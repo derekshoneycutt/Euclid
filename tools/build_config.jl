@@ -1,12 +1,37 @@
 module EuclidBuildConfiguration
 
 export native_linker_flags, native_runtime_dirs, native_runtime_environment,
-    resolve_msvc_tool_path
+    raylib_shared_library_path, resolve_msvc_tool_path
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const IMPORT_LIB_DIR = joinpath(REPOSITORY_ROOT, "bin", ".native_import_libs")
 const HARFBUZZ_PROVIDER_ENV = "EUCLID_HARFBUZZ_PROVIDER"
+
+"""Resolve the shared Raylib library bundled with the active Odin compiler."""
+function raylib_shared_library_path(kernel::Symbol=Sys.KERNEL)
+    odin_root = readchomp(`odin root`)
+    relative_path = if kernel == :Linux
+        joinpath("vendor", "raylib", "linux", "libraylib.so.600")
+    elseif kernel == :Darwin
+        joinpath("vendor", "raylib", "macos", "libraylib.600.dylib")
+    elseif kernel == :Windows
+        joinpath("vendor", "raylib", "windows", "raylib.dll")
+    else
+        error("Shared Raylib is unsupported on $kernel.")
+    end
+    path = joinpath(odin_root, relative_path)
+    isfile(path) || error("Missing Odin shared Raylib library at $path")
+    return path
+end
+
+"""Return loader-relative search flags for the adjacent shared Raylib library."""
+function raylib_runtime_linker_flags(kernel::Symbol=Sys.KERNEL)
+    kernel == :Linux && return "-Wl,-rpath,\\\$ORIGIN"
+    kernel == :Darwin && return "-Wl,-rpath,@loader_path"
+    kernel == :Windows && return ""
+    error("Shared Raylib is unsupported on $kernel.")
+end
 
 """Validate one normalized HarfBuzz dependency provider."""
 function validate_harfbuzz_provider(provider::Symbol, kernel::Symbol=Sys.KERNEL)
@@ -220,9 +245,13 @@ end
 """Resolve runtime library search directories for the active provider."""
 function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
     provider = validate_harfbuzz_provider(provider)
-    provider == :system && return String[]
-    _, paths = harfbuzz_jll_paths()
-    return Sys.iswindows() ? unique([Sys.BINDIR; paths]) : paths
+    paths = if provider == :system
+        String[]
+    else
+        _, jll_paths = harfbuzz_jll_paths()
+        Sys.iswindows() ? [Sys.BINDIR; jll_paths] : jll_paths
+    end
+    return unique([paths; dirname(raylib_shared_library_path())])
 end
 
 """Build a host loader environment override from resolved runtime directories."""
@@ -247,7 +276,7 @@ function native_linker_flags(provider::Symbol=harfbuzz_provider())
     Sys.iswindows() && return windows_linker_flags()
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
-    return "$harfbuzz_flags $(julia_linker_flags())"
+    return "$harfbuzz_flags $(julia_linker_flags()) $(raylib_runtime_linker_flags())"
 end
 
 end

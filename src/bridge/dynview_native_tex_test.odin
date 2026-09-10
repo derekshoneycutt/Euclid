@@ -400,7 +400,7 @@ dynview_native_math_maps_large_operator_script_programs :: proc(t: ^testing.T) {
     testing.expect(t, integral.tertiary_math_program_id > 0)
 }
 
-//   Verify complex Scratchpad math can be imported twice into one staging stream.
+//   Verify complex Terminal math can be imported twice into one staging stream.
 @(test)
 dynview_native_math_repeats_reported_formula :: proc(t: ^testing.T) {
     state := animation_value_test_state_create(49)

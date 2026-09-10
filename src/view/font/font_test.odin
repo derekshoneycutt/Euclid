@@ -203,18 +203,38 @@ view_test_math_seed_and_table :: proc(t: ^testing.T) {
     harfbuzz_shaper_destroy(&shaping)
 }
 
-// Verify the semantic math key maps only to the packaged NewCM source and seed.
+// Verify required semantic font keys map to their packaged sources and seeds.
 @(test)
 view_test_math_required_source_policy :: proc(t: ^testing.T) {
     testing.expect_value(
         t, FONT_FILENAMES[int(Font_Key.Math_Regular)],
         "NewCMSansMath-Regular.otf")
-    testing.expect_value(t, FONT_KEY_COUNT, int(Font_Key.Math_Regular) + 1)
+    testing.expect_value(
+        t, FONT_FILENAMES[int(Font_Key.Terminal_Regular)],
+        "JuliaMono-Regular.ttf")
+    testing.expect_value(t, FONT_KEY_COUNT, int(Font_Key.Terminal_Regular) + 1)
     math_seed := required_seed_codepoints(.Math_Regular)
     text_seed := required_seed_codepoints(.Regular)
     testing.expect(t, math_seed.count > text_seed.count)
     testing.expect_value(t, math_seed.count, i32(417))
     testing.expect_value(t, text_seed.count, i32(96))
+}
+
+// Verify terminal regular text resolves through its independently owned cache face.
+@(test)
+view_test_terminal_regular_font_key_is_independent :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    cache.entries[int(Font_Key.Regular)] = {
+        resident = true,
+        font = {baseSize = 32},
+    }
+    cache.entries[int(Font_Key.Terminal_Regular)] = {
+        resident = true,
+        font = {baseSize = 16},
+    }
+
+    resolved := cache_terminal_resolve(&cache, .Regular)
+    testing.expect_value(t, resolved.baseSize, i32(16))
 }
 
 // Verify the shipped faces yield a measurable lowercase match scale in MATH constants.

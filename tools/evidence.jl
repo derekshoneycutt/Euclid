@@ -57,7 +57,7 @@ const EVENT_NAMES = Dict{UInt16,String}(
     362 => "capture_requested", 363 => "capture_completed",
     364 => "capture_failed", 365 => "gif_started", 366 => "gif_completed",
     367 => "gif_failed", 368 => "shape_cache_prepared",
-    369 => "dynview_compiled", 370 => "scratchpad_completed",
+    369 => "dynview_compiled",
     371 => "presentation_cleared", 372 => "presentation_superseded",
     420 => "checkpoint_requested",
     421 => "checkpoint_stored", 422 => "checkpoint_unavailable",
@@ -75,7 +75,7 @@ const HANDLE_EVENT_KINDS = Set(UInt16[421, 423])
 
 const SCENARIO_ACTIONS = [
     "reset_animation", "select_animation", "reload_runtime",
-    "inject_reload_failure", "scratchpad", "pause_simulation",
+    "inject_reload_failure", "pause_simulation",
     "resume_simulation", "screenshot", "start_gif", "stop_gif", "wait_event",
     "wait_state", "assert_state", "checkpoint", "allocation_checkpoint",
     "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
@@ -85,13 +85,13 @@ const SCENARIO_EVENTS = [
     "animation_selected", "animation_tick_committed",
     "animation_cycle_boundary", "animation_loaded", "scene_batch_committed",
     "constraint_solve_completed", "presentation_cleared",
-    "presentation_superseded", "dynview_published", "scratchpad_completed",
+    "presentation_superseded", "dynview_published",
     "frame_presented",
     "capture_completed", "gif_completed", "checkpoint_stored",
     "runtime_shutdown_complete"]
 
 const SCENARIO_STATES = [
-    "runtime_ready", "runtime_idle", "animation_idle", "scratchpad_idle",
+    "runtime_ready", "runtime_idle", "animation_idle",
     "simulation_paused", "simulation_running", "dynview_enabled",
     "gif_active", "gif_idle"]
 

@@ -46,6 +46,7 @@ FONT_FILENAMES :: [FONT_KEY_COUNT]string{
     "JuliaMono-Black.ttf",
     "JuliaMono-BlackItalic.ttf",
     "NewCMSansMath-Regular.otf",
+    "JuliaMono-Regular.ttf",
 }
 
 Font_Key :: core.Font_Key
@@ -438,7 +439,7 @@ required_seed_codepoints :: proc(key: Font_Key) -> Font_Seed_Codepoint_Set {
 
 //   Prepare and finalize one synchronous required font generation.
 cache_load_required :: proc(cache: ^Font_Cache, key: Font_Key) -> bool {
-    if key != .Regular && key != .Math_Regular {
+    if key != .Regular && key != .Math_Regular && key != .Terminal_Regular {
         return false
     }
     if !cache_preparation_arena_init(cache) {
@@ -466,20 +467,20 @@ cache_load_required :: proc(cache: ^Font_Cache, key: Font_Key) -> bool {
     return cache_publish_required_seed(entry, &prepared, &shaping)
 }
 
-//   Load the permanent Regular fallback and required NewCM math face at startup.
+//   Load permanent text, math, and terminal faces at startup.
 //
 // Parameters:
 //   - cache: Zero-valued display-thread-owned cache.
 //
 // Side effects:
-//   - Loads both required GPU fonts synchronously and records source-file baselines.
-//   - Rolls back all cache ownership if either required generation fails.
+//   - Loads required GPU fonts synchronously and records source-file baselines.
+//   - Rolls back all cache ownership if any required generation fails.
 cache_init :: proc(cache: ^Font_Cache) -> bool {
     assert(cache != nil)
     cache^ = {}
     cache_source_paths_init(cache)
     rasterization_begin()
-    required_keys := [?]Font_Key{.Regular, .Math_Regular}
+    required_keys := [?]Font_Key{.Regular, .Math_Regular, .Terminal_Regular}
     ready := true
     for key in required_keys {
         entry := &cache.entries[int(key)]
@@ -623,7 +624,8 @@ cache_resolve :: proc(cache: ^Font_Cache, key: Font_Key) -> rl.Font {
 // Returns:
 //   - The result of `cache_resolve` for the cache borrowed through `user_data`.
 cache_terminal_resolve :: proc(user_data: rawptr, key: Font_Key) -> rl.Font {
-    return cache_resolve(cast(^Font_Cache)user_data, key)
+    resolved_key: Font_Key = .Terminal_Regular if key == .Regular else key
+    return cache_resolve(cast(^Font_Cache)user_data, resolved_key)
 }
 
 //   Select the same resident generation used by shaping and glyph resolution.

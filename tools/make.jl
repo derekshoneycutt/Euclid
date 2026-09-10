@@ -72,7 +72,7 @@ using UUIDs
 
 include(joinpath(@__DIR__, "build_config.jl"))
 using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs,
-    native_runtime_environment, resolve_msvc_tool_path
+    native_runtime_environment, raylib_shared_library_path, resolve_msvc_tool_path
 
 struct BuildCommand
     action::Symbol
@@ -621,6 +621,16 @@ function build_odin(
         error("Build failed.")
     end
 
+    stage_shared_raylib(dirname(app_binary_path(debug)))
+
+    return nothing
+end
+
+"""Copy Odin's bundled shared Raylib beside one produced executable."""
+function stage_shared_raylib(destination::String)
+    source = raylib_shared_library_path()
+    mkpath(destination)
+    cp(source, joinpath(destination, basename(source)); force=true)
     return nothing
 end
 
@@ -629,6 +639,7 @@ function odin_build_command(
     julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
     out_flag = "-out:$(app_binary_path(debug))"
     cmd_parts = ["odin", "build", "main.odin", "-file", out_flag]
+    push!(cmd_parts, "-define:RAYLIB_SHARED=true")
     debug && append!(cmd_parts, ["-debug", "-o:none"])
     strict && append!(cmd_parts,
         ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"])
@@ -672,6 +683,7 @@ function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
     print_captured_output("stdout:", build_result.stdout)
     print_captured_output("stderr:", build_result.stderr)
     build_result.exit_code == 0 || error("Harness build failed.")
+    stage_shared_raylib(dirname(HARNESS_BINARY_PATH))
 
     harness_args = [
         "--asset-root=" * BIN_DIR,
@@ -1046,6 +1058,8 @@ function run_plan_build(
             julia_flags, command.debug, command.strict)
         build_elapsed_ns = UInt64(time_ns() - build_started)
         println("Build exited $(build_result.exit_code)")
+        build_result.exit_code == 0 &&
+            stage_shared_raylib(dirname(app_binary_path(command.debug)))
         return build_result, build_elapsed_ns
     end
     build_odin(julia_flags, command.debug, command.strict)

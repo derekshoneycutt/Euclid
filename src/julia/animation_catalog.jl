@@ -4,14 +4,14 @@ using UUIDs
 using ..OdinJuliaBridge
 
 export AnimationDescriptor, AnimationImplementation,
-    AnimationNodeKind, CategoryNode, LeafNode, ScratchpadNode,
+    AnimationNodeKind, CategoryNode, LeafNode, TerminalNode,
     AnimationDescriptors, animation, ensure_animation_loaded,
     register_animation_catalog, validate_catalog
 
 @enum AnimationNodeKind::UInt8 begin
     CategoryNode = 1
     LeafNode = 2
-    ScratchpadNode = 3
+    TerminalNode = 3
 end
 
 """Immutable metadata for one animation tree node."""
@@ -65,9 +65,9 @@ function _validate_catalog_descriptor!(
     order_key = (descriptor.parent_id, descriptor.sibling_order)
     order_key in sibling_orders && throw(ArgumentError("duplicate sibling order"))
     push!(sibling_orders, order_key)
-    if descriptor.kind == ScratchpadNode
+    if descriptor.kind == TerminalNode
         descriptor.implementation_path === nothing ||
-            throw(ArgumentError("Scratchpad must not have an implementation path"))
+            throw(ArgumentError("Terminal must not have an implementation path"))
     else
         path = descriptor.implementation_path
         path isa String && _implementation_path_is_safe(path) ||
@@ -106,9 +106,9 @@ function _validate_catalog_hierarchy(by_id::Dict{UUID,AnimationDescriptor})
     end
 end
 
-"""Register validated metadata and bind the sole eager Scratchpad implementation."""
+"""Register validated metadata and bind the sole eager Terminal implementation."""
 function register_animation_catalog(
-    state_ptr::Ptr{Cvoid}, scratchpad_entry::Function)
+    state_ptr::Ptr{Cvoid}, terminal_entry::Function)
 
     validate_catalog(AnimationDescriptors)
     for descriptor in AnimationDescriptors
@@ -120,11 +120,11 @@ function register_animation_catalog(
         status == 1 || throw(ErrorException(
             "host rejected animation descriptor: $(descriptor.id)"))
     end
-    scratchpad = only(filter(
-        descriptor -> descriptor.kind == ScratchpadNode, AnimationDescriptors))
+    terminal = only(filter(
+        descriptor -> descriptor.kind == TerminalNode, AnimationDescriptors))
     status = OdinJuliaBridge.bind_animation_entry(
-        state_ptr, scratchpad_entry, string(scratchpad.id))
-    status == 1 || throw(ErrorException("host rejected Scratchpad entry binding"))
+        state_ptr, terminal_entry, string(terminal.id))
+    status == 1 || throw(ErrorException("host rejected Terminal entry binding"))
     return nothing
 end
 

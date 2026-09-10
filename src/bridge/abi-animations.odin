@@ -172,7 +172,7 @@ add_animation_descriptor :: proc "c" (
 
     if state == nil || state^.julia_interface == nil || name == nil ||
         metadata.node_kind < i32(core.Animation_Node_Kind.Category) ||
-        metadata.node_kind > i32(core.Animation_Node_Kind.Scratchpad) ||
+        metadata.node_kind > i32(core.Animation_Node_Kind.Terminal) ||
         metadata.sibling_order < 0 {
         return -1
     }

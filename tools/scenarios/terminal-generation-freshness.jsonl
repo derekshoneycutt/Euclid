@@ -1,0 +1,29 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"phase5_reset_marker = 41"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"41","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"terminal_session_ready","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"@isdefined phase5_reset_marker"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"false","timeout_ms":10000}
+{"type":"phase5_reload_marker = 42"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"42","timeout_ms":10000}
+{"do":"reload_runtime"}
+{"wait_event":"runtime_reload_committed","timeout_ms":10000}
+{"wait_event":"terminal_session_ready","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"@isdefined phase5_reload_marker"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"false","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

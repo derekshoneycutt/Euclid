@@ -1,0 +1,21 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"assert_terminal_contains":"Julia session ready"}
+{"type":"1 + 1"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"2","timeout_ms":10000}
+{"type":"begin"}
+{"key":"enter"}
+{"wait_state":"terminal_continuation","timeout_ms":10000}
+{"type":"1 + 2"}
+{"key":"enter"}
+{"wait_state":"terminal_continuation","timeout_ms":10000}
+{"type":"end"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"3","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

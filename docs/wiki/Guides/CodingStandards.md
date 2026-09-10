@@ -593,7 +593,7 @@ independently from related APIs.
 
 - Julia C API calls remain on the persistent owner thread, including exception
   inspection and shutdown.
-- Use `Base.invokelatest` only where freshly evaluated Scratchpad or reload
+- Use `Base.invokelatest` only where freshly evaluated Terminal session or reload
   definitions require latest-world dispatch. Do not spread it into ordinary
   static call paths.
 - Keep bridge calls and their status handling visible. Stop transactional

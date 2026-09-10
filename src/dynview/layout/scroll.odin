@@ -5,7 +5,7 @@ import dyncore "../core"
 
 import rl "vendor:raylib"
 
-Scratchpad_Fallback_Layout :: struct {
+Presentation_Fallback_Layout :: struct {
     text_padding, wrap_advance, row_height: f32,
     text: string,
 }
@@ -31,10 +31,10 @@ fallback_row_count :: #force_inline proc(
 }
 
 //   Return total content height using cached line metrics, else fallback row math.
-scratchpad_content_height_or_fallback :: proc(
+presentation_content_height_or_fallback :: proc(
     runtime: ^core.Dynview_System,
     panel: rl.Rectangle,
-    fallback: Scratchpad_Fallback_Layout) -> f32 {
+    fallback: Presentation_Fallback_Layout) -> f32 {
 
     fallback_rows := fallback_row_count(panel, fallback.wrap_advance, fallback.text)
     fallback_height := fallback.text_padding * 2 +
@@ -55,7 +55,7 @@ scratchpad_content_height_or_fallback :: proc(
 }
 
 //   Return scroll step derived from cached line metrics, else fallback to fixed row height.
-scratchpad_scroll_step_or_fallback :: proc(
+presentation_scroll_step_or_fallback :: proc(
     runtime: ^core.Dynview_System,
     fallback_row_height: f32) -> f32 {
 

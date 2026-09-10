@@ -9,6 +9,9 @@
       "windows": {
         "program": "${workspaceFolder}/.build/debug/euclid.exe"
       },
+      "initCommands": [
+        "process handle SIGSEGV --stop false --notify false --pass true"
+      ],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Euclid: Debug Build"
     },
@@ -22,6 +25,9 @@
       },
       "args": [
         "--diagnostics=${workspaceFolder}/.build/debug/euclid.log"
+      ],
+      "initCommands": [
+        "process handle SIGSEGV --stop false --notify false --pass true"
       ],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Euclid: Debug Build"
@@ -38,6 +44,9 @@
         "--diagnostics=${workspaceFolder}/.build/debug/euclid.log",
         "--scenario=${input:scenarioPath}",
         "--scenario-artifacts=${input:scenarioArtifacts}"
+      ],
+      "initCommands": [
+        "process handle SIGSEGV --stop false --notify false --pass true"
       ],
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Euclid: Debug Build"

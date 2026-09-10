@@ -106,7 +106,7 @@ end
 
     bridge = extract_julia_module(config, "src/julia/odin-julia-bridge.jl")
     @test bridge.display_name == "OdinJuliaBridge"
-    @test length(bridge.source_files) == 8
+    @test length(bridge.source_files) == 7
     create_label = only(filter(symbol -> symbol.name == "create_new_label", bridge.symbols))
     @test length(create_label.method_signatures) >= 16
     @test occursin("Construct a new label", create_label.doc_markdown)

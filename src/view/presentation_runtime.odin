@@ -8,6 +8,7 @@ import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../taskpool"
 
+
 // Presentation_Operation retains one producer envelope through parse task join.
 Presentation_Operation :: struct {
     message: ^core.Julia_Host_Egress,
@@ -119,26 +120,14 @@ presentation_parse_key :: proc(
     return {source = parse_source, key = key, mode = mode, valid = generation != 0}
 }
 
-//   Drain Julia egress and advance presentation work without blocking a frame.
-service_presentation_runtime :: proc(
-    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
-    if state == nil || runtime == nil || state^.julia_runtime_service == nil ||
-        state^.simulation_executor == nil {
-        return
-    }
-    service := state^.julia_runtime_service
-    presentation_sync_lifecycle(state, runtime)
-    if deferred := bridge.take_deferred_view_content(service); deferred != nil {
-        if content, ok := deferred^.(core.View_Content_Ready); ok {
-            presentation_admit(state, runtime, deferred, content)
-        } else {
-            _ = bridge.return_julia_egress(service, deferred)
-        }
-    }
+//   Drain one borrowed Julia egress message into its display-owned destination.
+presentation_drain_julia_egress :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
+    service: ^core.Julia_Runtime_Service) {
     for {
         message, received := bridge.try_receive_julia_egress(service)
         if !received {
-            break
+            return
         }
         if event, is_event := message^.(core.Julia_Event); is_event {
             bridge.accept_julia_event(service, event)
@@ -149,8 +138,40 @@ service_presentation_runtime :: proc(
             presentation_admit(state, runtime, message, content)
             continue
         }
+        _ = terminal_service_dispatch_egress(state, message)
         _ = bridge.return_julia_egress(service, message)
     }
+}
+
+//   Admit one presentation envelope deferred by an event-only consumer.
+presentation_admit_deferred_view :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
+    service: ^core.Julia_Runtime_Service) {
+    if deferred := bridge.take_deferred_view_content(service); deferred != nil {
+        if content, ok := deferred^.(core.View_Content_Ready); ok {
+            presentation_admit(state, runtime, deferred, content)
+        } else {
+            _ = bridge.return_julia_egress(service, deferred)
+        }
+    }
+}
+
+//   Drain Julia egress and advance presentation work without blocking a frame.
+service_presentation_runtime :: proc(
+    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
+    if state == nil || runtime == nil || state^.julia_runtime_service == nil ||
+        state^.simulation_executor == nil {
+        return
+    }
+    service := state^.julia_runtime_service
+    presentation_sync_lifecycle(state, runtime)
+    if deferred := bridge.take_deferred_terminal_egress(service); deferred != nil {
+        _ = terminal_service_dispatch_egress(state, deferred)
+        _ = bridge.return_julia_egress(service, deferred)
+    }
+    presentation_admit_deferred_view(state, runtime, service)
+    presentation_drain_julia_egress(state, runtime, service)
+    terminal_tick_publish(state)
     presentation_poll_active(state, runtime)
     presentation_start_pending(state, runtime)
 }

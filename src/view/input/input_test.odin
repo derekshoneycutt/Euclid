@@ -1,7 +1,6 @@
 #+test
 package input
 
-/* TODO: Commented out because we didn't bring over the full terminal module etc yet
 import "../../core/protocol"
 import gfxprotocol "../../terminal/graphics/protocol"
 import termemulator "../../terminal/emulator"
@@ -1513,4 +1512,3 @@ input_test_key_pressed_or_repeat_repeat_only :: proc(t: ^testing.T) {
     testing.expect(t, input_key_pressed_or_repeat(frame, .Left))
     testing.expect(t, !input_key_pressed_or_repeat(frame, .Right))
 }
-*/

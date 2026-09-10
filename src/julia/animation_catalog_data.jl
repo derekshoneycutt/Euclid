@@ -1,7 +1,7 @@
 const AnimationDescriptors = AnimationDescriptor[
     AnimationDescriptor(
         UUID("c4cf618f-86ca-55ba-ac0e-14f31f09940d"), nothing,
-        "Scratchpad", 0, ScratchpadNode, nothing),
+        "Terminal", 0, TerminalNode, nothing),
     AnimationDescriptor(
         UUID("4a3a9e1f-6448-554a-8e37-52f579b7476b"),
         nothing,

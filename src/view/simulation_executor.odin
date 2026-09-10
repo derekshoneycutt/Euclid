@@ -413,10 +413,10 @@ run_parallel_simulation_step :: proc(executor: ^Simulation_Executor, dt: f32) {
         &executor^.constraint_task.evidence_ring)
 }
 
-//   Prepare frame-owned shape and text caches concurrently before rendering.
-run_parallel_frame_preparation :: proc(
+//   Prepare frame-owned shape and text caches after UI geometry was resolved.
+run_parallel_frame_preparation_after_ui :: proc(
     state: ^core.Euclid_General_State, alpha: f32,
-    mouse_input: ui.Input_Frame) {
+    compile_ui: bool) {
     assert(state != nil && state^.simulation_executor != nil)
     executor := state^.simulation_executor
     executor^.shape_cache_task.interpolation_alpha = alpha
@@ -424,7 +424,7 @@ run_parallel_frame_preparation :: proc(
     assert(initialized)
     submit_simulation_task(executor, &fence, build_shape_cache_task,
         rawptr(&executor^.shape_cache_task))
-    if ui.prepare_ui_frame(state, mouse_input) {
+    if compile_ui {
         submit_simulation_task(executor, &fence, compile_dynview_task,
             rawptr(&executor^.dynview_task))
     }
@@ -433,4 +433,12 @@ run_parallel_frame_preparation :: proc(
         &state^.evidence_session, &executor^.shape_cache_task.evidence_ring)
     evidence_session.session_accept_ring(
         &state^.evidence_session, &executor^.dynview_task.evidence_ring)
+}
+
+//   Resolve UI geometry, then prepare frame-owned shape and text caches.
+run_parallel_frame_preparation :: proc(
+    state: ^core.Euclid_General_State, alpha: f32,
+    mouse_input: ui.Input_Frame) {
+    compile_ui := ui.prepare_ui_frame(state, mouse_input)
+    run_parallel_frame_preparation_after_ui(state, alpha, compile_ui)
 }

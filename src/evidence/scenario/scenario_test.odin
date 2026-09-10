@@ -40,6 +40,24 @@ scenario_test_parse_json_lines :: proc(t: ^testing.T) {
     testing.expect_value(t, program.commands[1].timeout_ms, u32(10))
 }
 
+// Verify Terminal input and cell assertions are bounded scenario commands.
+@(test)
+scenario_test_terminal_commands :: proc(t: ^testing.T) {
+    program: Program
+    result := parse(
+        "{\"type\":\"1 + 1\"}\n" +
+        "{\"key\":\"enter\"}\n" +
+        "{\"assert_terminal_contains\":\"2\"}\n", &program)
+    testing.expect_value(t, result, Parse_Error.None)
+    testing.expect_value(t, program.count, 3)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Type_Text)
+    testing.expect_value(t, program.commands[1].kind, Command_Kind.Key)
+    testing.expect_value(t,
+        program.commands[2].kind, Command_Kind.Assert_Terminal_Contains)
+    testing.expect(t, state_matches(
+        "terminal_idle", observe.Display{terminal_idle = true}))
+}
+
 // Verify event predicates progress immediately and deadlines bound failure.
 @(test)
 scenario_test_runner_event_and_deadline :: proc(t: ^testing.T) {
@@ -67,22 +85,6 @@ scenario_test_runner_event_and_deadline :: proc(t: ^testing.T) {
     testing.expect_value(t,
         runner_update(&runner, {now_ns = 5_000_100, display = display}),
         Run_Status.Failed)
-}
-
-// Verify Scratchpad idle uses the display-owned completion observation.
-@(test)
-scenario_test_scratchpad_idle_state :: proc(t: ^testing.T) {
-    testing.expect(t, state_matches(
-        "scratchpad_idle", observe.Display{scratchpad_idle = true}))
-    testing.expect(t, !state_matches("scratchpad_idle", observe.Display{}))
-}
-
-// Verify the scenario vocabulary exposes display-committed Scratchpad completion.
-@(test)
-scenario_test_scratchpad_completed_event :: proc(t: ^testing.T) {
-    kind, valid := event_kind("scratchpad_completed")
-    testing.expect(t, valid)
-    testing.expect_value(t, kind, trace.Kind.Scratchpad_Completed)
 }
 
 // Verify presentation replacement transitions are available to scenarios.
@@ -164,6 +166,32 @@ scenario_test_typed_alias_matching :: proc(t: ^testing.T) {
         now_ns = 2,
         events = matching[:],
         display = display,
+    }), Run_Status.Passed)
+}
+
+// Verify frame-specific waits inspect the typed animation event payload.
+@(test)
+scenario_test_animation_frame_matching :: proc(t: ^testing.T) {
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"wait_event\":\"animation_frame_presented\"," +
+        "\"frame_number\":2}\n", &program), Parse_Error.None)
+    runner: Runner
+    runner_init(&runner, program)
+    display := observe.Display{required_evidence_complete = true}
+    wrong_frame := trace.Event{
+        kind = .Animation_Frame_Presented,
+        payload = {counts = {first = 1}},
+    }
+    testing.expect_value(t, runner_update(&runner, {
+        events = {wrong_frame}, display = display,
+    }), Run_Status.Running)
+    matching := [2]trace.Event{wrong_frame, {
+        kind = .Animation_Frame_Presented,
+        payload = {counts = {first = 2}},
+    }}
+    testing.expect_value(t, runner_update(&runner, {
+        events = matching[:], display = display,
     }), Run_Status.Passed)
 }
 

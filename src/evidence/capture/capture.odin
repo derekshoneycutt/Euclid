@@ -153,6 +153,14 @@ checkpoint_path :: proc(coordinator: ^Coordinator) -> cstring {
     return cstring(&coordinator.path[0])
 }
 
+//   Return the bounded screenshot target with its coordinator-owned length.
+checkpoint_path_text :: proc(coordinator: ^Coordinator) -> string {
+    if coordinator == nil || coordinator.path_count == 0 {
+        return ""
+    }
+    return string(coordinator.path[:coordinator.path_count])
+}
+
 //   Fulfill pending evidence only after the display owner completes presentation.
 //
 // Parameters:

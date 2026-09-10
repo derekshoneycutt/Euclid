@@ -7,18 +7,11 @@
 {"wait_event":"presentation_superseded","correlation":"replacement-selection","timeout_ms":10000}
 {"wait_event":"animation_tick_committed","timeout_ms":10000}
 {"wait_event":"dynview_published","correlation":"replacement-selection","timeout_ms":10000}
-{"select_animation":"Scratchpad","as":"scratchpad-selection"}
-{"wait_event":"animation_selected","correlation":"scratchpad-selection","timeout_ms":10000}
-{"wait_event":"presentation_cleared","correlation":"scratchpad-selection","timeout_ms":10000}
-{"wait_event":"dynview_published","correlation":"scratchpad-selection","timeout_ms":10000}
-{"scratchpad":"println(1 + 2)","as":"scratchpad-evaluation"}
-{"wait_event":"scratchpad_completed","correlation":"scratchpad-evaluation","timeout_ms":10000}
-{"wait_event":"frame_presented","timeout_ms":10000}
 {"allocation_checkpoint":"animation"}
 {"allocation_checkpoint":"snapshot_slots"}
 {"allocation_checkpoint":"display_cache"}
-{"scratchpad":"println(1 + 2)","as":"scratchpad-repeat"}
-{"wait_event":"scratchpad_completed","correlation":"scratchpad-repeat","timeout_ms":10000}
+{"do":"reset_animation"}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
 {"wait_event":"frame_presented","timeout_ms":10000}
 {"assert_allocation_baseline":"animation"}
 {"assert_allocation_baseline":"snapshot_slots"}

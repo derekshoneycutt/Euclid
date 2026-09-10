@@ -16,6 +16,8 @@ const JULIA_TEST_RUNNER = joinpath(
 const JULIA_TEST_REPORTER = joinpath(REPOSITORY_ROOT, "tools", "julia_test_reporter.jl")
 const JULIA_TEST_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const ODIN_SOURCE_ROOT = joinpath(REPOSITORY_ROOT, "src")
+const ODIN_TEST_BINARY = joinpath(
+    REPOSITORY_ROOT, "bin", Sys.iswindows() ? "euclid_tests.exe" : "euclid_tests")
 const ANSI_RESET = "\e[0m"
 const ANSI_BOLD = "\e[1m"
 const ANSI_BOLD_GREEN = "\e[1;32m"
@@ -83,6 +85,8 @@ function odin_test_command(linker_flags::String; source_path::String=ODIN_SOURCE
         "test",
         source_path,
         "-all-packages",
+        "-out:$ODIN_TEST_BINARY",
+        "-define:RAYLIB_SHARED=true",
         "-define:ODIN_TEST_THREADS=1",
     ]
     !isempty(report_path) && push!(odin_command,
@@ -287,6 +291,7 @@ function run_odin_suite(suite::SuiteDefinition; selected_package=nothing,
         source_path, selected_package, selected_test, locations)
     selection == "" && return SuiteResult(suite.name, suite.language, 0, 0,
         "FAIL", "No Odin tests declared in package: $selected_package\n", TestResult[])
+    mkpath(dirname(ODIN_TEST_BINARY))
     return mktempdir() do directory
         report_path = joinpath(directory, "odin-tests.json")
         arguments = odin_test_command(native_linker_flags(); source_path,

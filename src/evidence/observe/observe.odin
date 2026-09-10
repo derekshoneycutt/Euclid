@@ -42,7 +42,36 @@ Display :: struct {
     active_runtime_request_id : u64,
     failed_runtime_request_count : u64,
     runtime_request_saturation_count : u64,
-    scratchpad_idle : bool,
+    terminal_ready : bool,
+    terminal_idle : bool,
+    terminal_continuation : bool,
+
+    // Terminal graphics transfer, publication, residency, and playback state.
+    graphics_transfer_admission_count : u64,
+    graphics_transfer_rejection_count : u64,
+    graphics_decode_count : u64,
+    graphics_failure_count : u64,
+    graphics_cancellation_count : u64,
+    graphics_publication_count : u64,
+    graphics_stale_completion_count : u64,
+    graphics_eviction_count : u64,
+    graphics_draw_count : u64,
+    graphics_draw_rejection_count : u64,
+    graphics_cpu_byte_count : int,
+    graphics_gpu_byte_count : int,
+    graphics_animation_decode_byte_count : int,
+    graphics_animated_attachment_count : int,
+    graphics_animation_admission_count : u64,
+    graphics_animation_rejection_count : u64,
+    graphics_gif_preflight_acceptance_count : u64,
+    graphics_gif_preflight_rejection_count : u64,
+    graphics_queue_full_count : u64,
+    graphics_playback_transition_count : u64,
+    graphics_playback_completion_count : u64,
+    graphics_playback_upload_failure_count : u64,
+    graphics_playback_stale_count : u64,
+    graphics_visibility_pause_count : u64,
+    graphics_visibility_resume_count : u64,
 
     // Animation publication identity and display-side tick state.
     animation_generation : u64,
@@ -203,9 +232,13 @@ display :: proc(state: ^app_core.Euclid_General_State) -> Display {
         fixed_step = state.fixed_step,
         simulation_time = state.simulation_time,
         simulation_paused = state.ui_runtime.simulation_paused,
-        scratchpad_idle =
-            state.ui_runtime.scratchpad_pending_submit_request_id == 0 &&
-            state.ui_runtime.scratchpad_forced_bottom_request_id == 0,
+        terminal_ready = state.terminal.initialized &&
+            state.terminal.julia_session_ready,
+        terminal_idle = state.terminal.initialized &&
+            state.terminal.julia_session_ready && !state.terminal.awaiting_eval,
+        terminal_continuation = state.terminal.initialized &&
+            state.terminal.julia_session_ready &&
+            state.terminal.collecting_continuation,
         dynview_enabled = state.dynview.enabled,
         dynview_pending_invalidation_mask = state.dynview.pending_invalidation_mask,
         gif_capture_active = state.gif_capture.active,

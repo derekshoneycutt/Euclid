@@ -4,8 +4,8 @@ import "../../core"
 
 import rl "vendor:raylib"
 
-//   Build the non-negative Scratchpad content rectangle inside the text panel.
-layout_scratchpad_rect :: proc(text_rect: rl.Rectangle) -> rl.Rectangle {
+//   Build the non-negative Terminal content rectangle inside the text panel.
+layout_terminal_rect :: proc(text_rect: rl.Rectangle) -> rl.Rectangle {
     return clamp_non_negative_rect({
         text_rect.x + 6,
         text_rect.y + 6,
@@ -45,7 +45,7 @@ compute_ui_regions :: proc(
         _, list_panel := build_tree_view_panels(regions.tree_rect)
         regions.settings_rect = list_panel
         regions.gif_rect = list_panel
-        regions.scratchpad_rect = layout_scratchpad_rect(regions.text_rect)
+        regions.terminal_rect = layout_terminal_rect(regions.text_rect)
     }
 
     return regions
@@ -65,7 +65,7 @@ validate_ui_regions :: proc(regions: core.Ui_Regions) -> bool {
         regions.text_rect,
         regions.settings_rect,
         regions.gif_rect,
-        regions.scratchpad_rect,
+        regions.terminal_rect,
     }
     for rect in rects {
         if !ui_rect_valid(rect) {

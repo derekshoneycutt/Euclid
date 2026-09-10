@@ -1,0 +1,62 @@
+module EuclidPolicy
+
+using ..EuclidActorRuntime
+import ..Terminal
+import ..Ticks
+import ..TerminalContainer
+import ..EuclidReplEvaluation
+using ..EuclidReplEvaluation: begin_help_for_host, begin_input_for_host,
+    begin_pkg_for_host, create_eval_runtime, poll_evaluation
+
+export AbandonTerminalSessionRequested, BeginTerminalSessionRequested
+export CancelTerminalSessionRequested, CompletionActorStopped
+export CompletionDuplicateRequest, CompletionFailed, CompletionFailureReason
+export CompletionInternalFailure, CompletionMailboxFull, CompletionRequested
+export CompletionResolved, CompletionRuntimeStopped, CompletionService
+export EngineCommandAccepted, EngineCommandCompleted, EngineCommandRejected
+export EngineDecisionDefaulted, EngineEventCommitted, EngineEventKind
+export EngineExternalFact, EvaluationCompleted, EvaluationExitRequested
+export EvaluationHelp, EvaluationIncomplete, EvaluationMode, EvaluationNormal
+export EvaluationPkg, EvaluationRequested, Evaluator, HotkeyTriggered
+export HotkeyBinding, HotkeyController, HotkeyKey, HotkeyRegistryBegin
+export HotkeyRegistryCommit, HotkeyRegistryEntry, HotkeyRegistryResult
+export LogicalAction, PollEvaluation, SetTerminalVisibility
+export ShellInterpolationCancelled, ShellInterpolationDuplicateRequest
+export ShellInterpolationEvaluatorBusy, ShellInterpolationLifecycleStatus
+export ShellInterpolationRequested, ShellInterpolationResolved
+export ShellInterpolationRuntimeStopped, ShellInterpolationService
+export ShellInterpolationTimedOut, ShellSession, ShellSessionSubmit
+export StopShellSession, TerminalController, TerminalInputAcquired
+export TerminalInputReleased, TerminalOutputBatch, TerminalRectangle
+export StopTerminalProcessService, TerminalProcessLaunchRequested
+export TerminalProcessService
+export drain_terminal_process_requests!
+export NativeTickPulse, StopTickService, TickService
+export TickStreamConfigurationAcknowledged, TickStreamConfigureRequested
+export TickStreamStopRequested, acknowledge_tick_stream!
+export accumulate_tick_pulse!, drain_tick_requests!, tick_interval_steps
+export StopTerminalContainerService, TerminalContainerChangeObserved
+export TerminalContainerConfigureRequested, TerminalContainerService
+export accept_terminal_container_configuration_result!
+export drain_terminal_container_requests!
+export TerminalSessionAccepted, TerminalSessionCompleted
+export TerminalSessionOperationId, TerminalSessionRejected, ToggleTerminal
+export HotkeyT, RegisterHotkeys
+export EVALUATION_OUTPUT_BATCH_MAX_BYTES, EVALUATION_OUTPUT_MAX_RETAINED_BYTES
+export begin_evaluation!, emit_interactive_events!, evaluation_request_key
+export fail_evaluation!, flush_evaluation_output!, record_output_batch!
+export reset_evaluation_output!, retain_output_fragment!
+export schedule_evaluation_poll!, shell_interpolation_request_key
+export shell_session_owner, utf8_prefix_bytes
+
+include("policy/terminal_controller.jl")
+include("policy/hotkey_controller.jl")
+include("policy/completion_service.jl")
+include("policy/shell_interpolation_service.jl")
+include("policy/shell_session.jl")
+include("policy/terminal_process_service.jl")
+include("policy/tick_service.jl")
+include("policy/terminal_container_service.jl")
+include("policy/evaluator.jl")
+
+end

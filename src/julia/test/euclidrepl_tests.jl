@@ -11,8 +11,11 @@ end
 if !isdefined(Main, :EuclidLatex)
     include("../latex.jl")
 end
-if !isdefined(Main, :Scratchpad)
-    include("../scratchpad.jl")
+if !isdefined(Main, :EuclidActorRuntime)
+    include("../runtime.jl")
+end
+if !isdefined(Main, :Ticks)
+    include("../ticks.jl")
 end
 if !isdefined(Main, :EuclidRepl)
     include("../euclidrepl.jl")
@@ -22,8 +25,31 @@ using .EuclidRepl
 using Colors
 using Test
 
+@testset "Terminal tick cadence" begin
+    requested_ns = Ticks.interval_nanoseconds(1 / 60)
+    @test requested_ns == UInt64(16_666_666)
+    @test Ticks.interval_nanoseconds(1e-12) == UInt64(1)
+end
+
 const TEST_STATE_PTR = Ptr{Cvoid}(0)
-const TEST_REPL_RUNTIME = Scratchpad.create_runtime_state()
+const TEST_REPL_RUNTIME = EuclidRepl.create_runtime()
+
+"""Run one operation while admitting its bounded number of tick subscriptions."""
+function with_tick_admissions(operation, expected::Int)
+    client = Ticks.TickClient(UInt64(1))
+    broker = @async begin
+        admitted = 0
+        while admitted < expected
+            request = take!(client.requests)
+            request isa Ticks.SubscribeRequest || continue
+            put!(request.admission, nothing)
+            admitted += 1
+        end
+    end
+    result = Ticks.with_tick_client(operation, client)
+    wait(broker)
+    return result
+end
 
 """Provide a no-op host callback for Julia-only REPL tests."""
 function test_hide_point(
@@ -139,7 +165,7 @@ end
 end
 
 @testset "EuclidRepl highlight APIs" begin
-    EuclidRepl.reset_scratchpad_session!(TEST_REPL_RUNTIME)
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
 
     @test_throws ArgumentError EuclidRepl.highlight_pen!(
         TEST_REPL_RUNTIME,
@@ -163,24 +189,28 @@ end
         0.5f0,
         0f0)
 
-    @test isnothing(EuclidRepl.highlight_pen!(
-        TEST_REPL_RUNTIME,
-        TEST_STATE_PTR,
-        Float32[0f0, 0f0, 0f0],
-        Float32[1f0, 0f0, 0f0]))
+    @test isnothing(with_tick_admissions(1) do
+        EuclidRepl.highlight_pen!(
+            TEST_REPL_RUNTIME,
+            TEST_STATE_PTR,
+            Float32[0f0, 0f0, 0f0],
+            Float32[1f0, 0f0, 0f0])
+    end)
 
     pen_status = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test pen_status.active == true
     @test pen_status.kind == :highlight_pen
 
-    @test isnothing(EuclidRepl.highlight_compass!(
-        TEST_REPL_RUNTIME,
-        TEST_STATE_PTR,
-        Float32[0f0, 0f0, 0f0],
-        Float32[1f0, 0f0, 0f0],
-        π / 2,
-        1f0,
-        filled=true))
+    @test isnothing(with_tick_admissions(1) do
+        EuclidRepl.highlight_compass!(
+            TEST_REPL_RUNTIME,
+            TEST_STATE_PTR,
+            Float32[0f0, 0f0, 0f0],
+            Float32[1f0, 0f0, 0f0],
+            π / 2,
+            1f0,
+            filled=true)
+    end)
 
     compass_status = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test compass_status.active == true
@@ -191,7 +221,7 @@ end
 end
 
 @testset "EuclidRepl session lifecycle" begin
-    EuclidRepl.reset_scratchpad_session!(TEST_REPL_RUNTIME)
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
 
     state0 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test state0.active == false
@@ -211,14 +241,14 @@ end
     @test EuclidRepl.status(
         TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 0
 
-    EuclidRepl.reset_scratchpad_session!(TEST_REPL_RUNTIME)
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     state_after_reset = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test state_after_reset.active == false
     @test state_after_reset.managed_shape_count == 0
 end
 
 @testset "EuclidRepl preemption and status" begin
-    EuclidRepl.reset_scratchpad_session!(TEST_REPL_RUNTIME)
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
 
     session = EuclidRepl.ensure_session!(TEST_REPL_RUNTIME)
     payload_a = EuclidRepl.PointPayload(1, Float32[0f0, 0f0, 0f0], :steelblue, 5f0)
@@ -234,12 +264,16 @@ end
         5f0)
     job_b = EuclidRepl.ReplDrawJob(:line, 0.8f0, 0f0, nothing, payload_b)
 
-    EuclidRepl.start_job!(TEST_REPL_RUNTIME, TEST_STATE_PTR, job_a)
+    with_tick_admissions(1) do
+        EuclidRepl.start_job!(TEST_REPL_RUNTIME, TEST_STATE_PTR, job_a)
+    end
     s1 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test s1.active == true
     @test s1.kind == :point
 
-    EuclidRepl.start_job!(TEST_REPL_RUNTIME, TEST_STATE_PTR, job_b)
+    with_tick_admissions(1) do
+        EuclidRepl.start_job!(TEST_REPL_RUNTIME, TEST_STATE_PTR, job_b)
+    end
     s2 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test s2.active == true
     @test s2.kind == :line

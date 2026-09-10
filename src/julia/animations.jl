@@ -4,7 +4,7 @@ Reusable animation-motion helpers for EuclidApp scripts.
 `EuclidAnimations` provides shared pen/compass motion primitives and higher-level
 draw helpers that orchestrate bridge calls through `OdinJuliaBridge`. Animation
 modules should consume this API to keep motion pacing and tool behavior consistent
-across Euclid content and scratchpad workflows.
+across Euclid content and Terminal workflows.
 """
 module EuclidAnimations
 

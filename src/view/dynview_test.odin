@@ -251,9 +251,9 @@ dynview_track_prose_fonts_includes_effective_variant :: proc(t: ^testing.T) {
     testing.expect(t, !runtime^.compile_cache.is_valid)
 }
 
-//   Verify the scratchpad history prompt style matches the live input indent.
+//   Verify the presentation history prompt style matches the live input indent.
 @(test)
-scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
+presentation_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
     prompt_style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_PROMPT)
     input_block := app_dynlayout.block_format_for_kind(
         dyncore.DYNVIEW_BLOCK_INPUT)
@@ -270,7 +270,7 @@ scratchpad_history_prompt_matches_live_input_indent :: proc(t: ^testing.T) {
 
 //   Verify the native error underline style id and flags are stable across the bridge.
 @(test)
-scratchpad_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
+presentation_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
     testing.expect_value(t,
         dyncore.DYNVIEW_STYLE_UNDERLINE, 17)
 
@@ -748,11 +748,11 @@ view_snapshot_publication_fixture_init :: proc(
     init_test_evidence(fixture.state)
 }
 
-//   Verify the publication and Scratchpad evidence identities for one snapshot.
+//   Verify the publication evidence identity for one snapshot.
 view_snapshot_expect_publication_evidence :: proc(
     t: ^testing.T,
     state: ^app_core.Euclid_General_State) {
-    testing.expect_value(t, state^.evidence_ring.count, 2)
+    testing.expect_value(t, state^.evidence_ring.count, 1)
     event := state^.evidence_ring.events[0]
     testing.expect_value(t, event.kind, app_evidence_trace.Kind.Dynview_Published)
     testing.expect_value(t, event.correlation_kind,
@@ -760,14 +760,6 @@ view_snapshot_expect_publication_evidence :: proc(
     testing.expect_value(t, event.correlation, u64(7))
     testing.expect_value(t, event.generation, u64(7))
     testing.expect_value(t, event.revision, u64(11))
-    completed := state^.evidence_ring.events[1]
-    testing.expect_value(t, completed.kind,
-        app_evidence_trace.Kind.Scratchpad_Completed)
-    testing.expect_value(t, completed.correlation_kind,
-        app_evidence_trace.Correlation_Kind.Runtime_Request)
-    testing.expect_value(t, completed.correlation, u64(41))
-    testing.expect_value(t, completed.generation, u64(3))
-    testing.expect_value(t, completed.revision, u64(11))
 }
 
 //   Verify valid snapshot publication records the immutable animation identity.
@@ -789,8 +781,6 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
         runtime_generation = 3,
         animation_generation = 7,
         generation = 11,
-        scratchpad_request_id = 41,
-        scratchpad_runtime_generation = 3,
         animation = animation,
     }
     view_snapshot_test_text_builders_init(
@@ -803,9 +793,9 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
     view_snapshot_expect_publication_evidence(t, state)
 }
 
-//   Verify invalid current content cannot claim Scratchpad display completion.
+//   Verify invalid current content cannot claim Dynview publication.
 @(test)
-scratchpad_completion_waits_for_valid_view_publication :: proc(t: ^testing.T) {
+dynview_publication_requires_valid_view_snapshot :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     service := new(app_bridge.Julia_Runtime_Service, context.allocator)
@@ -819,8 +809,6 @@ scratchpad_completion_waits_for_valid_view_publication :: proc(t: ^testing.T) {
     service^.animation_generation = 7
     snapshot := &service^.view_snapshots[0]
     view_snapshot_test_complete(snapshot, animation, 11, 3, 7)
-    snapshot^.scratchpad_request_id = 41
-    snapshot^.scratchpad_runtime_generation = 3
     view_snapshot_test_text_builders_init(t, snapshot, "fallback", "")
     defer app_core.arena_owner_destroy(&snapshot^.arena)
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
@@ -831,9 +819,9 @@ scratchpad_completion_waits_for_valid_view_publication :: proc(t: ^testing.T) {
     testing.expect_value(t, state^.evidence_ring.count, 0)
 }
 
-//   Verify malformed Scratchpad semantics retain the prior published fallback atomically.
+//   Verify malformed presentation semantics retain the prior published fallback atomically.
 @(test)
-scratchpad_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.T) {
+presentation_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.T) {
     fixture := View_Snapshot_Publication_Fixture{
         new(app_core.Euclid_General_State, context.allocator),
         new(app_bridge.Julia_Runtime_Service, context.allocator),
@@ -866,45 +854,6 @@ scratchpad_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.T)
         app_bridge.View_Snapshot_Slot_State.Published)
     testing.expect_value(t, candidate^.state,
         app_bridge.View_Snapshot_Slot_State.Free)
-}
-
-//   Verify stale runtime identity and evidence pressure cannot produce false proof.
-@(test)
-scratchpad_completion_requires_current_complete_evidence :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State, context.allocator)
-    defer free(state)
-    init_test_evidence(state)
-    snapshot := app_bridge.View_Snapshot{
-        runtime_generation = 3,
-        scratchpad_request_id = 41,
-        scratchpad_runtime_generation = 2,
-    }
-    app_bridge.record_scratchpad_completed(state, &snapshot)
-    testing.expect_value(t, state^.evidence_ring.count, 0)
-
-    snapshot.scratchpad_runtime_generation = 3
-    for _ in 0..<app_evidence_trace.TRACE_RING_CAPACITY {
-        testing.expect(t, app_evidence_trace.ring_record(
-            &state^.evidence_ring, {kind = .Frame_Presented}))
-    }
-    app_bridge.record_scratchpad_completed(state, &snapshot)
-    testing.expect(t, state^.evidence_ring.required_evidence_lost)
-    testing.expect(t, !app_evidence_trace.ring_evidence_complete(
-        &state^.evidence_ring))
-}
-
-//   Verify reload and shutdown lifecycle boundaries discard uncommitted identities.
-@(test)
-scratchpad_completion_watermark_clears_at_lifecycle_boundary :: proc(t: ^testing.T) {
-    service := new(app_bridge.Julia_Runtime_Service, context.allocator)
-    defer free(service)
-    service^.worker_scratchpad_completed_request_id = 41
-    service^.worker_scratchpad_completed_runtime_generation = 3
-    app_bridge.clear_scratchpad_completion_watermark(service)
-    testing.expect_value(t,
-        service^.worker_scratchpad_completed_request_id, u64(0))
-    testing.expect_value(t,
-        service^.worker_scratchpad_completed_runtime_generation, u64(0))
 }
 
 //   Verify view snapshot validation rejects incomplete command streams.
@@ -965,8 +914,6 @@ view_snapshot_expect_stale_candidate_rejected :: proc(
     expected: View_Snapshot_Published_Expected) {
     second := &fixture.service^.view_snapshots[1]
     view_snapshot_test_complete(second, fixture.animation, 2, 1, 3)
-    second^.scratchpad_request_id = 41
-    second^.scratchpad_runtime_generation = 1
     view_snapshot_test_payloads_init(t, second, "stale", 0)
     testing.expect(t, !app_bridge.publish_available_view_snapshot(fixture.state))
     testing.expect_value(t, fixture.state^.evidence_ring.count, 1)
@@ -1329,9 +1276,9 @@ dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
     testing.expect_value(t, cache^.layout_average_line_height, f32(66))
 }
 
-//   Verify Scratchpad scrolling consumes finalized row-derived layout metrics.
+//   Verify presentation scrolling consumes finalized row-derived layout metrics.
 @(test)
-dynview_scratchpad_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
+dynview_presentation_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
     runtime := new(app_core.Dynview_System, context.allocator)
     defer free(runtime)
     runtime^.enabled = true
@@ -1339,16 +1286,16 @@ dynview_scratchpad_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
     runtime^.compile_cache.layout_is_valid = true
     runtime^.compile_cache.layout_total_height = 66
     runtime^.compile_cache.layout_average_line_height = 44
-    fallback := app_dynlayout.Scratchpad_Fallback_Layout{
+    fallback := app_dynlayout.Presentation_Fallback_Layout{
         text_padding = 4,
         wrap_advance = 8,
         row_height = 22,
         text = "fallback",
     }
 
-    content_height := app_dynlayout.scratchpad_content_height_or_fallback(
+    content_height := app_dynlayout.presentation_content_height_or_fallback(
         runtime, {width = 80, height = 100}, fallback)
-    scroll_step := app_dynlayout.scratchpad_scroll_step_or_fallback(runtime, 22)
+    scroll_step := app_dynlayout.presentation_scroll_step_or_fallback(runtime, 22)
 
     testing.expect_value(t, content_height, f32(74))
     testing.expect_value(t, scroll_step, f32(44))
@@ -1368,12 +1315,12 @@ dynview_document_scroll_metrics_override_legacy_rows :: proc(t: ^testing.T) {
     runtime^.compile_cache.document_layout_total_height = 75
     runtime^.compile_cache.layout_is_valid = true
     runtime^.compile_cache.layout_total_height = 22
-    fallback := app_dynlayout.Scratchpad_Fallback_Layout{
+    fallback := app_dynlayout.Presentation_Fallback_Layout{
         text_padding = 4, wrap_advance = 8, row_height = 22, text = "fallback"}
 
-    content_height := app_dynlayout.scratchpad_content_height_or_fallback(
+    content_height := app_dynlayout.presentation_content_height_or_fallback(
         runtime, {width = 80, height = 100}, fallback)
-    scroll_step := app_dynlayout.scratchpad_scroll_step_or_fallback(runtime, 22)
+    scroll_step := app_dynlayout.presentation_scroll_step_or_fallback(runtime, 22)
 
     testing.expect_value(t, content_height, f32(83))
     testing.expect_value(t, scroll_step, f32(37.5))

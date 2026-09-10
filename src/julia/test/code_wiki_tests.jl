@@ -6,6 +6,7 @@ using .CodeWiki
 using Test
 
 const ODIN_DOC_FIXTURE = """package sample
+    Package sample owns documented fixture behavior.
 \tfile: sample.odin
 \t\tdocumented :: proc(value: int) -> bool {...} /* 1!20 */
 \t\t\t  Return whether the value is accepted.
@@ -43,6 +44,7 @@ end
 
     @test package.stable_id == "odin:src:sample"
     @test package.display_name == "sample"
+    @test package.doc_markdown == "Package sample owns documented fixture behavior."
     @test package.source_files == ["sample.odin"]
     @test length(package.symbols) == 3
 
@@ -58,7 +60,7 @@ end
     @test package.symbols[3].declaration_kind == :constant
 
     @test_throws ErrorException parse_odin_doc(
-        "package broken\n\torphan hierarchy", "src/broken")
+        "package broken\n\t\torphan :: proc()", "src/broken")
 end
 
 @testset "Odin source enrichment and rendering" begin

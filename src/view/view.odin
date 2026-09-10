@@ -6,6 +6,7 @@ package view
 import view_core "core"
 import "font"
 import "input"
+import terminalview "terminal"
 import "ui"
 import "../core"
 import "../audio"
@@ -187,14 +188,15 @@ run_window_frame :: proc(
     sync_window_prose_shaping(state)
     julia.publish_available_view_snapshot(state, false)
     service_presentation_runtime(state, presentation)
-    ui.apply_scratchpad_async_results(state, &state^.ui_runtime)
     input_frame := input.input_poll_frame(input_runtime)
+    compile_ui := ui.prepare_ui_frame(state, input_frame)
+    terminal_service_update(state, input_runtime, input_frame)
     alpha := accumulate_and_update_systems(state)
-    run_parallel_frame_preparation(state, alpha, input_frame)
+    run_parallel_frame_preparation_after_ui(state, alpha, compile_ui)
     audio.update_chalk_runtime(&state^.chalk_audio)
     if scenario_runtime != nil {
         _ = scenario_runtime_update(
-            scenario_runtime, u64(i64(time.tick_since({}))))
+            scenario_runtime, u64(i64(time.tick_since({}))), input_runtime)
     }
 
     evidence_profile.zone_begin(display_profile, "frame_present")
@@ -401,6 +403,9 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
     }
     view_core.gif_capture_destroy_session(&state^.gif_capture)
     evidence_allocation.domain_destroy(&state^.evidence_allocations)
+    terminal_graphics_runtime_destroy(state)
+    shell_service_runtime_destroy(state)
+    terminalview.terminal_destroy(&state^.terminal)
     core.animation_storage_destroy(
         &state^.animation_memory,
         &state^.animation_values,
@@ -620,6 +625,7 @@ run_deterministic_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> b
     julia.schedule_animation_tick(state, dt)
     run_parallel_simulation_step(state^.simulation_executor, dt)
     state^.fixed_step += 1
+    terminal_tick_record_step(&state^.terminal_tick_publisher, state^.fixed_step)
     state^.simulation_time += dt
     record_constraint_trace_summary(state)
     _ = record_evidence_checkpoint(state, false)

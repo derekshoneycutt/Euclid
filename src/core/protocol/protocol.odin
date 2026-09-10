@@ -8,9 +8,80 @@ package protocol
 // Zero means no active request; request owners issue monotonically increasing IDs.
 Request_Id :: distinct u64
 
+// Positive terminal viewport size measured in character cells.
+Terminal_Dimensions :: struct {
+    columns: u16,
+    rows: u16,
+}
 
+// Inclusive policy bounds for accepted terminal dimensions.
+Terminal_Dimension_Limits :: struct {
+    minimum: Terminal_Dimensions,
+    maximum: Terminal_Dimensions,
+}
 
+// Odin-owned accepted terminal geometry and its monotonic change generation.
+Terminal_Geometry :: struct {
+    dimensions: Terminal_Dimensions,
+    generation: u64,
+    column_width: f32,
+    line_height: f32,
+}
 
+// Version of the stable terminal capability snapshot understood by both hosts.
+TERMINAL_CAPABILITY_VERSION :: u16(3)
+
+// Maximum source bytes retained for evaluation and completion correlation.
+TERMINAL_RETAINED_TEXT_MAX_BYTES :: 64 * 1024
+
+// Text encoding implemented by the display-owned terminal surface.
+Terminal_Text_Encoding :: enum u8 {
+    Unknown,
+    Utf8,
+}
+
+// Highest color model implemented by the display-owned terminal surface.
+Terminal_Color_Level :: enum u8 {
+    Unknown,
+    None,
+    Ansi16,
+    Indexed256,
+    Truecolor,
+}
+
+// Stable terminal feature bits independent of negotiated active modes.
+Terminal_Capability_Feature :: enum u32 {
+    Alternate_Screen,
+    Bracketed_Paste,
+    Focus_Events,
+    Sgr_Mouse,
+    Query_Modify_Other_Keys,
+    Query_Kitty_Keyboard,
+    Query_Primary_Device_Attributes,
+    Hyperlinks,
+    Clipboard_Writes,
+    Synchronized_Output,
+    Query_Secondary_Device_Attributes,
+    Query_Device_Status,
+    Query_Cursor_Position,
+    Query_Private_Mode_Status,
+    Query_Window_Pixels,
+    Query_Cell_Pixels,
+    Query_Text_Area_Size,
+    Kitty_Graphics,
+    Sixel_Graphics,
+    Iterm2_Inline_Images,
+}
+
+// Immutable host capability snapshot independent of dynamic terminal geometry.
+Terminal_Capabilities :: struct {
+    version: u16,
+    encoding: Terminal_Text_Encoding,
+    color: Terminal_Color_Level,
+    modify_other_keys_level: u8,
+    kitty_keyboard_flags: u8,
+    features: bit_set[Terminal_Capability_Feature; u32],
+}
 
 // User intent interpreted by Julia policy rather than directly by display code.
 Logical_Action :: enum i32 {
@@ -85,6 +156,163 @@ Evaluation_Mode :: enum {
     Help,
     Pkg,
     Shell,
+}
+
+// Maximum terminal-control and complete UTF-8 bytes delivered in one input batch.
+TERMINAL_INTERACTIVE_INPUT_MAX_BYTES :: 16
+
+// Correlated source submission for one animation-owned Terminal session.
+Evaluation_Requested :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+    code: string,
+    mode: Evaluation_Mode,
+}
+
+// Completion ranges use UTF-8 byte offsets into an immutable source snapshot.
+Completion_Requested :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+    code: string,
+    cursor_byte: int,
+    show_candidates: bool,
+}
+
+// Bounded keyboard-byte chunk for Julia's active interactive-input request.
+Terminal_Interactive_Input :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+    bytes: [TERMINAL_INTERACTIVE_INPUT_MAX_BYTES]u8,
+    byte_count: int,
+}
+
+// Announces one display-owned Terminal animation generation to the Julia owner.
+Terminal_Session_Started :: struct {animation_generation: u64}
+
+// Retires one display-owned Terminal animation generation from the Julia owner.
+Terminal_Session_Closed :: struct {animation_generation: u64}
+
+// Confirms installation or shutdown of one generation-scoped Terminal tick stream.
+Tick_Stream_Configuration_Acknowledged :: struct {
+    animation_generation: u64,
+    stream_generation: u64,
+    interval_steps: u64,
+    active: bool,
+}
+
+// Publishes one contiguous range of display-owned fixed simulation updates.
+Tick_Pulse :: struct {
+    animation_generation: u64,
+    stream_generation: u64,
+    sequence: u64,
+    first_simulation_tick: u64,
+    last_simulation_tick: u64,
+    step_count: u64,
+}
+
+// Publishes accepted display geometry in monotonic generation order.
+Terminal_Geometry_Accepted :: struct {
+    animation_generation: u64,
+    geometry: Terminal_Geometry,
+}
+
+// Publishes the immutable display capability snapshot for one Terminal generation.
+Terminal_Capabilities_Accepted :: struct {
+    animation_generation: u64,
+    capabilities: Terminal_Capabilities,
+}
+
+// Ordered worker-owned output borrowed by the display until envelope return.
+Terminal_Output_Batch :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+    bytes: string,
+    truncated_bytes: u64,
+}
+
+// Reports that an evaluation needs more source before execution can complete.
+Evaluation_Incomplete :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+}
+
+// Reports the terminal outcome of one correlated evaluation.
+Evaluation_Completed :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+    succeeded: bool,
+}
+
+// Correlated completion replacement borrowed from the worker-owned envelope.
+Completion_Result :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+    found: bool,
+    replacement_start: int,
+    replacement_end: int,
+    insertion: string,
+    show_candidates: bool,
+}
+
+// Stable reason one correlated completion request could not produce a result.
+Completion_Failure_Reason :: enum i32 {
+    Mailbox_Full = 1,
+    Runtime_Stopped,
+    Internal_Failure,
+    Duplicate_Request,
+}
+
+// Terminal failure for one correlated completion request.
+Completion_Failed :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+    reason: Completion_Failure_Reason,
+}
+
+// Grants terminal bytes to one Julia interactive-input request.
+Terminal_Input_Acquired :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+}
+
+// Releases one Julia interactive-input request from terminal routing.
+Terminal_Input_Released :: struct {
+    request_id: Request_Id,
+    animation_generation: u64,
+}
+
+// Confirms Julia observed the exact accepted display geometry.
+Terminal_Geometry_Observed :: struct {
+    animation_generation: u64,
+    geometry: Terminal_Geometry,
+}
+
+// Confirms Julia observed the exact immutable capability snapshot.
+Terminal_Capabilities_Observed :: struct {
+    animation_generation: u64,
+    capabilities: Terminal_Capabilities,
+}
+
+// Confirms Julia installed one Terminal generation and carries its startup banner.
+Terminal_Session_Ready :: struct {
+    animation_generation: u64,
+    banner: string,
+}
+
+// Confirms Julia retired one Terminal animation generation.
+Terminal_Session_Stopped :: struct {animation_generation: u64}
+
+// Requests one demand-driven fixed-update stream for a Terminal generation.
+Tick_Stream_Configure_Requested :: struct {
+    animation_generation: u64,
+    stream_generation: u64,
+    requested_period_ns: u64,
+}
+
+// Requests idempotent shutdown of one exact Terminal tick stream.
+Tick_Stream_Stop_Requested :: struct {
+    animation_generation: u64,
+    stream_generation: u64,
 }
 
 // Display-to-worker telemetry, evaluation, and interaction requests.

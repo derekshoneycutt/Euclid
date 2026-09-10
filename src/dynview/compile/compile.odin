@@ -657,7 +657,7 @@ rebuild_compiled_plain_text :: proc(
     return compiled_builders_seal(cache, &compile_state)
 }
 
-//   Rebuild scratchpad copy icon hit targets from compiled copy blocks.
+//   Rebuild presentation copy icon hit targets from compiled copy blocks.
 rebuild_copy_hit_targets :: proc(
     runtime: ^app_core.Dynview_System,
     layout: Copy_Hit_Target_Layout) -> i32 {
@@ -1006,7 +1006,7 @@ compile_is_needed :: proc(runtime: ^app_core.Dynview_System) -> bool {
 }
 
 //   Return compiled text when validation succeeds without mutating compile state.
-scratchpad_text_or_fallback :: proc(
+presentation_text_or_fallback :: proc(
     runtime: ^app_core.Dynview_System,
     fallback_text: string) -> string {
 
@@ -1021,8 +1021,8 @@ scratchpad_text_or_fallback :: proc(
     return string(runtime^.compile_cache.compiled_plain_text[:text_len])
 }
 
-//   Recompute copy hit-target cache for the current scratchpad panel and scroll.
-refresh_scratchpad_copy_targets :: proc(
+//   Recompute copy hit-target cache for the current presentation panel and scroll.
+refresh_presentation_copy_targets :: proc(
     runtime: ^app_core.Dynview_System,
     layout: Copy_Hit_Target_Layout) {
 

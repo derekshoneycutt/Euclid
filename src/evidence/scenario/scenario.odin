@@ -29,12 +29,15 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"animation_tick_committed", .Animation_Tick_Committed},
     {"animation_cycle_boundary", .Animation_Cycle_Boundary},
     {"animation_loaded", .Animation_Loaded},
+    {"terminal_session_ready", .Terminal_Session_Ready},
+    {"terminal_raster_published", .Terminal_Raster_Published},
+    {"animation_frame_presented", .Animation_Frame_Presented},
+    {"animation_playback_completed", .Animation_Playback_Completed},
     {"scene_batch_committed", .Scene_Batch_Committed},
     {"constraint_solve_completed", .Constraint_Solve_Completed},
     {"presentation_cleared", .Presentation_Cleared},
     {"presentation_superseded", .Presentation_Superseded},
     {"dynview_published", .Dynview_Published},
-    {"scratchpad_completed", .Scratchpad_Completed},
     {"frame_presented", .Frame_Presented},
     {"capture_completed", .Capture_Completed},
     {"gif_completed", .Gif_Completed},
@@ -48,7 +51,8 @@ Command_Kind :: enum u8 {
     Select_Animation,
     Reload_Runtime,
     Inject_Reload_Failure,
-    Submit_Scratchpad,
+    Type_Text,
+    Key,
     Pause_Simulation,
     Resume_Simulation,
     Request_Screenshot,
@@ -56,7 +60,9 @@ Command_Kind :: enum u8 {
     Stop_Gif,
     Wait_Event,
     Wait_State,
+    Wait_Terminal_Contains,
     Assert_State,
+    Assert_Terminal_Contains,
     Checkpoint,
     Allocation_Checkpoint,
     Assert_Allocation_Baseline,
@@ -119,6 +125,9 @@ Command :: struct {
 
     // Bounded wait duration in milliseconds; nonwait commands leave this zero.
     timeout_ms : u32,
+
+    // Optional one-based animation frame selected by an event wait.
+    frame_number : u32,
 }
 
 // Fixed-capacity scenario program produced from one complete JSON Lines source.
@@ -193,14 +202,17 @@ Raw_Command :: struct {
     // Text-bearing runtime and capture actions.
     select_animation : string,
     inject_reload_failure : string,
-    scratchpad : string,
+    type_text : string `json:"type"`,
+    key : string,
     screenshot : string,
     start_gif : string,
 
     // Event waits and display-state predicates.
     wait_event : string,
     wait_state : string,
+    wait_terminal_contains : string,
     assert_state : string,
+    assert_terminal_contains : string,
 
     // State checkpoint action.
     checkpoint : string,
@@ -214,6 +226,7 @@ Raw_Command :: struct {
     alias : string `json:"as"`,
     correlation : string,
     timeout_ms : u32,
+    frame_number : u32,
 
     // Payload-free terminal action represented directly in JSON.
     shutdown : bool,
@@ -336,6 +349,20 @@ runner_assert_action :: proc(
     return true
 }
 
+// Wait until one display-owned action predicate succeeds or its deadline expires.
+runner_update_action_wait :: proc(
+    runner: ^Runner, command: ^Command, frame: Runner_Frame) -> bool {
+    if runner.deadline_ns == 0 {
+        runner.deadline_ns = deadline_from(frame.now_ns, command.timeout_ms)
+    }
+    if frame.actions.issue != nil &&
+        frame.actions.issue(frame.actions.user_data, command).accepted {
+        return true
+    }
+    runner_wait_or_fail(runner, frame.now_ns)
+    return false
+}
+
 //   Issue one ordinary action and retain any requested correlation alias.
 runner_issue_action :: proc(
     runner: ^Runner, command: ^Command, actions: Action_Sink) -> bool {
@@ -361,13 +388,17 @@ runner_update_command :: proc(
         return runner_update_event_wait(runner, command, frame)
     case .Wait_State:
         return runner_update_state_wait(runner, command, frame)
+    case .Wait_Terminal_Contains:
+        return runner_update_action_wait(runner, command, frame)
     case .Assert_State:
         return runner_assert_state(runner, command, frame.display)
-    case .Assert_Allocation_Baseline, .Assert_No_Bad_Frees:
+    case .Assert_Terminal_Contains, .Assert_Allocation_Baseline,
+         .Assert_No_Bad_Frees:
         return runner_assert_action(runner, command, frame.actions)
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
-         .Submit_Scratchpad, .Pause_Simulation, .Resume_Simulation,
+         .Type_Text, .Key,
+         .Pause_Simulation, .Resume_Simulation,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown:
         return runner_issue_action(runner, command, frame.actions)
@@ -408,8 +439,15 @@ runner_update :: proc(
         if !runner_update_command(runner, command, frame) {
             return runner.status
         }
+        frame_boundary := command.kind == .Wait_Event ||
+            command.kind == .Wait_State ||
+            command.kind == .Wait_Terminal_Contains || command.kind == .Type_Text ||
+            command.kind == .Key
         runner.step += 1
         runner.deadline_ns = 0
+        if frame_boundary && runner.step < runner.program.count {
+            return runner.status
+        }
     }
     runner.status = .Passed
     return runner.status
@@ -452,13 +490,18 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
         raw.select_animation, .Select_Animation, command)
     selected += raw_text_command_select(
         raw.inject_reload_failure, .Inject_Reload_Failure, command)
-    selected += raw_text_command_select(raw.scratchpad, .Submit_Scratchpad, command)
+    selected += raw_text_command_select(raw.type_text, .Type_Text, command)
+    selected += raw_text_command_select(raw.key, .Key, command)
     selected += raw_text_command_select(
         raw.screenshot, .Request_Screenshot, command)
     selected += raw_text_command_select(raw.start_gif, .Start_Gif, command)
     selected += raw_text_command_select(raw.wait_event, .Wait_Event, command)
     selected += raw_text_command_select(raw.wait_state, .Wait_State, command)
+    selected += raw_text_command_select(raw.wait_terminal_contains,
+        .Wait_Terminal_Contains, command)
     selected += raw_text_command_select(raw.assert_state, .Assert_State, command)
+    selected += raw_text_command_select(raw.assert_terminal_contains,
+        .Assert_Terminal_Contains, command)
     selected += raw_text_command_select(raw.checkpoint, .Checkpoint, command)
     selected += raw_text_command_select(raw.allocation_checkpoint,
         .Allocation_Checkpoint, command)
@@ -503,13 +546,20 @@ command_from_raw :: proc(raw: Raw_Command) -> (Command, Parse_Error) {
         return {}, .Name_Too_Long
     }
     command.timeout_ms = raw.timeout_ms
-    if command.kind == .Wait_Event || command.kind == .Wait_State {
+    command.frame_number = raw.frame_number
+    if command.kind == .Wait_Event || command.kind == .Wait_State ||
+        command.kind == .Wait_Terminal_Contains {
         if command.timeout_ms == 0 {
             command.timeout_ms = SCENARIO_DEFAULT_TIMEOUT_MS
         }
         if command.timeout_ms > SCENARIO_MAX_TIMEOUT_MS {
             return {}, .Invalid_Timeout
         }
+    }
+    if command.frame_number > 0 &&
+        (command.kind != .Wait_Event ||
+         text_string(&command.text) != "animation_frame_presented") {
+        return {}, .Invalid_Command
     }
     return command, .None
 }
@@ -521,9 +571,12 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
-         .Submit_Scratchpad, .Pause_Simulation, .Resume_Simulation,
+         .Type_Text, .Key,
+         .Pause_Simulation, .Resume_Simulation,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
-         .Wait_State, .Assert_State, .Checkpoint, .Allocation_Checkpoint,
+         .Wait_State, .Wait_Terminal_Contains, .Assert_State,
+         .Assert_Terminal_Contains,
+         .Checkpoint, .Allocation_Checkpoint,
          .Assert_Allocation_Baseline:
         return false
     }
@@ -643,7 +696,9 @@ runner_match_event :: proc(
     for index in runner.trace_cursor..<len(events) {
         event := events[index]
         runner.trace_cursor = index + 1
-        if event.kind == expected_kind &&
+        frame_matches := command.frame_number == 0 ||
+            event.payload.counts.first == command.frame_number
+        if event.kind == expected_kind && frame_matches &&
             (correlation.id == 0 ||
                 (event.correlation_kind == correlation.kind &&
                  event.correlation == correlation.id &&
@@ -671,6 +726,16 @@ event_kind :: proc(name: string) -> (trace.Kind, bool) {
 }
 
 //   Evaluate one stable scalar-state predicate.
+terminal_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "terminal_ready": return display.terminal_ready
+    case "terminal_idle": return display.terminal_idle
+    case "terminal_continuation": return display.terminal_continuation
+    }
+    return false
+}
+
+//   Evaluate one stable scalar-state predicate.
 //
 // Parameters:
 //   - name: Public scenario state-predicate spelling.
@@ -684,14 +749,13 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "runtime_idle": return display.active_runtime_request_id == 0
     // Presentation parsing is independently scheduled and does not extend animation work.
     case "animation_idle": return !display.animation_tick_pending
-    case "scratchpad_idle": return display.scratchpad_idle
     case "simulation_paused": return display.simulation_paused
     case "simulation_running": return !display.simulation_paused
     case "dynview_enabled": return display.dynview_enabled
     case "gif_active": return display.gif_capture_active
     case "gif_idle": return !display.gif_capture_active
     }
-    return false
+    return terminal_state_matches(name, display)
 }
 
 //   Return running before the deadline and fail at or after it.

@@ -5,10 +5,6 @@ using Test
         include("geometry_tests.jl")
     end
 
-    @testset "Scratchpad" begin
-        include("scratchpad_tests.jl")
-    end
-
     @testset "EuclidRepl" begin
         include("euclidrepl_tests.jl")
     end

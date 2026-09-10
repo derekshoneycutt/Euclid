@@ -34,8 +34,9 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         library_path, runtime_dirs = BuildConfiguration.harfbuzz_jll_paths()
         @test isfile(library_path)
         @test dirname(library_path) in runtime_dirs
-        @test isempty(BuildConfiguration.native_runtime_dirs(:system))
-        @test BuildConfiguration.native_runtime_environment(:system) === nothing
+        @test dirname(BuildConfiguration.raylib_shared_library_path()) in
+            BuildConfiguration.native_runtime_dirs(:system)
+        @test BuildConfiguration.native_runtime_environment(:system) !== nothing
         runtime_environment = BuildConfiguration.native_runtime_environment(:jll)
         @test runtime_environment !== nothing
         @test all(directory -> occursin(directory, runtime_environment.second),
@@ -124,6 +125,7 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test isempty(build.arguments)
         command = odin_build_command("-ljulia", true, true)
         @test "-out:$(debug_app_binary_path())" in command
+        @test "-define:RAYLIB_SHARED=true" in command
         @test debug_assets_archive_path() ==
             joinpath(dirname(debug_app_binary_path()), "assets.pkg")
         @test "-debug" in command
@@ -172,7 +174,12 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         suites = TestRunner.suite_definitions()
         @test [suite.name for suite in suites] == ["julia", "odin"]
         @test [suite.language for suite in suites] == ["Julia", "Odin"]
-        @test "-define:ODIN_TEST_THREADS=1" in TestRunner.odin_test_command("")
+        command = TestRunner.odin_test_command("")
+        @test "-define:ODIN_TEST_THREADS=1" in command
+        @test "-define:RAYLIB_SHARED=true" in command
+        @test "-out:$(TestRunner.ODIN_TEST_BINARY)" in command
+        @test dirname(TestRunner.ODIN_TEST_BINARY) ==
+            joinpath(TestRunner.REPOSITORY_ROOT, "bin")
     end
 
     @testset "structured test records" begin

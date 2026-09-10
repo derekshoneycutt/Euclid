@@ -27,8 +27,8 @@ Fallback_Text_Content :: struct {
     color : rl.Color,
 }
 
-//   Panel, font, and metrics for one scratchpad draw pass.
-Scratchpad_Draw_Params :: struct {
+//   Panel, font, and metrics for one presentation draw pass.
+Presentation_Draw_Params :: struct {
     panel : rl.Rectangle,
     scroll_y : f32,
     font : rl.Font,
@@ -46,9 +46,9 @@ Program_Draw_Position :: struct {
 }
 
 
-//   Draw the fallback plain-text content for one scratchpad pass.
-draw_scratchpad_fallback_text :: proc(
-    fallback: Fallback_Text_Content, params: Scratchpad_Draw_Params) {
+//   Draw fallback plain-text content for one presentation pass.
+draw_presentation_fallback_text :: proc(
+    fallback: Fallback_Text_Content, params: Presentation_Draw_Params) {
 
     view_core.draw_wrapped_text_content(fallback.text,
         view_core.Wrapped_Text_Content_Params{
@@ -66,27 +66,27 @@ draw_scratchpad_fallback_text :: proc(
 }
 
 //   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
-draw_scratchpad_styled_or_fallback :: proc(
+draw_presentation_styled_or_fallback :: proc(
     state: ^core.Euclid_General_State,
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
     fallback: Fallback_Text_Content,
-    params: Scratchpad_Draw_Params) {
+    params: Presentation_Draw_Params) {
 
     if ui_runtime == nil {
-        draw_scratchpad_fallback_text(fallback, params)
+        draw_presentation_fallback_text(fallback, params)
         return
     }
 
-    if !draw_scratchpad_dynview(state, ui_runtime, params) {
-        draw_scratchpad_fallback_text(fallback, params)
+    if !draw_presentation_dynview(state, ui_runtime, params) {
+        draw_presentation_fallback_text(fallback, params)
     }
 }
 
-// Draw available authoritative or cached Dynview content for the scratchpad.
-draw_scratchpad_dynview :: proc(
+// Draw available authoritative or cached Dynview content for the presentation panel.
+draw_presentation_dynview :: proc(
     state: ^core.Euclid_General_State,
     ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    params: Scratchpad_Draw_Params) -> bool {
+    params: Presentation_Draw_Params) -> bool {
 
     runtime := &state^.dynview
     if !runtime^.enabled || runtime^.cache_access_state != .Display_Readable ||

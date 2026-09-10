@@ -268,6 +268,7 @@ init_evidence_session :: proc(
     if !evidence_session.session_init(
         &state^.evidence_session, settings^.evidence) {
         fmt.eprintln("Invalid semantic evidence configuration.")
+        terminal_graphics_runtime_destroy(state)
         destroy_simulation_executor(state^.simulation_executor)
         state^.simulation_executor = nil
         free_animations_state(state)
@@ -313,6 +314,29 @@ init_animations_state_resources :: proc(
 }
 
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
+init_native_shell_or_release :: proc(state: ^Euclid_General_State) -> bool {
+    if shell_service_runtime_init(state) {
+        return true
+    }
+    fmt.eprintln("Failed to initialize the native shell runtime.")
+    free_animations_state(state)
+    return false
+}
+
+//   Allocate runtime state shared by the windowed frontend and the headless harness.
+init_runtime_executors :: proc(state: ^Euclid_General_State) -> bool {
+    evidence_trace.ring_init(&state^.evidence_ring, .Display)
+    state^.simulation_executor = create_simulation_executor(state)
+    if state^.simulation_executor == nil {
+        fmt.eprintln("Failed to initialize the simulation task pool.")
+        return false
+    }
+    if terminal_graphics_runtime_init(state) { return true }
+    fmt.eprintln("Failed to initialize terminal graphics.")
+    return false
+}
+
+//   Allocate runtime state shared by the windowed frontend and the headless harness.
 initiate_animations_state :: proc(
     julia_service: ^julia.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
@@ -339,10 +363,10 @@ initiate_animations_state :: proc(
         free_animations_state(state)
         return nil
     }
-    evidence_trace.ring_init(&state^.evidence_ring, .Display)
-    state^.simulation_executor = create_simulation_executor(state)
-    if state^.simulation_executor == nil {
-        fmt.eprintln("Failed to initialize the simulation task pool.")
+    if !init_native_shell_or_release(state) {
+        return nil
+    }
+    if !init_runtime_executors(state) {
         free_animations_state(state)
         return nil
     }
@@ -400,6 +424,29 @@ write_session_evidence :: proc(session: ^evidence_session.Session) -> bool {
 }
 
 //   Shut down one runtime session in reverse ownership order.
+finish_runtime_evidence :: proc(
+    session: Euclid_Runtime_Session, scenario_runtime: ^Scenario_Runtime,
+    artifact_output: string) -> (artifact_succeeded, evidence_exit_failed: bool) {
+    _ = evidence_session.session_record(
+        &session.state^.evidence_session, &session.state^.evidence_ring, {
+            lane = .Lifecycle,
+            kind = .Session_Finished,
+            flags = {.Required},
+        })
+    evidence_session.session_accept_ring(
+        &session.state^.evidence_session, &session.state^.evidence_ring)
+    artifact_succeeded = write_scenario_artifact(
+        session, scenario_runtime, artifact_output)
+    export_succeeded := write_session_evidence(
+        &session.state^.evidence_session) && artifact_succeeded
+    evidence_session.session_finish(
+        &session.state^.evidence_session, export_succeeded)
+    evidence_exit_failed = evidence_session.session_should_fail_process(
+        &session.state^.evidence_session)
+    return
+}
+
+//   Shut down one runtime session in reverse ownership order.
 shutdown_runtime_session :: proc(
     session: Euclid_Runtime_Session,
     scenario_runtime: ^Scenario_Runtime = nil,
@@ -410,25 +457,12 @@ shutdown_runtime_session :: proc(
 
     quiesce_presentation_runtime(session.state, session.presentation)
     destroy_presentation_runtime(session.presentation)
+    terminal_graphics_runtime_destroy(session.state)
     destroy_simulation_executor(session.state^.simulation_executor)
     session.state^.simulation_executor = nil
     shutdown_julia_runtime(session.state, session.julia_service)
-    _ = evidence_session.session_record(
-        &session.state^.evidence_session, &session.state^.evidence_ring, {
-            lane = .Lifecycle,
-            kind = .Session_Finished,
-            flags = {.Required},
-        })
-    evidence_session.session_accept_ring(
-        &session.state^.evidence_session, &session.state^.evidence_ring)
-    artifact_succeeded := write_scenario_artifact(
+    artifact_succeeded, evidence_exit_failed := finish_runtime_evidence(
         session, scenario_runtime, artifact_output)
-    export_succeeded := write_session_evidence(
-        &session.state^.evidence_session) && artifact_succeeded
-    evidence_session.session_finish(
-        &session.state^.evidence_session, export_succeeded)
-    evidence_exit_failed := evidence_session.session_should_fail_process(
-        &session.state^.evidence_session)
     julia.release_published_view_snapshot(session.state, session.julia_service)
     julia.destroy_julia_runtime_service(session.julia_service)
     session.state^.julia_runtime_service = nil

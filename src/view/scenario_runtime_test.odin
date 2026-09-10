@@ -104,28 +104,6 @@ scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {
         scenario_runtime_update(&runtime, 2), scenario.Run_Status.Passed)
 }
 
-// Verify accepted scenario Scratchpad work owns bottom scrolling until its reply.
-@(test)
-scenario_scratchpad_submission_marks_forced_bottom_scroll :: proc(t: ^testing.T) {
-    ui_runtime := core.Euclid_Ui_Runtime_State{
-        text_scroll_dragging = true,
-        text_scroll_drag_off = 7,
-        ui_press_owner = {
-            active = true,
-            kind = .Scrollbar,
-            id = 1002,
-        },
-    }
-
-    scenario_mark_scratchpad_submitted(&ui_runtime, 42)
-
-    testing.expect(t, ui_runtime.scratchpad_bottom_pinned)
-    testing.expect_value(t, ui_runtime.scratchpad_forced_bottom_request_id, u64(42))
-    testing.expect(t, !ui_runtime.text_scroll_dragging)
-    testing.expect_value(t, ui_runtime.text_scroll_drag_off, f32(0))
-    testing.expect(t, !ui_runtime.ui_press_owner.active)
-}
-
 // Verify scenario selection uses the programmatic tree synchronization path.
 @(test)
 scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
@@ -180,22 +158,4 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
         evidence_trace.Correlation_Kind.Runtime_Request)
     testing.expect_value(t, identity.id, u64(8))
     testing.expect_value(t, identity.generation, u64(8))
-}
-
-// Verify rejected scenario Scratchpad work does not mutate display scroll state.
-@(test)
-scenario_rejected_scratchpad_submission_preserves_scroll_state :: proc(t: ^testing.T) {
-    state := new(core.Euclid_General_State, context.allocator)
-    defer free(state)
-    state^.ui_runtime.text_scroll_dragging = true
-    command_text, copied := scenario.text_copy("1 + 1")
-    testing.expect(t, copied)
-    command := scenario.Command{kind = .Submit_Scratchpad, text = command_text}
-    identity: evidence_trace.Identity
-
-    testing.expect(t, !scenario_submit_scratchpad(state, &command, &identity))
-    testing.expect(t, state^.ui_runtime.text_scroll_dragging)
-    testing.expect(t, !state^.ui_runtime.scratchpad_bottom_pinned)
-    testing.expect_value(t,
-        state^.ui_runtime.scratchpad_forced_bottom_request_id, u64(0))
 }

@@ -57,12 +57,12 @@ end
 
 @testset "complete production catalog contract" begin
     @test length(AnimationDescriptors) == 118
-    @test count(descriptor -> descriptor.kind == ScratchpadNode,
+    @test count(descriptor -> descriptor.kind == TerminalNode,
         AnimationDescriptors) == 1
     roots = filter(descriptor -> descriptor.parent_id === nothing,
         AnimationDescriptors)
-    @test first(roots).kind == ScratchpadNode
-    @test first(roots).display_name == "Scratchpad"
+    @test first(roots).kind == TerminalNode
+    @test first(roots).display_name == "Terminal"
     @test getproperty.(roots, :sibling_order) == collect(0:4)
     path_backed = filter(
         descriptor -> descriptor.implementation_path !== nothing,

@@ -9,9 +9,13 @@ import "../evidence/observe"
 import scenario "../evidence/scenario"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
+import input "./input"
+import ui "./ui"
 
+import "core:unicode/utf8"
 import "core:log"
 import "core:os"
+import "core:strings"
 
 import rl "vendor:raylib"
 
@@ -20,6 +24,7 @@ Scenario_Runtime :: struct {
     runner: scenario.Runner,
     capture: capture.Coordinator,
     state: ^Euclid_General_State,
+    input_runtime: ^input.Input_Runtime,
     next_action_id: u64,
     presented_frame: u64,
     shutdown_requested: bool,
@@ -31,6 +36,18 @@ Scenario_Runtime :: struct {
 Scenario_Arena_Sample :: struct {
     kind: evidence_allocation.Arena_Domain_Kind,
     snapshot: evidence_allocation.Arena_Snapshot,
+}
+
+// Stable scenario spelling paired with one portable input key.
+Scenario_Key_Name :: struct {name: string, key: input.Input_Key}
+
+// Supported deterministic Terminal keys.
+SCENARIO_KEY_NAMES :: [?]Scenario_Key_Name{
+    {"escape", .Escape}, {"enter", .Enter}, {"tab", .Tab},
+    {"backspace", .Backspace}, {"delete", .Delete},
+    {"left", .Left}, {"right", .Right}, {"up", .Up}, {"down", .Down},
+    {"home", .Home}, {"end", .End}, {"page_up", .Page_Up},
+    {"page_down", .Page_Down},
 }
 
 //   Load and validate one bounded JSONL scenario before runtime execution.
@@ -130,11 +147,13 @@ scenario_runtime_record_terminal :: proc(
 
 //   Advance the scenario against the cumulative synchronized evidence snapshot.
 scenario_runtime_update :: proc(
-    runtime: ^Scenario_Runtime, now_ns: u64) -> scenario.Run_Status {
+    runtime: ^Scenario_Runtime, now_ns: u64,
+    input_runtime: ^input.Input_Runtime = nil) -> scenario.Run_Status {
     if runtime == nil || runtime.state == nil {
         return .Failed
     }
     state := runtime.state
+    runtime.input_runtime = input_runtime
     status := scenario.runner_update(&runtime.runner, {
         now_ns = now_ns,
         events = state.evidence_session.events[:state.evidence_session.event_count],
@@ -155,6 +174,57 @@ scenario_runtime_update :: proc(
     }
     scenario_runtime_record_terminal(runtime, status)
     return status
+}
+
+// Inject one complete UTF-8 text action into ordinary next-frame input.
+scenario_issue_terminal_text :: proc(
+    runtime: ^Scenario_Runtime, text: string) -> bool {
+    terminal := &runtime.state.terminal
+    if runtime.input_runtime == nil || !terminal.initialized ||
+        !terminal.julia_session_ready || terminal.awaiting_eval {
+        return false
+    }
+    events: [scenario.SCENARIO_TEXT_CAPACITY]input.Input_Event
+    count := 0
+    offset := 0
+    for offset < len(text) {
+        codepoint, width := utf8.decode_rune(text[offset:])
+        if width == 0 { return false }
+        events[count] = {kind = .Text, codepoint = codepoint}
+        count += 1
+        offset += width
+    }
+    return input.input_runtime_inject_events(
+        runtime.input_runtime, events[:count])
+}
+
+// Inject one supported portable key into ordinary next-frame input.
+scenario_issue_terminal_key :: proc(
+    runtime: ^Scenario_Runtime, name: string) -> bool {
+    terminal := &runtime.state.terminal
+    if runtime.input_runtime == nil || !terminal.initialized ||
+        !terminal.julia_session_ready || terminal.awaiting_eval {
+        return false
+    }
+    for entry in SCENARIO_KEY_NAMES {
+        if entry.name == name {
+            event := input.Input_Event{kind = .Press, key = entry.key}
+            return input.input_runtime_inject_events(
+                runtime.input_runtime, []input.Input_Event{event})
+        }
+    }
+    return false
+}
+
+// Report whether retained Terminal cells contain one requested text fragment.
+scenario_terminal_contains :: proc(
+    state: ^Euclid_General_State, text: string) -> bool {
+    for row in 0 ..< ui.terminal_line_count(&state.terminal) {
+        if strings.contains(ui.terminal_line_text(&state.terminal, row), text) {
+            return true
+        }
+    }
+    return false
 }
 
 //   Fulfill pending capture work after the display has presented a complete frame.
@@ -189,40 +259,6 @@ scenario_runtime_after_present :: proc(
         runtime.runner.status = .Failed
     }
     return status
-}
-
-//   Record display-owned scrolling intent for one accepted scenario submission.
-scenario_mark_scratchpad_submitted :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
-    request_id: u64) {
-
-    ui_runtime^.scratchpad_bottom_pinned = true
-    ui_runtime^.scratchpad_forced_bottom_request_id = request_id
-    ui_runtime^.text_scroll_dragging = false
-    ui_runtime^.text_scroll_drag_off = 0
-    if ui_runtime^.ui_press_owner.active &&
-        ui_runtime^.ui_press_owner.kind == .Scrollbar &&
-        ui_runtime^.ui_press_owner.id == 1002 {
-
-        ui_runtime^.ui_press_owner = {}
-    }
-}
-
-//   Route one Scratchpad command through its ordinary owner API.
-scenario_submit_scratchpad :: proc(
-    state: ^Euclid_General_State, command: ^scenario.Command,
-    identity: ^evidence_trace.Identity) -> bool {
-    text := scenario.text_string(&command.text)
-    request_id, submitted := julia.try_submit_scratchpad_async(
-        state, .Submit, julia.get_scratchpad_submission(text, len(text)))
-    if !submitted {
-        return false
-    }
-    scenario_mark_scratchpad_submitted(&state^.ui_runtime, request_id)
-    identity.kind = .Runtime_Request
-    identity.id = request_id
-    identity.generation = state.julia_runtime_service.runtime_generation
-    return true
 }
 
 //   Arm one validated scenario-only failure for the next runtime reload.
@@ -269,8 +305,6 @@ scenario_issue_julia_action :: proc(
         return true, true
     case .Select_Animation:
         return true, scenario_select_animation(state, command, identity)
-    case .Submit_Scratchpad:
-        return true, scenario_submit_scratchpad(state, command, identity)
     case .Reload_Runtime:
         if state.julia_runtime_service == nil {
             return true, false
@@ -442,6 +476,47 @@ scenario_record_allocation_evidence :: proc(
 }
 
 //   Route one generic scenario command through ordinary Euclid request state and APIs.
+scenario_issue_generic_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> (bool, bool) {
+    text := scenario.text_string(&command.text)
+    #partial switch command.kind {
+    case .Type_Text:
+        return true, scenario_issue_terminal_text(runtime, text)
+    case .Key:
+        return true, scenario_issue_terminal_key(runtime, text)
+    case .Wait_Terminal_Contains, .Assert_Terminal_Contains:
+        return true, scenario_terminal_contains(runtime.state, text)
+    case:
+    }
+    if handled, accepted := scenario_issue_julia_action(
+        runtime, command, identity); handled {
+        return handled, accepted
+    }
+    if handled, accepted := scenario_issue_display_action(
+        runtime, command, identity); handled {
+        return handled, accepted
+    }
+    return scenario_issue_allocation_action(runtime, command)
+}
+
+//   Record one accepted scenario action under its final correlation identity.
+scenario_record_issued_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    identity: evidence_trace.Identity) {
+    _ = evidence_session.session_record(
+        &runtime.state^.evidence_session, &runtime.state^.evidence_ring, {
+            lane = .Scenario,
+            kind = .Scenario_Action_Issued,
+            correlation_kind = identity.kind,
+            correlation = identity.id,
+            generation = identity.generation,
+            flags = {.Required},
+            payload = {counts = {first = u32(command.kind)}},
+        })
+}
+
+//   Route one generic scenario command through ordinary Euclid request state and APIs.
 scenario_runtime_issue :: proc(
     user_data: rawptr, command: ^scenario.Command) -> scenario.Action_Result {
     runtime := cast(^Scenario_Runtime)user_data
@@ -454,26 +529,11 @@ scenario_runtime_issue :: proc(
         generation = 1,
     }
     runtime.next_action_id += 1
-    handled, accepted := scenario_issue_julia_action(runtime, command, &identity)
-    if !handled {
-        handled, accepted = scenario_issue_display_action(runtime, command, &identity)
-    }
-    if !handled {
-        handled, accepted = scenario_issue_allocation_action(runtime, command)
-    }
+    handled, accepted := scenario_issue_generic_action(runtime, command, &identity)
     if !handled || !accepted {
         return {}
     }
-    _ = evidence_session.session_record(
-        &runtime.state^.evidence_session, &runtime.state^.evidence_ring, {
-            lane = .Scenario,
-            kind = .Scenario_Action_Issued,
-            correlation_kind = identity.kind,
-            correlation = identity.id,
-            generation = identity.generation,
-            flags = {.Required},
-            payload = {counts = {first = u32(command.kind)}},
-        })
+    scenario_record_issued_action(runtime, command, identity)
     return {accepted = true, correlation = identity}
 }
 
@@ -489,7 +549,7 @@ scenario_runtime_capture_screenshot :: proc(
         return false
     }
     rl.TakeScreenshot(path)
-    return rl.FileExists(path)
+    return os.exists(capture.checkpoint_path_text(&runtime.capture))
 }
 
 //   Report whether the scenario reached any terminal outcome.

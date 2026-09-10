@@ -67,6 +67,20 @@ if(BUILD_TESTING)
         particles
         shapes
         taskpool
+        terminal/attachment
+        terminal/clipboard
+        terminal/emulator
+        terminal/graphics/prepare
+        terminal/graphics/protocol
+        terminal/graphics/semantics
+        terminal/grid
+        terminal/history
+        terminal/hyperlink
+        terminal/model
+        terminal/palette
+        terminal/session
+        terminal/shell
+        terminal/shell_integration
         view
         view/core
         view/font

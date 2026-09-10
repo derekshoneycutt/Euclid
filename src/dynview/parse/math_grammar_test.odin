@@ -478,9 +478,9 @@ tex_parse_math_matches_rich_table_fixture :: proc(t: ^testing.T) {
     testing.expect_value(t, descriptor.row_extra_gaps[1].value, f32(-2))
 }
 
-//   Verify the reported Scratchpad formulas compile without recoverable fallback.
+//   Verify the reported Terminal formulas compile without recoverable fallback.
 @(test)
-tex_parse_math_matches_reported_scratchpad_formulas :: proc(t: ^testing.T) {
+tex_parse_math_matches_reported_terminal_formulas :: proc(t: ^testing.T) {
     cases := [?]string{
         "\\sum_{i=1}^{n} i\\;\\;\\; \\prod_{k=1}^{m} a_k\\;\\;\\; " +
             "\\int_0^1 f(x)\\,dx\\;\\;\\; \\lim_{x\\to 0} f(x)",

@@ -42,6 +42,9 @@ end
 """Split one compiler-normalized Odin parameter list without nested commas."""
 function split_odin_abi_parameters(parameters::AbstractString)
     isempty(strip(parameters)) && return String[]
+    if !occursin(':', parameters)
+        return strip.(split(parameters, ','))
+    end
     types = String[]
     pending_names = 0
     for part in split(parameters, ',')

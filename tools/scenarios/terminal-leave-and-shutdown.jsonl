@@ -1,0 +1,14 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"2 + 2"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"wait_terminal_contains":"4","timeout_ms":10000}
+{"select_animation":"Point","as":"point"}
+{"wait_event":"animation_selected","correlation":"point","timeout_ms":10000}
+{"select_animation":"Line","as":"line"}
+{"wait_event":"animation_selected","correlation":"line","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

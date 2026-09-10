@@ -1,6 +1,5 @@
 package input
 
-/* TODO: Commented out because we didn't bring over the full terminal module etc yet
 import gfxprotocol "../../terminal/graphics/protocol"
 import termemulator "../../terminal/emulator"
 import termmodel "../../terminal/model"
@@ -1642,4 +1641,3 @@ input_terminal_enqueue_frame :: proc(
         }
     }
 }
-*/

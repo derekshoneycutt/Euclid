@@ -1,0 +1,59 @@
+module EuclidHost
+
+using Logging
+using ..OdinJuliaBridge
+import ..EuclidRepl
+using ..EuclidActorRuntime
+using ..EuclidPolicy
+import ..TerminalContainer
+import ..EuclidReplEvaluation
+using ..EuclidReplEvaluation: complete_input, interactive_write!
+using ..EuclidShellInterpolation: evaluate_shell_interpolation
+
+export HostCompletionCommand, HostEvaluationCommand, HostPumpStatus, HostRuntime
+export HostSessionLifecycleCommand, HostSessionPhase, HostSessionRuntime
+export HostDiagnosticLogger, host_diagnostic_logger, @host_log
+export HostShellInterpolationCommand, HostShellSessionCommand
+export HostTerminalProcessCommand, HostTickStreamCommand
+export HostTerminalContainerConfigureCommand, HostTerminalContainerObservedCommand
+export HostHotkeyRegistryCommand, HostTerminalVisibilityCommand
+export cancel_shell_interpolation_for_host, create_host_runtime
+export create_session_module
+export close_session_for_host, start_session_for_host
+export create_host_runtime_for_host, evaluation_command_index
+export fail_completion!, fail_evaluation_for_host!, fail_shell_interpolation!
+export ingest_completion_candidates_for_host, ingest_completion_for_host
+export ingest_completion_preview_for_host, ingest_engine_event_for_host
+export ingest_evaluation_for_host, ingest_hotkey_for_host
+export ingest_hotkey_registry_result_for_host
+export ingest_interactive_input_for_host, ingest_shell_interpolation_for_host
+export ingest_shell_session_submit_for_host
+export ingest_terminal_capabilities_for_host
+export ingest_terminal_geometry_for_host
+export ingest_terminal_container_changed_for_host
+export ingest_terminal_container_configuration_result_for_host
+export ingest_terminal_session_accepted_for_host
+export ingest_terminal_session_completed_for_host
+export ingest_terminal_session_rejected_for_host
+export ingest_tick_pulse_for_host
+export ingest_tick_stream_configuration_for_host
+export pack_shell_interpolation_elements, pump_for_host
+export reject_pending_for_shutdown!, request_shutdown_for_host
+export take_completion_for_host, take_evaluation_for_host
+export take_session_lifecycle_for_host
+export take_outgoing_command!, take_shell_interpolation_for_host
+export take_shell_session_for_host, take_terminal_visibility_for_host
+export take_terminal_process_for_host
+export take_hotkey_registry_for_host
+export take_tick_stream_for_host
+export take_terminal_container_configure_for_host
+export take_terminal_container_observed_for_host
+
+include("host/logging.jl")
+include("host/runtime.jl")
+include("host/ingress.jl")
+include("host/egress.jl")
+include("host/lifecycle.jl")
+
+end
+

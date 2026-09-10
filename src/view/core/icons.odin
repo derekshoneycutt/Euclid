@@ -225,7 +225,7 @@ draw_books_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
         color)
 }
 
-//   Draw a simple two-sheet copy glyph used for scratchpad block copy actions.
+//   Draw a simple two-sheet copy glyph used for presentation block copy actions.
 draw_copy_icon :: proc(rect: rl.Rectangle, color: rl.Color) {
     back := rl.Rectangle{
         rect.x + rect.width * 0.32,

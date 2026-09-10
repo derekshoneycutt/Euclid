@@ -75,9 +75,9 @@ navigation_order = 45
 owner = "guide_authors"
 
 [[guides]]
-title = "Scratchpad Architecture"
-path = "Guides/ScratchpadArchitecture.md"
-summary = "Interactive Julia terminal, evaluation pipeline, session model, and frame hook lifecycle."
+title = "Terminal Architecture"
+path = "Guides/TerminalArchitecture.md"
+summary = "Interactive Terminal ownership, session actors, native process integration, and EuclidRepl lifecycle."
 navigation_order = 50
 owner = "guide_authors"
 
@@ -130,7 +130,7 @@ symbol_prefixes = []
 package_id = "julia:EuclidRepl"
 guide_paths = [
     "Guides/AnimationsStyle.md#motion-conventions",
-    "Guides/ArchitectureSummary.md#scratchpad-architecture-interactive-runtime-surface",
+    "Guides/ArchitectureSummary.md#terminal-architecture-interactive-runtime-surface",
 ]
 symbol_prefixes = ["circle!", "highlight_", "line!", "point!", "reflect", "rotate", "translate"]
 

@@ -284,7 +284,7 @@ expect_failed_dynview_rebuild :: proc(
     testing.expect_value(t, state^.dynview.cache_access_state,
         app_core.Dynview_Cache_Access_State.Display_Readable)
     testing.expect_value(t,
-        dyncompile.scratchpad_text_or_fallback(&state^.dynview, "fallback"),
+        dyncompile.presentation_text_or_fallback(&state^.dynview, "fallback"),
         "fallback")
 }
 

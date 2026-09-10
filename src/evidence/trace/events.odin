@@ -56,6 +56,7 @@ Correlation_Kind :: enum u8 {
     Checkpoint = 8,
     Scenario_Action = 9,
     Text = 10,
+    Attachment = 11,
 }
 
 // Stable semantic occurrence identifiers serialized by schema version.
@@ -127,9 +128,12 @@ Kind :: enum u16 {
     Gif_Failed = 367,
     Shape_Cache_Prepared = 368,
     Dynview_Compiled = 369,
-    Scratchpad_Completed = 370,
     Presentation_Cleared = 371,
     Presentation_Superseded = 372,
+    Terminal_Session_Ready = 373,
+    Terminal_Raster_Published = 374,
+    Animation_Frame_Presented = 375,
+    Animation_Playback_Completed = 376,
 
     // Rich checkpoint storage (420-459).
     Checkpoint_Requested = 420,

@@ -2,11 +2,13 @@ package bridge
 
 import "base:runtime"
 import "../core"
+import protocol "../core/protocol"
 import dyncore "../dynview/core"
 import "../julialib"
 import evidence_profile "../evidence/profile"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
+import "core:c"
 import "core:fmt"
 import "core:log"
 import "core:os"
@@ -23,8 +25,6 @@ JULIA_EVENT_CAPACITY :: core.JULIA_EVENT_CAPACITY
 JULIA_REQUEST_LINK_POOL_CAPACITY :: core.JULIA_REQUEST_LINK_POOL_CAPACITY
 JULIA_EVENT_LINK_POOL_CAPACITY :: core.JULIA_EVENT_LINK_POOL_CAPACITY
 JULIA_EVIDENCE_HANDOFF_CAPACITY :: core.JULIA_EVIDENCE_HANDOFF_CAPACITY
-SCRATCHPAD_ASYNC_SLOT_COUNT :: core.SCRATCHPAD_ASYNC_SLOT_COUNT
-SCRATCHPAD_ASYNC_TEXT_CAPACITY :: core.SCRATCHPAD_ASYNC_TEXT_CAPACITY
 VIEW_SNAPSHOT_SLOT_COUNT :: core.VIEW_SNAPSHOT_SLOT_COUNT
 VIEW_SNAPSHOT_TEXT_CAPACITY :: core.VIEW_SNAPSHOT_TEXT_CAPACITY
 ANIMATION_TICK_SLOT_COUNT :: core.ANIMATION_TICK_SLOT_COUNT
@@ -33,6 +33,19 @@ MAX_ACCUMULATED_ANIMATION_DT :: f32(0.25)
 // Stack-local Julia host handle retained by the worker's persistent GC frame.
 Julia_Runtime_Host :: struct {
     runtime: ^julialib.jl_value_t,
+    terminal_startup_banner: ^julialib.jl_value_t,
+    terminal_start_session: ^julialib.jl_value_t,
+    terminal_close_session: ^julialib.jl_value_t,
+    terminal_ingest_evaluation: ^julialib.jl_value_t,
+    terminal_pump: ^julialib.jl_value_t,
+    terminal_shutdown: ^julialib.jl_value_t,
+    terminal_take_evaluation: ^julialib.jl_value_t,
+    terminal_take_session_lifecycle: ^julialib.jl_value_t,
+    terminal_ingest_tick_configuration: ^julialib.jl_value_t,
+    terminal_ingest_tick_pulse: ^julialib.jl_value_t,
+    terminal_take_tick_stream: ^julialib.jl_value_t,
+    terminal_request_id: protocol.Request_Id,
+    terminal_generation: u64,
 }
 
 // One-root Julia GC frame installed for the complete initialized worker lifetime.
@@ -42,13 +55,33 @@ Julia_Runtime_Gc_Frame :: struct {
     root: rawptr,
 }
 
+// Five-root Julia GC frame used while constructing one Terminal evaluation call.
+Julia_Terminal_Request_Gc_Frame :: struct {
+    encoded_root_count: uintptr,
+    previous: ^julialib.jl_gcframe_t,
+    roots: [5]^julialib.jl_value_t,
+}
+
+// One-root Julia GC frame retaining a primitive host command during field boxing.
+Julia_Terminal_Command_Gc_Frame :: struct {
+    encoded_root_count: uintptr,
+    previous: ^julialib.jl_gcframe_t,
+    command: ^julialib.jl_value_t,
+}
+
+// Result of processing one serialized Julia worker request.
+Julia_Worker_Request_Result :: struct {
+    event: Julia_Event,
+    shutting_down: bool,
+    accepted: bool,
+}
+
 //   Dispatch table mapping each Julia event kind to its completion handler.
 //   Initialized and Invoke_Complete need no handler and map to nil.
 JULIA_EVENT_HANDLERS ::
     [Julia_Event_Kind]proc(service: ^Julia_Runtime_Service, event: Julia_Event){
     .Initialized = nil,
     .Invoke_Complete = nil,
-    .Scratchpad_Complete = julia_event_on_scratchpad,
     .Animation_Tick_Complete = julia_event_on_animation_tick,
     .Shutdown_Complete = julia_event_on_shutdown,
 }
@@ -97,10 +130,6 @@ Presentation_Snapshot_Request :: struct {
     document: ^dyncore.Dynview_Document,
 }
 
-Scratchpad_Async_Kind :: core.Scratchpad_Async_Kind
-Scratchpad_Async_Slot_State :: core.Scratchpad_Async_Slot_State
-Scratchpad_Async_Slot :: core.Scratchpad_Async_Slot
-Scratchpad_Input_Mode :: core.Scratchpad_Input_Mode
 Julia_Lifecycle_State :: core.Julia_Lifecycle_State
 Julia_Reload_State :: core.Julia_Reload_State
 Julia_Task_Proc :: core.Julia_Task_Proc
@@ -387,7 +416,6 @@ publish_view_snapshot_slot :: proc(
             revision = u64(slot^.generation),
             flags = {.Required},
         })
-    record_scratchpad_completed(state, slot)
 }
 
 //   Publish the newest valid complete snapshot and recycle superseded storage.
@@ -421,7 +449,6 @@ publish_available_view_snapshot :: proc(
         return false
     }
     if published_view_snapshot_equals(service, slot) {
-        record_scratchpad_completed(state, slot)
         slot^.state = .Free
         return false
     }
@@ -451,8 +478,6 @@ publish_presentation_snapshot :: proc(
     slot^.generation = service^.view_snapshot_generation
     slot^.runtime_generation = request.content.runtime_generation
     slot^.animation_generation = request.content.animation_generation
-    slot^.scratchpad_request_id = request.content.scratchpad_request_id
-    slot^.scratchpad_runtime_generation = request.content.runtime_generation
     slot^.host_state = state
     slot^.animation = request.content.animation
     slot^.presentation_mime = request.content.content.mime
@@ -533,27 +558,6 @@ stage_presentation_text_command :: proc(
     return dynview_push_command(staging, command)
 }
 
-//   Record an accepted Scratchpad request only after its semantic view is visible.
-record_scratchpad_completed :: proc(
-    state: ^core.Euclid_General_State,
-    slot: ^View_Snapshot) {
-
-    if slot^.scratchpad_request_id == 0 ||
-        slot^.scratchpad_runtime_generation != slot^.runtime_generation {
-        return
-    }
-    _ = evidence_session.session_record(
-        &state^.evidence_session, &state^.evidence_ring, {
-            lane = .Presentation,
-            kind = .Scratchpad_Completed,
-            correlation_kind = .Runtime_Request,
-            correlation = slot^.scratchpad_request_id,
-            generation = slot^.scratchpad_runtime_generation,
-            revision = u64(slot^.generation),
-            flags = {.Required},
-        })
-}
-
 //   Find the newest completed slot without relying on event ordering or retention.
 // Slot generation is authoritative because completion events only trigger display metadata.
 newest_completed_view_snapshot_index :: proc(service: ^Julia_Runtime_Service) -> int {
@@ -581,15 +585,6 @@ release_superseded_completed_view_snapshots :: proc(
             slot.state = .Free
         }
     }
-}
-
-//   Clear worker-only Scratchpad completion state at a lifecycle boundary.
-clear_scratchpad_completion_watermark :: proc(service: ^Julia_Runtime_Service) {
-    if service == nil {
-        return
-    }
-    service^.worker_scratchpad_completed_request_id = 0
-    service^.worker_scratchpad_completed_runtime_generation = 0
 }
 
 //   Keep previous semantic commands from appearing under a new selection.
@@ -1084,8 +1079,6 @@ reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
     slot^.generation = 0
     slot^.runtime_generation = 0
     slot^.animation_generation = 0
-    slot^.scratchpad_request_id = 0
-    slot^.scratchpad_runtime_generation = 0
     slot^.host_state = nil
     slot^.animation = nil
     slot^.presentation_mime = .Text_Plain
@@ -1557,10 +1550,41 @@ return_julia_egress :: proc(
         communication_link_return(&service^.event_link, message)
 }
 
+//   Release nested display-owned storage from one ingress envelope.
+destroy_julia_ingress_message :: proc(
+    service: ^Julia_Runtime_Service, message: ^core.Julia_Host_Ingress) {
+    if request, ok := message^.(protocol.Evaluation_Requested); ok {
+        communication_link_free_bytes(&service^.request_link,
+            transmute([]u8)request.code)
+    } else if request, complete_ok := message^.(protocol.Completion_Requested);
+              complete_ok {
+        communication_link_free_bytes(&service^.request_link,
+            transmute([]u8)request.code)
+    }
+    message^ = {}
+    communication_link_free(&service^.request_link, message)
+}
+
+//   Reclaim returned display ingress envelopes on the display producer thread.
+drain_julia_ingress_returns :: proc(service: ^Julia_Runtime_Service) -> int {
+    count := 0
+    for {
+        message, ok := communication_link_try_take_return(&service^.request_link)
+        if !ok {
+            return count
+        }
+        destroy_julia_ingress_message(service, message)
+        count += 1
+    }
+}
+
 //   Receive one available worker event without blocking the display thread.
 // Successful receives also apply lifecycle and slot-completion metadata exactly once.
 try_receive_julia_event :: proc(
     service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
+    if service == nil || service^.display_deferred_terminal_egress != nil {
+        return {}, false
+    }
     for {
         event_message, ok := try_receive_julia_egress(service)
         if !ok {
@@ -1572,7 +1596,12 @@ try_receive_julia_event :: proc(
             accept_julia_event(service, event)
             return event, true
         }
-        defer_view_content(service, event_message)
+        if _, is_content := event_message^.(core.View_Content_Ready); is_content {
+            defer_view_content(service, event_message)
+            continue
+        }
+        service^.display_deferred_terminal_egress = event_message
+        return {}, false
     }
 }
 
@@ -1598,12 +1627,31 @@ take_deferred_view_content :: proc(
     return message
 }
 
+//   Transfer one ordered terminal envelope deferred by an event-only consumer.
+take_deferred_terminal_egress :: proc(
+    service: ^Julia_Runtime_Service) -> ^core.Julia_Host_Egress {
+    if service == nil {
+        return nil
+    }
+    message := service^.display_deferred_terminal_egress
+    service^.display_deferred_terminal_egress = nil
+    return message
+}
+
 //   Destroy one Julia-owned egress envelope and any nested pool allocation.
 destroy_julia_egress_message :: proc(
     service: ^Julia_Runtime_Service, message: ^core.Julia_Host_Egress) {
-    content, is_content := message^.(core.View_Content_Ready)
-    if is_content {
+    if content, content_ok := message^.(core.View_Content_Ready); content_ok {
         communication_link_free_bytes(&service^.event_link, content.content.bytes)
+    } else if output, output_ok := message^.(protocol.Terminal_Output_Batch); output_ok {
+        communication_link_free_bytes(&service^.event_link,
+            transmute([]u8)output.bytes)
+    } else if result, result_ok := message^.(protocol.Completion_Result); result_ok {
+        communication_link_free_bytes(&service^.event_link,
+            transmute([]u8)result.insertion)
+    } else if ready, ready_ok := message^.(protocol.Terminal_Session_Ready); ready_ok {
+        communication_link_free_bytes(&service^.event_link,
+            transmute([]u8)ready.banner)
     }
     message^ = {}
     communication_link_free(&service^.event_link, message)
@@ -1653,7 +1701,6 @@ allocate_view_content_message :: proc(
         animation_generation = animation_generation,
         presentation_generation = generation,
         animation = animation,
-        scratchpad_request_id = service^.worker_scratchpad_completed_request_id,
         content = {mime = mime, bytes = bytes},
     })
     service^.presentation_generation = generation
@@ -1707,7 +1754,7 @@ send_julia_request :: proc(
         service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
-    _ = communication_link_drain_returns(&service^.request_link)
+    _ = drain_julia_ingress_returns(service)
     message, allocation_error := communication_link_alloc(&service^.request_link)
     if allocation_error != .None {
         return .Allocation_Failed
@@ -1715,6 +1762,243 @@ send_julia_request :: proc(
     message^ = core.Julia_Host_Ingress(request)
     if !communication_link_try_send(&service^.request_link, message) {
         communication_link_free(&service^.request_link, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+//   Return whether one ingress variant owns dynamic pooled bytes.
+terminal_ingress_has_dynamic_payload :: proc(
+    value: core.Julia_Host_Ingress) -> bool {
+    #partial switch _ in value {
+    case protocol.Evaluation_Requested:
+        return true
+    case protocol.Completion_Requested:
+        return true
+    }
+    return false
+}
+
+//   Clone and enqueue one typed Terminal ingress message without blocking.
+send_terminal_ingress :: proc(
+    service: ^Julia_Runtime_Service,
+    value: core.Julia_Host_Ingress) -> core.Communication_Send_Outcome {
+    if service == nil || service^.lifecycle == .Shutdown_Requested ||
+        service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    if terminal_ingress_has_dynamic_payload(value) {
+        return .Allocation_Failed
+    }
+    _ = drain_julia_ingress_returns(service)
+    message, allocation_error := communication_link_alloc(&service^.request_link)
+    if allocation_error != .None {
+        return .Allocation_Failed
+    }
+    message^ = value
+    if !communication_link_try_send(&service^.request_link, message) {
+        destroy_julia_ingress_message(service, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+//   Clone evaluation source into the display-owned ingress pool and enqueue it.
+send_terminal_evaluation :: proc(
+    service: ^Julia_Runtime_Service,
+    request: protocol.Evaluation_Requested) -> core.Communication_Send_Outcome {
+    if service == nil ||
+        len(request.code) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
+        return .Allocation_Failed
+    }
+    if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    _ = drain_julia_ingress_returns(service)
+    message, message_error := communication_link_alloc(&service^.request_link)
+    if message_error != .None {
+        return .Allocation_Failed
+    }
+    bytes, allocation_error := communication_link_alloc_bytes(
+        &service^.request_link, len(request.code))
+    if allocation_error != .None {
+        communication_link_free(&service^.request_link, message)
+        return .Allocation_Failed
+    }
+    copy(bytes, transmute([]u8)request.code)
+    cloned_request := request
+    cloned_request.code = string(bytes)
+    message^ = core.Julia_Host_Ingress(cloned_request)
+    if !communication_link_try_send(&service^.request_link, message) {
+        destroy_julia_ingress_message(service, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+//   Clone completion source into the display-owned ingress pool and enqueue it.
+send_terminal_completion_request :: proc(
+    service: ^Julia_Runtime_Service,
+    request: protocol.Completion_Requested) -> core.Communication_Send_Outcome {
+    if service == nil ||
+        len(request.code) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
+        return .Allocation_Failed
+    }
+    if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    _ = drain_julia_ingress_returns(service)
+    message, message_error := communication_link_alloc(&service^.request_link)
+    if message_error != .None {
+        return .Allocation_Failed
+    }
+    bytes, allocation_error := communication_link_alloc_bytes(
+        &service^.request_link, len(request.code))
+    if allocation_error != .None {
+        communication_link_free(&service^.request_link, message)
+        return .Allocation_Failed
+    }
+    copy(bytes, transmute([]u8)request.code)
+    cloned_request := request
+    cloned_request.code = string(bytes)
+    message^ = core.Julia_Host_Ingress(cloned_request)
+    if !communication_link_try_send(&service^.request_link, message) {
+        destroy_julia_ingress_message(service, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+//   Return whether one egress variant owns dynamic pooled bytes.
+terminal_egress_has_dynamic_payload :: proc(
+    value: core.Julia_Host_Egress) -> bool {
+    #partial switch _ in value {
+    case protocol.Terminal_Output_Batch:
+        return true
+    case protocol.Completion_Result:
+        return true
+    case protocol.Terminal_Session_Ready:
+        return true
+    }
+    return false
+}
+
+//   Enqueue one typed worker-owned Terminal result without blocking.
+send_terminal_egress :: proc(
+    service: ^Julia_Runtime_Service,
+    value: core.Julia_Host_Egress) -> core.Communication_Send_Outcome {
+    if service == nil || service^.lifecycle == .Shutdown_Requested ||
+        service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    if terminal_egress_has_dynamic_payload(value) {
+        return .Allocation_Failed
+    }
+    _ = drain_julia_egress_returns(service)
+    message, allocation_error := communication_link_alloc(&service^.event_link)
+    if allocation_error != .None {
+        return .Allocation_Failed
+    }
+    message^ = value
+    if !communication_link_try_send(&service^.event_link, message) {
+        destroy_julia_egress_message(service, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+//   Clone ordered terminal bytes into the Julia-owned egress pool and enqueue them.
+send_terminal_output :: proc(
+    service: ^Julia_Runtime_Service,
+    output: protocol.Terminal_Output_Batch) -> core.Communication_Send_Outcome {
+    if service == nil ||
+        len(output.bytes) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
+        return .Allocation_Failed
+    }
+    if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    _ = drain_julia_egress_returns(service)
+    message, message_error := communication_link_alloc(&service^.event_link)
+    if message_error != .None {
+        return .Allocation_Failed
+    }
+    bytes, allocation_error := communication_link_alloc_bytes(
+        &service^.event_link, len(output.bytes))
+    if allocation_error != .None {
+        communication_link_free(&service^.event_link, message)
+        return .Allocation_Failed
+    }
+    copy(bytes, transmute([]u8)output.bytes)
+    cloned_output := output
+    cloned_output.bytes = string(bytes)
+    message^ = core.Julia_Host_Egress(cloned_output)
+    if !communication_link_try_send(&service^.event_link, message) {
+        destroy_julia_egress_message(service, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+//   Clone completion insertion into the Julia-owned egress pool and enqueue it.
+send_terminal_completion_result :: proc(
+    service: ^Julia_Runtime_Service,
+    result: protocol.Completion_Result) -> core.Communication_Send_Outcome {
+    if service == nil ||
+        len(result.insertion) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
+        return .Allocation_Failed
+    }
+    if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    _ = drain_julia_egress_returns(service)
+    message, message_error := communication_link_alloc(&service^.event_link)
+    if message_error != .None {
+        return .Allocation_Failed
+    }
+    bytes, allocation_error := communication_link_alloc_bytes(
+        &service^.event_link, len(result.insertion))
+    if allocation_error != .None {
+        communication_link_free(&service^.event_link, message)
+        return .Allocation_Failed
+    }
+    copy(bytes, transmute([]u8)result.insertion)
+    cloned_result := result
+    cloned_result.insertion = string(bytes)
+    message^ = core.Julia_Host_Egress(cloned_result)
+    if !communication_link_try_send(&service^.event_link, message) {
+        destroy_julia_egress_message(service, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+//   Clone Julia's startup banner into the Julia-owned egress pool and enqueue it.
+send_terminal_session_ready :: proc(
+    service: ^Julia_Runtime_Service,
+    ready: protocol.Terminal_Session_Ready) -> core.Communication_Send_Outcome {
+    if service == nil ||
+        len(ready.banner) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
+        return .Allocation_Failed
+    }
+    if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
+        return .Runtime_Stopping
+    }
+    _ = drain_julia_egress_returns(service)
+    message, message_error := communication_link_alloc(&service^.event_link)
+    if message_error != .None { return .Allocation_Failed }
+    bytes, allocation_error := communication_link_alloc_bytes(
+        &service^.event_link, len(ready.banner))
+    if allocation_error != .None {
+        communication_link_free(&service^.event_link, message)
+        return .Allocation_Failed
+    }
+    copy(bytes, transmute([]u8)ready.banner)
+    cloned_ready := ready
+    cloned_ready.banner = string(bytes)
+    message^ = core.Julia_Host_Egress(cloned_ready)
+    if !communication_link_try_send(&service^.event_link, message) {
+        destroy_julia_egress_message(service, message)
         return .Queue_Full
     }
     return .Sent
@@ -1758,14 +2042,14 @@ try_submit_julia_request :: proc(
         service^.lifecycle = .Starting
     case .Shutdown:
         service^.lifecycle = .Shutdown_Requested
-    case .Invoke, .Scratchpad, .Animation_Tick:
+    case .Invoke, .Animation_Tick:
     }
     return request_id, true
 }
 
 //   Apply one worker event to display-owned lifecycle and completion metadata.
-// Scratchpad completions enter a bounded FIFO; view and animation events release their
-// single-pending submission guards while payload slots retain the completed data.
+// View and animation events release their single-pending submission guards while
+// payload slots retain the completed data.
 accept_julia_event :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
     if service^.evidence_session != nil {
         for evidence_index in 0..<event.evidence_count {
@@ -1797,12 +2081,6 @@ julia_event_on_shutdown :: proc(
     }
 }
 
-//   Record a completed scratchpad slot for the polling consumer.
-julia_event_on_scratchpad :: proc(
-    service: ^Julia_Runtime_Service, event: Julia_Event) {
-    record_completed_scratchpad_slot(service, event.slot_index)
-}
-
 //   Clear the animation-tick pending flag.
 julia_event_on_animation_tick :: proc(
     service: ^Julia_Runtime_Service, event: Julia_Event) {
@@ -1822,16 +2100,6 @@ record_julia_event_failure :: proc(
     if event.kind == .Initialized || event.kind == .Shutdown_Complete {
         service^.lifecycle = .Failed
     }
-}
-
-//   Enqueue one completed scratchpad slot for the polling consumer.
-record_completed_scratchpad_slot :: proc(
-    service: ^Julia_Runtime_Service, slot_index: i32) {
-    completed_index := (service^.completed_scratchpad_head +
-        service^.completed_scratchpad_count) % SCRATCHPAD_ASYNC_SLOT_COUNT
-    assert(service^.completed_scratchpad_count < SCRATCHPAD_ASYNC_SLOT_COUNT)
-    service^.completed_scratchpad_slots[completed_index] = slot_index
-    service^.completed_scratchpad_count += 1
 }
 
 //   Publish readiness after startup registration and priming have completed.
@@ -1899,11 +2167,15 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     }
     evidence_profile.destroy(&service^.profile)
     view_snapshot_slots_destroy(service)
-    _ = communication_link_drain_returns(&service^.request_link)
+    _ = drain_julia_ingress_returns(service)
     _ = drain_julia_egress_returns(service)
     if service^.display_deferred_view_content != nil {
         destroy_julia_egress_message(
             service, service^.display_deferred_view_content)
+    }
+    if service^.display_deferred_terminal_egress != nil {
+        destroy_julia_egress_message(
+            service, service^.display_deferred_terminal_egress)
     }
     if service^.pending_view_content != nil {
         destroy_julia_egress_message(service, service^.pending_view_content)
@@ -1921,10 +2193,12 @@ initialize_julia_state_task :: proc(data: rawptr) -> bool {
     state^.saved_context = context
     prepare_julia_interface_generation(state^.julia_interface)
     if !julia_interface_handles_valid(state^.julia_interface) {
+        log.error("julia_content_interface_handles_invalid")
         clean_julia_interface_instance(state^.julia_interface)
         return false
     }
     if !init_euclid_scripts(state) {
+        log.error("julia_content_registration_failed")
         clean_julia_interface_instance(state^.julia_interface)
         return false
     }
@@ -1977,6 +2251,55 @@ initialize_julia_worker_host :: proc(
 }
 
 //   Construct and validate the rooted runtime host after native state exists.
+bind_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) -> bool {
+    main_module := julialib.julia_main_module()
+    host^.terminal_startup_banner = julialib.jl_get_function(
+        main_module, "terminal_host_startup_banner")
+    host^.terminal_start_session = julialib.jl_get_function(
+        main_module, "terminal_host_start_session")
+    host^.terminal_close_session = julialib.jl_get_function(
+        main_module, "terminal_host_close_session")
+    host^.terminal_ingest_evaluation = julialib.jl_get_function(
+        main_module, "terminal_host_ingest_evaluation")
+    host^.terminal_pump = julialib.jl_get_function(main_module, "terminal_host_pump")
+    host^.terminal_shutdown = julialib.jl_get_function(
+        main_module, "terminal_host_shutdown")
+    host^.terminal_take_evaluation = julialib.jl_get_function(
+        main_module, "terminal_host_take_evaluation")
+    host^.terminal_take_session_lifecycle = julialib.jl_get_function(
+        main_module, "terminal_host_take_session_lifecycle")
+    host^.terminal_ingest_tick_configuration = julialib.jl_get_function(
+        main_module, "terminal_host_ingest_tick_stream_configuration")
+    host^.terminal_ingest_tick_pulse = julialib.jl_get_function(
+        main_module, "terminal_host_ingest_tick_pulse")
+    host^.terminal_take_tick_stream = julialib.jl_get_function(
+        main_module, "terminal_host_take_tick_stream")
+    return host^.terminal_startup_banner != nil &&
+        host^.terminal_start_session != nil &&
+        host^.terminal_close_session != nil &&
+        host^.terminal_ingest_evaluation != nil && host^.terminal_pump != nil &&
+        host^.terminal_shutdown != nil && host^.terminal_take_evaluation != nil &&
+        host^.terminal_take_session_lifecycle != nil &&
+        host^.terminal_ingest_tick_configuration != nil &&
+        host^.terminal_ingest_tick_pulse != nil &&
+        host^.terminal_take_tick_stream != nil
+}
+
+//   Report which required Terminal callbacks were absent during host construction.
+report_missing_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) {
+    fmt.eprintln(
+        "Julia startup: missing Terminal callback(s): banner=",
+        host^.terminal_startup_banner != nil,
+        " start=", host^.terminal_start_session != nil,
+        " close=", host^.terminal_close_session != nil,
+        " ingest=", host^.terminal_ingest_evaluation != nil,
+        " pump=", host^.terminal_pump != nil,
+        " shutdown=", host^.terminal_shutdown != nil,
+        " evaluation=", host^.terminal_take_evaluation != nil,
+        " lifecycle=", host^.terminal_take_session_lifecycle != nil)
+}
+
+//   Construct and validate the rooted runtime host after native state exists.
 initialize_julia_runtime_host :: proc(
     service: ^Julia_Runtime_Service,
     host: ^Julia_Runtime_Host,
@@ -1987,6 +2310,8 @@ initialize_julia_runtime_host :: proc(
     }
     host^.runtime = create_julia_runtime_host(state)
     if host^.runtime == nil {
+        print_julia_exception("create_euclid_runtime_host")
+        fmt.eprintln("Julia startup: failed to create runtime host")
         return false
     }
     julialib.jl_gc_collect(.JL_GC_FULL)
@@ -1997,6 +2322,11 @@ initialize_julia_runtime_host :: proc(
         julialib.jl_exception_occurred() == nil
     if !valid_host {
         print_julia_exception("is_euclid_runtime_host")
+        host^.runtime = nil
+        return false
+    }
+    if !bind_julia_terminal_callbacks(host) {
+        report_missing_julia_terminal_callbacks(host)
         host^.runtime = nil
         return false
     }
@@ -2041,8 +2371,6 @@ reject_julia_request_without_host :: proc(
     switch request.kind {
     case .Invoke:
         event^.kind = .Invoke_Complete
-    case .Scratchpad:
-        event^.kind = .Scratchpad_Complete
     case .Animation_Tick:
         event^.kind = .Animation_Tick_Complete
     case .Initialize, .Shutdown:
@@ -2100,6 +2428,367 @@ send_julia_event :: proc(
     return .Sent
 }
 
+//   Invoke one Terminal session lifecycle callback on the Julia owner thread.
+julia_terminal_session_call :: proc(
+    host: ^Julia_Runtime_Host, callback: ^julialib.jl_value_t,
+    generation: u64) -> bool {
+    if host == nil || host^.runtime == nil || callback == nil {
+        return false
+    }
+    result := julialib.jl_call2(
+        callback, host^.runtime, julialib.jl_box_uint64(generation))
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_session_lifecycle")
+        return false
+    }
+    return julialib.jl_unbox_bool(result) != 0
+}
+
+//   Submit one borrowed evaluation source to the rooted Julia Terminal host.
+julia_terminal_ingest_evaluation :: proc(
+    host: ^Julia_Runtime_Host, request: protocol.Evaluation_Requested) -> bool {
+    gc_stack := julialib.jl_get_pgcstack()
+    if host == nil || host^.runtime == nil || gc_stack == nil {
+        return false
+    }
+    frame := Julia_Terminal_Request_Gc_Frame{
+        encoded_root_count = (5 << 2) | 1,
+        previous = gc_stack^,
+    }
+    frame.roots[0] = host^.runtime
+    frame.roots[1] = julialib.jl_box_uint64(u64(request.request_id))
+    frame.roots[2] = julialib.jl_pchar_to_string(
+        cstring(raw_data(request.code)), len(request.code))
+    frame.roots[3] = julialib.jl_box_int32(i32(request.mode))
+    frame.roots[4] = julialib.jl_box_uint64(request.animation_generation)
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    result := julialib.jl_call(
+        host^.terminal_ingest_evaluation, &frame.roots[0], 5)
+    gc_stack^ = frame.previous
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_ingest_evaluation")
+        return false
+    }
+    host^.terminal_request_id = request.request_id
+    host^.terminal_generation = request.animation_generation
+    return julialib.jl_unbox_bool(result) != 0
+}
+
+//   Deliver one native tick-stream configuration result on the Julia owner thread.
+julia_terminal_ingest_tick_configuration :: proc(
+    host: ^Julia_Runtime_Host,
+    acknowledgement: protocol.Tick_Stream_Configuration_Acknowledged) -> bool {
+    arguments := [5]^julialib.jl_value_t{
+        host^.runtime,
+        julialib.jl_box_uint64(acknowledgement.animation_generation),
+        julialib.jl_box_uint64(acknowledgement.stream_generation),
+        julialib.jl_box_uint64(acknowledgement.interval_steps),
+        julialib.jl_box_bool(c.int8_t(acknowledgement.active)),
+    }
+    result := julialib.jl_call(
+        host^.terminal_ingest_tick_configuration, raw_data(arguments[:]), 5)
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_ingest_tick_stream_configuration")
+        return false
+    }
+    return true
+}
+
+//   Deliver one coalesced native fixed-step pulse on the Julia owner thread.
+julia_terminal_ingest_tick_pulse :: proc(
+    host: ^Julia_Runtime_Host, pulse: protocol.Tick_Pulse) -> bool {
+    arguments := [7]^julialib.jl_value_t{
+        host^.runtime,
+        julialib.jl_box_uint64(pulse.animation_generation),
+        julialib.jl_box_uint64(pulse.stream_generation),
+        julialib.jl_box_uint64(pulse.sequence),
+        julialib.jl_box_uint64(pulse.first_simulation_tick),
+        julialib.jl_box_uint64(pulse.last_simulation_tick),
+        julialib.jl_box_uint64(pulse.step_count),
+    }
+    result := julialib.jl_call(
+        host^.terminal_ingest_tick_pulse, raw_data(arguments[:]), 7)
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_ingest_tick_pulse")
+        return false
+    }
+    return true
+}
+
+//   Convert one Julia evaluation command into a producer-owned terminal envelope.
+send_terminal_value_until_sent :: proc(
+    service: ^Julia_Runtime_Service, value: core.Julia_Host_Egress) -> bool {
+    for {
+        outcome := send_terminal_egress(service, value)
+        if outcome == .Sent { return true }
+        if outcome == .Runtime_Stopping { return false }
+        time.sleep(time.Millisecond)
+    }
+}
+
+//   Retry one dynamic Terminal output batch until sent or runtime shutdown.
+send_terminal_output_until_sent :: proc(
+    service: ^Julia_Runtime_Service, output: protocol.Terminal_Output_Batch) -> bool {
+    for {
+        outcome := send_terminal_output(service, output)
+        if outcome == .Sent { return true }
+        if outcome == .Runtime_Stopping { return false }
+        time.sleep(time.Millisecond)
+    }
+}
+
+//   Emit one Julia Terminal output command through producer-owned pooled bytes.
+julia_terminal_emit_output :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    command: ^julialib.jl_value_t, request_id: protocol.Request_Id) -> bool {
+    text_value := julialib.jl_get_nth_field(command, 2)
+    byte_count := int(julialib.jl_unbox_int32(julialib.jl_get_nth_field(command, 3)))
+    truncated := u64(julialib.jl_unbox_uint64(julialib.jl_get_nth_field(command, 4)))
+    bytes := string(([^]u8)(julialib.jl_string_ptr(text_value))[:byte_count])
+    return send_terminal_output_until_sent(service, {
+        request_id = request_id,
+        animation_generation = host^.terminal_generation,
+        bytes = bytes,
+        truncated_bytes = truncated,
+    })
+}
+
+//   Emit one completed or incomplete Julia Terminal evaluation command.
+julia_terminal_emit_completion :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    request_id: protocol.Request_Id, complete: bool) -> bool {
+    value := core.Julia_Host_Egress(protocol.Evaluation_Incomplete{
+        request_id = request_id,
+        animation_generation = host^.terminal_generation,
+    })
+    if complete {
+        value = protocol.Evaluation_Completed{
+            request_id = request_id,
+            animation_generation = host^.terminal_generation,
+            succeeded = true,
+        }
+    }
+    return send_terminal_value_until_sent(service, value)
+}
+
+//   Convert one Julia evaluation command into a producer-owned terminal envelope.
+julia_terminal_emit_evaluation :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    command: ^julialib.jl_value_t) -> (bool, bool) {
+    gc_stack := julialib.jl_get_pgcstack()
+    if gc_stack == nil {
+        return false, false
+    }
+    frame := Julia_Terminal_Command_Gc_Frame{
+        encoded_root_count = (1 << 2) | 1,
+        previous = gc_stack^,
+        command = command,
+    }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    kind := i32(julialib.jl_unbox_int32(
+        julialib.jl_get_nth_field(command, 0)))
+    if kind == 0 {
+        gc_stack^ = frame.previous
+        return false, true
+    }
+    request_id := protocol.Request_Id(julialib.jl_unbox_uint64(
+        julialib.jl_get_nth_field(command, 1)))
+    sent := true
+    if kind == 1 {
+        sent = julia_terminal_emit_output(service, host, command, request_id)
+    } else if kind == 2 || kind == 3 {
+        sent = julia_terminal_emit_completion(service, host, request_id, kind == 2)
+    }
+    gc_stack^ = frame.previous
+    return true, sent
+}
+
+//   Fetch and publish Julia's startup banner for one installed Terminal session.
+julia_terminal_emit_session_ready :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    generation: u64) -> bool {
+    result := julialib.jl_call0(host^.terminal_startup_banner)
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_startup_banner")
+        return false
+    }
+    banner := string(julialib.jl_string_ptr(result))
+    for {
+        outcome := send_terminal_session_ready(service, {
+            animation_generation = generation,
+            banner = banner,
+        })
+        if outcome == .Sent { return true }
+        if outcome == .Runtime_Stopping { return false }
+        time.sleep(time.Millisecond)
+    }
+}
+
+//   Publish every ready Terminal session lifecycle observation.
+julia_terminal_emit_session_lifecycle :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
+    for {
+        command := julialib.jl_call1(
+            host^.terminal_take_session_lifecycle, host^.runtime)
+        if command == nil || julialib.jl_exception_occurred() != nil {
+            print_julia_exception("terminal_host_take_session_lifecycle")
+            return false
+        }
+        gc_stack := julialib.jl_get_pgcstack()
+        if gc_stack == nil {
+            return false
+        }
+        frame := Julia_Terminal_Command_Gc_Frame{
+            encoded_root_count = (1 << 2) | 1,
+            previous = gc_stack^,
+            command = command,
+        }
+        gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+        kind := i32(julialib.jl_unbox_int32(
+            julialib.jl_get_nth_field(command, 0)))
+        if kind == 0 {
+            gc_stack^ = frame.previous
+            return true
+        }
+        generation := u64(julialib.jl_unbox_uint64(
+            julialib.jl_get_nth_field(command, 1)))
+        gc_stack^ = frame.previous
+        if kind == 2 {
+            if !send_terminal_value_until_sent(service,
+                protocol.Terminal_Session_Stopped{
+                    animation_generation = generation,
+                }) { return true }
+        } else if !julia_terminal_emit_session_ready(
+            service, host, generation) { return false }
+    }
+}
+
+//   Publish every ready tick-stream configure or stop request.
+julia_terminal_emit_tick_stream :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
+    for {
+        command := julialib.jl_call1(host^.terminal_take_tick_stream, host^.runtime)
+        if command == nil || julialib.jl_exception_occurred() != nil { return false }
+        kind := i32(julialib.jl_unbox_int32(julialib.jl_get_nth_field(command, 0)))
+        if kind == 0 { return true }
+        animation_generation := u64(julialib.jl_unbox_uint64(
+            julialib.jl_get_nth_field(command, 1)))
+        stream_generation := u64(julialib.jl_unbox_uint64(
+            julialib.jl_get_nth_field(command, 2)))
+        value: core.Julia_Host_Egress
+        if kind == 1 {
+            value = protocol.Tick_Stream_Configure_Requested{
+                animation_generation = animation_generation,
+                stream_generation = stream_generation,
+                requested_period_ns = u64(julialib.jl_unbox_uint64(
+                    julialib.jl_get_nth_field(command, 3))),
+            }
+        } else {
+            value = protocol.Tick_Stream_Stop_Requested{
+                animation_generation = animation_generation,
+                stream_generation = stream_generation,
+            }
+        }
+        if !send_terminal_value_until_sent(service, value) { return false }
+    }
+}
+
+//   Pump bounded Julia Terminal work and publish every ready evaluation command.
+julia_terminal_service :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
+    if host == nil || host^.runtime == nil {
+        return false
+    }
+    result := julialib.jl_call1(host^.terminal_pump, host^.runtime)
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_pump")
+        return false
+    }
+    if !julia_terminal_emit_session_lifecycle(service, host) {
+        return false
+    }
+    if !julia_terminal_emit_tick_stream(service, host) { return false }
+    for {
+        command := julialib.jl_call1(
+            host^.terminal_take_evaluation, host^.runtime)
+        if command == nil || julialib.jl_exception_occurred() != nil {
+            print_julia_exception("terminal_host_take_evaluation")
+            return false
+        }
+        available, sent := julia_terminal_emit_evaluation(service, host, command)
+        if !sent {
+            return false
+        }
+        if !available {
+            return true
+        }
+    }
+}
+
+//   Dispatch one typed Terminal ingress envelope on the sole Julia owner thread.
+julia_terminal_dispatch_ingress :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    message: ^core.Julia_Host_Ingress) -> bool {
+    #partial switch payload in message^ {
+    case protocol.Terminal_Session_Started:
+        return julia_terminal_session_call(
+            host, host^.terminal_start_session, payload.animation_generation)
+    case protocol.Terminal_Session_Closed:
+        return julia_terminal_session_call(
+            host, host^.terminal_close_session, payload.animation_generation)
+    case protocol.Evaluation_Requested:
+        return julia_terminal_ingest_evaluation(host, payload)
+    case protocol.Tick_Stream_Configuration_Acknowledged:
+        return julia_terminal_ingest_tick_configuration(host, payload)
+    case protocol.Tick_Pulse:
+        return julia_terminal_ingest_tick_pulse(host, payload)
+    }
+    return false
+}
+
+//   Own the rooted Julia host stack frame and serialized requests until shutdown.
+shutdown_julia_runtime_host :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    frame: ^Julia_Runtime_Gc_Frame, request: Julia_Request,
+    event: ^Julia_Event) {
+    if host^.runtime != nil && host^.terminal_shutdown != nil {
+        result := julialib.jl_call1(host^.terminal_shutdown, host^.runtime)
+        event^.succeeded = event^.succeeded && result != nil &&
+            julialib.jl_exception_occurred() == nil &&
+            julialib.jl_unbox_bool(result) != 0
+        if !event^.succeeded { print_julia_exception("terminal_host_shutdown") }
+    }
+    attach_julia_request_evidence(service, request, event)
+    finalize_julia_worker_host(service, host, frame)
+    end_julia()
+}
+
+//   Process one ordinary Julia request and report whether shutdown completed.
+process_julia_worker_request :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    frame: ^Julia_Runtime_Gc_Frame, initialized: ^bool,
+    request: Julia_Request) -> Julia_Worker_Request_Result {
+    event, shutting_down := execute_julia_worker_request(
+        service, request, host, frame, initialized)
+    if shutting_down {
+        shutdown_julia_runtime_host(service, host, frame, request, &event)
+        return {event = event, shutting_down = true, accepted = true}
+    }
+    attach_julia_request_evidence(service, request, &event)
+    return {event = event, accepted = send_julia_event(service, event) == .Sent}
+}
+
+//   Dispatch and return one Terminal ingress envelope to its producer.
+process_julia_terminal_ingress :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    message: ^core.Julia_Host_Ingress) -> bool {
+    accepted := host^.runtime != nil &&
+        julia_terminal_dispatch_ingress(service, host, message)
+    _ = communication_link_return(&service^.request_link, message)
+    if !accepted { fmt.eprintln("Julia worker: Terminal ingress rejected") }
+    return accepted
+}
+
 //   Own the rooted Julia host stack frame and serialized requests until shutdown.
 // The returned shutdown event is published only after this stack frame is gone.
 julia_runtime_worker_run_host :: proc(
@@ -2110,31 +2799,32 @@ julia_runtime_worker_run_host :: proc(
     host_frame: Julia_Runtime_Gc_Frame
     initialized := false
     for {
-        request_message, ok := communication_link_recv(&service^.request_link)
-        if !ok {
-            return {}, false
+        request_message, received := communication_link_try_recv(
+            &service^.request_link)
+        if received {
+            if request, is_request := request_message^.(Julia_Request); is_request {
+                result := process_julia_worker_request(
+                    service, &host, &host_frame, &initialized, request)
+                _ = communication_link_return(
+                    &service^.request_link, request_message)
+                if result.shutting_down {
+                    return result.event, true
+                }
+                if !result.accepted { return {}, false }
+            } else if !process_julia_terminal_ingress(
+                service, &host, request_message) {
+                return {}, false
+            }
         }
-        request, is_request := request_message^.(Julia_Request)
-        if !is_request {
-            _ = communication_link_return(&service^.request_link, request_message)
-            return {}, false
-        }
-
-        event, shutting_down := execute_julia_worker_request(
-            service, request, &host, &host_frame, &initialized)
-        _ = communication_link_return(&service^.request_link, request_message)
-        if shutting_down {
-            attach_julia_request_evidence(service, request, &event)
-            finalize_julia_worker_host(service, &host, &host_frame)
-            end_julia()
-            return event, true
-        }
-        attach_julia_request_evidence(service, request, &event)
-        if send_julia_event(service, event) != .Sent {
+        if host.runtime != nil && !julia_terminal_service(service, &host) {
+            fmt.eprintln("Julia worker: Terminal service failed")
             return {}, false
         }
         context = worker_context
         free_all(context.temp_allocator)
+        if !received {
+            time.sleep(time.Millisecond)
+        }
     }
 }
 
@@ -2196,7 +2886,7 @@ attach_julia_request_evidence :: proc(
         }
     case .Invoke:
         record_completion = false
-    case .Initialize, .Scratchpad:
+    case .Initialize:
         return
     }
     if !record_completion || evidence_session.session_record(
@@ -2223,15 +2913,11 @@ dispatch_julia_request :: proc(
     case .Invoke:
         event^.kind = .Invoke_Complete
         event^.succeeded = run_julia_request_task(request)
-    case .Scratchpad:
-        event^.kind = .Scratchpad_Complete
-        event^.succeeded = run_julia_request_task(request)
     case .Animation_Tick:
         event^.kind = .Animation_Tick_Complete
         event^.succeeded = run_julia_request_task(request)
     case .Shutdown:
         assert(os.get_current_thread_id() == service^.owner_thread_id)
-        clear_scratchpad_completion_watermark(service)
         event^.kind = .Shutdown_Complete
         return true
     }

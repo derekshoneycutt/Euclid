@@ -37,7 +37,7 @@ export BridgeColor, BridgePointView, BridgeConstraintView, BridgeConstraintSpec,
     create_new_triangle, create_new_square, create_new_pentagon, get_point, show_point,
     hide_point, hide_point_batch, set_point_position, set_point_brush, set_point_color,
     set_point_active_color, notify_animation_cycle_boundary,
-    publish_view_content, publish_presented_text, scratchpad_evaluation_completed,
+    publish_view_content, publish_presented_text,
     get_bridge_version,
     get_bridge_feature_flags, get_point_capacity, get_point_next_index,
     is_point_index_in_range, set_point_draw_enabled, set_point_position_status,
@@ -69,7 +69,6 @@ include("bridge/constraints.jl")
 include("bridge/tools.jl")
 include("bridge/animations.jl")
 include("bridge/presentation.jl")
-include("bridge/scratchpad.jl")
 
 end
 

@@ -1,6 +1,7 @@
 package bridge
 
 import "../core"
+import protocol "../core/protocol"
 
 import "base:runtime"
 import "core:testing"
@@ -27,11 +28,15 @@ communication_link_test_service :: proc(t: ^testing.T) -> ^Julia_Runtime_Service
 
 // Destroy one link-only service after its producer-side return queues are drained.
 communication_link_test_service_destroy :: proc(service: ^Julia_Runtime_Service) {
-    _ = communication_link_drain_returns(&service.request_link)
+    _ = drain_julia_ingress_returns(service)
     _ = drain_julia_egress_returns(service)
     if service.display_deferred_view_content != nil {
         destroy_julia_egress_message(
             service, service.display_deferred_view_content)
+    }
+    if service.display_deferred_terminal_egress != nil {
+        destroy_julia_egress_message(
+            service, service.display_deferred_terminal_egress)
     }
     if service.pending_view_content != nil {
         destroy_julia_egress_message(service, service.pending_view_content)
@@ -39,6 +44,176 @@ communication_link_test_service_destroy :: proc(service: ^Julia_Runtime_Service)
     communication_link_destroy(&service.event_link)
     communication_link_destroy(&service.request_link)
     free(service)
+}
+
+// Verify evaluation source ownership survives saturation and pooled storage recovers.
+@(test)
+terminal_ingress_pressure_preserves_caller_source :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    for request_id in 1..=JULIA_REQUEST_CAPACITY {
+        _, sent := try_submit_julia_request(service, .Invoke)
+        testing.expect(t, sent)
+        testing.expect_value(t, service.active_request_id, u64(request_id))
+    }
+    source := "caller-owned"
+    request := protocol.Evaluation_Requested{
+        request_id = 44,
+        animation_generation = 7,
+        code = source,
+    }
+    testing.expect_value(t, send_terminal_evaluation(service, request),
+        core.Communication_Send_Outcome.Queue_Full)
+    testing.expect_value(t, request.code, source)
+
+    message, received := communication_link_try_recv(&service.request_link)
+    testing.expect(t, received)
+    testing.expect(t, communication_link_return(&service.request_link, message))
+    testing.expect_value(t, send_terminal_evaluation(service, request),
+        core.Communication_Send_Outcome.Sent)
+}
+
+// Verify oversized terminal source fails without taking caller ownership.
+@(test)
+terminal_ingress_allocation_failure_preserves_caller_source :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    oversized: [protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES + 1]u8
+    source := string(oversized[:])
+    request := protocol.Evaluation_Requested{code = source}
+    testing.expect_value(t, send_terminal_evaluation(service, request),
+        core.Communication_Send_Outcome.Allocation_Failed)
+    testing.expect_value(t, request.code, source)
+}
+
+// Round-trip one fixed ingress variant through display-owned allocation and return.
+terminal_transport_expect_fixed_ingress :: proc(
+    t: ^testing.T, service: ^Julia_Runtime_Service,
+    value: core.Julia_Host_Ingress) {
+    testing.expect_value(t, send_terminal_ingress(service, value),
+        core.Communication_Send_Outcome.Sent)
+    message, received := communication_link_try_recv(&service.request_link)
+    testing.expect(t, received)
+    testing.expect(t, communication_link_return(&service.request_link, message))
+}
+
+// Round-trip one fixed egress variant through worker-owned allocation and return.
+terminal_transport_expect_fixed_egress :: proc(
+    t: ^testing.T, service: ^Julia_Runtime_Service,
+    value: core.Julia_Host_Egress) {
+    testing.expect_value(t, send_terminal_egress(service, value),
+        core.Communication_Send_Outcome.Sent)
+    message, received := communication_link_try_recv(&service.event_link)
+    testing.expect(t, received)
+    testing.expect(t, communication_link_return(&service.event_link, message))
+}
+
+// Verify every fixed terminal family transfers through Euclid's existing links.
+@(test)
+terminal_transport_round_trips_fixed_message_families :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    ingress := [5]core.Julia_Host_Ingress{
+        protocol.Terminal_Session_Started{animation_generation = 3},
+        protocol.Terminal_Session_Closed{animation_generation = 3},
+        protocol.Terminal_Interactive_Input{animation_generation = 3},
+        protocol.Terminal_Geometry_Accepted{animation_generation = 3},
+        protocol.Terminal_Capabilities_Accepted{animation_generation = 3},
+    }
+    for value in ingress {
+        terminal_transport_expect_fixed_ingress(t, service, value)
+    }
+    egress := [8]core.Julia_Host_Egress{
+        protocol.Evaluation_Incomplete{animation_generation = 3},
+        protocol.Evaluation_Completed{animation_generation = 3},
+        protocol.Completion_Failed{animation_generation = 3},
+        protocol.Terminal_Input_Acquired{animation_generation = 3},
+        protocol.Terminal_Input_Released{animation_generation = 3},
+        protocol.Terminal_Geometry_Observed{animation_generation = 3},
+        protocol.Terminal_Capabilities_Observed{animation_generation = 3},
+        protocol.Terminal_Session_Stopped{animation_generation = 3},
+    }
+    for value in egress {
+        terminal_transport_expect_fixed_egress(t, service, value)
+    }
+}
+
+// Verify dynamic completion payloads are cloned and reclaimed by their producers.
+@(test)
+terminal_transport_round_trips_completion_payloads :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    request := protocol.Completion_Requested{
+        request_id = 7,
+        animation_generation = 3,
+        code = "alp",
+        cursor_byte = 3,
+    }
+    testing.expect_value(t, send_terminal_completion_request(service, request),
+        core.Communication_Send_Outcome.Sent)
+    ingress, ingress_received := communication_link_try_recv(&service.request_link)
+    testing.expect(t, ingress_received)
+    cloned_request, is_request := ingress^.(protocol.Completion_Requested)
+    testing.expect(t, is_request)
+    testing.expect_value(t, cloned_request.code, "alp")
+    testing.expect(t, communication_link_return(&service.request_link, ingress))
+
+    result := protocol.Completion_Result{
+        request_id = 7,
+        animation_generation = 3,
+        found = true,
+        insertion = "alpha",
+    }
+    testing.expect_value(t, send_terminal_completion_result(service, result),
+        core.Communication_Send_Outcome.Sent)
+    egress, egress_received := communication_link_try_recv(&service.event_link)
+    testing.expect(t, egress_received)
+    cloned_result, is_result := egress^.(protocol.Completion_Result)
+    testing.expect(t, is_result)
+    testing.expect_value(t, cloned_result.insertion, "alpha")
+    testing.expect(t, communication_link_return(&service.event_link, egress))
+    testing.expect_value(t, drain_julia_ingress_returns(service), 1)
+    testing.expect_value(t, drain_julia_egress_returns(service), 1)
+}
+
+// Verify session-ready transport clones borrowed banner text into producer storage.
+@(test)
+terminal_transport_clones_session_ready_banner :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    source := [6]u8{'J', 'u', 'l', 'i', 'a', '\n'}
+    banner := string(source[:])
+    testing.expect_value(t, send_terminal_session_ready(service, {
+        animation_generation = 3, banner = banner,
+    }), core.Communication_Send_Outcome.Sent)
+    source[0] = 'X'
+    message, received := communication_link_try_recv(&service.event_link)
+    testing.expect(t, received)
+    ready, is_ready := message^.(protocol.Terminal_Session_Ready)
+    testing.expect(t, is_ready)
+    testing.expect_value(t, ready.banner, "Julia\n")
+    testing.expect(t, communication_link_return(&service.event_link, message))
+    testing.expect_value(t, drain_julia_egress_returns(service), 1)
+}
+
+// Verify shutdown rejects fixed and dynamic terminal messages before ownership transfer.
+@(test)
+terminal_transport_rejects_all_messages_during_shutdown :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    service.lifecycle = .Shutdown_Requested
+    testing.expect_value(t, send_terminal_ingress(service,
+        protocol.Terminal_Session_Closed{animation_generation = 3}),
+        core.Communication_Send_Outcome.Runtime_Stopping)
+    testing.expect_value(t, send_terminal_evaluation(service,
+        protocol.Evaluation_Requested{code = "1"}),
+        core.Communication_Send_Outcome.Runtime_Stopping)
+    testing.expect_value(t, send_terminal_egress(service,
+        protocol.Terminal_Session_Stopped{animation_generation = 3}),
+        core.Communication_Send_Outcome.Runtime_Stopping)
+    testing.expect_value(t, send_terminal_output(service,
+        protocol.Terminal_Output_Batch{bytes = "x"}),
+        core.Communication_Send_Outcome.Runtime_Stopping)
 }
 
 // Verify bounded transfer preserves pointer identity and producer-side reclamation.
@@ -168,6 +343,36 @@ julia_event_receive_defers_view_content :: proc(t: ^testing.T) {
     testing.expect(t, is_content)
     testing.expect_value(t, string(content.content.bytes), "tex")
     testing.expect(t, return_julia_egress(service, deferred))
+}
+
+// Verify event-only consumers stop at ordered terminal egress without discarding it.
+@(test)
+julia_event_receive_defers_ordered_terminal_egress :: proc(t: ^testing.T) {
+    service := communication_link_test_service(t)
+    defer communication_link_test_service_destroy(service)
+    testing.expect_value(t, send_terminal_output(service, {
+        request_id = 7,
+        animation_generation = 3,
+        bytes = "ordered",
+    }), core.Communication_Send_Outcome.Sent)
+    testing.expect_value(t, send_julia_event(service, {
+        kind = .Invoke_Complete,
+        request_kind = .Invoke,
+        request_id = 9,
+        succeeded = true,
+    }), core.Communication_Send_Outcome.Sent)
+
+    _, event_received := try_receive_julia_event(service)
+    testing.expect(t, !event_received)
+    deferred := take_deferred_terminal_egress(service)
+    testing.expect(t, deferred != nil)
+    output, is_output := deferred^.(protocol.Terminal_Output_Batch)
+    testing.expect(t, is_output)
+    testing.expect_value(t, output.bytes, "ordered")
+    testing.expect(t, return_julia_egress(service, deferred))
+    event, received := try_receive_julia_event(service)
+    testing.expect(t, received)
+    testing.expect_value(t, event.request_id, u64(9))
 }
 
 // Verify full request queues preserve IDs and recover after producer reclamation.

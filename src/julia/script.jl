@@ -10,8 +10,15 @@ if !isdefined(Main, :EUCLID_SYSIMAGE_CORE_LOADED)
     include("./latex.jl")
     include("./geometry.jl")
     include("./animations.jl")
-    include("./scratchpad.jl")
+    include("./runtime.jl")
+    include("./terminal.jl")
+    include("./ticks.jl")
     include("./euclidrepl.jl")
+    include("./terminal_container.jl")
+    include("./eval.jl")
+    include("./interpolation.jl")
+    include("./policy.jl")
+    include("./host.jl")
 end
 
 if !isdefined(Main, :EuclidRuntimeHost)
@@ -43,9 +50,8 @@ function register_euclid_generation(
 
     register_catalog = Base.invokelatest(
         getfield, generation.animation_catalog, :register_animation_catalog)
-    scratchpad_entry = host.scratchpad.animation_callback
-    scratchpad_entry === nothing && error("Scratchpad callback is not initialized")
-    Base.invokelatest(register_catalog, state_ptr, scratchpad_entry)
+    Base.invokelatest(
+        register_catalog, state_ptr, host.terminal_animation_callback)
     println("Julia startup: content registration completed in ",
         round((time_ns() - registration_started) / 1_000_000; digits=2), " ms")
     return true
@@ -98,62 +104,79 @@ function invoke_generation_harness_scenario(
     end
 end
 
-"""Classify one scratchpad input's parse state for the host."""
-function scratchpad_classify_input(
-    host::EuclidRuntimeHost, text::AbstractString, input_mode)
-
-    Scratchpad.classify_input(
-        host.scratchpad, host.state_ptr, String(text), Int32(input_mode))
-end
-
-"""Complete a LaTeX-style backslash token to its Unicode symbol."""
-function scratchpad_complete_backslash(
-    host::EuclidRuntimeHost, token::AbstractString)
-
-    Scratchpad.complete_backslash(host.scratchpad, host.state_ptr, String(token))
-end
-
-"""Compute completion candidates for the current scratchpad input."""
-function scratchpad_complete_input(
-    host::EuclidRuntimeHost, text::AbstractString, caret_byte, input_mode)
-
-    Scratchpad.complete_input(
-        host.scratchpad, host.state_ptr,
-        String(text), Int(caret_byte), Int32(input_mode))
-end
-
-"""Queue one scratchpad input entry for execution."""
-function scratchpad_queue_input(
-    host::EuclidRuntimeHost, text::AbstractString, input_mode, request_id)
-
-    Scratchpad.queue_input(
-        host.scratchpad, host.state_ptr,
-        String(text), Int32(input_mode), UInt64(request_id))
-end
-
-"""Save the scratchpad input history to a file."""
-function scratchpad_save_history_to_file(
-    host::EuclidRuntimeHost, path::AbstractString)
-
-    Scratchpad.save_history_to_file(host.scratchpad, host.state_ptr, String(path))
-end
-
-"""Move the scratchpad history cursor to the previous entry."""
-function scratchpad_history_previous(host::EuclidRuntimeHost, input_mode)
-    Scratchpad.history_previous(host.scratchpad, host.state_ptr, Int32(input_mode))
-end
-
-"""Move the scratchpad history cursor to the next entry."""
-function scratchpad_history_next(host::EuclidRuntimeHost)
-    Scratchpad.history_next(host.scratchpad, host.state_ptr)
-end
-
-"""Reset the scratchpad history cursor to the latest entry."""
-function scratchpad_history_reset_cursor(host::EuclidRuntimeHost)
-    Scratchpad.history_reset_cursor(host.scratchpad, host.state_ptr)
-end
-
 """Run the global per-frame Euclid loop (no-op hook required by the host)."""
 function global_euclid_loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     # Nothing to do here, but is required
+end
+
+"""Request installation of one animation-owned Terminal session."""
+function terminal_host_start_session(
+    host::EuclidRuntimeHost, animation_generation::UInt64)::Bool
+    return start_euclid_terminal_session!(host, animation_generation)
+end
+
+"""Return Julia's colorized REPL startup banner to the native host."""
+function terminal_host_startup_banner()::String
+    return EuclidReplEvaluation.startup_banner_for_host()
+end
+
+"""Request retirement of one animation-owned Terminal session."""
+function terminal_host_close_session(
+    host::EuclidRuntimeHost, animation_generation::UInt64)::Bool
+    return close_euclid_terminal_session!(host, animation_generation)
+end
+
+"""Submit one correlated Terminal evaluation to the host-owned actor runtime."""
+function terminal_host_ingest_evaluation(
+    host::EuclidRuntimeHost, request_id::UInt64, source::AbstractString,
+    mode::Int32, animation_generation::UInt64)::Bool
+    host.pending_terminal_evaluation === nothing || return false
+    host.pending_terminal_evaluation = EuclidTerminalEvaluationRequest(
+        request_id, String(source), mode, animation_generation)
+    return true
+end
+
+"""Pump one bounded turn of host-owned Terminal services."""
+function terminal_host_pump(host::EuclidRuntimeHost)::Bool
+    return pump_euclid_terminal!(host)
+end
+
+"""Retire all Terminal actors before the native Julia owner shuts down."""
+function terminal_host_shutdown(host::EuclidRuntimeHost)::Bool
+    return shutdown_euclid_terminal!(host)
+end
+
+"""Take one primitive Terminal evaluation command without blocking."""
+function terminal_host_take_evaluation(host::EuclidRuntimeHost)
+    return EuclidHost.take_evaluation_for_host(host.terminal)
+end
+
+"""Take one primitive Terminal session lifecycle command without blocking."""
+function terminal_host_take_session_lifecycle(host::EuclidRuntimeHost)
+    return EuclidHost.take_session_lifecycle_for_host(host.terminal)
+end
+
+"""Install one native tick-stream configuration result for the active session."""
+function terminal_host_ingest_tick_stream_configuration(
+    host::EuclidRuntimeHost, session_generation::UInt64,
+    stream_generation::UInt64, interval_steps::UInt64, active::Bool)::Bool
+    return EuclidHost.ingest_tick_stream_configuration_for_host(
+        host.terminal, session_generation, stream_generation,
+        interval_steps, active)
+end
+
+"""Deliver one coalesced native fixed-step pulse to the active session."""
+function terminal_host_ingest_tick_pulse(
+    host::EuclidRuntimeHost, session_generation::UInt64,
+    stream_generation::UInt64, sequence::UInt64,
+    first_simulation_tick::UInt64, last_simulation_tick::UInt64,
+    step_count::UInt64)::Bool
+    return EuclidHost.ingest_tick_pulse_for_host(
+        host.terminal, session_generation, stream_generation, sequence,
+        first_simulation_tick, last_simulation_tick, step_count)
+end
+
+"""Take one primitive tick-stream configure or stop command without blocking."""
+function terminal_host_take_tick_stream(host::EuclidRuntimeHost)
+    return EuclidHost.take_tick_stream_for_host(host.terminal)
 end

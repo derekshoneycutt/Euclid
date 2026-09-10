@@ -17,7 +17,7 @@ View_Text_Scroll_End :: struct {
     mouse_input: Input_Frame,
 }
 
-//   Compute the bordered text viewport used by normal and Scratchpad views.
+//   Compute the bordered viewport used by text and Terminal presentations.
 view_text_content_panel :: proc(panel: rl.Rectangle) -> rl.Rectangle {
     panel_geometry := container_geometry(panel, 1)
     text_panel := rl.Rectangle{
@@ -37,7 +37,7 @@ view_text_scroll_begin :: proc(
     content_h: f32,
     mouse_input: Input_Frame) -> Scroll_Container_Begin_Result {
 
-    scroll_step := dynlayout.scratchpad_scroll_step_or_fallback(&state.dynview,
+    scroll_step := dynlayout.presentation_scroll_step_or_fallback(&state.dynview,
         TEXT_ROW_HEIGHT)
     scroll_begin := scroll_container_begin(Scroll_Container_Begin_Params{
         id = 1001,
@@ -66,7 +66,7 @@ view_text_draw_content :: proc(
     view_text: string,
     mouse_input: Input_Frame) {
 
-    dyncompile.refresh_scratchpad_copy_targets(&state.dynview, {
+    dyncompile.refresh_presentation_copy_targets(&state.dynview, {
         panel = text_panel,
         scroll_y = state^.ui_runtime.view_text_scroll_y,
         text_padding = TEXT_PADDING,
@@ -74,9 +74,9 @@ view_text_draw_content :: proc(
         icon_x_pad = DYNVIEW_COPY_ICON_X_PAD,
     })
 
-    ui_dynview.draw_scratchpad_styled_or_fallback(state, ui_runtime,
+    ui_dynview.draw_presentation_styled_or_fallback(state, ui_runtime,
         ui_dynview.Fallback_Text_Content{view_text, UI_TEXT_COLOR},
-        ui_dynview.Scratchpad_Draw_Params{
+        ui_dynview.Presentation_Draw_Params{
             panel = text_panel,
             scroll_y = state^.ui_runtime.view_text_scroll_y,
             font = font.cache_borrow(&state.font_cache, .Regular),
@@ -113,6 +113,13 @@ view_text_scroll_end :: proc(
     ui_runtime.text_scroll_drag_off = scroll_end.state_out.drag_offset_y
 }
 
+//   Return whether the selected catalog node owns the Terminal surface.
+is_terminal_selected :: #force_inline proc(state: ^core.Euclid_General_State) -> bool {
+    return state != nil && state^.julia_interface != nil &&
+        state^.julia_interface^.selected_animation != nil &&
+        state^.julia_interface^.selected_animation^.node_kind == .Terminal
+}
+
 //   Render wrapped animation view text with scroll handling.
 draw_view_text_panel :: proc(
     state: ^core.Euclid_General_State,
@@ -128,15 +135,13 @@ draw_view_text_panel :: proc(
     text_panel := view_text_content_panel(panel)
     text_panel = draw_container(text_panel, .Grey).drawn_rect
 
-    if is_scratchpad_selected(state) {
-        draw_scratchpad_output_and_prompt(
-            state, text_panel, ui_runtime,
-            font.cache_borrow(&state.font_cache, .Regular), input_frame)
+    if is_terminal_selected(state) {
+        terminal_draw(state, text_panel, input_frame)
         return
     }
 
     view_text := julia.current_view_snapshot_text(state)
-    content_h := dynlayout.scratchpad_content_height_or_fallback(&state.dynview,
+    content_h := dynlayout.presentation_content_height_or_fallback(&state.dynview,
         text_panel, {
             text_padding = TEXT_PADDING,
             wrap_advance = TEXT_WRAP_ADVANCE,

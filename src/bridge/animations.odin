@@ -2,16 +2,20 @@ package bridge
 
 import "../julialib"
 import "../core"
+import protocol "../core/protocol"
 import "../files"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../shapes"
+import termsession "../terminal/session"
+import terminalview "../view/terminal"
 
 import "core:encoding/uuid"
 import "core:fmt"
+import "core:log"
 import "core:strings"
 
-SCRATCHPAD_ANIMATION_NAME :: "Scratchpad"
+TERMINAL_ANIMATION_NAME :: "Terminal"
 ANIMATION_LOOKUP_INITIAL_RESERVE :: 512
 ANIMATION_LOOKUP_LOAD_FACTOR_NUMERATOR :: 7
 ANIMATION_LOOKUP_LOAD_FACTOR_DENOMINATOR :: 10
@@ -86,6 +90,7 @@ invoke_animation_operation :: proc(
 init_euclid_scripts :: proc(state: ^core.Euclid_General_State) -> bool {
     service := state^.julia_runtime_service
     if service == nil || service^.runtime_host == nil {
+        log.error("julia_content_runtime_host_missing")
         return false
     }
     state_value := julialib.jl_box_voidpointer(state)
@@ -97,8 +102,11 @@ init_euclid_scripts :: proc(state: ^core.Euclid_General_State) -> bool {
         print_julia_exception("init_euclid_scripts")
         return false
     }
-
-    return finish_registered_euclid_generation(state)
+    if !finish_registered_euclid_generation(state) {
+        log.error("julia_content_finish_generation_failed")
+        return false
+    }
+    return true
 }
 
 //   Complete native initialization after one generation registers its callbacks.
@@ -542,6 +550,21 @@ clean_current_animation :: proc(state: ^core.Euclid_General_State) -> bool {
 //   Clear animation-owned native state into the generation about to initiate.
 reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool {
     target_generation := current_animation_generation(state) + 1
+    if state^.terminal.initialized && state^.julia_runtime_service != nil {
+        _ = send_terminal_ingress(
+            state^.julia_runtime_service, protocol.Terminal_Session_Closed{
+                animation_generation = state^.terminal.animation_generation,
+            })
+    }
+    termsession.terminal_session_destroy(&state^.shell.session)
+    state^.shell.phase = .Inactive
+    if state^.terminal_graphics_release != nil &&
+       state^.simulation_executor != nil {
+        state^.terminal_graphics_release(
+            state^.terminal_graphics_user_data,
+            &state^.simulation_executor^.pool)
+    }
+    terminalview.terminal_destroy(&state^.terminal)
     if core.animation_storage_begin_generation(
         &state^.animation_memory,
         &state^.animation_values,
@@ -627,7 +650,7 @@ select_animation_programmatically :: proc(
     return true
 }
 
-//   Select the first non-scratchpad animation as default selection.
+//   Select the first non-Terminal animation as default selection.
 select_default_animation :: proc(state: ^core.Euclid_General_State) {
     if state == nil || state^.julia_interface == nil {
         return
@@ -642,7 +665,7 @@ select_default_animation :: proc(state: ^core.Euclid_General_State) {
         if node == nil {
             break
         }
-        if node^.name == SCRATCHPAD_ANIMATION_NAME {
+        if node^.name == TERMINAL_ANIMATION_NAME {
             continue
         }
 
@@ -1066,13 +1089,7 @@ publish_julia_interface_reload :: proc(
     clean_julia_interface_instance(previous_interface)
     state^.julia_interface_active_slot = staged_slot
 
-    // Keep Odin-side scratchpad editor buffer aligned with Julia session reset on reload.
-    state^.ui_runtime.scratchpad_input_len = 0
-    state^.ui_runtime.scratchpad_input_cursor = 0
-    state^.ui_runtime.scratchpad_input_mode = .Julia
-    state^.ui_runtime.scratchpad_bottom_pinned = true
     if service != nil {
-        clear_scratchpad_completion_watermark(service)
         service^.reload_failure_injection = .None
         service^.runtime_generation += 1
         service^.reload_failed_mtime_unix_nano = 0

@@ -13,6 +13,15 @@ import evidence_profile "../evidence/profile"
 import evidence_session "../evidence/session"
 import evidence_text "../evidence/text"
 import evidence_trace "../evidence/trace"
+import termattachment "../terminal/attachment"
+import termclipboard "../terminal/clipboard"
+import termemulator "../terminal/emulator"
+import termgrid "../terminal/grid"
+import termhist "../terminal/history"
+import termhyperlink "../terminal/hyperlink"
+import termmodel "../terminal/model"
+import termshellintegration "../terminal/shell_integration"
+import "./protocol"
 import "base:runtime"
 import "core:encoding/uuid"
 import "core:math"
@@ -45,7 +54,7 @@ TOOL_LENGTH :: 0.35
 
 DYNVIEW_MAX_COMMANDS :: 1024
 DYNVIEW_MAX_TEXT_BYTES :: 32 * 1024
-FONT_SHAPED_GLYPH_CAPACITY :: SCRATCHPAD_ASYNC_TEXT_CAPACITY
+FONT_SHAPED_GLYPH_CAPACITY :: 4096
 DYNVIEW_MAX_LAYOUT_LINES :: 4096
 DYNVIEW_MAX_LAYOUT_ITEMS :: 8192
 DYNVIEW_MAX_MATH_PROGRAMS :: 256
@@ -69,7 +78,7 @@ DYNVIEW_MAX_DOCUMENT_BREAK_WORK :: 1024 * 1024
 DYNVIEW_MAX_DOCUMENT_LAYOUT_COPY_TARGETS ::
     DYNVIEW_MAX_DOCUMENT_SHAPED_GLYPHS + DYNVIEW_MAX_DOCUMENT_INLINES
 
-FONT_KEY_COUNT :: int(Font_Key.Math_Regular) + 1
+FONT_KEY_COUNT :: int(Font_Key.Terminal_Regular) + 1
 FONT_SOURCE_PATH_CAPACITY :: 1024
 FONT_GLYPH_PAGE_CAPACITY :: 32
 FONT_SEED_CODEPOINT_CAPACITY :: 512
@@ -82,8 +91,6 @@ JULIA_EVENT_CAPACITY :: 16
 JULIA_REQUEST_LINK_POOL_CAPACITY :: 64 * 1024
 JULIA_EVENT_LINK_POOL_CAPACITY :: 640 * 1024
 JULIA_EVIDENCE_HANDOFF_CAPACITY :: 32
-SCRATCHPAD_ASYNC_SLOT_COUNT :: 16
-SCRATCHPAD_ASYNC_TEXT_CAPACITY :: 4096
 VIEW_SNAPSHOT_SLOT_COUNT :: 2
 VIEW_SNAPSHOT_TEXT_CAPACITY :: DYNVIEW_MAX_TEXT_BYTES
 PRESENTATION_MAX_SOURCE_BYTES :: DYNVIEW_MAX_TEXT_BYTES
@@ -190,7 +197,6 @@ Animation_Query_Snapshot :: struct {
 Julia_Request_Kind :: enum {
     Initialize,
     Invoke,
-    Scratchpad,
     Animation_Tick,
     Shutdown,
 }
@@ -198,7 +204,6 @@ Julia_Request_Kind :: enum {
 Julia_Event_Kind :: enum {
     Initialized,
     Invoke_Complete,
-    Scratchpad_Complete,
     Animation_Tick_Complete,
     Shutdown_Complete,
 }
@@ -237,8 +242,6 @@ View_Snapshot :: struct {
     generation: u64,
     runtime_generation: u64,
     animation_generation: u64,
-    scratchpad_request_id: u64,
-    scratchpad_runtime_generation: u64,
     host_state: ^Euclid_General_State,
     animation: ^Euclid_Julia_Animation_Interface,
     presentation_mime: Presentation_Mime,
@@ -274,43 +277,6 @@ View_Snapshot :: struct {
     document_blocks: []Dynview_Document_Block,
     document_inlines: []Dynview_Document_Inline,
     document_display_rows: []Dynview_Document_Display_Row,
-}
-
-Scratchpad_Async_Kind :: enum {
-    Submit,
-    Complete,
-    History_Previous,
-    History_Next,
-    History_Reset,
-    Save_History,
-}
-
-Scratchpad_Input_Mode :: enum u8 {
-    Julia,
-    Help,
-}
-
-Scratchpad_Async_Slot_State :: enum u8 {
-    Free,
-    Pending,
-    Complete,
-}
-
-Scratchpad_Async_Slot :: struct {
-    state: Scratchpad_Async_Slot_State,
-    kind: Scratchpad_Async_Kind,
-    request_id: u64,
-    runtime_generation: u64,
-    input_generation: u64,
-    input_mode: Scratchpad_Input_Mode,
-    host_state: ^Euclid_General_State,
-    caret_byte: int,
-    input_len: int,
-    input: [SCRATCHPAD_ASYNC_TEXT_CAPACITY]u8,
-    result_len: int,
-    result: [SCRATCHPAD_ASYNC_TEXT_CAPACITY]u8,
-    parse_result: i32,
-    succeeded: bool,
 }
 
 Julia_Lifecycle_State :: enum {
@@ -377,7 +343,6 @@ View_Content_Ready :: struct {
     animation_generation: u64,
     presentation_generation: u64,
     animation: ^Euclid_Julia_Animation_Interface,
-    scratchpad_request_id: u64,
     content: Presented_Text,
 }
 
@@ -393,12 +358,34 @@ Communication_Send_Outcome :: enum u8 {
 // Julia_Host_Ingress contains display-produced messages borrowed by the Julia owner.
 Julia_Host_Ingress :: union {
     Julia_Request,
+    protocol.Terminal_Session_Started,
+    protocol.Terminal_Session_Closed,
+    protocol.Evaluation_Requested,
+    protocol.Completion_Requested,
+    protocol.Terminal_Interactive_Input,
+    protocol.Terminal_Geometry_Accepted,
+    protocol.Terminal_Capabilities_Accepted,
+    protocol.Tick_Stream_Configuration_Acknowledged,
+    protocol.Tick_Pulse,
 }
 
 // Julia_Host_Egress contains Julia-produced messages borrowed by the display owner.
 Julia_Host_Egress :: union {
     Julia_Event,
     View_Content_Ready,
+    protocol.Terminal_Output_Batch,
+    protocol.Evaluation_Incomplete,
+    protocol.Evaluation_Completed,
+    protocol.Completion_Result,
+    protocol.Completion_Failed,
+    protocol.Terminal_Input_Acquired,
+    protocol.Terminal_Input_Released,
+    protocol.Terminal_Geometry_Observed,
+    protocol.Terminal_Capabilities_Observed,
+    protocol.Terminal_Session_Ready,
+    protocol.Terminal_Session_Stopped,
+    protocol.Tick_Stream_Configure_Requested,
+    protocol.Tick_Stream_Stop_Requested,
 }
 
 // Communication_Link carries producer-allocated envelopes through a bounded outbound
@@ -422,6 +409,7 @@ Julia_Runtime_Service :: struct {
     event_link: Communication_Link(Julia_Host_Egress),
     pending_view_content: ^Julia_Host_Egress,
     display_deferred_view_content: ^Julia_Host_Egress,
+    display_deferred_terminal_egress: ^Julia_Host_Egress,
     presentation_generation: u64,
     presentation_animation_generation_override: u64,
     presentation_animation_override: ^Euclid_Julia_Animation_Interface,
@@ -440,12 +428,6 @@ Julia_Runtime_Service :: struct {
     reload_failure_injection: Julia_Reload_Failure_Injection,
     runtime_generation: u64,
     reload_failed_mtime_unix_nano: i64,
-    scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]Scratchpad_Async_Slot,
-    completed_scratchpad_slots: [SCRATCHPAD_ASYNC_SLOT_COUNT]i32,
-    completed_scratchpad_head: int,
-    completed_scratchpad_count: int,
-    worker_scratchpad_completed_request_id: u64,
-    worker_scratchpad_completed_runtime_generation: u64,
     view_snapshots: [VIEW_SNAPSHOT_SLOT_COUNT]View_Snapshot,
     view_snapshot_generation: u64,
     published_view_snapshot_index: int,
@@ -487,7 +469,7 @@ Euclid_Julia_Animation_Interface :: struct {
 Animation_Node_Kind :: enum i32 {
     Category = 1,
     Leaf = 2,
-    Scratchpad = 3,
+    Terminal = 3,
 }
 
 Animation_Operation :: enum i32 {
@@ -511,14 +493,6 @@ Euclid_Julia_Interface :: struct {
     init_scripts : ^julialib.jl_value_t,
     ensure_animation_loaded: ^julialib.jl_value_t,
     global_loop : ^julialib.jl_value_t,
-    scratchpad_classify_input : ^julialib.jl_value_t,
-    scratchpad_complete_backslash : ^julialib.jl_value_t,
-    scratchpad_complete_input : ^julialib.jl_value_t,
-    scratchpad_queue_input : ^julialib.jl_value_t,
-    scratchpad_save_history_to_file : ^julialib.jl_value_t,
-    scratchpad_history_previous : ^julialib.jl_value_t,
-    scratchpad_history_next : ^julialib.jl_value_t,
-    scratchpad_history_reset_cursor : ^julialib.jl_value_t,
     asset_archive_mod_time_unix_nano: i64,
 
     null_animation : Euclid_Julia_Animation_Interface,
@@ -1897,6 +1871,7 @@ Font_Key :: enum {
     Black,
     Black_Italic,
     Math_Regular,
+    Terminal_Regular,
 }
 
 Font_Load_State :: enum {
@@ -2231,7 +2206,7 @@ Ui_Regions :: struct {
     text_rect: rl.Rectangle,
     settings_rect: rl.Rectangle,
     gif_rect: rl.Rectangle,
-    scratchpad_rect: rl.Rectangle,
+    terminal_rect: rl.Rectangle,
 }
 
 Ui_Press_Owner_Kind :: enum {
@@ -2240,7 +2215,6 @@ Ui_Press_Owner_Kind :: enum {
     Icon_Button,
     Text_Button,
     Checkbox,
-    Input_Box,
     Slider,
     Scrollbar,
     Splitter,
@@ -2300,19 +2274,6 @@ Euclid_Ui_Runtime_State :: struct {
     last_gif_path: [260]u8,
     last_gif_path_len: int,
 
-    scratchpad_input: [4096]u8,
-    scratchpad_input_len: int,
-    scratchpad_input_cursor: int,
-    scratchpad_input_viewport_col_start: int,
-    scratchpad_input_mode: Scratchpad_Input_Mode,
-    scratchpad_input_generation: u64,
-    scratchpad_pending_submit_request_id: u64,
-    scratchpad_forced_bottom_request_id: u64,
-    scratchpad_latest_completion_request_id: u64,
-    scratchpad_history_reset_pending: bool,
-    scratchpad_last_output_len: int,
-    scratchpad_bottom_pinned: bool,
-
     current_layout_mode: Ui_Layout_Mode,
     ui_regions: Ui_Regions,
 }
@@ -2331,6 +2292,92 @@ Euclid_Drawing_Surface :: struct {
     edge_color : rl.Color,
 
     edge_size : f32,
+}
+
+// Identifies one rendered terminal cell by line index and byte offset.
+Terminal_View_Position :: struct {
+    line: int,
+    byte_offset: int,
+}
+
+// Display-owned lifecycle capability for terminal graphics session resources.
+Terminal_Graphics_Lifecycle_Proc :: proc(
+    user_data: rawptr, pool: ^taskpool.Task_Pool)
+
+// Display-owned terminal model attached to one animation-memory generation.
+Terminal_State :: struct {
+    animation_generation: u64,
+    allocator: runtime.Allocator,
+    initialized: bool,
+
+    history_storage: termhist.Termhist_State,
+    history: ^termhist.Termhist_State,
+    output_grid: termgrid.Grid,
+    output_alternate_grid: termgrid.Grid,
+    output_scrollback: termgrid.Scrollback,
+    output_interpreter: termemulator.Interpreter,
+    hyperlink_registry: ^termhyperlink.Hyperlink_Registry,
+    clipboard_actions: ^termclipboard.Clipboard_Action_Queue,
+    shell_integration: ^termshellintegration.Shell_Integration_State,
+    raster_renderer: termattachment.Raster_Renderer,
+    output_producer: termmodel.Terminal_Producer,
+    geometry: protocol.Terminal_Geometry,
+    julia_geometry_generation: u64,
+    dimension_limits: protocol.Terminal_Dimension_Limits,
+    rejected_geometry_count: u64,
+    output_checkpoint: ^termgrid.Display_Checkpoint,
+    synchronized_output: ^termemulator.Synchronized_Output_State,
+    scroll_offset_y: f32,
+    scroll_content_height: f32,
+    view_selection_anchor: Terminal_View_Position,
+    view_selection_head: Terminal_View_Position,
+    hyperlink_pressed: termmodel.Hyperlink_Handle,
+    banner_ready: bool,
+    julia_session_ready: bool,
+    julia_session_start_sent: bool,
+    awaiting_eval: bool,
+    collecting_continuation: bool,
+    input_mode: protocol.Evaluation_Mode,
+    input_mode_backup: protocol.Evaluation_Mode,
+    output_checkpoint_started: bool,
+    output_started: bool,
+    julia_capabilities_observed: bool,
+    view_selection_active: bool,
+    view_selection_dragging: bool,
+    completion_result_received: bool,
+    completion_request_scheduled: bool,
+    pending_eval_storage: []u8,
+    pending_eval_source: string,
+    next_eval_request_id: protocol.Request_Id,
+    pending_eval_request_id: protocol.Request_Id,
+    interactive_input_request_id: protocol.Request_Id,
+    interactive_input_dropped_event_count: u64,
+    next_completion_request_id: protocol.Request_Id,
+    pending_completion_request_id: protocol.Request_Id,
+    pending_completion_cursor: int,
+    pending_completion_storage: []u8,
+    pending_completion_source: string,
+    completion_request_due: f64,
+    completion_preview_start: int,
+    completion_preview_end: int,
+    completion_preview_storage: []u8,
+    completion_preview_insertion: string,
+}
+
+// Bounded display-owned state for one generation-scoped Terminal tick stream.
+Terminal_Tick_Publisher :: struct {
+    animation_generation: u64,
+    stream_generation: u64,
+    interval_steps: u64,
+    next_sequence: u64,
+    accumulated_steps: u64,
+    accumulated_first_tick: u64,
+    accumulated_last_tick: u64,
+    acknowledgement: protocol.Tick_Stream_Configuration_Acknowledged,
+    pulse: protocol.Tick_Pulse,
+    active: bool,
+    acknowledgement_pending: bool,
+    pulse_pending: bool,
 }
 
 Chalk_Audio_Runtime :: struct {
@@ -2424,6 +2471,12 @@ Euclid_General_State :: struct {
     ui_runtime: Euclid_Ui_Runtime_State,
     gif_capture: Gif_Capture_Session,
     font_cache: Font_Cache,
+    terminal: Terminal_State,
+    terminal_tick_publisher: Terminal_Tick_Publisher,
+    shell: Shell_Runtime,
+    terminal_graphics_user_data: rawptr,
+    terminal_graphics_release: Terminal_Graphics_Lifecycle_Proc,
+    terminal_graphics_shutdown: Terminal_Graphics_Lifecycle_Proc,
 
     simulation_executor: ^Simulation_Executor,
     scene_command_batch_target: ^Scene_Command_Batch,

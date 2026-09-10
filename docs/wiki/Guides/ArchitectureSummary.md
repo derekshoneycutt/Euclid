@@ -5,7 +5,7 @@
 1. [What This Project Is](#what-this-project-is)
 1. [Where To Start Reading](#where-to-start-reading)
 1. [Module Map (Odin + Julia)](#module-map-odin--julia)
-1. [Scratchpad Architecture (Interactive Runtime Surface)](#scratchpad-architecture-interactive-runtime-surface)
+1. [Terminal Architecture (Interactive Runtime Surface)](#terminal-architecture-interactive-runtime-surface)
 1. [Dynview Text Engine (Hybrid-Immediate Rendering)](#dynview-text-engine-hybrid-immediate-rendering)
 1. [Dynamic LaTeX Pipeline (Native Parse And Layout)](#dynamic-latex-pipeline-native-parse-and-layout)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
@@ -43,8 +43,8 @@ If you are new, read in this order:
 1. Host lifecycle path (`src/main.odin`, `src/view/view.odin`).
 1. Host/runtime boundary (`src/bridge/abi.odin`, `src/bridge/abi-*.odin`,
    `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`,
-   `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`,
-  `src/bridge/dynview_native_tex.odin`, `src/julia/odin-julia-bridge.jl`).
+  `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`,
+  `src/julia/odin-julia-bridge.jl`).
 1. Dynview runtime (`src/dynview/dynview.odin`, `src/dynview/compile/compile.odin`,
    `src/dynview/core/`, `src/dynview/math/`, `src/dynview/layout/`).
 1. Julia runtime entry (`src/julia/script.jl`).
@@ -65,7 +65,7 @@ If you are new, read in this order:
 | **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
 | **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
-| **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/scratchpad.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
+| **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution and GIF output internals. | `src/files/files.odin`, `src/files/gif_encode.odin` |
 | **Odin** | Particles | Multi-layer particle systems and visual effects. | `src/particles/particles.odin` |
@@ -73,7 +73,7 @@ If you are new, read in this order:
 | **Julia** | Runtime Bootstrap | Script loading, animation registration, and global frame dispatch. | `src/julia/script.jl` |
 | **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
 | **Julia** | Shared Animation Utilities | Reusable animation and geometry helper routines. | `src/julia/animations.jl`, `src/julia/geometry.jl`, `src/julia/nullanimation.jl` |
-| **Julia** | Interactive Runtime | Scratchpad/REPL session lifecycle, queueing, and evaluation flow. | `src/julia/scratchpad.jl`, `src/julia/euclidrepl.jl` |
+| **Julia** | Interactive Runtime | Terminal session actors, evaluation, completion, interpolation, ticks, and EuclidRepl policy. | `src/julia/host/`, `src/julia/terminal/`, `src/julia/euclidrepl.jl` |
 | **Julia** | LaTeX Facade | Defines canonical TeX displayables and submits exact MIME bytes to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
 | **Julia** | Content Modules | Domain content roots and leaf animation definitions. | `src/julia/elements/elements.jl`, `src/julia/proclus/proclus.jl`, `src/julia/hilbert/hilbert.jl` |
 
@@ -104,12 +104,19 @@ Content-module contract:
 - Bridge calls mutate host state while Julia controls pedagogical flow.
 
 The Julia owner worker roots one stable `EuclidRuntimeHost` for its initialized
-lifetime. The host retains the borrowed, lifetime-stable Odin state pointer, owns
-persistent Scratchpad session and extension state, and roots its committed
-`EuclidRuntimeGeneration`. Each generation owns a fresh anonymous content module,
-catalog, load cache, and implementation roots. Generation commits preserve the host's
-Scratchpad state. Odin-held Julia pointers are borrowed and never establish GC
-ownership; Julia never frees the native state pointer.
+lifetime. The host retains the borrowed, lifetime-stable Odin state pointer and roots
+its committed `EuclidRuntimeGeneration`. Each animation generation owns a fresh
+anonymous content module, catalog, load cache, and implementation roots. Odin-held
+Julia pointers are borrowed and never establish GC ownership; Julia never frees the
+native state pointer.
+
+The host also owns one active Terminal `HostSessionRuntime`. Each Terminal generation
+has a fresh `EuclidTerminalSession_<generation>` module, actor set, and
+`EuclidReplRuntime`. Bounded ingress and egress links carry typed Terminal requests and
+responses. Dynamic payload bytes remain producer-owned until the consumer returns their
+envelope. Request IDs and Terminal generations correlate evaluation, completion,
+interactive input, and ordered output; display handlers reject stale generations before
+mutating terminal cells.
 
 Reload constructs and roots a candidate generation locally, registers it against the
 inactive Odin interface, restores the active UUID, validates Enter, commits the host's
@@ -125,35 +132,31 @@ verification, while `--profile=spall:PATH` records timing rather than diagnostic
 
 ---
 
-## Scratchpad Architecture (Interactive Runtime Surface)
+## Terminal Architecture (Interactive Runtime Surface)
 
-Scratchpad is an interactive runtime surface, not a normal deterministic
-animation. It is mounted in the animation tree as `"Scratchpad"`, but behaves
-like an embedded REPL control plane.
+Terminal is Euclid's interactive Julia and shell surface. It is owned independently
+from animation-tree selection and uses generation-tagged actor messages rather than a
+parallel bridge evaluator.
 
-See [ScratchpadArchitecture.md](ScratchpadArchitecture.md) for the detailed
-Odin/Julia ownership, communication, evaluation, rendering, and lifecycle model.
+See [TerminalArchitecture.md](TerminalArchitecture.md) for the detailed Odin/Julia
+ownership, communication, evaluation, rendering, and lifecycle model.
 
 ### Core Architecture
 
-- Odin owns UI input capture, text panel interaction, and buffer/cursor state.
-- Odin owns Julia/Help editor mode transitions and live prompt presentation.
-- Julia owns command parsing/evaluation, command history, and output stream
-  generation; Help-mode queries delegate to Julia's native `REPL.helpmode`.
-- Communication crosses the bridge through explicit scratchpad entrypoints.
-- Async requests, queued input, and history entries carry input mode explicitly
-  so delayed work and history navigation cannot infer the wrong prompt mode.
+- Odin owns input routing, terminal cells, scrolling, native process integration,
+  rendering, and lifecycle evidence.
+- Julia owns evaluation, completion, interpolation, actor policy, and EuclidRepl state.
+- Communication uses bounded, generation-tagged Terminal requests and ordered output.
+- Terminal transport is independent of Dynview publication; each subsystem commits
+  through its owning Odin boundary.
 
 ### Frame Model And Lifecycle
 
-- Input is only captured when the Scratchpad node is the active selection.
-- Enter submission is parse-aware:
-  - incomplete parse appends newline
-  - complete parse enqueues command
-- Julia processes at most one queued command per frame, then runs optional
-  per-frame hooks.
-- Sessions are isolated via fresh runtime modules and support explicit
-  reset/clean transitions without terminating the host.
+- Each Terminal generation receives a fresh session module, actor set, and
+  `EuclidReplRuntime`.
+- Evaluation runs asynchronously on the Julia host thread.
+- Animated EuclidRepl jobs use generation-local tick subscriptions.
+- Reset and shutdown unsubscribe active jobs before closing tick admission.
 
 ### Safety, Reliability, And Limits
 
@@ -180,8 +183,6 @@ Snapshot and display flow:
   batch completion.
 1. Odin emits required `Dynview_Published` evidence after animation identity
   validation and display publication succeed.
-1. A snapshot stamped by a completed Scratchpad evaluation additionally emits
-  required `Scratchpad_Completed` evidence correlated to the original runtime request.
 1. Odin compiles command buffers to cached plain/copy/layout state.
 1. If compile/layout is valid, Odin renders dynview output.
 1. If any stream stage fails, Odin falls back to plain text with no host crash.
@@ -268,8 +269,8 @@ flowchart LR
   - `LaTeXString` uses its installed `text/latex` display, including delimiters.
   - Generic values prefer an explicit `text/latex` display, otherwise strings
     remain unquoted and other values use bounded `text/plain` display.
-  - Animation and Scratchpad producers return one canonical displayable from
-    `get_view_content` and publish it with `publish_view_content`.
+  - Animation producers return one canonical displayable from `get_view_content`
+    and publish it with `publish_view_content`.
   - Julia does not classify, parse, normalize, cache, or encode TeX semantics.
 - Odin side:
   - `View_Content_Ready` owns its byte slice in the Julia egress TLSF pool until
@@ -417,12 +418,11 @@ preparation tasks are not cancelled.
 
 ### Julia Owner Thread
 
-The display and Julia threads communicate through bounded typed channels and
-service-owned fixed slots. Scratchpad work uses copied request/reply slots,
-view output uses complete semantic snapshots, and animation callbacks read
-immutable query snapshots while producing transactional scene-command batches.
-The display validates and publishes completed results at explicit frame or
-fixed-step boundaries.
+The display and Julia threads communicate through bounded typed channels.
+Terminal work uses generation-tagged actor ingress and egress queues, view output uses
+complete semantic snapshots, and animation callbacks read immutable query snapshots
+while producing transactional scene-command batches. The display validates and
+publishes completed results at explicit frame or fixed-step boundaries.
 
 Selection, reset, and reload use a narrow synchronous lifecycle barrier after
 asynchronous animation work quiesces. Julia initialization, callback execution,
@@ -590,9 +590,9 @@ worker-owned temporary bytes and projects only eligible Latin and lowercase Gree
 variables to mathematical italic Unicode. Original semantic text and canonical
 presentation bytes are never rewritten by projection.
 
-Ordinary UI text, literal presentation prose, top-level dynview `Text_Run` items,
-transcripts, and scratchpad input are shape-eligible. Scratchpad runs split at the cursor
-and the covered UTF-8 character is drawn unshaped. During invalidated Dynview preparation,
+Ordinary UI text, literal presentation prose, top-level dynview `Text_Run` items, and
+Terminal text are shape-eligible. Terminal runs split at the cursor and the covered UTF-8
+character is drawn unshaped. During invalidated Dynview preparation,
 eligible math-command sites are shaped once and measured from cached NewCM advances,
 extents, italic correction, and top-accent attachment. Recursive scripts, fractions,
 delimiters, radicals, accents, matrices, and large operators inherit those dimensions;
@@ -798,9 +798,10 @@ Choose the owning module first, then touch that module's highlighted files.
 - **New content animation**:
   - Content Modules (`src/julia/elements/**`, `src/julia/proclus/**`,
     `src/julia/hilbert/**`).
-- **Modify the Scratchpad/REPL surface**:
-  - Scratchpad and UI modules (`src/julia/scratchpad.jl`, `src/julia/euclidrepl.jl`,
-    `src/view/ui/scratchpad_panel.odin`)
+- **Modify the Terminal/REPL surface**:
+  - Terminal and Julia host modules (`src/view/terminal/`,
+    `src/view/terminal_service.odin`, `src/julia/host/`,
+    `src/julia/euclidrepl.jl`)
 
 ### Typical New Animation Workflow
 

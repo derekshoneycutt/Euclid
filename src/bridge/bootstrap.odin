@@ -117,22 +117,6 @@ resolve_julia_interface_callbacks :: proc(
     iface^.ensure_animation_loaded = julialib.jl_get_function(
         main_module, "ensure_animation_loaded")
     iface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
-    iface^.scratchpad_classify_input = julialib.jl_get_function(
-        main_module, "scratchpad_classify_input")
-    iface^.scratchpad_complete_backslash = julialib.jl_get_function(
-        main_module, "scratchpad_complete_backslash")
-    iface^.scratchpad_complete_input = julialib.jl_get_function(
-        main_module, "scratchpad_complete_input")
-    iface^.scratchpad_queue_input = julialib.jl_get_function(
-        main_module, "scratchpad_queue_input")
-    iface^.scratchpad_save_history_to_file = julialib.jl_get_function(
-        main_module, "scratchpad_save_history_to_file")
-    iface^.scratchpad_history_previous = julialib.jl_get_function(
-        main_module, "scratchpad_history_previous")
-    iface^.scratchpad_history_next = julialib.jl_get_function(
-        main_module, "scratchpad_history_next")
-    iface^.scratchpad_history_reset_cursor = julialib.jl_get_function(
-        main_module, "scratchpad_history_reset_cursor")
 }
 
 //   Return the inactive state-owned interface generation slot for staged registration.
@@ -160,14 +144,6 @@ julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bo
         iface^.init_scripts,
         iface^.ensure_animation_loaded,
         iface^.global_loop,
-        iface^.scratchpad_classify_input,
-        iface^.scratchpad_complete_backslash,
-        iface^.scratchpad_complete_input,
-        iface^.scratchpad_queue_input,
-        iface^.scratchpad_save_history_to_file,
-        iface^.scratchpad_history_previous,
-        iface^.scratchpad_history_next,
-        iface^.scratchpad_history_reset_cursor,
     }
     for handle in handles {
         if handle == nil {

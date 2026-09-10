@@ -10,7 +10,7 @@
 1. [Normal Frame Integration](#normal-frame-integration)
 1. [Animation Tick Pipeline](#animation-tick-pipeline)
 1. [View And Dynview Pipeline](#view-and-dynview-pipeline)
-1. [Scratchpad Pipeline](#scratchpad-pipeline)
+1. [Terminal Pipeline](#terminal-pipeline)
 1. [Animation Lifecycle And Reload](#animation-lifecycle-and-reload)
 1. [Lifecycle, Failure, And Diagnostics](#lifecycle-failure-and-diagnostics)
 1. [Memory And Odin Context](#memory-and-odin-context)
@@ -32,9 +32,9 @@ This document describes the implemented architecture. Its central rule is:
 > asynchronous Julia work may affect display-owned state only through bounded
 > published data.
 
-Three publication protocols enforce that rule:
+The publication protocols enforce that rule:
 
-- Scratchpad requests and replies use copied fixed-capacity slots.
+- Terminal requests and output use bounded generation-tagged actor transport.
 - View text and Dynview semantics use complete snapshots.
 - Animation callbacks read immutable query snapshots and emit transactional
   scene-command batches.
@@ -51,7 +51,7 @@ Euclid has three distinct execution roles:
   state, canonical scene state, fixed-step orchestration, and publication. It
   must not call the Julia C API or inspect worker-owned Julia handles.
 - The **Julia owner thread** owns Julia lifetime, C API calls, callback
-  execution, Scratchpad runtime, content registration, and reload. It must not
+  execution, Terminal session actors, content registration, and reload. It must not
   render or concurrently mutate canonical scene state.
 - The **CPU worker pool** is the bounded `src/taskpool` service. Its persistent
   workers run particle, constraint, shape draw-cache, and conditional Dynview
@@ -92,7 +92,7 @@ flowchart LR
 | Julia initialization and shutdown | `src/bridge/bootstrap.odin` |
 | Animation scheduling, callback capture, lifecycle, reload | `src/bridge/animations.odin` |
 | Immutable animation queries and scene batches | `src/bridge/scene_commands.odin` |
-| Copied Scratchpad requests and replies | `src/bridge/scratchpad.odin` |
+| Terminal requests, output, and session publication | `src/view/terminal_service.odin`, `src/julia/host/` |
 | Dynview raw-source ingestion and snapshots | `src/bridge/dynview_native_tex.odin`, `src/bridge/runtime_service.odin`, `src/dynview/**` |
 | Frame-loop publication boundaries | `src/view/view.odin` |
 | Host worker-pool windows | `src/view/simulation_executor.odin` |
@@ -106,19 +106,18 @@ flowchart LR
 - one request channel and one event channel
 - monotonically increasing request IDs
 - lifecycle, reload, failure, and saturation diagnostics
-- fixed Scratchpad, view-snapshot, and animation-tick slots
+- fixed Terminal, view-snapshot, and animation-tick storage
 - worker-only Dynview staging storage
 - animation pacing and latency counters
 
 The service's `runtime_host` pointer is borrowed. Its GC ownership comes from the
 worker-stack `Julia_Runtime_Gc_Frame`, installed before host construction and retained
 until immediately before Julia teardown. The rooted `EuclidRuntimeHost` owns one active
-generation, the persistent Scratchpad runtime state, and a borrowed pointer to the
-lifetime-stable Odin application state. Scratchpad callbacks bind the host and reject an
-ABI-provided state pointer that does not match that stored pointer. Replacing the active
-content generation does not replace Scratchpad session or extension ownership. Odin
-never roots Julia values by retaining their addresses in service state, and Julia never
-frees the borrowed native pointer.
+animation generation, one active Terminal `HostSessionRuntime`, and a borrowed pointer
+to the lifetime-stable Odin application state. Each Terminal generation owns a fresh
+session module, actor set, and `EuclidReplRuntime`. Replacing the Terminal generation
+resets that session-local state. Odin never roots Julia values by retaining their
+addresses in service state, and Julia never frees the borrowed native pointer.
 
 Both channels have capacity 16. Requests and events are small control records.
 Large payloads do not travel through channels; channel records carry a slot
@@ -137,7 +136,6 @@ event repeats the request kind, request ID, slot index, and success state.
 | --- | --- | --- |
 | `Initialize` | Initialize Julia and include the packaged script | `Initialized` |
 | `Invoke` | Execute a serialized owner-thread task | `Invoke_Complete` |
-| `Scratchpad` | Execute one copied Scratchpad operation | `Scratchpad_Complete` |
 | `Animation_Tick` | Run Julia loops against a query snapshot and command batch | `Animation_Tick_Complete` |
 | `Shutdown` | Tear Julia down and exit the worker loop | `Shutdown_Complete` |
 
@@ -187,7 +185,7 @@ The sequence is:
 1. Finish display-thread graphics and audio initialization.
 
 `Initialized` does not mean normal runtime work is ready. The separate `Ready`
-transition prevents animation, view, and Scratchpad work from observing a
+transition prevents animation, view, and Terminal work from observing a
 partially registered interface.
 
 After ten seconds without a startup completion, the loading label changes to
@@ -199,7 +197,7 @@ and rendering; closing the window terminates the process.
 The display loop performs Julia publication and submission at explicit points:
 
 ```text
-apply completed Scratchpad replies
+validate and route Terminal output
 service presentation envelopes and ready parse work
 run zero or more fixed simulation steps
     publish newest valid animation tick
@@ -356,7 +354,7 @@ Animation modules expose `get_view_content` and publish through `publish_view_co
 Julia chooses `text/latex` only for values that explicitly support it; ordinary strings
 remain unquoted `text/plain`. Serialization is bounded and atomic. `View_Content_Ready`
 carries one MIME value, exact bytes, animation identity, generation fields, and an
-optional Scratchpad completion watermark.
+producer generation and presentation identity.
 
 The Julia egress communication link has fixed queue and TLSF backing. A saturated link
 retains only the newest presentation, and all replaced or returned envelopes are
@@ -477,39 +475,26 @@ These tasks write disjoint caches and may run concurrently. The display joins
 the preparation batch before drawing, making panel rendering cache-only. Scroll
 state, copy-hit targets, and interaction remain display-thread work.
 
-## Scratchpad Pipeline
+## Terminal Pipeline
 
-Scratchpad UI operations use 16 service-owned slots. Each slot has a 4 KiB input
-buffer and a 4 KiB result buffer.
+Terminal requests and ordered output cross bounded ingress and egress queues. Every
+operation carries request identity and Terminal generation so display publication can
+reject stale work before visible cells or session state change.
 
-Supported operations are submit and parse classification, completion, history
-navigation, history cursor reset, and history save.
+Each active generation owns a `HostSessionRuntime`: a fresh
+`EuclidTerminalSession_<generation>` module, evaluator, completion, shell interpolation,
+shell session, native process, tick, and container actors, plus one
+`EuclidReplRuntime`. Evaluation and completion execute only while the Julia owner thread
+pumps those actors. Shell and native process operations use the same generation-scoped
+ownership rather than a second evaluator path.
 
-Submission copies text, caret position, and input generation into a free slot.
-The owner invokes Julia and copies result text into the same slot. Completion
-events enqueue slot indices in a bounded FIFO, preserving worker completion
-order.
+Output is emitted in bounded batches and may span multiple messages. The display routes
+accepted batches through Terminal storage and rendering ownership; queue saturation or
+stale generation rejects work explicitly without blocking or hidden growth.
 
-Complete submissions also copy their runtime request ID into Julia's bounded
-input queue. Evaluation reports that ID to worker-owned host state only after the
-queued entry finishes. The next successfully generated view snapshot carries the
-ID and runtime generation; display publication emits `Scratchpad_Completed` only
-after the snapshot passes lifecycle and structural validation and becomes visible.
-Reload publication and shutdown discard any uncommitted worker watermark.
-
-UI application uses request identity and input generations to prevent stale
-completion, history, or submission replies from overwriting newer edits. The
-display explicitly returns each consumed slot to `Free`.
-
-A submit classifies input first. Incomplete input preserves multiline editing;
-complete input is queued in Julia; parse errors remain visible to the editor.
-Queued evaluation runs inside Julia's global loop during an animation tick, so
-supported scene mutations use the same query-snapshot and command-batch
-boundary as animation code.
-
-Slot exhaustion or request-channel saturation rejects a new request without
-blocking. UI callers must retain or visibly reject required user intent rather
-than assuming every attempted submission was accepted.
+EuclidRepl helpers are closures installed in the generation-local session module.
+Animated jobs subscribe through `Ticks.Subscription`. Session reset and shutdown
+unsubscribe active jobs before tick admission closes, then clear managed geometry.
 
 ## Animation Lifecycle And Reload
 
@@ -528,7 +513,7 @@ within one callback.
 
 This compatibility barrier is deliberate and narrow. It preserves exclusive
 access while lifecycle callbacks rebuild canonical scene and registry state.
-Ordinary animation, view, and Scratchpad paths remain asynchronous.
+Ordinary animation, view, and Terminal paths remain asynchronous.
 
 ### Staged Reload
 
@@ -567,9 +552,8 @@ Scenario-only one-shot failure selectors exercise candidate-load and candidate-E
 rollback through this production transaction. They are Odin-owned, consumed once, and
 cleared on either publication or rollback; Julia has no mutable fault-injection global.
 
-Successful publication increments `runtime_generation`, clears the failed
-revision marker, and resets the display-owned Scratchpad editor state to match
-the new Julia session. View snapshots carry this runtime generation in addition
+Successful publication increments `runtime_generation` and clears the failed
+revision marker. View snapshots carry this runtime generation in addition
 to animation identity, preventing a recycled arena address from validating an
 old snapshot after later reloads.
 
@@ -608,8 +592,8 @@ invalidates its batch, preventing partial publication.
 ## Memory And Odin Context
 
 Cross-thread payload storage is fixed and service-owned. Normal frame operation
-does not allocate request payloads for animation ticks, view snapshots, or
-Scratchpad requests.
+does not allocate request payloads for animation ticks or view snapshots. Terminal
+transport has its own bounded queue and payload ownership.
 
 ### Host Allocation Ownership
 
@@ -623,9 +607,8 @@ Scratchpad requests.
   the startup context allocator. The service destroys both during teardown.
 - `thread.create_and_start_with_data` owns the persistent worker's platform
   thread resources. `thread.destroy` releases them after `Shutdown_Complete`.
-- Scratchpad slots, view snapshots, animation tick slots, query snapshots, and
-  scene-command batches are inline in `Julia_Runtime_Service`. Request traffic
-  does not allocate these payloads.
+- View snapshots, animation tick slots, query snapshots, and scene-command batches are
+  inline in `Julia_Runtime_Service`. Request traffic does not allocate these payloads.
 - Each view snapshot additionally owns one growing arena. The service initializes these
   arenas in place, resets one only when reusing a `Free` slot, and destroys all of them
   after the Julia worker has stopped. Initialized arena owners are never copied. Sealed
@@ -710,12 +693,11 @@ Odin view tests cover ordered scene-command commit, atomic invalid-batch
 rejection, deferred mutation, tool dependency validation, immutable animation
 queries, generation and sequence rejection, bounded tick coalescing, failure
 attribution, reload failure tracking, Dynview snapshot validation, newest
-completion selection, stale-view clearing, stale Scratchpad reply rejection,
-display-committed Scratchpad correlation and evidence loss, and repeated host
-worker-pool joins.
+completion selection, stale-view clearing, Terminal generation rejection, output
+publication, evidence loss, and repeated host worker-pool joins.
 
-Julia tests cover Scratchpad, bridge helpers, geometry, LaTeX, and
-runtime-facing content behavior. The required repository gate is:
+Julia tests cover Terminal actors, evaluation, EuclidRepl, bridge helpers, geometry,
+LaTeX, and runtime-facing content behavior. The required repository gate is:
 
 ```sh
 cmake --preset default
@@ -726,8 +708,9 @@ This runs the validated build, repository analysis, and all tests.
 
 Automated tests do not prove visual timing, responsiveness during an arbitrary
 stuck Julia C call, or platform-specific embedding behavior. Release validation
-must still exercise startup, selection, reset, Scratchpad evaluation, valid and
-invalid reloads, induced Julia delay, and shutdown on supported platforms.
+must still exercise startup, selection, reset, Terminal evaluation and session
+replacement, valid and invalid reloads, induced Julia delay, and shutdown on supported
+platforms.
 
 ## Current Constraints
 
@@ -739,7 +722,7 @@ invalid reloads, induced Julia delay, and shutdown on supported platforms.
   every intermediate tick.
 - View generation is requested once per frame when no request is pending; it is
   not driven by a complete semantic invalidation graph.
-- Scratchpad and request saturation are bounded rejection conditions. Required
+- Terminal ingress and request saturation are bounded rejection conditions. Required
   UI intent must handle unsuccessful submission explicitly.
 - Startup can report an unresponsive owner but cannot safely cancel an
   arbitrary Julia call in-process.

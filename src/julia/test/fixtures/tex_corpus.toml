@@ -1,6 +1,5 @@
 entry_count = 117
 grammar_version = 26
-required_scenarios = ["tools/scenarios/scratchpad-tex-baseline-restores-allocations.jsonl", "tools/scenarios/scratchpad-tex-restores-allocations.jsonl", "tools/scenarios/scratchpad-tex-compliance-restores-allocations.jsonl", "tools/scenarios/scratchpad-tex-pending-shutdown.jsonl"]
 schema_version = 1
 
 [[entries]]

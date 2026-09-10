@@ -173,6 +173,22 @@ function parse_odin_doc(output::AbstractString, source_root::AbstractString)
     return package
 end
 
+"""Consume one package-description line before the first Odin file record."""
+function consume_odin_package_doc_line!(
+    package::DocumentationPackage, line::String, current_file::AbstractString)::Bool
+
+    isempty(current_file) || return false
+    tab_indented = startswith(line, '\t') && !startswith(line, "\t\t")
+    space_indented = startswith(line, "    ") && !startswith(line, "        ")
+    (tab_indented || space_indented) || return false
+    text = strip(line)
+    if !isempty(text)
+        package.doc_markdown = isempty(package.doc_markdown) ? text :
+            package.doc_markdown * "\n" * text
+    end
+    return true
+end
+
 """Parse file, declaration, and metadata records into one package."""
 function parse_odin_doc_body!(package::DocumentationPackage, lines::Vector{String})
     current_file = ""
@@ -182,6 +198,8 @@ function parse_odin_doc_body!(package::DocumentationPackage, lines::Vector{Strin
         if startswith(line, "\tfile: ")
             current_file = strip(line[8:end])
             push!(package.source_files, current_file)
+            index += 1
+        elseif consume_odin_package_doc_line!(package, line, current_file)
             index += 1
         elseif startswith(line, "\t\t") && !startswith(line, "\t\t\t")
             isempty(current_file) && error("Odin declaration appeared before a file record.")

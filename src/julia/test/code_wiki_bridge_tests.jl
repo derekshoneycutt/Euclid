@@ -36,6 +36,13 @@ function bridge_test_call(; name="ping", parameter_type="Int32", return_type="In
         source_line=symbol.source_line, symbol=symbol)
 end
 
+@testset "Odin ABI signature parsing" begin
+    parts = CodeWiki.parse_odin_abi_signature(
+        "notify :: proc(^core.Euclid_General_State, u64) {...}")
+    @test parts.parameter_types == ["^core.Euclid_General_State", "u64"]
+    @test parts.return_type == "void"
+end
+
 @testset "bridge pairing and drift" begin
     exported = bridge_test_export()
     first_call = bridge_test_call()
@@ -77,8 +84,8 @@ end
     packages = CodeWiki.extract_default_wiki_packages(repository_root)
     pairs = extract_bridge_pairs(packages, repository_root)
 
-    @test length(pairs) == 101
-    @test sum(length(pair.julia_calls) for pair in pairs) == 111
+    @test length(pairs) == 100
+    @test sum(length(pair.julia_calls) for pair in pairs) == 110
     @test first(pairs).abi_name < last(pairs).abi_name
     @test all(pair -> !isempty(pair.odin_export.doc_markdown), pairs)
     @test all(pair -> all(call -> !isempty(call.doc_markdown), pair.julia_calls), pairs)

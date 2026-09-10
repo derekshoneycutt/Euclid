@@ -8,8 +8,14 @@ import "view"
 
 import "core:fmt"
 import "core:log"
+import "core:mem"
 import "core:os"
 import "core:strconv"
+
+// When NOT in debug, register packages to the blank identifier
+when !ODIN_DEBUG {
+    _ :: mem
+}
 
 COMMAND_LINE_PATH_MAX_BYTES :: 4096
 DIAGNOSTICS_OPTION_PREFIX :: "--diagnostics="
@@ -23,6 +29,42 @@ SEMANTIC_TRACE_EVENTS_PREFIX :: "--semantic-trace-events="
 
 // The main entry point for the Euclid application
 main :: proc() {
+    log_level : log.Level = .Info
+    when ODIN_DEBUG {
+        log_level = .Debug
+
+        // In debug builds, we load the tracking allocator and print out any unfreed allocations
+        // and frees that didn't free anything. Helpful.
+        fmt.println("Initiating debug memory tracking...")
+        track: mem.Tracking_Allocator
+        mem.tracking_allocator_init(&track, context.allocator)
+        context.allocator = mem.tracking_allocator(&track)
+        defer {
+            if len(track.allocation_map) > 0 {
+                fmt.printf("== %v allocations not freed: ==\n", len(track.allocation_map))
+                for _, entry in track.allocation_map {
+                    fmt.printf("- %v bytes @ %v\n", entry.size, entry.location)
+                }
+            }
+
+            if len(track.bad_free_array) > 0 {
+                fmt.printf("== %v bad frees detected ==\n", len(track.bad_free_array))
+                for entry in track.bad_free_array {
+                    fmt.printf("- bad free @ %v\n", entry.location)
+                }
+            }
+
+            mem.tracking_allocator_destroy(&track)
+
+            fmt.println("Debug memory tracking destroyed.")
+        }
+    }
+
+    run_application(log_level)
+}
+
+//  Run the application through to the appropriate exit
+run_application :: proc(log_level : log.Level) {
     settings := parse_command_line()
     if !settings.do_run {
         return
@@ -32,7 +74,7 @@ main :: proc() {
     selected_logger := context.logger
     if len(settings.diagnostics_path) > 0 {
         if diagnostics.logging_start(
-            &logging_state, settings.diagnostics_path, .Debug) {
+            &logging_state, settings.diagnostics_path, log_level) {
             selected_logger = logging_state.logger
         } else {
             fmt.eprintln("Unable to open diagnostics: ", settings.diagnostics_path)
@@ -60,7 +102,6 @@ main :: proc() {
         os.exit(exit_code)
     }
 }
-
 
 
 //  Parse one bounded dust-capacity option and report whether it matched.
