@@ -38,6 +38,11 @@ Tex_Document_Environment :: enum u8 {
     Center,
     Flush_Left,
     Flush_Right,
+    Quote,
+    Quotation,
+    Itemize,
+    Enumerate,
+    Description,
 }
 
 // Carry inherited prose style and one recursive sequence terminator.
@@ -45,7 +50,24 @@ Tex_Document_Parse_Context :: struct {
     font_flags: i32,
     color: Tex_Document_Color,
     environment: Tex_Document_Environment,
+    container_kind: Tex_Document_Container_Kind,
+    container_depth: u8,
+    left_margin_levels: u8,
+    right_margin_levels: u8,
+    suppress_first_indent: bool,
     stop_on_brace: bool,
+    stop_on_bracket: bool,
+    inline_only: bool,
+}
+
+// Preserve parser-owned formatting and list state across one nested environment.
+Tex_Document_Environment_State :: struct {
+    alignment: Tex_Document_Alignment,
+    format: Tex_Document_Format,
+    quotation_first: bool,
+    item_started: bool,
+    item_first: bool,
+    item_block_start: int,
 }
 
 // Track bounded recursive document parsing without allocation.
@@ -57,6 +79,13 @@ Tex_Document_Parser :: struct {
     active_paragraph: int,
     paragraph_alignment: Tex_Document_Alignment,
     pending_no_indent: bool,
+    paragraph_format: Tex_Document_Format,
+    quotation_first_paragraph: bool,
+    next_list_id: u16,
+    list_item_started: bool,
+    list_item_first_block: bool,
+    list_item_block_start: int,
+    description_label_active: bool,
     limits: Tex_Parse_Limits,
     output: ^Tex_Semantic_Output,
 }
@@ -115,6 +144,7 @@ tex_parse_document :: proc(
         source = source,
         active_paragraph = -1,
         paragraph_alignment = .Left,
+        paragraph_format = {alignment = .Left},
         output = output,
         limits = limits,
     }
@@ -174,6 +204,11 @@ tex_document_parse_sequence :: proc(
             parser.offset += 1
             return .Ok if parse_ctx.stop_on_brace else .Unexpected_Token
         }
+        if parser.description_label_active && parser.source[parser.offset] == ']' {
+            if !parse_ctx.stop_on_bracket {return .Unexpected_Token}
+            parser.offset += 1
+            return .Ok
+        }
         if tex_document_environment_ends(parser, parse_ctx.environment) {
             tex_document_close_paragraph(parser)
             tex_document_consume_environment_end(parser, parse_ctx.environment)
@@ -187,7 +222,7 @@ tex_document_parse_sequence :: proc(
             if status != .Ok {return status}
         }
     }
-    return .Unclosed_Group if parse_ctx.stop_on_brace ||
+    return .Unclosed_Group if parse_ctx.stop_on_brace || parse_ctx.stop_on_bracket ||
         parse_ctx.environment != .None else .Ok
 }
 
@@ -199,6 +234,7 @@ tex_document_parse_group :: proc(
     parser.offset += 1
     nested := inherited
     nested.stop_on_brace = true
+    nested.stop_on_bracket = false
     return tex_document_parse_sequence(parser, nested)
 }
 
@@ -209,12 +245,18 @@ tex_document_parse_run :: proc(
 
     display_info := tex_document_display_info(parser)
     if display_info.kind != .Plain {
+        if parse_ctx.inline_only {return .Unexpected_Token}
         return tex_document_parse_display_environment(
             parser, display_info, parse_ctx.color)
     }
     environment := tex_document_environment_starts(parser)
     if environment != .None {
+        if parse_ctx.inline_only {return .Unexpected_Token}
         return tex_document_parse_environment(parser, parse_ctx, environment)
+    }
+    if tex_document_command_starts(parser, "\\item") {
+        if parse_ctx.inline_only {return .Unexpected_Token}
+        return tex_document_parse_list_item(parser, parse_ctx)
     }
     style_status, style_handled := tex_document_parse_style_command(
         parser, parse_ctx)
@@ -225,6 +267,7 @@ tex_document_parse_run :: proc(
     }
     shape_command := tex_document_shape_command(parser)
     if shape_command.present {
+        if parse_ctx.inline_only {return .Unexpected_Token}
         return tex_document_parse_shape(parser, parse_ctx.font_flags, parse_ctx.color,
             shape_command.kind, shape_command.text)
     }
@@ -232,7 +275,7 @@ tex_document_parse_run :: proc(
         return tex_document_parse_math_run(parser, parse_ctx.color)
     }
     return tex_document_parse_prose_or_break(
-        parser, parse_ctx.font_flags, parse_ctx.color)
+        parser, parse_ctx.font_flags, parse_ctx.color, parse_ctx.inline_only)
 }
 
 
@@ -283,6 +326,7 @@ tex_document_parse_nested_style :: proc(
         nested.font_flags |= font_flags
     }
     nested.stop_on_brace = true
+    nested.stop_on_bracket = false
     return tex_document_parse_sequence(parser, nested)
 }
 
@@ -304,6 +348,7 @@ tex_document_parse_color :: proc(
     parser.offset += 1
     return tex_document_parse_sequence(parser, {
         font_flags = font_flags, color = color, stop_on_brace = true,
+        inline_only = parser.description_label_active,
     })
 }
 
@@ -387,7 +432,7 @@ tex_document_append_semantic_math :: proc(
         kind = .Display,
         inline_start = parser.output.document_inline_count,
         source = item.source,
-        format = {alignment = .Center},
+        format = tex_document_block_format(parser, .Center),
     })
     if block_index < 0 ||
         !tex_semantic_append_document_inline(parser.output, block_index, item) {
@@ -400,12 +445,13 @@ tex_document_append_semantic_math :: proc(
 tex_document_parse_prose_or_break :: proc(
     parser: ^Tex_Document_Parser,
     font_flags: i32,
-    color: Tex_Document_Color) -> Tex_Parse_Status {
+    color: Tex_Document_Color,
+    inline_only: bool = false) -> Tex_Parse_Status {
     control_status, handled := tex_document_parse_prose_control(
         parser, font_flags, color)
     if handled {return control_status}
     break_status, break_handled := tex_document_parse_break_control(
-        parser, font_flags, color)
+        parser, font_flags, color, inline_only)
     if break_handled {return break_status}
     if parser.source[parser.offset] == '\\' ||
         parser.source[parser.offset] == '$' {
@@ -418,29 +464,35 @@ tex_document_parse_prose_or_break :: proc(
 tex_document_parse_break_control :: proc(
     parser: ^Tex_Document_Parser,
     font_flags: i32,
-    color: Tex_Document_Color) -> (Tex_Parse_Status, bool) {
+    color: Tex_Document_Color,
+    inline_only: bool) -> (Tex_Parse_Status, bool) {
 
     if parser.source[parser.offset] == '\n' {
-        return tex_document_parse_newlines(parser, font_flags, color), true
+        return tex_document_parse_newlines(
+            parser, font_flags, color, inline_only), true
     }
     if tex_document_starts(parser, "\\\\") {
+        if inline_only {return .Unexpected_Token, true}
         source_start := parser.offset
         parser.offset += 2
         tex_document_consume_break_whitespace(parser)
         return tex_document_append_forced_break(parser, source_start), true
     }
     if tex_document_command_starts(parser, "\\newline") {
+        if inline_only {return .Unexpected_Token, true}
         source_start := parser.offset
         parser.offset += len("\\newline")
         tex_document_consume_break_whitespace(parser)
         return tex_document_append_forced_break(parser, source_start), true
     }
     if tex_document_command_starts(parser, "\\par") {
+        if inline_only {return .Unexpected_Token, true}
         parser.offset += len("\\par")
         tex_document_close_paragraph(parser)
         return .Ok, true
     }
     if tex_document_command_starts(parser, "\\noindent") {
+        if inline_only {return .Unexpected_Token, true}
         if parser.active_paragraph >= 0 {
             return .Unexpected_Token, true
         }
@@ -476,7 +528,8 @@ tex_document_parse_prose_control :: proc(
 tex_document_parse_newlines :: proc(
     parser: ^Tex_Document_Parser,
     font_flags: i32,
-    color: Tex_Document_Color) -> Tex_Parse_Status {
+    color: Tex_Document_Color,
+    inline_only: bool = false) -> Tex_Parse_Status {
     source_start := parser.offset
     newline_count := 0
     for parser.offset < len(parser.source) &&
@@ -494,6 +547,7 @@ tex_document_parse_newlines :: proc(
             {source_start, parser.offset - source_start},
             .Breakable, font_flags, color)
     }
+    if inline_only {return .Unexpected_Token}
     tex_document_close_paragraph(parser)
     return .Ok
 }
@@ -507,6 +561,7 @@ tex_document_parse_text :: proc(
     for parser.offset < len(parser.source) {
         value := parser.source[parser.offset]
         if value == '\\' || value == '$' || value == '{' || value == '}' ||
+            parser.description_label_active && value == ']' ||
             value == '%' || value == '\n' {
             break
         }
@@ -614,11 +669,12 @@ tex_document_append_paragraph_inline :: proc(
                 kind = .Paragraph,
                 inline_start = parser.output.document_inline_count,
                 source = {item.source.offset, 0},
-                format = {
-                    alignment = parser.paragraph_alignment,
-                    no_indent = parser.pending_no_indent,
-                },
+                format = tex_document_block_format(
+                    parser, parser.paragraph_alignment),
             })
+        if parser.active_paragraph >= 0 && parser.list_item_first_block {
+            parser.list_item_first_block = false
+        }
         parser.pending_no_indent = false
     }
     if parser.active_paragraph < 0 || !tex_semantic_append_document_inline(
@@ -653,6 +709,11 @@ tex_document_environment_starts :: proc(
     if tex_document_starts(parser, "\\begin{center}") {return .Center}
     if tex_document_starts(parser, "\\begin{flushleft}") {return .Flush_Left}
     if tex_document_starts(parser, "\\begin{flushright}") {return .Flush_Right}
+    if tex_document_starts(parser, "\\begin{quote}") {return .Quote}
+    if tex_document_starts(parser, "\\begin{quotation}") {return .Quotation}
+    if tex_document_starts(parser, "\\begin{itemize}") {return .Itemize}
+    if tex_document_starts(parser, "\\begin{enumerate}") {return .Enumerate}
+    if tex_document_starts(parser, "\\begin{description}") {return .Description}
     return .None
 }
 
@@ -662,6 +723,11 @@ tex_document_environment_name :: proc(environment: Tex_Document_Environment) -> 
     case .Center: return "center"
     case .Flush_Left: return "flushleft"
     case .Flush_Right: return "flushright"
+    case .Quote: return "quote"
+    case .Quotation: return "quotation"
+    case .Itemize: return "itemize"
+    case .Enumerate: return "enumerate"
+    case .Description: return "description"
     case .None: return ""
     }
     return ""
@@ -676,6 +742,11 @@ tex_document_environment_ends :: proc(
     case .Center: return tex_document_starts(parser, "\\end{center}")
     case .Flush_Left: return tex_document_starts(parser, "\\end{flushleft}")
     case .Flush_Right: return tex_document_starts(parser, "\\end{flushright}")
+    case .Quote: return tex_document_starts(parser, "\\end{quote}")
+    case .Quotation: return tex_document_starts(parser, "\\end{quotation}")
+    case .Itemize: return tex_document_starts(parser, "\\end{itemize}")
+    case .Enumerate: return tex_document_starts(parser, "\\end{enumerate}")
+    case .Description: return tex_document_starts(parser, "\\end{description}")
     case .None: return false
     }
     return false
@@ -689,6 +760,80 @@ tex_document_consume_environment_end :: proc(
     parser.offset += len("\\end{")+len(tex_document_environment_name(environment))+1
 }
 
+// Capture parser-owned state changed while parsing one nested environment.
+tex_document_environment_state :: proc(
+    parser: ^Tex_Document_Parser) -> Tex_Document_Environment_State {
+
+    return {
+        alignment = parser.paragraph_alignment,
+        format = parser.paragraph_format,
+        quotation_first = parser.quotation_first_paragraph,
+        item_started = parser.list_item_started,
+        item_first = parser.list_item_first_block,
+        item_block_start = parser.list_item_block_start,
+    }
+}
+
+// Restore parser-owned state after parsing one nested environment.
+tex_document_restore_environment_state :: proc(
+    parser: ^Tex_Document_Parser,
+    state: Tex_Document_Environment_State) {
+
+    parser.paragraph_alignment = state.alignment
+    parser.paragraph_format = state.format
+    parser.quotation_first_paragraph = state.quotation_first
+    parser.list_item_started = state.item_started
+    parser.list_item_first_block = state.item_first
+    parser.list_item_block_start = state.item_block_start
+}
+
+// Apply the alignment, quotation, or list policy for one entered environment.
+tex_document_enter_environment :: proc(
+    parser: ^Tex_Document_Parser,
+    environment: Tex_Document_Environment) -> Tex_Parse_Status {
+
+    switch environment {
+    case .Center: parser.paragraph_alignment = .Center
+    case .Flush_Left: parser.paragraph_alignment = .Left
+    case .Flush_Right: parser.paragraph_alignment = .Right
+    case .Quote, .Quotation:
+        next_depth := int(parser.paragraph_format.container_depth)+1
+        if next_depth > 4 {return .Work_Limit}
+        parser.paragraph_format.container_kind = .Quote if
+            environment == .Quote else .Quotation
+        parser.paragraph_format.container_depth = u8(next_depth)
+        parser.paragraph_format.left_margin_levels += 1
+        parser.paragraph_format.right_margin_levels += 1
+        parser.paragraph_format.no_indent = true
+        parser.quotation_first_paragraph = environment == .Quotation
+    case .Itemize, .Enumerate, .Description:
+        next_depth := int(parser.paragraph_format.container_depth)+1
+        if next_depth > 4 {return .Work_Limit}
+        parser.next_list_id += 1
+        #partial switch environment {
+        case .Itemize:
+            parser.paragraph_format.container_kind = .Itemize
+            parser.paragraph_format.list_kind = .Itemize
+        case .Enumerate:
+            parser.paragraph_format.container_kind = .Enumerate
+            parser.paragraph_format.list_kind = .Enumerate
+        case .Description:
+            parser.paragraph_format.container_kind = .Description
+            parser.paragraph_format.list_kind = .Description
+        }
+        parser.paragraph_format.container_depth = u8(next_depth)
+        parser.paragraph_format.left_margin_levels += 1
+        parser.paragraph_format.no_indent = true
+        parser.paragraph_format.list_id = parser.next_list_id
+        parser.paragraph_format.item_ordinal = 0
+        parser.list_item_started = false
+        parser.list_item_first_block = false
+        parser.list_item_block_start = parser.output.document_block_count
+    case .None: return .Unexpected_Token
+    }
+    return .Ok
+}
+
 // Parse one alignment environment as complete paragraphs with inherited inline style.
 tex_document_parse_environment :: proc(
     parser: ^Tex_Document_Parser,
@@ -698,20 +843,164 @@ tex_document_parse_environment :: proc(
     tex_document_close_paragraph(parser)
     name := tex_document_environment_name(environment)
     parser.offset += len("\\begin{")+len(name)+1
-    prior_alignment := parser.paragraph_alignment
-    switch environment {
-    case .Center: parser.paragraph_alignment = .Center
-    case .Flush_Left: parser.paragraph_alignment = .Left
-    case .Flush_Right: parser.paragraph_alignment = .Right
-    case .None: return .Unexpected_Token
-    }
+    prior := tex_document_environment_state(parser)
+    enter_status := tex_document_enter_environment(parser, environment)
+    if enter_status != .Ok {return enter_status}
     nested := inherited
     nested.environment = environment
     nested.stop_on_brace = false
     status := tex_document_parse_sequence(parser, nested)
     tex_document_close_paragraph(parser)
-    parser.paragraph_alignment = prior_alignment
+    if status == .Ok && tex_document_environment_is_list(environment) &&
+        (!parser.list_item_started || parser.output.document_block_count ==
+            parser.list_item_block_start) {
+        status = .Unexpected_Token
+    }
+    tex_document_restore_environment_state(parser, prior)
     return status
+}
+
+// Resolve one emitted block's inherited container and local alignment policy.
+tex_document_block_format :: proc(
+    parser: ^Tex_Document_Parser,
+    alignment: Tex_Document_Alignment) -> Tex_Document_Format {
+
+    result := parser.paragraph_format
+    result.alignment = alignment
+    result.no_indent = result.no_indent || parser.pending_no_indent
+    result.item_first_block = parser.list_item_first_block
+    return result
+}
+
+// Report whether one environment requires item-delimited body content.
+tex_document_environment_is_list :: #force_inline proc(
+    environment: Tex_Document_Environment) -> bool {
+
+    return environment == .Itemize || environment == .Enumerate ||
+        environment == .Description
+}
+
+// Begin one explicit list-item block that owns its label inlines.
+tex_document_begin_list_label :: proc(
+    parser: ^Tex_Document_Parser,
+    source: Tex_Source_Span) -> int {
+
+    format := tex_document_block_format(parser, .Left)
+    format.item_first_block = false
+    return tex_semantic_append_document_block(parser.output, {
+        kind = .List_Item,
+        inline_start = parser.output.document_inline_count,
+        source = source,
+        format = format,
+    })
+}
+
+// Append one parser-generated label to its explicit list-item semantic block.
+tex_document_append_list_label :: proc(
+    parser: ^Tex_Document_Parser,
+    source: Tex_Source_Span,
+    text: string) -> Tex_Parse_Status {
+
+    span, ok := tex_semantic_append_text(parser.output, text)
+    if !ok {return .Work_Limit}
+    block_index := tex_document_begin_list_label(parser, source)
+    if block_index < 0 || !tex_semantic_append_document_inline(
+        parser.output, block_index, {
+        kind = .Text, source = source, text = span,
+        font_flags = TEX_DOCUMENT_STYLE_BOLD, math_program = -1,
+    }) {return .Work_Limit}
+    return .Ok
+}
+
+// Append one bounded decimal enumerate label without transient allocation.
+tex_document_append_enumerate_label :: proc(
+    parser: ^Tex_Document_Parser,
+    source: Tex_Source_Span,
+    ordinal: int) -> Tex_Parse_Status {
+
+    bytes: [4]u8
+    digit_count := 0
+    remaining := ordinal
+    for remaining > 0 {
+        bytes[digit_count] = u8(remaining%10)+'0'
+        remaining /= 10
+        digit_count += 1
+    }
+    for left, right := 0, digit_count-1; left < right; left, right = left+1, right-1 {
+        bytes[left], bytes[right] = bytes[right], bytes[left]
+    }
+    bytes[digit_count] = '.'
+    return tex_document_append_list_label(
+        parser, source, string(bytes[:digit_count+1]))
+}
+
+// Parse one required description term through the bounded inline grammar.
+tex_document_parse_description_label :: proc(
+    parser: ^Tex_Document_Parser) -> Tex_Parse_Status {
+    if parser.offset >= len(parser.source) || parser.source[parser.offset] != '[' {
+        return .Unexpected_Token
+    }
+    start := parser.offset
+    parser.offset += 1
+    block_index := tex_document_begin_list_label(parser, {start, 1})
+    if block_index < 0 {return .Work_Limit}
+    parser.active_paragraph = block_index
+    parser.description_label_active = true
+    status := tex_document_parse_sequence(parser, {
+        font_flags = TEX_DOCUMENT_STYLE_BOLD,
+        stop_on_bracket = true,
+        inline_only = true,
+    })
+    parser.description_label_active = false
+    tex_document_close_paragraph(parser)
+    block := &parser.output.document_blocks[block_index]
+    block.source.length = parser.offset-start
+    if status != .Ok {return status}
+    if block.inline_count == 0 {return .Unexpected_Token}
+    return .Ok
+}
+
+// Begin one validated list item and prepare its first body block metadata.
+tex_document_parse_list_item :: proc(
+    parser: ^Tex_Document_Parser,
+    parse_ctx: Tex_Document_Parse_Context) -> Tex_Parse_Status {
+
+    list_kind := parser.paragraph_format.list_kind
+    if list_kind == .None {return .Unexpected_Token}
+    tex_document_close_paragraph(parser)
+    if !parser.list_item_started && parser.output.document_block_count !=
+        parser.list_item_block_start {return .Unexpected_Token}
+    if parser.list_item_started && parser.output.document_block_count ==
+        parser.list_item_block_start {
+        return .Unexpected_Token
+    }
+    source_start := parser.offset
+    parser.offset += len("\\item")
+    label_source := Tex_Source_Span{source_start, len("\\item")}
+    ordinal := int(parser.paragraph_format.item_ordinal)+1
+    parser.paragraph_format.item_ordinal += 1
+    parser.list_item_started = true
+    parser.list_item_first_block = true
+    if list_kind == .Enumerate {
+        if parser.offset < len(parser.source) && parser.source[parser.offset] == '[' {
+            return .Unexpected_Token
+        }
+        if ordinal > 999 {return .Work_Limit}
+    } else if list_kind == .Description {
+        status := tex_document_parse_description_label(parser)
+        if status != .Ok {return status}
+    } else if parser.offset < len(parser.source) && parser.source[parser.offset] == '[' {
+        return .Unexpected_Token
+    }
+    if list_kind != .Description {
+        status := tex_document_append_enumerate_label(
+            parser, label_source, ordinal) if list_kind == .Enumerate else
+            tex_document_append_list_label(parser, label_source, "•")
+        if status != .Ok {return status}
+    }
+    parser.list_item_block_start = parser.output.document_block_count
+    tex_document_consume_break_whitespace(parser)
+    return .Ok
 }
 
 // Report whether one control symbol emits a literal prose special.
@@ -766,6 +1055,11 @@ tex_document_close_paragraph :: proc(parser: ^Tex_Document_Parser) {
             block.inline_start + block.inline_count - 1]
         block.source.length = last.source.offset + last.source.length -
             block.source.offset
+        if parser.quotation_first_paragraph &&
+            parser.paragraph_format.container_kind == .Quotation {
+            parser.paragraph_format.no_indent = false
+            parser.quotation_first_paragraph = false
+        }
     }
     parser.active_paragraph = -1
 }

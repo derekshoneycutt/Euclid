@@ -868,6 +868,9 @@ view_snapshot_documents_are_valid :: proc(slot: ^View_Snapshot) -> bool {
                 return false
             }
         }
+        if !view_snapshot_document_list_sequence_is_valid(blocks) {
+            return false
+        }
         items := slot^.document_inlines[
             document.inline_start:document.inline_start + document.inline_count]
         for item in items {
@@ -881,6 +884,26 @@ view_snapshot_documents_are_valid :: proc(slot: ^View_Snapshot) -> bool {
             if !view_snapshot_document_display_row_is_valid(slot, document, row) {
                 return false
             }
+        }
+    }
+    return true
+}
+
+// Validate flattened list labels, body ownership, and item-start adjacency.
+view_snapshot_document_list_sequence_is_valid :: proc(
+    blocks: []core.Dynview_Document_Block) -> bool {
+
+    for block, index in blocks {
+        if block.kind == .List_Item {
+            if index+1 < len(blocks) {
+                body := blocks[index+1]
+                if body.item_first_block && (body.kind == .List_Item ||
+                    body.list_id != block.list_id ||
+                    body.item_ordinal != block.item_ordinal) {return false}
+            }
+        } else if block.list_kind != .None &&
+            (block.list_id == 0 || block.item_ordinal == 0) {
+            return false
         }
     }
     return true
@@ -909,10 +932,29 @@ view_snapshot_document_block_is_valid :: proc(
 
     kind := int(block.kind)
     alignment := int(block.alignment)
+    container_kind := int(block.container_kind)
+    list_kind := int(block.list_kind)
+    has_list := block.list_kind != .None
+    list_container := block.container_kind == .Itemize ||
+        block.container_kind == .Enumerate ||
+        block.container_kind == .Description
     return kind >= int(core.Dynview_Document_Block_Kind.Paragraph) &&
-        kind <= int(core.Dynview_Document_Block_Kind.Display) &&
+        kind <= int(core.Dynview_Document_Block_Kind.List_Item) &&
         alignment >= int(core.Dynview_Document_Alignment.Left) &&
         alignment <= int(core.Dynview_Document_Alignment.Right) &&
+        container_kind >= int(core.Dynview_Document_Container_Kind.None) &&
+        container_kind <= int(core.Dynview_Document_Container_Kind.Description) &&
+        list_kind >= int(core.Dynview_Document_List_Kind.None) &&
+        list_kind <= int(core.Dynview_Document_List_Kind.Description) &&
+        block.container_depth <= 4 && block.left_margin_levels <= 4 &&
+        block.right_margin_levels <= 4 &&
+        (!list_container || has_list) &&
+        (has_list || block.list_id == 0 && block.item_ordinal == 0) &&
+        (!has_list || block.list_id > 0 && block.item_ordinal > 0 &&
+            block.left_margin_levels > 0) &&
+        (block.kind != .List_Item || has_list && block.inline_count > 0 &&
+            !block.item_first_block) &&
+        (block.kind == .List_Item || !block.item_first_block || has_list) &&
         view_snapshot_subspan_is_valid(document.source_offset,
             document.source_count, block.source_offset, block.source_count) &&
         view_snapshot_subspan_is_valid(document.inline_start,

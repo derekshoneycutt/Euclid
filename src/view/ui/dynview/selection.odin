@@ -45,7 +45,11 @@ dynview_document_write_separator :: proc(
     separator: core.Dynview_Document_Selection_Separator) {
 
     switch separator {
+    case .Space:
+        strings.write_byte(builder, ' ')
     case .Line:
+        strings.write_byte(builder, '\n')
+    case .Item:
         strings.write_byte(builder, '\n')
     case .Block:
         strings.write_string(builder, "\n\n")

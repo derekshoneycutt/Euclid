@@ -260,6 +260,108 @@ document_layout_applies_semantic_paragraph_indent :: proc(t: ^testing.T) {
         runtime^.compile_cache.document_layout_items[0].x, f32(0))
 }
 
+// Verify container margins govern both line breaking and final placement.
+@(test)
+document_layout_applies_container_measure :: proc(t: ^testing.T) {
+    runtime_owner, cache_owner: app_core.Arena_Owner
+    fixture: Document_Layout_Test_Fixture
+    runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
+    defer app_core.arena_owner_destroy(&runtime_owner)
+    fixture.blocks[0].container_kind = .Quote
+    fixture.blocks[0].container_depth = 1
+    fixture.blocks[0].left_margin_levels = 1
+    fixture.blocks[0].right_margin_levels = 1
+    fixture.blocks[0].no_indent = true
+    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer app_core.arena_owner_destroy(&cache_owner)
+
+    status := rebuild_document_layout_cache(runtime, &cache_owner)
+
+    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect(t, len(runtime^.compile_cache.document_layout_lines) > 1)
+    for line in runtime^.compile_cache.document_layout_lines {
+        testing.expect_value(t, line.x, f32(32))
+    }
+}
+
+// Verify list labels occupy the gutter beside a hanging-indented body.
+@(test)
+document_layout_places_list_label_beside_body :: proc(t: ^testing.T) {
+    runtime_owner, cache_owner: app_core.Arena_Owner
+    fixture: Document_Layout_Test_Fixture
+    runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
+    defer app_core.arena_owner_destroy(&runtime_owner)
+    blocks := [2]app_core.Dynview_Document_Block{
+        {kind = .List_Item, inline_start = 0, inline_count = 1,
+            source_count = 5, alignment = .Left, container_kind = .Itemize,
+            container_depth = 1, left_margin_levels = 1, list_kind = .Itemize,
+            list_id = 1, item_ordinal = 1},
+        {kind = .Paragraph, inline_start = 1, inline_count = 1,
+            source_offset = 5, source_count = 4, alignment = .Left,
+            no_indent = true, container_kind = .Itemize, container_depth = 1,
+            left_margin_levels = 1, list_kind = .Itemize, list_id = 1,
+            item_ordinal = 1, item_first_block = true},
+    }
+    inlines := [2]app_core.Dynview_Document_Inline{
+        {kind = .Text, source_count = 5, text_count = 1},
+        {kind = .Text, source_offset = 5, source_count = 4,
+            text_offset = 1, text_count = 4},
+    }
+    runs := [2]app_core.Dynview_Document_Shaped_Run{
+        {inline_index = 0, text_count = 1, glyph_count = 1,
+            base_pixel_size = 16, width = 8, ascent = 12, descent = 3},
+        {inline_index = 1, text_offset = 1, text_count = 4,
+            glyph_start = 1, glyph_count = 1, base_pixel_size = 16,
+            width = 40, ascent = 12, descent = 3},
+    }
+    glyphs := [2]app_core.Shaped_Glyph{
+        {glyph_id = 1, x_advance = 512}, {glyph_id = 2, x_advance = 2560}}
+    runtime^.content.document_blocks = blocks[:]
+    runtime^.content.document_inlines = inlines[:]
+    runtime^.compile_cache.document_shaped_runs = runs[:]
+    runtime^.compile_cache.document_shaped_glyphs = glyphs[:]
+    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer app_core.arena_owner_destroy(&cache_owner)
+
+    status := rebuild_document_layout_cache(runtime, &cache_owner)
+
+    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    lines := runtime^.compile_cache.document_layout_lines
+    testing.expect_value(t, len(lines), 2)
+    testing.expect_value(t, lines[0].x, f32(16))
+    testing.expect_value(t, lines[1].x, f32(32))
+    testing.expect_value(t, lines[0].baseline, lines[1].baseline)
+    testing.expect_value(t, runtime^.compile_cache.document_layout_total_height,
+        f32(20))
+}
+
+// Verify description items share a label column and wide labels move above the body.
+@(test)
+document_layout_resolves_description_label_columns :: proc(t: ^testing.T) {
+    narrow := app_core.Dynview_Document_Block{
+        kind = .List_Item, container_kind = .Description,
+        left_margin_levels = 1, list_kind = .Description, list_id = 1}
+    body := narrow
+    body.kind = .Paragraph
+    wide := narrow
+
+    narrow_measure := document_block_measure(
+        narrow, 240, 16, 48, 24)
+    body_measure := document_block_measure(
+        body, 240, 16, 48, 0)
+    wide_measure := document_block_measure(
+        wide, 240, 16, 48, 72)
+
+    testing.expect_value(t, narrow_measure.origin, f32(0))
+    testing.expect_value(t, narrow_measure.width, f32(48))
+    testing.expect(t, !narrow_measure.label_above && !body_measure.label_above)
+    testing.expect_value(t, body_measure.origin, f32(56))
+    testing.expect_value(t, body_measure.width, f32(184))
+    testing.expect(t, wide_measure.label_above)
+    testing.expect_value(t, wide_measure.origin, body_measure.origin)
+    testing.expect_value(t, wide_measure.width, body_measure.width)
+}
+
 // Verify failed lowering leaves no partially published layout aliases.
 @(test)
 document_layout_invalid_input_rolls_back :: proc(t: ^testing.T) {

@@ -17,10 +17,12 @@ For this project, think of a group as a collection of actions taken on a figure.
 
 Formally, a group is a set $G$ with a binary operation $\circ: G \times G \to G$ satisfying 4 axioms:
 
-\textbf{1. Closure}: if $a, b \in G$, then $a \circ b \in G$.\newline
-\textbf{2. Associativity}: $(a \circ b) \circ c = a \circ (b \circ c)$ for all $a,b,c \in G$.\newline
-\textbf{3. Identity}: there is an element $e \in G$ with $e \circ a = a \circ e = a$ for all $a \in G$.\newline
-\textbf{4. Inverses}: for each $a \in G$, there is $a^{-1} \in G$ with $a \circ a^{-1} = a^{-1} \circ a = e$.
+\begin{enumerate}
+\item \textbf{Closure}: if $a, b \in G$, then $a \circ b \in G$.
+\item \textbf{Associativity}: $(a \circ b) \circ c = a \circ (b \circ c)$ for all $a,b,c \in G$.
+\item \textbf{Identity}: there is an element $e \in G$ with $e \circ a = a \circ e = a$ for all $a \in G$.
+\item \textbf{Inverses}: for each $a \in G$, there is $a^{-1} \in G$ with $a \circ a^{-1} = a^{-1} \circ a = e$.
+\end{enumerate}
 
 Some actions commute and some do not. If $a \circ b = b \circ a$ for all $a,b \in G$, then the group is \textit{commutative}, also called \textit{abelian}. Commutativity is not required.
 

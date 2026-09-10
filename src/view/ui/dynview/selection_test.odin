@@ -71,6 +71,27 @@ dynview_selection_test_composes_only_authored_separators :: proc(t: ^testing.T) 
         text, targets, {unit_index = 2}, {unit_index = 4}), "c\n\nd")
 }
 
+// Verify generated list labels copy beside bodies with one newline per item.
+@(test)
+dynview_selection_test_composes_list_items :: proc(t: ^testing.T) {
+    source: string = "1.alph2.bet"
+    text := transmute([]u8)source
+    targets := []core.Dynview_Document_Layout_Copy_Target{
+        {offset = 0, count = 2, canonical_text = true},
+        {offset = 2, count = 4, canonical_text = true,
+            separator_before = .Space},
+        {offset = 6, count = 2, canonical_text = true,
+            separator_before = .Item},
+        {offset = 8, count = 3, canonical_text = true,
+            separator_before = .Space},
+    }
+
+    selected := dynview_document_selection_text(text, targets,
+        {unit_index = 4}, {unit_index = 0})
+
+    testing.expect_value(t, selected, "1. alph\n2. bet")
+}
+
 // Verify UTF-8 unit boundaries map back to exact source byte boundaries.
 @(test)
 dynview_selection_test_maps_utf8_unit_boundaries :: proc(t: ^testing.T) {

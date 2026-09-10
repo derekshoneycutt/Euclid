@@ -41,6 +41,7 @@ Document_Block_Compose_Context :: struct {
     source_blocks: []app_core.Dynview_Document_Block,
     display_rows: []app_core.Dynview_Document_Display_Row,
     available_width: f32,
+    label_columns: []f32,
 }
 
 // Clear every semantic document-layout alias without touching command layout.
@@ -243,6 +244,31 @@ document_layout_mark_line_selection_separator :: proc(
     if first_target < builders^.copy_targets.count {
         builders^.copy_targets.storage[first_target].separator_before = separator
     }
+}
+
+// Resolve visual list transitions to canonical copied-text separators.
+document_layout_block_selection_separator :: proc(
+    source_blocks: []app_core.Dynview_Document_Block,
+    source_index: int) -> (
+        app_core.Dynview_Document_Selection_Separator, bool) {
+
+    if source_index <= 0 || source_index >= len(source_blocks) {
+        return .None, false
+    }
+    previous := source_blocks[source_index-1]
+    current := source_blocks[source_index]
+    if current.kind == .List_Item {
+        if previous.list_kind != .None &&
+            previous.list_id == current.list_id {
+            return .Item, true
+        }
+        return .Block, true
+    }
+    if previous.kind == .List_Item && previous.list_id == current.list_id &&
+        previous.item_ordinal == current.item_ordinal {
+        return .Space, true
+    }
+    return .None, false
 }
 
 // Initialize one line's item range and authored selection separator.
@@ -458,15 +484,92 @@ document_layout_compose_blocks :: proc(
     display_rows: []app_core.Dynview_Document_Display_Row,
     available_width: f32) -> app_core.Bounded_Builder_Status {
 
+    label_columns: [app_core.DYNVIEW_MAX_DOCUMENT_BLOCKS+1]f32
+    if !document_layout_measure_list_columns(
+        builders, source_blocks, available_width, cache^.last_font_size,
+        label_columns[:]) {return .Invalid_Argument}
     ctx := Document_Block_Compose_Context{
         cache = cache, builders = builders, source_blocks = source_blocks,
         display_rows = display_rows, available_width = available_width,
+        label_columns = label_columns[:],
     }
     for _, block_index in builders^.blocks.storage[:builders^.blocks.count] {
         status := document_layout_compose_block(ctx, block_index)
         if status != .Ok {return status}
     }
     return .Ok
+}
+
+// Measure one bounded shared label column for every semantic list identity.
+document_layout_measure_list_columns :: proc(
+    builders: ^Document_Layout_Builders,
+    source_blocks: []app_core.Dynview_Document_Block,
+    available_width, font_size: f32,
+    columns: []f32) -> bool {
+
+    for block in builders^.blocks.storage[:builders^.blocks.count] {
+        if block.source_block_index < 0 ||
+            block.source_block_index >= len(source_blocks) {return false}
+        source := source_blocks[block.source_block_index]
+        if source.kind != .List_Item {continue}
+        list_id := int(source.list_id)
+        if list_id <= 0 || list_id >= len(columns) {return false}
+        width: f32
+        for node in builders^.nodes.storage[
+            block.node_start:block.node_start+block.node_count] {width += node.width}
+        if source.list_kind == .Description {
+            list_origin := f32(max(0, int(source.left_margin_levels)-1))*font_size*2
+            list_measure := max(1, available_width-list_origin-
+                f32(source.right_margin_levels)*font_size*2)
+            width = min(width, min(font_size*12, list_measure*0.4))
+        }
+        columns[list_id] = max(columns[list_id], width)
+    }
+    return true
+}
+
+// Resolve one block's label column and final content geometry.
+document_layout_resolve_block_measure :: proc(
+    ctx: Document_Block_Compose_Context,
+    block: app_core.Dynview_Document_Layout_Block,
+    source: app_core.Dynview_Document_Block) -> (Document_Block_Measure, bool) {
+
+    label_column: f32
+    if source.list_kind != .None {
+        list_id := int(source.list_id)
+        if list_id <= 0 || list_id >= len(ctx.label_columns) {return {}, false}
+        label_column = ctx.label_columns[list_id]
+    }
+    label_width: f32
+    if source.kind == .List_Item {
+        for node in ctx.builders^.nodes.storage[
+            block.node_start:block.node_start+block.node_count] {label_width += node.width}
+    }
+    return document_block_measure(source, ctx.available_width,
+        ctx.cache^.last_font_size, label_column, label_width), true
+}
+
+// Compose one block's technical-display rows or optimally broken prose lines.
+document_layout_compose_block_lines :: proc(
+    ctx: Document_Block_Compose_Context,
+    block: app_core.Dynview_Document_Layout_Block,
+    source: app_core.Dynview_Document_Block,
+    block_index: int,
+    content_width: f32) -> app_core.Bounded_Builder_Status {
+
+    if source.kind == .Display && source.display_kind != .Plain {
+        return document_layout_compose_display({
+            cache = ctx.cache, builders = ctx.builders, block = block,
+            source = source, rows = ctx.display_rows, block_index = block_index,
+            available_width = content_width,
+        })
+    }
+    indent := document_block_first_line_indent(source, ctx.cache^.last_font_size)
+    result := document_optimal_break(ctx.builders^.nodes.storage[
+        block.node_start:block.node_start+block.node_count], block_index,
+        content_width, &ctx.builders^.lines, indent)
+    document_layout_record_break_result(ctx.cache, result)
+    return result.status
 }
 
 // Break and finalize one validated semantic document block.
@@ -478,25 +581,26 @@ document_layout_compose_block :: proc(
     if block.source_block_index < 0 ||
         block.source_block_index >= len(ctx.source_blocks) {return .Invalid_Argument}
     source := ctx.source_blocks[block.source_block_index]
+    measure, measure_ok := document_layout_resolve_block_measure(ctx, block, source)
+    if !measure_ok {return .Invalid_Argument}
+    record := &ctx.builders^.blocks.storage[block_index]
+    record^.content_origin = measure.origin
+    record^.content_width = measure.width
+    record^.list_label_above = measure.label_above
     line_start := ctx.builders^.lines.count
-    status: app_core.Bounded_Builder_Status
-    if source.kind == .Display && source.display_kind != .Plain {
-        status = document_layout_compose_display({
-            cache = ctx.cache, builders = ctx.builders, block = block,
-            source = source, rows = ctx.display_rows, block_index = block_index,
-            available_width = ctx.available_width,
-        })
-    } else {
-        indent := document_block_first_line_indent(source, ctx.cache^.last_font_size)
-        result := document_optimal_break(ctx.builders^.nodes.storage[
-            block.node_start:block.node_start+block.node_count], block_index,
-            ctx.available_width, &ctx.builders^.lines, indent)
-        status = result.status
-        document_layout_record_break_result(ctx.cache, result)
-    }
+    target_start := ctx.builders^.copy_targets.count
+    status := document_layout_compose_block_lines(
+        ctx, block, source, block_index, measure.width)
     if status != .Ok {return status}
-    return document_layout_finish_block(
+    status = document_layout_finish_block(
         ctx.cache, ctx.builders, block_index, block.node_start, line_start)
+    if status != .Ok {return status}
+    separator, replace := document_layout_block_selection_separator(
+        ctx.source_blocks, block.source_block_index)
+    if replace && target_start < ctx.builders^.copy_targets.count {
+        ctx.builders^.copy_targets.storage[target_start].separator_before = separator
+    }
+    return .Ok
 }
 
 // Seal all semantic layout families and publish one complete document cache.

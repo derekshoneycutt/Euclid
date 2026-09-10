@@ -321,6 +321,46 @@ view_snapshot_document_validation_rejects_malformed_ranges :: proc(t: ^testing.T
     testing.expect(t, !view_snapshot_is_valid(slot))
 }
 
+// Verify malformed list identity and label/body sequences reject publication.
+@(test)
+view_snapshot_document_validation_rejects_malformed_lists :: proc(t: ^testing.T) {
+    service := view_snapshot_arena_test_service(t)
+    defer view_snapshot_arena_test_service_destroy(service)
+    slot := &service^.view_snapshots[0]
+    testing.expect(t, prepare_view_snapshot_slot(slot))
+    testing.expect(t, build_view_snapshot_text_payloads(slot, "fallback", nil))
+    documents := []core.Dynview_Document{{source_count = 2, text_count = 2,
+        block_count = 2, inline_count = 2}}
+    blocks := []core.Dynview_Document_Block{
+        {kind = .List_Item, inline_count = 1, source_count = 1,
+            container_kind = .Itemize, container_depth = 1,
+            left_margin_levels = 1, list_kind = .Itemize,
+            list_id = 1, item_ordinal = 1},
+        {kind = .Paragraph, inline_start = 1, inline_count = 1,
+            source_offset = 1, source_count = 1, container_kind = .Itemize,
+            container_depth = 1, left_margin_levels = 1,
+            list_kind = .Itemize, list_id = 1, item_ordinal = 1,
+            item_first_block = true},
+    }
+    items := []core.Dynview_Document_Inline{
+        {kind = .Text, source_count = 1, text_count = 1,
+            math_program_id = -1},
+        {kind = .Text, source_offset = 1, source_count = 1,
+            text_offset = 1, text_count = 1, math_program_id = -1},
+    }
+    testing.expect(t, build_view_snapshot_record_payloads(slot, {
+        document_text = {'a', 'b'}, documents = documents,
+        document_blocks = blocks, document_inlines = items,
+    }))
+    testing.expect(t, view_snapshot_is_valid(slot))
+
+    slot^.document_blocks[1].item_ordinal = 2
+    testing.expect(t, !view_snapshot_is_valid(slot))
+    slot^.document_blocks[1].item_ordinal = 1
+    slot^.document_blocks[0].list_id = 0
+    testing.expect(t, !view_snapshot_is_valid(slot))
+}
+
 //   Verify record validation rejects same-length slices outside sealed storage.
 @(test)
 view_snapshot_record_validation_rejects_forged_aliases :: proc(t: ^testing.T) {

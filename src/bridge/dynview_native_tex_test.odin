@@ -174,6 +174,30 @@ dynview_native_document_publishes_authoritative_semantics :: proc(t: ^testing.T)
     testing.expect_value(t, cache^.math_program_count, 11)
 }
 
+// Verify nested quotations retain enclosing list identity through publication.
+@(test)
+dynview_native_document_publishes_mixed_containers :: proc(t: ^testing.T) {
+    state := animation_value_test_state_create(43)
+    testing.expect(t, state != nil)
+    defer animation_value_test_state_destroy(state)
+    state.saved_context = context
+    state.dynview.enabled = true
+    source := "\\begin{enumerate}\\item outer" +
+        "\\begin{quote}quoted\\end{quote}\\end{enumerate}"
+
+    status := dynview_native_test_document(state, source, 18)
+
+    testing.expect_value(t, status, i32(BRIDGE_STATUS_OK))
+    cache := &state.dynview.compile_cache
+    testing.expect_value(t, cache^.document_block_count, 3)
+    quoted := cache^.document_blocks[2]
+    testing.expect_value(t, quoted.container_kind,
+        core.Dynview_Document_Container_Kind.Quote)
+    testing.expect_value(t, quoted.list_kind,
+        core.Dynview_Document_List_Kind.Enumerate)
+    testing.expect_value(t, quoted.item_ordinal, u16(1))
+}
+
 // Verify group animation documents survive bridge import without fallback staging.
 @(test)
 dynview_native_group_documents_publish_semantics :: proc(t: ^testing.T) {

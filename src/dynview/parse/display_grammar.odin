@@ -308,7 +308,7 @@ tex_document_parse_display_environment :: proc(
     block_index := tex_semantic_append_document_block(parser.output, {
         kind = .Display, inline_start = parser.output.document_inline_count,
         source = {source_start, body_end+len(info.closer)-source_start},
-        format = {alignment = .Center}, display_kind = info.kind,
+        format = tex_document_block_format(parser, .Center), display_kind = info.kind,
         display_row_start = row_start, display_numbered = info.numbered,
     })
     if block_index < 0 {return .Work_Limit}

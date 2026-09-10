@@ -281,6 +281,164 @@ tex_parse_document_accepts_alignment_and_noindent :: proc(t: ^testing.T) {
         Tex_Document_Alignment.Left)
 }
 
+// Verify quotation containers flatten into bounded block margin policy.
+@(test)
+tex_parse_document_accepts_quote_and_quotation :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\begin{quote}short\\end{quote}" +
+        "\\begin{quotation}first\\par second\\end{quotation}"
+
+    status := tex_parse_document(source, output)
+
+    testing.expect_value(t, status, Tex_Parse_Status.Ok)
+    testing.expect_value(t, output.document_block_count, 3)
+    for block in output.document_blocks[:output.document_block_count] {
+        testing.expect_value(t, block.format.container_depth, u8(1))
+        testing.expect_value(t, block.format.left_margin_levels, u8(1))
+        testing.expect_value(t, block.format.right_margin_levels, u8(1))
+    }
+    testing.expect(t, output.document_blocks[0].format.no_indent)
+    testing.expect(t, output.document_blocks[1].format.no_indent)
+    testing.expect(t, !output.document_blocks[2].format.no_indent)
+    testing.expect_value(t, output.document_blocks[0].format.container_kind,
+        Tex_Document_Container_Kind.Quote)
+    testing.expect_value(t, output.document_blocks[1].format.container_kind,
+        Tex_Document_Container_Kind.Quotation)
+}
+
+// Verify displays inherit quotation margins without becoming prose blocks.
+@(test)
+tex_parse_document_applies_quote_policy_to_displays :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\begin{quote}before$$x$$" +
+        "\\begin{equation}y=1\\end{equation}\\end{quote}"
+
+    testing.expect_value(t, tex_parse_document(source, output), Tex_Parse_Status.Ok)
+    testing.expect_value(t, output.document_block_count, 3)
+    for block in output.document_blocks[:output.document_block_count] {
+        testing.expect_value(t, block.format.container_kind,
+            Tex_Document_Container_Kind.Quote)
+        testing.expect_value(t, block.format.left_margin_levels, u8(1))
+        testing.expect_value(t, block.format.right_margin_levels, u8(1))
+    }
+}
+
+// Verify list environments retain generated labels and item block identity.
+@(test)
+tex_parse_document_accepts_native_lists :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\begin{itemize}\\item alpha\\item beta\\end{itemize}" +
+        "\\begin{enumerate}\\item one\\item two\\end{enumerate}" +
+        "\\begin{description}\\item[Point] no part\\end{description}"
+
+    testing.expect_value(t, tex_parse_document(source, output), Tex_Parse_Status.Ok)
+    testing.expect_value(t, output.document_block_count, 10)
+    expected := [?]Tex_Document_List_Kind{
+        .Itemize, .Itemize, .Enumerate, .Enumerate, .Description,
+    }
+    for index in 0..<len(expected) {
+        label_block := output.document_blocks[index*2]
+        body_block := output.document_blocks[index*2+1]
+        testing.expect_value(t, label_block.kind,
+            Tex_Document_Block_Kind.List_Item)
+        testing.expect_value(t, label_block.format.list_kind, expected[index])
+        testing.expect_value(t, label_block.inline_count, 1)
+        testing.expect(t, !label_block.format.item_first_block)
+        testing.expect(t, body_block.format.item_first_block)
+        testing.expect_value(t, label_block.format.item_ordinal,
+            body_block.format.item_ordinal)
+        label := output.document_inlines[label_block.inline_start]
+        testing.expect_value(t, label.kind, Tex_Document_Inline_Kind.Text)
+    }
+    enumerate_label := output.document_inlines[output.document_blocks[6].inline_start]
+    testing.expect_value(t, tex_semantic_text(output, enumerate_label.text), "2.")
+    description_label := output.document_inlines[
+        output.document_blocks[8].inline_start]
+    testing.expect_value(t, tex_semantic_text(output, description_label.text), "Point")
+}
+
+// Verify description labels retain bounded style, color, spaces, and inline math.
+@(test)
+tex_parse_document_accepts_rich_description_labels :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\begin{description}\\item[\\textit{Red}~\\textcolor{red}{point} " +
+        "$A$] body\\end{description}"
+
+    testing.expect_value(t, tex_parse_document(source, output), Tex_Parse_Status.Ok)
+    label := output.document_blocks[0]
+    testing.expect_value(t, label.kind, Tex_Document_Block_Kind.List_Item)
+    testing.expect_value(t, label.inline_count, 5)
+    first := output.document_inlines[label.inline_start]
+    testing.expect(t, first.font_flags&TEX_DOCUMENT_STYLE_BOLD != 0)
+    testing.expect(t, first.font_flags&TEX_DOCUMENT_STYLE_ITALIC != 0)
+    testing.expect_value(t, output.document_inlines[
+        label.inline_start+label.inline_count-1].kind, Tex_Document_Inline_Kind.Math)
+}
+
+// Verify malformed list boundaries reject the complete structured document.
+@(test)
+tex_parse_document_rejects_invalid_lists :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    cases := [?]string{
+        "\\item orphan", "\\begin{itemize}before\\item after\\end{itemize}",
+        "\\begin{itemize}\\item\\end{itemize}",
+        "\\begin{itemize}\\item one\\item\\end{itemize}",
+        "\\begin{enumerate}\\item[x] one\\end{enumerate}",
+        "\\begin{description}\\item missing\\end{description}",
+        "\\begin{description}\\item[] empty\\end{description}",
+        "\\begin{description}\\item[\\par bad] body\\end{description}",
+        "\\begin{description}\\item[\\euclidpoint] body\\end{description}",
+        "\\begin{description}\\item[unclosed body\\end{description}",
+    }
+    for source in cases {
+        testing.expect(t, tex_parse_document(source, output) != .Ok)
+        testing.expect_value(t, output.document_block_count, 0)
+        testing.expect_value(t, output.document_inline_count, 0)
+    }
+}
+
+// Verify list and quotation containers compose through four bounded levels.
+@(test)
+tex_parse_document_accepts_mixed_container_nesting :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\begin{enumerate}\\item outer" +
+        "\\begin{quote}quoted" +
+        "\\begin{itemize}\\item inner\\end{itemize}" +
+        "\\end{quote}\\end{enumerate}"
+
+    testing.expect_value(t, tex_parse_document(source, output), Tex_Parse_Status.Ok)
+    deepest := u8(0)
+    for block in output.document_blocks[:output.document_block_count] {
+        deepest = max(deepest, block.format.container_depth)
+    }
+    testing.expect_value(t, deepest, u8(3))
+    testing.expect_value(t, output.document_blocks[0].kind,
+        Tex_Document_Block_Kind.List_Item)
+    testing.expect_value(t, output.document_blocks[
+        output.document_block_count-2].kind, Tex_Document_Block_Kind.List_Item)
+}
+
+// Verify a fifth combined list or quotation level rejects transactionally.
+@(test)
+tex_parse_document_rejects_fifth_container_level :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\begin{quote}\\begin{quote}\\begin{quote}\\begin{quote}" +
+        "\\begin{quote}too deep\\end{quote}\\end{quote}\\end{quote}" +
+        "\\end{quote}\\end{quote}"
+
+    testing.expect_value(t, tex_parse_document(source, output),
+        Tex_Parse_Status.Work_Limit)
+    testing.expect_value(t, output.document_block_count, 0)
+    testing.expect_value(t, output.document_inline_count, 0)
+}
+
 // Verify unavailable faces and malformed environment boundaries fail completely.
 @(test)
 tex_parse_document_rejects_unavailable_prose_faces :: proc(t: ^testing.T) {

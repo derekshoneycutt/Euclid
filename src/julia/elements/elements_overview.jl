@@ -38,7 +38,28 @@ $${\textstyle \frac{a}{b}}+\frac{c}{d}\;\dfrac{1}{2}+\tfrac{3}{4}\;\sum\nolimits
 $$\bigl(x\bigr)+\Bigl[x\Bigr]+\biggl\{x\biggr\}\;\left\{x\middle|y\middle\|z\right\}\;\check a+\breve b+\acute c+\grave d+\mathring e\;\overset{!}{=}+\underset{n}{x}\;\overbrace{a+b+c}^{n}+\underbrace{x+y}_{m}$$
 
 \noindent {\bfseries Bold {\itshape italic}} \textnormal{normal} \% \# \_ \& \{ \}~kept\ space% hidden
-\par\begin{center}Centered JuliaMono prose.\end{center}\begin{flushright}Right aligned prose.\end{flushright}"""
+\par\begin{center}Centered JuliaMono prose.\end{center}\begin{flushright}Right aligned prose.\end{flushright}
+
+\begin{quote}A short quotation uses symmetric margins without paragraph indentation.\end{quote}
+
+\begin{quotation}A longer quotation also uses symmetric margins. Its first paragraph is not indented.
+
+Its following paragraph returns to ordinary first-line indentation.\end{quotation}
+
+\begin{itemize}
+\item A bullet item with enough text to demonstrate hanging indentation when the panel becomes narrow.
+\item A nested ordered construction:
+\begin{enumerate}
+\item Choose two points $A$ and $B$.
+\item Draw the segment $AB$ and compare it with
+\[\overline{AB} = \sqrt{(x_B-x_A)^2+(y_B-y_A)^2}.\]
+\end{enumerate}
+\end{itemize}
+
+\begin{description}
+\item[Point] That which has no part.
+\item[\textcolor{steelblue}{Extended construction term}] A wide styled term moves above its body when the shared label column reaches its bound.
+\end{description}"""
 end
 
 """Initialize the null animation and publish the Elements overview."""

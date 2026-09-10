@@ -96,6 +96,15 @@ document_block_spacing_before :: proc(
     }
     previous := blocks[block_index-1].kind
     current := blocks[block_index].kind
+    if previous == .List_Item {
+        previous_block := blocks[block_index-1]
+        current_block := blocks[block_index]
+        if previous_block.list_id == current_block.list_id &&
+            previous_block.item_ordinal == current_block.item_ordinal {
+            return document_block_spacing_before(
+                documents, blocks, block_index-1, style)
+        }
+    }
     if previous == .Display || current == .Display {
         return style.display_spacing, true
     }
@@ -198,6 +207,17 @@ document_place_vertical_block :: proc(
     spacing, ok := document_block_spacing_before(
         content^.documents, content^.document_blocks,
         block.source_block_index, ctx.style)
+    if block_index > 0 &&
+        builders^.blocks.storage[block_index-1].list_label_above {
+        previous_source_index := builders^.blocks.storage[
+            block_index-1].source_block_index
+        previous_source := content^.document_blocks[previous_source_index]
+        current_source := content^.document_blocks[block.source_block_index]
+        if previous_source.list_id == current_source.list_id &&
+            previous_source.item_ordinal == current_source.item_ordinal {
+            spacing = 0
+        }
+    }
     cache := &ctx.runtime^.compile_cache
     reservation_top := f32(row_cursor)*cache^.last_cell_height
     block.top = reservation_top+spacing
@@ -226,16 +246,29 @@ document_place_block_contents :: proc(
     source_block: app_core.Dynview_Document_Block,
     lines: []app_core.Dynview_Document_Layout_Line) -> bool {
 
-    first_line_indent := document_block_first_line_indent(
-        source_block, ctx.runtime^.compile_cache.last_font_size)
+    font_size := ctx.runtime^.compile_cache.last_font_size
+    first_line_indent := document_block_first_line_indent(source_block, font_size)
     document_place_block_horizontally(
         source_block, lines, ctx.runtime^.content.document_display_rows,
-        ctx.available_width, first_line_indent)
+        block.content_width, first_line_indent, block.content_origin)
     for line, relative_index in lines {
         if !document_place_line_contents(
             ctx.builders, block.line_start+relative_index, line) {return false}
     }
     return true
+}
+
+// Report whether one label is immediately followed by its first body block.
+document_list_label_has_adjacent_body :: proc(
+    blocks: []app_core.Dynview_Document_Block,
+    source_index: int) -> bool {
+
+    if source_index < 0 || source_index >= len(blocks)-1 ||
+        blocks[source_index].kind != .List_Item {return false}
+    label := blocks[source_index]
+    body := blocks[source_index+1]
+    return body.kind != .List_Item && body.item_first_block &&
+        body.list_id == label.list_id && body.item_ordinal == label.item_ordinal
 }
 
 // Place all semantic blocks and reserve each completed extent on the outer grid.
@@ -259,7 +292,14 @@ document_place_vertical_layout :: proc(
         if result.status != .Ok {
             return result.status
         }
-        row_cursor = result.next_row
+        source_index := builders^.blocks.storage[block_index].source_block_index
+        source := runtime^.content.document_blocks[source_index]
+        layout_block := builders^.blocks.storage[block_index]
+        if source.kind != .List_Item || layout_block.list_label_above ||
+            !document_list_label_has_adjacent_body(
+                runtime^.content.document_blocks, source_index) {
+            row_cursor = result.next_row
+        }
     }
     cache^.document_layout_total_height = f32(row_cursor)*cache^.last_cell_height
     return .Ok

@@ -214,6 +214,7 @@ Tex_Document_Shape :: struct {
 Tex_Document_Block_Kind :: enum {
     Paragraph,
     Display,
+    List_Item,
 }
 
 // Identify the document-level policy for one technical display environment.
@@ -249,10 +250,36 @@ Tex_Document_Alignment :: enum {
     Right,
 }
 
+// Identify one resolved document container without retaining a parse tree.
+Tex_Document_Container_Kind :: enum u8 {
+    None,
+    Quote,
+    Quotation,
+    Itemize,
+    Enumerate,
+    Description,
+}
+
+// Identify list formatting independently from surrounding quotation containers.
+Tex_Document_List_Kind :: enum u8 {
+    None,
+    Itemize,
+    Enumerate,
+    Description,
+}
+
 // Retain paragraph and display policy before layout.
 Tex_Document_Format :: struct {
     alignment: Tex_Document_Alignment,
     no_indent: bool,
+    container_kind: Tex_Document_Container_Kind,
+    container_depth: u8,
+    left_margin_levels: u8,
+    right_margin_levels: u8,
+    list_kind: Tex_Document_List_Kind,
+    list_id: u16,
+    item_ordinal: u16,
+    item_first_block: bool,
 }
 
 // Retain one bounded technical-display row and its existing math programs.

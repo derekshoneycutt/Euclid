@@ -1350,6 +1350,25 @@ Dynview_Command_Buffer :: struct {
 Dynview_Document_Block_Kind :: enum u8 {
     Paragraph,
     Display,
+    List_Item,
+}
+
+// Identify one resolved document container in snapshot-owned storage.
+Dynview_Document_Container_Kind :: enum u8 {
+    None,
+    Quote,
+    Quotation,
+    Itemize,
+    Enumerate,
+    Description,
+}
+
+// Identify list formatting independently from surrounding quotation containers.
+Dynview_Document_List_Kind :: enum u8 {
+    None,
+    Itemize,
+    Enumerate,
+    Description,
 }
 
 // Identify one semantic item copied into a document block.
@@ -1444,6 +1463,14 @@ Dynview_Document_Block :: struct {
     source_count: int,
     alignment: Dynview_Document_Alignment,
     no_indent: bool,
+    container_kind: Dynview_Document_Container_Kind,
+    container_depth: u8,
+    left_margin_levels: u8,
+    right_margin_levels: u8,
+    list_kind: Dynview_Document_List_Kind,
+    list_id: u16,
+    item_ordinal: u16,
+    item_first_block: bool,
     display_kind: Dynview_Document_Display_Kind,
     display_row_start: int,
     display_row_count: int,
@@ -1587,12 +1614,17 @@ Dynview_Document_Layout_Block :: struct {
     row_start: int,
     row_count: int,
     width: f32,
+    content_origin: f32,
+    content_width: f32,
+    list_label_above: bool,
 }
 
 // Identify authored separation before one selectable document target.
 Dynview_Document_Selection_Separator :: enum u8 {
     None,
+    Space,
     Line,
+    Item,
     Block,
 }
 

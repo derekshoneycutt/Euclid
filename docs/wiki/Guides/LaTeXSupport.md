@@ -28,9 +28,7 @@ breaks, and Euclid inline shapes.
 The MIME authoring API is the production presentation contract:
 
 ```julia
-const Equation = L"\frac{a+b}{c}"
-const Definition = tex"""
-    extbf{Definition 1.}
+const Definition = tex"""\textbf{Definition 1.}
 
 A point is that which has no part.
 """
@@ -107,6 +105,8 @@ Document mode supports a deliberately small LaTeX-like prose language:
 - Paragraph breaks from a blank source line or `\par`.
 - `\noindent` at paragraph start to suppress the normal one-em first-line indent.
 - `center`, `flushleft`, and `flushright` environments for paragraph alignment.
+- `itemize`, `enumerate`, and `description` environments for semantic lists.
+- `quote` and `quotation` environments for indented quoted prose.
 - Comments from an unescaped `%` through the source newline.
 - Inline Euclid shapes through `\euclidpoint`, `\euclidline`,
     `\euclidcircle`, `\euclidbox`, `\euclidangle`, `\euclidsemicircle`,
@@ -117,10 +117,10 @@ A single source newline in prose normalizes to one breakable space. A blank line
 semantic block with measured vertical spacing; authors should not add blank lines merely
 to pad a display.
 
-Document grammar revision 29 retains bounded, font-independent levels: at most 256
-paragraph or display blocks and at most 2,048 inline text, space, math, shape, penalty,
-or forced-break nodes, plus at most 512 technical display rows. Inline and row records
-preserve source byte spans, style and color,
+Document grammar revision 30 retains bounded, font-independent levels: at most 256
+paragraph, display, or list-item blocks and at most 2,048 inline text, space, math, shape,
+penalty, or forced-break nodes, plus at most 512 technical display rows. Inline and row
+records preserve source byte spans, style and color,
 math-program identity, and shape values. Breakable and nonbreaking spaces remain
 distinct; each carries one canonical space byte for shaping, and `~` produces
 nonbreaking space semantics. Capacity exhaustion rejects the complete structured
@@ -140,11 +140,31 @@ document and publishes the exact canonical source literally.
 | `center` | Center each paragraph in the environment and suppress first-line indentation. |
 | `flushleft` | Left-align each paragraph in the environment and suppress first-line indentation. |
 | `flushright` | Right-align each paragraph in the environment and suppress first-line indentation. |
+| `quote` | Apply symmetric two-em margins and suppress paragraph indentation. |
+| `quotation` | Apply symmetric two-em margins; suppress the first paragraph indent and retain ordinary indentation thereafter. |
+| `itemize` | Generate bullet labels in a hanging label column. |
+| `enumerate` | Generate document-local decimal labels beginning at `1.`. |
+| `description` | Require `\item[...]` terms and share a left-aligned label column. |
 
 Brace groups scope declarations without producing visible characters. Environment names
 and closing commands must match exactly. Unknown commands, unavailable face requests,
 unclosed groups or environments, and unmatched `\end{...}` commands fail the complete
 structured path.
+
+Lists and quotations may nest in any combination through four levels. Each quotation
+level contributes two-em left and right margins; each list level contributes a two-em
+left margin. List body lines use a hanging origin after the label column. Itemized and
+enumerated labels are right-aligned; description terms are left-aligned and share a
+column capped at the smaller of 12 em or 40 percent of the list measure. A wider
+description term occupies its own line above the body.
+
+Every list requires at least one nonempty item and rejects prose before its first
+`\item`. Optional labels are rejected for `itemize` and `enumerate`; `description`
+requires a nonempty `\item[...]` term. Description terms support nested prose styles,
+colors, escaped specials, controlled or nonbreaking spaces, and inline math. Paragraphs,
+displays, shapes, and nested environments are not permitted inside the brackets.
+Generated labels and description terms are selectable and appear in copied text. A
+canonical space separates each label from its body, and one newline separates items.
 
 The Julia-host snapshot transaction copies exact source bytes, semantic text, document
 descriptors, blocks, and inlines into bounded slot-owned storage. Source/text spans,
@@ -604,8 +624,8 @@ Bridge status failures also stop publication without exposing partial content.
 
 ## Known Limitations
 
-- This is not a TeX engine. Macros, packages, declarations, sections, lists,
-    document tables, and unlisted general `\begin{...}` document environments are
+- This is not a TeX engine. Macros, packages, sections, document tables, custom list
+    labels or counters, and unlisted general `\begin{...}` document environments are
     unsupported.
 - Document styling is limited to nested bold and italic spans. There is no
     document-level font size, color, heading, or alignment syntax.

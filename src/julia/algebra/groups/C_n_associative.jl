@@ -131,9 +131,11 @@ $$(a \circ b) \circ c = a \circ (b \circ c)\; \text{for all}\; a,b,c$$
 
 Here, compare the two ways of grouping the same three rotations.
 
-\textbf{1.} Left grouping: $(\rho^1\rho^2)\rho^3 = \rho^6$.\\
-\textbf{2.} Right grouping: $\rho^1(\rho^2\rho^3) = \rho^6$.\\
-\textbf{3.} Both paths match because function composition is associative.
+\begin{enumerate}
+\item Left grouping: $(\rho^1\rho^2)\rho^3 = \rho^6$.
+\item Right grouping: $\rho^1(\rho^2\rho^3) = \rho^6$.
+\item Both paths match because function composition is associative.
+\end{enumerate}
 
 The side-by-side circles make grouping visible while the endpoint confirms equality.
 Formally, the same final motion appears no matter how the three actions are grouped."""

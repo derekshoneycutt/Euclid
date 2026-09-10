@@ -135,10 +135,12 @@ The point is that these rotations compose cleanly: turn by one step, then anothe
 
 Brief proof it is a group:
 
-\textbf{1. Closure}: $\rho^i\rho^j = \rho^{i+j \;\mathrm{mod}\; n}$, still in the set.\\
-\textbf{2. Associativity}: composition of rotations is associative.\\
-\textbf{3. Identity}: $\rho^0=e$.\\
-\textbf{4. Inverses}: $(\rho^k)^{-1}=\rho^{n-k}$.
+\begin{enumerate}
+\item \textbf{Closure}: $\rho^i\rho^j = \rho^{i+j \;\mathrm{mod}\; n}$, still in the set.
+\item \textbf{Associativity}: composition of rotations is associative.
+\item \textbf{Identity}: $\rho^0=e$.
+\item \textbf{Inverses}: $(\rho^k)^{-1}=\rho^{n-k}$.
+\end{enumerate}
 
 Also, $C_n$ is abelian because turning by one amount and then another gives the same result as doing those turns in the opposite order."""
 end

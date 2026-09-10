@@ -79,11 +79,13 @@ end
 function get_view_content(_state_ptr::Ptr{Cvoid})
     return tex"""\textbf{Euclid Elements - Book I - Common Notions}
 
-\textbf{1.} Things which are equal to the same thing are also equal to one another.\\
-\textbf{2.} If equals be added to equals, the wholes are equal.\\
-\textbf{3.} If equals be subtracted from equals, the remainders are equal.\\
-\textbf{4.} Things which coincide with one another are equal to one another.\\
-\textbf{5.} The whole is greater than the part."""
+\begin{enumerate}
+\item Things which are equal to the same thing are also equal to one another.
+\item If equals be added to equals, the wholes are equal.
+\item If equals be subtracted from equals, the remainders are equal.
+\item Things which coincide with one another are equal to one another.
+\item The whole is greater than the part.
+\end{enumerate}"""
 end
 
 """Reset the animation cycle while preserving its native handles."""
