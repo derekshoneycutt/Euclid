@@ -216,6 +216,48 @@ document_layout_node_width :: proc(
     return node.width+max(adjustment_ratio, -1)*node.shrink
 }
 
+// Resolve authored separation before the first selectable target on one line.
+document_layout_line_selection_separator :: proc(
+    builders: ^Document_Layout_Builders,
+    line_index: int,
+    line: app_core.Dynview_Document_Layout_Line) ->
+        app_core.Dynview_Document_Selection_Separator {
+
+    if line_index > 0 && builders^.lines.storage[line_index-1].block_index !=
+        line.block_index {
+        return .Block
+    }
+    if line.node_start > 0 &&
+        builders^.nodes.storage[line.node_start-1].kind == .Forced_Break {
+        return .Line
+    }
+    return .None
+}
+
+// Mark the first target added for one line with its authored separator.
+document_layout_mark_line_selection_separator :: proc(
+    builders: ^Document_Layout_Builders,
+    first_target: int,
+    separator: app_core.Dynview_Document_Selection_Separator) {
+
+    if first_target < builders^.copy_targets.count {
+        builders^.copy_targets.storage[first_target].separator_before = separator
+    }
+}
+
+// Initialize one line's item range and authored selection separator.
+document_layout_begin_line :: proc(
+    builders: ^Document_Layout_Builders,
+    line_index: int,
+    line: ^app_core.Dynview_Document_Layout_Line) -> (
+        first_target: int,
+        separator: app_core.Dynview_Document_Selection_Separator) {
+
+    line^.item_start = builders^.items.count
+    return builders^.copy_targets.count,
+        document_layout_line_selection_separator(builders, line_index, line^)
+}
+
 // Append positioned boxes from one broken node range into final item storage.
 document_layout_place_line :: proc(
     cache: ^app_core.Dynview_Compile_Cache,
@@ -223,7 +265,7 @@ document_layout_place_line :: proc(
     line_index: int,
     line: ^app_core.Dynview_Document_Layout_Line) -> app_core.Bounded_Builder_Status {
 
-    line^.item_start = builders^.items.count
+    first_target, separator := document_layout_begin_line(builders, line_index, line)
     x: f32
     for node in builders^.nodes.storage[
         line^.node_start:line^.node_start+line^.node_count] {
@@ -252,6 +294,7 @@ document_layout_place_line :: proc(
         x += node_width
     }
     line^.item_count = builders^.items.count-line^.item_start
+    document_layout_mark_line_selection_separator(builders, first_target, separator)
     return .Ok
 }
 

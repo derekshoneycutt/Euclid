@@ -191,9 +191,17 @@ Snapshot and display flow:
 
 | Ownership | Odin | Julia |
 | --- | --- | --- |
-| Runtime/UI state | Owns front buffer/cache/layout/draw and copy-hit targets | Reads nothing directly |
+| Runtime/UI state | Owns front buffer/cache/layout/draw, selection, and copy-hit targets | Reads nothing directly |
 | Text intent | Validates MIME messages and owns parsing, storage, and immutable snapshots | Produces one canonical displayable |
 | Failure semantics | Current invalid TeX is published as its exact literal source | Serialization and transport failures publish nothing partial |
+
+The display owner retains selection as UI state against one compiled presentation
+revision. Semantic prose selects at shaped UTF-8 cluster boundaries. Math and embedded
+shape insets are atomic selectable units whose copied representation is their exact TeX
+source span. Plain and literal-fallback presentations select their visible wrapped UTF-8
+text without introducing newlines for visual wrapping. `Ctrl+C` copies the active mixed
+selection and `Ctrl+A` selects every visible unit. The existing copy action remains a
+separate exact-source operation over the complete canonical presentation bytes.
 
 ---
 

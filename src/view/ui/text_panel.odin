@@ -58,6 +58,38 @@ view_text_scroll_begin :: proc(
     return scroll_begin
 }
 
+//   Update and draw selection behind one non-Terminal presentation.
+view_text_draw_selection :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    text_panel: rl.Rectangle,
+    view_text: string,
+    mouse_input: Input_Frame) {
+    selection_view := ui_dynview.Dynview_Selection_View{
+        panel = text_panel,
+        scroll_y = state^.ui_runtime.view_text_scroll_y,
+        text_padding = TEXT_PADDING,
+        row_height = TEXT_ROW_HEIGHT,
+        wrap_advance = TEXT_WRAP_ADVANCE,
+        fallback_text = view_text,
+    }
+    selection_content := ui_dynview.dynview_selection_content(
+        &state^.dynview, view_text)
+    selection := &ui_runtime^.dynview_selection
+    ui_dynview.dynview_selection_reconcile(selection, selection_content)
+    ui_dynview.dynview_selection_update_mouse({
+        runtime = &state^.dynview,
+        selection = selection,
+        press_owner = &ui_runtime^.ui_press_owner,
+        content = selection_content,
+        view = selection_view,
+        frame = mouse_input,
+    })
+    ui_dynview.dynview_selection_update_keyboard(&state^.dynview, selection,
+        selection_content, view_text, mouse_input)
+    ui_dynview.dynview_selection_draw(&state^.dynview, selection^, selection_view)
+}
+
 //   Draw the view-text transcript content and copy affordances.
 view_text_draw_content :: proc(
     state: ^core.Euclid_General_State,
@@ -73,6 +105,7 @@ view_text_draw_content :: proc(
         icon_size = DYNVIEW_COPY_ICON_SIZE,
         icon_x_pad = DYNVIEW_COPY_ICON_X_PAD,
     })
+    view_text_draw_selection(state, ui_runtime, text_panel, view_text, mouse_input)
 
     ui_dynview.draw_presentation_styled_or_fallback(state, ui_runtime,
         ui_dynview.Fallback_Text_Content{view_text, UI_TEXT_COLOR},

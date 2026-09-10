@@ -221,7 +221,8 @@ draw_copy_icon_button :: proc(
 copy_icon_draw_target :: proc(
     runtime: ^core.Dynview_System,
     target: core.Dynview_Copy_Hit_Target,
-    mouse_input: input.Input_Frame) -> bool {
+    mouse_input: input.Input_Frame,
+    click_eligible: bool) -> bool {
 
     mouse := rl.Vector2{
         mouse_input.mouse_position.x, mouse_input.mouse_position.y}
@@ -251,7 +252,7 @@ copy_icon_draw_target :: proc(
 
     press_visual := max(press_t, copy_icon_linger_t(runtime, is_linger_target))
 
-    return draw_copy_icon_button(
+    return click_eligible && draw_copy_icon_button(
         target.rect, hover_t, press_visual, hovered_icon, mouse_input)
 }
 
@@ -314,11 +315,17 @@ draw_copy_icons :: proc(
     }
 
     dt := min(0.05, max(0.0, rl.GetFrameTime()))
+    released_block_id := i32(-1)
+    if runtime^.copy_icon_press_active && .Left in mouse_input.mouse_released {
+        released_block_id = runtime^.copy_icon_press_block_id
+    }
     copy_icon_update_runtime_state(runtime, cache, mouse_input, dt)
 
     clicked_index := -1
     for i in 0..<cache^.copy_hit_target_count {
-        if copy_icon_draw_target(runtime, cache^.copy_hit_targets[i], mouse_input) {
+        target := cache^.copy_hit_targets[i]
+        if copy_icon_draw_target(runtime, target, mouse_input,
+            target.block_id == released_block_id) {
             clicked_index = i
         }
     }

@@ -230,6 +230,8 @@ document_layout_reflows_from_pixel_width :: proc(t: ^testing.T) {
     testing.expect_value(t, len(runtime^.compile_cache.document_layout_lines), 2)
     targets := runtime^.compile_cache.document_layout_copy_targets
     testing.expect_value(t, targets[len(targets)-1].line_index, 1)
+    testing.expect_value(t, targets[len(targets)-1].separator_before,
+        app_core.Dynview_Document_Selection_Separator.None)
     testing.expect_value(t, targets[len(targets)-1].x, f32(0))
     testing.expect_value(t, targets[len(targets)-1].offset, 5)
 }

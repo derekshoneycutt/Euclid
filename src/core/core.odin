@@ -1589,6 +1589,13 @@ Dynview_Document_Layout_Block :: struct {
     width: f32,
 }
 
+// Identify authored separation before one selectable document target.
+Dynview_Document_Selection_Separator :: enum u8 {
+    None,
+    Line,
+    Block,
+}
+
 // Retain one source span's horizontal geometry in a measured semantic line.
 Dynview_Document_Layout_Copy_Target :: struct {
     line_index: int,
@@ -1600,6 +1607,30 @@ Dynview_Document_Layout_Copy_Target :: struct {
     width: f32,
     height: f32,
     canonical_text: bool,
+    separator_before: Dynview_Document_Selection_Separator,
+}
+
+// Identify the visible presentation model owning one logical text selection.
+Dynview_Selection_Mode :: enum u8 {
+    None,
+    Semantic_Document,
+    Atomic_Source,
+    Wrapped_Text,
+}
+
+// Identify one half-open boundary between ordered selectable presentation units.
+Dynview_Selection_Position :: struct {
+    unit_index: int,
+}
+
+// Retain display-thread selection state against one compiled content revision.
+Dynview_Selection_State :: struct {
+    mode: Dynview_Selection_Mode,
+    revision: u64,
+    anchor: Dynview_Selection_Position,
+    head: Dynview_Selection_Position,
+    active: bool,
+    dragging: bool,
 }
 
 Dynview_Compile_Cache :: struct {
@@ -2217,6 +2248,7 @@ Ui_Press_Owner_Kind :: enum {
     Slider,
     Scrollbar,
     Splitter,
+    Dynview_Selection,
 }
 
 Ui_Press_Owner_State :: struct {
@@ -2242,6 +2274,7 @@ Euclid_Ui_Runtime_State :: struct {
 
     text_scroll_dragging: bool,
     text_scroll_drag_off: f32,
+    dynview_selection: Dynview_Selection_State,
 
     vertical_split_x: f32,
     horizontal_split_y: f32,
