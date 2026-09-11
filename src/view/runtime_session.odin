@@ -15,6 +15,11 @@ import julia "../bridge"
 
 import "core:fmt"
 import "core:log"
+
+when !core.SCENARIOS_ENABLED {
+    _ :: evidence_allocation
+    _ :: observe
+}
 import "core:math/linalg"
 import "core:time"
 
@@ -298,10 +303,7 @@ init_animations_state_resources :: proc(
     settings: ^Euclid_Run_Settings,
     particle_system: ^Particle_System,
     points: Session_Point_System) -> bool {
-    if !evidence_allocation.domain_init(
-        &state^.evidence_allocations, context.allocator, context.allocator) {
-        return false
-    }
+    state^.evidence_allocations = settings^.evidence_allocations
     state^.saved_context = context
     state^.julia_runtime_service = julia_service
     state^.iso_scale = make_iso_scale()
@@ -379,39 +381,42 @@ initiate_animations_state :: proc(
     return state
 }
 
-//   Write the terminal scenario artifact when one was requested.
-write_scenario_artifact :: proc(
-    session: Euclid_Runtime_Session, runtime: ^Scenario_Runtime,
-    output: string) -> bool {
-    if runtime == nil || len(output) == 0 {
-        return true
+when core.SCENARIOS_ENABLED {
+    //   Write the terminal scenario artifact when one was requested.
+    write_scenario_artifact :: proc(
+        session: Euclid_Runtime_Session, runtime: ^Scenario_Runtime,
+        output: string) -> bool {
+        if runtime == nil || len(output) == 0 {
+            return true
+        }
+        result := evidence_artifact.Result.Inconclusive
+        if runtime.runner.status == .Passed {
+            result = .Passed
+        } else if runtime.runner.status == .Failed {
+            result = .Failed
+        }
+        events := session.state.evidence_session.events[
+            :session.state.evidence_session.event_count]
+        last_trace_sequence: u64
+        if len(events) > 0 {
+            last_trace_sequence = events[len(events) - 1].sequence
+        }
+        return evidence_artifact.write_bundle(output, {
+            manifest = {
+                result = result,
+                reason = runtime.terminal_reason,
+                failed_step = runtime.runner.step,
+                trace_complete =
+                    session.state.evidence_session.required_evidence_complete,
+                last_trace_sequence = last_trace_sequence,
+            },
+            events = events,
+            state = observe.display(session.state),
+            julia_host = observe.julia_host(session.julia_service),
+            allocations = observe.allocation(session.state.evidence_allocations),
+            arena_baselines = session.state.evidence_arena_baselines,
+        })
     }
-    result := evidence_artifact.Result.Inconclusive
-    if runtime.runner.status == .Passed {
-        result = .Passed
-    } else if runtime.runner.status == .Failed {
-        result = .Failed
-    }
-    events := session.state.evidence_session.events[
-        :session.state.evidence_session.event_count]
-    last_trace_sequence: u64
-    if len(events) > 0 {
-        last_trace_sequence = events[len(events) - 1].sequence
-    }
-    return evidence_artifact.write_bundle(output, {
-        manifest = {
-            result = result,
-            reason = runtime.terminal_reason,
-            failed_step = runtime.runner.step,
-            trace_complete = session.state.evidence_session.required_evidence_complete,
-            last_trace_sequence = last_trace_sequence,
-        },
-        events = events,
-        state = observe.display(session.state),
-        julia_host = observe.julia_host(session.julia_service),
-        allocations = observe.allocation(&session.state.evidence_allocations),
-        arena_baselines = session.state.evidence_arena_baselines,
-    })
 }
 
 //   Export the completed evidence session through its selected encoding owner.
@@ -436,8 +441,12 @@ finish_runtime_evidence :: proc(
         })
     evidence_session.session_accept_ring(
         &session.state^.evidence_session, &session.state^.evidence_ring)
-    artifact_succeeded = write_scenario_artifact(
-        session, scenario_runtime, artifact_output)
+    when core.SCENARIOS_ENABLED {
+        artifact_succeeded = write_scenario_artifact(
+            session, scenario_runtime, artifact_output)
+    } else {
+        artifact_succeeded = true
+    }
     export_succeeded := write_session_evidence(
         &session.state^.evidence_session) && artifact_succeeded
     evidence_session.session_finish(

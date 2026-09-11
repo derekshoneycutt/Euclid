@@ -735,6 +735,8 @@ declaration's review contract.
 ### Safety
 
 - Do not expose unsafe low-level operations as default APIs.
+- Compile automation capable of injecting terminal input or Julia work only into
+  repository debug/test builds. Production builds must retain a secure-disabled default.
 - Validate external/input data at boundaries.
 - Keep interop assumptions explicit and documented.
 - Keep pointer validity, count/span relationships, ABI widths, and nullability explicit.
@@ -743,6 +745,8 @@ declaration's review contract.
 - Thread-affine Julia, rendering, window, and audio operations must remain on
   their owning threads.
 - Prefer bounded failure over unchecked truncation, overflow, or queue growth.
+- Process-scoped allocator instrumentation must restore `context.allocator` before
+  reporting or destroying tracking metadata; runtime state may only borrow that domain.
 
 ## Standard Updates
 

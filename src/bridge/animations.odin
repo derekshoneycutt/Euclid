@@ -687,64 +687,66 @@ select_animation_by_stable_id :: proc(
     return select_animation_programmatically(state, selected)
 }
 
-//   Invoke one harness scenario callback on the Julia owner thread.
-//
-// Parameters:
-//   - state: Global runtime state forwarded to Julia.
-//   - scenario_name: Scenario function name resolved from Main.
-//   - step_count: Number of deterministic fixed steps already executed.
-//
-// Returns:
-//   - ok: true when the scenario callback completed successfully.
-invoke_harness_scenario :: proc(
-    state: ^core.Euclid_General_State,
-    scenario_name: string,
-    step_count: int) -> bool {
+when core.HARNESS_ENABLED {
+    //   Invoke one harness scenario callback on the Julia owner thread.
+    //
+    // Parameters:
+    //   - state: Global runtime state forwarded to Julia.
+    //   - scenario_name: Scenario function name resolved from Main.
+    //   - step_count: Number of deterministic fixed steps already executed.
+    //
+    // Returns:
+    //   - ok: true when the scenario callback completed successfully.
+    invoke_harness_scenario :: proc(
+        state: ^core.Euclid_General_State,
+        scenario_name: string,
+        step_count: int) -> bool {
 
-    if state == nil || len(scenario_name) == 0 {
-        return false
+        if state == nil || len(scenario_name) == 0 {
+            return false
+        }
+
+        return invoke_harness_transaction(state, scenario_name, i64(step_count))
     }
 
-    return invoke_harness_transaction(state, scenario_name, i64(step_count))
-}
+    //   Execute one harness scenario callback after deterministic stepping.
+    run_harness_scenario :: proc(
+        host: ^Julia_Runtime_Host,
+        request: core.Harness_Scenario_Requested) -> bool {
+        state := host^.native_state
+        assert_julia_runtime_owner(state)
+        context = state^.saved_context
 
-//   Execute one harness scenario callback after deterministic stepping.
-run_harness_scenario :: proc(
-    host: ^Julia_Runtime_Host,
-    request: core.Harness_Scenario_Requested) -> bool {
-    state := host^.native_state
-    assert_julia_runtime_owner(state)
-    context = state^.saved_context
+        main_module := resolve_main_module()
+        if main_module == nil || len(request.scenario_name) == 0 {
+            return false
+        }
 
-    main_module := resolve_main_module()
-    if main_module == nil || len(request.scenario_name) == 0 {
-        return false
-    }
+        callback := julialib.jl_get_function(
+            main_module, "invoke_generation_harness_scenario")
+        if callback == nil || host^.runtime == nil {
+            return false
+        }
 
-    callback := julialib.jl_get_function(
-        main_module, "invoke_generation_harness_scenario")
-    if callback == nil || host^.runtime == nil {
-        return false
+        scenario_bytes := transmute([]u8)request.scenario_name
+        state_value := julialib.jl_box_voidpointer(state)
+        step_value := julialib.jl_box_int64(request.step_count)
+        result := julialib.jl_call4(
+            callback,
+            host^.runtime,
+            julialib.jl_pchar_to_string(
+                cstring(raw_data(scenario_bytes)), len(scenario_bytes)),
+            state_value,
+            step_value)
+        if julialib.jl_exception_occurred() != nil {
+            print_julia_exception("harness scenario")
+            return false
+        }
+        if result == nil {
+            return false
+        }
+        return julialib.jl_unbox_bool(result) != 0
     }
-
-    scenario_bytes := transmute([]u8)request.scenario_name
-    state_value := julialib.jl_box_voidpointer(state)
-    step_value := julialib.jl_box_int64(request.step_count)
-    result := julialib.jl_call4(
-        callback,
-        host^.runtime,
-        julialib.jl_pchar_to_string(
-            cstring(raw_data(scenario_bytes)), len(scenario_bytes)),
-        state_value,
-        step_value)
-    if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("harness scenario")
-        return false
-    }
-    if result == nil {
-        return false
-    }
-    return julialib.jl_unbox_bool(result) != 0
 }
 
 /* TODO: Can we kill this?

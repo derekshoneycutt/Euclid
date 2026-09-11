@@ -10,21 +10,6 @@
         "program": "${workspaceFolder}/.build/debug/euclid.exe"
       },
       "envFile": "${workspaceFolder}/.build/debug/euclid.env",
-      "initCommands": [
-        "process handle SIGSEGV --stop false --notify false --pass true"
-      ],
-      "cwd": "${workspaceFolder}/bin",
-      "preLaunchTask": "Euclid: Debug Build"
-    },
-    {
-      "name": "Euclid: Debug with Diagnostics",
-      "type": "lldb",
-      "request": "launch",
-      "program": "${workspaceFolder}/.build/debug/euclid",
-      "windows": {
-        "program": "${workspaceFolder}/.build/debug/euclid.exe"
-      },
-      "envFile": "${workspaceFolder}/.build/debug/euclid.env",
       "args": [
         "--diagnostics=${workspaceFolder}/.build/debug/euclid.log"
       ],

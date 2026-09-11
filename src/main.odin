@@ -2,73 +2,67 @@ package main
 
 import "core"
 import "diagnostics"
+import evidence_allocation "evidence/allocation"
 import evidence_session "evidence/session"
 import "files"
 import "view"
 
 import "core:fmt"
 import "core:log"
-import "core:mem"
 import "core:os"
 import "core:strconv"
-
-// When NOT in debug, register packages to the blank identifier
-when !ODIN_DEBUG {
-    _ :: mem
-}
 
 COMMAND_LINE_PATH_MAX_BYTES :: 4096
 DIAGNOSTICS_OPTION_PREFIX :: "--diagnostics="
 DUST_PARTICLE_MAX_PREFIX :: "--dust-particle-max="
 TIMING_PROFILE_PREFIX :: "--timing-profile="
 PROFILE_OPTION_PREFIX :: "--profile=spall:"
-SCENARIO_INPUT_PREFIX :: "--scenario="
-SCENARIO_ARTIFACT_PREFIX :: "--scenario-artifacts="
 SEMANTIC_TRACE_OUTPUT_PREFIX :: "--semantic-trace-output="
 SEMANTIC_TRACE_EVENTS_PREFIX :: "--semantic-trace-events="
+when core.SCENARIOS_ENABLED {
+    SCENARIO_INPUT_PREFIX :: "--scenario="
+    SCENARIO_ARTIFACT_PREFIX :: "--scenario-artifacts="
+}
 
 // The main entry point for the Euclid application
 main :: proc() {
     log_level : log.Level = .Info
+    exit_code := 0
     when ODIN_DEBUG {
         log_level = .Debug
-
-        // In debug builds, we load the tracking allocator and print out any unfreed allocations
-        // and frees that didn't free anything. Helpful.
-        fmt.println("Initiating debug memory tracking...")
-        track: mem.Tracking_Allocator
-        mem.tracking_allocator_init(&track, context.allocator)
-        context.allocator = mem.tracking_allocator(&track)
-        defer {
-            if len(track.allocation_map) > 0 {
-                fmt.printf("== %v allocations not freed: ==\n", len(track.allocation_map))
-                for _, entry in track.allocation_map {
-                    fmt.printf("- %v bytes @ %v\n", entry.size, entry.location)
-                }
-            }
-
-            if len(track.bad_free_array) > 0 {
-                fmt.printf("== %v bad frees detected ==\n", len(track.bad_free_array))
-                for entry in track.bad_free_array {
-                    fmt.printf("- bad free @ %v\n", entry.location)
-                }
-            }
-
-            mem.tracking_allocator_destroy(&track)
-
-            fmt.println("Debug memory tracking destroyed.")
+        fmt.println("Initiating debug allocation evidence...")
+        original_allocator := context.allocator
+        process_allocations: evidence_allocation.Domain
+        if !evidence_allocation.domain_init(
+            &process_allocations, original_allocator, original_allocator) {
+            fmt.eprintln("Unable to initialize debug allocation evidence.")
+            exit_code = 1
+        } else {
+            context.allocator = evidence_allocation.domain_allocator(
+                &process_allocations)
+            exit_code = run_application(log_level, &process_allocations)
+            context.allocator = original_allocator
+            evidence_allocation.domain_report(&process_allocations)
+            evidence_allocation.domain_destroy(&process_allocations)
+            fmt.println("Debug allocation evidence destroyed.")
         }
+    } else {
+        exit_code = run_application(log_level)
     }
-
-    run_application(log_level)
+    if exit_code != 0 {
+        os.exit(exit_code)
+    }
 }
 
 //  Run the application through to the appropriate exit
-run_application :: proc(log_level : log.Level) {
+run_application :: proc(
+    log_level: log.Level,
+    process_allocations: ^evidence_allocation.Domain = nil) -> int {
     settings := parse_command_line()
     if !settings.do_run {
-        return
+        return 0
     }
+    settings.evidence_allocations = process_allocations
 
     logging_state: diagnostics.Logging_State
     selected_logger := context.logger
@@ -98,9 +92,7 @@ run_application :: proc(log_level : log.Level) {
     context.logger = log.nil_logger()
     diagnostics.logging_stop(&logging_state)
     fmt.println("Euclid ended")
-    if exit_code != 0 {
-        os.exit(exit_code)
-    }
+    return exit_code
 }
 
 
@@ -174,15 +166,17 @@ parse_runtime_value_flag :: proc(
         "Invalid timing profile path", &settings.profile_path) {
         return true
     }
-    if len(arg) > len(SCENARIO_INPUT_PREFIX) &&
-        arg[:len(SCENARIO_INPUT_PREFIX)] == SCENARIO_INPUT_PREFIX {
-        settings.scenario_input = arg[len(SCENARIO_INPUT_PREFIX):]
-        return true
-    }
-    if len(arg) > len(SCENARIO_ARTIFACT_PREFIX) &&
-        arg[:len(SCENARIO_ARTIFACT_PREFIX)] == SCENARIO_ARTIFACT_PREFIX {
-        settings.scenario_artifact_output = arg[len(SCENARIO_ARTIFACT_PREFIX):]
-        return true
+    when core.SCENARIOS_ENABLED {
+        if len(arg) > len(SCENARIO_INPUT_PREFIX) &&
+            arg[:len(SCENARIO_INPUT_PREFIX)] == SCENARIO_INPUT_PREFIX {
+            settings.scenario_input = arg[len(SCENARIO_INPUT_PREFIX):]
+            return true
+        }
+        if len(arg) > len(SCENARIO_ARTIFACT_PREFIX) &&
+            arg[:len(SCENARIO_ARTIFACT_PREFIX)] == SCENARIO_ARTIFACT_PREFIX {
+            settings.scenario_artifact_output = arg[len(SCENARIO_ARTIFACT_PREFIX):]
+            return true
+        }
     }
     return false
 }
@@ -348,8 +342,10 @@ print_command_line_help :: proc() {
     fmt.println("  --semantic-trace-events=LIST   Limit evidence lanes (lifecycle,domain,transport,presentation,scenario,diagnostic).")
     fmt.println("  --semantic-trace-strict  Fail on required evidence loss or export failure.")
     fmt.println("  --timing-profile=PATH    Alias for --profile=spall:PATH.")
-    fmt.println("  --scenario=PATH          Run a bounded semantic scenario from JSONL.")
-    fmt.println("  --scenario-artifacts=DIR Write the scenario evidence bundle to DIR.")
+    when core.SCENARIOS_ENABLED {
+        fmt.println("  --scenario=PATH          Run a bounded semantic scenario from JSONL.")
+        fmt.println("  --scenario-artifacts=DIR Write the scenario evidence bundle to DIR.")
+    }
     fmt.println("  -h, --help               Show this help text.")
     fmt.println("")
     fmt.println("Short options can be combined, for example: -vasg or -VAFSG")
@@ -397,10 +393,12 @@ parse_command_line :: proc() -> core.Euclid_Run_Settings {
         parse_command_line_param(arg, &settings)
     }
 
-    if len(settings.scenario_input) > 0 {
-        settings.evidence.enabled = true
-        if len(settings.evidence.output_path) == 0 {
-            settings.evidence.output_mode = .Sink
+    when core.SCENARIOS_ENABLED {
+        if len(settings.scenario_input) > 0 {
+            settings.evidence.enabled = true
+            if len(settings.evidence.output_path) == 0 {
+                settings.evidence.output_mode = .Sink
+            }
         }
     }
 

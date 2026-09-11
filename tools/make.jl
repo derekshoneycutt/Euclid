@@ -656,7 +656,8 @@ function odin_build_command(
     out_flag = "-out:$(app_binary_path(debug))"
     cmd_parts = ["odin", "build", "main.odin", "-file", out_flag]
     push!(cmd_parts, "-define:RAYLIB_SHARED=true")
-    debug && append!(cmd_parts, ["-debug", "-o:none"])
+    debug && append!(cmd_parts, [
+        "-define:EUCLID_ENABLE_SCENARIOS=true", "-debug", "-o:none"])
     strict && append!(cmd_parts,
         ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"])
     if is_windows()
@@ -689,6 +690,7 @@ function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
         "build",
         "harness/main.odin",
         "-file",
+        "-define:EUCLID_ENABLE_HARNESS=true",
         is_windows() ? "-out:../bin/euclid_harness.exe" : "-out:../bin/euclid_harness",
     ]
     if !isempty(julia_linker_flags)

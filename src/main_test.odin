@@ -36,6 +36,20 @@ profile_arguments_configure_spall_path :: proc(t: ^testing.T) {
         ".build/legacy.spall")
 }
 
+// Verify repository test builds retain the debug-only scenario CLI capability.
+@(test)
+scenario_arguments_configure_debug_automation :: proc(t: ^testing.T) {
+    testing.expect(t, core.SCENARIOS_ENABLED)
+    settings: core.Euclid_Run_Settings
+
+    parse_command_line_param("--scenario=tools/scenarios/example.jsonl", &settings)
+    parse_command_line_param("--scenario-artifacts=.build/scenario", &settings)
+
+    testing.expect_value(t, settings.scenario_input,
+        "tools/scenarios/example.jsonl")
+    testing.expect_value(t, settings.scenario_artifact_output, ".build/scenario")
+}
+
 // Verify retained semantic-trace options configure the typed evidence session.
 @(test)
 semantic_trace_arguments_configure_evidence_policy :: proc(t: ^testing.T) {

@@ -137,6 +137,11 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         command = odin_build_command("-ljulia", true, true)
         @test "-out:$(debug_app_binary_path())" in command
         @test "-define:RAYLIB_SHARED=true" in command
+        @test "-define:EUCLID_ENABLE_SCENARIOS=true" in command
+        @test !("-define:EUCLID_ENABLE_SCENARIOS=true" in
+            odin_build_command("-ljulia", false, false))
+        @test !("-define:EUCLID_ENABLE_SCENARIOS=true" in
+            odin_build_command("-ljulia", false, true))
         @test debug_assets_archive_path() ==
             joinpath(dirname(debug_app_binary_path()), "assets.pkg")
         @test "-debug" in command

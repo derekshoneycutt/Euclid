@@ -87,6 +87,8 @@ function odin_test_command(linker_flags::String; source_path::String=ODIN_SOURCE
         "-all-packages",
         "-out:$ODIN_TEST_BINARY",
         "-define:RAYLIB_SHARED=true",
+        "-define:EUCLID_ENABLE_HARNESS=true",
+        "-define:EUCLID_ENABLE_SCENARIOS=true",
         "-define:ODIN_TEST_THREADS=1",
     ]
     !isempty(report_path) && push!(odin_command,

@@ -499,11 +499,14 @@ and [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for publication lif
 | --- | --- |
 | Unit and module tests | First defense for geometry, Dynview, files, particles, bridge behavior, and runtime invariants. |
 | Semantic traces | Typed evidence at owner-controlled state transitions. |
-| Scenarios | Display-loop workflows involving ordering, rendering, capture, allocation, or shutdown. |
+| Scenarios | Debug/test-only display-loop workflows involving ordering, rendering, capture, allocation, or shutdown. |
 | Headless harness | Deterministic bridge/runtime behavior through the production fixed-step boundary. |
 
-The interactive app and harness share runtime-session and deterministic-step code;
-test orchestration remains outside the production control surface.
+The interactive app and harness share runtime-session and deterministic-step code.
+JSONL scenario CLI and display-loop orchestration compile only when repository debug or
+test tooling enables `EUCLID_ENABLE_SCENARIOS`; default and strict application builds
+leave that automation outside the production control surface. The headless harness is a
+separate developer executable and does not enable the application scenario CLI.
 
 See [TestingStrategy.md](TestingStrategy.md) for the full testing model,
 including trace ownership, checkpoint boundaries, harness usage, failure policy,
@@ -537,6 +540,12 @@ the owner responsible for release.
 
 ### Current Arena Notes
 
+- Debug process entry wraps `context.allocator` in one process-owned allocation evidence
+  domain. Runtime state borrows that domain for synchronized scenario artifact samples;
+  `main` restores the original allocator before final reporting and metadata teardown.
+- The process domain covers allocations routed through its context allocator. Julia GC,
+  Raylib/native allocations, temporary storage, and dedicated subsystem allocators remain
+  outside its counters.
 - Julia interface slots own registry arenas cleared on staging, rollback, or retirement.
 - Snapshot slots retain presentation bytes and pointer-free semantics until the slot is
   free; display aliases are cleared before reuse.

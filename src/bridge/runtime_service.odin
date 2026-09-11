@@ -2157,35 +2157,38 @@ try_submit_animation_lifecycle :: proc(
     return request_id, true
 }
 
-//   Submit one typed harness request with producer-pooled scenario-name bytes.
-try_submit_harness_scenario :: proc(
-    service: ^Julia_Runtime_Service, scenario_name: string,
-    step_count: i64) -> (u64, bool) {
-    if service == nil || len(scenario_name) == 0 ||
-        len(scenario_name) > core.HARNESS_SCENARIO_NAME_CAPACITY || step_count < 0 {
-        return 0, false
+when core.HARNESS_ENABLED {
+    //   Submit one typed harness request with producer-pooled scenario-name bytes.
+    try_submit_harness_scenario :: proc(
+        service: ^Julia_Runtime_Service, scenario_name: string,
+        step_count: i64) -> (u64, bool) {
+        if service == nil || len(scenario_name) == 0 ||
+            len(scenario_name) > core.HARNESS_SCENARIO_NAME_CAPACITY ||
+            step_count < 0 {
+            return 0, false
+        }
+        _ = drain_julia_ingress_returns(service)
+        bytes, allocation_error := communication_link_alloc_bytes(
+            &service^.request_link, len(scenario_name))
+        if allocation_error != .None {
+            return 0, false
+        }
+        copy(bytes, transmute([]u8)scenario_name)
+        request_id := service^.next_request_id
+        request := core.Harness_Scenario_Requested{
+            request_id = request_id,
+            scenario_name = string(bytes),
+            step_count = step_count,
+        }
+        outcome := send_julia_ingress_control(service, request)
+        if outcome != .Sent {
+            communication_link_free_bytes(&service^.request_link, bytes)
+        }
+        if !finish_julia_request_submission(service, request_id, .Invoke, outcome) {
+            return 0, false
+        }
+        return request_id, true
     }
-    _ = drain_julia_ingress_returns(service)
-    bytes, allocation_error := communication_link_alloc_bytes(
-        &service^.request_link, len(scenario_name))
-    if allocation_error != .None {
-        return 0, false
-    }
-    copy(bytes, transmute([]u8)scenario_name)
-    request_id := service^.next_request_id
-    request := core.Harness_Scenario_Requested{
-        request_id = request_id,
-        scenario_name = string(bytes),
-        step_count = step_count,
-    }
-    outcome := send_julia_ingress_control(service, request)
-    if outcome != .Sent {
-        communication_link_free_bytes(&service^.request_link, bytes)
-    }
-    if !finish_julia_request_submission(service, request_id, .Invoke, outcome) {
-        return 0, false
-    }
-    return request_id, true
 }
 
 //   Submit typed runtime shutdown and close admission to later control work.
@@ -2685,31 +2688,33 @@ invoke_animation_lifecycle_transaction :: proc(
     return wait_animation_lifecycle_completion(service, request_id)
 }
 
-//   Run one typed harness request synchronously while routing unrelated egress.
-invoke_harness_transaction :: proc(
-    state: ^core.Euclid_General_State, scenario_name: string,
-    step_count: i64) -> bool {
-    if state == nil || state^.julia_runtime_service == nil {
-        return false
-    }
-    service := state^.julia_runtime_service
-    if os.get_current_thread_id() == service^.owner_thread_id {
-        return false
-    }
-    request_id, sent := try_submit_harness_scenario(
-        service, scenario_name, step_count)
-    if !sent {
-        return false
-    }
-    for {
-        event_message, ok := communication_link_recv(&service^.event_link)
-        if !ok {
+when core.HARNESS_ENABLED {
+    //   Run one typed harness request synchronously while routing unrelated egress.
+    invoke_harness_transaction :: proc(
+        state: ^core.Euclid_General_State, scenario_name: string,
+        step_count: i64) -> bool {
+        if state == nil || state^.julia_runtime_service == nil {
             return false
         }
-        event, is_event := route_julia_egress_message(service, event_message)
-        if is_event && event.kind == .Invoke_Complete &&
-            event.request_id == request_id {
-            return event.succeeded
+        service := state^.julia_runtime_service
+        if os.get_current_thread_id() == service^.owner_thread_id {
+            return false
+        }
+        request_id, sent := try_submit_harness_scenario(
+            service, scenario_name, step_count)
+        if !sent {
+            return false
+        }
+        for {
+            event_message, ok := communication_link_recv(&service^.event_link)
+            if !ok {
+                return false
+            }
+            event, is_event := route_julia_egress_message(service, event_message)
+            if is_event && event.kind == .Invoke_Complete &&
+                event.request_id == request_id {
+                return event.succeeded
+            }
         }
     }
 }
@@ -2995,9 +3000,13 @@ execute_julia_control_handler :: proc(
         event^.succeeded = state^.host.runtime != nil &&
             update_animation_lifecycle(service, &state^.host, request)
     case core.Harness_Scenario_Requested:
-        event^.kind = .Invoke_Complete
-        event^.succeeded = state^.host.runtime != nil &&
-            run_harness_scenario(&state^.host, request)
+        when core.HARNESS_ENABLED {
+            event^.kind = .Invoke_Complete
+            event^.succeeded = state^.host.runtime != nil &&
+                run_harness_scenario(&state^.host, request)
+        } else {
+            event^.succeeded = false
+        }
     case core.Runtime_Shutdown_Requested:
         assert(os.get_current_thread_id() == service^.owner_thread_id)
         event^.kind = .Shutdown_Complete
@@ -3143,8 +3152,12 @@ decode_julia_control :: proc(
         return {protocol = .Runtime_Content_Initialize, request_kind = .Invoke,
             request_id = request.request_id, slot_index = -1}, true
     case core.Harness_Scenario_Requested:
-        return {protocol = .Harness_Scenario, request_kind = .Invoke,
-            request_id = request.request_id, slot_index = -1}, true
+        when core.HARNESS_ENABLED {
+            return {protocol = .Harness_Scenario, request_kind = .Invoke,
+                request_id = request.request_id, slot_index = -1}, true
+        } else {
+            return {}, false
+        }
     case core.Runtime_Shutdown_Requested:
         return {protocol = .Runtime_Shutdown, request_kind = .Shutdown,
             request_id = request.request_id, slot_index = -1}, true

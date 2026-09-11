@@ -448,7 +448,7 @@ scenario_issue_allocation_action :: proc(
         return true, accepted
     case .Assert_No_Bad_Frees:
         return true, evidence_allocation.domain_has_no_bad_frees(
-            &state.evidence_allocations)
+            state.evidence_allocations)
     case:
         return false, false
     }

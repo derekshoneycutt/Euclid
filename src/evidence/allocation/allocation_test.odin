@@ -41,6 +41,37 @@ allocation_test_bad_free_is_evidence :: proc(t: ^testing.T) {
     testing.expect_value(t, domain_snapshot(&domain).bad_frees, 1)
 }
 
+// Verify absent process instrumentation is reported as unavailable evidence.
+@(test)
+allocation_test_nil_domain_is_unavailable :: proc(t: ^testing.T) {
+    testing.expect_value(t, domain_snapshot(nil), Snapshot{})
+    testing.expect(t, !domain_has_no_bad_frees(nil))
+}
+
+// Verify one borrowed domain exposes current and cumulative allocation pressure.
+@(test)
+allocation_test_snapshot_records_pressure :: proc(t: ^testing.T) {
+    domain: Domain
+    testing.expect(t, domain_init(
+        &domain, context.allocator, context.allocator))
+    defer domain_destroy(&domain)
+    allocator := domain_allocator(&domain)
+    bytes, allocation_error := make([]byte, 64, allocator)
+    testing.expect(t, allocation_error == nil)
+
+    active := domain_snapshot(&domain)
+    testing.expect_value(t, active.live_allocations, 1)
+    testing.expect_value(t, active.current_bytes, i64(64))
+    testing.expect(t, active.peak_bytes >= active.current_bytes)
+    testing.expect_value(t, active.total_allocations, i64(1))
+
+    delete(bytes, allocator)
+    released := domain_snapshot(&domain)
+    testing.expect_value(t, released.live_allocations, 0)
+    testing.expect_value(t, released.current_bytes, i64(0))
+    testing.expect_value(t, released.total_allocations, i64(1))
+}
+
 // Verify arena baselines enforce stable usage and high water while allowing resets.
 @(test)
 allocation_test_arena_baseline_matches_warm_rebuild :: proc(t: ^testing.T) {

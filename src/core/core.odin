@@ -5,6 +5,12 @@ package core
 // stick to that memory, except for a few UI helpers using temp_allocator, Julia's GC, and GIFs.
 // This creates some hard caps on e.g. the particle system, but it also prevents wildness.
 
+// Compile application scenario automation only for repository debug and test builds.
+SCENARIOS_ENABLED :: #config(EUCLID_ENABLE_SCENARIOS, false)
+
+// Compile headless harness execution only for the harness executable and tests.
+HARNESS_ENABLED :: #config(EUCLID_ENABLE_HARNESS, false)
+
 import "../julialib"
 import "../taskpool"
 import evidence_allocation "../evidence/allocation"
@@ -2652,7 +2658,7 @@ Euclid_General_State :: struct {
     consumed_cycle_boundary_generation: u64,
 
     evidence_session: evidence_session.Session,
-    evidence_allocations: evidence_allocation.Domain,
+    evidence_allocations: ^evidence_allocation.Domain,
     evidence_arena_baselines: evidence_allocation.Arena_Baselines,
     evidence_ring: evidence_trace.Ring,
     evidence_text: evidence_text.Store,
@@ -2676,6 +2682,7 @@ Euclid_Run_Settings :: struct {
     limit_fps: bool,
     use_simd_batch_projection: bool,
     use_gpu_dust_instancing: bool,
+    evidence_allocations: ^evidence_allocation.Domain,
     evidence: evidence_session.Config,
     profile_path: string,
     scenario_input: string,

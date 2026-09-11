@@ -47,36 +47,39 @@ communication_link_test_send_invoke_completion :: proc(
     })
 }
 
-// Receive and validate the five non-shutdown typed control families.
-communication_link_test_expect_control_families :: proc(
-    t: ^testing.T, service: ^Julia_Runtime_Service,
-    expected_state: ^core.Euclid_General_State,
-    tick_handle: core.Animation_Tick_Slot_Handle,
-    lifecycle_handle: core.Animation_Lifecycle_Slot_Handle) {
-    initialize_message, _ := communication_link_try_recv(&service.request_link)
-    content_message, _ := communication_link_try_recv(&service.request_link)
-    tick_message, _ := communication_link_try_recv(&service.request_link)
-    lifecycle_message, _ := communication_link_try_recv(&service.request_link)
-    harness_message, _ := communication_link_try_recv(&service.request_link)
-    _, initialize_ok := initialize_message^.(core.Runtime_Initialize_Requested)
-    content, content_ok := content_message^.(core.Runtime_Content_Initialize_Requested)
-    tick, tick_ok := tick_message^.(core.Animation_Tick_Requested)
-    lifecycle, lifecycle_ok :=
-        lifecycle_message^.(core.Animation_Lifecycle_Requested)
-    harness, harness_ok := harness_message^.(core.Harness_Scenario_Requested)
-    testing.expect(t, initialize_ok && content_ok && tick_ok &&
-        lifecycle_ok && harness_ok)
-    testing.expect_value(t, tick.handle, tick_handle)
-    testing.expect_value(t, lifecycle.handle, lifecycle_handle)
-    testing.expect_value(t, content.native_state, expected_state)
-    testing.expect_value(t, harness.scenario_name, "typed_case")
-    testing.expect_value(t, harness.step_count, i64(8))
-    messages := [5]^core.Julia_Host_Ingress{initialize_message, content_message,
-        tick_message, lifecycle_message, harness_message}
-    for message in messages {
-        testing.expect(t, communication_link_return(&service.request_link, message))
+when core.HARNESS_ENABLED {
+    // Receive and validate the five non-shutdown typed control families.
+    communication_link_test_expect_control_families :: proc(
+        t: ^testing.T, service: ^Julia_Runtime_Service,
+        expected_state: ^core.Euclid_General_State,
+        tick_handle: core.Animation_Tick_Slot_Handle,
+        lifecycle_handle: core.Animation_Lifecycle_Slot_Handle) {
+        initialize_message, _ := communication_link_try_recv(&service.request_link)
+        content_message, _ := communication_link_try_recv(&service.request_link)
+        tick_message, _ := communication_link_try_recv(&service.request_link)
+        lifecycle_message, _ := communication_link_try_recv(&service.request_link)
+        harness_message, _ := communication_link_try_recv(&service.request_link)
+        _, initialize_ok := initialize_message^.(core.Runtime_Initialize_Requested)
+        content, content_ok :=
+            content_message^.(core.Runtime_Content_Initialize_Requested)
+        tick, tick_ok := tick_message^.(core.Animation_Tick_Requested)
+        lifecycle, lifecycle_ok :=
+            lifecycle_message^.(core.Animation_Lifecycle_Requested)
+        harness, harness_ok := harness_message^.(core.Harness_Scenario_Requested)
+        testing.expect(t, initialize_ok && content_ok && tick_ok &&
+            lifecycle_ok && harness_ok)
+        testing.expect_value(t, tick.handle, tick_handle)
+        testing.expect_value(t, lifecycle.handle, lifecycle_handle)
+        testing.expect_value(t, content.native_state, expected_state)
+        testing.expect_value(t, harness.scenario_name, "typed_case")
+        testing.expect_value(t, harness.step_count, i64(8))
+        messages := [5]^core.Julia_Host_Ingress{initialize_message, content_message,
+            tick_message, lifecycle_message, harness_message}
+        for message in messages {
+            testing.expect(t, communication_link_return(&service.request_link, message))
+        }
+        _ = drain_julia_ingress_returns(service)
     }
-    _ = drain_julia_ingress_returns(service)
 }
 
 // Allocate a service with initialized links and no worker-owned runtime state.
@@ -374,9 +377,10 @@ julia_runtime_links_round_trip_requests_and_events :: proc(t: ^testing.T) {
     testing.expect_value(t, service.active_request_id, u64(0))
 }
 
-// Verify every typed control API publishes its operation-specific ingress variant.
-@(test)
-julia_control_transport_round_trips_all_request_families :: proc(t: ^testing.T) {
+when core.HARNESS_ENABLED {
+    // Verify every typed control API publishes its operation-specific ingress variant.
+    @(test)
+    julia_control_transport_round_trips_all_request_families :: proc(t: ^testing.T) {
     service := communication_link_test_service(t)
     defer communication_link_test_service_destroy(service)
     state := new(core.Euclid_General_State, context.allocator)
@@ -414,11 +418,11 @@ julia_control_transport_round_trips_all_request_families :: proc(t: ^testing.T) 
     _, shutdown_ok := shutdown_message^.(core.Runtime_Shutdown_Requested)
     testing.expect(t, shutdown_ok)
     testing.expect(t, communication_link_return(&service.request_link, shutdown_message))
-}
+    }
 
-// Verify harness names are copied into pooled storage, bounded, and reclaimed on return.
-@(test)
-julia_harness_payload_is_bounded_and_reclaimed :: proc(t: ^testing.T) {
+    // Verify harness names are copied into pooled storage, bounded, and reclaimed on return.
+    @(test)
+    julia_harness_payload_is_bounded_and_reclaimed :: proc(t: ^testing.T) {
     service := communication_link_test_service(t)
     defer communication_link_test_service_destroy(service)
     source := [10]u8{'t', 'y', 'p', 'e', 'd', '_', 'c', 'a', 's', 'e'}
@@ -441,6 +445,7 @@ julia_harness_payload_is_bounded_and_reclaimed :: proc(t: ^testing.T) {
         service, string(oversized), 12)
     testing.expect(t, !rejected)
     testing.expect_value(t, rejected_id, u64(0))
+    }
 }
 
 // Verify a completion with foreign identity cannot clear the active request.

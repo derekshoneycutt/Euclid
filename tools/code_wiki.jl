@@ -308,7 +308,8 @@ end
 """Capture `odin doc` output from the repository root, retrying pre-output crashes."""
 function run_odin_doc(repository_root::String, relative_path::String)
     command = Cmd(Cmd([
-        "odin", "doc", relative_path, "-in-source-order"]); dir=repository_root)
+        "odin", "doc", relative_path, "-in-source-order",
+        "-define:EUCLID_ENABLE_HARNESS=true"]); dir=repository_root)
     for attempt in 1:3
         stdout = IOBuffer()
         stderr = IOBuffer()

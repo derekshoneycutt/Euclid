@@ -3,6 +3,7 @@ package allocation
 // Package allocation records selected Odin allocator-domain evidence.
 
 import "core:mem"
+import "core:fmt"
 import "core:sync"
 
 ALLOCATION_BASELINE_CAPACITY :: 16
@@ -165,6 +166,31 @@ domain_snapshot :: proc(domain: ^Domain) -> Snapshot {
         peak_bytes = domain.tracker.peak_memory_allocated,
         total_allocations = domain.tracker.total_allocation_count,
         bad_frees = len(domain.tracker.bad_free_array),
+    }
+}
+
+//   Print final process allocation evidence after the tracked allocator is detached.
+//
+// Notes:
+//   - The caller must stop every allocator user and restore context.allocator first.
+domain_report :: proc(domain: ^Domain) {
+    if domain == nil || !domain.initialized {
+        return
+    }
+    sync.mutex_lock(&domain.tracker.mutex)
+    defer sync.mutex_unlock(&domain.tracker.mutex)
+    fmt.printf(
+        "== allocation evidence: live=%d current_bytes=%d peak_bytes=%d total=%d bad_frees=%d ==\n",
+        len(domain.tracker.allocation_map),
+        domain.tracker.current_memory_allocated,
+        domain.tracker.peak_memory_allocated,
+        domain.tracker.total_allocation_count,
+        len(domain.tracker.bad_free_array))
+    for _, entry in domain.tracker.allocation_map {
+        fmt.printf("- live %d bytes @ %v\n", entry.size, entry.location)
+    }
+    for entry in domain.tracker.bad_free_array {
+        fmt.printf("- bad free @ %v\n", entry.location)
     }
 }
 

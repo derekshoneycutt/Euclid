@@ -13,7 +13,6 @@ import "../audio"
 import "../dynview"
 import "../shapes"
 import julia "../bridge"
-import evidence_allocation "../evidence/allocation"
 import capture "../evidence/capture"
 import evidence_checkpoint "../evidence/checkpoint"
 import evidence_profile "../evidence/profile"
@@ -178,7 +177,6 @@ run_window_frame :: proc(
     ctx: Window_Frame_Context) {
     input_runtime := ctx.input_runtime
     presentation := ctx.presentation
-    scenario_runtime := ctx.scenario_runtime
     display_profile := ctx.display_profile
     evidence_profile.zone_begin(display_profile, "display_frame")
     font.cache_service(
@@ -193,9 +191,11 @@ run_window_frame :: proc(
     alpha := accumulate_and_update_systems(state)
     run_parallel_frame_preparation_after_ui(state, alpha, compile_ui)
     audio.update_chalk_runtime(&state^.chalk_audio)
-    if scenario_runtime != nil {
-        _ = scenario_runtime_update(
-            scenario_runtime, u64(i64(time.tick_since({}))), input_runtime)
+    when core.SCENARIOS_ENABLED {
+        if ctx.scenario_runtime != nil {
+            _ = scenario_runtime_update(
+                ctx.scenario_runtime, u64(i64(time.tick_since({}))), input_runtime)
+        }
     }
 
     evidence_profile.zone_begin(display_profile, "frame_present")
@@ -204,8 +204,11 @@ run_window_frame :: proc(
     rl.EndDrawing()
     evidence_profile.zone_end(display_profile)
 
-    if scenario_runtime != nil {
-        _ = scenario_runtime_after_present(scenario_runtime, ctx.capture_sink)
+    when core.SCENARIOS_ENABLED {
+        if ctx.scenario_runtime != nil {
+            _ = scenario_runtime_after_present(
+                ctx.scenario_runtime, ctx.capture_sink)
+        }
     }
     run_gif_capture_frame(state)
     finish_window_frame(state, display_profile)
@@ -235,8 +238,10 @@ run_window_frames :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context) {
     for !rl.WindowShouldClose() {
         run_window_frame(state, ctx)
-        if scenario_runtime_finished(ctx.scenario_runtime) {
-            return
+        when core.SCENARIOS_ENABLED {
+            if scenario_runtime_finished(ctx.scenario_runtime) {
+                return
+            }
         }
     }
 }
@@ -261,33 +266,45 @@ run_initialized_window_session :: proc(
     state := session.state
     log.info("display_runtime_ready")
 
-    scenario_runtime: Scenario_Runtime
-    active_scenario: ^Scenario_Runtime
-    capture_sink: capture.Sink
-    if len(settings^.scenario_input) > 0 {
-        if !scenario_runtime_load_file(
-            &scenario_runtime, state, settings^.scenario_input) {
-            fmt.eprintln("Failed to load semantic scenario: ", settings^.scenario_input)
-            log.error("scenario_load_failed")
-            _ = shutdown_window_runtime(session)
-            return 1
+    when core.SCENARIOS_ENABLED {
+        scenario_runtime: Scenario_Runtime
+        active_scenario: ^Scenario_Runtime
+        capture_sink: capture.Sink
+        if len(settings^.scenario_input) > 0 {
+            if !scenario_runtime_load_file(
+                &scenario_runtime, state, settings^.scenario_input) {
+                fmt.eprintln(
+                    "Failed to load semantic scenario: ", settings^.scenario_input)
+                log.error("scenario_load_failed")
+                _ = shutdown_window_runtime(session)
+                return 1
+            }
+            active_scenario = &scenario_runtime
+            capture_sink = scenario_capture_sink(active_scenario)
         }
-        active_scenario = &scenario_runtime
-        capture_sink = scenario_capture_sink(active_scenario)
-    }
 
-    free_all(context.temp_allocator)
-    run_window_frames(state, {
-        input_runtime = input_runtime,
-        presentation = session.presentation,
-        scenario_runtime = active_scenario,
-        capture_sink = capture_sink,
-        display_profile = display_profile,
-    })
-    log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
-        state^.fixed_step, active_scenario != nil)
-    return finish_window_session(
-        session, active_scenario, settings^.scenario_artifact_output)
+        free_all(context.temp_allocator)
+        run_window_frames(state, {
+            input_runtime = input_runtime,
+            presentation = session.presentation,
+            scenario_runtime = active_scenario,
+            capture_sink = capture_sink,
+            display_profile = display_profile,
+        })
+        log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
+            state^.fixed_step, active_scenario != nil)
+        return finish_window_session(
+            session, active_scenario, settings^.scenario_artifact_output)
+    } else {
+        free_all(context.temp_allocator)
+        run_window_frames(state, {
+            input_runtime = input_runtime,
+            presentation = session.presentation,
+            display_profile = display_profile,
+        })
+        log.infof("display_loop_stopped fixed_step=%d", state^.fixed_step)
+        return shutdown_window_runtime(session)
+    }
 }
 
 //   - Owns state/window setup and teardown via deferred cleanup calls.
@@ -388,7 +405,6 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
         return
     }
     view_core.gif_capture_destroy_session(&state^.gif_capture)
-    evidence_allocation.domain_destroy(&state^.evidence_allocations)
     terminal_graphics_runtime_destroy(state)
     shell_service_runtime_destroy(state)
     terminalview.terminal_destroy(&state^.terminal)
