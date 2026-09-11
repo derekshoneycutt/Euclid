@@ -5,6 +5,15 @@
     HostSessionQuiescent
 end
 
+"""Ordered shutdown phase for application actor ownership."""
+@enum HostShutdownPhase begin
+    HostShutdownRunning
+    HostStoppingAnimation
+    HostStoppingSession
+    HostStoppingRoots
+    HostShutdownComplete
+end
+
 """Generation-scoped module, actors, and mutable user-service state."""
 mutable struct HostSessionRuntime
     generation::UInt64
@@ -28,6 +37,11 @@ end
 mutable struct HostRuntime
     state_ptr::Ptr{Cvoid}
     actors::EuclidActorRuntime.ActorRuntime
+    animation_supervisor::EuclidActorRuntime.ActorId
+    animation_supervisor_state::AnimationSupervisor
+    animation_ready::Bool
+    animation_queue_high_water::Int
+    animation_outcomes_routed::UInt64
     terminal_controller::EuclidActorRuntime.ActorId
     hotkey_controller::EuclidActorRuntime.ActorId
     session::HostSessionRuntime
@@ -37,6 +51,7 @@ mutable struct HostRuntime
     logger::AbstractLogger
     reported_actor_failures::Int
     shutdown_requested::Bool
+    shutdown_phase::HostShutdownPhase
 end
 
 """Compact scheduling and lifecycle state returned after one host pump."""
@@ -50,6 +65,11 @@ struct HostPumpStatus
     output_queue_high_water::Int32
     output_emitted_bytes::UInt64
     output_truncated_bytes::UInt64
+    animation_ready::Bool
+    animation_failed::Bool
+    animation_queue_depth::Int32
+    animation_queue_high_water::Int32
+    animation_failure_count::UInt64
 end
 
 const HOST_SESSION_PROPERTIES = (
@@ -157,12 +177,20 @@ function create_host_runtime(
     states::Ptr{Cvoid}, window_width::Float32,
     window_height::Float32;
     session_generation::UInt64=UInt64(1),
+    animation_runtime_generation::UInt64=UInt64(0),
+    animation_implementation_loader=(_id -> throw(ArgumentError(
+        "animation implementation loader is unavailable"))),
     completion_function=complete_input,
     interpolation_function=evaluate_shell_interpolation,
     completion_mailbox_capacity::Integer=64,
+    actor_runtime::Union{Nothing,EuclidActorRuntime.ActorRuntime}=nothing,
     logger::AbstractLogger=states == C_NULL ? NullLogger() :
         host_diagnostic_logger(states))::HostRuntime
-    actors = EuclidActorRuntime.ActorRuntime()
+    actors = something(actor_runtime, EuclidActorRuntime.ActorRuntime())
+    animation_supervisor_state = AnimationSupervisor(
+        animation_runtime_generation, animation_implementation_loader)
+    animation_supervisor = EuclidActorRuntime.spawn!(
+        actors, animation_supervisor_state; mailbox_capacity=1)
     rectangle = TerminalRectangle(0.0f0, 0.0f0, window_width, window_height)
     terminal_controller = EuclidActorRuntime.spawn!(
         actors, TerminalController(rectangle, UInt64(0), UInt64(0)))
@@ -175,12 +203,38 @@ function create_host_runtime(
         actors, states, session_generation, completion_function,
         interpolation_function, Int(completion_mailbox_capacity))
     runtime = HostRuntime(
-        states, actors, terminal_controller, hotkey_controller, session,
+        states, actors, animation_supervisor, animation_supervisor_state,
+        false, 0, UInt64(0),
+        terminal_controller, hotkey_controller, session,
         completion_function, interpolation_function,
         Int(completion_mailbox_capacity),
-        logger, 0, false)
+        logger, 0, false, HostShutdownRunning)
+    send_animation_supervisor_for_host(runtime, StartAnimationSupervisor()) ===
+        EuclidActorRuntime.SendAccepted ||
+        error("animation supervisor rejected startup")
     @host_log runtime Logging.Debug "host runtime created"
     return runtime
+end
+
+const AnimationSupervisorCommand = Union{
+    StartAnimationSupervisor,StopAnimationSupervisor,ActivateAnimation,
+    AdoptActiveAnimation,
+    ResetAnimation,TickAnimation,StopAnimation,ReloadAnimation,
+    NativeAnimationStateReset}
+
+"""Route one bounded command to the persistent animation supervisor root."""
+function send_animation_supervisor_for_host(
+    runtime::HostRuntime,
+    command::AnimationSupervisorCommand)::EuclidActorRuntime.SendOutcome
+    outcome = EuclidActorRuntime.send!(
+        runtime.actors, runtime.animation_supervisor, command)
+    if outcome === EuclidActorRuntime.SendAccepted
+        depth = EuclidActorRuntime.mailbox_depth(
+            runtime.actors, runtime.animation_supervisor)
+        runtime.animation_queue_high_water = max(
+            runtime.animation_queue_high_water, depth)
+    end
+    return outcome
 end
 
 """Create host services after querying Odin's immutable window dimensions."""

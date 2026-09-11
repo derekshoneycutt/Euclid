@@ -21,6 +21,10 @@ using Test
         include("animation_catalog_tests.jl")
     end
 
+    @testset "Animation Actors" begin
+        include("animation_actor_tests.jl")
+    end
+
     @testset "Runtime Host" begin
         include("runtime_host_tests.jl")
     end

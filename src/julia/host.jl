@@ -12,12 +12,14 @@ using ..EuclidShellInterpolation: evaluate_shell_interpolation
 
 export HostCompletionCommand, HostEvaluationCommand, HostPumpStatus, HostRuntime
 export HostSessionLifecycleCommand, HostSessionPhase, HostSessionRuntime
+export HostShutdownPhase
 export HostDiagnosticLogger, host_diagnostic_logger, @host_log
 export HostShellInterpolationCommand, HostShellSessionCommand
 export HostTerminalProcessCommand, HostTickStreamCommand
 export HostTerminalContainerConfigureCommand, HostTerminalContainerObservedCommand
 export HostHotkeyRegistryCommand, HostTerminalVisibilityCommand
 export cancel_shell_interpolation_for_host, create_host_runtime
+export send_animation_supervisor_for_host
 export create_session_module
 export close_session_for_host, start_session_for_host
 export create_host_runtime_for_host, evaluation_command_index

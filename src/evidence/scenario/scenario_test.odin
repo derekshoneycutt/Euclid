@@ -97,12 +97,14 @@ scenario_test_presentation_lifecycle_events :: proc(t: ^testing.T) {
     testing.expect_value(t, superseded, trace.Kind.Presentation_Superseded)
 }
 
-// Verify the scenario vocabulary exposes generation-owned animation loading.
+// Verify the scenario vocabulary exposes generation-owned animation lifecycle events.
 @(test)
 scenario_test_animation_loaded_event :: proc(t: ^testing.T) {
-    kind, valid := event_kind("animation_loaded")
-    testing.expect(t, valid)
-    testing.expect_value(t, kind, trace.Kind.Animation_Loaded)
+    loaded, loaded_valid := event_kind("animation_loaded")
+    reset, reset_valid := event_kind("animation_reset_committed")
+    testing.expect(t, loaded_valid && reset_valid)
+    testing.expect_value(t, loaded, trace.Kind.Animation_Loaded)
+    testing.expect_value(t, reset, trace.Kind.Animation_Reset_Committed)
 }
 
 // Verify deterministic reload failure injection is parsed as an ordinary action.

@@ -6,7 +6,7 @@ sections such as Proclus's Commentaries, Hilbert's Foundations of Geometry, and 
 demonstrations.
 
 This is primarily a Julia-focused application, utilizing the interactive nature of the
-langauge for animations and a REPL-like Scratchpad. Featuring the
+langauge for animations and a REPL-like Terminal. Featuring the
 [JuliaMono](https://juliamono.netlify.app/) font, available under the OFL/SIL license.
 
 The code and documentation of this project is under The Unlicense, being public domain.
@@ -18,7 +18,7 @@ The core application is coded in Odin, with Raylib used for rendering.
     1. [Q: Why?](#q-why)
     1. [Q: What's the utility?](#q-whats-the-utility)
     1. [Q: What about AI?](#q-what-about-ai)
-    1. [Q: What is the "Scratchpad"?](#q-what-is-the-scratchpad)
+    1. [Q: What is the Terminal?](#q-what-is-the-terminal)
     1. [Q: Wait, Save Gif?](#q-wait-save-gif)
     1. [Q: You support LaTeX?](#q-you-support-latex)
     1. [Q: Any performance hacks for users?](#q-any-performance-hacks-for-users)
@@ -155,28 +155,28 @@ or some other tool.
 This is not going to be as strong as some would wish. For a project being released into
 the public domain, I just do not have the energy for a stronger stance in this project.
 A public domain project is really not the place for many of the ethical and political
-discussions. I will not be fighting that in this project. This will not be a project that
-is concerned with any stronger stance than demanding a human take full responsibility.
+discussions. In many ways, this project is actively hostile to copyright concerns, and
+it is difficult to take a stronger stance through this project otherwise. I will not be
+fighting more in this project. This will not be a project that is concerned with any
+stronger stance than demanding a human take full responsibility.
 
 I do see this as an educational project. I am certainly expanding my understanding of
 geometry as I explore it, and I am learning a lot about graphics programming. Sometimes my
 code sucks, and even AI will gladly point it out the second someone points a code review
-agent at it. The code suggested by AI is quite often not very good without modification.
+agent at it. The code suggested by AI is quite often absolute shit without modification.
+The danger here is that AI code makes it easy to not think yourself about the code, on top
+of any other ethical concerns, and that would be counter to this project entirely. As
+such, human involvement through-and-through is an **absolute requirement**.
 
-Finally, yes, there is code that has used AI in this. Again, my conclusion remains: They
-really are not very good on their own. I do need to point out I often continue to
-experiment with the AIs in order to show potential employers that I know how to use the
-things. Additionally, I am getting my Masters in Computer Science, specializing in AI. So
-yes, I do practice in this codebase. Again, I take full responsibility and hand-work on
-all code. I have added a comprehensive, opinionated static analysis engine; I did this
-*even moreso* because I forget things and do embarrassingly stupid things even when I am
-coding by hand, but it helps against bad AI code, too. If an AI driver cannot explain how
-they have gotten code through this static analysis in this project, I'm not really
+I have added a comprehensive, opinionated static analysis engine for this project; I did
+this *even moreso* because I forget things and do embarrassingly stupid things even when I
+am coding by hand, but it helps against bad AI code, too. If an AI driver cannot explain
+how they have gotten code through this static analysis in this project, I'm not really
 interested in their code. I think that is a strong enough stance.
 
-### Q: What is the "Scratchpad"?
+### Q: What is the Terminal?
 
-Before continuing, the point of the Scratchpad is indeed to make the application even more
+Before continuing, the point of the Terminal is indeed to make the application even more
 *fun*. Once again, the point is to be *fun*. Nonetheless, it is a bit technical, including
 computer code. Reader beware. Caution to the wind, this does also provide some educational
 benefit for the tinkerers out there, I think, which is a beneficial addition.
@@ -184,14 +184,13 @@ benefit for the tinkerers out there, I think, which is a beneficial addition.
 The code of this project is designed with a core engine coded in Odin, but all of the
 animations are executed as Julia scripts. Julia is a fast, JIT compiled language in this
 use. Julia users will also be familiar with the REPL, where they can enter in Julia code
-essentially line-by-line and see how it works in a live environment. The Scratchpad in
+essentially line-by-line and see how it works in a live environment. The Terminal in
 this project is like this. It provides an emptied drawing surface and a line input for
 Julia code input. `2+2` will show `4` in the output directly above, for example. In fact,
 via using Julia's `REPL` package directly, even scope issues should follow similar Julia
 REPL standards for those already familiar.
 
-`:help` will show most of the important information for how to use the Scratchpad in
-practice. You can also type `?` to immediately enter the standard Julia REPL help mode,
+You can type `?` to immediately enter the standard Julia REPL help mode,
 navigating the code documentation in the project.
 
 A quick cheatsheet for drawing the standard Euclidean matters:
@@ -204,9 +203,9 @@ A quick cheatsheet for drawing the standard Euclidean matters:
 - `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)`
   : Animates drawing a circle centered at [x, y, z], with a radius of r.
 
-#### Some details about using the Scratchpad
+#### Some details about using the Terminal
 
-The `state_ptr` variable is *always* available from the Scratchpad. This is the first
+The `state_ptr` variable is *always* available from the Terminal. This is the first
 parameter that is sent to all `OdinJuliaBridge` functions, and it holds a value of type
 `Ptr{Cvoid}`, pointing back to the Odin state structure in memory.
 
@@ -284,7 +283,7 @@ The single biggest performance tweak is the default-enabled GPU Dust Instancing,
 will draw the dust particles with the GPU.
 
 The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
-LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the
+LaTeX/Terminal compiler workloads into a platform-specific shared library beside the
 executable. Build and run it with `julia tools/make.jl sysimage`, then
 `julia tools/make.jl run-only`. Ordinary build or asset
 commands remove an existing sysimage to prevent stale baked code from being used.
@@ -439,7 +438,7 @@ helpful for simple animation updates.
 
 Animation content remains dynamically loaded when using a sysimage. Changes to baked core
 modules such as the bridge wrappers, TeX source facade, geometry helpers, animation
-helpers, or Scratchpad require rebuilding the sysimage and restarting Euclid.
+helpers, or Terminal require rebuilding the sysimage and restarting Euclid.
 
 ### Q: What is all this verification output?
 

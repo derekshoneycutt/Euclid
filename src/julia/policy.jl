@@ -1,6 +1,8 @@
 module EuclidPolicy
 
+using UUIDs
 using ..EuclidActorRuntime
+import ..OdinJuliaBridge
 import ..Terminal
 import ..Ticks
 import ..TerminalContainer
@@ -9,6 +11,18 @@ using ..EuclidReplEvaluation: begin_help_for_host, begin_input_for_host,
     begin_pkg_for_host, create_eval_runtime, poll_evaluation
 
 export AbandonTerminalSessionRequested, BeginTerminalSessionRequested
+export ActivateAnimation, ActiveAnimationAdopted, AdoptActiveAnimation
+export AnimationFailureReason, AnimationLifecycleCompleted
+export AnimationLifecycleKind, AnimationLifecycleStage
+export AnimationLifecycleTransaction, AnimationProgramCommand
+export AnimationProgramCompleted
+export AnimationRequestKey, AnimationSupervisor, AnimationSupervisorShutdownKey
+export AnimationSupervisorStarted
+export AnimationSupervisorStopped, StartAnimationSupervisor
+export AnimationTickCompleted, AnimationTickSlotHandle
+export CompatibilityAnimationProgram, NativeAnimationStateReset
+export ReloadAnimation, ResetAnimation, ResetNativeAnimationState
+export StopAnimation, StopAnimationSupervisor, TickAnimation
 export CancelTerminalSessionRequested, CompletionActorStopped
 export CompletionDuplicateRequest, CompletionFailed, CompletionFailureReason
 export CompletionInternalFailure, CompletionMailboxFull, CompletionRequested
@@ -50,6 +64,9 @@ export schedule_evaluation_poll!, shell_interpolation_request_key
 export shell_session_owner, utf8_prefix_bytes
 
 include("policy/terminal_controller.jl")
+include("policy/animation_protocol.jl")
+include("policy/animation_program_actor.jl")
+include("policy/animation_supervisor.jl")
 include("policy/hotkey_controller.jl")
 include("policy/completion_service.jl")
 include("policy/shell_interpolation_service.jl")

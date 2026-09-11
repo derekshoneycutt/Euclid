@@ -91,6 +91,7 @@ JULIA_EVENT_CAPACITY :: 16
 JULIA_REQUEST_LINK_POOL_CAPACITY :: 64 * 1024
 JULIA_EVENT_LINK_POOL_CAPACITY :: 640 * 1024
 JULIA_EVIDENCE_HANDOFF_CAPACITY :: 32
+HARNESS_SCENARIO_NAME_CAPACITY :: 256
 VIEW_SNAPSHOT_SLOT_COUNT :: 2
 VIEW_SNAPSHOT_TEXT_CAPACITY :: DYNVIEW_MAX_TEXT_BYTES
 PRESENTATION_MAX_SOURCE_BYTES :: DYNVIEW_MAX_TEXT_BYTES
@@ -212,11 +213,13 @@ Animation_Tick_Slot_State :: enum u8 {
     Free,
     Pending,
     Complete,
+    Accepted,
 }
 
 Animation_Tick_Slot :: struct {
     state: Animation_Tick_Slot_State,
     request_id: u64,
+    reservation_generation: u64,
     generation: u64,
     sequence: u64,
     host_state: ^Euclid_General_State,
@@ -304,15 +307,97 @@ Julia_Reload_Failure_Injection :: enum u8 {
     Animation_Enter,
 }
 
-Julia_Task_Proc :: #type proc(data: rawptr) -> bool
-
-Julia_Request :: struct {
-    kind: Julia_Request_Kind,
-    request_id: u64,
-    task: Julia_Task_Proc,
-    data: rawptr,
-    slot_index: i32,
+Animation_Tick_Slot_Handle :: struct {
+    index: i32,
+    reservation_generation: u64,
 }
+
+Animation_Lifecycle_Slot_Handle :: struct {
+    index: i32,
+    reservation_generation: u64,
+}
+
+Animation_Lifecycle_Slot_State :: enum u8 {
+    Free,
+    Pending,
+    Complete,
+}
+
+Animation_Lifecycle_Outcome :: enum u8 {
+    None,
+    Committed,
+    Rolled_Back,
+}
+
+Animation_Lifecycle_Slot :: struct {
+    state: Animation_Lifecycle_Slot_State,
+    outcome: Animation_Lifecycle_Outcome,
+    request_id: u64,
+    reservation_generation: u64,
+    runtime_generation: u64,
+    animation_generation: u64,
+    selected_stable_id: uuid.Identifier,
+    reset_requested: bool,
+    reload_requested: bool,
+    host_state: ^Euclid_General_State,
+}
+
+Runtime_Initialize_Requested :: struct {
+    request_id: u64,
+}
+
+Runtime_Content_Initialize_Requested :: struct {
+    request_id: u64,
+    native_state: ^Euclid_General_State,
+}
+
+Animation_Tick_Requested :: struct {
+    request_id: u64,
+    handle: Animation_Tick_Slot_Handle,
+    animation_generation: u64,
+    sequence: u64,
+}
+
+Animation_Lifecycle_Requested :: struct {
+    request_id: u64,
+    handle: Animation_Lifecycle_Slot_Handle,
+    runtime_generation: u64,
+    animation_generation: u64,
+}
+
+Harness_Scenario_Requested :: struct {
+    request_id: u64,
+    scenario_name: string,
+    step_count: i64,
+}
+
+Runtime_Shutdown_Requested :: struct {
+    request_id: u64,
+}
+
+Julia_Completion :: struct {
+    request_id: u64,
+    succeeded: bool,
+    evidence: [JULIA_EVIDENCE_HANDOFF_CAPACITY]evidence_trace.Event,
+    evidence_count: int,
+}
+
+Runtime_Initialized :: struct { completion: Julia_Completion }
+Runtime_Content_Initialized :: struct { completion: Julia_Completion }
+Animation_Tick_Completed :: struct {
+    completion: Julia_Completion,
+    handle: Animation_Tick_Slot_Handle,
+    animation_generation: u64,
+    sequence: u64,
+}
+Animation_Lifecycle_Completed :: struct {
+    completion: Julia_Completion,
+    handle: Animation_Lifecycle_Slot_Handle,
+    runtime_generation: u64,
+    animation_generation: u64,
+}
+Harness_Scenario_Completed :: struct { completion: Julia_Completion }
+Runtime_Shutdown_Completed :: struct { completion: Julia_Completion }
 
 Julia_Event :: struct {
     kind: Julia_Event_Kind,
@@ -357,7 +442,12 @@ Communication_Send_Outcome :: enum u8 {
 
 // Julia_Host_Ingress contains display-produced messages borrowed by the Julia owner.
 Julia_Host_Ingress :: union {
-    Julia_Request,
+    Runtime_Initialize_Requested,
+    Runtime_Content_Initialize_Requested,
+    Animation_Tick_Requested,
+    Animation_Lifecycle_Requested,
+    Harness_Scenario_Requested,
+    Runtime_Shutdown_Requested,
     protocol.Terminal_Session_Started,
     protocol.Terminal_Session_Closed,
     protocol.Evaluation_Requested,
@@ -371,7 +461,12 @@ Julia_Host_Ingress :: union {
 
 // Julia_Host_Egress contains Julia-produced messages borrowed by the display owner.
 Julia_Host_Egress :: union {
-    Julia_Event,
+    Runtime_Initialized,
+    Runtime_Content_Initialized,
+    Animation_Tick_Completed,
+    Animation_Lifecycle_Completed,
+    Harness_Scenario_Completed,
+    Runtime_Shutdown_Completed,
     View_Content_Ready,
     protocol.Terminal_Output_Batch,
     protocol.Evaluation_Incomplete,
@@ -387,6 +482,11 @@ Julia_Host_Egress :: union {
     protocol.Tick_Stream_Configure_Requested,
     protocol.Tick_Stream_Stop_Requested,
 }
+
+// Julia_Egress_Dispatch_Proc routes one non-event envelope on the display thread.
+// Returning true transfers the envelope borrow to the destination owner.
+Julia_Egress_Dispatch_Proc :: #type proc(
+    user_data: rawptr, message: ^Julia_Host_Egress) -> bool
 
 // Communication_Link carries producer-allocated envelopes through a bounded outbound
 // channel and returns consumed pointers to that producer for reclamation.
@@ -408,8 +508,9 @@ Julia_Runtime_Service :: struct {
     request_link: Communication_Link(Julia_Host_Ingress),
     event_link: Communication_Link(Julia_Host_Egress),
     pending_view_content: ^Julia_Host_Egress,
-    display_deferred_view_content: ^Julia_Host_Egress,
-    display_deferred_terminal_egress: ^Julia_Host_Egress,
+    display_egress_dispatch: Julia_Egress_Dispatch_Proc,
+    display_egress_user_data: rawptr,
+    display_pending_view_content: ^Julia_Host_Egress,
     presentation_generation: u64,
     presentation_animation_generation_override: u64,
     presentation_animation_override: ^Euclid_Julia_Animation_Interface,
@@ -432,6 +533,7 @@ Julia_Runtime_Service :: struct {
     view_snapshot_generation: u64,
     published_view_snapshot_index: int,
     animation_tick_slots: [ANIMATION_TICK_SLOT_COUNT]Animation_Tick_Slot,
+    animation_lifecycle_slot: Animation_Lifecycle_Slot,
     animation_generation: u64,
     animation_tick_sequence: u64,
     animation_last_committed_sequence: u64,

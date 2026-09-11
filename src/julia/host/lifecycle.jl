@@ -119,7 +119,9 @@ function pump_for_host(
     deadline_ns = time_ns() + budget_ns
     status = EuclidActorRuntime.pump!(
         runtime.actors; max_turns=Int(max_turns), deadline_ns=deadline_ns)
+    route_animation_supervisor_outcomes!(runtime)
     advance_session_lifecycle!(runtime)
+    advance_host_shutdown!(runtime)
     report_actor_failures!(runtime)
     ready = status.remaining_ready > 0
     outgoing = !isempty(runtime.actors.outgoing)
@@ -127,14 +129,50 @@ function pump_for_host(
     output_depth = count(
         command -> command isa TerminalOutputBatch, runtime.actors.outgoing)
     evaluator = runtime.evaluator_state
-    shutdown_ready = runtime.shutdown_requested && !ready &&
+    animation = animation_pump_status(runtime)
+    shutdown_ready = runtime.shutdown_phase === HostShutdownComplete && !ready &&
         isempty(runtime.actors.outgoing) &&
         EuclidActorRuntime.pending_request_count(runtime.actors) == 0
     return HostPumpStatus(
-        ready, typemax(UInt64), outgoing, healthy,
-        shutdown_ready,
+        ready, typemax(UInt64), outgoing, healthy, shutdown_ready,
         Int32(output_depth), Int32(evaluator.output_queue_high_water),
-        evaluator.emitted_output_bytes, evaluator.truncated_output_bytes)
+        evaluator.emitted_output_bytes, evaluator.truncated_output_bytes,
+        animation.ready, animation.failed, animation.queue_depth,
+        animation.queue_high_water, animation.failure_count)
+end
+
+"""Collect animation supervisor health and bounded mailbox diagnostics."""
+function animation_pump_status(runtime::HostRuntime)
+    animation_queue_depth = EuclidActorRuntime.mailbox_depth(
+        runtime.actors, runtime.animation_supervisor)
+    runtime.animation_queue_high_water = max(
+        runtime.animation_queue_high_water, animation_queue_depth)
+    animation_failure_count = count(
+        failure -> failure.actor == runtime.animation_supervisor ||
+            failure.supervisor == runtime.animation_supervisor,
+        runtime.actors.failures)
+    animation_live = EuclidActorRuntime.is_live(
+        runtime.actors, runtime.animation_supervisor)
+    animation_failed = animation_failure_count > 0 ||
+        runtime.animation_supervisor_state.stopping &&
+        !runtime.shutdown_requested
+    return (
+        ready=runtime.animation_ready && animation_live,
+        failed=animation_failed,
+        queue_depth=Int32(animation_queue_depth),
+        queue_high_water=Int32(runtime.animation_queue_high_water),
+        failure_count=UInt64(animation_failure_count))
+end
+
+"""Consume animation supervisor lifecycle outcomes inside the host adapter."""
+function route_animation_supervisor_outcomes!(runtime::HostRuntime)::Nothing
+    command_type = Union{AnimationSupervisorStarted,AnimationSupervisorStopped}
+    while true
+        outcome = take_outgoing_command!(runtime, command_type)
+        outcome === nothing && return nothing
+        runtime.animation_ready = outcome isa AnimationSupervisorStarted
+        runtime.animation_outcomes_routed += UInt64(1)
+    end
 end
 
 """Log newly observed actor failures and advance the reporting cursor."""
@@ -191,9 +229,8 @@ function reject_pending_for_shutdown!(runtime::HostRuntime)::Nothing
     return nothing
 end
 
-"""Stop every session service after shutdown admission has closed."""
+"""Stop every generation-scoped Terminal service after animation policy stops."""
 function stop_session_services!(runtime::HostRuntime)::Nothing
-    EuclidActorRuntime.stop!(runtime.actors, runtime.terminal_controller)
     EuclidActorRuntime.stop!(runtime.actors, runtime.completion_service)
     EuclidActorRuntime.stop!(
         runtime.actors, runtime.shell_interpolation_service)
@@ -205,6 +242,48 @@ function stop_session_services!(runtime::HostRuntime)::Nothing
         runtime.actors, runtime.tick_service, StopTickService())
     EuclidActorRuntime.send!(runtime.actors,
         runtime.terminal_container_service, StopTerminalContainerService())
+    return nothing
+end
+
+"""Stop application-lifetime Terminal roots after generation actors stop."""
+function stop_persistent_host_roots!(runtime::HostRuntime)::Nothing
+    EuclidActorRuntime.stop!(runtime.actors, runtime.hotkey_controller)
+    EuclidActorRuntime.stop!(runtime.actors, runtime.terminal_controller)
+    return nothing
+end
+
+"""Advance ordered animation, session, and persistent-root shutdown."""
+function advance_host_shutdown!(runtime::HostRuntime)::Nothing
+    runtime.shutdown_phase === HostStoppingAnimation &&
+        advance_animation_shutdown!(runtime)
+    if runtime.shutdown_phase === HostStoppingSession
+        runtime.evaluator_state.active_request === nothing &&
+            EuclidActorRuntime.stop!(runtime.actors, runtime.evaluator)
+        if session_actors_stopped(runtime, runtime.session)
+            stop_persistent_host_roots!(runtime)
+            runtime.shutdown_phase = HostStoppingRoots
+        end
+    end
+    if runtime.shutdown_phase === HostStoppingRoots &&
+        !EuclidActorRuntime.is_live(runtime.actors, runtime.hotkey_controller) &&
+        !EuclidActorRuntime.is_live(runtime.actors, runtime.terminal_controller)
+        runtime.shutdown_phase = HostShutdownComplete
+    end
+    return nothing
+end
+
+"""Retry bounded supervisor stop admission or advance to session shutdown."""
+function advance_animation_shutdown!(runtime::HostRuntime)::Nothing
+    animation_live = EuclidActorRuntime.is_live(
+        runtime.actors, runtime.animation_supervisor)
+    if animation_live && EuclidActorRuntime.mailbox_depth(
+        runtime.actors, runtime.animation_supervisor) == 0 &&
+        runtime.animation_supervisor_state.lifecycle_transaction === nothing
+        send_animation_supervisor_for_host(runtime, StopAnimationSupervisor())
+    elseif !animation_live
+        stop_session_services!(runtime)
+        runtime.shutdown_phase = HostStoppingSession
+    end
     return nothing
 end
 
@@ -222,6 +301,8 @@ function request_shutdown_for_host(runtime::HostRuntime)::Nothing
         output_truncated_bytes=evaluator.truncated_output_bytes,
         output_queue_high_water=evaluator.output_queue_high_water)
     runtime.shutdown_requested = true
+    runtime.shutdown_phase = HostStoppingAnimation
+    send_animation_supervisor_for_host(runtime, StopAnimationSupervisor())
     evaluator.discard_output = true
     runtime.tick_service_state.client.accepting = false
     runtime.terminal_container_state.client.accepting = false
@@ -233,8 +314,5 @@ function request_shutdown_for_host(runtime::HostRuntime)::Nothing
     evaluator.truncated_output_bytes += UInt64(pending_bytes)
     empty!(evaluator.pending_output)
     reject_pending_for_shutdown!(runtime)
-    stop_session_services!(runtime)
-    evaluator.active_request === nothing &&
-        EuclidActorRuntime.stop!(runtime.actors, runtime.evaluator)
     return nothing
 end

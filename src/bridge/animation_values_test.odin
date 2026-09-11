@@ -268,7 +268,7 @@ animation_value_stale_tick_does_not_commit_typed_write :: proc(t: ^testing.T) {
     _ = core.animation_value_store_set(
         &state^.animation_values, identity, []u8{1})
     slot := &service.animation_tick_slots[0]
-    slot.state = .Complete
+    slot.state = .Accepted
     slot.generation = 1
     slot.sequence = 1
     slot.animation = animation
@@ -303,7 +303,7 @@ animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
     interface.selected_animation = animation
     service.animation_generation = 7
     slot := &service.animation_tick_slots[0]
-    slot.state = .Complete
+    slot.state = .Accepted
     slot.generation = 7
     slot.sequence = 1
     slot.animation = animation

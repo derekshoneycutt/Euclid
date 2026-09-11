@@ -136,19 +136,19 @@ function terminal_host_ingest_evaluation(
     return true
 end
 
-"""Pump one bounded turn of host-owned Terminal services."""
+"""Pump one bounded turn of host-owned application actor work."""
 function terminal_host_pump(host::EuclidRuntimeHost)::Bool
-    return pump_euclid_terminal!(host)
+    return pump_euclid_reactor!(host)
 end
 
-"""Retire all Terminal actors before the native Julia owner shuts down."""
+"""Retire all application actors before the native Julia owner shuts down."""
 function terminal_host_shutdown(host::EuclidRuntimeHost)::Bool
-    return shutdown_euclid_terminal!(host)
+    return shutdown_euclid_reactor!(host)
 end
 
 """Take one primitive Terminal evaluation command without blocking."""
 function terminal_host_take_evaluation(host::EuclidRuntimeHost)
-    return EuclidHost.take_evaluation_for_host(host.terminal)
+    return EuclidHost.take_evaluation_for_host(host.reactor)
 end
 
 """Register one automatic completion-preview request with the active Terminal host."""
@@ -156,7 +156,7 @@ function terminal_host_ingest_completion_preview(
     host::EuclidRuntimeHost, request_id::UInt64, source::String,
     cursor_byte::Int32, session_generation::UInt64)
     return EuclidHost.ingest_completion_preview_for_host(
-        host.terminal, request_id, source, cursor_byte, session_generation)
+        host.reactor, request_id, source, cursor_byte, session_generation)
 end
 
 """Register one explicit completion candidate request with the active Terminal host."""
@@ -164,17 +164,17 @@ function terminal_host_ingest_completion_candidates(
     host::EuclidRuntimeHost, request_id::UInt64, source::String,
     cursor_byte::Int32, session_generation::UInt64)
     return EuclidHost.ingest_completion_candidates_for_host(
-        host.terminal, request_id, source, cursor_byte, session_generation)
+        host.reactor, request_id, source, cursor_byte, session_generation)
 end
 
 """Take one primitive Terminal completion command without blocking."""
 function terminal_host_take_completion(host::EuclidRuntimeHost)
-    return EuclidHost.take_completion_for_host(host.terminal)
+    return EuclidHost.take_completion_for_host(host.reactor)
 end
 
 """Take one primitive Terminal session lifecycle command without blocking."""
 function terminal_host_take_session_lifecycle(host::EuclidRuntimeHost)
-    return EuclidHost.take_session_lifecycle_for_host(host.terminal)
+    return EuclidHost.take_session_lifecycle_for_host(host.reactor)
 end
 
 """Install one native tick-stream configuration result for the active session."""
@@ -182,7 +182,7 @@ function terminal_host_ingest_tick_stream_configuration(
     host::EuclidRuntimeHost, session_generation::UInt64,
     stream_generation::UInt64, interval_steps::UInt64, active::Bool)::Bool
     return EuclidHost.ingest_tick_stream_configuration_for_host(
-        host.terminal, session_generation, stream_generation,
+        host.reactor, session_generation, stream_generation,
         interval_steps, active)
 end
 
@@ -193,11 +193,11 @@ function terminal_host_ingest_tick_pulse(
     first_simulation_tick::UInt64, last_simulation_tick::UInt64,
     step_count::UInt64)::Bool
     return EuclidHost.ingest_tick_pulse_for_host(
-        host.terminal, session_generation, stream_generation, sequence,
+        host.reactor, session_generation, stream_generation, sequence,
         first_simulation_tick, last_simulation_tick, step_count)
 end
 
 """Take one primitive tick-stream configure or stop command without blocking."""
 function terminal_host_take_tick_stream(host::EuclidRuntimeHost)
-    return EuclidHost.take_tick_stream_for_host(host.terminal)
+    return EuclidHost.take_tick_stream_for_host(host.reactor)
 end

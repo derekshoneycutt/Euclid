@@ -24,6 +24,7 @@ Presentation_Operation :: struct {
 
 // Presentation_Runtime owns one active parse and one newest bounded replacement.
 Presentation_Runtime :: struct {
+    state: ^core.Euclid_General_State,
     active: Presentation_Operation,
     pending: ^core.Julia_Host_Egress,
     newest_generation: u64,
@@ -120,42 +121,6 @@ presentation_parse_key :: proc(
     return {source = parse_source, key = key, mode = mode, valid = generation != 0}
 }
 
-//   Drain one borrowed Julia egress message into its display-owned destination.
-presentation_drain_julia_egress :: proc(
-    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
-    service: ^core.Julia_Runtime_Service) {
-    for {
-        message, received := bridge.try_receive_julia_egress(service)
-        if !received {
-            return
-        }
-        if event, is_event := message^.(core.Julia_Event); is_event {
-            bridge.accept_julia_event(service, event)
-            _ = bridge.return_julia_egress(service, message)
-            continue
-        }
-        if content, is_content := message^.(core.View_Content_Ready); is_content {
-            presentation_admit(state, runtime, message, content)
-            continue
-        }
-        _ = terminal_service_dispatch_egress(state, message)
-        _ = bridge.return_julia_egress(service, message)
-    }
-}
-
-//   Admit one presentation envelope deferred by an event-only consumer.
-presentation_admit_deferred_view :: proc(
-    state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime,
-    service: ^core.Julia_Runtime_Service) {
-    if deferred := bridge.take_deferred_view_content(service); deferred != nil {
-        if content, ok := deferred^.(core.View_Content_Ready); ok {
-            presentation_admit(state, runtime, deferred, content)
-        } else {
-            _ = bridge.return_julia_egress(service, deferred)
-        }
-    }
-}
-
 //   Drain Julia egress and advance presentation work without blocking a frame.
 service_presentation_runtime :: proc(
     state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
@@ -165,12 +130,7 @@ service_presentation_runtime :: proc(
     }
     service := state^.julia_runtime_service
     presentation_sync_lifecycle(state, runtime)
-    if deferred := bridge.take_deferred_terminal_egress(service); deferred != nil {
-        _ = terminal_service_dispatch_egress(state, deferred)
-        _ = bridge.return_julia_egress(service, deferred)
-    }
-    presentation_admit_deferred_view(state, runtime, service)
-    presentation_drain_julia_egress(state, runtime, service)
+    _ = bridge.drain_julia_egress(service)
     terminal_tick_publish(state)
     presentation_poll_active(state, runtime)
     presentation_start_pending(state, runtime)
@@ -194,16 +154,31 @@ presentation_sync_lifecycle :: proc(
     runtime^.observed_animation_generation = service^.animation_generation
     bridge.release_published_view_snapshot(state, service)
     superseded := runtime^.newest_generation != 0
-    if runtime^.pending != nil {
+    preserve_pending := presentation_pending_matches_current(state, runtime)
+    if runtime^.pending != nil && !preserve_pending {
         _ = bridge.return_julia_egress(service, runtime^.pending)
         runtime^.pending = nil
     }
     presentation_cancel_active(state, runtime)
+    if preserve_pending {
+        return
+    }
     if superseded {
         presentation_record_event(state, .Presentation_Superseded,
             service^.animation_generation, runtime^.newest_generation)
     }
     runtime^.newest_generation = 0
+}
+
+//   Report whether pre-completion lifecycle content became current at generation commit.
+presentation_pending_matches_current :: proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^Presentation_Runtime) -> bool {
+    if runtime^.pending == nil {
+        return false
+    }
+    content, ok := runtime^.pending^.(core.View_Content_Ready)
+    return ok && presentation_content_matches(state, content)
 }
 
 //   Retain only the newest current presentation and cancel superseded active work.
@@ -408,9 +383,19 @@ presentation_content_matches :: proc(
     state: ^core.Euclid_General_State,
     content: core.View_Content_Ready) -> bool {
     service := state^.julia_runtime_service
-    return service != nil && state^.julia_interface != nil &&
-        content.runtime_generation == service^.runtime_generation &&
+    if service == nil || state^.julia_interface == nil {
+        return false
+    }
+    if content.runtime_generation == service^.runtime_generation &&
         content.animation_generation == service^.animation_generation &&
+        content.animation == state^.julia_interface^.current_animation {
+        return true
+    }
+    slot := &service^.animation_lifecycle_slot
+    return slot^.state == .Complete && slot^.outcome == .Committed &&
+        content.request_id == slot^.request_id &&
+        content.runtime_generation == service^.runtime_generation &&
+        content.animation_generation == slot^.animation_generation + 1 &&
         content.animation == state^.julia_interface^.current_animation
 }
 

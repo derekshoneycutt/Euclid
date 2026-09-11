@@ -25,7 +25,6 @@ import "base:runtime"
 import "core:fmt"
 import "core:log"
 import "core:strings"
-import "core:thread"
 import "core:time"
 
 import rl "vendor:raylib"
@@ -337,18 +336,12 @@ shutdown_window_runtime :: proc(
 //   - Runtime state construction lives in runtime_session.odin and is shared with headless execution.
 submit_julia_shutdown :: proc(
     service: ^julia.Julia_Runtime_Service, started_at: time.Tick) -> u64 {
-    shutdown_id: u64
-    sent := false
-    for !sent {
-        shutdown_id, sent = julia.try_submit_julia_request(service, .Shutdown)
-        _, _ = julia.try_receive_julia_event(service)
-        if time.duration_seconds(time.tick_since(started_at)) >=
-            JULIA_SHUTDOWN_TIMEOUT_SECONDS {
-            fmt.eprintln(
-                "Julia shutdown request queue remained saturated; terminating process.")
-            runtime.exit(1)
-        }
-        thread.yield()
+    shutdown_id, sent := julia.submit_runtime_shutdown_until(
+        service, started_at, JULIA_SHUTDOWN_TIMEOUT_SECONDS)
+    if !sent {
+        fmt.eprintln(
+            "Julia shutdown request queue remained saturated; terminating process.")
+        runtime.exit(1)
     }
     return shutdown_id
 }
@@ -357,17 +350,10 @@ submit_julia_shutdown :: proc(
 wait_for_julia_shutdown :: proc(
     service: ^julia.Julia_Runtime_Service, shutdown_id: u64,
     started_at: time.Tick) {
-    for {
-        event, ok := julia.try_receive_julia_event(service)
-        if ok && event.request_id == shutdown_id && event.kind == .Shutdown_Complete {
-            return
-        }
-        if time.duration_seconds(time.tick_since(started_at)) >=
-            JULIA_SHUTDOWN_TIMEOUT_SECONDS {
-            fmt.eprintln("Julia shutdown timed out; terminating process.")
-            runtime.exit(1)
-        }
-        thread.yield()
+    if !julia.wait_runtime_shutdown_completion(
+        service, shutdown_id, started_at, JULIA_SHUTDOWN_TIMEOUT_SECONDS) {
+        fmt.eprintln("Julia shutdown timed out; terminating process.")
+        runtime.exit(1)
     }
 }
 

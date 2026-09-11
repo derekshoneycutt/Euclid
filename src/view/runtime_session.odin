@@ -46,7 +46,7 @@ wait_for_julia_request :: proc(
 
     started_at := time.tick_now()
     for {
-        event, ok := julia.try_receive_julia_event(service)
+        event, ok := julia.try_route_julia_egress(service)
         if ok && event.request_id == request_id && event.kind == expected_kind {
             return event.succeeded
         }
@@ -74,7 +74,7 @@ session_start_julia_service :: proc(
     }
 
     initialize_id, initialize_sent :=
-        julia.try_submit_julia_request(julia_service, .Initialize)
+        julia.try_submit_runtime_initialize(julia_service)
     if !initialize_sent {
         log.error("julia_startup_failed phase=initialize_submit")
         julia.destroy_julia_runtime_service(julia_service)
@@ -131,8 +131,8 @@ session_load_content :: proc(
     }
 
     record_runtime_lifecycle(state, .Runtime_Starting, initialize_id)
-    content_id, content_sent := julia.try_submit_julia_request(
-        julia_service, .Invoke, julia.initialize_julia_state_task, rawptr(state))
+    content_id, content_sent := julia.try_submit_runtime_content_initialize(
+        julia_service, state)
     if !content_sent {
         log.error("julia_startup_failed phase=content_submit")
         shutdown_runtime_session(Euclid_Runtime_Session{
@@ -189,6 +189,7 @@ create_runtime_session :: proc(
         })
         return {}, false
     }
+    julia_egress_router_attach(state, presentation)
     return {
         state = state,
         julia_service = julia_service,
@@ -456,6 +457,7 @@ shutdown_runtime_session :: proc(
     }
 
     quiesce_presentation_runtime(session.state, session.presentation)
+    julia_egress_router_detach(session.state, session.presentation)
     destroy_presentation_runtime(session.presentation)
     terminal_graphics_runtime_destroy(session.state)
     destroy_simulation_executor(session.state^.simulation_executor)

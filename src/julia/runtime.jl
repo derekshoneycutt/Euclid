@@ -7,6 +7,7 @@ export RequestOutcome, RequestDuplicate, RequestRegistered, RequestStaleOwner
 export SendOutcome, SendAccepted, SendMailboxFull, SendStaleActor
 export StopOutcome, StopAccepted, StopStaleActor
 export advance!, emit!, is_live, now_ns, pending_request_count, pump!, receive!
+export mailbox_depth
 export register_request!, resolve_request!, send!, spawn!, stop!, take_failures!
 export take_outgoing!
 
@@ -148,6 +149,13 @@ end
 """Return whether an actor identity names its currently live slot generation."""
 function is_live(runtime::ActorRuntime, actor_id::ActorId)::Bool
     return actor_slot(runtime, actor_id) !== nothing
+end
+
+"""Return one live actor mailbox depth, or zero for a stale identity."""
+function mailbox_depth(runtime::ActorRuntime, actor_id::ActorId)::Int
+    assert_owner(runtime)
+    slot = actor_slot(runtime, actor_id)
+    return slot === nothing ? 0 : length(slot.mailbox)
 end
 
 """Spawn an actor into a fresh generation of an available runtime slot."""

@@ -13,6 +13,14 @@ import "core:strings"
 import "core:testing"
 import "core:time"
 
+// Dispatch one test envelope through the same display-owned Terminal path as production.
+terminal_service_test_route_egress :: proc(
+    user_data: rawptr, message: ^core.Julia_Host_Egress) -> bool {
+    state := cast(^core.Euclid_General_State)user_data
+    _ = terminal_service_dispatch_egress(state, message)
+    return false
+}
+
 // Initialize one link-only Julia service without starting or entering libjulia.
 terminal_service_test_runtime_init :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State) {
@@ -21,11 +29,14 @@ terminal_service_test_runtime_init :: proc(
         runtime.Allocator_Error.None)
     service.lifecycle = .Ready
     state^.julia_runtime_service = service
+    bridge.configure_julia_egress_dispatch(
+        service, terminal_service_test_route_egress, rawptr(state))
 }
 
 // Destroy one link-only Julia service after reclaiming all returned envelopes.
 terminal_service_test_runtime_destroy :: proc(state: ^core.Euclid_General_State) {
     service := state^.julia_runtime_service
+    bridge.clear_julia_egress_dispatch(service)
     _ = bridge.drain_julia_ingress_returns(service)
     _ = bridge.drain_julia_egress_returns(service)
     bridge.communication_link_destroy(&service^.event_link)
@@ -37,18 +48,8 @@ terminal_service_test_runtime_destroy :: proc(state: ^core.Euclid_General_State)
 // Drain borrowed terminal messages through the display-owned dispatcher.
 terminal_service_test_dispatch_egress :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State) -> int {
-    count := 0
-    for {
-        message, received := bridge.try_receive_julia_egress(
-            state^.julia_runtime_service)
-        if !received {
-            return count
-        }
-        testing.expect(t, terminal_service_dispatch_egress(state, message))
-        testing.expect(t, bridge.return_julia_egress(
-            state^.julia_runtime_service, message))
-        count += 1
-    }
+    testing.expect(t, state != nil && state^.julia_runtime_service != nil)
+    return bridge.drain_julia_egress(state^.julia_runtime_service)
 }
 
 // Produce two ordered output batches and one completion as the simulated Julia owner.
@@ -334,12 +335,9 @@ terminal_service_test_rejects_stale_generation_egress :: proc(t: ^testing.T) {
     }
     testing.expect_value(t, bridge.send_terminal_output(
         state^.julia_runtime_service, stale), core.Communication_Send_Outcome.Sent)
-    message, received := bridge.try_receive_julia_egress(
+    _, received_event := bridge.try_route_julia_egress(
         state^.julia_runtime_service)
-    testing.expect(t, received)
-    testing.expect(t, !terminal_service_dispatch_egress(state, message))
-    testing.expect(t, bridge.return_julia_egress(
-        state^.julia_runtime_service, message))
+    testing.expect(t, !received_event)
     testing.expect(t, !terminal_service_test_contains(state, "stale output"))
     terminalview.terminal_destroy(&state^.terminal)
 }

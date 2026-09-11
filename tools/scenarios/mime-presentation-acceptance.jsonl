@@ -11,6 +11,7 @@
 {"allocation_checkpoint":"snapshot_slots"}
 {"allocation_checkpoint":"display_cache"}
 {"do":"reset_animation"}
+{"wait_event":"animation_reset_committed","timeout_ms":10000}
 {"wait_event":"animation_tick_committed","timeout_ms":10000}
 {"wait_event":"frame_presented","timeout_ms":10000}
 {"assert_allocation_baseline":"animation"}

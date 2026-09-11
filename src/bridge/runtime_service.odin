@@ -33,6 +33,7 @@ MAX_ACCUMULATED_ANIMATION_DT :: f32(0.25)
 // Stack-local Julia host handle retained by the worker's persistent GC frame.
 Julia_Runtime_Host :: struct {
     runtime: ^julialib.jl_value_t,
+    native_state: ^core.Euclid_General_State,
     terminal_startup_banner: ^julialib.jl_value_t,
     terminal_start_session: ^julialib.jl_value_t,
     terminal_close_session: ^julialib.jl_value_t,
@@ -47,6 +48,11 @@ Julia_Runtime_Host :: struct {
     terminal_ingest_tick_configuration: ^julialib.jl_value_t,
     terminal_ingest_tick_pulse: ^julialib.jl_value_t,
     terminal_take_tick_stream: ^julialib.jl_value_t,
+    animation_tick: ^julialib.jl_value_t,
+    animation_tick_payload_type: ^julialib.jl_value_t,
+    animation_lifecycle: ^julialib.jl_value_t,
+    animation_lifecycle_acknowledge_reset: ^julialib.jl_value_t,
+    animation_lifecycle_payload_type: ^julialib.jl_value_t,
     terminal_request_id: protocol.Request_Id,
     terminal_generation: u64,
 }
@@ -72,11 +78,94 @@ Julia_Terminal_Command_Gc_Frame :: struct {
     command: ^julialib.jl_value_t,
 }
 
+// Three-root Julia GC frame used for one actor-owned animation tick.
+Julia_Animation_Tick_Gc_Frame :: struct {
+    encoded_root_count: uintptr,
+    previous: ^julialib.jl_gcframe_t,
+    roots: [3]^julialib.jl_value_t,
+}
+
+// Three-root Julia GC frame used for one actor-owned animation lifecycle call.
+Julia_Animation_Lifecycle_Gc_Frame :: struct {
+    encoded_root_count: uintptr,
+    previous: ^julialib.jl_gcframe_t,
+    roots: [3]^julialib.jl_value_t,
+}
+
+// Mirror Julia's primitive-only NativeAnimationTickPayload isbits layout.
+Native_Animation_Tick_Payload :: struct {
+    request_id: u64,
+    runtime_generation: u64,
+    animation_generation: u64,
+    sequence: u64,
+    slot_index: i32,
+    reservation_generation: u64,
+    dt: f32,
+}
+
+#assert(size_of(Native_Animation_Tick_Payload) == 56)
+
+// Mirror Julia's primitive-only NativeAnimationLifecyclePayload isbits layout.
+Native_Animation_Lifecycle_Payload :: struct {
+    request_id: u64,
+    runtime_generation: u64,
+    animation_generation: u64,
+    operation: i32,
+}
+
+#assert(size_of(Native_Animation_Lifecycle_Payload) == 32)
+
 // Result of processing one serialized Julia worker request.
 Julia_Worker_Request_Result :: struct {
     event: Julia_Event,
     shutting_down: bool,
     accepted: bool,
+}
+
+Julia_Control_Protocol :: enum u8 {
+    Runtime_Initialize,
+    Runtime_Content_Initialize,
+    Animation_Tick,
+    Animation_Lifecycle,
+    Harness_Scenario,
+    Runtime_Shutdown,
+}
+
+Julia_Decoded_Control :: struct {
+    protocol: Julia_Control_Protocol,
+    request_kind: Julia_Request_Kind,
+    request_id: u64,
+    slot_index: i32,
+    tick_handle: core.Animation_Tick_Slot_Handle,
+    lifecycle_handle: core.Animation_Lifecycle_Slot_Handle,
+    runtime_generation: u64,
+    animation_generation: u64,
+    sequence: u64,
+}
+
+Julia_Worker_Run_Result :: struct {
+    shutdown_request: Julia_Decoded_Control,
+    shutdown_event: Julia_Event,
+    shutting_down: bool,
+}
+
+Julia_Animation_Tick_Submission :: struct {
+    handle: core.Animation_Tick_Slot_Handle,
+    animation_generation: u64,
+    sequence: u64,
+}
+
+Julia_Worker_State :: struct {
+    host: Julia_Runtime_Host,
+    frame: Julia_Runtime_Gc_Frame,
+    initialized: bool,
+}
+
+// Result of attempting to route one checked animation completion envelope.
+Animation_Egress_Route_Result :: struct {
+    event    : Julia_Event,
+    accepted : bool,
+    handled  : bool,
 }
 
 //   Dispatch table mapping each Julia event kind to its completion handler.
@@ -135,8 +224,6 @@ Presentation_Snapshot_Request :: struct {
 
 Julia_Lifecycle_State :: core.Julia_Lifecycle_State
 Julia_Reload_State :: core.Julia_Reload_State
-Julia_Task_Proc :: core.Julia_Task_Proc
-Julia_Request :: core.Julia_Request
 Julia_Event :: core.Julia_Event
 Julia_Runtime_Service :: core.Julia_Runtime_Service
 
@@ -167,9 +254,15 @@ coalesce_animation_tick :: proc(service: ^Julia_Runtime_Service, dt: f32) {
 submit_animation_tick_slot :: proc(
     service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
     slot_index: int, total_dt: f32) -> bool {
-    request_id, sent := try_submit_julia_request(
-        service, .Animation_Tick, generate_animation_tick_task,
-        rawptr(slot), i32(slot_index))
+    handle := core.Animation_Tick_Slot_Handle{
+        index = i32(slot_index),
+        reservation_generation = slot^.reservation_generation,
+    }
+    request_id, sent := try_submit_animation_tick(service, {
+        handle = handle,
+        animation_generation = slot^.generation,
+        sequence = slot^.sequence,
+    })
     if !sent {
         rollback_animation_tick_slot(service, slot, total_dt)
         return false
@@ -215,9 +308,11 @@ fill_animation_tick_slot :: proc(
     service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
     state: ^core.Euclid_General_State, total_dt: f32) {
 
+    reservation_generation := slot^.reservation_generation
     slot^ = Animation_Tick_Slot{
         state = .Pending,
         request_id = service^.next_request_id,
+        reservation_generation = reservation_generation,
         generation = service^.animation_generation,
         sequence = service^.animation_tick_sequence,
         host_state = state,
@@ -246,12 +341,7 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
         return false
     }
     service := state^.julia_runtime_service
-    for {
-        _, ok := try_receive_julia_event(service)
-        if !ok {
-            break
-        }
-    }
+    _ = drain_julia_egress(service)
     slot_index := newest_completed_animation_tick_index(service)
     if slot_index < 0 {
         return false
@@ -362,20 +452,24 @@ animation_tick_matches_current :: proc(
 reserve_animation_tick_slot :: proc(service: ^Julia_Runtime_Service) -> int {
     for &slot, slot_index in service^.animation_tick_slots {
         if slot.state == .Free {
+            slot.reservation_generation += 1
+            if slot.reservation_generation == 0 {
+                slot.reservation_generation = 1
+            }
             return slot_index
         }
     }
     return -1
 }
 
-//   Find the newest worker completion without relying on event payload retention.
+//   Find the newest accepted completion without relying on event payload retention.
 // Older completed sequences may be superseded because only the latest canonical intent is
 // useful at the next fixed-step publication boundary.
 newest_completed_animation_tick_index :: proc(service: ^Julia_Runtime_Service) -> int {
     newest_index := -1
     newest_sequence: u64
     for &slot, slot_index in service^.animation_tick_slots {
-        if slot.state == .Complete && (newest_index < 0 ||
+        if slot.state == .Accepted && (newest_index < 0 ||
             slot.sequence > newest_sequence) {
             newest_index = slot_index
             newest_sequence = slot.sequence
@@ -384,11 +478,11 @@ newest_completed_animation_tick_index :: proc(service: ^Julia_Runtime_Service) -
     return newest_index
 }
 
-//   Release all consumed or superseded animation completion slots.
+//   Release all consumed or superseded accepted animation slots.
 // Pending slots remain worker-owned and must not be recycled by the display thread.
 release_completed_animation_ticks :: proc(service: ^Julia_Runtime_Service) {
     for &slot in service^.animation_tick_slots {
-        if slot.state == .Complete {
+        if slot.state == .Accepted {
             slot.state = .Free
         }
     }
@@ -429,12 +523,7 @@ publish_available_view_snapshot :: proc(
     }
     service := state^.julia_runtime_service
     if drain_events {
-        for {
-            _, ok := try_receive_julia_event(service)
-            if !ok {
-                break
-            }
-        }
+        _ = drain_julia_egress(service)
     }
     slot_index := newest_completed_view_snapshot_index(service)
     if slot_index < 0 {
@@ -1605,6 +1694,10 @@ destroy_julia_ingress_message :: proc(
               complete_ok {
         communication_link_free_bytes(&service^.request_link,
             transmute([]u8)request.code)
+    } else if request, harness_ok := message^.(core.Harness_Scenario_Requested);
+              harness_ok {
+        communication_link_free_bytes(&service^.request_link,
+            transmute([]u8)request.scenario_name)
     }
     message^ = {}
     communication_link_free(&service^.request_link, message)
@@ -1623,64 +1716,259 @@ drain_julia_ingress_returns :: proc(service: ^Julia_Runtime_Service) -> int {
     }
 }
 
-//   Receive one available worker event without blocking the display thread.
-// Successful receives also apply lifecycle and slot-completion metadata exactly once.
-try_receive_julia_event :: proc(
-    service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
-    if service == nil || service^.display_deferred_terminal_egress != nil {
-        return {}, false
-    }
-    for {
-        event_message, ok := try_receive_julia_egress(service)
-        if !ok {
-            return {}, false
-        }
-        event, is_event := event_message^.(Julia_Event)
-        if is_event {
-            _ = return_julia_egress(service, event_message)
-            accept_julia_event(service, event)
-            return event, true
-        }
-        if _, is_content := event_message^.(core.View_Content_Ready); is_content {
-            defer_view_content(service, event_message)
-            continue
-        }
-        service^.display_deferred_terminal_egress = event_message
-        return {}, false
-    }
-}
-
-//   Retain only the newest presentation encountered by an event-only consumer.
-defer_view_content :: proc(
+//   Retain only the newest presentation until the display can validate its generation.
+retain_display_view_content :: proc(
     service: ^Julia_Runtime_Service,
     message: ^core.Julia_Host_Egress) {
-    if service^.display_deferred_view_content != nil {
-        _ = return_julia_egress(
-            service, service^.display_deferred_view_content)
+    if service^.display_pending_view_content != nil {
+        _ = return_julia_egress(service, service^.display_pending_view_content)
     }
-    service^.display_deferred_view_content = message
+    service^.display_pending_view_content = message
 }
 
-//   Transfer the newest presentation deferred by an event-only display consumer.
-take_deferred_view_content :: proc(
-    service: ^Julia_Runtime_Service) -> ^core.Julia_Host_Egress {
-    if service == nil {
-        return nil
+//   Route one retained presentation after its owning lifecycle boundary commits.
+route_retained_display_view_content :: proc(service: ^Julia_Runtime_Service) {
+    message := service^.display_pending_view_content
+    service^.display_pending_view_content = nil
+    if message != nil {
+        _, _ = route_julia_egress_message(service, message)
     }
-    message := service^.display_deferred_view_content
-    service^.display_deferred_view_content = nil
-    return message
 }
 
-//   Transfer one ordered terminal envelope deferred by an event-only consumer.
-take_deferred_terminal_egress :: proc(
-    service: ^Julia_Runtime_Service) -> ^core.Julia_Host_Egress {
-    if service == nil {
-        return nil
+//   Normalize one typed completion envelope for display-owned metadata handling.
+decode_julia_completion :: proc(
+    message: ^core.Julia_Host_Egress) -> (Julia_Event, bool) {
+    if completed, ok := message^.(core.Runtime_Initialized); ok {
+        return julia_event_from_completion(
+            completed.completion, .Initialize, .Initialized), true
     }
-    message := service^.display_deferred_terminal_egress
-    service^.display_deferred_terminal_egress = nil
-    return message
+    if completed, ok := message^.(core.Runtime_Content_Initialized); ok {
+        return julia_event_from_completion(
+            completed.completion, .Invoke, .Invoke_Complete), true
+    }
+    if completed, ok := message^.(core.Harness_Scenario_Completed); ok {
+        return julia_event_from_completion(
+            completed.completion, .Invoke, .Invoke_Complete), true
+    }
+    if completed, ok := message^.(core.Runtime_Shutdown_Completed); ok {
+        return julia_event_from_completion(
+            completed.completion, .Shutdown, .Shutdown_Complete), true
+    }
+    return {}, false
+}
+
+//   Resolve whether one completion owns the exact worker-completed slot incarnation.
+animation_tick_completion_owns_slot :: proc(
+    service: ^Julia_Runtime_Service,
+    completed: core.Animation_Tick_Completed) -> bool {
+    index := int(completed.handle.index)
+    if index < 0 || index >= len(service^.animation_tick_slots) {
+        return false
+    }
+    slot := &service^.animation_tick_slots[index]
+    return slot^.state == .Complete &&
+        slot^.reservation_generation == completed.handle.reservation_generation &&
+        slot^.request_id == completed.completion.request_id &&
+        slot^.generation == completed.animation_generation &&
+        slot^.sequence == completed.sequence
+}
+
+//   Match one exact slot completion against the active request and current animation.
+animation_tick_completion_matches :: proc(
+    service: ^Julia_Runtime_Service,
+    completed: core.Animation_Tick_Completed) -> bool {
+    return animation_tick_completion_owns_slot(service, completed) &&
+        completed.completion.request_id == service^.active_request_id &&
+        service^.active_request_kind == .Animation_Tick &&
+        completed.animation_generation == service^.animation_generation
+}
+
+//   Recycle a rejected completion only when its handle owns the exact completed slot.
+recycle_rejected_animation_tick :: proc(
+    service: ^Julia_Runtime_Service,
+    completed: core.Animation_Tick_Completed) {
+    if animation_tick_completion_owns_slot(service, completed) {
+        service^.animation_tick_slots[completed.handle.index].state = .Free
+    }
+}
+
+//   Validate and normalize one checked tick completion.
+accept_animation_tick_completion :: proc(
+    service: ^Julia_Runtime_Service,
+    completed: core.Animation_Tick_Completed) -> (Julia_Event, bool) {
+    if !animation_tick_completion_matches(service, completed) {
+        owns_active_slot := animation_tick_completion_owns_slot(service, completed) &&
+            completed.completion.request_id == service^.active_request_id &&
+            service^.active_request_kind == .Animation_Tick
+        recycle_rejected_animation_tick(service, completed)
+        if owns_active_slot {
+            event := julia_event_from_completion(
+                completed.completion, .Animation_Tick, .Animation_Tick_Complete)
+            accept_julia_event(service, event)
+        }
+        return {}, false
+    }
+    service^.animation_tick_slots[completed.handle.index].state = .Accepted
+    event := julia_event_from_completion(
+        completed.completion, .Animation_Tick, .Animation_Tick_Complete)
+    event.slot_index = completed.handle.index
+    accept_julia_event(service, event)
+    return event, true
+}
+
+//   Match one lifecycle completion to the exact completed transaction and active request.
+animation_lifecycle_completion_matches :: proc(
+    service: ^Julia_Runtime_Service,
+    completed: core.Animation_Lifecycle_Completed) -> bool {
+    slot := &service^.animation_lifecycle_slot
+    expected_success := slot^.outcome == .Committed
+    return completed.handle.index == 0 && slot^.state == .Complete &&
+        slot^.reservation_generation == completed.handle.reservation_generation &&
+        slot^.request_id == completed.completion.request_id &&
+        slot^.runtime_generation == completed.runtime_generation &&
+        slot^.animation_generation == completed.animation_generation &&
+        completed.completion.request_id == service^.active_request_id &&
+        service^.active_request_kind == .Invoke &&
+        completed.completion.succeeded == expected_success
+}
+
+//   Apply lifecycle completion metadata without classifying rollback as transport failure.
+accept_animation_lifecycle_event :: proc(
+    service: ^Julia_Runtime_Service,
+    event: Julia_Event) {
+    if service^.evidence_session != nil {
+        for evidence_index in 0..<event.evidence_count {
+            evidence := event.evidence[evidence_index]
+            evidence_session.session_accept_event(
+                service^.evidence_session, evidence)
+        }
+    }
+    service^.active_request_id = 0
+}
+
+//   Accept one exact lifecycle completion and release its bounded transaction slot.
+accept_animation_lifecycle_completion :: proc(
+    service: ^Julia_Runtime_Service,
+    completed: core.Animation_Lifecycle_Completed) -> (Julia_Event, bool) {
+    if !animation_lifecycle_completion_matches(service, completed) {
+        log.warnf(
+            "animation_lifecycle_completion_rejected request_id=%d slot_generation=%d runtime_generation=%d animation_generation=%d",
+            completed.completion.request_id,
+            completed.handle.reservation_generation,
+            completed.runtime_generation,
+            completed.animation_generation)
+        return {}, false
+    }
+    event := julia_event_from_completion(
+        completed.completion, .Invoke, .Invoke_Complete)
+    event.slot_index = completed.handle.index
+    accept_animation_lifecycle_event(service, event)
+    service^.animation_lifecycle_slot.state = .Free
+    return event, true
+}
+
+//   Route checked animation tick and lifecycle completions to their slot owners.
+route_animation_egress_completion :: proc(
+    service: ^Julia_Runtime_Service,
+    message: ^core.Julia_Host_Egress) -> Animation_Egress_Route_Result {
+    if completed, is_tick := message^.(core.Animation_Tick_Completed); is_tick {
+        event, accepted := accept_animation_tick_completion(service, completed)
+        _ = return_julia_egress(service, message)
+        return {event = event, accepted = accepted, handled = true}
+    }
+    if completed, is_lifecycle := message^.(
+        core.Animation_Lifecycle_Completed); is_lifecycle {
+        event, accepted := accept_animation_lifecycle_completion(service, completed)
+        _ = return_julia_egress(service, message)
+        return {event = event, accepted = accepted, handled = true}
+    }
+    return {}
+}
+
+//   Route one borrowed egress envelope and return any accepted Julia event.
+route_julia_egress_message :: proc(
+    service: ^Julia_Runtime_Service,
+    message: ^core.Julia_Host_Egress) -> (Julia_Event, bool) {
+    if service == nil || message == nil {
+        return {}, false
+    }
+    animation_result := route_animation_egress_completion(service, message)
+    if animation_result.handled {
+        return animation_result.event, animation_result.accepted
+    }
+    if event, completed := decode_julia_completion(message); completed {
+        _ = return_julia_egress(service, message)
+        accept_julia_event(service, event)
+        return event, true
+    }
+    if service^.display_egress_dispatch != nil {
+        retained := service^.display_egress_dispatch(
+            service^.display_egress_user_data, message)
+        if !retained {
+            _ = return_julia_egress(service, message)
+        }
+        return {}, false
+    }
+    if _, is_content := message^.(core.View_Content_Ready); is_content &&
+        service^.lifecycle != .Shutdown_Requested &&
+        service^.lifecycle != .Stopped {
+        retain_display_view_content(service, message)
+        return {}, false
+    }
+    _ = return_julia_egress(service, message)
+    return {}, false
+}
+
+//   Route one available egress envelope without blocking the display thread.
+try_route_julia_egress :: proc(
+    service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
+    message, received := try_receive_julia_egress(service)
+    if !received {
+        return {}, false
+    }
+    return route_julia_egress_message(service, message)
+}
+
+//   Drain every currently available egress envelope through the registered router.
+drain_julia_egress :: proc(service: ^Julia_Runtime_Service) -> int {
+    count := 0
+    for {
+        message, received := try_receive_julia_egress(service)
+        if !received {
+            return count
+        }
+        _, _ = route_julia_egress_message(service, message)
+        count += 1
+    }
+}
+
+//   Install the sole normal-runtime non-event destination and route startup content.
+configure_julia_egress_dispatch :: proc(
+    service: ^Julia_Runtime_Service,
+    dispatch: core.Julia_Egress_Dispatch_Proc,
+    user_data: rawptr) {
+    assert(service != nil && dispatch != nil)
+    assert(service^.display_egress_dispatch == nil)
+    service^.display_egress_dispatch = dispatch
+    service^.display_egress_user_data = user_data
+    pending := service^.display_pending_view_content
+    service^.display_pending_view_content = nil
+    if pending != nil {
+        _, _ = route_julia_egress_message(service, pending)
+    }
+}
+
+//   Remove the normal-runtime destination and return any unclaimed startup content.
+clear_julia_egress_dispatch :: proc(service: ^Julia_Runtime_Service) {
+    if service == nil {
+        return
+    }
+    service^.display_egress_dispatch = nil
+    service^.display_egress_user_data = nil
+    if service^.display_pending_view_content != nil {
+        _ = return_julia_egress(service, service^.display_pending_view_content)
+        service^.display_pending_view_content = nil
+    }
 }
 
 //   Destroy one Julia-owned egress envelope and any nested pool allocation.
@@ -1791,12 +2079,174 @@ flush_pending_view_content :: proc(
     return .Sent
 }
 
-//   Allocate and nonblockingly send one display-owned request envelope.
-send_julia_request :: proc(
+//   Submit typed runtime initialization while retaining shared admission bookkeeping.
+try_submit_runtime_initialize :: proc(
+    service: ^Julia_Runtime_Service) -> (u64, bool) {
+    if service == nil {
+        return 0, false
+    }
+    request_id := service^.next_request_id
+    outcome := send_julia_ingress_control(
+        service, core.Runtime_Initialize_Requested{request_id = request_id})
+    if !finish_julia_request_submission(
+        service, request_id, .Initialize, outcome) {
+        return 0, false
+    }
+    return request_id, true
+}
+
+//   Submit typed content initialization with one lifetime-stable native binding.
+try_submit_runtime_content_initialize :: proc(
     service: ^Julia_Runtime_Service,
-    request: Julia_Request) -> core.Communication_Send_Outcome {
-    if service^.lifecycle == .Shutdown_Requested ||
-        service^.lifecycle == .Stopped {
+    native_state: ^core.Euclid_General_State) -> (u64, bool) {
+    if service == nil || native_state == nil {
+        return 0, false
+    }
+    request_id := service^.next_request_id
+    outcome := send_julia_ingress_control(service,
+        core.Runtime_Content_Initialize_Requested{
+            request_id = request_id,
+            native_state = native_state,
+        })
+    if !finish_julia_request_submission(service, request_id, .Invoke, outcome) {
+        return 0, false
+    }
+    return request_id, true
+}
+
+//   Submit one typed animation tick carrying checked slot identity.
+try_submit_animation_tick :: proc(
+    service: ^Julia_Runtime_Service,
+    submission: Julia_Animation_Tick_Submission) -> (u64, bool) {
+    if service == nil {
+        return 0, false
+    }
+    request_id := service^.next_request_id
+    outcome := send_julia_ingress_control(service, core.Animation_Tick_Requested{
+        request_id = request_id,
+        handle = submission.handle,
+        animation_generation = submission.animation_generation,
+        sequence = submission.sequence,
+    })
+    if !finish_julia_request_submission(
+        service, request_id, .Animation_Tick, outcome) {
+        return 0, false
+    }
+    return request_id, true
+}
+
+//   Submit one typed animation lifecycle transaction through its compatibility handler.
+try_submit_animation_lifecycle :: proc(
+    service: ^Julia_Runtime_Service,
+    handle: core.Animation_Lifecycle_Slot_Handle,
+    runtime_generation, animation_generation: u64) -> (u64, bool) {
+    if service == nil {
+        return 0, false
+    }
+    request_id := service^.next_request_id
+    outcome := send_julia_ingress_control(
+        service, core.Animation_Lifecycle_Requested{
+            request_id = request_id,
+            handle = handle,
+            runtime_generation = runtime_generation,
+            animation_generation = animation_generation,
+        })
+    if !finish_julia_request_submission(service, request_id, .Invoke, outcome) {
+        return 0, false
+    }
+    return request_id, true
+}
+
+//   Submit one typed harness request with producer-pooled scenario-name bytes.
+try_submit_harness_scenario :: proc(
+    service: ^Julia_Runtime_Service, scenario_name: string,
+    step_count: i64) -> (u64, bool) {
+    if service == nil || len(scenario_name) == 0 ||
+        len(scenario_name) > core.HARNESS_SCENARIO_NAME_CAPACITY || step_count < 0 {
+        return 0, false
+    }
+    _ = drain_julia_ingress_returns(service)
+    bytes, allocation_error := communication_link_alloc_bytes(
+        &service^.request_link, len(scenario_name))
+    if allocation_error != .None {
+        return 0, false
+    }
+    copy(bytes, transmute([]u8)scenario_name)
+    request_id := service^.next_request_id
+    request := core.Harness_Scenario_Requested{
+        request_id = request_id,
+        scenario_name = string(bytes),
+        step_count = step_count,
+    }
+    outcome := send_julia_ingress_control(service, request)
+    if outcome != .Sent {
+        communication_link_free_bytes(&service^.request_link, bytes)
+    }
+    if !finish_julia_request_submission(service, request_id, .Invoke, outcome) {
+        return 0, false
+    }
+    return request_id, true
+}
+
+//   Submit typed runtime shutdown and close admission to later control work.
+try_submit_runtime_shutdown :: proc(
+    service: ^Julia_Runtime_Service) -> (u64, bool) {
+    if service == nil {
+        return 0, false
+    }
+    request_id := service^.next_request_id
+    outcome := send_julia_ingress_control(
+        service, core.Runtime_Shutdown_Requested{request_id = request_id})
+    if !finish_julia_request_submission(service, request_id, .Shutdown, outcome) {
+        return 0, false
+    }
+    return request_id, true
+}
+
+//   Retry typed shutdown admission while routing egress to relieve bounded pressure.
+submit_runtime_shutdown_until :: proc(
+    service: ^Julia_Runtime_Service, started_at: time.Tick,
+    timeout_seconds: f64) -> (u64, bool) {
+    if service == nil || timeout_seconds < 0 {
+        return 0, false
+    }
+    for {
+        if request_id, sent := try_submit_runtime_shutdown(service); sent {
+            return request_id, true
+        }
+        _, _ = try_route_julia_egress(service)
+        if time.duration_seconds(time.tick_since(started_at)) >= timeout_seconds {
+            return 0, false
+        }
+        thread.yield()
+    }
+}
+
+//   Route egress until the exact typed shutdown completion arrives or time expires.
+wait_runtime_shutdown_completion :: proc(
+    service: ^Julia_Runtime_Service, request_id: u64,
+    started_at: time.Tick, timeout_seconds: f64) -> bool {
+    if service == nil || request_id == 0 || timeout_seconds < 0 {
+        return false
+    }
+    for {
+        event, accepted := try_route_julia_egress(service)
+        if accepted && event.request_id == request_id &&
+            event.kind == .Shutdown_Complete {
+            return event.succeeded
+        }
+        if time.duration_seconds(time.tick_since(started_at)) >= timeout_seconds {
+            return false
+        }
+        thread.yield()
+    }
+}
+
+//   Enqueue one already-owned typed control value without blocking the display thread.
+send_julia_ingress_control :: proc(
+    service: ^Julia_Runtime_Service,
+    value: core.Julia_Host_Ingress) -> core.Communication_Send_Outcome {
+    if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
     _ = drain_julia_ingress_returns(service)
@@ -1804,12 +2254,36 @@ send_julia_request :: proc(
     if allocation_error != .None {
         return .Allocation_Failed
     }
-    message^ = core.Julia_Host_Ingress(request)
+    message^ = value
     if !communication_link_try_send(&service^.request_link, message) {
         communication_link_free(&service^.request_link, message)
         return .Queue_Full
     }
     return .Sent
+}
+
+//   Apply common request identity, saturation, and lifecycle bookkeeping.
+finish_julia_request_submission :: proc(
+    service: ^Julia_Runtime_Service, request_id: u64,
+    kind: Julia_Request_Kind,
+    outcome: core.Communication_Send_Outcome) -> bool {
+    if outcome != .Sent {
+        service^.request_saturation_count += 1
+        if diagnostic_occurrence_should_log(service^.request_saturation_count) {
+            log.warnf("julia_request_saturated kind=%d outcome=%d count=%d",
+                int(kind), int(outcome), service^.request_saturation_count)
+        }
+        return false
+    }
+    service^.next_request_id += 1
+    service^.active_request_id = request_id
+    service^.active_request_kind = kind
+    if kind == .Initialize {
+        service^.lifecycle = .Starting
+    } else if kind == .Shutdown {
+        service^.lifecycle = .Shutdown_Requested
+    }
+    return true
 }
 
 //   Return whether one ingress variant owns dynamic pooled bytes.
@@ -2049,53 +2523,18 @@ send_terminal_session_ready :: proc(
     return .Sent
 }
 
-//   Submit one lifecycle or compatibility request without blocking the caller.
-// Request IDs advance only after successful queue insertion. Saturation is observable through
-// diagnostics and leaves caller-owned task payloads untouched for retry or cleanup.
-try_submit_julia_request :: proc(
-    service: ^Julia_Runtime_Service, kind: Julia_Request_Kind,
-    task: Julia_Task_Proc = nil, data: rawptr = nil,
-    slot_index: i32 = -1) -> (u64, bool) {
-
-    if service == nil {
-        return 0, false
-    }
-
-    request_id := service^.next_request_id
-    request := Julia_Request{
-        kind = kind,
-        request_id = request_id,
-        task = task,
-        data = data,
-        slot_index = slot_index,
-    }
-    send_outcome := send_julia_request(service, request)
-    if send_outcome != .Sent {
-        service^.request_saturation_count += 1
-        if diagnostic_occurrence_should_log(service^.request_saturation_count) {
-            log.warnf("julia_request_saturated kind=%d outcome=%d count=%d",
-                int(kind), int(send_outcome), service^.request_saturation_count)
-        }
-        return 0, false
-    }
-
-    service^.next_request_id += 1
-    service^.active_request_id = request_id
-    service^.active_request_kind = kind
-    switch kind {
-    case .Initialize:
-        service^.lifecycle = .Starting
-    case .Shutdown:
-        service^.lifecycle = .Shutdown_Requested
-    case .Invoke, .Animation_Tick:
-    }
-    return request_id, true
-}
-
 //   Apply one worker event to display-owned lifecycle and completion metadata.
 // View and animation events release their single-pending submission guards while
 // payload slots retain the completed data.
 accept_julia_event :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) {
+    if event.request_id != service^.active_request_id ||
+        event.request_kind != service^.active_request_kind {
+        log.warnf(
+            "julia_completion_mismatch request_id=%d request_kind=%d active_id=%d active_kind=%d",
+            event.request_id, int(event.request_kind), service^.active_request_id,
+            int(service^.active_request_kind))
+        return
+    }
     if service^.evidence_session != nil {
         for evidence_index in 0..<event.evidence_count {
             evidence_session.session_accept_event(
@@ -2105,9 +2544,7 @@ accept_julia_event :: proc(service: ^Julia_Runtime_Service, event: Julia_Event) 
     if !event.succeeded {
         record_julia_event_failure(service, event)
     }
-    if event.request_id == service^.active_request_id {
-        service^.active_request_id = 0
-    }
+    service^.active_request_id = 0
 
     handlers := JULIA_EVENT_HANDLERS
     handler := handlers[event.kind]
@@ -2164,21 +2601,103 @@ assert_julia_runtime_owner :: proc(state: ^core.Euclid_General_State) {
         "Julia C API operation executed outside the Julia owner thread")
 }
 
-//   Run one temporary serialized bridge operation on the Julia owner thread.
-// Calls made by the owner execute directly; all others block while consuming events until the
-// correlated completion arrives. Unrelated events are still accepted during that wait.
-invoke_julia_compatibility_task :: proc(
-    state: ^core.Euclid_General_State, task: Julia_Task_Proc, data: rawptr) -> bool {
+//   Reserve the single bounded lifecycle slot and advance its incarnation.
+reserve_animation_lifecycle_slot :: proc(
+    service: ^Julia_Runtime_Service) -> (core.Animation_Lifecycle_Slot_Handle, bool) {
+    slot := &service^.animation_lifecycle_slot
+    if slot^.state != .Free {
+        return {}, false
+    }
+    slot^.reservation_generation += 1
+    if slot^.reservation_generation == 0 {
+        slot^.reservation_generation = 1
+    }
+    slot^.state = .Pending
+    return core.Animation_Lifecycle_Slot_Handle{
+        index = 0,
+        reservation_generation = slot^.reservation_generation,
+    }, true
+}
 
-    if state == nil || state^.julia_runtime_service == nil || task == nil {
+//   Snapshot display-owned lifecycle intent into one reserved transaction slot.
+prepare_animation_lifecycle_slot :: proc(
+    state: ^core.Euclid_General_State,
+    handle: core.Animation_Lifecycle_Slot_Handle) {
+    service := state^.julia_runtime_service
+    selected := state^.julia_interface^.selected_animation
+    if selected == nil {
+        selected = &state^.julia_interface^.null_animation
+    }
+    service^.animation_lifecycle_slot = {
+        state = .Pending,
+        request_id = service^.next_request_id,
+        reservation_generation = handle.reservation_generation,
+        runtime_generation = service^.runtime_generation,
+        animation_generation = service^.animation_generation,
+        selected_stable_id = selected^.stable_id,
+        reset_requested = state^.julia_interface^.pending_animation_reset,
+        reload_requested = service^.reload_requested,
+        host_state = state,
+    }
+}
+
+//   Route egress until the correlated lifecycle transaction completes.
+wait_animation_lifecycle_completion :: proc(
+    service: ^Julia_Runtime_Service,
+    request_id: u64) -> bool {
+    for {
+        event_message, ok := communication_link_recv(&service^.event_link)
+        if !ok {
+            return false
+        }
+        if _, is_content := event_message^.(core.View_Content_Ready); is_content {
+            retain_display_view_content(service, event_message)
+            continue
+        }
+        event, is_event := route_julia_egress_message(service, event_message)
+        if is_event && event.kind == .Invoke_Complete &&
+            event.request_id == request_id {
+            return event.succeeded
+        }
+    }
+}
+
+//   Submit one prepared lifecycle transaction and synchronously route its completion.
+invoke_animation_lifecycle_transaction :: proc(
+    state: ^core.Euclid_General_State) -> bool {
+    if state == nil || state^.julia_runtime_service == nil ||
+        state^.julia_interface == nil {
+        return false
+    }
+    service := state^.julia_runtime_service
+    handle, reserved := reserve_animation_lifecycle_slot(service)
+    if !reserved {
+        return false
+    }
+    prepare_animation_lifecycle_slot(state, handle)
+    slot := &service^.animation_lifecycle_slot
+    request_id, sent := try_submit_animation_lifecycle(
+        service, handle, slot^.runtime_generation, slot^.animation_generation)
+    if !sent {
+        slot^.state = .Free
+        return false
+    }
+    return wait_animation_lifecycle_completion(service, request_id)
+}
+
+//   Run one typed harness request synchronously while routing unrelated egress.
+invoke_harness_transaction :: proc(
+    state: ^core.Euclid_General_State, scenario_name: string,
+    step_count: i64) -> bool {
+    if state == nil || state^.julia_runtime_service == nil {
         return false
     }
     service := state^.julia_runtime_service
     if os.get_current_thread_id() == service^.owner_thread_id {
-        return task(data)
+        return false
     }
-
-    request_id, sent := try_submit_julia_request(service, .Invoke, task, data)
+    request_id, sent := try_submit_harness_scenario(
+        service, scenario_name, step_count)
     if !sent {
         return false
     }
@@ -2187,14 +2706,9 @@ invoke_julia_compatibility_task :: proc(
         if !ok {
             return false
         }
-        event, is_event := event_message^.(Julia_Event)
-        if !is_event {
-            defer_view_content(service, event_message)
-            continue
-        }
-        _ = communication_link_return(&service^.event_link, event_message)
-        accept_julia_event(service, event)
-        if event.kind == .Invoke_Complete && event.request_id == request_id {
+        event, is_event := route_julia_egress_message(service, event_message)
+        if is_event && event.kind == .Invoke_Complete &&
+            event.request_id == request_id {
             return event.succeeded
         }
     }
@@ -2214,13 +2728,9 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     view_snapshot_slots_destroy(service)
     _ = drain_julia_ingress_returns(service)
     _ = drain_julia_egress_returns(service)
-    if service^.display_deferred_view_content != nil {
+    if service^.display_pending_view_content != nil {
         destroy_julia_egress_message(
-            service, service^.display_deferred_view_content)
-    }
-    if service^.display_deferred_terminal_egress != nil {
-        destroy_julia_egress_message(
-            service, service^.display_deferred_terminal_egress)
+            service, service^.display_pending_view_content)
     }
     if service^.pending_view_content != nil {
         destroy_julia_egress_message(service, service^.pending_view_content)
@@ -2232,8 +2742,7 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
 
 //   Resolve Julia callbacks and register content into unpublished host state.
 // This owner-thread task publishes no Ready lifecycle state; startup priming controls that step.
-initialize_julia_state_task :: proc(data: rawptr) -> bool {
-    state := cast(^core.Euclid_General_State)data
+initialize_julia_state :: proc(state: ^core.Euclid_General_State) -> bool {
     assert_julia_runtime_owner(state)
     state^.saved_context = context
     prepare_julia_interface_generation(state^.julia_interface)
@@ -2318,6 +2827,16 @@ bind_julia_terminal_ingress_callbacks :: proc(
         main_module, "terminal_host_ingest_tick_stream_configuration")
     host^.terminal_ingest_tick_pulse = julialib.jl_get_function(
         main_module, "terminal_host_ingest_tick_pulse")
+    host^.animation_tick = julialib.jl_get_function(
+        main_module, "animation_host_tick")
+    host^.animation_tick_payload_type = julialib.jl_get_global(
+        main_module, julialib.jl_symbol("NativeAnimationTickPayload"))
+    host^.animation_lifecycle = julialib.jl_get_function(
+        main_module, "animation_host_lifecycle")
+    host^.animation_lifecycle_acknowledge_reset = julialib.jl_get_function(
+        main_module, "animation_host_acknowledge_reset")
+    host^.animation_lifecycle_payload_type = julialib.jl_get_global(
+        main_module, julialib.jl_symbol("NativeAnimationLifecyclePayload"))
 }
 
 //   Bind Julia functions that expose Terminal results to the native host.
@@ -2348,7 +2867,11 @@ julia_terminal_callbacks_complete :: proc(host: ^Julia_Runtime_Host) -> bool {
         host^.terminal_take_session_lifecycle != nil &&
         host^.terminal_ingest_tick_configuration != nil &&
         host^.terminal_ingest_tick_pulse != nil &&
-        host^.terminal_take_tick_stream != nil
+        host^.terminal_take_tick_stream != nil && host^.animation_tick != nil &&
+        host^.animation_tick_payload_type != nil &&
+        host^.animation_lifecycle != nil &&
+        host^.animation_lifecycle_acknowledge_reset != nil &&
+        host^.animation_lifecycle_payload_type != nil
 }
 
 //   Construct and validate the rooted runtime host after native state exists.
@@ -2373,7 +2896,14 @@ report_missing_julia_terminal_callbacks :: proc(host: ^Julia_Runtime_Host) {
         " shutdown=", host^.terminal_shutdown != nil,
         " evaluation=", host^.terminal_take_evaluation != nil,
         " completion=", host^.terminal_take_completion != nil,
-        " lifecycle=", host^.terminal_take_session_lifecycle != nil)
+        " lifecycle=", host^.terminal_take_session_lifecycle != nil,
+        " animation_tick=", host^.animation_tick != nil,
+        " animation_tick_payload=", host^.animation_tick_payload_type != nil,
+        " animation_lifecycle=", host^.animation_lifecycle != nil,
+        " animation_lifecycle_ack=",
+        host^.animation_lifecycle_acknowledge_reset != nil,
+        " animation_lifecycle_payload=",
+        host^.animation_lifecycle_payload_type != nil)
 }
 
 //   Construct and validate the rooted runtime host after native state exists.
@@ -2424,69 +2954,143 @@ finalize_julia_worker_host :: proc(
     host^.runtime = nil
 }
 
-//   Ensure a non-initialize request has a constructed runtime host when eligible.
-prepare_julia_request_host :: proc(
-    service: ^Julia_Runtime_Service,
-    host: ^Julia_Runtime_Host,
-    request: Julia_Request) -> bool {
-
-    if host^.runtime != nil {
-        return true
-    }
-    if request.kind != .Invoke {
+//   Initialize content and install the sole lifetime-stable native host binding.
+initialize_julia_content_control :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    request: core.Runtime_Content_Initialize_Requested) -> bool {
+    if request.native_state == nil {
         return false
     }
-    return initialize_julia_runtime_host(
-        service, host, cast(^core.Euclid_General_State)request.data)
-}
-
-//   Select the completion kind for a request rejected before host construction.
-reject_julia_request_without_host :: proc(
-    request: Julia_Request, event: ^Julia_Event) {
-
-    event^.succeeded = false
-    switch request.kind {
-    case .Invoke:
-        event^.kind = .Invoke_Complete
-    case .Animation_Tick:
-        event^.kind = .Animation_Tick_Complete
-    case .Initialize, .Shutdown:
-    }
-}
-
-//   Execute one serialized worker request while borrowing the persistent host root.
-execute_julia_worker_request :: proc(
-    service: ^Julia_Runtime_Service, request: Julia_Request,
-    host: ^Julia_Runtime_Host, frame: ^Julia_Runtime_Gc_Frame,
-    initialized: ^bool) -> (Julia_Event, bool) {
-    event := Julia_Event{
-        request_kind = request.kind,
-        request_id = request.request_id,
-        slot_index = request.slot_index,
-        succeeded = true,
-    }
-    evidence_profile.zone_begin(&service^.profile, "julia_request")
-    shutting_down := false
-    if request.kind == .Initialize {
-        event.kind = .Initialized
-        event.succeeded = !initialized^ &&
-            initialize_julia_worker_host(service, host, frame)
-        initialized^ = event.succeeded
-    } else {
-        host_ready := prepare_julia_request_host(service, host, request)
-        if host_ready || request.kind == .Shutdown {
-            shutting_down = dispatch_julia_request(service, request, &event)
-        } else {
-            reject_julia_request_without_host(request, &event)
+    if host^.runtime == nil {
+        host^.native_state = request.native_state
+        if !initialize_julia_runtime_host(service, host, host^.native_state) {
+            return false
         }
     }
+    return host^.native_state == request.native_state &&
+        initialize_julia_state(request.native_state)
+}
+
+//   Dispatch one typed control to its concrete owner-thread handler.
+execute_julia_control_handler :: proc(
+    service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
+    message: ^core.Julia_Host_Ingress, event: ^Julia_Event) -> bool {
+    shutting_down := false
+    #partial switch request in message^ {
+    case core.Runtime_Initialize_Requested:
+        event^.kind = .Initialized
+        event^.succeeded = !state^.initialized &&
+            initialize_julia_worker_host(service, &state^.host, &state^.frame)
+        state^.initialized = event^.succeeded
+    case core.Runtime_Content_Initialize_Requested:
+        event^.kind = .Invoke_Complete
+        event^.succeeded = state^.initialized &&
+            initialize_julia_content_control(service, &state^.host, request)
+    case core.Animation_Tick_Requested:
+        event^.kind = .Animation_Tick_Complete
+        event^.succeeded = state^.host.runtime != nil &&
+            generate_animation_tick(service, &state^.host, request)
+    case core.Animation_Lifecycle_Requested:
+        event^.kind = .Invoke_Complete
+        event^.succeeded = state^.host.runtime != nil &&
+            update_animation_lifecycle(service, &state^.host, request)
+    case core.Harness_Scenario_Requested:
+        event^.kind = .Invoke_Complete
+        event^.succeeded = state^.host.runtime != nil &&
+            run_harness_scenario(&state^.host, request)
+    case core.Runtime_Shutdown_Requested:
+        assert(os.get_current_thread_id() == service^.owner_thread_id)
+        event^.kind = .Shutdown_Complete
+        shutting_down = true
+    case:
+        event^.succeeded = false
+    }
+    return shutting_down
+}
+
+//   Execute one typed control while borrowing its producer-owned ingress envelope.
+execute_julia_control :: proc(
+    service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
+    message: ^core.Julia_Host_Ingress,
+    decoded: Julia_Decoded_Control) -> (Julia_Event, bool) {
+    event := Julia_Event{request_kind = decoded.request_kind,
+        request_id = decoded.request_id, slot_index = decoded.slot_index,
+        succeeded = true}
+    evidence_profile.zone_begin(&service^.profile, "julia_request")
+    shutting_down := execute_julia_control_handler(service, state, message, &event)
     evidence_profile.zone_end(&service^.profile)
     return event, shutting_down
 }
 
-//   Allocate and reliably send one worker-owned event envelope.
-send_julia_event :: proc(
+//   Convert shared worker completion storage into its typed transport fields.
+julia_completion_from_event :: proc(event: Julia_Event) -> core.Julia_Completion {
+    return {
+        request_id = event.request_id,
+        succeeded = event.succeeded,
+        evidence = event.evidence,
+        evidence_count = event.evidence_count,
+    }
+}
+
+//   Normalize one typed completion for existing lifecycle and evidence handlers.
+julia_event_from_completion :: proc(
+    completion: core.Julia_Completion,
+    request_kind: Julia_Request_Kind,
+    event_kind: Julia_Event_Kind) -> Julia_Event {
+    return {
+        kind = event_kind,
+        request_kind = request_kind,
+        request_id = completion.request_id,
+        slot_index = -1,
+        succeeded = completion.succeeded,
+        evidence = completion.evidence,
+        evidence_count = completion.evidence_count,
+    }
+}
+
+//   Encode one typed completion with repeated request and slot identity.
+encode_typed_julia_completion :: proc(
+    message: ^core.Julia_Host_Egress, decoded: Julia_Decoded_Control,
+    event: Julia_Event) {
+    completion := julia_completion_from_event(event)
+    switch decoded.protocol {
+    case .Runtime_Initialize:
+        message^ = core.Julia_Host_Egress(core.Runtime_Initialized{
+            completion = completion,
+        })
+    case .Runtime_Content_Initialize:
+        message^ = core.Julia_Host_Egress(core.Runtime_Content_Initialized{
+            completion = completion,
+        })
+    case .Animation_Tick:
+        message^ = core.Julia_Host_Egress(core.Animation_Tick_Completed{
+            completion = completion,
+            handle = decoded.tick_handle,
+            animation_generation = decoded.animation_generation,
+            sequence = decoded.sequence,
+        })
+    case .Animation_Lifecycle:
+        message^ = core.Julia_Host_Egress(core.Animation_Lifecycle_Completed{
+            completion = completion,
+            handle = decoded.lifecycle_handle,
+            runtime_generation = decoded.runtime_generation,
+            animation_generation = decoded.animation_generation,
+        })
+    case .Harness_Scenario:
+        message^ = core.Julia_Host_Egress(core.Harness_Scenario_Completed{
+            completion = completion,
+        })
+    case .Runtime_Shutdown:
+        message^ = core.Julia_Host_Egress(core.Runtime_Shutdown_Completed{
+            completion = completion,
+        })
+    }
+}
+
+//   Publish one matching typed completion through the producer-owned egress pool.
+send_typed_julia_completion :: proc(
     service: ^Julia_Runtime_Service,
+    decoded: Julia_Decoded_Control,
     event: Julia_Event) -> core.Communication_Send_Outcome {
     _ = drain_julia_egress_returns(service)
     pending_outcome := flush_pending_view_content(service)
@@ -2497,12 +3101,55 @@ send_julia_event :: proc(
     if allocation_error != .None {
         return .Allocation_Failed
     }
-    message^ = core.Julia_Host_Egress(event)
+    encode_typed_julia_completion(message, decoded, event)
     if !communication_link_send(&service^.event_link, message) {
         destroy_julia_egress_message(service, message)
         return .Channel_Closed
     }
     return .Sent
+}
+
+//   Decode one animation control into a bridge-private compatibility request.
+decode_julia_animation_control :: proc(
+    message: ^core.Julia_Host_Ingress) -> (Julia_Decoded_Control, bool) {
+    #partial switch request in message^ {
+    case core.Animation_Tick_Requested:
+        return {protocol = .Animation_Tick, request_kind = .Animation_Tick,
+            request_id = request.request_id, slot_index = request.handle.index,
+            tick_handle = request.handle,
+            animation_generation = request.animation_generation,
+            sequence = request.sequence}, true
+    case core.Animation_Lifecycle_Requested:
+        return {protocol = .Animation_Lifecycle, request_kind = .Invoke,
+            request_id = request.request_id, slot_index = request.handle.index,
+            lifecycle_handle = request.handle,
+            runtime_generation = request.runtime_generation,
+            animation_generation = request.animation_generation}, true
+    }
+    return {}, false
+}
+
+//   Decode one runtime or harness control into a bridge-private execution record.
+decode_julia_control :: proc(
+    message: ^core.Julia_Host_Ingress) -> (Julia_Decoded_Control, bool) {
+    if decoded, ok := decode_julia_animation_control(message); ok {
+        return decoded, true
+    }
+    #partial switch request in message^ {
+    case core.Runtime_Initialize_Requested:
+        return {protocol = .Runtime_Initialize, request_kind = .Initialize,
+            request_id = request.request_id, slot_index = -1}, true
+    case core.Runtime_Content_Initialize_Requested:
+        return {protocol = .Runtime_Content_Initialize, request_kind = .Invoke,
+            request_id = request.request_id, slot_index = -1}, true
+    case core.Harness_Scenario_Requested:
+        return {protocol = .Harness_Scenario, request_kind = .Invoke,
+            request_id = request.request_id, slot_index = -1}, true
+    case core.Runtime_Shutdown_Requested:
+        return {protocol = .Runtime_Shutdown, request_kind = .Shutdown,
+            request_id = request.request_id, slot_index = -1}, true
+    }
+    return {}, false
 }
 
 //   Invoke one Terminal session lifecycle callback on the Julia owner thread.
@@ -2949,7 +3596,7 @@ julia_terminal_dispatch_ingress :: proc(
 //   Own the rooted Julia host stack frame and serialized requests until shutdown.
 shutdown_julia_runtime_host :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    frame: ^Julia_Runtime_Gc_Frame, request: Julia_Request,
+    frame: ^Julia_Runtime_Gc_Frame, decoded: Julia_Decoded_Control,
     event: ^Julia_Event) {
     if host^.runtime != nil && host^.terminal_shutdown != nil {
         result := julialib.jl_call1(host^.terminal_shutdown, host^.runtime)
@@ -2958,24 +3605,25 @@ shutdown_julia_runtime_host :: proc(
             julialib.jl_unbox_bool(result) != 0
         if !event^.succeeded { print_julia_exception("terminal_host_shutdown") }
     }
-    attach_julia_request_evidence(service, request, event)
+    attach_julia_control_evidence(service, decoded, event)
     finalize_julia_worker_host(service, host, frame)
     end_julia()
 }
 
-//   Process one ordinary Julia request and report whether shutdown completed.
-process_julia_worker_request :: proc(
-    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    frame: ^Julia_Runtime_Gc_Frame, initialized: ^bool,
-    request: Julia_Request) -> Julia_Worker_Request_Result {
-    event, shutting_down := execute_julia_worker_request(
-        service, request, host, frame, initialized)
+//   Execute one typed control and attach its bounded completion evidence.
+process_julia_worker_control :: proc(
+    service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
+    message: ^core.Julia_Host_Ingress,
+    decoded: Julia_Decoded_Control) -> Julia_Worker_Request_Result {
+    event, shutting_down := execute_julia_control(
+        service, state, message, decoded)
     if shutting_down {
-        shutdown_julia_runtime_host(service, host, frame, request, &event)
+        shutdown_julia_runtime_host(
+            service, &state^.host, &state^.frame, decoded, &event)
         return {event = event, shutting_down = true, accepted = true}
     }
-    attach_julia_request_evidence(service, request, &event)
-    return {event = event, accepted = send_julia_event(service, event) == .Sent}
+    attach_julia_control_evidence(service, decoded, &event)
+    return {event = event, accepted = true}
 }
 
 //   Dispatch and return one Terminal ingress envelope to its producer.
@@ -2989,36 +3637,52 @@ process_julia_terminal_ingress :: proc(
     return accepted
 }
 
+//   Process one borrowed worker ingress envelope and report whether the loop may continue.
+process_julia_worker_ingress :: proc(
+    service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
+    message: ^core.Julia_Host_Ingress) -> (Julia_Worker_Run_Result, bool) {
+    decoded, is_control := decode_julia_control(message)
+    if !is_control {
+        return {}, process_julia_terminal_ingress(service, &state^.host, message)
+    }
+    result := process_julia_worker_control(service, state, message, decoded)
+    _ = communication_link_return(&service^.request_link, message)
+    if result.shutting_down {
+        return {
+            shutdown_request = decoded,
+            shutdown_event = result.event,
+            shutting_down = true,
+        }, true
+    }
+    accepted := result.accepted &&
+        send_typed_julia_completion(service, decoded, result.event) == .Sent
+    return {}, accepted
+}
+
 //   Own the rooted Julia host stack frame and serialized requests until shutdown.
 // The returned shutdown event is published only after this stack frame is gone.
 julia_runtime_worker_run_host :: proc(
-    service: ^Julia_Runtime_Service) -> (Julia_Event, bool) {
+    service: ^Julia_Runtime_Service) -> Julia_Worker_Run_Result {
 
     worker_context := context
-    host: Julia_Runtime_Host
-    host_frame: Julia_Runtime_Gc_Frame
-    initialized := false
+    state: Julia_Worker_State
     for {
         request_message, received := communication_link_try_recv(
             &service^.request_link)
         if received {
-            if request, is_request := request_message^.(Julia_Request); is_request {
-                result := process_julia_worker_request(
-                    service, &host, &host_frame, &initialized, request)
-                _ = communication_link_return(
-                    &service^.request_link, request_message)
-                if result.shutting_down {
-                    return result.event, true
-                }
-                if !result.accepted { return {}, false }
-            } else if !process_julia_terminal_ingress(
-                service, &host, request_message) {
-                return {}, false
+            result, accepted := process_julia_worker_ingress(
+                service, &state, request_message)
+            if result.shutting_down {
+                return result
+            }
+            if !accepted {
+                return {}
             }
         }
-        if host.runtime != nil && !julia_terminal_service(service, &host) {
+        if state.host.runtime != nil &&
+            !julia_terminal_service(service, &state.host) {
             fmt.eprintln("Julia worker: Terminal service failed")
-            return {}, false
+            return {}
         }
         context = worker_context
         free_all(context.temp_allocator)
@@ -3034,12 +3698,13 @@ julia_runtime_worker :: proc(data: rawptr) {
     service^.owner_thread_id = os.get_current_thread_id()
     evidence_profile.thread_name(&service^.profile, "julia-worker")
     log.info("julia_worker_started")
-    shutdown_event, shutting_down := julia_runtime_worker_run_host(service)
-    if !shutting_down {
+    result := julia_runtime_worker_run_host(service)
+    if !result.shutting_down {
         log.error("julia_worker_requests_closed_before_shutdown")
         return
     }
-    if send_julia_event(service, shutdown_event) != .Sent {
+    if send_typed_julia_completion(
+        service, result.shutdown_request, result.shutdown_event) != .Sent {
         log.error("julia_worker_shutdown_event_send_failed")
         return
     }
@@ -3048,45 +3713,46 @@ julia_runtime_worker :: proc(data: rawptr) {
 
 //   Build one animation-tick completion event for the Julia channel handoff.
 animation_tick_request_evidence :: proc(
-    service: ^Julia_Runtime_Service, request: Julia_Request,
+    service: ^Julia_Runtime_Service, decoded: Julia_Decoded_Control,
     event: ^Julia_Event) -> evidence_trace.Event {
     return {
             lane = .Transport,
             kind = event.succeeded ? .Animation_Tick_Accepted : .Animation_Tick_Rejected,
             correlation_kind = .Runtime_Request,
-            correlation = request.request_id,
+            correlation = decoded.request_id,
             generation = service.animation_generation,
             flags = event.succeeded ? {} : {.Failure},
             payload = {request = {
                 status = event.succeeded ? 1 : 0,
-                slot = u32(max(request.slot_index, 0)),
+                slot = u32(max(decoded.slot_index, 0)),
             }},
         }
 }
 
 //   Attach one owner-recorded Julia completion event to its channel handoff.
-attach_julia_request_evidence :: proc(
-    service: ^Julia_Runtime_Service, request: Julia_Request, event: ^Julia_Event) {
+attach_julia_control_evidence :: proc(
+    service: ^Julia_Runtime_Service, decoded: Julia_Decoded_Control,
+    event: ^Julia_Event) {
     if service == nil || event == nil || service.evidence_session == nil {
         return
     }
     evidence: evidence_trace.Event
     record_completion := true
-    switch request.kind {
+    switch decoded.protocol {
     case .Animation_Tick:
-        evidence = animation_tick_request_evidence(service, request, event)
-    case .Shutdown:
+        evidence = animation_tick_request_evidence(service, decoded, event)
+    case .Runtime_Shutdown:
         evidence = {
             lane = .Lifecycle,
             kind = .Runtime_Shutdown_Complete,
             correlation_kind = .Runtime_Request,
-            correlation = request.request_id,
+            correlation = decoded.request_id,
             generation = service.runtime_generation,
             flags = {.Required},
         }
-    case .Invoke:
+    case .Runtime_Content_Initialize, .Animation_Lifecycle, .Harness_Scenario:
         record_completion = false
-    case .Initialize:
+    case .Runtime_Initialize:
         return
     }
     if !record_completion || evidence_session.session_record(
@@ -3097,37 +3763,4 @@ attach_julia_request_evidence :: proc(
     if service.evidence_ring.count > 0 {
         evidence_session.session_mark_incomplete(service.evidence_session)
     }
-}
-
-//   Execute one worker request, filling its completion event.
-//
-// Returns:
-//   - true when the request is Shutdown and the worker must exit after sending the event.
-dispatch_julia_request :: proc(
-    service: ^Julia_Runtime_Service,
-    request: Julia_Request, event: ^Julia_Event) -> bool {
-
-    switch request.kind {
-    case .Initialize:
-        event^.kind = .Initialized
-    case .Invoke:
-        event^.kind = .Invoke_Complete
-        event^.succeeded = run_julia_request_task(request)
-    case .Animation_Tick:
-        event^.kind = .Animation_Tick_Complete
-        event^.succeeded = run_julia_request_task(request)
-    case .Shutdown:
-        assert(os.get_current_thread_id() == service^.owner_thread_id)
-        event^.kind = .Shutdown_Complete
-        return true
-    }
-    return false
-}
-
-//   Run a request's task callback when present, preserving the prior success state.
-run_julia_request_task :: proc(request: Julia_Request) -> bool {
-    if request.task == nil {
-        return true
-    }
-    return request.task(request.data)
 }

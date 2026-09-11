@@ -26,6 +26,7 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"runtime_reload_committed", .Runtime_Reload_Committed},
     {"runtime_reload_rolled_back", .Runtime_Reload_Rolled_Back},
     {"animation_selected", .Animation_Selected},
+    {"animation_reset_committed", .Animation_Reset_Committed},
     {"animation_tick_committed", .Animation_Tick_Committed},
     {"animation_cycle_boundary", .Animation_Cycle_Boundary},
     {"animation_loaded", .Animation_Loaded},
