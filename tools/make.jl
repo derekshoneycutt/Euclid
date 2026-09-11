@@ -627,10 +627,12 @@ function build_odin(
 end
 
 """Copy Odin's bundled shared Raylib beside one produced executable."""
-function stage_shared_raylib(destination::String)
-    source = raylib_shared_library_path()
+function stage_shared_raylib(
+    destination::String; source::String=raylib_shared_library_path())
     mkpath(destination)
-    cp(source, joinpath(destination, basename(source)); force=true)
+    staged_path = joinpath(destination, basename(source))
+    (ispath(staged_path) || islink(staged_path)) && rm(staged_path; force=true)
+    cp(source, staged_path; follow_symlinks=true)
     return nothing
 end
 

@@ -208,7 +208,8 @@ function unix_harfbuzz_jll_linker_flags()
     if Sys.islinux()
         return "$harfbuzz_library -Wl,-rpath-link,$(join(runtime_dirs, ':'))"
     end
-    return harfbuzz_library
+    rpaths = ["-Wl,-rpath,$directory" for directory in runtime_dirs]
+    return join([harfbuzz_library; rpaths], " ")
 end
 
 """Generate the Windows import libraries required by the Odin application."""

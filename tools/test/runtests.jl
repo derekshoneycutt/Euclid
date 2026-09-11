@@ -47,7 +47,12 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         else
             jll_flags = BuildConfiguration.unix_harfbuzz_jll_linker_flags()
             @test startswith(jll_flags, library_path)
-            @test Sys.isapple() || occursin("-Wl,-rpath-link,", jll_flags)
+            if Sys.isapple()
+                @test all(directory -> "-Wl,-rpath,$directory" in
+                    split(jll_flags), runtime_dirs)
+            else
+                @test occursin("-Wl,-rpath-link,", jll_flags)
+            end
             @test !(Sys.BINDIR in BuildConfiguration.native_runtime_dirs())
         end
     end
@@ -149,6 +154,26 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             parse_driver_invocation(["build", "--", "--no-vsync"]))
         @test_throws ErrorException parse_build_command(
             parse_driver_invocation(["run-only", "--strict"]))
+    end
+
+    @testset "shared Raylib staging" begin
+        mktempdir() do root
+            source_directory = joinpath(root, "odin", "vendor", "raylib", "macos")
+            destination = joinpath(root, "build")
+            library = joinpath(root, "libraylib.6.0.0.dylib")
+            source = joinpath(source_directory, "libraylib.600.dylib")
+            staged = joinpath(destination, basename(source))
+            mkpath(source_directory)
+            mkpath(destination)
+            write(library, "raylib")
+            symlink(relpath(library, source_directory), source)
+            symlink("missing/libraylib.6.0.0.dylib", staged)
+
+            stage_shared_raylib(destination; source)
+
+            @test !islink(staged)
+            @test read(staged, String) == "raylib"
+        end
     end
 
     @testset "fixed command build plans" begin

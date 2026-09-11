@@ -35,9 +35,6 @@ when ODIN_OS == .Linux {
     // Linux request from asm-generic/ioctls.h.
     UNIX_TIOCSWINSZ :: c.ulong(0x5414)
 } else when ODIN_OS == .Darwin {
-    // TODO(terminal-platform/macos): Verify PTY resize, completion, and teardown
-    // against the Linux-proven session lifecycle. Run the terminal/session package
-    // tests and complete repository gate on macOS; remove after native evidence passes.
     // Darwin request from _IOW('t', 103, struct winsize) in sys/ttycom.h.
     UNIX_TIOCSWINSZ :: c.ulong(0x80087467)
 }
