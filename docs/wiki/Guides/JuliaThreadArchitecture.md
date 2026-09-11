@@ -4,6 +4,7 @@
 
 1. [Purpose](#purpose)
 1. [System Model](#system-model)
+1. [Transport Topology](#transport-topology)
 1. [Source Map](#source-map)
 1. [Runtime Service](#runtime-service)
 1. [Startup And Readiness](#startup-and-readiness)
@@ -32,12 +33,14 @@ This document describes the implemented architecture. Its central rule is:
 > asynchronous Julia work may affect display-owned state only through bounded
 > published data.
 
-The publication protocols enforce that rule:
+Three paths enforce that rule for different kinds of work:
 
-- Terminal requests and output use bounded generation-tagged actor transport.
-- View text and Dynview semantics use complete snapshots.
-- Animation callbacks read immutable query snapshots and emit transactional
-  scene-command batches.
+- **Terminal:** pooled messages cross the Odin/Julia boundary and feed a
+  generation-scoped Julia actor graph.
+- **Presentation/Dynview:** canonical MIME messages use the same pooled transport,
+  but bypass Julia actors; Odin materializes them into immutable snapshot slots.
+- **Animation:** lightweight control requests refer to dedicated tick slots containing
+  immutable queries and transactional scene-command batches.
 
 Rare animation lifecycle operations remain synchronous. They first quiesce
 asynchronous ticks, then run on the owner thread while the display thread waits
@@ -63,50 +66,116 @@ Euclid has three distinct execution roles:
 The Julia owner thread is not part of the CPU worker pool. It is a dedicated,
 long-lived command processor with different ownership and shutdown rules.
 
+The Julia owner is therefore both a serialized request executor and the reactor that
+pumps the Terminal actor runtime. The CPU worker pool is separate from both roles.
+
+## Transport Topology
+
 ```mermaid
 flowchart LR
-    D[Display thread]
-    R[Bounded request channel]
-    J[Julia owner thread]
-    E[Bounded event channel]
-    S[Service-owned slots]
-    C[Canonical scene and UI]
-    P[CPU worker pool]
+  D[Display owner]
+  RI[Ingress communication link]
+  J[Julia owner loop]
+  A[Generation-scoped Terminal actors]
+  RE[Egress communication link]
+  PR[Presentation runtime]
+  VS[Immutable view snapshot slots]
+  TS[Animation tick slots]
+  C[Canonical scene and UI]
 
-    D -->|try_send| R
-    R --> J
-    J -->|complete slot| S
-    J -->|completion event| E
-    E -->|try_recv or correlated wait| D
-    D -->|validate and publish| C
-    D -->|host work batches| P
-    P -->|joined results| C
+  D -->|Terminal messages| RI --> J --> A
+  A -->|Terminal output and commands| J --> RE --> D
+
+  J -->|View_Content_Ready| RE --> PR --> VS --> C
+
+  D -->|Animation_Tick control + slot index| RI --> J
+  TS <-->|immutable query / scene batch| J
+  J -->|completion + slot index| RE --> D
+  D -->|validate and commit| C
 ```
+
+The links are shared transport, not a shared execution model. `Julia_Host_Ingress` and
+`Julia_Host_Egress` are tagged unions carried in producer-owned pooled envelopes. The
+message kind determines the route after receipt.
+
+| Path | Cross-boundary carrier | Julia-side execution | Durable result | Why this path exists |
+| --- | --- | --- | --- | --- |
+| Terminal | Typed ingress and egress messages | Generation-scoped actors pumped by the owner thread | Display-owned terminal state | Terminal work is conversational, independently correlated, and may outlive one frame. |
+| Presentation/Dynview | `View_Content_Ready` egress message | Direct publication from content execution; no Julia actor | Display-owned immutable snapshot slot, then derived cache | Presentations are replaceable values, not conversations or scene mutations. |
+| Animation tick | `Animation_Tick` control request and completion event | Direct serialized callback execution | Tick slot with query snapshot and scene-command batch | Fixed-step work needs bounded latest-result pacing and atomic scene commit. |
+| Lifecycle | `Invoke` control request and completion event | Direct serialized lifecycle task | Interface generation or lifecycle state | Selection and reload require an exclusive, correlated barrier. |
+
+### Terminal Message Path
+
+Terminal ingress is decoded by Odin bridge adapters and delivered to actors owned by
+the active `HostSessionRuntime`. Actor turns perform evaluation, completion, shell,
+process, tick, and container policy. The host pump drains actor output and encodes it as
+typed egress messages for display-owned commit.
+
+```mermaid
+flowchart LR
+  UI[Display input or native event]
+  I[Typed ingress envelope]
+  H[Julia host adapter]
+  A[Session actor mailbox]
+  P[Bounded actor pump]
+  O[Actor outgoing command]
+  E[Typed egress envelope]
+  T[Display-owned Terminal]
+
+  UI --> I --> H --> A --> P --> O --> E --> T
+```
+
+Actors are used because Terminal operations have independent identities, mailboxes,
+timers, cancellation, and lifecycle. They structure cooperative concurrency inside the
+single Julia owner thread; they do not permit parallel Julia execution.
+
+### Presentation Message Path
+
+`publish_view_content` serializes one canonical MIME value and places
+`View_Content_Ready` directly on the Julia-to-display egress link. It does not address a
+Julia actor and does not wait for an animation tick slot to publish.
+
+The display retains the producer-owned envelope while it classifies or parses the
+source, then copies validated pointer-free semantics into a view snapshot slot. This
+separation lets presentation supersession, parsing, and publication proceed without
+changing scene-batch commit or actor lifecycle.
+
+### Animation Slot Path
+
+Animation ticks do not send scene payloads through pooled envelopes. The display fills
+a service-owned slot, sends a small request containing its index, and the owner thread
+runs callbacks directly against that slot. Query bridge calls read its immutable
+snapshot; mutation bridge calls append to its bounded scene-command batch. The
+completion message returns only correlation and slot identity.
+
+Slots are used because animation work is frame-paced, replaceable, and tightly bounded.
+One pending tick is enough: later elapsed time coalesces instead of creating an actor
+mailbox or copying large query and result payloads through the links.
 
 ## Source Map
 
-| Concern | Primary files |
-| --- | --- |
-| Shared service and payload types | `src/core/core.odin` |
-| Channels, worker loop, slots, publication, diagnostics | `src/bridge/runtime_service.odin` |
-| Julia initialization and shutdown | `src/bridge/bootstrap.odin` |
-| Animation scheduling, callback capture, lifecycle, reload | `src/bridge/animations.odin` |
-| Immutable animation queries and scene batches | `src/bridge/scene_commands.odin` |
-| Terminal requests, output, and session publication | `src/view/terminal_service.odin`, `src/julia/host/` |
-| Dynview raw-source ingestion and snapshots | `src/bridge/dynview_native_tex.odin`, `src/bridge/runtime_service.odin`, `src/dynview/**` |
-| Frame-loop publication boundaries | `src/view/view.odin` |
-| Host worker-pool windows | `src/view/simulation_executor.odin` |
-| Julia callbacks and global loop | `src/julia/script.jl` |
+| Path | Boundary and policy | Julia execution | Display publication |
+| --- | --- | --- | --- |
+| Shared transport | `src/core/core.odin`, `src/bridge/communication_link.odin`, `src/bridge/runtime_service.odin` | `src/bridge/runtime_service.odin` | `src/bridge/runtime_service.odin` |
+| Terminal actors | `src/view/terminal_service.odin`, `src/core/protocol/` | `src/julia/host/`, `src/julia/actors/`, `src/julia/repl/` | `src/view/terminal/`, `src/terminal/` |
+| Presentation/Dynview | `src/julia/bridge/presentation.jl`, `src/bridge/abi-presentation.odin` | Direct callback during content execution | `src/view/presentation_runtime.odin`, `src/bridge/dynview_native_tex.odin`, `src/dynview/` |
+| Animation ticks | `src/bridge/animations.odin` | `src/julia/script.jl`, content modules | `src/bridge/scene_commands.odin`, `src/view/simulation_executor.odin` |
+| Lifecycle and reload | `src/bridge/animations.odin` | `src/julia/host/`, `src/julia/script.jl` | `src/bridge/bootstrap.odin`, `src/view/runtime_session.odin` |
+
+The frame loop that orders all publication paths lives in `src/view/view.odin`. Julia
+initialization and shutdown live in `src/bridge/bootstrap.odin`.
 
 ## Runtime Service
 
-`Julia_Runtime_Service` is allocated before Julia starts. It owns:
+`Julia_Runtime_Service` is allocated before Julia starts. It is the common transport
+and lifetime owner, not a single payload protocol. It owns:
 
 - one persistent `thread.Thread`
-- one request channel and one event channel
+- one pooled ingress link and one pooled egress link
 - monotonically increasing request IDs
 - lifecycle, reload, failure, and saturation diagnostics
-- fixed Terminal, view-snapshot, and animation-tick storage
+- deferred message pointers plus fixed view-snapshot and animation-tick slots
 - worker-only Dynview staging storage
 - animation pacing and latency counters
 
@@ -119,18 +188,20 @@ session module, actor set, and `EuclidReplRuntime`. Replacing the Terminal gener
 resets that session-local state. Odin never roots Julia values by retaining their
 addresses in service state, and Julia never frees the borrowed native pointer.
 
-Both channels have capacity 16. Requests and events are small control records.
-Large payloads do not travel through channels; channel records carry a slot
-index whose storage remains owned by the service.
+Each communication link contains a bounded outbound channel, a bounded return channel,
+and a producer-owned TLSF pool. Terminal and presentation bytes may live in those pooled
+envelopes. Animation query and scene payloads do not: their control records carry a slot
+index into service-owned storage.
 
-This distinction is important. A completion event may be drained before a
-consumer is ready, but the completed payload remains in its slot until the
-display thread publishes or releases it.
+Consumers return envelopes to the producing link rather than freeing foreign storage.
+Completed slot payloads remain valid independently of event draining until their owning
+consumer publishes or releases the slot.
 
-### Request And Event Types
+### Control Request And Event Types
 
-Every accepted request receives a monotonically increasing `request_id`. Every
-event repeats the request kind, request ID, slot index, and success state.
+The following control messages share the communication links with Terminal and
+presentation messages. Every accepted control request receives a monotonically
+increasing `request_id`; its event repeats the kind, ID, slot index, and success state.
 
 | Request | Worker action | Completion event |
 | --- | --- | --- |
@@ -139,23 +210,25 @@ event repeats the request kind, request ID, slot index, and success state.
 | `Animation_Tick` | Run Julia loops against a query snapshot and command batch | `Animation_Tick_Complete` |
 | `Shutdown` | Tear Julia down and exit the worker loop | `Shutdown_Complete` |
 
-Display-side submission uses `chan.try_send`. Queue saturation cannot
+Display-side submission uses nonblocking communication-link send. Queue saturation cannot
 implicitly block the display thread. Failed insertion leaves the caller
 responsible for recycling its slot or retrying required work, and increments
 `request_saturation_count`.
 
-The owner thread uses blocking `chan.recv` while idle and blocking `chan.send`
-for completions. The bounded event channel can therefore apply backpressure to
-the owner if the display stops draining events, without allowing memory growth.
+The owner thread blocks on ingress while idle and uses reliable bounded send for required
+completions. Egress can therefore apply backpressure if the display stops draining it,
+without allowing memory growth.
 
 ### Worker Dispatch Loop
 
-`julia_runtime_worker` records its operating-system thread ID, then processes
-requests serially until `Shutdown`:
+`julia_runtime_worker` records its operating-system thread ID, then processes ingress
+messages serially until `Shutdown`:
 
-1. Receive one request.
-1. Execute its request-kind-specific task.
-1. Send exactly one correlated event.
+1. Receive one ingress envelope.
+1. Dispatch control requests directly or route Terminal messages into the host runtime.
+1. Pump bounded Julia actor work when the Terminal path requires it.
+1. Emit any required correlated control event and Terminal egress.
+1. Return the consumed ingress envelope to its producer.
 1. Restore the worker's saved Odin context.
 1. Clear the worker temporary allocator.
 
@@ -603,8 +676,8 @@ transport has its own bounded queue and payload ownership.
 - `Julia_Runtime_Service` and its worker-only `Dynview_System` staging object
   are allocated once with the startup context allocator. The service owns and
   frees both after the Julia worker has stopped.
-- Request and event channels each allocate one fixed capacity-16 buffer with
-  the startup context allocator. The service destroys both during teardown.
+- Ingress and egress communication links each own fixed channel storage and a bounded
+  producer-side pool. The service destroys both links during teardown.
 - `thread.create_and_start_with_data` owns the persistent worker's platform
   thread resources. `thread.destroy` releases them after `Shutdown_Complete`.
 - View snapshots, animation tick slots, query snapshots, and scene-command batches are
@@ -659,7 +732,7 @@ Normal shutdown is cooperative and owner-thread-affine:
 1. Call `jl_atexit_hook` through `end_julia` on the owner thread.
 1. Send `Shutdown_Complete` and exit the owner loop.
 1. Join/destroy the stopped worker.
-1. Destroy snapshot-slot arenas, staging storage, and both channels.
+1. Destroy snapshot-slot arenas, staging storage, and both communication links.
 1. Destroy both interface registry arenas and free canonical host state.
 
 Shutdown request saturation or missing completion after five seconds is
@@ -673,7 +746,7 @@ owner would violate Julia lifetime ownership and could strand queued payloads.
 
 1. Every Julia C API call executes on the persistent owner thread.
 1. Every owner-thread request emits one correlated completion event.
-1. Channel payload pointers refer only to storage that outlives the request.
+1. Communication-link payloads remain producer-owned until the consumer returns them.
 1. Animation bridge queries read the active immutable query snapshot.
 1. Recurring animation mutations are captured in a bounded scene batch.
 1. Scene batches validate completely before any canonical mutation.
@@ -684,8 +757,8 @@ owner would violate Julia lifetime ownership and could strand queued payloads.
 1. Rendering performs no Julia call and consumes only joined host caches.
 1. Julia owner work never calls thread-affine raylib rendering APIs.
 
-Using the request channel alone does not make a callback safe. Its reads and
-writes must also use the correct snapshot, command, or copied-slot protocol.
+Crossing the ingress link alone does not make a callback safe. Its reads and writes must
+still use the path-specific actor, snapshot, command-batch, or lifecycle protocol.
 
 ## Verification Coverage
 

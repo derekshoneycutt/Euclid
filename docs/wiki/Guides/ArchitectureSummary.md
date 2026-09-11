@@ -77,58 +77,25 @@ If you are new, read in this order:
 | **Julia** | LaTeX Facade | Defines canonical TeX displayables and submits exact MIME bytes to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
 | **Julia** | Content Modules | Domain content roots and leaf animation definitions. | `src/julia/elements/elements.jl`, `src/julia/proclus/proclus.jl`, `src/julia/hilbert/hilbert.jl` |
 
+### Cross-Module Contracts
+
 Dynview production callers import the child package that owns each symbol. Root
-`src/dynview` owns only subsystem enablement and invalidation tracking; it does not
-forward child APIs. `dynview/core` owns shared primitives, `dynview/math` owns intrinsic
-formula measurement and shaping, `dynview/layout` places measured content into document
-and grid rows, and `dynview/compile` orchestrates derived-cache rebuilds. Display-thread
-drawing and Raylib resource ownership remain in `src/view/ui/dynview`.
+`src/dynview` owns enablement and invalidation rather than forwarding child APIs:
+`core` owns shared primitives, `math` measurement, `layout` placement, `compile`
+rebuild ordering, and `view/ui/dynview` display-thread drawing.
 
-One invalidated derived-cache transaction runs in dependency order:
+Content startup registers metadata without evaluating path-backed programs. Each item
+has a permanent UUID and a generation-local implementation. First activation validates
+and caches the entry; normal ticks call it directly. Julia roots the runtime host and
+committed generations, while Odin-held Julia pointers remain borrowed.
 
-1. Clear partial views, shaped records, and the worker-owned cache arena.
-1. Copy immutable semantic math records into mutable measurement storage.
-1. Compile and seal plain text, canonical copy payloads, and copy blocks.
-1. Shape and seal intrinsic math records.
-1. Rebuild and seal document layout records.
-1. Publish revision metadata, clear invalidation, and mark the cache valid.
+Reload builds and validates a candidate against the inactive interface before one
+commit. Failure retains and restarts the prior generation; candidate state never leaks
+into the committed generation.
 
-Content-module contract:
-
-- Startup registers the complete metadata catalog without evaluating path-backed programs.
-- Every catalog item has a permanent UUID and a generation-local implementation path.
-- Animation files provide named `get_view_content`, `initialize`, `loop`, `clean`, and a
-  direct `animation_entry` that dispatches bridge-stable lifecycle operations.
-- First activation loads and validates the selected UUID, then Odin caches its entry on
-  that generation's registry node. Normal ticks call the cached entry directly.
-- Bridge calls mutate host state while Julia controls pedagogical flow.
-
-The Julia owner worker roots one stable `EuclidRuntimeHost` for its initialized
-lifetime. The host retains the borrowed, lifetime-stable Odin state pointer and roots
-its committed `EuclidRuntimeGeneration`. Each animation generation owns a fresh
-anonymous content module, catalog, load cache, and implementation roots. Odin-held
-Julia pointers are borrowed and never establish GC ownership; Julia never frees the
-native state pointer.
-
-The host also owns one active Terminal `HostSessionRuntime`. Each Terminal generation
-has a fresh `EuclidTerminalSession_<generation>` module, actor set, and
-`EuclidReplRuntime`. Bounded ingress and egress links carry typed Terminal requests and
-responses. Dynamic payload bytes remain producer-owned until the consumer returns their
-envelope. Request IDs and Terminal generations correlate evaluation, completion,
-interactive input, and ordered output; display handlers reject stale generations before
-mutating terminal cells.
-
-Reload constructs and roots a candidate generation locally, registers it against the
-inactive Odin interface, restores the active UUID, validates Enter, commits the host's
-generation with one assignment, and only then publishes the interface. Failure restores
-the old interface, forces full Julia GC, and restarts the old animation before reporting
-rollback. Candidate state and pointers never enter the committed generation on failure.
-
-Operational diagnostics are optional human-readable records written through the
-synchronized logger configured by `--diagnostics=PATH`. They describe process and
-subsystem lifecycle, degradation, and failures, but never determine application
-behavior. Typed semantic evidence remains authoritative for scenarios and behavioral
-verification, while `--profile=spall:PATH` records timing rather than diagnostics.
+Semantic evidence is authoritative for behavioral claims. Diagnostics explain
+operation and failure, while Spall profiles measure timing; neither substitutes for
+typed evidence.
 
 ---
 
@@ -143,29 +110,27 @@ ownership, communication, evaluation, rendering, and lifecycle model.
 
 ### Core Architecture
 
-- Odin owns input routing, terminal cells, scrolling, native process integration,
-  rendering, and lifecycle evidence.
+- Odin owns input routing, terminal cells, scrolling, native processes, rendering,
+  and lifecycle evidence.
 - Julia owns evaluation, completion, interpolation, actor policy, and EuclidRepl state.
-- Communication uses bounded, generation-tagged Terminal requests and ordered output.
-- Terminal transport is independent of Dynview publication; each subsystem commits
-  through its owning Odin boundary.
+- Bounded generation-tagged messages cross the boundary; stale generations are rejected
+  before visible state changes.
+- Terminal publication is independent from Dynview publication.
 
 ### Frame Model And Lifecycle
 
-- Each Terminal generation receives a fresh session module, actor set, and
-  `EuclidReplRuntime`.
-- Evaluation runs asynchronously on the Julia host thread.
-- Animated EuclidRepl jobs use generation-local tick subscriptions.
+- Each generation receives a fresh session module, actor set, and `EuclidReplRuntime`.
+- Evaluation runs asynchronously on the Julia owner thread.
+- Animated jobs use generation-local tick subscriptions.
 - Reset and shutdown unsubscribe active jobs before closing tick admission.
 
 ### Safety, Reliability, And Limits
 
-- Input is policy-filtered before eval.
-- Parse/eval/hook failures are surfaced as user-visible output, not host
-  crashes.
-- Repeated failing hooks auto-disable to prevent recurring frame-time spam.
-- Queue/history/output are bounded with retention caps and overflow behavior.
-- Runtime diagnostics are exposed through `:stats` counters.
+- Input is policy-filtered before evaluation.
+- Parse, evaluation, and hook failures become user-visible output rather than host
+  failures; repeatedly failing hooks auto-disable.
+- Queues, history, and output are bounded with explicit overflow behavior.
+- Runtime counters are available through `:stats`.
 
 ---
 
@@ -174,18 +139,19 @@ ownership, communication, evaluation, rendering, and lifecycle model.
 Dynview snapshots contain one canonical MIME presentation materialized as either exact
 plain text or native parsed semantic document content.
 
-Snapshot and display flow:
+```mermaid
+flowchart LR
+    A[Named Julia producer]
+    B[Canonical MIME value]
+    C[One active parse plus newest pending]
+    D[Immutable validated snapshot]
+    E[Compiled text, copy, and layout cache]
+    F[Rendered Dynview output]
+    G[Exact literal fallback]
 
-1. A named Julia producer returns one displayable value.
-1. Julia explicitly publishes its canonical MIME value through `publish_view_content`.
-1. The display owner admits at most one active parse and one newest pending value.
-1. Odin validates and installs an immutable populated snapshot independently of scene
-  batch completion.
-1. Odin emits required `Dynview_Published` evidence after animation identity
-  validation and display publication succeed.
-1. Odin compiles command buffers to cached plain/copy/layout state.
-1. If compile/layout is valid, Odin renders dynview output.
-1. If any stream stage fails, Odin falls back to plain text with no host crash.
+    A --> B --> C --> D --> E --> F
+    C -->|parse or capacity failure| G --> D
+```
 
 ### Architectural Contract
 
@@ -195,26 +161,17 @@ Snapshot and display flow:
 | Text intent | Validates MIME messages and owns parsing, storage, and immutable snapshots | Produces one canonical displayable |
 | Failure semantics | Current invalid TeX is published as its exact literal source | Serialization and transport failures publish nothing partial |
 
-The display owner retains selection as UI state against one compiled presentation
-revision. Semantic prose selects at shaped UTF-8 cluster boundaries. Math and embedded
-shape insets are atomic selectable units whose copied representation is their exact TeX
-source span. Plain and literal-fallback presentations select their visible wrapped UTF-8
-text without introducing newlines for visual wrapping. `Ctrl+C` copies the active mixed
-selection and `Ctrl+A` selects every visible unit. The existing copy action remains a
-separate exact-source operation over the complete canonical presentation bytes.
+Selection belongs to the display owner. Prose selects at shaped UTF-8 cluster
+boundaries; math and embedded shapes are atomic units that copy their exact source
+spans. Visual wrapping never inserts bytes into copied plain text.
 
 ---
 
 ## Dynamic LaTeX Pipeline (Native Parse And Layout)
 
-Dynamic LaTeX support is now a first-class dynview path, not a special case.
-`src/julia/latex.jl` exposes `TeXDocument` and raw `tex"..."` literals.
-`OdinJuliaBridge.presented_text`
-selects one canonical `text/plain` or `text/latex` representation, and
-`publish_view_content` clones its exact bounded bytes into the Julia-owned
-egress pool. Animation producers return these displayables directly through named
-`get_view_content` functions. Dynview owns classification, bounded recursive-descent
-parsing, normalization, semantic storage, snapshot copying, measurement, and layout.
+LaTeX is a first-class Dynview path. Julia selects one canonical displayable; native
+Dynview owns classification, parsing, semantic storage, snapshots, measurement, and
+layout. See [LaTeXSupport.md](LaTeXSupport.md) for syntax and authoring behavior.
 
 ### Native Ingestion
 
@@ -230,27 +187,6 @@ parsing, normalization, semantic storage, snapshot copying, measurement, and lay
 | Commit | `src/dynview/core/document_store.odin` | `document_store_commit`, `document_store_resolve` | Immutable generation-scoped semantic document |
 | Stage | `src/bridge/dynview_native_tex.odin` | native document/math import | Pointer-free semantic records in display-owned staging |
 | Publish | `src/bridge/runtime_service.odin` | `publish_presentation_snapshot` | Immutable slot-owned semantic snapshot or exact literal source |
-
-Native compatibility tests cover nested scripts, accents,
-radicals, fractions, stretch delimiters, matrix environments, declared operator
-names, and grouped mathematical alphabets.
-
-Document grammar revision 29 preserves paragraph and display blocks with bounded
-inline text, spacing, math, shape, penalty, forced-break, and technical display-row
-records. Space records
-retain source byte spans and carry one canonical space byte for native shaping. These
-records otherwise use indices and values only. They are the sole stored document
-representation. A parse or capacity failure publishes no semantic blocks or inlines.
-
-Parsing and store mutation are separate ownership stages. A pure parse build receives
-source, key, generation identity, and caller-owned fixed-capacity result storage; it has
-no document-store, animation-memory, snapshot, or visible-runtime reference. The result
-retains a borrowed exact source view, so its message storage remains alive through join
-and commit. After join, the display owner revalidates generation, exact source bytes, and
-the complete key before allocating and publishing one immutable store entry. The
-transitional `document_store_intern` API still composes these stages for legacy callers.
-Canonical presentation misses use the shared taskpool, while exact positive and negative
-cache hits remain display-owned and complete without task submission.
 
 ### End-To-End Flow
 
@@ -272,70 +208,19 @@ flowchart LR
 
 ### Runtime Boundaries For LaTeX
 
-- Julia side:
-  - `TeXDocument` and `tex"..."` preserve unwrapped document source.
-  - `LaTeXString` uses its installed `text/latex` display, including delimiters.
-  - Generic values prefer an explicit `text/latex` display, otherwise strings
-    remain unquoted and other values use bounded `text/plain` display.
-  - Animation producers return one canonical displayable from `get_view_content`
-    and publish it with `publish_view_content`.
-  - Julia does not classify, parse, normalize, cache, or encode TeX semantics.
-- Odin side:
-  - `View_Content_Ready` owns its byte slice in the Julia egress TLSF pool until
-    the display returns the borrowed envelope.
-  - A saturated lane retains only the newest presentation; replacement destroys
-    the older envelope and nested bytes on the Julia owner thread.
-  - The display owns one active parse and one newest pending replacement. A newer
-    presentation clears visible and copy state immediately, requests cooperative
-    cancellation of active work, and retains every borrowed envelope through join.
-  - Normal frame service polls task readiness and joins only ready work. Selection,
-    reset, reload, and shutdown invalidate or cancel work; shutdown joins before the
-    shared taskpool and Julia-owned transport are destroyed.
-  - The parser applies explicit source, work, depth, command, node, span, run,
-    and table limits before publishing semantics.
-  - The document store keys exact source bytes with grammar, semantic profile,
-    parse mode, and root style. Repeated source within one animation generation
-    resolves the same immutable document.
-  - Cache lookup and commit remain display-owned. Parse-build entry points mutate only
-    their caller-owned `Dynview_Parse_Result`, which embeds bounded semantic output and
-    carries the borrowed exact source, generation, and complete semantic key required
-    for commit validation.
-  - Joined results revalidate runtime generation, animation generation, animation
-    identity, presentation generation, reload state, and reset state before commit.
-    Current rejected TeX and store failures publish the exact canonical source literally.
-  - Animation tick slots own only query and scene-batch results. Scene validation and
-    `Animation_Tick_Committed` never depend on presentation reservation or parse status.
-  - Lifecycle callbacks scope target animation identity and generation only for messages;
-    selection, reset, and reload clear visible presentation and cancel stale parsing when
-    the display observes the committed generation.
-  - Bridge staging checkpoints cover text, commands, math records, document bytes,
-    blocks, and inlines. Any parse, store, range, or capacity failure restores the
-    complete fragment and preserves the exact canonical source.
-  - Native document import copies exact source and semantic text into dedicated
-    staging bytes. It rebases block children, source/text spans, and inline math
-    programs before the animation-lifetime document handle leaves the owner path.
-  - Snapshots seal document bytes, descriptors, blocks, and inlines in slot-owned
-    arenas. Publication validates every alias, enum, span, child range, and math
-    program reference. Document-store handles and animation-arena pointers never
-    cross into display-owned state.
-  - `src/dynview/math/programs.odin` measures script/large-op/fraction/radical/matrix
-    structures before draw. It owns display, text, script, and script-script
-    transitions, including cramped child state.
-  - The resident font capability captures all OpenType MATH constants as one
-    immutable font-generation snapshot. Worker shaping and derived layout cache
-    publication reject stale generations and publish constants transactionally
-    with shaped records.
-  - Required NewCM seed storage is fixed at 512 scalars; the current 417-scalar
-    seed includes all advertised alphabet families. Font tests query every
-    advertised alphabet scalar through HarfBuzz before accepting the face.
-  - Worker-only HarfBuzz queries publish bounded vertical variants and glyph
-    assemblies after shaped-cache sealing. Layout selects and seals exact radical
-    and delimiter constructions; display drawing resolves every selected part
-    through bounded glyph-page demand and uses synthetic geometry only when font
-    construction data is rejected or not yet resident.
+- Julia preserves authored source and selects one bounded MIME representation. It owns
+  transferred bytes until Odin returns their envelope.
+- The display owns parse scheduling, generation-local document storage, and commit
+  validation. One active parse and one newest pending presentation bound the work.
+- Pointer-free semantic snapshots cross into display state. Store and animation-arena
+  pointers do not.
+- Presentation work commits independently from animation scene batches. Selection,
+  reset, reload, and shutdown invalidate stale work, and every accepted task is joined.
+- Odin owns font-sensitive math measurement and drawing. Rejected current content falls
+  back to its exact canonical source without publishing partial semantics.
 
-Practical effect: Julia selects one displayable and MIME representation; native
-Dynview owns classification, parsing, semantic storage, and physical realization.
+See [LaTeXSupport.md](LaTeXSupport.md) for supported syntax, document layout, font and
+MATH behavior, compatibility coverage, and authoring guidance.
 
 ---
 
@@ -403,38 +288,27 @@ synchronization rules; no subsystem may treat the workers as interchangeable.
 
 ### Thread Roles
 
-- The **display thread** owns window events, raylib rendering, UI state,
-  canonical scene state, fixed-step orchestration, and final publication of
-  worker results.
-- The **Julia owner thread** exclusively owns Julia initialization, every Julia
-  C API operation, callback handles, script reload, and Julia shutdown. Bridge
-  tasks that call Julia must assert this owner identity.
-- The **simulation pool** is the bounded `src/taskpool` service. It reserves two
-  logical processors for display and Julia work, owns fixed TLSF-backed task and
-  queue storage, and reuses persistent workers for independent fixed-step systems
-  and per-frame cache preparation. It also prepares requested font variants on
-  CPU workers. Tasks must not call Julia or thread-affine raylib window, audio,
-  or rendering APIs.
+- The **display thread** owns the window, Raylib resources, UI, canonical scene,
+  frame orchestration, and final publication.
+- The **Julia owner thread** exclusively owns Julia initialization, C API calls,
+  callbacks, reload, and shutdown.
+- The **task pool** performs bounded fixed-step work, cache preparation, and CPU-only
+  font preparation. Workers never call Julia or thread-affine Raylib APIs.
 
-Pool handles are generational, joined exactly once, and may receive cooperative
-cancellation requests before join. Cancellation never releases payload ownership or
-removes queued backend work: a task observes its token only at bounded checkpoints,
-and the submitting owner still joins before reusing payload or allocator storage.
-Cancellation requested before join is the authoritative terminal result. Deterministic
-fences rank failure above cancellation above success; mandatory simulation and frame
-preparation tasks are not cancelled.
+Task handles are generational and joined exactly once. Cancellation is cooperative:
+the submitter retains payload ownership through join. Mandatory simulation and frame
+preparation work is not cancelled.
 
 ### Julia Owner Thread
 
-The display and Julia threads communicate through bounded typed channels.
-Terminal work uses generation-tagged actor ingress and egress queues, view output uses
-complete semantic snapshots, and animation callbacks read immutable query snapshots
-while producing transactional scene-command batches. The display validates and
-publishes completed results at explicit frame or fixed-step boundaries.
+The display and Julia threads exchange bounded typed messages. Animation callbacks read
+immutable queries and produce transactional scene batches; presentations cross as MIME
+envelopes and immutable snapshots; Terminal traffic carries generation identity. The
+display validates and commits each result at its owning boundary.
 
-Selection, reset, and reload use a narrow synchronous lifecycle barrier after
-asynchronous animation work quiesces. Julia initialization, callback execution,
-reload, exception inspection, and shutdown always remain on the owner thread.
+Selection, reset, and reload use a narrow synchronous barrier after asynchronous work
+quiesces. All Julia initialization, callback execution, reload, exception inspection,
+and shutdown remains on the owner thread.
 
 See [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for the complete
 request/event model, slot lifecycles, backpressure, publication rules, reload
@@ -452,17 +326,10 @@ ordering:
 1. Advance display-owned `fixed_step` and deterministic `simulation_time`.
 1. Emit the post-join semantic trace summary.
 
-The interactive loop calls `run_windowed_fixed_step`, which layers GIF capture
-state on top of that deterministic step. GIF behavior is presentation-side
-policy and is not part of the core semantic step boundary.
-
 Particle tasks exclusively mutate `Particle_System`; constraint tasks exclusively
-mutate `Shapes_Point_System`. Their payloads are persistent executor fields.
-Each batch uses a deterministic fence allocated from the pool's fixed backing
-region and released at join. While waiting, the display owner may execute queued
-pool work itself. It does not continue past the fence until both tasks complete,
-so canonical constraints settle worker-commanded geometry before any dependent
-capture or rendering work.
+mutate `Shapes_Point_System`. Persistent payloads and fence storage are reused. The
+display may help execute queued work, but cannot advance until the complete batch joins.
+The windowed wrapper adds GIF policy without changing this semantic boundary.
 
 ### Per-Frame Preparation
 
@@ -475,195 +342,53 @@ After all fixed steps complete, the display thread opens a second pool window:
 1. Submit Dynview compile and layout construction only when invalidated.
 1. Join every submitted task before beginning raylib drawing.
 
-Shape preparation reads settled point state and exclusively writes
-`Shapes_Point_System.draw_cache`. Dynview preparation exclusively writes the
-Dynview compile and layout caches. Dynview owns one growing display-cache arena with a
-1 MiB initial reservation. An invalidated Dynview task enters worker-mutable ownership,
-resets the arena, and builds derived views. Failure clears partial derived views and
-retains exact literal presentation. Task completion returns display-readable ownership,
-and the fence joins before panel drawing or copy access.
+Shape preparation reads settled point state and writes only the shape draw cache.
+Dynview preparation reads immutable snapshots and writes only its compile and layout
+caches. The tasks may run concurrently because their ownership does not overlap.
+Display-only interaction state and drawing consume the caches after the fence joins.
 
-Bounded builders publish compiled plain-text and copy-payload slices only after both
-complete streams seal within the existing text limit. These display-readable aliases
-remain valid until the next cache-arena reset; rejection clears them before fallback.
-Copy blocks seal in the same compile transaction, preserving source order and payload
-spans under the command-count limit. After the worker fence, the display thread rebuilds
-panel- and scroll-dependent hit targets in a reusable bounded builder. Repeated frames
-reuse its arena capacity; each successful refresh publishes only the populated prefix,
-and rejection publishes no targets. Bounded line and item builders retain the existing
-scalar counts and indexes while remaining worker-mutable during grid placement and
-aggregate metric calculation, then both seal before `layout_is_valid` publishes
-populated slices. Empty content publishes one canonical line; overflow or invalid
-layout publishes neither family. Bounded shaped-run
-and glyph builders retain their logical maxima and publish populated arena slices only
-after generation, source, glyph, and command-site spans all validate. Rejection
-publishes no shaped records and leaves all command-site indices on their unshaped
-fallback sentinel. The tasks may run concurrently because their ownership does not
-overlap. Shutdown clears arena-backed aliases and destroys the arena only after the pool
-is quiescent.
+Dynview publishes complete bounded cache slices. Failure clears partial derived state
+and preserves exact literal fallback; shutdown clears aliases and joins workers before
+destroying arena storage.
 
 ### Font Cache
 
-`Euclid_General_State.font_cache` owns every resident JuliaMono GPU font and its
-resolved source paths. Each resident generation pairs a 96-codepoint printable-ASCII
-and U+FFFD compatibility seed with generation-owned HarfBuzz handles, an exact-size
-glyph-state table indexed by face glyph ID, and up to 32 immutable demand-loaded
-texture pages. Regular loads synchronously as the permanent fallback. Other weights
-and italic variants are requested on demand. Seed and page preparation are serialized
-through the shared taskpool using one reusable virtual arena and finalized on the
-display thread. Frame service polls without waiting and publishes only
-current-generation results. When a newer generation supersedes accepted work for the
-same font, the display owner requests cooperative cancellation and continues polling
-until the task is terminal. Preparation checks cancellation between allocation,
-metrics, packing, and glyph-rasterization work, clears partial result metadata, and
-retains arena ownership until the task is joined. Cancelled page work restores queued
-glyph demand for later preparation.
+The display-owned font cache publishes complete resident generations: GPU resources,
+HarfBuzz state, glyph metadata, and append-only demand-loaded pages. Regular is the
+permanent fallback; other variants load on demand. CPU preparation runs on the task
+pool, while GPU creation and retirement remain on the display thread.
 
-The resident font's cmap defines Unicode support; Euclid no longer maintains a broad
-Unicode allowlist. Shaped text uses HarfBuzz output glyph IDs directly. Unshaped
-geometry labels and dynview math map each Unicode scalar through the same generation's
-HarfBuzz font, then resolve the resulting glyph ID through the page table. Pending,
-unsupported, and capacity-blocked direct glyphs display the seed's U+FFFD replacement.
-Demand state lives directly in the exact-size glyph table, avoiding a growing set.
+Shaping and Dynview compilation borrow exact-generation capabilities. A stale,
+incomplete, or over-capacity result falls back atomically rather than mixing font
+generations or publishing partial layout. Odin alone makes font-sensitive MATH layout
+decisions; drawing consumes sealed results without reshaping.
 
-Each page task admits genuine demand first, then deterministically fills unused batch
-capacity with missing face glyph IDs. Ordinary pages therefore contain 256 glyphs,
-making the append-only generation ceiling up to 8192 paged glyphs plus the seed.
-Published pages are never repacked or evicted. Demand beyond the reserved 32-page
-capacity becomes terminal for that generation and continues to display U+FFFD until
-source reload creates a new generation. Generation-local counters record page
-publication, prefetch, pending codepoint lookup, unsupported lookup, and first capacity
-rejection without retaining source text.
-
-Shaping uses one reusable native HarfBuzz buffer per resident generation and one
-display-owned 4096-glyph workspace. Both are allocated during initialization or
-font publication, never per frame. A run is completely validated before drawing;
-workspace overflow, invalid glyph/cluster data, non-horizontal metrics, or pending
-glyph pages fall back atomically to the existing unshaped renderer. Shaped drawing
-uses a second resolver that normalizes seed and page texture records rather than
-indexing `rl.Font` directly. Hot reload publishes the seed, exact-size metadata, and
-shaper together, preserving the prior generation when any candidate component fails.
-All old pages are retired with that prior generation.
-
-Semantic prose shaping borrows those resident JuliaMono shapers through an
-exact-generation worker capability. Each requested variant resolves to either its own
-resident face or Regular, and the capability records both the requested and effective
-key so fallback publication cannot be confused with a later variant publication at the
-same generation number. The display thread tracks all 14 effective key/generation
-identities and invalidates Dynview when any identity changes. The simulation executor
-owns one fixed-capacity prose glyph workspace for its complete lifetime; it is created
-once before the worker pool starts and released after the pool joins.
-
-During invalidated compilation, every semantic text and space inline is shaped before
-math measurement and document layout. Bounded arena builders retain source-relative
-clusters, advances, offsets, exact face identity, and aggregate width and ink metrics.
-They publish `Dynview_Document_Shaped_Run` and glyph slices only after all inline,
-source, glyph, and generation spans validate. Failure clears both slices rather than
-publishing a partial cache.
-
-Semantic document compilation skips command-layout construction. It consumes sealed
-prose runs and recursively measured NewCM programs directly, lowering semantic inlines
-to bounded boxes, glue, penalties, and forced breaks before selecting measured line
-breaks. Unbreakable sequences remain intact and become explicit overfull lines when
-necessary. Math and Euclid shapes remain atomic boxes whose dimensions come from the
-measured math programs and shape payloads. Standalone math and unrelated plain command
-streams retain the command-layout path.
-
-The resulting node, block, line, item, and copy-target slices publish as one
-arena-backed authoritative cache. Items retain semantic source and canonical text spans;
-prose copy targets derive their horizontal positions and UTF-8 ranges from sealed
-HarfBuzz clusters, while math and shape targets retain their source spans. Missing
-prose measurements or any lowering or capacity failure clears every document-layout
-slice. Complete failure returns the view to its exact canonical presentation source.
-
-The document cache places composed lines in exact pixels with TeX-inspired
-previous-depth leading. Each next baseline uses the configured baseline skip when the
-measured depth and ascent permit it, otherwise it falls back to a non-overlapping line
-skip. Paragraph and display glue apply between blocks, reset at semantic document
-boundaries, and display lines center within the measured panel width unless an explicit
-alignment overrides them. Final line origins propagate to items and cluster-derived
-copy rectangles without reconstructing rows or columns.
-
-Only a completed block crosses back into outer-grid geometry. Its exact extent,
-including resolved leading glue, rounds outward from the current row boundary; the
-layout cache records the reserved row range and trailing padding separately from the
-exact ink bounds. Semantic drawing and scrolling consume these sealed positions, while
-the grid package owns only generic extent rounding and contains no document semantics.
-Copy icons use the same semantic block bounds and exact canonical presentation bytes.
-
-Dynview owns a separate generation-tagged NewCM buffer on its preparation worker.
-Julia marks normal math runs as italic variables or upright symbols using existing
-style IDs. Before NewCM shaping, Odin strictly decodes the original run into bounded
-worker-owned temporary bytes and projects only eligible Latin and lowercase Greek
-variables to mathematical italic Unicode. Original semantic text and canonical
-presentation bytes are never rewritten by projection.
-
-Ordinary UI text, literal presentation prose, top-level dynview `Text_Run` items, and
-Terminal text are shape-eligible. Terminal runs split at the cursor and the covered UTF-8
-character is drawn unshaped. During invalidated Dynview preparation,
-eligible math-command sites are shaped once and measured from cached NewCM advances,
-extents, italic correction, and top-accent attachment. Recursive scripts, fractions,
-delimiters, radicals, accents, matrices, and large operators inherit those dimensions;
-top-level prose and outer-grid policy remain unchanged. Recursive draw items retain the
-originating math-command index. The display thread resolves the exact sealed
-command/site glyph slice through its matching resident `Math_Regular` generation,
-preflights complete residency, and draws cached offsets and advances without reshaping.
-Script, radical-index, and large-operator placement reuse the measurement metric
-scaler. Stale generations, invalid spans, and pending glyphs reject the complete site
-before the existing whole-run fallback draws; copy bytes and non-math paths are
-unchanged.
-
-Julia owns one authored displayable and serializes one canonical MIME value. One
-producer-owned envelope crosses the language boundary; recursive semantic records do
-not. Native Dynview derives atom and glue classes, recursive structure,
-delimiter and accent kinds, operator policy, and typed table descriptors. It validates
-every source span, enum, descriptor index, and bounded tree relation before snapshot
-publication; invalid input publishes no partial document or math program.
-
-Odin alone owns font-sensitive decisions. A worker-borrowed Math_Regular capability
-provides one immutable generation-stamped constants snapshot plus bounded glyph
-metrics, corner-kern tables, vertical and horizontal variants, and assemblies. Cache
-rebuild accepts those records only when the shaping service and every result match the
-active generation. Layout selects variants, solves assemblies, applies final-height
-math kern, and seals child baselines, x positions, rules, and construction part
-offsets into layout items. Drawing consumes those records without querying HarfBuzz or
-independently repeating a typographic decision.
-
-Native-geometry validity and font-generation fields on each sealed item make fallback
-use explicit. Missing, stale, malformed, over-capacity, or pending native data leaves
-the corresponding validity field unset and routes the complete structure through its
-bounded synthetic fallback. Julia-emitted ratios remain only as compatibility inputs
-to those fallback paths; successful MATH layout does not consume them. Font-page
-resolution separately records fallback demand in generation-local cache telemetry.
-
-Source changes are polled at a bounded cadence and debounced before replacement.
-Shutdown rejects new font requests, requests cancellation of accepted font work,
-joins that work before destroying the taskpool, unloads seed and page textures while
-the graphics context is live, releases exact-size generation metadata, destroys
-HarfBuzz handles, and finally releases the preparation arena.
+Source replacement is transactional. Failed candidates retain the prior generation,
+and shutdown joins preparation before unloading GPU resources or destroying HarfBuzz
+and arena state. See [LaTeXSupport.md](LaTeXSupport.md) for typography and MATH behavior
+and [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for publication lifecycle.
 
 ### Lifecycle And Failure Rules
 
 - Normal Julia work begins only after startup registration publishes `Ready`.
-- Selection, reset, and reload invalidate stale asynchronous results; failed
-  reloads retain the previous valid interface generation.
-- Julia shutdown completes on its owner thread before service destruction.
-  The simulation pool is also joined before canonical state is freed.
+- Selection, reset, and reload invalidate stale asynchronous results; failed reloads
+  retain the previous valid interface generation.
+- Julia shutdown completes on its owner thread, and the task pool joins before
+  canonical state is freed.
 
 ---
 
 ## Testing Strategy
 
-Euclid's testing foundation is the ordinary unit and module test suite. Those
-tests are the first line of defense for geometry, dynview, files, particles,
-bridge behavior, and runtime invariants before any higher-level harness or trace
-system is involved.
+| Layer | Purpose |
+| --- | --- |
+| Unit and module tests | First defense for geometry, Dynview, files, particles, bridge behavior, and runtime invariants. |
+| Semantic traces | Typed evidence at owner-controlled state transitions. |
+| Scenarios | Display-loop workflows involving ordering, rendering, capture, allocation, or shutdown. |
+| Headless harness | Deterministic bridge/runtime behavior through the production fixed-step boundary. |
 
-On top of that baseline, Euclid now has a dedicated testing architecture built
-around semantic tracing, deterministic fixed-step execution, and a headless
-runtime harness. The interactive app and the harness share the same runtime
-session and deterministic step boundary, while test-only orchestration remains
-outside the production control surface.
+The interactive app and harness share runtime-session and deterministic-step code;
+test orchestration remains outside the production control surface.
 
 See [TestingStrategy.md](TestingStrategy.md) for the full testing model,
 including trace ownership, checkpoint boundaries, harness usage, failure policy,
@@ -677,68 +402,32 @@ This policy is strict by design.
 
 ### Non-Negotiable Rules
 
-- Default rule: no growing host allocations in steady per-frame paths.
-- Long-lived host state must be allocated at startup and reused.
-- When a maximum size is known, preallocate and mutate in place.
-- Julia interface generations use two inline host-state slots. Reload prepares
-  the inactive slot and never allocates or frees an interface struct.
-- Fixed-step and per-frame task payloads and pool completion storage are
-  allocated at startup and reused for every batch.
-- New per-frame heap growth requires explicit justification in review.
+- Do not grow host allocations in steady per-frame paths.
+- Allocate long-lived state at startup and reuse it.
+- Preallocate known-capacity storage and mutate it in place.
+- Prepare reloads in the inactive Julia interface slot.
+- Reuse fixed-step and frame-task payloads and completion storage.
+- Require explicit review justification for new per-frame heap growth.
 
 ### Allowed Exceptions
 
-1. Frame-scoped scratch memory from the temp allocator.
-   - Example: temporary UI/text conversion buffers.
-   - Requirement: reclaimed by frame reset (`free_all(context.temp_allocator)`).
-1. Julia runtime GC-managed allocations.
-   - Julia owns script/runtime objects.
-   - Odin owns host state and must stay deterministic on the host side.
-1. Dedicated virtual arenas for lifecycle-scoped subsystems.
-   - Examples: GIF encoder working memory and Julia animation registries.
-   - Requirement: `arena_free_all` on logical reset/reload and `arena_destroy`
-    on subsystem/application teardown.
-1. Event-driven allocations outside steady frame loops.
-   - Current approved cases are intentionally narrow:
-      1. Final contiguous GIF output buffer returned by encoder end with
-        documented allocation.
-      1. Asset-unpack decompression staging allocation released immediately when
-        unpack completes.
-      1. Exact-size font glyph-state metadata allocated once for a candidate
-        generation and released when that generation is retired.
-   - Requirement: tied to lifecycle/user events, not continuous simulation ticks.
+1. Frame-scoped scratch from the temporary allocator, reclaimed at frame reset.
+1. Julia GC-managed objects that do not move host ownership into Julia.
+1. Dedicated subsystem arenas with explicit reset and teardown points.
+1. Narrow event-driven outputs such as final GIF bytes, asset decompression staging,
+   and candidate font metadata.
+
+Event-driven exceptions must remain outside continuous simulation ticks and identify
+the owner responsible for release.
 
 ### Current Arena Notes
 
-- Scenario allocation evidence samples three stable owner domains at display-thread
-  synchronization points: `animation` observes the canonical animation-value arena,
-  `snapshot_slots` aggregates both Julia runtime view-snapshot arenas, and
-  `display_cache` observes the Dynview cache arena. Checkpoints retain current usage,
-  reservation and commit state, lifetime high waters, reset counts, and initialized
-  owner counts without allocating in the sampled domain.
-- A matching assertion requires identical current usage, reservation/commit pressure,
-  lifetime high waters, and initialized-owner count; reset counts may only increase.
-  The terminal `allocations.json` records both checkpoint and assertion-time samples,
-  the match result for each domain, and aggregate bad-free evidence. Artifact writing
-  does not resample arenas after teardown has begun.
-- GIF encoder internals are arena-backed for session-local working memory.
-- Each of the two Julia interface slots retains one growing registry arena.
-  Animation nodes, copied names, and UUID lookup tables share that arena.
-- Reload clears the inactive arena before staging. Rollback clears that same
-  arena; publication clears the retired arena. Both arenas are destroyed only
-  after the Julia owner thread has stopped during application teardown.
-- Each display-published view-snapshot slot owns one growing arena and bounded builders.
-  Canonical presentation bytes, semantic command text, commands, math programs, table
-  descriptors, math commands, math nodes, document bytes, document descriptors, blocks,
-  and inlines are sealed arena-backed slices. A slot reset is permitted only after it is
-  `Free`, so every payload remains valid through `Pending`, `Complete`, and `Published`.
-  Display publication installs immutable views of every payload before releasing the
-  previous slot. Compilation copies math records only into its private mutable working
-  cache for derived metrics, shaping indexes, and authoritative document layout.
-  Display aliases are cleared before free-slot reuse or service teardown.
-- Font preparation uses one 96 MiB virtual scratch arena for seed and glyph-page
-  work. Each completed page uploads its pixels and copies scalar metrics into
-  generation-owned storage before the arena is reset.
+- Julia interface slots own registry arenas cleared on staging, rollback, or retirement.
+- Snapshot slots retain presentation bytes and pointer-free semantics until the slot is
+  free; display aliases are cleared before reuse.
+- Dynview, font preparation, GIF capture, and evidence use dedicated lifecycle arenas.
+- Scenario allocation checks sample the stable `animation`, `snapshot_slots`, and
+  `display_cache` domains at display-thread synchronization points.
 
 ### Not Allowed Without Explicit Approval
 
@@ -750,34 +439,18 @@ This policy is strict by design.
 
 ## Build and Packaging Model
 
-- CMake 3.28 presets are the cross-platform orchestration entry point. CMake validates
-  tools and options, bootstraps Julia environments through dependency-aware build-tree
-  stamps, exposes stable targets, and registers suite-level CTest tests.
-- `tools/make.jl` remains the domain-specific build, test, analysis, evidence, asset,
-  and reporting driver. Parameterized path and report operations invoke it directly;
-  CMake does not reimplement those policies.
-- The CMake `check` target runs the canonical complete verification gate. CMake's
-  reserved `test` target runs registered CTest suites instead.
-- Native HarfBuzz linkage uses `HarfBuzz_jll` by default on Windows, Linux, and
-  macOS. Unix source and distribution builds may set
-  `EUCLID_HARFBUZZ_PROVIDER=system` to use a `pkg-config`-visible system library;
-  system HarfBuzz is unsupported on Windows.
-- Repository-driven JLL development runs provide the artifact runtime search path
-  through the host loader environment. This is distinct from release packaging:
-  future distributable bundles must stage the native closure and use platform-relative
-  loader metadata rather than depending on the Julia artifact store.
-- `make.jl` builds Odin executable and package runtime assets into `bin/assets.pkg`.
-  Debug builds also publish the package beside `.build/debug/euclid` so the
-  isolated executable has a matching runtime closure.
-- Packaged assets include:
-  - `src/julia/**` scripts
-  - `src/view/shaders/**`
-  - `assets/**`
-  - `manifest.txt`
-- At startup, app requires `assets.pkg` beside the selected executable, then
-  unpacks it to a writable cache directory and resolves runtime paths from
-  there. A missing package aborts startup with a nonzero process result before
-  Julia initialization, even when an older unpack cache exists.
+- CMake 3.28 presets are the cross-platform entry point; `tools/make.jl` owns the
+  domain-specific build, test, analysis, evidence, and asset policy.
+- The CMake `check` target is the complete gate. CMake's reserved `test` target runs
+  registered CTest suites only.
+- HarfBuzz uses `HarfBuzz_jll` by default. Unix builds may select the supported system
+  provider; Windows may not.
+- Development JLL linkage is not a relocatable bundle. Releases must stage the native
+  closure and use platform-relative loader metadata.
+- Builds package Julia scripts, shaders, assets, and `manifest.txt` into
+  `bin/assets.pkg`; debug builds publish a matching package beside the debug executable.
+- Startup requires the package beside the executable and unpacks it to a writable
+  cache. A stale unpacked cache never substitutes for a missing package.
 
 ---
 
@@ -787,29 +460,18 @@ This policy is strict by design.
 
 Choose the owning module first, then touch that module's highlighted files.
 
-- **Lifecycle/timing issues**:
-  - Application Lifecycle Module (`src/main.odin`, `src/view/view.odin`).
-- **Rendering/UI behavior**:
-  - Rendering and UI Module (`src/view/elements.odin`, `src/view/ui/ui.odin`,
-    `src/view/core/view_core.odin`).
-  - Pen and compass shading contract: [ToolRendering.md](ToolRendering.md).
-- **Dynview text/math behavior**:
-  - Dynview Runtime Module (`src/dynview/dynview.odin`,
-    `src/dynview/compile/compile.odin`, `src/dynview/core/`, `src/dynview/math/`,
-    `src/dynview/layout/`).
-- **Geometry/constraints behavior**:
-  - Geometry Kernel Module (`src/shapes/shapes.odin`,
-    `src/shapes/constraints.odin`, `src/shapes/system.odin`).
-- **Julia feature surface / bridge contract**:
-  - Bridge and Embedding Module + Bridge Wrapper Module
-    (`src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/julia/odin-julia-bridge.jl`).
-- **New content animation**:
-  - Content Modules (`src/julia/elements/**`, `src/julia/proclus/**`,
-    `src/julia/hilbert/**`).
-- **Modify the Terminal/REPL surface**:
-  - Terminal and Julia host modules (`src/view/terminal/`,
-    `src/view/terminal_service.odin`, `src/julia/host/`,
-    `src/julia/euclidrepl.jl`)
+- **Lifecycle or timing:** `src/main.odin`, `src/view/view.odin`.
+- **Rendering or UI:** `src/view/elements.odin`, `src/view/ui/`, `src/view/core/`.
+- **Pen or compass visuals:** [ToolRendering.md](ToolRendering.md).
+- **Dynview text or math:** `src/dynview/core/`, `src/dynview/math/`,
+  `src/dynview/layout/`, `src/dynview/compile/`.
+- **Geometry or constraints:** `src/shapes/`.
+- **Julia bridge contract:** `src/bridge/abi*.odin` and
+  `src/julia/odin-julia-bridge.jl`.
+- **New animation:** `src/julia/elements/`, `src/julia/proclus/`,
+  `src/julia/hilbert/`.
+- **Terminal or REPL:** `src/view/terminal/`, `src/julia/host/`,
+  `src/julia/euclidrepl.jl`.
 
 ### Typical New Animation Workflow
 
