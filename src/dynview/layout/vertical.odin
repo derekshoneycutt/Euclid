@@ -10,6 +10,7 @@ Document_Vertical_Style :: struct {
     line_skip: f32,
     paragraph_spacing: f32,
     display_spacing: f32,
+    list_spacing: f32,
 }
 
 Document_Vertical_Context :: struct {
@@ -35,6 +36,7 @@ document_vertical_style :: proc(font_size: f32) -> (Document_Vertical_Style, boo
         line_skip = max(1, font_size*0.1),
         paragraph_spacing = font_size*0.5,
         display_spacing = font_size*0.75,
+        list_spacing = font_size*0.5,
     }, true
 }
 
@@ -94,16 +96,27 @@ document_block_spacing_before :: proc(
             return 0, true
         }
     }
-    previous := blocks[block_index-1].kind
-    current := blocks[block_index].kind
+    previous_block := blocks[block_index-1]
+    current_block := blocks[block_index]
+    previous := previous_block.kind
+    current := current_block.kind
+    if current == .List_Item {
+        if previous_block.list_kind != .None &&
+            previous_block.list_id == current_block.list_id {
+            return 0, true
+        }
+        return style.list_spacing, true
+    }
     if previous == .List_Item {
-        previous_block := blocks[block_index-1]
-        current_block := blocks[block_index]
         if previous_block.list_id == current_block.list_id &&
             previous_block.item_ordinal == current_block.item_ordinal {
             return document_block_spacing_before(
                 documents, blocks, block_index-1, style)
         }
+    }
+    if previous_block.list_kind != .None &&
+        previous_block.list_id != current_block.list_id {
+        return style.list_spacing, true
     }
     if previous == .Display || current == .Display {
         return style.display_spacing, true
@@ -192,6 +205,49 @@ document_vertical_block_ranges_valid :: #force_inline proc(
         block.line_count <= line_count-block.line_start
 }
 
+// Resolve an exact top for adjacent list rows instead of retaining grid padding.
+document_list_block_top :: proc(
+    builders: ^Document_Layout_Builders,
+    sources: []app_core.Dynview_Document_Block,
+    style: Document_Vertical_Style,
+    block_index: int,
+    default_top: f32) -> f32 {
+
+    if block_index <= 0 {return default_top}
+    blocks := builders^.blocks.storage[:builders^.blocks.count]
+    current := blocks[block_index]
+    previous := blocks[block_index-1]
+    current_source := sources[current.source_block_index]
+    previous_source := sources[previous.source_block_index]
+    same_item := previous_source.kind == .List_Item &&
+        previous_source.list_id == current_source.list_id &&
+        previous_source.item_ordinal == current_source.item_ordinal
+    new_item := current_source.kind == .List_Item &&
+        previous_source.list_id == current_source.list_id &&
+        previous_source.item_ordinal != current_source.item_ordinal
+    if same_item && !previous.list_label_above {return previous.top}
+    if !same_item && !new_item {return default_top}
+    previous_line := builders^.lines.storage[
+        previous.line_start+previous.line_count-1]
+    current_line := builders^.lines.storage[current.line_start]
+    glue := document_interline_glue(
+        previous_line.descent, current_line.ascent, style)
+    return previous_line.bottom+glue
+}
+
+// Reserve an exact block extent outward on the shared row grid.
+document_reserve_block_extent :: proc(
+    block_top, block_bottom, cell_height: f32) -> (grid.Vertical_Reservation, bool) {
+
+    if block_top < 0 || block_bottom <= block_top || cell_height <= 0 {
+        return {}, false
+    }
+    row_start := int(block_top/cell_height)
+    reserved_top := f32(row_start)*cell_height
+    return grid.reserve_vertical_extent(
+        row_start, block_bottom-reserved_top, cell_height)
+}
+
 // Place and reserve one validated semantic block from the current outer row.
 document_place_vertical_block :: proc(
     ctx: Document_Vertical_Context,
@@ -220,14 +276,16 @@ document_place_vertical_block :: proc(
     }
     cache := &ctx.runtime^.compile_cache
     reservation_top := f32(row_cursor)*cache^.last_cell_height
-    block.top = reservation_top+spacing
     lines := builders^.lines.storage[block.line_start:block.line_start+block.line_count]
+    block.top = document_list_block_top(
+        builders, content^.document_blocks, ctx.style,
+        block_index, reservation_top+spacing)
     block.bottom, ok = document_place_block_lines(lines, block.top, ctx.style)
     if !ok {
         return {row_cursor, .Invalid_Argument}
     }
-    reservation, reserved := grid.reserve_vertical_extent(
-        row_cursor, block.bottom-reservation_top, cache^.last_cell_height)
+    reservation, reserved := document_reserve_block_extent(
+        block.top, block.bottom, cache^.last_cell_height)
     if !reserved {
         return {row_cursor, .Invalid_Argument}
     }
@@ -236,7 +294,7 @@ document_place_vertical_block :: proc(
         return {row_cursor, .Invalid_Argument}
     }
     document_publish_block_reservation(block, spacing, reservation)
-    return {row_cursor+reservation.row_count, .Ok}
+    return {max(row_cursor, reservation.row_start+reservation.row_count), .Ok}
 }
 
 // Position one block horizontally and publish every line's child contents.

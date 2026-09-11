@@ -153,10 +153,11 @@ structured path.
 
 Lists and quotations may nest in any combination through four levels. Each quotation
 level contributes two-em left and right margins; each list level contributes a two-em
-left margin. List body lines use a hanging origin after the label column. Itemized and
-enumerated labels are right-aligned; description terms are left-aligned and share a
-column capped at the smaller of 12 em or 40 percent of the list measure. A wider
-description term occupies its own line above the body.
+left margin. Lists use ordinary interline leading between items and three-quarter-em
+spacing at their outer boundaries. List body lines use a hanging origin after the label
+column. Itemized and enumerated labels are right-aligned; description terms are
+left-aligned and share a column capped at the smaller of 12 em or 40 percent of the list
+measure. A wider description term occupies its own line above the body.
 
 Every list requires at least one nonempty item and rejects prose before its first
 `\item`. Optional labels are rejected for `itemize` and `enumerate`; `description`

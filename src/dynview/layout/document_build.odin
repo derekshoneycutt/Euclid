@@ -543,7 +543,9 @@ document_layout_resolve_block_measure :: proc(
     label_width: f32
     if source.kind == .List_Item {
         for node in ctx.builders^.nodes.storage[
-            block.node_start:block.node_start+block.node_count] {label_width += node.width}
+            block.node_start:block.node_start+block.node_count] {
+            label_width += node.width
+        }
     }
     return document_block_measure(source, ctx.available_width,
         ctx.cache^.last_font_size, label_column, label_width), true

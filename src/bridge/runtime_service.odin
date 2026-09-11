@@ -58,11 +58,11 @@ Julia_Runtime_Gc_Frame :: struct {
     root: rawptr,
 }
 
-// Five-root Julia GC frame used while constructing one Terminal evaluation call.
+// Seven-root Julia GC frame used while constructing one Terminal ingress call.
 Julia_Terminal_Request_Gc_Frame :: struct {
     encoded_root_count: uintptr,
     previous: ^julialib.jl_gcframe_t,
-    roots: [5]^julialib.jl_value_t,
+    roots: [7]^julialib.jl_value_t,
 }
 
 // One-root Julia GC frame retaining a primitive host command during field boxing.
@@ -2529,19 +2529,19 @@ julia_terminal_ingest_evaluation :: proc(
         return false
     }
     frame := Julia_Terminal_Request_Gc_Frame{
-        encoded_root_count = (5 << 2) | 1,
+        encoded_root_count = 5 << 2,
         previous = gc_stack^,
     }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    defer gc_stack^ = frame.previous
     frame.roots[0] = host^.runtime
     frame.roots[1] = julialib.jl_box_uint64(u64(request.request_id))
     frame.roots[2] = julialib.jl_pchar_to_string(
         cstring(raw_data(request.code)), len(request.code))
     frame.roots[3] = julialib.jl_box_int32(i32(request.mode))
     frame.roots[4] = julialib.jl_box_uint64(request.animation_generation)
-    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
     result := julialib.jl_call(
         host^.terminal_ingest_evaluation, &frame.roots[0], 5)
-    gc_stack^ = frame.previous
     if result == nil || julialib.jl_exception_occurred() != nil {
         print_julia_exception("terminal_host_ingest_evaluation")
         return false
@@ -2566,18 +2566,18 @@ julia_terminal_ingest_completion :: proc(
         return false
     }
     frame := Julia_Terminal_Request_Gc_Frame{
-        encoded_root_count = (5 << 2) | 1,
+        encoded_root_count = 5 << 2,
         previous = gc_stack^,
     }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    defer gc_stack^ = frame.previous
     frame.roots[0] = host^.runtime
     frame.roots[1] = julialib.jl_box_uint64(u64(request.request_id))
     frame.roots[2] = julialib.jl_pchar_to_string(
         cstring(raw_data(request.code)), len(request.code))
     frame.roots[3] = julialib.jl_box_int32(i32(request.cursor_byte))
     frame.roots[4] = julialib.jl_box_uint64(request.animation_generation)
-    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
     result := julialib.jl_call(callback, &frame.roots[0], 5)
-    gc_stack^ = frame.previous
     if result == nil || julialib.jl_exception_occurred() != nil {
         print_julia_exception("terminal_host_ingest_completion")
         return false
@@ -2589,15 +2589,23 @@ julia_terminal_ingest_completion :: proc(
 julia_terminal_ingest_tick_configuration :: proc(
     host: ^Julia_Runtime_Host,
     acknowledgement: protocol.Tick_Stream_Configuration_Acknowledged) -> bool {
-    arguments := [5]^julialib.jl_value_t{
-        host^.runtime,
-        julialib.jl_box_uint64(acknowledgement.animation_generation),
-        julialib.jl_box_uint64(acknowledgement.stream_generation),
-        julialib.jl_box_uint64(acknowledgement.interval_steps),
-        julialib.jl_box_bool(c.int8_t(acknowledgement.active)),
+    gc_stack := julialib.jl_get_pgcstack()
+    if gc_stack == nil {
+        return false
     }
+    frame := Julia_Terminal_Request_Gc_Frame{
+        encoded_root_count = 5 << 2,
+        previous = gc_stack^,
+    }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    defer gc_stack^ = frame.previous
+    frame.roots[0] = host^.runtime
+    frame.roots[1] = julialib.jl_box_uint64(acknowledgement.animation_generation)
+    frame.roots[2] = julialib.jl_box_uint64(acknowledgement.stream_generation)
+    frame.roots[3] = julialib.jl_box_uint64(acknowledgement.interval_steps)
+    frame.roots[4] = julialib.jl_box_bool(c.int8_t(acknowledgement.active))
     result := julialib.jl_call(
-        host^.terminal_ingest_tick_configuration, raw_data(arguments[:]), 5)
+        host^.terminal_ingest_tick_configuration, &frame.roots[0], 5)
     if result == nil || julialib.jl_exception_occurred() != nil {
         print_julia_exception("terminal_host_ingest_tick_stream_configuration")
         return false
@@ -2608,17 +2616,25 @@ julia_terminal_ingest_tick_configuration :: proc(
 //   Deliver one coalesced native fixed-step pulse on the Julia owner thread.
 julia_terminal_ingest_tick_pulse :: proc(
     host: ^Julia_Runtime_Host, pulse: protocol.Tick_Pulse) -> bool {
-    arguments := [7]^julialib.jl_value_t{
-        host^.runtime,
-        julialib.jl_box_uint64(pulse.animation_generation),
-        julialib.jl_box_uint64(pulse.stream_generation),
-        julialib.jl_box_uint64(pulse.sequence),
-        julialib.jl_box_uint64(pulse.first_simulation_tick),
-        julialib.jl_box_uint64(pulse.last_simulation_tick),
-        julialib.jl_box_uint64(pulse.step_count),
+    gc_stack := julialib.jl_get_pgcstack()
+    if gc_stack == nil {
+        return false
     }
+    frame := Julia_Terminal_Request_Gc_Frame{
+        encoded_root_count = 7 << 2,
+        previous = gc_stack^,
+    }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    defer gc_stack^ = frame.previous
+    frame.roots[0] = host^.runtime
+    frame.roots[1] = julialib.jl_box_uint64(pulse.animation_generation)
+    frame.roots[2] = julialib.jl_box_uint64(pulse.stream_generation)
+    frame.roots[3] = julialib.jl_box_uint64(pulse.sequence)
+    frame.roots[4] = julialib.jl_box_uint64(pulse.first_simulation_tick)
+    frame.roots[5] = julialib.jl_box_uint64(pulse.last_simulation_tick)
+    frame.roots[6] = julialib.jl_box_uint64(pulse.step_count)
     result := julialib.jl_call(
-        host^.terminal_ingest_tick_pulse, raw_data(arguments[:]), 7)
+        host^.terminal_ingest_tick_pulse, &frame.roots[0], 7)
     if result == nil || julialib.jl_exception_occurred() != nil {
         print_julia_exception("terminal_host_ingest_tick_pulse")
         return false
@@ -2691,7 +2707,7 @@ julia_terminal_emit_evaluation :: proc(
         return false, false
     }
     frame := Julia_Terminal_Command_Gc_Frame{
-        encoded_root_count = (1 << 2) | 1,
+        encoded_root_count = 1 << 2,
         previous = gc_stack^,
         command = command,
     }
@@ -2750,7 +2766,7 @@ julia_terminal_emit_session_lifecycle :: proc(
             return false
         }
         frame := Julia_Terminal_Command_Gc_Frame{
-            encoded_root_count = (1 << 2) | 1,
+            encoded_root_count = 1 << 2,
             previous = gc_stack^,
             command = command,
         }
@@ -2851,7 +2867,7 @@ julia_terminal_emit_completions :: proc(
         gc_stack := julialib.jl_get_pgcstack()
         if gc_stack == nil { return false }
         frame := Julia_Terminal_Command_Gc_Frame{
-            encoded_root_count = (1 << 2) | 1,
+            encoded_root_count = 1 << 2,
             previous = gc_stack^,
             command = command,
         }

@@ -61,6 +61,13 @@ Cached_Shaped_Run_Draw :: struct {
     base_pixel_size: f32,
 }
 
+//   Immutable cached monospace run plus its source text and cell pitch.
+Cached_Monospace_Run_Draw :: struct {
+    shaped: Cached_Shaped_Run_Draw,
+    text: string,
+    column_advance: f32,
+}
+
 //   Pixel placement and next pen position for one cached shaped glyph.
 Cached_Glyph_Placement :: struct {
     position: rl.Vector2,
@@ -209,6 +216,23 @@ ui_text_cached_glyph_placement :: #force_inline proc(
     }
 }
 
+//   Place one shaped JuliaMono glyph on its authoritative source-codepoint column.
+ui_text_cached_monospace_glyph_placement :: #force_inline proc(
+    text: string, glyph: view_font.Shaped_Glyph,
+    origin: rl.Vector2, column_advance, font_size, base_pixel_size: f32) ->
+    (rl.Vector2, bool) {
+
+    column, valid := ui_text_cluster_column(text, glyph.cluster)
+    if !valid || column_advance <= 0 || font_size <= 0 || base_pixel_size <= 0 {
+        return {}, false
+    }
+    offset_scale := font_size/base_pixel_size/64
+    return {
+        origin.x + f32(column)*column_advance + f32(glyph.x_offset)*offset_scale,
+        origin.y + f32(glyph.y_offset)*offset_scale,
+    }, true
+}
+
 //   Convert a measured ink-top position to the resident font's stable line top.
 ui_text_cached_run_line_top :: #force_inline proc(
     ink_top, ink_ascent, raster_ascent, font_size, base_pixel_size: f32) -> f32 {
@@ -246,6 +270,37 @@ ui_text_cached_shaped_run :: proc(request: Cached_Shaped_Run_Draw) -> bool {
             color = request.color,
         })
         pen_x = placement.next_pen_x
+    }
+    return true
+}
+
+//   Draw one sealed JuliaMono run on the source-column grid used by the terminal.
+ui_text_cached_monospace_run :: proc(request: Cached_Monospace_Run_Draw) -> bool {
+    shaped := request.shaped
+    if shaped.resolver.resolve_glyph == nil || len(shaped.glyphs) == 0 ||
+        len(request.text) == 0 || request.column_advance <= 0 ||
+        shaped.font_size <= 0 || shaped.base_pixel_size <= 0 {
+        return false
+    }
+    if !ui_text_shape_clusters_are_valid(request.text, shaped.glyphs) ||
+        !ui_text_shape_glyphs_are_resident(
+            shaped.resolver, shaped.key, shaped.glyphs) {
+        return false
+    }
+    for glyph in shaped.glyphs {
+        resolved, resident := shaped.resolver.resolve_glyph(
+            shaped.resolver.user_data, shaped.key, glyph.glyph_id)
+        assert(resident)
+        position, valid := ui_text_cached_monospace_glyph_placement(
+            request.text, glyph, shaped.position, request.column_advance,
+            shaped.font_size, shaped.base_pixel_size)
+        assert(valid)
+        ui_text_draw_resolved_glyph({
+            resolved = resolved,
+            position = position,
+            font_size = shaped.font_size,
+            color = shaped.color,
+        })
     }
     return true
 }

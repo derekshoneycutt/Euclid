@@ -69,13 +69,14 @@ Start with the simplest nontrivial geometry: given an equilateral triangle \eucl
 
 The two motions composed result in an action inside the same collection, the do-nothing motion acts as identity, and each reflection motion undoes itself.
 
-$\mathbb{Z}_2 = \{0,1\}$
+$$\mathbb{Z}_2 = \{0,1\}$$
 
 This is the group under addition \textit{mod 2}. Let $r$ be reflection across the fixed axis and $e$ the identity motion.
 
-$e \circ e = e, \; e \circ r = r, \; r \circ e = r, \; r \circ r = e$
+$$e \circ e = e, \; e \circ r = r, \; r \circ e = r, \; r \circ r = e$$
 
-\textbf{Brief proof it is a group:}
+
+Brief proof it is a group:
 
 \begin{enumerate}
 \item \textbf{Closure}: composing $e$ and $r$ always gives $e$ or $r$.

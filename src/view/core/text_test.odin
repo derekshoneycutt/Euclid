@@ -94,6 +94,24 @@ text_test_cached_glyph_placement_uses_shaped_metrics :: proc(t: ^testing.T) {
     testing.expect_value(t, placement.next_pen_x, f32(15))
 }
 
+// Verify cached JuliaMono glyphs use source columns instead of cumulative advances.
+@(test)
+text_test_cached_monospace_placement_uses_source_cluster :: proc(t: ^testing.T) {
+    glyph := view_font.Shaped_Glyph{
+        cluster = 3,
+        x_advance = 700,
+        x_offset = -32,
+        y_offset = 64,
+    }
+
+    position, valid := ui_text_cached_monospace_glyph_placement(
+        "α=>", glyph, {10, 20}, 8, 16, 32)
+
+    testing.expect(t, valid)
+    testing.expect_value(t, position.x, f32(25.75))
+    testing.expect_value(t, position.y, f32(20.5))
+}
+
 // Verify unlike ink bounds preserve one shared raster baseline.
 @(test)
 text_test_cached_run_line_top_uses_font_ascent :: proc(t: ^testing.T) {

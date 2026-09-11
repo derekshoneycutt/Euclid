@@ -2679,14 +2679,30 @@ draw_document_prose_item :: proc(
     line_top := view_core.ui_text_cached_run_line_top(
         position.y, run.ascent, run.raster_ascent,
         ctx.font_size, run.base_pixel_size)
+    if run.text_offset < 0 || run.text_count <= 0 ||
+        run.text_count > len(ctx.runtime^.content.document_text)-run.text_offset {
+        return false
+    }
+    text := string(ctx.runtime^.content.document_text[
+        run.text_offset:run.text_offset+run.text_count])
+    atlas := font.cache_borrow(&ctx.state^.font_cache, run.effective_font_key)
+    column_advance, advance_valid := view_core.ui_text_column_advance(
+        atlas, ctx.font_size)
+    if !advance_valid {
+        return false
+    }
     resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
-    return view_core.ui_text_cached_shaped_run({
-        resolver = resolver, key = run.effective_font_key,
-        glyphs = cache^.document_shaped_glyphs[
-            run.glyph_start:run.glyph_start+run.glyph_count],
-        position = {position.x, line_top},
-        color = document_draw_color(semantic_inline.color),
-        font_size = ctx.font_size, base_pixel_size = run.base_pixel_size,
+    return view_core.ui_text_cached_monospace_run({
+        shaped = {
+            resolver = resolver, key = run.effective_font_key,
+            glyphs = cache^.document_shaped_glyphs[
+                run.glyph_start:run.glyph_start+run.glyph_count],
+            position = {position.x, line_top},
+            color = document_draw_color(semantic_inline.color),
+            font_size = ctx.font_size, base_pixel_size = run.base_pixel_size,
+        },
+        text = text,
+        column_advance = column_advance,
     })
 }
 
