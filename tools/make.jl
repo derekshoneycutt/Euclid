@@ -622,7 +622,21 @@ function build_odin(
     end
 
     stage_shared_raylib(dirname(app_binary_path(debug)))
+    debug && write_debug_environment(native_runtime_dirs())
 
+    return nothing
+end
+
+"""Write the native loader environment consumed by the CodeLLDB launch."""
+function write_debug_environment(
+    runtime_dirs::Vector{String};
+    path::String=joinpath(dirname(debug_app_binary_path()), "euclid.env"))
+    environment = native_runtime_environment(runtime_dirs)
+    environment === nothing && return nothing
+    value = Sys.iswindows() ? replace(environment.second, '\\' => '/') :
+        environment.second
+    escaped = replace(value, '\\' => "\\\\", '"' => "\\\"")
+    write(path, "$(environment.first)=\"$escaped\"\n")
     return nothing
 end
 

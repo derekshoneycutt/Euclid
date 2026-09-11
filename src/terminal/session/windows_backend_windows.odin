@@ -1,10 +1,6 @@
 #+build windows
 package termsession
 
-// TODO(terminal-platform/windows): Verify ConPTY resize, completion, and teardown
-// against the Linux-proven session lifecycle. Run the terminal/session package tests
-// and complete repository gate on Windows; remove after native evidence passes.
-
 import vmem "core:mem/virtual"
 import "core:log"
 import "core:strings"
@@ -86,6 +82,8 @@ Windows_Terminal_Backend :: struct {
     // ConPTY attachment metadata, live channels, and process identity.
     attribute_list: rawptr,
     pseudo_console: Windows_Pseudo_Console,
+    pseudo_input: windows.HANDLE,
+    pseudo_output: windows.HANDLE,
     input_write: windows.HANDLE,
     output_read: windows.HANDLE,
     process: windows.HANDLE,
@@ -273,6 +271,8 @@ windows_terminal_release_workspace :: proc(backend: ^Windows_Terminal_Backend) {
 //     allocator, mutex, and condition-variable identity.
 windows_terminal_reset_session_state :: proc(backend: ^Windows_Terminal_Backend) {
     backend.pseudo_console = nil
+    backend.pseudo_input = nil
+    backend.pseudo_output = nil
     backend.input_write = nil
     backend.output_read = nil
     backend.process = nil
@@ -815,6 +815,8 @@ windows_terminal_start_process :: proc(
             windows.EXTENDED_STARTUPINFO_PRESENT,
         backend.environment, backend.working_directory,
         &startup.startup_info, &process_info)
+    windows_terminal_close_handle(&backend.pseudo_input)
+    windows_terminal_close_handle(&backend.pseudo_output)
     if !created {
         error_code := windows.GetLastError()
         log.errorf(
@@ -1085,8 +1087,8 @@ windows_terminal_prepare_pseudo_console :: proc(
     }
     result := windows_create_pseudo_console(
         size, pseudo_input, pseudo_output, 0, &backend.pseudo_console)
-    windows.CloseHandle(pseudo_input)
-    windows.CloseHandle(pseudo_output)
+    backend.pseudo_input = pseudo_input
+    backend.pseudo_output = pseudo_output
     return result >= 0 && windows_terminal_create_attribute_list(backend)
 }
 
@@ -1104,6 +1106,8 @@ windows_terminal_abort_start :: proc(
             windows_close_pseudo_console(backend.pseudo_console)
             backend.pseudo_console = nil
         }
+        windows_terminal_close_handle(&backend.pseudo_input)
+        windows_terminal_close_handle(&backend.pseudo_output)
         windows_terminal_close_handle(&backend.input_write)
         windows_terminal_close_handle(&backend.output_read)
     }

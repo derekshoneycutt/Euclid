@@ -24,7 +24,11 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test_throws ErrorException BuildConfiguration.harfbuzz_provider(
             "invalid", :Linux)
         @test_throws ErrorException BuildConfiguration.harfbuzz_provider(
-            "system", :Windows)
+            "system", :NT)
+        if Sys.iswindows()
+            @test basename(BuildConfiguration.raylib_shared_library_path()) ==
+                "raylib.dll"
+        end
         @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Linux) ==
             ["--libs", "--static", "harfbuzz"]
         @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Darwin) ==
@@ -34,9 +38,11 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         library_path, runtime_dirs = BuildConfiguration.harfbuzz_jll_paths()
         @test isfile(library_path)
         @test dirname(library_path) in runtime_dirs
-        @test dirname(BuildConfiguration.raylib_shared_library_path()) in
-            BuildConfiguration.native_runtime_dirs(:system)
-        @test BuildConfiguration.native_runtime_environment(:system) !== nothing
+        if !Sys.iswindows()
+            @test dirname(BuildConfiguration.raylib_shared_library_path()) in
+                BuildConfiguration.native_runtime_dirs(:system)
+            @test BuildConfiguration.native_runtime_environment(:system) !== nothing
+        end
         runtime_environment = BuildConfiguration.native_runtime_environment(:jll)
         @test runtime_environment !== nothing
         @test all(directory -> occursin(directory, runtime_environment.second),
@@ -140,6 +146,19 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test "-disallow-do" in command
         @test "-warnings-as-errors" in command
 
+        mktempdir() do root
+            environment_path = joinpath(root, "euclid.env")
+            runtime_dirs = [raw"C:\Julia Runtime\bin",
+                raw"C:\Artifacts\harfbuzz\bin"]
+            withenv("PATH" => raw"C:\Existing Tools\bin") do
+                write_debug_environment(runtime_dirs; path=environment_path)
+            end
+            expected = Sys.iswindows() ?
+                "PATH=\"C:/Julia Runtime/bin;C:/Artifacts/harfbuzz/bin;C:/Existing Tools/bin\"\n" :
+                "PATH=\"$(join(replace.(runtime_dirs, '\\' => "\\\\"), ':')):C:\\\\Existing Tools\\\\bin\"\n"
+            @test read(environment_path, String) == expected
+        end
+
         debug_arguments = debug_application_arguments(["--no-vsync"], true)
         @test first(debug_arguments) ==
             "--diagnostics=$(debug_diagnostics_path())"
@@ -160,14 +179,19 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         mktempdir() do root
             source_directory = joinpath(root, "odin", "vendor", "raylib", "macos")
             destination = joinpath(root, "build")
-            library = joinpath(root, "libraylib.6.0.0.dylib")
             source = joinpath(source_directory, "libraylib.600.dylib")
             staged = joinpath(destination, basename(source))
             mkpath(source_directory)
             mkpath(destination)
-            write(library, "raylib")
-            symlink(relpath(library, source_directory), source)
-            symlink("missing/libraylib.6.0.0.dylib", staged)
+            if Sys.iswindows()
+                write(source, "raylib")
+                write(staged, "stale")
+            else
+                library = joinpath(root, "libraylib.6.0.0.dylib")
+                write(library, "raylib")
+                symlink(relpath(library, source_directory), source)
+                symlink("missing/libraylib.6.0.0.dylib", staged)
+            end
 
             stage_shared_raylib(destination; source)
 

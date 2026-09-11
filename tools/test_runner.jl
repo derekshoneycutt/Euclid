@@ -136,8 +136,8 @@ function discover_odin_locations(source_path::String)
                 prefix = SubString(content, 1, prevind(content, offset))
                 line = count(==('\n'), prefix) + 1
                 name = test_match[1]
-                locations["$package.$name"] = TestLocation(
-                    relpath(path, REPOSITORY_ROOT), line)
+                relative_path = replace(relpath(path, REPOSITORY_ROOT), '\\' => '/')
+                locations["$package.$name"] = TestLocation(relative_path, line)
             end
         end
     end
@@ -157,7 +157,7 @@ end
 
 """Return exact test names declared directly in one Odin package directory."""
 function odin_package_test_names(source_path::String, locations)
-    relative_directory = relpath(source_path, REPOSITORY_ROOT)
+    relative_directory = replace(relpath(source_path, REPOSITORY_ROOT), '\\' => '/')
     return sort([name for (name, location) in locations
         if dirname(location.file) == relative_directory])
 end

@@ -9,10 +9,11 @@
       "windows": {
         "program": "${workspaceFolder}/.build/debug/euclid.exe"
       },
+      "envFile": "${workspaceFolder}/.build/debug/euclid.env",
       "initCommands": [
         "process handle SIGSEGV --stop false --notify false --pass true"
       ],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/bin",
       "preLaunchTask": "Euclid: Debug Build"
     },
     {
@@ -23,13 +24,14 @@
       "windows": {
         "program": "${workspaceFolder}/.build/debug/euclid.exe"
       },
+      "envFile": "${workspaceFolder}/.build/debug/euclid.env",
       "args": [
         "--diagnostics=${workspaceFolder}/.build/debug/euclid.log"
       ],
       "initCommands": [
         "process handle SIGSEGV --stop false --notify false --pass true"
       ],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/bin",
       "preLaunchTask": "Euclid: Debug Build"
     },
     {
@@ -40,6 +42,7 @@
       "windows": {
         "program": "${workspaceFolder}/.build/debug/euclid.exe"
       },
+      "envFile": "${workspaceFolder}/.build/debug/euclid.env",
       "args": [
         "--diagnostics=${workspaceFolder}/.build/debug/euclid.log",
         "--scenario=${input:scenarioPath}",
@@ -48,7 +51,7 @@
       "initCommands": [
         "process handle SIGSEGV --stop false --notify false --pass true"
       ],
-      "cwd": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}/bin",
       "preLaunchTask": "Euclid: Debug Build"
     }
   ],

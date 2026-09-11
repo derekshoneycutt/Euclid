@@ -15,7 +15,7 @@ function raylib_shared_library_path(kernel::Symbol=Sys.KERNEL)
         joinpath("vendor", "raylib", "linux", "libraylib.so.600")
     elseif kernel == :Darwin
         joinpath("vendor", "raylib", "macos", "libraylib.600.dylib")
-    elseif kernel == :Windows
+    elseif kernel == :NT
         joinpath("vendor", "raylib", "windows", "raylib.dll")
     else
         error("Shared Raylib is unsupported on $kernel.")
@@ -29,7 +29,7 @@ end
 function raylib_runtime_linker_flags(kernel::Symbol=Sys.KERNEL)
     kernel == :Linux && return "-Wl,-rpath,\\\$ORIGIN"
     kernel == :Darwin && return "-Wl,-rpath,@loader_path"
-    kernel == :Windows && return ""
+    kernel == :NT && return ""
     error("Shared Raylib is unsupported on $kernel.")
 end
 
@@ -37,7 +37,7 @@ end
 function validate_harfbuzz_provider(provider::Symbol, kernel::Symbol=Sys.KERNEL)
     provider in (:jll, :system) || error(
         "$HARFBUZZ_PROVIDER_ENV must be either jll or system.")
-    provider == :system && kernel == :Windows && error(
+    provider == :system && kernel == :NT && error(
         "System HarfBuzz linkage is unsupported on Windows.")
     return provider
 end
