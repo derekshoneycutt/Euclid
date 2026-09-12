@@ -317,9 +317,11 @@ animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
     slot.sequence = 1
     slot.animation = animation
     slot.scene_batch.animation = animation
+    service.animation_tick_pending = true
 
     testing.expect(t, publish_available_animation_tick(state))
     testing.expect_value(t, service.animation_last_committed_sequence, u64(1))
+    testing.expect(t, !service.animation_tick_pending)
     testing.expect_value(t, slot.state, core.Animation_Tick_Slot_State.Free)
     for snapshot in service.view_snapshots {
         testing.expect_value(t, snapshot.state, core.View_Snapshot_Slot_State.Free)

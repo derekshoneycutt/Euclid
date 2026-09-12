@@ -359,6 +359,7 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
     }
     record_animation_tick_outcome(state, service, slot, committed, reject_reason)
     release_completed_animation_ticks(service)
+    service^.animation_tick_pending = false
     return committed
 }
 

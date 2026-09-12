@@ -207,11 +207,12 @@ Shape_Angle_Constraint :: struct {
     movement: Shape_Constraint_Movement_Policy,
 }
 
-// Keep one pivot at the planar midpoint of two direct endpoints.
+// Keep one pivot at the planar midpoint, optionally selecting an upper hinge.
 Shape_Center_Pivot_Constraint :: struct {
     first: Shape_Entity,
     pivot: Shape_Entity,
     second: Shape_Entity,
+    limb_length: f32,
 }
 
 // Store one kind-valid direct-target constraint payload.

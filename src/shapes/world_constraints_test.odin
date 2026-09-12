@@ -136,6 +136,59 @@ world_constraints_solve_to_allowed_error :: proc(t: ^testing.T) {
     testing.expect_value(t, world_constraint_test_position(&world, point), Vector3{})
 }
 
+// Verify contradictory constraints exhaust bounded work instead of blocking a frame.
+@(test)
+world_constraints_nonconvergent_solve_is_bounded :: proc(t: ^testing.T) {
+    world: core.Shape_World
+    point := world_constraint_test_point(&world, {})
+    _, first_status := world_create_snap_point_constraint(&world, {
+        point = point, position = {1, 0, 0}, enabled = true})
+    _, second_status := world_create_snap_point_constraint(&world, {
+        point = point, position = {2, 0, 0}, enabled = true})
+    testing.expect_value(t, first_status, core.Shape_World_Status.Ok)
+    testing.expect_value(t, second_status, core.Shape_World_Status.Ok)
+
+    world_apply_all_constraints_to_error(&world, 0)
+
+    testing.expect(t, world_total_constraint_error(&world) > 0)
+}
+
+// Verify locked compass tips converge to a hinge above the drawing plane.
+@(test)
+world_constraints_compass_locks_keep_hinge_above_floor :: proc(t: ^testing.T) {
+    world: core.Shape_World
+    compass, status := world_create_compass(&world, {
+        joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
+        joint2 = {0.02, 0.02, 0}, limb_length = 0.35,
+        style = Shape_Style{}})
+    testing.expect_value(t, status, core.Shape_World_Status.Ok)
+    for iteration in 0..<64 {
+        if iteration & 1 == 0 {
+            world_apply_all_constraints_reverse(&world)
+        } else {
+            world_apply_all_constraints(&world)
+        }
+    }
+    first_lock := &world.constraints.values[compass.joint1_lock_constraint]
+    first_lock^.payload.snap_point.position = {0.5, 0.5, 1.4}
+    first_lock^.enabled = true
+    second_lock := &world.constraints.values[compass.joint2_lock_constraint]
+    second_lock^.payload.snap_point.position = {0.75, 0.5, 1.4}
+    second_lock^.enabled = true
+
+    for iteration in 0..<64 {
+        if iteration & 1 == 0 {
+            world_apply_all_constraints_reverse(&world)
+        } else {
+            world_apply_all_constraints(&world)
+        }
+    }
+    pivot := world_constraint_test_position(&world, compass.pivot)
+
+    testing.expect(t, pivot.z > 1.4)
+    testing.expect(t, world_total_constraint_error(&world) <= 0.0001)
+}
+
 // Verify only angle kinds can consume the statically three-target angle input.
 @(test)
 world_constraints_reject_non_angle_kind_for_angle_payload :: proc(t: ^testing.T) {

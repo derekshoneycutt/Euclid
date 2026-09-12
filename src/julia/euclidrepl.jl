@@ -122,7 +122,7 @@ struct Reflect2DSpec <: TransformSpec
 end
 
 struct TransformPayload <: ReplDrawPayload
-    point_ids::Vector{Int}
+    point_ids::Vector{UInt64}
     start_positions::Vector{Vector{Float32}}
     spec::TransformSpec
 end
@@ -137,7 +137,7 @@ end
 
 mutable struct ReplDrawSession
     active_job::Union{Nothing, ReplDrawJob}
-    managed_host_ids::Vector{Int}
+    managed_host_ids::Vector{UInt64}
 end
 
 """Generation-local EuclidRepl state owned by one Terminal session."""
@@ -146,7 +146,7 @@ mutable struct EuclidReplRuntime
 end
 
 """Create empty EuclidRepl state for one Terminal session generation."""
-create_runtime() = EuclidReplRuntime(ReplDrawSession(nothing, Int[]))
+create_runtime() = EuclidReplRuntime(ReplDrawSession(nothing, UInt64[]))
 
 """Install user-facing drawing helpers bound to one Terminal generation."""
 function install_drawing_helpers!(
@@ -341,9 +341,9 @@ function vec3(name::AbstractString, value::AbstractVector{<:Real})
     return Float32[first_value, second_value, third_value]
 end
 
-"""Return validated non-empty point ids as `Vector{Int}`."""
+"""Return validated non-empty point ids as packed `UInt64` entities."""
 function validated_point_ids(point_ids)
-    ids = Int[Integer(id) for id in point_ids]
+    ids = UInt64[UInt64(id) for id in point_ids]
     if isempty(ids)
         throw(ArgumentError("point_ids must contain at least one id"))
     end
@@ -377,7 +377,7 @@ end
 
 """Validate matching lengths for point ids and start positions."""
 function validate_transform_batch_lengths(
-    point_ids::Vector{Int}, start_positions::Vector{Vector{Float32}})
+    point_ids::Vector{UInt64}, start_positions::Vector{Vector{Float32}})
 
     if length(point_ids) != length(start_positions)
         throw(ArgumentError("point_ids and start_positions must have equal length"))
@@ -822,10 +822,10 @@ function clear!(
     return true
 end
 
-"""Hide one bridge point, tolerating hosts that lack the hide symbol."""
-function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::Integer)
+"""Hide one packed bridge entity, tolerating hosts that lack the hide symbol."""
+function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::UInt64)
     try
-        OdinJuliaBridge.hide_point(state_ptr, Int(id))
+        OdinJuliaBridge.hide_point(state_ptr, id)
     catch err
         message = sprint(showerror, err)
         if occursin("could not load symbol", message) || occursin("undefined symbol", message)
@@ -843,7 +843,7 @@ function hide!(
     index::Integer)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, Int(index))
+    _hide_bridge_point(state_ptr, UInt64(index))
     return nothing
 end
 
@@ -854,7 +854,7 @@ function hide!(
     view::OdinJuliaBridge.BridgePointView)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, Int(view.index))
+    _hide_bridge_point(state_ptr, view.index)
     return nothing
 end
 
@@ -865,7 +865,7 @@ function hide!(
     shape::OdinJuliaBridge.BridgeShapeLine)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, Int(shape.host_id))
+    _hide_bridge_point(state_ptr, shape.host_id)
     return nothing
 end
 
@@ -876,7 +876,7 @@ function hide!(
     shape::OdinJuliaBridge.BridgeShapeCircle)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, Int(shape.host_id))
+    _hide_bridge_point(state_ptr, shape.host_id)
     return nothing
 end
 
@@ -887,7 +887,7 @@ function hide!(
     shape::OdinJuliaBridge.BridgeShapeFilledCircle)
 
     _ = host_runtime
-    _hide_bridge_point(state_ptr, Int(shape.host_id))
+    _hide_bridge_point(state_ptr, shape.host_id)
     return nothing
 end
 
@@ -937,11 +937,11 @@ function point!(
     draw_duration = validated_duration(duration)
 
     point = OdinJuliaBridge.create_new_point(state_ptr, pos3, color, brush_value)
-    payload = PointPayload(Int(point.index), pos3, color, brush_value)
+    payload = PointPayload(point.index, pos3, color, brush_value)
     job = ReplDrawJob(:point, draw_duration, Float32(0f0), nothing, payload)
 
     start_job!(host_runtime, state_ptr, job)
-    track_managed_host!(ensure_session!(host_runtime), Int(point.index))
+    track_managed_host!(ensure_session!(host_runtime), point.index)
     return point
 end
 
@@ -971,9 +971,9 @@ function line!(
         color, brush_value)
 
     payload = LinePayload(
-        Int(line_shape.host_id),
-        Int(line_shape.joint1_id),
-        Int(line_shape.joint2_id),
+        line_shape.host_id,
+        line_shape.joint1_id,
+        line_shape.joint2_id,
         start_pos3,
         end_pos3,
         color,
@@ -981,7 +981,7 @@ function line!(
 
     job = ReplDrawJob(:line, draw_duration, Float32(0f0), nothing, payload)
     start_job!(host_runtime, state_ptr, job)
-    track_managed_host!(ensure_session!(host_runtime), Int(line_shape.host_id))
+    track_managed_host!(ensure_session!(host_runtime), line_shape.host_id)
     return line_shape
 end
 
@@ -1027,13 +1027,13 @@ function circle!(
             start_theta_valid, final_end_theta, color, brush_value)
     end
 
-    payload = CirclePayload(filled, full_sweep, Int(shape.host_id), Int(shape.start_id),
-        Int(shape.end_id), center3, start_pos, end_pos, radius_valid, angle_theta,
+    payload = CirclePayload(filled, full_sweep, shape.host_id, shape.start_id,
+        shape.end_id, center3, start_pos, end_pos, radius_valid, angle_theta,
         color, brush_value)
 
     job = ReplDrawJob(:circle, draw_duration, Float32(0.0), nothing, payload)
     start_job!(host_runtime, state_ptr, job)
-    track_managed_host!(ensure_session!(host_runtime), Int(shape.host_id))
+    track_managed_host!(ensure_session!(host_runtime), shape.host_id)
     return shape
 end
 

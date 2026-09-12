@@ -352,13 +352,14 @@ world_append_compass_constraints :: proc(
     limb_length: f32) -> [8]u16 {
     indices: [8]u16
     indices[0], _ = world_create_center_pivot_constraint(world, {
-        first = joint1, pivot = pivot, second = joint2, enabled = true})
+        first = joint1, pivot = pivot, second = joint2,
+        limb_length = limb_length, enabled = true})
     indices[1], _ = world_create_distance_constraint(world, {
         first = joint1, second = pivot, length = limb_length,
-        movement = .Move_Both, enabled = true})
+        movement = .Move_Second, enabled = true})
     indices[2], _ = world_create_distance_constraint(world, {
         first = pivot, second = joint2, length = limb_length,
-        movement = .Move_Both, enabled = true})
+        movement = .Move_First, enabled = true})
     floor_targets := [3]core.Shape_Entity{joint1, pivot, joint2}
     for target, offset in floor_targets {
         indices[3 + offset], _ = world_create_floor_constraint(world, {

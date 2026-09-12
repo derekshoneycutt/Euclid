@@ -112,6 +112,9 @@ end
 end
 
 @testset "managed outputs and local links" begin
+    markdown = "[Guide](Guide.md)\n`[]u8`\n```odin\nvalue: []u8\n```\n"
+    @test CodeWiki.local_markdown_links(markdown) == ["Guide.md"]
+
     mktempdir() do directory
         manifest = navigation_test_manifest()
         wiki_root = joinpath(directory, "docs", "wiki")

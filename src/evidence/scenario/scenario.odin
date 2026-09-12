@@ -749,7 +749,9 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "runtime_ready": return display.runtime_lifecycle == .Ready
     case "runtime_idle": return display.active_runtime_request_id == 0
     // Presentation parsing is independently scheduled and does not extend animation work.
-    case "animation_idle": return !display.animation_tick_pending
+    case "animation_idle":
+        return !display.animation_tick_pending ||
+            display.animation_tick_sequence == display.animation_last_committed_sequence
     case "simulation_paused": return display.simulation_paused
     case "simulation_running": return !display.simulation_paused
     case "dynview_enabled": return display.dynview_enabled

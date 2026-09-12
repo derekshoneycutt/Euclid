@@ -5,6 +5,8 @@ import "core:math/linalg"
 
 import "../core"
 
+WORLD_CONSTRAINT_SOLVE_ITERATION_LIMIT :: 64
+
 // Supply one direct point target and floor response parameters.
 World_Floor_Constraint_Input :: struct {
     point: core.Shape_Entity,
@@ -47,11 +49,12 @@ World_Angle_Constraint_Input :: struct {
     enabled: bool,
 }
 
-// Supply three direct targets for planar pivot centering.
+// Supply three direct targets and optional equal compass-limb length.
 World_Center_Pivot_Constraint_Input :: struct {
     first: core.Shape_Entity,
     pivot: core.Shape_Entity,
     second: core.Shape_Entity,
+    limb_length: f32,
     enabled: bool,
 }
 
@@ -140,7 +143,8 @@ world_create_center_pivot_constraint :: proc(
     input: World_Center_Pivot_Constraint_Input) -> (u16, core.Shape_World_Status) {
     constraint := core.Shape_Constraint{kind = .Center_Pivot, enabled = input.enabled}
     constraint.payload.center_pivot = {
-        first = input.first, pivot = input.pivot, second = input.second}
+        first = input.first, pivot = input.pivot, second = input.second,
+        limb_length = input.limb_length}
     return world_create_constraint(world, constraint)
 }
 
@@ -238,18 +242,21 @@ world_apply_all_constraints_reverse :: proc(world: ^core.Shape_World) {
     }
 }
 
-// Alternate reverse and forward passes until total error meets the threshold.
+// Alternate solve passes until convergence or the fixed frame-work budget.
 world_apply_all_constraints_to_error :: proc(
     world: ^core.Shape_World,
     allowed_error: f32) {
     reverse := false
-    for world_total_constraint_error(world) > allowed_error {
+    iterations := 0
+    for world_total_constraint_error(world) > allowed_error &&
+        iterations < WORLD_CONSTRAINT_SOLVE_ITERATION_LIMIT {
         if reverse {
             world_apply_all_constraints(world)
         } else {
             world_apply_all_constraints_reverse(world)
         }
         reverse = !reverse
+        iterations += 1
     }
 }
 
@@ -338,7 +345,22 @@ world_angle_constraint_error :: proc(
     return 0
 }
 
-// Compute pivot displacement from the planar midpoint of two direct endpoints.
+// Compute the target for planar centering or an upper equal-limb compass hinge.
+world_center_pivot_target :: proc(
+    first, pivot, second: Vector3,
+    limb_length: f32) -> Vector3 {
+    midpoint := (first + second) / 2.0
+    if limb_length <= 0 {
+        return {midpoint.x, midpoint.y, pivot.z}
+    }
+    half_x := (second.x - first.x) / 2.0
+    half_y := (second.y - first.y) / 2.0
+    height_squared := max(limb_length * limb_length -
+        half_x * half_x - half_y * half_y, f32(0))
+    return {midpoint.x, midpoint.y, midpoint.z + math.sqrt(height_squared)}
+}
+
+// Compute pivot displacement from its direct center-pivot target.
 world_center_pivot_constraint_error :: proc(
     world: ^core.Shape_World,
     payload: core.Shape_Center_Pivot_Constraint) -> f32 {
@@ -348,8 +370,8 @@ world_center_pivot_constraint_error :: proc(
     if !first_ok || !pivot_ok || !second_ok {
         return 0
     }
-    midpoint := (first.position + second.position) / 2.0
-    target := Vector3{midpoint.x, midpoint.y, pivot.position.z}
+    target := world_center_pivot_target(first.position, pivot.position,
+        second.position, payload.limb_length)
     return math.abs(linalg.length(target - pivot.position))
 }
 
@@ -435,7 +457,7 @@ world_apply_angle_constraint :: proc(
     }
 }
 
-// Apply planar midpoint centering to one direct pivot target.
+// Apply planar centering or the upper equal-limb hinge to one pivot target.
 world_apply_center_pivot_constraint :: proc(
     world: ^core.Shape_World,
     payload: core.Shape_Center_Pivot_Constraint) {
@@ -445,6 +467,6 @@ world_apply_center_pivot_constraint :: proc(
     if !first_ok || !pivot_ok || !second_ok {
         return
     }
-    midpoint := (first.position + second.position) / 2.0
-    pivot.position = {midpoint.x, midpoint.y, pivot.position.z}
+    pivot.position = world_center_pivot_target(first.position, pivot.position,
+        second.position, payload.limb_length)
 }

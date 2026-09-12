@@ -612,6 +612,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
     view_core.screenshake_update(state^.iso_scale, frame_dt)
 
     if state^.ui_runtime.simulation_paused {
+        julia.publish_available_animation_tick(state)
         state^.accumulator = 0
         return 0
     }

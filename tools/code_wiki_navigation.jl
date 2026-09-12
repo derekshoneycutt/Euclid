@@ -525,10 +525,36 @@ function validate_managed_outputs(
     return true
 end
 
+"""Remove fenced blocks and inline code before scanning Markdown prose."""
+function markdown_without_code(markdown::String)
+    io = IOBuffer()
+    fence_character = '\0'
+    fence_length = 0
+    for line in split(markdown, '\n'; keepempty=true)
+        matched = match(r"^\s*(`{3,}|~{3,})", line)
+        if matched !== nothing
+            marker = matched.captures[1]
+            if fence_length == 0
+                fence_character = first(marker)
+                fence_length = length(marker)
+            elseif first(marker) == fence_character && length(marker) >= fence_length
+                fence_character = '\0'
+                fence_length = 0
+            end
+            write(io, '\n')
+            continue
+        end
+        fence_length == 0 && write(io, replace(line, r"`[^`\n]*`" => ""))
+        write(io, '\n')
+    end
+    return String(take!(io))
+end
+
 """Return local Markdown link targets from one document body."""
 function local_markdown_links(markdown::String)
     links = String[]
-    for matched in eachmatch(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)", markdown)
+    prose = markdown_without_code(markdown)
+    for matched in eachmatch(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)", prose)
         target = matched.captures[1]
         occursin(r"^[A-Za-z][A-Za-z0-9+.-]*:", target) && continue
         push!(links, target)

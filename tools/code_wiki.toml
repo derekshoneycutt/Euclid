@@ -68,6 +68,13 @@ navigation_order = 40
 owner = "guide_authors"
 
 [[guides]]
+title = "Shape System"
+path = "Guides/ShapeSystem.md"
+summary = "Bounded shape storage, bridge ABI, draw-cache derivation, and animation lifetime."
+navigation_order = 42
+owner = "guide_authors"
+
+[[guides]]
 title = "Tool Rendering"
 path = "Guides/ToolRendering.md"
 summary = "Pen and compass geometry, shading, and rendering contracts."

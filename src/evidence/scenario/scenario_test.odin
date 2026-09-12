@@ -40,6 +40,26 @@ scenario_test_parse_json_lines :: proc(t: ^testing.T) {
     testing.expect_value(t, program.commands[1].timeout_ms, u32(10))
 }
 
+// Verify animation idleness follows pending work and publication identity.
+@(test)
+scenario_test_animation_idle_state :: proc(t: ^testing.T) {
+    testing.expect(t, !state_matches("animation_idle", observe.Display{
+        animation_tick_pending = true,
+        animation_tick_sequence = 2,
+        animation_last_committed_sequence = 1,
+    }))
+    testing.expect(t, state_matches("animation_idle", observe.Display{
+        animation_tick_pending = true,
+        animation_tick_sequence = 2,
+        animation_last_committed_sequence = 2,
+    }))
+    testing.expect(t, state_matches("animation_idle", observe.Display{
+        animation_tick_pending = false,
+        animation_tick_sequence = 2,
+        animation_last_committed_sequence = 1,
+    }))
+}
+
 // Verify Terminal input and cell assertions are bounded scenario commands.
 @(test)
 scenario_test_terminal_commands :: proc(t: ^testing.T) {
