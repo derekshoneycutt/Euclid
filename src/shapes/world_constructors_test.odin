@@ -184,3 +184,66 @@ shapes_test_world_constructor_capacity_failure_is_transactional :: proc(t: ^test
     testing.expect_value(t, world.render_styles.count, before_styles)
     testing.expect_value(t, world.geometries.count, before_geometry)
 }
+
+// Verify pen construction publishes direct geometry and its five ordered constraints.
+@(test)
+shapes_test_world_creates_pen_with_direct_constraints :: proc(t: ^testing.T) {
+    world: core.Shape_World
+    pen, status := world_create_pen(&world, {
+        joint1 = {-1, 0, 0}, joint2 = {1, 0, 0}, length = 2,
+        style = world_shape_test_style()})
+    testing.expect_value(t, status, core.Shape_World_Status.Ok)
+    testing.expect_value(t, world.constraints.count, u16(5))
+    geometry, found := core.shape_component_get(
+        &world.geometries, &world.registry, pen.shape)
+    testing.expect(t, found)
+    testing.expect_value(t, geometry.payload.pen.joint1, pen.joint1)
+    distance := world.constraints.values[pen.length_constraint].payload.distance
+    testing.expect_value(t, distance.first, pen.joint1)
+    testing.expect_value(t, distance.second, pen.joint2)
+    testing.expect_value(t, distance.movement,
+        core.Shape_Constraint_Movement_Policy.Move_Both)
+    testing.expect(t, !world.constraints.values[pen.joint1_lock_constraint].enabled)
+    testing.expect(t, !world.constraints.values[pen.joint2_lock_constraint].enabled)
+}
+
+// Verify compass construction names each limb and pivot without child offsets.
+@(test)
+shapes_test_world_creates_compass_with_direct_constraints :: proc(t: ^testing.T) {
+    world: core.Shape_World
+    compass, status := world_create_compass(&world, {
+        joint1 = {-1, 0, 0}, pivot = {}, joint2 = {1, 0, 0}, limb_length = 1,
+        style = world_shape_test_style()})
+    testing.expect_value(t, status, core.Shape_World_Status.Ok)
+    testing.expect_value(t, world.constraints.count, u16(8))
+    center := world.constraints.values[
+        compass.center_pivot_constraint].payload.center_pivot
+    first_limb := world.constraints.values[
+        compass.limb1_length_constraint].payload.distance
+    second_limb := world.constraints.values[
+        compass.limb2_length_constraint].payload.distance
+    testing.expect_value(t, center.pivot, compass.pivot)
+    testing.expect_value(t, first_limb.first, compass.joint1)
+    testing.expect_value(t, first_limb.second, compass.pivot)
+    testing.expect_value(t, second_limb.first, compass.pivot)
+    testing.expect_value(t, second_limb.second, compass.joint2)
+}
+
+// Verify complete tool capacity is checked before any world frontier advances.
+@(test)
+shapes_test_world_tool_constraint_capacity_failure_is_transactional :: proc(
+    t: ^testing.T) {
+    world: core.Shape_World
+    world.constraints.count = core.MAX_SHAPE_CONSTRAINTS - 4
+    before_entities := world.registry.entity_count
+    before_constraints := world.constraints.count
+
+    _, status := world_create_pen(&world, {
+        joint1 = {-1, 0, 0}, joint2 = {1, 0, 0}, length = 2,
+        style = world_shape_test_style()})
+
+    testing.expect_value(t, status, core.Shape_World_Status.Out_Of_Capacity)
+    testing.expect_value(t, world.registry.entity_count, before_entities)
+    testing.expect_value(t, world.transforms.count, u16(0))
+    testing.expect_value(t, world.constraints.count, before_constraints)
+}

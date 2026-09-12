@@ -5,6 +5,7 @@ import rl "vendor:raylib"
 
 MAX_SHAPE_ENTITIES :: MAX_SHAPESPOINTS
 MAX_SHAPE_VERTEX_REFERENCES :: MAX_SHAPE_ENTITIES
+MAX_SHAPE_CONSTRAINTS :: MAX_SHAPESCONSTRAINTS
 MAX_SHAPE_LABEL_SOURCE_BYTES :: 256
 MAX_SHAPE_LABEL_TOTAL_BYTES :: 32 * 1024
 SHAPE_ENTITY_INVALID_SLOT :: u32(0)
@@ -151,6 +152,90 @@ Shape_Label_Store :: struct {
     baseline_frozen: bool,
 }
 
+// Select which distance or angle endpoints a correction may move.
+Shape_Constraint_Movement_Policy :: enum u8 {
+    Move_First,
+    Move_Both,
+    Move_Second,
+}
+
+// Distinguish direct-target constraint payloads without geometry coupling.
+Shape_Constraint_Kind :: enum u8 {
+    Distance,
+    Floor,
+    Snap_To_Floor,
+    Snap_Point,
+    Max_Angle,
+    Min_Angle,
+    Center_Pivot,
+}
+
+// Keep one transform at or above a floor height with optional bounce.
+Shape_Floor_Constraint :: struct {
+    point: Shape_Entity,
+    height: f32,
+    bounce: f32,
+}
+
+// Snap one transform to a floor height outside the allowed tolerance.
+Shape_Snap_To_Floor_Constraint :: struct {
+    point: Shape_Entity,
+    height: f32,
+    allowance: f32,
+}
+
+// Snap one transform to an explicit world position.
+Shape_Snap_Point_Constraint :: struct {
+    point: Shape_Entity,
+    position: Vector3,
+}
+
+// Preserve one direct endpoint distance under an explicit movement policy.
+Shape_Distance_Constraint :: struct {
+    first: Shape_Entity,
+    second: Shape_Entity,
+    length: f32,
+    movement: Shape_Constraint_Movement_Policy,
+}
+
+// Bound one direct three-transform angle under an explicit movement policy.
+Shape_Angle_Constraint :: struct {
+    first: Shape_Entity,
+    pivot: Shape_Entity,
+    second: Shape_Entity,
+    limit: f32,
+    movement: Shape_Constraint_Movement_Policy,
+}
+
+// Keep one pivot at the planar midpoint of two direct endpoints.
+Shape_Center_Pivot_Constraint :: struct {
+    first: Shape_Entity,
+    pivot: Shape_Entity,
+    second: Shape_Entity,
+}
+
+// Store one kind-valid direct-target constraint payload.
+Shape_Constraint :: struct {
+    kind: Shape_Constraint_Kind,
+    payload: struct #raw_union {
+        distance: Shape_Distance_Constraint,
+        floor: Shape_Floor_Constraint,
+        snap_to_floor: Shape_Snap_To_Floor_Constraint,
+        snap_point: Shape_Snap_Point_Constraint,
+        angle: Shape_Angle_Constraint,
+        center_pivot: Shape_Center_Pivot_Constraint,
+    },
+    enabled: bool,
+}
+
+// Own constraints in stable solver order with one rewindable animation suffix.
+Shape_Constraint_Store :: struct {
+    values: [MAX_SHAPE_CONSTRAINTS]Shape_Constraint,
+    count: u16,
+    animation_start: u16,
+    baseline_frozen: bool,
+}
+
 // Describe all fixed capacities required by one transactional construction.
 Shape_Construction_Needs :: struct {
     entities: int,
@@ -161,6 +246,7 @@ Shape_Construction_Needs :: struct {
     labels: int,
     label_bytes: int,
     vertex_references: int,
+    constraints: int,
 }
 
 // Identify one standalone point entity.
@@ -218,6 +304,11 @@ Shape_Pen_Handle :: struct {
     shape: Shape_Entity,
     joint1: Shape_Entity,
     joint2: Shape_Entity,
+    length_constraint: u16,
+    joint1_floor_constraint: u16,
+    joint2_floor_constraint: u16,
+    joint1_lock_constraint: u16,
+    joint2_lock_constraint: u16,
 }
 
 // Identify one compass host and its direct geometry references.
@@ -226,6 +317,14 @@ Shape_Compass_Handle :: struct {
     joint1: Shape_Entity,
     pivot: Shape_Entity,
     joint2: Shape_Entity,
+    center_pivot_constraint: u16,
+    limb1_length_constraint: u16,
+    limb2_length_constraint: u16,
+    joint1_floor_constraint: u16,
+    pivot_floor_constraint: u16,
+    joint2_floor_constraint: u16,
+    joint1_lock_constraint: u16,
+    joint2_lock_constraint: u16,
 }
 
 // Hold the first bounded canonical world slice during the shape migration.
@@ -238,6 +337,7 @@ Shape_World :: struct {
     labels: Shape_Component_Set(Shape_Label),
     vertex_references: Shape_Vertex_Reference_Store,
     label_store: Shape_Label_Store,
+    constraints: Shape_Constraint_Store,
 }
 
 // Pack one pointer-free entity identity for bridge and snapshot storage.
@@ -426,6 +526,71 @@ shape_component_rewind_animation :: proc(
     return .Ok
 }
 
+// Return whether one entity is a live transform target in the canonical world.
+shape_constraint_target_resolves :: proc(
+    world: ^Shape_World,
+    entity: Shape_Entity) -> bool {
+    return world != nil && shape_component_contains(
+        &world.transforms, &world.registry, entity)
+}
+
+// Validate every direct target required by one kind-specific constraint payload.
+shape_constraint_targets_resolve :: proc(
+    world: ^Shape_World,
+    constraint: Shape_Constraint) -> bool {
+    if world == nil {
+        return false
+    }
+    switch constraint.kind {
+    case .Floor:
+        return shape_constraint_target_resolves(world, constraint.payload.floor.point)
+    case .Snap_To_Floor:
+        return shape_constraint_target_resolves(
+            world, constraint.payload.snap_to_floor.point)
+    case .Snap_Point:
+        return shape_constraint_target_resolves(
+            world, constraint.payload.snap_point.point)
+    case .Distance:
+        payload := constraint.payload.distance
+        return shape_constraint_target_resolves(world, payload.first) &&
+            shape_constraint_target_resolves(world, payload.second)
+    case .Max_Angle, .Min_Angle:
+        payload := constraint.payload.angle
+        return shape_constraint_target_resolves(world, payload.first) &&
+            shape_constraint_target_resolves(world, payload.pivot) &&
+            shape_constraint_target_resolves(world, payload.second)
+    case .Center_Pivot:
+        payload := constraint.payload.center_pivot
+        return shape_constraint_target_resolves(world, payload.first) &&
+            shape_constraint_target_resolves(world, payload.pivot) &&
+            shape_constraint_target_resolves(world, payload.second)
+    }
+    return false
+}
+
+// Append one fully validated constraint without partially advancing its store.
+shape_constraint_append :: proc(
+    world: ^Shape_World,
+    constraint: Shape_Constraint,
+    index: ^u16 = nil) -> Shape_World_Status {
+    if world == nil {
+        return .Invalid_Argument
+    }
+    if !shape_constraint_targets_resolve(world, constraint) {
+        return .Not_Found
+    }
+    if world.constraints.count >= MAX_SHAPE_CONSTRAINTS {
+        return .Out_Of_Capacity
+    }
+    constraint_index := world.constraints.count
+    world.constraints.values[constraint_index] = constraint
+    world.constraints.count += 1
+    if index != nil {
+        index^ = constraint_index
+    }
+    return .Ok
+}
+
 // Return whether one construction fits every fixed world store without mutation.
 shape_world_has_capacity :: proc(
     world: ^Shape_World,
@@ -433,7 +598,7 @@ shape_world_has_capacity :: proc(
     if world == nil || needs.entities < 0 || needs.transforms < 0 ||
         needs.render_styles < 0 || needs.active_features < 0 ||
         needs.geometries < 0 || needs.labels < 0 || needs.label_bytes < 0 ||
-        needs.vertex_references < 0 {
+        needs.vertex_references < 0 || needs.constraints < 0 {
         return false
     }
     component_capacity := MAX_SHAPE_ENTITIES
@@ -446,7 +611,8 @@ shape_world_has_capacity :: proc(
         int(world.label_store.byte_count) + needs.label_bytes <=
             MAX_SHAPE_LABEL_TOTAL_BYTES &&
         int(world.vertex_references.count) + needs.vertex_references <=
-            MAX_SHAPE_VERTEX_REFERENCES
+            MAX_SHAPE_VERTEX_REFERENCES &&
+        int(world.constraints.count) + needs.constraints <= MAX_SHAPE_CONSTRAINTS
 }
 
 // Validate one immutable, single-line plain-text label source.
@@ -578,7 +744,8 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     if world.registry.baseline_frozen || world.transforms.baseline_frozen ||
         world.render_styles.baseline_frozen || world.active_features.baseline_frozen ||
         world.geometries.baseline_frozen || world.labels.baseline_frozen ||
-        world.vertex_references.baseline_frozen || world.label_store.baseline_frozen {
+        world.vertex_references.baseline_frozen || world.label_store.baseline_frozen ||
+        world.constraints.baseline_frozen {
         return .Illegal_State
     }
     _ = shape_registry_freeze_baseline(&world.registry)
@@ -591,6 +758,8 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     world.vertex_references.baseline_frozen = true
     world.label_store.animation_byte_start = world.label_store.byte_count
     world.label_store.baseline_frozen = true
+    world.constraints.animation_start = world.constraints.count
+    world.constraints.baseline_frozen = true
     return .Ok
 }
 
@@ -602,7 +771,8 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
     if !world.registry.baseline_frozen || !world.transforms.baseline_frozen ||
         !world.render_styles.baseline_frozen || !world.active_features.baseline_frozen ||
         !world.geometries.baseline_frozen || !world.labels.baseline_frozen ||
-        !world.vertex_references.baseline_frozen || !world.label_store.baseline_frozen {
+        !world.vertex_references.baseline_frozen || !world.label_store.baseline_frozen ||
+        !world.constraints.baseline_frozen {
         return .Illegal_State
     }
     _ = shape_component_rewind_animation(&world.transforms)
@@ -612,5 +782,6 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
     _ = shape_component_rewind_animation(&world.labels)
     world.vertex_references.count = world.vertex_references.animation_start
     world.label_store.byte_count = world.label_store.animation_byte_start
+    world.constraints.count = world.constraints.animation_start
     return shape_registry_rewind_animation(&world.registry)
 }
