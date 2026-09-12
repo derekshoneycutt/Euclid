@@ -368,6 +368,57 @@ emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
         ps^.low_particles.alive[3])
 }
 
+//   Seed one world line with direct endpoint transforms and configurable visibility.
+seed_shape_world_particle_line :: proc(
+    world: ^app_core.Shape_World,
+    visible: bool) {
+    shape, first, second: app_core.Shape_Entity
+    assert(app_core.shape_world_create_entity(world, &shape) == .Ok)
+    assert(app_core.shape_world_create_entity(world, &first) == .Ok)
+    assert(app_core.shape_world_create_entity(world, &second) == .Ok)
+    assert(app_core.shape_component_insert(&world.transforms, &world.registry,
+        first, app_core.Shape_Transform{position = {0, 0, 0}}) == .Ok)
+    assert(app_core.shape_component_insert(&world.transforms, &world.registry,
+        second, app_core.Shape_Transform{position = {1, 0, 0}}) == .Ok)
+    assert(app_core.shape_component_insert(&world.render_styles, &world.registry,
+        shape, app_core.Shape_Render_Style{visible = visible}) == .Ok)
+    geometry := app_core.Shape_Geometry{kind = .Line}
+    geometry.payload.line = {first = first, second = second}
+    assert(app_core.shape_component_insert(&world.geometries, &world.registry,
+        shape, geometry) == .Ok)
+}
+
+//   Verify world clear particles resolve direct line entities without child topology.
+@(test)
+emit_shape_world_clear_burst_spawns_dust_for_direct_line :: proc(t: ^testing.T) {
+    particles := new(app_core.Particle_System, context.allocator)
+    defer free(particles)
+    particles.use_max_dust_particles = 4
+    world: app_core.Shape_World
+    seed_shape_world_particle_line(&world, true)
+
+    emit_shape_world_clear_burst(particles, &world)
+
+    testing.expect(t, particles.low_particles.alive[0])
+    testing.expect(t, particles.low_particles.alive[1])
+}
+
+//   Verify hidden world geometry does not participate in clear particle emission.
+@(test)
+emit_shape_world_clear_burst_skips_hidden_geometry :: proc(t: ^testing.T) {
+    particles := new(app_core.Particle_System, context.allocator)
+    defer free(particles)
+    particles.use_max_dust_particles = 4
+    world: app_core.Shape_World
+    seed_shape_world_particle_line(&world, false)
+
+    emit_shape_world_clear_burst(particles, &world)
+
+    for alive in particles.low_particles.alive[:particles.use_max_dust_particles] {
+        testing.expect(t, !alive)
+    }
+}
+
 //   Verify out-of-bounds particles clamp to the bounds and bounce their velocity.
 @(test)
 clamp_xy_bounds_index_bounces_particles_back_inside_bounds :: proc(t: ^testing.T) {

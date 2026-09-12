@@ -7,6 +7,7 @@ import "../core"
 import "../particles"
 
 import "core:math/linalg"
+import "core:unicode/utf8"
 
 import rl "vendor:raylib"
 
@@ -54,7 +55,7 @@ Polygon_Cache_Range_Reservation :: struct {
 }
 
 Polygon_Triangulation :: struct {
-    point_system: ^Shapes_Point_System,
+    cache: ^core.Shapes_Draw_Cache,
     ring: []Shapes_Polygon_Ring_Node,
     vertices: []Vector3,
     count: int,
@@ -68,6 +69,12 @@ Polygon_Draw_Commit :: struct {
     source_index, vertex_count, triangle_count: int,
     source: ^Shapes_Point,
     reservation: Polygon_Cache_Range_Reservation,
+}
+
+// Legacy_Label_Source_Range identifies encoded label bytes owned by one draw packet.
+Legacy_Label_Source_Range :: struct {
+    offset: u16,
+    count:  u16,
 }
 
 //   Snapshot current point positions into per-point previous_position for interpolation.
@@ -159,11 +166,65 @@ build_draw_cache :: proc(
 draw_cache_reset :: proc(
     point_system: ^Shapes_Point_System) {
 
-    point_system^.draw_cache.item_count = 0
-    point_system^.draw_cache.polygon_vertex_count = 0
-    point_system^.draw_cache.polygon_triangle_count = 0
-    point_system^.draw_cache.draw_pen = false
-    point_system^.draw_cache.draw_compass = false
+    draw_cache_reset_storage(&point_system.draw_cache)
+}
+
+//   Reset one derived packet before rebuilding it from any canonical source.
+draw_cache_reset_storage :: proc(cache: ^core.Shapes_Draw_Cache) {
+
+    cache.item_count = 0
+    cache.label_byte_count = 0
+    cache.polygon_vertex_count = 0
+    cache.polygon_triangle_count = 0
+    cache.draw_pen = false
+    cache.draw_compass = false
+}
+
+//   Append one UTF-8 codepoint to packet-owned label storage.
+draw_cache_append_label_codepoint :: proc(
+    cache: ^core.Shapes_Draw_Cache,
+    codepoint: rune) -> bool {
+    encoded, width := utf8.encode_rune(codepoint)
+    end := int(cache.label_byte_count) + width
+    if width <= 0 || end > len(cache.label_bytes) {
+        return false
+    }
+    copy(cache.label_bytes[cache.label_byte_count:end], encoded[:width])
+    cache.label_byte_count = u16(end)
+    return true
+}
+
+//   Encode one legacy decorated label as ordinary immutable Unicode source.
+draw_cache_append_legacy_label :: proc(
+    cache: ^core.Shapes_Draw_Cache,
+    label: rune,
+    decoration: core.Shapes_Label_Decoration_Kind) -> (Legacy_Label_Source_Range, bool) {
+    start := cache.label_byte_count
+    if !draw_cache_append_label_codepoint(cache, label) {
+        return {}, false
+    }
+    decoration_codepoint: rune
+    decoration_count := 0
+    switch decoration {
+    case .None:
+    case .Prime:
+        decoration_codepoint, decoration_count = '′', 1
+    case .Double_Prime:
+        decoration_codepoint, decoration_count = '′', 2
+    case .Triple_Prime:
+        decoration_codepoint, decoration_count = '′', 3
+    case .Hat:
+        decoration_codepoint, decoration_count = '\u0302', 1
+    case .Bar:
+        decoration_codepoint, decoration_count = '\u0304', 1
+    }
+    for _ in 0..<decoration_count {
+        if !draw_cache_append_label_codepoint(cache, decoration_codepoint) {
+            cache.label_byte_count = start
+            return {}, false
+        }
+    }
+    return {start, cache.label_byte_count - start}, true
 }
 
 //   Return true when one z coordinate should count as on-surface for cache sorting.
@@ -183,14 +244,14 @@ draw_cache_visual_depth :: #force_inline proc(point: Vector3) -> f32 {
 
 //   Compute one polygon centroid and whether all cached polygon vertices are flat.
 draw_cache_polygon_centroid_and_flatness :: proc(
-    point_system: ^Shapes_Point_System,
+    cache: ^core.Shapes_Draw_Cache,
     poly: ^Shapes_Polygon_Draw) -> (Vector3, bool) {
 
     if poly^.vertex_count <= 0 {
         return {}, false
     }
 
-    vertices := point_system^.draw_cache.polygon_vertices[
+    vertices := cache.polygon_vertices[
         poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
     sum := Vector3{}
     flat := true
@@ -256,7 +317,7 @@ draw_cache_compass_depth_and_flatness :: #force_inline proc(
 //   - Flat items are later kept in authored creation order when compared to
 //     other flat items.
 draw_cache_item_depth_and_flatness :: proc(
-    point_system: ^Shapes_Point_System,
+    cache: ^core.Shapes_Draw_Cache,
     item: ^Shapes_Draw_Cache_Item) -> (f32, bool) {
 
     switch &typed in item {
@@ -271,7 +332,7 @@ draw_cache_item_depth_and_flatness :: proc(
     case Shapes_Filled_Circle_Draw:
         return draw_cache_filledcircle_depth_and_flatness(typed)
     case Shapes_Polygon_Draw:
-        centroid, flat := draw_cache_polygon_centroid_and_flatness(point_system, &typed)
+        centroid, flat := draw_cache_polygon_centroid_and_flatness(cache, &typed)
         return draw_cache_visual_depth(centroid), flat
     case Shapes_Pen_Draw: return draw_cache_pen_depth_and_flatness(typed)
     case Shapes_Compass_Draw: return draw_cache_compass_depth_and_flatness(typed)
@@ -311,7 +372,12 @@ draw_cache_item_should_precede :: #force_inline proc(
 //     primitives or solve exact visibility.
 //   - Fully flat `z = 0` items keep their authored creation order.
 sort_draw_cache_low :: proc(point_system: ^Shapes_Point_System) {
-    item_count := point_system^.draw_cache.item_count
+    sort_draw_cache_storage(&point_system.draw_cache)
+}
+
+//   Stable-sort one derived packet by representative visual depth.
+sort_draw_cache_storage :: proc(cache: ^core.Shapes_Draw_Cache) {
+    item_count := cache.item_count
     if item_count <= 1 {
         return
     }
@@ -321,12 +387,12 @@ sort_draw_cache_low :: proc(point_system: ^Shapes_Point_System) {
 
     for i in 0..<item_count {
         depths[i], flats[i] = draw_cache_item_depth_and_flatness(
-            point_system,
-            &point_system^.draw_cache.items[i])
+            cache,
+            &cache.items[i])
     }
 
     for i in 1..<item_count {
-        item := point_system^.draw_cache.items[i]
+        item := cache.items[i]
         item_depth := depths[i]
         item_flat := flats[i]
         j := i
@@ -341,13 +407,13 @@ sort_draw_cache_low :: proc(point_system: ^Shapes_Point_System) {
                 break
             }
 
-            point_system^.draw_cache.items[j] = point_system^.draw_cache.items[prev_index]
+            cache.items[j] = cache.items[prev_index]
             depths[j] = depths[prev_index]
             flats[j] = flats[prev_index]
             j = prev_index
         }
 
-        point_system^.draw_cache.items[j] = item
+        cache.items[j] = item
         depths[j] = item_depth
         flats[j] = item_flat
     }
@@ -413,12 +479,19 @@ lerped_child_positions :: proc(
 draw_cache_next_item_slot :: #force_inline proc(
     point_system: ^Shapes_Point_System) -> (^Shapes_Draw_Cache_Item, bool) {
 
-    if point_system^.draw_cache.item_count >= len(point_system^.draw_cache.items) {
+    return draw_cache_next_item_slot_storage(&point_system.draw_cache)
+}
+
+//   Reserve the next item slot in one derived packet.
+draw_cache_next_item_slot_storage :: #force_inline proc(
+    cache: ^core.Shapes_Draw_Cache) -> (^Shapes_Draw_Cache_Item, bool) {
+
+    if cache.item_count >= len(cache.items) {
         return nil, false
     }
 
-    slot := &point_system^.draw_cache.items[point_system^.draw_cache.item_count]
-    point_system^.draw_cache.item_count += 1
+    slot := &cache.items[cache.item_count]
+    cache.item_count += 1
     return slot, true
 }
 
@@ -427,16 +500,25 @@ draw_cache_reserve_polygon_vertices :: #force_inline proc(
     point_system: ^Shapes_Point_System,
     count: int) -> (int, bool) {
 
+    return draw_cache_reserve_polygon_vertices_storage(
+        &point_system.draw_cache, count)
+}
+
+//   Reserve a contiguous polygon vertex range in one derived packet.
+draw_cache_reserve_polygon_vertices_storage :: #force_inline proc(
+    cache: ^core.Shapes_Draw_Cache,
+    count: int) -> (int, bool) {
+
     if count <= 0 {
         return 0, false
     }
 
-    next := point_system^.draw_cache.polygon_vertex_count
-    if next + count > len(point_system^.draw_cache.polygon_vertices) {
+    next := cache.polygon_vertex_count
+    if next + count > len(cache.polygon_vertices) {
         return 0, false
     }
 
-    point_system^.draw_cache.polygon_vertex_count = next + count
+    cache.polygon_vertex_count = next + count
     return next, true
 }
 
@@ -445,16 +527,25 @@ draw_cache_reserve_polygon_triangles :: #force_inline proc(
     point_system: ^Shapes_Point_System,
     count: int) -> (int, bool) {
 
+    return draw_cache_reserve_polygon_triangles_storage(
+        &point_system.draw_cache, count)
+}
+
+//   Reserve a contiguous polygon triangle range in one derived packet.
+draw_cache_reserve_polygon_triangles_storage :: #force_inline proc(
+    cache: ^core.Shapes_Draw_Cache,
+    count: int) -> (int, bool) {
+
     if count <= 0 {
         return 0, false
     }
 
-    next := point_system^.draw_cache.polygon_triangle_count
-    if next + count > len(point_system^.draw_cache.polygon_triangles) {
+    next := cache.polygon_triangle_count
+    if next + count > len(cache.polygon_triangles) {
         return 0, false
     }
 
-    point_system^.draw_cache.polygon_triangle_count = next + count
+    cache.polygon_triangle_count = next + count
     return next, true
 }
 
@@ -522,7 +613,7 @@ emit_polygon_triangle :: #force_inline proc(
     a, b, c: int) {
 
     write_index := triangulation.triangle_start + triangulation.triangle_count^
-    triangulation.point_system^.draw_cache.polygon_triangles[write_index] =
+    triangulation.cache.polygon_triangles[write_index] =
         Shapes_Polygon_Triangle{
         triangulation.base_vertex + a,
         triangulation.base_vertex + b,
@@ -666,19 +757,30 @@ triangulate_polygon_ear_clip :: proc(
     vertices: []Vector3,
     triangle_start: int) -> int {
 
+    return triangulate_polygon_ear_clip_storage(
+        &point_system.draw_cache, base_vertex, vertices, triangle_start)
+}
+
+//   Triangulate one polygon into cache-owned workspace and triangle storage.
+triangulate_polygon_ear_clip_storage :: proc(
+    cache: ^core.Shapes_Draw_Cache,
+    base_vertex: int,
+    vertices: []Vector3,
+    triangle_start: int) -> int {
+
     count := len(vertices)
     if count < 3 {
         return 0
     }
 
-    ring := point_system^.draw_cache.polygon_ring_nodes[:count]
+    ring := cache.polygon_ring_nodes[:count]
     init_polygon_ring_nodes(ring, count)
 
     area := polygon_signed_area_xy(vertices)
     want_ccw := area >= 0
     triangle_count := 0
     triangulation := Polygon_Triangulation{
-        point_system, ring, vertices, count, want_ccw, triangle_start,
+        cache, ring, vertices, count, want_ccw, triangle_start,
         &triangle_count, base_vertex,
     }
     remaining := triangulate_polygon_ear_loop(triangulation)
@@ -698,19 +800,26 @@ reserve_polygon_cache_ranges :: #force_inline proc(
     point_system: ^Shapes_Point_System,
     vertex_count: int) -> Polygon_Cache_Range_Reservation {
 
-    first_vertex, has_vertex_space := draw_cache_reserve_polygon_vertices(
-        point_system,
-        vertex_count)
+    return reserve_polygon_cache_ranges_storage(
+        &point_system.draw_cache, vertex_count)
+}
+
+//   Reserve all packet ranges required by one polygon.
+reserve_polygon_cache_ranges_storage :: #force_inline proc(
+    cache: ^core.Shapes_Draw_Cache,
+    vertex_count: int) -> Polygon_Cache_Range_Reservation {
+
+    first_vertex, has_vertex_space := draw_cache_reserve_polygon_vertices_storage(
+        cache, vertex_count)
     if !has_vertex_space {
         return Polygon_Cache_Range_Reservation{0, 0, 0, false}
     }
 
     max_triangle_count := vertex_count - 2
-    first_triangle, has_triangle_space := draw_cache_reserve_polygon_triangles(
-        point_system,
-        max_triangle_count)
+    first_triangle, has_triangle_space := draw_cache_reserve_polygon_triangles_storage(
+        cache, max_triangle_count)
     if !has_triangle_space {
-        point_system^.draw_cache.polygon_vertex_count -= vertex_count
+        cache.polygon_vertex_count -= vertex_count
         return Polygon_Cache_Range_Reservation{0, 0, 0, false}
     }
 
@@ -728,8 +837,18 @@ rollback_polygon_cache_ranges :: #force_inline proc(
     vertex_count: int,
     reserved_triangle_count: int) {
 
-    point_system^.draw_cache.polygon_vertex_count -= vertex_count
-    point_system^.draw_cache.polygon_triangle_count -= reserved_triangle_count
+    rollback_polygon_cache_ranges_storage(
+        &point_system.draw_cache, vertex_count, reserved_triangle_count)
+}
+
+//   Roll back one failed polygon reservation in a derived packet.
+rollback_polygon_cache_ranges_storage :: #force_inline proc(
+    cache: ^core.Shapes_Draw_Cache,
+    vertex_count: int,
+    reserved_triangle_count: int) {
+
+    cache.polygon_vertex_count -= vertex_count
+    cache.polygon_triangle_count -= reserved_triangle_count
 }
 
 //   Shrink reserved triangle range to the actual emitted triangle count.
@@ -738,7 +857,17 @@ finalize_polygon_triangle_reservation :: #force_inline proc(
     first_triangle: int,
     triangle_count: int) {
 
-    point_system^.draw_cache.polygon_triangle_count = first_triangle + triangle_count
+    finalize_polygon_triangle_reservation_storage(
+        &point_system.draw_cache, first_triangle, triangle_count)
+}
+
+//   Shrink one packet triangle reservation to its emitted count.
+finalize_polygon_triangle_reservation_storage :: #force_inline proc(
+    cache: ^core.Shapes_Draw_Cache,
+    first_triangle: int,
+    triangle_count: int) {
+
+    cache.polygon_triangle_count = first_triangle + triangle_count
 }
 
 
@@ -782,13 +911,20 @@ cache_push_label :: proc(
         return
     }
 
-    slot, has_slot := draw_cache_next_item_slot(point_system)
-    if !has_slot {
+    source, source_ok := draw_cache_append_legacy_label(
+        &point_system.draw_cache, label, src.decoration_kind)
+    if !source_ok {
         return
     }
 
-    point := Shapes_Label_Draw{ make_draw_base(source_index, src),
-        p0, label, src^.decoration_kind }
+    slot, has_slot := draw_cache_next_item_slot(point_system)
+    if !has_slot {
+        point_system.draw_cache.label_byte_count = source.offset
+        return
+    }
+
+    point := Shapes_Label_Draw{make_draw_base(source_index, src),
+        p0, .Text_Plain, source.offset, source.count, 0}
     slot^ = point
 }
 

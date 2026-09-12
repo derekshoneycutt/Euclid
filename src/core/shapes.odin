@@ -329,6 +329,7 @@ Shape_Compass_Handle :: struct {
 
 // Hold the first bounded canonical world slice during the shape migration.
 Shape_World :: struct {
+    draw_cache: Shapes_Draw_Cache,
     registry: Shape_Registry,
     transforms: Shape_Component_Set(Shape_Transform),
     render_styles: Shape_Component_Set(Shape_Render_Style),
@@ -338,6 +339,19 @@ Shape_World :: struct {
     vertex_references: Shape_Vertex_Reference_Store,
     label_store: Shape_Label_Store,
     constraints: Shape_Constraint_Store,
+}
+
+// Invalidate every published packet frontier before canonical world mutation.
+shape_world_invalidate_draw_cache :: proc(world: ^Shape_World) {
+    if world == nil {
+        return
+    }
+    world.draw_cache.item_count = 0
+    world.draw_cache.label_byte_count = 0
+    world.draw_cache.polygon_vertex_count = 0
+    world.draw_cache.polygon_triangle_count = 0
+    world.draw_cache.draw_pen = false
+    world.draw_cache.draw_compass = false
 }
 
 // Pack one pointer-free entity identity for bridge and snapshot storage.
@@ -775,6 +789,7 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
         !world.constraints.baseline_frozen {
         return .Illegal_State
     }
+    shape_world_invalidate_draw_cache(world)
     _ = shape_component_rewind_animation(&world.transforms)
     _ = shape_component_rewind_animation(&world.render_styles)
     _ = shape_component_rewind_animation(&world.active_features)

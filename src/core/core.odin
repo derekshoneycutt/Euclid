@@ -786,8 +786,10 @@ Shapes_Draw_Base :: struct {
 Shapes_Label_Draw :: struct {
     using base: Shapes_Draw_Base,
     point1: Vector3,
-    label: rune,
-    decoration_kind: Shapes_Label_Decoration_Kind,
+    mime: Shape_Text_Mime,
+    source_offset: u16,
+    source_count: u16,
+    source_revision: u32,
 }
 
 Shapes_Point_Draw :: struct {
@@ -864,6 +866,9 @@ Shapes_Draw_Cache_Item :: union {
 Shapes_Draw_Cache :: struct {
     items: [MAX_SHAPESPOINTS]Shapes_Draw_Cache_Item,
     item_count: int,
+
+    label_bytes: [MAX_SHAPE_LABEL_TOTAL_BYTES]u8,
+    label_byte_count: u16,
 
     polygon_vertices: [MAX_DRAW_CACHE_POLYGON_VERTICES]Vector3,
     polygon_vertex_count: int,

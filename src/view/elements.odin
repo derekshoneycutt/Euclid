@@ -1717,61 +1717,25 @@ project_iso_points_batch_with_components :: proc(
 
 
 
-//   Draw one prime decoration glyph at the resolved position and size.
-label_draw_prime :: #force_inline proc(
-    state: ^Euclid_General_State, pos: rl.Vector2, size: f32, color: rl.Color) {
-    regular_font := font.cache_borrow(&state^.font_cache, .Regular)
-    rl.DrawTextCodepoint(regular_font, '\'', pos, size, color)
-}
-
-//   Draw a run of prime decoration glyphs spaced across the label.
-label_draw_prime_run :: proc(
-    state: ^Euclid_General_State,
-    c: rl.Vector2,
-    brush_size: f32,
-    color: rl.Color,
-    count: int) {
-
-    width := brush_size * LABEL_DECORATION_WIDTH_SCALE
-    height := brush_size * LABEL_DECORATION_HEIGHT_SCALE
-    prime_pos := rl.Vector2{
-        c.x + width * LABEL_DECORATION_PRIME_X_OFFSET_SCALE,
-        c.y - height * LABEL_DECORATION_PRIME_Y_OFFSET_SCALE,
-    }
-    prime_size := math.max(16.0, brush_size * LABEL_DECORATION_PRIME_SIZE_SCALE)
-    spacing := prime_size * LABEL_DECORATION_DOUBLEPRIME_SPACING_SCALE
-    for i in 0..<count {
-        pos := rl.Vector2{prime_pos.x + f32(i) * spacing, prime_pos.y}
-        label_draw_prime(state, pos, prime_size, color)
-    }
-}
-
 //   Render one cached label draw item.
 draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Draw) {
+    cache := &state.point_system.draw_cache
+    start := int(p.source_offset)
+    end := start + int(p.source_count)
+    if p.source_count == 0 || end > int(cache.label_byte_count) || end < start {
+        return
+    }
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
     resolver := font.cache_terminal_resolver(&state^.font_cache)
-    view_core.ui_text_codepoint_paged({
+    regular_font := font.cache_borrow(&state.font_cache, .Regular)
+    view_core.ui_text_unshaped_paged({
         resolver = resolver,
         key = .Regular,
-        codepoint = p^.label,
+        text = string(cache.label_bytes[start:end]),
         position = c,
-        font_size = p^.brush_size,
         color = p^.color,
+        font = {font = regular_font, font_size = p.brush_size},
     })
-
-    switch p^.decoration_kind {
-    case .None:
-    case .Prime:
-        label_draw_prime_run(state, c, p^.brush_size, p^.color, 1)
-    case .Double_Prime:
-        label_draw_prime_run(state, c, p^.brush_size, p^.color, 2)
-    case .Triple_Prime:
-        label_draw_prime_run(state, c, p^.brush_size, p^.color, 3)
-    case .Hat:
-        //TODO: Do this
-    case .Bar:
-        //TODO: Do this
-    }
 }
 
 

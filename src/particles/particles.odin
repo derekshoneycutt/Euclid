@@ -156,6 +156,13 @@ Circle_Kind_Burst_Config :: struct {
     abort_on_invalid: bool,
 }
 
+// Group one world-backed clear-burst operation and its render color.
+Shape_World_Burst_Context :: struct {
+    particles: ^Particle_System,
+    world: ^core.Shape_World,
+    color: rl.Color,
+}
+
 Dust_Collision_Grid :: struct {
     cell_y, cell_x, cell_index, cell_count: int,
     radius_sq, min_sep: f32,
@@ -435,6 +442,113 @@ emit_shapes_clear_burst :: proc(
 
         if emit_shapes_burst(ps, ks, kp, col, false) {
             continue
+        }
+    }
+}
+
+//   Resolve one direct world transform position for particle emission.
+shape_world_burst_position :: proc(
+    world: ^core.Shape_World,
+    entity: core.Shape_Entity) -> (Vector3, bool) {
+    transform, found := core.shape_component_get(
+        &world.transforms, &world.registry, entity)
+    if !found {
+        return {}, false
+    }
+    return transform.position, true
+}
+
+//   Emit one world polygon through the existing bounded fill sampler.
+emit_shape_world_polygon_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    geometry: core.Shape_Polygon_Geometry) {
+    entities, found := core.shape_polygon_vertices(ctx.world, geometry)
+    vertices: [12]Vector3
+    if !found || len(entities) > len(vertices) {
+        return
+    }
+    for entity, index in entities {
+        position, position_found := shape_world_burst_position(ctx.world, entity)
+        if !position_found {
+            return
+        }
+        vertices[index] = position
+    }
+    emit_polygon_fill_dust(
+        ctx.particles, &vertices, len(entities), ctx.color)
+}
+
+//   Emit one world arc through the existing bounded sweep sampler.
+emit_shape_world_arc_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    geometry: core.Shape_Arc_Geometry,
+    offset: f32,
+    sample_count: int) {
+    center, center_ok := shape_world_burst_position(ctx.world, geometry.center)
+    start, start_ok := shape_world_burst_position(ctx.world, geometry.start)
+    finish, finish_ok := shape_world_burst_position(ctx.world, geometry.finish)
+    if !center_ok || !start_ok || !finish_ok {
+        return
+    }
+    emit_circle_dust(ctx.particles, {
+        center, start, finish, offset, ctx.color, sample_count})
+}
+
+//   Emit one direct world geometry using the legacy sampling behavior.
+emit_shape_world_geometry_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: core.Shape_Entity,
+    geometry: core.Shape_Geometry,
+    offset: f32) {
+    switch geometry.kind {
+    case .Point:
+        position, found := shape_world_burst_position(ctx.world, entity)
+        if found {emit_point_burst(ctx.particles, position, ctx.color)}
+    case .Line:
+        first, first_ok := shape_world_burst_position(
+            ctx.world, geometry.payload.line.first)
+        second, second_ok := shape_world_burst_position(
+            ctx.world, geometry.payload.line.second)
+        if first_ok && second_ok {
+            emit_line_dust(ctx.particles, first, second, ctx.color)
+        }
+    case .Arc:
+        emit_shape_world_arc_burst(ctx, geometry.payload.arc,
+            offset, CLEAR_BURST_CIRCLE_SAMPLES)
+    case .Filled_Arc:
+        emit_shape_world_arc_burst(ctx, geometry.payload.arc,
+            offset, CLEAR_BURST_FILLED_CIRCLE_SAMPLES)
+    case .Polygon:
+        emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
+    case .Pen, .Compass:
+    }
+}
+
+//   Emit clear dust for every visible label and geometry in one canonical world.
+emit_shape_world_clear_burst :: proc(
+    ps: ^Particle_System,
+    world: ^core.Shape_World,
+    iso_scale: ^Iso_Scale = nil) {
+    if ps == nil || world == nil || ps.use_max_dust_particles < 1 {
+        return
+    }
+    kick_existing_dust(ps, iso_scale)
+    for index in 0..<world.render_styles.count {
+        entity := world.render_styles.entities[index]
+        style := world.render_styles.values[index]
+        if !style.visible || !core.shape_registry_resolves(&world.registry, entity) {
+            continue
+        }
+        ctx := Shape_World_Burst_Context{ps, world, style.color}
+        if core.shape_component_contains(&world.labels, &world.registry, entity) {
+            position, found := shape_world_burst_position(world, entity)
+            if found {emit_label_burst(ps, position, style.color)}
+            continue
+        }
+        geometry, found := core.shape_component_get(
+            &world.geometries, &world.registry, entity)
+        if found {
+            emit_shape_world_geometry_burst(ctx, entity, geometry^, style.offset)
         }
     }
 }
