@@ -199,3 +199,69 @@ core_test_shape_world_repeated_rewind_restores_frontiers :: proc(t: ^testing.T) 
         testing.expect(t, !shape_registry_resolves(&world.registry, animation))
     }
 }
+
+// Verify plain labels admit representative Unicode and preserve exact source bytes.
+@(test)
+core_test_shape_labels_store_unicode_source :: proc(t: ^testing.T) {
+    sources := [?]string{"A", "α", "A′", "∠ABC"}
+    store: Shape_Label_Store
+    for source in sources {
+        label: Shape_Label
+        testing.expect_value(t, shape_label_store_append(
+            &store, .Text_Plain, source, &label), Shape_World_Status.Ok)
+        stored, found := shape_label_source(&store, label)
+        testing.expect(t, found)
+        testing.expect_value(t, stored, source)
+        testing.expect_value(t, label.revision, u32(1))
+    }
+}
+
+// Verify malformed, multiline, control, empty, and unsupported label source is rejected.
+@(test)
+core_test_shape_labels_reject_invalid_source :: proc(t: ^testing.T) {
+    malformed_bytes := [1]u8{0xff}
+    malformed := string(malformed_bytes[:])
+    testing.expect_value(t, shape_label_validate_source(
+        .Text_Plain, malformed), Shape_World_Status.Invalid_Utf8)
+    invalid_sources := [?]string{"", "A\nB", "A\rB", "A\x00B", "A\x7fB"}
+    for source in invalid_sources {
+        testing.expect_value(t, shape_label_validate_source(
+            .Text_Plain, source), Shape_World_Status.Invalid_Argument)
+    }
+    testing.expect_value(t, shape_label_validate_source(
+        .Text_Latex, "A"), Shape_World_Status.Unsupported_Mime)
+}
+
+// Verify the exact per-label byte limit succeeds and one additional byte rejects.
+@(test)
+core_test_shape_labels_enforce_source_limit :: proc(t: ^testing.T) {
+    exact_bytes: [MAX_SHAPE_LABEL_SOURCE_BYTES]u8
+    for &byte in exact_bytes {
+        byte = 'a'
+    }
+    exact := string(exact_bytes[:])
+    testing.expect_value(t, shape_label_validate_source(
+        .Text_Plain, exact), Shape_World_Status.Ok)
+
+    oversized_bytes: [MAX_SHAPE_LABEL_SOURCE_BYTES + 1]u8
+    for &byte in oversized_bytes {
+        byte = 'a'
+    }
+    testing.expect_value(t, shape_label_validate_source(
+        .Text_Plain, string(oversized_bytes[:])), Shape_World_Status.Invalid_Argument)
+}
+
+// Verify polygon publication rejects stale or transform-free entity references.
+@(test)
+core_test_shape_polygon_references_require_live_transforms :: proc(t: ^testing.T) {
+    world: Shape_World
+    entities: [3]Shape_Entity
+    for &entity in entities {
+        testing.expect_value(t, shape_world_create_entity(
+            &world, &entity), Shape_World_Status.Ok)
+    }
+    geometry: Shape_Polygon_Geometry
+    testing.expect_value(t, shape_vertex_references_append(
+        &world, entities[:], &geometry), Shape_World_Status.Not_Found)
+    testing.expect_value(t, world.vertex_references.count, u16(0))
+}

@@ -1,8 +1,12 @@
 package core
 
+import "core:unicode/utf8"
 import rl "vendor:raylib"
 
 MAX_SHAPE_ENTITIES :: MAX_SHAPESPOINTS
+MAX_SHAPE_VERTEX_REFERENCES :: MAX_SHAPE_ENTITIES
+MAX_SHAPE_LABEL_SOURCE_BYTES :: 256
+MAX_SHAPE_LABEL_TOTAL_BYTES :: 32 * 1024
 SHAPE_ENTITY_INVALID_SLOT :: u32(0)
 SHAPE_ENTITY_INVALID_GENERATION :: u32(0)
 
@@ -14,6 +18,8 @@ Shape_World_Status :: enum {
     Not_Found,
     Already_Present,
     Out_Of_Capacity,
+    Invalid_Utf8,
+    Unsupported_Mime,
 }
 
 // Identify one entity slot across animation-suffix reuse.
@@ -51,7 +57,7 @@ Shape_Render_Style :: struct {
     color: rl.Color,
     active_color: Maybe(rl.Color),
     brush_size: f32,
-    offset: Vector3,
+    offset: f32,
     visible: bool,
 }
 
@@ -60,12 +66,178 @@ Shape_Active_Feature :: struct {
     index: u16,
 }
 
+// Distinguish the immutable topology payload owned by one shape entity.
+Shape_Geometry_Kind :: enum u8 {
+    Point,
+    Line,
+    Arc,
+    Filled_Arc,
+    Polygon,
+    Pen,
+    Compass,
+}
+
+// Name both transform entities required by one line.
+Shape_Line_Geometry :: struct {
+    first: Shape_Entity,
+    second: Shape_Entity,
+}
+
+// Name the center and endpoint transforms required by one arc.
+Shape_Arc_Geometry :: struct {
+    center: Shape_Entity,
+    start: Shape_Entity,
+    finish: Shape_Entity,
+}
+
+// Locate one immutable ordered polygon span in the world reference pool.
+Shape_Polygon_Geometry :: struct {
+    first_vertex: u16,
+    vertex_count: u16,
+}
+
+// Name both transform entities required by one pen.
+Shape_Pen_Geometry :: struct {
+    joint1: Shape_Entity,
+    joint2: Shape_Entity,
+}
+
+// Name all transform entities required by one compass.
+Shape_Compass_Geometry :: struct {
+    joint1: Shape_Entity,
+    pivot: Shape_Entity,
+    joint2: Shape_Entity,
+}
+
+// Store one immutable kind-valid geometry payload.
+Shape_Geometry :: struct {
+    kind: Shape_Geometry_Kind,
+    payload: struct #raw_union {
+        line: Shape_Line_Geometry,
+        arc: Shape_Arc_Geometry,
+        polygon: Shape_Polygon_Geometry,
+        pen: Shape_Pen_Geometry,
+        compass: Shape_Compass_Geometry,
+    },
+}
+
+// Identify the canonical source language for one geometric annotation.
+Shape_Text_Mime :: enum u8 {
+    Text_Plain,
+    Text_Latex,
+}
+
+// Locate one immutable label source span without retaining an internal pointer.
+Shape_Label :: struct {
+    mime: Shape_Text_Mime,
+    byte_offset: u16,
+    byte_count: u16,
+    revision: u32,
+}
+
+// Own ordered variable-arity polygon topology in one fixed inline pool.
+Shape_Vertex_Reference_Store :: struct {
+    entities: [MAX_SHAPE_VERTEX_REFERENCES]Shape_Entity,
+    count: u16,
+    animation_start: u16,
+    baseline_frozen: bool,
+}
+
+// Own canonical label source bytes in one fixed inline pool.
+Shape_Label_Store :: struct {
+    bytes: [MAX_SHAPE_LABEL_TOTAL_BYTES]u8,
+    byte_count: u16,
+    animation_byte_start: u16,
+    baseline_frozen: bool,
+}
+
+// Describe all fixed capacities required by one transactional construction.
+Shape_Construction_Needs :: struct {
+    entities: int,
+    transforms: int,
+    render_styles: int,
+    active_features: int,
+    geometries: int,
+    labels: int,
+    label_bytes: int,
+    vertex_references: int,
+}
+
+// Identify one standalone point entity.
+Shape_Point_Handle :: struct {
+    entity: Shape_Entity,
+}
+
+// Identify one standalone label entity.
+Shape_Label_Handle :: struct {
+    entity: Shape_Entity,
+}
+
+// Identify a line host and both endpoint transforms.
+Shape_Line_Handle :: struct {
+    shape: Shape_Entity,
+    first: Shape_Entity,
+    second: Shape_Entity,
+}
+
+// Identify an arc host and its center and endpoint transforms.
+Shape_Arc_Handle :: struct {
+    shape: Shape_Entity,
+    center: Shape_Entity,
+    start: Shape_Entity,
+    finish: Shape_Entity,
+}
+
+// Identify one variable-arity polygon host.
+Shape_Polygon_Handle :: struct {
+    shape: Shape_Entity,
+}
+
+// Identify one triangle host and its three ordered vertices.
+Shape_Triangle_Handle :: struct {
+    shape: Shape_Entity,
+    first: Shape_Entity,
+    second: Shape_Entity,
+    third: Shape_Entity,
+}
+
+// Identify one square host and its four ordered vertices.
+Shape_Square_Handle :: struct {
+    shape: Shape_Entity,
+    vertices: [4]Shape_Entity,
+}
+
+// Identify one pentagon host and its five ordered vertices.
+Shape_Pentagon_Handle :: struct {
+    shape: Shape_Entity,
+    vertices: [5]Shape_Entity,
+}
+
+// Identify one pen host and its direct geometry references.
+Shape_Pen_Handle :: struct {
+    shape: Shape_Entity,
+    joint1: Shape_Entity,
+    joint2: Shape_Entity,
+}
+
+// Identify one compass host and its direct geometry references.
+Shape_Compass_Handle :: struct {
+    shape: Shape_Entity,
+    joint1: Shape_Entity,
+    pivot: Shape_Entity,
+    joint2: Shape_Entity,
+}
+
 // Hold the first bounded canonical world slice during the shape migration.
 Shape_World :: struct {
     registry: Shape_Registry,
     transforms: Shape_Component_Set(Shape_Transform),
     render_styles: Shape_Component_Set(Shape_Render_Style),
     active_features: Shape_Component_Set(Shape_Active_Feature),
+    geometries: Shape_Component_Set(Shape_Geometry),
+    labels: Shape_Component_Set(Shape_Label),
+    vertex_references: Shape_Vertex_Reference_Store,
+    label_store: Shape_Label_Store,
 }
 
 // Pack one pointer-free entity identity for bridge and snapshot storage.
@@ -254,6 +426,140 @@ shape_component_rewind_animation :: proc(
     return .Ok
 }
 
+// Return whether one construction fits every fixed world store without mutation.
+shape_world_has_capacity :: proc(
+    world: ^Shape_World,
+    needs: Shape_Construction_Needs) -> bool {
+    if world == nil || needs.entities < 0 || needs.transforms < 0 ||
+        needs.render_styles < 0 || needs.active_features < 0 ||
+        needs.geometries < 0 || needs.labels < 0 || needs.label_bytes < 0 ||
+        needs.vertex_references < 0 {
+        return false
+    }
+    component_capacity := MAX_SHAPE_ENTITIES
+    return int(world.registry.entity_count) + needs.entities <= MAX_SHAPE_ENTITIES &&
+        int(world.transforms.count) + needs.transforms <= component_capacity &&
+        int(world.render_styles.count) + needs.render_styles <= component_capacity &&
+        int(world.active_features.count) + needs.active_features <= component_capacity &&
+        int(world.geometries.count) + needs.geometries <= component_capacity &&
+        int(world.labels.count) + needs.labels <= component_capacity &&
+        int(world.label_store.byte_count) + needs.label_bytes <=
+            MAX_SHAPE_LABEL_TOTAL_BYTES &&
+        int(world.vertex_references.count) + needs.vertex_references <=
+            MAX_SHAPE_VERTEX_REFERENCES
+}
+
+// Validate one immutable, single-line plain-text label source.
+shape_label_validate_source :: proc(
+    mime: Shape_Text_Mime,
+    source: string) -> Shape_World_Status {
+    if mime != .Text_Plain {
+        return .Unsupported_Mime
+    }
+    if len(source) == 0 || len(source) > MAX_SHAPE_LABEL_SOURCE_BYTES {
+        return .Invalid_Argument
+    }
+    if !utf8.valid_string(source) {
+        return .Invalid_Utf8
+    }
+    offset := 0
+    for offset < len(source) {
+        codepoint, width := utf8.decode_rune(source[offset:])
+        if codepoint < 0x20 || codepoint >= 0x7f && codepoint <= 0x9f {
+            return .Invalid_Argument
+        }
+        offset += width
+    }
+    return .Ok
+}
+
+// Append validated label bytes and return their pointer-free descriptor.
+shape_label_store_append :: proc(
+    store: ^Shape_Label_Store,
+    mime: Shape_Text_Mime,
+    source: string,
+    label: ^Shape_Label) -> Shape_World_Status {
+    if store == nil || label == nil {
+        return .Invalid_Argument
+    }
+    status := shape_label_validate_source(mime, source)
+    if status != .Ok {
+        return status
+    }
+    if int(store.byte_count) + len(source) > MAX_SHAPE_LABEL_TOTAL_BYTES {
+        return .Out_Of_Capacity
+    }
+    offset := store.byte_count
+    end := int(offset) + len(source)
+    copy(store.bytes[offset:end], transmute([]u8)source)
+    label^ = {mime = mime, byte_offset = offset,
+        byte_count = u16(len(source)), revision = 1}
+    store.byte_count = u16(end)
+    return .Ok
+}
+
+// Resolve one validated immutable label descriptor into borrowed world bytes.
+shape_label_source :: proc(
+    store: ^Shape_Label_Store,
+    label: Shape_Label) -> (string, bool) {
+    if store == nil || label.byte_count == 0 {
+        return "", false
+    }
+    start := int(label.byte_offset)
+    end := start + int(label.byte_count)
+    if start < 0 || end > int(store.byte_count) || end < start {
+        return "", false
+    }
+    return string(store.bytes[start:end]), true
+}
+
+// Append one immutable ordered polygon reference span.
+shape_vertex_references_append :: proc(
+    world: ^Shape_World,
+    entities: []Shape_Entity,
+    geometry: ^Shape_Polygon_Geometry) -> Shape_World_Status {
+    if world == nil || geometry == nil || len(entities) < 3 {
+        return .Invalid_Argument
+    }
+    if int(world.vertex_references.count) + len(entities) >
+        MAX_SHAPE_VERTEX_REFERENCES {
+        return .Out_Of_Capacity
+    }
+    for entity in entities {
+        if !shape_component_contains(&world.transforms, &world.registry, entity) {
+            return .Not_Found
+        }
+    }
+    store := &world.vertex_references
+    first := store.count
+    end := int(first) + len(entities)
+    copy(store.entities[first:end], entities)
+    store.count = u16(end)
+    geometry^ = {first_vertex = first, vertex_count = u16(len(entities))}
+    return .Ok
+}
+
+// Resolve one polygon span after validating bounds and every entity identity.
+shape_polygon_vertices :: proc(
+    world: ^Shape_World,
+    geometry: Shape_Polygon_Geometry) -> ([]Shape_Entity, bool) {
+    if world == nil || geometry.vertex_count < 3 {
+        return nil, false
+    }
+    start := int(geometry.first_vertex)
+    end := start + int(geometry.vertex_count)
+    if start < 0 || end > int(world.vertex_references.count) || end < start {
+        return nil, false
+    }
+    vertices := world.vertex_references.entities[start:end]
+    for entity in vertices {
+        if !shape_component_contains(&world.transforms, &world.registry, entity) {
+            return nil, false
+        }
+    }
+    return vertices, true
+}
+
 // Append one entity through the canonical world's registry.
 shape_world_create_entity :: proc(
     world: ^Shape_World,
@@ -270,13 +576,21 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
         return .Invalid_Argument
     }
     if world.registry.baseline_frozen || world.transforms.baseline_frozen ||
-        world.render_styles.baseline_frozen || world.active_features.baseline_frozen {
+        world.render_styles.baseline_frozen || world.active_features.baseline_frozen ||
+        world.geometries.baseline_frozen || world.labels.baseline_frozen ||
+        world.vertex_references.baseline_frozen || world.label_store.baseline_frozen {
         return .Illegal_State
     }
     _ = shape_registry_freeze_baseline(&world.registry)
     _ = shape_component_freeze_baseline(&world.transforms)
     _ = shape_component_freeze_baseline(&world.render_styles)
     _ = shape_component_freeze_baseline(&world.active_features)
+    _ = shape_component_freeze_baseline(&world.geometries)
+    _ = shape_component_freeze_baseline(&world.labels)
+    world.vertex_references.animation_start = world.vertex_references.count
+    world.vertex_references.baseline_frozen = true
+    world.label_store.animation_byte_start = world.label_store.byte_count
+    world.label_store.baseline_frozen = true
     return .Ok
 }
 
@@ -286,11 +600,17 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
         return .Invalid_Argument
     }
     if !world.registry.baseline_frozen || !world.transforms.baseline_frozen ||
-        !world.render_styles.baseline_frozen || !world.active_features.baseline_frozen {
+        !world.render_styles.baseline_frozen || !world.active_features.baseline_frozen ||
+        !world.geometries.baseline_frozen || !world.labels.baseline_frozen ||
+        !world.vertex_references.baseline_frozen || !world.label_store.baseline_frozen {
         return .Illegal_State
     }
     _ = shape_component_rewind_animation(&world.transforms)
     _ = shape_component_rewind_animation(&world.render_styles)
     _ = shape_component_rewind_animation(&world.active_features)
+    _ = shape_component_rewind_animation(&world.geometries)
+    _ = shape_component_rewind_animation(&world.labels)
+    world.vertex_references.count = world.vertex_references.animation_start
+    world.label_store.byte_count = world.label_store.animation_byte_start
     return shape_registry_rewind_animation(&world.registry)
 }
