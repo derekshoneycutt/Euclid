@@ -111,6 +111,12 @@ DYNVIEW_STYLE_CUSTOM_FONT_MASK :: dyncore.DYNVIEW_STYLE_CUSTOM_FONT_MASK
 
 Input_Frame :: input.Input_Frame
 
+// Geometry-stage result carried into static routing and later frame preparation.
+Ui_Geometry_Preparation :: struct {
+    pointer_capture: core.Ui_Press_Owner_State,
+    compile_dynview: bool,
+}
+
 // Convert one portable screen position for immediate use by Raylib UI APIs.
 input_frame_mouse_position :: #force_inline proc(frame: Input_Frame) -> rl.Vector2 {
     return {frame.mouse_position.x, frame.mouse_position.y}
@@ -143,11 +149,12 @@ clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
     return clamped
 }
 
-//   Prepare frame geometry and report whether Dynview cache construction is required.
-prepare_ui_frame :: proc(
+// Prepare panel geometry while preserving capture identity from frame start.
+prepare_ui_geometry :: proc(
     state: ^core.Euclid_General_State,
-    mouse_input: Input_Frame) -> bool {
+    mouse_input: Input_Frame) -> Ui_Geometry_Preparation {
     ui_runtime := &state^.ui_runtime
+    capture_for_frame := ui_runtime^.ui_press_owner
     frame_dt := min(f32(0.05), max(f32(0), rl.GetFrameTime()))
     update_splitters(ui_runtime, mouse_input, frame_dt)
     regions := compute_ui_regions(ui_runtime.current_layout_mode,
@@ -157,7 +164,6 @@ prepare_ui_frame :: proc(
         regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
     }
     state^.ui_runtime.ui_regions = regions
-    _ = ui_reconcile_focus(ui_runtime, mouse_input, is_terminal_selected(state))
     view_core.fit_iso_scale_to_viewport(
         state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
@@ -166,7 +172,19 @@ prepare_ui_frame :: proc(
     dynview.track_font(
         &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
     dynview.track_style(&state^.dynview, dyncore.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
-    return dyncompile.compile_is_needed(&state^.dynview)
+    return {capture_for_frame, dyncompile.compile_is_needed(&state^.dynview)}
+}
+
+// Resolve static UI targets after authoritative panel geometry is available.
+prepare_ui_static_interaction :: proc(
+    state: ^core.Euclid_General_State,
+    frame: Input_Frame,
+    capture: core.Ui_Press_Owner_State) {
+    _ = ui_route_interaction_frame(&state^.ui_runtime, {
+        frame = frame,
+        terminal_present = is_terminal_selected(state),
+        capture = capture,
+    })
 }
 
 //   Render all UI panels in baseline layout.

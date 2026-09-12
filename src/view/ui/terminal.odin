@@ -34,6 +34,7 @@ Terminal_Content_Route :: struct {
     bounds: rl.Rectangle,
     layout: terminalview.Terminal_Draw_Layout,
     child_pointer_capture: bool,
+    over_track: bool,
 }
 
 // Return the fixed terminal content rectangle inside the former text panel.
@@ -75,25 +76,11 @@ terminal_draw_theme :: proc() -> terminalview.Terminal_Draw_Theme {
     }
 }
 
-// Return fields needed to complete already-admitted Terminal pointer transactions.
-terminal_captured_pointer_fields :: proc(
-    local_capture: bool, child_capture: bool) -> input.Input_Pointer_Fields {
-    fields: input.Input_Pointer_Fields
-    if local_capture {
-        fields += {.Screen_Position, .Release_Edges}
-    }
-    if child_capture {
-        fields += {.Motion, .Release_Edges, .Levels, .Terminal_Position,
-            .Terminal_Ownership}
-    }
-    return fields
-}
-
-// Remove UI-owned pointer input while retaining fields required by active captures.
+// Filter Terminal pointer fields for focused routing tests and isolated callers.
 terminal_filter_content_pointer :: proc(
     frame: input.Input_Frame, bounds: rl.Rectangle,
     local_capture: bool, child_capture: bool) -> input.Input_Frame {
-    fields := terminal_captured_pointer_fields(local_capture, child_capture)
+    fields := ui_terminal_captured_pointer_fields(local_capture, child_capture)
     return input.input_frame_filter_pointer(
         frame, fields, {bounds.x - 1, bounds.y - 1})
 }
@@ -118,19 +105,16 @@ terminal_commit_prepared_scroll :: proc(
     state^.ui_runtime.terminal_scroll_drag_off = scroll.state_out.drag_offset_y
     terminalview.terminal_commit_scroll(
         &state^.terminal, scroll.scroll_y_out, route.layout.content_height)
-    owner := state^.ui_runtime.ui_press_owner
-    foreign_ui_capture := owner.active &&
-        (owner.kind != .Scrollbar || owner.id != 1002)
-    if scroll.pointer_reserved || foreign_ui_capture {
-        local_capture := state^.terminal.view_selection_dragging ||
-            state^.terminal.hyperlink_pressed != 0
-        return terminal_filter_content_pointer(
-            route.resolved, route.bounds, local_capture,
-            route.child_pointer_capture)
-    }
-    result := route.resolved
-    if scroll.wheel_consumed { result.mouse_wheel_delta = 0 }
-    return result
+    ui_refine_terminal_scroll_route(&state^.ui_runtime, route.over_track,
+        scroll.pointer_reserved, route.resolved.mouse_wheel_delta != 0)
+    local_capture := state^.terminal.view_selection_dragging ||
+        state^.terminal.hyperlink_pressed != 0
+    return ui_route_terminal_content_frame(&state^.ui_runtime, route.resolved,
+        route.bounds, {
+            local_capture = local_capture,
+            child_capture = route.child_pointer_capture,
+            wheel_consumed = scroll.wheel_consumed,
+        })
 }
 
 // Resolve Terminal scrollbar and content wheel ownership for one frame.
@@ -165,7 +149,7 @@ terminal_prepare_scroll :: proc(
             state^.ui_runtime.terminal_scroll_drag_off},
     })
     route := Terminal_Content_Route{
-        resolved, bounds, layout, child_pointer_capture}
+        resolved, bounds, layout, child_pointer_capture, over_track}
     content_frame := terminal_commit_prepared_scroll(state, route, scroll)
     return {scroll, content_frame}
 }

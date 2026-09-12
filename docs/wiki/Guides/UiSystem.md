@@ -159,10 +159,10 @@ sequenceDiagram
     F->>F: Publish available font and presentation results
     I->>I: Poll one Input_Frame
     I->>U: Raw frame snapshot
-    U->>U: Update splitters and compute Ui_Regions
-    U->>U: Reconcile logical and effective focus
-    U->>T: Frame, focus result, and prepared panel geometry
-    T->>T: Update Terminal and active native session
+    U->>U: Prepare geometry and snapshot pointer capture
+    U->>U: Resolve static focus, hover, pointer, and wheel targets
+    U->>T: Raw frame, router result, and prepared panel geometry
+    T->>T: Refine Terminal scrollbar routing and update sessions
     T->>S: Continue fixed-step and frame preparation
     S->>D: Joined draw-ready state
     D->>D: Draw world, panels, splitters, overlays
@@ -176,7 +176,8 @@ The concrete high-level order is:
 1. publish available Julia presentation state;
 1. service presentation parsing and publication;
 1. poll one device-independent `Input_Frame`;
-1. call `ui.prepare_ui_frame`;
+1. call `ui.prepare_ui_geometry`;
+1. call `ui.prepare_ui_static_interaction`;
 1. update the selected Terminal and active shell session;
 1. advance fixed-step simulation;
 1. run and join frame preparation that depends on the new UI geometry;
@@ -185,10 +186,12 @@ The concrete high-level order is:
 1. service post-presentation scenarios and GIF capture;
 1. publish frame evidence and reset `context.temp_allocator`.
 
-Two ordering details are especially important:
+Three ordering details are especially important:
 
 - splitter changes happen before `Ui_Regions` and Dynview panel tracking;
-- logical focus is reconciled after region computation and before Terminal processing;
+- capture identity from frame start survives splitter and widget release updates;
+- static routing follows region computation and precedes Terminal processing;
+- Terminal scrollbar geometry refines the static panel target before input consumption;
 - most ordinary widget interactions currently happen inside panel drawing, after the
   Terminal service has already processed the frame.
 
@@ -385,8 +388,32 @@ capture the same press.
 
 Press ownership is distinct from logical focus. Logical focus persists after release
 and currently selects Terminal, Presentation, or Tree as the ordinary keyboard target.
-Press ownership still does not identify a wheel owner or unify Terminal child mouse
-capture.
+The interaction router classifies the legacy owner into a typed frame-local capture
+target. It snapshots that identity before interaction updates so release-frame routing
+cannot fall through to a newly hovered panel. Terminal child mouse capture remains an
+independent protocol mechanism.
+
+## Interaction Routing
+
+`ui_route_interaction_frame` is the bounded display-owned router. It consumes the raw
+frame, current regions, visible presentation kind, persistent focus, and the singleton
+capture snapshot. It publishes one `Ui_Interaction_Frame` containing:
+
+- logical and effective keyboard focus;
+- topmost hover, pointer capture, pointer target, and wheel target identities;
+- narrow keyboard, pointer, and wheel eligibility for Terminal, Presentation, and Tree;
+- the effective Terminal focus transition used by rendering and child protocols.
+
+Targets carry an interaction class, focus surface, and stable ID. Static resolution
+places splitters above Terminal, Presentation, Tree, and world content. Existing capture
+outranks current hover. A wheel delta receives the hovered target only when no pointer
+capture is active, so it cannot follow a drag into another panel.
+
+Terminal preparation is the current layout-dependent refinement stage. Once scrollbar
+geometry exists, the complete visible track replaces the coarse Terminal content target
+for hover, pointer, and eligible wheel routing. The same result filters the one frame
+used by local Terminal policy and child byte encoding. The router uses only value state
+and fixed enums; it allocates no region or target lists.
 
 ## Widgets
 
@@ -574,7 +601,7 @@ window activation. Terminal entry focuses Terminal once. A primary press on Term
 Presentation, or Tree moves logical focus to that surface; world, background, and
 splitter presses clear it. Leaving Terminal clears a Terminal focus target.
 
-`ui_reconcile_focus` derives effective focus after splitter and region preparation:
+`ui_route_interaction_frame` derives effective focus during static interaction routing:
 
 ```text
 terminal_focused = window_focused && terminal_present && logical_focus == Terminal
@@ -596,13 +623,12 @@ The Terminal UI distinguishes several existing facts:
 - interpreter-negotiated child mouse modes;
 - owner-bound retained bytes for Julia evaluation or native sessions.
 
-These facts are intentionally not all the same concept. Current orchestration now has
-explicit keyboard focus and Terminal pointer filtering. One routed content frame feeds
-both local Terminal policy and native child byte encoding. A scrollbar or foreign UI
-capture removes fresh Terminal presses, levels, motion, and wheel. Existing local
-selection or hyperlink capture retains its real release point, while existing child
-protocol capture retains resolved motion and release data outside content. General
-application-wide pointer and wheel routing remains later migration work.
+These facts are intentionally not all the same concept. Current orchestration has one
+application-wide interaction result plus Terminal pointer filtering. One routed content
+frame feeds both local Terminal policy and native child byte encoding. A scrollbar or
+foreign UI capture removes fresh Terminal presses, levels, motion, and wheel. Existing
+local selection or hyperlink capture retains its real release point, while existing child
+protocol capture retains resolved motion and release data outside content.
 
 ## Tree And Utility Panels
 
@@ -713,7 +739,7 @@ temporary allocator already reset at frame completion.
 
 | Test area | Coverage |
 | --- | --- |
-| `src/view/ui/ui_test.odin` | Region validation, splitter geometry/capture, tree layout and reveal, scroll math. |
+| `src/view/ui/ui_test.odin` | Router priority, focus, capture, wheel ownership, regions, splitters, tree layout, and scrolling. |
 | `src/view/ui/dynview/selection_test.odin` | Selection modes, hit boundaries, capture, and source extraction. |
 | `src/view/core/copy_interaction_test.odin` | Copy target identity, hover, press, release, and animation state. |
 | `src/view/input/input_test.odin` | Device-independent events, correlation, hotkeys, Terminal encoding. |
@@ -759,19 +785,20 @@ are important when changing it:
     traversal, modal focus, and control-level focus are not implemented.
 1. `Ui_Press_Owner_State` is pointer capture, not focus, and covers one press at a time.
 1. Terminal child mouse capture and UI widget capture are independent mechanisms.
-1. Terminal uses an explicit routed pointer frame, but other panels do not yet share one
-    application-wide pointer or wheel routing result.
+1. All top-level surfaces share one routing result, but most non-Terminal consumers do
+    not yet consume its narrow eligibility when updating their controls.
 1. Splitters update before services, while most controls, scrollbars, tree rows,
    Dynview selection, and copy icons update during drawing.
 1. Scroll-container functions combine input mutation, clipping, and scrollbar drawing.
 1. Several `draw_*` procedures submit application actions as well as render visuals.
-1. Z-order is partly encoded by draw and call order rather than one routing table.
+1. Panel and splitter z-order is explicit; control and copy-affordance registration
+    remains tied to draw-time call order until their interaction migration.
 1. The window uses fixed logical dimensions and has only the baseline layout mode.
 1. Keyboard traversal, modal focus, and accessibility navigation are not implemented.
 
-The remaining focus and routing redesign is staged in the repository root document
-`staging_uifocus.md`. This guide describes the implemented focus model and Terminal
-pointer filtering plus the current pre-router behavior of other panels.
+The remaining update/render separation is staged in the repository root document
+`staging_uifocus.md`. This guide describes the implemented focus and routing model plus
+the current draw-time behavior of controls awaiting migration.
 
 ## Change Guide
 

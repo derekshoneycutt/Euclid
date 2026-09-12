@@ -1,0 +1,14 @@
+{
+  "odinTestExplorer.argumentProvider": {
+    "command": "${workspaceFolder}/tools/odin-test-arguments.jl",
+    "cwd": "${workspaceFolder}",
+    "scope": "workspace"
+  },
+  "odinTestExplorer.testSuites": [
+    {
+      "name": "Application",
+      "path": "src",
+      "arguments": ["-all-packages"]
+    }
+  ]
+}

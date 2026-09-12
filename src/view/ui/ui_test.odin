@@ -106,6 +106,97 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
     testing.expect(t, exited.terminal_focus_changed)
 }
 
+// Verify static routing declares splitter and panel priority independently of drawing.
+@(test)
+ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
+    runtime := app_core.Euclid_Ui_Runtime_State{
+        vertical_split_x = VIEW_WIDTH,
+        horizontal_split_y = VIEW_HEIGHT,
+        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+    }
+    splitter := ui_route_interaction_frame(&runtime, {
+        frame = {mouse_position = {VIEW_WIDTH, 20}},
+        terminal_present = true,
+    })
+    testing.expect_value(t, splitter.hover.kind,
+        app_core.Ui_Interaction_Target_Kind.Splitter)
+
+    terminal := runtime.ui_regions.terminal_rect
+    routed := ui_route_interaction_frame(&runtime, {
+        frame = {
+            mouse_position = {terminal.x + 1, terminal.y + 1},
+            mouse_wheel_delta = -1,
+        },
+        terminal_present = true,
+    })
+    testing.expect_value(t, routed.hover.focus.kind,
+        app_core.Ui_Focus_Kind.Terminal)
+    testing.expect(t, routed.terminal.pointer)
+    testing.expect(t, routed.terminal.wheel)
+    testing.expect(t, !routed.presentation.pointer)
+    testing.expect(t, !routed.tree.wheel)
+}
+
+// Verify capture from frame start outranks new hover and suppresses wheel routing.
+@(test)
+ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
+    runtime := app_core.Euclid_Ui_Runtime_State{
+        vertical_split_x = VIEW_WIDTH,
+        horizontal_split_y = VIEW_HEIGHT,
+        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+    }
+    terminal := runtime.ui_regions.terminal_rect
+    routed := ui_route_interaction_frame(&runtime, {
+        frame = {
+            mouse_position = {terminal.x + 1, terminal.y + 1},
+            mouse_released = {.Left},
+            mouse_wheel_delta = -1,
+        },
+        terminal_present = true,
+        capture = {active = true, kind = .Scrollbar,
+            id = UI_TREE_SCROLLBAR_ID},
+    })
+    testing.expect_value(t, routed.hover.focus.kind,
+        app_core.Ui_Focus_Kind.Terminal)
+    testing.expect_value(t, routed.pointer_capture.focus.kind,
+        app_core.Ui_Focus_Kind.Tree)
+    testing.expect_value(t, routed.pointer_target.focus.kind,
+        app_core.Ui_Focus_Kind.Tree)
+    testing.expect_value(t, routed.wheel_target.kind,
+        app_core.Ui_Interaction_Target_Kind.None)
+    testing.expect(t, routed.tree.pointer)
+    testing.expect(t, !routed.terminal.pointer)
+}
+
+// Verify prepared Terminal track geometry refines panel routing before consumption.
+@(test)
+ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
+    runtime := app_core.Euclid_Ui_Runtime_State{
+        vertical_split_x = VIEW_WIDTH,
+        horizontal_split_y = VIEW_HEIGHT,
+        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+    }
+    terminal := runtime.ui_regions.terminal_rect
+    _ = ui_route_interaction_frame(&runtime, {
+        frame = {
+            mouse_position = {terminal.x + 1, terminal.y + 1},
+            mouse_wheel_delta = -1,
+        },
+        terminal_present = true,
+    })
+    ui_refine_terminal_scroll_route(&runtime, true, true, true)
+
+    routed := runtime.interaction_frame
+    testing.expect_value(t, routed.hover.kind,
+        app_core.Ui_Interaction_Target_Kind.Scrollbar)
+    testing.expect_value(t, routed.pointer_target.id,
+        UI_TERMINAL_SCROLLBAR_ID)
+    testing.expect_value(t, routed.wheel_target.id,
+        UI_TERMINAL_SCROLLBAR_ID)
+    testing.expect(t, routed.terminal.pointer)
+    testing.expect(t, routed.terminal.wheel)
+}
+
 //   Verify splitter geometry uses an eight-pixel hit target and three-pixel line.
 @(test)
 splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {

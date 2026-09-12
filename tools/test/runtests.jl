@@ -35,6 +35,14 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             ["--libs", "harfbuzz"]
         @test_throws ErrorException BuildConfiguration.harfbuzz_pkg_config_arguments(
             :FreeBSD)
+        @test BuildConfiguration.native_test_linker_flags("-ljulia", :Linux) ==
+            "-ljulia -lX11 -lXrandr -lXi -lXcursor -lXinerama"
+        @test BuildConfiguration.native_test_linker_flags("-ljulia", :Darwin) ==
+            "-ljulia"
+        @test BuildConfiguration.native_test_linker_flags("-ljulia", :NT) ==
+            "-ljulia /STACK:8388608"
+        @test_throws ErrorException BuildConfiguration.native_test_linker_flags(
+            "-ljulia", :FreeBSD)
         library_path, runtime_dirs = BuildConfiguration.harfbuzz_jll_paths()
         @test isfile(library_path)
         @test dirname(library_path) in runtime_dirs

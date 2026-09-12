@@ -2271,6 +2271,30 @@ Ui_Focus_Target :: struct {
     id: int,
 }
 
+// Frame-local interaction class resolved above panel consumers.
+Ui_Interaction_Target_Kind :: enum u8 {
+    None,
+    Splitter,
+    Control,
+    Scrollbar,
+    Panel_Content,
+    World,
+}
+
+// Typed identity for one hovered, captured, pointer, or wheel target.
+Ui_Interaction_Target :: struct {
+    kind: Ui_Interaction_Target_Kind,
+    focus: Ui_Focus_Target,
+    id: int,
+}
+
+// Narrow eligibility exposed to one top-level UI surface.
+Ui_Surface_Interaction :: struct {
+    keyboard: bool,
+    pointer: bool,
+    wheel: bool,
+}
+
 Ui_Interaction_State :: struct {
     logical_focus: Ui_Focus_Target,
     terminal_was_present: bool,
@@ -2280,6 +2304,13 @@ Ui_Interaction_State :: struct {
 Ui_Interaction_Frame :: struct {
     logical_focus: Ui_Focus_Target,
     effective_focus: Ui_Focus_Target,
+    hover: Ui_Interaction_Target,
+    pointer_capture: Ui_Interaction_Target,
+    pointer_target: Ui_Interaction_Target,
+    wheel_target: Ui_Interaction_Target,
+    terminal: Ui_Surface_Interaction,
+    presentation: Ui_Surface_Interaction,
+    tree: Ui_Surface_Interaction,
     terminal_focus_changed: bool,
     terminal_focused: bool,
 }

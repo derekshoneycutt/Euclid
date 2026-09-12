@@ -209,10 +209,13 @@ run_window_frame :: proc(
     julia.publish_available_view_snapshot(state, false)
     service_presentation_runtime(state, presentation)
     input_frame := input.input_poll_frame(input_runtime)
-    compile_ui := ui.prepare_ui_frame(state, input_frame)
+    ui_geometry := ui.prepare_ui_geometry(state, input_frame)
+    ui.prepare_ui_static_interaction(
+        state, input_frame, ui_geometry.pointer_capture)
     terminal_frame := terminal_service_update(state, input_runtime, input_frame)
     alpha := accumulate_and_update_systems(state)
-    run_parallel_frame_preparation_after_ui(state, alpha, compile_ui)
+    run_parallel_frame_preparation_after_ui(
+        state, alpha, ui_geometry.compile_dynview)
     audio.update_chalk_runtime(&state^.chalk_audio)
     service_scenario_before_present(ctx)
 

@@ -1,7 +1,7 @@
 module EuclidBuildConfiguration
 
 export native_linker_flags, native_runtime_dirs, native_runtime_environment,
-    raylib_shared_library_path, resolve_msvc_tool_path
+    native_test_linker_flags, raylib_shared_library_path, resolve_msvc_tool_path
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
@@ -278,6 +278,17 @@ function native_linker_flags(provider::Symbol=harfbuzz_provider())
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
     return "$harfbuzz_flags $(julia_linker_flags()) $(raylib_runtime_linker_flags())"
+end
+
+"""Append platform libraries and options required by Odin test executables."""
+function native_test_linker_flags(
+    linker_flags::String=native_linker_flags(), kernel::Symbol=Sys.KERNEL)
+    kernel == :NT && return strip(string(linker_flags, " /STACK:8388608"))
+    kernel == :Linux && return strip(string(
+        linker_flags,
+        " -lX11 -lXrandr -lXi -lXcursor -lXinerama"))
+    kernel == :Darwin && return linker_flags
+    error("Odin test linkage is unsupported on $kernel.")
 end
 
 end

@@ -3,7 +3,8 @@
 module EuclidTestRunner
 
 include("build_config.jl")
-using .EuclidBuildConfiguration: native_linker_flags, native_runtime_environment
+using .EuclidBuildConfiguration: native_linker_flags, native_runtime_environment,
+    native_test_linker_flags
 using Serialization
 
 pushfirst!(LOAD_PATH, joinpath(@__DIR__, "analysis"))
@@ -95,14 +96,7 @@ function odin_test_command(linker_flags::String; source_path::String=ODIN_SOURCE
         "-define:ODIN_TEST_JSON_REPORT=$report_path")
     selected_test !== nothing && push!(odin_command,
         "-define:ODIN_TEST_NAMES=$selected_test")
-    if Sys.iswindows()
-        linker_flags = strip(string(linker_flags, " /STACK:8388608"))
-    end
-    if !Sys.iswindows() && !Sys.isapple()
-        linker_flags = strip(string(
-            linker_flags,
-            " -lX11 -lXrandr -lXi -lXcursor -lXinerama"))
-    end
+    linker_flags = native_test_linker_flags(linker_flags)
     if !isempty(linker_flags)
         push!(odin_command, "-extra-linker-flags:$linker_flags")
     end
