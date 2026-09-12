@@ -103,6 +103,100 @@ julia tools/make.jl scenario --all
 julia tools/make.jl scenario point-runtime-reload-preserves-state --format=json
 ```
 
+Run an ad hoc scenario with an explicit artifact destination:
+
+```sh
+julia tools/make.jl run --debug -- \
+  --scenario=path/to/scenario.jsonl \
+  --scenario-artifacts=.build/scenario
+```
+
+### Authoring A Scenario
+
+Each nonempty JSONL line contains exactly one action. A reliable visual workflow waits
+for the state or correlated event that makes the intended frame meaningful, applies any
+viewport changes, captures a presented frame, and waits for capture completion:
+
+```jsonl
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Proposition I","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"set_splitters":{"vertical":900,"horizontal":560}}
+{"set_view_scroll":{"y":100000}}
+{"screenshot":".build/scenario/proposition-1-bottom.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}
+```
+
+`as` stores the typed identity produced by an action. A later `wait_event` may name it
+with `correlation`; matching includes identity kind, ID, and generation. Use correlated
+waits when the scenario must prove that a particular request produced an event. An
+uncorrelated wait consumes the next event of that kind.
+
+The principal command forms are:
+
+| Form | Purpose |
+| --- | --- |
+| `{"do":"ACTION"}` | Issue `reset_animation`, `reload_runtime`, pause/resume, or `stop_gif`. |
+| `{"select_animation":"NAME"}` | Select an animation by exact display name. |
+| `{"scratchpad":"CODE"}` | Submit code through the asynchronous Scratchpad path. |
+| `{"set_view_scroll":{"y":Y}}` | Set non-Terminal presentation scroll in logical pixels. |
+| `{"set_splitters":{"vertical":X,"horizontal":Y}}` | Atomically set both pane splitters in logical pixels. |
+| `{"wait_event":"EVENT"}` | Wait for retained typed evidence, optionally correlated. |
+| `{"wait_state":"STATE"}` | Wait until an observed scalar predicate holds. |
+| `{"assert_state":"STATE"}` | Check an observed scalar predicate immediately. |
+| `{"screenshot":"PATH"}` | Capture the next eligible presented frame. |
+| `{"start_gif":"NAME"}` | Start GIF capture; stop it with `{"do":"stop_gif"}`. |
+| `{"checkpoint":"NAME"}` | Store a semantic evidence checkpoint. |
+| `{"allocation_checkpoint":"DOMAIN"}` | Store an arena-domain allocation baseline. |
+| `{"assert_allocation_baseline":"DOMAIN"}` | Compare an arena domain with its baseline. |
+| `{"assert_no_bad_frees":true}` | Require zero aggregate bad frees. |
+| `{"shutdown":true}` | Request orderly application shutdown. |
+
+Inspect the authoritative vocabulary and bounds rather than guessing names or limits:
+
+```sh
+julia tools/make.jl evidence capabilities
+julia tools/make.jl evidence schema
+```
+
+Programs permit at most 128 commands and 64 KiB of source; each line is limited to
+1024 bytes. Text payloads are limited to 256 bytes, alias names to 64 bytes, and waits
+to 60 seconds. Unknown actions, events, states, aliases, or combined action fields fail
+the scenario. Required evidence loss makes the result inconclusive, never passed.
+
+### Presentation And Capture Semantics
+
+View-scroll and splitter actions each create a frame boundary. The display applies the
+request before the next frame's UI geometry and Dynview layout, so the following
+`screenshot` observes the effective clamped viewport. View scrolling targets only the
+non-Terminal presentation. Splitter changes preserve pane minimums and are rejected
+while GIF capture is active or requested.
+
+Screenshot completion occurs after a frame is presented. Follow `screenshot` with an
+uncorrelated `capture_completed` wait when later steps depend on the file; screenshot
+aliases do not currently match capture-completion identity.
+
+### Judging A Scenario Result
+
+Orderly shutdown writes the following bundle:
+
+| File | Required evidence |
+| --- | --- |
+| `manifest.json` | Result, failure reason and step, schema version, and trace completeness. |
+| `evidence.bin` | Canonical fixed-record semantic trace. |
+| `state.json` | Final display and Julia-host observations, including effective viewport values. |
+| `allocations.json` | Aggregate allocation totals plus retained arena baseline samples. |
+
+A screenshot is supporting visual evidence, not proof of scenario success. Require
+`manifest.json` to report `result: "passed"` and `trace_complete: true`, then inspect
+the relevant semantic records and final state. For viewport scenarios, compare
+`view_text_scroll_y` with `view_text_scroll_max` and verify both effective splitter
+coordinates in `state.json` before reviewing the image.
+
 The command builds the headed debug application once, gives every selected scenario a
 fresh directory under `.build/scenarios/`, and derives its reported result, reason,
 failed step, and trace completeness from the validated terminal manifest. A failed or
@@ -115,6 +209,14 @@ and `display_cache`. Each `allocation_checkpoint` must precede the corresponding
 `assert_allocation_baseline`; `assert_no_bad_frees` remains aggregate. Successful and
 failed baseline comparisons emit typed semantic events, and terminal bundles retain
 the checkpoint and final assertion samples in `allocations.json`.
+
+Presentation capture scenarios may set the non-Terminal text viewport with
+`{"set_view_scroll":{"y":Y}}` and atomically set both pane dividers with
+`{"set_splitters":{"vertical":X,"horizontal":Y}}`. Coordinates are absolute
+logical pixels. Each action yields a frame: the display applies it before the next UI
+geometry and Dynview preparation pass, clamps it through ordinary UI policy, and only
+then advances to a following screenshot command. Final `state.json` records the
+effective scroll position, scroll maximum, and both splitter positions.
 
 The session retains at most 4,096 semantic events. Required evidence loss makes a
 scenario inconclusive, so combined corpora must remain below that fixed bound rather

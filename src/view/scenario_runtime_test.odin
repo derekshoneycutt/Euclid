@@ -75,6 +75,38 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
     scenario_runtime_expect_outcome_logs(t, path)
 }
 
+// Verify viewport actions remain deferred until the next pre-geometry boundary.
+@(test)
+scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    animation := new(core.Euclid_Julia_Animation_Interface, context.allocator)
+    defer free(animation)
+    state^.julia_interface^.selected_animation = animation
+    state^.ui_runtime.vertical_split_x = 900
+    state^.ui_runtime.horizontal_split_y = 500
+    runtime := Scenario_Runtime{state = state}
+    identity: evidence_trace.Identity
+
+    scroll := scenario.Command{kind = .Set_View_Scroll, value = 90}
+    handled, accepted := scenario_issue_display_action(&runtime, &scroll, &identity)
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(0))
+    testing.expect(t, scenario_runtime_apply_pending_ui(&runtime))
+    testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(90))
+
+    splitters := scenario.Command{
+        kind = .Set_Splitters, value = 0, secondary_value = 720}
+    handled, accepted = scenario_issue_display_action(
+        &runtime, &splitters, &identity)
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(900))
+    testing.expect(t, scenario_runtime_apply_pending_ui(&runtime))
+    testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(320))
+    testing.expect_value(t, state^.ui_runtime.horizontal_split_y, f32(580))
+}
+
 // Verify a required screenshot keeps the run active until post-presentation completion.
 @(test)
 scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {

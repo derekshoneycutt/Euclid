@@ -144,6 +144,8 @@ artifact_state_json :: proc(
         "\"animation_last_committed_sequence\":%d," +
         "\"point_count\":%d,\"constraint_count\":%d," +
         "\"particle_count\":%d,\"dynview_enabled\":%v," +
+        "\"view_text_scroll_y\":%g,\"view_text_scroll_max\":%g," +
+        "\"vertical_split_x\":%g,\"horizontal_split_y\":%g," +
         "\"gif_capture_active\":%v,\"gif_captured_frames\":%d," +
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
         "\"display_pending_drops\":%d,\"julia_lifecycle\":%d," +
@@ -155,6 +157,8 @@ artifact_state_json :: proc(
         state.animation_generation, state.animation_tick_sequence,
         state.animation_last_committed_sequence, state.point_count,
         state.constraint_count, state.particle_count, state.dynview_enabled,
+        state.view_text_scroll_y, state.view_text_scroll_max,
+        state.vertical_split_x, state.horizontal_split_y,
         state.gif_capture_active, state.gif_captured_frames,
         state.required_evidence_complete, state.trace.event_count,
         state.trace.pending_drops, julia_host.lifecycle,

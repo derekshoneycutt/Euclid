@@ -19,6 +19,19 @@ import "core:strings"
 
 import rl "vendor:raylib"
 
+// Deferred display mutation applied before the next frame's UI geometry is prepared.
+Scenario_Ui_Mutation_Kind :: enum u8 {
+    None,
+    View_Scroll,
+    Splitters,
+}
+
+Scenario_Ui_Mutation :: struct {
+    kind: Scenario_Ui_Mutation_Kind,
+    value: f32,
+    secondary_value: f32,
+}
+
 // Display-owned coordinator connecting the generic runner to Euclid actions.
 Scenario_Runtime :: struct {
     runner: scenario.Runner,
@@ -30,6 +43,7 @@ Scenario_Runtime :: struct {
     shutdown_requested: bool,
     terminal_recorded: bool,
     terminal_reason: artifact.Reason,
+    pending_ui_mutation: Scenario_Ui_Mutation,
 }
 
 // Resolved owner-domain identity and its synchronized arena diagnostics.
@@ -336,11 +350,38 @@ scenario_issue_checkpoint_action :: proc(
     return true
 }
 
+//   Queue one validated viewport mutation for the next pre-geometry frame boundary.
+scenario_issue_viewport_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command) -> (bool, bool) {
+    if command.kind != .Set_View_Scroll && command.kind != .Set_Splitters {
+        return false, false
+    }
+    if runtime.pending_ui_mutation.kind != .None {
+        return true, false
+    }
+    if command.kind == .Set_View_Scroll {
+        if !ui.presentation_scroll_is_available(runtime.state) {
+            return true, false
+        }
+        runtime.pending_ui_mutation = {.View_Scroll, command.value, 0}
+        return true, true
+    }
+    if !ui.splitter_positions_are_mutable(&runtime.state.ui_runtime) {
+        return true, false
+    }
+    runtime.pending_ui_mutation = {
+        .Splitters, command.value, command.secondary_value}
+    return true, true
+}
+
 //   Route one display or capture command through display-owned state.
 scenario_issue_display_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
     state := runtime.state
+    if handled, accepted := scenario_issue_viewport_action(runtime, command); handled {
+        return handled, accepted
+    }
     #partial switch command.kind {
     case .Pause_Simulation:
         state.ui_runtime.simulation_paused = true
@@ -368,6 +409,32 @@ scenario_issue_display_action :: proc(
     case:
         return false, false
     }
+}
+
+//   Consume one accepted viewport mutation before authoritative UI geometry is built.
+scenario_runtime_apply_pending_ui :: proc(runtime: ^Scenario_Runtime) -> bool {
+    if runtime == nil || runtime.state == nil {
+        return false
+    }
+    mutation := runtime.pending_ui_mutation
+    runtime.pending_ui_mutation = {}
+    applied := true
+    #partial switch mutation.kind {
+    case .None:
+        return true
+    case .View_Scroll:
+        applied = ui.set_presentation_scroll_position(
+            runtime.state, mutation.value)
+    case .Splitters:
+        applied = ui.set_splitter_positions(&runtime.state.ui_runtime,
+            mutation.value, mutation.secondary_value)
+    }
+    if !applied {
+        runtime.runner.failure_count += 1
+        runtime.runner.status = .Failed
+        runtime.terminal_reason = .Assertion_Failed
+    }
+    return applied
 }
 
 //   Evaluate one allocation-domain scenario command.

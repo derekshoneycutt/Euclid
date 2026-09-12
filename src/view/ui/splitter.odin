@@ -67,6 +67,26 @@ splitters_locked_for_gif :: #force_inline proc(phase: core.Gif_Capture_Phase) ->
     return phase == .Armed || phase == .Recording || phase == .Finalizing
 }
 
+//   Report whether scenario-driven splitter geometry may change now.
+splitter_positions_are_mutable :: #force_inline proc(
+    ui_runtime: ^core.Euclid_Ui_Runtime_State) -> bool {
+
+    return ui_runtime != nil && !ui_runtime^.save_gif_requested &&
+        !splitters_locked_for_gif(ui_runtime^.gif_capture_phase)
+}
+
+//   Clamp one requested vertical split while preserving both horizontal pane minimums.
+splitter_clamp_vertical :: #force_inline proc(value: f32) -> f32 {
+    return clamp(value, f32(WORLD_MIN_WIDTH),
+        f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
+}
+
+//   Clamp one requested horizontal split while preserving both vertical pane minimums.
+splitter_clamp_horizontal :: #force_inline proc(value: f32) -> f32 {
+    return clamp(value, f32(WORLD_MIN_HEIGHT),
+        f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
+}
+
 //   Report whether one splitter owns the shared UI press capture.
 splitter_owns_press :: #force_inline proc(
     owner: core.Ui_Press_Owner_State, press_id: int) -> bool {
@@ -90,6 +110,22 @@ splitter_release_capture :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
     }
     ui_runtime.ui_press_owner = {}
     ui_runtime.splitter_drag_offset = 0
+}
+
+//   Atomically apply scenario-requested splitter positions through ordinary UI policy.
+set_splitter_positions :: proc(
+    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    vertical, horizontal: f32) -> bool {
+
+    if !splitter_positions_are_mutable(ui_runtime) {
+        return false
+    }
+    splitter_release_capture(ui_runtime)
+    ui_runtime^.vertical_split_x = splitter_clamp_vertical(vertical)
+    ui_runtime^.horizontal_split_y = splitter_clamp_horizontal(horizontal)
+    ui_runtime^.vertical_split_hover = 0
+    ui_runtime^.horizontal_split_hover = 0
+    return true
 }
 
 //   Capture the hovered splitter when no other control owns the pointer press.
@@ -125,14 +161,12 @@ splitter_apply_drag :: proc(
         return
     }
     if splitter_owns_press(ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID) {
-        ui_runtime.vertical_split_x = clamp(
-            mouse_input.mouse_position.x + ui_runtime.splitter_drag_offset,
-            f32(WORLD_MIN_WIDTH), f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
+        ui_runtime.vertical_split_x = splitter_clamp_vertical(
+            mouse_input.mouse_position.x + ui_runtime.splitter_drag_offset)
     } else if splitter_owns_press(
         ui_runtime.ui_press_owner, SPLITTER_HORIZONTAL_PRESS_ID) {
-        ui_runtime.horizontal_split_y = clamp(
-            mouse_input.mouse_position.y + ui_runtime.splitter_drag_offset,
-            f32(WORLD_MIN_HEIGHT), f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
+        ui_runtime.horizontal_split_y = splitter_clamp_horizontal(
+            mouse_input.mouse_position.y + ui_runtime.splitter_drag_offset)
     }
 }
 

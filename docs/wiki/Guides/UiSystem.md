@@ -268,6 +268,12 @@ GIF capture phases `Armed`, `Recording`, and `Finalizing` lock both splitters. E
 one of those phases releases an existing splitter capture and removes hover feedback so
 captured frames retain stable panel geometry.
 
+Debug/test scenarios may request both splitter positions atomically with
+`{"set_splitters":{"vertical":X,"horizontal":Y}}`. The display queues the request
+after the current frame is prepared, then applies the same pane-minimum clamps before
+the next frame computes `Ui_Regions`. A pending or active GIF capture rejects the
+request, preserving capture geometry.
+
 ## Panel Composition
 
 The top-level draw order is:
@@ -518,6 +524,12 @@ scrolls locally. In content, negotiated SGR mouse mode receives wheel input unle
 selects local scrollback. Thumb capture persists outside the track until release.
 Prepared draw helpers begin and end Raylib scissoring and draw the scrollbar without
 mutating scroll state.
+
+Debug/test scenarios may request non-Terminal presentation scrolling with
+`{"set_view_scroll":{"y":Y}}`. The request clears presentation scrollbar capture,
+clamps negative values to zero, and yields a frame. The next presentation preparation
+computes the content-dependent maximum and clamps the effective offset before drawing;
+Terminal scrollback and tree scrolling remain separately owned.
 
 ## Presentation Panel
 

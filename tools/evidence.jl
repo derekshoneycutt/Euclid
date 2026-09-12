@@ -76,8 +76,9 @@ const HANDLE_EVENT_KINDS = Set(UInt16[421, 423])
 const SCENARIO_ACTIONS = [
     "reset_animation", "select_animation", "reload_runtime",
     "inject_reload_failure", "pause_simulation",
-    "resume_simulation", "screenshot", "start_gif", "stop_gif", "wait_event",
-    "wait_state", "assert_state", "checkpoint", "allocation_checkpoint",
+    "resume_simulation", "set_view_scroll", "set_splitters", "screenshot",
+    "start_gif", "stop_gif", "wait_event", "wait_state", "assert_state",
+    "checkpoint", "allocation_checkpoint",
     "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
 
 const SCENARIO_EVENTS = [
@@ -119,6 +120,9 @@ function capabilities()
         trace_schema_version=TRACE_SCHEMA_VERSION,
         trace_event_bytes=TRACE_EVENT_BYTES,
         actions=SCENARIO_ACTIONS,
+        action_payloads=(
+            set_view_scroll=(required=["y"],),
+            set_splitters=(required=["vertical", "horizontal"],)),
         events=SCENARIO_EVENTS,
         states=SCENARIO_STATES,
         captures=["screenshot", "gif", "trace", "state", "allocations", "manifest"],

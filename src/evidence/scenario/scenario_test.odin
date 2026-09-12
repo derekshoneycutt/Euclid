@@ -40,6 +40,62 @@ scenario_test_parse_json_lines :: proc(t: ^testing.T) {
     testing.expect_value(t, program.commands[1].timeout_ms, u32(10))
 }
 
+// Verify named viewport payloads retain explicit zero and both splitter coordinates.
+@(test)
+scenario_test_parse_viewport_actions :: proc(t: ^testing.T) {
+    program: Program
+    result := parse(
+        "{\"set_view_scroll\":{\"y\":0}}\n" +
+        "{\"set_splitters\":{\"vertical\":640.5,\"horizontal\":360}}\n",
+        &program)
+    testing.expect_value(t, result, Parse_Error.None)
+    testing.expect_value(t, program.count, 2)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Set_View_Scroll)
+    testing.expect_value(t, program.commands[0].value, f32(0))
+    testing.expect_value(t, program.commands[1].kind, Command_Kind.Set_Splitters)
+    testing.expect_value(t, program.commands[1].value, f32(640.5))
+    testing.expect_value(t, program.commands[1].secondary_value, f32(360))
+}
+
+// Verify viewport payloads reject missing, extra, nonnumeric, and competing actions.
+@(test)
+scenario_test_reject_invalid_viewport_actions :: proc(t: ^testing.T) {
+    invalid_sources := [?]string{
+        "{\"set_view_scroll\":{}}\n",
+        "{\"set_view_scroll\":{\"y\":1,\"extra\":2}}\n",
+        "{\"set_view_scroll\":{\"y\":\"bottom\"}}\n",
+        "{\"set_splitters\":{\"vertical\":640}}\n",
+        "{\"set_splitters\":{\"vertical\":640,\"horizontal\":360,\"extra\":1}}\n",
+        "{\"set_view_scroll\":{\"y\":10},\"shutdown\":true}\n",
+    }
+    for source in invalid_sources {
+        program: Program
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
+}
+
+// Verify viewport actions yield a frame before the next scenario command executes.
+@(test)
+scenario_test_viewport_actions_create_frame_boundaries :: proc(t: ^testing.T) {
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"set_view_scroll\":{\"y\":10}}\n" +
+        "{\"set_splitters\":{\"vertical\":640,\"horizontal\":360}}\n" +
+        "{\"shutdown\":true}\n", &program), Parse_Error.None)
+    runner: Runner
+    runner_init(&runner, program)
+    frame := Runner_Frame{
+        display = {required_evidence_complete = true},
+        actions = {issue = scenario_test_runtime_action},
+    }
+
+    testing.expect_value(t, runner_update(&runner, frame), Run_Status.Running)
+    testing.expect_value(t, runner.step, 1)
+    testing.expect_value(t, runner_update(&runner, frame), Run_Status.Running)
+    testing.expect_value(t, runner.step, 2)
+    testing.expect_value(t, runner_update(&runner, frame), Run_Status.Passed)
+}
+
 // Verify animation idleness follows pending work and publication identity.
 @(test)
 scenario_test_animation_idle_state :: proc(t: ^testing.T) {

@@ -74,6 +74,30 @@ is_terminal_selected :: #force_inline proc(state: ^core.Euclid_General_State) ->
         state^.julia_interface^.selected_animation^.node_kind == .Terminal
 }
 
+//   Report whether the display currently owns a non-Terminal presentation surface.
+presentation_scroll_is_available :: #force_inline proc(
+    state: ^core.Euclid_General_State) -> bool {
+
+    return state != nil && state^.julia_interface != nil &&
+        state^.julia_interface^.selected_animation != nil &&
+        !is_terminal_selected(state)
+}
+
+//   Apply a requested presentation scroll before the next layout interaction pass.
+set_presentation_scroll_position :: proc(
+    state: ^core.Euclid_General_State, requested_y: f32) -> bool {
+
+    if !presentation_scroll_is_available(state) {
+        return false
+    }
+    ui_runtime := &state^.ui_runtime
+    scroll_container_release_press(&ui_runtime^.ui_press_owner,
+        UI_PRESENTATION_SCROLLBAR_ID, &ui_runtime^.text_scroll_dragging,
+        &ui_runtime^.text_scroll_drag_off)
+    ui_runtime^.view_text_scroll_y = max(0, requested_y)
+    return true
+}
+
 //   Update and commit the presentation scroll container.
 prepare_presentation_scroll :: proc(
     state: ^core.Euclid_General_State,
@@ -134,6 +158,9 @@ prepare_presentation_interaction :: proc(
     panel: rl.Rectangle,
     mouse_input: Input_Frame,
     keyboard_enabled: bool) -> Presentation_Preparation {
+    if state != nil {
+        state^.ui_runtime.view_text_scroll_max = 0
+    }
     if state == nil || state^.julia_interface == nil || is_terminal_selected(state) {
         return {}
     }
@@ -143,6 +170,7 @@ prepare_presentation_interaction :: proc(
         text_panel, {text_padding = TEXT_PADDING,
             wrap_advance = TEXT_WRAP_ADVANCE, row_height = TEXT_ROW_HEIGHT,
             text = view_text})
+    state^.ui_runtime.view_text_scroll_max = max(0, content_h - text_panel.height)
     scroll_step := dynlayout.presentation_scroll_step_or_fallback(
         &state.dynview, TEXT_ROW_HEIGHT)
     scroll := prepare_presentation_scroll(

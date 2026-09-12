@@ -49,6 +49,12 @@ end
 @testset "evidence capabilities and schema" begin
     @test "select_animation" in EuclidEvidence.capabilities().actions
     @test "inject_reload_failure" in EuclidEvidence.capabilities().actions
+    @test "set_view_scroll" in EuclidEvidence.scenario_schema().actions
+    @test "set_splitters" in EuclidEvidence.scenario_schema().actions
+    @test EuclidEvidence.scenario_schema().action_payloads.set_view_scroll.required ==
+        ["y"]
+    @test EuclidEvidence.scenario_schema().action_payloads.set_splitters.required ==
+        ["vertical", "horizontal"]
     @test "animation_cycle_boundary" in EuclidEvidence.scenario_schema().events
     @test "animation_tick_committed" in EuclidEvidence.scenario_schema().events
     @test "animation_loaded" in EuclidEvidence.scenario_schema().events

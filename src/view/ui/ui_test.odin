@@ -333,6 +333,55 @@ gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
     }
 }
 
+//   Verify programmatic splitter placement is atomic, clamped, and capture-safe.
+@(test)
+scenario_splitter_positions_follow_ui_policy :: proc(t: ^testing.T) {
+    ui_runtime := app_core.Euclid_Ui_Runtime_State{
+        vertical_split_x = VIEW_WIDTH,
+        horizontal_split_y = VIEW_HEIGHT,
+        ui_press_owner = {active = true, kind = .Splitter,
+            id = SPLITTER_VERTICAL_PRESS_ID},
+        vertical_split_hover = 1,
+        horizontal_split_hover = 1,
+    }
+
+    testing.expect(t, set_splitter_positions(&ui_runtime, 0, WINDOW_HEIGHT))
+    testing.expect_value(t, ui_runtime.vertical_split_x, f32(WORLD_MIN_WIDTH))
+    testing.expect_value(t, ui_runtime.horizontal_split_y,
+        f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
+    testing.expect(t, !ui_runtime.ui_press_owner.active)
+    testing.expect_value(t, ui_runtime.vertical_split_hover, f32(0))
+    testing.expect_value(t, ui_runtime.horizontal_split_hover, f32(0))
+
+    ui_runtime.gif_capture_phase = .Recording
+    testing.expect(t, !set_splitter_positions(&ui_runtime, VIEW_WIDTH, VIEW_HEIGHT))
+    testing.expect_value(t, ui_runtime.vertical_split_x, f32(WORLD_MIN_WIDTH))
+}
+
+//   Verify programmatic presentation scrolling clears capture and rejects Terminal.
+@(test)
+scenario_presentation_scroll_follows_ui_policy :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    defer free(animation)
+    state^.julia_interface^.selected_animation = animation
+    state^.ui_runtime.ui_press_owner = {active = true, kind = .Scrollbar,
+        id = UI_PRESENTATION_SCROLLBAR_ID}
+    state^.ui_runtime.text_scroll_dragging = true
+    state^.ui_runtime.text_scroll_drag_off = 12
+
+    testing.expect(t, set_presentation_scroll_position(state, -40))
+    testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(0))
+    testing.expect(t, !state^.ui_runtime.ui_press_owner.active)
+    testing.expect(t, !state^.ui_runtime.text_scroll_dragging)
+
+    animation^.node_kind = .Terminal
+    testing.expect(t, !set_presentation_scroll_position(state, 40))
+    testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(0))
+}
+
 //   Verify UI region validation rejects negative dimensions.
 @(test)
 validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {

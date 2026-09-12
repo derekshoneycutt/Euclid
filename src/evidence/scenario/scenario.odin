@@ -5,6 +5,7 @@ package scenario
 import "../observe"
 import trace "../trace"
 import json "core:encoding/json"
+import "core:math"
 
 SCENARIO_COMMAND_CAPACITY :: 128
 SCENARIO_TEXT_CAPACITY :: 256
@@ -56,6 +57,8 @@ Command_Kind :: enum u8 {
     Key,
     Pause_Simulation,
     Resume_Simulation,
+    Set_View_Scroll,
+    Set_Splitters,
     Request_Screenshot,
     Start_Gif,
     Stop_Gif,
@@ -129,6 +132,10 @@ Command :: struct {
 
     // Optional one-based animation frame selected by an event wait.
     frame_number : u32,
+
+    // Fixed numeric payload used by display-owned viewport actions.
+    value : f32,
+    secondary_value : f32,
 }
 
 // Fixed-capacity scenario program produced from one complete JSON Lines source.
@@ -233,6 +240,89 @@ Raw_Command :: struct {
     shutdown : bool,
 }
 
+// Temporary decoded representations and stable outcome for one JSONL line.
+Scenario_Parsed_Line :: struct {
+    raw: Raw_Command,
+    value: json.Value,
+    root: json.Object,
+    error: Parse_Error,
+}
+
+//   Return one finite JSON number as f32 without accepting narrowing overflow.
+scenario_json_f32 :: proc(value: json.Value) -> (f32, bool) {
+    number: f64
+    #partial switch scalar in value {
+    case json.Integer:
+        number = f64(scalar)
+    case json.Float:
+        number = scalar
+    case:
+        return 0, false
+    }
+    if math.is_nan(number) || math.is_inf(number, 0) ||
+        number < -f64(max(f32)) || number > f64(max(f32)) {
+        return 0, false
+    }
+    return f32(number), true
+}
+
+//   Decode one exact named-object viewport action from the parsed root object.
+scenario_numeric_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    selected := 0
+    if value, present := root["set_view_scroll"]; present {
+        payload, payload_ok := value.(json.Object)
+        if !payload_ok || len(payload) != 1 {
+            return 0, false
+        }
+        y_value, y_present := payload["y"]
+        y, y_ok := scenario_json_f32(y_value)
+        if !y_present || !y_ok {
+            return 0, false
+        }
+        command^.kind = .Set_View_Scroll
+        command^.value = y
+        selected += 1
+    }
+    if value, present := root["set_splitters"]; present {
+        payload, payload_ok := value.(json.Object)
+        if !payload_ok || len(payload) != 2 {
+            return 0, false
+        }
+        vertical_value, vertical_present := payload["vertical"]
+        horizontal_value, horizontal_present := payload["horizontal"]
+        vertical, vertical_ok := scenario_json_f32(vertical_value)
+        horizontal, horizontal_ok := scenario_json_f32(horizontal_value)
+        if !vertical_present || !horizontal_present ||
+            !vertical_ok || !horizontal_ok {
+            return 0, false
+        }
+        command^.kind = .Set_Splitters
+        command^.value = vertical
+        command^.secondary_value = horizontal
+        selected += 1
+    }
+    return selected, true
+}
+
+//   Decode one JSONL command line into its temporary struct and structured object.
+scenario_parse_line :: proc(line: string) -> Scenario_Parsed_Line {
+    raw: Raw_Command
+    if json.unmarshal_string(line, &raw, allocator = context.temp_allocator) != nil {
+        return {error = .Invalid_Json}
+    }
+    parsed, parse_error := json.parse_string(line, allocator = context.temp_allocator)
+    if parse_error != .None {
+        return {error = .Invalid_Json}
+    }
+    root, root_ok := parsed.(json.Object)
+    if !root_ok {
+        json.destroy_value(parsed, allocator = context.temp_allocator)
+        return {error = .Invalid_Command}
+    }
+    return {raw = raw, value = parsed, root = root}
+}
+
 //   Parse and validate a complete bounded JSON Lines program.
 //
 // Parameters:
@@ -271,11 +361,13 @@ parse :: proc(source: string, program: ^Program) -> Parse_Error {
         if program.count == SCENARIO_COMMAND_CAPACITY {
             return .Too_Many_Commands
         }
-        raw: Raw_Command
-        if json.unmarshal_string(line, &raw, allocator = context.temp_allocator) != nil {
-            return .Invalid_Json
+        parsed_line := scenario_parse_line(line)
+        if parsed_line.error != .None {
+            return parsed_line.error
         }
-        command, command_error := command_from_raw(raw)
+        command, command_error := command_from_raw(
+            parsed_line.raw, parsed_line.root)
+        json.destroy_value(parsed_line.value, allocator = context.temp_allocator)
         if command_error != .None {
             return command_error
         }
@@ -400,6 +492,7 @@ runner_update_command :: proc(
          .Inject_Reload_Failure,
          .Type_Text, .Key,
          .Pause_Simulation, .Resume_Simulation,
+            .Set_View_Scroll, .Set_Splitters,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown:
         return runner_issue_action(runner, command, frame.actions)
@@ -443,7 +536,8 @@ runner_update :: proc(
         frame_boundary := command.kind == .Wait_Event ||
             command.kind == .Wait_State ||
             command.kind == .Wait_Terminal_Contains || command.kind == .Type_Text ||
-            command.kind == .Key
+            command.kind == .Key || command.kind == .Set_View_Scroll ||
+            command.kind == .Set_Splitters
         runner.step += 1
         runner.deadline_ns = 0
         if frame_boundary && runner.step < runner.program.count {
@@ -519,6 +613,33 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     return selected
 }
 
+//   Copy bounded aliases and validate command-specific optional fields.
+command_apply_options :: proc(raw: Raw_Command, command: ^Command) -> Parse_Error {
+    command^.alias, _ = name_copy(raw.alias)
+    command^.correlation, _ = name_copy(raw.correlation)
+    if len(raw.alias) > SCENARIO_NAME_CAPACITY ||
+        len(raw.correlation) > SCENARIO_NAME_CAPACITY {
+        return .Name_Too_Long
+    }
+    command^.timeout_ms = raw.timeout_ms
+    command^.frame_number = raw.frame_number
+    if command^.kind == .Wait_Event || command^.kind == .Wait_State ||
+        command^.kind == .Wait_Terminal_Contains {
+        if command^.timeout_ms == 0 {
+            command^.timeout_ms = SCENARIO_DEFAULT_TIMEOUT_MS
+        }
+        if command^.timeout_ms > SCENARIO_MAX_TIMEOUT_MS {
+            return .Invalid_Timeout
+        }
+    }
+    if command^.frame_number > 0 &&
+        (command^.kind != .Wait_Event ||
+         text_string(&command^.text) != "animation_frame_presented") {
+        return .Invalid_Command
+    }
+    return .None
+}
+
 //   Convert one decoded JSON object into exactly one bounded command.
 //
 // Parameters:
@@ -530,9 +651,15 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
 // Notes:
 //   - Exactly one action field must be selected. Waits receive the default timeout
 //     when omitted and reject values beyond the configured maximum.
-command_from_raw :: proc(raw: Raw_Command) -> (Command, Parse_Error) {
+command_from_raw :: proc(
+    raw: Raw_Command, root: json.Object) -> (Command, Parse_Error) {
     command: Command
     selected := raw_command_select(raw, &command)
+    numeric_selected, numeric_valid := scenario_numeric_action_select(root, &command)
+    if !numeric_valid {
+        return {}, .Invalid_Command
+    }
+    selected += numeric_selected
     if selected != 1 {
         return {}, .Invalid_Command
     }
@@ -540,27 +667,8 @@ command_from_raw :: proc(raw: Raw_Command) -> (Command, Parse_Error) {
         !command_kind_allows_empty_text(command.kind) {
         return {}, .Text_Too_Long
     }
-    command.alias, _ = name_copy(raw.alias)
-    command.correlation, _ = name_copy(raw.correlation)
-    if len(raw.alias) > SCENARIO_NAME_CAPACITY ||
-        len(raw.correlation) > SCENARIO_NAME_CAPACITY {
-        return {}, .Name_Too_Long
-    }
-    command.timeout_ms = raw.timeout_ms
-    command.frame_number = raw.frame_number
-    if command.kind == .Wait_Event || command.kind == .Wait_State ||
-        command.kind == .Wait_Terminal_Contains {
-        if command.timeout_ms == 0 {
-            command.timeout_ms = SCENARIO_DEFAULT_TIMEOUT_MS
-        }
-        if command.timeout_ms > SCENARIO_MAX_TIMEOUT_MS {
-            return {}, .Invalid_Timeout
-        }
-    }
-    if command.frame_number > 0 &&
-        (command.kind != .Wait_Event ||
-         text_string(&command.text) != "animation_frame_presented") {
-        return {}, .Invalid_Command
+    if options_error := command_apply_options(raw, &command); options_error != .None {
+        return {}, options_error
     }
     return command, .None
 }
@@ -568,7 +676,7 @@ command_from_raw :: proc(raw: Raw_Command) -> (Command, Parse_Error) {
 //   Report whether one command intentionally carries no text payload.
 command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
     switch kind {
-    case .Assert_No_Bad_Frees, .Shutdown:
+    case .Set_View_Scroll, .Set_Splitters, .Assert_No_Bad_Frees, .Shutdown:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,

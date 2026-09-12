@@ -1,0 +1,11 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Theorem 6","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"selection","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"set_splitters":{"vertical":700,"horizontal":580}}
+{"set_view_scroll":{"y":100000}}
+{"screenshot":".build/dynview-scroll-and-splitters.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

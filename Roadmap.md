@@ -83,18 +83,19 @@ Core Content (>163 animations; 98 complete):
 General features:
 
 - [X] Windows, MacOS, Linux support
-- [X] Julia make script with static analysis report and testing options
-- [X] Primitives
+- [X] CMake & Julia make script with static analysis report and testing options
+- [X] Primitives / Shape System
+  - [X] Sparse SoA simple animation-lifetime entity component system style structure
+  - [X] Pen
+  - [X] Compass
   - [X] Point
   - [X] Line
   - [X] Circle
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
-  - [ ] Cardioids & Limacons
   - [X] Label
-  - [X] Pen
-  - [X] Compass
   - [ ] Roulette tool
+  - [ ] Cardioids & Limacons
 - [X] Basic, layered particle system
   - [X] Dust
   - [X] Embers
@@ -115,8 +116,8 @@ General features:
   - [X] Basic input tab completion support, including unicode characters & function names
   - [X] Basic clipboard support
   - [X] Initial primitive drawing animation hooks
-  - [X] LaTeX output
-  - [X] Improved Scratchpad console-like REPL
+  - [X] Improved console-like REPL
+  - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation
@@ -132,14 +133,18 @@ General features:
   - [X] Dynamic sized brackets
   - [X] Matrices
   - [X] Sums, Products, Integrals
+  - [X] More advanced math layouts and features
+  - [X] Basic document mode formatting
 - [X] Naive spatial-aware shape drawing
 - [X] Improved pen clipping through 3D polygons
+- [X] Resizable layout via Splitters
 - [X] Drawing Sounds (Initial procedural)
 
 Final tasks:
 
 - [X] Final optimizations
   - [X] Dedicated Julia thread for Julia module isolation
+  - [X] Julia Actor Model infrastructure
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
   - [X] Shader-based particle drawing
@@ -202,14 +207,12 @@ Core Features:
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support
-- Improved Scratchpad REPL tab completion (preview of options, etc.)
-- Improved Scratchpad highlight and clipboard support
 - Scratchpad animation recorder w/ playback (e.g. start_recording! ... end_recording!
  ... replay_recording!)
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
 - REPL-focused exercise suggestions
-- Persisting Scratchpads (runtime-only, as children in the trees of Scratchpad
+- Persisting Terminals (runtime-only, as children in the trees of Terminal
  that can be navigated away from and returned to with persisted internal state;
   exit cleans REPL state and removes from tree)
 - Declarative animations support

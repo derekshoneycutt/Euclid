@@ -89,6 +89,12 @@ Display :: struct {
     dynview_enabled : bool,
     dynview_pending_invalidation_mask : u32,
 
+    // Effective display-owned presentation viewport state.
+    view_text_scroll_y : f32,
+    view_text_scroll_max : f32,
+    vertical_split_x : f32,
+    horizontal_split_y : f32,
+
     // GIF capture lifecycle and completed frame count.
     gif_capture_active : bool,
     gif_capture_phase : app_core.Gif_Capture_Phase,
@@ -213,6 +219,19 @@ observe_display_julia_service :: proc(
     result.animation_ticks_dropped = service.animation_ticks_dropped
 }
 
+//   Copy display-owned UI and capture state into an in-progress observation.
+observe_display_ui :: proc(
+    state: ^app_core.Euclid_General_State, result: ^Display) {
+    result.simulation_paused = state.ui_runtime.simulation_paused
+    result.view_text_scroll_y = state.ui_runtime.view_text_scroll_y
+    result.view_text_scroll_max = state.ui_runtime.view_text_scroll_max
+    result.vertical_split_x = state.ui_runtime.vertical_split_x
+    result.horizontal_split_y = state.ui_runtime.horizontal_split_y
+    result.gif_capture_active = state.gif_capture.active
+    result.gif_capture_phase = state.ui_runtime.gif_capture_phase
+    result.gif_captured_frames = state.ui_runtime.gif_captured_frames
+}
+
 //   Copy display-owned Euclid truth without advancing any subsystem.
 //
 // Parameters:
@@ -231,7 +250,6 @@ display :: proc(state: ^app_core.Euclid_General_State) -> Display {
     result := Display{
         fixed_step = state.fixed_step,
         simulation_time = state.simulation_time,
-        simulation_paused = state.ui_runtime.simulation_paused,
         terminal_ready = state.terminal.initialized &&
             state.terminal.julia_session_ready,
         terminal_idle = state.terminal.initialized &&
@@ -241,14 +259,12 @@ display :: proc(state: ^app_core.Euclid_General_State) -> Display {
             state.terminal.collecting_continuation,
         dynview_enabled = state.dynview.enabled,
         dynview_pending_invalidation_mask = state.dynview.pending_invalidation_mask,
-        gif_capture_active = state.gif_capture.active,
-        gif_capture_phase = state.ui_runtime.gif_capture_phase,
-        gif_captured_frames = state.ui_runtime.gif_captured_frames,
         required_evidence_complete =
             state.evidence_session.required_evidence_complete &&
             evidence_trace.ring_evidence_complete(&state.evidence_ring),
         trace = trace_state(&state.evidence_ring),
     }
+    observe_display_ui(state, &result)
     if state.shape_world != nil {
         result.point_count = int(state.shape_world.transforms.count)
         result.constraint_count = int(state.shape_world.constraints.count)

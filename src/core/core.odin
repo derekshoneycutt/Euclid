@@ -2321,6 +2321,7 @@ Euclid_Ui_Runtime_State :: struct {
     tree_reveal_pending: bool,
     tree_reveal_stable_id: uuid.Identifier,
     view_text_scroll_y: f32,
+    view_text_scroll_max: f32,
 
     tree_scroll_dragging: bool,
     tree_scroll_drag_off: f32,

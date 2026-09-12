@@ -61,6 +61,37 @@ artifact_test_expect_arena_allocations :: proc(t: ^testing.T, directory: string)
     testing.expect(t, strings.contains(text, "\"matched\":true"))
 }
 
+// Verify final state artifacts retain effective presentation viewport values.
+artifact_test_expect_viewport_state :: proc(t: ^testing.T, directory: string) {
+    data, read_error := os.read_entire_file(
+        fmt.tprintf("%s/state.json", directory), context.allocator)
+    defer delete(data)
+    text := string(data)
+    testing.expect(t, read_error == nil)
+    testing.expect(t, strings.contains(text, "\"view_text_scroll_y\":90.5"))
+    testing.expect(t, strings.contains(text, "\"view_text_scroll_max\":120"))
+    testing.expect(t, strings.contains(text, "\"vertical_split_x\":640"))
+    testing.expect(t, strings.contains(text, "\"horizontal_split_y\":360"))
+}
+
+// Build the canonical failed bundle payload used by the artifact integration test.
+artifact_test_failure_bundle_data :: proc(
+    events: []trace.Event, arenas: allocation.Arena_Baselines) -> Bundle {
+    return {
+        manifest = {.Failed, .Wait_Timeout, 14, true, 2},
+        events = events,
+        state = {
+            fixed_step = 9,
+            view_text_scroll_y = 90.5,
+            view_text_scroll_max = 120,
+            vertical_split_x = 640,
+            horizontal_split_y = 360,
+        },
+        julia_host = {runtime_generation = 2},
+        arena_baselines = arenas,
+    }
+}
+
 // Verify a forced failure writes its canonical result and fixed binary trace.
 @(test)
 artifact_test_failure_bundle :: proc(t: ^testing.T) {
@@ -75,19 +106,8 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
     arenas.present[allocation.Arena_Domain_Kind.Animation] = true
     arenas.observed_present[allocation.Arena_Domain_Kind.Animation] = true
     arenas.matched[allocation.Arena_Domain_Kind.Animation] = true
-    written := write_bundle(directory, {
-        manifest = {
-            result = .Failed,
-            reason = .Wait_Timeout,
-            failed_step = 14,
-            trace_complete = true,
-            last_trace_sequence = 2,
-        },
-        events = events[:],
-        state = observe.Display{fixed_step = 9},
-        julia_host = observe.Julia_Host{runtime_generation = 2},
-        arena_baselines = arenas,
-    })
+    written := write_bundle(
+        directory, artifact_test_failure_bundle_data(events[:], arenas))
     testing.expect(t, written)
     if !written {
         return
@@ -97,6 +117,7 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
     artifact_test_expect_failure_trace(t, directory)
     artifact_test_expect_standalone_trace(t, directory, events[:])
     artifact_test_expect_arena_allocations(t, directory)
+    artifact_test_expect_viewport_state(t, directory)
     testing.expect(t, !write_bundle("../outside", {}))
     testing.expect(t, !write_trace("../outside.bin", events[:]))
 }

@@ -181,6 +181,15 @@ sync_window_prose_shaping :: proc(state: ^Euclid_General_State) {
         &state^.dynview, effective_keys[:], generations[:])
 }
 
+// Apply accepted scenario UI state before panel geometry and Dynview layout are prepared.
+service_scenario_before_ui :: proc(ctx: Window_Frame_Context) {
+    when core.SCENARIOS_ENABLED {
+        if ctx.scenario_runtime != nil {
+            _ = scenario_runtime_apply_pending_ui(ctx.scenario_runtime)
+        }
+    }
+}
+
 // Advance one active scenario before the frame is presented.
 service_scenario_before_present :: proc(ctx: Window_Frame_Context) {
     when core.SCENARIOS_ENABLED {
@@ -216,6 +225,7 @@ run_window_frame :: proc(
     sync_window_prose_shaping(state)
     julia.publish_available_view_snapshot(state, false)
     service_presentation_runtime(state, presentation)
+    service_scenario_before_ui(ctx)
     input_frame := input.input_poll_frame(input_runtime)
     ui_geometry := ui.prepare_ui_geometry(state, input_frame)
     ui.prepare_ui_static_interaction(
