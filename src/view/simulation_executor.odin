@@ -91,12 +91,12 @@ update_particles_task :: proc(
     return .Succeeded
 }
 
-//   Solve point-system constraints on a simulation worker.
+//   Solve canonical world constraints on a simulation worker.
 solve_constraints_task :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     data := cast(^Simulation_Task_Data)payload
-    shapes.apply_all_constraints_to_error(
-        data^.state^.point_system, ALLOWED_CONSTRAINT_ERROR)
+    shapes.world_apply_all_constraints_to_error(
+        data^.state^.shape_world, ALLOWED_CONSTRAINT_ERROR)
     _ = evidence_session.session_record(
         &data^.state^.evidence_session, &data^.evidence_ring, {
             lane = .Domain,
@@ -106,8 +106,7 @@ solve_constraints_task :: proc(
             tick = data^.state^.fixed_step + 1,
             flags = {.Required},
             payload = {counts = {
-                first = u32(max(
-                    data^.state^.point_system^.next_constraint_index, 0)),
+                first = u32(data^.state^.shape_world^.constraints.count),
             }},
         })
     return .Succeeded
@@ -117,7 +116,8 @@ solve_constraints_task :: proc(
 build_shape_cache_task :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     data := cast(^Frame_Preparation_Task_Data)payload
-    shapes.build_draw_cache(data^.state^.point_system, data^.interpolation_alpha)
+    shapes.build_shape_world_draw_cache(
+        data^.state^.shape_world, data^.interpolation_alpha)
     _ = evidence_session.session_record(
         &data^.state^.evidence_session, &data^.evidence_ring, {
             lane = .Presentation,
@@ -127,7 +127,7 @@ build_shape_cache_task :: proc(
             tick = data^.state^.fixed_step,
             payload = {counts = {
                 first = u32(max(
-                    data^.state^.point_system^.draw_cache.item_count, 0)),
+                    data^.state^.shape_world^.draw_cache.item_count, 0)),
             }},
         })
     return .Succeeded

@@ -1,6 +1,7 @@
 package bridge
 
 import "../core"
+import "../shapes"
 
 import "core:testing"
 
@@ -67,4 +68,39 @@ explicit_reload_requests_animation_lifecycle_update :: proc(t: ^testing.T) {
     service^.reload_requested = true
 
     testing.expect(t, animation_lifecycle_update_needed(state))
+}
+
+//   Verify retirement emits clear effects while animation geometry is still valid.
+@(test)
+animation_retirement_emits_before_world_rewind :: proc(t: ^testing.T) {
+    state := animation_value_test_state_create()
+    testing.expect(t, state != nil)
+    if state == nil {return}
+    defer animation_value_test_state_destroy(state)
+    world: core.Shape_World
+    particles := new(core.Particle_System, context.allocator)
+    defer free(particles, context.allocator)
+    service := new(core.Julia_Runtime_Service, context.allocator)
+    defer free(service, context.allocator)
+    service^.animation_generation = 1
+    state^.shape_world = &world
+    state^.particle_system = particles
+    state^.julia_runtime_service = service
+    particles^.use_max_dust_particles = 4
+    testing.expect_value(t,
+        core.shape_world_freeze_baseline(&world), core.Shape_World_Status.Ok)
+    line, status := shapes.world_create_line(
+        &world, {0, 0, 0}, {1, 0, 0}, {})
+    testing.expect_value(t, status, core.Shape_World_Status.Ok)
+    style, found := core.shape_component_get_mut(
+        &world.render_styles, &world.registry, line.shape)
+    testing.expect(t, found)
+    if found {style^.visible = true}
+
+    testing.expect(t, reset_animation_switch_state(state))
+
+    testing.expect(t, particles^.low_particles.alive[0])
+    testing.expect_value(t, world.registry.entity_count, u32(0))
+    testing.expect_value(t, world.transforms.count, u16(0))
+    testing.expect(t, !core.shape_registry_resolves(&world.registry, line.shape))
 }

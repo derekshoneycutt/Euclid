@@ -345,13 +345,10 @@ scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
     defer free(interface)
     animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    point_system := new(app_core.Shapes_Point_System, context.allocator)
-    defer free(point_system)
     world := new(app_core.Shape_World, context.allocator)
     defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
-    state^.point_system = point_system
     state^.shape_world = world
     first := scene_command_test_entity(world, {})
     second := scene_command_test_entity(world, {})
@@ -386,13 +383,10 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     defer free(interface)
     animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    point_system := new(app_core.Shapes_Point_System, context.allocator)
-    defer free(point_system)
     world := new(app_core.Shape_World, context.allocator)
     defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
-    state^.point_system = point_system
     state^.shape_world = world
     entity := scene_command_test_entity(world, {9, 9, 9})
     batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
@@ -421,11 +415,8 @@ scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) 
     defer free(current)
     stale := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(stale)
-    point_system := new(app_core.Shapes_Point_System, context.allocator)
-    defer free(point_system)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = current
-    state^.point_system = point_system
 
     overflowed := app_bridge.Scene_Command_Batch{animation = current, overflowed = true}
     stale_batch := app_bridge.Scene_Command_Batch{animation = stale}
@@ -477,13 +468,10 @@ scene_command_batch_defers_shape_style_until_commit :: proc(t: ^testing.T) {
     defer free(interface)
     animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    point_system := new(app_core.Shapes_Point_System, context.allocator)
-    defer free(point_system)
     world := new(app_core.Shape_World, context.allocator)
     defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
-    state^.point_system = point_system
     state^.shape_world = world
     entity := scene_command_test_entity(world, {})
     style, found := app_core.shape_component_get_mut(
@@ -515,13 +503,10 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
     defer free(interface)
     animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    point_system := new(app_core.Shapes_Point_System, context.allocator)
-    defer free(point_system)
     world := new(app_core.Shape_World, context.allocator)
     defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
-    state^.point_system = point_system
     state^.shape_world = world
     entity := scene_command_test_entity(world, {9, 9, 9})
     batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}

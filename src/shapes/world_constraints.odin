@@ -64,6 +64,14 @@ World_Angle_Constraint_Limbs :: struct {
     theta: f32,
 }
 
+// Rotate one vector around an axis using Rodrigues' formula.
+rotate_around_axis :: proc(vec, axis: Vector3, angle: f32) -> Vector3 {
+    cosine := math.cos(angle)
+    sine := math.sin(angle)
+    return vec * cosine + linalg.cross(axis, vec) * sine +
+        axis * linalg.dot(axis, vec) * (1 - cosine)
+}
+
 // Append one generic direct-target constraint after complete validation.
 world_create_constraint :: proc(
     world: ^core.Shape_World,

@@ -168,12 +168,10 @@ animation_value_batch_commits_scene_and_typed_state :: proc(t: ^testing.T) {
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
     interface: core.Euclid_Julia_Interface
-    point_system: core.Shapes_Point_System
     world: core.Shape_World
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
-    state^.point_system = &point_system
     state^.shape_world = &world
     entity := animation_value_test_entity(&world, {})
     identity := core.Animation_Value_Identity{1, 1, 1, 1}
@@ -206,12 +204,10 @@ animation_value_batch_rejects_typed_write_with_invalid_scene :: proc(t: ^testing
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
     interface: core.Euclid_Julia_Interface
-    point_system: core.Shapes_Point_System
     world: core.Shape_World
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
-    state^.point_system = &point_system
     state^.shape_world = &world
     identity := core.Animation_Value_Identity{1, 1, 1, 1}
     _ = core.animation_value_store_set(
@@ -239,12 +235,10 @@ animation_value_batch_rejects_scene_with_invalid_typed_write :: proc(t: ^testing
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
     interface: core.Euclid_Julia_Interface
-    point_system: core.Shapes_Point_System
     world: core.Shape_World
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
-    state^.point_system = &point_system
     state^.shape_world = &world
     entity := animation_value_test_entity(&world, {9, 9, 9})
     batch := core.Scene_Command_Batch{animation = animation, command_count = 1}
@@ -312,10 +306,8 @@ animation_tick_commits_without_view_candidate :: proc(t: ^testing.T) {
         runtime.Allocator_Error.None)
     defer destroy_julia_runtime_service(service)
     animation := &interface.null_animation
-    point_system: core.Shapes_Point_System
     state^.julia_interface = &interface
     state^.julia_runtime_service = service
-    state^.point_system = &point_system
     interface.current_animation = animation
     interface.selected_animation = animation
     service.animation_generation = 7

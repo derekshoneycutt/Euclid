@@ -1561,18 +1561,6 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
-                "view-runtime-session-point-system",
-                "src/view/runtime_session.odin",
-                "make_shape_storage",
-                :context,
-                "Created once at startup with a definitive destruction at application end.";
-                operation="new",
-                target="Shapes_Point_System",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=1,
-                maximum_matches=1),
-            ReviewedAllocationPolicy(
                 "view-runtime-session-shape-world",
                 "src/view/runtime_session.odin",
                 "make_shape_storage",

@@ -11,8 +11,8 @@ import "core:testing"
 observe_test_display_scalars :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
-    defer free(state^.point_system)
+    state^.shape_world = new(app_core.Shape_World, context.allocator)
+    defer free(state^.shape_world)
     state^.particle_system = new(app_core.Particle_System, context.allocator)
     defer free(state^.particle_system)
     state^.julia_runtime_service = new(app_core.Julia_Runtime_Service, context.allocator)
@@ -21,8 +21,8 @@ observe_test_display_scalars :: proc(t: ^testing.T) {
     state^.simulation_time = 2.5
     state^.ui_runtime.simulation_paused = true
     state^.evidence_session.required_evidence_complete = true
-    state^.point_system^.next_point_index = 4
-    state^.point_system^.next_constraint_index = 3
+    state^.shape_world^.transforms.count = 4
+    state^.shape_world^.constraints.count = 3
     state^.particle_system^.next_index = 12
     state^.julia_runtime_service^.runtime_generation = 2
     state^.julia_runtime_service^.animation_tick_sequence = 9

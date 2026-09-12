@@ -44,16 +44,11 @@ SURFACE_EDGE_COLOR :: rl.Color{96, 65, 76, 255}
 
 TREE_FONT_SIZE :: 16
 
-MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
 TOOL_LENGTH :: core.TOOL_LENGTH
 
 Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 Iso_Scale :: core.Iso_Scale
-Shapes_Point_Type :: core.Shapes_Point_Type
-Shapes_Point :: core.Shapes_Point
-Shapes_Constraint :: core.Shapes_Constraint
-Shapes_Point_System :: core.Shapes_Point_System
 Particle :: core.Particle
 Particle_System :: core.Particle_System
 Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface

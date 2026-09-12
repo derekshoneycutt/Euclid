@@ -29,16 +29,11 @@ import "core:time"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
 
-MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
 TOOL_LENGTH :: core.TOOL_LENGTH
 
 Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 Iso_Scale :: core.Iso_Scale
-Shapes_Point_Type :: core.Shapes_Point_Type
-Shapes_Point :: core.Shapes_Point
-Shapes_Constraint :: core.Shapes_Constraint
-Shapes_Point_System :: core.Shapes_Point_System
 Particle :: core.Particle
 Particle_System :: core.Particle_System
 Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
@@ -447,7 +442,6 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
     julia.destroy_julia_interface_resources(state)
     free(state^.particle_system)
     free(state^.shape_world)
-    free(state^.point_system)
     free(state^.draw_surface)
     free(state^.iso_scale)
     free(state)
@@ -624,7 +618,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
 
     state^.accumulator += frame_dt
 
-    shapes.update_last_cache_vectors(state^.point_system)
+    shapes.shape_world_update_previous_positions(state^.shape_world)
     step_count := 0
     for state^.accumulator >= FIXED_DT {
         // Never expose worker-commanded tool dimensions before constraints normalize them.
@@ -719,12 +713,13 @@ record_gif_capture_transition :: proc(
 
 //   Record one post-join constraint summary for semantic trace consumers.
 record_constraint_trace_summary :: proc(state: ^Euclid_General_State) {
-    if state == nil || state^.point_system == nil {
+    if state == nil || state^.shape_world == nil {
         return
     }
     active_constraints := 0
-    for constraint_index in 0..<state^.point_system^.next_constraint_index {
-        if state^.point_system^.constraints[constraint_index].do_apply {
+    for constraint in state^.shape_world^.constraints.values[
+        :state^.shape_world^.constraints.count] {
+        if constraint.enabled {
             active_constraints += 1
         }
     }
@@ -737,7 +732,7 @@ record_constraint_trace_summary :: proc(state: ^Euclid_General_State) {
             tick = state^.fixed_step,
             payload = {counts = {
                 first = u32(active_constraints),
-                second = u32(state^.point_system^.next_constraint_index),
+                second = u32(state^.shape_world^.constraints.count),
             }},
         })
 }
@@ -750,7 +745,8 @@ record_constraint_trace_summary :: proc(state: ^Euclid_General_State) {
 record_evidence_checkpoint :: proc(
     state: ^Euclid_General_State,
     required: bool) -> evidence_checkpoint.Handle {
-    if state == nil || state^.point_system == nil || state^.julia_runtime_service == nil {
+    if state == nil || state^.shape_world == nil ||
+        state^.julia_runtime_service == nil {
         return {}
     }
 
@@ -781,9 +777,34 @@ record_evidence_checkpoint :: proc(
     return handle
 }
 
+//   Project one dense world transform and its optional rendering state.
+capture_evidence_point :: proc(
+    world: ^core.Shape_World,
+    transform_index: int,
+    captured: ^evidence_checkpoint.Point) {
+    entity := world^.transforms.entities[transform_index]
+    transform := &world^.transforms.values[transform_index]
+    captured^.index = i32(entity.slot) - 1
+    captured^.x = transform.position.x
+    captured^.y = transform.position.y
+    captured^.z = transform.position.z
+    captured^.has_position = true
+    if style, found := core.shape_component_get(
+        &world^.render_styles, &world^.registry, entity); found {
+        captured^.visible = style^.visible
+        captured^.brush_size = style^.brush_size
+        captured^.offset = style^.offset
+    }
+    if feature, found := core.shape_component_get(
+        &world^.active_features, &world^.registry, entity); found {
+        captured^.active_child = i32(feature^.index)
+    }
+}
+
 //   Copy authoritative post-join Euclid state into one fixed checkpoint value.
 capture_evidence_checkpoint :: proc(
     state: ^Euclid_General_State) -> evidence_checkpoint.Snapshot {
+    world := state^.shape_world
     snapshot := evidence_checkpoint.Snapshot{
         fixed_step = state^.fixed_step,
         simulation_time = state^.simulation_time,
@@ -791,30 +812,18 @@ capture_evidence_checkpoint :: proc(
         animation_generation = state^.julia_runtime_service^.animation_generation,
         animation_tick_sequence = state^.julia_runtime_service^.animation_tick_sequence,
         point_count = min(
-            state^.point_system^.next_point_index,
+            int(world^.transforms.count),
             evidence_checkpoint.CHECKPOINT_POINT_CAPACITY),
-        constraint_count = state^.point_system^.next_constraint_index,
+        constraint_count = int(world^.constraints.count),
     }
-    for constraint in state^.point_system^.constraints[
-        :state^.point_system^.next_constraint_index] {
-        if constraint.do_apply {
+    for constraint in world^.constraints.values[:world^.constraints.count] {
+        if constraint.enabled {
             snapshot.active_constraint_count += 1
         }
     }
-    for point_index in 0..<snapshot.point_count {
-        point := &state^.point_system^.points[point_index]
-        captured := &snapshot.points[point_index]
-        captured.index = i32(point_index)
-        captured.active_child = i32(point.active_child)
-        captured.visible = point.do_draw
-        captured.brush_size = point.brush_size
-        captured.offset = point.offset
-        if position, ok := point.position.?; ok {
-            captured.x = position.x
-            captured.y = position.y
-            captured.z = position.z
-            captured.has_position = true
-        }
+    for transform_index in 0..<snapshot.point_count {
+        capture_evidence_point(
+            world, transform_index, &snapshot.points[transform_index])
     }
     return snapshot
 }

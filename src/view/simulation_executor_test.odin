@@ -8,6 +8,7 @@ import evidence_checkpoint "../evidence/checkpoint"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import app_files "../files"
+import "../shapes"
 
 import "core:math"
 import "core:os"
@@ -114,8 +115,8 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.particle_system = new(app_core.Particle_System, context.allocator)
     defer free(state^.particle_system)
-    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
-    defer free(state^.point_system)
+    state^.shape_world = new(app_core.Shape_World, context.allocator)
+    defer free(state^.shape_world)
     init_test_evidence(state)
 
     executor := create_simulation_executor(state)
@@ -178,11 +179,11 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
     defer free(state^.julia_runtime_service)
     state^.particle_system = new(app_core.Particle_System, context.allocator)
     defer free(state^.particle_system)
-    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
-    defer free(state^.point_system)
-    state^.point_system^.next_point_index = 1
-    state^.point_system^.points[0].kind = .Point
-    state^.point_system^.points[0].position = app_core.Vector3{1, 2, 3}
+    state^.shape_world = new(app_core.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+    _, point_status := shapes.world_create_point(
+        state^.shape_world, {1, 2, 3}, {})
+    testing.expect_value(t, point_status, app_core.Shape_World_Status.Ok)
     init_test_evidence(state)
 
     executor := create_simulation_executor(state)
@@ -206,8 +207,8 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
     defer free(state)
     state^.particle_system = new(app_core.Particle_System, context.allocator)
     defer free(state^.particle_system)
-    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
-    defer free(state^.point_system)
+    state^.shape_world = new(app_core.Shape_World, context.allocator)
+    defer free(state^.shape_world)
 
     particles := state^.particle_system
     particles^.use_max_dust_particles = 1
@@ -215,14 +216,12 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
     particles^.low_particles.life[0] = 10
     particles^.low_particles.vel_x[0] = 0.25
 
-    points := state^.point_system
-    points^.points[0].position = app_core.Vector3{0, 0, -1}
-    points^.constraints[0] = app_core.Shapes_Constraint{
-        kind = .Floor,
-        on_point = 0,
-        restriction = app_core.Vector3{0, 0, 0},
-        do_apply = true,
-    }
+    point, point_status := shapes.world_create_point(
+        state^.shape_world, {0, 0, -1}, {})
+    testing.expect_value(t, point_status, app_core.Shape_World_Status.Ok)
+    _, constraint_status := shapes.world_create_floor_constraint(
+        state^.shape_world, {point = point.entity, height = 0, enabled = true})
+    testing.expect_value(t, constraint_status, app_core.Shape_World_Status.Ok)
 
     executor := create_simulation_executor(state)
     testing.expect(t, executor != nil)
@@ -233,8 +232,11 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
 
     testing.expect_value(t, first_batch_x, f32(0.25))
     testing.expect(t, particles^.low_particles.pos_x[0] > first_batch_x)
-    position := points^.points[0].position.? or_else app_core.Vector3{}
-    testing.expect_value(t, position.z, f32(0))
+    transform, found := app_core.shape_component_get(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry,
+        point.entity)
+    testing.expect(t, found)
+    testing.expect_value(t, transform^.position.z, f32(0))
 }
 
 //   Verify terminal Dynview arena diagnostics after executor destruction.
@@ -254,7 +256,7 @@ expect_parallel_frame_cache_ready :: proc(
     t: ^testing.T,
     state: ^app_core.Euclid_General_State,
     executor: ^Simulation_Executor) {
-    testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
+    testing.expect_value(t, state^.shape_world^.draw_cache.item_count, 1)
     testing.expect(t, state^.dynview.compile_cache.is_valid)
     testing.expect(t, state^.dynview.compile_cache.layout_is_valid)
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
@@ -295,12 +297,16 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     defer free(state)
     state^.iso_scale = new(app_core.Iso_Scale, context.allocator)
     defer free(state^.iso_scale)
-    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
-    defer free(state^.point_system)
-    state^.point_system^.next_point_index = 1
-    state^.point_system^.points[0].kind = .Point
-    state^.point_system^.points[0].do_draw = true
-    state^.point_system^.points[0].position = app_core.Vector3{1, 2, 3}
+    state^.shape_world = new(app_core.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+    point, point_status := shapes.world_create_point(
+        state^.shape_world, {1, 2, 3}, {})
+    testing.expect_value(t, point_status, app_core.Shape_World_Status.Ok)
+    style, found := app_core.shape_component_get(
+        &state^.shape_world^.render_styles, &state^.shape_world^.registry,
+        point.entity)
+    testing.expect(t, found)
+    style^.visible = true
     state^.dynview.enabled = true
 
     executor := create_simulation_executor(state)
@@ -317,7 +323,7 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     expect_parallel_frame_cache_ready(t, state, executor)
 
     run_parallel_frame_preparation(state, 0.75, {})
-    testing.expect_value(t, state^.point_system^.draw_cache.item_count, 1)
+    testing.expect_value(t, state^.shape_world^.draw_cache.item_count, 1)
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(1))
 
@@ -337,8 +343,8 @@ dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
     defer free(state)
     state^.iso_scale = new(app_core.Iso_Scale, context.allocator)
     defer free(state^.iso_scale)
-    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
-    defer free(state^.point_system)
+    state^.shape_world = new(app_core.Shape_World, context.allocator)
+    defer free(state^.shape_world)
     state^.dynview.enabled = true
 
     executor := create_simulation_executor(state)

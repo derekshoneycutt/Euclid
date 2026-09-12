@@ -6,7 +6,7 @@ import protocol "../core/protocol"
 import "../files"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
-import "../shapes"
+import "../particles"
 import termsession "../terminal/session"
 import terminalview "../view/terminal"
 
@@ -605,7 +605,7 @@ record_animation_loaded :: proc(
     })
 }
 
-//   Clear animation-owned native state into the generation about to initiate.
+//   Retire animation-owned native state into the generation about to initiate.
 reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool {
     target_generation := current_animation_generation(state) + 1
     if state^.terminal.initialized && state^.julia_runtime_service != nil {
@@ -623,15 +623,16 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
             &state^.simulation_executor^.pool)
     }
     terminalview.terminal_destroy(&state^.terminal)
-    if core.animation_storage_begin_generation(
-        &state^.animation_memory,
-        &state^.animation_values,
-        &state^.dynview_documents,
-        target_generation) != .Ok {
+    particles.emit_shape_world_clear_burst(
+        state^.particle_system, state^.shape_world, state^.iso_scale)
+    if core.shape_world_rewind_animation(state^.shape_world) != .Ok {
         return false
     }
-    shapes.clear_animation_data(
-        state^.point_system, state^.particle_system, state^.iso_scale)
+    if core.animation_storage_begin_generation(
+        &state^.animation_memory, &state^.animation_values,
+        &state^.dynview_documents, target_generation) != .Ok {
+        return false
+    }
     hide_pen(state)
     hide_compass(state)
     state^.animation_drawing_sound_enabled = true

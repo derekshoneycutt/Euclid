@@ -389,13 +389,20 @@ commit_scene_command_batch :: proc(
     }
 
     appliers := SCENE_COMMAND_APPLIERS
+    hide_burst_kicked := false
     for command_index in 0..<batch^.command_count {
         command := &batch^.commands[command_index]
-        applier := appliers[command^.kind]
-        if applier != nil {
-            applier(state, command)
-            record_scene_command_evidence(state, command)
+        if command^.kind == .Set_Shape_Visible {
+            _, emitted := shape_set_visible_local(
+                state, command^.entity, u8(command^.flag), !hide_burst_kicked)
+            hide_burst_kicked = hide_burst_kicked || emitted
+        } else {
+            applier := appliers[command^.kind]
+            if applier != nil {
+                applier(state, command)
+            }
         }
+        record_scene_command_evidence(state, command)
     }
     record_scene_batch_evidence(state, .Scene_Batch_Committed, false)
     return true

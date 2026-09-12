@@ -222,7 +222,7 @@ observe_display_julia_service :: proc(
 //   - Pointer-free display snapshot, or zero values for nil state.
 //
 // Notes:
-//   - Missing point, particle, or Julia services leave their field groups zero.
+//   - Missing shape, particle, or Julia services leave their field groups zero.
 //   - The source and all nested mutable services must be stable for the copy.
 display :: proc(state: ^app_core.Euclid_General_State) -> Display {
     if state == nil {
@@ -249,9 +249,9 @@ display :: proc(state: ^app_core.Euclid_General_State) -> Display {
             evidence_trace.ring_evidence_complete(&state.evidence_ring),
         trace = trace_state(&state.evidence_ring),
     }
-    if state.point_system != nil {
-        result.point_count = state.point_system.next_point_index
-        result.constraint_count = state.point_system.next_constraint_index
+    if state.shape_world != nil {
+        result.point_count = int(state.shape_world.transforms.count)
+        result.constraint_count = int(state.shape_world.constraints.count)
     }
     if state.particle_system != nil {
         result.particle_count = state.particle_system.next_index

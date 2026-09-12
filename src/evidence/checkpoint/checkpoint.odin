@@ -19,9 +19,9 @@ Handle :: struct {
     generation : u16,
 }
 
-// Pointer-free point state copied from the authoritative point system.
+// Pointer-free point state copied from the authoritative shape world.
 //
-// The record preserves resolved position, drawing state, and point-system
+// The record preserves resolved position, drawing state, and shape-entity
 // identity without retaining source pointers. Position components are valid
 // only when has_position is true.
 Point :: struct {

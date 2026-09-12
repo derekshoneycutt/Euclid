@@ -1,6 +1,7 @@
 package bridge
 
 import "../core"
+import "../particles"
 import "../shapes"
 
 import rl "vendor:raylib"
@@ -309,6 +310,28 @@ shape_set_position :: proc "c" (
     return BRIDGE_STATUS_OK
 }
 
+// Apply one visibility transition and report whether it emitted hide dust.
+shape_set_visible_local :: proc(
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    visible: u8,
+    kick_dust: bool) -> (i32, bool) {
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {return BRIDGE_STATUS_NOT_FOUND, false}
+    style, has_style := core.shape_component_get_mut(
+        &state.shape_world.render_styles, &state.shape_world.registry, entity)
+    if !has_style {return BRIDGE_STATUS_NOT_FOUND, false}
+    target_visible := visible != 0
+    emitted := false
+    if style^.visible && !target_visible {
+        emitted = particles.emit_shape_world_hide_burst(
+            state^.particle_system, state^.shape_world, entity,
+            state^.iso_scale, kick_dust)
+    }
+    style^.visible = target_visible
+    return BRIDGE_STATUS_OK, emitted
+}
+
 // Set one live render style's visibility by packed entity identity.
 @(export)
 shape_set_visible :: proc "c" (
@@ -321,13 +344,8 @@ shape_set_visible :: proc "c" (
         command.flag = visible != 0
     }
     if captured {return BRIDGE_STATUS_OK}
-    entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
-    style, has_style := core.shape_component_get_mut(
-        &state.shape_world.render_styles, &state.shape_world.registry, entity)
-    if !has_style {return BRIDGE_STATUS_NOT_FOUND}
-    style.visible = visible != 0
-    return BRIDGE_STATUS_OK
+    status, _ := shape_set_visible_local(state, packed, visible, true)
+    return status
 }
 
 // Set one live render style's color by packed entity identity.

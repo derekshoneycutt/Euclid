@@ -349,25 +349,6 @@ reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T)
     testing.expect_value(t, ps^.next_index, 1)
 }
 
-//   Verify a shape-hide burst spawns dust for the supported shape kinds.
-@(test)
-emit_shapes_hide_burst_spawns_dust_for_supported_shapes :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
-    defer free(ps)
-    ps^.use_max_dust_particles = 4
-
-    ks: app_core.Shapes_Point_System
-    ks.points[0].do_draw = true
-    ks.points[0].kind = .Point
-    ks.points[0].position = app_core.Vector3{1, 2, 0}
-
-    emit_shapes_hide_burst(ps, &ks, 0, false)
-
-    testing.expect(t, ps^.low_particles.alive[0])
-    testing.expect(t, ps^.low_particles.alive[1] || ps^.low_particles.alive[2] ||
-        ps^.low_particles.alive[3])
-}
-
 //   Seed one world line with direct endpoint transforms and configurable visibility.
 seed_shape_world_particle_line :: proc(
     world: ^app_core.Shape_World,

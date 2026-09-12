@@ -454,8 +454,8 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
 // Returns:
 //   - none.
 draw_shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
-    for i in 0..<state^.point_system^.draw_cache.item_count {
-        draw_cached_item_low(state, &state^.point_system^.draw_cache.items[i])
+    for i in 0..<state^.shape_world^.draw_cache.item_count {
+        draw_cached_item_low(state, &state^.shape_world^.draw_cache.items[i])
     }
 }
 
@@ -472,7 +472,7 @@ draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
         polygon_index = -1,
     }
     has_crossing := find_pen_polygon_crossing(state, &crossing)
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     _, pen_index := find_cached_pen_item(cache)
     _, compass_index := find_cached_compass_item(cache)
     pen_draw_index := pen_index
@@ -510,11 +510,11 @@ draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
 // Returns:
 //   - none.
 draw_shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
-    if state^.point_system^.draw_cache.draw_pen {
-        draw_cached_pen_shadow(state, &state^.point_system^.draw_cache.pen)
+    if state^.shape_world^.draw_cache.draw_pen {
+        draw_cached_pen_shadow(state, &state^.shape_world^.draw_cache.pen)
     }
-    if state^.point_system^.draw_cache.draw_compass {
-        draw_cached_compass_shadow(state, &state^.point_system^.draw_cache.compass)
+    if state^.shape_world^.draw_cache.draw_compass {
+        draw_cached_compass_shadow(state, &state^.shape_world^.draw_cache.compass)
     }
 }
 
@@ -524,8 +524,8 @@ draw_shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
 //   - Flat and below-surface geometry draws no shadow.
 //   - Labels are intentionally excluded from the shape-shadow pass.
 draw_shapes_shapes_shadows_cached :: proc(state: ^Euclid_General_State) {
-    for i in 0..<state^.point_system^.draw_cache.item_count {
-        draw_cached_item_shadow(state, &state^.point_system^.draw_cache.items[i])
+    for i in 0..<state^.shape_world^.draw_cache.item_count {
+        draw_cached_item_shadow(state, &state^.shape_world^.draw_cache.items[i])
     }
 }
 
@@ -558,7 +558,7 @@ draw_cached_pen_high_merged :: #force_inline proc(
 
     compass_caster: ^core.Shapes_Compass_Draw = nil
     if receives_compass {
-        compass_caster = &state^.point_system^.draw_cache.compass
+        compass_caster = &state^.shape_world^.draw_cache.compass
     }
     draw_cached_pen_full(state, pen, compass_caster)
 }
@@ -571,7 +571,7 @@ draw_cached_compass_high_merged :: #force_inline proc(
 
     pen_caster: ^core.Shapes_Pen_Draw = nil
     if receives_pen {
-        pen_caster = &state^.point_system^.draw_cache.pen
+        pen_caster = &state^.shape_world^.draw_cache.pen
     }
     draw_cached_compass_full(state, compass, pen_caster)
 }
@@ -643,7 +643,7 @@ draw_cached_polygon_is_elevated :: #force_inline proc(
     state: ^Euclid_General_State,
     poly: ^core.Shapes_Polygon_Draw) -> bool {
 
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     vertices := cache^.polygon_vertices[
         poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
     return has_any_elevated_shadow_point(vertices)
@@ -1209,7 +1209,7 @@ polygon_plane :: proc(
         return false
     }
 
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     vertices := cache^.polygon_vertices[
         polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
     triangles := cache^.polygon_triangles[
@@ -1247,7 +1247,7 @@ point_inside_polygon :: proc(
     polygon: ^core.Shapes_Polygon_Draw,
     point: Vector3) -> bool {
 
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     vertices := cache^.polygon_vertices[
         polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
     triangles := cache^.polygon_triangles[
@@ -1524,7 +1524,7 @@ find_pen_crossing_polygon :: proc(
     pen_index: int,
     out_crossing: ^Pen_Polygon_Crossing) -> bool {
 
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
         case core.Shapes_Polygon_Draw:
@@ -1560,7 +1560,7 @@ find_pen_polygon_crossing :: proc(
     state: ^Euclid_General_State,
     out_crossing: ^Pen_Polygon_Crossing) -> bool {
 
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     pen, pen_index := find_cached_pen_item(cache)
     if pen_index < 0 {
         return false
@@ -1719,10 +1719,10 @@ project_iso_points_batch_with_components :: proc(
 
 //   Render one cached label draw item.
 draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Draw) {
-    cache := &state.point_system.draw_cache
-    start := int(p.source_offset)
-    end := start + int(p.source_count)
-    if p.source_count == 0 || end > int(cache.label_byte_count) || end < start {
+    label := core.Shape_Label{mime = p.mime, byte_offset = p.source_offset,
+        byte_count = p.source_count, revision = p.source_revision}
+    source, found := core.shape_label_source(&state.shape_world.label_store, label)
+    if !found {
         return
     }
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
@@ -1731,7 +1731,7 @@ draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Dr
     view_core.ui_text_unshaped_paged({
         resolver = resolver,
         key = .Regular,
-        text = string(cache.label_bytes[start:end]),
+        text = source,
         position = c,
         color = p^.color,
         font = {font = regular_font, font_size = p.brush_size},
@@ -1927,7 +1927,7 @@ project_cached_polygon_vertices :: #force_inline proc(
     poly: ^core.Shapes_Polygon_Draw,
     projected: []Vector2) -> bool {
 
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     vertices := cache^.polygon_vertices[
         poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
     xs, ys, zs: [core.MAX_DRAW_CACHE_POLYGON_VERTICES]f32
@@ -1980,7 +1980,7 @@ draw_cached_polygon_shadow :: proc(
         return
     }
 
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     vertices := cache^.polygon_vertices[
         poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
     if !has_any_elevated_shadow_point(vertices) {
@@ -2008,7 +2008,7 @@ draw_cached_polygon :: proc(
         return
     }
 
-    cache := &state^.point_system^.draw_cache
+    cache := &state^.shape_world^.draw_cache
     draw_cached_polygon_triangles(cache, poly, projected[:], poly^.color)
 }
 

@@ -35,11 +35,8 @@ Session_Julia_Service :: struct {
     initialize_id : u64,
 }
 
-//   Allocated legacy and canonical shape stores plus their baseline tools.
+//   Allocated canonical shape world plus its baseline tools.
 Session_Shape_Storage :: struct {
-    point_system : ^Shapes_Point_System,
-    compass : core.Shapes_Compass,
-    pen : core.Shapes_Pen,
     world : ^core.Shape_World,
     world_compass : core.Shape_Compass_Handle,
     world_pen : core.Shape_Pen_Handle,
@@ -231,18 +228,8 @@ make_drawing_surface :: proc() -> ^Euclid_Drawing_Surface {
     return drawing_surface
 }
 
-//   Allocate both migration-era shape stores and build their baseline tools.
+//   Allocate the canonical shape world and build its baseline tools.
 make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
-    point_system := new(Shapes_Point_System, context.allocator)
-    compass := shapes.init_compass(point_system, TOOL_LENGTH, view_core.TOOL_COLOR, 5)
-    pen := shapes.init_pen(point_system, TOOL_LENGTH, view_core.TOOL_COLOR, 5)
-    shapes.freeze_system_indices(point_system)
-    shapes.apply_all_constraints_to_error(
-        point_system, view_core.ALLOWED_CONSTRAINT_ERROR)
-    shapes.update_last_cache_vectors(point_system)
-    out.point_system = point_system
-    out.compass = compass
-    out.pen = pen
     world := new(core.Shape_World, context.allocator)
     world_compass, compass_status := shapes.world_create_compass(world, {
         joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
@@ -254,7 +241,6 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
     if compass_status != .Ok || pen_status != .Ok ||
         core.shape_world_freeze_baseline(world) != .Ok {
         free(world)
-        free(point_system)
         return false
     }
     shapes.world_apply_all_constraints_to_error(
@@ -332,10 +318,7 @@ init_animations_state_resources :: proc(
     state^.julia_runtime_service = julia_service
     state^.iso_scale = make_iso_scale()
     state^.draw_surface = make_drawing_surface()
-    state^.point_system = shapes_state.point_system
     state^.particle_system = particle_system
-    state^.compass = shapes_state.compass
-    state^.pen = shapes_state.pen
     state^.shape_world = shapes_state.world
     state^.world_compass = shapes_state.world_compass
     state^.world_pen = shapes_state.world_pen
@@ -385,7 +368,6 @@ make_animations_state :: proc(
     free(state)
     free(particle_system)
     free(shape_storage.world)
-    free(shape_storage.point_system)
     return nil
 }
 

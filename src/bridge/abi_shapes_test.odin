@@ -87,6 +87,74 @@ bridge_shape_abi_rejects_stale_generation :: proc(t: ^testing.T) {
         core.Vector3{2, 0, 0})
 }
 
+// Verify a deferred hide emits dust on display-thread commit before visibility clears.
+@(test)
+bridge_shape_hide_emits_world_geometry_dust :: proc(t: ^testing.T) {
+    world: core.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    particles := new(core.Particle_System, context.allocator)
+    defer free(particles, context.allocator)
+    particles^.use_max_dust_particles = 128
+    state^.particle_system = particles
+    line := shape_create_line(state, {0, 0, 0}, {1, 0, 0},
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t,
+        shape_set_visible(state, line.shape, 1), i32(BRIDGE_STATUS_OK))
+    state^.julia_interface = new(core.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    batch: Scene_Command_Batch
+
+    begin_scene_command_batch(state, &batch)
+    testing.expect_value(t,
+        shape_set_visible(state, line.shape, 0), i32(BRIDGE_STATUS_OK))
+    end_scene_command_batch(state)
+    testing.expect(t, !particles^.low_particles.alive[0])
+    testing.expect_value(t, shape_get_view(state, line.shape).visible, u8(1))
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+
+    testing.expect(t, particles^.low_particles.alive[0])
+    view := shape_get_view(state, line.shape)
+    testing.expect_value(t, view.visible, u8(0))
+}
+
+// Verify one batch kick does not immediately age dust emitted by an earlier hide.
+@(test)
+bridge_shape_batch_coalesces_hide_dust_kick :: proc(t: ^testing.T) {
+    world: core.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    particles := new(core.Particle_System, context.allocator)
+    defer free(particles, context.allocator)
+    particles^.use_max_dust_particles = 256
+    particles^.low_particles.alive[0] = true
+    particles^.low_particles.life[0] = 10
+    state^.particle_system = particles
+    first := shape_create_line(state, {0, 0, 0}, {1, 0, 0},
+        bridge_shape_test_input({}).style)
+    second := shape_create_line(state, {0, 1, 0}, {1, 1, 0},
+        bridge_shape_test_input({}).style)
+    _ = shape_set_visible(state, first.shape, 1)
+    _ = shape_set_visible(state, second.shape, 1)
+    state^.julia_interface = new(core.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    batch: Scene_Command_Batch
+
+    begin_scene_command_batch(state, &batch)
+    _ = shape_set_visible(state, first.shape, 0)
+    _ = shape_set_visible(state, second.shape, 0)
+    end_scene_command_batch(state)
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+
+    testing.expect(t, particles^.low_particles.age[0] > 0)
+    testing.expect(t, particles^.low_particles.alive[1])
+    testing.expect_value(t, particles^.low_particles.age[1], f32(0))
+}
+
 // Verify worker queries remain isolated from later canonical component mutation.
 @(test)
 bridge_shape_abi_reads_query_snapshot :: proc(t: ^testing.T) {

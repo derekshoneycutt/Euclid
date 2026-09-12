@@ -67,7 +67,7 @@ If you are new, read in this order:
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Font Cache | Required JuliaMono/NewCM residency, MATH-table admission, demand-paged glyphs, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
-| **Odin** | Geometry Kernel | Shapes, constraints, and system evolution/integration rules. | `src/shapes/shapes.odin`, `src/shapes/constraints.odin`, `src/shapes/system.odin` |
+| **Odin** | Geometry Kernel | Bounded entity registry, components, direct-target constraints, and derived render packets. | `src/core/shapes.odin`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
 | **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
@@ -437,8 +437,9 @@ ordering:
 1. Emit the post-join semantic trace summary.
 
 Particle tasks exclusively mutate `Particle_System`; constraint tasks exclusively
-mutate `Shapes_Point_System`. Persistent payloads and fence storage are reused. The
-display may help execute queued work, but cannot advance until the complete batch joins.
+mutate the ordered constraints and transforms in `Shape_World`. Persistent payloads and
+fence storage are reused. The display may help execute queued work, but cannot advance
+until the complete batch joins.
 The windowed wrapper adds GIF policy without changing this semantic boundary.
 
 ### Per-Frame Preparation
@@ -452,7 +453,8 @@ After all fixed steps complete, the display thread opens a second pool window:
 1. Submit Dynview compile and layout construction only when invalidated.
 1. Join every submitted task before beginning raylib drawing.
 
-Shape preparation reads settled point state and writes only the shape draw cache.
+Shape preparation reads settled `Shape_World` components and writes only its derived
+shape draw cache.
 Dynview preparation reads immutable snapshots and writes only its compile and layout
 caches. The tasks may run concurrently because their ownership does not overlap.
 Display-only interaction state and drawing consume the caches after the fence joins.
@@ -460,6 +462,9 @@ Display-only interaction state and drawing consume the caches after the fence jo
 Dynview publishes complete bounded cache slices. Failure clears partial derived state
 and preserves exact literal fallback; shutdown clears aliases and joins workers before
 destroying arena storage.
+
+See [ShapeSystem.md](ShapeSystem.md) for entity validity, component storage, direct
+geometry and constraints, label ownership, and animation-suffix retirement.
 
 ### Font Cache
 

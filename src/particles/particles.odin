@@ -33,13 +33,9 @@ Vector2 :: core.Vector2
 Vector3 :: core.Vector3
 Particle :: core.Particle
 Particle_System :: core.Particle_System
-Shapes_Point_System :: core.Shapes_Point_System
-Shapes_Point :: core.Shapes_Point
-Shapes_Point_Type :: core.Shapes_Point_Type
 Iso_Scale :: core.Iso_Scale
 
 MAX_PARTICLES :: core.MAX_PARTICLES
-MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
 
 SPAWN_INTERVAL :: 0.012 // seconds
 PARTICLE_LIFE :: 0.75  // seconds
@@ -148,12 +144,6 @@ Circle_Dust_Emission :: struct {
     offset: f32,
     color: rl.Color,
     sample_count: int,
-}
-
-Circle_Kind_Burst_Config :: struct {
-    color: rl.Color,
-    sample_count: int,
-    abort_on_invalid: bool,
 }
 
 // Group one world-backed clear-burst operation and its render color.
@@ -371,81 +361,6 @@ kick_existing_dust :: proc(ps: ^Particle_System, iso_scale: ^Iso_Scale = nil) {
     }
 }
 
-//   Emit dust burst particles for a specific drawable shapes item.
-//
-// Parameters:
-//   - ps: Particle system receiving emitted dust.
-//   - ks: Shapes system used to resolve geometry for the selected item.
-//   - index: Point index of the drawable shapes host item.
-//   - kick_dust: When true, pre-kicks existing dust before emitting new dust.
-//
-// Returns:
-//   - none.
-emit_shapes_hide_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    index: int,
-    kick_dust: bool = true,
-    iso_scale: ^Iso_Scale = nil) {
-    if index < 0 || index >= MAX_SHAPESPOINTS || ps^.use_max_dust_particles < 1 {
-        return
-    }
-
-    kp := &ks.points[index]
-    if !kp.do_draw {
-        return
-    }
-
-    if !is_burst_drawable_kind(kp.kind) {
-        return
-    }
-
-    if kick_dust {
-        kick_existing_dust(ps, iso_scale)
-    }
-
-    col := kp.color.? or_else rl.WHITE
-    if emit_shapes_burst(ps, ks, kp, col, true) {
-        return
-    }
-}
-
-//   Emit dust bursts across all currently drawable shapes items.
-//
-// Parameters:
-//   - ps: Particle system receiving emitted dust.
-//   - ks: Shapes system used to resolve drawable geometry.
-//
-// Returns:
-//   - none.
-emit_shapes_clear_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    iso_scale: ^Iso_Scale = nil) {
-    if  ps^.use_max_dust_particles < 1 {
-        return
-    }
-
-    kick_existing_dust(ps, iso_scale)
-
-    for i in 0..<MAX_SHAPESPOINTS {
-        kp := &ks.points[i]
-        if !kp.do_draw {
-            continue
-        }
-
-        if !is_burst_drawable_kind(kp.kind) {
-            continue
-        }
-
-        col := kp.color.? or_else rl.WHITE
-
-        if emit_shapes_burst(ps, ks, kp, col, false) {
-            continue
-        }
-    }
-}
-
 //   Resolve one direct world transform position for particle emission.
 shape_world_burst_position :: proc(
     world: ^core.Shape_World,
@@ -522,6 +437,40 @@ emit_shape_world_geometry_burst :: proc(
         emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
     case .Pen, .Compass:
     }
+}
+
+//   Emit clear dust for one visible entity before its presentation is hidden.
+emit_shape_world_hide_burst :: proc(
+    ps: ^Particle_System,
+    world: ^core.Shape_World,
+    entity: core.Shape_Entity,
+    iso_scale: ^Iso_Scale = nil,
+    kick_dust: bool = true) -> bool {
+    if ps == nil || world == nil || ps.use_max_dust_particles < 1 ||
+        !core.shape_registry_resolves(&world.registry, entity) {
+        return false
+    }
+    style, found := core.shape_component_get(
+        &world.render_styles, &world.registry, entity)
+    if !found || !style^.visible {
+        return false
+    }
+    if core.shape_component_contains(&world.labels, &world.registry, entity) {
+        position, position_found := shape_world_burst_position(world, entity)
+        if !position_found {return false}
+        if kick_dust {kick_existing_dust(ps, iso_scale)}
+        emit_label_burst(ps, position, style^.color)
+        return true
+    }
+    geometry, geometry_found := core.shape_component_get(
+        &world.geometries, &world.registry, entity)
+    if !geometry_found || geometry^.kind == .Pen || geometry^.kind == .Compass {
+        return false
+    }
+    if kick_dust {kick_existing_dust(ps, iso_scale)}
+    emit_shape_world_geometry_burst(
+        {ps, world, style^.color}, entity, geometry^, style^.offset)
+    return true
 }
 
 //   Emit clear dust for every visible label and geometry in one canonical world.
@@ -607,18 +556,6 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
 
 
 
-//   Check whether a shapes shape kind participates in dust burst emission.
-is_burst_drawable_kind :: #force_inline proc(kind: Shapes_Point_Type) -> bool {
-    return kind == .Label ||
-        kind == .Point ||
-        kind == .Line ||
-        kind == .Circle ||
-        kind == .Filled_Circle ||
-        kind == .Triangle ||
-        kind == .Square ||
-        kind == .Pentagon
-}
-
 //   Emit point burst dust for one position.
 emit_point_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
     for _ in 0..<CLEAR_BURST_POINT_COUNT {
@@ -631,146 +568,6 @@ emit_label_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
     for _ in 0..<CLEAR_BURST_LABEL_COUNT {
         spawn_dust_particle(ps, p, col)
     }
-}
-
-//   Emit burst dust for a single shapes draw item.
-//
-// Returns:
-//   - true when caller should abort (hide-burst strict mode), else false.
-emit_circle_kind_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    kp: ^Shapes_Point,
-    config: Circle_Kind_Burst_Config) -> bool {
-
-    center, center_ok := kp.position.?
-    if !center_ok {
-        return config.abort_on_invalid
-    }
-
-    start_id := kp.child_point_head
-    if start_id < 0 || start_id >= MAX_SHAPESPOINTS {
-        return config.abort_on_invalid
-    }
-
-    end_id := ks.points[start_id].next_child_point
-    if end_id < 0 || end_id >= MAX_SHAPESPOINTS {
-        return config.abort_on_invalid
-    }
-
-    start, start_ok := ks.points[start_id].position.?
-    finish, finish_ok := ks.points[end_id].position.?
-    if !start_ok || !finish_ok {
-        return config.abort_on_invalid
-    }
-
-    if kp.active_child > 1 {
-        start, finish = finish, start
-    }
-
-    emit_circle_dust(ps, {center, start, finish, kp.offset, config.color,
-        config.sample_count})
-    return false
-}
-
-//   Emit burst dust for label/point kinds using the host position.
-emit_point_like_kind_burst :: #force_inline proc(
-    ps: ^Particle_System, kp: ^Shapes_Point, col: rl.Color) {
-    p, ok := kp.position.?
-    if !ok {
-        return
-    }
-
-    switch kp.kind {
-    case .Label:
-        emit_label_burst(ps, p, col)
-    case .Point:
-        emit_point_burst(ps, p, col)
-    case .Line, .Circle, .Filled_Circle, .Triangle, .Square, .Pentagon, .Pen, .Compass:
-        return
-    }
-}
-
-//   Emit burst dust for one line kind, resolving its two child endpoints.
-//
-// Returns:
-//   - true when caller should abort (hide-burst strict mode), else false.
-emit_line_kind_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    kp: ^Shapes_Point,
-    col: rl.Color,
-    abort_on_invalid: bool) -> bool {
-
-    a_id := kp.child_point_head
-    if a_id < 0 || a_id >= MAX_SHAPESPOINTS {
-        return abort_on_invalid
-    }
-
-    b_id := ks.points[a_id].next_child_point
-    if b_id < 0 || b_id >= MAX_SHAPESPOINTS {
-        return abort_on_invalid
-    }
-
-    a, a_ok := ks.points[a_id].position.?
-    b, b_ok := ks.points[b_id].position.?
-    if a_ok && b_ok {
-        emit_line_dust(ps, a, b, col)
-    }
-
-    return false
-}
-
-//   Emit burst dust for polygon edge kinds.
-emit_polygon_kind_burst :: #force_inline proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    kp: ^Shapes_Point,
-    col: rl.Color) {
-    switch kp.kind {
-    case .Triangle:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 3, col)
-    case .Square:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 4, col)
-    case .Pentagon:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 5, col)
-    case .Label, .Point, .Line, .Circle, .Filled_Circle, .Pen, .Compass:
-        return
-    }
-}
-
-//   Emit burst dust for a single shapes draw item.
-//
-// Returns:
-//   - true when caller should abort (hide-burst strict mode), else false.
-emit_shapes_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    kp: ^Shapes_Point,
-    col: rl.Color,
-    abort_on_invalid: bool) -> bool {
-
-    switch kp.kind {
-    case .Label, .Point:
-        emit_point_like_kind_burst(ps, kp, col)
-
-    case .Line:
-        return emit_line_kind_burst(ps, ks, kp, col, abort_on_invalid)
-
-    case .Triangle, .Square, .Pentagon:
-        emit_polygon_kind_burst(ps, ks, kp, col)
-
-    case .Circle:
-        return emit_circle_kind_burst(
-            ps, ks, kp, {col, CLEAR_BURST_CIRCLE_SAMPLES, abort_on_invalid})
-    case .Filled_Circle:
-        return emit_circle_kind_burst(
-            ps, ks, kp, {col, CLEAR_BURST_FILLED_CIRCLE_SAMPLES, abort_on_invalid})
-    case .Pen, .Compass:
-        return abort_on_invalid
-    }
-
-    return false
 }
 
 //   Integrate positions for one SoA particle bucket using velocity.
@@ -1175,44 +972,6 @@ emit_polygon_fill_dust :: proc(
             vertices[tri_index + 2])
         spawn_dust_particle(ps, sample, col)
     }
-}
-
-//   Emit dust along each edge of a polygon resolved from shapes child-point links.
-//
-// Notes:
-//   - Supports up to the local fixed vertex buffer size.
-emit_polygon_edge_dust :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    first_child_id: int,
-    vertex_count: int,
-    col: rl.Color) {
-    if vertex_count < 3 {
-        return
-    }
-
-    if first_child_id < 0 || first_child_id >= MAX_SHAPESPOINTS {
-        return
-    }
-
-    vertices: [12]Vector3
-
-    current_id := first_child_id
-    for i in 0..<vertex_count {
-        if current_id < 0 || current_id >= MAX_SHAPESPOINTS {
-            return
-        }
-
-        v, ok := ks.points[current_id].position.?
-        if !ok {
-            return
-        }
-
-        vertices[i] = v
-        current_id = ks.points[current_id].next_child_point
-    }
-
-    emit_polygon_fill_dust(ps, &vertices, vertex_count, col)
 }
 
 //   Normalize angle to non-negative range by adding one full turn when needed.

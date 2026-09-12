@@ -24,16 +24,11 @@ world_constraint_test_position :: proc(
     return transform.position
 }
 
-// Compare one world distance correction with the matching legacy policy result.
+// Verify one world distance correction against its expected endpoint positions.
 world_constraint_test_distance_parity_case :: proc(
     t: ^testing.T,
     movement: core.Shape_Constraint_Movement_Policy,
-    depend_on: i32) {
-    legacy_first := make_point(-1, 0, 0)
-    legacy_second := make_point(1, 0, 0)
-    legacy := make_distance_constraint(depend_on, 6)
-    apply_constraint_distance(&legacy, &legacy_first, &legacy_second)
-
+    expected_first, expected_second: Vector3) {
     world: core.Shape_World
     first := world_constraint_test_point(&world, {-1, 0, 0})
     second := world_constraint_test_point(&world, {1, 0, 0})
@@ -44,17 +39,17 @@ world_constraint_test_distance_parity_case :: proc(
     world_apply_all_constraints(&world)
 
     test_helpers.expect_vec3_close(t, world_constraint_test_position(&world, first),
-        legacy_first.position.? or_else Vector3{}, "first endpoint parity")
+        expected_first, "first endpoint")
     test_helpers.expect_vec3_close(t, world_constraint_test_position(&world, second),
-        legacy_second.position.? or_else Vector3{}, "second endpoint parity")
+        expected_second, "second endpoint")
 }
 
-// Verify explicit movement policies preserve legacy distance correction behavior.
+// Verify explicit movement policies produce deterministic distance correction.
 @(test)
 world_constraints_distance_solver_matches_legacy :: proc(t: ^testing.T) {
-    world_constraint_test_distance_parity_case(t, .Move_First, 1)
-    world_constraint_test_distance_parity_case(t, .Move_Both, 0)
-    world_constraint_test_distance_parity_case(t, .Move_Second, -1)
+    world_constraint_test_distance_parity_case(t, .Move_First, {-5, 0, 0}, {1, 0, 0})
+    world_constraint_test_distance_parity_case(t, .Move_Both, {-3, 0, 0}, {3, 0, 0})
+    world_constraint_test_distance_parity_case(t, .Move_Second, {-1, 0, 0}, {5, 0, 0})
 }
 
 // Verify constraint creation rejects stale and non-transform targets transactionally.

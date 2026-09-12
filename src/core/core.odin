@@ -642,128 +642,6 @@ Shapes_Point_Type :: enum {
     Compass,
 }
 
-Shapes_Label_Decoration_Kind :: enum {
-    None,
-    Prime,
-    Double_Prime,
-    Triple_Prime,
-    Hat,
-    Bar,
-}
-
-Shapes_Point :: struct {
-    kind : Shapes_Point_Type,
-
-    position : Maybe(Vector3),
-    previous_position : Maybe(Vector3),
-    color : Maybe(rl.Color),
-    active_color : Maybe(rl.Color),
-    brush_size : f32,
-    offset : f32,
-    label : Maybe(rune),
-    decoration_kind : Shapes_Label_Decoration_Kind,
-
-    active_child: int,
-    child_count : int,
-    child_point_head : int,
-    next_child_point : int,
-
-    do_draw : bool,
-}
-
-Shapes_Constraint_Kind :: enum {
-    Distance,
-    Floor,
-    Snap_To_Floor,
-    Snap_Point,
-    Max_Angle,
-    Min_Angle,
-    Center_Pivot,
-}
-
-Shapes_Constraint :: struct {
-    kind : Shapes_Constraint_Kind,
-
-    on_point : int,
-    restriction : Vector3,
-    bounce : f32,
-    allowance : f32,
-    depend_on : i32,
-    child_offset : Maybe(i32),
-
-    do_apply : bool,
-}
-
-Shapes_Compass :: struct {
-    host_id : int,
-    joint1_id : int,
-    pivot_id : int,
-    joint2_id : int,
-
-    center_pivot_id : int,
-    limb1_length_id : int,
-    limb2_length_id : int,
-    point1_floor_id : int,
-    pivot_floor_id : int,
-    point2_floor_id : int,
-    lock_point1_id : int,
-    lock_point2_id : int,
-}
-
-Shapes_Pen :: struct {
-    host_id : int,
-    joint1_id : int,
-    joint2_id : int,
-
-    length_constraint_id : int,
-    point1_floor_id : int,
-    point2_floor_id : int,
-    lock_point1_id : int,
-    lock_point2_id : int,
-}
-
-Shapes_Line :: struct {
-    host_id : int,
-    joint1_id : int,
-    joint2_id : int,
-}
-
-Shapes_Circle :: struct {
-    host_id : int,
-    start_id : int,
-    end_id : int,
-}
-
-Shapes_Filled_Circle :: struct {
-    host_id : int,
-    start_id : int,
-    end_id : int,
-}
-
-Shapes_Triangle :: struct {
-    host_id : int,
-    joint1_id : int,
-    joint2_id : int,
-    joint3_id : int,
-}
-
-Shapes_Square :: struct {
-    host_id : int,
-    joint1_id : int,
-    joint2_id : int,
-    joint3_id : int,
-    joint4_id : int,
-}
-
-Shapes_Pentagon :: struct {
-    host_id : int,
-    joint1_id : int,
-    joint2_id : int,
-    joint3_id : int,
-    joint4_id : int,
-    joint5_id : int,
-}
-
 Shapes_Draw_Base :: struct {
     kind: Shapes_Point_Type,
     source_index: int,
@@ -872,19 +750,6 @@ Shapes_Draw_Cache :: struct {
     compass: Shapes_Compass_Draw,
     draw_compass: bool,
 }
-
-Shapes_Point_System :: struct {
-    draw_cache : Shapes_Draw_Cache,
-
-    points : [MAX_SHAPESPOINTS]Shapes_Point,
-    constraints : [MAX_SHAPESCONSTRAINTS]Shapes_Constraint,
-    next_point_index : int,
-    next_constraint_index : int,
-
-    anim_points_start : int,
-    anim_constraints_start : int,
-}
-
 
 /****
     The particle system is basically a 3-layered SoA system, each layer having its own type
@@ -2622,9 +2487,6 @@ Euclid_General_State :: struct {
     julia_interface_active_slot: int,
     julia_interface : ^Euclid_Julia_Interface,
 
-    point_system : ^Shapes_Point_System,
-    compass : Shapes_Compass,
-    pen : Shapes_Pen,
     shape_world: ^Shape_World,
     world_compass: Shape_Compass_Handle,
     world_pen: Shape_Pen_Handle,

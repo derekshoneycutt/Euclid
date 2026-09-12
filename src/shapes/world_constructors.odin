@@ -4,6 +4,21 @@ import "core:math"
 
 import "../core"
 
+import rl "vendor:raylib"
+
+// Supply presentation values shared by canonical shape constructors.
+Shape_Style :: struct {
+    color: rl.Color,
+    brush_size: f32,
+}
+
+// Supply canonical arc geometry and presentation values.
+Arc_Input :: struct {
+    center: Vector3,
+    radius, start_theta, end_theta: f32,
+    style: Shape_Style,
+}
+
 // Supply canonical source and presentation values for one world label.
 World_Label_Input :: struct {
     source: string,
