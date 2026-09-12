@@ -210,7 +210,7 @@ run_window_frame :: proc(
     service_presentation_runtime(state, presentation)
     input_frame := input.input_poll_frame(input_runtime)
     compile_ui := ui.prepare_ui_frame(state, input_frame)
-    terminal_service_update(state, input_runtime, input_frame)
+    terminal_frame := terminal_service_update(state, input_runtime, input_frame)
     alpha := accumulate_and_update_systems(state)
     run_parallel_frame_preparation_after_ui(state, alpha, compile_ui)
     audio.update_chalk_runtime(&state^.chalk_audio)
@@ -218,7 +218,7 @@ run_window_frame :: proc(
 
     evidence_profile.zone_begin(display_profile, "frame_present")
     rl.BeginDrawing()
-        draw_frame(state, alpha, input_frame)
+        draw_frame(state, alpha, input_frame, terminal_frame)
     rl.EndDrawing()
     evidence_profile.zone_end(display_profile)
 
@@ -862,12 +862,13 @@ draw_world :: proc(state: ^Euclid_General_State) {
 //   Render one full frame including world, particles, UI panels, and capture step.
 draw_frame :: proc(
     state : ^Euclid_General_State, alpha: f32,
-    input_frame: input.Input_Frame) {
+    input_frame: input.Input_Frame,
+    terminal_frame: ui.Terminal_Prepared_Frame) {
     rl.ClearBackground(BACKGROUND_COLOR)
 
     draw_world(state)
 
-    ui.draw_ui_panels(state, input_frame)
+    ui.draw_ui_panels(state, input_frame, terminal_frame)
 
     if state^.ui_runtime.display_fps {
         fps_flags := core.Font_Variant_Flags.Medium

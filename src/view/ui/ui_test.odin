@@ -232,6 +232,106 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
     testing.expect_value(t, scrollbar.thumb_height, scrollbar.thumb_rect.height)
 }
 
+// Verify prepared scrolling owns the full track and applies wheel exactly once.
+@(test)
+scroll_container_update_reserves_track_and_wheel :: proc(t: ^testing.T) {
+    owner: app_core.Ui_Press_Owner_State
+    result := scroll_container_update({
+        id = 1002,
+        rect = {10, 20, 100, 80},
+        content_height = 240,
+        mouse_input = {mouse_position = {106, 30}, mouse_wheel_delta = -1},
+        interaction_space_rect = {10, 20, 100, 80},
+        wheel_step = 20,
+        press_owner = &owner,
+    })
+    testing.expect(t, result.scrollbar.has_scrollbar)
+    testing.expect(t, result.pointer_reserved)
+    testing.expect(t, result.wheel_consumed)
+    testing.expect_value(t, result.scroll_y_out, f32(20))
+}
+
+// Verify thumb capture survives pointer exit and clears on physical release.
+scroll_container_drag_test_update :: proc(
+    owner: ^app_core.Ui_Press_Owner_State,
+    state: Scroll_Container_State,
+    mouse_input: Input_Frame,
+    scroll_y: f32 = 0) -> Scroll_Container_Update_Result {
+    return scroll_container_update({
+        id = 1002, rect = {10, 20, 100, 80}, scroll_y_in = scroll_y,
+        content_height = 240, mouse_input = mouse_input,
+        interaction_space_rect = {10, 20, 100, 80}, wheel_step = 20,
+        press_owner = owner, state_in = state,
+    })
+}
+
+// Verify thumb capture survives pointer exit and clears on physical release.
+@(test)
+scroll_container_update_retains_drag_outside_track :: proc(t: ^testing.T) {
+    owner: app_core.Ui_Press_Owner_State
+    pressed := scroll_container_drag_test_update(&owner, {}, {
+        mouse_position = {106, 21}, mouse_pressed = {.Left},
+        mouse_down = {.Left},
+    })
+    testing.expect(t, pressed.state_out.is_dragging_thumb)
+    testing.expect(t, pressed.pointer_reserved)
+
+    dragged := scroll_container_drag_test_update(&owner, pressed.state_out,
+        {mouse_position = {200, 95}, mouse_down = {.Left}})
+    testing.expect(t, dragged.state_out.is_dragging_thumb)
+    testing.expect(t, dragged.pointer_reserved)
+    testing.expect_value(t, dragged.scroll_y_out, f32(160))
+
+    released := scroll_container_drag_test_update(&owner, dragged.state_out,
+        {mouse_position = {200, 95}, mouse_released = {.Left}},
+        dragged.scroll_y_out)
+    testing.expect(t, !released.state_out.is_dragging_thumb)
+    testing.expect(t, !owner.active)
+}
+
+// Verify Terminal wheel policy gives track and Shift override priority over the child.
+@(test)
+terminal_scroll_wheel_routes_to_one_owner :: proc(t: ^testing.T) {
+    frame := Input_Frame{mouse_wheel_delta = -2}
+    testing.expect_value(t,
+        terminal_scroll_wheel_delta(frame, false, false), f32(-2))
+    testing.expect_value(t,
+        terminal_scroll_wheel_delta(frame, false, true), f32(0))
+    testing.expect_value(t,
+        terminal_scroll_wheel_delta(frame, true, true), f32(-2))
+
+    frame.mouse_modifiers = {.Shift}
+    testing.expect_value(t,
+        terminal_scroll_wheel_delta(frame, false, true), f32(-2))
+}
+
+// Verify scrollbar routing blocks new content input while retaining release delivery.
+@(test)
+terminal_scrollbar_filter_preserves_release :: proc(t: ^testing.T) {
+    bounds := rl.Rectangle{10, 20, 100, 80}
+    filtered := terminal_frame_without_content_pointer({
+        mouse_position = {106, 30},
+        mouse_moved = true,
+        mouse_pressed = {.Left},
+        mouse_released = {.Left},
+        mouse_down = {.Left},
+        mouse_wheel_delta = -1,
+        terminal_mouse_inside = true,
+        terminal_mouse_owned = true,
+        terminal_mouse_position_valid = true,
+        terminal_mouse_position = {column = 12, row = 3},
+    }, bounds)
+    testing.expect(t, !filtered.mouse_moved)
+    testing.expect(t, card(filtered.mouse_pressed) == 0)
+    testing.expect(t, .Left in filtered.mouse_released)
+    testing.expect(t, card(filtered.mouse_down) == 0)
+    testing.expect_value(t, filtered.mouse_wheel_delta, f32(0))
+    testing.expect(t, !filtered.terminal_mouse_inside)
+    testing.expect(t, !filtered.terminal_mouse_owned)
+    testing.expect(t, filtered.terminal_mouse_position_valid)
+    testing.expect_value(t, filtered.terminal_mouse_position.column, 12)
+}
+
 //   Seed one tree node with a name and optional children for testing.
 seed_tree_node :: proc(
     node: ^app_core.Euclid_Julia_Animation_Interface,

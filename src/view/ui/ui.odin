@@ -172,7 +172,8 @@ prepare_ui_frame :: proc(
 //   Render all UI panels in baseline layout.
 draw_ui_panels :: proc(
     state: ^core.Euclid_General_State,
-    input_frame: Input_Frame) {
+    input_frame: Input_Frame,
+    terminal_frame: Terminal_Prepared_Frame) {
     regions := state^.ui_runtime.ui_regions
 
     bottom_bar := rl.Rectangle{
@@ -182,7 +183,7 @@ draw_ui_panels :: proc(
         WINDOW_HEIGHT - regions.world_rect.height,
     }
     rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
-    draw_view_text_panel(state, regions.text_rect, input_frame)
+    draw_view_text_panel(state, regions.text_rect, input_frame, terminal_frame)
 
     right_bar := rl.Rectangle{
         regions.world_rect.x + regions.world_rect.width,

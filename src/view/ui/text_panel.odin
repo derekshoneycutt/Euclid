@@ -157,7 +157,8 @@ is_terminal_selected :: #force_inline proc(state: ^core.Euclid_General_State) ->
 draw_view_text_panel :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    input_frame: Input_Frame) {
+    input_frame: Input_Frame,
+    terminal_frame: Terminal_Prepared_Frame) {
     if state == nil || state.julia_interface == nil {
         return
     }
@@ -169,7 +170,7 @@ draw_view_text_panel :: proc(
     text_panel = draw_container(text_panel, .Grey).drawn_rect
 
     if is_terminal_selected(state) {
-        terminal_draw(state, text_panel, input_frame)
+        terminal_draw(state, terminal_frame)
         return
     }
 

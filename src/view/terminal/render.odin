@@ -576,11 +576,10 @@ terminal_draw_content :: proc(
     term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
     raster_renderer: termattachment.Raster_Renderer,
     draw: Terminal_Draw_Content_Context) {
-    hover := terminal_hyperlink_hover_hit(term, draw.frame, draw.bounds)
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, draw.origin, .Behind_Text)
     terminal_draw_output_rows(
-        term, font_resolver, draw.layout, draw.origin, hover)
+        term, font_resolver, draw.layout, draw.origin, draw.hyperlink_hover)
     terminal_draw_command_statuses(term, draw.layout, draw.origin)
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, draw.origin, .In_Front_Of_Text)
@@ -605,16 +604,6 @@ terminal_draw_overlays :: proc(
 // Returns:
 //   - Zero while the foreground session owns unshifted mouse reporting; otherwise the
 //     frame's wheel delta for local scroll handling.
-terminal_local_wheel_delta :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame) -> f32 {
-    mode := termemulator.interpreter_input_mode(&term.output_interpreter)
-    if mode.mouse_tracking != .None && mode.mouse_sgr_encoding &&
-        .Shift not_in frame.mouse_modifiers {
-        return 0
-    }
-    return frame.mouse_wheel_delta
-}
-
 //   Shrink a rectangle by the terminal's edge padding on all sides.
 //
 // Parameters:

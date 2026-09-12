@@ -211,6 +211,7 @@ Terminal_Draw_Content_Context :: struct {
     origin: rl.Vector2,
     bounds: rl.Rectangle,
     frame: input.Input_Frame,
+    hyperlink_hover: Terminal_Link_Hit,
 }
 
 // Frame-local source and destination geometry for one raster placement.

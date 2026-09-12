@@ -313,6 +313,13 @@ The display owns immediate editing behavior. It translates input events into UTF
 physical-key actions, paste operations, cursor changes, or a complete submission. The
 active mode determines where submission goes:
 
+Before Terminal input processing, the UI prepares geometry and resolves the complete
+scrollbar track above content. It commits local scrolling before selection and hyperlink
+hit testing, then supplies one routed frame to local editing and child input encoding.
+Negotiated SGR mouse mode owns content wheel input unless Shift requests local
+scrollback; the scrollbar track retains local priority in every mode. Rendering consumes
+the prepared layout, scroll geometry, and hyperlink hover without mutating scrolling.
+
 | Mode | Owner and behavior |
 | --- | --- |
 | Normal | Julia evaluator parses and evaluates in the session module. |

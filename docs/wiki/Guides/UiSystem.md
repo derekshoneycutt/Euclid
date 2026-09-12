@@ -442,23 +442,21 @@ correct.
 | Terminal panel | 1002 | Terminal scroll offset committed through its facade |
 | Tree catalogue | 1003 | `tree_scroll_y` |
 
-The container has begin and end phases:
+Presentation and Tree retain the compatibility begin/end path. Terminal uses the
+pre-render update path because its content consumes pointer input before drawing:
 
 ```mermaid
 flowchart LR
-    Begin[Begin]
-    Hint[Use content-height hint]
+    Geometry[Build geometry]
     Wheel[Apply hovered wheel]
-    Capture[Prepare thumb capture]
-    Scissor[Begin scissor]
-    Content[Caller draws content]
-    Final[Use final content height]
-    Drag[Apply drag and clamp]
-    Draw[Draw track and thumb]
-    End[End scissor]
+    Capture[Resolve capture and drag]
+    Commit[Commit scroll offset]
+    Route[Route content input]
+    Service[Update Terminal content]
+    Scissor[Begin draw-only scissor]
+    Draw[Draw content and scrollbar]
 
-    Begin --> Hint --> Wheel --> Capture --> Scissor --> Content
-    Content --> Final --> Drag --> Draw --> End
+    Geometry --> Wheel --> Capture --> Commit --> Route --> Service --> Scissor --> Draw
 ```
 
 The view rectangle, interaction-space rectangle, and optional scroll offset keep hit
@@ -472,9 +470,11 @@ $$
 The scrollbar is eight pixels wide and its thumb has a minimum height of 24 pixels.
 Thumb capture uses the shared press owner and persists while the button remains down.
 
-The current implementation also begins and ends Raylib scissoring inside the same
-functions that update wheel, capture, drag, and scrollbar state. Scrolling is therefore
-both an interaction primitive and a rendering primitive today.
+The complete visible track is reserved above Terminal content. Track wheel input always
+scrolls locally. In content, negotiated SGR mouse mode receives wheel input unless Shift
+selects local scrollback. Thumb capture persists outside the track until release.
+Prepared draw helpers begin and end Raylib scissoring and draw the scrollbar without
+mutating scroll state.
 
 ## Presentation Panel
 
@@ -531,14 +531,16 @@ Before drawing, `terminal_service_update`:
 1. confirms the committed Terminal animation is selected;
 1. initializes generation-scoped Terminal state when needed;
 1. requests and waits for the matching Julia session;
-1. derives the same content panel used by later drawing;
-1. resolves the current font and Terminal geometry;
-1. consumes the UI-prepared effective focus and transition;
-1. updates local editor, selection, completion, and link behavior;
-1. applies submissions and completion requests;
-1. enriches a frame copy with Terminal mouse coordinates;
-1. updates the active native shell session and terminal graphics;
-1. publishes clipboard and hyperlink actions through display-owned adapters.
+4. derives the same content panel used by later drawing;
+5. resolves font, Terminal geometry, layout, and mouse coordinates;
+6. resolves scrollbar capture and wheel ownership, then commits local scrolling;
+7. routes a content frame that excludes scrollbar-owned input;
+8. prepares hyperlink hover from the committed scroll position;
+9. consumes the UI-prepared effective focus and transition;
+10. updates local editor, selection, completion, and link behavior;
+11. applies submissions and completion requests;
+12. updates the active native shell session and terminal graphics;
+13. publishes clipboard and hyperlink actions through display-owned adapters.
 
 Terminal initialization and input routing are service work, not draw work. Julia never
 receives a pointer to the visible Terminal state.
@@ -548,12 +550,11 @@ receives a pointer to the visible Terminal state.
 `ui.terminal_draw`:
 
 1. resolves a font capability and draw theme;
-1. computes Terminal content layout;
-1. begins the Terminal scroll container;
-1. converts the final scroll offset into a content origin;
-1. resolves Terminal mouse coordinates for draw-time hover behavior;
+1. consumes the prepared layout, scroll geometry, and hyperlink hover;
+1. begins draw-only Terminal scissoring;
+1. converts the prepared scroll offset into a content origin;
 1. draws cells, prompt, cursor, selection, links, and raster attachments;
-1. ends the scroll container and commits the final scroll offset;
+1. ends scissoring and draws the prepared scrollbar;
 1. draws overlays outside content clipping.
 
 Terminal prompt and output cursor styles consume effective Terminal focus. Focused

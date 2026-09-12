@@ -36,6 +36,32 @@ Scroll_Container_End_Result :: struct {
     thumb_rect: rl.Rectangle,
 }
 
+// Complete scroll state prepared before rendering for one container frame.
+Scroll_Container_Update_Result :: struct {
+    view_rect: rl.Rectangle,
+    scroll_y_out: f32,
+    state_out: Scroll_Container_State,
+    scrollbar: Vertical_Scrollbar_Geometry,
+    pointer_reserved: bool,
+    wheel_consumed: bool,
+}
+
+// Mutable scrollbar interaction values returned to the frame preparation owner.
+Scroll_Container_Interaction_Result :: struct {
+    state: Scroll_Container_State,
+    scrollbar: Vertical_Scrollbar_Geometry,
+    owned_for_frame: bool,
+}
+
+// Geometry and range inputs used while advancing scrollbar interaction.
+Scroll_Container_Interaction_Input :: struct {
+    params: Scroll_Container_Update_Params,
+    local_mouse: rl.Vector2,
+    hovered_thumb: bool,
+    max_scroll: f32,
+    initial: Vertical_Scrollbar_Geometry,
+}
+
 //   Inputs for starting a scroll-container frame: identity, geometry, current
 //   scroll position, content extent, pointer input, and shared press/drag
 //   ownership, grouped so the begin call passes one coherent value.
@@ -117,6 +143,115 @@ Scroll_Container_End_Params :: struct {
     scroll_offset:          rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     press_owner:            ^core.Ui_Press_Owner_State,
+}
+
+// Inputs for resolving scrolling and capture before rendering.
+Scroll_Container_Update_Params :: struct {
+    id: int,
+    rect: rl.Rectangle,
+    scroll_y_in: f32,
+    content_height: f32,
+    mouse_input: Input_Frame,
+    scroll_offset: rl.Vector2,
+    interaction_space_rect: rl.Rectangle,
+    wheel_step: f32,
+    press_owner: ^core.Ui_Press_Owner_State,
+    state_in: Scroll_Container_State,
+}
+
+// Apply one eligible wheel delta and report whether it was consumed.
+scroll_container_update_wheel :: proc(
+    params: Scroll_Container_Update_Params,
+    hovered_view: bool,
+    max_scroll: f32,
+    scroll_y: ^f32) -> bool {
+    consumed := max_scroll > 0 && hovered_view &&
+        params.mouse_input.mouse_wheel_delta != 0 && params.wheel_step > 0
+    if consumed {
+        scroll_y^ -= params.mouse_input.mouse_wheel_delta * params.wheel_step
+        clamp_scroll_position(scroll_y, max_scroll)
+    }
+    return consumed
+}
+
+// Advance capture, drag, and release state against prepared scrollbar geometry.
+scroll_container_update_interaction :: proc(
+    input: Scroll_Container_Interaction_Input,
+    scroll_y: ^f32) -> Scroll_Container_Interaction_Result {
+    params := input.params
+    state := params.state_in
+    owns_press := scroll_container_owns_press(params.press_owner, params.id)
+    owned_for_frame := owns_press
+    if state.is_dragging_thumb && !owns_press { state = {} }
+    if input.initial.has_scrollbar && !state.is_dragging_thumb {
+        scroll_container_try_capture_press(params.press_owner, params.id,
+            {params.mouse_input, input.hovered_thumb, input.local_mouse,
+                input.initial.thumb_rect},
+            &state.is_dragging_thumb, &state.drag_offset_y)
+    }
+    owns_press = scroll_container_owns_press(params.press_owner, params.id)
+    owned_for_frame = owned_for_frame || owns_press
+    scrollbar := input.initial
+    if state.is_dragging_thumb && owns_press &&
+        input_frame_left_down(params.mouse_input) {
+        thumb_range := params.rect.height - scrollbar.thumb_height
+        if thumb_range <= SCROLLBAR_DRAG_EPSILON {
+            scroll_y^ = 0
+        } else {
+            thumb_y := input.local_mouse.y - state.drag_offset_y
+            scroll_y^ = clamp((thumb_y - params.rect.y) / thumb_range, 0, 1) *
+                input.max_scroll
+        }
+        scrollbar = build_vertical_scrollbar(
+            {params.rect, params.content_height, scroll_y^, input.max_scroll},
+            SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
+    } else if state.is_dragging_thumb && owns_press || !input.initial.has_scrollbar {
+        scroll_container_release_press(params.press_owner, params.id,
+            &state.is_dragging_thumb, &state.drag_offset_y)
+    }
+    return {state, scrollbar, owned_for_frame}
+}
+
+// Resolve one scrollbar's wheel, capture, drag, and release before drawing.
+scroll_container_update :: proc(
+    params: Scroll_Container_Update_Params) -> Scroll_Container_Update_Result {
+    view_rect := clamp_non_negative_rect(params.rect)
+    local_mouse := scroll_container_local_mouse(
+        params.mouse_input, params.scroll_offset)
+    in_interaction := scroll_container_in_interaction_space(
+        local_mouse, params.interaction_space_rect)
+    max_scroll := max(0.0, params.content_height - view_rect.height)
+    scroll_y := max(0.0, params.scroll_y_in)
+    clamp_scroll_position(&scroll_y, max_scroll)
+    hovered_view := in_interaction &&
+        rl.CheckCollisionPointRec(local_mouse, view_rect)
+    wheel_consumed := scroll_container_update_wheel(
+        params, hovered_view, max_scroll, &scroll_y)
+    scrollbar := build_vertical_scrollbar(
+        {view_rect, params.content_height, scroll_y, max_scroll},
+        SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
+    hovered_thumb := scrollbar.has_scrollbar && in_interaction &&
+        rl.CheckCollisionPointRec(local_mouse, scrollbar.thumb_rect)
+    interaction := scroll_container_update_interaction(
+        {params, local_mouse, hovered_thumb, max_scroll, scrollbar}, &scroll_y)
+    scrollbar = interaction.scrollbar
+    pointer_reserved := scrollbar.has_scrollbar &&
+        (interaction.owned_for_frame || in_interaction &&
+            rl.CheckCollisionPointRec(local_mouse, scrollbar.track_rect))
+    return {view_rect, scroll_y, interaction.state, scrollbar,
+        pointer_reserved, wheel_consumed}
+}
+
+// Begin clipping content using an already prepared scroll result.
+scroll_container_draw_begin :: proc(result: Scroll_Container_Update_Result) {
+    rl.BeginScissorMode(i32(result.view_rect.x), i32(result.view_rect.y),
+        i32(result.view_rect.width), i32(result.view_rect.height))
+}
+
+// End clipping and draw an already prepared scrollbar without mutating state.
+scroll_container_draw_end :: proc(result: Scroll_Container_Update_Result) {
+    rl.EndScissorMode()
+    scroll_container_draw_scrollbar(result.scrollbar)
 }
 
 //   Convert screen-space pointer position to local interaction space.

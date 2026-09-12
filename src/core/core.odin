@@ -2301,6 +2301,8 @@ Euclid_Ui_Runtime_State :: struct {
 
     text_scroll_dragging: bool,
     text_scroll_drag_off: f32,
+    terminal_scroll_dragging: bool,
+    terminal_scroll_drag_off: f32,
     dynview_selection: Dynview_Selection_State,
 
     vertical_split_x: f32,
