@@ -158,6 +158,31 @@ Input_Mouse_Button :: enum u8 {
 
 Input_Mouse_Buttons :: bit_set[Input_Mouse_Button; u8]
 
+// Independently routable pointer fields in one input-frame value copy.
+Input_Pointer_Field :: enum u8 {
+    Screen_Position,
+    Motion,
+    Press_Edges,
+    Release_Edges,
+    Levels,
+    Wheel,
+    Terminal_Position,
+    Terminal_Ownership,
+}
+
+Input_Pointer_Fields :: bit_set[Input_Pointer_Field; u8]
+
+INPUT_POINTER_FIELDS_ALL :: Input_Pointer_Fields{
+    .Screen_Position,
+    .Motion,
+    .Press_Edges,
+    .Release_Edges,
+    .Levels,
+    .Wheel,
+    .Terminal_Position,
+    .Terminal_Ownership,
+}
+
 // One-based live terminal-grid coordinates resolved by the UI.
 Input_Terminal_Position :: struct {
     column: int,
@@ -235,6 +260,32 @@ Input_Hotkey_Binding :: struct {
 Input_Hotkey_Match :: struct {
     action: protocol.Logical_Action,
     event_index: int,
+}
+
+// Return a value copy exposing only the selected pointer field classes.
+//
+// The event slice and all non-pointer fields remain borrowed and unchanged. A caller
+// may provide an off-surface screen position when hidden coordinates must not hit-test.
+input_frame_filter_pointer :: proc(
+    frame: Input_Frame, fields: Input_Pointer_Fields,
+    hidden_position: Input_Position = {}) -> Input_Frame {
+    result := frame
+    if .Screen_Position not_in fields { result.mouse_position = hidden_position }
+    if .Motion not_in fields { result.mouse_moved = false }
+    if .Press_Edges not_in fields { result.mouse_pressed = {} }
+    if .Release_Edges not_in fields { result.mouse_released = {} }
+    if .Levels not_in fields { result.mouse_down = {} }
+    if .Wheel not_in fields { result.mouse_wheel_delta = 0 }
+    if .Terminal_Position not_in fields {
+        result.terminal_mouse_position = {}
+        result.terminal_mouse_pixel_position = {}
+        result.terminal_mouse_position_valid = false
+    }
+    if .Terminal_Ownership not_in fields {
+        result.terminal_mouse_inside = false
+        result.terminal_mouse_owned = false
+    }
+    return result
 }
 
 // Return routed effective focus, defaulting isolated non-routed calls to focused.

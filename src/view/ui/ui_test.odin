@@ -4,6 +4,7 @@ import "core:testing"
 
 import app_core "../../core"
 import app_dynview "../../dynview"
+import "../input"
 
 import rl "vendor:raylib"
 
@@ -305,11 +306,11 @@ terminal_scroll_wheel_routes_to_one_owner :: proc(t: ^testing.T) {
         terminal_scroll_wheel_delta(frame, false, true), f32(-2))
 }
 
-// Verify scrollbar routing blocks new content input while retaining release delivery.
+// Verify scrollbar routing blocks all uncaptured Terminal pointer input.
 @(test)
-terminal_scrollbar_filter_preserves_release :: proc(t: ^testing.T) {
+terminal_scrollbar_filter_blocks_uncaptured_pointer :: proc(t: ^testing.T) {
     bounds := rl.Rectangle{10, 20, 100, 80}
-    filtered := terminal_frame_without_content_pointer({
+    filtered := terminal_filter_content_pointer({
         mouse_position = {106, 30},
         mouse_moved = true,
         mouse_pressed = {.Left},
@@ -320,14 +321,57 @@ terminal_scrollbar_filter_preserves_release :: proc(t: ^testing.T) {
         terminal_mouse_owned = true,
         terminal_mouse_position_valid = true,
         terminal_mouse_position = {column = 12, row = 3},
-    }, bounds)
+    }, bounds, false, false)
     testing.expect(t, !filtered.mouse_moved)
     testing.expect(t, card(filtered.mouse_pressed) == 0)
-    testing.expect(t, .Left in filtered.mouse_released)
+    testing.expect(t, card(filtered.mouse_released) == 0)
     testing.expect(t, card(filtered.mouse_down) == 0)
     testing.expect_value(t, filtered.mouse_wheel_delta, f32(0))
     testing.expect(t, !filtered.terminal_mouse_inside)
     testing.expect(t, !filtered.terminal_mouse_owned)
+    testing.expect(t, !filtered.terminal_mouse_position_valid)
+    testing.expect_value(t, filtered.mouse_position,
+        input.Input_Position{bounds.x - 1, bounds.y - 1})
+}
+
+// Verify local capture retains its real release point but cannot start another press.
+@(test)
+terminal_scrollbar_filter_preserves_local_release :: proc(t: ^testing.T) {
+    bounds := rl.Rectangle{10, 20, 100, 80}
+    frame := Input_Frame{
+        mouse_position = {106, 30},
+        mouse_pressed = {.Left},
+        mouse_released = {.Left},
+        mouse_wheel_delta = -1,
+    }
+    filtered := terminal_filter_content_pointer(frame, bounds, true, false)
+    testing.expect_value(t, filtered.mouse_position, frame.mouse_position)
+    testing.expect(t, card(filtered.mouse_pressed) == 0)
+    testing.expect(t, .Left in filtered.mouse_released)
+    testing.expect_value(t, filtered.mouse_wheel_delta, f32(0))
+}
+
+// Verify child capture retains routed drag and release data outside content.
+@(test)
+terminal_scrollbar_filter_preserves_child_capture :: proc(t: ^testing.T) {
+    bounds := rl.Rectangle{10, 20, 100, 80}
+    filtered := terminal_filter_content_pointer({
+        mouse_position = {106, 30},
+        mouse_moved = true,
+        mouse_pressed = {.Middle},
+        mouse_released = {.Left},
+        mouse_down = {.Left},
+        mouse_wheel_delta = -1,
+        terminal_mouse_owned = true,
+        terminal_mouse_position_valid = true,
+        terminal_mouse_position = {column = 12, row = 3},
+    }, bounds, false, true)
+    testing.expect(t, filtered.mouse_moved)
+    testing.expect(t, card(filtered.mouse_pressed) == 0)
+    testing.expect(t, .Left in filtered.mouse_released)
+    testing.expect(t, .Left in filtered.mouse_down)
+    testing.expect_value(t, filtered.mouse_wheel_delta, f32(0))
+    testing.expect(t, filtered.terminal_mouse_owned)
     testing.expect(t, filtered.terminal_mouse_position_valid)
     testing.expect_value(t, filtered.terminal_mouse_position.column, 12)
 }

@@ -328,7 +328,8 @@ terminal_service_update :: proc(
     shell_was_running := state^.shell.phase == .Running
     terminal_frame := terminal_service_routed_frame(state, frame)
     prepared := ui.terminal_prepare_frame(
-        state, terminal_frame, terminal_font, bounds)
+        state, terminal_frame, terminal_font, bounds,
+        input_runtime != nil && card(input_runtime^.mouse_captured) > 0)
     update := ui.terminal_update(
         &state^.terminal, prepared.content_frame, terminal_font, bounds)
     update.geometry_change = prepared.geometry_change

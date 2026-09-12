@@ -338,6 +338,12 @@ The snapshot contains:
 UI modules receive the frame by value and commonly use helpers in `ui.odin` for the
 left-button aliases and Raylib-compatible pointer position.
 
+`input_frame_filter_pointer` creates routed value copies without copying the borrowed
+event storage. Its fixed mask independently controls screen position, motion, press and
+release edges, button levels, wheel, resolved Terminal positions, and Terminal
+ownership. Callers can therefore suppress a new press while preserving the release and
+coordinates required by an already-admitted capture.
+
 The input package also owns concerns that are not UI focus:
 
 - device-to-portable key mapping;
@@ -534,7 +540,8 @@ Before drawing, `terminal_service_update`:
 4. derives the same content panel used by later drawing;
 5. resolves font, Terminal geometry, layout, and mouse coordinates;
 6. resolves scrollbar capture and wheel ownership, then commits local scrolling;
-7. routes a content frame that excludes scrollbar-owned input;
+7. routes a content frame that excludes scrollbar or foreign UI-owned input while
+    retaining fields required by established local or child capture;
 8. prepares hyperlink hover from the committed scroll position;
 9. consumes the UI-prepared effective focus and transition;
 10. updates local editor, selection, completion, and link behavior;
@@ -590,7 +597,12 @@ The Terminal UI distinguishes several existing facts:
 - owner-bound retained bytes for Julia evaluation or native sessions.
 
 These facts are intentionally not all the same concept. Current orchestration now has
-explicit keyboard focus, but pointer and wheel routing remain later migration work.
+explicit keyboard focus and Terminal pointer filtering. One routed content frame feeds
+both local Terminal policy and native child byte encoding. A scrollbar or foreign UI
+capture removes fresh Terminal presses, levels, motion, and wheel. Existing local
+selection or hyperlink capture retains its real release point, while existing child
+protocol capture retains resolved motion and release data outside content. General
+application-wide pointer and wheel routing remains later migration work.
 
 ## Tree And Utility Panels
 
@@ -747,8 +759,8 @@ are important when changing it:
     traversal, modal focus, and control-level focus are not implemented.
 1. `Ui_Press_Owner_State` is pointer capture, not focus, and covers one press at a time.
 1. Terminal child mouse capture and UI widget capture are independent mechanisms.
-1. The same raw input frame reaches multiple consumers without one application-wide
-   pointer or wheel routing result.
+1. Terminal uses an explicit routed pointer frame, but other panels do not yet share one
+    application-wide pointer or wheel routing result.
 1. Splitters update before services, while most controls, scrollbars, tree rows,
    Dynview selection, and copy icons update during drawing.
 1. Scroll-container functions combine input mutation, clipping, and scrollbar drawing.
@@ -758,8 +770,8 @@ are important when changing it:
 1. Keyboard traversal, modal focus, and accessibility navigation are not implemented.
 
 The remaining focus and routing redesign is staged in the repository root document
-`staging_uifocus.md`. This guide describes the implemented Phase 1 focus model and the
-current pre-router pointer behavior.
+`staging_uifocus.md`. This guide describes the implemented focus model and Terminal
+pointer filtering plus the current pre-router behavior of other panels.
 
 ## Change Guide
 

@@ -366,6 +366,60 @@ input_test_terminal_mouse_capture_is_owner_bound :: proc(t: ^testing.T) {
     testing.expect(t, !runtime.mouse_last_position_valid)
 }
 
+// Verify pointer filtering preserves borrowed events and independently masks fields.
+@(test)
+input_test_pointer_filter_is_field_selective :: proc(t: ^testing.T) {
+    events := []Input_Event{{kind = .Press, key = .Enter}}
+    frame := Input_Frame{
+        events = events,
+        window_focused = true,
+        mouse_position = {12, 34},
+        mouse_moved = true,
+        mouse_pressed = {.Left},
+        mouse_released = {.Middle},
+        mouse_down = {.Right},
+        mouse_wheel_delta = -2,
+        terminal_mouse_position = {column = 4, row = 5},
+        terminal_mouse_pixel_position = {column = 40, row = 50},
+        terminal_mouse_position_valid = true,
+        terminal_mouse_inside = true,
+        terminal_mouse_owned = true,
+    }
+    filtered := input_frame_filter_pointer(frame, {
+        .Screen_Position, .Release_Edges, .Terminal_Position,
+    })
+    testing.expect_value(t, len(filtered.events), 1)
+    testing.expect(t, filtered.window_focused)
+    testing.expect_value(t, filtered.mouse_position, frame.mouse_position)
+    testing.expect(t, !filtered.mouse_moved)
+    testing.expect_value(t, filtered.mouse_pressed, Input_Mouse_Buttons{})
+    testing.expect_value(t, filtered.mouse_released, Input_Mouse_Buttons{.Middle})
+    testing.expect_value(t, filtered.mouse_down, Input_Mouse_Buttons{})
+    testing.expect_value(t, filtered.mouse_wheel_delta, f32(0))
+    testing.expect_value(t,
+        filtered.terminal_mouse_position, frame.terminal_mouse_position)
+    testing.expect(t, filtered.terminal_mouse_position_valid)
+    testing.expect(t, !filtered.terminal_mouse_inside)
+    testing.expect(t, !filtered.terminal_mouse_owned)
+}
+
+// Verify hidden pointer coordinates use the caller's non-interactive sentinel.
+@(test)
+input_test_pointer_filter_replaces_hidden_coordinates :: proc(t: ^testing.T) {
+    filtered := input_frame_filter_pointer({
+        mouse_position = {12, 34},
+        terminal_mouse_position = {column = 4, row = 5},
+        terminal_mouse_pixel_position = {column = 40, row = 50},
+        terminal_mouse_position_valid = true,
+    }, {}, {-1, -2})
+    testing.expect_value(t, filtered.mouse_position, Input_Position{-1, -2})
+    testing.expect_value(t, filtered.terminal_mouse_position,
+        Input_Terminal_Position{})
+    testing.expect_value(t, filtered.terminal_mouse_pixel_position,
+        Input_Terminal_Position{})
+    testing.expect(t, !filtered.terminal_mouse_position_valid)
+}
+
 // Verify queue pressure retains a captured release and retries it before new input.
 @(test)
 input_test_terminal_mouse_release_retries_atomically :: proc(t: ^testing.T) {
