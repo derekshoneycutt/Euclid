@@ -92,6 +92,14 @@ Window_Scenario_Preparation :: struct {
     loaded: bool,
 }
 
+//   Frame-local values consumed only by observational drawing.
+Frame_Draw_Preparation :: struct {
+    input_frame: input.Input_Frame,
+    terminal_frame: ui.Terminal_Prepared_Frame,
+    controls: ui.Ui_Control_Preparation,
+    layout_interaction: ui.Ui_Layout_Interaction_Preparation,
+}
+
 
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
@@ -212,16 +220,20 @@ run_window_frame :: proc(
     ui_geometry := ui.prepare_ui_geometry(state, input_frame)
     ui.prepare_ui_static_interaction(
         state, input_frame, ui_geometry.pointer_capture)
+    ui_controls := ui.prepare_ui_controls(state, input_frame)
     terminal_frame := terminal_service_update(state, input_runtime, input_frame)
     alpha := accumulate_and_update_systems(state)
     run_parallel_frame_preparation_after_ui(
         state, alpha, ui_geometry.compile_dynview)
+    ui_layout_interaction := ui.prepare_ui_layout_interaction(state, input_frame)
+    draw_preparation := Frame_Draw_Preparation{input_frame, terminal_frame,
+        ui_controls, ui_layout_interaction}
     audio.update_chalk_runtime(&state^.chalk_audio)
     service_scenario_before_present(ctx)
 
     evidence_profile.zone_begin(display_profile, "frame_present")
     rl.BeginDrawing()
-        draw_frame(state, alpha, input_frame, terminal_frame)
+        draw_frame(state, alpha, draw_preparation)
     rl.EndDrawing()
     evidence_profile.zone_end(display_profile)
 
@@ -865,13 +877,14 @@ draw_world :: proc(state: ^Euclid_General_State) {
 //   Render one full frame including world, particles, UI panels, and capture step.
 draw_frame :: proc(
     state : ^Euclid_General_State, alpha: f32,
-    input_frame: input.Input_Frame,
-    terminal_frame: ui.Terminal_Prepared_Frame) {
+    prepared: Frame_Draw_Preparation) {
     rl.ClearBackground(BACKGROUND_COLOR)
 
     draw_world(state)
 
-    ui.draw_ui_panels(state, input_frame, terminal_frame)
+    ui.draw_ui_panels(
+        state, prepared.input_frame, prepared.terminal_frame,
+        prepared.controls, prepared.layout_interaction)
 
     if state^.ui_runtime.display_fps {
         fps_flags := core.Font_Variant_Flags.Medium

@@ -1,5 +1,7 @@
 {
   "recommendations": [
+    "derekshoneycutt.julia-test-explorer",
+    "derekshoneycutt.odin-test-explorer",
     "ms-vscode.cmake-tools",
     "DanielGavin.ols",
     "julialang.language-julia",

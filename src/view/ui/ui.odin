@@ -3,6 +3,7 @@ package ui
 // Shared UI constants and basic drawing helpers for panel modules.
 
 import view_core "../core"
+import view_font "../font"
 import "../input"
 import "../../dynview"
 import dyncompile "../../dynview/compile"
@@ -117,6 +118,19 @@ Ui_Geometry_Preparation :: struct {
     compile_dynview: bool,
 }
 
+// Fixed frame-local control results prepared before services and rendering.
+Ui_Control_Preparation :: struct {
+    tree_toolbar: Tree_Toolbar_Preparation,
+    settings: Settings_View_Preparation,
+    gif: Gif_View_Preparation,
+    tree: Tree_List_Preparation,
+}
+
+// Post-layout interaction results prepared after Dynview compilation completes.
+Ui_Layout_Interaction_Preparation :: struct {
+    presentation: Presentation_Preparation,
+}
+
 // Convert one portable screen position for immediate use by Raylib UI APIs.
 input_frame_mouse_position :: #force_inline proc(frame: Input_Frame) -> rl.Vector2 {
     return {frame.mouse_position.x, frame.mouse_position.y}
@@ -187,11 +201,74 @@ prepare_ui_static_interaction :: proc(
     })
 }
 
+// Return a frame copy containing only pointer fields routed to the tree surface.
+ui_tree_input_frame :: proc(
+    frame: Input_Frame,
+    routed: core.Ui_Surface_Interaction) -> Input_Frame {
+    if routed.pointer && routed.wheel {
+        return input.input_frame_filter_pointer(frame, {
+            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels, .Wheel})
+    }
+    if routed.pointer {
+        return input.input_frame_filter_pointer(frame, {
+            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels})
+    }
+    if routed.wheel {
+        return input.input_frame_filter_pointer(frame, {.Screen_Position, .Wheel})
+    }
+    return input.input_frame_filter_pointer(frame, {.Screen_Position})
+}
+
+// Resolve geometry-known controls and commit their actions before services run.
+prepare_ui_controls :: proc(
+    state: ^core.Euclid_General_State,
+    frame: Input_Frame) -> Ui_Control_Preparation {
+    routed_frame := ui_tree_input_frame(
+        frame, state^.ui_runtime.interaction_frame.tree)
+    result := Ui_Control_Preparation{}
+    tree_panel := state^.ui_runtime.ui_regions.tree_rect
+    result.tree_toolbar = prepare_tree_view_controls(state, tree_panel, routed_frame)
+    _, list_panel := build_tree_view_panels(tree_panel)
+    if state^.ui_runtime.show_tree_settings {
+        result.settings = prepare_settings_view(state, list_panel, routed_frame)
+    } else if state^.ui_runtime.show_tree_gif {
+        result.gif = prepare_gif_view(state, list_panel, routed_frame)
+    } else {
+        result.tree = prepare_tree_list_panel({
+            ji = state^.julia_interface,
+            ui_runtime = &state^.ui_runtime,
+            list_panel = list_panel,
+            mouse_input = routed_frame,
+            scroll_y = &state^.ui_runtime.tree_scroll_y,
+            font = view_font.cache_borrow(&state^.font_cache, .Regular),
+            font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+        })
+    }
+    return result
+}
+
+// Resolve layout-dependent presentation interaction before drawing begins.
+prepare_ui_layout_interaction :: proc(
+    state: ^core.Euclid_General_State,
+    frame: Input_Frame) -> Ui_Layout_Interaction_Preparation {
+    routed := state^.ui_runtime.interaction_frame.presentation
+    presentation_frame := input.input_frame_filter_pointer(frame,
+        routed.pointer ? input.Input_Pointer_Fields{
+            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels,
+            .Wheel} : input.Input_Pointer_Fields{.Screen_Position})
+    if !routed.wheel { presentation_frame.mouse_wheel_delta = 0 }
+    return {presentation = prepare_presentation_interaction(state,
+        state^.ui_runtime.ui_regions.text_rect, presentation_frame,
+        routed.keyboard)}
+}
+
 //   Render all UI panels in baseline layout.
 draw_ui_panels :: proc(
     state: ^core.Euclid_General_State,
     input_frame: Input_Frame,
-    terminal_frame: Terminal_Prepared_Frame) {
+    terminal_frame: Terminal_Prepared_Frame,
+    controls: Ui_Control_Preparation,
+    layout_interaction: Ui_Layout_Interaction_Preparation) {
     regions := state^.ui_runtime.ui_regions
 
     bottom_bar := rl.Rectangle{
@@ -201,7 +278,8 @@ draw_ui_panels :: proc(
         WINDOW_HEIGHT - regions.world_rect.height,
     }
     rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
-    draw_view_text_panel(state, regions.text_rect, input_frame, terminal_frame)
+    draw_view_text_panel(state, regions.text_rect, terminal_frame,
+        layout_interaction.presentation)
 
     right_bar := rl.Rectangle{
         regions.world_rect.x + regions.world_rect.width,
@@ -210,6 +288,6 @@ draw_ui_panels :: proc(
         WINDOW_HEIGHT,
     }
     rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
-    draw_tree_view(state, regions.tree_rect, input_frame)
+    draw_tree_view(state, regions.tree_rect, input_frame, controls)
     draw_splitters(&state^.ui_runtime, input_frame_mouse_position(input_frame))
 }

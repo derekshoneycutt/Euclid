@@ -43,7 +43,7 @@ ui_capture_target :: proc(
         if capture.id == UI_PRESENTATION_SCROLLBAR_ID { focus = .Presentation }
         if capture.id == UI_TERMINAL_SCROLLBAR_ID { focus = .Terminal }
         return ui_interaction_target(.Scrollbar, focus, capture.id)
-    case .Dynview_Selection:
+    case .Dynview_Selection, .Copy_Icon:
         return ui_interaction_target(.Control, .Presentation, capture.id)
     case .None:
         return {}

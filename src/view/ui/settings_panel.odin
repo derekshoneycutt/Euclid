@@ -9,16 +9,6 @@ import "core:fmt"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
 
-//   Shared context for one settings toggle checkbox row.
-Settings_Toggle_Context :: struct {
-    panel : rl.Rectangle,
-    row_y : f32,
-    mouse_input : Input_Frame,
-    ui_runtime : ^core.Euclid_Ui_Runtime_State,
-    font : rl.Font,
-    font_resolver : view_font.Font_Resolver,
-}
-
 //   Shared dependencies for controls in one settings panel frame.
 Settings_View_Context :: struct {
     state: ^core.Euclid_General_State,
@@ -37,6 +27,74 @@ Settings_View_Rows :: struct {
     sound_y : f32,
     simd_y : f32,
     gpu_dust_y : f32,
+}
+
+//   Fixed prepared interaction results for all settings controls.
+Settings_View_Preparation :: struct {
+    rows: Settings_View_Rows,
+    max_particles: Integer_Slider_Result,
+    fps: Checkbox_Result,
+    limit: Checkbox_Result,
+    sound: Checkbox_Result,
+    simd: Checkbox_Result,
+    gpu_dust: Checkbox_Result,
+}
+
+//   Values unique to one checkbox row in the settings panel.
+Settings_Checkbox_Descriptor :: struct {
+    row_y: f32,
+    id: int,
+    label: string,
+    checked: bool,
+    enabled: bool,
+}
+
+//   Prepared controls paired with platform feature availability.
+Settings_Control_Update :: struct {
+    prepared: Settings_View_Preparation,
+    simd_available: bool,
+    gpu_available: bool,
+}
+
+//   Build one settings checkbox parameter record from shared row context.
+settings_checkbox_params :: proc(
+    ctx: Settings_View_Context,
+    descriptor: Settings_Checkbox_Descriptor) -> Checkbox_Params {
+    return {
+        id = descriptor.id,
+        rect = {ctx.panel.x + SETTINGS_PANEL_INSET, descriptor.row_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE},
+        checked = descriptor.checked,
+        enabled = descriptor.enabled,
+        mouse = ctx.mouse_input,
+        interaction_space_rect = ctx.panel,
+        interaction_enabled = true,
+        label = descriptor.label,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
+        label_font_size = TREE_FONT_SIZE,
+        label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
+        label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
+    }
+}
+
+//   Build the maximum-particle slider parameters shared by update and draw.
+settings_max_particles_params :: proc(
+    ctx: Settings_View_Context,
+    row_y: f32) -> Integer_Slider_Params {
+    return {
+        panel = ctx.panel,
+        row_y = row_y,
+        mouse_input = ctx.mouse_input,
+        ui_runtime = &ctx.state.ui_runtime,
+        press_id = SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
+        label = "Maximum Dust particles",
+        value = &ctx.state.particle_system.use_max_dust_particles,
+        min_value = 0,
+        max_value = core.MAX_LOW_PARTICLES,
+        font = ctx.font,
+        font_resolver = ctx.font_resolver,
+    }
 }
 
 //   Render particle render-count statistics and Julia animation-entry counts in settings view.
@@ -63,184 +121,6 @@ draw_settings_particle_stats :: proc(
             color = UI_TEXT_COLOR,
             font = view_core.ui_text_font(ctx.font),
         })
-    }
-}
-
-//   Render and handle the Display FPS toggle control.
-draw_settings_fps_checkbox :: proc(
-    ctx: Settings_View_Context, row_y: f32) {
-
-    box := rl.Rectangle{
-        ctx.panel.x + SETTINGS_PANEL_INSET,
-        row_y,
-        SETTINGS_CHECKBOX_SIZE,
-        SETTINGS_CHECKBOX_SIZE,
-    }
-
-    label := "Display FPS"
-
-    checkbox_result := draw_checkbox(Checkbox_Params{
-        id = 4001,
-        rect = box,
-        checked = ctx.state.ui_runtime.display_fps,
-        enabled = true,
-        mouse = ctx.mouse_input,
-        scroll_offset = rl.Vector2{},
-        interaction_space_rect = ctx.panel,
-        interaction_enabled = true,
-        label = label,
-        font = ctx.font,
-        font_resolver = ctx.font_resolver,
-        label_font_size = TREE_FONT_SIZE,
-        label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
-        label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ctx.state.ui_runtime.ui_press_owner)
-    if checkbox_result.toggled {
-        ctx.state.ui_runtime.display_fps = checkbox_result.checked_out
-    }
-}
-
-//   Render and handle the Limit FPS toggle control.
-draw_settings_limit_fps_checkbox :: proc(
-    ctx: Settings_View_Context, row_y: f32) {
-
-    box := rl.Rectangle{
-        ctx.panel.x + SETTINGS_PANEL_INSET,
-        row_y,
-        SETTINGS_CHECKBOX_SIZE,
-        SETTINGS_CHECKBOX_SIZE,
-    }
-
-    label := "Limit FPS"
-
-    checkbox_result := draw_checkbox(Checkbox_Params{
-        id = 4002,
-        rect = box,
-        checked = ctx.state.ui_runtime.limit_fps,
-        enabled = true,
-        mouse = ctx.mouse_input,
-        scroll_offset = rl.Vector2{},
-        interaction_space_rect = ctx.panel,
-        interaction_enabled = true,
-        label = label,
-        font = ctx.font,
-        font_resolver = ctx.font_resolver,
-        label_font_size = TREE_FONT_SIZE,
-        label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
-        label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ctx.state.ui_runtime.ui_press_owner)
-    if checkbox_result.toggled {
-        ctx.state.ui_runtime.limit_fps = checkbox_result.checked_out
-        if checkbox_result.checked_out {
-            rl.SetTargetFPS(LIMIT_FPS)
-        } else {
-            rl.SetTargetFPS(0)
-        }
-    }
-}
-
-//   Draw one settings toggle checkbox, honoring availability and writing the flag.
-draw_settings_toggle_checkbox :: proc(
-    ctx: Settings_Toggle_Context,
-    id: int,
-    label: string,
-    is_available: bool,
-    value: ^bool) {
-
-    panel := ctx.panel
-    ui_runtime := ctx.ui_runtime
-    box := rl.Rectangle{
-        panel.x + SETTINGS_PANEL_INSET,
-        ctx.row_y,
-        SETTINGS_CHECKBOX_SIZE,
-        SETTINGS_CHECKBOX_SIZE,
-    }
-
-    checkbox_result := draw_checkbox(Checkbox_Params{
-        id = id,
-        rect = box,
-        checked = value^,
-        enabled = is_available,
-        mouse = ctx.mouse_input,
-        scroll_offset = rl.Vector2{},
-        interaction_space_rect = panel,
-        interaction_enabled = true,
-        label = label,
-        font = ctx.font,
-        font_resolver = ctx.font_resolver,
-        label_font_size = TREE_FONT_SIZE,
-        label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
-        label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ui_runtime.ui_press_owner)
-    if checkbox_result.toggled {
-        value^ = checkbox_result.checked_out
-    }
-    if !is_available {
-        value^ = false
-    }
-}
-
-//   Render and handle the SIMD batch projection toggle control.
-draw_settings_simd_projection_checkbox :: proc(
-    ctx: Settings_View_Context, row_y: f32) {
-
-    is_available := view_core.simd_batch_projection_available()
-    label := "Use SIMD Projection"
-    if !is_available {
-        label = "Use SIMD Projection (Unavailable)"
-    }
-    draw_settings_toggle_checkbox(
-        Settings_Toggle_Context{
-            ctx.panel, row_y, ctx.mouse_input, &ctx.state.ui_runtime,
-            ctx.font, ctx.font_resolver},
-        4003, label, is_available, &ctx.state.ui_runtime.use_simd_batch_projection)
-}
-
-//   Render and handle the GPU dust instancing toggle control.
-draw_settings_gpu_dust_checkbox :: proc(
-    ctx: Settings_View_Context, row_y: f32) {
-
-    is_available := rlgl.GetVersion() >= .OPENGL_33
-    label := "GPU Dust Instancing"
-    if !is_available {
-        label = "GPU Dust Instancing (Unavailable)"
-    }
-    draw_settings_toggle_checkbox(
-        Settings_Toggle_Context{
-            ctx.panel, row_y, ctx.mouse_input, &ctx.state.ui_runtime,
-            ctx.font, ctx.font_resolver},
-        4005, label, is_available, &ctx.state.ui_runtime.use_gpu_dust_instancing)
-}
-
-//   Render and handle the drawing sound toggle control.
-draw_settings_sound_checkbox :: proc(
-    ctx: Settings_View_Context, row_y: f32) {
-
-    box := rl.Rectangle{
-        ctx.panel.x + SETTINGS_PANEL_INSET,
-        row_y,
-        SETTINGS_CHECKBOX_SIZE,
-        SETTINGS_CHECKBOX_SIZE,
-    }
-
-    checkbox_result := draw_checkbox(Checkbox_Params{
-        id = 4004,
-        rect = box,
-        checked = ctx.state.user_drawing_sound_enabled,
-        enabled = true,
-        mouse = ctx.mouse_input,
-        scroll_offset = rl.Vector2{},
-        interaction_space_rect = ctx.panel,
-        interaction_enabled = true,
-        label = "Enable Drawing Sound",
-        font = ctx.font,
-        font_resolver = ctx.font_resolver,
-        label_font_size = TREE_FONT_SIZE,
-        label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
-        label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
-    }, &ctx.state.ui_runtime.ui_press_owner)
-    if checkbox_result.toggled {
-        ctx.state.user_drawing_sound_enabled = checkbox_result.checked_out
     }
 }
 
@@ -293,14 +173,85 @@ settings_view_layout_rows :: proc(stack_rect: rl.Rectangle) -> Settings_View_Row
     }
 }
 
+//   Update every settings control and report optional feature availability.
+update_settings_controls :: proc(
+    ctx: Settings_View_Context,
+    rows: Settings_View_Rows) -> Settings_Control_Update {
+    result := Settings_View_Preparation{rows = rows}
+    result.max_particles = update_settings_integer_slider(
+        settings_max_particles_params(ctx, rows.slider_label_y))
+    result.fps = update_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
+        4001, "Display FPS", ctx.state.ui_runtime.display_fps, true}),
+        &ctx.state.ui_runtime.ui_press_owner)
+    result.limit = update_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
+        4002, "Limit FPS", ctx.state.ui_runtime.limit_fps, true}),
+        &ctx.state.ui_runtime.ui_press_owner)
+    result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
+        4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled, true}),
+        &ctx.state.ui_runtime.ui_press_owner)
+    simd_available := view_core.simd_batch_projection_available()
+    simd_label := "Use SIMD Projection"
+    if !simd_available { simd_label = "Use SIMD Projection (Unavailable)" }
+    result.simd = update_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
+        4003, simd_label, ctx.state.ui_runtime.use_simd_batch_projection,
+        simd_available}), &ctx.state.ui_runtime.ui_press_owner)
+    gpu_available := rlgl.GetVersion() >= .OPENGL_33
+    gpu_label := "GPU Dust Instancing"
+    if !gpu_available { gpu_label = "GPU Dust Instancing (Unavailable)" }
+    result.gpu_dust = update_checkbox(settings_checkbox_params(ctx, {rows.gpu_dust_y,
+        4005, gpu_label, ctx.state.ui_runtime.use_gpu_dust_instancing,
+        gpu_available}), &ctx.state.ui_runtime.ui_press_owner)
+    return {result, simd_available, gpu_available}
+}
+
+//   Resolve settings controls and commit their values before rendering.
+prepare_settings_view :: proc(
+    state: ^core.Euclid_General_State,
+    panel: rl.Rectangle,
+    mouse_input: Input_Frame) -> Settings_View_Preparation {
+    if state == nil || state.particle_system == nil { return {} }
+    stack_rect := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+        panel.y + SETTINGS_HEADER_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        panel.height - SETTINGS_HEADER_TOP_OFFSET}
+    rows := settings_view_layout_rows(stack_rect)
+    ctx := Settings_View_Context{state, panel, mouse_input,
+        view_font.cache_borrow(&state.font_cache, .Regular),
+        view_font.cache_terminal_resolver(&state.font_cache)}
+    update := update_settings_controls(ctx, rows)
+    apply_settings_preparation(state, update.prepared,
+        update.simd_available, update.gpu_available)
+    return update.prepared
+}
+
+//   Commit prepared settings toggle results and related display policy.
+apply_settings_preparation :: proc(
+    state: ^core.Euclid_General_State,
+    prepared: Settings_View_Preparation,
+    simd_available: bool,
+    gpu_available: bool) {
+    if prepared.fps.toggled { state.ui_runtime.display_fps = prepared.fps.checked_out }
+    if prepared.limit.toggled {
+        state.ui_runtime.limit_fps = prepared.limit.checked_out
+        if prepared.limit.checked_out { rl.SetTargetFPS(LIMIT_FPS) }
+        else { rl.SetTargetFPS(0) }
+    }
+    if prepared.sound.toggled {
+        state.user_drawing_sound_enabled = prepared.sound.checked_out
+    }
+    state.ui_runtime.use_simd_batch_projection =
+        simd_available && prepared.simd.checked_out
+    state.ui_runtime.use_gpu_dust_instancing =
+        gpu_available && prepared.gpu_dust.checked_out
+}
+
 //   Draw all settings controls against the laid-out rows.
 draw_settings_controls :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
     mouse_input: Input_Frame,
-    rows: Settings_View_Rows) {
+    prepared: Settings_View_Preparation) {
 
-    ps := state.particle_system
     ui_runtime := &state.ui_runtime
     regular_font := view_font.cache_borrow(&state.font_cache, .Regular)
     resolver := view_font.cache_terminal_resolver(&state.font_cache)
@@ -311,32 +262,36 @@ draw_settings_controls :: proc(
     if state.julia_interface != nil {
         animation_entries_added = state.julia_interface.animation_count
     }
-    draw_settings_integer_slider(Integer_Slider_Params{
-        panel = panel,
-        row_y = rows.slider_label_y,
-        mouse_input = mouse_input,
-        ui_runtime = ui_runtime,
-        press_id = SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
-        label = "Maximum Dust particles",
-        value = &ps.use_max_dust_particles,
-        min_value = 0,
-        max_value = core.MAX_LOW_PARTICLES,
-        font = regular_font,
-        font_resolver = resolver,
-    })
-    draw_settings_particle_stats(ctx, rows.stats_y, animation_entries_added)
-    draw_settings_fps_checkbox(ctx, rows.fps_y)
-    draw_settings_limit_fps_checkbox(ctx, rows.limit_y)
-    draw_settings_sound_checkbox(ctx, rows.sound_y)
-    draw_settings_simd_projection_checkbox(ctx, rows.simd_y)
-    draw_settings_gpu_dust_checkbox(ctx, rows.gpu_dust_y)
+    draw_settings_integer_slider_prepared(settings_max_particles_params(
+        ctx, prepared.rows.slider_label_y), prepared.max_particles)
+    draw_settings_particle_stats(ctx, prepared.rows.stats_y, animation_entries_added)
+    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.fps_y,
+        4001, "Display FPS", ui_runtime.display_fps, true}), prepared.fps)
+    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.limit_y,
+        4002, "Limit FPS", ui_runtime.limit_fps, true}), prepared.limit)
+    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.sound_y,
+        4004, "Enable Drawing Sound", state.user_drawing_sound_enabled, true}),
+        prepared.sound)
+    simd_available := view_core.simd_batch_projection_available()
+    simd_label := "Use SIMD Projection"
+    if !simd_available { simd_label = "Use SIMD Projection (Unavailable)" }
+    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.simd_y,
+        4003, simd_label, ui_runtime.use_simd_batch_projection,
+        simd_available}), prepared.simd)
+    gpu_available := rlgl.GetVersion() >= .OPENGL_33
+    gpu_label := "GPU Dust Instancing"
+    if !gpu_available { gpu_label = "GPU Dust Instancing (Unavailable)" }
+    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.gpu_dust_y,
+        4005, gpu_label, ui_runtime.use_gpu_dust_instancing,
+        gpu_available}), prepared.gpu_dust)
 }
 
 //   Render full settings panel and wire all settings controls.
 draw_settings_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Input_Frame) {
+    mouse_input: Input_Frame,
+    prepared: Settings_View_Preparation) {
 
     if state == nil || state.particle_system == nil {
         return
@@ -356,13 +311,6 @@ draw_settings_view :: proc(
         font = view_core.ui_text_font(regular_font),
     })
 
-    stack_rect := rl.Rectangle{
-        panel.x + SETTINGS_PANEL_INSET,
-        panel.y + SETTINGS_HEADER_TOP_OFFSET,
-        panel.width - SETTINGS_PANEL_INSET * 2,
-        panel.height - SETTINGS_HEADER_TOP_OFFSET,
-    }
-    rows := settings_view_layout_rows(stack_rect)
-    draw_settings_controls(state, panel, mouse_input, rows)
+    draw_settings_controls(state, panel, mouse_input, prepared)
 }
 

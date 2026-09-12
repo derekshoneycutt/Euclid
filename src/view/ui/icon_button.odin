@@ -151,8 +151,8 @@ draw_icon_button_glyph :: proc(
     }
 }
 
-//   Draw and resolve one icon button interaction result.
-draw_icon_button :: proc(
+//   Resolve one icon button interaction without issuing drawing commands.
+update_icon_button :: proc(
     params: Icon_Button_Params,
     press_owner: ^core.Ui_Press_Owner_State) -> Icon_Button_Result {
     slot_rect := clamp_non_negative_rect(params.rect)
@@ -175,11 +175,39 @@ draw_icon_button :: proc(
         press_t = 1
     }
 
-    result := draw_icon_button_with_visual_state(params, hover_t, press_t, true)
-    result.pressed = pressed
-    result.clicked = owns_press && input_frame_left_pressed(params.mouse)
+    result := Icon_Button_Result{
+        icon_drawn_rect = icon_button_icon_draw_rect(
+            slot_rect, params.inset_scale * (1.0 +
+                ICON_BUTTON_HOVER_SCALE_ADD * hover_t -
+                ICON_BUTTON_PRESS_SCALE_SUB * press_t)),
+        hovered = hovered,
+        pressed = pressed,
+        clicked = owns_press && input_frame_left_pressed(params.mouse),
+    }
     icon_button_release_press(press_owner, &owns_press, params.mouse)
     return result
+}
+
+//   Draw one icon button from a prepared interaction result.
+draw_icon_button_prepared :: proc(
+    params: Icon_Button_Params,
+    result: Icon_Button_Result) {
+
+    slot_rect := clamp_non_negative_rect(params.rect)
+    icon_color := UI_TEXT_COLOR
+    if (params.toggle || result.pressed) {
+        rl.DrawRectangleRec(slot_rect, UI_BORDER_COLOR)
+        icon_color = BACKGROUND_COLOR
+    }
+    if result.pressed {
+        icon_color = icon_button_darken(icon_color, 1)
+    }
+    icon_rect := result.icon_drawn_rect
+    if result.pressed {
+        icon_rect.x += 0.5
+        icon_rect.y += 0.5
+    }
+    draw_icon_button_glyph(params.icon_id, icon_rect, icon_color)
 }
 
 //   Draw icon button using externally supplied visual hover/press intensities.

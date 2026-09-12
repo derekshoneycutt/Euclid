@@ -197,6 +197,50 @@ ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
     testing.expect(t, routed.terminal.wheel)
 }
 
+// Verify tree routing independently filters pointer edges and wheel input.
+@(test)
+ui_tree_input_frame_filters_independent_pointer_classes :: proc(t: ^testing.T) {
+    frame := Input_Frame{mouse_position = {12, 18}, mouse_pressed = {.Left},
+        mouse_down = {.Left}, mouse_wheel_delta = -2}
+    wheel_only := ui_tree_input_frame(frame, {wheel = true})
+    testing.expect(t, card(wheel_only.mouse_pressed) == 0)
+    testing.expect(t, card(wheel_only.mouse_down) == 0)
+    testing.expect_value(t, wheel_only.mouse_wheel_delta, f32(-2))
+
+    pointer_only := ui_tree_input_frame(frame, {pointer = true})
+    testing.expect(t, .Left in pointer_only.mouse_pressed)
+    testing.expect(t, .Left in pointer_only.mouse_down)
+    testing.expect_value(t, pointer_only.mouse_wheel_delta, f32(0))
+}
+
+// Verify update-only checkbox interaction captures and toggles on matching release.
+@(test)
+checkbox_update_commits_without_drawing :: proc(t: ^testing.T) {
+    owner: app_core.Ui_Press_Owner_State
+    params := Checkbox_Params{id = 41, rect = {10, 10, 20, 20}, checked = false,
+        enabled = true, mouse = {mouse_position = {15, 15},
+            mouse_pressed = {.Left}, mouse_down = {.Left}},
+        interaction_space_rect = {0, 0, 100, 100}, interaction_enabled = true}
+    pressed := update_checkbox(params, &owner)
+    testing.expect(t, pressed.pressed && owner.active)
+
+    params.mouse = {mouse_position = {15, 15}, mouse_released = {.Left}}
+    released := update_checkbox(params, &owner)
+    testing.expect(t, released.toggled && released.checked_out)
+    testing.expect(t, !owner.active)
+}
+
+// Verify a copy-icon capture remains classified as Presentation interaction.
+@(test)
+ui_router_classifies_copy_capture_as_presentation :: proc(t: ^testing.T) {
+    target := ui_capture_target({active = true, kind = .Copy_Icon, id = 17})
+    testing.expect_value(t, target.kind,
+        app_core.Ui_Interaction_Target_Kind.Control)
+    testing.expect_value(t, target.focus.kind,
+        app_core.Ui_Focus_Kind.Presentation)
+    testing.expect_value(t, target.id, 17)
+}
+
 //   Verify splitter geometry uses an eight-pixel hit target and three-pixel line.
 @(test)
 splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {

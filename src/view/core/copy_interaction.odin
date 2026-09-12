@@ -90,13 +90,16 @@ copy_icon_begin_press_if_hovered :: proc(
     runtime: ^core.Dynview_System,
     cache: ^core.Dynview_Compile_Cache,
     hovered_index: int,
-    mouse_input: input.Input_Frame) {
+    mouse_input: input.Input_Frame,
+    press_owner: ^core.Ui_Press_Owner_State) {
 
-    if .Left not_in mouse_input.mouse_pressed || hovered_index < 0 {
+    if .Left not_in mouse_input.mouse_pressed || hovered_index < 0 ||
+        press_owner^.active {
         return
     }
 
     block_id := cache^.copy_hit_targets[hovered_index].block_id
+    press_owner^ = {active = true, kind = .Copy_Icon, id = int(block_id)}
     runtime^.copy_icon_press_active = true
     runtime^.copy_icon_press_block_id = block_id
     runtime^.copy_icon_linger_active = false
@@ -184,13 +187,11 @@ copy_icon_color :: #force_inline proc(press_t: f32) -> rl.Color {
 draw_copy_icon_button :: proc(
     rect: rl.Rectangle,
     hover_t: f32,
-    press_t: f32,
-    hovered_icon: bool,
-    mouse_input: input.Input_Frame) -> bool {
+    press_t: f32) {
 
     slot_rect := rect
     if slot_rect.width <= 0 || slot_rect.height <= 0 {
-        return false
+        return
     }
 
     use_hover_t := clamp(hover_t, 0.0, 1.0)
@@ -214,21 +215,12 @@ draw_copy_icon_button :: proc(
     }
 
     draw_copy_icon(icon_rect, copy_icon_color(use_press_t))
-    return hovered_icon && .Left in mouse_input.mouse_released
 }
 
-//   Draw one copy icon with hover and click feedback, returning click hit state.
+//   Draw one copy icon with prepared hover and click feedback.
 copy_icon_draw_target :: proc(
     runtime: ^core.Dynview_System,
-    target: core.Dynview_Copy_Hit_Target,
-    mouse_input: input.Input_Frame,
-    click_eligible: bool) -> bool {
-
-    mouse := rl.Vector2{
-        mouse_input.mouse_position.x, mouse_input.mouse_position.y}
-
-    hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
-    hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
+    target: core.Dynview_Copy_Hit_Target) {
     is_hover_target := runtime^.copy_icon_hover_active &&
         runtime^.copy_icon_hover_block_id == target.block_id
     is_press_target := runtime^.copy_icon_press_active &&
@@ -236,8 +228,8 @@ copy_icon_draw_target :: proc(
     is_linger_target := runtime^.copy_icon_linger_active &&
         runtime^.copy_icon_linger_block_id == target.block_id
 
-    if !hovered_block && !hovered_icon && !is_press_target && !is_linger_target {
-        return false
+    if !is_hover_target && !is_press_target && !is_linger_target {
+        return
     }
 
     hover_t: f32 = 0
@@ -252,25 +244,45 @@ copy_icon_draw_target :: proc(
 
     press_visual := max(press_t, copy_icon_linger_t(runtime, is_linger_target))
 
-    return click_eligible && draw_copy_icon_button(
-        target.rect, hover_t, press_visual, hovered_icon, mouse_input)
+    draw_copy_icon_button(target.rect, hover_t, press_visual)
 }
 
-//   Resolve per-frame copy-icon hover/press ownership and animation transitions.
-copy_icon_update_runtime_state :: proc(
+//   Resolve copy hover, shared capture, clipboard publication, and transitions.
+prepare_copy_icons :: proc(
     runtime: ^core.Dynview_System,
-    cache: ^core.Dynview_Compile_Cache,
     mouse_input: input.Input_Frame,
-    dt: f32) {
+    dt: f32,
+    press_owner: ^core.Ui_Press_Owner_State) -> bool {
+    if runtime == nil { return false }
+    cache := &runtime^.compile_cache
+    if cache^.copy_hit_target_count <= 0 {
+        copy_icon_reset_animation_state(runtime)
+        if press_owner^.kind == .Copy_Icon { press_owner^ = {} }
+        return false
+    }
 
     mouse := rl.Vector2{
         mouse_input.mouse_position.x, mouse_input.mouse_position.y}
 
     hovered_index := copy_icon_find_hovered_index(cache, mouse)
     copy_icon_update_hover_state(runtime, cache, hovered_index)
-    copy_icon_begin_press_if_hovered(runtime, cache, hovered_index, mouse_input)
+    copy_icon_begin_press_if_hovered(
+        runtime, cache, hovered_index, mouse_input, press_owner)
+    clicked_index := -1
+    if press_owner^.active && press_owner^.kind == .Copy_Icon &&
+        .Left in mouse_input.mouse_released {
+        if hovered_index >= 0 &&
+            int(cache^.copy_hit_targets[hovered_index].block_id) == press_owner^.id {
+            clicked_index = hovered_index
+        }
+        press_owner^ = {}
+    }
     copy_icon_update_press_and_linger(runtime, mouse_input, dt)
     copy_icon_update_transition_values(runtime, dt)
+    payload := copy_target_payload(runtime, clicked_index)
+    if len(payload) <= 0 { return false }
+    input.input_set_clipboard_text(payload)
+    return true
 }
 
 //   Return compiled copy payload string for one hit target index.
@@ -299,46 +311,19 @@ copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) ->
 //   Draw per-block copy icons and return whether one was clicked.
 draw_copy_icons :: proc(
     runtime: ^core.Dynview_System,
-    panel: rl.Rectangle,
-    mouse_input: input.Input_Frame) -> bool {
+    panel: rl.Rectangle) {
 
     if runtime == nil {
-        return false
+        return
     }
 
     _ = panel
 
     cache := &runtime^.compile_cache
     if cache^.copy_hit_target_count <= 0 {
-        copy_icon_reset_animation_state(runtime)
-        return false
+        return
     }
-
-    dt := min(0.05, max(0.0, rl.GetFrameTime()))
-    released_block_id := i32(-1)
-    if runtime^.copy_icon_press_active && .Left in mouse_input.mouse_released {
-        released_block_id = runtime^.copy_icon_press_block_id
+    for target in cache^.copy_hit_targets[:cache^.copy_hit_target_count] {
+        copy_icon_draw_target(runtime, target)
     }
-    copy_icon_update_runtime_state(runtime, cache, mouse_input, dt)
-
-    clicked_index := -1
-    for i in 0..<cache^.copy_hit_target_count {
-        target := cache^.copy_hit_targets[i]
-        if copy_icon_draw_target(runtime, target, mouse_input,
-            target.block_id == released_block_id) {
-            clicked_index = i
-        }
-    }
-
-    if clicked_index < 0 {
-        return false
-    }
-
-    payload := copy_target_payload(runtime, clicked_index)
-    if len(payload) <= 0 {
-        return false
-    }
-
-    input.input_set_clipboard_text(payload)
-    return true
 }

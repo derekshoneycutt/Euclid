@@ -2250,6 +2250,7 @@ Ui_Press_Owner_Kind :: enum {
     Scrollbar,
     Splitter,
     Dynview_Selection,
+    Copy_Icon,
 }
 
 Ui_Press_Owner_State :: struct {

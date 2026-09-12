@@ -444,20 +444,25 @@ The windowed wrapper adds GIF policy without changing this semantic boundary.
 
 ### Per-Frame Preparation
 
-After all fixed steps complete, the display thread opens a second pool window:
+UI and cache preparation use explicit ordered stages around the fixed-step update:
 
 1. Compute and publish the frame's UI regions and exact text-panel geometry.
 1. Track Dynview panel, font, and style inputs to determine whether its cache is
   invalidated.
-1. Submit shape draw-cache construction every frame.
-1. Submit Dynview compile and layout construction only when invalidated.
-1. Join every submitted task before beginning raylib drawing.
+1. Resolve static focus, hover, pointer, wheel, and geometry-known controls.
+1. Update Terminal geometry, scrolling, links, and routed input.
+1. Complete fixed-step simulation.
+1. Submit shape draw-cache construction and any invalidated Dynview compilation.
+1. Join every submitted task.
+1. Resolve layout-dependent presentation scrolling, copy interaction, and selection.
+1. Begin Raylib drawing over committed state and fixed frame-local preparation records.
 
 Shape preparation reads settled `Shape_World` components and writes only its derived
 shape draw cache.
 Dynview preparation reads immutable snapshots and writes only its compile and layout
 caches. The tasks may run concurrently because their ownership does not overlap.
-Display-only interaction state and drawing consume the caches after the fence joins.
+Display-only layout-dependent interaction consumes the caches after the fence joins;
+drawing does not mutate interaction state or publish actions.
 
 Before Terminal service processing, UI preparation also reconciles display-owned
 logical focus against the resolved regions, active Terminal presentation, and OS window

@@ -65,9 +65,9 @@ interaction state, visible application state, Raylib resources, and draw submiss
 flowchart LR
     Input[Device input snapshot]
     State[Euclid application state]
-    Layout[UI layout and splitters]
+    Layout[Geometry and static interaction]
     Services[Presentation and Terminal services]
-    Prepare[Worker-backed frame preparation]
+    Prepare[Worker caches and layout interaction]
     Panels[Panel and widget code]
     Draw[Raylib drawing]
 
@@ -82,8 +82,9 @@ flowchart LR
 ```
 
 The UI combines immediate geometry and drawing with persistent interaction fields in
-`Euclid_Ui_Runtime_State`. Widgets compute their rectangles each frame, inspect the
-same `Input_Frame`, update display-owned state, and draw their current visual result.
+`Euclid_Ui_Runtime_State`. Update procedures compute widget rectangles, consume routed
+frame copies, and commit display-owned state before `BeginDrawing`. Draw procedures
+consume fixed frame-local preparation records and committed state.
 
 This is a hybrid model:
 
@@ -91,7 +92,7 @@ This is a hybrid model:
 | --- | --- |
 | Widget geometry | Recomputed from panel rectangles each frame. |
 | Widget state | Stored in application, subsystem, or UI runtime state. |
-| Input | One borrowed frame snapshot shared by UI consumers. |
+| Input | One borrowed raw snapshot filtered into per-surface value copies. |
 | Drawing | Immediate Raylib calls on the display thread. |
 | Layout caches | Dynview, font, shape, and Terminal owners retain derived state. |
 | Cross-thread work | Workers prepare finite results; the display commits and draws. |
@@ -161,10 +162,13 @@ sequenceDiagram
     I->>U: Raw frame snapshot
     U->>U: Prepare geometry and snapshot pointer capture
     U->>U: Resolve static focus, hover, pointer, and wheel targets
+    U->>U: Update toolbar, settings, GIF, and tree controls
     U->>T: Raw frame, router result, and prepared panel geometry
     T->>T: Refine Terminal scrollbar routing and update sessions
     T->>S: Continue fixed-step and frame preparation
-    S->>D: Joined draw-ready state
+    S->>U: Joined Dynview layout and copy targets
+    U->>U: Update presentation scroll, copy, and selection
+    U->>D: Prepared interaction and draw-ready state
     D->>D: Draw world, panels, splitters, overlays
     D->>E: Present, scenario capture, GIF frame, evidence
     E->>E: Reset the temporary allocator
@@ -178,9 +182,11 @@ The concrete high-level order is:
 1. poll one device-independent `Input_Frame`;
 1. call `ui.prepare_ui_geometry`;
 1. call `ui.prepare_ui_static_interaction`;
+1. call `ui.prepare_ui_controls` for toolbar, settings, GIF, and tree interaction;
 1. update the selected Terminal and active shell session;
 1. advance fixed-step simulation;
 1. run and join frame preparation that depends on the new UI geometry;
+1. call `ui.prepare_ui_layout_interaction` for presentation interaction;
 1. update audio and pre-presentation scenarios;
 1. call `BeginDrawing`, draw the frame, and call `EndDrawing`;
 1. service post-presentation scenarios and GIF capture;
@@ -190,10 +196,11 @@ Three ordering details are especially important:
 
 - splitter changes happen before `Ui_Regions` and Dynview panel tracking;
 - capture identity from frame start survives splitter and widget release updates;
-- static routing follows region computation and precedes Terminal processing;
+- static routing and geometry-known controls precede Terminal processing;
 - Terminal scrollbar geometry refines the static panel target before input consumption;
-- most ordinary widget interactions currently happen inside panel drawing, after the
-  Terminal service has already processed the frame.
+- presentation scrolling, copy targets, and selection update after authoritative
+    Dynview layout exists and before drawing begins;
+- drawing consumes prepared records and does not commit UI interaction or actions.
 
 The second detail is a current limitation discussed below.
 
@@ -371,7 +378,7 @@ Ui_Press_Owner_State :: struct {
 ```
 
 Supported owner kinds currently include list items, icon and text buttons, checkboxes,
-sliders, scrollbars, splitters, and Dynview selection.
+sliders, scrollbars, splitters, Dynview selection, and copy icons.
 
 The common lifecycle is:
 
@@ -409,11 +416,11 @@ places splitters above Terminal, Presentation, Tree, and world content. Existing
 outranks current hover. A wheel delta receives the hovered target only when no pointer
 capture is active, so it cannot follow a drag into another panel.
 
-Terminal preparation is the current layout-dependent refinement stage. Once scrollbar
-geometry exists, the complete visible track replaces the coarse Terminal content target
-for hover, pointer, and eligible wheel routing. The same result filters the one frame
-used by local Terminal policy and child byte encoding. The router uses only value state
-and fixed enums; it allocates no region or target lists.
+Terminal preparation refines its coarse content target once scrollbar geometry exists.
+The complete visible track then replaces content for hover, pointer, and eligible wheel
+routing. Presentation preparation similarly resolves scrolling, copy targets, and
+selection after Dynview layout completes. The router uses only value state, fixed enums,
+and borrowed frame copies; it allocates no region or target lists.
 
 ## Widgets
 
@@ -422,6 +429,10 @@ and fixed enums; it allocates no region or target lists.
 Icon and text buttons use the shared capture pattern. They distinguish hover, active
 press, enabled state, toggle state, and completed click. A click completes only after a
 captured press reaches release according to the widget's hit policy.
+
+Each basic widget exposes an update procedure and a prepared-result draw procedure.
+Panel preparation commits actions and values; drawing only selects visual state from
+the prepared result.
 
 The tree toolbar uses icon buttons for:
 
@@ -461,9 +472,9 @@ draw and handle an expander icon. Selection clears the previous selected flag, u
 `selected_animation`, records a pending reveal identity, and requests the normal
 animation transition path.
 
-The tree walk is recursive but bounded by the registered animation count. It skips
-offscreen row drawing while still advancing content height so scrollbar geometry stays
-correct.
+The tree update and draw walks are recursive but bounded by the registered animation
+count. The update walk resolves one hovered row and expander identity without allocating
+a row list. The draw walk skips offscreen rows while preserving content height.
 
 ## Scrolling
 
@@ -475,8 +486,7 @@ correct.
 | Terminal panel | 1002 | Terminal scroll offset committed through its facade |
 | Tree catalogue | 1003 | `tree_scroll_y` |
 
-Presentation and Tree retain the compatibility begin/end path. Terminal uses the
-pre-render update path because its content consumes pointer input before drawing:
+Presentation, Terminal, and Tree all use the pre-render update path:
 
 ```mermaid
 flowchart LR
@@ -516,15 +526,18 @@ The bottom-left panel shows either the selected animation presentation or the Te
 
 ### Dynview Or Plain Text
 
-For an ordinary animation, the panel:
+For an ordinary animation, the post-layout interaction stage:
 
 1. obtains the current immutable presentation snapshot;
 1. queries authoritative Dynview content height or the wrapped-text fallback height;
-1. begins the shared presentation scroll container;
+1. updates and commits the shared presentation scroll container;
+1. refreshes bounded copy targets from authoritative layout;
+1. updates copy capture, clipboard publication, and visual transitions;
 1. reconciles and updates selection state;
-1. draws the compiled document, math, or fallback text;
-1. refreshes and draws copy affordances;
-1. ends scrolling and commits drag state.
+1. publishes a fixed preparation record for drawing.
+
+Drawing then clips with the prepared scroll result and renders selection, compiled or
+fallback content, copy affordances, and the scrollbar without changing interaction.
 
 Dynview remains responsible for semantic content, shaping, line breaking, math layout,
 and copy-target generation. The UI supplies panel bounds, scroll offset, style metrics,
@@ -538,7 +551,8 @@ The selection stores mode, revision, anchor, head, active state, and drag state.
 A left press inside selectable content captures `.Dynview_Selection` unless another
 widget owns the press or a copy icon occupies the point. Dragging updates the head, and
 release commits an active selection when anchor and head differ. `Ctrl+A` selects the
-complete logical content and `Ctrl+C` writes selected source to the clipboard.
+complete logical content and `Ctrl+C` writes selected source to the clipboard only while
+Presentation has effective keyboard focus.
 
 ### Copy Affordances
 
@@ -546,9 +560,9 @@ Dynview compilation publishes bounded copy hit targets. The copy interaction run
 tracks one hovered block, one pressed block, and short linger feedback. On a matching
 release it publishes that block's canonical payload to the clipboard.
 
-Copy interaction state currently lives in `Dynview_System` rather than the shared UI
-press owner. The selection path explicitly excludes copy icon hit regions to avoid one
-important overlap.
+Copy visual state remains in `Dynview_System`, while `.Copy_Icon` in the shared press
+owner retains the pointer transaction through release. Copy updates run before
+selection, so an admitted icon press has priority over selectable content.
 
 ## Terminal Panel
 
@@ -635,9 +649,10 @@ protocol capture retains resolved motion and release data outside content.
 ### Tree Catalogue
 
 The right-side outer container is divided into a 28-pixel toolbar and a list panel with
-a six-pixel gap. The list counts visible rows, applies pending reveal state, begins a
-scroll container, recursively visits visible roots and expanded children, applies the
-selected or toggled hit, and commits scrolling.
+a six-pixel gap. Before services run, the list counts visible rows, applies pending
+reveal state, updates scrolling, and walks visible roots to resolve hover, selection,
+and expansion. Expansion recounts topology and reclamps scrolling in the same update.
+Rendering repeats the bounded walk only to issue draw calls.
 
 The reveal mechanism stores a stable animation UUID rather than a pointer. On the next
 eligible tree frame it resolves the current node and minimally adjusts scroll so the row
@@ -785,20 +800,11 @@ are important when changing it:
     traversal, modal focus, and control-level focus are not implemented.
 1. `Ui_Press_Owner_State` is pointer capture, not focus, and covers one press at a time.
 1. Terminal child mouse capture and UI widget capture are independent mechanisms.
-1. All top-level surfaces share one routing result, but most non-Terminal consumers do
-    not yet consume its narrow eligibility when updating their controls.
-1. Splitters update before services, while most controls, scrollbars, tree rows,
-   Dynview selection, and copy icons update during drawing.
-1. Scroll-container functions combine input mutation, clipping, and scrollbar drawing.
-1. Several `draw_*` procedures submit application actions as well as render visuals.
-1. Panel and splitter z-order is explicit; control and copy-affordance registration
-    remains tied to draw-time call order until their interaction migration.
 1. The window uses fixed logical dimensions and has only the baseline layout mode.
-1. Keyboard traversal, modal focus, and accessibility navigation are not implemented.
+1. Accessibility navigation is not implemented.
 
-The remaining update/render separation is staged in the repository root document
-`staging_uifocus.md`. This guide describes the implemented focus and routing model plus
-the current draw-time behavior of controls awaiting migration.
+The repository root document `staging_uifocus.md` records the completed interaction
+migration and the deliberately deferred keyboard traversal and modal-focus work.
 
 ## Change Guide
 
@@ -856,6 +862,9 @@ The current UI depends on these invariants:
 1. Scroll offsets remain clamped to the current content and viewport extents.
 1. Tree traversal is bounded by registered animation count.
 1. Presentation selection is reconciled when content mode or revision changes.
+1. Every pointer edge and wheel delta reaches at most one routed top-level surface.
+1. Control, tree, presentation, copy, and Terminal interaction commits before drawing.
+1. Repeating drawing for one prepared frame cannot duplicate a UI action.
 1. Terminal state and messages are accepted only for the matching animation generation.
 1. Worker-prepared state commits before the display consumes it.
 1. Font and texture resources are published and destroyed by the display thread.

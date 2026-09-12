@@ -319,6 +319,8 @@ hit testing, then supplies one routed frame to local editing and child input enc
 Negotiated SGR mouse mode owns content wheel input unless Shift requests local
 scrollback; the scrollbar track retains local priority in every mode. Rendering consumes
 the prepared layout, scroll geometry, and hyperlink hover without mutating scrolling.
+Hyperlink press/release matching and activation requests also complete during Terminal
+update, so repeated drawing cannot launch a URI twice.
 
 | Mode | Owner and behavior |
 | --- | --- |

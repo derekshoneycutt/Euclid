@@ -27,6 +27,15 @@ Integer_Slider_Params :: struct {
     font_resolver : view_font.Font_Resolver,
 }
 
+//   Prepared interaction and geometry for one integer slider draw.
+Integer_Slider_Result :: struct {
+    value: int,
+    track: rl.Rectangle,
+    knob: rl.Rectangle,
+    knob_center_x: f32,
+    knob_color: rl.Color,
+}
+
 //   Value range and drag inputs for one slider drag update.
 Slider_Drag_Input :: struct {
     min_value : int,
@@ -256,15 +265,10 @@ slider_draw_text :: proc(
     })
 }
 
-//   Render and update a reusable integer slider control.
-draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
-
-    panel := params.panel
-    row_y := params.row_y
-    mouse_input := params.mouse_input
-    slider_draw_text(params, params.label, panel.x + SETTINGS_PANEL_INSET)
-
-    track := slider_track_rect(panel, row_y)
+//   Resolve one integer slider update without issuing drawing commands.
+update_settings_integer_slider :: proc(
+    params: Integer_Slider_Params) -> Integer_Slider_Result {
+    track := slider_track_rect(params.panel, params.row_y)
     hit := slider_hit_rect(track)
 
     clamped, owns_press := slider_resolve_value(params, track, hit)
@@ -274,21 +278,31 @@ draw_settings_integer_slider :: proc(params: Integer_Slider_Params) {
     ratio := f32(clamped - params.min_value) / f32(denom)
     knob_center_x, knob := build_slider_knob(track, ratio)
 
-    pressed_knob := owns_press && input_frame_left_down(mouse_input)
+    pressed_knob := owns_press && input_frame_left_down(params.mouse_input)
     knob_draw, knob_color :=
-        slider_knob_draw_style(knob, panel, mouse_input, pressed_knob)
+        slider_knob_draw_style(knob, params.panel, params.mouse_input, pressed_knob)
+    return {clamped, track, knob_draw, knob_center_x, knob_color}
+}
 
-    rl.DrawRectangleRec(track, BACKGROUND_COLOR)
+//   Draw one integer slider from prepared interaction and geometry.
+draw_settings_integer_slider_prepared :: proc(
+    params: Integer_Slider_Params,
+    result: Integer_Slider_Result) {
+
+    panel := params.panel
+    slider_draw_text(params, params.label, panel.x + SETTINGS_PANEL_INSET)
+
+    rl.DrawRectangleRec(result.track, BACKGROUND_COLOR)
     rl.DrawRectangleRec(
         rl.Rectangle{
-            track.x,
-            track.y,
-            max(0.0, knob_center_x - track.x),
-            track.height,
+            result.track.x,
+            result.track.y,
+            max(0.0, result.knob_center_x - result.track.x),
+            result.track.height,
         },
         UI_BORDER_COLOR)
-    rl.DrawRectangleRec(knob_draw, knob_color)
+    rl.DrawRectangleRec(result.knob, result.knob_color)
 
-    slider_draw_text(params, fmt.tprintf("%d", clamped),
+    slider_draw_text(params, fmt.tprintf("%d", result.value),
         panel.x + panel.width - SETTINGS_PANEL_INSET - 32)
 }

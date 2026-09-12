@@ -63,9 +63,9 @@ tree_expander_scaled_rect :: #force_inline proc(
     }
 }
 
-//   Draw one tree expander chevron and report hover/click hit state.
-//   Click is gated by caller-provided toggle_triggered to preserve row click semantics.
-draw_tree_expander :: proc(params: Tree_Expander_Params) -> Tree_Expander_Result {
+//   Resolve one tree expander interaction without issuing drawing commands.
+//   Click is gated by caller-provided toggle_triggered to preserve row semantics.
+update_tree_expander :: proc(params: Tree_Expander_Params) -> Tree_Expander_Result {
     expander_rect := clamp_non_negative_rect(params.rect)
 
     local_mouse := tree_expander_local_mouse(params.mouse, params.scroll_offset)
@@ -74,19 +74,22 @@ draw_tree_expander :: proc(params: Tree_Expander_Params) -> Tree_Expander_Result
         rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
     pressed := hovered && input_frame_left_down(params.mouse)
 
-    hover_t: f32 = 0
-    if hovered {
-        hover_t = 1
-    }
+    return {hovered, pressed, hovered && params.toggle_triggered}
+}
 
+//   Draw one tree expander from a prepared interaction result.
+draw_tree_expander_prepared :: proc(
+    params: Tree_Expander_Params,
+    result: Tree_Expander_Result) {
+    hover_t: f32 = 0
+    if result.hovered { hover_t = 1 }
     press_t: f32 = 0
-    if pressed {
-        press_t = 1
-    }
+    if result.pressed { press_t = 1 }
 
     scale := 1.0 + TREE_EXPANDER_HOVER_SCALE_ADD * hover_t -
         TREE_EXPANDER_PRESS_SCALE_SUB * press_t
-    icon_rect := tree_expander_scaled_rect(expander_rect, scale)
+    icon_rect := tree_expander_scaled_rect(
+        clamp_non_negative_rect(params.rect), scale)
 
     icon_color := params.color
     if press_t > 0 {
@@ -94,10 +97,4 @@ draw_tree_expander :: proc(params: Tree_Expander_Params) -> Tree_Expander_Result
     }
 
     view_core.draw_tree_disclosure_icon(icon_rect, params.expanded, icon_color)
-
-    return Tree_Expander_Result{
-        hovered = hovered,
-        pressed = pressed,
-        clicked = hovered && params.toggle_triggered,
-    }
 }

@@ -209,8 +209,8 @@ checkbox_resolve_interaction :: proc(
     out.pressed = owns_press && input_frame_left_down(params.mouse)
 }
 
-//   Draw one checkbox and resolve release-confirmed toggle interaction.
-draw_checkbox :: proc(
+//   Resolve one checkbox interaction without issuing drawing commands.
+update_checkbox :: proc(
     params: Checkbox_Params,
     press_owner: ^core.Ui_Press_Owner_State) -> Checkbox_Result {
 
@@ -221,16 +221,25 @@ draw_checkbox :: proc(
     hit_rect := drawn_rect
     label_rect := rl.Rectangle{}
     label_rect, hit_rect = checkbox_label_layout(params, box_rect, hit_rect)
-    label_color := checkbox_label_color(params.enabled)
 
     result := Checkbox_Result{
         box_drawn_rect = box_rect,
         label_drawn_rect = label_rect,
     }
     checkbox_resolve_interaction(params, press_owner, local_mouse, hit_rect, &result)
+    return result
+}
+
+//   Draw one checkbox from a prepared interaction result.
+draw_checkbox_prepared :: proc(
+    params: Checkbox_Params,
+    result: Checkbox_Result) {
+
+    label_color := checkbox_label_color(params.enabled)
 
     border, mark := checkbox_mark_colors(params.enabled)
-    checkbox_draw_box_marks(box_rect, result.checked_out, result.pressed, border, mark)
+    checkbox_draw_box_marks(
+        result.box_drawn_rect, result.checked_out, result.pressed, border, mark)
 
     if len(params.label) > 0 {
         text_font := view_core.Ui_Text_Font{params.font, params.label_font_size}
@@ -238,11 +247,9 @@ draw_checkbox :: proc(
             resolver = params.font_resolver,
             key = .Regular,
             text = params.label,
-            position = {label_rect.x, label_rect.y},
+            position = {result.label_drawn_rect.x, result.label_drawn_rect.y},
             color = label_color,
             font = text_font,
         })
     }
-
-    return result
 }

@@ -35,8 +35,8 @@ list_item_local_mouse :: #force_inline proc(
     }
 }
 
-//   Resolve one list-row interaction and draw visual state.
-draw_list_item :: proc(
+//   Resolve one list-row interaction without issuing drawing commands.
+update_list_item :: proc(
     params: List_Item_Params,
     press_owner: ^core.Ui_Press_Owner_State) -> List_Item_Result {
 
@@ -50,24 +50,29 @@ draw_list_item :: proc(
 
     clicked := list_item_run_press(params, press_owner, drawn_rect,
         hovered, hovered_item)
+    return {
+        drawn_rect = drawn_rect,
+        inner_rect = inner_rect,
+        hovered = hovered,
+        clicked = clicked,
+    }
+}
 
-    if press_owner^.active && press_owner^.kind == .List_Item &&
-        press_owner^.id == params.id && input_frame_left_down(params.mouse) {
-        rl.DrawRectangleRec(drawn_rect, rl.Color{
+//   Draw one list row from prepared hover and shared capture state.
+draw_list_item_prepared :: proc(
+    params: List_Item_Params,
+    result: List_Item_Result,
+    press_owner: core.Ui_Press_Owner_State) {
+    if press_owner.active && press_owner.kind == .List_Item &&
+        press_owner.id == params.id && input_frame_left_down(params.mouse) {
+        rl.DrawRectangleRec(result.drawn_rect, rl.Color{
             UI_BORDER_COLOR.r,
             UI_BORDER_COLOR.g,
             UI_BORDER_COLOR.b,
             LIST_ITEM_ACTIVE_PRESS_ALPHA,
         })
     } else if params.selected {
-        rl.DrawRectangleRec(drawn_rect, UI_BORDER_COLOR)
-    }
-
-    return List_Item_Result{
-        drawn_rect = drawn_rect,
-        inner_rect = inner_rect,
-        hovered = hovered,
-        clicked = clicked,
+        rl.DrawRectangleRec(result.drawn_rect, UI_BORDER_COLOR)
     }
 }
 

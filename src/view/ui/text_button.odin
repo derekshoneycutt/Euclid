@@ -145,8 +145,8 @@ text_button_draw_label :: proc(
     })
 }
 
-//   Draw one text button and resolve release-confirmed click interaction.
-draw_text_button :: proc(
+//   Resolve one text button interaction without issuing drawing commands.
+update_text_button :: proc(
     params: Text_Button_Params,
     press_owner: ^core.Ui_Press_Owner_State) -> Text_Button_Result {
 
@@ -168,18 +168,21 @@ draw_text_button :: proc(
         hovered_item,
         &owns_press)
 
-    pressed := owns_press && input_frame_left_down(params.mouse)
-    colors := text_button_colors(params, hovered, pressed)
-
-    rl.DrawRectangleRec(button_rect, colors.background)
-    rl.DrawRectangleLinesEx(button_rect, 1, colors.border)
-
-    text_button_draw_label(params, button_rect, colors.foreground)
-
     return Text_Button_Result{
         button_drawn_rect = button_rect,
         clicked = clicked,
         hovered = hovered,
-        pressed = pressed,
+        pressed = owns_press && input_frame_left_down(params.mouse),
     }
+}
+
+//   Draw one text button from a prepared interaction result.
+draw_text_button_prepared :: proc(
+    params: Text_Button_Params,
+    result: Text_Button_Result) {
+
+    colors := text_button_colors(params, result.hovered, result.pressed)
+    rl.DrawRectangleRec(result.button_drawn_rect, colors.background)
+    rl.DrawRectangleLinesEx(result.button_drawn_rect, 1, colors.border)
+    text_button_draw_label(params, result.button_drawn_rect, colors.foreground)
 }

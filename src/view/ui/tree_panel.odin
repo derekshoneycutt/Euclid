@@ -9,6 +9,16 @@ import rl "vendor:raylib"
 Tree_Hit :: struct {
     selected_node : ^core.Euclid_Julia_Animation_Interface,
     toggled_node : ^core.Euclid_Julia_Animation_Interface,
+    hovered_node : ^core.Euclid_Julia_Animation_Interface,
+    hovered_expander_node : ^core.Euclid_Julia_Animation_Interface,
+}
+
+//   Prepared tree scrolling and bounded hover identities for observational drawing.
+Tree_List_Preparation :: struct {
+    scroll: Scroll_Container_Update_Result,
+    content_height: f32,
+    hovered_node: ^core.Euclid_Julia_Animation_Interface,
+    hovered_expander_node: ^core.Euclid_Julia_Animation_Interface,
 }
 
 //   Mutable walk cursor: running content y plus the remaining row budget.
@@ -41,23 +51,22 @@ Tree_Walk_Context :: struct {
     interaction_space_rect : rl.Rectangle,
     font : rl.Font,
     font_resolver : view_font.Font_Resolver,
+    hovered_node: ^core.Euclid_Julia_Animation_Interface,
+    hovered_expander_node: ^core.Euclid_Julia_Animation_Interface,
 }
 
-//   Render the right-side tree panel and route toolbar interactions.
-draw_tree_view :: proc(
+//   Resolve tree-toolbar interaction and commit its actions before rendering.
+prepare_tree_view_controls :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Input_Frame) {
+    mouse_input: Input_Frame) -> Tree_Toolbar_Preparation {
 
     ji := state.julia_interface
     ui_runtime := &state.ui_runtime
-
-    _ = draw_container(panel, .Dark_Red)
-
-    toolbar_panel, list_panel := build_tree_view_panels(panel)
+    toolbar_panel, _ := build_tree_view_panels(panel)
 
     show_tree := !ui_runtime.show_tree_gif && !ui_runtime.show_tree_settings
-    toolbar_hit := draw_tree_toolbar(Tree_Toolbar_Context{
+    prepared, toolbar_hit := update_tree_toolbar(Tree_Toolbar_Context{
         panel = toolbar_panel,
         mouse_input = mouse_input,
         press_owner = &ui_runtime.ui_press_owner,
@@ -66,16 +75,39 @@ draw_tree_view :: proc(
         show_settings = ui_runtime.show_tree_settings,
         simulation_paused = ui_runtime.simulation_paused,
     })
-
     apply_tree_toolbar_hit(state, ji, ui_runtime, toolbar_hit)
+    return prepared
+}
+
+//   Render the right-side tree panel from prepared toolbar interaction.
+draw_tree_view :: proc(
+    state: ^core.Euclid_General_State,
+    panel: rl.Rectangle,
+    mouse_input: Input_Frame,
+    prepared: Ui_Control_Preparation) {
+
+    ji := state.julia_interface
+    ui_runtime := &state.ui_runtime
+    _ = draw_container(panel, .Dark_Red)
+    toolbar_panel, list_panel := build_tree_view_panels(panel)
+    show_tree := !ui_runtime.show_tree_gif && !ui_runtime.show_tree_settings
+    draw_tree_toolbar(Tree_Toolbar_Context{
+        panel = toolbar_panel,
+        mouse_input = mouse_input,
+        press_owner = &ui_runtime.ui_press_owner,
+        show_tree = show_tree,
+        show_gif = ui_runtime.show_tree_gif,
+        show_settings = ui_runtime.show_tree_settings,
+        simulation_paused = ui_runtime.simulation_paused,
+    }, prepared.tree_toolbar)
 
     if ui_runtime.show_tree_settings {
-        draw_settings_view(state, list_panel, mouse_input)
+        draw_settings_view(state, list_panel, mouse_input, prepared.settings)
         return
     }
 
     if ui_runtime.show_tree_gif {
-        draw_gif_view(state, list_panel, mouse_input)
+        draw_gif_view(state, list_panel, mouse_input, prepared.gif)
         return
     }
 
@@ -87,7 +119,7 @@ draw_tree_view :: proc(
         scroll_y = &state^.ui_runtime.tree_scroll_y,
         font = view_font.cache_borrow(&state.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state.font_cache),
-    })
+    }, prepared.tree)
 }
 
 //   Cancel an in-flight GIF capture when the user refreshes while paused.
@@ -319,6 +351,10 @@ merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
     if src.toggled_node != nil {
         dst.toggled_node = src.toggled_node
     }
+    if src.hovered_node != nil { dst.hovered_node = src.hovered_node }
+    if src.hovered_expander_node != nil {
+        dst.hovered_expander_node = src.hovered_expander_node
+    }
 }
 
 //   Apply selection/expand hits and sync related UI state.
@@ -355,8 +391,8 @@ accumulate_offscreen_child_rows :: proc(
     }
 }
 
-//   Traverse and draw child node branches with depth tracking.
-walk_draw_child_nodes_limited :: proc(
+//   Traverse child node branches and resolve interaction with depth tracking.
+walk_update_child_nodes_limited :: proc(
     ctx: Tree_Walk_Context,
     first_child: ^core.Euclid_Julia_Animation_Interface,
     depth: int,
@@ -368,7 +404,7 @@ walk_draw_child_nodes_limited :: proc(
     child := first_child
     steps := 0
     for child != nil && steps < ctx.ji.animation_count {
-        child_hit := walk_draw_tree_node_limited(ctx, child, depth + 1, content_y,
+        child_hit := walk_update_tree_node_limited(ctx, child, depth + 1, content_y,
             remaining - 1)
         merge_tree_hit(&hit, child_hit)
         child = child.next_sibling
@@ -390,8 +426,8 @@ expanded_first_child :: #force_inline proc(
     return node.first_child
 }
 
-//   Draw the expander for a node with children and report a toggle click.
-draw_tree_node_expander :: proc(
+//   Resolve one node expander and record its hover and toggle identities.
+update_tree_node_expander_hit :: proc(
     ctx: Tree_Walk_Context,
     node: ^core.Euclid_Julia_Animation_Interface,
     icon_rect: rl.Rectangle,
@@ -402,7 +438,7 @@ draw_tree_node_expander :: proc(
         return
     }
 
-    expander_result := draw_tree_expander(Tree_Expander_Params{
+    expander_result := update_tree_expander(Tree_Expander_Params{
         rect = icon_rect,
         expanded = node.is_expanded,
         mouse = ctx.mouse_input,
@@ -416,6 +452,7 @@ draw_tree_node_expander :: proc(
     if expander_result.clicked {
         hit.toggled_node = node
     }
+    if expander_result.hovered { hit.hovered_expander_node = node }
 }
 
 //   Draw one tree node label at its indented row position.
@@ -434,8 +471,8 @@ draw_tree_node_label :: proc(
     })
 }
 
-//   Render one tree row and capture selection/toggle interactions.
-draw_tree_node_row :: proc(
+//   Resolve one tree row and capture selection, hover, and toggle identities.
+update_tree_node_row :: proc(
     ctx: Tree_Walk_Context,
     node: ^core.Euclid_Julia_Animation_Interface,
     depth: int,
@@ -453,7 +490,7 @@ draw_tree_node_row :: proc(
         TREE_ROW_ICON_SIZE,
         TREE_ROW_ICON_SIZE,
     }
-    list_item_result := draw_list_item(List_Item_Params{
+    list_item_result := update_list_item(List_Item_Params{
         id = tree_node_press_id(node),
         rect = row_rect,
         can_expand_pos_y = false,
@@ -464,14 +501,12 @@ draw_tree_node_row :: proc(
         interaction_enabled = ctx.allow_clicks && !ctx.ui_runtime.tree_scroll_dragging,
     }, &ctx.ui_runtime.ui_press_owner)
 
-    draw_tree_node_expander(ctx, node, icon_rect, list_item_result.clicked, hit)
-
-    draw_tree_node_label(ctx, node, indent_x + TREE_ROW_LABEL_OFFSET_X,
-        row_rect.y + TREE_ROW_LABEL_OFFSET_Y)
+    update_tree_node_expander_hit(ctx, node, icon_rect, list_item_result.clicked, hit)
 
     if list_item_result.clicked {
         hit.selected_node = node
     }
+    if list_item_result.hovered { hit.hovered_node = node }
 }
 
 //   Walk and merge child-node hits for one expanded parent.
@@ -485,13 +520,13 @@ walk_merge_child_hits :: proc(
     if child_first == nil {
         return
     }
-    child_hit := walk_draw_child_nodes_limited(ctx, child_first, depth,
+    child_hit := walk_update_child_nodes_limited(ctx, child_first, depth,
         cursor.content_y, cursor.remaining)
     merge_tree_hit(hit, child_hit)
 }
 
 //   Traverse one tree node branch with clipping-aware row handling.
-walk_draw_tree_node_limited :: proc(
+walk_update_tree_node_limited :: proc(
     ctx: Tree_Walk_Context,
     node: ^core.Euclid_Julia_Animation_Interface,
     depth: int,
@@ -521,7 +556,7 @@ walk_draw_tree_node_limited :: proc(
     }
 
     if row_rect.y + row_rect.height >= ctx.panel.y {
-        draw_tree_node_row(ctx, node, depth, row_rect, &hit)
+        update_tree_node_row(ctx, node, depth, row_rect, &hit)
     }
 
     walk_merge_child_hits(ctx, child_first, depth,
@@ -530,7 +565,7 @@ walk_draw_tree_node_limited :: proc(
 }
 
 //   Traverse and draw root nodes, aggregating click hits.
-walk_draw_tree_roots :: proc(
+walk_update_tree_roots :: proc(
     ctx: Tree_Walk_Context,
     content_y: ^f32) -> Tree_Hit {
 
@@ -541,12 +576,95 @@ walk_draw_tree_roots :: proc(
             continue
         }
 
-        root_hit := walk_draw_tree_node_limited(ctx, node, 0, content_y,
+        root_hit := walk_update_tree_node_limited(ctx, node, 0, content_y,
             ctx.ji.animation_count)
         merge_tree_hit(&hit, root_hit)
     }
 
     return hit
+}
+
+//   Draw one prepared tree row without changing interaction or application state.
+draw_tree_node_row :: proc(
+    ctx: Tree_Walk_Context,
+    node: ^core.Euclid_Julia_Animation_Interface,
+    depth: int,
+    row_rect: rl.Rectangle) {
+    indent_x := row_rect.x + f32(depth) * TREE_INDENT
+    icon_rect := rl.Rectangle{indent_x + TREE_ROW_ICON_OFFSET_X,
+        row_rect.y + TREE_ROW_ICON_OFFSET_Y, TREE_ROW_ICON_SIZE, TREE_ROW_ICON_SIZE}
+    item_params := List_Item_Params{id = tree_node_press_id(node), rect = row_rect,
+        selected = node.is_selected, mouse = ctx.mouse_input,
+        interaction_space_rect = ctx.interaction_space_rect}
+    draw_list_item_prepared(item_params, {drawn_rect = row_rect,
+        inner_rect = row_rect, hovered = ctx.hovered_node == node},
+        ctx.ui_runtime.ui_press_owner)
+    if node.first_child != nil {
+        expander_params := Tree_Expander_Params{rect = icon_rect,
+            expanded = node.is_expanded, mouse = ctx.mouse_input,
+            interaction_space_rect = ctx.interaction_space_rect,
+            color = UI_TEXT_COLOR}
+        hovered := ctx.hovered_expander_node == node
+        draw_tree_expander_prepared(expander_params, {hovered = hovered,
+            pressed = hovered && input_frame_left_down(ctx.mouse_input)})
+    }
+    draw_tree_node_label(ctx, node, indent_x + TREE_ROW_LABEL_OFFSET_X,
+        row_rect.y + TREE_ROW_LABEL_OFFSET_Y)
+}
+
+//   Draw visible child branches without resolving any interaction.
+walk_draw_child_nodes_limited :: proc(
+    ctx: Tree_Walk_Context,
+    first_child: ^core.Euclid_Julia_Animation_Interface,
+    depth: int,
+    content_y: ^f32,
+    remaining: int) {
+    for child, steps := first_child, 0;
+        child != nil && steps < ctx.ji.animation_count;
+        child, steps = child.next_sibling, steps + 1 {
+        walk_draw_tree_node_limited(
+            ctx, child, depth + 1, content_y, remaining - 1)
+    }
+}
+
+//   Draw one visible tree branch with clipping-aware row handling.
+walk_draw_tree_node_limited :: proc(
+    ctx: Tree_Walk_Context,
+    node: ^core.Euclid_Julia_Animation_Interface,
+    depth: int,
+    content_y: ^f32,
+    remaining: int) {
+    if remaining <= 0 || node == nil { return }
+    child_first := expanded_first_child(node)
+    row_y_world := content_y^
+    content_y^ += TREE_ROW_HEIGHT
+    row_rect := rl.Rectangle{ctx.panel.x,
+        ctx.panel.y + row_y_world - ctx.scroll_y,
+        ctx.panel.width, TREE_ROW_HEIGHT}
+    if row_rect.y > ctx.panel.y + ctx.panel.height {
+        if child_first != nil {
+            accumulate_offscreen_child_rows(ctx.ji, child_first, content_y, remaining)
+        }
+        return
+    }
+    if row_rect.y + row_rect.height >= ctx.panel.y {
+        draw_tree_node_row(ctx, node, depth, row_rect)
+    }
+    if child_first != nil {
+        walk_draw_child_nodes_limited(
+            ctx, child_first, depth, content_y, remaining)
+    }
+}
+
+//   Draw all visible root branches without resolving interaction.
+walk_draw_tree_roots :: proc(ctx: Tree_Walk_Context) {
+    content_y: f32
+    for node := ctx.ji.animation_head; node != nil; node = node.next_in_registry {
+        if node.parent == nil {
+            walk_draw_tree_node_limited(
+                ctx, node, 0, &content_y, ctx.ji.animation_count)
+        }
+    }
 }
 
 //   Build toolbar and list panel rectangles inside tree container.
@@ -577,102 +695,81 @@ build_tree_view_panels :: proc(
     return toolbar_panel, list_panel
 }
 
-//   Begin the tree list scroll container and return it with the clamped panel.
-tree_list_scroll_begin :: proc(
-    params: Tree_List_Params, content_h: f32) -> Scroll_Container_Begin_Result {
+//   Commit tree scroll drag state from one update result.
+commit_tree_scroll :: proc(
+    params: Tree_List_Params,
+    scroll: Scroll_Container_Update_Result) {
+    params.scroll_y^ = scroll.scroll_y_out
+    params.ui_runtime.tree_scroll_dragging = scroll.state_out.is_dragging_thumb
+    params.ui_runtime.tree_scroll_drag_off = scroll.state_out.drag_offset_y
+}
 
-    scroll_begin := scroll_container_begin(Scroll_Container_Begin_Params{
-        id = 1003,
-        rect = params.list_panel,
-        scroll_y_in = params.scroll_y^,
-        content_height_hint = content_h,
-        mouse_input = params.mouse_input,
-        scroll_offset = rl.Vector2{},
+//   Recount expanded topology and reclamp the prepared tree scrollbar.
+reconcile_tree_topology :: proc(
+    params: Tree_List_Params,
+    scroll: ^Scroll_Container_Update_Result,
+    content_height: ^f32) {
+    content_height^ = f32(count_visible_tree_rows_all_roots(params.ji)) * TREE_ROW_HEIGHT
+    max_scroll := max(content_height^ - scroll^.view_rect.height, 0)
+    params.scroll_y^ = clamp(params.scroll_y^, 0, max_scroll)
+    scroll^.scroll_y_out = params.scroll_y^
+    scroll^.scrollbar = build_vertical_scrollbar(
+        {scroll^.view_rect, content_height^, scroll^.scroll_y_out, max_scroll},
+        SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
+}
+
+//   Release completed list-item capture after tree interaction.
+release_tree_list_capture :: proc(params: Tree_List_Params) {
+    if params.ui_runtime.ui_press_owner.active &&
+        params.ui_runtime.ui_press_owner.kind == .List_Item &&
+        input_frame_left_released(params.mouse_input) {
+        params.ui_runtime.ui_press_owner = {}
+    }
+}
+
+//   Resolve tree scrolling and row interaction before rendering.
+prepare_tree_list_panel :: proc(params: Tree_List_Params) -> Tree_List_Preparation {
+    total_rows := count_visible_tree_rows_all_roots(params.ji)
+    if total_rows <= 0 { return {} }
+    content_h := f32(total_rows) * TREE_ROW_HEIGHT
+    apply_pending_tree_reveal(params, content_h)
+    scroll := scroll_container_update({id = UI_TREE_SCROLLBAR_ID,
+        rect = params.list_panel, scroll_y_in = params.scroll_y^,
+        content_height = content_h, mouse_input = params.mouse_input,
         interaction_space_rect = params.list_panel,
         wheel_step = TREE_ROW_HEIGHT * WHEEL_SCROLL_MULTIPLIER,
         press_owner = &params.ui_runtime.ui_press_owner,
-        state_in = Scroll_Container_State{
-            is_dragging_thumb = params.ui_runtime.tree_scroll_dragging,
-            drag_offset_y = params.ui_runtime.tree_scroll_drag_off,
-        },
-    })
-    params.scroll_y^ = scroll_begin.scroll_y_out
-    return scroll_begin
+        state_in = {params.ui_runtime.tree_scroll_dragging,
+            params.ui_runtime.tree_scroll_drag_off}})
+    commit_tree_scroll(params, scroll)
+    walk_ctx := Tree_Walk_Context{ji = params.ji, ui_runtime = params.ui_runtime,
+        panel = scroll.view_rect, scroll_y = scroll.scroll_y_out,
+        allow_clicks = !(scroll.pointer_reserved &&
+            input_frame_left_pressed(params.mouse_input)),
+        mouse_input = params.mouse_input, interaction_space_rect = scroll.view_rect,
+        font = params.font, font_resolver = params.font_resolver}
+    content_y: f32
+    hit := walk_update_tree_roots(walk_ctx, &content_y)
+    apply_tree_hit(params.ji, params.ui_runtime, hit)
+    if hit.toggled_node != nil {
+        reconcile_tree_topology(params, &scroll, &content_h)
+    }
+    release_tree_list_capture(params)
+    return {scroll, content_h, hit.hovered_node, hit.hovered_expander_node}
 }
 
-//   Walk and draw the visible tree rows, then release any completed press.
-tree_list_walk_and_release :: proc(
+//   Render the prepared tree list without mutating interaction state.
+draw_tree_list_panel :: proc(
     params: Tree_List_Params,
-    scroll_begin: Scroll_Container_Begin_Result) {
-
-    ui_runtime := params.ui_runtime
-    allow_tree_clicks := true
-    if scroll_begin.scroll_ref.is_hovered_thumb &&
-        input_frame_left_pressed(params.mouse_input) {
-        allow_tree_clicks = false
-    }
-
-    y_cursor: f32 = 0
-    walk_ctx := Tree_Walk_Context{
-        ji = params.ji,
-        ui_runtime = ui_runtime,
-        panel = scroll_begin.view_rect,
-        scroll_y = params.scroll_y^,
-        allow_clicks = allow_tree_clicks,
-        mouse_input = params.mouse_input,
-        scroll_offset = rl.Vector2{},
-        interaction_space_rect = scroll_begin.view_rect,
-        font = params.font,
-        font_resolver = params.font_resolver,
-    }
-    hit := walk_draw_tree_roots(walk_ctx, &y_cursor)
-    apply_tree_hit(params.ji, ui_runtime, hit)
-
-    if ui_runtime.ui_press_owner.active &&
-        ui_runtime.ui_press_owner.kind == .List_Item &&
-        input_frame_left_released(params.mouse_input) {
-
-        ui_runtime.ui_press_owner.active = false
-        ui_runtime.ui_press_owner.kind = .None
-        ui_runtime.ui_press_owner.id = -1
-    }
-}
-
-//   End the tree list scroll container and commit drag state.
-tree_list_scroll_end :: proc(
-    params: Tree_List_Params,
-    content_h: f32,
-    scroll_begin: Scroll_Container_Begin_Result) {
-
-    ui_runtime := params.ui_runtime
-    scroll_end := scroll_container_end(
-        Scroll_Container_End_Params{
-            scroll_ref = scroll_begin.scroll_ref,
-            content_height_final = content_h,
-            scroll_y_in = params.scroll_y^,
-            mouse_input = params.mouse_input,
-            scroll_offset = rl.Vector2{},
-            interaction_space_rect = scroll_begin.view_rect,
-            press_owner = &ui_runtime.ui_press_owner,
-        })
-    params.scroll_y^ = scroll_end.scroll_y_out
-    ui_runtime.tree_scroll_dragging = scroll_end.state_out.is_dragging_thumb
-    ui_runtime.tree_scroll_drag_off = scroll_end.state_out.drag_offset_y
-}
-
-//   Render tree list body, scrollbars, and visible node rows.
-draw_tree_list_panel :: proc(params: Tree_List_Params) {
-
+    prepared: Tree_List_Preparation) {
     _ = draw_container(params.list_panel, .Grey)
-
-    total_rows := count_visible_tree_rows_all_roots(params.ji)
-    if total_rows <= 0 {
-        return
-    }
-
-    content_h := f32(total_rows) * TREE_ROW_HEIGHT
-    apply_pending_tree_reveal(params, content_h)
-    scroll_begin := tree_list_scroll_begin(params, content_h)
-    tree_list_walk_and_release(params, scroll_begin)
-    tree_list_scroll_end(params, content_h, scroll_begin)
+    if prepared.content_height <= 0 { return }
+    scroll_container_draw_begin(prepared.scroll)
+    walk_draw_tree_roots(Tree_Walk_Context{ji = params.ji,
+        ui_runtime = params.ui_runtime, panel = prepared.scroll.view_rect,
+        scroll_y = prepared.scroll.scroll_y_out, mouse_input = params.mouse_input,
+        interaction_space_rect = prepared.scroll.view_rect, font = params.font,
+        font_resolver = params.font_resolver, hovered_node = prepared.hovered_node,
+        hovered_expander_node = prepared.hovered_expander_node})
+    scroll_container_draw_end(prepared.scroll)
 }

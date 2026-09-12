@@ -30,43 +30,46 @@ Gif_View_Rows :: struct {
     status_y: f32,
 }
 
-//   Render and process the Save/Cancel GIF action button.
-draw_settings_save_gif_button :: proc(
-    ctx: Gif_Panel_Context, row_y: f32) {
+//   Fixed prepared interaction results for all GIF panel controls.
+Gif_View_Preparation :: struct {
+    rows: Gif_View_Rows,
+    downsample: Integer_Slider_Result,
+    frame_step: Integer_Slider_Result,
+    save_button: Text_Button_Result,
+}
 
-    button := rl.Rectangle{
-        ctx.panel.x + SETTINGS_PANEL_INSET,
-        row_y,
-        ctx.panel.width - SETTINGS_PANEL_INSET * 2,
-        SETTINGS_GIF_BUTTON_HEIGHT,
+//   Build one GIF slider parameter record shared by update and draw.
+gif_slider_params :: proc(
+    ctx: Gif_Panel_Context,
+    row_y: f32,
+    press_id: int,
+    label: string,
+    value: ^int) -> Integer_Slider_Params {
+    return {
+        panel = ctx.panel, row_y = row_y, mouse_input = ctx.mouse_input,
+        ui_runtime = ctx.ui_runtime, press_id = press_id, label = label,
+        value = value, min_value = 1, max_value = 4, font = ctx.font,
+        font_resolver = ctx.resolver,
     }
+}
 
+//   Build the GIF save/cancel button parameters shared by update and draw.
+gif_save_button_params :: proc(
+    ctx: Gif_Panel_Context,
+    row_y: f32) -> Text_Button_Params {
     is_armed := ctx.ui_runtime.gif_capture_phase == .Armed
     disabled := ctx.ui_runtime.gif_capture_phase == .Recording ||
         ctx.ui_runtime.gif_capture_phase == .Finalizing
-
     button_text := "Save Gif"
-    if is_armed {
-        button_text = "Cancel Gif"
-    }
-
-    button_result := draw_text_button(Text_Button_Params{
+    if is_armed { button_text = "Cancel Gif" }
+    return {
         id = 3001,
-        rect = button,
-        label = button_text,
-        enabled = !disabled,
-        mouse = ctx.mouse_input,
-        scroll_offset = rl.Vector2{},
-        interaction_space_rect = ctx.panel,
-        interaction_enabled = true,
-        font = ctx.font,
-        has_font_color_override = false,
-        font_color_override = rl.Color{},
-        font_resolver = ctx.resolver,
-    }, &ctx.ui_runtime.ui_press_owner)
-
-    if button_result.clicked {
-        ctx.ui_runtime.save_gif_requested = true
+        rect = {ctx.panel.x + SETTINGS_PANEL_INSET, row_y,
+            ctx.panel.width - SETTINGS_PANEL_INSET * 2,
+            SETTINGS_GIF_BUTTON_HEIGHT},
+        label = button_text, enabled = !disabled, mouse = ctx.mouse_input,
+        interaction_space_rect = ctx.panel, interaction_enabled = true,
+        font = ctx.font, font_resolver = ctx.resolver,
     }
 }
 
@@ -158,11 +161,38 @@ gif_view_layout_rows :: proc(stack_rect: rl.Rectangle) -> Gif_View_Rows {
     }
 }
 
+//   Resolve GIF controls and commit their action before rendering.
+prepare_gif_view :: proc(
+    state: ^core.Euclid_General_State,
+    panel: rl.Rectangle,
+    mouse_input: Input_Frame) -> Gif_View_Preparation {
+    if state == nil || state.particle_system == nil { return {} }
+    ctx := Gif_Panel_Context{panel, mouse_input, &state.ui_runtime,
+        view_font.cache_borrow(&state.font_cache, .Regular),
+        view_font.cache_terminal_resolver(&state.font_cache)}
+    stack_rect := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+        panel.y + SETTINGS_HEADER_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        panel.height - SETTINGS_HEADER_TOP_OFFSET}
+    result := Gif_View_Preparation{rows = gif_view_layout_rows(stack_rect)}
+    result.downsample = update_settings_integer_slider(gif_slider_params(
+        ctx, result.rows.sliders.downsample_y, 6201, "Downsample",
+        &ctx.ui_runtime.gif_downsample_factor))
+    result.frame_step = update_settings_integer_slider(gif_slider_params(
+        ctx, result.rows.sliders.frame_step_y, 6202, "Frame Step",
+        &ctx.ui_runtime.gif_frame_step))
+    result.save_button = update_text_button(gif_save_button_params(
+        ctx, result.rows.save_button_y), &ctx.ui_runtime.ui_press_owner)
+    if result.save_button.clicked { ctx.ui_runtime.save_gif_requested = true }
+    return result
+}
+
 //   Render dedicated GIF panel and wire GIF controls.
 draw_gif_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Input_Frame) {
+    mouse_input: Input_Frame,
+    prepared: Gif_View_Preparation) {
 
     if state == nil || state.particle_system == nil {
         return
@@ -186,48 +216,13 @@ draw_gif_view :: proc(
         font = view_core.ui_text_font(regular_font),
     })
 
-    stack_rect := rl.Rectangle{
-        panel.x + SETTINGS_PANEL_INSET,
-        gif_section_y,
-        panel.width - SETTINGS_PANEL_INSET * 2,
-        panel.height - SETTINGS_HEADER_TOP_OFFSET,
-    }
-
-    rows := gif_view_layout_rows(stack_rect)
-    draw_gif_sliders(ctx, rows.sliders)
-    draw_settings_save_gif_button(ctx, rows.save_button_y)
-    draw_settings_gif_status(ctx, rows.status_y)
-}
-
-//   Draw the downsample and frame-step integer sliders for the GIF panel.
-draw_gif_sliders :: proc(
-    ctx: Gif_Panel_Context, rows: Gif_Slider_Rows) {
-
-    draw_settings_integer_slider(Integer_Slider_Params{
-        panel = ctx.panel,
-        row_y = rows.downsample_y,
-        mouse_input = ctx.mouse_input,
-        ui_runtime = ctx.ui_runtime,
-        press_id = 6201,
-        label = "Downsample",
-        value = &ctx.ui_runtime.gif_downsample_factor,
-        min_value = 1,
-        max_value = 4,
-        font = ctx.font,
-        font_resolver = ctx.resolver,
-    })
-
-    draw_settings_integer_slider(Integer_Slider_Params{
-        panel = ctx.panel,
-        row_y = rows.frame_step_y,
-        mouse_input = ctx.mouse_input,
-        ui_runtime = ctx.ui_runtime,
-        press_id = 6202,
-        label = "Frame Step",
-        value = &ctx.ui_runtime.gif_frame_step,
-        min_value = 1,
-        max_value = 4,
-        font = ctx.font,
-        font_resolver = ctx.resolver,
-    })
+    draw_settings_integer_slider_prepared(gif_slider_params(ctx,
+        prepared.rows.sliders.downsample_y, 6201, "Downsample",
+        &ctx.ui_runtime.gif_downsample_factor), prepared.downsample)
+    draw_settings_integer_slider_prepared(gif_slider_params(ctx,
+        prepared.rows.sliders.frame_step_y, 6202, "Frame Step",
+        &ctx.ui_runtime.gif_frame_step), prepared.frame_step)
+    draw_text_button_prepared(gif_save_button_params(ctx,
+        prepared.rows.save_button_y), prepared.save_button)
+    draw_settings_gif_status(ctx, prepared.rows.status_y)
 }

@@ -32,6 +32,16 @@ Tree_Toolbar_Slots :: struct {
     books:    rl.Rectangle,
 }
 
+//   Fixed prepared interaction results for all tree toolbar buttons.
+Tree_Toolbar_Preparation :: struct {
+    slots: Tree_Toolbar_Slots,
+    refresh: Icon_Button_Result,
+    pause: Icon_Button_Result,
+    settings: Icon_Button_Result,
+    gif: Icon_Button_Result,
+    books: Icon_Button_Result,
+}
+
 //   Place one toolbar slot in the lane and advance the cursor.
 tree_toolbar_place_slot :: #force_inline proc(
     lane: rl.Rectangle, size: f32, origin_x: f32, direction: int,
@@ -87,15 +97,15 @@ tree_toolbar_layout_slots :: proc(
     }
 }
 
-//   Draw one toolbar icon button and report whether it was clicked.
-tree_toolbar_button :: #force_inline proc(
+//   Build one toolbar icon-button parameter record.
+tree_toolbar_button_params :: #force_inline proc(
     ctx: Tree_Toolbar_Context,
     id: int,
     rect: rl.Rectangle,
     icon_id: Icon_Button_Id,
-    toggle: bool) -> bool {
+    toggle: bool) -> Icon_Button_Params {
 
-    button := draw_icon_button(Icon_Button_Params{
+    return Icon_Button_Params{
         id = id,
         rect = rect,
         icon_id = icon_id,
@@ -105,37 +115,55 @@ tree_toolbar_button :: #force_inline proc(
         interaction_space_rect = ctx.panel,
         interaction_enabled = true,
         inset_scale = 1.0,
-    }, ctx.press_owner)
-    return button.clicked
+    }
 }
 
-//   Render toolbar row and report refresh/tree/gif/settings toggle hits.
-draw_tree_toolbar :: proc(
-    ctx: Tree_Toolbar_Context) -> Tree_Toolbar_Hit {
-
-    hit := Tree_Toolbar_Hit{}
-
-    _ = draw_container(ctx.panel, .Grey)
-
+//   Resolve toolbar interaction and return fixed visual preparation plus action hits.
+update_tree_toolbar :: proc(
+    ctx: Tree_Toolbar_Context) -> (Tree_Toolbar_Preparation, Tree_Toolbar_Hit) {
     slots := tree_toolbar_layout_slots(ctx)
-
-    hit.refresh_requested = tree_toolbar_button(ctx, 2001, slots.refresh,
-        .Refresh, false)
-
     pause_icon_id := Icon_Button_Id.Pause
     if ctx.simulation_paused {
         pause_icon_id = .Play
     }
-    hit.toggle_pause_requested = tree_toolbar_button(ctx, 2002, slots.pause,
-        pause_icon_id, ctx.simulation_paused)
+    prepared := Tree_Toolbar_Preparation{slots = slots}
+    prepared.refresh = update_icon_button(tree_toolbar_button_params(
+        ctx, 2001, slots.refresh, .Refresh, false), ctx.press_owner)
+    prepared.pause = update_icon_button(tree_toolbar_button_params(
+        ctx, 2002, slots.pause, pause_icon_id, ctx.simulation_paused), ctx.press_owner)
+    prepared.gif = update_icon_button(tree_toolbar_button_params(
+        ctx, 2003, slots.gif, .Gif, ctx.show_gif), ctx.press_owner)
+    prepared.books = update_icon_button(tree_toolbar_button_params(
+        ctx, 2005, slots.books, .Books, ctx.show_tree), ctx.press_owner)
+    prepared.settings = update_icon_button(tree_toolbar_button_params(
+        ctx, 2004, slots.settings, .Gear, ctx.show_settings), ctx.press_owner)
+    return prepared, {
+        refresh_requested = prepared.refresh.clicked,
+        toggle_pause_requested = prepared.pause.clicked,
+        toggle_tree_requested = prepared.books.clicked,
+        toggle_gif_requested = prepared.gif.clicked,
+        toggle_settings_requested = prepared.settings.clicked,
+    }
+}
 
-    hit.toggle_gif_requested = tree_toolbar_button(ctx, 2003, slots.gif,
-        .Gif, ctx.show_gif)
+//   Render the toolbar from prepared interaction results without mutation.
+draw_tree_toolbar :: proc(
+    ctx: Tree_Toolbar_Context,
+    prepared: Tree_Toolbar_Preparation) {
 
-    hit.toggle_tree_requested = tree_toolbar_button(ctx, 2005, slots.books,
-        .Books, ctx.show_tree)
-
-    hit.toggle_settings_requested = tree_toolbar_button(ctx, 2004, slots.settings,
-        .Gear, ctx.show_settings)
-    return hit
+    _ = draw_container(ctx.panel, .Grey)
+    pause_icon_id := Icon_Button_Id.Pause
+    if ctx.simulation_paused { pause_icon_id = .Play }
+    draw_icon_button_prepared(tree_toolbar_button_params(
+        ctx, 2001, prepared.slots.refresh, .Refresh, false), prepared.refresh)
+    draw_icon_button_prepared(tree_toolbar_button_params(
+        ctx, 2002, prepared.slots.pause, pause_icon_id,
+        ctx.simulation_paused), prepared.pause)
+    draw_icon_button_prepared(tree_toolbar_button_params(
+        ctx, 2003, prepared.slots.gif, .Gif, ctx.show_gif), prepared.gif)
+    draw_icon_button_prepared(tree_toolbar_button_params(
+        ctx, 2005, prepared.slots.books, .Books, ctx.show_tree), prepared.books)
+    draw_icon_button_prepared(tree_toolbar_button_params(
+        ctx, 2004, prepared.slots.settings, .Gear,
+        ctx.show_settings), prepared.settings)
 }
