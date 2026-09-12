@@ -90,6 +90,13 @@ Window_Frame_Context :: struct {
     display_profile: ^evidence_profile.State,
 }
 
+// Optional scenario bindings and admission status for one window session.
+Window_Scenario_Preparation :: struct {
+    runtime: ^Scenario_Runtime,
+    capture_sink: capture.Sink,
+    loaded: bool,
+}
+
 
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
@@ -171,6 +178,27 @@ sync_window_prose_shaping :: proc(state: ^Euclid_General_State) {
         &state^.dynview, effective_keys[:], generations[:])
 }
 
+// Advance one active scenario before the frame is presented.
+service_scenario_before_present :: proc(ctx: Window_Frame_Context) {
+    when core.SCENARIOS_ENABLED {
+        if ctx.scenario_runtime != nil {
+            _ = scenario_runtime_update(
+                ctx.scenario_runtime, u64(i64(time.tick_since({}))),
+                ctx.input_runtime)
+        }
+    }
+}
+
+// Capture one active scenario after the frame is presented.
+service_scenario_after_present :: proc(ctx: Window_Frame_Context) {
+    when core.SCENARIOS_ENABLED {
+        if ctx.scenario_runtime != nil {
+            _ = scenario_runtime_after_present(
+                ctx.scenario_runtime, ctx.capture_sink)
+        }
+    }
+}
+
 //   Run one window frame: async results, simulation update, draw, and GIF capture.
 run_window_frame :: proc(
     state: ^Euclid_General_State,
@@ -191,12 +219,7 @@ run_window_frame :: proc(
     alpha := accumulate_and_update_systems(state)
     run_parallel_frame_preparation_after_ui(state, alpha, compile_ui)
     audio.update_chalk_runtime(&state^.chalk_audio)
-    when core.SCENARIOS_ENABLED {
-        if ctx.scenario_runtime != nil {
-            _ = scenario_runtime_update(
-                ctx.scenario_runtime, u64(i64(time.tick_since({}))), input_runtime)
-        }
-    }
+    service_scenario_before_present(ctx)
 
     evidence_profile.zone_begin(display_profile, "frame_present")
     rl.BeginDrawing()
@@ -204,12 +227,7 @@ run_window_frame :: proc(
     rl.EndDrawing()
     evidence_profile.zone_end(display_profile)
 
-    when core.SCENARIOS_ENABLED {
-        if ctx.scenario_runtime != nil {
-            _ = scenario_runtime_after_present(
-                ctx.scenario_runtime, ctx.capture_sink)
-        }
-    }
+    service_scenario_after_present(ctx)
     run_gif_capture_frame(state)
     finish_window_frame(state, display_profile)
 }
@@ -219,6 +237,35 @@ scenario_capture_sink :: proc(runtime: ^Scenario_Runtime) -> capture.Sink {
     return {
         user_data = rawptr(runtime),
         capture = scenario_runtime_capture_screenshot,
+    }
+}
+
+//   Load optional scenario state into caller-owned session storage.
+prepare_window_scenario :: proc(
+    settings: ^Euclid_Run_Settings, state: ^Euclid_General_State,
+    runtime: ^Scenario_Runtime) -> Window_Scenario_Preparation {
+    if len(settings^.scenario_input) == 0 {return {loaded = true}}
+    if !scenario_runtime_load_file(runtime, state, settings^.scenario_input) {
+        fmt.eprintln("Failed to load semantic scenario: ", settings^.scenario_input)
+        log.error("scenario_load_failed")
+        return {}
+    }
+    return {runtime, scenario_capture_sink(runtime), true}
+}
+
+//   Bind display-lifetime services for one frame loop.
+window_frame_context :: proc(
+    input_runtime: ^input.Input_Runtime,
+    presentation: ^Presentation_Runtime,
+    display_profile: ^evidence_profile.State,
+    scenario_runtime: ^Scenario_Runtime = nil,
+    capture_sink: capture.Sink = {}) -> Window_Frame_Context {
+    return {
+        input_runtime = input_runtime,
+        presentation = presentation,
+        scenario_runtime = scenario_runtime,
+        capture_sink = capture_sink,
+        display_profile = display_profile,
     }
 }
 
@@ -268,40 +315,25 @@ run_initialized_window_session :: proc(
 
     when core.SCENARIOS_ENABLED {
         scenario_runtime: Scenario_Runtime
-        active_scenario: ^Scenario_Runtime
-        capture_sink: capture.Sink
-        if len(settings^.scenario_input) > 0 {
-            if !scenario_runtime_load_file(
-                &scenario_runtime, state, settings^.scenario_input) {
-                fmt.eprintln(
-                    "Failed to load semantic scenario: ", settings^.scenario_input)
-                log.error("scenario_load_failed")
-                _ = shutdown_window_runtime(session)
-                return 1
-            }
-            active_scenario = &scenario_runtime
-            capture_sink = scenario_capture_sink(active_scenario)
+        scenario := prepare_window_scenario(
+            settings, state, &scenario_runtime)
+        if !scenario.loaded {
+            _ = shutdown_window_runtime(session)
+            return 1
         }
 
         free_all(context.temp_allocator)
-        run_window_frames(state, {
-            input_runtime = input_runtime,
-            presentation = session.presentation,
-            scenario_runtime = active_scenario,
-            capture_sink = capture_sink,
-            display_profile = display_profile,
-        })
+        run_window_frames(state, window_frame_context(
+            input_runtime, session.presentation, display_profile,
+            scenario.runtime, scenario.capture_sink))
         log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
-            state^.fixed_step, active_scenario != nil)
+            state^.fixed_step, scenario.runtime != nil)
         return finish_window_session(
-            session, active_scenario, settings^.scenario_artifact_output)
+            session, scenario.runtime, settings^.scenario_artifact_output)
     } else {
         free_all(context.temp_allocator)
-        run_window_frames(state, {
-            input_runtime = input_runtime,
-            presentation = session.presentation,
-            display_profile = display_profile,
-        })
+        run_window_frames(state, window_frame_context(
+            input_runtime, session.presentation, display_profile))
         log.infof("display_loop_stopped fixed_step=%d", state^.fixed_step)
         return shutdown_window_runtime(session)
     }

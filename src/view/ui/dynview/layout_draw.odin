@@ -2657,6 +2657,26 @@ document_shape_draw_kind :: proc(
     return {kind, outline_stroke, true}
 }
 
+// Resolve one resident shaped run referenced by a prose layout item.
+document_prose_shaped_run :: proc(
+    ctx: Layout_Draw_Context,
+    item: core.Dynview_Document_Layout_Item) ->
+    (core.Dynview_Document_Shaped_Run, bool) {
+    cache := &ctx.runtime^.compile_cache
+    if item.shaped_run_index < 0 ||
+        item.shaped_run_index >= len(cache^.document_shaped_runs) {
+        return {}, false
+    }
+    run := cache^.document_shaped_runs[item.shaped_run_index]
+    if run.glyph_start < 0 || run.glyph_count <= 0 ||
+        run.glyph_count > len(cache^.document_shaped_glyphs)-run.glyph_start ||
+        !font.cache_generation_is_resident(
+            &ctx.state^.font_cache, run.effective_font_key, run.font_generation) {
+        return {}, false
+    }
+    return run, true
+}
+
 // Draw one sealed semantic prose run through its exact resident font generation.
 draw_document_prose_item :: proc(
     ctx: Layout_Draw_Context,
@@ -2664,18 +2684,9 @@ draw_document_prose_item :: proc(
     semantic_inline: core.Dynview_Document_Inline,
     position: rl.Vector2) -> bool {
 
+    run, run_valid := document_prose_shaped_run(ctx, item)
+    if !run_valid {return false}
     cache := &ctx.runtime^.compile_cache
-    if item.shaped_run_index < 0 ||
-        item.shaped_run_index >= len(cache^.document_shaped_runs) {
-        return false
-    }
-    run := cache^.document_shaped_runs[item.shaped_run_index]
-    if run.glyph_start < 0 || run.glyph_count <= 0 ||
-        run.glyph_count > len(cache^.document_shaped_glyphs)-run.glyph_start ||
-        !font.cache_generation_is_resident(
-            &ctx.state^.font_cache, run.effective_font_key, run.font_generation) {
-        return false
-    }
     line_top := view_core.ui_text_cached_run_line_top(
         position.y, run.ascent, run.raster_ascent,
         ctx.font_size, run.base_pixel_size)

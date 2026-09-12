@@ -218,18 +218,20 @@ ui_text_cached_glyph_placement :: #force_inline proc(
 
 //   Place one shaped JuliaMono glyph on its authoritative source-codepoint column.
 ui_text_cached_monospace_glyph_placement :: #force_inline proc(
-    text: string, glyph: view_font.Shaped_Glyph,
-    origin: rl.Vector2, column_advance, font_size, base_pixel_size: f32) ->
-    (rl.Vector2, bool) {
+    request: Cached_Monospace_Run_Draw,
+    glyph: view_font.Shaped_Glyph) -> (rl.Vector2, bool) {
 
-    column, valid := ui_text_cluster_column(text, glyph.cluster)
-    if !valid || column_advance <= 0 || font_size <= 0 || base_pixel_size <= 0 {
+    shaped := request.shaped
+    column, valid := ui_text_cluster_column(request.text, glyph.cluster)
+    if !valid || request.column_advance <= 0 || shaped.font_size <= 0 ||
+        shaped.base_pixel_size <= 0 {
         return {}, false
     }
-    offset_scale := font_size/base_pixel_size/64
+    offset_scale := shaped.font_size/shaped.base_pixel_size/64
     return {
-        origin.x + f32(column)*column_advance + f32(glyph.x_offset)*offset_scale,
-        origin.y + f32(glyph.y_offset)*offset_scale,
+        shaped.position.x + f32(column)*request.column_advance +
+            f32(glyph.x_offset)*offset_scale,
+        shaped.position.y + f32(glyph.y_offset)*offset_scale,
     }, true
 }
 
@@ -292,8 +294,7 @@ ui_text_cached_monospace_run :: proc(request: Cached_Monospace_Run_Draw) -> bool
             shaped.resolver.user_data, shaped.key, glyph.glyph_id)
         assert(resident)
         position, valid := ui_text_cached_monospace_glyph_placement(
-            request.text, glyph, shaped.position, request.column_advance,
-            shaped.font_size, shaped.base_pixel_size)
+            request, glyph)
         assert(valid)
         ui_text_draw_resolved_glyph({
             resolved = resolved,

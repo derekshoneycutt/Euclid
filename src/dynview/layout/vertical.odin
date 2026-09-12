@@ -78,6 +78,24 @@ document_place_block_lines :: proc(
     return lines[len(lines)-1].bottom, true
 }
 
+// Report whether two blocks belong to the same semantic list item.
+document_blocks_share_list_item :: #force_inline proc(
+    previous, current: app_core.Dynview_Document_Block) -> bool {
+    return previous.list_kind != .None &&
+        previous.list_id == current.list_id &&
+        previous.item_ordinal == current.item_ordinal
+}
+
+// Report whether one source block begins a semantic document.
+document_block_starts_document :: #force_inline proc(
+    documents: []app_core.Dynview_Document,
+    block_index: int) -> bool {
+    for document in documents {
+        if document.block_start == block_index {return true}
+    }
+    return false
+}
+
 // Resolve collapsed vertical glue before one block from adjacent block kinds.
 document_block_spacing_before :: proc(
     documents: []app_core.Dynview_Document,
@@ -91,11 +109,7 @@ document_block_spacing_before :: proc(
     if block_index == 0 {
         return 0, true
     }
-    for document in documents {
-        if document.block_start == block_index {
-            return 0, true
-        }
-    }
+    if document_block_starts_document(documents, block_index) {return 0, true}
     previous_block := blocks[block_index-1]
     current_block := blocks[block_index]
     previous := previous_block.kind
@@ -107,12 +121,10 @@ document_block_spacing_before :: proc(
         }
         return style.list_spacing, true
     }
-    if previous == .List_Item {
-        if previous_block.list_id == current_block.list_id &&
-            previous_block.item_ordinal == current_block.item_ordinal {
-            return document_block_spacing_before(
-                documents, blocks, block_index-1, style)
-        }
+    if previous == .List_Item &&
+        document_blocks_share_list_item(previous_block, current_block) {
+        return document_block_spacing_before(
+            documents, blocks, block_index-1, style)
     }
     if previous_block.list_kind != .None &&
         previous_block.list_id != current_block.list_id {
@@ -248,6 +260,22 @@ document_reserve_block_extent :: proc(
         row_start, block_bottom-reserved_top, cell_height)
 }
 
+// Remove spacing between a raised list label and its matching body block.
+document_adjust_label_body_spacing :: #force_inline proc(
+    builders: ^Document_Layout_Builders,
+    sources: []app_core.Dynview_Document_Block,
+    block_index: int,
+    spacing: f32) -> f32 {
+    if block_index <= 0 ||
+        !builders^.blocks.storage[block_index-1].list_label_above {
+        return spacing
+    }
+    previous_index := builders^.blocks.storage[block_index-1].source_block_index
+    current_index := builders^.blocks.storage[block_index].source_block_index
+    return 0 if document_blocks_share_list_item(
+        sources[previous_index], sources[current_index]) else spacing
+}
+
 // Place and reserve one validated semantic block from the current outer row.
 document_place_vertical_block :: proc(
     ctx: Document_Vertical_Context,
@@ -263,17 +291,8 @@ document_place_vertical_block :: proc(
     spacing, ok := document_block_spacing_before(
         content^.documents, content^.document_blocks,
         block.source_block_index, ctx.style)
-    if block_index > 0 &&
-        builders^.blocks.storage[block_index-1].list_label_above {
-        previous_source_index := builders^.blocks.storage[
-            block_index-1].source_block_index
-        previous_source := content^.document_blocks[previous_source_index]
-        current_source := content^.document_blocks[block.source_block_index]
-        if previous_source.list_id == current_source.list_id &&
-            previous_source.item_ordinal == current_source.item_ordinal {
-            spacing = 0
-        }
-    }
+    spacing = document_adjust_label_body_spacing(
+        builders, content^.document_blocks, block_index, spacing)
     cache := &ctx.runtime^.compile_cache
     reservation_top := f32(row_cursor)*cache^.last_cell_height
     lines := builders^.lines.storage[block.line_start:block.line_start+block.line_count]
@@ -308,7 +327,7 @@ document_place_block_contents :: proc(
     first_line_indent := document_block_first_line_indent(source_block, font_size)
     document_place_block_horizontally(
         source_block, lines, ctx.runtime^.content.document_display_rows,
-        block.content_width, first_line_indent, block.content_origin)
+        {block.content_width, first_line_indent, block.content_origin})
     for line, relative_index in lines {
         if !document_place_line_contents(
             ctx.builders, block.line_start+relative_index, line) {return false}

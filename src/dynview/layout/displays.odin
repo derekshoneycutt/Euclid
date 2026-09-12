@@ -9,6 +9,13 @@ Document_Block_Measure :: struct {
     label_above: bool,
 }
 
+// Bind one block's resolved horizontal placement inputs.
+Document_Horizontal_Placement :: struct {
+    available_width: f32,
+    first_line_indent: f32,
+    content_origin: f32,
+}
+
 // Resolve one block's content origin and width from semantic margin levels.
 document_block_measure :: #force_inline proc(
     block: app_core.Dynview_Document_Block,
@@ -75,12 +82,10 @@ document_place_block_horizontally :: proc(
     block: app_core.Dynview_Document_Block,
     lines: []app_core.Dynview_Document_Layout_Line,
     display_rows: []app_core.Dynview_Document_Display_Row,
-    available_width: f32,
-    first_line_indent: f32,
-    content_origin: f32 = 0) {
+    placement: Document_Horizontal_Placement) {
 
     for &line, line_index in lines {
-        line_width := available_width
+        line_width := placement.available_width
         if line.display_content_width > 0 {
             line_width = line.display_content_width
         }
@@ -90,13 +95,13 @@ document_place_block_horizontally :: proc(
             alignment_block.kind = .Paragraph
             alignment_block.alignment = display_rows[line.display_row_index].alignment
         }
-        line.x = content_origin+document_line_horizontal_offset(
+        line.x = placement.content_origin+document_line_horizontal_offset(
             alignment_block, line.width, line_width)
         if line.display_number > 0 {
-            line.display_number_x += content_origin
+            line.display_number_x += placement.content_origin
         }
         if line_index == 0 {
-            line.x += first_line_indent
+            line.x += placement.first_line_indent
         }
     }
 }

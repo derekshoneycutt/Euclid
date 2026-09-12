@@ -270,6 +270,20 @@ function adopt_animation_for_tick!(
         nothing : adopted.program_actor
 end
 
+"""Report whether one tick completion matches every submitted identity field."""
+function tick_completion_matches(
+    completed, payload::NativeAnimationTickPayload,
+    animation_id::UUID, actor::EuclidActorRuntime.ActorId)::Bool
+    completed === nothing && return false
+    return completed.succeeded &&
+    completed.runtime_generation == payload.runtime_generation &&
+    completed.animation_generation == payload.animation_generation &&
+    completed.animation_id == animation_id && completed.program_actor == actor &&
+    completed.sequence == payload.sequence &&
+    completed.slot.index == payload.slot_index &&
+    completed.slot.reservation_generation == payload.reservation_generation
+end
+
 """Execute one tick with an implementation resolved by the owning generation."""
 function animation_host_tick_with_implementation!(
     host::EuclidRuntimeHost, payload::NativeAnimationTickPayload,
@@ -289,13 +303,7 @@ function animation_host_tick_with_implementation!(
     completed !== nothing &&
         completed.reason === EuclidPolicy.AnimationMailboxFull &&
         error("animation program mailbox invariant violated")
-    return completed !== nothing && completed.succeeded &&
-        completed.runtime_generation == payload.runtime_generation &&
-        completed.animation_generation == payload.animation_generation &&
-        completed.animation_id == animation_id && completed.program_actor == actor &&
-        completed.sequence == payload.sequence &&
-        completed.slot.index == payload.slot_index &&
-        completed.slot.reservation_generation == payload.reservation_generation
+    return tick_completion_matches(completed, payload, animation_id, actor)
 end
 
 """Execute one native-owned animation tick through the shared actor scheduler."""

@@ -185,6 +185,28 @@ tex_document_validate_source :: proc(
     return .Ok
 }
 
+// Consume one closing token or environment terminator when present.
+tex_document_parse_sequence_end :: proc(
+    parser: ^Tex_Document_Parser,
+    parse_ctx: Tex_Document_Parse_Context) -> (Tex_Parse_Status, bool) {
+    if parser.source[parser.offset] == '}' {
+        parser.offset += 1
+        status := Tex_Parse_Status.Ok if parse_ctx.stop_on_brace else .Unexpected_Token
+        return status, true
+    }
+    if parser.description_label_active && parser.source[parser.offset] == ']' {
+        if !parse_ctx.stop_on_bracket {return .Unexpected_Token, true}
+        parser.offset += 1
+        return .Ok, true
+    }
+    if tex_document_environment_ends(parser, parse_ctx.environment) {
+        tex_document_close_paragraph(parser)
+        tex_document_consume_environment_end(parser, parse_ctx.environment)
+        return .Ok, true
+    }
+    return .Ok, false
+}
+
 //   Parse runs recursively through source end or one required closing brace.
 tex_document_parse_sequence :: proc(
     parser: ^Tex_Document_Parser,
@@ -200,20 +222,8 @@ tex_document_parse_sequence :: proc(
         if !tex_document_charge(parser) {
             return .Work_Limit
         }
-        if parser.source[parser.offset] == '}' {
-            parser.offset += 1
-            return .Ok if parse_ctx.stop_on_brace else .Unexpected_Token
-        }
-        if parser.description_label_active && parser.source[parser.offset] == ']' {
-            if !parse_ctx.stop_on_bracket {return .Unexpected_Token}
-            parser.offset += 1
-            return .Ok
-        }
-        if tex_document_environment_ends(parser, parse_ctx.environment) {
-            tex_document_close_paragraph(parser)
-            tex_document_consume_environment_end(parser, parse_ctx.environment)
-            return .Ok
-        }
+        end_status, ended := tex_document_parse_sequence_end(parser, parse_ctx)
+        if ended {return end_status}
         if parser.source[parser.offset] == '{' {
             status := tex_document_parse_group(parser, parse_ctx)
             if status != .Ok {return status}
@@ -238,26 +248,37 @@ tex_document_parse_group :: proc(
     return tex_document_parse_sequence(parser, nested)
 }
 
+// Parse one display, environment, or list-item structural run when present.
+tex_document_parse_structural_run :: proc(
+    parser: ^Tex_Document_Parser,
+    parse_ctx: Tex_Document_Parse_Context) -> (Tex_Parse_Status, bool) {
+    display_info := tex_document_display_info(parser)
+    if display_info.kind != .Plain {
+        if parse_ctx.inline_only {return .Unexpected_Token, true}
+        status := tex_document_parse_display_environment(
+            parser, display_info, parse_ctx.color)
+        return status, true
+    }
+    environment := tex_document_environment_starts(parser)
+    if environment != .None {
+        if parse_ctx.inline_only {return .Unexpected_Token, true}
+        return tex_document_parse_environment(parser, parse_ctx, environment), true
+    }
+    if tex_document_command_starts(parser, "\\item") {
+        if parse_ctx.inline_only {return .Unexpected_Token, true}
+        return tex_document_parse_list_item(parser, parse_ctx), true
+    }
+    return .Ok, false
+}
+
 //   Parse one styled, colored, shape, math, break, or prose run.
 tex_document_parse_run :: proc(
     parser: ^Tex_Document_Parser,
     parse_ctx: Tex_Document_Parse_Context) -> Tex_Parse_Status {
 
-    display_info := tex_document_display_info(parser)
-    if display_info.kind != .Plain {
-        if parse_ctx.inline_only {return .Unexpected_Token}
-        return tex_document_parse_display_environment(
-            parser, display_info, parse_ctx.color)
-    }
-    environment := tex_document_environment_starts(parser)
-    if environment != .None {
-        if parse_ctx.inline_only {return .Unexpected_Token}
-        return tex_document_parse_environment(parser, parse_ctx, environment)
-    }
-    if tex_document_command_starts(parser, "\\item") {
-        if parse_ctx.inline_only {return .Unexpected_Token}
-        return tex_document_parse_list_item(parser, parse_ctx)
-    }
+    structural_status, structural := tex_document_parse_structural_run(
+        parser, parse_ctx)
+    if structural {return structural_status}
     style_status, style_handled := tex_document_parse_style_command(
         parser, parse_ctx)
     if style_handled {return style_status}
@@ -460,6 +481,25 @@ tex_document_parse_prose_or_break :: proc(
     return tex_document_parse_text(parser, font_flags, color)
 }
 
+// Parse one explicit forced-break command when present.
+tex_document_parse_forced_break_control :: proc(
+    parser: ^Tex_Document_Parser,
+    inline_only: bool) -> (Tex_Parse_Status, bool) {
+    command_length := 0
+    if tex_document_starts(parser, "\\\\") {
+        command_length = 2
+    } else if tex_document_command_starts(parser, "\\newline") {
+        command_length = len("\\newline")
+    } else {
+        return .Ok, false
+    }
+    if inline_only {return .Unexpected_Token, true}
+    source_start := parser.offset
+    parser.offset += command_length
+    tex_document_consume_break_whitespace(parser)
+    return tex_document_append_forced_break(parser, source_start), true
+}
+
 // Parse a prose newline or explicit paragraph and line-break command when present.
 tex_document_parse_break_control :: proc(
     parser: ^Tex_Document_Parser,
@@ -471,20 +511,9 @@ tex_document_parse_break_control :: proc(
         return tex_document_parse_newlines(
             parser, font_flags, color, inline_only), true
     }
-    if tex_document_starts(parser, "\\\\") {
-        if inline_only {return .Unexpected_Token, true}
-        source_start := parser.offset
-        parser.offset += 2
-        tex_document_consume_break_whitespace(parser)
-        return tex_document_append_forced_break(parser, source_start), true
-    }
-    if tex_document_command_starts(parser, "\\newline") {
-        if inline_only {return .Unexpected_Token, true}
-        source_start := parser.offset
-        parser.offset += len("\\newline")
-        tex_document_consume_break_whitespace(parser)
-        return tex_document_append_forced_break(parser, source_start), true
-    }
+    forced_status, forced := tex_document_parse_forced_break_control(
+        parser, inline_only)
+    if forced {return forced_status, true}
     if tex_document_command_starts(parser, "\\par") {
         if inline_only {return .Unexpected_Token, true}
         parser.offset += len("\\par")
@@ -787,6 +816,51 @@ tex_document_restore_environment_state :: proc(
     parser.list_item_block_start = state.item_block_start
 }
 
+// Apply bounded quote-container policy for one entered quote environment.
+tex_document_enter_quote_environment :: proc(
+    parser: ^Tex_Document_Parser,
+    environment: Tex_Document_Environment) -> Tex_Parse_Status {
+    next_depth := int(parser.paragraph_format.container_depth)+1
+    if next_depth > 4 {return .Work_Limit}
+    parser.paragraph_format.container_kind = .Quote if
+        environment == .Quote else .Quotation
+    parser.paragraph_format.container_depth = u8(next_depth)
+    parser.paragraph_format.left_margin_levels += 1
+    parser.paragraph_format.right_margin_levels += 1
+    parser.paragraph_format.no_indent = true
+    parser.quotation_first_paragraph = environment == .Quotation
+    return .Ok
+}
+
+// Apply bounded list-container policy for one entered list environment.
+tex_document_enter_list_environment :: proc(
+    parser: ^Tex_Document_Parser,
+    environment: Tex_Document_Environment) -> Tex_Parse_Status {
+    next_depth := int(parser.paragraph_format.container_depth)+1
+    if next_depth > 4 {return .Work_Limit}
+    parser.next_list_id += 1
+    #partial switch environment {
+    case .Itemize:
+        parser.paragraph_format.container_kind = .Itemize
+        parser.paragraph_format.list_kind = .Itemize
+    case .Enumerate:
+        parser.paragraph_format.container_kind = .Enumerate
+        parser.paragraph_format.list_kind = .Enumerate
+    case .Description:
+        parser.paragraph_format.container_kind = .Description
+        parser.paragraph_format.list_kind = .Description
+    }
+    parser.paragraph_format.container_depth = u8(next_depth)
+    parser.paragraph_format.left_margin_levels += 1
+    parser.paragraph_format.no_indent = true
+    parser.paragraph_format.list_id = parser.next_list_id
+    parser.paragraph_format.item_ordinal = 0
+    parser.list_item_started = false
+    parser.list_item_first_block = false
+    parser.list_item_block_start = parser.output.document_block_count
+    return .Ok
+}
+
 // Apply the alignment, quotation, or list policy for one entered environment.
 tex_document_enter_environment :: proc(
     parser: ^Tex_Document_Parser,
@@ -797,38 +871,9 @@ tex_document_enter_environment :: proc(
     case .Flush_Left: parser.paragraph_alignment = .Left
     case .Flush_Right: parser.paragraph_alignment = .Right
     case .Quote, .Quotation:
-        next_depth := int(parser.paragraph_format.container_depth)+1
-        if next_depth > 4 {return .Work_Limit}
-        parser.paragraph_format.container_kind = .Quote if
-            environment == .Quote else .Quotation
-        parser.paragraph_format.container_depth = u8(next_depth)
-        parser.paragraph_format.left_margin_levels += 1
-        parser.paragraph_format.right_margin_levels += 1
-        parser.paragraph_format.no_indent = true
-        parser.quotation_first_paragraph = environment == .Quotation
+        return tex_document_enter_quote_environment(parser, environment)
     case .Itemize, .Enumerate, .Description:
-        next_depth := int(parser.paragraph_format.container_depth)+1
-        if next_depth > 4 {return .Work_Limit}
-        parser.next_list_id += 1
-        #partial switch environment {
-        case .Itemize:
-            parser.paragraph_format.container_kind = .Itemize
-            parser.paragraph_format.list_kind = .Itemize
-        case .Enumerate:
-            parser.paragraph_format.container_kind = .Enumerate
-            parser.paragraph_format.list_kind = .Enumerate
-        case .Description:
-            parser.paragraph_format.container_kind = .Description
-            parser.paragraph_format.list_kind = .Description
-        }
-        parser.paragraph_format.container_depth = u8(next_depth)
-        parser.paragraph_format.left_margin_levels += 1
-        parser.paragraph_format.no_indent = true
-        parser.paragraph_format.list_id = parser.next_list_id
-        parser.paragraph_format.item_ordinal = 0
-        parser.list_item_started = false
-        parser.list_item_first_block = false
-        parser.list_item_block_start = parser.output.document_block_count
+        return tex_document_enter_list_environment(parser, environment)
     case .None: return .Unexpected_Token
     }
     return .Ok
@@ -960,6 +1005,38 @@ tex_document_parse_description_label :: proc(
     return .Ok
 }
 
+// Report whether the next list item may follow the current list body.
+tex_document_list_item_position_valid :: proc(
+    parser: ^Tex_Document_Parser) -> bool {
+    if !parser.list_item_started {
+        return parser.output.document_block_count == parser.list_item_block_start
+    }
+    return parser.output.document_block_count != parser.list_item_block_start
+}
+
+// Parse or synthesize one list-item label according to its container kind.
+tex_document_parse_list_item_label :: proc(
+    parser: ^Tex_Document_Parser,
+    list_kind: Tex_Document_List_Kind,
+    source: Tex_Source_Span,
+    ordinal: int) -> Tex_Parse_Status {
+    has_optional_label := parser.offset < len(parser.source) &&
+        parser.source[parser.offset] == '['
+    switch list_kind {
+    case .Enumerate:
+        if has_optional_label {return .Unexpected_Token}
+        if ordinal > 999 {return .Work_Limit}
+        return tex_document_append_enumerate_label(parser, source, ordinal)
+    case .Description:
+        return tex_document_parse_description_label(parser)
+    case .Itemize:
+        if has_optional_label {return .Unexpected_Token}
+        return tex_document_append_list_label(parser, source, "•")
+    case .None: return .Unexpected_Token
+    }
+    return .Unexpected_Token
+}
+
 // Begin one validated list item and prepare its first body block metadata.
 tex_document_parse_list_item :: proc(
     parser: ^Tex_Document_Parser,
@@ -968,12 +1045,7 @@ tex_document_parse_list_item :: proc(
     list_kind := parser.paragraph_format.list_kind
     if list_kind == .None {return .Unexpected_Token}
     tex_document_close_paragraph(parser)
-    if !parser.list_item_started && parser.output.document_block_count !=
-        parser.list_item_block_start {return .Unexpected_Token}
-    if parser.list_item_started && parser.output.document_block_count ==
-        parser.list_item_block_start {
-        return .Unexpected_Token
-    }
+    if !tex_document_list_item_position_valid(parser) {return .Unexpected_Token}
     source_start := parser.offset
     parser.offset += len("\\item")
     label_source := Tex_Source_Span{source_start, len("\\item")}
@@ -981,23 +1053,9 @@ tex_document_parse_list_item :: proc(
     parser.paragraph_format.item_ordinal += 1
     parser.list_item_started = true
     parser.list_item_first_block = true
-    if list_kind == .Enumerate {
-        if parser.offset < len(parser.source) && parser.source[parser.offset] == '[' {
-            return .Unexpected_Token
-        }
-        if ordinal > 999 {return .Work_Limit}
-    } else if list_kind == .Description {
-        status := tex_document_parse_description_label(parser)
-        if status != .Ok {return status}
-    } else if parser.offset < len(parser.source) && parser.source[parser.offset] == '[' {
-        return .Unexpected_Token
-    }
-    if list_kind != .Description {
-        status := tex_document_append_enumerate_label(
-            parser, label_source, ordinal) if list_kind == .Enumerate else
-            tex_document_append_list_label(parser, label_source, "•")
-        if status != .Ok {return status}
-    }
+    label_status := tex_document_parse_list_item_label(
+        parser, list_kind, label_source, ordinal)
+    if label_status != .Ok {return label_status}
     parser.list_item_block_start = parser.output.document_block_count
     tex_document_consume_break_whitespace(parser)
     return .Ok

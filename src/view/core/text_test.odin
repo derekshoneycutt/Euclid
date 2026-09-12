@@ -104,8 +104,12 @@ text_test_cached_monospace_placement_uses_source_cluster :: proc(t: ^testing.T) 
         y_offset = 64,
     }
 
-    position, valid := ui_text_cached_monospace_glyph_placement(
-        "α=>", glyph, {10, 20}, 8, 16, 32)
+    request := Cached_Monospace_Run_Draw{
+        shaped = {position = {10, 20}, font_size = 16, base_pixel_size = 32},
+        text = "α=>",
+        column_advance = 8,
+    }
+    position, valid := ui_text_cached_monospace_glyph_placement(request, glyph)
 
     testing.expect(t, valid)
     testing.expect_value(t, position.x, f32(25.75))

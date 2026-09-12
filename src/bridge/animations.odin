@@ -307,10 +307,9 @@ complete_actor_animation_lifecycle :: proc(
     return acknowledge_actor_animation_reset(host, request_id, reset_succeeded)
 }
 
-//   Invoke one lifecycle transaction and service its typed native reset barrier.
-invoke_actor_animation_lifecycle :: proc(
+//   Validate one lifecycle call and consume candidate-load failure injection.
+animation_lifecycle_invocation_allowed :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    request: core.Animation_Lifecycle_Requested,
     animation: ^core.Euclid_Julia_Animation_Interface,
     operation: i32) -> bool {
     if host == nil || host^.runtime == nil || host^.animation_lifecycle == nil ||
@@ -322,18 +321,53 @@ invoke_actor_animation_lifecycle :: proc(
         service^.reload_failure_injection = .None
         return false
     }
+    return true
+}
+
+//   Build one primitive lifecycle payload for the current runtime generation.
+make_animation_lifecycle_payload :: proc(
+    service: ^Julia_Runtime_Service,
+    request: core.Animation_Lifecycle_Requested,
+    operation: i32) -> Native_Animation_Lifecycle_Payload {
+    return {
+        request_id = request.request_id,
+        runtime_generation = service^.runtime_generation,
+        animation_generation = service^.animation_generation + 1,
+        operation = operation,
+    }
+}
+
+//   Validate one lifecycle callback result and complete its native barrier.
+finish_animation_lifecycle_invocation :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    request_id: u64, operation: i32,
+    result: ^julialib.jl_value_t) -> bool {
+    if result == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("animation_host_lifecycle")
+        return false
+    }
+    status := i32(julialib.jl_unbox_int32(result))
+    return complete_actor_animation_lifecycle(
+        service, host, request_id, operation, status)
+}
+
+//   Invoke one lifecycle transaction and service its typed native reset barrier.
+invoke_actor_animation_lifecycle :: proc(
+    service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
+    request: core.Animation_Lifecycle_Requested,
+    animation: ^core.Euclid_Julia_Animation_Interface,
+    operation: i32) -> bool {
+    if !animation_lifecycle_invocation_allowed(
+        service, host, animation, operation) {
+        return false
+    }
     gc_stack := julialib.jl_get_pgcstack()
     if gc_stack == nil {
         return false
     }
     uuid_buffer: [36]u8
     stable_id := uuid.to_string(animation^.stable_id, uuid_buffer[:])
-    payload := Native_Animation_Lifecycle_Payload{
-        request_id = request.request_id,
-        runtime_generation = service^.runtime_generation,
-        animation_generation = service^.animation_generation + 1,
-        operation = operation,
-    }
+    payload := make_animation_lifecycle_payload(service, request, operation)
     frame := Julia_Animation_Lifecycle_Gc_Frame{
         encoded_root_count = 3 << 2,
         previous = gc_stack^,
@@ -349,13 +383,8 @@ invoke_actor_animation_lifecycle :: proc(
         return false
     }
     result := julialib.jl_call(host^.animation_lifecycle, &frame.roots[0], 3)
-    if result == nil || julialib.jl_exception_occurred() != nil {
-        print_julia_exception("animation_host_lifecycle")
-        return false
-    }
-    status := i32(julialib.jl_unbox_int32(result))
-    return complete_actor_animation_lifecycle(
-        service, host, request.request_id, operation, status)
+    return finish_animation_lifecycle_invocation(
+        service, host, request.request_id, operation, result)
 }
 
 //   Return native reset completion to the supervisor and await its exact result.
@@ -417,6 +446,22 @@ generate_animation_tick :: proc(
     return callback_succeeded
 }
 
+//   Build one primitive tick payload for the reserved immutable slot.
+make_animation_tick_payload :: proc(
+    service: ^Julia_Runtime_Service,
+    request: core.Animation_Tick_Requested,
+    slot: ^core.Animation_Tick_Slot) -> Native_Animation_Tick_Payload {
+    return {
+        request_id = request.request_id,
+        runtime_generation = service^.runtime_generation,
+        animation_generation = request.animation_generation,
+        sequence = request.sequence,
+        slot_index = request.handle.index,
+        reservation_generation = request.handle.reservation_generation,
+        dt = slot^.dt,
+    }
+}
+
 //   Transfer one checked primitive tick payload through the actor host adapter.
 invoke_actor_animation_tick :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
@@ -432,15 +477,7 @@ invoke_actor_animation_tick :: proc(
     }
     uuid_buffer: [36]u8
     stable_id := uuid.to_string(animation^.stable_id, uuid_buffer[:])
-    payload := Native_Animation_Tick_Payload{
-        request_id = request.request_id,
-        runtime_generation = service^.runtime_generation,
-        animation_generation = request.animation_generation,
-        sequence = request.sequence,
-        slot_index = request.handle.index,
-        reservation_generation = request.handle.reservation_generation,
-        dt = slot^.dt,
-    }
+    payload := make_animation_tick_payload(service, request, slot)
     frame := Julia_Animation_Tick_Gc_Frame{
         encoded_root_count = 3 << 2,
         previous = gc_stack^,
@@ -955,17 +992,42 @@ discard_julia_runtime_generation :: proc(service: ^Julia_Runtime_Service) {
     }
 }
 
+//   Admit one reload transaction and publish its registering state.
+begin_julia_interface_reload :: proc(
+    state: ^core.Euclid_General_State) -> (^Julia_Runtime_Service, bool) {
+    if state == nil {
+        return nil, false
+    }
+    service := state^.julia_runtime_service
+    if service == nil || service^.runtime_host == nil {
+        return nil, false
+    }
+    service^.reload_state = .Registering
+    return service, true
+}
+
+//   Construct one rooted reload candidate and publish construction failure.
+create_julia_interface_reload_candidate :: proc(
+    service: ^Julia_Runtime_Service,
+    archive_mtime: i64) -> ^julialib.jl_value_t {
+    candidate := create_julia_runtime_generation()
+    if candidate == nil {
+        fmt.eprintln("Julia asset reload: candidate generation construction failed")
+        mark_julia_reload_failed(service, archive_mtime)
+    }
+    return candidate
+}
+
 //   Register and validate one fresh interface before retiring the active generation.
 stage_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State, host: ^Julia_Runtime_Host,
     request: core.Animation_Lifecycle_Requested, archive_mtime: i64,
     stable_id: uuid.Identifier) -> bool {
 
-    service := state^.julia_runtime_service
-    if service == nil || service^.runtime_host == nil {
+    service, admitted := begin_julia_interface_reload(state)
+    if !admitted {
         return false
     }
-    service^.reload_state = .Registering
     gc_stack := julialib.jl_get_pgcstack()
     if gc_stack == nil {
         fmt.eprintln("Julia asset reload: owner thread has no GC stack")
@@ -980,10 +1042,8 @@ stage_julia_interface_reload :: proc(
     }
     gc_stack^ = (^julialib.jl_gcframe_t)(&candidate_frame)
     defer gc_stack^ = candidate_frame.previous
-    candidate = create_julia_runtime_generation()
+    candidate = create_julia_interface_reload_candidate(service, archive_mtime)
     if candidate == nil {
-        fmt.eprintln("Julia asset reload: candidate generation construction failed")
-        mark_julia_reload_failed(service, archive_mtime)
         return false
     }
     transaction := Julia_Interface_Reload_Transaction{
@@ -1175,21 +1235,6 @@ record_julia_evidence :: proc(
     _ = evidence_session.session_record(
         service.evidence_session, &service.evidence_ring, event)
 }
-
-/* TODO : Can we kill this?
-//   Consume a pending cycle-boundary notification exactly once.
-consume_animation_cycle_boundary :: proc(state: ^core.Euclid_General_State) -> bool {
-    if state == nil {
-        return false
-    }
-
-    if state^.consumed_cycle_boundary_generation == state^.cycle_boundary_generation {
-        return false
-    }
-
-    state^.consumed_cycle_boundary_generation = state^.cycle_boundary_generation
-    return true
-}*/
 
 //   Parse a bridge-provided animation stable UUID string into typed identity.
 parse_animation_stable_id :: proc(stable_id, name: cstring) -> (uuid.Identifier, bool) {

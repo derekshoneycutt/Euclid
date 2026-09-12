@@ -2976,6 +2976,16 @@ initialize_julia_content_control :: proc(
         initialize_julia_state(request.native_state)
 }
 
+//   Initialize the Julia worker host and publish its resulting state.
+execute_julia_runtime_initialize :: proc(
+    service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
+    event: ^Julia_Event) {
+    event^.kind = .Initialized
+    event^.succeeded = !state^.initialized &&
+        initialize_julia_worker_host(service, &state^.host, &state^.frame)
+    state^.initialized = event^.succeeded
+}
+
 //   Dispatch one typed control to its concrete owner-thread handler.
 execute_julia_control_handler :: proc(
     service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
@@ -2983,10 +2993,7 @@ execute_julia_control_handler :: proc(
     shutting_down := false
     #partial switch request in message^ {
     case core.Runtime_Initialize_Requested:
-        event^.kind = .Initialized
-        event^.succeeded = !state^.initialized &&
-            initialize_julia_worker_host(service, &state^.host, &state^.frame)
-        state^.initialized = event^.succeeded
+        execute_julia_runtime_initialize(service, state, event)
     case core.Runtime_Content_Initialize_Requested:
         event^.kind = .Invoke_Complete
         event^.succeeded = state^.initialized &&

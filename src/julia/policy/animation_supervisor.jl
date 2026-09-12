@@ -114,11 +114,11 @@ function send_program_command!(
         AnimationMailboxFull : AnimationStaleActor
 end
 
-"""Spawn and activate the program selected by one lifecycle transaction."""
-function activate_transaction_program!(
+"""Resolve the implementation and generations selected by one transaction."""
+function resolve_transaction_program!(
     supervisor::AnimationSupervisor,
     context::EuclidActorRuntime.ActorContext,
-    transaction::AnimationLifecycleTransaction)::AnimationFailureReason
+    transaction::AnimationLifecycleTransaction)
     restoring = transaction.stage === AnimationProgramRestoring
     animation_id = restoring ?
         something(transaction.previous_animation_id) :
@@ -137,8 +137,19 @@ function activate_transaction_program!(
     catch exception
         supervisor.failure = EuclidActorRuntime.ActorFailed(
             context.self, exception, transaction)
-        return AnimationProgramFailed
+        return nothing
     end
+    return (; restoring, animation_id, animation_generation, implementation)
+end
+
+"""Spawn and activate the program selected by one lifecycle transaction."""
+function activate_transaction_program!(
+    supervisor::AnimationSupervisor,
+    context::EuclidActorRuntime.ActorContext,
+    transaction::AnimationLifecycleTransaction)::AnimationFailureReason
+    resolved = resolve_transaction_program!(supervisor, context, transaction)
+    resolved === nothing && return AnimationProgramFailed
+    (; restoring, animation_id, animation_generation, implementation) = resolved
     implementation.id == animation_id || return AnimationStaleRuntime
     runtime_generation = transaction.kind === AnimationReload &&
         transaction.stage !== AnimationProgramRestoring ?
@@ -305,6 +316,24 @@ function begin_program_stop!(
     return reason
 end
 
+"""Build one activation transaction from current and requested program state."""
+function activation_transaction(
+    supervisor::AnimationSupervisor,
+    request::ActivateAnimation,
+    implementation)::AnimationLifecycleTransaction
+    actor = supervisor.active_program_actor
+    previous_id = supervisor.active_animation_id
+    previous_implementation = previous_id === nothing ? nothing :
+        load_animation_implementation!(supervisor, previous_id)
+    return AnimationLifecycleTransaction(
+        request.request_id, AnimationActivate, request.runtime_generation,
+        request.animation_generation, request.animation_id, request.state_ptr,
+        actor, actor === nothing ? AnimationNativeResetPending :
+            AnimationProgramStopping, UInt64(0), nothing, implementation,
+        supervisor.load_implementation, previous_implementation, previous_id,
+        supervisor.active_animation_generation, AnimationNoFailure)
+end
+
 """Start one compatibility program actor for a valid activation request."""
 function EuclidActorRuntime.receive!(
     supervisor::AnimationSupervisor,
@@ -328,17 +357,8 @@ function EuclidActorRuntime.receive!(
             false, AnimationProgramFailed)
         return nothing
     end
-    actor = supervisor.active_program_actor
-    previous_id = supervisor.active_animation_id
-    previous_implementation = previous_id === nothing ? nothing :
-        load_animation_implementation!(supervisor, previous_id)
-    transaction = AnimationLifecycleTransaction(
-        request.request_id, AnimationActivate, request.runtime_generation,
-        request.animation_generation, request.animation_id, request.state_ptr,
-        actor, actor === nothing ? AnimationNativeResetPending :
-            AnimationProgramStopping, UInt64(0), nothing, implementation,
-        supervisor.load_implementation, previous_implementation, previous_id,
-        supervisor.active_animation_generation, AnimationNoFailure)
+    transaction = activation_transaction(supervisor, request, implementation)
+    actor = transaction.actor
     supervisor.lifecycle_transaction = transaction
     if actor === nothing
         EuclidActorRuntime.emit!(context, ResetNativeAnimationState(

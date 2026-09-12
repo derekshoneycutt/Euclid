@@ -284,14 +284,13 @@ document_layout_applies_container_measure :: proc(t: ^testing.T) {
     }
 }
 
-// Verify list labels occupy the gutter beside a hanging-indented body.
-@(test)
-document_layout_places_list_label_beside_body :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
-    fixture: Document_Layout_Test_Fixture
-    runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
-    blocks := [2]app_core.Dynview_Document_Block{
+// Populate the caller-owned arrays for one itemized label and body fixture.
+document_layout_list_item_fixture :: proc(
+    blocks: ^[2]app_core.Dynview_Document_Block,
+    inlines: ^[2]app_core.Dynview_Document_Inline,
+    runs: ^[2]app_core.Dynview_Document_Shaped_Run,
+    glyphs: ^[2]app_core.Shaped_Glyph) {
+    blocks^ = {
         {kind = .List_Item, inline_start = 0, inline_count = 1,
             source_count = 5, alignment = .Left, container_kind = .Itemize,
             container_depth = 1, left_margin_levels = 1, list_kind = .Itemize,
@@ -302,20 +301,34 @@ document_layout_places_list_label_beside_body :: proc(t: ^testing.T) {
             left_margin_levels = 1, list_kind = .Itemize, list_id = 1,
             item_ordinal = 1, item_first_block = true},
     }
-    inlines := [2]app_core.Dynview_Document_Inline{
+    inlines^ = {
         {kind = .Text, source_count = 5, text_count = 1},
         {kind = .Text, source_offset = 5, source_count = 4,
             text_offset = 1, text_count = 4},
     }
-    runs := [2]app_core.Dynview_Document_Shaped_Run{
+    runs^ = {
         {inline_index = 0, text_count = 1, glyph_count = 1,
             base_pixel_size = 16, width = 8, ascent = 12, descent = 3},
         {inline_index = 1, text_offset = 1, text_count = 4,
             glyph_start = 1, glyph_count = 1, base_pixel_size = 16,
             width = 40, ascent = 12, descent = 3},
     }
-    glyphs := [2]app_core.Shaped_Glyph{
+    glyphs^ = {
         {glyph_id = 1, x_advance = 512}, {glyph_id = 2, x_advance = 2560}}
+}
+
+// Verify list labels occupy the gutter beside a hanging-indented body.
+@(test)
+document_layout_places_list_label_beside_body :: proc(t: ^testing.T) {
+    runtime_owner, cache_owner: app_core.Arena_Owner
+    fixture: Document_Layout_Test_Fixture
+    runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
+    defer app_core.arena_owner_destroy(&runtime_owner)
+    blocks: [2]app_core.Dynview_Document_Block
+    inlines: [2]app_core.Dynview_Document_Inline
+    runs: [2]app_core.Dynview_Document_Shaped_Run
+    glyphs: [2]app_core.Shaped_Glyph
+    document_layout_list_item_fixture(&blocks, &inlines, &runs, &glyphs)
     runtime^.content.document_blocks = blocks[:]
     runtime^.content.document_inlines = inlines[:]
     runtime^.compile_cache.document_shaped_runs = runs[:]
