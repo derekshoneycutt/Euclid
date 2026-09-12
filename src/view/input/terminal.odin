@@ -1626,11 +1626,15 @@ input_terminal_enqueue_frame :: proc(
     mode: termmodel.Terminal_Input_Mode,
     modify_other_keys_level: u8 = 0,
     kitty_keyboard_flags: u8 = 0) {
-    if mode.focus_reporting && frame.window_focus_changed {
-        sequence := "\e[I" if frame.window_focused else "\e[O"
+    focused := input_frame_terminal_focused(frame)
+    if mode.focus_reporting && frame.terminal_focus_changed {
+        sequence := "\e[I" if focused else "\e[O"
         input_terminal_enqueue_string(runtime, sequence)
     }
     input_terminal_enqueue_mouse(runtime, frame, mode)
+    if !focused {
+        return
+    }
     claims: Input_Event_Claim_State
     encoding_mode := Input_Terminal_Encoding_Mode{
         mode, modify_other_keys_level, kitty_keyboard_flags}

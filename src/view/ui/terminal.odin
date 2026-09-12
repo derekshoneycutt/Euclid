@@ -39,6 +39,16 @@ terminal_line_text :: proc(term: ^core.Terminal_State, line: int) -> string {
     return terminalview.terminal_line_text(term, line)
 }
 
+// Return the fixed semantic colors used by Terminal presentation.
+terminal_draw_theme :: proc() -> terminalview.Terminal_Draw_Theme {
+    return {
+        default_foreground = UI_TEXT_COLOR,
+        cursor_foreground = terminalview.TERMINAL_CURSOR_TEXT_COLOR,
+        selection_foreground = rl.WHITE,
+        selection_background = rl.Color{82, 96, 112, 255},
+    }
+}
+
 // Draw one terminal through Euclid's fixed text-panel scrolling container.
 terminal_scroll_begin :: proc(
     state: ^core.Euclid_General_State,
@@ -64,13 +74,10 @@ terminal_draw :: proc(
     term := &state^.terminal
     if !term.initialized { return }
     resolver := font.cache_terminal_resolver(&state^.font_cache)
-    theme := terminalview.Terminal_Draw_Theme{
-        default_foreground = UI_TEXT_COLOR,
-        cursor_foreground = terminalview.TERMINAL_CURSOR_TEXT_COLOR,
-        selection_foreground = rl.WHITE,
-        selection_background = rl.Color{82, 96, 112, 255},
-    }
+    theme := terminal_draw_theme()
     layout := terminalview.terminal_draw_layout(term, resolver, bounds, theme)
+    layout.terminal_focused =
+        state^.ui_runtime.interaction_frame.terminal_focused
     scroll_begin := terminal_scroll_begin(state, layout, bounds, frame)
     origin := rl.Vector2{
         scroll_begin.view_rect.x,
@@ -79,7 +86,11 @@ terminal_draw :: proc(
     resolved := terminalview.terminal_resolve_mouse_frame(term, frame, bounds)
     terminalview.terminal_draw_content(
         term, resolver, term.raster_renderer, {
-            layout = layout, origin = origin, bounds = bounds, frame = resolved})
+            layout = layout,
+            origin = origin,
+            bounds = bounds,
+            frame = resolved,
+        })
     scroll_end := scroll_container_end(Scroll_Container_End_Params{
         scroll_ref = scroll_begin.scroll_ref,
         content_height_final = layout.content_height,

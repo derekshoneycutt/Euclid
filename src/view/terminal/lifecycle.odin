@@ -12,6 +12,7 @@ import termhist "../../terminal/history"
 import termhyperlink "../../terminal/hyperlink"
 import termpalette "../../terminal/palette"
 import termshellintegration "../../terminal/shell_integration"
+import "../input"
 import "core:fmt"
 import "core:log"
 import "core:mem"
@@ -838,6 +839,24 @@ terminal_display_banner :: proc(term: ^core.Terminal_State, text: string) {
     term.banner_ready = true
 }
 
+// Apply local cursor-movement effects and return the resulting completion request.
+terminal_apply_keyboard_update :: proc(
+    term: ^core.Terminal_State, keyboard: Terminal_Keyboard_Update,
+    now: f64) -> Terminal_Completion_Request {
+    if keyboard.cursor_moved {
+        term.view_selection_active = false
+        term.view_selection_dragging = false
+        if !keyboard.completion.requested {
+            terminal_clear_completion(term)
+            terminal_schedule_completion(term, now)
+        }
+    }
+    if keyboard.completion.requested {
+        return keyboard.completion
+    }
+    return terminal_take_scheduled_completion(term, now)
+}
+
 //   Poll keyboard and mouse input for the active frame and apply it to the terminal.
 //
 // Parameters:
@@ -865,25 +884,14 @@ terminal_update :: proc(
         geometry_change = terminal_update_geometry(
             term, request.font, request.bounds)
     }
-    keyboard := terminal_update_keyboard(term, request.frame)
-    if keyboard.cursor_moved {
-        term.view_selection_active = false
-        term.view_selection_dragging = false
-        if !keyboard.completion.requested {
-            terminal_clear_completion(term)
-            terminal_schedule_completion(term, request.now)
-        }
-    }
-
+    focused := input.input_frame_terminal_focused(request.frame)
+    keyboard := terminal_update_keyboard(term, request.frame, focused)
     hyperlink_activation := terminal_update_hyperlink_click(
         term, request.frame, request.bounds)
     terminal_update_mouse_selection(
         term, request.frame, request.font, request.bounds)
-    terminal_update_clipboard_copy(term, request.frame)
-    completion := keyboard.completion
-    if !completion.requested {
-        completion = terminal_take_scheduled_completion(term, request.now)
-    }
+    terminal_update_clipboard_copy(term, request.frame, focused)
+    completion := terminal_apply_keyboard_update(term, keyboard, request.now)
     return {
         submission = keyboard.submission,
         completion = completion,

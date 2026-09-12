@@ -82,6 +82,13 @@ navigation_order = 45
 owner = "guide_authors"
 
 [[guides]]
+title = "UI System"
+path = "Guides/UiSystem.md"
+summary = "Display-owned layout, panels, input, widgets, scrolling, and rendering."
+navigation_order = 48
+owner = "guide_authors"
+
+[[guides]]
 title = "Terminal Architecture"
 path = "Guides/TerminalArchitecture.md"
 summary = "Interactive Terminal ownership, session actors, native process integration, and EuclidRepl lifecycle."

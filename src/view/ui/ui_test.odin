@@ -42,6 +42,69 @@ ui_regions_clamp_all_pane_minimums :: proc(t: ^testing.T) {
     testing.expect(t, maximums.text_rect.height >= 0)
 }
 
+// Verify Terminal entry focuses once while window activation only changes effective focus.
+@(test)
+ui_focus_terminal_entry_and_window_activation :: proc(t: ^testing.T) {
+    runtime := app_core.Euclid_Ui_Runtime_State{
+        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+    }
+    focused := ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    testing.expect_value(t, focused.logical_focus.kind,
+        app_core.Ui_Focus_Kind.Terminal)
+    testing.expect(t, focused.terminal_focused)
+    testing.expect(t, focused.terminal_focus_changed)
+
+    unfocused := ui_reconcile_focus(&runtime, {window_focused = false}, true)
+    testing.expect_value(t, unfocused.logical_focus.kind,
+        app_core.Ui_Focus_Kind.Terminal)
+    testing.expect(t, !unfocused.terminal_focused)
+    testing.expect(t, unfocused.terminal_focus_changed)
+
+    restored := ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    testing.expect(t, restored.terminal_focused)
+    testing.expect(t, restored.terminal_focus_changed)
+    stable := ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    testing.expect(t, !stable.terminal_focus_changed)
+}
+
+// Verify primary presses retarget focus and Terminal exit invalidates its target.
+@(test)
+ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
+    runtime := app_core.Euclid_Ui_Runtime_State{
+        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+    }
+    _ = ui_reconcile_focus(&runtime, {window_focused = true}, true)
+
+    tree := runtime.ui_regions.tree_rect
+    moved := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+        mouse_position = {tree.x + 1, tree.y + 1},
+        mouse_pressed = {.Left},
+    }, true)
+    testing.expect_value(t, moved.logical_focus.kind,
+        app_core.Ui_Focus_Kind.Tree)
+    testing.expect_value(t, moved.effective_focus.kind,
+        app_core.Ui_Focus_Kind.Tree)
+    testing.expect(t, !moved.terminal_focused)
+    testing.expect(t, moved.terminal_focus_changed)
+
+    terminal := runtime.ui_regions.terminal_rect
+    restored := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+        mouse_position = {terminal.x + 1, terminal.y + 1},
+        mouse_pressed = {.Left},
+    }, true)
+    testing.expect_value(t, restored.logical_focus.kind,
+        app_core.Ui_Focus_Kind.Terminal)
+    testing.expect(t, restored.terminal_focused)
+
+    exited := ui_reconcile_focus(&runtime, {window_focused = true}, false)
+    testing.expect_value(t, exited.logical_focus.kind,
+        app_core.Ui_Focus_Kind.None)
+    testing.expect(t, !exited.terminal_focused)
+    testing.expect(t, exited.terminal_focus_changed)
+}
+
 //   Verify splitter geometry uses an eight-pixel hit target and three-pixel line.
 @(test)
 splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {

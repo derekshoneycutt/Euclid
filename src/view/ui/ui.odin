@@ -157,6 +157,7 @@ prepare_ui_frame :: proc(
         regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
     }
     state^.ui_runtime.ui_regions = regions
+    _ = ui_reconcile_focus(ui_runtime, mouse_input, is_terminal_selected(state))
     view_core.fit_iso_scale_to_viewport(
         state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 

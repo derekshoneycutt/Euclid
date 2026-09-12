@@ -145,6 +145,11 @@ Kitty supports query, replace, set, clear, push, and pop for flags 1, 2, 4, 8, a
 its state is retained independently for primary and alternate screens. All negotiated
 input state resets at an evaluation or process stream boundary.
 
+The display-owned UI runtime supplies effective Terminal focus separately from the raw
+window-focus sample. It combines logical Terminal focus, Terminal presentation, and OS
+activation. Local editing and child keyboard bytes require effective focus. DECSET 1004
+reports its transitions before any admitted pointer or keyboard bytes for that frame.
+
 ```mermaid
 flowchart LR
     Output[Child mode-setting output]
@@ -379,9 +384,10 @@ flowchart LR
 ```
 
 The lease is tied to the active evaluation request and generation. Outside that lease,
-keyboard input continues to edit the display-owned prompt. During the lease, encoded
-terminal bytes go to the evaluator's interactive input adapter. Session close sends an
-interrupt when necessary before draining the evaluator.
+keyboard input edits the display-owned prompt only while Terminal has effective focus.
+During the lease, focused encoded terminal bytes go to the evaluator's interactive
+input adapter. Session close sends an interrupt when necessary before draining the
+evaluator.
 
 ## Output, Emulation, And Rendering
 

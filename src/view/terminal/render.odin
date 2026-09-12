@@ -112,14 +112,14 @@ terminal_output_cursor_cells :: proc(
 //
 // Parameters:
 //   - term: Terminal state carrying interpreter visibility and active-grid cursor state.
-//   - window_focused: Whether the cursor should use its focused filled presentation.
+//   - terminal_focused: Whether the cursor should use its focused filled presentation.
 //
 // Returns:
 //   - A visible cursor presentation with combined line, column, width, and style, or
 //     an empty presentation when output cursor rendering is not applicable.
 terminal_output_cursor_presentation :: proc(
     term: ^core.Terminal_State,
-    window_focused: bool = true) -> Terminal_Output_Cursor_Presentation {
+    terminal_focused: bool = true) -> Terminal_Output_Cursor_Presentation {
     if term == nil || terminal_prompt_visible(term) {
         return {}
     }
@@ -145,7 +145,7 @@ terminal_output_cursor_presentation :: proc(
     }
     return {
         visible = true,
-        style = .Filled if window_focused else .Outline,
+        style = .Filled if terminal_focused else .Outline,
         line = terminal_visible_scrollback_count(term) + cursor.row,
         column = cursor.column,
         width = width,
@@ -545,11 +545,10 @@ terminal_commit_scroll :: proc(
 // Draw terminal foreground overlays after output rows and rasters.
 terminal_draw_foreground :: proc(
     term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
-    layout: Terminal_Draw_Layout, origin: rl.Vector2,
-    frame: input.Input_Frame) {
+    layout: Terminal_Draw_Layout, origin: rl.Vector2) {
     terminal_draw_output_cursor(
         term, font_resolver,
-        terminal_output_cursor_presentation(term, frame.window_focused),
+        terminal_output_cursor_presentation(term, layout.terminal_focused),
         layout, origin)
     if layout.prompt_visible {
         terminal_draw_prompt(
@@ -586,7 +585,7 @@ terminal_draw_content :: proc(
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, draw.origin, .In_Front_Of_Text)
     terminal_draw_foreground(
-        term, font_resolver, draw.layout, draw.origin, draw.frame)
+        term, font_resolver, draw.layout, draw.origin)
 }
 
 // Draw terminal overlays after the owning UI container closes its scissor region.
@@ -846,7 +845,7 @@ terminal_draw_single_line_prompt :: proc(
         text = prompt_text,
         position = request.position,
         theme = request.layout.theme,
-    }, cursor, selection)
+    }, cursor, selection, request.layout.terminal_focused)
 }
 
 //   Draw the live prompt line, including its selection highlight and cursor.
@@ -872,7 +871,7 @@ terminal_draw_prompt :: proc(
         terminal_draw_prompt_lines(
             term, font_resolver, prompt_position, layout.theme)
         terminal_draw_multiline_prompt_cursor(
-            term, font_resolver, regular, prompt_position, layout.theme)
+            term, font_resolver, regular, prompt_position, layout)
         return
     }
     terminal_draw_single_line_prompt({
@@ -983,7 +982,7 @@ terminal_draw_prompt_lines :: proc(
 terminal_draw_multiline_prompt_cursor :: proc(
     term: ^core.Terminal_State, resolver: font.Font_Resolver,
     font: rl.Font, position: rl.Vector2,
-    theme: Terminal_Draw_Theme) {
+    layout: Terminal_Draw_Layout) {
     text := termhist.termhist_current_text(term.history)
     cursor := termhist.termhist_cursor(term.history)
     line := 0
@@ -1009,8 +1008,8 @@ terminal_draw_multiline_prompt_cursor :: proc(
         font = font,
         text = prompt_text,
         position = cursor_position_y,
-        theme = theme,
-    }, cursor_position, false)
+        theme = layout.theme,
+    }, cursor_position, false, layout.terminal_focused)
 }
 
 //   Draw a muted completion insertion without mutating the live input text.
@@ -1844,7 +1843,7 @@ terminal_resolve_foreground :: proc(
 //   - Issues Raylib commands for the optional selection overlay and block cursor.
 terminal_draw_prompt_overlay :: proc(
     draw: Terminal_Text_Overlay_Draw, cursor_position: int,
-    selection: Terminal_Line_Selection) {
+    selection: Terminal_Line_Selection, terminal_focused: bool) {
     if selection.has_selection {
         terminal_draw_inverted_span(
             draw, selection, selection.right_edge_x)
@@ -1853,7 +1852,7 @@ terminal_draw_prompt_overlay :: proc(
     cursor_on_selection := selection.has_selection &&
         cursor_position >= selection.start && cursor_position < selection.end
     terminal_draw_cursor(
-        draw, cursor_position, cursor_on_selection)
+        draw, cursor_position, cursor_on_selection, terminal_focused)
 }
 
 //   Draw a solid rect plus inverted glyphs over one line's selected byte
@@ -1920,7 +1919,7 @@ terminal_draw_inverted_span :: proc(
 //   - Issues Raylib commands for the cursor rectangle and inverted codepoint glyph.
 terminal_draw_cursor :: proc(
     draw: Terminal_Text_Overlay_Draw, cursor_position: int,
-    on_selection: bool) {
+    on_selection: bool, terminal_focused: bool) {
     cursor_end := terminal_codepoint_end(draw.text, cursor_position)
 
     prefix_width := terminal_text_column_width(
@@ -1936,6 +1935,19 @@ terminal_draw_cursor :: proc(
         on_selection else draw.theme.default_foreground
     glyph_color := draw.theme.selection_background if
         on_selection else draw.theme.cursor_foreground
+
+    if !terminal_focused {
+        rl.DrawRectangleLinesEx(rl.Rectangle{
+            cursor_screen_position.x, cursor_screen_position.y,
+            glyph_width, TERMINAL_FONT_SIZE,
+        }, 1, rect_color)
+        if !on_selection {
+            _ = terminal_draw_shaped_prompt_span(
+                draw.resolver, .Regular, glyph_text,
+                cursor_screen_position, draw.theme.default_foreground)
+        }
+        return
+    }
 
     rl.DrawRectangleV(cursor_screen_position,
         rl.Vector2{glyph_width, TERMINAL_FONT_SIZE}, rect_color)

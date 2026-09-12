@@ -2258,6 +2258,32 @@ Ui_Press_Owner_State :: struct {
     id: int,
 }
 
+Ui_Focus_Kind :: enum u8 {
+    None,
+    Terminal,
+    Presentation,
+    Tree,
+    Input_Box,
+}
+
+Ui_Focus_Target :: struct {
+    kind: Ui_Focus_Kind,
+    id: int,
+}
+
+Ui_Interaction_State :: struct {
+    logical_focus: Ui_Focus_Target,
+    terminal_was_present: bool,
+    terminal_effectively_focused: bool,
+}
+
+Ui_Interaction_Frame :: struct {
+    logical_focus: Ui_Focus_Target,
+    effective_focus: Ui_Focus_Target,
+    terminal_focus_changed: bool,
+    terminal_focused: bool,
+}
+
 Euclid_Ui_Runtime_State :: struct {
     tree_scroll_y: f32,
     tree_reveal_pending: bool,
@@ -2309,6 +2335,8 @@ Euclid_Ui_Runtime_State :: struct {
 
     current_layout_mode: Ui_Layout_Mode,
     ui_regions: Ui_Regions,
+    interaction: Ui_Interaction_State,
+    interaction_frame: Ui_Interaction_Frame,
 }
 
 

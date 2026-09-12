@@ -78,8 +78,9 @@ terminal_log_clipboard_teardown :: proc(term: ^core.Terminal_State) {
 //
 // Returns:
 //   - True when the frame contains a Ctrl+Shift+V press chord.
-terminal_clipboard_paste_requested :: proc(frame: input.Input_Frame) -> bool {
-    return input.input_chord_pressed(frame, .V, {.Control, .Shift})
+terminal_clipboard_paste_requested :: proc(
+    frame: input.Input_Frame, focused: bool = true) -> bool {
+    return focused && input.input_chord_pressed(frame, .V, {.Control, .Shift})
 }
 
 //   Insert clipboard text at the live input cursor.
@@ -111,8 +112,9 @@ terminal_insert_clipboard_text :: proc(
 //
 // Returns:
 //   - True when the frame contains a Ctrl+Shift+C press chord.
-terminal_clipboard_copy_requested :: proc(frame: input.Input_Frame) -> bool {
-    return input.input_chord_pressed(frame, .C, {.Control, .Shift})
+terminal_clipboard_copy_requested :: proc(
+    frame: input.Input_Frame, focused: bool = true) -> bool {
+    return focused && input.input_chord_pressed(frame, .C, {.Control, .Shift})
 }
 
 // Extract the active view selection as plain text for clipboard publication.
@@ -138,12 +140,13 @@ terminal_view_selection_text :: proc(term: ^core.Terminal_State) -> string {
 // Side effects:
 //   - Writes to the system clipboard via the input package; leaves the selection active.
 terminal_update_clipboard_copy :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame) {
-    if !term.view_selection_active {
+    term: ^core.Terminal_State, frame: input.Input_Frame,
+    focused: bool) {
+    if !focused || !term.view_selection_active {
         return
     }
 
-    if !terminal_clipboard_copy_requested(frame) {
+    if !terminal_clipboard_copy_requested(frame, focused) {
         return
     }
 

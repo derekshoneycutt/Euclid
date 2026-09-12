@@ -178,6 +178,7 @@ Terminal_Draw_Layout :: struct {
     selection: Terminal_Selection_Bounds,
     regular: rl.Font,
     theme: Terminal_Draw_Theme,
+    terminal_focused: bool,
 }
 
 // Frame-local semantic colors supplied by the terminal container owner.

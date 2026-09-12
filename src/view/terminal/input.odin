@@ -41,8 +41,9 @@ terminal_update_synchronized_output :: proc(
 // Side effects:
 //   - Mutates the live input line, cursor, and committed scrollback via termhist.
 terminal_update_keyboard :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame) -> Terminal_Keyboard_Update {
-    if term.awaiting_eval || !term.banner_ready {
+    term: ^core.Terminal_State, frame: input.Input_Frame,
+    focused: bool = true) -> Terminal_Keyboard_Update {
+    if !focused || term.awaiting_eval || !term.banner_ready {
         return {}
     }
 

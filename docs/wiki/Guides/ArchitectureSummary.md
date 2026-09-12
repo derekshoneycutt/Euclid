@@ -459,6 +459,11 @@ Dynview preparation reads immutable snapshots and writes only its compile and la
 caches. The tasks may run concurrently because their ownership does not overlap.
 Display-only interaction state and drawing consume the caches after the fence joins.
 
+Before Terminal service processing, UI preparation also reconciles display-owned
+logical focus against the resolved regions, active Terminal presentation, and OS window
+activation. The resulting effective Terminal focus gates local and child keyboard
+input, drives DECSET 1004 transitions, and selects prompt and output cursor style.
+
 Dynview publishes complete bounded cache slices. Failure clears partial derived state
 and preserves exact literal fallback; shutdown clears aliases and joins workers before
 destroying arena storage.

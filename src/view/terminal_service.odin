@@ -297,6 +297,18 @@ terminal_service_send_completion :: proc(
     }
 }
 
+// Add UI-owned effective focus to a frame copy routed to Terminal consumers.
+terminal_service_routed_frame :: proc(
+    state: ^core.Euclid_General_State,
+    frame: input.Input_Frame) -> input.Input_Frame {
+    result := frame
+    interaction := state^.ui_runtime.interaction_frame
+    result.terminal_focus_known = true
+    result.terminal_focused = interaction.terminal_focused
+    result.terminal_focus_changed = interaction.terminal_focus_changed
+    return result
+}
+
 // Update the selected fixed-panel Terminal before simulation preparation.
 terminal_service_update :: proc(
     state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
@@ -314,11 +326,13 @@ terminal_service_update :: proc(
     bounds := ui.terminal_content_panel(state^.ui_runtime.ui_regions.text_rect)
     terminal_font := font.cache_resolve(&state^.font_cache, .Regular)
     shell_was_running := state^.shell.phase == .Running
-    update := ui.terminal_update(&state^.terminal, frame, terminal_font, bounds)
+    terminal_frame := terminal_service_routed_frame(state, frame)
+    update := ui.terminal_update(
+        &state^.terminal, terminal_frame, terminal_font, bounds)
     terminal_service_apply_submission(state, update.submission)
     terminal_service_send_completion(state, update.completion)
     shell_frame := terminalview.terminal_resolve_mouse_frame(
-        &state^.terminal, frame, bounds)
+        &state^.terminal, terminal_frame, bounds)
     shell_service_update(
         state, input_runtime, shell_frame, update.geometry_change,
         shell_was_running)

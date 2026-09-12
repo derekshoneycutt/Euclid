@@ -120,19 +120,26 @@ input_test_terminal_focus_reports_precede_keys :: proc(t: ^testing.T) {
         events = events,
         window_focused = focused,
         window_focus_changed = changed,
+        terminal_focus_known = true,
+        terminal_focus_changed = true,
     }
-    input_terminal_enqueue_frame(
-        &runtime, frame, {focus_reporting = true})
+    input_terminal_enqueue_frame(&runtime, frame, {focus_reporting = true})
     bytes: [8]u8
     count := input_runtime_copy_queued_bytes(&runtime, bytes[:])
-    testing.expect_value(t, string(bytes[:count]), "\e[Ox")
+    testing.expect_value(t, string(bytes[:count]), "\e[O")
+
+    testing.expect(t, input_runtime_pop_queued_bytes(&runtime, count))
+    frame.terminal_focused = true
+    input_terminal_enqueue_frame(&runtime, frame, {focus_reporting = true})
+    count = input_runtime_copy_queued_bytes(&runtime, bytes[:])
+    testing.expect_value(t, string(bytes[:count]), "\e[Ix")
 
     testing.expect(t, input_runtime_pop_queued_bytes(&runtime, count))
     _, changed = input_runtime_update_window_focus(&runtime, false)
     testing.expect(t, !changed)
     input_terminal_enqueue_frame(&runtime, {
-        window_focused = false,
-        window_focus_changed = changed,
+        terminal_focus_known = true,
+        terminal_focus_changed = changed,
     }, {focus_reporting = true})
     testing.expect_value(t, runtime.byte_queue_count, 0)
 }

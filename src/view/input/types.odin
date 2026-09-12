@@ -202,6 +202,11 @@ Input_Frame :: struct {
     terminal_mouse_inside: bool,
     // False when local UI arbitration, currently Shift override, owns mouse activity.
     terminal_mouse_owned: bool,
+
+    // UI-routed effective focus. Production Terminal frames always mark it known.
+    terminal_focus_known: bool,
+    terminal_focused: bool,
+    terminal_focus_changed: bool,
 }
 
 // Exclusive destination for bytes retained across display frames.
@@ -230,5 +235,10 @@ Input_Hotkey_Binding :: struct {
 Input_Hotkey_Match :: struct {
     action: protocol.Logical_Action,
     event_index: int,
+}
+
+// Return routed effective focus, defaulting isolated non-routed calls to focused.
+input_frame_terminal_focused :: #force_inline proc(frame: Input_Frame) -> bool {
+    return frame.terminal_focused || !frame.terminal_focus_known
 }
 

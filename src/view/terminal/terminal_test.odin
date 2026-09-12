@@ -1195,6 +1195,7 @@ terminal_test_clipboard_paste_shortcut :: proc(t: ^testing.T) {
         }},
     }
     testing.expect(t, terminal_clipboard_paste_requested(paste))
+    testing.expect(t, !terminal_clipboard_paste_requested(paste, false))
 
     term: core.Terminal_State
     testing.expect(t, terminal_init(&term))
@@ -1204,6 +1205,27 @@ terminal_test_clipboard_paste_shortcut :: proc(t: ^testing.T) {
     testing.expect(t, terminal_insert_clipboard_text(&term, "β"))
     testing.expect_value(t, termhist.termhist_current_text(term.history), "aβc")
     testing.expect_value(t, termhist.termhist_cursor(term.history), len("aβ"))
+}
+
+// Verify ordinary local editing requires effective Terminal focus.
+@(test)
+terminal_test_keyboard_requires_effective_focus :: proc(t: ^testing.T) {
+    term: core.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term)
+    term.banner_ready = true
+    frame := input.Input_Frame{events = []input.Input_Event{{
+        kind = .Text,
+        codepoint = 'x',
+    }}}
+
+    update := terminal_update_keyboard(&term, frame, false)
+    testing.expect(t, !update.cursor_moved)
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "")
+
+    update = terminal_update_keyboard(&term, frame, true)
+    testing.expect(t, update.cursor_moved)
+    testing.expect_value(t, termhist.termhist_current_text(term.history), "x")
 }
 
 // Verify the prompt and keyboard input stay blocked until Julia's real
