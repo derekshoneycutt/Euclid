@@ -146,31 +146,31 @@ const EmphasisSweepDuration = 1.2f0
 
 """Complete immutable state for one Theorem 20 animation generation."""
 struct AnimationState
-    edge_cbhost_id::Int64
+    edge_cbhost_id::UInt64
     edge_cbjoint1_id::Int64
     edge_cbjoint2_id::Int64
-    edge_bahost_id::Int64
+    edge_bahost_id::UInt64
     edge_bajoint1_id::Int64
     edge_bajoint2_id::Int64
-    edge_achost_id::Int64
+    edge_achost_id::UInt64
     edge_acjoint1_id::Int64
     edge_acjoint2_id::Int64
-    edge_cdhost_id::Int64
+    edge_cdhost_id::UInt64
     edge_cdjoint1_id::Int64
     edge_cdjoint2_id::Int64
-    edge_cehost_id::Int64
+    edge_cehost_id::UInt64
     edge_cejoint1_id::Int64
     edge_cejoint2_id::Int64
-    point_bid::Int64
-    point_cid::Int64
-    point_aid::Int64
-    point_did::Int64
-    point_eid::Int64
-    label_bid::Int64
-    label_cid::Int64
-    label_aid::Int64
-    label_did::Int64
-    label_eid::Int64
+    point_bid::UInt64
+    point_cid::UInt64
+    point_aid::UInt64
+    point_did::UInt64
+    point_eid::UInt64
+    label_bid::UInt64
+    label_cid::UInt64
+    label_aid::UInt64
+    label_did::UInt64
+    label_eid::UInt64
     phase::Float32
     timer::Float32
 end

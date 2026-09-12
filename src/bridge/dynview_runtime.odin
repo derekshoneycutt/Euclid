@@ -2,24 +2,6 @@ package bridge
 
 import "../core"
 
-//   Convert a bridge decoration code to its native label decoration.
-label_decoration_kind_from_i32 :: #force_inline proc(
-    kind: i32) -> core.Shapes_Label_Decoration_Kind {
-    switch kind {
-    case BRIDGE_LABEL_DECORATION_PRIME:
-        return .Prime
-    case BRIDGE_LABEL_DECORATION_DOUBLEPRIME:
-        return .Double_Prime
-    case BRIDGE_LABEL_DECORATION_TRIPLEPRIME:
-        return .Triple_Prime
-    case BRIDGE_LABEL_DECORATION_HAT:
-        return .Hat
-    case BRIDGE_LABEL_DECORATION_BAR:
-        return .Bar
-    }
-    return .None
-}
-
 //   Mark the current Dynview stream and compile cache invalid.
 dynview_fail :: #force_inline proc(
     runtime: ^core.Dynview_System, code: i32) -> i32 {

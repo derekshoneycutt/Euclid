@@ -24,7 +24,7 @@ const RiseDuration = 3f0
 
 """Complete immutable state for one point-definition animation generation."""
 struct AnimationState
-    point_id::Int64
+    point_id::UInt64
     phase::Float32
     timer::Float32
 end

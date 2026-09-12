@@ -108,6 +108,6 @@ end
     @test bridge.display_name == "OdinJuliaBridge"
     @test length(bridge.source_files) == 7
     create_label = only(filter(symbol -> symbol.name == "create_new_label", bridge.symbols))
-    @test length(create_label.method_signatures) >= 16
+    @test length(create_label.method_signatures) >= 6
     @test occursin("Construct a new label", create_label.doc_markdown)
 end

@@ -4,7 +4,6 @@ import "core:strings"
 import "core:testing"
 
 import app_core "../core"
-import app_bridge "../bridge"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import app_view "./core"
@@ -179,35 +178,6 @@ gif_capture_transitions_record_required_evidence :: proc(t: ^testing.T) {
     testing.expect_value(t, events[2].kind, evidence_trace.Kind.Gif_Failed)
     testing.expect(t, .Required in events[0].flags)
     testing.expect(t, .Failure in events[2].flags)
-}
-
-//   Verify a large hide-point batch splits into multiple commands.
-@(test)
-scene_command_batch_splits_large_hide_point_batches :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State, context.allocator)
-    defer free(state)
-
-    state^.point_system = new(app_core.Shapes_Point_System, context.allocator)
-    defer free(state^.point_system)
-    state^.julia_interface = new(app_core.Euclid_Julia_Interface, context.allocator)
-    defer free(state^.julia_interface)
-    state^.julia_interface^.current_animation =
-        new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
-    defer free(state^.julia_interface^.current_animation)
-
-    batch: app_bridge.Scene_Command_Batch
-    app_bridge.begin_scene_command_batch(state, &batch)
-
-    ids: [10]i32
-    for i in 0..<len(ids) {
-        ids[i] = i32(i)
-    }
-
-    ok := app_bridge.capture_hide_point_batch_command(state, &ids[0], i32(len(ids)))
-    testing.expect(t, ok)
-    testing.expect_value(t, batch.command_count, 2)
-
-    app_bridge.end_scene_command_batch(state)
 }
 
 //   Verify gif_output_filename produces an Euclid-prefixed .gif name.

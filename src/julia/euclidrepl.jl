@@ -57,16 +57,16 @@ end
 abstract type ReplDrawPayload end
 
 struct PointPayload <: ReplDrawPayload
-    point_id::Int
+    point_id::UInt64
     pos::Vector{Float32}
     color
     brush::Float32
 end
 
 struct LinePayload <: ReplDrawPayload
-    host_id::Int
-    start_id::Int
-    end_id::Int
+    host_id::UInt64
+    start_id::UInt64
+    end_id::UInt64
     start_pos::Vector{Float32}
     end_pos::Vector{Float32}
     color
@@ -76,9 +76,9 @@ end
 struct CirclePayload <: ReplDrawPayload
     filled::Bool
     full_sweep::Bool
-    host_id::Int
-    start_id::Int
-    end_id::Int
+    host_id::UInt64
+    start_id::UInt64
+    end_id::UInt64
     center::Vector{Float32}
     start_pos::Vector{Float32}
     end_pos::Vector{Float32}
@@ -623,7 +623,7 @@ function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
     elapsed::Real,
     duration::Real,
-    point_id::Int,
+    point_id::UInt64,
     start_position::AbstractVector{<:Real},
     spec::TranslateSpec)
 
@@ -641,7 +641,7 @@ function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
     elapsed::Real,
     duration::Real,
-    point_id::Int,
+    point_id::UInt64,
     start_position::AbstractVector{<:Real},
     spec::RotateSpec)
 
@@ -661,7 +661,7 @@ function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
     elapsed::Real,
     duration::Real,
-    point_id::Int,
+    point_id::UInt64,
     start_position::AbstractVector{<:Real},
     spec::Reflect2DSpec)
 
@@ -724,7 +724,7 @@ function clear_active_job!(
 end
 
 """Track a host point id as managed EuclidRepl geometry."""
-function track_managed_host!(session::ReplDrawSession, host_id::Int)
+function track_managed_host!(session::ReplDrawSession, host_id::UInt64)
     if !(host_id in session.managed_host_ids)
         push!(session.managed_host_ids, host_id)
     end

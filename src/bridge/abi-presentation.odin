@@ -30,7 +30,7 @@ presentation_bridge_status :: proc(outcome: core.Communication_Send_Outcome) -> 
 @(export)
 publish_presented_text :: proc "c" (
     state: ^core.Euclid_General_State, mime_value: i32,
-    source: rawptr, byte_count: i32) -> i32 {
+    source: ^u8, byte_count: i32) -> i32 {
     if state == nil || state^.julia_runtime_service == nil ||
         state^.julia_interface == nil {
         return BRIDGE_STATUS_ILLEGAL_STATE

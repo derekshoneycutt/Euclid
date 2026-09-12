@@ -57,23 +57,23 @@ const FinalHoldDuration = 0.9f0
 
 """Complete immutable state for one Theorem 7 animation generation."""
 struct AnimationState
-    plane_host_id::Int64
-    divider_host_id::Int64
+    plane_host_id::UInt64
+    divider_host_id::UInt64
     divider_joint1_id::Int64
     divider_joint2_id::Int64
-    point_aid::Int64
-    point_bid::Int64
-    point_aprime_id::Int64
-    segment_abhost_id::Int64
+    point_aid::UInt64
+    point_bid::UInt64
+    point_aprime_id::UInt64
+    segment_abhost_id::UInt64
     segment_abjoint1_id::Int64
     segment_abjoint2_id::Int64
-    segment_aaprime_host_id::Int64
+    segment_aaprime_host_id::UInt64
     segment_aaprime_joint1_id::Int64
     segment_aaprime_joint2_id::Int64
-    alpha_label_id::Int64
-    alabel_id::Int64
-    blabel_id::Int64
-    aprime_label_id::Int64
+    alpha_label_id::UInt64
+    alabel_id::UInt64
+    blabel_id::UInt64
+    aprime_label_id::UInt64
     phase::Float32
     timer::Float32
 end
@@ -236,8 +236,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
     label_b = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', BLabelPoint, LabelColor, 16f0)
-    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
         APrimeLabelPoint, LabelColor, 16f0)
 
     divider_line = OdinJuliaBridge.create_new_line(

@@ -323,9 +323,22 @@ view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(
     testing.expect(t, app_bridge.view_snapshot_matches_current(state, service, snapshot))
 }
 
-//   Verify a scene command batch commits point positions in submission order.
+// Create one transform-and-style entity for scene command tests.
+scene_command_test_entity :: proc(
+    world: ^app_core.Shape_World,
+    position: app_core.Vector3) -> app_core.Shape_Entity {
+    entity: app_core.Shape_Entity
+    assert(app_core.shape_world_create_entity(world, &entity) == .Ok)
+    assert(app_core.shape_component_insert(&world^.transforms, &world^.registry,
+        entity, app_core.Shape_Transform{position = position}) == .Ok)
+    assert(app_core.shape_component_insert(&world^.render_styles, &world^.registry,
+        entity, app_core.Shape_Render_Style{}) == .Ok)
+    return entity
+}
+
+// Verify a scene command batch commits shape positions in submission order.
 @(test)
-scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
+scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     interface := new(app_core.Euclid_Julia_Interface, context.allocator)
@@ -334,24 +347,34 @@ scene_command_batch_commits_point_positions_in_order :: proc(t: ^testing.T) {
     defer free(animation)
     point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
+    world := new(app_core.Shape_World, context.allocator)
+    defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     state^.point_system = point_system
-    point_system^.next_point_index = 2
+    state^.shape_world = world
+    first := scene_command_test_entity(world, {})
+    second := scene_command_test_entity(world, {})
     batch := app_bridge.Scene_Command_Batch{animation = animation}
 
     state^.scene_command_batch_target = &batch
-    testing.expect(t, app_bridge.capture_point_position_command(
-        state, 0, app_core.Vector3{1, 2, 3}))
-    testing.expect(t, app_bridge.capture_point_position_command(
-        state, 1, app_core.Vector3{4, 5, 6}))
+    first_command, first_captured := app_bridge.capture_shape_command(
+        state, .Set_Shape_Position, app_core.shape_entity_pack(first))
+    first_command^.position = {1, 2, 3}
+    testing.expect(t, first_captured)
+    second_command, second_captured := app_bridge.capture_shape_command(
+        state, .Set_Shape_Position, app_core.shape_entity_pack(second))
+    second_command^.position = {4, 5, 6}
+    testing.expect(t, second_captured)
     state^.scene_command_batch_target = nil
 
     testing.expect(t, app_bridge.commit_scene_command_batch(state, &batch))
-    position_0, ok_0 := point_system^.points[0].position.?
-    position_1, ok_1 := point_system^.points[1].position.?
-    testing.expect(t, ok_0 && position_0 == app_core.Vector3{1, 2, 3})
-    testing.expect(t, ok_1 && position_1 == app_core.Vector3{4, 5, 6})
+    transform_0, ok_0 := app_core.shape_component_get(
+        &world^.transforms, &world^.registry, first)
+    transform_1, ok_1 := app_core.shape_component_get(
+        &world^.transforms, &world^.registry, second)
+    testing.expect(t, ok_0 && transform_0^.position == app_core.Vector3{1, 2, 3})
+    testing.expect(t, ok_1 && transform_1^.position == app_core.Vector3{4, 5, 6})
 }
 
 //   Verify an invalid tail command rejects the whole batch atomically.
@@ -365,20 +388,26 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     defer free(animation)
     point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
+    world := new(app_core.Shape_World, context.allocator)
+    defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     state^.point_system = point_system
-    point_system^.next_point_index = 1
-    point_system^.points[0].position = app_core.Vector3{9, 9, 9}
+    state^.shape_world = world
+    entity := scene_command_test_entity(world, {9, 9, 9})
     batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
     batch.commands[0] = app_bridge.Scene_Command{
-        kind = .Set_Point_Position, point_index = 0, position = {1, 2, 3}}
+        kind = .Set_Shape_Position,
+        entity = app_core.shape_entity_pack(entity), position = {1, 2, 3}}
     batch.commands[1] = app_bridge.Scene_Command{
-        kind = .Set_Point_Position, point_index = 1, position = {4, 5, 6}}
+        kind = .Set_Shape_Position,
+        entity = app_core.shape_entity_pack({slot = 2, generation = 1}),
+        position = {4, 5, 6}}
 
     testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
-    position := point_system^.points[0].position.? or_else app_core.Vector3{}
-    testing.expect(t, position == app_core.Vector3{9, 9, 9})
+    transform, found := app_core.shape_component_get(
+        &world^.transforms, &world^.registry, entity)
+    testing.expect(t, found && transform^.position == app_core.Vector3{9, 9, 9})
 }
 
 //   Verify overflow and stale-animation commands reject the batch atomically.
@@ -439,9 +468,9 @@ animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(
         "stale_sequence")
 }
 
-//   Verify general point properties are deferred until the batch commits.
+// Verify canonical shape style is deferred until the batch commits.
 @(test)
-scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^testing.T) {
+scene_command_batch_defers_shape_style_until_commit :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     interface := new(app_core.Euclid_Julia_Interface, context.allocator)
@@ -450,26 +479,34 @@ scene_command_batch_defers_general_point_properties_until_commit :: proc(t: ^tes
     defer free(animation)
     point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
+    world := new(app_core.Shape_World, context.allocator)
+    defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     state^.point_system = point_system
-    point_system^.next_point_index = 1
-    point_system^.points[0].offset = 1
+    state^.shape_world = world
+    entity := scene_command_test_entity(world, {})
+    style, found := app_core.shape_component_get_mut(
+        &world^.render_styles, &world^.registry, entity)
+    testing.expect(t, found)
+    style^.offset = 1
     batch: app_bridge.Scene_Command_Batch
 
     app_bridge.begin_scene_command_batch(state, &batch)
-    testing.expect(t, app_bridge.capture_point_scalar_command(
-        state, .Set_Point_Offset, 0, 2))
-    testing.expect_value(t, point_system^.points[0].offset, f32(1))
+    command, captured := app_bridge.capture_shape_command(
+        state, .Set_Shape_Offset, app_core.shape_entity_pack(entity))
+    command^.scalar = 2
+    testing.expect(t, captured)
+    testing.expect_value(t, style^.offset, f32(1))
     app_bridge.end_scene_command_batch(state)
 
     testing.expect(t, app_bridge.commit_scene_command_batch(state, &batch))
-    testing.expect_value(t, point_system^.points[0].offset, f32(2))
+    testing.expect_value(t, style^.offset, f32(2))
 }
 
-//   Verify an invalid implicit compass handle rejects the batch atomically.
+// Verify an invalid packed tool lock rejects the batch atomically.
 @(test)
-scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(
+scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
     t: ^testing.T) {
 
     state := new(app_core.Euclid_General_State, context.allocator)
@@ -480,20 +517,23 @@ scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(
     defer free(animation)
     point_system := new(app_core.Shapes_Point_System, context.allocator)
     defer free(point_system)
+    world := new(app_core.Shape_World, context.allocator)
+    defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     state^.point_system = point_system
-    point_system^.next_point_index = 1
-    point_system^.points[0].position = app_core.Vector3{9, 9, 9}
-    state^.compass.joint1_id = 1
+    state^.shape_world = world
+    entity := scene_command_test_entity(world, {9, 9, 9})
     batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
     batch.commands[0] = app_bridge.Scene_Command{
-        kind = .Set_Point_Position, point_index = 0, position = {1, 2, 3}}
-    batch.commands[1] = app_bridge.Scene_Command{kind = .Lock_Compass_Joint1}
+        kind = .Set_Shape_Position,
+        entity = app_core.shape_entity_pack(entity), position = {1, 2, 3}}
+    batch.commands[1] = app_bridge.Scene_Command{kind = .Set_Tool_Lock}
 
     testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
-    position := point_system^.points[0].position.? or_else app_core.Vector3{}
-    testing.expect(t, position == app_core.Vector3{9, 9, 9})
+    transform, found := app_core.shape_component_get(
+        &world^.transforms, &world^.registry, entity)
+    testing.expect(t, found && transform^.position == app_core.Vector3{9, 9, 9})
 }
 
 //   Verify the animation query snapshot is immutable while the worker ticks.
@@ -501,21 +541,25 @@ scene_command_batch_rejects_invalid_implicit_compass_handle_atomically :: proc(
 animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    point_system := new(app_core.Shapes_Point_System, context.allocator)
-    defer free(point_system)
-    state^.point_system = point_system
-    state^.pen.joint1_id = 0
-    point_system^.points[0].position = app_core.Vector3{1, 2, 3}
+    world := new(app_core.Shape_World, context.allocator)
+    defer free(world)
+    state^.shape_world = world
+    status := app_core.shape_world_create_entity(world, &state^.world_pen.joint1)
+    testing.expect_value(t, status, app_core.Shape_World_Status.Ok)
+    status = app_core.shape_component_insert(&world^.transforms, &world^.registry,
+        state^.world_pen.joint1,
+        app_core.Shape_Transform{position = {1, 2, 3}})
+    testing.expect_value(t, status, app_core.Shape_World_Status.Ok)
     snapshot: app_bridge.Animation_Query_Snapshot
     app_bridge.capture_animation_query_snapshot(state, &snapshot)
 
-    point_system^.points[0].position = app_core.Vector3{4, 5, 6}
+    transform, found := app_core.shape_component_get_mut(
+        &world^.transforms, &world^.registry, state^.world_pen.joint1)
+    testing.expect(t, found)
+    transform^.position = {4, 5, 6}
     state^.animation_query_snapshot_target = &snapshot
     testing.expect(
         t, app_bridge.get_pen_joint1_position(state) == app_core.Vector3{1, 2, 3})
-    point_view := app_bridge.get_point_view(state, 0)
-    testing.expect(
-        t, point_view.has_position && point_view.position == app_core.Vector3{1, 2, 3})
     state^.animation_query_snapshot_target = nil
 }
 

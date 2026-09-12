@@ -63,54 +63,54 @@ const LabelPPrimePoint = PointPPrime + [0.05f0, -0.05f0, 0f0]
 
 """Complete immutable state for one Theorem 17 animation generation."""
 struct AnimationState
-    edge_abhost_id::Int64
+    edge_abhost_id::UInt64
     edge_abjoint1_id::Int64
     edge_abjoint2_id::Int64
-    edge_bchost_id::Int64
+    edge_bchost_id::UInt64
     edge_bcjoint1_id::Int64
     edge_bcjoint2_id::Int64
-    edge_cdhost_id::Int64
+    edge_cdhost_id::UInt64
     edge_cdjoint1_id::Int64
     edge_cdjoint2_id::Int64
-    edge_dahost_id::Int64
+    edge_dahost_id::UInt64
     edge_dajoint1_id::Int64
     edge_dajoint2_id::Int64
-    edge_aprime_bprime_host_id::Int64
+    edge_aprime_bprime_host_id::UInt64
     edge_aprime_bprime_joint1_id::Int64
     edge_aprime_bprime_joint2_id::Int64
-    edge_bprime_cprime_host_id::Int64
+    edge_bprime_cprime_host_id::UInt64
     edge_bprime_cprime_joint1_id::Int64
     edge_bprime_cprime_joint2_id::Int64
-    edge_cprime_dprime_host_id::Int64
+    edge_cprime_dprime_host_id::UInt64
     edge_cprime_dprime_joint1_id::Int64
     edge_cprime_dprime_joint2_id::Int64
-    edge_dprime_aprime_host_id::Int64
+    edge_dprime_aprime_host_id::UInt64
     edge_dprime_aprime_joint1_id::Int64
     edge_dprime_aprime_joint2_id::Int64
-    edge_aphost_id::Int64
+    edge_aphost_id::UInt64
     edge_apjoint1_id::Int64
     edge_apjoint2_id::Int64
-    edge_pchost_id::Int64
+    edge_pchost_id::UInt64
     edge_pcjoint1_id::Int64
     edge_pcjoint2_id::Int64
-    edge_aprime_pprime_host_id::Int64
+    edge_aprime_pprime_host_id::UInt64
     edge_aprime_pprime_joint1_id::Int64
     edge_aprime_pprime_joint2_id::Int64
-    edge_pprime_cprime_host_id::Int64
+    edge_pprime_cprime_host_id::UInt64
     edge_pprime_cprime_joint1_id::Int64
     edge_pprime_cprime_joint2_id::Int64
-    point_pid::Int64
-    point_pprime_id::Int64
-    label_aid::Int64
-    label_bid::Int64
-    label_cid::Int64
-    label_did::Int64
-    label_pid::Int64
-    label_aprime_id::Int64
-    label_bprime_id::Int64
-    label_cprime_id::Int64
-    label_dprime_id::Int64
-    label_pprime_id::Int64
+    point_pid::UInt64
+    point_pprime_id::UInt64
+    label_aid::UInt64
+    label_bid::UInt64
+    label_cid::UInt64
+    label_did::UInt64
+    label_pid::UInt64
+    label_aprime_id::UInt64
+    label_bprime_id::UInt64
+    label_cprime_id::UInt64
+    label_dprime_id::UInt64
+    label_pprime_id::UInt64
     phase::Float32
     timer::Float32
 end
@@ -354,20 +354,20 @@ function initialize(state_ptr::Ptr{Cvoid})
     label_p = OdinJuliaBridge.create_new_label(
         state_ptr, 'P', LabelPPoint, LabelColor, 16f0)
 
-    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
         LabelAPrimePoint, LabelColor, 16f0)
-    label_b_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'B', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_b_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "B′",
         LabelBPrimePoint, LabelColor, 16f0)
-    label_c_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'C', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_c_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "C′",
         LabelCPrimePoint, LabelColor, 16f0)
-    label_d_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'D', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_d_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "D′",
         LabelDPrimePoint, LabelColor, 16f0)
-    label_p_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'P', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_p_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "P′",
         LabelPPrimePoint, LabelColor, 16f0)
 
 

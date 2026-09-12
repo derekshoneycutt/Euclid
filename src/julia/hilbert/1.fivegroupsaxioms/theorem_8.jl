@@ -37,18 +37,18 @@ const FinalHoldDuration = 0.9f0
 
 """Complete immutable state for one Theorem 8 animation generation."""
 struct AnimationState
-    line_ahost_id::Int64
+    line_ahost_id::UInt64
     line_ajoint1_id::Int64
     line_ajoint2_id::Int64
-    line_bhost_id::Int64
+    line_bhost_id::UInt64
     line_bjoint1_id::Int64
     line_bjoint2_id::Int64
-    line_chost_id::Int64
+    line_chost_id::UInt64
     line_cjoint1_id::Int64
     line_cjoint2_id::Int64
-    labela_id::Int64
-    labelb_id::Int64
-    labelc_id::Int64
+    labela_id::UInt64
+    labelb_id::UInt64
+    labelc_id::UInt64
     phase::Float32
     timer::Float32
 end

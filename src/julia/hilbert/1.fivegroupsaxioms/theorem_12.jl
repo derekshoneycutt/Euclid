@@ -214,50 +214,50 @@ const FinalHoldDuration = 0.35f0
 
 """Complete immutable state for one Theorem 12 animation generation."""
 struct AnimationState
-    edge_achost_id::Int64
+    edge_achost_id::UInt64
     edge_acjoint1_id::Int64
     edge_acjoint2_id::Int64
-    edge_cdhost_id::Int64
+    edge_cdhost_id::UInt64
     edge_cdjoint1_id::Int64
     edge_cdjoint2_id::Int64
-    edge_dahost_id::Int64
+    edge_dahost_id::UInt64
     edge_dajoint1_id::Int64
     edge_dajoint2_id::Int64
-    edge_cbhost_id::Int64
+    edge_cbhost_id::UInt64
     edge_cbjoint1_id::Int64
     edge_cbjoint2_id::Int64
-    edge_aprime_cprime_host_id::Int64
+    edge_aprime_cprime_host_id::UInt64
     edge_aprime_cprime_joint1_id::Int64
     edge_aprime_cprime_joint2_id::Int64
-    edge_cprime_dprime_host_id::Int64
+    edge_cprime_dprime_host_id::UInt64
     edge_cprime_dprime_joint1_id::Int64
     edge_cprime_dprime_joint2_id::Int64
-    edge_dprime_aprime_host_id::Int64
+    edge_dprime_aprime_host_id::UInt64
     edge_dprime_aprime_joint1_id::Int64
     edge_dprime_aprime_joint2_id::Int64
-    edge_cprime_bprime_host_id::Int64
+    edge_cprime_bprime_host_id::UInt64
     edge_cprime_bprime_joint1_id::Int64
     edge_cprime_bprime_joint2_id::Int64
-    label_aid::Int64
-    label_bid::Int64
-    label_cid::Int64
-    label_did::Int64
-    label_aprime_id::Int64
-    label_bprime_id::Int64
-    label_cprime_id::Int64
-    label_dprime_id::Int64
-    marker_abchost_id::Int64
-    marker_abcstart_id::Int64
-    marker_abcend_id::Int64
-    marker_aprime_bprime_cprime_host_id::Int64
-    marker_aprime_bprime_cprime_start_id::Int64
-    marker_aprime_bprime_cprime_end_id::Int64
-    marker_cbdhost_id::Int64
-    marker_cbdstart_id::Int64
-    marker_cbdend_id::Int64
-    marker_cprime_bprime_dprime_host_id::Int64
-    marker_cprime_bprime_dprime_start_id::Int64
-    marker_cprime_bprime_dprime_end_id::Int64
+    label_aid::UInt64
+    label_bid::UInt64
+    label_cid::UInt64
+    label_did::UInt64
+    label_aprime_id::UInt64
+    label_bprime_id::UInt64
+    label_cprime_id::UInt64
+    label_dprime_id::UInt64
+    marker_abchost_id::UInt64
+    marker_abcstart_id::UInt64
+    marker_abcend_id::UInt64
+    marker_aprime_bprime_cprime_host_id::UInt64
+    marker_aprime_bprime_cprime_start_id::UInt64
+    marker_aprime_bprime_cprime_end_id::UInt64
+    marker_cbdhost_id::UInt64
+    marker_cbdstart_id::UInt64
+    marker_cbdend_id::UInt64
+    marker_cprime_bprime_dprime_host_id::UInt64
+    marker_cprime_bprime_dprime_start_id::UInt64
+    marker_cprime_bprime_dprime_end_id::UInt64
     phase::Float32
     timer::Float32
 end
@@ -547,17 +547,17 @@ function initialize(state_ptr::Ptr{Cvoid})
     label_d = OdinJuliaBridge.create_new_label(
         state_ptr, 'D', LabelDPoint, LabelColor, 16f0)
 
-    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
         LabelAPrimePoint, LabelColor, 16f0)
-    label_b_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'B', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_b_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "B′",
         LabelBPrimePoint, LabelColor, 16f0)
-    label_c_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'C', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_c_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "C′",
         LabelCPrimePoint, LabelColor, 16f0)
-    label_d_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'D', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_d_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "D′",
         LabelDPrimePoint, LabelColor, 16f0)
 
 

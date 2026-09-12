@@ -319,24 +319,24 @@ function initialize(state_ptr::Ptr{Cvoid})
     label_k = OdinJuliaBridge.create_new_label(
         state_ptr, 'k', LabelKPoint, LabelColor, 16f0)
 
-    label_o_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'O', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_o_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "O′",
         LabelOPrimePoint, LabelColor, 16f0)
-    label_h_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'h', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_h_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "h′",
         LabelHPrimePoint, LabelColor, 16f0)
-    label_k_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'k', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_k_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "k′",
         LabelKPrimePoint, LabelColor, 16f0)
 
-    label_o_double_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'O', OdinJuliaBridge.LABEL_DECORATION_DOUBLEPRIME,
+    label_o_double_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "O″",
         LabelODoublePrimePoint, LabelColor, 16f0)
-    label_h_double_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'h', OdinJuliaBridge.LABEL_DECORATION_DOUBLEPRIME,
+    label_h_double_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "h″",
         LabelHDoublePrimePoint, LabelColor, 16f0)
-    label_k_double_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'k', OdinJuliaBridge.LABEL_DECORATION_DOUBLEPRIME,
+    label_k_double_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "k″",
         LabelKDoublePrimePoint, LabelColor, 16f0)
 
     state = AnimationState(

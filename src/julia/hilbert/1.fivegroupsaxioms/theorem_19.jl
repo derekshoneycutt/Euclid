@@ -112,13 +112,13 @@ const FinalHoldDuration = 0.35f0
 
 """Complete immutable state for one Theorem 19 animation generation."""
 struct AnimationState
-    lower_host_id::Int64
+    lower_host_id::UInt64
     lower_joint1_id::Int64
     lower_joint2_id::Int64
-    upper_host_id::Int64
+    upper_host_id::UInt64
     upper_joint1_id::Int64
     upper_joint2_id::Int64
-    transversal_host_id::Int64
+    transversal_host_id::UInt64
     transversal_joint1_id::Int64
     transversal_joint2_id::Int64
     phase::Float32

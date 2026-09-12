@@ -144,8 +144,8 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     label_a = OdinJuliaBridge.create_new_label(
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
-    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
         APrimeLabelPoint, LabelColor, 16f0)
     label_o = OdinJuliaBridge.create_new_label(
         state_ptr, 'O', OLabelPoint, LabelColor, 16f0)

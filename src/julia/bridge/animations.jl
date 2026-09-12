@@ -129,7 +129,7 @@ function set_animation_value!(
     return _with_animation_value_source(value) do source
         @ccall set_animation_value(
             state_ptr::Ptr{Cvoid}, identity::AnimationValueIdentityABI,
-            source::Ptr{Cvoid}, Int32(byte_count)::Int32)::Int32
+            source::Ptr{UInt8}, Int32(byte_count)::Int32)::Int32
     end
 end
 
@@ -145,7 +145,7 @@ function get_animation_value(
     return _with_animation_value_destination(T) do destination
         @ccall get_animation_value(
             state_ptr::Ptr{Cvoid}, identity::AnimationValueIdentityABI,
-            destination::Ptr{Cvoid}, Int32(byte_count)::Int32)::Int32
+            destination::Ptr{UInt8}, Int32(byte_count)::Int32)::Int32
     end
 end
 

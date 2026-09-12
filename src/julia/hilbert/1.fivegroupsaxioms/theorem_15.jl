@@ -152,34 +152,34 @@ const FinalHoldDuration = 0.35f0
 
 """Complete immutable state for one Theorem 15 animation generation."""
 struct AnimationState
-    base_line_host_id::Int64
+    base_line_host_id::UInt64
     base_line_joint1_id::Int64
     base_line_joint2_id::Int64
-    right_ray_host_id::Int64
+    right_ray_host_id::UInt64
     right_ray_joint1_id::Int64
     right_ray_joint2_id::Int64
-    base_line_prime_host_id::Int64
+    base_line_prime_host_id::UInt64
     base_line_prime_joint1_id::Int64
     base_line_prime_joint2_id::Int64
-    right_ray_prime_host_id::Int64
+    right_ray_prime_host_id::UInt64
     right_ray_prime_joint1_id::Int64
     right_ray_prime_joint2_id::Int64
-    right_ray_double_host_id::Int64
+    right_ray_double_host_id::UInt64
     right_ray_double_joint1_id::Int64
     right_ray_double_joint2_id::Int64
-    right_ray_triple_host_id::Int64
+    right_ray_triple_host_id::UInt64
     right_ray_triple_joint1_id::Int64
     right_ray_triple_joint2_id::Int64
-    label_bid::Int64
-    label_aid::Int64
-    label_cid::Int64
-    label_did::Int64
-    label_bprime_id::Int64
-    label_aprime_id::Int64
-    label_cprime_id::Int64
-    label_dprime_id::Int64
-    label_ddouble_id::Int64
-    label_dtriple_id::Int64
+    label_bid::UInt64
+    label_aid::UInt64
+    label_cid::UInt64
+    label_did::UInt64
+    label_bprime_id::UInt64
+    label_aprime_id::UInt64
+    label_cprime_id::UInt64
+    label_dprime_id::UInt64
+    label_ddouble_id::UInt64
+    label_dtriple_id::UInt64
     phase::Float32
     timer::Float32
 end
@@ -409,23 +409,23 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, 'C', LabelCPoint, LabelColor, 16f0)
     label_d = OdinJuliaBridge.create_new_label(
         state_ptr, 'D', LabelDPoint, LabelColor, 16f0)
-    label_b_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'B', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_b_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "B′",
         LabelBPrimePoint, LabelColor, 16f0)
-    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
         LabelAPrimePoint, LabelColor, 16f0)
-    label_c_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'C', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_c_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "C′",
         LabelCPrimePoint, LabelColor, 16f0)
-    label_d_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'D', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_d_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "D′",
         LabelDPrimePoint, LabelColor, 16f0)
-    label_d_double = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'D', OdinJuliaBridge.LABEL_DECORATION_DOUBLEPRIME,
+    label_d_double = OdinJuliaBridge.create_new_label(
+        state_ptr, "D″",
         LabelDDoublePoint, LabelColor, 16f0)
-    label_d_triple = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'D', OdinJuliaBridge.LABEL_DECORATION_TRIPLEPRIME,
+    label_d_triple = OdinJuliaBridge.create_new_label(
+        state_ptr, "D‴",
         LabelDTriplePoint, LabelColor, 16f0)
 
 

@@ -116,28 +116,23 @@ end
 
 @testset "EuclidRepl hide helpers" begin
     point_view = OdinJuliaBridge.BridgePointView(
-        0x0,
-        7,
-        0,
-        0x0,
-        0f0,
-        0f0,
-        0x0,
-        (0f0, 0f0, 0f0),
-        0x0,
-        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
-        0x0,
-        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
-        0x0,
-        UInt32(0),
         Int32(0),
-        0,
-        0,
-        0,
-        0)
-    line_shape = OdinJuliaBridge.BridgeShapeLine(11, 12, 13)
-    circle_shape = OdinJuliaBridge.BridgeShapeCircle(21, 22, 23)
-    filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(31, 32, 33)
+        UInt64(7),
+        Int32(0),
+        UInt8(0),
+        UInt8(0),
+        UInt8(0),
+        UInt8(0),
+        (0f0, 0f0, 0f0),
+        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
+        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
+        UInt8(0),
+        0f0,
+        0f0,
+        UInt16(0))
+    line_shape = OdinJuliaBridge.BridgeShapeLine(0, 11, 12, 13)
+    circle_shape = OdinJuliaBridge.BridgeShapeCircle(0, 21, 21, 22, 23)
+    filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(0, 31, 31, 32, 33)
 
     @test isnothing(EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 5))
     @test isnothing(EuclidRepl.hide!(

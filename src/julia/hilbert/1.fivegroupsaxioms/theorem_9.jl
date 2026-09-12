@@ -218,16 +218,16 @@ function initialize(state_ptr::Ptr{Cvoid})
     label_pairs = ntuple(6) do i
         label_unprimed = OdinJuliaBridge.create_new_label(
             state_ptr, UnprimedLabelChars[i], UnprimedLabelPoints[i], LabelColor, 16f0)
-        label_primed = OdinJuliaBridge.create_new_label_decorated(
-            state_ptr, UnprimedLabelChars[i], OdinJuliaBridge.LABEL_DECORATION_PRIME,
+        label_primed = OdinJuliaBridge.create_new_label(
+            state_ptr, string(UnprimedLabelChars[i], '′'),
             PrimedLabelPoints[i], LabelColor, 16f0)
         return (label_unprimed.index, label_primed.index)
     end
 
     labela_line = OdinJuliaBridge.create_new_label(
         state_ptr, 'a', LabelaLinePoint, LabelColor, 16f0)
-    label_a_prime_line = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'a', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime_line = OdinJuliaBridge.create_new_label(
+        state_ptr, "a′",
         LabelAPrimeLinePoint, LabelColor, 16f0)
     state = AnimationState(
         LineIds(line_a.host_id, line_a.joint1_id, line_a.joint2_id),

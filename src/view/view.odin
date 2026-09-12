@@ -446,6 +446,7 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
         &state^.dynview_documents)
     julia.destroy_julia_interface_resources(state)
     free(state^.particle_system)
+    free(state^.shape_world)
     free(state^.point_system)
     free(state^.draw_surface)
     free(state^.iso_scale)

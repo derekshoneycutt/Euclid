@@ -73,11 +73,11 @@ struct AnimationState
     poly6_host_id::Int64
     poly6_joint1_id::Int64
     poly6_joint2_id::Int64
-    point_aid::Int64
-    point_bid::Int64
-    point_aprime_id::Int64
-    point_bprime_id::Int64
-    segment_abhost_id::Int64
+    point_aid::UInt64
+    point_bid::UInt64
+    point_aprime_id::UInt64
+    point_bprime_id::UInt64
+    segment_abhost_id::UInt64
     segment_abjoint1_id::Int64
     segment_abjoint2_id::Int64
     inside1_host_id::Int64
@@ -95,10 +95,10 @@ struct AnimationState
     outside3_host_id::Int64
     outside3_joint1_id::Int64
     outside3_joint2_id::Int64
-    label_aid::Int64
-    label_bid::Int64
-    label_aprime_id::Int64
-    label_bprime_id::Int64
+    label_aid::UInt64
+    label_bid::UInt64
+    label_aprime_id::UInt64
+    label_bprime_id::UInt64
     phase::Float32
     timer::Float32
 end
@@ -287,11 +287,11 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
     label_b = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', BLabelPoint, LabelColor, 16f0)
-    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
         APrimeLabelPoint, LabelColor, 16f0)
-    label_b_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'B', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_b_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "B′",
         BPrimeLabelPoint, LabelColor, 16f0)
 
 

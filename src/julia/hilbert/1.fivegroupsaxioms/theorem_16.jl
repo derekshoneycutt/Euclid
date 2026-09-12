@@ -175,30 +175,30 @@ const FinalHoldDuration = 0.35f0
 
 """Complete immutable state for one Theorem 16 animation generation."""
 struct AnimationState
-    edge_abhost_id::Int64
+    edge_abhost_id::UInt64
     edge_abjoint1_id::Int64
     edge_abjoint2_id::Int64
-    edge_bchost_id::Int64
+    edge_bchost_id::UInt64
     edge_bcjoint1_id::Int64
     edge_bcjoint2_id::Int64
-    edge_cahost_id::Int64
+    edge_cahost_id::UInt64
     edge_cajoint1_id::Int64
     edge_cajoint2_id::Int64
-    edge_aprime_bprime_host_id::Int64
+    edge_aprime_bprime_host_id::UInt64
     edge_aprime_bprime_joint1_id::Int64
     edge_aprime_bprime_joint2_id::Int64
-    edge_bprime_cprime_host_id::Int64
+    edge_bprime_cprime_host_id::UInt64
     edge_bprime_cprime_joint1_id::Int64
     edge_bprime_cprime_joint2_id::Int64
-    edge_cprime_aprime_host_id::Int64
+    edge_cprime_aprime_host_id::UInt64
     edge_cprime_aprime_joint1_id::Int64
     edge_cprime_aprime_joint2_id::Int64
-    label_aid::Int64
-    label_bid::Int64
-    label_cid::Int64
-    label_aprime_id::Int64
-    label_bprime_id::Int64
-    label_cprime_id::Int64
+    label_aid::UInt64
+    label_bid::UInt64
+    label_cid::UInt64
+    label_aprime_id::UInt64
+    label_bprime_id::UInt64
+    label_cprime_id::UInt64
     phase::Float32
     timer::Float32
 end
@@ -371,14 +371,14 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
     label_c = OdinJuliaBridge.create_new_label(
         state_ptr, 'C', LabelCPoint, LabelColor, 16f0)
-    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
         LabelAPrimePoint, LabelColor, 16f0)
-    label_b_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'B', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_b_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "B′",
         LabelBPrimePoint, LabelColor, 16f0)
-    label_c_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'C', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_c_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "C′",
         LabelCPrimePoint, LabelColor, 16f0)
 
 

@@ -24,22 +24,25 @@ import "core:math/linalg"
 import "core:time"
 
 Euclid_Runtime_Session :: struct {
-    state: ^Euclid_General_State,
-    julia_service: ^julia.Julia_Runtime_Service,
-    presentation: ^Presentation_Runtime,
+    state : ^Euclid_General_State,
+    julia_service : ^julia.Julia_Runtime_Service,
+    presentation : ^Presentation_Runtime,
 }
 
 //   Created Julia runtime service plus its completed initialize request id.
 Session_Julia_Service :: struct {
-    service:       ^julia.Julia_Runtime_Service,
-    initialize_id: u64,
+    service : ^julia.Julia_Runtime_Service,
+    initialize_id : u64,
 }
 
-//   Allocated point system plus its default compass and pen tools.
-Session_Point_System :: struct {
-    point_system: ^Shapes_Point_System,
-    compass:      core.Shapes_Compass,
-    pen:          core.Shapes_Pen,
+//   Allocated legacy and canonical shape stores plus their baseline tools.
+Session_Shape_Storage :: struct {
+    point_system : ^Shapes_Point_System,
+    compass : core.Shapes_Compass,
+    pen : core.Shapes_Pen,
+    world : ^core.Shape_World,
+    world_compass : core.Shape_Compass_Handle,
+    world_pen : core.Shape_Pen_Handle,
 }
 
 //   Wait for one Julia startup request without driving a window event loop.
@@ -228,9 +231,9 @@ make_drawing_surface :: proc() -> ^Euclid_Drawing_Surface {
     return drawing_surface
 }
 
-//   Allocate the point system, build the default tools, and settle constraints.
-make_point_system :: proc(out: ^Session_Point_System) {
-    point_system := new(Shapes_Point_System)
+//   Allocate both migration-era shape stores and build their baseline tools.
+make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
+    point_system := new(Shapes_Point_System, context.allocator)
     compass := shapes.init_compass(point_system, TOOL_LENGTH, view_core.TOOL_COLOR, 5)
     pen := shapes.init_pen(point_system, TOOL_LENGTH, view_core.TOOL_COLOR, 5)
     shapes.freeze_system_indices(point_system)
@@ -240,6 +243,27 @@ make_point_system :: proc(out: ^Session_Point_System) {
     out.point_system = point_system
     out.compass = compass
     out.pen = pen
+    world := new(core.Shape_World, context.allocator)
+    world_compass, compass_status := shapes.world_create_compass(world, {
+        joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
+        joint2 = {0.02, 0.02, 0}, limb_length = TOOL_LENGTH,
+        style = {color = view_core.TOOL_COLOR, brush_size = 5}})
+    world_pen, pen_status := shapes.world_create_pen(world, {
+        joint1 = {0, 0, 0}, joint2 = {0, 0, 0}, length = TOOL_LENGTH,
+        style = {color = view_core.TOOL_COLOR, brush_size = 5}})
+    if compass_status != .Ok || pen_status != .Ok ||
+        core.shape_world_freeze_baseline(world) != .Ok {
+        free(world)
+        free(point_system)
+        return false
+    }
+    shapes.world_apply_all_constraints_to_error(
+        world, view_core.ALLOWED_CONSTRAINT_ERROR)
+    shapes.shape_world_update_previous_positions(world)
+    out.world = world
+    out.world_compass = world_compass
+    out.world_pen = world_pen
+    return true
 }
 
 //   Populate the simulation/UI scalar fields on the general state.
@@ -302,16 +326,19 @@ init_animations_state_resources :: proc(
     julia_service: ^julia.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings,
     particle_system: ^Particle_System,
-    points: Session_Point_System) -> bool {
+    shapes_state: Session_Shape_Storage) -> bool {
     state^.evidence_allocations = settings^.evidence_allocations
     state^.saved_context = context
     state^.julia_runtime_service = julia_service
     state^.iso_scale = make_iso_scale()
     state^.draw_surface = make_drawing_surface()
-    state^.point_system = points.point_system
+    state^.point_system = shapes_state.point_system
     state^.particle_system = particle_system
-    state^.compass = points.compass
-    state^.pen = points.pen
+    state^.compass = shapes_state.compass
+    state^.pen = shapes_state.pen
+    state^.shape_world = shapes_state.world
+    state^.world_compass = shapes_state.world_compass
+    state^.world_pen = shapes_state.world_pen
     init_runtime_fields(state, settings)
     return true
 }
@@ -340,24 +367,34 @@ init_runtime_executors :: proc(state: ^Euclid_General_State) -> bool {
 }
 
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
+make_animations_state :: proc(
+    julia_service: ^julia.Julia_Runtime_Service,
+    settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
+    particle_system := new(Particle_System, context.allocator)
+    particle_system^.use_max_dust_particles = settings^.dust_particle_max
+    shape_storage: Session_Shape_Storage
+    if !make_shape_storage(&shape_storage) {
+        free(particle_system)
+        return nil
+    }
+    state := new(Euclid_General_State, context.allocator)
+    if init_animations_state_resources(
+        state, julia_service, settings, particle_system, shape_storage) {
+        return state
+    }
+    free(state)
+    free(particle_system)
+    free(shape_storage.world)
+    free(shape_storage.point_system)
+    return nil
+}
+
+//   Allocate runtime state shared by the windowed frontend and the headless harness.
 initiate_animations_state :: proc(
     julia_service: ^julia.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
-
-    particle_system := new(Particle_System)
-    particle_system^.use_max_dust_particles = settings^.dust_particle_max
-
-    point_system_parts: Session_Point_System
-    make_point_system(&point_system_parts)
-
-    state := new(Euclid_General_State)
-    if !init_animations_state_resources(
-        state, julia_service, settings, particle_system, point_system_parts) {
-        free(state)
-        free(particle_system)
-        free(point_system_parts.point_system)
-        return nil
-    }
+    state := make_animations_state(julia_service, settings)
+    if state == nil {return nil}
     if !core.animation_storage_init(
         &state^.animation_memory,
         &state^.animation_values,

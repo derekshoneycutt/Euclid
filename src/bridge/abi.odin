@@ -48,81 +48,111 @@ BRIDGE_STATUS_ILLEGAL_STATE :: 6
 BRIDGE_STATUS_NON_CONVERGED :: 7
 BRIDGE_STATUS_NOT_FOUND :: 8
 BRIDGE_STATUS_SCHEMA_MISMATCH :: 9
-
-BRIDGE_LABEL_DECORATION_NONE :: i32(core.Shapes_Label_Decoration_Kind.None)
-BRIDGE_LABEL_DECORATION_PRIME :: i32(core.Shapes_Label_Decoration_Kind.Prime)
-BRIDGE_LABEL_DECORATION_DOUBLEPRIME :: i32(core.Shapes_Label_Decoration_Kind.Double_Prime)
-BRIDGE_LABEL_DECORATION_TRIPLEPRIME :: i32(core.Shapes_Label_Decoration_Kind.Triple_Prime)
-BRIDGE_LABEL_DECORATION_HAT :: i32(core.Shapes_Label_Decoration_Kind.Hat)
-BRIDGE_LABEL_DECORATION_BAR :: i32(core.Shapes_Label_Decoration_Kind.Bar)
-
-SHAPES_CONSTRAINT_KIND_MIN :: i32(core.Shapes_Constraint_Kind.Distance)
-SHAPES_CONSTRAINT_KIND_MAX :: i32(core.Shapes_Constraint_Kind.Center_Pivot)
-
-CONSTRAINT_SPEC_TRAITS :: (1 << 0)
-CONSTRAINT_SPEC_ONPOINT :: (1 << 1)
-CONSTRAINT_SPEC_RESTRICTION :: (1 << 2)
-CONSTRAINT_SPEC_BOUNCE :: (1 << 3)
-CONSTRAINT_SPEC_ALLOWANCE :: (1 << 4)
-CONSTRAINT_SPEC_DEPENDON :: (1 << 5)
-CONSTRAINT_SPEC_CHILDOFFSET :: (1 << 6)
-CONSTRAINT_SPEC_DOAPPLY :: (1 << 7)
+BRIDGE_STATUS_INVALID_UTF8 :: 10
+BRIDGE_STATUS_UNSUPPORTED_MIME :: 11
 
 Bridge_Color :: core.Bridge_Color
 
-Bridge_Point_View :: struct {
-    valid: bool,
-    index: int,
+// Carry presentation values shared by shape construction exports.
+Bridge_Shape_Style :: struct {
+    color: Bridge_Color,
+    brush_size: f32,
+}
 
-    point_type: int,
-    do_draw: bool,
+// Carry one positioned shape's construction values within the ABI parameter budget.
+Bridge_Positioned_Shape_Input :: struct {
+    position: core.Vector3,
+    style: Bridge_Shape_Style,
+}
+
+// Carry direct distance-constraint targets and policy as one ABI value.
+Bridge_Distance_Constraint_Input :: struct {
+    first: u64,
+    second: u64,
+    length: f32,
+    movement: i32,
+    enabled: u8,
+}
+
+// Carry direct angle-constraint targets and policy as one ABI value.
+Bridge_Angle_Constraint_Input :: struct {
+    first: u64,
+    pivot: u64,
+    second: u64,
+    limit: f32,
+    movement: i32,
+    enabled: u8,
+}
+
+// Return one packed entity identity with an explicit operation status.
+Bridge_Shape_Entity_Result :: struct {
+    status: i32,
+    entity: u64,
+}
+
+// Return one line host and both direct endpoint identities.
+Bridge_Shape_Line_Result :: struct {
+    status: i32,
+    shape: u64,
+    first: u64,
+    second: u64,
+}
+
+// Return one arc host and all direct transform identities.
+Bridge_Shape_Arc_Result :: struct {
+    status: i32,
+    shape: u64,
+    center: u64,
+    start: u64,
+    finish: u64,
+}
+
+// Return one triangle host and its direct ordered vertex identities.
+Bridge_Shape_Triangle_Result :: struct {
+    status: i32,
+    shape: u64,
+    first: u64,
+    second: u64,
+    third: u64,
+}
+
+// Return one square host and its direct ordered vertex identities.
+Bridge_Shape_Square_Result :: struct {
+    status: i32,
+    shape: u64,
+    vertices: [4]u64,
+}
+
+// Return one pentagon host and its direct ordered vertex identities.
+Bridge_Shape_Pentagon_Result :: struct {
+    status: i32,
+    shape: u64,
+    vertices: [5]u64,
+}
+
+// Return component projections for one resolved packed entity.
+Bridge_Shape_View :: struct {
+    status: i32,
+    entity: u64,
+    kind: i32,
+    visible: u8,
+    has_transform: u8,
+    has_style: u8,
+    has_active_feature: u8,
+    position: core.Vector3,
+    color: Bridge_Color,
+    active_color: Bridge_Color,
+    has_active_color: u8,
     brush_size: f32,
     offset: f32,
-
-    has_position: bool,
-    position: core.Vector3,
-    
-    has_color: bool,
-    color: Bridge_Color,
-
-    has_active_color: bool,
-    active_color: Bridge_Color,
-
-    has_label : bool,
-    label : rune,
-    decoration_kind: i32,
-
-    active_child: int,
-    child_count: int,
-    child_point_head: int,
-    next_child_point: int,
+    active_feature: u16,
 }
 
-Bridge_Constraint_View :: struct {
-    valid: u8,
-    index: i32,
-
-    traits: i32,
-    on_point: i32,
-    restriction: core.Vector3,
-    bounce: f32,
-    allowance: f32,
-    depend_on: i32,
-    has_child_offset: u8,
-    child_offset: i32,
-    do_apply: u8,
-}
-
-Bridge_Constraint_Spec :: struct {
-    traits: i32,
-    on_point: i32,
-    restriction: core.Vector3,
-    bounce: f32,
-    allowance: f32,
-    depend_on: i32,
-    has_child_offset: u8,
-    child_offset: i32,
-    do_apply: u8,
+// Return metadata from copying one immutable label source.
+Bridge_Label_Copy_Result :: struct {
+    status: i32,
+    byte_count: i32,
+    mime: i32,
 }
 
 Bridge_Solve_Result :: struct {

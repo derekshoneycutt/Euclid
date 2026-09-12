@@ -105,7 +105,6 @@ VIEW_SNAPSHOT_ARENA_RESERVATION :: uint(2 * mem.Megabyte)
 ANIMATION_TICK_SLOT_COUNT :: 2
 
 SCENE_COMMAND_BATCH_CAPACITY :: 64
-SCENE_COMMAND_POINT_BATCH_CAPACITY :: 8
 
 JULIA_INTERFACE_GENERATION_SLOT_COUNT :: 2
 
@@ -129,13 +128,6 @@ Bridge_Arc_Geometry :: struct {
     end_theta:   f32,
 }
 
-//   Glyph and decoration for one label point, grouped so the C export
-//   signature stays within the bridge parameter budget.
-Bridge_Label_Glyph :: struct {
-    label:           rune,
-    decoration_kind: i32,
-}
-
 //   Four vertices for one square shape, grouped so the C export signature
 //   stays within the bridge parameter budget.
 Bridge_Square_Vertices :: struct {
@@ -149,23 +141,15 @@ Bridge_Pentagon_Vertices :: struct {
 }
 
 Scene_Command_Kind :: enum u8 {
-    Set_Point_Position,
-    Set_Point_Color,
-    Set_Point_Brush,
-    Set_Point_Offset,
-    Show_Point,
-    Hide_Point,
-    Hide_Point_Batch,
-    Lock_Pen_Joint1,
-    Move_Pen_Joint2,
-    Set_Pen_Active,
-    Show_Pen,
-    Hide_Pen,
-    Hide_Compass,
-    Show_Compass,
-    Set_Compass_Active,
-    Lock_Compass_Joint1,
-    Lock_Compass_Joint2,
+    Set_Shape_Position,
+    Set_Shape_Color,
+    Set_Shape_Active_Color,
+    Set_Shape_Brush,
+    Set_Shape_Offset,
+    Set_Shape_Visible,
+    Set_Shape_Active_Feature,
+    Set_Tool_Position,
+    Set_Tool_Lock,
     Set_Drawing_Sound_Enabled,
     Simulate_Drawing_Sound,
     Emit_Trailing_Particle,
@@ -175,14 +159,23 @@ Scene_Command_Kind :: enum u8 {
 
 Scene_Command :: struct {
     kind: Scene_Command_Kind,
-    point_index: int,
+    entity: u64,
     position: Vector3,
     color: Bridge_Color,
     scalar: f32,
     integer: int,
     flag: bool,
-    point_count: int,
-    point_indices: [SCENE_COMMAND_POINT_BATCH_CAPACITY]i32,
+}
+
+// Hold pointer-free canonical shape projections for one asynchronous query window.
+Shape_Query_Snapshot :: struct {
+    registry: Shape_Registry,
+    transforms: Shape_Component_Set(Shape_Transform),
+    render_styles: Shape_Component_Set(Shape_Render_Style),
+    active_features: Shape_Component_Set(Shape_Active_Feature),
+    geometries: Shape_Component_Set(Shape_Geometry),
+    labels: Shape_Component_Set(Shape_Label),
+    label_store: Shape_Label_Store,
 }
 
 Scene_Command_Batch :: struct {
@@ -194,9 +187,7 @@ Scene_Command_Batch :: struct {
 }
 
 Animation_Query_Snapshot :: struct {
-    points: [MAX_SHAPESPOINTS]Shapes_Point,
-    pen: Shapes_Pen,
-    compass: Shapes_Compass,
+    shapes: Shape_Query_Snapshot,
     animation_values_valid: bool,
     animation_values: Animation_Value_Snapshot,
 }
@@ -2634,6 +2625,9 @@ Euclid_General_State :: struct {
     point_system : ^Shapes_Point_System,
     compass : Shapes_Compass,
     pen : Shapes_Pen,
+    shape_world: ^Shape_World,
+    world_compass: Shape_Compass_Handle,
+    world_pen: Shape_Pen_Handle,
 
     particle_system : ^Particle_System,
 

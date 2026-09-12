@@ -39,6 +39,17 @@ animation_value_test_state_destroy :: proc(state: ^core.Euclid_General_State) {
     free(state)
 }
 
+// Create one canonical transform entity for mixed transaction tests.
+animation_value_test_entity :: proc(
+    world: ^core.Shape_World,
+    position: core.Vector3) -> core.Shape_Entity {
+    entity: core.Shape_Entity
+    assert(core.shape_world_create_entity(world, &entity) == .Ok)
+    assert(core.shape_component_insert(&world^.transforms, &world^.registry,
+        entity, core.Shape_Transform{position = position}) == .Ok)
+    return entity
+}
+
 //   Verify copied ABI storage round-trips without retaining caller pointers.
 @(test)
 animation_value_abi_round_trips_copied_bytes :: proc(t: ^testing.T) {
@@ -107,7 +118,7 @@ animation_value_test_stage_pending_writes :: proc(
     pending_values := [2]u8{2, 3}
     for &value in pending_values {
         testing.expect_value(t, set_animation_value(
-            state, identity, rawptr(&value), size_of(value)),
+            state, identity, &value, size_of(value)),
             i32(BRIDGE_STATUS_OK))
     }
 }
@@ -158,26 +169,29 @@ animation_value_batch_commits_scene_and_typed_state :: proc(t: ^testing.T) {
     defer animation_value_test_state_destroy(state)
     interface: core.Euclid_Julia_Interface
     point_system: core.Shapes_Point_System
+    world: core.Shape_World
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
     state^.point_system = &point_system
-    point_system.next_point_index = 1
+    state^.shape_world = &world
+    entity := animation_value_test_entity(&world, {})
     identity := core.Animation_Value_Identity{1, 1, 1, 1}
     _ = core.animation_value_store_set(
         &state^.animation_values, identity, []u8{1})
     batch := core.Scene_Command_Batch{animation = animation, command_count = 1}
     batch.commands[0] = {
-        kind = .Set_Point_Position,
-        point_index = 0,
+        kind = .Set_Shape_Position,
+        entity = core.shape_entity_pack(entity),
         position = {2, 3, 4},
     }
     _ = core.animation_value_pending_append(
         &batch.animation_value_writes, identity, []u8{2})
 
     testing.expect(t, commit_scene_command_batch(state, &batch))
-    position := point_system.points[0].position.? or_else core.Vector3{}
-    testing.expect(t, position == core.Vector3{2, 3, 4})
+    transform, found := core.shape_component_get(
+        &world.transforms, &world.registry, entity)
+    testing.expect(t, found && transform^.position == core.Vector3{2, 3, 4})
     destination: [1]u8
     testing.expect_value(t, core.animation_value_store_copy(
         &state^.animation_values, identity, destination[:]),
@@ -193,18 +207,19 @@ animation_value_batch_rejects_typed_write_with_invalid_scene :: proc(t: ^testing
     defer animation_value_test_state_destroy(state)
     interface: core.Euclid_Julia_Interface
     point_system: core.Shapes_Point_System
+    world: core.Shape_World
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
     state^.point_system = &point_system
-    point_system.next_point_index = 1
+    state^.shape_world = &world
     identity := core.Animation_Value_Identity{1, 1, 1, 1}
     _ = core.animation_value_store_set(
         &state^.animation_values, identity, []u8{1})
     batch := core.Scene_Command_Batch{animation = animation, command_count = 1}
     batch.commands[0] = {
-        kind = .Set_Point_Position,
-        point_index = 1,
+        kind = .Set_Shape_Position,
+        entity = core.shape_entity_pack({slot = 1, generation = 1}),
         position = {2, 3, 4},
     }
     _ = core.animation_value_pending_append(
@@ -225,16 +240,17 @@ animation_value_batch_rejects_scene_with_invalid_typed_write :: proc(t: ^testing
     defer animation_value_test_state_destroy(state)
     interface: core.Euclid_Julia_Interface
     point_system: core.Shapes_Point_System
+    world: core.Shape_World
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
     state^.point_system = &point_system
-    point_system.next_point_index = 1
-    point_system.points[0].position = core.Vector3{9, 9, 9}
+    state^.shape_world = &world
+    entity := animation_value_test_entity(&world, {9, 9, 9})
     batch := core.Scene_Command_Batch{animation = animation, command_count = 1}
     batch.commands[0] = {
-        kind = .Set_Point_Position,
-        point_index = 0,
+        kind = .Set_Shape_Position,
+        entity = core.shape_entity_pack(entity),
         position = {2, 3, 4},
     }
     _ = core.animation_value_pending_append(
@@ -243,8 +259,9 @@ animation_value_batch_rejects_scene_with_invalid_typed_write :: proc(t: ^testing
         i32(core.ANIMATION_VALUE_TOTAL_PAYLOAD_BYTES)
 
     testing.expect(t, !commit_scene_command_batch(state, &batch))
-    position := point_system.points[0].position.? or_else core.Vector3{}
-    testing.expect(t, position == core.Vector3{9, 9, 9})
+    transform, found := core.shape_component_get(
+        &world.transforms, &world.registry, entity)
+    testing.expect(t, found && transform^.position == core.Vector3{9, 9, 9})
 }
 
 //   Verify runtime generation rejection prevents stale typed publication.

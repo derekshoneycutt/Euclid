@@ -75,16 +75,6 @@ struct BridgeArcGeometry
 end
 
 """
-Glyph and decoration for one label point.
-
-Mirrors the Odin `Bridge_Label_Glyph` ABI struct field-for-field.
-"""
-struct BridgeLabelGlyph
-    label::UInt32
-    decoration_kind::Int32
-end
-
-"""
 Four vertices for one square shape.
 
 Mirrors the Odin `Bridge_Square_Vertices` ABI struct field-for-field.
@@ -102,59 +92,66 @@ struct BridgePentagonVertices
     vertices::NTuple{5, NTuple{3, Cfloat}}
 end
 
-struct BridgePointView
-    valid::UInt8
-    index::Int64
+"""Canonical presentation values passed to shape constructors."""
+struct BridgeShapeStyle
+    color::BridgeColor
+    brush_size::Cfloat
+end
 
-    point_type::Int64
+"""Position and presentation values passed to standalone shape constructors."""
+struct BridgePositionedShapeInput
+    position::NTuple{3, Cfloat}
+    style::BridgeShapeStyle
+end
+
+"""Direct targets and policy for one distance constraint."""
+struct BridgeDistanceConstraintInput
+    first::UInt64
+    second::UInt64
+    length::Cfloat
+    movement::Int32
+    enabled::UInt8
+end
+
+"""Direct targets and policy for one angle constraint."""
+struct BridgeAngleConstraintInput
+    first::UInt64
+    pivot::UInt64
+    second::UInt64
+    limit::Cfloat
+    movement::Int32
+    enabled::UInt8
+end
+
+"""Result of constructing one standalone entity."""
+struct BridgeShapeEntityResult
+    status::Int32
+    index::UInt64
+end
+
+"""Pointer-free component projection for one packed entity."""
+struct BridgePointView
+    status::Int32
+    index::UInt64
+    point_type::Int32
     do_draw::UInt8
+    has_position::UInt8
+    has_color::UInt8
+    has_active_feature::UInt8
+    pos::NTuple{3, Cfloat}
+    color::BridgeColor
+    active_color::BridgeColor
+    has_active_color::UInt8
     brush_size::Cfloat
     offset::Cfloat
-
-    has_position::UInt8
-    pos::NTuple{3, Cfloat}
-
-    has_color::UInt8
-    color::BridgeColor
-
-    has_active_color::UInt8
-    active_color::BridgeColor
-
-    has_label::UInt8
-    label::UInt32
-    decoration_kind::Int32
-
-    active_child::Int64
-    child_count::Int64
-    child_point_head::Int64
-    next_child_point::Int64
+    active_child::UInt16
 end
 
-struct BridgeConstraintView
-    valid::UInt8
-    index::Int32
-
-    traits::Int32
-    on_point::Int32
-    restriction::NTuple{3, Cfloat}
-    bounce::Cfloat
-    allowance::Cfloat
-    depend_on::Int32
-    has_child_offset::UInt8
-    child_offset::Int32
-    do_apply::UInt8
-end
-
-struct BridgeConstraintSpec
-    traits::Int32
-    on_point::Int32
-    restriction::NTuple{3, Cfloat}
-    bounce::Cfloat
-    allowance::Cfloat
-    depend_on::Int32
-    has_child_offset::UInt8
-    child_offset::Int32
-    do_apply::UInt8
+"""Metadata returned after copying one immutable label source."""
+struct BridgeLabelCopyResult
+    status::Int32
+    byte_count::Int32
+    mime::Int32
 end
 
 struct BridgeSolveResult
@@ -166,81 +163,48 @@ struct BridgeSolveResult
 end
 
 struct BridgeShapeLine
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
+    status::Int32
+    host_id::UInt64
+    joint1_id::UInt64
+    joint2_id::UInt64
 end
 
 struct BridgeShapeCircle
-    host_id::Int64
-    start_id::Int64
-    end_id::Int64
+    status::Int32
+    host_id::UInt64
+    center_id::UInt64
+    start_id::UInt64
+    end_id::UInt64
 end
 
-struct BridgeShapeFilledCircle
-    host_id::Int64
-    start_id::Int64
-    end_id::Int64
-end
+const BridgeShapeFilledCircle = BridgeShapeCircle
 
 struct BridgeShapeTriangle
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
-    joint3_id::Int64
+    status::Int32
+    host_id::UInt64
+    joint1_id::UInt64
+    joint2_id::UInt64
+    joint3_id::UInt64
 end
 
 struct BridgeShapeSquare
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
-    joint3_id::Int64
-    joint4_id::Int64
+    status::Int32
+    host_id::UInt64
+    joint1_id::UInt64
+    joint2_id::UInt64
+    joint3_id::UInt64
+    joint4_id::UInt64
 end
 
 struct BridgeShapePentagon
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
-    joint3_id::Int64
-    joint4_id::Int64
-    joint5_id::Int64
+    status::Int32
+    host_id::UInt64
+    joint1_id::UInt64
+    joint2_id::UInt64
+    joint3_id::UInt64
+    joint4_id::UInt64
+    joint5_id::UInt64
 end
-
-struct BridgeShapePen
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
-
-    length_constraint_id::Int64
-    point1_floor_id::Int64
-    point2_floor_id::Int64
-    lock_point1_id::Int64
-    lock_point2_id::Int64
-end
-
-struct BridgeShapeCompass
-    host_id::Int64
-    joint1_id::Int64
-    pivot_id::Int64
-    joint2_id::Int64
-
-    center_pivot_id::Int64
-    limb1_length_id::Int64
-    limb2_length_id::Int64
-    point1_floor_id::Int64
-    pivot_floor_id::Int64
-    point2_floor_id::Int64
-    lock_point1_id::Int64
-    lock_point2_id::Int64
-end
-
-const LABEL_DECORATION_NONE = Int32(0)
-const LABEL_DECORATION_PRIME = Int32(1)
-const LABEL_DECORATION_DOUBLEPRIME = Int32(2)
-const LABEL_DECORATION_TRIPLEPRIME = Int32(3)
-const LABEL_DECORATION_HAT = Int32(4)
-const LABEL_DECORATION_BAR = Int32(5)
 
 const BRIDGE_STATUS_OK = Int32(0)
 const BRIDGE_STATUS_INVALID_INDEX = Int32(1)
@@ -257,15 +221,6 @@ const BRIDGE_VERSION = Int32(6)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)
-
-const CONSTRAINT_SPEC_TRAITS = Int32(1 << 0)
-const CONSTRAINT_SPEC_ONPOINT = Int32(1 << 1)
-const CONSTRAINT_SPEC_RESTRICTION = Int32(1 << 2)
-const CONSTRAINT_SPEC_BOUNCE = Int32(1 << 3)
-const CONSTRAINT_SPEC_ALLOWANCE = Int32(1 << 4)
-const CONSTRAINT_SPEC_DEPENDON = Int32(1 << 5)
-const CONSTRAINT_SPEC_CHILDOFFSET = Int32(1 << 6)
-const CONSTRAINT_SPEC_DOAPPLY = Int32(1 << 7)
 
 const ANIMATION_STABLE_ID_NAMESPACE = UUID("66f8da8f-bd5c-5f58-ae66-5cbaf6ea4d41")
 

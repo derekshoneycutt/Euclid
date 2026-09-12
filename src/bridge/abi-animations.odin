@@ -62,7 +62,7 @@ animation_value_identity :: proc "contextless" (
 set_animation_value :: proc "c" (
     state: ^core.Euclid_General_State,
     identity_abi: Animation_Value_Abi_Identity,
-    source: rawptr,
+    source: ^u8,
     byte_count: i32) -> i32 {
     if state == nil {
         return BRIDGE_STATUS_ILLEGAL_STATE
@@ -127,7 +127,7 @@ get_animation_query_value :: proc(
 get_animation_value :: proc "c" (
     state: ^core.Euclid_General_State,
     identity_abi: Animation_Value_Abi_Identity,
-    destination: rawptr,
+    destination: ^u8,
     byte_count: i32) -> i32 {
     if state == nil {
         return BRIDGE_STATUS_ILLEGAL_STATE

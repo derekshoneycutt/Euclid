@@ -168,8 +168,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, 'A', ALabelPoint, LabelColor, 16f0)
     label_b = OdinJuliaBridge.create_new_label(
         state_ptr, 'B', BLabelPoint, LabelColor, 16f0)
-    label_a_prime = OdinJuliaBridge.create_new_label_decorated(
-        state_ptr, 'A', OdinJuliaBridge.LABEL_DECORATION_PRIME,
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
         APrimeLabelPoint, LabelColor, 16f0)
 
     state = AnimationState(

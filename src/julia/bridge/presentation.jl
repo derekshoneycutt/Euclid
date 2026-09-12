@@ -49,7 +49,7 @@ function publish_presented_text(state_ptr::Ptr{Cvoid}, presentation::PresentedTe
         return @ccall publish_presented_text(
             state_ptr::Ptr{Cvoid},
             Int32(presentation.mime)::Int32,
-            pointer(bytes)::Ptr{Cvoid},
+            pointer(bytes)::Ptr{UInt8},
             Int32(byte_count)::Int32)::Int32
     end
 end
