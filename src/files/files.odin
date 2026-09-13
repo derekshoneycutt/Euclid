@@ -635,6 +635,8 @@ resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string
 baseline_asset_entries_exist :: proc(unpack_dir: string) -> bool {
     required_entries := []string{
         "julia/script.jl",
+        "content/animation_catalog_generation.jl",
+        "content/animation_catalog_data.jl",
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
         "NewCMSansMath-Regular.otf",

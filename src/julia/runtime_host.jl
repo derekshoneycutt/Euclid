@@ -68,10 +68,10 @@ end
 
 """Create the Julia runtime host whose lifetime is owned by the native worker."""
 function create_euclid_runtime_host(
-    state_ptr::Ptr{Cvoid};
+    state_ptr::Ptr{Cvoid}, content_root::AbstractString;
     actor_runtime::OptionalActorRuntime=nothing)::EuclidRuntimeHost
     state_ptr == C_NULL && throw(ArgumentError("state_ptr must not be null"))
-    generation = create_euclid_runtime_generation()
+    generation = create_euclid_runtime_generation(content_root)
     terminal_animation_callback = (callback_state_ptr, operation, dt) ->
         terminal_animation_entry(state_ptr, callback_state_ptr, operation, dt)
     reactor = EuclidHost.create_host_runtime(
@@ -395,7 +395,7 @@ end
 
 """Create one fresh module that owns all reloadable content for a generation."""
 function create_euclid_runtime_generation(
-    source_root::AbstractString=@__DIR__)::EuclidRuntimeGeneration
+    source_root::AbstractString)::EuclidRuntimeGeneration
 
     root = abspath(String(source_root))
     content = Module(gensym(:EuclidRuntimeContent), false, false)

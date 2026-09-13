@@ -5,6 +5,20 @@ if !isdefined(Main, :EuclidRuntimeHost)
 end
 
 const RuntimeHostPointId = UUID("03bf688d-40d0-56a2-a6be-ca2656c9b10d")
+const RuntimeHostContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content"))
+
+"""Create one test runtime host against the repository content root."""
+function create_euclid_runtime_host(
+    state_ptr::Ptr{Cvoid}; actor_runtime::OptionalActorRuntime=nothing)
+
+    return create_euclid_runtime_host(
+        state_ptr, RuntimeHostContentRoot; actor_runtime)
+end
+
+"""Create one test generation against the repository content root."""
+function create_euclid_runtime_generation()
+    return create_euclid_runtime_generation(RuntimeHostContentRoot)
+end
 
 """Return the stable UUID registered for the generation's Terminal node."""
 function runtime_host_terminal_id(host::EuclidRuntimeHost)::UUID

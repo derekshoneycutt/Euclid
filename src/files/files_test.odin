@@ -43,7 +43,7 @@ write_required_entry :: proc(root_dir, rel_path: string) -> bool {
             return false
         }
         defer delete(parent_dir)
-        if os.make_directory_all(parent_dir) != nil {
+        if !os.is_directory(parent_dir) && os.make_directory_all(parent_dir) != nil {
             return false
         }
     }
@@ -86,6 +86,8 @@ write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
 build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
     required := []string{
         "julia/script.jl",
+        "content/animation_catalog_generation.jl",
+        "content/animation_catalog_data.jl",
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
         "NewCMSansMath-Regular.otf",

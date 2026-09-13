@@ -28,9 +28,9 @@ The overall structure includes 2 programming languages, Odin and Julia.
     memory ownership, and bridge exports. It owns long-lived application state
   (`Euclid_General_State`), rendering, UI, and systems (shapes + particles +
   gif capture).
-- **Julia** code provides animation/content logic loaded from scripts at runtime. It
-    registers an animation tree and drives per-animation behavior by calling exported
-    Odin-Julia Bridge functions.
+- **Julia** runtime code provides the sysimage-owned host, policy, authoring APIs, and
+  bridge wrappers. Generation-owned content loaded from `src/content/` registers an
+  animation tree and drives per-animation behavior through those stable APIs.
 
 A useful mental model:
 
@@ -77,10 +77,11 @@ If you are new, read in this order:
 | **---** | **--- Julia Modules ---** | **---** | **---** |
 | **Julia** | Runtime Bootstrap | Script loading, animation registration, and global frame dispatch. | `src/julia/script.jl` |
 | **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
-| **Julia** | Shared Animation Utilities | Reusable animation and geometry helper routines. | `src/julia/animations.jl`, `src/julia/geometry.jl`, `src/julia/nullanimation.jl` |
+| **Julia** | Shared Animation Utilities | Sysimage-owned reusable animation and geometry helpers. | `src/julia/animations.jl`, `src/julia/geometry.jl` |
 | **Julia** | Application Reactor | One bounded actor scheduler for persistent Terminal roots, generation-scoped Terminal services, and animation policy supervision. | `src/julia/runtime.jl`, `src/julia/host/`, `src/julia/policy/`, `src/julia/terminal/` |
 | **Julia** | LaTeX Facade | Defines canonical TeX displayables and submits exact MIME bytes to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
-| **Julia** | Content Modules | Domain content roots and leaf animation definitions. | `src/julia/elements/elements.jl`, `src/julia/proclus/proclus.jl`, `src/julia/hilbert/hilbert.jl` |
+| **Julia Content** | Generation Bootstrap | Catalog descriptors, null behavior, and harness scenarios loaded into each generation. | `src/content/animation_catalog_generation.jl`, `src/content/nullanimation.jl`, `src/content/harness_scenarios.jl` |
+| **Julia Content** | Content Modules | Domain roots and leaf animation definitions loaded at startup or on demand. | `src/content/elements/`, `src/content/proclus/`, `src/content/hilbert/`, `src/content/algebra/` |
 
 ### Cross-Module Contracts
 
@@ -607,14 +608,14 @@ Choose the owning module first, then touch that module's highlighted files.
 - **Geometry or constraints:** `src/shapes/`.
 - **Julia bridge contract:** `src/bridge/abi*.odin` and
   `src/julia/odin-julia-bridge.jl`.
-- **New animation:** `src/julia/elements/`, `src/julia/proclus/`,
-  `src/julia/hilbert/`.
+- **New animation:** `src/content/elements/`, `src/content/proclus/`,
+  `src/content/hilbert/`, `src/content/algebra/`.
 - **Terminal or REPL:** `src/view/terminal/`, `src/julia/host/`,
   `src/julia/euclidrepl.jl`.
 
 ### Typical New Animation Workflow
 
-1. Add Julia animation module/file in `src/julia/...`.
+1. Add the Julia animation module/file under `src/content/`.
 1. Implement `get_view_content`, `initialize`, `loop`, `clean`.
 1. Implement the module's direct `animation_entry` dispatcher for Enter, Tick, and Exit.
 1. Publish the named `get_view_content` producer from `initialize`, or from `loop`

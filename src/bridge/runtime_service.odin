@@ -12,6 +12,7 @@ import "core:c"
 import "core:fmt"
 import "core:log"
 import "core:os"
+import "core:strings"
 import "core:thread"
 import "core:time"
 
@@ -2871,8 +2872,15 @@ create_julia_runtime_host :: proc(
     if constructor == nil {
         return nil
     }
-    host := julialib.jl_call1(
-        constructor, julialib.jl_box_voidpointer(state))
+    content_path, content_ok := resolve_packaged_julia_content_path(false)
+    if !content_ok {
+        return nil
+    }
+    content_cstr := strings.clone_to_cstring(
+        content_path, context.temp_allocator)
+    content_value := julialib.jl_cstr_to_string(content_cstr)
+    host := julialib.jl_call2(
+        constructor, julialib.jl_box_voidpointer(state), content_value)
     if host == nil || julialib.jl_exception_occurred() != nil {
         print_julia_exception("create_euclid_runtime_host")
         return nil

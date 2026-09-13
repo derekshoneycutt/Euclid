@@ -394,16 +394,19 @@ Julia 1.13 image compression, and `script.jl` remains an idempotent bootstrap gu
 the image sentinel.
 
 Catalog descriptor data, `nullanimation.jl`, harness scenarios, and individual animation
-implementations remain generation-owned. Every reload creates a fresh content module,
-includes that data again, and shares only the stable catalog machinery from the image.
+implementations live under `src/content/` and remain generation-owned. Every reload
+creates a fresh content module from the explicitly resolved packaged `content/` root,
+includes that data again, and shares only stable catalog machinery from the image.
 Core-runtime edits therefore require rebuilding the image and restarting Euclid, while
 animation and catalog-content edits retain the normal asset hot-reload behavior. Normal
 builds fingerprint the static graph, dependency lock, Julia toolchain, platform, and image
 options and reuse a verified image under `.build/sysimage-cache`. The `sysimage` command
 forces a clean stock-based rebuild; an existing Euclid image is never used as its base.
 
-`assets.pkg` carries the image, input fingerprint, and artifact SHA-256. Startup verifies
-and materializes it at an immutable digest-addressed user-cache path before calling
+`assets.pkg` carries sibling `julia/` and `content/` roots plus the image, input
+fingerprint, content fingerprint, and artifact SHA-256. The content fingerprint refreshes
+packaging independently without invalidating the stable image. Startup verifies and
+materializes the image at an immutable digest-addressed user-cache path before calling
 `jl_init_with_image_file`; corruption triggers one fresh extraction and then a hard
 failure, never stock-Julia fallback. Live asset reload compares the candidate fingerprint
 before publication. A changed image requires restart and cannot create a mixed runtime.

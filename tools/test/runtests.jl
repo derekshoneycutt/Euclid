@@ -240,6 +240,7 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test !("animation_catalog_generation.jl" in relative_inputs)
         @test !("nullanimation.jl" in relative_inputs)
         @test !any(startswith(path, "elements/") for path in relative_inputs)
+        @test length(content_input_fingerprint()) == 64
 
         mktempdir() do root
             first_path = joinpath(root, "first.jl")

@@ -6,7 +6,7 @@ end
 using .AnimationCatalog
 
 if !isdefined(Main, :AnimationCatalogGeneration)
-    include("../animation_catalog_generation.jl")
+    include("../../content/animation_catalog_generation.jl")
 end
 using .AnimationCatalogGeneration: AnimationDescriptors
 
@@ -14,7 +14,7 @@ if !isdefined(Main, :EuclidAnimations)
     include("../animations.jl")
 end
 if !isdefined(Main, :NullAnimation)
-    include("../nullanimation.jl")
+    include("../../content/nullanimation.jl")
 end
 if !isdefined(Main, :EuclidRuntimeHost)
     include("../runtime_host.jl")
@@ -23,6 +23,7 @@ end
 const CatalogRootId = UUID("e405664d-b83f-5ca6-af5d-45fead73b38d")
 const CatalogLeafId = UUID("683b096d-5f64-50d2-9853-df907ca19075")
 const AlgebraOverviewId = UUID("a8bd259b-0c7b-5b60-b21f-84095e2eb903")
+const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content"))
 
 """Construct one valid two-node catalog for loader tests."""
 function test_catalog(; leaf_id=CatalogLeafId, path="test/fixtures/lazy_animation.jl")
@@ -55,7 +56,7 @@ end
     Core.eval(owner, :(const EuclidLatex = $EuclidLatex))
     Core.eval(owner, :(const NullAnimation = $NullAnimation))
     implementation = ensure_animation_loaded(
-        dirname(@__DIR__), [descriptor], AlgebraOverviewId; owner)
+        ProductionContentRoot, [descriptor], AlgebraOverviewId; owner)
     @test implementation.id == AlgebraOverviewId
     @test nameof(implementation.entry) == :animation_entry
 end
@@ -73,12 +74,13 @@ end
         descriptor -> descriptor.implementation_path !== nothing,
         AnimationDescriptors)
     @test length(path_backed) == 117
-    generation = create_euclid_runtime_generation()
+    generation = create_euclid_runtime_generation(ProductionContentRoot)
     for descriptor in path_backed
         implementation = load_generation_animation(generation, descriptor.id)
         @test implementation.id == descriptor.id
         @test nameof(implementation.entry) == :animation_entry
-        source = read(joinpath(dirname(@__DIR__), descriptor.implementation_path), String)
+        source = read(
+            joinpath(ProductionContentRoot, descriptor.implementation_path), String)
         @test occursin(r"export[^\n]*get_view_content", source)
         @test occursin("publish_view_content", source)
         @test !occursin("get_view_text", source)
@@ -87,14 +89,16 @@ end
 end
 
 @testset "production presentation boundary" begin
-    julia_root = dirname(@__DIR__)
     forbidden = r"\b(?:dynview_[a-z0-9_]+|BRIDGE_DYNVIEW_[A-Z0-9_]+)\b"
     violations = String[]
-    for (directory, _, files) in walkdir(julia_root)
-        startswith(directory, joinpath(julia_root, "test")) && continue
-        for file in filter(path -> endswith(path, ".jl"), files)
-            path = joinpath(directory, file)
-            occursin(forbidden, read(path, String)) && push!(violations, path)
+    roots = (dirname(@__DIR__), ProductionContentRoot)
+    for root in roots
+        for (directory, _, files) in walkdir(root)
+            startswith(directory, joinpath(root, "test")) && continue
+            for file in filter(path -> endswith(path, ".jl"), files)
+                path = joinpath(directory, file)
+                occursin(forbidden, read(path, String)) && push!(violations, path)
+            end
         end
     end
     @test isempty(violations)

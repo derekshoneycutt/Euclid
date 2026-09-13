@@ -251,6 +251,18 @@ resolve_packaged_julia_project_path :: proc(exit_on_failure: bool) -> (string, b
     return project_path, true
 }
 
+//   Resolve the packaged Julia content directory used by generation loading.
+resolve_packaged_julia_content_path :: proc(exit_on_failure: bool) -> (string, bool) {
+    content_path := files.packaged_asset_path("content", context.temp_allocator)
+    if len(content_path) == 0 {
+        fmt.eprintln("Failed to resolve packaged Julia content path.")
+        fmt.eprintln("Expected content directory in assets package next to executable.")
+        return "", include_packaged_script_failure(exit_on_failure)
+    }
+
+    return content_path, true
+}
+
 //   Resolve the packaged Julia script path needed for Main.include.
 resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, bool) {
     script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)

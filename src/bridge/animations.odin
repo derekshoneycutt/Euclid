@@ -933,7 +933,14 @@ create_julia_runtime_generation :: proc() -> ^julialib.jl_value_t {
     if constructor == nil {
         return nil
     }
-    generation := julialib.jl_call0(constructor)
+    content_path, content_ok := resolve_packaged_julia_content_path(false)
+    if !content_ok {
+        return nil
+    }
+    content_cstr := strings.clone_to_cstring(
+        content_path, context.temp_allocator)
+    content_value := julialib.jl_cstr_to_string(content_cstr)
+    generation := julialib.jl_call1(constructor, content_value)
     if generation == nil || julialib.jl_exception_occurred() != nil {
         print_julia_exception("create_euclid_runtime_generation")
         return nil

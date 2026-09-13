@@ -217,6 +217,16 @@ function sysimage_input_fingerprint(root::String=JULIA_TEST_PROJECT)
     return fingerprint_sysimage_inputs(paths, root)
 end
 
+"""Return the deterministic identity of reloadable Julia content bytes."""
+function content_input_fingerprint(root::String=joinpath(SRC_DIR, "content"))
+    paths = String[]
+    for (directory, _, names) in walkdir(root), name in names
+        push!(paths, joinpath(directory, name))
+    end
+    sort!(paths; by=path -> replace(relpath(path, root), '\\' => '/'))
+    return fingerprint_sysimage_inputs(paths, root; identity="euclid-content-v1")
+end
+
 """Return the platform-specific generated sysimage filename."""
 julia_sysimage_filename() = "euclid-sysimage." * Libdl.dlext
 
@@ -251,6 +261,16 @@ function write_sysimage_cache_metadata(
     end
 end
 
+"""Return whether cached metadata identifies the requested image and toolchain."""
+function cached_sysimage_metadata_matches(
+    metadata, fingerprint::String, image_path::String)
+
+    return get(metadata, "schema_version", 0) == 1 &&
+        get(metadata, "input_fingerprint", "") == fingerprint &&
+        get(metadata, "image_filename", "") == basename(image_path) &&
+        get(metadata, "toolchain_identity", "") == sysimage_toolchain_identity()
+end
+
 """Return a cached image only when its metadata and bytes remain valid."""
 function load_cached_julia_sysimage(
     fingerprint::String; cache_root::String=SYSIMAGE_CACHE_ROOT)
@@ -264,11 +284,7 @@ function load_cached_julia_sysimage(
         error_object isa TOML.ParserError || rethrow()
         return nothing
     end
-    get(metadata, "schema_version", 0) == 1 || return nothing
-    get(metadata, "input_fingerprint", "") == fingerprint || return nothing
-    get(metadata, "image_filename", "") == basename(image_path) || return nothing
-    get(metadata, "toolchain_identity", "") == sysimage_toolchain_identity() ||
-        return nothing
+    cached_sysimage_metadata_matches(metadata, fingerprint, image_path) || return nothing
     expected_digest = get(metadata, "artifact_sha256", "")
     length(expected_digest) == 64 || return nothing
     sysimage_artifact_sha256(image_path) == expected_digest || return nothing
@@ -1002,10 +1018,13 @@ function stage_assets_content(sysimage::JuliaSysimageArtifact)
     end
 
     mkpath(joinpath(ASSETS_STAGING_DIR, "julia"))
+    mkpath(joinpath(ASSETS_STAGING_DIR, "content"))
     mkpath(joinpath(ASSETS_STAGING_DIR, "shaders"))
 
     copy_directory_contents(joinpath(SRC_DIR, "julia"),
         joinpath(ASSETS_STAGING_DIR, "julia"))
+    copy_directory_contents(joinpath(SRC_DIR, "content"),
+        joinpath(ASSETS_STAGING_DIR, "content"))
     copy_directory_contents(joinpath(SRC_DIR, "view", "shaders"),
         joinpath(ASSETS_STAGING_DIR, "shaders"))
     copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
@@ -1021,6 +1040,8 @@ function stage_assets_content(sysimage::JuliaSysimageArtifact)
         write(io, """
 package=assets.pkg
 julia_root=julia
+content_root=content
+content_input_fingerprint=$(content_input_fingerprint())
 shader_root=shaders
 schema_version=2
 sysimage_path=$(replace(sysimage_relative_path, '\\' => '/'))
@@ -1383,7 +1404,7 @@ end
 """Return whether a unit invocation includes the Odin application suite."""
 unit_command_runs_odin(arguments::Vector{String}) = !("julia" in arguments)
 
-"""Return whether assets.pkg contains the current mandatory sysimage identity."""
+"""Return whether assets.pkg contains current runtime and content identities."""
 function packaged_assets_are_current()
     isfile(ASSETS_ARCHIVE_PATH) || return false
     result = run_command(Cmd([
@@ -1392,8 +1413,9 @@ function packaged_assets_are_current()
     result.exit_code == 0 || return false
     expected = "sysimage_input_fingerprint=$(sysimage_input_fingerprint())"
     expected_platform = "sysimage_platform=$(sysimage_platform_key())"
+    expected_content = "content_input_fingerprint=$(content_input_fingerprint())"
     lines = split(result.stdout, '\n')
-    return expected in lines && expected_platform in lines
+    return expected in lines && expected_platform in lines && expected_content in lines
 end
 
 """Prepare packaged assets required by Odin runtime integration tests."""

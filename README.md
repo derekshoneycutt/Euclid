@@ -286,8 +286,11 @@ Euclid requires Julia 1.13 and packages a compressed Julia sysimage inside `asse
 Normal build and asset commands fingerprint the stable Julia runtime and reuse the image
 from `.build/sysimage-cache` while those inputs remain unchanged. A stable-runtime,
 dependency, Julia, platform, or compiler-setting change triggers one automatic rebuild;
-animation-only changes continue to reuse the image. `julia tools/make.jl sysimage`
-forces a clean rebuild from Julia's stock image before packaging.
+animation-only changes under `src/content/` continue to reuse the image. The packaged
+`julia/` runtime and `content/` tree remain separate asset roots, and startup and reload
+pass the extracted content root explicitly into each generation. A separate content
+fingerprint refreshes `assets.pkg` without invalidating the sysimage. `julia
+tools/make.jl sysimage` forces a clean rebuild from Julia's stock image before packaging.
 
 Additionally, there are some startup options that can affect application performance.
 
