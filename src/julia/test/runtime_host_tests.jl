@@ -41,6 +41,24 @@ end
     @test occursin('\e', banner)
 end
 
+@testset "runtime host renders colorized Julia errors" begin
+    error_stack = try
+        Core.eval(Main, :(missing_terminal_repl_name))
+    catch error
+        error isa UndefVarError || rethrow()
+        current_exceptions()
+    end
+    output = IOBuffer()
+    response = Pair{Any,Bool}(error_stack, true)
+    EuclidReplEvaluation.append_repl_response!(
+        output, response, "missing_terminal_repl_name")
+    rendered = String(take!(output))
+    @test occursin("UndefVarError", rendered)
+    @test occursin("missing_terminal_repl_name", rendered)
+    @test occursin('\e', rendered)
+    @test !occursin("repl_display_error", rendered)
+end
+
 @testset "native animation tick payload has stable isbits layout" begin
     @test isbitstype(NativeAnimationTickPayload)
     @test sizeof(NativeAnimationTickPayload) == 56

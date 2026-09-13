@@ -52,7 +52,8 @@ function append_repl_response!(
     value, is_error = response
     if is_error
         context = IOContext(output, :color => true)
-        REPL.repl_display_error(context, Base.scrub_repl_backtrace(value))
+        Base.invokelatest(
+            Base.display_error, context, Base.scrub_repl_backtrace(value))
     elseif value !== nothing && !REPL.ends_with_semicolon(code)
         context = IOContext(
             output, :color => true, :limit => true,
