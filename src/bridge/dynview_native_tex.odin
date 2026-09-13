@@ -609,7 +609,7 @@ dynview_native_import_table_descriptors :: proc(
     for source in ctx.document.table_descriptors {
         destination := &cache.math_table_descriptors[cache.math_table_descriptor_count]
         destination^ = dynview_native_table_descriptor(source)
-        if !core.dynview_math_table_descriptor_is_valid(destination^) {
+        if !dyncore.math_table_descriptor_is_valid(destination^) {
             return BRIDGE_STATUS_INVALID_ARGUMENT
         }
         cache.math_table_descriptor_count += 1

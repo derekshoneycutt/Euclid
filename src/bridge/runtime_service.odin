@@ -779,7 +779,7 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
 //   Validate one sealed native table descriptor at the publication boundary.
 view_snapshot_math_table_descriptor_is_valid :: proc(
     descriptor: core.Dynview_Math_Table_Descriptor) -> bool {
-    return core.dynview_math_table_descriptor_is_valid(descriptor)
+    return dyncore.math_table_descriptor_is_valid(descriptor)
 }
 
 //   Validate atom and explicit-glue metadata before snapshot publication.
