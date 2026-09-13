@@ -1,15 +1,16 @@
 package shapes
 
+import shapemodel "model"
+
 import "core:math"
 import "core:math/linalg"
 
-import "../core"
 
 WORLD_CONSTRAINT_SOLVE_ITERATION_LIMIT :: 64
 
 // Supply one direct point target and floor response parameters.
 World_Floor_Constraint_Input :: struct {
-    point: core.Shape_Entity,
+    point: shapemodel.Shape_Entity,
     height: f32,
     bounce: f32,
     enabled: bool,
@@ -17,7 +18,7 @@ World_Floor_Constraint_Input :: struct {
 
 // Supply one direct point target and floor snapping parameters.
 World_Snap_To_Floor_Constraint_Input :: struct {
-    point: core.Shape_Entity,
+    point: shapemodel.Shape_Entity,
     height: f32,
     allowance: f32,
     enabled: bool,
@@ -25,35 +26,35 @@ World_Snap_To_Floor_Constraint_Input :: struct {
 
 // Supply one direct point target and fixed world position.
 World_Snap_Point_Constraint_Input :: struct {
-    point: core.Shape_Entity,
+    point: shapemodel.Shape_Entity,
     position: Vector3,
     enabled: bool,
 }
 
 // Supply both direct endpoints and distance correction policy.
 World_Distance_Constraint_Input :: struct {
-    first: core.Shape_Entity,
-    second: core.Shape_Entity,
+    first: shapemodel.Shape_Entity,
+    second: shapemodel.Shape_Entity,
     length: f32,
-    movement: core.Shape_Constraint_Movement_Policy,
+    movement: shapemodel.Shape_Constraint_Movement_Policy,
     enabled: bool,
 }
 
 // Supply three direct angle targets and correction policy.
 World_Angle_Constraint_Input :: struct {
-    first: core.Shape_Entity,
-    pivot: core.Shape_Entity,
-    second: core.Shape_Entity,
+    first: shapemodel.Shape_Entity,
+    pivot: shapemodel.Shape_Entity,
+    second: shapemodel.Shape_Entity,
     limit: f32,
-    movement: core.Shape_Constraint_Movement_Policy,
+    movement: shapemodel.Shape_Constraint_Movement_Policy,
     enabled: bool,
 }
 
 // Supply three direct targets and optional equal compass-limb length.
 World_Center_Pivot_Constraint_Input :: struct {
-    first: core.Shape_Entity,
-    pivot: core.Shape_Entity,
-    second: core.Shape_Entity,
+    first: shapemodel.Shape_Entity,
+    pivot: shapemodel.Shape_Entity,
+    second: shapemodel.Shape_Entity,
     limb_length: f32,
     enabled: bool,
 }
@@ -77,18 +78,18 @@ rotate_around_axis :: proc(vec, axis: Vector3, angle: f32) -> Vector3 {
 
 // Append one generic direct-target constraint after complete validation.
 world_create_constraint :: proc(
-    world: ^core.Shape_World,
-    constraint: core.Shape_Constraint) -> (u16, core.Shape_World_Status) {
+    world: ^shapemodel.Shape_World,
+    constraint: shapemodel.Shape_Constraint) -> (u16, shapemodel.Shape_World_Status) {
     index: u16
-    status := core.shape_constraint_append(world, constraint, &index)
+    status := shapemodel.shape_constraint_append(world, constraint, &index)
     return index, status
 }
 
 // Append one floor constraint with a direct transform target.
 world_create_floor_constraint :: proc(
-    world: ^core.Shape_World,
-    input: World_Floor_Constraint_Input) -> (u16, core.Shape_World_Status) {
-    constraint := core.Shape_Constraint{kind = .Floor, enabled = input.enabled}
+    world: ^shapemodel.Shape_World,
+    input: World_Floor_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
+    constraint := shapemodel.Shape_Constraint{kind = .Floor, enabled = input.enabled}
     constraint.payload.floor = {
         point = input.point, height = input.height, bounce = input.bounce}
     return world_create_constraint(world, constraint)
@@ -96,9 +97,12 @@ world_create_floor_constraint :: proc(
 
 // Append one snap-to-floor constraint with a direct transform target.
 world_create_snap_to_floor_constraint :: proc(
-    world: ^core.Shape_World,
-    input: World_Snap_To_Floor_Constraint_Input) -> (u16, core.Shape_World_Status) {
-    constraint := core.Shape_Constraint{kind = .Snap_To_Floor, enabled = input.enabled}
+    world: ^shapemodel.Shape_World,
+    input: World_Snap_To_Floor_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
+    constraint := shapemodel.Shape_Constraint{
+        kind = .Snap_To_Floor,
+        enabled = input.enabled,
+    }
     constraint.payload.snap_to_floor = {point = input.point,
         height = input.height, allowance = input.allowance}
     return world_create_constraint(world, constraint)
@@ -106,18 +110,18 @@ world_create_snap_to_floor_constraint :: proc(
 
 // Append one snap-point constraint with a direct transform target.
 world_create_snap_point_constraint :: proc(
-    world: ^core.Shape_World,
-    input: World_Snap_Point_Constraint_Input) -> (u16, core.Shape_World_Status) {
-    constraint := core.Shape_Constraint{kind = .Snap_Point, enabled = input.enabled}
+    world: ^shapemodel.Shape_World,
+    input: World_Snap_Point_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
+    constraint := shapemodel.Shape_Constraint{kind = .Snap_Point, enabled = input.enabled}
     constraint.payload.snap_point = {point = input.point, position = input.position}
     return world_create_constraint(world, constraint)
 }
 
 // Append one distance constraint with direct endpoint targets.
 world_create_distance_constraint :: proc(
-    world: ^core.Shape_World,
-    input: World_Distance_Constraint_Input) -> (u16, core.Shape_World_Status) {
-    constraint := core.Shape_Constraint{kind = .Distance, enabled = input.enabled}
+    world: ^shapemodel.Shape_World,
+    input: World_Distance_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
+    constraint := shapemodel.Shape_Constraint{kind = .Distance, enabled = input.enabled}
     constraint.payload.distance = {first = input.first, second = input.second,
         length = input.length, movement = input.movement}
     return world_create_constraint(world, constraint)
@@ -125,13 +129,13 @@ world_create_distance_constraint :: proc(
 
 // Append one angle-bound constraint with direct limb and pivot targets.
 world_create_angle_constraint :: proc(
-    world: ^core.Shape_World,
-    kind: core.Shape_Constraint_Kind,
-    input: World_Angle_Constraint_Input) -> (u16, core.Shape_World_Status) {
+    world: ^shapemodel.Shape_World,
+    kind: shapemodel.Shape_Constraint_Kind,
+    input: World_Angle_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
     if kind != .Max_Angle && kind != .Min_Angle {
         return 0, .Invalid_Argument
     }
-    constraint := core.Shape_Constraint{kind = kind, enabled = input.enabled}
+    constraint := shapemodel.Shape_Constraint{kind = kind, enabled = input.enabled}
     constraint.payload.angle = {first = input.first, pivot = input.pivot,
         second = input.second, limit = input.limit, movement = input.movement}
     return world_create_constraint(world, constraint)
@@ -139,9 +143,12 @@ world_create_angle_constraint :: proc(
 
 // Append one center-pivot constraint with three direct transform targets.
 world_create_center_pivot_constraint :: proc(
-    world: ^core.Shape_World,
-    input: World_Center_Pivot_Constraint_Input) -> (u16, core.Shape_World_Status) {
-    constraint := core.Shape_Constraint{kind = .Center_Pivot, enabled = input.enabled}
+    world: ^shapemodel.Shape_World,
+    input: World_Center_Pivot_Constraint_Input) -> (u16, shapemodel.Shape_World_Status) {
+    constraint := shapemodel.Shape_Constraint{
+        kind = .Center_Pivot,
+        enabled = input.enabled,
+    }
     constraint.payload.center_pivot = {
         first = input.first, pivot = input.pivot, second = input.second,
         limb_length = input.limb_length}
@@ -150,20 +157,20 @@ world_create_center_pivot_constraint :: proc(
 
 // Resolve one mutable transform only after entity generation and membership checks.
 world_constraint_transform :: proc(
-    world: ^core.Shape_World,
-    entity: core.Shape_Entity) -> (^core.Shape_Transform, bool) {
+    world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity) -> (^shapemodel.Shape_Transform, bool) {
     if world == nil {
         return nil, false
     }
-    return core.shape_component_get_mut(&world.transforms, &world.registry, entity)
+    return shapemodel.shape_component_get_mut(&world.transforms, &world.registry, entity)
 }
 
 // Compute one direct-target constraint's current scalar error.
 world_constraint_error :: proc(
-    world: ^core.Shape_World,
-    constraint: ^core.Shape_Constraint) -> f32 {
+    world: ^shapemodel.Shape_World,
+    constraint: ^shapemodel.Shape_Constraint) -> f32 {
     if world == nil || constraint == nil || !constraint.enabled ||
-        !core.shape_constraint_targets_resolve(world, constraint^) {
+        !shapemodel.shape_constraint_targets_resolve(world, constraint^) {
         return 0
     }
     switch constraint.kind {
@@ -187,7 +194,7 @@ world_constraint_error :: proc(
 }
 
 // Compute total error in stable constraint insertion order.
-world_total_constraint_error :: proc(world: ^core.Shape_World) -> f32 {
+world_total_constraint_error :: proc(world: ^shapemodel.Shape_World) -> f32 {
     if world == nil {
         return 0
     }
@@ -200,10 +207,10 @@ world_total_constraint_error :: proc(world: ^core.Shape_World) -> f32 {
 
 // Apply one direct-target constraint after revalidating all required transforms.
 world_apply_constraint :: proc(
-    world: ^core.Shape_World,
-    constraint: ^core.Shape_Constraint) {
+    world: ^shapemodel.Shape_World,
+    constraint: ^shapemodel.Shape_Constraint) {
     if world == nil || constraint == nil || !constraint.enabled ||
-        !core.shape_constraint_targets_resolve(world, constraint^) {
+        !shapemodel.shape_constraint_targets_resolve(world, constraint^) {
         return
     }
     switch constraint.kind {
@@ -223,7 +230,7 @@ world_apply_constraint :: proc(
 }
 
 // Apply every active constraint in stable forward insertion order.
-world_apply_all_constraints :: proc(world: ^core.Shape_World) {
+world_apply_all_constraints :: proc(world: ^shapemodel.Shape_World) {
     if world == nil {
         return
     }
@@ -233,7 +240,7 @@ world_apply_all_constraints :: proc(world: ^core.Shape_World) {
 }
 
 // Apply every active constraint in stable reverse insertion order.
-world_apply_all_constraints_reverse :: proc(world: ^core.Shape_World) {
+world_apply_all_constraints_reverse :: proc(world: ^shapemodel.Shape_World) {
     if world == nil {
         return
     }
@@ -244,7 +251,7 @@ world_apply_all_constraints_reverse :: proc(world: ^core.Shape_World) {
 
 // Alternate solve passes until convergence or the fixed frame-work budget.
 world_apply_all_constraints_to_error :: proc(
-    world: ^core.Shape_World,
+    world: ^shapemodel.Shape_World,
     allowed_error: f32) {
     reverse := false
     iterations := 0
@@ -262,8 +269,8 @@ world_apply_all_constraints_to_error :: proc(
 
 // Compute error below one direct floor height.
 world_floor_constraint_error :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Floor_Constraint) -> f32 {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Floor_Constraint) -> f32 {
     transform, ok := world_constraint_transform(world, payload.point)
     if !ok || transform.position.z >= payload.height {
         return 0
@@ -273,8 +280,8 @@ world_floor_constraint_error :: proc(
 
 // Compute error outside one floor snapping allowance.
 world_snap_to_floor_constraint_error :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Snap_To_Floor_Constraint) -> f32 {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Snap_To_Floor_Constraint) -> f32 {
     transform, ok := world_constraint_transform(world, payload.point)
     if !ok || math.abs(transform.position.z - payload.height) <= payload.allowance {
         return 0
@@ -284,8 +291,8 @@ world_snap_to_floor_constraint_error :: proc(
 
 // Compute distance from one transform to its fixed snap position.
 world_snap_point_constraint_error :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Snap_Point_Constraint) -> f32 {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Snap_Point_Constraint) -> f32 {
     transform, ok := world_constraint_transform(world, payload.point)
     if !ok {
         return 0
@@ -295,8 +302,8 @@ world_snap_point_constraint_error :: proc(
 
 // Compute absolute direct-endpoint distance error.
 world_distance_constraint_error :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Distance_Constraint) -> f32 {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Distance_Constraint) -> f32 {
     first, first_ok := world_constraint_transform(world, payload.first)
     second, second_ok := world_constraint_transform(world, payload.second)
     if !first_ok || !second_ok {
@@ -307,8 +314,8 @@ world_distance_constraint_error :: proc(
 
 // Resolve pivot-relative vectors and included angle for one direct angle payload.
 world_angle_constraint_limbs :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Angle_Constraint) -> (World_Angle_Constraint_Limbs, bool) {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Angle_Constraint) -> (World_Angle_Constraint_Limbs, bool) {
     first, first_ok := world_constraint_transform(world, payload.first)
     pivot, pivot_ok := world_constraint_transform(world, payload.pivot)
     second, second_ok := world_constraint_transform(world, payload.second)
@@ -329,9 +336,9 @@ world_angle_constraint_limbs :: proc(
 
 // Compute error outside one direct minimum or maximum angle bound.
 world_angle_constraint_error :: proc(
-    world: ^core.Shape_World,
-    kind: core.Shape_Constraint_Kind,
-    payload: core.Shape_Angle_Constraint) -> f32 {
+    world: ^shapemodel.Shape_World,
+    kind: shapemodel.Shape_Constraint_Kind,
+    payload: shapemodel.Shape_Angle_Constraint) -> f32 {
     limbs, ok := world_angle_constraint_limbs(world, payload)
     if !ok {
         return 0
@@ -362,8 +369,8 @@ world_center_pivot_target :: proc(
 
 // Compute pivot displacement from its direct center-pivot target.
 world_center_pivot_constraint_error :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Center_Pivot_Constraint) -> f32 {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Center_Pivot_Constraint) -> f32 {
     first, first_ok := world_constraint_transform(world, payload.first)
     pivot, pivot_ok := world_constraint_transform(world, payload.pivot)
     second, second_ok := world_constraint_transform(world, payload.second)
@@ -377,8 +384,8 @@ world_center_pivot_constraint_error :: proc(
 
 // Apply one floor response to its direct transform target.
 world_apply_floor_constraint :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Floor_Constraint) {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Floor_Constraint) {
     transform, ok := world_constraint_transform(world, payload.point)
     if !ok || transform.position.z >= payload.height {
         return
@@ -389,8 +396,8 @@ world_apply_floor_constraint :: proc(
 
 // Apply one floor snap outside its allowed tolerance.
 world_apply_snap_to_floor_constraint :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Snap_To_Floor_Constraint) {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Snap_To_Floor_Constraint) {
     transform, ok := world_constraint_transform(world, payload.point)
     if !ok || math.abs(transform.position.z - payload.height) <= payload.allowance {
         return
@@ -400,8 +407,8 @@ world_apply_snap_to_floor_constraint :: proc(
 
 // Apply one fixed-position snap to its direct transform target.
 world_apply_snap_point_constraint :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Snap_Point_Constraint) {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Snap_Point_Constraint) {
     transform, ok := world_constraint_transform(world, payload.point)
     if ok {
         transform.position = payload.position
@@ -410,8 +417,8 @@ world_apply_snap_point_constraint :: proc(
 
 // Apply one direct distance correction according to its movement policy.
 world_apply_distance_constraint :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Distance_Constraint) {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Distance_Constraint) {
     first, first_ok := world_constraint_transform(world, payload.first)
     second, second_ok := world_constraint_transform(world, payload.second)
     if !first_ok || !second_ok {
@@ -433,9 +440,9 @@ world_apply_distance_constraint :: proc(
 
 // Apply one direct angle correction according to its movement policy.
 world_apply_angle_constraint :: proc(
-    world: ^core.Shape_World,
-    kind: core.Shape_Constraint_Kind,
-    payload: core.Shape_Angle_Constraint) {
+    world: ^shapemodel.Shape_World,
+    kind: shapemodel.Shape_Constraint_Kind,
+    payload: shapemodel.Shape_Angle_Constraint) {
     limbs, ok := world_angle_constraint_limbs(world, payload)
     if !ok || kind == .Min_Angle && limbs.theta >= payload.limit ||
         kind == .Max_Angle && limbs.theta <= payload.limit {
@@ -459,8 +466,8 @@ world_apply_angle_constraint :: proc(
 
 // Apply planar centering or the upper equal-limb hinge to one pivot target.
 world_apply_center_pivot_constraint :: proc(
-    world: ^core.Shape_World,
-    payload: core.Shape_Center_Pivot_Constraint) {
+    world: ^shapemodel.Shape_World,
+    payload: shapemodel.Shape_Center_Pivot_Constraint) {
     first, first_ok := world_constraint_transform(world, payload.first)
     pivot, pivot_ok := world_constraint_transform(world, payload.pivot)
     second, second_ok := world_constraint_transform(world, payload.second)

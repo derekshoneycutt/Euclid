@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import termgrid "../../terminal/grid"
 import termmodel "../../terminal/model"
 import termshellintegration "../../terminal/shell_integration"
@@ -10,7 +11,7 @@ import "core:unicode/utf8"
 
 // Find a prompt row when a caller supplies shell metadata without an initialized index.
 terminal_find_shell_prompt_row :: proc(
-    term: ^core.Terminal_State, start_line, direction: int) -> (int, bool) {
+    term: ^viewterminalmodel.Terminal_State, start_line, direction: int) -> (int, bool) {
     line_count := terminal_line_count(term)
     for line := start_line + direction;
         line >= 0 && line < line_count;
@@ -23,7 +24,7 @@ terminal_find_shell_prompt_row :: proc(
 
 // Resolve one retained semantic row identity to its current presented line.
 terminal_find_logical_row :: proc(
-    term: ^core.Terminal_State, logical_line_id: i64) -> (int, bool) {
+    term: ^viewterminalmodel.Terminal_State, logical_line_id: i64) -> (int, bool) {
     line_count := terminal_line_count(term)
     for line in 0..<line_count {
         candidate, present := terminal_output_logical_row(term, line)
@@ -34,7 +35,7 @@ terminal_find_logical_row :: proc(
 
 // Find the nearest indexed prompt before or after one presented line.
 terminal_find_shell_prompt :: proc(
-    term: ^core.Terminal_State, start_line, direction: int) -> (int, bool) {
+    term: ^viewterminalmodel.Terminal_State, start_line, direction: int) -> (int, bool) {
     if term == nil || direction == 0 {
         return 0, false
     }
@@ -65,9 +66,9 @@ terminal_find_shell_prompt :: proc(
 
 // Resolve one semantic command position into the current byte-based view model.
 terminal_semantic_view_position :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     position: termmodel.Terminal_Semantic_Position) ->
-    (core.Terminal_View_Position, bool) {
+    (viewterminalmodel.Terminal_View_Position, bool) {
     for line in 0..<terminal_line_count(term) {
         semantic_row := terminal_output_semantic_row(term, line)
         if !semantic_row.present ||
@@ -96,7 +97,8 @@ terminal_semantic_view_position :: proc(
 
 // Return the indexed block covering one logical row, or the nearest preceding block.
 terminal_shell_block_at_line :: proc(
-    term: ^core.Terminal_State, line: int) -> (termmodel.Command_Block, bool) {
+    term: ^viewterminalmodel.Terminal_State, line: int) ->
+        (termmodel.Command_Block, bool) {
     logical_id, present := terminal_output_logical_row(term, line)
     if !present { return {}, false }
     result: termmodel.Command_Block
@@ -121,7 +123,7 @@ terminal_shell_block_at_line :: proc(
 
 // Resolve one command or output semantic range into current view-selection endpoints.
 terminal_command_range :: proc(
-    term: ^core.Terminal_State, block: ^termmodel.Command_Block,
+    term: ^viewterminalmodel.Terminal_State, block: ^termmodel.Command_Block,
     kind: Terminal_Command_Range) -> Terminal_Command_View_Range {
     start, end := block.command, block.execution
     required := bit_set[termmodel.Shell_Marker_Kind; u8]{
@@ -163,7 +165,7 @@ terminal_command_search_append_row :: proc(
 
 // Compose one B-to-C command as bounded searchable bytes and cell-boundary positions.
 terminal_command_search_workspace :: proc(
-    term: ^core.Terminal_State, block: ^termmodel.Command_Block,
+    term: ^viewterminalmodel.Terminal_State, block: ^termmodel.Command_Block,
     workspace: ^Terminal_Command_Search_Workspace) -> bool {
     workspace^ = {}
     command_range := terminal_command_range(term, block, .Command)
@@ -266,7 +268,7 @@ terminal_command_search_current :: proc(
 
 // Find and select the next or previous literal command match with wraparound.
 terminal_command_search :: proc(
-    term: ^core.Terminal_State, direction: int) -> bool {
+    term: ^viewterminalmodel.Terminal_State, direction: int) -> bool {
     shell := term.shell_integration
     if shell == nil || direction == 0 || shell.search_query_byte_count == 0 {
         return false
@@ -304,7 +306,7 @@ terminal_command_search :: proc(
 }
 
 // Begin a fresh bounded local command-search edit transaction.
-terminal_command_search_begin :: proc(term: ^core.Terminal_State) -> bool {
+terminal_command_search_begin :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
     if term == nil || term.shell_integration == nil { return false }
     shell := term.shell_integration
     shell.search_query = {}
@@ -317,7 +319,7 @@ terminal_command_search_begin :: proc(term: ^core.Terminal_State) -> bool {
 
 // Append one typed scalar to the active bounded command-search query.
 terminal_command_search_append :: proc(
-    term: ^core.Terminal_State, codepoint: rune) -> bool {
+    term: ^viewterminalmodel.Terminal_State, codepoint: rune) -> bool {
     shell := term.shell_integration
     if shell == nil || !shell.search_editing { return false }
     bytes, byte_count := utf8.encode_rune(codepoint)
@@ -332,7 +334,8 @@ terminal_command_search_append :: proc(
 }
 
 // Remove the final UTF-8 scalar from the active command-search query.
-terminal_command_search_backspace :: proc(term: ^core.Terminal_State) -> bool {
+terminal_command_search_backspace :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> bool {
     shell := term.shell_integration
     if shell == nil || !shell.search_editing || shell.search_query_byte_count == 0 {
         return false
@@ -350,7 +353,7 @@ terminal_command_search_backspace :: proc(term: ^core.Terminal_State) -> bool {
 
 // Consume one input event while the local command-search editor owns keyboard input.
 terminal_update_command_search :: proc(
-    term: ^core.Terminal_State, event: input.Input_Event) -> bool {
+    term: ^viewterminalmodel.Terminal_State, event: input.Input_Event) -> bool {
     shell := term.shell_integration
     if shell == nil || !shell.search_editing { return false }
     if event.kind == .Text {
@@ -369,7 +372,7 @@ terminal_update_command_search :: proc(
 
 // Replace the bounded literal command-search query and clear prior match identity.
 terminal_command_search_set_query :: proc(
-    term: ^core.Terminal_State, query: string) -> bool {
+    term: ^viewterminalmodel.Terminal_State, query: string) -> bool {
     shell := term.shell_integration
     if shell == nil || len(query) > len(shell.search_query) ||
         !utf8.valid_string(query) { return false }
@@ -383,7 +386,7 @@ terminal_command_search_set_query :: proc(
 
 // Select one indexed command or output range nearest the current scroll position.
 terminal_select_command_range :: proc(
-    term: ^core.Terminal_State, kind: Terminal_Command_Range) -> bool {
+    term: ^viewterminalmodel.Terminal_State, kind: Terminal_Command_Range) -> bool {
     if term == nil || term.geometry.line_height <= 0 { return false }
     line := int(term.scroll_offset_y / term.geometry.line_height)
     block, found := terminal_shell_block_at_line(term, line)
@@ -399,7 +402,7 @@ terminal_select_command_range :: proc(
 
 // Find the nearest indexed command start before or after one presented line.
 terminal_find_shell_command :: proc(
-    term: ^core.Terminal_State, start_line, direction: int) -> (int, bool) {
+    term: ^viewterminalmodel.Terminal_State, start_line, direction: int) -> (int, bool) {
     if term == nil || direction == 0 { return 0, false }
     current_id, current_present := terminal_output_logical_row(term, start_line)
     if !current_present { return 0, false }
@@ -423,7 +426,7 @@ terminal_find_shell_command :: proc(
 
 // Apply one shell-navigation press and report whether it was reserved.
 terminal_update_shell_navigation_event :: proc(
-    term: ^core.Terminal_State, event: input.Input_Event,
+    term: ^viewterminalmodel.Terminal_State, event: input.Input_Event,
     current_line: int) -> bool {
     direction := -1 if event.key == .Page_Up else
         1 if event.key == .Page_Down else 0
@@ -451,7 +454,7 @@ terminal_update_shell_navigation_event :: proc(
 
 // Apply one reserved prompt, command-navigation, or semantic-selection chord.
 terminal_update_shell_navigation :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     frame: input.Input_Frame) -> (event_index: int, handled: bool) {
     if term == nil || term.geometry.line_height <= 0 {
         return 0, false

@@ -1,9 +1,11 @@
 package view
 
+import viewmodel "model"
+
 // Just drawing whatever particles are currently alive. Pretty simple, tbh
 
-import "../core"
 import "../files"
+import particlemodel "../particles/model"
 import view_core "core"
 
 import "core:c"
@@ -14,12 +16,12 @@ import "core:strings"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
 
-MAX_PARTICLES :: core.MAX_PARTICLES
-MAX_LOW_PARTICLES :: core.MAX_LOW_PARTICLES
+MAX_PARTICLES :: particlemodel.MAX_PARTICLES
+MAX_LOW_PARTICLES :: particlemodel.MAX_LOW_PARTICLES
 DUST_TEXTURE_SIZE :: 64
 DUST_ATLAS_COLUMNS :: 3
 DUST_ATLAS_ROWS :: 3
-DUST_ATLAS_VARIANT_COUNT :: core.DUST_ATLAS_VARIANT_COUNT
+DUST_ATLAS_VARIANT_COUNT :: particlemodel.DUST_ATLAS_VARIANT_COUNT
 DUST_ATLAS_SIZE :: DUST_TEXTURE_SIZE * DUST_ATLAS_COLUMNS
 DUST_TEXTURE_SOFT_EDGE_START :: 0.58
 DUST_VERTEX_POSITION_LOCATION :: 0
@@ -107,7 +109,7 @@ stage_low_particle_instances :: proc(
 // Returns:
 //   - ok: true when the VAO was enabled for drawing.
 dust_upload_instance_buffers :: proc(
-    dust_render: ^core.Dust_Render_State, count: int) -> bool {
+    dust_render: ^viewmodel.Dust_Render_State, count: int) -> bool {
 
     geometry_size := count * size_of(dust_render^.instance_geometry[0])
     color_size := count * size_of(dust_render^.instance_colors[0])
@@ -134,7 +136,7 @@ dust_upload_instance_buffers :: proc(
 
 //   Bind shader, viewport, and texture, then issue the instanced draw call.
 dust_issue_instanced_draw :: proc(
-    dust_render: ^core.Dust_Render_State, count: int) {
+    dust_render: ^viewmodel.Dust_Render_State, count: int) {
 
     viewport := [2]f32{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
     texture_slot := i32(0)
@@ -301,7 +303,7 @@ shutdown_particle_render_resources :: proc(state: ^Euclid_General_State) {
 }
 
 //   Release all complete or partially initialized dust instancing resources.
-release_dust_instancing_resources :: proc(dust_render: ^core.Dust_Render_State) {
+release_dust_instancing_resources :: proc(dust_render: ^viewmodel.Dust_Render_State) {
     if dust_render^.instance_color_vbo_id != 0 {
         rlgl.UnloadVertexBuffer(dust_render^.instance_color_vbo_id)
         dust_render^.instance_color_vbo_id = 0
@@ -359,7 +361,7 @@ ensure_dust_instancing :: proc(state: ^Euclid_General_State) {
 }
 
 //   Load the packaged dust shader and resolve its required uniforms.
-load_dust_instancing_shader :: proc(dust_render: ^core.Dust_Render_State) -> bool {
+load_dust_instancing_shader :: proc(dust_render: ^viewmodel.Dust_Render_State) -> bool {
     vertex_path :=
         files.packaged_asset_path("shaders/dust_instanced.vs", context.temp_allocator)
     fragment_path :=
@@ -391,7 +393,7 @@ load_dust_instancing_shader :: proc(dust_render: ^core.Dust_Render_State) -> boo
 //
 // Returns:
 //   - ok: true when both buffers loaded and their attributes were enabled.
-dust_load_quad_buffers :: proc(dust_render: ^core.Dust_Render_State) -> bool {
+dust_load_quad_buffers :: proc(dust_render: ^viewmodel.Dust_Render_State) -> bool {
     // Two triangles covering the unit quad each dust instance is stamped onto.
     quad_positions := [12]f32{
         -0.5, -0.5,
@@ -445,7 +447,7 @@ dust_load_instance_buffer :: proc(
 }
 
 //   Create the static quad and reusable dynamic instance buffers.
-load_dust_instancing_buffers :: proc(dust_render: ^core.Dust_Render_State) -> bool {
+load_dust_instancing_buffers :: proc(dust_render: ^viewmodel.Dust_Render_State) -> bool {
     dust_render^.vao_id = rlgl.LoadVertexArray()
     if dust_render^.vao_id == 0 || !rlgl.EnableVertexArray(dust_render^.vao_id) {
         fmt.println("dust vertex array could not be created; using immediate rendering")

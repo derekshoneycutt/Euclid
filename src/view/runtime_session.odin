@@ -1,5 +1,9 @@
 package view
 
+import bridgemodel "../bridge/model"
+
+import shapemodel "../shapes/model"
+
 import view_core "core"
 import "../core"
 import "../dynview"
@@ -25,28 +29,28 @@ import "core:time"
 
 Euclid_Runtime_Session :: struct {
     state : ^Euclid_General_State,
-    julia_service : ^julia.Julia_Runtime_Service,
+    julia_service : ^bridgemodel.Julia_Runtime_Service,
     presentation : ^Presentation_Runtime,
 }
 
 //   Created Julia runtime service plus its completed initialize request id.
 Session_Julia_Service :: struct {
-    service : ^julia.Julia_Runtime_Service,
+    service : ^bridgemodel.Julia_Runtime_Service,
     initialize_id : u64,
 }
 
 //   Allocated canonical shape world plus its baseline tools.
 Session_Shape_Storage :: struct {
-    world : ^core.Shape_World,
-    world_compass : core.Shape_Compass_Handle,
-    world_pen : core.Shape_Pen_Handle,
+    world : ^shapemodel.Shape_World,
+    world_compass : shapemodel.Shape_Compass_Handle,
+    world_pen : shapemodel.Shape_Pen_Handle,
 }
 
 //   Wait for one Julia startup request without driving a window event loop.
 wait_for_julia_request :: proc(
-    service: ^julia.Julia_Runtime_Service,
+    service: ^bridgemodel.Julia_Runtime_Service,
     request_id: u64,
-    expected_kind: julia.Julia_Event_Kind,
+    expected_kind: bridgemodel.Julia_Event_Kind,
     timeout_seconds: f64) -> bool {
 
     started_at := time.tick_now()
@@ -123,7 +127,7 @@ record_runtime_lifecycle :: proc(
 // Returns:
 //   - ok: true when state was created and content initialization completed.
 session_load_content :: proc(
-    julia_service: ^julia.Julia_Runtime_Service,
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings,
     initialize_id: u64,
     out_state: ^^Euclid_General_State) -> bool {
@@ -230,7 +234,7 @@ make_drawing_surface :: proc() -> ^Euclid_Drawing_Surface {
 
 //   Allocate the canonical shape world and build its baseline tools.
 make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
-    world := new(core.Shape_World, context.allocator)
+    world := new(shapemodel.Shape_World, context.allocator)
     world_compass, compass_status := shapes.world_create_compass(world, {
         joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
         joint2 = {0.02, 0.02, 0}, limb_length = TOOL_LENGTH,
@@ -239,7 +243,7 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
         joint1 = {0, 0, 0}, joint2 = {0, 0, 0}, length = TOOL_LENGTH,
         style = {color = view_core.TOOL_COLOR, brush_size = 5}})
     if compass_status != .Ok || pen_status != .Ok ||
-        core.shape_world_freeze_baseline(world) != .Ok {
+        shapemodel.shape_world_freeze_baseline(world) != .Ok {
         free(world)
         return false
     }
@@ -309,7 +313,7 @@ init_evidence_session :: proc(
 //   Initialize allocation domains and bind the state-owned runtime resources.
 init_animations_state_resources :: proc(
     state: ^Euclid_General_State,
-    julia_service: ^julia.Julia_Runtime_Service,
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings,
     particle_system: ^Particle_System,
     shapes_state: Session_Shape_Storage) -> bool {
@@ -351,7 +355,7 @@ init_runtime_executors :: proc(state: ^Euclid_General_State) -> bool {
 
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
 make_animations_state :: proc(
-    julia_service: ^julia.Julia_Runtime_Service,
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
     particle_system := new(Particle_System, context.allocator)
     particle_system^.use_max_dust_particles = settings^.dust_particle_max
@@ -373,11 +377,11 @@ make_animations_state :: proc(
 
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
 initiate_animations_state :: proc(
-    julia_service: ^julia.Julia_Runtime_Service,
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
     state := make_animations_state(julia_service, settings)
     if state == nil {return nil}
-    if !core.animation_storage_init(
+    if !julia.animation_storage_init(
         &state^.animation_memory,
         &state^.animation_values,
         &state^.dynview_documents) {
@@ -430,7 +434,7 @@ when core.SCENARIOS_ENABLED {
                 last_trace_sequence = last_trace_sequence,
             },
             events = events,
-            state = observe.display(session.state),
+            state = observe_display_state(session.state),
             julia_host = observe.julia_host(session.julia_service),
             allocations = observe.allocation(session.state.evidence_allocations),
             arena_baselines = session.state.evidence_arena_baselines,

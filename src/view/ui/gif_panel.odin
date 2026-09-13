@@ -1,5 +1,7 @@
 package ui
 
+import viewmodel "../model"
+
 import "../../core"
 import view_core "../core"
 import view_font "../font"
@@ -18,7 +20,7 @@ Gif_Slider_Rows :: struct {
 Gif_Panel_Context :: struct {
     panel: rl.Rectangle,
     mouse_input: Input_Frame,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     font: rl.Font,
     resolver: view_font.Font_Resolver,
 }
@@ -74,7 +76,8 @@ gif_save_button_params :: proc(
 }
 
 //   Return human-readable status text for GIF capture phase.
-gif_capture_status_label :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) -> string {
+gif_capture_status_label :: proc(
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> string {
     switch ui_runtime.gif_capture_phase {
     case .Idle:
         return "Status: Idle"

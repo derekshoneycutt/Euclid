@@ -28,9 +28,7 @@ The core application is coded in Odin, with Raylib used for rendering.
     1. [Q: What's this about hot-reload?](#q-whats-this-about-hot-reload)
     1. [Q: What is all this verification output?](#q-what-is-all-this-verification-output)
 
-<p align="center">
-<img src="./screen.gif" >
-</p>
+![Screenshot](./screen.gif)
 
 ## Building from Source
 

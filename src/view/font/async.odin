@@ -1,7 +1,7 @@
 package font
 
-import "../../core"
 import "../../taskpool"
+import fontmodel "model"
 
 import "core:log"
 import vmem "core:mem/virtual"
@@ -10,10 +10,10 @@ import vmem "core:mem/virtual"
 //
 // Retry owns an unsubmitted payload; Queued identifies pool-owned execution/polling;
 // Idle guarantees no worker can access task or arena storage.
-Font_Prepare_Operation_State :: core.Font_Prepare_Operation_State
-Font_Prepare_Operation_Kind :: core.Font_Prepare_Operation_Kind
-Font_Prepare_Task :: core.Font_Prepare_Task
-Font_Prepare_Operation :: core.Font_Prepare_Operation
+Font_Prepare_Operation_State :: fontmodel.Font_Prepare_Operation_State
+Font_Prepare_Operation_Kind :: fontmodel.Font_Prepare_Operation_Kind
+Font_Prepare_Task :: fontmodel.Font_Prepare_Task
+Font_Prepare_Operation :: fontmodel.Font_Prepare_Operation
 
 //   Prepare one task-owned font result without touching display resources.
 //
@@ -152,7 +152,7 @@ cache_next_page_key :: proc(cache: ^Font_Cache) -> (Font_Key, bool) {
         if entry.resident && entry.state == .Ready &&
             entry.generation == entry.requested_generation &&
             entry.pending_glyph_count > 0 &&
-            entry.page_count < core.FONT_GLYPH_PAGE_CAPACITY {
+            entry.page_count < fontmodel.FONT_GLYPH_PAGE_CAPACITY {
             return Font_Key(entry_index), true
         }
     }

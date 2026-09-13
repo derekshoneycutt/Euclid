@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 
 import "core:math"
 import "core:strings"
@@ -19,8 +20,8 @@ Terminal_Line_Selection :: struct {
 
 // Ordered multi-line selection endpoints plus the viewport edge used for full-line spans.
 Terminal_Selection_Bounds :: struct {
-    start : core.Terminal_View_Position,
-    end : core.Terminal_View_Position,
+    start : viewterminalmodel.Terminal_View_Position,
+    end : viewterminalmodel.Terminal_View_Position,
     right_edge_x : f32,
 }
 
@@ -33,8 +34,8 @@ Terminal_Selection_Bounds :: struct {
 // Returns:
 //   - The earlier position first, the later position second.
 terminal_selection_ordered :: proc(
-    anchor, head: core.Terminal_View_Position) -> (
-    core.Terminal_View_Position, core.Terminal_View_Position) {
+    anchor, head: viewterminalmodel.Terminal_View_Position) -> (
+    viewterminalmodel.Terminal_View_Position, viewterminalmodel.Terminal_View_Position) {
     if anchor.line < head.line ||
         (anchor.line == head.line && anchor.byte_offset <= head.byte_offset) {
         return anchor, head
@@ -59,7 +60,7 @@ terminal_selection_ordered :: proc(
 // Returns:
 //   - The selected text, with lines beyond the first joined by "\n".
 terminal_compose_selection_text :: proc(
-    lines: []string, start, end: core.Terminal_View_Position) -> string {
+    lines: []string, start, end: viewterminalmodel.Terminal_View_Position) -> string {
     builder := strings.builder_make(context.temp_allocator)
     started := false
 

@@ -1,5 +1,11 @@
 package view
 
+import bridgemodel "../bridge/model"
+
+import dynviewmodel "../dynview/model"
+
+import presentation_model "../bridge/presentation"
+
 import bridge "../bridge"
 import "../core"
 import dyncore "../dynview/core"
@@ -11,7 +17,7 @@ import "../taskpool"
 
 // Presentation_Operation retains one producer envelope through parse task join.
 Presentation_Operation :: struct {
-    message: ^core.Julia_Host_Egress,
+    message: ^bridgemodel.Julia_Host_Egress,
     handle: taskpool.Task_Handle,
     key: dyncore.Dynview_Document_Key,
     parse_source: string,
@@ -26,12 +32,12 @@ Presentation_Operation :: struct {
 Presentation_Runtime :: struct {
     state: ^core.Euclid_General_State,
     active: Presentation_Operation,
-    pending: ^core.Julia_Host_Egress,
+    pending: ^bridgemodel.Julia_Host_Egress,
     newest_generation: u64,
     observed_runtime_generation: u64,
     observed_animation_generation: u64,
     lifecycle_observed: bool,
-    staging: ^core.Dynview_System,
+    staging: ^dynviewmodel.Dynview_System,
 }
 
 // Presentation_Parse_Request retains one classified exact parse operation.
@@ -73,7 +79,7 @@ presentation_record_event :: proc(
 //   Record successful semantic publication under its originating action identity.
 presentation_record_semantic_published :: proc(
     state: ^core.Euclid_General_State,
-    content: core.View_Content_Ready) {
+    content: bridgemodel.View_Content_Ready) {
     correlation_kind := evidence_trace.Correlation_Kind.Animation
     correlation := content.animation_generation
     generation := content.animation_generation
@@ -105,7 +111,7 @@ create_presentation_runtime :: proc() -> ^Presentation_Runtime {
         free(runtime)
         return nil
     }
-    runtime^.staging = new(core.Dynview_System, context.allocator)
+    runtime^.staging = new(dynviewmodel.Dynview_System, context.allocator)
     if runtime^.staging == nil {
         free(runtime^.active.result)
         free(runtime)
@@ -130,7 +136,7 @@ destroy_presentation_runtime :: proc(runtime: ^Presentation_Runtime) {
 
 //   Derive the parser key while retaining exact envelope bytes separately.
 presentation_parse_key :: proc(
-    content: core.Presented_Text,
+    content: presentation_model.Presented_Text,
     generation: u64) -> Presentation_Parse_Request {
     source := bridge.presentation_literal_source(content)
     mode := bridge.presentation_source_mode(content.mime, source)
@@ -210,7 +216,7 @@ presentation_pending_matches_current :: proc(
     if runtime^.pending == nil {
         return false
     }
-    content, ok := runtime^.pending^.(core.View_Content_Ready)
+    content, ok := runtime^.pending^.(bridgemodel.View_Content_Ready)
     return ok && presentation_content_matches(state, content)
 }
 
@@ -218,8 +224,8 @@ presentation_pending_matches_current :: proc(
 presentation_admit :: proc(
     state: ^core.Euclid_General_State,
     runtime: ^Presentation_Runtime,
-    message: ^core.Julia_Host_Egress,
-    content: core.View_Content_Ready) {
+    message: ^bridgemodel.Julia_Host_Egress,
+    content: bridgemodel.View_Content_Ready) {
     service := state^.julia_runtime_service
     if content.presentation_generation <= runtime^.newest_generation ||
         !presentation_content_matches(state, content) {
@@ -249,7 +255,7 @@ presentation_start_pending :: proc(
         return
     }
     message := runtime^.pending
-    content, ok := message^.(core.View_Content_Ready)
+    content, ok := message^.(bridgemodel.View_Content_Ready)
     if !ok || !presentation_content_is_current(state, runtime, content) {
         runtime^.pending = nil
         _ = bridge.return_julia_egress(state^.julia_runtime_service, message)
@@ -310,7 +316,7 @@ presentation_release_pending :: proc(
 presentation_submit_parse :: proc(
     state: ^core.Euclid_General_State,
     runtime: ^Presentation_Runtime,
-    message: ^core.Julia_Host_Egress,
+    message: ^bridgemodel.Julia_Host_Egress,
     parse: Presentation_Parse_Request) {
     result := runtime^.active.result
     runtime^.active = {
@@ -365,7 +371,7 @@ presentation_poll_active :: proc(
     task_result, joined := taskpool.task_pool_wait(
         &state^.simulation_executor^.pool, operation^.handle)
     message := operation^.message
-    content, has_content := message^.(core.View_Content_Ready)
+    content, has_content := message^.(bridgemodel.View_Content_Ready)
     if joined == .Joined && task_result == .Succeeded && has_content &&
         presentation_content_is_current(state, runtime, content) {
         presentation_commit_joined(state, runtime, content)
@@ -379,7 +385,7 @@ presentation_poll_active :: proc(
 presentation_commit_joined :: proc(
     state: ^core.Euclid_General_State,
     runtime: ^Presentation_Runtime,
-    content: core.View_Content_Ready) {
+    content: bridgemodel.View_Content_Ready) {
     operation := &runtime^.active
     request := bridge.Presentation_Snapshot_Request{
         content = content,
@@ -417,7 +423,7 @@ presentation_materialize :: proc(
 //   Match producer identities against the current display-owned runtime selection.
 presentation_content_matches :: proc(
     state: ^core.Euclid_General_State,
-    content: core.View_Content_Ready) -> bool {
+    content: bridgemodel.View_Content_Ready) -> bool {
     service := state^.julia_runtime_service
     if service == nil || state^.julia_interface == nil {
         return false
@@ -439,7 +445,7 @@ presentation_content_matches :: proc(
 presentation_content_is_current :: proc(
     state: ^core.Euclid_General_State,
     runtime: ^Presentation_Runtime,
-    content: core.View_Content_Ready) -> bool {
+    content: bridgemodel.View_Content_Ready) -> bool {
     service := state^.julia_runtime_service
     return presentation_content_matches(state, content) &&
         content.presentation_generation == runtime^.newest_generation &&
@@ -450,7 +456,7 @@ presentation_content_is_current :: proc(
 //   Cooperatively cancel active work once a newer or invalid generation exists.
 presentation_cancel_stale_active :: proc(
     state: ^core.Euclid_General_State, runtime: ^Presentation_Runtime) {
-    content, ok := runtime^.active.message^.(core.View_Content_Ready)
+    content, ok := runtime^.active.message^.(bridgemodel.View_Content_Ready)
     if ok && presentation_content_is_current(state, runtime, content) {
         return
     }

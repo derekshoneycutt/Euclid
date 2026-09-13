@@ -4,6 +4,7 @@ import "../bridge"
 import "../core"
 import evidence_session "../evidence/session"
 import "../files"
+import particlemodel "../particles/model"
 import "../view"
 
 import "core:encoding/uuid"
@@ -132,7 +133,7 @@ harness_runtime_settings :: proc(options: Harness_Options) -> core.Euclid_Run_Se
         do_run = true,
         do_antialiasing = false,
         do_vsync = false,
-        dust_particle_max = core.MAX_LOW_PARTICLES,
+        dust_particle_max = particlemodel.MAX_LOW_PARTICLES,
         limit_fps = false,
         use_simd_batch_projection = false,
         use_gpu_dust_instancing = false,

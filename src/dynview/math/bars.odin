@@ -1,6 +1,7 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 
 // Math_Bar_Kind selects the OpenType MATH overbar or underbar constants.
 Math_Bar_Kind :: enum u8 {
@@ -16,7 +17,7 @@ Math_Bar_Constants :: struct {
 
 // Math_Bar_Geometry_Input contains one measured child and font snapshot.
 Math_Bar_Geometry_Input :: struct {
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     font_size: f32,
     kind: Math_Bar_Kind,

@@ -1,8 +1,9 @@
 package ui_dynview
 
+import dynviewmodel "../../../dynview/model"
+
 import "core:testing"
 
-import core "../../../core"
 import dynmath "../../../dynview/math"
 
 //   Verify stacked limits remain inside the large operator's measured box.
@@ -26,7 +27,7 @@ layout_draw_test_large_op_limit_tops_match_measured_stack :: proc(t: ^testing.T)
 //   Verify delimiter children retain scoped text style during recursive drawing.
 @(test)
 layout_draw_test_stretch_delimiter_preserves_child_style :: proc(t: ^testing.T) {
-    item := core.Dynview_Layout_Item{
+    item := dynviewmodel.Dynview_Layout_Item{
         math_style_level = u8(dynmath.Math_Style_Level.Text),
         math_style_cramped = true,
     }

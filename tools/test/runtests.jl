@@ -292,14 +292,14 @@ const ScenarioRunner = Main.EuclidScenarioRunner
     end
 
     @testset "structured test records" begin
-        source_path = joinpath(TestRunner.ODIN_SOURCE_ROOT, "core")
+        source_path = joinpath(TestRunner.ODIN_SOURCE_ROOT, "core", "animation")
         locations = TestRunner.discover_odin_locations(TestRunner.ODIN_SOURCE_ROOT)
-        name = "core.core_test_animation_value_store_overwrites_bound_key"
-        @test locations[name].file == "src/core/animation_value_store_test.odin"
+        name = "animation_model.animation_model_test_animation_value_store_overwrites_bound_key"
+        @test locations[name].file == "src/core/animation/value_store_test.odin"
         @test locations[name].line == 27
         package_names = TestRunner.odin_package_test_names(source_path, locations)
         @test name in package_names
-        @test all(startswith(test_name, "core.") for test_name in package_names)
+        @test all(startswith(test_name, "animation_model.") for test_name in package_names)
         @test TestRunner.odin_source_path("../outside") === nothing
         @test TestRunner.odin_source_path("missing") === nothing
 

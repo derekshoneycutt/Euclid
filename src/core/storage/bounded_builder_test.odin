@@ -1,4 +1,4 @@
-package core
+package storage
 
 import "base:runtime"
 import "core:mem"
@@ -6,7 +6,7 @@ import "core:testing"
 
 //   Verify byte builders admit the exact limit and reject one byte beyond it.
 @(test)
-core_test_bounded_byte_builder_enforces_exact_limit :: proc(t: ^testing.T) {
+storage_test_bounded_byte_builder_enforces_exact_limit :: proc(t: ^testing.T) {
     owner: Arena_Owner
     testing.expect(t, arena_owner_init(&owner, 64*uint(mem.Kilobyte)))
     defer arena_owner_destroy(&owner)
@@ -23,7 +23,7 @@ core_test_bounded_byte_builder_enforces_exact_limit :: proc(t: ^testing.T) {
 
 //   Verify failed growth preserves all previously admitted byte state.
 @(test)
-core_test_bounded_byte_builder_preserves_state_on_failed_growth :: proc(
+storage_test_bounded_byte_builder_preserves_state_on_failed_growth :: proc(
     t: ^testing.T) {
     builder: Bounded_Byte_Builder
     remaining_allocations := 1
@@ -45,7 +45,7 @@ core_test_bounded_byte_builder_preserves_state_on_failed_growth :: proc(
 
 //   Verify sealing publishes the populated prefix and rejects every later mutation.
 @(test)
-core_test_bounded_byte_builder_seals_once :: proc(t: ^testing.T) {
+storage_test_bounded_byte_builder_seals_once :: proc(t: ^testing.T) {
     owner: Arena_Owner
     testing.expect(t, arena_owner_init(&owner, 64*uint(mem.Kilobyte)))
     defer arena_owner_destroy(&owner)
@@ -66,7 +66,7 @@ core_test_bounded_byte_builder_seals_once :: proc(t: ^testing.T) {
 
 //   Verify typed builders preserve values and bound abandoned geometric capacity.
 @(test)
-core_test_bounded_element_builder_bounds_geometric_waste :: proc(t: ^testing.T) {
+storage_test_bounded_element_builder_bounds_geometric_waste :: proc(t: ^testing.T) {
     owner: Arena_Owner
     testing.expect(t, arena_owner_init(&owner, 64*uint(mem.Kilobyte)))
     defer arena_owner_destroy(&owner)
@@ -95,7 +95,7 @@ core_test_bounded_element_builder_bounds_geometric_waste :: proc(t: ^testing.T) 
 
 //   Verify reusable element builders clear content without abandoning capacity.
 @(test)
-core_test_bounded_element_builder_clear_reuses_capacity :: proc(t: ^testing.T) {
+storage_test_bounded_element_builder_clear_reuses_capacity :: proc(t: ^testing.T) {
     owner: Arena_Owner
     testing.expect(t, arena_owner_init(&owner, 64*uint(mem.Kilobyte)))
     defer arena_owner_destroy(&owner)

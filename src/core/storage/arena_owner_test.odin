@@ -1,4 +1,4 @@
-package core
+package storage
 
 import "base:runtime"
 import "core:mem"
@@ -7,7 +7,7 @@ import "core:testing"
 
 //   Reject deterministic initialization failure without publishing owner state.
 @(test)
-core_test_arena_owner_rejects_initialization_failure :: proc(t: ^testing.T) {
+storage_test_arena_owner_rejects_initialization_failure :: proc(t: ^testing.T) {
     owner: Arena_Owner
     initialized := arena_owner_init_with(
         &owner, ARENA_OWNER_DEFAULT_RESERVATION, arena_owner_test_init_failure)
@@ -19,7 +19,7 @@ core_test_arena_owner_rejects_initialization_failure :: proc(t: ^testing.T) {
 
 //   Retain the first block, release growth blocks, and preserve peak diagnostics.
 @(test)
-core_test_arena_owner_reset_releases_growth_blocks :: proc(t: ^testing.T) {
+storage_test_arena_owner_reset_releases_growth_blocks :: proc(t: ^testing.T) {
     owner: Arena_Owner
     testing.expect(t, arena_owner_init(&owner))
     allocator := arena_owner_allocator(&owner)
@@ -42,7 +42,7 @@ core_test_arena_owner_reset_releases_growth_blocks :: proc(t: ^testing.T) {
 
 //   Release all storage and retain terminal counters for teardown evidence.
 @(test)
-core_test_arena_owner_destroy_preserves_diagnostics :: proc(t: ^testing.T) {
+storage_test_arena_owner_destroy_preserves_diagnostics :: proc(t: ^testing.T) {
     owner: Arena_Owner
     testing.expect(t, arena_owner_init(&owner, 64*uint(mem.Kilobyte)))
     allocator := arena_owner_allocator(&owner)

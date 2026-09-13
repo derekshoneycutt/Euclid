@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 import "../input"
 
 import rl "vendor:raylib"
@@ -13,7 +14,7 @@ UI_TREE_SCROLLBAR_ID :: 1003
 Ui_Interaction_Route_Input :: struct {
     frame: Input_Frame,
     terminal_present: bool,
-    capture: core.Ui_Press_Owner_State,
+    capture: viewmodel.Ui_Press_Owner_State,
 }
 
 // Capture and wheel facts needed to filter one resolved Terminal frame.
@@ -25,21 +26,21 @@ Ui_Terminal_Content_Route_Input :: struct {
 
 // Return one target with its focus owner and optional stable interaction identity.
 ui_interaction_target :: #force_inline proc(
-    kind: core.Ui_Interaction_Target_Kind,
-    focus: core.Ui_Focus_Kind = .None,
-    id: int = 0) -> core.Ui_Interaction_Target {
+    kind: viewmodel.Ui_Interaction_Target_Kind,
+    focus: viewmodel.Ui_Focus_Kind = .None,
+    id: int = 0) -> viewmodel.Ui_Interaction_Target {
     return {kind = kind, focus = {kind = focus}, id = id}
 }
 
 // Classify legacy singleton capture until widget call sites register with the router.
 ui_capture_target :: proc(
-    capture: core.Ui_Press_Owner_State) -> core.Ui_Interaction_Target {
+    capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
     if !capture.active { return {} }
     switch capture.kind {
     case .Splitter:
         return ui_interaction_target(.Splitter, id = capture.id)
     case .Scrollbar:
-        focus := core.Ui_Focus_Kind.Tree
+        focus := viewmodel.Ui_Focus_Kind.Tree
         if capture.id == UI_PRESENTATION_SCROLLBAR_ID { focus = .Presentation }
         if capture.id == UI_TERMINAL_SCROLLBAR_ID { focus = .Terminal }
         return ui_interaction_target(.Scrollbar, focus, capture.id)
@@ -55,9 +56,9 @@ ui_capture_target :: proc(
 
 // Resolve the topmost static target under the current pointer sample.
 ui_hover_target :: proc(
-    runtime: ^core.Euclid_Ui_Runtime_State,
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: Input_Frame,
-    terminal_present: bool) -> core.Ui_Interaction_Target {
+    terminal_present: bool) -> viewmodel.Ui_Interaction_Target {
     mouse := input_frame_mouse_position(frame)
     if !splitters_locked_for_gif(runtime^.gif_capture_phase) {
         axis, hovered := splitter_hovered_axis(mouse,
@@ -86,9 +87,9 @@ ui_hover_target :: proc(
 
 // Resolve persistent logical focus from presentation and routed press transitions.
 ui_route_logical_focus :: proc(
-    runtime: ^core.Euclid_Ui_Runtime_State,
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     input: Ui_Interaction_Route_Input,
-    pointer_target: core.Ui_Interaction_Target) -> core.Ui_Focus_Target {
+    pointer_target: viewmodel.Ui_Interaction_Target) -> viewmodel.Ui_Focus_Target {
     result := runtime^.interaction.logical_focus
     terminal_present := input.terminal_present
     if terminal_present && !runtime^.interaction.terminal_was_present {
@@ -104,7 +105,7 @@ ui_route_logical_focus :: proc(
 
 // Return whether Terminal is the active and valid keyboard focus target.
 ui_terminal_effectively_focused :: #force_inline proc(
-    logical_focus: core.Ui_Focus_Target,
+    logical_focus: viewmodel.Ui_Focus_Target,
     window_focused: bool,
     terminal_present: bool) -> bool {
     return window_focused && terminal_present &&
@@ -113,8 +114,8 @@ ui_terminal_effectively_focused :: #force_inline proc(
 
 // Reconcile persistent logical focus and this frame's effective Terminal focus.
 ui_route_interaction_frame :: proc(
-    runtime: ^core.Euclid_Ui_Runtime_State,
-    input: Ui_Interaction_Route_Input) -> core.Ui_Interaction_Frame {
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    input: Ui_Interaction_Route_Input) -> viewmodel.Ui_Interaction_Frame {
     hover := ui_hover_target(runtime, input.frame, input.terminal_present)
     capture := ui_capture_target(input.capture)
     pointer_target := hover
@@ -122,11 +123,11 @@ ui_route_interaction_frame :: proc(
     logical_focus := ui_route_logical_focus(runtime, input, pointer_target)
     terminal_focused := ui_terminal_effectively_focused(
         logical_focus, input.frame.window_focused, input.terminal_present)
-    wheel_target: core.Ui_Interaction_Target
+    wheel_target: viewmodel.Ui_Interaction_Target
     if input.frame.mouse_wheel_delta != 0 && capture.kind == .None {
         wheel_target = hover
     }
-    result := core.Ui_Interaction_Frame{
+    result := viewmodel.Ui_Interaction_Frame{
         logical_focus = logical_focus,
         hover = hover,
         pointer_capture = capture,
@@ -149,9 +150,9 @@ ui_route_interaction_frame :: proc(
 
 // Route focus through the full interaction result for isolated callers and tests.
 ui_reconcile_focus :: proc(
-    runtime: ^core.Euclid_Ui_Runtime_State,
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: Input_Frame,
-    terminal_present: bool) -> core.Ui_Interaction_Frame {
+    terminal_present: bool) -> viewmodel.Ui_Interaction_Frame {
     return ui_route_interaction_frame(runtime, {
         frame = frame,
         terminal_present = terminal_present,
@@ -160,7 +161,7 @@ ui_reconcile_focus :: proc(
 }
 
 // Refresh narrow surface eligibility after static or layout-dependent routing.
-ui_refresh_surface_interaction :: proc(frame: ^core.Ui_Interaction_Frame) {
+ui_refresh_surface_interaction :: proc(frame: ^viewmodel.Ui_Interaction_Frame) {
     frame^.terminal = {
         keyboard = frame^.effective_focus.kind == .Terminal,
         pointer = frame^.pointer_target.focus.kind == .Terminal,
@@ -180,7 +181,7 @@ ui_refresh_surface_interaction :: proc(frame: ^core.Ui_Interaction_Frame) {
 
 // Refine the static Terminal panel target with prepared scrollbar geometry.
 ui_refine_terminal_scroll_route :: proc(
-    runtime: ^core.Euclid_Ui_Runtime_State,
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     over_track: bool,
     pointer_reserved: bool,
     wheel_present: bool) {
@@ -215,7 +216,7 @@ ui_terminal_captured_pointer_fields :: proc(
 
 // Route one resolved frame to Terminal content from the shared interaction result.
 ui_route_terminal_content_frame :: proc(
-    runtime: ^core.Euclid_Ui_Runtime_State,
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: Input_Frame,
     bounds: rl.Rectangle,
     route: Ui_Terminal_Content_Route_Input) -> Input_Frame {

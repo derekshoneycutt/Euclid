@@ -1,5 +1,15 @@
 package bridge
 
+import dynviewmodel "../dynview/model"
+
+import fontmodel "../view/font/model"
+
+import animation_model "../core/animation"
+
+import presentation_model "presentation"
+
+import storage "../core/storage"
+
 import "core:testing"
 import "core:os"
 import "../core"
@@ -14,7 +24,7 @@ dynview_native_test_document :: proc(
     block_id: i32) -> i32 {
 
     reset_view_snapshot_staging(&state^.dynview)
-    status := dynview_push_command(&state^.dynview, core.Dynview_Command{
+    status := dynview_push_command(&state^.dynview, dynviewmodel.Dynview_Command{
         kind = .Begin_Block,
         block_id = block_id,
         style_id = dyncore.DYNVIEW_BLOCK_OUTPUT,
@@ -26,7 +36,7 @@ dynview_native_test_document :: proc(
     state^.dynview.command_buffer.stream_open_block_id = block_id
     status = dynview_native_import_document(
         state, &state^.dynview, source, dyncore.DYNVIEW_STYLE_OUTPUT)
-    close_status := dynview_push_command(&state^.dynview, core.Dynview_Command{
+    close_status := dynview_push_command(&state^.dynview, dynviewmodel.Dynview_Command{
         kind = .End_Block,
         block_id = block_id,
     })
@@ -74,7 +84,7 @@ presentation_source_mode_uses_mime_and_outer_delimiters :: proc(t: ^testing.T) {
 @(test)
 presentation_literal_source_preserves_exact_bytes :: proc(t: ^testing.T) {
     bytes := [?]u8{'A', 0, '\n', '\\', 'x'}
-    content := core.Presented_Text{mime = .Text_Latex, bytes = bytes[:]}
+    content := presentation_model.Presented_Text{mime = .Text_Latex, bytes = bytes[:]}
     literal := presentation_literal_source(content)
     testing.expect_value(t, len(literal), len(bytes))
     testing.expect(t, literal[0] == 'A' && literal[1] == 0)
@@ -108,10 +118,10 @@ dynview_native_math_source_survives_animation_reset :: proc(t: ^testing.T) {
 
     copied := string(state.dynview.command_buffer.text_bytes[
         :state.dynview.command_buffer.text_bytes_len])
-    core.dynview_document_store_clear_generation(&state.dynview_documents)
-    testing.expect_value(t, core.animation_memory_begin_generation(
-        &state.animation_memory, 32), core.Animation_Memory_Status.Ok)
-    core.dynview_document_store_publish_generation(
+    dynviewmodel.dynview_document_store_clear_generation(&state.dynview_documents)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &state.animation_memory, 32), animation_model.Animation_Memory_Status.Ok)
+    dynviewmodel.dynview_document_store_publish_generation(
         &state.dynview_documents, &state.animation_memory, 32)
     testing.expect(t, len(copied) > 0)
     testing.expect_value(t, state.dynview.command_buffer.command_count, 2)
@@ -132,10 +142,10 @@ dynview_native_document_replays_mixed_runs :: proc(t: ^testing.T) {
     testing.expect(t, !state.dynview.command_buffer.has_stream_error)
     testing.expect(t, !state.dynview.command_buffer.stream_open_block)
     testing.expect_value(t, state.dynview.command_buffer.commands[0].kind,
-        core.Dynview_Command_Kind.Begin_Block)
+        dynviewmodel.Dynview_Command_Kind.Begin_Block)
     count := state.dynview.command_buffer.command_count
     testing.expect_value(t, state.dynview.command_buffer.commands[count-1].kind,
-        core.Dynview_Command_Kind.End_Block)
+        dynviewmodel.Dynview_Command_Kind.End_Block)
     testing.expect(t, state.dynview.compile_cache.math_program_count > 0)
     testing.expect_value(t, state.dynview.compile_cache.document_count, 1)
     testing.expect_value(t, state.dynview.compile_cache.document_block_count, 2)
@@ -160,7 +170,7 @@ dynview_native_document_publishes_authoritative_semantics :: proc(t: ^testing.T)
 
     testing.expect_value(t, status, i32(BRIDGE_STATUS_OK))
     testing.expect_value(t, state.dynview.command_buffer.command_count, 2)
-    expected_kinds := [?]core.Dynview_Command_Kind{
+    expected_kinds := [?]dynviewmodel.Dynview_Command_Kind{
         .Begin_Block, .End_Block,
     }
     for command, index in state.dynview.command_buffer.commands[
@@ -192,9 +202,9 @@ dynview_native_document_publishes_mixed_containers :: proc(t: ^testing.T) {
     testing.expect_value(t, cache^.document_block_count, 3)
     quoted := cache^.document_blocks[2]
     testing.expect_value(t, quoted.container_kind,
-        core.Dynview_Document_Container_Kind.Quote)
+        dynviewmodel.Dynview_Document_Container_Kind.Quote)
     testing.expect_value(t, quoted.list_kind,
-        core.Dynview_Document_List_Kind.Enumerate)
+        dynviewmodel.Dynview_Document_List_Kind.Enumerate)
     testing.expect_value(t, quoted.item_ordinal, u16(1))
 }
 
@@ -260,8 +270,8 @@ dynview_native_document_numbers_technical_display_rows :: proc(t: ^testing.T) {
 dynview_native_expect_snapshot_semantics :: proc(
     t: ^testing.T,
     slot: ^View_Snapshot,
-    runtime: ^core.Dynview_System,
-    document: core.Dynview_Document,
+    runtime: ^dynviewmodel.Dynview_System,
+    document: dynviewmodel.Dynview_Document,
     copied_source: string) {
 
     testing.expect_value(t, string(slot.document_text[
@@ -305,10 +315,10 @@ dynview_native_document_snapshot_survives_animation_reset :: proc(t: ^testing.T)
         document.source_offset:document.source_offset + document.source_count])
     testing.expect_value(t, copied_source, "text $x^2$")
 
-    core.dynview_document_store_clear_generation(&state.dynview_documents)
-    testing.expect_value(t, core.animation_memory_begin_generation(
-        &state.animation_memory, 44), core.Animation_Memory_Status.Ok)
-    core.dynview_document_store_publish_generation(
+    dynviewmodel.dynview_document_store_clear_generation(&state.dynview_documents)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &state.animation_memory, 44), animation_model.Animation_Memory_Status.Ok)
+    dynviewmodel.dynview_document_store_publish_generation(
         &state.dynview_documents, &state.animation_memory, 44)
 
     testing.expect_value(t, string(slot.command_text), command_text)
@@ -332,13 +342,13 @@ dynview_native_document_classifies_whole_inline_math :: proc(t: ^testing.T) {
     testing.expect_value(t, diagnostics.entry_count, 1)
     testing.expect_value(t, state.dynview.compile_cache.math_program_count, 4)
     command := state.dynview.command_buffer.commands[1]
-    testing.expect_value(t, command.kind, core.Dynview_Command_Kind.Math_Block)
+    testing.expect_value(t, command.kind, dynviewmodel.Dynview_Command_Kind.Math_Block)
     root := &state.dynview.compile_cache.math_programs[command.math_program_id]
     root_command := state.dynview.compile_cache.math_commands[root.command_start]
     testing.expect_value(t, root_command.kind,
-        core.Dynview_Command_Kind.Style_Override)
+        dynviewmodel.Dynview_Command_Kind.Style_Override)
     testing.expect_value(t, root_command.radical_mode,
-        i32(core.Dynview_Math_Style_Level.Text))
+        i32(dynviewmodel.Dynview_Math_Style_Level.Text))
 }
 
 //   Verify explicit raw-math root style and presentation metadata reach native import.
@@ -366,7 +376,7 @@ dynview_native_math_request_preserves_styles :: proc(t: ^testing.T) {
     root := &state.dynview.compile_cache.math_programs[command.math_program_id]
     root_command := state.dynview.compile_cache.math_commands[root.command_start]
     testing.expect_value(t, root_command.kind,
-        core.Dynview_Command_Kind.Style_Override)
+        dynviewmodel.Dynview_Command_Kind.Style_Override)
 }
 
 //   Verify blackboard-bold operations retain the request's dedicated style.
@@ -481,7 +491,7 @@ dynview_native_math_maps_stretch_delimiter_modes :: proc(t: ^testing.T) {
     program := &state.dynview.compile_cache.math_programs[block.math_program_id]
     command := state.dynview.compile_cache.math_commands[program.command_start]
     testing.expect_value(t, command.kind,
-        core.Dynview_Command_Kind.Stretch_Delimiter)
+        dynviewmodel.Dynview_Command_Kind.Stretch_Delimiter)
     testing.expect_value(t, command.accent_mode,
         i32(dynparse.Tex_Delimiter_Kind.Left_Angle))
     testing.expect_value(t, command.radical_mode,
@@ -526,9 +536,9 @@ dynview_native_matrix_snapshot_is_valid :: proc(t: ^testing.T) {
         text = dyncore.DYNVIEW_STYLE_OUTPUT,
         math = dyncore.DYNVIEW_STYLE_ITALIC,
         regular = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |
-            i32(core.Font_Variant_Flags.Regular),
+            i32(fontmodel.Font_Variant_Flags.Regular),
         mathbb = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |
-            i32(core.Font_Variant_Flags.Regular),
+            i32(fontmodel.Font_Variant_Flags.Regular),
     }
     testing.expect_value(t, dynview_native_test_math(
         state, source, .Display, styles),
@@ -559,8 +569,8 @@ dynview_native_circle_document_compiles :: proc(t: ^testing.T) {
     testing.expect_value(t, dynview_native_test_document(state, source, 16),
         i32(BRIDGE_STATUS_OK))
 
-    testing.expect(t, core.arena_owner_init(&state.dynview.cache_arena))
-    defer core.arena_owner_destroy(&state.dynview.cache_arena)
+    testing.expect(t, storage.arena_owner_init(&state.dynview.cache_arena))
+    defer storage.arena_owner_destroy(&state.dynview.cache_arena)
     state.dynview.cache_access_state = .Worker_Mutable
     state.dynview.cache_worker_thread_id = os.get_current_thread_id()
     state.dynview.compile_cache.last_panel_width = 800

@@ -1,6 +1,7 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 
 // Script_Box_Metrics describes one measured box relative to its baseline.
 Script_Box_Metrics :: struct {
@@ -12,7 +13,7 @@ Script_Box_Metrics :: struct {
 
 // Math_Script_Geometry_Input contains measured boxes and style for one attachment.
 Math_Script_Geometry_Input :: struct {
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     font_size: f32,
     script_font_size: f32,
@@ -21,10 +22,10 @@ Math_Script_Geometry_Input :: struct {
     superscript: Script_Box_Metrics,
     subscript: Script_Box_Metrics,
     italic_correction: f32,
-    base_top_right: app_core.Font_Math_Kern_Table,
-    base_bottom_right: app_core.Font_Math_Kern_Table,
-    superscript_bottom_left: app_core.Font_Math_Kern_Table,
-    subscript_top_left: app_core.Font_Math_Kern_Table,
+    base_top_right: fontmodel.Font_Math_Kern_Table,
+    base_bottom_right: fontmodel.Font_Math_Kern_Table,
+    superscript_bottom_left: fontmodel.Font_Math_Kern_Table,
+    subscript_top_left: fontmodel.Font_Math_Kern_Table,
     has_superscript: bool,
     has_subscript: bool,
 }
@@ -45,7 +46,7 @@ Math_Script_Geometry :: struct {
 //   Sum one base/script corner pair at their independent glyph scales.
 math_script_kern_sum :: proc(
     input: Math_Script_Geometry_Input,
-    base_table, script_table: app_core.Font_Math_Kern_Table,
+    base_table, script_table: fontmodel.Font_Math_Kern_Table,
     base_height, script_height: f32) -> f32 {
 
     base_size := input.constants.base_pixel_size

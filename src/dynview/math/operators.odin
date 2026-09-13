@@ -1,9 +1,10 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
 
-Math_Glyph_Variant :: app_core.Font_Math_Glyph_Variant
-Math_Glyph_Variants :: app_core.Font_Math_Glyph_Variants
+
+Math_Glyph_Variant :: fontmodel.Font_Math_Glyph_Variant
+Math_Glyph_Variants :: fontmodel.Font_Math_Glyph_Variants
 
 // Math_Operator_Variant stores one selected display glyph and scaled advance.
 Math_Operator_Variant :: struct {
@@ -11,13 +12,13 @@ Math_Operator_Variant :: struct {
     glyph_id: u32,
     advance: f32,
     extended_shape: bool,
-    extents: app_core.Font_Glyph_Extents,
+    extents: fontmodel.Font_Glyph_Extents,
     italic_correction: f32,
 }
 
 // Math_Operator_Geometry_Input groups one selected body and its semantic limits.
 Math_Operator_Geometry_Input :: struct {
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     font_size: f32,
     style: Math_Style,
@@ -42,7 +43,7 @@ Math_Operator_Geometry :: struct {
 //   Select the smallest vertical variant meeting the font's display threshold.
 math_operator_select_variant :: proc(
     variants: Math_Glyph_Variants,
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     font_size: f32) -> Math_Operator_Variant {
 

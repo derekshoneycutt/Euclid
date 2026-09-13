@@ -1,5 +1,8 @@
 package bridge
 
+import bridgemodel "model"
+import shapemodel "../shapes/model"
+
 import "../julialib"
 import "../core"
 import protocol "../core/protocol"
@@ -8,6 +11,7 @@ import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../particles"
 import termsession "../terminal/session"
+import view_core "../view/core"
 import terminalview "../view/terminal"
 
 import "core:c"
@@ -29,15 +33,15 @@ ANIMATION_LIFECYCLE_COMPLETED :: i32(2)
 Julia_Interface_Reload_Transaction :: struct {
     state: ^core.Euclid_General_State,
     host: ^Julia_Runtime_Host,
-    request: core.Animation_Lifecycle_Requested,
+    request: bridgemodel.Animation_Lifecycle_Requested,
     archive_mtime: i64,
     stable_id: uuid.Identifier,
     candidate: ^julialib.jl_value_t,
     service: ^Julia_Runtime_Service,
-    previous_interface: ^core.Euclid_Julia_Interface,
-    staged_interface: ^core.Euclid_Julia_Interface,
+    previous_interface: ^bridgemodel.Euclid_Julia_Interface,
+    staged_interface: ^bridgemodel.Euclid_Julia_Interface,
     staged_slot: int,
-    target: ^core.Euclid_Julia_Animation_Interface,
+    target: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
 //   Invoke one Julia callback through the stack-preserving diagnostic boundary.
@@ -174,7 +178,7 @@ synchronize_animation_lifecycle :: proc(state: ^core.Euclid_General_State) -> bo
 //   Verify one typed request owns the pending lifecycle transaction incarnation.
 animation_lifecycle_request_owns_slot :: proc(
     service: ^Julia_Runtime_Service,
-    request: core.Animation_Lifecycle_Requested) -> bool {
+    request: bridgemodel.Animation_Lifecycle_Requested) -> bool {
     slot := &service^.animation_lifecycle_slot
     return request.handle.index == 0 && slot^.state == .Pending &&
         slot^.reservation_generation == request.handle.reservation_generation &&
@@ -186,8 +190,8 @@ animation_lifecycle_request_owns_slot :: proc(
 //   Verify frozen lifecycle intent still matches display-prepared authoritative state.
 animation_lifecycle_intent_matches :: proc(
     service: ^Julia_Runtime_Service,
-    slot: ^core.Animation_Lifecycle_Slot) -> bool {
-    state := slot^.host_state
+    slot: ^bridgemodel.Animation_Lifecycle_Slot) -> bool {
+    state := cast(^core.Euclid_General_State)slot^.host_state
     if state == nil || state^.julia_interface == nil {
         return false
     }
@@ -204,7 +208,7 @@ animation_lifecycle_intent_matches :: proc(
 
 //   Publish one lifecycle outcome and release the worker-owned slot for handoff.
 complete_animation_lifecycle_slot :: proc(
-    slot: ^core.Animation_Lifecycle_Slot, succeeded: bool) {
+    slot: ^bridgemodel.Animation_Lifecycle_Slot, succeeded: bool) {
     slot^.outcome = .Committed if succeeded else .Rolled_Back
     slot^.state = .Complete
 }
@@ -212,8 +216,8 @@ complete_animation_lifecycle_slot :: proc(
 //   Execute one validated reload, selection, or reset against the supervisor.
 execute_animation_lifecycle_transition :: proc(
     state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
-    host: ^Julia_Runtime_Host, request: core.Animation_Lifecycle_Requested,
-    animation: ^core.Euclid_Julia_Animation_Interface) -> bool {
+    host: ^Julia_Runtime_Host, request: bridgemodel.Animation_Lifecycle_Requested,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
     if animation_reload_update_needed(state) {
         return reload_packaged_assets_if_updated(
             state, service, host, request, animation)
@@ -237,7 +241,7 @@ execute_animation_lifecycle_transition :: proc(
 update_animation_lifecycle :: proc(
     service: ^Julia_Runtime_Service,
     host: ^Julia_Runtime_Host,
-    request: core.Animation_Lifecycle_Requested) -> bool {
+    request: bridgemodel.Animation_Lifecycle_Requested) -> bool {
     slot := &service^.animation_lifecycle_slot
     if !animation_lifecycle_request_owns_slot(service, request) {
         log.warnf(
@@ -253,7 +257,7 @@ update_animation_lifecycle :: proc(
         complete_animation_lifecycle_slot(slot, false)
         return false
     }
-    state := slot^.host_state
+    state := cast(^core.Euclid_General_State)slot^.host_state
     assert_julia_runtime_owner(state)
     context = state^.saved_context
     animation := state^.julia_interface^.selected_animation
@@ -310,7 +314,7 @@ complete_actor_animation_lifecycle :: proc(
 //   Validate one lifecycle call and consume candidate-load failure injection.
 animation_lifecycle_invocation_allowed :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    animation: ^core.Euclid_Julia_Animation_Interface,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
     operation: i32) -> bool {
     if host == nil || host^.runtime == nil || host^.animation_lifecycle == nil ||
         host^.animation_lifecycle_payload_type == nil || animation == nil {
@@ -327,7 +331,7 @@ animation_lifecycle_invocation_allowed :: proc(
 //   Build one primitive lifecycle payload for the current runtime generation.
 make_animation_lifecycle_payload :: proc(
     service: ^Julia_Runtime_Service,
-    request: core.Animation_Lifecycle_Requested,
+    request: bridgemodel.Animation_Lifecycle_Requested,
     operation: i32) -> Native_Animation_Lifecycle_Payload {
     return {
         request_id = request.request_id,
@@ -354,8 +358,8 @@ finish_animation_lifecycle_invocation :: proc(
 //   Invoke one lifecycle transaction and service its typed native reset barrier.
 invoke_actor_animation_lifecycle :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    request: core.Animation_Lifecycle_Requested,
-    animation: ^core.Euclid_Julia_Animation_Interface,
+    request: bridgemodel.Animation_Lifecycle_Requested,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
     operation: i32) -> bool {
     if !animation_lifecycle_invocation_allowed(
         service, host, animation, operation) {
@@ -415,7 +419,7 @@ acknowledge_actor_animation_reset :: proc(
 //   Resolve one checked tick handle and produce its immutable scene batch.
 generate_animation_tick :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    request: core.Animation_Tick_Requested) -> bool {
+    request: bridgemodel.Animation_Tick_Requested) -> bool {
     if request.handle.index < 0 ||
         int(request.handle.index) >= len(service^.animation_tick_slots) {
         return false
@@ -428,7 +432,7 @@ generate_animation_tick :: proc(
         slot^.sequence != request.sequence {
         return false
     }
-    state := slot^.host_state
+    state := cast(^core.Euclid_General_State)slot^.host_state
     assert_julia_runtime_owner(state)
     context = state^.saved_context
     state^.animation_query_snapshot_target = &slot^.query_snapshot
@@ -449,8 +453,8 @@ generate_animation_tick :: proc(
 //   Build one primitive tick payload for the reserved immutable slot.
 make_animation_tick_payload :: proc(
     service: ^Julia_Runtime_Service,
-    request: core.Animation_Tick_Requested,
-    slot: ^core.Animation_Tick_Slot) -> Native_Animation_Tick_Payload {
+    request: bridgemodel.Animation_Tick_Requested,
+    slot: ^bridgemodel.Animation_Tick_Slot) -> Native_Animation_Tick_Payload {
     return {
         request_id = request.request_id,
         runtime_generation = service^.runtime_generation,
@@ -465,8 +469,8 @@ make_animation_tick_payload :: proc(
 //   Transfer one checked primitive tick payload through the actor host adapter.
 invoke_actor_animation_tick :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    request: core.Animation_Tick_Requested, slot: ^core.Animation_Tick_Slot,
-    animation: ^core.Euclid_Julia_Animation_Interface) -> bool {
+    request: bridgemodel.Animation_Tick_Requested, slot: ^bridgemodel.Animation_Tick_Slot,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
     if host == nil || host^.runtime == nil || host^.animation_tick == nil ||
         host^.animation_tick_payload_type == nil {
         return false
@@ -570,7 +574,7 @@ call_global_euclid_loop :: proc(state: ^core.Euclid_General_State, dt: f32) {
 //   Publish the selected animation pointer and its next host-owned generation.
 commit_animation_selection :: proc(
     state: ^core.Euclid_General_State,
-    animation: ^core.Euclid_Julia_Animation_Interface) {
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface) {
     state^.julia_interface^.current_animation = animation
     animation_generation: u64 = 0
     if state^.julia_runtime_service != nil {
@@ -589,7 +593,7 @@ commit_animation_selection :: proc(
 //   Record one successful UUID binding against its owning runtime generation.
 record_animation_loaded :: proc(
     state: ^core.Euclid_General_State,
-    animation: ^core.Euclid_Julia_Animation_Interface,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
     generation: ^julialib.jl_value_t) {
     runtime_generation := state^.julia_runtime_service^.runtime_generation
     if generation != nil {
@@ -623,12 +627,14 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
             &state^.simulation_executor^.pool)
     }
     terminalview.terminal_destroy(&state^.terminal)
-    particles.emit_shape_world_clear_burst(
-        state^.particle_system, state^.shape_world, state^.iso_scale)
-    if core.shape_world_rewind_animation(state^.shape_world) != .Ok {
+    if particles.emit_shape_world_clear_burst(
+        state^.particle_system, state^.shape_world) && state^.iso_scale != nil {
+        view_core.screenshake_on_dust_kick(state^.iso_scale)
+    }
+    if shapemodel.shape_world_rewind_animation(state^.shape_world) != .Ok {
         return false
     }
-    if core.animation_storage_begin_generation(
+    if animation_storage_begin_generation(
         &state^.animation_memory, &state^.animation_values,
         &state^.dynview_documents, target_generation) != .Ok {
         return false
@@ -642,7 +648,7 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
 //   Synchronize one programmatic animation selection and request its tree reveal.
 select_animation_programmatically :: proc(
     state: ^core.Euclid_General_State,
-    selected: ^core.Euclid_Julia_Animation_Interface) -> bool {
+    selected: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
 
     if state == nil || state^.julia_interface == nil || selected == nil {
         return false
@@ -678,7 +684,7 @@ select_default_animation :: proc(state: ^core.Euclid_General_State) {
     }
 
     ji := state^.julia_interface
-    target: ^core.Euclid_Julia_Animation_Interface
+    target: ^bridgemodel.Euclid_Julia_Animation_Interface
 
     it := animation_iterator_begin(ji)
     for {
@@ -750,7 +756,7 @@ when core.HARNESS_ENABLED {
     //   Execute one harness scenario callback after deterministic stepping.
     run_harness_scenario :: proc(
         host: ^Julia_Runtime_Host,
-        request: core.Harness_Scenario_Requested) -> bool {
+        request: bridgemodel.Harness_Scenario_Requested) -> bool {
         state := host^.native_state
         assert_julia_runtime_owner(state)
         context = state^.saved_context
@@ -802,7 +808,7 @@ reset_julia_interface_registry :: proc(state: ^core.Euclid_General_State) {
 //   Find an animation pointer by its registered stable UUID identity.
 find_animation_by_stable_id :: proc(
     state: ^core.Euclid_General_State,
-    stable_id: uuid.Identifier) -> ^core.Euclid_Julia_Animation_Interface {
+    stable_id: uuid.Identifier) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
 
     if state == nil || state^.julia_interface == nil {
         return nil
@@ -850,8 +856,8 @@ record_runtime_reload_event :: proc(
 //   Detect packaged asset updates and hot-reload Julia script/interface state when changed.
 reload_packaged_assets_if_updated :: proc(
     state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
-    host: ^Julia_Runtime_Host, request: core.Animation_Lifecycle_Requested,
-    target: ^core.Euclid_Julia_Animation_Interface) -> bool {
+    host: ^Julia_Runtime_Host, request: bridgemodel.Animation_Lifecycle_Requested,
+    target: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
     archive_mtime, ok := files.packaged_asset_archive_modification_unix_nano()
     if !ok {
         return true
@@ -1032,7 +1038,7 @@ create_julia_interface_reload_candidate :: proc(
 //   Register and validate one fresh interface before retiring the active generation.
 stage_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State, host: ^Julia_Runtime_Host,
-    request: core.Animation_Lifecycle_Requested, archive_mtime: i64,
+    request: bridgemodel.Animation_Lifecycle_Requested, archive_mtime: i64,
     stable_id: uuid.Identifier) -> bool {
 
     service, admitted := begin_julia_interface_reload(state)
@@ -1171,7 +1177,7 @@ validate_julia_interface_reload :: proc(
 //   Restore the active generation after staged registration or activation fails.
 rollback_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State,
-    previous_interface, staged_interface: ^core.Euclid_Julia_Interface,
+    previous_interface, staged_interface: ^bridgemodel.Euclid_Julia_Interface,
     service: ^Julia_Runtime_Service, archive_mtime: i64) {
 
     clean_julia_interface_instance(staged_interface)
@@ -1184,7 +1190,7 @@ rollback_julia_interface_reload :: proc(
 //   Publish one validated interface generation and retire its predecessor.
 publish_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State,
-    previous_interface: ^core.Euclid_Julia_Interface,
+    previous_interface: ^bridgemodel.Euclid_Julia_Interface,
     staged_slot: int,
     service: ^Julia_Runtime_Service) {
 
@@ -1271,7 +1277,7 @@ parse_animation_stable_id :: proc(stable_id, name: cstring) -> (uuid.Identifier,
 //   Find an already registered animation by stable UUID identity.
 find_registered_animation_by_stable_id :: proc(
     state: ^core.Euclid_General_State,
-    stable_id: uuid.Identifier) -> ^core.Euclid_Julia_Animation_Interface {
+    stable_id: uuid.Identifier) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
 
     return find_animation_by_stable_id(state, stable_id)
 }
@@ -1302,18 +1308,20 @@ reject_duplicate_stable_id :: proc(
 
 //   Create a forward-only iterator over the animation registry list.
 animation_iterator_begin :: proc(
-    ji: ^core.Euclid_Julia_Interface) -> core.Euclid_Julia_Animation_Iterator {
+    ji: ^bridgemodel.Euclid_Julia_Interface) ->
+        bridgemodel.Euclid_Julia_Animation_Iterator {
 
     if ji == nil {
         return {}
     }
 
-    return core.Euclid_Julia_Animation_Iterator{current = ji^.animation_head}
+    return bridgemodel.Euclid_Julia_Animation_Iterator{current = ji^.animation_head}
 }
 
 //   Return the current iterator node and advance to the next registry entry.
 animation_iterator_next :: proc(
-    it: ^core.Euclid_Julia_Animation_Iterator) -> ^core.Euclid_Julia_Animation_Interface {
+    it: ^bridgemodel.Euclid_Julia_Animation_Iterator) ->
+        ^bridgemodel.Euclid_Julia_Animation_Interface {
 
     if it == nil || it^.current == nil {
         return nil
@@ -1326,7 +1334,7 @@ animation_iterator_next :: proc(
 
 //   Attach a child animation to its parent while preserving sibling order.
 animation_link_child :: proc(
-    parent, child: ^core.Euclid_Julia_Animation_Interface) {
+    parent, child: ^bridgemodel.Euclid_Julia_Animation_Interface) {
 
     if parent == nil || child == nil {
         return
@@ -1347,8 +1355,8 @@ animation_link_child :: proc(
 
 //   Append a new node to the registry's arena-backed insertion order list.
 animation_append_to_registry :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    node: ^core.Euclid_Julia_Animation_Interface) {
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface) {
 
     if ji == nil || node == nil {
         return
@@ -1383,7 +1391,7 @@ animation_hash_stable_id :: proc(stable_id: uuid.Identifier) -> u64 {
 
 //   Probe the UUID lookup table for an occupied match or an insertion slot.
 animation_lookup_probe :: proc(
-    entries: []core.Euclid_Julia_Animation_Lookup_Entry,
+    entries: []bridgemodel.Euclid_Julia_Animation_Lookup_Entry,
     capacity: int,
     stable_id: uuid.Identifier,
     for_insert: bool) -> (int, bool) {
@@ -1415,14 +1423,14 @@ animation_lookup_probe :: proc(
 
 //   Allocate a lookup table buffer from the registry arena.
 animation_lookup_allocate :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    new_capacity: int) -> []core.Euclid_Julia_Animation_Lookup_Entry {
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    new_capacity: int) -> []bridgemodel.Euclid_Julia_Animation_Lookup_Entry {
 
     if ji == nil || new_capacity <= 0 || (new_capacity & (new_capacity - 1)) != 0 {
         return nil
     }
 
-    new_entries := make([]core.Euclid_Julia_Animation_Lookup_Entry,
+    new_entries := make([]bridgemodel.Euclid_Julia_Animation_Lookup_Entry,
         new_capacity, ji^.animation_registry_allocator)
     if len(new_entries) != new_capacity {
         return nil
@@ -1433,7 +1441,7 @@ animation_lookup_allocate :: proc(
 
 //   Grow and rehash the UUID lookup table into a larger arena allocation.
 animation_lookup_grow :: proc(
-    ji: ^core.Euclid_Julia_Interface,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
     new_capacity: int) -> bool {
 
     if ji == nil || new_capacity <= 0 {
@@ -1464,8 +1472,8 @@ animation_lookup_grow :: proc(
 // Returns:
 //   - true when all occupied entries rehash without collision or overflow.
 rehash_animation_lookup :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    old_entries: []core.Euclid_Julia_Animation_Lookup_Entry,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    old_entries: []bridgemodel.Euclid_Julia_Animation_Lookup_Entry,
     old_capacity: int) -> bool {
 
     for i in 0..<old_capacity {
@@ -1484,7 +1492,7 @@ rehash_animation_lookup :: proc(
         }
 
         ji^.animation_lookup_entries[insert_index] =
-            core.Euclid_Julia_Animation_Lookup_Entry{
+            bridgemodel.Euclid_Julia_Animation_Lookup_Entry{
                 is_occupied = true,
                 stable_id = entry.stable_id,
                 animation = entry.animation,
@@ -1496,7 +1504,8 @@ rehash_animation_lookup :: proc(
 }
 
 //   Ensure the lookup table has enough free space for another inserted animation.
-animation_lookup_ensure_capacity :: proc(ji: ^core.Euclid_Julia_Interface) -> bool {
+animation_lookup_ensure_capacity :: proc(
+    ji: ^bridgemodel.Euclid_Julia_Interface) -> bool {
     if ji == nil {
         return false
     }
@@ -1516,9 +1525,9 @@ animation_lookup_ensure_capacity :: proc(ji: ^core.Euclid_Julia_Interface) -> bo
 
 //   Insert a stable UUID to animation pointer mapping into the lookup table.
 animation_lookup_insert :: proc(
-    ji: ^core.Euclid_Julia_Interface,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
     stable_id: uuid.Identifier,
-    node: ^core.Euclid_Julia_Animation_Interface) -> bool {
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
 
     if ji == nil || node == nil {
         return false
@@ -1537,19 +1546,20 @@ animation_lookup_insert :: proc(
         return false
     }
 
-    ji^.animation_lookup_entries[insert_index] = core.Euclid_Julia_Animation_Lookup_Entry{
-        is_occupied = true,
-        stable_id = stable_id,
-        animation = node,
-    }
+    ji^.animation_lookup_entries[insert_index] =
+        bridgemodel.Euclid_Julia_Animation_Lookup_Entry{
+            is_occupied = true,
+            stable_id = stable_id,
+            animation = node,
+        }
     ji^.animation_lookup_count += 1
     return true
 }
 
 //   Resolve a stable UUID to a registry node pointer.
 animation_lookup_find :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    stable_id: uuid.Identifier) -> ^core.Euclid_Julia_Animation_Interface {
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    stable_id: uuid.Identifier) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
 
     if ji == nil || ji^.animation_lookup_capacity <= 0 {
         return nil
@@ -1573,8 +1583,8 @@ add_animation_to_registry :: proc(
     entry: ^julialib.jl_value_t,
     name: cstring,
     stable_id: uuid.Identifier,
-    parent: ^core.Euclid_Julia_Animation_Interface) -> (
-        ^core.Euclid_Julia_Animation_Interface, bool) {
+    parent: ^bridgemodel.Euclid_Julia_Animation_Interface) -> (
+        ^bridgemodel.Euclid_Julia_Animation_Interface, bool) {
 
     if state == nil || state^.julia_interface == nil {
         return nil, false
@@ -1585,7 +1595,8 @@ add_animation_to_registry :: proc(
     }
 
     ji := state^.julia_interface
-    node := new(core.Euclid_Julia_Animation_Interface, ji^.animation_registry_allocator)
+    node := new(bridgemodel.Euclid_Julia_Animation_Interface,
+        ji^.animation_registry_allocator)
     if node == nil {
         return nil, false
     }
@@ -1607,7 +1618,8 @@ add_animation_to_registry :: proc(
 //   Resolve a parent animation from the stable UUID text supplied by Julia.
 resolve_parent_animation_by_stable_id :: proc(
     state: ^core.Euclid_General_State,
-    parent_stable_id_text: cstring) -> (^core.Euclid_Julia_Animation_Interface, bool) {
+    parent_stable_id_text: cstring) ->
+        (^bridgemodel.Euclid_Julia_Animation_Interface, bool) {
 
     if parent_stable_id_text == nil {
         return nil, false

@@ -1,5 +1,7 @@
 package view
 
+import viewmodel "model"
+
 import "core:strings"
 import "core:testing"
 
@@ -11,7 +13,7 @@ import app_view "./core"
 //   Verify clearing then setting a long GIF status note truncates with a terminator.
 @(test)
 clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(app_core.Euclid_Ui_Runtime_State, context.allocator)
+    ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
     defer free(ui_runtime)
 
     app_view.clear_gif_status_note(ui_runtime)
@@ -30,7 +32,7 @@ clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
 //   Verify clearing then setting a long GIF path truncates with a terminator.
 @(test)
 clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(app_core.Euclid_Ui_Runtime_State, context.allocator)
+    ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
     defer free(ui_runtime)
 
     app_view.clear_last_gif_path(ui_runtime)
@@ -100,7 +102,7 @@ gif_capture_source_dimensions_follow_world_extent :: proc(t: ^testing.T) {
 //   Verify one GIF session freezes and clears its framebuffer crop dimensions.
 @(test)
 gif_capture_session_dimensions_are_stable_until_teardown :: proc(t: ^testing.T) {
-    session := app_core.Gif_Capture_Session{}
+    session := viewmodel.Gif_Capture_Session{}
 
     app_view.gif_capture_freeze_source_dimensions(&session, 900, 500)
     testing.expect_value(t, session.source_width, 900)
@@ -144,7 +146,7 @@ gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^test
 //   Verify aborting an inactive GIF capture session is a safe no-op.
 @(test)
 gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
-    session := app_core.Gif_Capture_Session{
+    session := viewmodel.Gif_Capture_Session{
         source_width = 900,
         source_height = 500,
     }

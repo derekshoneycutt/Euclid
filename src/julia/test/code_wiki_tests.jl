@@ -105,10 +105,9 @@ end
     @test "src/core" in packages
     @test !("src/julialib" in packages)
 
-    package = extract_odin_package(config, "src/core")
+    package = extract_odin_package(config, "src/view/font/model")
     symbol = only(filter(item -> item.name == "font_weight_rank", package.symbols))
-    @test occursin("Defines the core structures", package.doc_markdown)
-    @test symbol.source_path == "src/core/font_styles.odin"
+    @test symbol.source_path == "src/view/font/model/styles.odin"
     @test symbol.source_line > 0
     @test occursin("canonical weight ordering", symbol.doc_markdown)
 

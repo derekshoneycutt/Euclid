@@ -1,5 +1,11 @@
 package ui
 
+import viewmodel "../model"
+
+import bridgemodel "../../bridge/model"
+
+import dynviewmodel "../../dynview/model"
+
 import "core:testing"
 
 import app_core "../../core"
@@ -46,18 +52,18 @@ ui_regions_clamp_all_pane_minimums :: proc(t: ^testing.T) {
 // Verify Terminal entry focuses once while window activation only changes effective focus.
 @(test)
 ui_focus_terminal_entry_and_window_activation :: proc(t: ^testing.T) {
-    runtime := app_core.Euclid_Ui_Runtime_State{
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
         ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
     }
     focused := ui_reconcile_focus(&runtime, {window_focused = true}, true)
     testing.expect_value(t, focused.logical_focus.kind,
-        app_core.Ui_Focus_Kind.Terminal)
+        viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect(t, focused.terminal_focused)
     testing.expect(t, focused.terminal_focus_changed)
 
     unfocused := ui_reconcile_focus(&runtime, {window_focused = false}, true)
     testing.expect_value(t, unfocused.logical_focus.kind,
-        app_core.Ui_Focus_Kind.Terminal)
+        viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect(t, !unfocused.terminal_focused)
     testing.expect(t, unfocused.terminal_focus_changed)
 
@@ -71,7 +77,7 @@ ui_focus_terminal_entry_and_window_activation :: proc(t: ^testing.T) {
 // Verify primary presses retarget focus and Terminal exit invalidates its target.
 @(test)
 ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
-    runtime := app_core.Euclid_Ui_Runtime_State{
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
         ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
     }
     _ = ui_reconcile_focus(&runtime, {window_focused = true}, true)
@@ -83,9 +89,9 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
         mouse_pressed = {.Left},
     }, true)
     testing.expect_value(t, moved.logical_focus.kind,
-        app_core.Ui_Focus_Kind.Tree)
+        viewmodel.Ui_Focus_Kind.Tree)
     testing.expect_value(t, moved.effective_focus.kind,
-        app_core.Ui_Focus_Kind.Tree)
+        viewmodel.Ui_Focus_Kind.Tree)
     testing.expect(t, !moved.terminal_focused)
     testing.expect(t, moved.terminal_focus_changed)
 
@@ -96,12 +102,12 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
         mouse_pressed = {.Left},
     }, true)
     testing.expect_value(t, restored.logical_focus.kind,
-        app_core.Ui_Focus_Kind.Terminal)
+        viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect(t, restored.terminal_focused)
 
     exited := ui_reconcile_focus(&runtime, {window_focused = true}, false)
     testing.expect_value(t, exited.logical_focus.kind,
-        app_core.Ui_Focus_Kind.None)
+        viewmodel.Ui_Focus_Kind.None)
     testing.expect(t, !exited.terminal_focused)
     testing.expect(t, exited.terminal_focus_changed)
 }
@@ -109,7 +115,7 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
 // Verify static routing declares splitter and panel priority independently of drawing.
 @(test)
 ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
-    runtime := app_core.Euclid_Ui_Runtime_State{
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
         ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
@@ -119,7 +125,7 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
         terminal_present = true,
     })
     testing.expect_value(t, splitter.hover.kind,
-        app_core.Ui_Interaction_Target_Kind.Splitter)
+        viewmodel.Ui_Interaction_Target_Kind.Splitter)
 
     terminal := runtime.ui_regions.terminal_rect
     routed := ui_route_interaction_frame(&runtime, {
@@ -130,7 +136,7 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
         terminal_present = true,
     })
     testing.expect_value(t, routed.hover.focus.kind,
-        app_core.Ui_Focus_Kind.Terminal)
+        viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect(t, routed.terminal.pointer)
     testing.expect(t, routed.terminal.wheel)
     testing.expect(t, !routed.presentation.pointer)
@@ -140,7 +146,7 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
 // Verify capture from frame start outranks new hover and suppresses wheel routing.
 @(test)
 ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
-    runtime := app_core.Euclid_Ui_Runtime_State{
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
         ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
@@ -157,13 +163,13 @@ ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
             id = UI_TREE_SCROLLBAR_ID},
     })
     testing.expect_value(t, routed.hover.focus.kind,
-        app_core.Ui_Focus_Kind.Terminal)
+        viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect_value(t, routed.pointer_capture.focus.kind,
-        app_core.Ui_Focus_Kind.Tree)
+        viewmodel.Ui_Focus_Kind.Tree)
     testing.expect_value(t, routed.pointer_target.focus.kind,
-        app_core.Ui_Focus_Kind.Tree)
+        viewmodel.Ui_Focus_Kind.Tree)
     testing.expect_value(t, routed.wheel_target.kind,
-        app_core.Ui_Interaction_Target_Kind.None)
+        viewmodel.Ui_Interaction_Target_Kind.None)
     testing.expect(t, routed.tree.pointer)
     testing.expect(t, !routed.terminal.pointer)
 }
@@ -171,7 +177,7 @@ ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
 // Verify prepared Terminal track geometry refines panel routing before consumption.
 @(test)
 ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
-    runtime := app_core.Euclid_Ui_Runtime_State{
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
         ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
@@ -188,7 +194,7 @@ ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
 
     routed := runtime.interaction_frame
     testing.expect_value(t, routed.hover.kind,
-        app_core.Ui_Interaction_Target_Kind.Scrollbar)
+        viewmodel.Ui_Interaction_Target_Kind.Scrollbar)
     testing.expect_value(t, routed.pointer_target.id,
         UI_TERMINAL_SCROLLBAR_ID)
     testing.expect_value(t, routed.wheel_target.id,
@@ -216,7 +222,7 @@ ui_tree_input_frame_filters_independent_pointer_classes :: proc(t: ^testing.T) {
 // Verify update-only checkbox interaction captures and toggles on matching release.
 @(test)
 checkbox_update_commits_without_drawing :: proc(t: ^testing.T) {
-    owner: app_core.Ui_Press_Owner_State
+    owner: viewmodel.Ui_Press_Owner_State
     params := Checkbox_Params{id = 41, rect = {10, 10, 20, 20}, checked = false,
         enabled = true, mouse = {mouse_position = {15, 15},
             mouse_pressed = {.Left}, mouse_down = {.Left}},
@@ -235,9 +241,9 @@ checkbox_update_commits_without_drawing :: proc(t: ^testing.T) {
 ui_router_classifies_copy_capture_as_presentation :: proc(t: ^testing.T) {
     target := ui_capture_target({active = true, kind = .Copy_Icon, id = 17})
     testing.expect_value(t, target.kind,
-        app_core.Ui_Interaction_Target_Kind.Control)
+        viewmodel.Ui_Interaction_Target_Kind.Control)
     testing.expect_value(t, target.focus.kind,
-        app_core.Ui_Focus_Kind.Presentation)
+        viewmodel.Ui_Focus_Kind.Presentation)
     testing.expect_value(t, target.id, 17)
 }
 
@@ -257,7 +263,7 @@ splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
 //   Verify a changed split width invalidates Dynview panel layout for reflow.
 @(test)
 split_width_change_invalidates_dynview_panel_layout :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
     baseline := compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
     resized := compute_ui_regions(.Baseline, VIEW_WIDTH - 100, VIEW_HEIGHT)
@@ -294,7 +300,7 @@ splitter_intersection_selects_nearest_axis :: proc(t: ^testing.T) {
 //   Verify splitter capture persists off-target, clamps, and releases on mouse-up.
 @(test)
 splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
-    ui_runtime := app_core.Euclid_Ui_Runtime_State{
+    ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
     }
@@ -316,9 +322,9 @@ splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
 //   Verify active GIF phases lock and release splitter interaction.
 @(test)
 gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
-    phases := [3]app_core.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
+    phases := [3]viewmodel.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
     for phase in phases {
-        ui_runtime := app_core.Euclid_Ui_Runtime_State{
+        ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
             vertical_split_x = VIEW_WIDTH,
             horizontal_split_y = VIEW_HEIGHT,
             gif_capture_phase = phase,
@@ -336,7 +342,7 @@ gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
 //   Verify programmatic splitter placement is atomic, clamped, and capture-safe.
 @(test)
 scenario_splitter_positions_follow_ui_policy :: proc(t: ^testing.T) {
-    ui_runtime := app_core.Euclid_Ui_Runtime_State{
+    ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
         ui_press_owner = {active = true, kind = .Splitter,
@@ -364,7 +370,7 @@ scenario_presentation_scroll_follows_ui_policy :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
-    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
     state^.julia_interface^.selected_animation = animation
     state^.ui_runtime.ui_press_owner = {active = true, kind = .Scrollbar,
@@ -386,7 +392,7 @@ scenario_presentation_scroll_follows_ui_policy :: proc(t: ^testing.T) {
 @(test)
 validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {
     // Ensures region validation fails when any panel rectangle has negative width or height.
-    regions := app_core.Ui_Regions{}
+    regions := viewmodel.Ui_Regions{}
     regions.world_rect = rl.Rectangle{0, 0, -1, 10}
 
     testing.expect(t, !validate_ui_regions(regions))
@@ -420,7 +426,7 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
 // Verify prepared scrolling owns the full track and applies wheel exactly once.
 @(test)
 scroll_container_update_reserves_track_and_wheel :: proc(t: ^testing.T) {
-    owner: app_core.Ui_Press_Owner_State
+    owner: viewmodel.Ui_Press_Owner_State
     result := scroll_container_update({
         id = 1002,
         rect = {10, 20, 100, 80},
@@ -438,7 +444,7 @@ scroll_container_update_reserves_track_and_wheel :: proc(t: ^testing.T) {
 
 // Verify thumb capture survives pointer exit and clears on physical release.
 scroll_container_drag_test_update :: proc(
-    owner: ^app_core.Ui_Press_Owner_State,
+    owner: ^viewmodel.Ui_Press_Owner_State,
     state: Scroll_Container_State,
     mouse_input: Input_Frame,
     scroll_y: f32 = 0) -> Scroll_Container_Update_Result {
@@ -453,7 +459,7 @@ scroll_container_drag_test_update :: proc(
 // Verify thumb capture survives pointer exit and clears on physical release.
 @(test)
 scroll_container_update_retains_drag_outside_track :: proc(t: ^testing.T) {
-    owner: app_core.Ui_Press_Owner_State
+    owner: viewmodel.Ui_Press_Owner_State
     pressed := scroll_container_drag_test_update(&owner, {}, {
         mouse_position = {106, 21}, mouse_pressed = {.Left},
         mouse_down = {.Left},
@@ -562,10 +568,10 @@ terminal_scrollbar_filter_preserves_child_capture :: proc(t: ^testing.T) {
 
 //   Seed one tree node with a name and optional children for testing.
 seed_tree_node :: proc(
-    node: ^app_core.Euclid_Julia_Animation_Interface,
-    parent: ^app_core.Euclid_Julia_Animation_Interface,
-    first_child: ^app_core.Euclid_Julia_Animation_Interface,
-    next_sibling: ^app_core.Euclid_Julia_Animation_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    parent: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    first_child: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    next_sibling: ^bridgemodel.Euclid_Julia_Animation_Interface,
     expanded: bool) {
 
     node^.parent = parent
@@ -578,8 +584,8 @@ seed_tree_node :: proc(
 @(test)
 tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
     // Verifies visible tree row counting respects node expansion state and first-child expansion helper behavior.
-    ji := app_core.Euclid_Julia_Interface{}
-    nodes: [3]app_core.Euclid_Julia_Animation_Interface
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_tail = &nodes[2]
     ji.animation_count = 3
@@ -607,8 +613,8 @@ tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
 //   Verify tree row lookup follows visible depth-first order across roots.
 @(test)
 tree_visible_row_follows_draw_order :: proc(t: ^testing.T) {
-    ji := app_core.Euclid_Julia_Interface{}
-    nodes: [4]app_core.Euclid_Julia_Animation_Interface
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    nodes: [4]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
     for index in 0..<len(nodes) - 1 {
@@ -644,14 +650,14 @@ tree_reveal_scroll_is_minimal_and_clamped :: proc(t: ^testing.T) {
 //   Verify a stable reveal request scrolls, cancels dragging, and is consumed.
 @(test)
 pending_tree_reveal_applies_display_state :: proc(t: ^testing.T) {
-    ji := app_core.Euclid_Julia_Interface{}
-    nodes: [2]app_core.Euclid_Julia_Animation_Interface
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
     nodes[0].next_in_registry = &nodes[1]
     nodes[0].stable_id[0] = 1
     nodes[1].stable_id[0] = 2
-    ui_runtime := app_core.Euclid_Ui_Runtime_State{
+    ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
         tree_reveal_pending = true,
         tree_reveal_stable_id = nodes[1].stable_id,
         tree_scroll_dragging = true,
@@ -698,8 +704,8 @@ build_tree_view_panels_clamps_small_panels :: proc(t: ^testing.T) {
 @(test)
 tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
     // Verifies row counting guard limits recursive traversal depth to prevent runaway tree walks.
-    ji := app_core.Euclid_Julia_Interface{}
-    nodes: [2]app_core.Euclid_Julia_Animation_Interface
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_tail = &nodes[1]
     ji.animation_count = 2

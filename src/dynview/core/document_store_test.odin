@@ -1,10 +1,13 @@
 package dynview_core
 
+import dynviewmodel "../model"
+
+import animation_model "../../core/animation"
+
 import "base:runtime"
 import "core:mem"
 import "core:testing"
 import "core:thread"
-import app_core "../../core"
 import dynparse "../parse"
 
 Dynview_Parse_Test_Task :: struct {
@@ -39,37 +42,37 @@ document_parse_test_run_concurrently :: proc(tasks: ^[2]Dynview_Parse_Test_Task)
 
 //   Initialize one document store and shared arena for focused tests.
 document_store_test_init :: proc(
-    memory: ^app_core.Animation_Memory,
-    store: ^app_core.Dynview_Document_Store,
+    memory: ^animation_model.Animation_Memory,
+    store: ^dynviewmodel.Dynview_Document_Store,
     generation: u64) -> bool {
-    return app_core.animation_memory_init(memory) &&
-        app_core.dynview_document_store_init(store, memory) &&
-        app_core.animation_memory_begin_generation(memory, generation) == .Ok &&
+    return animation_model.animation_memory_init(memory) &&
+        dynviewmodel.dynview_document_store_init(store, memory) &&
+        animation_model.animation_memory_begin_generation(memory, generation) == .Ok &&
         document_store_test_publish(store, memory, generation)
 }
 
 //   Publish a test generation through the shared-core lifecycle contract.
 document_store_test_publish :: proc(
-    store: ^app_core.Dynview_Document_Store,
-    memory: ^app_core.Animation_Memory,
+    store: ^dynviewmodel.Dynview_Document_Store,
+    memory: ^animation_model.Animation_Memory,
     generation: u64) -> bool {
-    app_core.dynview_document_store_publish_generation(store, memory, generation)
+    dynviewmodel.dynview_document_store_publish_generation(store, memory, generation)
     return store.generation == generation
 }
 
 //   Destroy one focused store fixture in borrower-before-owner order.
 document_store_test_destroy :: proc(
-    memory: ^app_core.Animation_Memory,
-    store: ^app_core.Dynview_Document_Store) {
-    app_core.dynview_document_store_destroy(store)
-    app_core.animation_memory_destroy(memory)
+    memory: ^animation_model.Animation_Memory,
+    store: ^dynviewmodel.Dynview_Document_Store) {
+    dynviewmodel.dynview_document_store_destroy(store)
+    animation_model.animation_memory_destroy(memory)
 }
 
 //   Verify concurrent parse builds mutate only their independent result records.
 @(test)
 document_parse_builds_are_isolated_from_store_state :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 31))
     defer document_store_test_destroy(&memory, &store)
     math_result := new(Dynview_Parse_Result, context.temp_allocator)
@@ -105,8 +108,8 @@ document_parse_builds_are_isolated_from_store_state :: proc(t: ^testing.T) {
 //   Verify owner commit publishes the same immutable bytes as legacy interning.
 @(test)
 document_parse_commit_matches_legacy_intern :: proc(t: ^testing.T) {
-    direct_memory, split_memory: app_core.Animation_Memory
-    direct_store, split_store: app_core.Dynview_Document_Store
+    direct_memory, split_memory: animation_model.Animation_Memory
+    direct_store, split_store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&direct_memory, &direct_store, 32))
     defer document_store_test_destroy(&direct_memory, &direct_store)
     testing.expect(t, document_store_test_init(&split_memory, &split_store, 32))
@@ -131,8 +134,8 @@ document_parse_commit_matches_legacy_intern :: proc(t: ^testing.T) {
 //   Verify a committed rejected parse remains an exact negative-cache entry.
 @(test)
 document_parse_commit_preserves_negative_cache :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 33))
     defer document_store_test_destroy(&memory, &store)
     source := "\\textbf{x"
@@ -153,31 +156,31 @@ document_parse_commit_preserves_negative_cache :: proc(t: ^testing.T) {
 //   Verify a result built for a retired generation cannot mutate the new store.
 @(test)
 document_parse_commit_rejects_retired_generation :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 34))
     defer document_store_test_destroy(&memory, &store)
     result := new(Dynview_Parse_Result, context.temp_allocator)
     defer free(result, context.temp_allocator)
     testing.expect_value(t, dynview_parse_build_math(
         "x", .Display, 1, 34, result), Dynview_Document_Status.Ok)
-    app_core.dynview_document_store_clear_generation(&store)
-    testing.expect_value(t, app_core.animation_memory_begin_generation(
-        &memory, 35), app_core.Animation_Memory_Status.Ok)
+    dynviewmodel.dynview_document_store_clear_generation(&store)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &memory, 35), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, document_store_test_publish(&store, &memory, 35))
     before := document_store_diagnostics(&store)
     handle, status := document_store_commit(&store, "x", result)
 
     testing.expect_value(t, status, Dynview_Document_Status.Illegal_State)
-    testing.expect_value(t, handle, app_core.Dynview_Document_Handle{})
+    testing.expect_value(t, handle, dynviewmodel.Dynview_Document_Handle{})
     testing.expect_value(t, document_store_diagnostics(&store), before)
 }
 
 //   Verify invalid rebuilds and failed owner allocation publish no partial entry.
 @(test)
 document_parse_split_path_fails_atomically :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 36))
     defer document_store_test_destroy(&memory, &store)
     result := new(Dynview_Parse_Result, context.temp_allocator)
@@ -201,7 +204,7 @@ document_parse_split_path_fails_atomically :: proc(t: ^testing.T) {
     after := document_store_diagnostics(&store)
 
     testing.expect_value(t, status, Dynview_Document_Status.Allocation_Failed)
-    testing.expect_value(t, handle, app_core.Dynview_Document_Handle{})
+    testing.expect_value(t, handle, dynviewmodel.Dynview_Document_Handle{})
     testing.expect_value(t, after.entry_count, before.entry_count)
     testing.expect_value(t, after.blob_bytes, before.blob_bytes)
     testing.expect_value(t, after.arena.current_used, before.arena.current_used)
@@ -211,8 +214,8 @@ document_parse_split_path_fails_atomically :: proc(t: ^testing.T) {
 //   Verify unsupported keyed parse modes commit as deterministic rejections.
 @(test)
 document_parse_commit_preserves_dispatch_rejection :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 37))
     defer document_store_test_destroy(&memory, &store)
     result := new(Dynview_Parse_Result, context.temp_allocator)
@@ -234,8 +237,8 @@ document_parse_commit_preserves_dispatch_rejection :: proc(t: ^testing.T) {
 //   Verify identical parse requests allocate once and resolve immutable semantics.
 @(test)
 document_store_deduplicates_and_resolves :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 11))
     defer document_store_test_destroy(&memory, &store)
 
@@ -267,8 +270,8 @@ document_store_deduplicates_and_resolves :: proc(t: ^testing.T) {
 //   Verify semantic document blocks resolve from immutable aligned storage.
 @(test)
 document_store_resolves_semantic_document_blocks :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 21))
     defer document_store_test_destroy(&memory, &store)
     source := "first $x$\n\nsecond\n\\[y\\]\nthird"
@@ -293,8 +296,8 @@ document_store_resolves_semantic_document_blocks :: proc(t: ^testing.T) {
 // Verify technical display rows resolve from aligned generation-owned storage.
 @(test)
 document_store_resolves_technical_display_rows :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 22))
     defer document_store_test_destroy(&memory, &store)
     source := "\\begin{align}a&=b\\\\c&=d\\notag\\end{align}"
@@ -315,8 +318,8 @@ document_store_resolves_technical_display_rows :: proc(t: ^testing.T) {
 //   Verify equal hashes continue probing and compare exact retained source bytes.
 @(test)
 document_store_resolves_forced_hash_collisions :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 12))
     defer document_store_test_destroy(&memory, &store)
 
@@ -339,8 +342,8 @@ document_store_resolves_forced_hash_collisions :: proc(t: ^testing.T) {
 //   Verify profile, parse mode, and root style remain distinct identity fields.
 @(test)
 document_store_keys_every_semantic_input :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 13))
     defer document_store_test_destroy(&memory, &store)
     source_hash := document_store_source_hash("x")
@@ -366,12 +369,12 @@ document_store_keys_every_semantic_input :: proc(t: ^testing.T) {
 //   Verify the fixed index admits exactly its capacity and rejects one more key.
 @(test)
 document_store_enforces_exact_entry_capacity :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 20))
     defer document_store_test_destroy(&memory, &store)
     source_hash := document_store_source_hash("x")
-    for index in 0..<app_core.DYNVIEW_DOCUMENT_ENTRY_CAPACITY {
+    for index in 0..<dynviewmodel.DYNVIEW_DOCUMENT_ENTRY_CAPACITY {
         key := document_store_key(
             "x", u32(index + 1), .Math, .Display, source_hash)
         _, status := document_store_intern_keyed(&store, "x", key)
@@ -379,21 +382,21 @@ document_store_enforces_exact_entry_capacity :: proc(t: ^testing.T) {
     }
     before := document_store_diagnostics(&store)
     excess_key := document_store_key("x",
-        u32(app_core.DYNVIEW_DOCUMENT_ENTRY_CAPACITY + 1),
+        u32(dynviewmodel.DYNVIEW_DOCUMENT_ENTRY_CAPACITY + 1),
         .Math, .Display, source_hash)
     _, excess_status := document_store_intern_keyed(&store, "x", excess_key)
     after := document_store_diagnostics(&store)
     testing.expect_value(t, excess_status, Dynview_Document_Status.Out_Of_Capacity)
     testing.expect_value(
-        t, after.entry_count, app_core.DYNVIEW_DOCUMENT_ENTRY_CAPACITY)
+        t, after.entry_count, dynviewmodel.DYNVIEW_DOCUMENT_ENTRY_CAPACITY)
     testing.expect_value(t, after.arena.current_used, before.arena.current_used)
 }
 
 //   Verify deterministic parser rejection is cached without semantic allocation.
 @(test)
 document_store_caches_rejected_documents :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 14))
     defer document_store_test_destroy(&memory, &store)
 
@@ -419,17 +422,17 @@ document_store_caches_rejected_documents :: proc(t: ^testing.T) {
 //   Verify the logical byte quota admits its measured bound and rejects one more blob.
 @(test)
 document_store_enforces_exact_byte_quota :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 15))
     defer document_store_test_destroy(&memory, &store)
     _, status := document_store_intern(&store, "x", .Math, .Display)
     testing.expect_value(t, status, Dynview_Document_Status.Ok)
     exact_bytes := store.blob_bytes
 
-    app_core.dynview_document_store_clear_generation(&store)
-    testing.expect_value(t, app_core.animation_memory_begin_generation(
-        &memory, 16), app_core.Animation_Memory_Status.Ok)
+    dynviewmodel.dynview_document_store_clear_generation(&store)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &memory, 16), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, document_store_test_publish(&store, &memory, 16))
     store.byte_quota = exact_bytes
     _, exact_status := document_store_intern(&store, "x", .Math, .Display)
@@ -445,8 +448,8 @@ document_store_enforces_exact_byte_quota :: proc(t: ^testing.T) {
 //   Verify failed final allocation publishes neither an entry nor a handle.
 @(test)
 document_store_rolls_back_allocation_failure :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 17))
     defer document_store_test_destroy(&memory, &store)
     remaining_allocations := 0
@@ -454,7 +457,7 @@ document_store_rolls_back_allocation_failure :: proc(t: ^testing.T) {
 
     handle, status := document_store_intern(&store, "x", .Math, .Display)
     testing.expect_value(t, status, Dynview_Document_Status.Allocation_Failed)
-    testing.expect_value(t, handle, app_core.Dynview_Document_Handle{})
+    testing.expect_value(t, handle, dynviewmodel.Dynview_Document_Handle{})
     testing.expect_value(t, store.entry_count, 0)
     testing.expect_value(t, store.blob_bytes, 0)
     testing.expect_value(t, store.allocation_failures, u64(1))
@@ -463,16 +466,16 @@ document_store_rolls_back_allocation_failure :: proc(t: ^testing.T) {
 //   Verify generation transition invalidates every previously issued handle.
 @(test)
 document_store_rejects_stale_handles :: proc(t: ^testing.T) {
-    memory: app_core.Animation_Memory
-    store: app_core.Dynview_Document_Store
+    memory: animation_model.Animation_Memory
+    store: dynviewmodel.Dynview_Document_Store
     testing.expect(t, document_store_test_init(&memory, &store, 18))
     defer document_store_test_destroy(&memory, &store)
     handle, status := document_store_intern(&store, "x", .Math, .Display)
     testing.expect_value(t, status, Dynview_Document_Status.Ok)
 
-    app_core.dynview_document_store_clear_generation(&store)
-    testing.expect_value(t, app_core.animation_memory_begin_generation(
-        &memory, 19), app_core.Animation_Memory_Status.Ok)
+    dynviewmodel.dynview_document_store_clear_generation(&store)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &memory, 19), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, document_store_test_publish(&store, &memory, 19))
     _, resolve_status := document_store_resolve(&store, handle)
     diagnostics := document_store_diagnostics(&store)

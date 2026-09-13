@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import termgrid "../../terminal/grid"
 import termhist "../../terminal/history"
 
@@ -22,7 +23,7 @@ import rl "vendor:raylib"
 //     The live prompt line includes its "> " prefix so it can be hit-tested,
 //     highlighted, and copied like any other line. Virtual lines below it
 //     return an empty string.
-terminal_line_text :: proc(term: ^core.Terminal_State, line: int) -> string {
+terminal_line_text :: proc(term: ^viewterminalmodel.Terminal_State, line: int) -> string {
     if line < 0 {
         return ""
     }
@@ -56,7 +57,7 @@ terminal_line_text :: proc(term: ^core.Terminal_State, line: int) -> string {
 //
 // Returns:
 //   - Zero for unavailable history; otherwise one plus embedded newline count.
-terminal_live_input_line_count :: proc(term: ^core.Terminal_State) -> int {
+terminal_live_input_line_count :: proc(term: ^viewterminalmodel.Terminal_State) -> int {
     if term == nil || term.history == nil {
         return 0
     }
@@ -113,15 +114,15 @@ terminal_live_input_line_text :: proc(text: string, line: int) -> string {
 //   - The hit position and true, or a zero value and false when the mouse sits
 //     outside the terminal's padded bounds.
 terminal_hit_test :: proc(
-    term: ^core.Terminal_State, font: rl.Font, bounds: rl.Rectangle,
-    mouse: rl.Vector2) -> (core.Terminal_View_Position, bool) {
+    term: ^viewterminalmodel.Terminal_State, font: rl.Font, bounds: rl.Rectangle,
+    mouse: rl.Vector2) -> (viewterminalmodel.Terminal_View_Position, bool) {
     if term == nil || term.history == nil {
-        return core.Terminal_View_Position{}, false
+        return viewterminalmodel.Terminal_View_Position{}, false
     }
 
     padded_bounds := terminal_accepted_padded_bounds(term, bounds)
     if !rl.CheckCollisionPointRec(mouse, padded_bounds) {
-        return core.Terminal_View_Position{}, false
+        return viewterminalmodel.Terminal_View_Position{}, false
     }
 
     line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
@@ -134,14 +135,14 @@ terminal_hit_test :: proc(
     if line < output_line_count {
         cells, ok := terminal_output_row(term, line)
         if !ok {
-            return core.Terminal_View_Position{}, false
+            return viewterminalmodel.Terminal_View_Position{}, false
         }
         column_width := terminal_column_width(font)
         column := 0
         if column_width > 0 {
             column = int((mouse.x - padded_bounds.x) / column_width + 0.5)
         }
-        return core.Terminal_View_Position{
+        return viewterminalmodel.Terminal_View_Position{
             line = line,
             byte_offset = terminal_output_row_byte_offset(cells, column),
         }, true
@@ -149,7 +150,10 @@ terminal_hit_test :: proc(
     line_text := terminal_line_text(term, line)
     byte_offset := terminal_byte_offset_for_x(font, line_text, mouse.x - padded_bounds.x)
 
-    return core.Terminal_View_Position{line = line, byte_offset = byte_offset}, true
+    return viewterminalmodel.Terminal_View_Position{
+        line = line,
+        byte_offset = byte_offset,
+    }, true
 }
 
 //   Map a horizontal pixel offset within a line to the nearest UTF-8 byte
@@ -219,7 +223,7 @@ terminal_byte_offset_for_column :: proc(
 // Returns:
 //   - The sub-range, with has_selection false when the intersection is empty.
 terminal_selection_span_for_line :: proc(
-    start, end: core.Terminal_View_Position,
+    start, end: viewterminalmodel.Terminal_View_Position,
     line, line_len: int) -> Terminal_Line_Selection {
     if line < start.line || line > end.line {
         return Terminal_Line_Selection{}

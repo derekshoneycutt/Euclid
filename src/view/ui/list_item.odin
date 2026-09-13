@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 
 import rl "vendor:raylib"
 
@@ -38,7 +39,7 @@ list_item_local_mouse :: #force_inline proc(
 //   Resolve one list-row interaction without issuing drawing commands.
 update_list_item :: proc(
     params: List_Item_Params,
-    press_owner: ^core.Ui_Press_Owner_State) -> List_Item_Result {
+    press_owner: ^viewmodel.Ui_Press_Owner_State) -> List_Item_Result {
 
     drawn_rect := clamp_non_negative_rect(params.rect)
     inner_rect := drawn_rect
@@ -62,7 +63,7 @@ update_list_item :: proc(
 draw_list_item_prepared :: proc(
     params: List_Item_Params,
     result: List_Item_Result,
-    press_owner: core.Ui_Press_Owner_State) {
+    press_owner: viewmodel.Ui_Press_Owner_State) {
     if press_owner.active && press_owner.kind == .List_Item &&
         press_owner.id == params.id && input_frame_left_down(params.mouse) {
         rl.DrawRectangleRec(result.drawn_rect, rl.Color{
@@ -79,7 +80,7 @@ draw_list_item_prepared :: proc(
 //   Run the press acquire/release lifecycle for one list item; returns clicked.
 list_item_run_press :: proc(
     params: List_Item_Params,
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     drawn_rect: rl.Rectangle,
     hovered, hovered_item: bool) -> bool {
 

@@ -1,6 +1,9 @@
 #+test
+
 package terminalview
 
+import animation_model "../../core/animation"
+import viewterminalmodel "model"
 import "../../core"
 import "../../core/protocol"
 import termattachment "../../terminal/attachment"
@@ -97,7 +100,7 @@ terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
 // Verify initialization never discards an already published terminal owner.
 @(test)
 terminal_test_reinitialization_is_rejected :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     allocator := term.allocator
@@ -110,7 +113,7 @@ terminal_test_reinitialization_is_rejected :: proc(t: ^testing.T) {
 // Verify a retired terminal generation tolerates final application teardown.
 @(test)
 terminal_test_destroy_is_idempotent :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
 
     terminal_destroy(&term)
@@ -196,7 +199,7 @@ terminal_test_write_clipboard :: proc(user_data: rawptr, text: string) -> bool {
 // Verify OSC 7 observation and reserved OSC 133 prompt navigation use presented rows.
 @(test)
 terminal_test_shell_integration_navigation :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     term.geometry.line_height = 20
@@ -221,10 +224,21 @@ terminal_test_shell_integration_navigation :: proc(t: ^testing.T) {
     testing.expect_value(t, filtered.events[0].key, input.Input_Key.A)
 }
 
+// Apply one Ctrl+Alt shell-navigation shortcut and report whether it was handled.
+terminal_test_apply_shell_shortcut :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    key: input.Input_Key) -> bool {
+    events := [1]input.Input_Event{{
+        kind = .Press, key = key, modifiers = {.Control, .Alt},
+    }}
+    _, handled := terminal_update_shell_navigation(term, {events = events[:]})
+    return handled
+}
+
 // Verify indexed command navigation and semantic selection use exact marker columns.
 @(test)
 terminal_test_shell_command_navigation_and_selection :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     term.geometry.line_height = 20
@@ -233,39 +247,29 @@ terminal_test_shell_command_navigation_and_selection :: proc(t: ^testing.T) {
         "\e]133;D;0\a\e]133;A\ap$ \e]133;B\afalse\e]133;C\a\r\n" +
         "bad\e]133;D;1\a")
     term.scroll_offset_y = 0
-    command_down := [1]input.Input_Event{{
-        kind = .Press, key = .Page_Down, modifiers = {.Control, .Alt},
-    }}
-    _, handled := terminal_update_shell_navigation(
-        &term, {events = command_down[:]})
-    testing.expect(t, handled)
+    testing.expect(t, terminal_test_apply_shell_shortcut(&term, .Page_Down))
     testing.expect_value(t, term.scroll_offset_y, f32(40))
 
-    select_command := [1]input.Input_Event{{
-        kind = .Press, key = .C, modifiers = {.Control, .Alt},
-    }}
-    _, handled = terminal_update_shell_navigation(
-        &term, {events = select_command[:]})
-    testing.expect(t, handled && term.view_selection_active)
-    testing.expect_value(t, term.view_selection_anchor, core.Terminal_View_Position{2, 3})
-    testing.expect_value(t, term.view_selection_head, core.Terminal_View_Position{2, 8})
+    testing.expect(t, terminal_test_apply_shell_shortcut(&term, .C))
+    testing.expect(t, term.view_selection_active)
+    testing.expect_value(t, term.view_selection_anchor,
+        viewterminalmodel.Terminal_View_Position{2, 3})
+    testing.expect_value(t, term.view_selection_head,
+        viewterminalmodel.Terminal_View_Position{2, 8})
     testing.expect_value(t, terminal_view_selection_text(&term), "false")
 
-    select_output := [1]input.Input_Event{{
-        kind = .Press, key = .O, modifiers = {.Control, .Alt},
-    }}
-    _, handled = terminal_update_shell_navigation(
-        &term, {events = select_output[:]})
-    testing.expect(t, handled)
-    testing.expect_value(t, term.view_selection_anchor, core.Terminal_View_Position{2, 8})
-    testing.expect_value(t, term.view_selection_head, core.Terminal_View_Position{3, 3})
+    testing.expect(t, terminal_test_apply_shell_shortcut(&term, .O))
+    testing.expect_value(t, term.view_selection_anchor,
+        viewterminalmodel.Terminal_View_Position{2, 8})
+    testing.expect_value(t, term.view_selection_head,
+        viewterminalmodel.Terminal_View_Position{3, 3})
     testing.expect_value(t, terminal_view_selection_text(&term), "bad")
 }
 
 // Verify literal command search wraps and joins soft rows at cell boundaries.
 @(test)
 terminal_test_shell_command_search_wrap_and_graphemes :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -277,8 +281,9 @@ terminal_test_shell_command_search_wrap_and_graphemes :: proc(t: ^testing.T) {
     testing.expect(t, terminal_command_search_set_query(&term, "stuv"))
     testing.expect(t, terminal_command_search(&term, 1))
     testing.expect_value(t, term.view_selection_anchor,
-        core.Terminal_View_Position{0, 18})
-    testing.expect_value(t, term.view_selection_head, core.Terminal_View_Position{1, 2})
+        viewterminalmodel.Terminal_View_Position{0, 18})
+    testing.expect_value(t, term.view_selection_head,
+        viewterminalmodel.Terminal_View_Position{1, 2})
     first_generation := term.shell_integration.search_match_generation
     testing.expect(t, terminal_command_search(&term, 1))
     testing.expect_value(t,
@@ -288,8 +293,10 @@ terminal_test_shell_command_search_wrap_and_graphemes :: proc(t: ^testing.T) {
     testing.expect(t, !terminal_command_search(&term, 1))
     testing.expect(t, terminal_command_search_set_query(&term, "é"))
     testing.expect(t, terminal_command_search(&term, -1))
-    testing.expect_value(t, term.view_selection_anchor, core.Terminal_View_Position{2, 0})
-    testing.expect_value(t, term.view_selection_head, core.Terminal_View_Position{2, 3})
+    testing.expect_value(t, term.view_selection_anchor,
+        viewterminalmodel.Terminal_View_Position{2, 0})
+    testing.expect_value(t, term.view_selection_head,
+        viewterminalmodel.Terminal_View_Position{2, 3})
     query: [termshellintegration.SHELL_COMMAND_SEARCH_QUERY_BYTE_CAPACITY]u8
     testing.expect(t, terminal_command_search_set_query(&term, string(query[:])))
 }
@@ -297,7 +304,7 @@ terminal_test_shell_command_search_wrap_and_graphemes :: proc(t: ^testing.T) {
 // Verify the local search editor retains UTF-8 and navigates in both directions.
 @(test)
 terminal_test_shell_command_search_input :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     terminal_append_ansi_output(&term,
@@ -373,7 +380,7 @@ terminal_test_dimensions_from_viewport :: proc(t: ^testing.T) {
 @(test)
 terminal_test_accept_geometry_generation :: proc(t: ^testing.T) {
     retained: termemulator.Terminal_Title_State
-    term := core.Terminal_State{
+    term := viewterminalmodel.Terminal_State{
         geometry = {dimensions = {columns = 128, rows = 34}, generation = 1},
         output_interpreter = {title_state = &retained},
     }
@@ -408,7 +415,7 @@ terminal_test_accept_geometry_generation :: proc(t: ^testing.T) {
 // Verify semantic drawing and hit-test bounds use accepted cell dimensions.
 @(test)
 terminal_test_accepted_bounds_follow_dynamic_geometry :: proc(t: ^testing.T) {
-    term := core.Terminal_State{geometry = {
+    term := viewterminalmodel.Terminal_State{geometry = {
         dimensions = {columns = 20, rows = 4},
         column_width = 8,
         line_height = 18,
@@ -442,7 +449,7 @@ terminal_test_output_row_byte_offsets_follow_cell_geometry :: proc(t: ^testing.T
 // Verify live-grid mouse coordinates are one-based, bounded, and Shift-arbitrated.
 @(test)
 terminal_test_resolve_mouse_frame_uses_live_grid :: proc(t: ^testing.T) {
-    term := core.Terminal_State{geometry = {
+    term := viewterminalmodel.Terminal_State{geometry = {
         dimensions = {columns = 20, rows = 4},
         column_width = 8,
         line_height = 18,
@@ -474,7 +481,7 @@ terminal_test_resolve_mouse_frame_uses_live_grid :: proc(t: ^testing.T) {
 // Verify resize preserves a valid fixed-shape checkpoint without changing scrollback.
 @(test)
 terminal_test_primary_grid_resize_rebuilds_checkpoint :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, termemulator.interpreter_write(
@@ -505,7 +512,7 @@ terminal_test_primary_grid_resize_rebuilds_checkpoint :: proc(t: ^testing.T) {
 // Verify failed primary preparation does not alter grid or accepted geometry.
 @(test)
 terminal_test_primary_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     dimensions := term.geometry.dimensions
@@ -527,7 +534,7 @@ terminal_test_primary_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) 
 // Verify failure after preparing the active grid commits neither display grid.
 @(test)
 terminal_test_second_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     active_cells := raw_data(term.output_grid.cells)
@@ -551,7 +558,7 @@ terminal_test_second_grid_resize_failure_is_uncommitted :: proc(t: ^testing.T) {
 // Verify rows evicted after resize enter history at their new exact width.
 @(test)
 terminal_test_resized_grid_commits_new_width_scrollback :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -567,14 +574,14 @@ terminal_test_resized_grid_commits_new_width_scrollback :: proc(t: ^testing.T) {
 
 // Verify one narrow reflow's history identity and reverse selection mapping.
 terminal_test_expect_narrow_reflow :: proc(
-    t: ^testing.T, term: ^core.Terminal_State,
+    t: ^testing.T, term: ^viewterminalmodel.Terminal_State,
     line_id: termmodel.Terminal_Logical_Line_Id) {
     testing.expect_value(t, term.output_scrollback.count, 1)
     testing.expect(t, term.view_selection_active)
     testing.expect_value(t, term.view_selection_anchor,
-        core.Terminal_View_Position{line = 2, byte_offset = 2})
+        viewterminalmodel.Terminal_View_Position{line = 2, byte_offset = 2})
     testing.expect_value(t, term.view_selection_head,
-        core.Terminal_View_Position{line = 0, byte_offset = 1})
+        viewterminalmodel.Terminal_View_Position{line = 0, byte_offset = 1})
     history, history_found := termgrid.scrollback_row(&term.output_scrollback, 0)
     testing.expect(t, history_found)
     testing.expect_value(t, history.logical_line_id, line_id)
@@ -583,7 +590,7 @@ terminal_test_expect_narrow_reflow :: proc(
 // Verify repeated semantic reflow crosses history while preserving reverse selection.
 @(test)
 terminal_test_primary_reflow_round_trip_preserves_selection :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -609,9 +616,9 @@ terminal_test_primary_reflow_round_trip_preserves_selection :: proc(t: ^testing.
         terminal_output_row_text(term.output_grid.rows[0].cells), "abcdefghi")
     testing.expect_value(t, term.output_grid.rows[0].logical_line_id, line_id)
     testing.expect_value(t, term.view_selection_anchor,
-        core.Terminal_View_Position{line = 0, byte_offset = 1})
+        viewterminalmodel.Terminal_View_Position{line = 0, byte_offset = 1})
     testing.expect_value(t, term.view_selection_head,
-        core.Terminal_View_Position{line = 0, byte_offset = 8})
+        viewterminalmodel.Terminal_View_Position{line = 0, byte_offset = 8})
 }
 
 // Admit one tiny raster attachment for terminal placement resize fixtures.
@@ -653,7 +660,7 @@ terminal_test_admit_reflow_placement :: proc(
 // Verify a raster anchor resolves on the trailing blank cursor row.
 @(test)
 terminal_test_raster_resolves_blank_grid_row :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -670,7 +677,7 @@ terminal_test_raster_resolves_blank_grid_row :: proc(t: ^testing.T) {
 // Verify a trailing blank-row raster contributes its full extent to scrolling.
 @(test)
 terminal_test_raster_extends_content_height :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -694,7 +701,7 @@ terminal_test_raster_extends_content_height :: proc(t: ^testing.T) {
 // Verify a scrolled top-row anchor follows its semantic content through widening.
 @(test)
 terminal_test_primary_reflow_relocates_viewport_anchor :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -714,7 +721,7 @@ terminal_test_primary_reflow_relocates_viewport_anchor :: proc(t: ^testing.T) {
 // Verify primary raster anchors relocate while alternate anchors retain coordinates.
 @(test)
 terminal_test_primary_reflow_relocates_placements :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -753,7 +760,7 @@ terminal_test_primary_reflow_relocates_placements :: proc(t: ^testing.T) {
 // Verify delayed wrap remains armed at the reflowed end of a full logical line.
 @(test)
 terminal_test_primary_reflow_preserves_delayed_wrap :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -775,7 +782,7 @@ terminal_test_primary_reflow_preserves_delayed_wrap :: proc(t: ^testing.T) {
 // Verify rollback checkpoint content reflows independently from later live output.
 @(test)
 terminal_test_primary_reflow_rebuilds_semantic_checkpoint :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, terminal_resize_display_grids(
@@ -804,7 +811,7 @@ terminal_test_primary_reflow_rebuilds_semantic_checkpoint :: proc(t: ^testing.T)
 // Verify shrink clears only selections with endpoints outside the new rectangle.
 @(test)
 terminal_test_resize_reconciles_view_selection :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     term.banner_ready = true
@@ -821,7 +828,7 @@ terminal_test_resize_reconciles_view_selection :: proc(t: ^testing.T) {
 // Verify resize preserves a selection whose endpoints remain representable.
 @(test)
 terminal_test_resize_preserves_valid_view_selection :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     term.banner_ready = true
@@ -838,7 +845,7 @@ terminal_test_resize_preserves_valid_view_selection :: proc(t: ^testing.T) {
 @(test)
 terminal_test_alternate_screen_resize_restores_resized_primary :: proc(
     t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     interpreter := &term.output_interpreter
@@ -869,7 +876,7 @@ terminal_test_alternate_screen_resize_restores_resized_primary :: proc(
 
 // Exercise display replacement, attachment reuse, and retained history growth.
 terminal_test_churn_recyclable_storage :: proc(
-    t: ^testing.T, term: ^core.Terminal_State) {
+    t: ^testing.T, term: ^viewterminalmodel.Terminal_State) {
     dimensions := [2]protocol.Terminal_Dimensions{
         {columns = 140, rows = 40},
         {columns = TERMINAL_GRID_COLUMNS, rows = TERMINAL_GRID_ROWS},
@@ -906,27 +913,28 @@ terminal_test_churn_recyclable_storage :: proc(
 // Verify terminal model storage follows ordinary animation generation replacement.
 @(test)
 terminal_test_animation_generation_replacement :: proc(t: ^testing.T) {
-    memory: core.Animation_Memory
-    testing.expect(t, core.animation_memory_init(&memory))
-    defer core.animation_memory_destroy(&memory)
-    testing.expect_value(t, core.animation_memory_begin_generation(
-        &memory, 7), core.Animation_Memory_Status.Ok)
+    memory: animation_model.Animation_Memory
+    testing.expect(t, animation_model.animation_memory_init(&memory))
+    defer animation_model.animation_memory_destroy(&memory)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &memory, 7), animation_model.Animation_Memory_Status.Ok)
 
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init_for_animation(&term, &memory, 7))
     testing.expect_value(t, term.animation_generation, u64(7))
-    testing.expect(t, term.allocator == core.animation_memory_allocator(&memory))
-    initial := core.animation_memory_diagnostics(&memory)
+    testing.expect(t,
+        term.allocator == animation_model.animation_memory_allocator(&memory))
+    initial := animation_model.animation_memory_diagnostics(&memory)
     testing.expect(t, initial.current_used > 0)
 
     terminal_test_churn_recyclable_storage(t, &term)
-    churned := core.animation_memory_diagnostics(&memory)
+    churned := animation_model.animation_memory_diagnostics(&memory)
     testing.expect(t, churned.current_used >= initial.current_used)
 
     terminal_destroy(&term)
-    testing.expect_value(t, core.animation_memory_begin_generation(
-        &memory, 8), core.Animation_Memory_Status.Ok)
-    reset := core.animation_memory_diagnostics(&memory)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &memory, 8), animation_model.Animation_Memory_Status.Ok)
+    reset := animation_model.animation_memory_diagnostics(&memory)
     testing.expect_value(t, reset.current_used, uint(0))
     testing.expect_value(t, reset.reset_count, churned.reset_count + 1)
     testing.expect(t, terminal_init_for_animation(&term, &memory, 8))
@@ -938,7 +946,7 @@ terminal_test_animation_generation_replacement :: proc(t: ^testing.T) {
 @(test)
 terminal_test_ambiguous_width_policy_is_terminal_lifetime_state :: proc(
     t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term, .Wide))
     defer terminal_destroy(&term)
     palette := &term.output_interpreter.title_state.palette
@@ -1197,7 +1205,7 @@ terminal_test_clipboard_paste_shortcut :: proc(t: ^testing.T) {
     testing.expect(t, terminal_clipboard_paste_requested(paste))
     testing.expect(t, !terminal_clipboard_paste_requested(paste, false))
 
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     testing.expect(t, termhist.termhist_insert_text(term.history, "ac"))
@@ -1210,7 +1218,7 @@ terminal_test_clipboard_paste_shortcut :: proc(t: ^testing.T) {
 // Verify ordinary local editing requires effective Terminal focus.
 @(test)
 terminal_test_keyboard_requires_effective_focus :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     term.banner_ready = true
@@ -1232,7 +1240,7 @@ terminal_test_keyboard_requires_effective_focus :: proc(t: ^testing.T) {
 // startup banner arrives, then unblock once it's displayed.
 @(test)
 terminal_test_banner_gates_prompt_and_input :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1249,7 +1257,7 @@ terminal_test_banner_gates_prompt_and_input :: proc(t: ^testing.T) {
 // Verify a submitted evaluation hides the live prompt until completion.
 @(test)
 terminal_test_prompt_waits_for_eval_completion :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     term.banner_ready = true
@@ -1274,7 +1282,7 @@ terminal_test_prompt_waits_for_eval_completion :: proc(t: ^testing.T) {
 // Verify continuation input is auto-indented and editable across lines.
 @(test)
 terminal_test_continuation_is_multiline_editable :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1307,7 +1315,7 @@ terminal_test_continuation_is_multiline_editable :: proc(t: ^testing.T) {
 // Verify incomplete input removes its committed prompt from authoritative output.
 @(test)
 terminal_test_continuation_restores_display_checkpoint :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1330,7 +1338,7 @@ terminal_test_continuation_restores_display_checkpoint :: proc(t: ^testing.T) {
 terminal_test_repeated_continuation_does_not_duplicate_prompt_rows :: proc(
     t: ^testing.T) {
 
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1366,7 +1374,7 @@ terminal_test_repeated_continuation_does_not_duplicate_prompt_rows :: proc(
 // Verify `?` at the start of the line enters help mode and keeps trailing text.
 @(test)
 terminal_test_help_mode_keeps_text_after_leading_question_mark :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1382,7 +1390,7 @@ terminal_test_help_mode_keeps_text_after_leading_question_mark :: proc(t: ^testi
 // Verify `?` typed after the start of the line is left as ordinary input.
 @(test)
 terminal_test_question_mark_mid_line_does_not_enter_help_mode :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1396,7 +1404,7 @@ terminal_test_question_mark_mid_line_does_not_enter_help_mode :: proc(t: ^testin
 // how Julia's REPL returns to `julia>` immediately after a help submission.
 @(test)
 terminal_test_exit_help_mode_restores_standard_prompt :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1411,7 +1419,7 @@ terminal_test_exit_help_mode_restores_standard_prompt :: proc(t: ^testing.T) {
 // Verify `]` at the start of the line enters pkg mode and keeps trailing text.
 @(test)
 terminal_test_pkg_mode_keeps_text_after_leading_bracket :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1427,7 +1435,7 @@ terminal_test_pkg_mode_keeps_text_after_leading_bracket :: proc(t: ^testing.T) {
 // Verify `]` typed after the start of the line is left as ordinary input.
 @(test)
 terminal_test_bracket_mid_line_does_not_enter_pkg_mode :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1441,7 +1449,7 @@ terminal_test_bracket_mid_line_does_not_enter_pkg_mode :: proc(t: ^testing.T) {
 // help mode's single-shot behavior.
 @(test)
 terminal_test_pkg_mode_stays_active_across_submit :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1459,7 +1467,7 @@ terminal_test_pkg_mode_stays_active_across_submit :: proc(t: ^testing.T) {
 // Verify backspace on an empty pkg-mode line exits back to the standard prompt.
 @(test)
 terminal_test_backspace_on_empty_exits_pkg_mode :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1472,7 +1480,7 @@ terminal_test_backspace_on_empty_exits_pkg_mode :: proc(t: ^testing.T) {
 // Verify Ctrl+C cancels Pkg input and restores the standard Julia prompt.
 @(test)
 terminal_test_cancel_pkg_mode :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1488,7 +1496,7 @@ terminal_test_cancel_pkg_mode :: proc(t: ^testing.T) {
 // Verify history browsing restores each entry's own recorded prompt mode.
 @(test)
 terminal_test_history_browse_restores_recorded_mode :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1512,7 +1520,8 @@ terminal_test_history_browse_restores_recorded_mode :: proc(t: ^testing.T) {
 }
 
 //   Step to the previous history entry via the same path terminal keys use.
-terminal_history_prev_test_helper :: proc(term: ^core.Terminal_State) -> bool {
+terminal_history_prev_test_helper :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> bool {
     before := term.history.history_index
     terminal_history_browse_prev(term)
     return term.history.history_index != before
@@ -1520,7 +1529,7 @@ terminal_history_prev_test_helper :: proc(term: ^core.Terminal_State) -> bool {
 
 // Verify selection and negotiated mouse tracking suppress hyperlink clicks.
 terminal_test_expect_hyperlink_precedence :: proc(
-    t: ^testing.T, term: ^core.Terminal_State,
+    t: ^testing.T, term: ^viewterminalmodel.Terminal_State,
     point: input.Input_Position, bounds: rl.Rectangle) {
     shifted := input.Input_Frame{
         mouse_position = point,
@@ -1543,7 +1552,7 @@ terminal_test_expect_hyperlink_precedence :: proc(
 // non-continuation line, matching a shell's EOF-on-empty-line convention.
 @(test)
 terminal_test_can_exit_on_ctrl_d :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1567,7 +1576,7 @@ terminal_test_can_exit_on_ctrl_d :: proc(t: ^testing.T) {
 // Verify completed evaluation leaves one blank line before the next prompt.
 @(test)
 terminal_test_completion_adds_prompt_spacing :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1583,7 +1592,7 @@ terminal_test_completion_adds_prompt_spacing :: proc(t: ^testing.T) {
 // Verify same-link release activates through a fake adapter and respects precedence.
 @(test)
 terminal_test_hyperlink_click_activation :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     terminal_append_ansi_output(
@@ -1614,7 +1623,7 @@ terminal_test_hyperlink_click_activation :: proc(t: ^testing.T) {
 // Verify conservative row-local detection trims prose without weakening URI policy.
 @(test)
 terminal_test_detects_plain_text_links :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     terminal_append_output_line(&term,
@@ -1649,7 +1658,7 @@ terminal_test_detects_plain_text_links :: proc(t: ^testing.T) {
 // Verify unmatched closers trim and explicit OSC 8 metadata wins over detection.
 @(test)
 terminal_test_detected_link_boundaries_and_explicit_precedence :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     terminal_append_output_line(&term, "https://example.com/path) tail")
@@ -1672,7 +1681,7 @@ terminal_test_detected_link_boundaries_and_explicit_precedence :: proc(t: ^testi
 // Verify detected links activate only after an unchanged same-target release.
 @(test)
 terminal_test_detected_link_click_activation :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     terminal_append_output_line(&term, "https://example.com/path")
@@ -1709,7 +1718,7 @@ terminal_test_detected_link_click_activation :: proc(t: ^testing.T) {
 // Verify release over another valid detected target cannot activate the pressed URI.
 @(test)
 terminal_test_detected_link_changed_target_rejected :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     terminal_append_output_line(
@@ -1725,7 +1734,7 @@ terminal_test_detected_link_changed_target_rejected :: proc(t: ^testing.T) {
 // Verify matching OSC 52 actions publish in order through a fake display sink.
 @(test)
 terminal_test_publishes_osc_clipboard_writes :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     producer := termmodel.Terminal_Producer{.Julia_Evaluation, 19, 0}
@@ -1753,7 +1762,7 @@ terminal_test_publishes_osc_clipboard_writes :: proc(t: ^testing.T) {
 // Verify producer rollover discards older clipboard content before publication.
 @(test)
 terminal_test_discards_stale_osc_clipboard_writes :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     first := termmodel.Terminal_Producer{.Terminal_Session, 3, 1}
@@ -1781,7 +1790,7 @@ terminal_test_discards_stale_osc_clipboard_writes :: proc(t: ^testing.T) {
 // Verify retained terminal text rejects overflow without allocating or publishing state.
 @(test)
 terminal_test_rejects_retained_text_overflow :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1812,7 +1821,7 @@ terminal_test_rejects_retained_text_overflow :: proc(t: ^testing.T) {
 // Verify a Unicode completion previews before explicitly replacing source text.
 @(test)
 terminal_test_accepts_unicode_completion_preview :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1835,7 +1844,7 @@ terminal_test_accepts_unicode_completion_preview :: proc(t: ^testing.T) {
 // Verify a completion response cannot overwrite edits made after Tab.
 @(test)
 terminal_test_discards_stale_completion :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1856,7 +1865,7 @@ terminal_test_discards_stale_completion :: proc(t: ^testing.T) {
 // Verify automatic completion waits for its debounce deadline.
 @(test)
 terminal_test_completion_debounce :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1880,7 +1889,7 @@ terminal_test_completion_debounce :: proc(t: ^testing.T) {
 // Verify duplicate completion results cannot replace an accepted preview.
 @(test)
 terminal_test_discards_duplicate_completion_result :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1906,7 +1915,7 @@ terminal_test_discards_duplicate_completion_result :: proc(t: ^testing.T) {
 // Verify request identity and cursor position independently guard completion results.
 @(test)
 terminal_test_completion_requires_current_identity_and_cursor :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1931,7 +1940,7 @@ terminal_test_completion_requires_current_identity_and_cursor :: proc(t: ^testin
 // Verify a current failure terminates its request and a stale failure does not.
 @(test)
 terminal_test_completion_failure_respects_snapshot :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1970,7 +1979,7 @@ terminal_test_font_weight_selection :: proc(t: ^testing.T) {
 // Verify ANSI SGR output becomes styled terminal cells without escape bytes.
 @(test)
 terminal_test_ansi_output_styles :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -1993,7 +2002,7 @@ terminal_test_ansi_output_styles :: proc(t: ^testing.T) {
 // Verify a bare `\r` overwrite replaces cells written earlier on the line.
 @(test)
 terminal_test_ansi_output_carriage_return_overwrite :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -2006,7 +2015,7 @@ terminal_test_ansi_output_carriage_return_overwrite :: proc(t: ^testing.T) {
 // Verify synchronized output hides live mutations until normal publication.
 @(test)
 terminal_test_synchronized_output_defers_presentation :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -2035,7 +2044,7 @@ terminal_test_synchronized_output_defers_presentation :: proc(t: ^testing.T) {
 // Verify synchronized presentation retains old hyperlink metadata until publication.
 @(test)
 terminal_test_synchronized_output_defers_hyperlinks :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -2057,7 +2066,7 @@ terminal_test_synchronized_output_defers_hyperlinks :: proc(t: ^testing.T) {
 // Verify an unterminated synchronized transaction publishes after 250 ms.
 @(test)
 terminal_test_synchronized_output_deadline_forces_publication :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -2076,7 +2085,7 @@ terminal_test_synchronized_output_deadline_forces_publication :: proc(t: ^testin
 // Verify style set before a `\r` overwrite still applies to text typed after it.
 @(test)
 terminal_test_ansi_output_carriage_return_keeps_style :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -2091,7 +2100,7 @@ terminal_test_ansi_output_carriage_return_keeps_style :: proc(t: ^testing.T) {
 // Verify `\r\n` is normalized to a single line ending like a lone `\n`.
 @(test)
 terminal_test_ansi_output_crlf_normalized :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -2105,7 +2114,7 @@ terminal_test_ansi_output_crlf_normalized :: proc(t: ^testing.T) {
 // Verify output split before a newline does not create a blank row.
 @(test)
 terminal_test_ansi_output_chunk_boundary_preserves_lines :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -2120,7 +2129,7 @@ terminal_test_ansi_output_chunk_boundary_preserves_lines :: proc(t: ^testing.T) 
 // Verify abnormal evaluation completion restores primary history and prompt ownership.
 @(test)
 terminal_test_completion_restores_stranded_alternate_screen :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
     term.banner_ready = true
@@ -2151,7 +2160,7 @@ terminal_test_completion_restores_stranded_alternate_screen :: proc(t: ^testing.
 // Verify the ANSI cursor follows active-grid visibility and scrollback coordinates.
 @(test)
 terminal_test_output_cursor_presentation :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 
@@ -2181,7 +2190,7 @@ terminal_test_output_cursor_presentation :: proc(t: ^testing.T) {
 // Verify a `\r` overwrite on one line never touches an earlier closed line.
 @(test)
 terminal_test_ansi_output_carriage_return_keeps_prior_line :: proc(t: ^testing.T) {
-    term: core.Terminal_State
+    term: viewterminalmodel.Terminal_State
     testing.expect(t, terminal_init(&term))
     defer terminal_destroy(&term)
 

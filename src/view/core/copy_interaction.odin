@@ -1,6 +1,9 @@
 package view_core
 
-import "../../core"
+import viewmodel "../model"
+
+import dynviewmodel "../../dynview/model"
+
 import "../input"
 
 import rl "vendor:raylib"
@@ -20,7 +23,7 @@ copy_icon_approach :: #force_inline proc(current, target, speed, dt: f32) -> f32
 
 //   Draw soft hover backgrounds for copy-enabled dynview blocks.
 draw_copy_hover_backgrounds :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     mouse: rl.Vector2) {
 
     if runtime == nil {
@@ -46,7 +49,7 @@ draw_copy_hover_backgrounds :: proc(
 }
 
 //   Reset all transient copy-icon animation state for frames without targets.
-copy_icon_reset_animation_state :: proc(runtime: ^core.Dynview_System) {
+copy_icon_reset_animation_state :: proc(runtime: ^dynviewmodel.Dynview_System) {
     runtime^.copy_icon_hover_active = false
     runtime^.copy_icon_press_active = false
     runtime^.copy_icon_linger_active = false
@@ -57,7 +60,7 @@ copy_icon_reset_animation_state :: proc(runtime: ^core.Dynview_System) {
 
 //   Return the first copy-icon target under the cursor, or -1 when none match.
 copy_icon_find_hovered_index :: proc(
-    cache: ^core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     mouse: rl.Vector2) -> int {
 
     for i in 0..<cache^.copy_hit_target_count {
@@ -71,8 +74,8 @@ copy_icon_find_hovered_index :: proc(
 
 //   Update runtime hover ownership to the currently hovered copy target.
 copy_icon_update_hover_state :: proc(
-    runtime: ^core.Dynview_System,
-    cache: ^core.Dynview_Compile_Cache,
+    runtime: ^dynviewmodel.Dynview_System,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     hovered_index: int) {
 
     if hovered_index >= 0 {
@@ -87,11 +90,11 @@ copy_icon_update_hover_state :: proc(
 
 //   Start press feedback when left-click begins on a copy-icon target.
 copy_icon_begin_press_if_hovered :: proc(
-    runtime: ^core.Dynview_System,
-    cache: ^core.Dynview_Compile_Cache,
+    runtime: ^dynviewmodel.Dynview_System,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     hovered_index: int,
     mouse_input: input.Input_Frame,
-    press_owner: ^core.Ui_Press_Owner_State) {
+    press_owner: ^viewmodel.Ui_Press_Owner_State) {
 
     if .Left not_in mouse_input.mouse_pressed || hovered_index < 0 ||
         press_owner^.active {
@@ -108,7 +111,7 @@ copy_icon_begin_press_if_hovered :: proc(
 
 //   Advance press-release lifecycle, including short dark linger after release.
 copy_icon_update_press_and_linger :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     mouse_input: input.Input_Frame,
     dt: f32) {
 
@@ -131,7 +134,8 @@ copy_icon_update_press_and_linger :: proc(
 }
 
 //   Move hover and press transition values toward their current targets.
-copy_icon_update_transition_values :: proc(runtime: ^core.Dynview_System, dt: f32) {
+copy_icon_update_transition_values :: proc(
+    runtime: ^dynviewmodel.Dynview_System, dt: f32) {
     hover_target: f32 = 0
     if runtime^.copy_icon_hover_active {
         hover_target = 1
@@ -162,7 +166,7 @@ copy_icon_update_transition_values :: proc(runtime: ^core.Dynview_System, dt: f3
 
 //   Compute normalized linger intensity for a specific copy-icon target.
 copy_icon_linger_t :: #force_inline proc(
-    runtime: ^core.Dynview_System, is_linger_target: bool) -> f32 {
+    runtime: ^dynviewmodel.Dynview_System, is_linger_target: bool) -> f32 {
     if !is_linger_target || COPY_ICON_CLICK_LINGER_SECONDS <= 0 {
         return 0
     }
@@ -219,8 +223,8 @@ draw_copy_icon_button :: proc(
 
 //   Draw one copy icon with prepared hover and click feedback.
 copy_icon_draw_target :: proc(
-    runtime: ^core.Dynview_System,
-    target: core.Dynview_Copy_Hit_Target) {
+    runtime: ^dynviewmodel.Dynview_System,
+    target: dynviewmodel.Dynview_Copy_Hit_Target) {
     is_hover_target := runtime^.copy_icon_hover_active &&
         runtime^.copy_icon_hover_block_id == target.block_id
     is_press_target := runtime^.copy_icon_press_active &&
@@ -249,10 +253,10 @@ copy_icon_draw_target :: proc(
 
 //   Resolve copy hover, shared capture, clipboard publication, and transitions.
 prepare_copy_icons :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     mouse_input: input.Input_Frame,
     dt: f32,
-    press_owner: ^core.Ui_Press_Owner_State) -> bool {
+    press_owner: ^viewmodel.Ui_Press_Owner_State) -> bool {
     if runtime == nil { return false }
     cache := &runtime^.compile_cache
     if cache^.copy_hit_target_count <= 0 {
@@ -286,7 +290,8 @@ prepare_copy_icons :: proc(
 }
 
 //   Return compiled copy payload string for one hit target index.
-copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) -> string {
+copy_target_payload :: proc(
+    runtime: ^dynviewmodel.Dynview_System, target_index: int) -> string {
     if runtime == nil {
         return ""
     }
@@ -310,7 +315,7 @@ copy_target_payload :: proc(runtime: ^core.Dynview_System, target_index: int) ->
 
 //   Draw per-block copy icons and return whether one was clicked.
 draw_copy_icons :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     panel: rl.Rectangle) {
 
     if runtime == nil {

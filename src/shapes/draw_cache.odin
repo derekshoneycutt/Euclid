@@ -1,30 +1,30 @@
 package shapes
 
+import shapemodel "model"
+
 // This file owns the derived draw-cache packet: item/vertex/triangle storage,
 // depth-based sorting, and polygon ear-clipping triangulation used by any
 // canonical shape source that builds a Shapes_Draw_Cache.
 
-import "../core"
-
 DRAW_CACHE_SORT_FLAT_EPSILON :: 1e-5
 
-MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
+MAX_SHAPESPOINTS :: shapemodel.MAX_SHAPESPOINTS
 
-Vector3 :: core.Vector3
-Shapes_Point_Type :: core.Shapes_Point_Type
+Vector3 :: shapemodel.Vector3
+Shapes_Point_Type :: shapemodel.Shapes_Point_Type
 
-Shapes_Draw_Base :: core.Shapes_Draw_Base
-Shapes_Label_Draw :: core.Shapes_Label_Draw
-Shapes_Point_Draw :: core.Shapes_Point_Draw
-Shapes_Line_Draw :: core.Shapes_Line_Draw
-Shapes_Circle_Draw :: core.Shapes_Circle_Draw
-Shapes_Filled_Circle_Draw :: core.Shapes_Filled_Circle_Draw
-Shapes_Polygon_Draw :: core.Shapes_Polygon_Draw
-Shapes_Polygon_Ring_Node :: core.Shapes_Polygon_Ring_Node
-Shapes_Polygon_Triangle :: core.Shapes_Polygon_Triangle
-Shapes_Pen_Draw :: core.Shapes_Pen_Draw
-Shapes_Compass_Draw :: core.Shapes_Compass_Draw
-Shapes_Draw_Cache_Item :: core.Shapes_Draw_Cache_Item
+Shapes_Draw_Base :: shapemodel.Shapes_Draw_Base
+Shapes_Label_Draw :: shapemodel.Shapes_Label_Draw
+Shapes_Point_Draw :: shapemodel.Shapes_Point_Draw
+Shapes_Line_Draw :: shapemodel.Shapes_Line_Draw
+Shapes_Circle_Draw :: shapemodel.Shapes_Circle_Draw
+Shapes_Filled_Circle_Draw :: shapemodel.Shapes_Filled_Circle_Draw
+Shapes_Polygon_Draw :: shapemodel.Shapes_Polygon_Draw
+Shapes_Polygon_Ring_Node :: shapemodel.Shapes_Polygon_Ring_Node
+Shapes_Polygon_Triangle :: shapemodel.Shapes_Polygon_Triangle
+Shapes_Pen_Draw :: shapemodel.Shapes_Pen_Draw
+Shapes_Compass_Draw :: shapemodel.Shapes_Compass_Draw
+Shapes_Draw_Cache_Item :: shapemodel.Shapes_Draw_Cache_Item
 
 
 Polygon_Cache_Range_Reservation :: struct {
@@ -35,7 +35,7 @@ Polygon_Cache_Range_Reservation :: struct {
 }
 
 Polygon_Triangulation :: struct {
-    cache : ^core.Shapes_Draw_Cache,
+    cache : ^shapemodel.Shapes_Draw_Cache,
     ring : []Shapes_Polygon_Ring_Node,
     vertices : []Vector3,
     count : int,
@@ -46,7 +46,7 @@ Polygon_Triangulation :: struct {
 }
 
 //   Reset one derived packet before rebuilding it from any canonical source.
-draw_cache_reset_storage :: proc(cache: ^core.Shapes_Draw_Cache) {
+draw_cache_reset_storage :: proc(cache: ^shapemodel.Shapes_Draw_Cache) {
 
     cache.item_count = 0
     cache.label_byte_count = 0
@@ -73,7 +73,7 @@ draw_cache_visual_depth :: #force_inline proc(point: Vector3) -> f32 {
 
 //   Compute one polygon centroid and whether all cached polygon vertices are flat.
 draw_cache_polygon_centroid_and_flatness :: proc(
-    cache: ^core.Shapes_Draw_Cache,
+    cache: ^shapemodel.Shapes_Draw_Cache,
     poly: ^Shapes_Polygon_Draw) -> (Vector3, bool) {
 
     if poly^.vertex_count <= 0 {
@@ -146,7 +146,7 @@ draw_cache_compass_depth_and_flatness :: #force_inline proc(
 //   - Flat items are later kept in authored creation order when compared to
 //     other flat items.
 draw_cache_item_depth_and_flatness :: proc(
-    cache: ^core.Shapes_Draw_Cache,
+    cache: ^shapemodel.Shapes_Draw_Cache,
     item: ^Shapes_Draw_Cache_Item) -> (f32, bool) {
 
     switch &typed in item {
@@ -200,7 +200,7 @@ draw_cache_item_should_precede :: #force_inline proc(
 //   - Applies only whole-primitive painter ordering; it does not split
 //     primitives or solve exact visibility.
 //   - Fully flat `z = 0` items keep their authored creation order.
-sort_draw_cache_storage :: proc(cache: ^core.Shapes_Draw_Cache) {
+sort_draw_cache_storage :: proc(cache: ^shapemodel.Shapes_Draw_Cache) {
     item_count := cache.item_count
     if item_count <= 1 {
         return
@@ -245,7 +245,7 @@ sort_draw_cache_storage :: proc(cache: ^core.Shapes_Draw_Cache) {
 
 //   Reserve the next item slot in one derived packet.
 draw_cache_next_item_slot_storage :: #force_inline proc(
-    cache: ^core.Shapes_Draw_Cache) -> (^Shapes_Draw_Cache_Item, bool) {
+    cache: ^shapemodel.Shapes_Draw_Cache) -> (^Shapes_Draw_Cache_Item, bool) {
 
     if cache.item_count >= len(cache.items) {
         return nil, false
@@ -258,7 +258,7 @@ draw_cache_next_item_slot_storage :: #force_inline proc(
 
 //   Reserve a contiguous polygon vertex range in one derived packet.
 draw_cache_reserve_polygon_vertices_storage :: #force_inline proc(
-    cache: ^core.Shapes_Draw_Cache,
+    cache: ^shapemodel.Shapes_Draw_Cache,
     count: int) -> (int, bool) {
 
     if count <= 0 {
@@ -276,7 +276,7 @@ draw_cache_reserve_polygon_vertices_storage :: #force_inline proc(
 
 //   Reserve a contiguous polygon triangle range in one derived packet.
 draw_cache_reserve_polygon_triangles_storage :: #force_inline proc(
-    cache: ^core.Shapes_Draw_Cache,
+    cache: ^shapemodel.Shapes_Draw_Cache,
     count: int) -> (int, bool) {
 
     if count <= 0 {
@@ -475,7 +475,7 @@ triangulate_polygon_ear_loop :: #force_inline proc(
 
 //   Triangulate one polygon into cache-owned workspace and triangle storage.
 triangulate_polygon_ear_clip_storage :: proc(
-    cache: ^core.Shapes_Draw_Cache,
+    cache: ^shapemodel.Shapes_Draw_Cache,
     base_vertex: int,
     vertices: []Vector3,
     triangle_start: int) -> int {
@@ -509,7 +509,7 @@ triangulate_polygon_ear_clip_storage :: proc(
 
 //   Reserve all packet ranges required by one polygon.
 reserve_polygon_cache_ranges_storage :: #force_inline proc(
-    cache: ^core.Shapes_Draw_Cache,
+    cache: ^shapemodel.Shapes_Draw_Cache,
     vertex_count: int) -> Polygon_Cache_Range_Reservation {
 
     first_vertex, has_vertex_space := draw_cache_reserve_polygon_vertices_storage(
@@ -536,7 +536,7 @@ reserve_polygon_cache_ranges_storage :: #force_inline proc(
 
 //   Roll back one failed polygon reservation in a derived packet.
 rollback_polygon_cache_ranges_storage :: #force_inline proc(
-    cache: ^core.Shapes_Draw_Cache,
+    cache: ^shapemodel.Shapes_Draw_Cache,
     vertex_count: int,
     reserved_triangle_count: int) {
 
@@ -546,7 +546,7 @@ rollback_polygon_cache_ranges_storage :: #force_inline proc(
 
 //   Shrink one packet triangle reservation to its emitted count.
 finalize_polygon_triangle_reservation_storage :: #force_inline proc(
-    cache: ^core.Shapes_Draw_Cache,
+    cache: ^shapemodel.Shapes_Draw_Cache,
     first_triangle: int,
     triangle_count: int) {
 

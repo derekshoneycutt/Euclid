@@ -1,6 +1,9 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import storage "../../core/storage"
+
 
 // Font-relative spacing inputs for pixel-native document vertical placement.
 Document_Vertical_Style :: struct {
@@ -13,7 +16,7 @@ Document_Vertical_Style :: struct {
 }
 
 Document_Vertical_Context :: struct {
-    runtime: ^app_core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     builders: ^Document_Layout_Builders,
     style: Document_Vertical_Style,
     available_width: f32,
@@ -21,7 +24,7 @@ Document_Vertical_Context :: struct {
 
 Document_Block_Placement_Result :: struct {
     next_row: int,
-    status: app_core.Bounded_Builder_Status,
+    status: storage.Bounded_Builder_Status,
 }
 
 // Derive stable paragraph leading from the active semantic prose size.
@@ -50,7 +53,7 @@ document_interline_glue :: #force_inline proc(
 
 // Place one block's lines from an exact pixel top without row quantization.
 document_place_block_lines :: proc(
-    lines: []app_core.Dynview_Document_Layout_Line,
+    lines: []dynviewmodel.Dynview_Document_Layout_Line,
     block_top: f32,
     style: Document_Vertical_Style) -> (f32, bool) {
 
@@ -79,7 +82,7 @@ document_place_block_lines :: proc(
 
 // Report whether two blocks belong to the same semantic list item.
 document_blocks_share_list_item :: #force_inline proc(
-    previous, current: app_core.Dynview_Document_Block) -> bool {
+    previous, current: dynviewmodel.Dynview_Document_Block) -> bool {
     return previous.list_kind != .None &&
         previous.list_id == current.list_id &&
         previous.item_ordinal == current.item_ordinal
@@ -87,7 +90,7 @@ document_blocks_share_list_item :: #force_inline proc(
 
 // Report whether one source block begins a semantic document.
 document_block_starts_document :: #force_inline proc(
-    documents: []app_core.Dynview_Document,
+    documents: []dynviewmodel.Dynview_Document,
     block_index: int) -> bool {
     for document in documents {
         if document.block_start == block_index {return true}
@@ -97,8 +100,8 @@ document_block_starts_document :: #force_inline proc(
 
 // Resolve collapsed vertical glue before one block from adjacent block kinds.
 document_block_spacing_before :: proc(
-    documents: []app_core.Dynview_Document,
-    blocks: []app_core.Dynview_Document_Block,
+    documents: []dynviewmodel.Dynview_Document,
+    blocks: []dynviewmodel.Dynview_Document_Block,
     block_index: int,
     style: Document_Vertical_Style) -> (f32, bool) {
 
@@ -138,7 +141,7 @@ document_block_spacing_before :: proc(
 // Resolve a stable visual center from non-shape content on one line.
 document_line_shape_center :: proc(
     builders: ^Document_Layout_Builders,
-    line: app_core.Dynview_Document_Layout_Line) -> (f32, bool) {
+    line: dynviewmodel.Dynview_Document_Layout_Line) -> (f32, bool) {
 
     ascent, descent: f32
     found := false
@@ -158,7 +161,7 @@ document_line_shape_center :: proc(
 document_place_line_contents :: proc(
     builders: ^Document_Layout_Builders,
     line_index: int,
-    line: app_core.Dynview_Document_Layout_Line) -> bool {
+    line: dynviewmodel.Dynview_Document_Layout_Line) -> bool {
 
     shape_center, center_ok := document_line_shape_center(builders, line)
     if !center_ok {return false}
@@ -192,7 +195,7 @@ document_place_line_contents :: proc(
 
 // Publish one completed block's exact and outward-rounded vertical extents.
 document_publish_block_reservation :: proc(
-    block: ^app_core.Dynview_Document_Layout_Block,
+    block: ^dynviewmodel.Dynview_Document_Layout_Block,
     spacing: f32,
     reservation: Vertical_Reservation) {
 
@@ -207,7 +210,7 @@ document_publish_block_reservation :: proc(
 
 // Report whether one layout block references complete source and line ranges.
 document_vertical_block_ranges_valid :: #force_inline proc(
-    block: app_core.Dynview_Document_Layout_Block,
+    block: dynviewmodel.Dynview_Document_Layout_Block,
     source_block_count, line_count: int) -> bool {
 
     return block.source_block_index >= 0 &&
@@ -219,7 +222,7 @@ document_vertical_block_ranges_valid :: #force_inline proc(
 // Resolve an exact top for adjacent list rows instead of retaining grid padding.
 document_list_block_top :: proc(
     builders: ^Document_Layout_Builders,
-    sources: []app_core.Dynview_Document_Block,
+    sources: []dynviewmodel.Dynview_Document_Block,
     style: Document_Vertical_Style,
     block_index: int,
     default_top: f32) -> f32 {
@@ -262,7 +265,7 @@ document_reserve_block_extent :: proc(
 // Remove spacing between a raised list label and its matching body block.
 document_adjust_label_body_spacing :: #force_inline proc(
     builders: ^Document_Layout_Builders,
-    sources: []app_core.Dynview_Document_Block,
+    sources: []dynviewmodel.Dynview_Document_Block,
     block_index: int,
     spacing: f32) -> f32 {
     if block_index <= 0 ||
@@ -318,9 +321,9 @@ document_place_vertical_block :: proc(
 // Position one block horizontally and publish every line's child contents.
 document_place_block_contents :: proc(
     ctx: Document_Vertical_Context,
-    block: app_core.Dynview_Document_Layout_Block,
-    source_block: app_core.Dynview_Document_Block,
-    lines: []app_core.Dynview_Document_Layout_Line) -> bool {
+    block: dynviewmodel.Dynview_Document_Layout_Block,
+    source_block: dynviewmodel.Dynview_Document_Block,
+    lines: []dynviewmodel.Dynview_Document_Layout_Line) -> bool {
 
     font_size := ctx.runtime^.compile_cache.last_font_size
     first_line_indent := document_block_first_line_indent(source_block, font_size)
@@ -336,7 +339,7 @@ document_place_block_contents :: proc(
 
 // Report whether one label is immediately followed by its first body block.
 document_list_label_has_adjacent_body :: proc(
-    blocks: []app_core.Dynview_Document_Block,
+    blocks: []dynviewmodel.Dynview_Document_Block,
     source_index: int) -> bool {
 
     if source_index < 0 || source_index >= len(blocks)-1 ||
@@ -349,9 +352,9 @@ document_list_label_has_adjacent_body :: proc(
 
 // Place all semantic blocks and reserve each completed extent on the outer grid.
 document_place_vertical_layout :: proc(
-    runtime: ^app_core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     builders: ^Document_Layout_Builders,
-    available_width: f32) -> app_core.Bounded_Builder_Status {
+    available_width: f32) -> storage.Bounded_Builder_Status {
 
     cache := &runtime^.compile_cache
     style, style_ok := document_vertical_style(cache^.last_font_size)

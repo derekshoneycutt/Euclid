@@ -1,11 +1,14 @@
 package dynview_math
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
 import "core:math"
 
 //   Evaluate one immutable MATH corner table at a raw 26.6 correction height.
 math_kern_value :: proc(
-    table: app_core.Font_Math_Kern_Table,
+    table: fontmodel.Font_Math_Kern_Table,
     generation: u64,
     correction_height: i32) -> (i32, bool) {
 
@@ -32,9 +35,9 @@ math_kern_value :: proc(
 
 //   Find one immutable generation-specific corner table by edge glyph identity.
 math_kern_table_for_glyph :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     glyph_id: u32,
-    corner: u8) -> (app_core.Font_Math_Kern_Table, bool) {
+    corner: u8) -> (fontmodel.Font_Math_Kern_Table, bool) {
 
     if cache == nil || glyph_id == 0 || corner > 3 {
         return {}, false
@@ -50,7 +53,7 @@ math_kern_table_for_glyph :: proc(
 
 //   Evaluate and scale one 32-pixel 26.6 kern table at a physical layout height.
 math_kern_value_px :: proc(
-    table: app_core.Font_Math_Kern_Table,
+    table: fontmodel.Font_Math_Kern_Table,
     generation: u64,
     correction_height: f32,
     glyph_font_size: f32,

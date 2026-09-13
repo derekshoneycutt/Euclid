@@ -18,7 +18,7 @@ This guide describes four contracts that must remain aligned:
 
 | Concern | Owning source |
 | --- | --- |
-| Entity, component, pool, constraint, and world types | `src/core/shapes.odin` |
+| Entity, component, pool, constraint, and world types | `src/shapes/model/` |
 | ABI structs, status values, and bridge version | `src/bridge/abi.odin` |
 | Shape constructors and preflight | `src/shapes/world_constructors.odin` |
 | Direct-target constraint creation and solving | `src/shapes/world_constraints.odin` |

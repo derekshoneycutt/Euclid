@@ -5,8 +5,8 @@
 {"select_animation":"Axiom I,1","as":"replacement-selection"}
 {"wait_event":"animation_selected","correlation":"replacement-selection","timeout_ms":10000}
 {"wait_event":"presentation_superseded","correlation":"replacement-selection","timeout_ms":10000}
-{"wait_event":"animation_tick_committed","timeout_ms":10000}
 {"wait_event":"dynview_published","correlation":"replacement-selection","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
 {"allocation_checkpoint":"animation"}
 {"allocation_checkpoint":"snapshot_slots"}
 {"allocation_checkpoint":"display_cache"}

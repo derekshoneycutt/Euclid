@@ -1,6 +1,9 @@
 package dynview_core
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
 
 import rl "vendor:raylib"
 
@@ -31,8 +34,8 @@ DYNVIEW_STYLE_CUSTOM_FONT_MASK :: 0xFF
 DYNVIEW_BLOCK_INPUT :: 1
 DYNVIEW_BLOCK_OUTPUT :: 2
 
-Dynview_Text_Alignment :: app_core.Dynview_Text_Alignment
-Dynview_Text_Style :: app_core.Dynview_Text_Style
+Dynview_Text_Alignment :: dynviewmodel.Dynview_Text_Alignment
+Dynview_Text_Style :: dynviewmodel.Dynview_Text_Style
 
 //   One fixed style entry: a style id and its resolved text style.
 Style_Entry :: struct {
@@ -78,9 +81,9 @@ STYLE_TABLE :: []Style_Entry{
     {DYNVIEW_STYLE_ITALIC, Dynview_Text_Style{
         color = UI_TEXT_COLOR,
         italic = true,
-        font_flags = app_core.Font_Variant_Flags(
-            u32(app_core.Font_Variant_Flags.Regular) |
-            u32(app_core.Font_Variant_Flags.Italic)),
+        font_flags = fontmodel.Font_Variant_Flags(
+            u32(fontmodel.Font_Variant_Flags.Regular) |
+            u32(fontmodel.Font_Variant_Flags.Italic)),
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,
     }},
@@ -140,13 +143,13 @@ style_from_custom_font_flags :: #force_inline proc(
     }
 
     flags_bits := bits & u32(DYNVIEW_STYLE_CUSTOM_FONT_MASK)
-    flags := app_core.Font_Variant_Flags(flags_bits)
+    flags := fontmodel.Font_Variant_Flags(flags_bits)
     if flags == .None {
         flags = .Regular
     }
 
-    weight := app_core.font_resolve_weight_from_flags(flags)
-    italic := app_core.font_has_flag(flags, .Italic)
+    weight := fontmodel.font_resolve_weight_from_flags(flags)
+    italic := fontmodel.font_has_flag(flags, .Italic)
 
     _ = weight
     wrap_scale: f32 = 1.0

@@ -1,11 +1,13 @@
 package dynview
 
-import "../core"
+import dynviewmodel "model"
+
+import fontmodel "../view/font/model"
 
 import rl "vendor:raylib"
 
 //   Toggle Dynview rendering and invalidate all cache inputs when it changes.
-set_enabled :: proc(runtime: ^core.Dynview_System, enabled: bool) {
+set_enabled :: proc(runtime: ^dynviewmodel.Dynview_System, enabled: bool) {
     if runtime^.enabled == enabled {
         return
     }
@@ -19,7 +21,7 @@ set_enabled :: proc(runtime: ^core.Dynview_System, enabled: bool) {
 }
 
 //   Mark compile cache invalid and accumulate invalidation reasons.
-invalidate :: proc(runtime: ^core.Dynview_System, mask: u32) {
+invalidate :: proc(runtime: ^dynviewmodel.Dynview_System, mask: u32) {
     if runtime == nil {
         return
     }
@@ -29,7 +31,7 @@ invalidate :: proc(runtime: ^core.Dynview_System, mask: u32) {
 }
 
 //   Track panel dimensions and invalidate when layout bounds change.
-track_panel :: proc(runtime: ^core.Dynview_System, panel: rl.Rectangle) {
+track_panel :: proc(runtime: ^dynviewmodel.Dynview_System, panel: rl.Rectangle) {
     if runtime == nil {
         return
     }
@@ -47,7 +49,7 @@ track_panel :: proc(runtime: ^core.Dynview_System, panel: rl.Rectangle) {
 
 //   Track canonical font and cell metrics, invalidating when text layout shifts.
 track_font :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     font_size, cell_width, cell_height: f32) {
 
     if runtime == nil {
@@ -68,7 +70,7 @@ track_font :: proc(
 }
 
 //   Track style schema version and invalidate when style mapping changes.
-track_style :: proc(runtime: ^core.Dynview_System, style_revision: u64) {
+track_style :: proc(runtime: ^dynviewmodel.Dynview_System, style_revision: u64) {
     if runtime == nil {
         return
     }
@@ -83,11 +85,11 @@ track_style :: proc(runtime: ^core.Dynview_System, style_revision: u64) {
 
 // Track every requested JuliaMono variant's effective face identity.
 track_prose_fonts :: proc(
-    runtime: ^core.Dynview_System,
-    effective_keys: []core.Font_Key,
+    runtime: ^dynviewmodel.Dynview_System,
+    effective_keys: []fontmodel.Font_Key,
     generations: []u64) {
 
-    count := int(core.Font_Key.Math_Regular)
+    count := int(fontmodel.Font_Key.Math_Regular)
     if runtime == nil || len(effective_keys) != count || len(generations) != count {
         return
     }

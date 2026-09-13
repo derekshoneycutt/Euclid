@@ -1,8 +1,10 @@
 package ui_dynview
 
+import viewmodel "../../model"
+import dynviewmodel "../../../dynview/model"
+
 import "core:testing"
 
-import core "../../../core"
 import input "../../input"
 
 import rl "vendor:raylib"
@@ -10,8 +12,8 @@ import rl "vendor:raylib"
 // Verify selection boundaries normalize forward and reverse drags.
 @(test)
 dynview_selection_test_orders_unit_boundaries :: proc(t: ^testing.T) {
-    first := core.Dynview_Selection_Position{unit_index = 1}
-    last := core.Dynview_Selection_Position{unit_index = 4}
+    first := dynviewmodel.Dynview_Selection_Position{unit_index = 1}
+    last := dynviewmodel.Dynview_Selection_Position{unit_index = 4}
 
     start, end := dynview_selection_ordered(last, first)
 
@@ -24,7 +26,7 @@ dynview_selection_test_orders_unit_boundaries :: proc(t: ^testing.T) {
 dynview_selection_test_composes_document_units :: proc(t: ^testing.T) {
     source: string = "α + \\frac{a}{b} = c"
     text := transmute([]u8)source
-    targets := []core.Dynview_Document_Layout_Copy_Target{
+    targets := []dynviewmodel.Dynview_Document_Layout_Copy_Target{
         {offset = 0, count = 2, canonical_text = true},
         {offset = 2, count = 3, canonical_text = true},
         {offset = 5, count = 11},
@@ -41,7 +43,7 @@ dynview_selection_test_composes_document_units :: proc(t: ^testing.T) {
 @(test)
 dynview_selection_test_rejects_invalid_document_ranges :: proc(t: ^testing.T) {
     text := []u8{'a', 'b'}
-    targets := []core.Dynview_Document_Layout_Copy_Target{
+    targets := []dynviewmodel.Dynview_Document_Layout_Copy_Target{
         {offset = 0, count = 1},
         {offset = 2, count = 1},
     }
@@ -56,7 +58,7 @@ dynview_selection_test_rejects_invalid_document_ranges :: proc(t: ^testing.T) {
 @(test)
 dynview_selection_test_composes_only_authored_separators :: proc(t: ^testing.T) {
     text := []u8{'a', 'b', 'c', 'd'}
-    targets := []core.Dynview_Document_Layout_Copy_Target{
+    targets := []dynviewmodel.Dynview_Document_Layout_Copy_Target{
         {offset = 0, count = 1},
         {offset = 1, count = 1},
         {offset = 2, count = 1, separator_before = .Line},
@@ -76,7 +78,7 @@ dynview_selection_test_composes_only_authored_separators :: proc(t: ^testing.T) 
 dynview_selection_test_composes_list_items :: proc(t: ^testing.T) {
     source: string = "1.alph2.bet"
     text := transmute([]u8)source
-    targets := []core.Dynview_Document_Layout_Copy_Target{
+    targets := []dynviewmodel.Dynview_Document_Layout_Copy_Target{
         {offset = 0, count = 2, canonical_text = true},
         {offset = 2, count = 4, canonical_text = true,
             separator_before = .Space},
@@ -106,7 +108,7 @@ dynview_selection_test_maps_utf8_unit_boundaries :: proc(t: ^testing.T) {
 // Verify wrapped fallback selection preserves exact authored newline bytes.
 @(test)
 dynview_selection_test_wrapped_copy_preserves_newlines :: proc(t: ^testing.T) {
-    selection := core.Dynview_Selection_State{
+    selection := dynviewmodel.Dynview_Selection_State{
         mode = .Wrapped_Text, active = true,
         anchor = {unit_index = 1}, head = {unit_index = 4},
     }
@@ -118,14 +120,14 @@ dynview_selection_test_wrapped_copy_preserves_newlines :: proc(t: ^testing.T) {
 // Verify semantic selection reads the immutable published document bytes.
 @(test)
 dynview_selection_test_uses_published_document_text :: proc(t: ^testing.T) {
-    runtime := new(core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime, context.allocator)
     published := []u8{'r', 'i', 'g', 'h', 't'}
     runtime^.content.document_text = published[:]
     runtime^.compile_cache.document_text[0] = 'x'
     runtime^.compile_cache.document_layout_copy_targets =
-        []core.Dynview_Document_Layout_Copy_Target{{offset = 0, count = 5}}
-    selection := core.Dynview_Selection_State{
+        []dynviewmodel.Dynview_Document_Layout_Copy_Target{{offset = 0, count = 5}}
+    selection := dynviewmodel.Dynview_Selection_State{
         mode = .Semantic_Document, active = true,
         anchor = {unit_index = 0}, head = {unit_index = 1},
     }
@@ -137,7 +139,7 @@ dynview_selection_test_uses_published_document_text :: proc(t: ^testing.T) {
 // Verify semantic hit testing chooses the nearest half-open target boundary.
 @(test)
 dynview_selection_test_hits_semantic_boundaries :: proc(t: ^testing.T) {
-    targets := []core.Dynview_Document_Layout_Copy_Target{
+    targets := []dynviewmodel.Dynview_Document_Layout_Copy_Target{
         {x = 0, y = 0, width = 10, height = 12},
         {x = 10, y = 0, width = 20, height = 12},
     }
@@ -157,7 +159,7 @@ dynview_selection_test_hits_semantic_boundaries :: proc(t: ^testing.T) {
 // Verify content revision and mode changes retire stale logical boundaries.
 @(test)
 dynview_selection_test_reconciles_content_identity :: proc(t: ^testing.T) {
-    selection := core.Dynview_Selection_State{
+    selection := dynviewmodel.Dynview_Selection_State{
         mode = .Semantic_Document, revision = 4,
         anchor = {unit_index = 1}, head = {unit_index = 3}, active = true,
     }
@@ -166,7 +168,7 @@ dynview_selection_test_reconciles_content_identity :: proc(t: ^testing.T) {
 
     testing.expect(t, !selection.active)
     testing.expect_value(t, selection.mode,
-        core.Dynview_Selection_Mode.Semantic_Document)
+        dynviewmodel.Dynview_Selection_Mode.Semantic_Document)
     testing.expect_value(t, selection.revision, u64(5))
 }
 
@@ -176,7 +178,7 @@ dynview_selection_test_keyboard_selects_all :: proc(t: ^testing.T) {
     events := [1]input.Input_Event{{
         kind = .Press, key = .A, modifiers = {.Control},
     }}
-    selection := core.Dynview_Selection_State{
+    selection := dynviewmodel.Dynview_Selection_State{
         mode = .Wrapped_Text, revision = 2,
     }
 
@@ -192,13 +194,13 @@ dynview_selection_test_keyboard_selects_all :: proc(t: ^testing.T) {
 // Verify a copy-icon press cannot claim Dynview selection ownership.
 @(test)
 dynview_selection_test_copy_icon_has_pointer_priority :: proc(t: ^testing.T) {
-    runtime := new(core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime, context.allocator)
-    runtime^.compile_cache.copy_hit_targets = []core.Dynview_Copy_Hit_Target{{
+    runtime^.compile_cache.copy_hit_targets = []dynviewmodel.Dynview_Copy_Hit_Target{{
         rect = {x = 10, y = 10, width = 20, height = 20},
     }}
-    selection: core.Dynview_Selection_State
-    owner: core.Ui_Press_Owner_State
+    selection: dynviewmodel.Dynview_Selection_State
+    owner: viewmodel.Ui_Press_Owner_State
     frame := input.Input_Frame{
         mouse_position = {15, 15}, mouse_pressed = {.Left}, mouse_down = {.Left},
     }
@@ -218,10 +220,10 @@ dynview_selection_test_copy_icon_has_pointer_priority :: proc(t: ^testing.T) {
 // Verify a pointer drag captures ownership and finalizes a nonempty range.
 @(test)
 dynview_selection_test_drag_finalizes_wrapped_range :: proc(t: ^testing.T) {
-    selection := core.Dynview_Selection_State{
+    selection := dynviewmodel.Dynview_Selection_State{
         mode = .Wrapped_Text, revision = 1,
     }
-    owner: core.Ui_Press_Owner_State
+    owner: viewmodel.Ui_Press_Owner_State
     view := Dynview_Selection_View{
         panel = {0, 0, 100, 30}, row_height = 20,
         wrap_advance = 8, fallback_text = "test",

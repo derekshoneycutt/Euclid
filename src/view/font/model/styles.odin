@@ -1,4 +1,4 @@
-package core
+package fontmodel
 
 //   Canonical weight ordering ranks for heaviest-flag resolution.
 FONT_WEIGHT_RANKS :: [Font_Weight]int{

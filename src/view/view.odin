@@ -1,5 +1,14 @@
 package view
 
+import viewmodel "model"
+
+import bridgemodel "../bridge/model"
+
+import fontmodel "font/model"
+
+import particlemodel "../particles/model"
+import shapemodel "../shapes/model"
+
 // Here is where we initialize the application state and load up the window, running
 // the loop for the lifetime of this instance.
 
@@ -29,14 +38,14 @@ import "core:time"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
 
-TOOL_LENGTH :: core.TOOL_LENGTH
+TOOL_LENGTH :: viewmodel.TOOL_LENGTH
 
-Vector2 :: core.Vector2
-Vector3 :: core.Vector3
-Iso_Scale :: core.Iso_Scale
-Particle :: core.Particle
-Particle_System :: core.Particle_System
-Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
+Vector2 :: rl.Vector2
+Vector3 :: rl.Vector3
+Iso_Scale :: viewmodel.Iso_Scale
+Particle :: particlemodel.Particle
+Particle_System :: particlemodel.Particle_System
+Euclid_Drawing_Surface :: viewmodel.Euclid_Drawing_Surface
 Euclid_General_State :: core.Euclid_General_State
 Euclid_Run_Settings :: core.Euclid_Run_Settings
 
@@ -166,7 +175,7 @@ sync_window_math_shaping :: proc(state: ^Euclid_General_State) {
 // Track effective JuliaMono face generations after display-thread publication.
 sync_window_prose_shaping :: proc(state: ^Euclid_General_State) {
     count := int(font.Font_Key.Math_Regular)
-    effective_keys: [int(font.Font_Key.Math_Regular)]core.Font_Key
+    effective_keys: [int(font.Font_Key.Math_Regular)]fontmodel.Font_Key
     generations: [int(font.Font_Key.Math_Regular)]u64
     for key_index in 0..<count {
         identity, ready := font.cache_shaping_identity(
@@ -404,7 +413,7 @@ shutdown_window_runtime :: proc(
 // Notes:
 //   - Runtime state construction lives in runtime_session.odin and is shared with headless execution.
 submit_julia_shutdown :: proc(
-    service: ^julia.Julia_Runtime_Service, started_at: time.Tick) -> u64 {
+    service: ^bridgemodel.Julia_Runtime_Service, started_at: time.Tick) -> u64 {
     shutdown_id, sent := julia.submit_runtime_shutdown_until(
         service, started_at, JULIA_SHUTDOWN_TIMEOUT_SECONDS)
     if !sent {
@@ -417,7 +426,7 @@ submit_julia_shutdown :: proc(
 
 //   Wait for the matching shutdown completion within the shared timeout window.
 wait_for_julia_shutdown :: proc(
-    service: ^julia.Julia_Runtime_Service, shutdown_id: u64,
+    service: ^bridgemodel.Julia_Runtime_Service, shutdown_id: u64,
     started_at: time.Tick) {
     if !julia.wait_runtime_shutdown_completion(
         service, shutdown_id, started_at, JULIA_SHUTDOWN_TIMEOUT_SECONDS) {
@@ -431,7 +440,7 @@ wait_for_julia_shutdown :: proc(
 // Notes:
 //   - Runtime state construction lives in runtime_session.odin and is shared with headless execution.
 shutdown_julia_runtime :: proc(
-    state: ^Euclid_General_State, service: ^julia.Julia_Runtime_Service) {
+    state: ^Euclid_General_State, service: ^bridgemodel.Julia_Runtime_Service) {
     started_at := time.tick_now()
     shutdown_id := submit_julia_shutdown(service, started_at)
     _ = evidence_session.session_record(
@@ -460,7 +469,7 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
     terminal_graphics_runtime_destroy(state)
     shell_service_runtime_destroy(state)
     terminalview.terminal_destroy(&state^.terminal)
-    core.animation_storage_destroy(
+    julia.animation_storage_destroy(
         &state^.animation_memory,
         &state^.animation_values,
         &state^.dynview_documents)
@@ -565,7 +574,7 @@ shutdown_window_resources :: proc(state : ^Euclid_General_State) {
 
 //   Update rolling FPS statistics used for average-FPS overlay display.
 //   Advance the rolling FPS window by one full bucket when it completes.
-fps_advance_bucket_if_full :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
+fps_advance_bucket_if_full :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
     if ui_runtime.fps_avg_bucket_elapsed < 1.0 {
         return
     }
@@ -587,7 +596,7 @@ fps_advance_bucket_if_full :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
 
 //   Accumulate one frame's elapsed time into the rolling FPS buckets.
 fps_accumulate_seconds :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State, frame_dt: f32) {
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, frame_dt: f32) {
 
     remaining := frame_dt
     for remaining > 0 {
@@ -710,7 +719,7 @@ run_windowed_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> bool {
 //   Record a required semantic event when GIF capture changes lifecycle phase.
 record_gif_capture_transition :: proc(
     state: ^Euclid_General_State,
-    previous, current: core.Gif_Capture_Phase) {
+    previous, current: viewmodel.Gif_Capture_Phase) {
     if state == nil || previous == current {
         return
     }
@@ -805,7 +814,7 @@ record_evidence_checkpoint :: proc(
 
 //   Project one dense world transform and its optional rendering state.
 capture_evidence_point :: proc(
-    world: ^core.Shape_World,
+    world: ^shapemodel.Shape_World,
     transform_index: int,
     captured: ^evidence_checkpoint.Point) {
     entity := world^.transforms.entities[transform_index]
@@ -815,13 +824,13 @@ capture_evidence_point :: proc(
     captured^.y = transform.position.y
     captured^.z = transform.position.z
     captured^.has_position = true
-    if style, found := core.shape_component_get(
+    if style, found := shapemodel.shape_component_get(
         &world^.render_styles, &world^.registry, entity); found {
         captured^.visible = style^.visible
         captured^.brush_size = style^.brush_size
         captured^.offset = style^.offset
     }
-    if feature, found := core.shape_component_get(
+    if feature, found := shapemodel.shape_component_get(
         &world^.active_features, &world^.registry, entity); found {
         captured^.active_child = i32(feature^.index)
     }
@@ -897,7 +906,7 @@ draw_frame :: proc(
         prepared.controls, prepared.layout_interaction)
 
     if state^.ui_runtime.display_fps {
-        fps_flags := core.Font_Variant_Flags.Medium
+        fps_flags := fontmodel.Font_Variant_Flags.Medium
         mono_font := font.cache_resolve(
             &state^.font_cache, font.font_key_from_flags(fps_flags))
 

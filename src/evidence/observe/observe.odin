@@ -1,12 +1,19 @@
 package observe
 
+import viewmodel "../../view/model"
+import viewterminalmodel "../../view/terminal/model"
+
+import bridgemodel "../../bridge/model"
+import dynviewmodel "../../dynview/model"
+import particlemodel "../../particles/model"
+import shapemodel "../../shapes/model"
+
 // Package observe copies bounded Euclid facts at explicit ownership boundaries.
 //
 // Observations are pointer-free values and do not retain source storage. This
 // package does not establish synchronization: callers must already own the
 // source or have completed the documented producer handoff or task join.
 
-import app_core "../../core"
 import allocation_evidence "../allocation"
 import evidence_trace "../trace"
 
@@ -37,7 +44,7 @@ Display :: struct {
     simulation_paused : bool,
 
     // Julia runtime lifecycle, active request, and submission pressure.
-    runtime_lifecycle : app_core.Julia_Lifecycle_State,
+    runtime_lifecycle : bridgemodel.Julia_Lifecycle_State,
     runtime_generation : u64,
     active_runtime_request_id : u64,
     failed_runtime_request_count : u64,
@@ -97,12 +104,29 @@ Display :: struct {
 
     // GIF capture lifecycle and completed frame count.
     gif_capture_active : bool,
-    gif_capture_phase : app_core.Gif_Capture_Phase,
+    gif_capture_phase : viewmodel.Gif_Capture_Phase,
     gif_captured_frames : int,
 
     // Aggregate required-evidence health and display producer state.
     required_evidence_complete : bool,
     trace : Trace_State,
+}
+
+// Borrowed owner-model components used to assemble one display observation.
+//
+// Callers must keep every non-nil component stable for the duration of display.
+Display_Source :: struct {
+    fixed_step : u64,
+    simulation_time : f32,
+    ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
+    gif_capture : ^viewmodel.Gif_Capture_Session,
+    terminal : ^viewterminalmodel.Terminal_State,
+    dynview : ^dynviewmodel.Dynview_System,
+    shape_world : ^shapemodel.Shape_World,
+    particle_system : ^particlemodel.Particle_System,
+    julia_service : ^bridgemodel.Julia_Runtime_Service,
+    required_evidence_complete : bool,
+    evidence_ring : ^evidence_trace.Ring,
 }
 
 // Pointer-free snapshot of state authoritative to the Julia host owner.
@@ -112,10 +136,10 @@ Display :: struct {
 // outcomes without exposing the service's mutable queues.
 Julia_Host :: struct {
     // Runtime lifecycle, active request identity, and submission outcomes.
-    lifecycle : app_core.Julia_Lifecycle_State,
+    lifecycle : bridgemodel.Julia_Lifecycle_State,
     runtime_generation : u64,
     active_request_id : u64,
-    active_request_kind : app_core.Julia_Request_Kind,
+    active_request_kind : bridgemodel.Julia_Request_Kind,
     failed_request_count : u64,
     request_saturation_count : u64,
 
@@ -143,6 +167,14 @@ Simulation :: struct {
     // Frame-preparation worker evidence.
     shape_cache : Trace_State,
     dynview : Trace_State,
+}
+
+// Borrowed producer rings made stable by simulation and preparation joins.
+Simulation_Source :: struct {
+    particle : ^evidence_trace.Ring,
+    constraint : ^evidence_trace.Ring,
+    shape_cache : ^evidence_trace.Ring,
+    dynview : ^evidence_trace.Ring,
 }
 
 // Stable scenario lifecycle independent of parser and runner storage.
@@ -203,7 +235,7 @@ trace_state :: proc(ring: ^evidence_trace.Ring) -> Trace_State {
 
 //   Copy Julia-service fields into an in-progress display observation.
 observe_display_julia_service :: proc(
-    service: ^app_core.Julia_Runtime_Service, result: ^Display) {
+    service: ^bridgemodel.Julia_Runtime_Service, result: ^Display) {
     if service == nil {
         return
     }
@@ -221,15 +253,19 @@ observe_display_julia_service :: proc(
 
 //   Copy display-owned UI and capture state into an in-progress observation.
 observe_display_ui :: proc(
-    state: ^app_core.Euclid_General_State, result: ^Display) {
-    result.simulation_paused = state.ui_runtime.simulation_paused
-    result.view_text_scroll_y = state.ui_runtime.view_text_scroll_y
-    result.view_text_scroll_max = state.ui_runtime.view_text_scroll_max
-    result.vertical_split_x = state.ui_runtime.vertical_split_x
-    result.horizontal_split_y = state.ui_runtime.horizontal_split_y
-    result.gif_capture_active = state.gif_capture.active
-    result.gif_capture_phase = state.ui_runtime.gif_capture_phase
-    result.gif_captured_frames = state.ui_runtime.gif_captured_frames
+    source: ^Display_Source, result: ^Display) {
+    if source.ui_runtime != nil {
+        result.simulation_paused = source.ui_runtime.simulation_paused
+        result.view_text_scroll_y = source.ui_runtime.view_text_scroll_y
+        result.view_text_scroll_max = source.ui_runtime.view_text_scroll_max
+        result.vertical_split_x = source.ui_runtime.vertical_split_x
+        result.horizontal_split_y = source.ui_runtime.horizontal_split_y
+        result.gif_capture_phase = source.ui_runtime.gif_capture_phase
+        result.gif_captured_frames = source.ui_runtime.gif_captured_frames
+    }
+    if source.gif_capture != nil {
+        result.gif_capture_active = source.gif_capture.active
+    }
 }
 
 //   Copy display-owned Euclid truth without advancing any subsystem.
@@ -243,36 +279,38 @@ observe_display_ui :: proc(
 // Notes:
 //   - Missing shape, particle, or Julia services leave their field groups zero.
 //   - The source and all nested mutable services must be stable for the copy.
-display :: proc(state: ^app_core.Euclid_General_State) -> Display {
-    if state == nil {
+display :: proc(source: ^Display_Source) -> Display {
+    if source == nil {
         return {}
     }
     result := Display{
-        fixed_step = state.fixed_step,
-        simulation_time = state.simulation_time,
-        terminal_ready = state.terminal.initialized &&
-            state.terminal.julia_session_ready,
-        terminal_idle = state.terminal.initialized &&
-            state.terminal.julia_session_ready && !state.terminal.awaiting_eval,
-        terminal_continuation = state.terminal.initialized &&
-            state.terminal.julia_session_ready &&
-            state.terminal.collecting_continuation,
-        dynview_enabled = state.dynview.enabled,
-        dynview_pending_invalidation_mask = state.dynview.pending_invalidation_mask,
-        required_evidence_complete =
-            state.evidence_session.required_evidence_complete &&
-            evidence_trace.ring_evidence_complete(&state.evidence_ring),
-        trace = trace_state(&state.evidence_ring),
+        fixed_step = source.fixed_step,
+        simulation_time = source.simulation_time,
+        required_evidence_complete = source.required_evidence_complete &&
+            evidence_trace.ring_evidence_complete(source.evidence_ring),
+        trace = trace_state(source.evidence_ring),
     }
-    observe_display_ui(state, &result)
-    if state.shape_world != nil {
-        result.point_count = int(state.shape_world.transforms.count)
-        result.constraint_count = int(state.shape_world.constraints.count)
+    if source.terminal != nil {
+        result.terminal_ready = source.terminal.initialized &&
+            source.terminal.julia_session_ready
+        result.terminal_idle = result.terminal_ready && !source.terminal.awaiting_eval
+        result.terminal_continuation = result.terminal_ready &&
+            source.terminal.collecting_continuation
     }
-    if state.particle_system != nil {
-        result.particle_count = state.particle_system.next_index
+    if source.dynview != nil {
+        result.dynview_enabled = source.dynview.enabled
+        result.dynview_pending_invalidation_mask =
+            source.dynview.pending_invalidation_mask
     }
-    observe_display_julia_service(state.julia_runtime_service, &result)
+    observe_display_ui(source, &result)
+    if source.shape_world != nil {
+        result.point_count = int(source.shape_world.transforms.count)
+        result.constraint_count = int(source.shape_world.constraints.count)
+    }
+    if source.particle_system != nil {
+        result.particle_count = source.particle_system.next_index
+    }
+    observe_display_julia_service(source.julia_service, &result)
     return result
 }
 
@@ -286,7 +324,7 @@ display :: proc(state: ^app_core.Euclid_General_State) -> Display {
 //
 // Notes:
 //   - This procedure does not inspect Julia objects or mutable request payloads.
-julia_host :: proc(service: ^app_core.Julia_Runtime_Service) -> Julia_Host {
+julia_host :: proc(service: ^bridgemodel.Julia_Runtime_Service) -> Julia_Host {
     if service == nil {
         return {}
     }
@@ -320,15 +358,15 @@ julia_host :: proc(service: ^app_core.Julia_Runtime_Service) -> Julia_Host {
 //
 // Notes:
 //   - Calling before all relevant task fences join would race producer-owned rings.
-simulation :: proc(executor: ^app_core.Simulation_Executor) -> Simulation {
-    if executor == nil {
+simulation :: proc(source: ^Simulation_Source) -> Simulation {
+    if source == nil {
         return {}
     }
     return {
-        particle = trace_state(&executor.particle_task.evidence_ring),
-        constraint = trace_state(&executor.constraint_task.evidence_ring),
-        shape_cache = trace_state(&executor.shape_cache_task.evidence_ring),
-        dynview = trace_state(&executor.dynview_task.evidence_ring),
+        particle = trace_state(source.particle),
+        constraint = trace_state(source.constraint),
+        shape_cache = trace_state(source.shape_cache),
+        dynview = trace_state(source.dynview),
     }
 }
 

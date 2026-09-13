@@ -1,6 +1,7 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 
 // Fraction_Box_Metrics describes one measured fraction child relative to its baseline.
 Fraction_Box_Metrics :: struct {
@@ -11,7 +12,7 @@ Fraction_Box_Metrics :: struct {
 
 // Math_Fraction_Geometry_Input contains measured children and one resolved style.
 Math_Fraction_Geometry_Input :: struct {
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     font_size: f32,
     style: Math_Style,

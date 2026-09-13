@@ -28,6 +28,47 @@ make_iso_scale :: proc(scale, x_offset, y_offset: f32) -> Iso_Scale {
     return iso
 }
 
+//   Verify a single dust kick adds trauma and resets the screenshake clock.
+@(test)
+screenshake_on_dust_kick_adds_trauma :: proc(t: ^testing.T) {
+    scale: Iso_Scale
+
+    screenshake_on_dust_kick(&scale)
+
+    testing.expect(t, scale.screenshake_trauma > 0)
+    testing.expect_value(t, scale.screenshake_elapsed, 0.0)
+}
+
+//   Verify a batched dust kick produces a stronger aggregated impulse.
+@(test)
+screenshake_on_dust_kick_batch_uses_stronger_aggregated_impulse :: proc(t: ^testing.T) {
+    single: Iso_Scale
+    batch: Iso_Scale
+
+    screenshake_on_dust_kick(&single)
+    screenshake_on_dust_kick_batch(&batch, 8)
+
+    testing.expect(t, batch.screenshake_trauma > single.screenshake_trauma)
+}
+
+//   Verify screenshake decay clears all state at the bounded duration.
+@(test)
+screenshake_update_decays_and_clears_deterministically :: proc(t: ^testing.T) {
+    scale: Iso_Scale
+    screenshake_on_dust_kick(&scale)
+    before := scale.screenshake_trauma
+
+    screenshake_update(&scale, 0.01)
+
+    testing.expect(t, scale.screenshake_trauma < before)
+    testing.expect(t, scale.screenshake_offset_x != 0 || scale.screenshake_offset_y != 0)
+    screenshake_update(&scale, SCREENSHAKE_MAX_TIME)
+    testing.expect_value(t, scale.screenshake_trauma, 0.0)
+    testing.expect_value(t, scale.screenshake_elapsed, 0.0)
+    testing.expect_value(t, scale.screenshake_offset_x, 0.0)
+    testing.expect_value(t, scale.screenshake_offset_y, 0.0)
+}
+
 //   Verify recompute_iso_scale_precompute sets the cached half/quarter coefficients.
 @(test)
 recompute_iso_scale_precompute_sets_cached_coefficients :: proc(t: ^testing.T) {

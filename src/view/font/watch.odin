@@ -1,6 +1,6 @@
 package font
 
-import "../../core"
+import fontmodel "model"
 
 import "core:os"
 import "core:time"
@@ -12,13 +12,13 @@ FONT_SOURCE_POLL_INTERVAL_NS :: i64(100 * time.Millisecond)
 FONT_SOURCE_DEBOUNCE_NS :: i64(150 * time.Millisecond)
 
 // Comparable file identity used for polling without retaining OS metadata.
-Font_Source_Signature :: core.Font_Source_Signature
+Font_Source_Signature :: fontmodel.Font_Source_Signature
 
 // Per-font committed and debounce-pending source observation.
-Font_Source_Monitor_Entry :: core.Font_Source_Monitor_Entry
+Font_Source_Monitor_Entry :: fontmodel.Font_Source_Monitor_Entry
 
 // Display-owned polling/debounce state for every configured font source.
-Font_Source_Monitor :: core.Font_Source_Monitor
+Font_Source_Monitor :: fontmodel.Font_Source_Monitor
 
 //   Return monotonic nanoseconds for display-owned polling and debounce deadlines.
 //

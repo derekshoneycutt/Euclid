@@ -1,6 +1,11 @@
 package dynview_math
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
+import storage "../../core/storage"
+
 import dyncore "../core"
 
 MATH_ACCENT_TEXTS :: [16]string{
@@ -15,7 +20,7 @@ Math_Shape_Request :: struct {
     standalone_accent: bool,
     flattened_accent: bool,
     projection_workspace: []u8,
-    glyph_output: []app_core.Shaped_Glyph,
+    glyph_output: []fontmodel.Shaped_Glyph,
 }
 
 Math_Shape_Result :: struct {
@@ -34,7 +39,7 @@ Math_Glyph_Metrics_Request :: struct {
 }
 
 Math_Glyph_Metrics_Result :: struct {
-    extents: app_core.Font_Glyph_Extents,
+    extents: fontmodel.Font_Glyph_Extents,
     italic_correction: i32,
     top_accent_attachment: i32,
     ok: bool,
@@ -48,7 +53,7 @@ Math_Glyph_Metrics_Handler :: #type proc(
 Math_Glyph_Variants_Request :: struct {
     generation: u64,
     glyph_id: u32,
-    output: []app_core.Font_Math_Glyph_Variant,
+    output: []fontmodel.Font_Math_Glyph_Variant,
 }
 
 Math_Glyph_Variants_Result :: struct {
@@ -65,7 +70,7 @@ Math_Glyph_Variants_Handler :: #type proc(
 Math_Glyph_Assembly_Request :: struct {
     generation: u64,
     glyph_id: u32,
-    output: []app_core.Font_Math_Glyph_Part,
+    output: []fontmodel.Font_Math_Glyph_Part,
 }
 
 Math_Glyph_Assembly_Result :: struct {
@@ -84,7 +89,7 @@ Math_Glyph_Kern_Table_Request :: struct {
     generation: u64,
     glyph_id: u32,
     corner: u8,
-    output: []app_core.Font_Math_Kern_Entry,
+    output: []fontmodel.Font_Math_Kern_Entry,
 }
 
 Math_Glyph_Kern_Table_Result :: struct {
@@ -103,7 +108,7 @@ Math_Shaping_Service :: struct {
     generation: u64,
     base_pixel_size: f32,
     raster_ascent: f32,
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     shape: Math_Shape_Handler,
     glyph_metrics: Math_Glyph_Metrics_Handler,
     glyph_variants: Math_Glyph_Variants_Handler,
@@ -112,7 +117,7 @@ Math_Shaping_Service :: struct {
     horizontal_glyph_assembly: Math_Glyph_Assembly_Handler,
     glyph_kern_table: Math_Glyph_Kern_Table_Handler,
     projection_workspace: []u8,
-    glyph_workspace: []app_core.Shaped_Glyph,
+    glyph_workspace: []fontmodel.Shaped_Glyph,
 }
 
 // Scaled shaped-run dimensions consumed by recursive math layout.
@@ -131,10 +136,10 @@ Shaped_Ink_Bounds :: struct {
 
 Shape_Command_Site_Context :: struct {
     builder: ^Dynview_Shaped_Builder,
-    runtime: ^app_core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     service: Math_Shaping_Service,
     command_index: int,
-    command: app_core.Dynview_Command,
+    command: dynviewmodel.Dynview_Command,
 }
 
 Math_Command_Site :: struct {
@@ -152,9 +157,9 @@ Shaped_Measure_Accumulator :: struct {
 
 //   Return one sealed shaped run for a math command site.
 shaped_run_for_command :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    command: app_core.Dynview_Command,
-    site: app_core.Dynview_Shaped_Site) -> (^app_core.Dynview_Shaped_Run, bool) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    command: dynviewmodel.Dynview_Command,
+    site: dynviewmodel.Dynview_Shaped_Site) -> (^dynviewmodel.Dynview_Shaped_Run, bool) {
 
     run_index := int(command.shaped_run_indices[int(site)])
     if cache == nil || run_index < 0 || run_index >= len(cache^.shaped_runs) {
@@ -167,7 +172,7 @@ shaped_run_for_command :: #force_inline proc(
 
 //   Scale cached 32-pixel shaping metrics to one requested math size.
 shaped_run_layout_metrics :: #force_inline proc(
-    run: ^app_core.Dynview_Shaped_Run,
+    run: ^dynviewmodel.Dynview_Shaped_Run,
     font_size: f32) -> (Shaped_Run_Layout_Metrics, bool) {
 
     if run == nil || run^.base_pixel_size <= 0 || font_size <= 0 {
@@ -188,8 +193,8 @@ shaped_run_layout_metrics :: #force_inline proc(
 
 //   Return the complete sealed glyph slice for one shaped run.
 shaped_glyphs_for_run :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    run: ^app_core.Dynview_Shaped_Run) -> ([]app_core.Shaped_Glyph, bool) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    run: ^dynviewmodel.Dynview_Shaped_Run) -> ([]fontmodel.Shaped_Glyph, bool) {
 
     if cache == nil || run == nil || run^.glyph_start < 0 || run^.glyph_count <= 0 {
         return nil, false
@@ -204,15 +209,15 @@ shaped_glyphs_for_run :: #force_inline proc(
 //   Shape every supported site for all compiled math commands.
 shape_all_math_command_sites :: proc(
     builder: ^Dynview_Shaped_Builder,
-    runtime: ^app_core.Dynview_System,
-    service: Math_Shaping_Service) -> app_core.Bounded_Builder_Status {
+    runtime: ^dynviewmodel.Dynview_System,
+    service: Math_Shaping_Service) -> storage.Bounded_Builder_Status {
 
     cache := &runtime^.compile_cache
     for command_index in 0..<cache^.math_command_count {
         command := cache^.math_commands[command_index]
         ctx := Shape_Command_Site_Context{
             builder, runtime, service, command_index, command}
-        for site in app_core.Dynview_Shaped_Site {
+        for site in dynviewmodel.Dynview_Shaped_Site {
             status := shape_math_command_site(ctx, site)
             if status != .Ok {
                 return status
@@ -224,9 +229,9 @@ shape_all_math_command_sites :: proc(
 
 //   Build and atomically seal proportional records for supported math text sites.
 rebuild_shaped_math_cache :: proc(
-    runtime: ^app_core.Dynview_System,
-    arena: ^app_core.Arena_Owner,
-    service: Math_Shaping_Service) -> app_core.Bounded_Builder_Status {
+    runtime: ^dynviewmodel.Dynview_System,
+    arena: ^storage.Arena_Owner,
+    service: Math_Shaping_Service) -> storage.Bounded_Builder_Status {
 
     cache := &runtime^.compile_cache
     clear_shaped_records(cache)
@@ -279,7 +284,7 @@ cache_math_kern_record :: proc(
     service: Math_Shaping_Service,
     glyph_id: u32,
     corner: u8,
-    record: ^app_core.Font_Math_Kern_Table) -> bool {
+    record: ^fontmodel.Font_Math_Kern_Table) -> bool {
 
     result := service.glyph_kern_table(service.user_data, {
         generation = service.generation, glyph_id = glyph_id, corner = corner,
@@ -298,15 +303,15 @@ cache_math_kern_record :: proc(
 
 //   Publish four immutable edge kern tables for every sealed shaped run.
 cache_math_kern_records :: proc(
-    runtime: ^app_core.Dynview_System,
-    arena: ^app_core.Arena_Owner,
-    service: Math_Shaping_Service) -> app_core.Bounded_Builder_Status {
+    runtime: ^dynviewmodel.Dynview_System,
+    arena: ^storage.Arena_Owner,
+    service: Math_Shaping_Service) -> storage.Bounded_Builder_Status {
 
     cache := &runtime^.compile_cache
     count := len(cache^.shaped_runs) * 4
-    allocator := app_core.arena_owner_allocator(arena)
+    allocator := storage.arena_owner_allocator(arena)
     tables, allocation_error := make(
-        []app_core.Font_Math_Kern_Table, count, allocator)
+        []fontmodel.Font_Math_Kern_Table, count, allocator)
     if allocation_error != nil {
         return .Allocation_Failed
     }
@@ -334,9 +339,9 @@ cache_math_kern_records :: proc(
 //   Shape, measure, and append one already validated semantic text site.
 shape_valid_math_command_site :: proc(
     ctx: Shape_Command_Site_Context,
-    site: app_core.Dynview_Shaped_Site,
+    site: dynviewmodel.Dynview_Shaped_Site,
     command_site: Math_Command_Site,
-    text: string) -> app_core.Bounded_Builder_Status {
+    text: string) -> storage.Bounded_Builder_Status {
     service := ctx.service
     result := service.shape(service.user_data, {
         generation = service.generation,
@@ -368,7 +373,7 @@ shape_valid_math_command_site :: proc(
 
 // Cache one display-growing operator's bounded vertical variants by command index.
 cache_math_operator_variants :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     service: Math_Shaping_Service,
     command_index: int,
     glyph_id: u32) {
@@ -392,7 +397,7 @@ cache_math_operator_variants :: proc(
 
 //   Publish variants for sealed primary runs of display-growing operators.
 cache_math_operator_variant_records :: proc(
-    runtime: ^app_core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     service: Math_Shaping_Service) {
 
     cache := &runtime^.compile_cache
@@ -415,7 +420,7 @@ cache_math_operator_variant_records :: proc(
 cache_math_stretch_source :: proc(
     service: Math_Shaping_Service,
     glyph_id: u32,
-    source: ^app_core.Font_Math_Stretch_Source) {
+    source: ^fontmodel.Font_Math_Stretch_Source) {
 
     source^.raster_ascent = service.raster_ascent
     variant_result := service.glyph_variants(service.user_data, {
@@ -474,8 +479,8 @@ math_accent_text :: proc(accent_mode: i32) -> string {
 //   Query one accent glyph's horizontal variants and assembly.
 cache_math_accent_source :: proc(
     service: Math_Shaping_Service,
-    base: app_core.Font_Math_Glyph_Variant,
-    source: ^app_core.Font_Math_Stretch_Source) -> bool {
+    base: fontmodel.Font_Math_Glyph_Variant,
+    source: ^fontmodel.Font_Math_Stretch_Source) -> bool {
 
     source^.raster_ascent = service.raster_ascent
     source^.variants.valid = true
@@ -512,7 +517,7 @@ cache_math_accent_source :: proc(
 math_accent_base_variant :: proc(
     service: Math_Shaping_Service,
     text: string,
-    flattened: bool) -> (app_core.Font_Math_Glyph_Variant, bool) {
+    flattened: bool) -> (fontmodel.Font_Math_Glyph_Variant, bool) {
 
     result := service.shape(service.user_data, {
         generation = service.generation, text = text,
@@ -540,13 +545,13 @@ math_accent_base_variant :: proc(
 
 //   Publish normal and flattened horizontal sources for every glyph accent.
 cache_math_accent_source_records :: proc(
-    runtime: ^app_core.Dynview_System,
-    arena: ^app_core.Arena_Owner,
-    service: Math_Shaping_Service) -> app_core.Bounded_Builder_Status {
+    runtime: ^dynviewmodel.Dynview_System,
+    arena: ^storage.Arena_Owner,
+    service: Math_Shaping_Service) -> storage.Bounded_Builder_Status {
 
     cache := &runtime^.compile_cache
-    allocator := app_core.arena_owner_allocator(arena)
-    sources, allocation_error := make([][2]app_core.Font_Math_Stretch_Source,
+    allocator := storage.arena_owner_allocator(arena)
+    sources, allocation_error := make([][2]fontmodel.Font_Math_Stretch_Source,
         cache^.math_command_count, allocator)
     if allocation_error != nil {
         return .Allocation_Failed
@@ -574,7 +579,7 @@ cache_math_accent_source_records :: proc(
 
 //   Publish radical and visible delimiter construction sources after cache sealing.
 cache_math_stretch_source_records :: proc(
-    runtime: ^app_core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     service: Math_Shaping_Service) {
 
     cache := &runtime^.compile_cache
@@ -602,7 +607,7 @@ cache_math_stretch_source_records :: proc(
 //   Shape one eligible command site, retaining baseline fallback on native rejection.
 shape_math_command_site :: proc(
     ctx: Shape_Command_Site_Context,
-    site: app_core.Dynview_Shaped_Site) -> app_core.Bounded_Builder_Status {
+    site: dynviewmodel.Dynview_Shaped_Site) -> storage.Bounded_Builder_Status {
 
     command_site := math_command_site(ctx.command, site)
     if !command_site.eligible || command_site.count <= 0 {
@@ -620,8 +625,8 @@ shape_math_command_site :: proc(
 
 //   Select one semantic text span and style from a recursive math command.
 math_command_site :: #force_inline proc(
-    command: app_core.Dynview_Command,
-    site: app_core.Dynview_Shaped_Site) -> Math_Command_Site {
+    command: dynviewmodel.Dynview_Command,
+    site: dynviewmodel.Dynview_Shaped_Site) -> Math_Command_Site {
 
     switch site {
     case .Primary:
@@ -645,7 +650,7 @@ math_command_site :: #force_inline proc(
 //   Aggregate one shaped run's advance, ink bounds, and approved MATH values.
 measure_shaped_glyphs :: proc(
     service: Math_Shaping_Service,
-    glyphs: []app_core.Shaped_Glyph) -> (app_core.Dynview_Shaped_Run, bool) {
+    glyphs: []fontmodel.Shaped_Glyph) -> (dynviewmodel.Dynview_Shaped_Run, bool) {
 
     accumulator: Shaped_Measure_Accumulator
     for glyph, glyph_index in glyphs {
@@ -655,7 +660,7 @@ measure_shaped_glyphs :: proc(
         }
     }
     unit := f32(1.0 / 64.0)
-    return app_core.Dynview_Shaped_Run{
+    return dynviewmodel.Dynview_Shaped_Run{
         base_pixel_size = service.base_pixel_size,
         raster_ascent = service.raster_ascent,
         advance = f32(accumulator.pen_x) * unit,
@@ -672,7 +677,7 @@ measure_shaped_glyphs :: proc(
 measure_shaped_glyph_include :: proc(
     accumulator: ^Shaped_Measure_Accumulator,
     service: Math_Shaping_Service,
-    glyph: app_core.Shaped_Glyph,
+    glyph: fontmodel.Shaped_Glyph,
     glyph_index: int) -> bool {
 
     metrics := service.glyph_metrics(service.user_data,

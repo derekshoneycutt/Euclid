@@ -1,6 +1,9 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import storage "../../core/storage"
+
 
 Document_Greedy_Append :: struct {
     start: int,
@@ -10,13 +13,13 @@ Document_Greedy_Append :: struct {
 }
 
 Document_Line_Builder :: struct {
-    value: ^app_core.Bounded_Element_Builder(
-        app_core.Dynview_Document_Layout_Line),
+    value: ^storage.Bounded_Element_Builder(
+        dynviewmodel.Dynview_Document_Layout_Line),
 }
 
 // Report whether one node is a legal line boundary after its width is consumed.
 document_node_allows_break :: #force_inline proc(
-    node: app_core.Dynview_Document_Layout_Node) -> bool {
+    node: dynviewmodel.Dynview_Document_Layout_Node) -> bool {
 
     return node.kind == .Forced_Break ||
         node.kind == .Glue && node.break_allowed ||
@@ -25,7 +28,7 @@ document_node_allows_break :: #force_inline proc(
 
 // Return the first node retained on a line after discarding leading glue.
 document_skip_leading_glue :: #force_inline proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     start, end: int) -> int {
 
     result := start
@@ -37,7 +40,7 @@ document_skip_leading_glue :: #force_inline proc(
 
 // Return the exclusive line end before trailing glue or a forced-break marker.
 document_trim_line_end :: #force_inline proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     start, end: int) -> int {
 
     result := end
@@ -50,7 +53,7 @@ document_trim_line_end :: #force_inline proc(
 
 // Sum natural widths over one measured node range.
 document_node_range_width :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     start, end: int) -> f32 {
 
     width: f32
@@ -62,15 +65,15 @@ document_node_range_width :: proc(
 
 // Append one measured line range and report its next unconsumed node.
 document_greedy_append_line :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     request: Document_Greedy_Append,
-    lines: Document_Line_Builder) -> (int, app_core.Bounded_Builder_Status) {
+    lines: Document_Line_Builder) -> (int, storage.Bounded_Builder_Status) {
 
     content_start := document_skip_leading_glue(nodes, request.start, request.end)
     content_end := document_trim_line_end(nodes, content_start, request.end)
     width := document_node_range_width(nodes, content_start, content_end)
-    status := app_core.bounded_element_builder_append(lines.value,
-        []app_core.Dynview_Document_Layout_Line{{
+    status := storage.bounded_element_builder_append(lines.value,
+        []dynviewmodel.Dynview_Document_Layout_Line{{
             node_start = content_start,
             node_count = content_end-content_start,
             block_index = request.block_index,
@@ -84,7 +87,7 @@ document_greedy_append_line :: proc(
 
 // Find the measured last-fitting breakpoint for one current line.
 document_greedy_line_end :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     start: int,
     available_width: f32) -> int {
 
@@ -111,12 +114,12 @@ document_greedy_line_end :: proc(
 
 // Break one paragraph into bounded measured lines using last-fitting breakpoints.
 document_greedy_break :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     block_index: int,
     available_width: f32,
-    lines: ^app_core.Bounded_Element_Builder(
-        app_core.Dynview_Document_Layout_Line),
-    first_line_indent: f32 = 0) -> app_core.Bounded_Builder_Status {
+    lines: ^storage.Bounded_Element_Builder(
+        dynviewmodel.Dynview_Document_Layout_Line),
+    first_line_indent: f32 = 0) -> storage.Bounded_Builder_Status {
 
     if available_width <= 0 || lines == nil {
         return .Invalid_Argument

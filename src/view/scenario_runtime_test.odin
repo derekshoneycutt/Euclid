@@ -1,5 +1,9 @@
 package view
 
+import bridgemodel "../bridge/model"
+
+import presentation_model "../bridge/presentation"
+
 import julia "../bridge"
 import "../core"
 import capture "../evidence/capture"
@@ -99,7 +103,7 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
     state := new(Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
-    animation := new(core.Euclid_Julia_Animation_Interface, context.allocator)
+    animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
     state^.julia_interface^.selected_animation = animation
     state^.ui_runtime.vertical_split_x = 900
@@ -159,12 +163,12 @@ scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {
 scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(core.Julia_Runtime_Service, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(service)
     state^.julia_runtime_service = service
     ji := &state^.julia_interface_slots[0]
     state^.julia_interface = ji
-    nodes: [2]core.Euclid_Julia_Animation_Interface
+    nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
     nodes[0].name = "Group"
     nodes[1].name = "Target"
     nodes[0].next_in_registry = &nodes[1]
@@ -193,7 +197,7 @@ scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
 scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(core.Julia_Runtime_Service, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(service)
     state^.julia_runtime_service = service
     service^.runtime_generation = 7
@@ -212,15 +216,15 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
 
 // Verify one queued view-content request retains exact source and lifecycle identity.
 scenario_expect_view_content_request :: proc(
-    t: ^testing.T, service: ^core.Julia_Runtime_Service,
-    animation: ^core.Euclid_Julia_Animation_Interface,
+    t: ^testing.T, service: ^bridgemodel.Julia_Runtime_Service,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
     identity: evidence_trace.Identity) {
     message, received := julia.communication_link_try_recv(&service^.request_link)
     testing.expect(t, received)
-    request, request_ok := message^.(core.Scenario_View_Content_Requested)
+    request, request_ok := message^.(bridgemodel.Scenario_View_Content_Requested)
     testing.expect(t, request_ok)
     testing.expect_value(t, string(request.source), "$A_1$")
-    testing.expect_value(t, request.mime, core.Presentation_Mime.Text_Latex)
+    testing.expect_value(t, request.mime, presentation_model.Presentation_Mime.Text_Latex)
     testing.expect_value(t, request.runtime_generation, u64(7))
     testing.expect_value(t, request.animation_generation, u64(9))
     testing.expect_value(t, request.animation, animation)
@@ -234,7 +238,7 @@ scenario_expect_view_content_request :: proc(
 scenario_view_content_submits_typed_owner_request :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(core.Julia_Runtime_Service, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(service)
     testing.expect_value(t, julia.init_julia_runtime_channels(service),
         runtime.Allocator_Error.None)

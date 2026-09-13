@@ -1,14 +1,19 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
+import storage "../../core/storage"
+
 import "core:mem"
 import "core:testing"
 
 Document_Layout_Test_Fixture :: struct {
-    blocks: [1]app_core.Dynview_Document_Block,
-    inlines: [6]app_core.Dynview_Document_Inline,
-    runs: [2]app_core.Dynview_Document_Shaped_Run,
-    glyphs: [4]app_core.Shaped_Glyph,
+    blocks: [1]dynviewmodel.Dynview_Document_Block,
+    inlines: [6]dynviewmodel.Dynview_Document_Inline,
+    runs: [2]dynviewmodel.Dynview_Document_Shaped_Run,
+    glyphs: [4]fontmodel.Shaped_Glyph,
 }
 
 // Initialize the semantic records shared by document layout tests.
@@ -48,12 +53,12 @@ document_layout_test_semantics :: proc(fixture: ^Document_Layout_Test_Fixture) {
 // Allocate one runtime outside the stack and attach its semantic layout inputs.
 document_layout_test_runtime :: proc(
     t: ^testing.T,
-    owner: ^app_core.Arena_Owner,
-    fixture: ^Document_Layout_Test_Fixture) -> ^app_core.Dynview_System {
+    owner: ^storage.Arena_Owner,
+    fixture: ^Document_Layout_Test_Fixture) -> ^dynviewmodel.Dynview_System {
 
-    testing.expect(t, app_core.arena_owner_init(owner, 4*uint(mem.Megabyte)))
-    allocator := app_core.arena_owner_allocator(owner)
-    runtime := new(app_core.Dynview_System, allocator)
+    testing.expect(t, storage.arena_owner_init(owner, 4*uint(mem.Megabyte)))
+    allocator := storage.arena_owner_allocator(owner)
+    runtime := new(dynviewmodel.Dynview_System, allocator)
     testing.expect(t, runtime != nil)
     document_layout_test_semantics(fixture)
     runtime^.content.document_blocks = fixture^.blocks[:]
@@ -74,7 +79,7 @@ document_layout_test_runtime :: proc(
 // Verify semantic shapes retain legacy authored units and fill-only point styling.
 @(test)
 document_shape_geometry_preserves_authored_units :: proc(t: ^testing.T) {
-    point := app_core.Dynview_Document_Shape{
+    point := dynviewmodel.Dynview_Document_Shape{
         present = true, kind = .Point, width = 1, height = 1, thickness = 1}
     point_command, point_ok := document_shape_command(point)
     point_geometry, point_geometry_ok := document_shape_geometry(point, 8)
@@ -83,10 +88,10 @@ document_shape_geometry_preserves_authored_units :: proc(t: ^testing.T) {
     testing.expect_value(t, point_geometry.draw_width, f32(16))
     testing.expect_value(t, point_geometry.draw_height, f32(16))
 
-    line := app_core.Dynview_Document_Inline{
+    line := dynviewmodel.Dynview_Document_Inline{
         kind = .Shape, shape = {present = true, kind = .Line,
             width = 3, height = 1, thickness = 4}}
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
     cache^.last_cell_width = 8
     line_node, line_ok := document_shape_node(cache, line, 0)
@@ -95,7 +100,7 @@ document_shape_geometry_preserves_authored_units :: proc(t: ^testing.T) {
     testing.expect_value(t, line_node.ascent, f32(2))
     testing.expect_value(t, line_node.descent, f32(2))
 
-    pie := app_core.Dynview_Document_Shape{
+    pie := dynviewmodel.Dynview_Document_Shape{
         present = true, kind = .Angle, width = 2, height = 1,
         thickness = 1, filled = true, start_angle = 0, end_angle = 90}
     pie_geometry, pie_ok := document_shape_geometry(pie, 8)
@@ -107,38 +112,38 @@ document_shape_geometry_preserves_authored_units :: proc(t: ^testing.T) {
 // Verify every semantic layout output family rejects one record beyond its limit.
 @(test)
 document_layout_builders_enforce_all_output_limits :: proc(t: ^testing.T) {
-    arena: app_core.Arena_Owner
-    testing.expect(t, app_core.arena_owner_init(&arena, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&arena)
+    arena: storage.Arena_Owner
+    testing.expect(t, storage.arena_owner_init(&arena, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&arena)
     builders: Document_Layout_Builders
     testing.expect_value(t, document_layout_builders_init(&builders, &arena),
-        app_core.Bounded_Builder_Status.Ok)
-    builders.nodes.count = app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_NODES
-    builders.blocks.count = app_core.DYNVIEW_MAX_DOCUMENT_BLOCKS
-    builders.lines.count = app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_LINES
-    builders.items.count = app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_ITEMS
-    builders.copy_targets.count = app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_COPY_TARGETS
+        storage.Bounded_Builder_Status.Ok)
+    builders.nodes.count = dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_NODES
+    builders.blocks.count = dynviewmodel.DYNVIEW_MAX_DOCUMENT_BLOCKS
+    builders.lines.count = dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_LINES
+    builders.items.count = dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_ITEMS
+    builders.copy_targets.count = dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_COPY_TARGETS
 
     testing.expect_value(t, document_append_layout_node(&builders, {}),
-        app_core.Bounded_Builder_Status.Limit_Exceeded)
-    testing.expect_value(t, app_core.bounded_element_builder_append(
-        &builders.blocks, []app_core.Dynview_Document_Layout_Block{{}}),
-        app_core.Bounded_Builder_Status.Limit_Exceeded)
-    testing.expect_value(t, app_core.bounded_element_builder_append(
-        &builders.lines, []app_core.Dynview_Document_Layout_Line{{}}),
-        app_core.Bounded_Builder_Status.Limit_Exceeded)
-    testing.expect_value(t, app_core.bounded_element_builder_append(
-        &builders.items, []app_core.Dynview_Document_Layout_Item{{}}),
-        app_core.Bounded_Builder_Status.Limit_Exceeded)
-    testing.expect_value(t, app_core.bounded_element_builder_append(
+        storage.Bounded_Builder_Status.Limit_Exceeded)
+    testing.expect_value(t, storage.bounded_element_builder_append(
+        &builders.blocks, []dynviewmodel.Dynview_Document_Layout_Block{{}}),
+        storage.Bounded_Builder_Status.Limit_Exceeded)
+    testing.expect_value(t, storage.bounded_element_builder_append(
+        &builders.lines, []dynviewmodel.Dynview_Document_Layout_Line{{}}),
+        storage.Bounded_Builder_Status.Limit_Exceeded)
+    testing.expect_value(t, storage.bounded_element_builder_append(
+        &builders.items, []dynviewmodel.Dynview_Document_Layout_Item{{}}),
+        storage.Bounded_Builder_Status.Limit_Exceeded)
+    testing.expect_value(t, storage.bounded_element_builder_append(
         &builders.copy_targets,
-        []app_core.Dynview_Document_Layout_Copy_Target{{}}),
-        app_core.Bounded_Builder_Status.Limit_Exceeded)
+        []dynviewmodel.Dynview_Document_Layout_Copy_Target{{}}),
+        storage.Bounded_Builder_Status.Limit_Exceeded)
 }
 
 // Require canonical copy targets and nonoverlapping vertical placement.
 document_layout_expect_mixed_copy_and_bounds :: proc(
-    t: ^testing.T, cache: ^app_core.Dynview_Compile_Cache) {
+    t: ^testing.T, cache: ^dynviewmodel.Dynview_Compile_Cache) {
     testing.expect_value(t, len(cache^.document_layout_copy_targets), 4)
     testing.expect(t, cache^.document_layout_copy_targets[0].canonical_text)
     testing.expect_value(t, cache^.document_layout_copy_targets[0].count, 2)
@@ -158,21 +163,21 @@ document_layout_expect_mixed_copy_and_bounds :: proc(
 // Require the complete mixed-content layout contract after a successful rebuild.
 document_layout_expect_mixed_records :: proc(
     t: ^testing.T,
-    status: app_core.Bounded_Builder_Status,
-    cache: ^app_core.Dynview_Compile_Cache) {
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    status: storage.Bounded_Builder_Status,
+    cache: ^dynviewmodel.Dynview_Compile_Cache) {
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     testing.expect(t, cache^.document_layout_is_valid)
     testing.expect_value(t, len(cache^.document_layout_nodes), 6)
     testing.expect_value(t, len(cache^.document_layout_lines), 3)
     testing.expect_value(t, len(cache^.document_layout_items), 3)
     testing.expect_value(t, cache^.document_layout_nodes[1].kind,
-        app_core.Dynview_Document_Layout_Node_Kind.Glue)
+        dynviewmodel.Dynview_Document_Layout_Node_Kind.Glue)
     testing.expect_value(t, cache^.document_layout_nodes[2].box_kind,
-        app_core.Dynview_Document_Box_Kind.Math)
+        dynviewmodel.Dynview_Document_Box_Kind.Math)
     testing.expect_value(t, cache^.document_layout_nodes[3].kind,
-        app_core.Dynview_Document_Layout_Node_Kind.Penalty)
+        dynviewmodel.Dynview_Document_Layout_Node_Kind.Penalty)
     testing.expect_value(t, cache^.document_layout_items[2].box_kind,
-        app_core.Dynview_Document_Box_Kind.Shape)
+        dynviewmodel.Dynview_Document_Box_Kind.Shape)
     testing.expect_value(t, cache^.document_layout_items[2].source_offset, 11)
     testing.expect_value(t, cache^.document_layout_items[2].width, f32(33))
     testing.expect_value(t, cache^.document_layout_items[2].ascent, f32(16.5))
@@ -185,12 +190,12 @@ document_layout_expect_mixed_records :: proc(
 // Verify mixed semantic nodes seal into measured lines and positioned source items.
 @(test)
 document_layout_builds_mixed_measured_records :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    defer storage.arena_owner_destroy(&runtime_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
     status := rebuild_document_layout_cache(runtime, &cache_owner)
     document_layout_expect_mixed_records(t, status, &runtime^.compile_cache)
 }
@@ -198,40 +203,40 @@ document_layout_builds_mixed_measured_records :: proc(t: ^testing.T) {
 // Verify changing only panel width deterministically reflows measured prose.
 @(test)
 document_layout_reflows_from_pixel_width :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
+    defer storage.arena_owner_destroy(&runtime_owner)
     fixture.blocks[0].inline_count = 3
     fixture.inlines[2] = {kind = .Text, text_offset = 5, text_count = 4}
     fixture.runs[1].inline_index = 1
-    third_run := app_core.Dynview_Document_Shaped_Run{
+    third_run := dynviewmodel.Dynview_Document_Shaped_Run{
         inline_index = 2, text_offset = 5, text_count = 4,
         glyph_start = 3, glyph_count = 1, base_pixel_size = 16,
         width = 40, ascent = 12, descent = 3}
-    runs := [3]app_core.Dynview_Document_Shaped_Run{
+    runs := [3]dynviewmodel.Dynview_Document_Shaped_Run{
         fixture.runs[0], fixture.runs[1], third_run}
     runtime^.compile_cache.document_shaped_runs = runs[:]
     fixture.glyphs[3] = {glyph_id = 4, x_advance = 2560}
     runtime^.compile_cache.document_shaped_glyphs = fixture.glyphs[:]
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     runtime^.compile_cache.last_panel_width = 122
     wide_status := rebuild_document_layout_cache(runtime, &cache_owner)
     wide_lines := len(runtime^.compile_cache.document_layout_lines)
-    app_core.arena_owner_reset(&cache_owner)
+    storage.arena_owner_reset(&cache_owner)
     runtime^.compile_cache.last_panel_width = 95
     narrow_status := rebuild_document_layout_cache(runtime, &cache_owner)
 
-    testing.expect_value(t, wide_status, app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, narrow_status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, wide_status, storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, narrow_status, storage.Bounded_Builder_Status.Ok)
     testing.expect_value(t, wide_lines, 1)
     testing.expect_value(t, len(runtime^.compile_cache.document_layout_lines), 2)
     targets := runtime^.compile_cache.document_layout_copy_targets
     testing.expect_value(t, targets[len(targets)-1].line_index, 1)
     testing.expect_value(t, targets[len(targets)-1].separator_before,
-        app_core.Dynview_Document_Selection_Separator.None)
+        dynviewmodel.Dynview_Document_Selection_Separator.None)
     testing.expect_value(t, targets[len(targets)-1].x, f32(0))
     testing.expect_value(t, targets[len(targets)-1].offset, 5)
 }
@@ -239,22 +244,22 @@ document_layout_reflows_from_pixel_width :: proc(t: ^testing.T) {
 // Verify no-indent controls both the first-line measure and positioned origin.
 @(test)
 document_layout_applies_semantic_paragraph_indent :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
+    defer storage.arena_owner_destroy(&runtime_owner)
     fixture.blocks[0].inline_count = 1
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     indented_status := rebuild_document_layout_cache(runtime, &cache_owner)
     indented_x := runtime^.compile_cache.document_layout_items[0].x
-    app_core.arena_owner_reset(&cache_owner)
+    storage.arena_owner_reset(&cache_owner)
     fixture.blocks[0].no_indent = true
     plain_status := rebuild_document_layout_cache(runtime, &cache_owner)
 
-    testing.expect_value(t, indented_status, app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, plain_status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, indented_status, storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, plain_status, storage.Bounded_Builder_Status.Ok)
     testing.expect_value(t, indented_x, f32(16))
     testing.expect_value(t,
         runtime^.compile_cache.document_layout_items[0].x, f32(0))
@@ -263,21 +268,21 @@ document_layout_applies_semantic_paragraph_indent :: proc(t: ^testing.T) {
 // Verify container margins govern both line breaking and final placement.
 @(test)
 document_layout_applies_container_measure :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
+    defer storage.arena_owner_destroy(&runtime_owner)
     fixture.blocks[0].container_kind = .Quote
     fixture.blocks[0].container_depth = 1
     fixture.blocks[0].left_margin_levels = 1
     fixture.blocks[0].right_margin_levels = 1
     fixture.blocks[0].no_indent = true
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     testing.expect(t, len(runtime^.compile_cache.document_layout_lines) > 1)
     for line in runtime^.compile_cache.document_layout_lines {
         testing.expect_value(t, line.x, f32(32))
@@ -286,10 +291,10 @@ document_layout_applies_container_measure :: proc(t: ^testing.T) {
 
 // Populate the caller-owned arrays for one itemized label and body fixture.
 document_layout_list_item_fixture :: proc(
-    blocks: ^[2]app_core.Dynview_Document_Block,
-    inlines: ^[2]app_core.Dynview_Document_Inline,
-    runs: ^[2]app_core.Dynview_Document_Shaped_Run,
-    glyphs: ^[2]app_core.Shaped_Glyph) {
+    blocks: ^[2]dynviewmodel.Dynview_Document_Block,
+    inlines: ^[2]dynviewmodel.Dynview_Document_Inline,
+    runs: ^[2]dynviewmodel.Dynview_Document_Shaped_Run,
+    glyphs: ^[2]fontmodel.Shaped_Glyph) {
     blocks^ = {
         {kind = .List_Item, inline_start = 0, inline_count = 1,
             source_count = 5, alignment = .Left, container_kind = .Itemize,
@@ -320,25 +325,25 @@ document_layout_list_item_fixture :: proc(
 // Verify list labels occupy the gutter beside a hanging-indented body.
 @(test)
 document_layout_places_list_label_beside_body :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
-    blocks: [2]app_core.Dynview_Document_Block
-    inlines: [2]app_core.Dynview_Document_Inline
-    runs: [2]app_core.Dynview_Document_Shaped_Run
-    glyphs: [2]app_core.Shaped_Glyph
+    defer storage.arena_owner_destroy(&runtime_owner)
+    blocks: [2]dynviewmodel.Dynview_Document_Block
+    inlines: [2]dynviewmodel.Dynview_Document_Inline
+    runs: [2]dynviewmodel.Dynview_Document_Shaped_Run
+    glyphs: [2]fontmodel.Shaped_Glyph
     document_layout_list_item_fixture(&blocks, &inlines, &runs, &glyphs)
     runtime^.content.document_blocks = blocks[:]
     runtime^.content.document_inlines = inlines[:]
     runtime^.compile_cache.document_shaped_runs = runs[:]
     runtime^.compile_cache.document_shaped_glyphs = glyphs[:]
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     lines := runtime^.compile_cache.document_layout_lines
     testing.expect_value(t, len(lines), 2)
     testing.expect_value(t, lines[0].x, f32(16))
@@ -351,7 +356,7 @@ document_layout_places_list_label_beside_body :: proc(t: ^testing.T) {
 // Verify description items share a label column and wide labels move above the body.
 @(test)
 document_layout_resolves_description_label_columns :: proc(t: ^testing.T) {
-    narrow := app_core.Dynview_Document_Block{
+    narrow := dynviewmodel.Dynview_Document_Block{
         kind = .List_Item, container_kind = .Description,
         left_margin_levels = 1, list_kind = .Description, list_id = 1}
     body := narrow
@@ -378,17 +383,17 @@ document_layout_resolves_description_label_columns :: proc(t: ^testing.T) {
 // Verify failed lowering leaves no partially published layout aliases.
 @(test)
 document_layout_invalid_input_rolls_back :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
+    defer storage.arena_owner_destroy(&runtime_owner)
     runtime^.compile_cache.math_programs[0].valid = false
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Invalid_Argument)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Invalid_Argument)
     testing.expect(t, !runtime^.compile_cache.document_layout_is_valid)
     testing.expect_value(t, len(runtime^.compile_cache.document_layout_nodes), 0)
     testing.expect_value(t, len(runtime^.compile_cache.document_layout_lines), 0)
@@ -400,15 +405,15 @@ document_layout_invalid_input_rolls_back :: proc(t: ^testing.T) {
 // Rebuild one width and verify exact lines remain inside outward block reservations.
 document_layout_expect_vertical_containment :: proc(
     t: ^testing.T,
-    runtime: ^app_core.Dynview_System,
-    cache_owner: ^app_core.Arena_Owner,
+    runtime: ^dynviewmodel.Dynview_System,
+    cache_owner: ^storage.Arena_Owner,
     panel_width: f32) -> f32 {
 
-    app_core.arena_owner_reset(cache_owner)
+    storage.arena_owner_reset(cache_owner)
     runtime^.compile_cache.last_panel_width = panel_width
     status := rebuild_document_layout_cache(runtime, cache_owner)
     cache := &runtime^.compile_cache
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     for line_index in 1..<len(cache^.document_layout_lines) {
         testing.expect(t, cache^.document_layout_lines[line_index-1].bottom <=
             cache^.document_layout_lines[line_index].top)
@@ -423,12 +428,12 @@ document_layout_expect_vertical_containment :: proc(
 // Verify tall mixed content remains contained while three panel widths reflow it.
 @(test)
 document_layout_vertical_reservations_contain_three_widths :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    defer storage.arena_owner_destroy(&runtime_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     wide_height := document_layout_expect_vertical_containment(
         t, runtime, &cache_owner, 160)
@@ -444,7 +449,7 @@ document_layout_vertical_reservations_contain_three_widths :: proc(t: ^testing.T
 // Verify paragraph/display flow shares exact positions and reserves completed blocks.
 document_layout_expect_outer_grid :: proc(
     t: ^testing.T,
-    cache: ^app_core.Dynview_Compile_Cache) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache) {
 
     testing.expect_value(t, cache^.document_layout_blocks[1].spacing_before, f32(12))
     testing.expect_value(t, cache^.document_layout_blocks[2].spacing_before, f32(12))
@@ -467,11 +472,11 @@ document_layout_expect_outer_grid :: proc(
 // Verify paragraph/display flow shares exact positions and reserves completed blocks.
 @(test)
 document_layout_places_display_blocks_on_outer_grid :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
-    blocks := [3]app_core.Dynview_Document_Block{
+    defer storage.arena_owner_destroy(&runtime_owner)
+    blocks := [3]dynviewmodel.Dynview_Document_Block{
         {kind = .Paragraph, inline_start = 0, inline_count = 1,
             source_count = 1, alignment = .Left},
         {kind = .Display, inline_start = 1, inline_count = 1,
@@ -479,7 +484,7 @@ document_layout_places_display_blocks_on_outer_grid :: proc(t: ^testing.T) {
         {kind = .Paragraph, inline_start = 2, inline_count = 1,
             source_offset = 2, source_count = 1, alignment = .Right},
     }
-    inlines := [3]app_core.Dynview_Document_Inline{
+    inlines := [3]dynviewmodel.Dynview_Document_Inline{
         {kind = .Shape, source_count = 1,
             shape = {present = true, kind = .Point, width = 1, height = 1}},
         {kind = .Shape, source_offset = 1, source_count = 1,
@@ -491,31 +496,31 @@ document_layout_places_display_blocks_on_outer_grid :: proc(t: ^testing.T) {
     runtime^.content.document_inlines = inlines[:]
     runtime^.compile_cache.document_shaped_runs = nil
     runtime^.compile_cache.document_shaped_glyphs = nil
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     document_layout_expect_outer_grid(t, &runtime^.compile_cache)
 }
 
 // Verify align rows share one measured alignment axis and reserve number space.
 @(test)
 document_layout_aligns_technical_display_columns :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
-    block := [1]app_core.Dynview_Document_Block{{kind = .Display,
+    defer storage.arena_owner_destroy(&runtime_owner)
+    block := [1]dynviewmodel.Dynview_Document_Block{{kind = .Display,
         inline_count = 4, display_kind = .Align, display_row_count = 2}}
-    rows := [2]app_core.Dynview_Document_Display_Row{
+    rows := [2]dynviewmodel.Dynview_Document_Display_Row{
         {primary_program_id = 0, secondary_program_id = 1,
             alignment = .Center, number = 1},
         {primary_program_id = 2, secondary_program_id = 3,
             alignment = .Center},
     }
-    inlines := [4]app_core.Dynview_Document_Inline{
+    inlines := [4]dynviewmodel.Dynview_Document_Inline{
         {kind = .Math, math_program_id = 0}, {kind = .Math, math_program_id = 1},
         {kind = .Math, math_program_id = 2}, {kind = .Math, math_program_id = 3},
     }
@@ -529,8 +534,8 @@ document_layout_aligns_technical_display_columns :: proc(t: ^testing.T) {
         cache^.math_programs[index] = {
             valid = true, draw_width = width, ascent = 12, descent = 4}
     }
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)
 
@@ -540,10 +545,10 @@ document_layout_aligns_technical_display_columns :: proc(t: ^testing.T) {
 // Require aligned rows to share an axis while preserving numbering policy.
 document_layout_expect_aligned_columns :: proc(
     t: ^testing.T,
-    status: app_core.Bounded_Builder_Status,
-    cache: ^app_core.Dynview_Compile_Cache) {
+    status: storage.Bounded_Builder_Status,
+    cache: ^dynviewmodel.Dynview_Compile_Cache) {
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     testing.expect_value(t, len(cache^.document_layout_lines), 2)
     testing.expect_value(t, len(cache^.document_layout_items), 6)
     testing.expect_value(t, cache^.document_layout_items[2].x,
@@ -555,19 +560,19 @@ document_layout_expect_aligned_columns :: proc(
 // Verify multline row alignment and colliding final-number fallback are deterministic.
 @(test)
 document_layout_places_narrow_numbered_multline :: proc(t: ^testing.T) {
-    runtime_owner, cache_owner: app_core.Arena_Owner
+    runtime_owner, cache_owner: storage.Arena_Owner
     fixture: Document_Layout_Test_Fixture
     runtime := document_layout_test_runtime(t, &runtime_owner, &fixture)
-    defer app_core.arena_owner_destroy(&runtime_owner)
-    block := [1]app_core.Dynview_Document_Block{{kind = .Display,
+    defer storage.arena_owner_destroy(&runtime_owner)
+    block := [1]dynviewmodel.Dynview_Document_Block{{kind = .Display,
         inline_count = 3, display_kind = .Multline, display_row_count = 3}}
-    rows := [3]app_core.Dynview_Document_Display_Row{
+    rows := [3]dynviewmodel.Dynview_Document_Display_Row{
         {primary_program_id = 0, secondary_program_id = -1, alignment = .Left},
         {primary_program_id = 1, secondary_program_id = -1, alignment = .Center},
         {primary_program_id = 2, secondary_program_id = -1,
             alignment = .Right, number = 1},
     }
-    inlines := [3]app_core.Dynview_Document_Inline{
+    inlines := [3]dynviewmodel.Dynview_Document_Inline{
         {kind = .Math, math_program_id = 0}, {kind = .Math, math_program_id = 1},
         {kind = .Math, math_program_id = 2},
     }
@@ -582,8 +587,8 @@ document_layout_places_narrow_numbered_multline :: proc(t: ^testing.T) {
         cache^.math_programs[index] = {
             valid = true, draw_width = width, ascent = 12, descent = 4}
     }
-    testing.expect(t, app_core.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
-    defer app_core.arena_owner_destroy(&cache_owner)
+    testing.expect(t, storage.arena_owner_init(&cache_owner, 2*uint(mem.Megabyte)))
+    defer storage.arena_owner_destroy(&cache_owner)
 
     status := rebuild_document_layout_cache(runtime, &cache_owner)
     lines := cache^.document_layout_lines
@@ -594,11 +599,11 @@ document_layout_places_narrow_numbered_multline :: proc(t: ^testing.T) {
 // Require deterministic narrow multline placement and number fallback.
 document_layout_expect_narrow_multline :: proc(
     t: ^testing.T,
-    status: app_core.Bounded_Builder_Status,
-    cache: ^app_core.Dynview_Compile_Cache,
-    lines: []app_core.Dynview_Document_Layout_Line) {
+    status: storage.Bounded_Builder_Status,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    lines: []dynviewmodel.Dynview_Document_Layout_Line) {
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     testing.expect_value(t, len(lines), 3)
     testing.expect_value(t, lines[0].x, f32(0))
     testing.expect_value(t, lines[1].x, f32(27))

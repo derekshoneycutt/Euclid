@@ -1,5 +1,8 @@
 package particles
 
+import shapemodel "../shapes/model"
+import particlemodel "model"
+
 // Simple particle system kinda took off away from me a bit here, but it has a few important
 // points to discuss:
 
@@ -20,22 +23,17 @@ package particles
 // - Flicker move in a 3D velocity away from the point of emission. They randomly show as
 //   single pixels drawn on the screen. The result is a kind of sparkling flicker effect.
 
-import "../core"
-import view_core "../view/core"
-
 import "core:math"
 import "core:mem"
 import rand "core:math/rand"
 
 import rl "vendor:raylib"
 
-Vector2 :: core.Vector2
-Vector3 :: core.Vector3
-Particle :: core.Particle
-Particle_System :: core.Particle_System
-Iso_Scale :: core.Iso_Scale
-
-MAX_PARTICLES :: core.MAX_PARTICLES
+Vector2 :: rl.Vector2
+Vector3 :: rl.Vector3
+Particle :: particlemodel.Particle
+Particle_System :: particlemodel.Particle_System
+MAX_PARTICLES :: particlemodel.MAX_PARTICLES
 
 SPAWN_INTERVAL :: 0.012 // seconds
 PARTICLE_LIFE :: 0.75  // seconds
@@ -100,12 +98,12 @@ DUST_COLLISION_NORMAL_JITTER_RADIANS :: 0.18
 
 PARTICLE_RANDOM_SEED :: u64(0x9e3779b97f4a7c15)
 
-DUST_GRID_CELL_SIZE :: core.DUST_GRID_CELL_SIZE
-DUST_GRID_DIM :: core.DUST_GRID_DIM
-DUST_GRID_DIM_SQUARED :: core.DUST_GRID_DIM_SQUARED
-DUST_GRID_BUCKET_CAP :: core.DUST_GRID_BUCKET_CAP
-DUST_GRID_BUCKET_COUNT :: core.DUST_GRID_BUCKET_COUNT
-DUST_COLLISION_PAIR_CAP :: core.DUST_COLLISION_PAIR_CAP
+DUST_GRID_CELL_SIZE :: particlemodel.DUST_GRID_CELL_SIZE
+DUST_GRID_DIM :: particlemodel.DUST_GRID_DIM
+DUST_GRID_DIM_SQUARED :: particlemodel.DUST_GRID_DIM_SQUARED
+DUST_GRID_BUCKET_CAP :: particlemodel.DUST_GRID_BUCKET_CAP
+DUST_GRID_BUCKET_COUNT :: particlemodel.DUST_GRID_BUCKET_COUNT
+DUST_COLLISION_PAIR_CAP :: particlemodel.DUST_COLLISION_PAIR_CAP
 
 DUST_GRID_NEIGHBORS :: [5][2]int{{0,0},{1,0},{-1,1},{0,1},{1,1}}
 
@@ -149,7 +147,7 @@ Circle_Dust_Emission :: struct {
 // Group one world-backed clear-burst operation and its render color.
 Shape_World_Burst_Context :: struct {
     particles: ^Particle_System,
-    world: ^core.Shape_World,
+    world: ^shapemodel.Shape_World,
     color: rl.Color,
 }
 
@@ -347,7 +345,7 @@ kick_existing_dust_index :: proc(ps: ^Particle_System, i: int) {
 //
 // Returns:
 //   - none.
-kick_existing_dust :: proc(ps: ^Particle_System, iso_scale: ^Iso_Scale = nil) {
+kick_existing_dust :: proc(ps: ^Particle_System) {
     for i in 0..<ps^.use_max_dust_particles {
         if !ps.low_particles[i].alive {
             continue
@@ -356,16 +354,13 @@ kick_existing_dust :: proc(ps: ^Particle_System, iso_scale: ^Iso_Scale = nil) {
         kick_existing_dust_index(ps, i)
     }
 
-    if iso_scale != nil {
-        view_core.screenshake_on_dust_kick(iso_scale)
-    }
 }
 
 //   Resolve one direct world transform position for particle emission.
 shape_world_burst_position :: proc(
-    world: ^core.Shape_World,
-    entity: core.Shape_Entity) -> (Vector3, bool) {
-    transform, found := core.shape_component_get(
+    world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity) -> (Vector3, bool) {
+    transform, found := shapemodel.shape_component_get(
         &world.transforms, &world.registry, entity)
     if !found {
         return {}, false
@@ -376,8 +371,8 @@ shape_world_burst_position :: proc(
 //   Emit one world polygon through the existing bounded fill sampler.
 emit_shape_world_polygon_burst :: proc(
     ctx: Shape_World_Burst_Context,
-    geometry: core.Shape_Polygon_Geometry) {
-    entities, found := core.shape_polygon_vertices(ctx.world, geometry)
+    geometry: shapemodel.Shape_Polygon_Geometry) {
+    entities, found := shapemodel.shape_polygon_vertices(ctx.world, geometry)
     vertices: [12]Vector3
     if !found || len(entities) > len(vertices) {
         return
@@ -396,7 +391,7 @@ emit_shape_world_polygon_burst :: proc(
 //   Emit one world arc through the existing bounded sweep sampler.
 emit_shape_world_arc_burst :: proc(
     ctx: Shape_World_Burst_Context,
-    geometry: core.Shape_Arc_Geometry,
+    geometry: shapemodel.Shape_Arc_Geometry,
     offset: f32,
     sample_count: int) {
     center, center_ok := shape_world_burst_position(ctx.world, geometry.center)
@@ -412,8 +407,8 @@ emit_shape_world_arc_burst :: proc(
 //   Emit one direct world geometry using the legacy sampling behavior.
 emit_shape_world_geometry_burst :: proc(
     ctx: Shape_World_Burst_Context,
-    entity: core.Shape_Entity,
-    geometry: core.Shape_Geometry,
+    entity: shapemodel.Shape_Entity,
+    geometry: shapemodel.Shape_Geometry,
     offset: f32) {
     switch geometry.kind {
     case .Point:
@@ -442,32 +437,31 @@ emit_shape_world_geometry_burst :: proc(
 //   Emit clear dust for one visible entity before its presentation is hidden.
 emit_shape_world_hide_burst :: proc(
     ps: ^Particle_System,
-    world: ^core.Shape_World,
-    entity: core.Shape_Entity,
-    iso_scale: ^Iso_Scale = nil,
+    world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity,
     kick_dust: bool = true) -> bool {
     if ps == nil || world == nil || ps.use_max_dust_particles < 1 ||
-        !core.shape_registry_resolves(&world.registry, entity) {
+        !shapemodel.shape_registry_resolves(&world.registry, entity) {
         return false
     }
-    style, found := core.shape_component_get(
+    style, found := shapemodel.shape_component_get(
         &world.render_styles, &world.registry, entity)
     if !found || !style^.visible {
         return false
     }
-    if core.shape_component_contains(&world.labels, &world.registry, entity) {
+    if shapemodel.shape_component_contains(&world.labels, &world.registry, entity) {
         position, position_found := shape_world_burst_position(world, entity)
         if !position_found {return false}
-        if kick_dust {kick_existing_dust(ps, iso_scale)}
+        if kick_dust {kick_existing_dust(ps)}
         emit_label_burst(ps, position, style^.color)
         return true
     }
-    geometry, geometry_found := core.shape_component_get(
+    geometry, geometry_found := shapemodel.shape_component_get(
         &world.geometries, &world.registry, entity)
     if !geometry_found || geometry^.kind == .Pen || geometry^.kind == .Compass {
         return false
     }
-    if kick_dust {kick_existing_dust(ps, iso_scale)}
+    if kick_dust {kick_existing_dust(ps)}
     emit_shape_world_geometry_burst(
         {ps, world, style^.color}, entity, geometry^, style^.offset)
     return true
@@ -476,30 +470,31 @@ emit_shape_world_hide_burst :: proc(
 //   Emit clear dust for every visible label and geometry in one canonical world.
 emit_shape_world_clear_burst :: proc(
     ps: ^Particle_System,
-    world: ^core.Shape_World,
-    iso_scale: ^Iso_Scale = nil) {
+    world: ^shapemodel.Shape_World) -> bool {
     if ps == nil || world == nil || ps.use_max_dust_particles < 1 {
-        return
+        return false
     }
-    kick_existing_dust(ps, iso_scale)
+    kick_existing_dust(ps)
     for index in 0..<world.render_styles.count {
         entity := world.render_styles.entities[index]
         style := world.render_styles.values[index]
-        if !style.visible || !core.shape_registry_resolves(&world.registry, entity) {
+        if !style.visible ||
+           !shapemodel.shape_registry_resolves(&world.registry, entity) {
             continue
         }
         ctx := Shape_World_Burst_Context{ps, world, style.color}
-        if core.shape_component_contains(&world.labels, &world.registry, entity) {
+        if shapemodel.shape_component_contains(&world.labels, &world.registry, entity) {
             position, found := shape_world_burst_position(world, entity)
             if found {emit_label_burst(ps, position, style.color)}
             continue
         }
-        geometry, found := core.shape_component_get(
+        geometry, found := shapemodel.shape_component_get(
             &world.geometries, &world.registry, entity)
         if found {
             emit_shape_world_geometry_burst(ctx, entity, geometry^, style.offset)
         }
     }
+    return true
 }
 
 //   Advance particle simulation for dust, Ember, and Flicker layers.
@@ -833,7 +828,7 @@ spawn_dust_particle_index :: proc(
     ps.low_particles[i].dust_sprite_index = u8(random_i32_range(
         ps,
         0,
-        core.DUST_ATLAS_VARIANT_COUNT - 1))
+        particlemodel.DUST_ATLAS_VARIANT_COUNT - 1))
 
     ps.low_particles.pos_x[i] = origin.x + random_f32_range(ps, -0.0022, 0.0022)
     ps.low_particles.pos_y[i] = origin.y + random_f32_range(ps, -0.0022, 0.0022)

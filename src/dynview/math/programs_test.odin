@@ -1,13 +1,14 @@
 package dynview_math
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
 
 import "core:testing"
 
 //   Verify table lengths and rule records resolve once into boundary spans.
 @(test)
 math_table_boundaries_resolve_typed_lengths_and_rules :: proc(t: ^testing.T) {
-    descriptor := app_core.Dynview_Math_Table_Descriptor{rows = 2, columns = 2}
+    descriptor := dynviewmodel.Dynview_Math_Table_Descriptor{rows = 2, columns = 2}
     descriptor.column_boundary_gaps[0] = {0, .Zero}
     descriptor.column_boundary_gaps[1] = {0.5, .Em}
     descriptor.vertical_rule_counts[0] = 2
@@ -76,23 +77,23 @@ math_atom_spacing_uses_tex_display_table :: proc(t: ^testing.T) {
 //   Verify binary atoms retain binary spacing only between compatible neighbors.
 @(test)
 math_binary_atom_cancellation_matches_tex_neighbors :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
-    program := app_core.Dynview_Math_Program{command_count = 3}
+    program := dynviewmodel.Dynview_Math_Program{command_count = 3}
     cache^.math_commands[0].math_atom_class = .Ord
     cache^.math_commands[1].math_atom_class = .Bin
     cache^.math_commands[2].math_atom_class = .Ord
 
     testing.expect_value(t,
         math_program_effective_atom_class(cache, program, 1),
-        app_core.Dynview_Math_Atom_Class.Bin)
+        dynviewmodel.Dynview_Math_Atom_Class.Bin)
     testing.expect_value(t,
         math_program_command_leading_space(cache, program, 1, 18), f32(4))
 
     cache^.math_commands[0].math_atom_class = .Open
     testing.expect_value(t,
         math_program_effective_atom_class(cache, program, 1),
-        app_core.Dynview_Math_Atom_Class.Ord)
+        dynviewmodel.Dynview_Math_Atom_Class.Ord)
     testing.expect_value(t,
         math_program_command_leading_space(cache, program, 1, 18), f32(0))
 
@@ -100,7 +101,7 @@ math_binary_atom_cancellation_matches_tex_neighbors :: proc(t: ^testing.T) {
     cache^.math_commands[2].math_atom_class = .Rel
     testing.expect_value(t,
         math_program_effective_atom_class(cache, program, 1),
-        app_core.Dynview_Math_Atom_Class.Ord)
+        dynviewmodel.Dynview_Math_Atom_Class.Ord)
     testing.expect_value(t,
         math_program_command_leading_space(cache, program, 2, 18), f32(5))
 }
@@ -108,9 +109,9 @@ math_binary_atom_cancellation_matches_tex_neighbors :: proc(t: ^testing.T) {
 //   Verify explicit math glue contributes its own fixed mu width between atoms.
 @(test)
 math_explicit_glue_uses_semantic_width :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
-    program := app_core.Dynview_Math_Program{command_count = 3}
+    program := dynviewmodel.Dynview_Math_Program{command_count = 3}
     cache^.math_commands[0].math_atom_class = .Ord
     cache^.math_commands[1].math_glue_kind = .Thick
     cache^.math_commands[2].math_atom_class = .Ord

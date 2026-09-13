@@ -1,5 +1,7 @@
 package ui
 
+import viewmodel "../model"
+
 import "../../core"
 import dyncompile "../../dynview/compile"
 import dynlayout "../../dynview/layout"
@@ -34,7 +36,7 @@ view_text_content_panel :: proc(panel: rl.Rectangle) -> rl.Rectangle {
 //   Draw selection behind one non-Terminal presentation.
 view_text_draw_selection :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     selection_view: ui_dynview.Dynview_Selection_View) {
     ui_dynview.dynview_selection_draw(
         &state^.dynview, ui_runtime^.dynview_selection, selection_view)
@@ -43,7 +45,7 @@ view_text_draw_selection :: proc(
 //   Draw the view-text transcript content and copy affordances.
 view_text_draw_content :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     text_panel: rl.Rectangle,
     view_text: string,
     selection_view: ui_dynview.Dynview_Selection_View) {

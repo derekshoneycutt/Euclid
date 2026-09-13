@@ -1,10 +1,11 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 
 // Stack_Geometry_Input describes two measured children and their enclosing style.
 Stack_Geometry_Input :: struct {
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     font_size: f32,
     style: Math_Style,
@@ -21,7 +22,7 @@ Stack_Geometry :: struct {
 
 // Over_Under_Geometry_Input describes an annotation and base at one placement side.
 Over_Under_Geometry_Input :: struct {
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     font_size: f32,
     annotation, base: Fraction_Box_Metrics,

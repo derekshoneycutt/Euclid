@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import termgrid "../../terminal/grid"
 import termemulator "../../terminal/emulator"
 import termattachment "../../terminal/attachment"
@@ -40,7 +41,7 @@ import rl "vendor:raylib"
 //   - Marks output started and mutates interpreter, grid, scrollback, title, and parser
 //     diagnostics according to the received terminal stream.
 terminal_append_ansi_output :: proc(
-    term: ^core.Terminal_State, text: string,
+    term: ^viewterminalmodel.Terminal_State, text: string,
     producer: termmodel.Terminal_Producer = {}) {
     if term == nil || term.history == nil {
         return
@@ -66,7 +67,8 @@ terminal_append_ansi_output :: proc(
 //
 // Side effects:
 //   - Appends one white output run per line via termhist.
-terminal_append_output_line :: proc(term: ^core.Terminal_State, text: string) {
+terminal_append_output_line :: proc(
+    term: ^viewterminalmodel.Terminal_State, text: string) {
     if term == nil || term.history == nil {
         return
     }
@@ -86,7 +88,7 @@ terminal_append_output_line :: proc(term: ^core.Terminal_State, text: string) {
 // Returns:
 //   - Prior offset unless content height increased beyond the previous frame.
 terminal_initial_scroll_offset :: proc(
-    term: ^core.Terminal_State, padded_bounds: rl.Rectangle,
+    term: ^viewterminalmodel.Terminal_State, padded_bounds: rl.Rectangle,
     content_height: f32) -> f32 {
     offset_y := term.scroll_offset_y
     if content_height > term.scroll_content_height {
@@ -97,7 +99,8 @@ terminal_initial_scroll_offset :: proc(
 
 // Resolve the active or synchronized grid row containing an output cursor.
 terminal_output_cursor_cells :: proc(
-    term: ^core.Terminal_State, cursor: termgrid.Cursor) -> ([]termgrid.Cell, bool) {
+    term: ^viewterminalmodel.Terminal_State, cursor: termgrid.Cursor) ->
+        ([]termgrid.Cell, bool) {
     if term.synchronized_output.active {
         return termgrid.display_checkpoint_grid_row(
             &term.synchronized_output.checkpoint, cursor.row)
@@ -118,7 +121,7 @@ terminal_output_cursor_cells :: proc(
 //   - A visible cursor presentation with combined line, column, width, and style, or
 //     an empty presentation when output cursor rendering is not applicable.
 terminal_output_cursor_presentation :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     terminal_focused: bool = true) -> Terminal_Output_Cursor_Presentation {
     if term == nil || terminal_prompt_visible(term) {
         return {}
@@ -162,7 +165,7 @@ terminal_output_cursor_presentation :: proc(
 // Returns:
 //   - Frame-local layout metrics and ordered selection used by terminal drawing.
 terminal_draw_layout :: proc(
-    term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     bounds: rl.Rectangle,
     theme: Terminal_Draw_Theme) -> Terminal_Draw_Layout {
     padded_bounds := terminal_accepted_padded_bounds(term, bounds)
@@ -199,7 +202,7 @@ terminal_draw_layout :: proc(
 
 // Draw the grapheme inverted inside one filled output cursor.
 terminal_draw_output_cursor_glyph :: proc(
-    term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     presentation: Terminal_Output_Cursor_Presentation, position: rl.Vector2,
     theme: Terminal_Draw_Theme) {
     cells, ok := terminal_output_row(term, presentation.line)
@@ -231,7 +234,7 @@ terminal_draw_output_cursor_glyph :: proc(
 // Side effects:
 //   - Issues Raylib rectangle and optional inverted cursor-glyph draw commands.
 terminal_draw_output_cursor :: proc(
-    term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     presentation: Terminal_Output_Cursor_Presentation,
     layout: Terminal_Draw_Layout, origin: rl.Vector2) {
     if !presentation.visible {
@@ -271,7 +274,7 @@ terminal_draw_output_cursor :: proc(
 // Side effects:
 //   - Issues row glyph and active-selection draw commands in display order.
 terminal_draw_output_rows :: proc(
-    term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     layout: Terminal_Draw_Layout, origin: rl.Vector2,
     hover: Terminal_Link_Hit) {
 
@@ -309,7 +312,7 @@ terminal_command_status_color :: proc(status: i32) -> rl.Color {
 
 // Draw retained command completion outcomes without inserting terminal text.
 terminal_draw_command_statuses :: proc(
-    term: ^core.Terminal_State, layout: Terminal_Draw_Layout,
+    term: ^viewterminalmodel.Terminal_State, layout: Terminal_Draw_Layout,
     origin: rl.Vector2) {
     count := termshellintegration.shell_command_block_count(term.shell_integration)
     for index in 0..<count {
@@ -329,7 +332,7 @@ terminal_draw_command_statuses :: proc(
 
 // Draw the active local command-search query as a compact bottom status strip.
 terminal_draw_command_search :: proc(
-    term: ^core.Terminal_State, resolver: font.Font_Resolver, font: rl.Font,
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver, font: rl.Font,
     bounds: rl.Rectangle, theme: Terminal_Draw_Theme) {
     shell := term.shell_integration
     if shell == nil || !shell.search_editing { return }
@@ -350,7 +353,7 @@ terminal_draw_command_search :: proc(
 // Returns:
 //   - Zero-based line and true, or zero and false when the row is not presented.
 terminal_raster_line :: proc(
-    term: ^core.Terminal_State, logical_row: i64) -> (int, bool) {
+    term: ^viewterminalmodel.Terminal_State, logical_row: i64) -> (int, bool) {
     if term == nil { return 0, false }
     line_count := terminal_visible_scrollback_count(term)
     line_count += len(term.synchronized_output.checkpoint.grid_rows) if
@@ -454,7 +457,7 @@ terminal_raster_in_layer :: proc(z_index: i32, layer: Terminal_Raster_Layer) -> 
 
 // Collect the active live or synchronized placement snapshot for drawing.
 terminal_collect_raster_placements :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     placements: []termattachment.Placement_Metadata) -> int {
     screen := termattachment.Screen_Identity.Alternate if
         term.output_interpreter.alternate_screen_active else .Primary
@@ -470,7 +473,7 @@ terminal_collect_raster_placements :: proc(
 
 // Draw one placement when its layer, row, metrics, and geometry resolve.
 terminal_draw_raster :: proc(
-    term: ^core.Terminal_State, renderer: termattachment.Raster_Renderer,
+    term: ^viewterminalmodel.Terminal_State, renderer: termattachment.Raster_Renderer,
     placement: termattachment.Placement_Metadata,
     draw: Terminal_Raster_Draw_Context) {
     if !terminal_raster_in_layer(placement.geometry.z_index, draw.layer) { return }
@@ -497,7 +500,7 @@ terminal_draw_raster :: proc(
 
 // Return the lowest drawable raster edge in terminal content coordinates.
 terminal_raster_content_height :: proc(
-    term: ^core.Terminal_State, column_width, line_height: f32) -> f32 {
+    term: ^viewterminalmodel.Terminal_State, column_width, line_height: f32) -> f32 {
     if term == nil { return 0 }
     placements:
         [termattachment.DEFAULT_PLACEMENT_CAPACITY]termattachment.Placement_Metadata
@@ -521,7 +524,7 @@ terminal_raster_content_height :: proc(
 //   Draw one z-index partition of captured or live placements through a
 //   display-owned renderer capability.
 terminal_draw_rasters :: proc(
-    term: ^core.Terminal_State, renderer: termattachment.Raster_Renderer,
+    term: ^viewterminalmodel.Terminal_State, renderer: termattachment.Raster_Renderer,
     layout: Terminal_Draw_Layout, origin: rl.Vector2,
     layer: Terminal_Raster_Layer) {
     if renderer.draw == nil { return }
@@ -537,14 +540,14 @@ terminal_draw_rasters :: proc(
 
 // Retain UI-owned scrolling results in terminal presentation state.
 terminal_commit_scroll :: proc(
-    term: ^core.Terminal_State, offset_y, content_height: f32) {
+    term: ^viewterminalmodel.Terminal_State, offset_y, content_height: f32) {
     term.scroll_offset_y = offset_y
     term.scroll_content_height = content_height
 }
 
 // Draw terminal foreground overlays after output rows and rasters.
 terminal_draw_foreground :: proc(
-    term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     layout: Terminal_Draw_Layout, origin: rl.Vector2) {
     terminal_draw_output_cursor(
         term, font_resolver,
@@ -573,7 +576,7 @@ terminal_draw_foreground :: proc(
 // Side effects:
 //   - Issues terminal raster, text, cursor, prompt, and search draw commands.
 terminal_draw_content :: proc(
-    term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     raster_renderer: termattachment.Raster_Renderer,
     draw: Terminal_Draw_Content_Context) {
     terminal_draw_rasters(
@@ -589,7 +592,7 @@ terminal_draw_content :: proc(
 
 // Draw terminal overlays after the owning UI container closes its scissor region.
 terminal_draw_overlays :: proc(
-    term: ^core.Terminal_State, resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
     layout: Terminal_Draw_Layout) {
     terminal_draw_command_search(
         term, resolver, layout.regular, layout.padded_bounds, layout.theme)
@@ -627,7 +630,7 @@ terminal_padded_bounds :: proc(bounds: rl.Rectangle) -> rl.Rectangle {
 // Returns:
 //   - Padded bounds clamped to accepted grid dimensions when geometry is measurable.
 terminal_accepted_padded_bounds :: proc(
-    term: ^core.Terminal_State, bounds: rl.Rectangle) -> rl.Rectangle {
+    term: ^viewterminalmodel.Terminal_State, bounds: rl.Rectangle) -> rl.Rectangle {
     padded := terminal_padded_bounds(bounds)
     if term.geometry.column_width <= 0 || term.geometry.line_height <= 0 {
         return padded
@@ -650,7 +653,7 @@ terminal_accepted_padded_bounds :: proc(
 //   - A copy of the frame enriched with clamped one-based terminal coordinates,
 //     inside-state, validity, and Shift-based foreground ownership.
 terminal_resolve_mouse_frame :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame,
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     bounds: rl.Rectangle) -> input.Input_Frame {
     result := frame
     if term == nil || term.geometry.column_width <= 0 ||
@@ -691,7 +694,7 @@ terminal_resolve_mouse_frame :: proc(
 // Side effects:
 //   - May issue Raylib highlight and inverted-text commands for the selected span.
 terminal_draw_line_selection :: proc(
-    term: ^core.Terminal_State, resolver: font.Font_Resolver, line: int,
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver, line: int,
     layout: Terminal_Draw_Layout, line_position: rl.Vector2) {
     if !term.view_selection_active {
         return
@@ -767,7 +770,7 @@ terminal_draw_virtual_selection_rows :: proc(
 // Returns:
 //   - Prompt-local selection bounds, or an empty span when selection is inactive.
 terminal_prompt_selection :: proc(
-    term: ^core.Terminal_State, selection: Terminal_Selection_Bounds,
+    term: ^viewterminalmodel.Terminal_State, selection: Terminal_Selection_Bounds,
     line_count, prompt_length: int) -> Terminal_Line_Selection {
 
     if !term.view_selection_active {
@@ -849,7 +852,7 @@ terminal_draw_single_line_prompt :: proc(
 // Side effects:
 //   - Issues Raylib commands for prompt text, completion preview, selection, and cursor.
 terminal_draw_prompt :: proc(
-    term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     layout: Terminal_Draw_Layout, prompt_position: rl.Vector2) {
 
     regular := terminal_font_resolve(font_resolver, .Regular)
@@ -933,7 +936,7 @@ terminal_draw_prompt_line :: proc(
 //   - Draws the mode-specific primary prefix on row zero and aligned continuation
 //     prefixes on subsequent rows without mutating terminal state.
 terminal_draw_prompt_lines :: proc(
-    term: ^core.Terminal_State, font_resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
     position: rl.Vector2, theme: Terminal_Draw_Theme) {
     text := termhist.termhist_current_text(term.history)
     prompt_color := terminal_prompt_draw_color(term.input_mode)
@@ -969,7 +972,7 @@ terminal_draw_prompt_lines :: proc(
 // Side effects:
 //   - Issues Raylib commands for the block cursor and inverted cursor glyph.
 terminal_draw_multiline_prompt_cursor :: proc(
-    term: ^core.Terminal_State, resolver: font.Font_Resolver,
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
     font: rl.Font, position: rl.Vector2,
     layout: Terminal_Draw_Layout) {
     text := termhist.termhist_current_text(term.history)
@@ -1017,7 +1020,7 @@ terminal_draw_multiline_prompt_cursor :: proc(
 // Side effects:
 //   - Issues Raylib replacement-mask and muted preview-text draw commands when current.
 terminal_draw_completion_preview :: proc(
-    term: ^core.Terminal_State, resolver: font.Font_Resolver, font: rl.Font,
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver, font: rl.Font,
     position: rl.Vector2, theme: Terminal_Draw_Theme) {
     current_text := termhist.termhist_current_text(term.history)
     prompt_prefix := terminal_prompt_prefix(term)

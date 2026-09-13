@@ -63,11 +63,13 @@ If you are new, read in this order:
 | Section | Module | Purpose | Key files |
 | --- | --- | --- | --- |
 | **Odin** | Application Lifecycle | Process entry and startup/shutdown sequencing. | `src/main.odin` |
-| **Odin** | Core Definitions | Canonical runtime data shapes and capacity constants. | `src/core/core.odin` |
+| **Odin** | Application Composition | Process-wide composition, run settings, and intrinsic task records. | `src/core/core.odin` |
+| **Odin** | Shared Foundations | Bounded storage, animation-generation memory, and native protocol contracts. | `src/core/storage/`, `src/core/animation/`, `src/core/protocol/` |
+| **Odin** | Coordinator Contracts | Bridge transport and presentation contracts plus display and Terminal runtime models. | `src/bridge/model/`, `src/bridge/presentation/`, `src/view/model/`, `src/view/terminal/model/` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Font Cache | Required JuliaMono/NewCM residency, MATH-table admission, demand-paged glyphs, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
-| **Odin** | Geometry Kernel | Bounded entity registry, components, direct-target constraints, and derived render packets. | `src/core/shapes.odin`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
+| **Odin** | Geometry Kernel | Bounded entity registry, components, direct-target constraints, and derived render packets. | `src/shapes/model/`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
 | **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
@@ -84,6 +86,31 @@ If you are new, read in this order:
 | **Julia Content** | Content Modules | Domain roots and leaf animation definitions loaded at startup or on demand. | `src/content/elements/`, `src/content/proclus/`, `src/content/hilbert/`, `src/content/algebra/` |
 
 ### Cross-Module Contracts
+
+Odin packages follow three enforced dependency layers:
+
+- **Substrate** owns reusable storage, protocol contracts, subsystem models, and leaf
+  behavior. It may depend only on substrate.
+- **Composition** is root package `src/core`. It owns `Euclid_General_State`,
+  `Euclid_Run_Settings`, and intrinsic application task records, and may depend on
+  substrate.
+- **Coordinators** are executable entry points plus `src/view` and `src/bridge`
+  behavior. They may depend on composition and substrate.
+
+More-specific model paths beneath view and bridge remain substrate. Reachability from
+`Euclid_General_State` does not imply root-core ownership: each field's defining
+invariants, storage policy, mutation, and tests belong to its subsystem package.
+`ARCHITECTURE-FORBIDDEN-DEPENDENCY` and `ARCHITECTURE-DEPENDENCY-CYCLE` make violations
+blocking repository-analysis failures.
+
+```mermaid
+flowchart TD
+    Entry[Executable entry points] --> Composition[Application composition]
+    Entry --> Substrate[Subsystem and model substrate]
+    Coordinators[View and bridge coordinators] --> Composition
+    Coordinators --> Substrate
+    Composition --> Substrate
+```
 
 Dynview production callers import the child package that owns each symbol. Root
 `src/dynview` owns enablement and invalidation rather than forwarding child APIs:

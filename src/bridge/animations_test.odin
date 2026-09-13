@@ -1,5 +1,10 @@
 package bridge
 
+import bridgemodel "model"
+
+import particlemodel "../particles/model"
+import shapemodel "../shapes/model"
+
 import "../core"
 import "../shapes"
 
@@ -12,7 +17,7 @@ programmatic_selection_synchronizes_tree_state :: proc(t: ^testing.T) {
     defer free(state)
     ji := &state^.julia_interface_slots[0]
     state^.julia_interface = ji
-    nodes: [3]core.Euclid_Julia_Animation_Interface
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
     nodes[0].next_in_registry = &nodes[1]
@@ -40,7 +45,7 @@ programmatic_selection_rejects_unregistered_target :: proc(t: ^testing.T) {
     defer free(state)
     ji := &state^.julia_interface_slots[0]
     state^.julia_interface = ji
-    selected, outsider: core.Euclid_Julia_Animation_Interface
+    selected, outsider: bridgemodel.Euclid_Julia_Animation_Interface
     ji.animation_head = &selected
     ji.animation_count = 1
     ji.selected_animation = &selected
@@ -57,7 +62,7 @@ programmatic_selection_rejects_unregistered_target :: proc(t: ^testing.T) {
 explicit_reload_requests_animation_lifecycle_update :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    service := new(core.Julia_Runtime_Service, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(service)
     ji := &state^.julia_interface_slots[0]
     animation := &ji^.null_animation
@@ -77,10 +82,10 @@ animation_retirement_emits_before_world_rewind :: proc(t: ^testing.T) {
     testing.expect(t, state != nil)
     if state == nil {return}
     defer animation_value_test_state_destroy(state)
-    world: core.Shape_World
-    particles := new(core.Particle_System, context.allocator)
+    world: shapemodel.Shape_World
+    particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles, context.allocator)
-    service := new(core.Julia_Runtime_Service, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(service, context.allocator)
     service^.animation_generation = 1
     state^.shape_world = &world
@@ -88,11 +93,11 @@ animation_retirement_emits_before_world_rewind :: proc(t: ^testing.T) {
     state^.julia_runtime_service = service
     particles^.use_max_dust_particles = 4
     testing.expect_value(t,
-        core.shape_world_freeze_baseline(&world), core.Shape_World_Status.Ok)
+        shapemodel.shape_world_freeze_baseline(&world), shapemodel.Shape_World_Status.Ok)
     line, status := shapes.world_create_line(
         &world, {0, 0, 0}, {1, 0, 0}, {})
-    testing.expect_value(t, status, core.Shape_World_Status.Ok)
-    style, found := core.shape_component_get_mut(
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    style, found := shapemodel.shape_component_get_mut(
         &world.render_styles, &world.registry, line.shape)
     testing.expect(t, found)
     if found {style^.visible = true}
@@ -102,5 +107,5 @@ animation_retirement_emits_before_world_rewind :: proc(t: ^testing.T) {
     testing.expect(t, particles^.low_particles.alive[0])
     testing.expect_value(t, world.registry.entity_count, u32(0))
     testing.expect_value(t, world.transforms.count, u16(0))
-    testing.expect(t, !core.shape_registry_resolves(&world.registry, line.shape))
+    testing.expect(t, !shapemodel.shape_registry_resolves(&world.registry, line.shape))
 }

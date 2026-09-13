@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import termgrid "../../terminal/grid"
 import termmodel "../../terminal/model"
 
@@ -15,7 +16,7 @@ Terminal_Output_Semantic_Row :: struct {
 
 // Return one oldest-first output row from bounded scrollback or the live grid.
 terminal_output_row :: proc(
-    term: ^core.Terminal_State, line: int) -> ([]termgrid.Cell, bool) {
+    term: ^viewterminalmodel.Terminal_State, line: int) -> ([]termgrid.Cell, bool) {
 
     if term == nil || line < 0 {
         return nil, false
@@ -44,7 +45,7 @@ terminal_output_row :: proc(
 
 // Return the stable logical-row identity for one presented output line.
 terminal_output_logical_row :: proc(
-    term: ^core.Terminal_State, line: int) -> (i64, bool) {
+    term: ^viewterminalmodel.Terminal_State, line: int) -> (i64, bool) {
     if term == nil || line < 0 { return 0, false }
     scrollback_count := terminal_visible_scrollback_count(term)
     if line < scrollback_count {
@@ -70,7 +71,7 @@ terminal_output_logical_row :: proc(
 
 // Return semantic line identity and starting grapheme ordinal for one output row.
 terminal_output_semantic_row :: proc(
-    term: ^core.Terminal_State, line: int) -> Terminal_Output_Semantic_Row {
+    term: ^viewterminalmodel.Terminal_State, line: int) -> Terminal_Output_Semantic_Row {
     if term == nil || line < 0 { return {} }
     scrollback_count := terminal_visible_scrollback_count(term)
     if line < scrollback_count {
@@ -98,7 +99,7 @@ terminal_output_semantic_row :: proc(
 
 // Return whether one presented physical row soft-wraps into its successor.
 terminal_output_row_wrapped :: proc(
-    term: ^core.Terminal_State, line: int) -> (bool, bool) {
+    term: ^viewterminalmodel.Terminal_State, line: int) -> (bool, bool) {
     if term == nil || line < 0 { return false, false }
     scrollback_count := terminal_visible_scrollback_count(term)
     if line < scrollback_count {
@@ -123,7 +124,8 @@ terminal_output_row_wrapped :: proc(
 }
 
 // Hide primary history while the ephemeral alternate viewport is selected.
-terminal_visible_scrollback_count :: proc(term: ^core.Terminal_State) -> int {
+terminal_visible_scrollback_count :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> int {
     if term == nil {
         return 0
     }
@@ -146,7 +148,7 @@ terminal_output_row_occupied :: proc(cells: []termgrid.Cell) -> bool {
 }
 
 // Return the meaningful screen prefix, excluding the unused fixed-grid tail.
-terminal_grid_line_count :: proc(term: ^core.Terminal_State) -> int {
+terminal_grid_line_count :: proc(term: ^viewterminalmodel.Terminal_State) -> int {
     if term == nil {
         return 0
     }
@@ -180,7 +182,7 @@ terminal_grid_line_count :: proc(term: ^core.Terminal_State) -> int {
 
 // Return shell markers for one presented scrollback or live-grid row.
 terminal_output_row_shell_markers :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     line: int) -> (termmodel.Shell_Row_Markers, bool) {
     if term == nil || line < 0 {
         return {}, false
@@ -254,7 +256,7 @@ terminal_output_row_byte_offset :: proc(cells: []termgrid.Cell, column: int) -> 
 }
 
 // Return the bounded output row count currently visible to the terminal UI.
-terminal_line_count :: proc(term: ^core.Terminal_State) -> int {
+terminal_line_count :: proc(term: ^viewterminalmodel.Terminal_State) -> int {
     if term == nil {
         return 0
     }

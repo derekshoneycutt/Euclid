@@ -2,12 +2,12 @@ package files
 
 import "core:testing"
 
-import app_core "../core"
+import gifmodel "gif_model"
 
 //   Verify gif_encode_begin rejects zero and oversized dimensions.
 @(test)
 gif_encode_begin_rejects_invalid_dimensions :: proc(t: ^testing.T) {
-    state := app_core.Gif_Encode_State{}
+    state := gifmodel.Gif_Encode_State{}
 
     testing.expect(t, !gif_encode_begin(&state, 0, 10))
     testing.expect(t, !gif_encode_begin(&state, 10, 0))
@@ -17,7 +17,7 @@ gif_encode_begin_rejects_invalid_dimensions :: proc(t: ^testing.T) {
 //   Verify begin+end with no frames still emits a GIF trailer byte.
 @(test)
 gif_encode_begin_and_end_produces_trailer_without_frames :: proc(t: ^testing.T) {
-    state := app_core.Gif_Encode_State{}
+    state := gifmodel.Gif_Encode_State{}
 
     testing.expect(t, gif_encode_begin(&state, 2, 2))
 
@@ -31,7 +31,7 @@ gif_encode_begin_and_end_produces_trailer_without_frames :: proc(t: ^testing.T) 
 //   Verify a small RGBA frame encodes and the stream still ends with a trailer.
 @(test)
 gif_encode_frame_round_trip_with_small_rgba_input :: proc(t: ^testing.T) {
-    state := app_core.Gif_Encode_State{}
+    state := gifmodel.Gif_Encode_State{}
 
     testing.expect(t, gif_encode_begin(&state, 2, 2))
 
@@ -84,7 +84,7 @@ collect_gce_packed_bytes :: proc(data: []u8) -> []u8 {
 //   Verify frames above the alpha threshold set the GCE transparency flag.
 @(test)
 gif_encode_marks_current_frame_transparency_in_gce :: proc(t: ^testing.T) {
-    state := app_core.Gif_Encode_State{}
+    state := gifmodel.Gif_Encode_State{}
     testing.expect(t, gif_encode_begin(&state, 2, 2))
 
     state.alpha_threshold = 256
@@ -115,7 +115,7 @@ gif_encode_marks_current_frame_transparency_in_gce :: proc(t: ^testing.T) {
 //   Verify fully opaque frames leave the GCE transparency flag unset.
 @(test)
 gif_encode_opaque_frames_do_not_set_gce_transparency :: proc(t: ^testing.T) {
-    state := app_core.Gif_Encode_State{}
+    state := gifmodel.Gif_Encode_State{}
     testing.expect(t, gif_encode_begin(&state, 2, 2))
 
     opaque_pixels := []u8{

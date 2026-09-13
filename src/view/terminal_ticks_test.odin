@@ -1,5 +1,7 @@
 package view
 
+import viewterminalmodel "terminal/model"
+
 import "../core"
 import "../core/protocol"
 import "core:testing"
@@ -36,7 +38,7 @@ terminal_tick_configure_rejects_stale_generation :: proc(t: ^testing.T) {
 // Verify fixed steps coalesce into one bounded pulse after acknowledgement.
 @(test)
 terminal_tick_record_step_coalesces_one_pending_pulse :: proc(t: ^testing.T) {
-    publisher := core.Terminal_Tick_Publisher{
+    publisher := viewterminalmodel.Terminal_Tick_Publisher{
         animation_generation = 9,
         stream_generation = 2,
         interval_steps = 2,

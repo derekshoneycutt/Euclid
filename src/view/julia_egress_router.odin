@@ -1,15 +1,17 @@
 package view
 
+import bridgemodel "../bridge/model"
+
 import bridge "../bridge"
 import "../core"
 
 //   Route one non-event Julia envelope to its display-owned subsystem.
 // Presentation admission retains the envelope; Terminal dispatch consumes it immediately.
 julia_egress_router_dispatch :: proc(
-    user_data: rawptr, message: ^core.Julia_Host_Egress) -> bool {
+    user_data: rawptr, message: ^bridgemodel.Julia_Host_Egress) -> bool {
     runtime := cast(^Presentation_Runtime)user_data
     assert(runtime != nil && runtime^.state != nil)
-    if content, is_content := message^.(core.View_Content_Ready); is_content {
+    if content, is_content := message^.(bridgemodel.View_Content_Ready); is_content {
         presentation_admit(runtime^.state, runtime, message, content)
         return true
     }

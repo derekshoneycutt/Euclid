@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import termgrid "../../terminal/grid"
 import termemulator "../../terminal/emulator"
 import termhyperlink "../../terminal/hyperlink"
@@ -11,7 +12,8 @@ import rl "vendor:raylib"
 
 // Return the hyperlink leader at one visible output row and zero-based column.
 terminal_output_hyperlink_at :: proc(
-    term: ^core.Terminal_State, line, column: int) -> termmodel.Hyperlink_Handle {
+    term: ^viewterminalmodel.Terminal_State,
+    line, column: int) -> termmodel.Hyperlink_Handle {
     cells, ok := terminal_output_row(term, line)
     if !ok || column < 0 || column >= len(cells) {
         return 0
@@ -146,7 +148,7 @@ terminal_detect_link_at :: proc(
 }
 
 // Clear every retained press target without affecting hover or terminal content.
-terminal_clear_hyperlink_press :: proc(term: ^core.Terminal_State) {
+terminal_clear_hyperlink_press :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.hyperlink_pressed = 0
     registry := term.hyperlink_registry
     if registry == nil { return }
@@ -158,7 +160,7 @@ terminal_clear_hyperlink_press :: proc(term: ^core.Terminal_State) {
 
 // Retain the compact identity of one explicit or detected press target.
 terminal_store_hyperlink_press :: proc(
-    term: ^core.Terminal_State, hit: Terminal_Link_Hit) {
+    term: ^viewterminalmodel.Terminal_State, hit: Terminal_Link_Hit) {
     terminal_clear_hyperlink_press(term)
     if hit.kind == .Osc8 {
         term.hyperlink_pressed = hit.handle
@@ -173,7 +175,7 @@ terminal_store_hyperlink_press :: proc(
 
 // Report whether one released hit exactly matches the retained press target.
 terminal_hyperlink_release_matches :: proc(
-    term: ^core.Terminal_State, hit: Terminal_Link_Hit) -> bool {
+    term: ^viewterminalmodel.Terminal_State, hit: Terminal_Link_Hit) -> bool {
     if hit.kind == .Osc8 {
         return hit.handle != 0 && hit.handle == term.hyperlink_pressed
     }
@@ -188,7 +190,7 @@ terminal_hyperlink_release_matches :: proc(
 
 // Resolve one screen-space point to an actionable link in committed presentation state.
 terminal_hit_test_link :: proc(
-    term: ^core.Terminal_State, bounds: rl.Rectangle,
+    term: ^viewterminalmodel.Terminal_State, bounds: rl.Rectangle,
     mouse: rl.Vector2) -> Terminal_Link_Hit {
     if term == nil || term.geometry.column_width <= 0 ||
         term.geometry.line_height <= 0 {
@@ -224,7 +226,7 @@ terminal_hit_test_link :: proc(
 
 // Track one press/release pair and request activation only on the same link.
 terminal_update_hyperlink_click :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame,
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     bounds: rl.Rectangle) -> Terminal_Hyperlink_Activation {
     if !terminal_hyperlink_interaction_allowed(term, frame.mouse_modifiers) {
         terminal_clear_hyperlink_press(term)
@@ -253,7 +255,7 @@ terminal_update_hyperlink_click :: proc(
 
 // Report whether local hyperlink interaction owns unmodified pointer input.
 terminal_hyperlink_interaction_allowed :: proc(
-    term: ^core.Terminal_State, modifiers: input.Input_Modifiers) -> bool {
+    term: ^viewterminalmodel.Terminal_State, modifiers: input.Input_Modifiers) -> bool {
     if term == nil || .Shift in modifiers {
         return false
     }
@@ -263,7 +265,7 @@ terminal_hyperlink_interaction_allowed :: proc(
 
 // Resolve the actionable link under one pointer when local interaction has precedence.
 terminal_hyperlink_hover_hit :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame,
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     bounds: rl.Rectangle) -> Terminal_Link_Hit {
     if !terminal_hyperlink_interaction_allowed(term, frame.mouse_modifiers) {
         return {}
@@ -274,14 +276,14 @@ terminal_hyperlink_hover_hit :: proc(
 
 // Report whether the current eligible pointer position covers an actionable link.
 terminal_hyperlink_hovered :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame,
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     bounds: rl.Rectangle) -> bool {
     return terminal_hyperlink_hover_hit(term, frame, bounds).kind != .None
 }
 
 // Invoke one validated hyperlink through a caller-owned display-thread adapter.
 terminal_activate_hyperlink :: proc(
-    term: ^core.Terminal_State, activation: Terminal_Hyperlink_Activation,
+    term: ^viewterminalmodel.Terminal_State, activation: Terminal_Hyperlink_Activation,
     sink: Terminal_Hyperlink_Activation_Sink) -> bool {
     if term == nil || !activation.requested || sink.activate == nil {
         return false

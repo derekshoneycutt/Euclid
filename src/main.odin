@@ -4,6 +4,7 @@ import "core"
 import "diagnostics"
 import evidence_allocation "evidence/allocation"
 import evidence_session "evidence/session"
+import particlemodel "particles/model"
 import "view"
 
 import "core:fmt"
@@ -104,11 +105,11 @@ parse_dust_particle_max_param :: proc(
 
     value_text := arg[len(DUST_PARTICLE_MAX_PREFIX):]
     value, ok := strconv.parse_i64_of_base(value_text, 10)
-    if !ok || value < 0 || value > core.MAX_LOW_PARTICLES {
+    if !ok || value < 0 || value > particlemodel.MAX_LOW_PARTICLES {
         fmt.println(fmt.tprintf(
             "Invalid --dust-particle-max value: %s. Expected 0-%d.",
             value_text,
-            core.MAX_LOW_PARTICLES))
+            particlemodel.MAX_LOW_PARTICLES))
         return true
     }
 
@@ -323,8 +324,8 @@ print_command_line_help :: proc() {
     fmt.println("  -A, --no-antialiasing    Disable anti-aliasing.")
     fmt.println(fmt.tprintf(
         "  --dust-particle-max=N    Set maximum dust particles, 0-%d. (default: %d)",
-        core.MAX_LOW_PARTICLES,
-        core.MAX_LOW_PARTICLES))
+        particlemodel.MAX_LOW_PARTICLES,
+        particlemodel.MAX_LOW_PARTICLES))
     fmt.println("  -f, --limit-fps          Limit rendering to 60 FPS. (default)")
     fmt.println("  -F, --no-limit-fps       Disable the 60 FPS limit.")
     fmt.println(
@@ -377,7 +378,7 @@ parse_command_line :: proc() -> core.Euclid_Run_Settings {
         do_run = true,
         do_antialiasing = true,
         do_vsync = true,
-        dust_particle_max = core.MAX_LOW_PARTICLES,
+        dust_particle_max = particlemodel.MAX_LOW_PARTICLES,
         limit_fps = true,
         use_simd_batch_projection = true,
         use_gpu_dust_instancing = true,

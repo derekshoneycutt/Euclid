@@ -1,5 +1,9 @@
 package ui_dynview
 
+import dynviewmodel "../../../dynview/model"
+
+import fontmodel "../../font/model"
+
 import "../../../core"
 import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
@@ -13,15 +17,15 @@ import rl "vendor:raylib"
 //   Uniform handler shape for one flow command; the style is resolved by the caller.
 //   Handlers that do not need the command buffer receive nil for it.
 Flow_Command_Handler :: #type proc(
-    cmd : core.Dynview_Command,
-    buffer : ^core.Dynview_Command_Buffer,
+    cmd : dynviewmodel.Dynview_Command,
+    buffer : ^dynviewmodel.Dynview_Command_Buffer,
     flow : ^Dynview_Flow_State,
     style : dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context)
 
 //   Dispatch table mapping each dynview command kind to its flow handler.
 //   Kinds with no flow behavior (blocks, copyable text, line-break) map to nil.
-FLOW_COMMAND_HANDLERS :: [core.Dynview_Command_Kind]Flow_Command_Handler{
+FLOW_COMMAND_HANDLERS :: [dynviewmodel.Dynview_Command_Kind]Flow_Command_Handler{
     .Begin_Block = nil,
     .End_Block = nil,
     .Line_Break = nil,
@@ -127,13 +131,13 @@ Flow_Atom_Frame :: struct {
 style_font_key :: #force_inline proc(style: dyncore.Dynview_Text_Style) -> font.Font_Key {
     flags := style.font_flags
     if flags == .None {
-        flags = core.Font_Variant_Flags.Regular
+        flags = fontmodel.Font_Variant_Flags.Regular
         if style.bold {
             flags = .Bold
         }
         if style.italic {
-            flags = core.Font_Variant_Flags(
-                u32(flags) | u32(core.Font_Variant_Flags.Italic))
+            flags = fontmodel.Font_Variant_Flags(
+                u32(flags) | u32(fontmodel.Font_Variant_Flags.Italic))
         }
     }
     return font.font_key_from_flags(flags)
@@ -164,7 +168,7 @@ wrap_if_full :: #force_inline proc(flow: ^Dynview_Flow_State, max_cols: int) {
 
 //   Resolve draw color using command brush override with style fallback.
 command_draw_color :: #force_inline proc(
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style) -> rl.Color {
 
     if cmd.has_brush_color {
@@ -394,7 +398,7 @@ draw_pentagon_shape :: proc(
 //   Prepare one inline-shape frame using the current flow cursor and row height.
 flow_inline_shape_frame :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context,
     span: Flow_Shape_Span) -> Inline_Shape_Frame {
@@ -590,7 +594,7 @@ flow_row_position :: #force_inline proc(
 //   Consume one inline-line atom in flow layout, optionally drawing it.
 flow_consume_inline_line :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -619,7 +623,7 @@ flow_consume_inline_line :: proc(
 //   Consume one inline-box atom in flow layout, optionally drawing it.
 flow_consume_inline_box :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -683,7 +687,7 @@ flow_inline_atom_frame :: proc(
 
 //   Draw one inline circle outline within an atom frame.
 draw_flow_inline_circle :: #force_inline proc(
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context,
     frame: Flow_Atom_Frame) {
@@ -701,7 +705,7 @@ draw_flow_inline_circle :: #force_inline proc(
 
 //   Compute the inline box rect within an atom frame.
 flow_inline_box_rect :: #force_inline proc(
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     draw_ctx: ^Dynview_Draw_Context,
     frame: Flow_Atom_Frame) -> rl.Rectangle {
 
@@ -714,7 +718,7 @@ flow_inline_box_rect :: #force_inline proc(
 //   Consume one inline-circle atom in flow layout, optionally drawing it.
 flow_consume_inline_circle :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -736,7 +740,7 @@ flow_consume_inline_circle :: proc(
 //   Consume one filled inline-box atom in flow layout, optionally drawing it.
 flow_consume_inline_filled_box :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -761,7 +765,7 @@ flow_consume_inline_filled_box :: proc(
 
 //   Draw one filled inline circle within an atom frame, with optional outline.
 draw_flow_inline_filled_circle :: #force_inline proc(
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context,
     frame: Flow_Atom_Frame) {
@@ -783,7 +787,7 @@ draw_flow_inline_filled_circle :: #force_inline proc(
 //   Consume one filled inline-circle atom in flow layout, optionally drawing it.
 flow_consume_inline_filled_circle :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -804,7 +808,7 @@ flow_consume_inline_filled_circle :: proc(
 
 //   Draw one inline pie-section wedge within an atom frame.
 draw_flow_inline_pie_section :: #force_inline proc(
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context,
     frame: Flow_Atom_Frame) {
@@ -844,7 +848,7 @@ draw_flow_inline_pie_section :: #force_inline proc(
 //   Consume one inline pie-section atom in flow layout, optionally drawing it.
 flow_consume_inline_pie_section :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -866,7 +870,7 @@ flow_consume_inline_pie_section :: proc(
 //   Consume one inline-perpendicular atom in flow layout, optionally drawing it.
 flow_consume_inline_perpendicular :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -885,7 +889,7 @@ flow_consume_inline_perpendicular :: proc(
 //   Consume one inline-triangle atom in flow layout, optionally drawing it.
 flow_consume_inline_triangle :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -909,7 +913,7 @@ flow_consume_inline_triangle :: proc(
 //   Consume one inline-pentagon atom in flow layout, optionally drawing it.
 flow_consume_inline_pentagon :: proc(
     flow: ^Dynview_Flow_State,
-    cmd: core.Dynview_Command,
+    cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
 
@@ -934,8 +938,8 @@ flow_consume_inline_pentagon :: proc(
 
 //  Consume a text based command for the given flow
 consume_text_based_command :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -950,8 +954,8 @@ consume_text_based_command :: proc(
 
 //  Consume a large op command for the given flow
 consume_large_op_command :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -962,8 +966,8 @@ consume_large_op_command :: proc(
 
 //   Adapt flow_consume_inline_line to the uniform table handler shape.
 flow_handle_inline_line :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -972,8 +976,8 @@ flow_handle_inline_line :: proc(
 
 //   Adapt flow_consume_inline_box to the uniform table handler shape.
 flow_handle_inline_box :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -982,8 +986,8 @@ flow_handle_inline_box :: proc(
 
 //   Adapt flow_consume_inline_circle to the uniform table handler shape.
 flow_handle_inline_circle :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -992,8 +996,8 @@ flow_handle_inline_circle :: proc(
 
 //   Adapt flow_consume_inline_filled_box to the uniform table handler shape.
 flow_handle_inline_filled_box :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -1002,8 +1006,8 @@ flow_handle_inline_filled_box :: proc(
 
 //   Adapt flow_consume_inline_filled_circle to the uniform table handler shape.
 flow_handle_inline_filled_circle :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -1012,8 +1016,8 @@ flow_handle_inline_filled_circle :: proc(
 
 //   Adapt flow_consume_inline_pie_section to the uniform table handler shape.
 flow_handle_inline_pie_section :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -1022,8 +1026,8 @@ flow_handle_inline_pie_section :: proc(
 
 //   Adapt flow_consume_inline_perpendicular to the uniform table handler shape.
 flow_handle_inline_perpendicular :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -1032,8 +1036,8 @@ flow_handle_inline_perpendicular :: proc(
 
 //   Adapt flow_consume_inline_triangle to the uniform table handler shape.
 flow_handle_inline_triangle :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {
@@ -1042,8 +1046,8 @@ flow_handle_inline_triangle :: proc(
 
 //   Adapt flow_consume_inline_pentagon to the uniform table handler shape.
 flow_handle_inline_pentagon :: proc(
-    cmd: core.Dynview_Command,
-    buffer: ^core.Dynview_Command_Buffer,
+    cmd: dynviewmodel.Dynview_Command,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     flow: ^Dynview_Flow_State,
     style: dyncore.Dynview_Text_Style,
     draw_ctx: ^Dynview_Draw_Context) {

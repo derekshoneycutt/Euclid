@@ -1,6 +1,8 @@
 package ui_dynview
 
-import "../../../core"
+import viewmodel "../../model"
+import dynviewmodel "../../../dynview/model"
+
 import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
 import "../../input"
@@ -24,16 +26,16 @@ Dynview_Selection_View :: struct {
 
 // Group one selection mode with its current ordered unit count and revision.
 Dynview_Selection_Content :: struct {
-    mode: core.Dynview_Selection_Mode,
+    mode: dynviewmodel.Dynview_Selection_Mode,
     revision: u64,
     unit_count: int,
 }
 
 // Group mutable owners and frame data for one pointer-selection update.
 Dynview_Selection_Update :: struct {
-    runtime: ^core.Dynview_System,
-    selection: ^core.Dynview_Selection_State,
-    press_owner: ^core.Ui_Press_Owner_State,
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: ^dynviewmodel.Dynview_Selection_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     content: Dynview_Selection_Content,
     view: Dynview_Selection_View,
     frame: input.Input_Frame,
@@ -42,7 +44,7 @@ Dynview_Selection_Update :: struct {
 // Append authored separation between two selected semantic document targets.
 dynview_document_write_separator :: proc(
     builder: ^strings.Builder,
-    separator: core.Dynview_Document_Selection_Separator) {
+    separator: dynviewmodel.Dynview_Document_Selection_Separator) {
 
     switch separator {
     case .Space:
@@ -59,8 +61,9 @@ dynview_document_write_separator :: proc(
 
 // Return ordered half-open unit boundaries for one selection anchor and head.
 dynview_selection_ordered :: proc(
-    anchor, head: core.Dynview_Selection_Position) -> (
-        core.Dynview_Selection_Position, core.Dynview_Selection_Position) {
+    anchor, head: dynviewmodel.Dynview_Selection_Position) -> (
+        dynviewmodel.Dynview_Selection_Position,
+        dynviewmodel.Dynview_Selection_Position) {
 
     if anchor.unit_index <= head.unit_index {
         return anchor, head
@@ -71,8 +74,8 @@ dynview_selection_ordered :: proc(
 // Compose selected semantic-document targets from sealed canonical and source bytes.
 dynview_document_selection_text :: proc(
     text: []u8,
-    targets: []core.Dynview_Document_Layout_Copy_Target,
-    anchor, head: core.Dynview_Selection_Position) -> string {
+    targets: []dynviewmodel.Dynview_Document_Layout_Copy_Target,
+    anchor, head: dynviewmodel.Dynview_Selection_Position) -> string {
 
     start, end := dynview_selection_ordered(anchor, head)
     if start.unit_index < 0 || end.unit_index > len(targets) ||
@@ -97,7 +100,7 @@ dynview_document_selection_text :: proc(
 
 // Resolve the selectable model currently rendered by one presentation runtime.
 dynview_selection_content :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     fallback_text: string) -> Dynview_Selection_Content {
 
     if runtime == nil {
@@ -123,7 +126,7 @@ dynview_selection_content :: proc(
 }
 
 // Clear one display-owned presentation selection and its press-independent state.
-dynview_selection_clear :: proc(selection: ^core.Dynview_Selection_State) {
+dynview_selection_clear :: proc(selection: ^dynviewmodel.Dynview_Selection_State) {
     if selection != nil {
         selection^ = {}
     }
@@ -131,7 +134,7 @@ dynview_selection_clear :: proc(selection: ^core.Dynview_Selection_State) {
 
 // Reconcile stored logical positions with the currently rendered presentation.
 dynview_selection_reconcile :: proc(
-    selection: ^core.Dynview_Selection_State,
+    selection: ^dynviewmodel.Dynview_Selection_State,
     content: Dynview_Selection_Content) {
 
     if selection^.mode != content.mode || selection^.revision != content.revision ||
@@ -146,7 +149,7 @@ dynview_selection_reconcile :: proc(
 
 // Return the screen-space rectangle for one semantic document selection target.
 dynview_document_target_rect :: #force_inline proc(
-    target: core.Dynview_Document_Layout_Copy_Target,
+    target: dynviewmodel.Dynview_Document_Layout_Copy_Target,
     view: Dynview_Selection_View) -> rl.Rectangle {
 
     return {
@@ -168,9 +171,9 @@ dynview_selection_rect_distance_squared :: #force_inline proc(
 
 // Resolve the nearest semantic target boundary to one screen-space pointer.
 dynview_document_hit_boundary :: proc(
-    targets: []core.Dynview_Document_Layout_Copy_Target,
+    targets: []dynviewmodel.Dynview_Document_Layout_Copy_Target,
     view: Dynview_Selection_View,
-    point: rl.Vector2) -> core.Dynview_Selection_Position {
+    point: rl.Vector2) -> dynviewmodel.Dynview_Selection_Position {
 
     if len(targets) == 0 {return {}}
     nearest := 0
@@ -205,7 +208,7 @@ dynview_text_byte_boundary :: proc(text: string, unit_index: int) -> int {
 dynview_wrapped_hit_boundary :: proc(
     text: string,
     view: Dynview_Selection_View,
-    point: rl.Vector2) -> core.Dynview_Selection_Position {
+    point: rl.Vector2) -> dynviewmodel.Dynview_Selection_Position {
 
     max_chars := dyncore.chars_per_text_row(
         view.panel.width-view.text_padding*2, view.wrap_advance)
@@ -233,10 +236,10 @@ dynview_wrapped_hit_boundary :: proc(
 
 // Resolve one pointer to the current presentation mode's nearest logical boundary.
 dynview_selection_hit_boundary :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     content: Dynview_Selection_Content,
     view: Dynview_Selection_View,
-    point: rl.Vector2) -> core.Dynview_Selection_Position {
+    point: rl.Vector2) -> dynviewmodel.Dynview_Selection_Position {
 
     switch content.mode {
     case .Semantic_Document:
@@ -256,7 +259,7 @@ dynview_selection_hit_boundary :: proc(
 
 // Report whether a pointer press belongs to the existing exact-source icon.
 dynview_selection_hits_copy_icon :: proc(
-    runtime: ^core.Dynview_System, point: rl.Vector2) -> bool {
+    runtime: ^dynviewmodel.Dynview_System, point: rl.Vector2) -> bool {
     if runtime == nil {return false}
     for target in runtime^.compile_cache.copy_hit_targets {
         if rl.CheckCollisionPointRec(point, target.rect) {return true}
@@ -266,7 +269,7 @@ dynview_selection_hits_copy_icon :: proc(
 
 // Return whether the shared press owner belongs to Dynview selection.
 dynview_selection_owns_press :: #force_inline proc(
-    owner: ^core.Ui_Press_Owner_State) -> bool {
+    owner: ^viewmodel.Ui_Press_Owner_State) -> bool {
     return owner^.active && owner^.kind == .Dynview_Selection
 }
 
@@ -297,8 +300,8 @@ dynview_selection_update_mouse :: proc(
 
 // Select every logical unit or copy the active selection for keyboard chords.
 dynview_selection_update_keyboard :: proc(
-    runtime: ^core.Dynview_System,
-    selection: ^core.Dynview_Selection_State,
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: ^dynviewmodel.Dynview_Selection_State,
     content: Dynview_Selection_Content,
     fallback_text: string,
     frame: input.Input_Frame) {
@@ -317,8 +320,8 @@ dynview_selection_update_keyboard :: proc(
 
 // Compose one active selection according to its presentation mode.
 dynview_selection_text :: proc(
-    runtime: ^core.Dynview_System,
-    selection: core.Dynview_Selection_State,
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: dynviewmodel.Dynview_Selection_State,
     fallback_text: string) -> string {
 
     if !selection.active {return ""}
@@ -342,7 +345,7 @@ dynview_selection_text :: proc(
 
 // Return the visible bounds occupied by the legacy standalone presentation layout.
 dynview_atomic_selection_rect :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     view: Dynview_Selection_View) -> (rl.Rectangle, bool) {
 
     cache := &runtime^.compile_cache
@@ -370,7 +373,7 @@ dynview_atomic_selection_rect :: proc(
 
 // Draw selected wrapped fallback codepoints one visible row at a time.
 dynview_selection_draw_wrapped :: proc(
-    selection: core.Dynview_Selection_State,
+    selection: dynviewmodel.Dynview_Selection_State,
     view: Dynview_Selection_View) {
 
     start, end := dynview_selection_ordered(selection.anchor, selection.head)
@@ -402,8 +405,8 @@ dynview_selection_draw_wrapped :: proc(
 
 // Draw selected semantic targets as clipped screen-space background rectangles.
 dynview_selection_draw_document :: proc(
-    runtime: ^core.Dynview_System,
-    selection: core.Dynview_Selection_State,
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: dynviewmodel.Dynview_Selection_State,
     view: Dynview_Selection_View) {
 
     start, end := dynview_selection_ordered(selection.anchor, selection.head)
@@ -417,8 +420,8 @@ dynview_selection_draw_document :: proc(
 
 // Draw one active selection behind the presentation content.
 dynview_selection_draw :: proc(
-    runtime: ^core.Dynview_System,
-    selection: core.Dynview_Selection_State,
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: dynviewmodel.Dynview_Selection_State,
     view: Dynview_Selection_View) {
 
     if !selection.active && !selection.dragging {return}

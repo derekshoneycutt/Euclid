@@ -1,6 +1,7 @@
 package ui
 
 import "../../core"
+import particlemodel "../../particles/model"
 import view_core "../core"
 import view_font "../font"
 
@@ -91,7 +92,7 @@ settings_max_particles_params :: proc(
         label = "Maximum Dust particles",
         value = &ctx.state.particle_system.use_max_dust_particles,
         min_value = 0,
-        max_value = core.MAX_LOW_PARTICLES,
+        max_value = particlemodel.MAX_LOW_PARTICLES,
         font = ctx.font,
         font_resolver = ctx.font_resolver,
     }

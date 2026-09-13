@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 
 import rl "vendor:raylib"
 
@@ -63,13 +64,14 @@ splitter_hovered_axis :: proc(
 }
 
 //   Report whether GIF capture currently requires stable pane geometry.
-splitters_locked_for_gif :: #force_inline proc(phase: core.Gif_Capture_Phase) -> bool {
+splitters_locked_for_gif :: #force_inline proc(
+    phase: viewmodel.Gif_Capture_Phase) -> bool {
     return phase == .Armed || phase == .Recording || phase == .Finalizing
 }
 
 //   Report whether scenario-driven splitter geometry may change now.
 splitter_positions_are_mutable :: #force_inline proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State) -> bool {
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
 
     return ui_runtime != nil && !ui_runtime^.save_gif_requested &&
         !splitters_locked_for_gif(ui_runtime^.gif_capture_phase)
@@ -89,7 +91,7 @@ splitter_clamp_horizontal :: #force_inline proc(value: f32) -> f32 {
 
 //   Report whether one splitter owns the shared UI press capture.
 splitter_owns_press :: #force_inline proc(
-    owner: core.Ui_Press_Owner_State, press_id: int) -> bool {
+    owner: viewmodel.Ui_Press_Owner_State, press_id: int) -> bool {
 
     return owner.active && owner.kind == .Splitter && owner.id == press_id
 }
@@ -104,7 +106,7 @@ splitter_update_fade :: #force_inline proc(value, target, dt: f32) -> f32 {
 }
 
 //   Release splitter capture when geometry locks or the pointer is released.
-splitter_release_capture :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
+splitter_release_capture :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
     if ui_runtime.ui_press_owner.kind != .Splitter {
         return
     }
@@ -114,7 +116,7 @@ splitter_release_capture :: proc(ui_runtime: ^core.Euclid_Ui_Runtime_State) {
 
 //   Atomically apply scenario-requested splitter positions through ordinary UI policy.
 set_splitter_positions :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     vertical, horizontal: f32) -> bool {
 
     if !splitter_positions_are_mutable(ui_runtime) {
@@ -130,7 +132,7 @@ set_splitter_positions :: proc(
 
 //   Capture the hovered splitter when no other control owns the pointer press.
 splitter_try_capture :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse_input: Input_Frame,
     hovered_axis: Splitter_Axis,
     hovered: bool) {
@@ -153,7 +155,7 @@ splitter_try_capture :: proc(
 
 //   Apply the active splitter drag while preserving all pane minimums.
 splitter_apply_drag :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse_input: Input_Frame) {
 
     if !input_frame_left_down(mouse_input) {
@@ -172,7 +174,7 @@ splitter_apply_drag :: proc(
 
 //   Update splitter capture, positions, and hover fades before layout is prepared.
 update_splitters :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse_input: Input_Frame,
     dt: f32) {
 
@@ -207,7 +209,7 @@ update_splitters :: proc(
 
 //   Draw splitter feedback and apply the active resize cursor.
 draw_splitters :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse_position: rl.Vector2) {
 
     axis, hovered := splitter_hovered_axis(mouse_position,

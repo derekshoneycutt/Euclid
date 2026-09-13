@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import termclipboard "../../terminal/clipboard"
 import termhist "../../terminal/history"
 import termmodel "../../terminal/model"
@@ -23,7 +24,7 @@ import "core:math"
 //   - Discards stale actions, invokes the sink for matching actions, clears all
 //     consumed content, and updates content-free publication diagnostics.
 terminal_publish_clipboard_actions :: proc(
-    term: ^core.Terminal_State, producer: termmodel.Terminal_Producer,
+    term: ^viewterminalmodel.Terminal_State, producer: termmodel.Terminal_Producer,
     sink: Terminal_Clipboard_Write_Sink) -> int {
     if term == nil || term.clipboard_actions == nil || sink.write == nil {
         return 0
@@ -55,7 +56,7 @@ terminal_publish_clipboard_actions :: proc(
 }
 
 // Report content-free clipboard action outcomes before retained storage is released.
-terminal_log_clipboard_teardown :: proc(term: ^core.Terminal_State) {
+terminal_log_clipboard_teardown :: proc(term: ^viewterminalmodel.Terminal_State) {
     queue := term.clipboard_actions
     if queue.acceptance_count == 0 && queue.rejection_count == 0 {
         return
@@ -95,7 +96,7 @@ terminal_clipboard_paste_requested :: proc(
 // Side effects:
 //   - Inserts text into the live editable input and advances its cursor.
 terminal_insert_clipboard_text :: proc(
-    term: ^core.Terminal_State, text: string) -> bool {
+    term: ^viewterminalmodel.Terminal_State, text: string) -> bool {
     if len(text) == 0 {
         return false
     }
@@ -118,7 +119,7 @@ terminal_clipboard_copy_requested :: proc(
 }
 
 // Extract the active view selection as plain text for clipboard publication.
-terminal_view_selection_text :: proc(term: ^core.Terminal_State) -> string {
+terminal_view_selection_text :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
     if term == nil || !term.view_selection_active { return "" }
     start, end := terminal_selection_ordered(
         term.view_selection_anchor, term.view_selection_head)
@@ -140,7 +141,7 @@ terminal_view_selection_text :: proc(term: ^core.Terminal_State) -> string {
 // Side effects:
 //   - Writes to the system clipboard via the input package; leaves the selection active.
 terminal_update_clipboard_copy :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame,
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     focused: bool) {
     if !focused || !term.view_selection_active {
         return

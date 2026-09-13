@@ -1,11 +1,14 @@
 package view
 
+import viewmodel "model"
+
+import shapemodel "../shapes/model"
+
 // We draw the basic surface and all the shapes and tools here
 
 // Only the tools are drawn with shaders. Everything else is the ordinary 2D tools,
 // drawn with an isometric projection
 
-import "../core"
 import "../files"
 import view_core "core"
 import "font"
@@ -70,8 +73,8 @@ LABEL_DECORATION_DOUBLEPRIME_SPACING_SCALE :: 0.44
 Pen_Polygon_Crossing :: struct {
     pen_index: int,
     polygon_index: int,
-    pen: core.Shapes_Pen_Draw,
-    polygon: core.Shapes_Polygon_Draw,
+    pen: shapemodel.Shapes_Pen_Draw,
+    polygon: shapemodel.Shapes_Polygon_Draw,
     back0: Vector3,
     back1: Vector3,
     front0: Vector3,
@@ -144,7 +147,7 @@ Compass_Arc_Samples :: struct {
 //   Cached geometry and optional pen occluder used to draw both compass legs.
 Compass_Leg_Draw_Context :: struct {
     state:            ^Euclid_General_State,
-    comp:             ^core.Shapes_Compass_Draw,
+    comp:             ^shapemodel.Shapes_Compass_Draw,
     c0, c1, c2:       Vector2,
     leg1, leg2:       Tool_Brush_Occluder,
     pen_occluder:     Tool_Brush_Occluder,
@@ -163,7 +166,7 @@ Tool_Brush_Occluder :: struct {
 
 //   Allocation-free occluders uploaded for one receiving tool segment.
 Tool_Brush_Occluder_Context :: struct {
-    occluders: [core.MAX_TOOL_BRUSH_OCCLUDERS]Tool_Brush_Occluder,
+    occluders: [viewmodel.MAX_TOOL_BRUSH_OCCLUDERS]Tool_Brush_Occluder,
     count:     int,
 }
 
@@ -197,7 +200,7 @@ make_compass_arc_occluders :: #force_inline proc(
     leg1, leg2: Tool_Brush_Occluder) -> Tool_Brush_Occluder_Context {
     return Tool_Brush_Occluder_Context{
         occluders = {leg1, leg2},
-        count = core.MAX_TOOL_BRUSH_OCCLUDERS,
+        count = viewmodel.MAX_TOOL_BRUSH_OCCLUDERS,
     }
 }
 
@@ -233,7 +236,7 @@ tool_brush_occluder_overlaps :: #force_inline proc(
 append_tool_brush_occluder :: #force_inline proc(
     ctx: ^Tool_Brush_Occluder_Context,
     receiver, caster: Tool_Brush_Occluder) {
-    if ctx^.count >= core.MAX_TOOL_BRUSH_OCCLUDERS ||
+    if ctx^.count >= viewmodel.MAX_TOOL_BRUSH_OCCLUDERS ||
         !tool_brush_occluder_overlaps(receiver, caster) {
         return
     }
@@ -320,7 +323,7 @@ tool_brush_shader_paths :: proc(paths: ^Tool_Brush_Shader_Paths) -> bool {
 }
 
 //   Cache tool_brush uniform locations onto the stroke_3d render state.
-tool_brush_cache_uniform_locations :: proc(s: ^core.Tool_Render_State) {
+tool_brush_cache_uniform_locations :: proc(s: ^viewmodel.Tool_Render_State) {
     s^.loc_light_dir = rl.GetShaderLocation(s^.shader, "uLightDirView")
     s^.loc_ambient = rl.GetShaderLocation(s^.shader, "uAmbient")
     s^.loc_diffuse = rl.GetShaderLocation(s^.shader, "uDiffuse")
@@ -359,7 +362,7 @@ tool_brush_cache_uniform_locations :: proc(s: ^core.Tool_Render_State) {
 }
 
 //   Return true when the required tool_brush uniforms were all located.
-tool_brush_uniforms_valid :: proc(s: ^core.Tool_Render_State) -> bool {
+tool_brush_uniforms_valid :: proc(s: ^viewmodel.Tool_Render_State) -> bool {
     scalar_uniforms_valid := s^.loc_light_dir >= 0 && s^.loc_ambient >= 0 &&
         s^.loc_diffuse >= 0 && s^.loc_material_roughness >= 0 &&
         s^.loc_material_fresnel_0 >= 0 && s^.loc_material_specular_tint >= 0 &&
@@ -374,7 +377,7 @@ tool_brush_uniforms_valid :: proc(s: ^core.Tool_Render_State) -> bool {
         return false
     }
 
-    for i in 0..<core.MAX_TOOL_BRUSH_OCCLUDERS {
+    for i in 0..<viewmodel.MAX_TOOL_BRUSH_OCCLUDERS {
         if s^.loc_occluder_p0[i] < 0 || s^.loc_occluder_p1[i] < 0 ||
             s^.loc_occluder_radius[i] < 0 || s^.loc_occluder_depth0[i] < 0 ||
             s^.loc_occluder_depth1[i] < 0 || s^.loc_occluder_tangent[i] < 0 {
@@ -414,7 +417,8 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
 
     surface_zeros : Vector3 = room^.zeros + { room.edge_size, room.edge_size, 0 }
     surface_right_up : Vector3 = room^.right_up + { -room.edge_size, room.edge_size, 0 }
-    surface_left_down : Vector3 = room^.left_down + { room.edge_size, -room.edge_size, 0 }
+    surface_left_down : Vector3 =
+        room^.left_down + { room.edge_size, -room.edge_size, 0 }
     surface_right_down : Vector3 =
         room^.right_down + { -room.edge_size, -room.edge_size, 0 }
 
@@ -485,7 +489,7 @@ draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
     for i in 0..<cache^.item_count {
         if has_crossing {
             if i == crossing.polygon_index {
-                compass_caster: ^core.Shapes_Compass_Draw = nil
+                compass_caster: ^shapemodel.Shapes_Compass_Draw = nil
                 if pen_receives_compass {
                     compass_caster = &cache^.compass
                 }
@@ -531,32 +535,32 @@ draw_shapes_shapes_shadows_cached :: proc(state: ^Euclid_General_State) {
 
 //   Draw one cached item only when it belongs to the lower geometry layer.
 draw_cached_item_low :: proc(state: ^Euclid_General_State,
-    item: ^core.Shapes_Draw_Cache_Item) {
+    item: ^shapemodel.Shapes_Draw_Cache_Item) {
     switch &item_typed in item {
-    case core.Shapes_Label_Draw:
+    case shapemodel.Shapes_Label_Draw:
         draw_cached_label(state, &item_typed)
-    case core.Shapes_Point_Draw:
+    case shapemodel.Shapes_Point_Draw:
         draw_cached_point_low(state, &item_typed)
-    case core.Shapes_Line_Draw:
+    case shapemodel.Shapes_Line_Draw:
         draw_cached_line_low(state, &item_typed)
-    case core.Shapes_Circle_Draw:
+    case shapemodel.Shapes_Circle_Draw:
         draw_cached_circle_low(state, &item_typed)
-    case core.Shapes_Filled_Circle_Draw:
+    case shapemodel.Shapes_Filled_Circle_Draw:
         draw_cached_filledcircle_low(state, &item_typed)
-    case core.Shapes_Polygon_Draw:
+    case shapemodel.Shapes_Polygon_Draw:
         draw_cached_polygon_low(state, &item_typed)
-    case core.Shapes_Pen_Draw,
-        core.Shapes_Compass_Draw:
+    case shapemodel.Shapes_Pen_Draw,
+        shapemodel.Shapes_Compass_Draw:
     }
 }
 
 //   Draw the cached pen with the compass caster selected by merged-layer ordering.
 draw_cached_pen_high_merged :: #force_inline proc(
     state: ^Euclid_General_State,
-    pen: ^core.Shapes_Pen_Draw,
+    pen: ^shapemodel.Shapes_Pen_Draw,
     receives_compass: bool) {
 
-    compass_caster: ^core.Shapes_Compass_Draw = nil
+    compass_caster: ^shapemodel.Shapes_Compass_Draw = nil
     if receives_compass {
         compass_caster = &state^.shape_world^.draw_cache.compass
     }
@@ -566,10 +570,10 @@ draw_cached_pen_high_merged :: #force_inline proc(
 //   Draw the cached compass with the pen caster selected by merged-layer ordering.
 draw_cached_compass_high_merged :: #force_inline proc(
     state: ^Euclid_General_State,
-    compass: ^core.Shapes_Compass_Draw,
+    compass: ^shapemodel.Shapes_Compass_Draw,
     receives_pen: bool) {
 
-    pen_caster: ^core.Shapes_Pen_Draw = nil
+    pen_caster: ^shapemodel.Shapes_Pen_Draw = nil
     if receives_pen {
         pen_caster = &state^.shape_world^.draw_cache.pen
     }
@@ -578,62 +582,63 @@ draw_cached_compass_high_merged :: #force_inline proc(
 
 //   Draw one cached item only when it belongs to the merged higher layer.
 draw_cached_item_high_merged :: proc(state: ^Euclid_General_State,
-    item: ^core.Shapes_Draw_Cache_Item,
+    item: ^shapemodel.Shapes_Draw_Cache_Item,
     pen_receives_compass, compass_receives_pen: bool) {
     switch &item_typed in item {
-    case core.Shapes_Label_Draw:
-    case core.Shapes_Point_Draw:
+    case shapemodel.Shapes_Label_Draw:
+    case shapemodel.Shapes_Point_Draw:
         draw_cached_point_high(state, &item_typed)
-    case core.Shapes_Line_Draw:
+    case shapemodel.Shapes_Line_Draw:
         draw_cached_line_high(state, &item_typed)
-    case core.Shapes_Circle_Draw:
+    case shapemodel.Shapes_Circle_Draw:
         draw_cached_circle_high(state, &item_typed)
-    case core.Shapes_Filled_Circle_Draw:
+    case shapemodel.Shapes_Filled_Circle_Draw:
         draw_cached_filledcircle_high(state, &item_typed)
-    case core.Shapes_Polygon_Draw:
+    case shapemodel.Shapes_Polygon_Draw:
         draw_cached_polygon_high(state, &item_typed)
-    case core.Shapes_Pen_Draw:
+    case shapemodel.Shapes_Pen_Draw:
         draw_cached_pen_high_merged(state, &item_typed, pen_receives_compass)
-    case core.Shapes_Compass_Draw:
+    case shapemodel.Shapes_Compass_Draw:
         draw_cached_compass_high_merged(state, &item_typed, compass_receives_pen)
     }
 }
 
 //   Draw one cached item's floor shadow when that item can cast one.
 draw_cached_item_shadow :: proc(state: ^Euclid_General_State,
-    item: ^core.Shapes_Draw_Cache_Item) {
+    item: ^shapemodel.Shapes_Draw_Cache_Item) {
     switch &item_typed in item {
-    case core.Shapes_Label_Draw,
-        core.Shapes_Pen_Draw,
-        core.Shapes_Compass_Draw:
-    case core.Shapes_Point_Draw:
+    case shapemodel.Shapes_Label_Draw,
+        shapemodel.Shapes_Pen_Draw,
+        shapemodel.Shapes_Compass_Draw:
+    case shapemodel.Shapes_Point_Draw:
         draw_cached_point_shadow(state, &item_typed)
-    case core.Shapes_Line_Draw:
+    case shapemodel.Shapes_Line_Draw:
         draw_cached_line_shadow(state, &item_typed)
-    case core.Shapes_Circle_Draw:
+    case shapemodel.Shapes_Circle_Draw:
         draw_cached_circle_shadow(state, &item_typed)
-    case core.Shapes_Filled_Circle_Draw:
+    case shapemodel.Shapes_Filled_Circle_Draw:
         draw_cached_filledcircle_shadow(state, &item_typed)
-    case core.Shapes_Polygon_Draw:
+    case shapemodel.Shapes_Polygon_Draw:
         draw_cached_polygon_shadow(state, &item_typed)
     }
 }
 
 //   Return true when a cached point draw item belongs to the elevated layer.
-draw_cached_point_is_elevated :: #force_inline proc(p: ^core.Shapes_Point_Draw) -> bool {
+draw_cached_point_is_elevated :: #force_inline proc(
+    p: ^shapemodel.Shapes_Point_Draw) -> bool {
     return shadow_point_is_elevated(p^.point1)
 }
 
 //   Return true when a cached circle draw item belongs to the elevated layer.
 draw_cached_circle_is_elevated :: #force_inline proc(
-    c: ^core.Shapes_Circle_Draw) -> bool {
+    c: ^shapemodel.Shapes_Circle_Draw) -> bool {
     circle_points := [3]Vector3{c^.center, c^.start, c^.end}
     return has_any_elevated_shadow_point(circle_points[:])
 }
 
 //   Return true when a cached filled-circle draw item belongs to the elevated layer.
 draw_cached_filledcircle_is_elevated :: #force_inline proc(
-    c: ^core.Shapes_Filled_Circle_Draw) -> bool {
+    c: ^shapemodel.Shapes_Filled_Circle_Draw) -> bool {
     circle_points := [3]Vector3{c^.center, c^.start, c^.end}
     return has_any_elevated_shadow_point(circle_points[:])
 }
@@ -641,7 +646,7 @@ draw_cached_filledcircle_is_elevated :: #force_inline proc(
 //   Return true when any cached polygon vertex belongs to the elevated layer.
 draw_cached_polygon_is_elevated :: #force_inline proc(
     state: ^Euclid_General_State,
-    poly: ^core.Shapes_Polygon_Draw) -> bool {
+    poly: ^shapemodel.Shapes_Polygon_Draw) -> bool {
 
     cache := &state^.shape_world^.draw_cache
     vertices := cache^.polygon_vertices[
@@ -651,7 +656,7 @@ draw_cached_polygon_is_elevated :: #force_inline proc(
 
 //   Draw one cached point only when it belongs to the lower geometry layer.
 draw_cached_point_low :: #force_inline proc(
-    state: ^Euclid_General_State, p: ^core.Shapes_Point_Draw) {
+    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
     if !draw_cached_point_is_elevated(p) {
         draw_cached_point(state, p)
     }
@@ -659,7 +664,7 @@ draw_cached_point_low :: #force_inline proc(
 
 //   Draw one cached point only when it belongs to the merged higher layer.
 draw_cached_point_high :: #force_inline proc(
-    state: ^Euclid_General_State, p: ^core.Shapes_Point_Draw) {
+    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
     if draw_cached_point_is_elevated(p) {
         draw_cached_point(state, p)
     }
@@ -667,19 +672,19 @@ draw_cached_point_high :: #force_inline proc(
 
 //   Draw one cached line only when it belongs to the lower geometry layer.
 draw_cached_line_low :: #force_inline proc(
-    state: ^Euclid_General_State, l: ^core.Shapes_Line_Draw) {
+    state: ^Euclid_General_State, l: ^shapemodel.Shapes_Line_Draw) {
     draw_cached_line(state, l, false)
 }
 
 //   Draw one cached line only when it belongs to the merged higher layer.
 draw_cached_line_high :: #force_inline proc(
-    state: ^Euclid_General_State, l: ^core.Shapes_Line_Draw) {
+    state: ^Euclid_General_State, l: ^shapemodel.Shapes_Line_Draw) {
     draw_cached_line(state, l, true)
 }
 
 //   Draw one cached circle only when it belongs to the lower geometry layer.
 draw_cached_circle_low :: #force_inline proc(
-    state: ^Euclid_General_State, c: ^core.Shapes_Circle_Draw) {
+    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
     if !draw_cached_circle_is_elevated(c) {
         draw_cached_circle(state, c)
     }
@@ -687,7 +692,7 @@ draw_cached_circle_low :: #force_inline proc(
 
 //   Draw one cached circle only when it belongs to the merged higher layer.
 draw_cached_circle_high :: #force_inline proc(
-    state: ^Euclid_General_State, c: ^core.Shapes_Circle_Draw) {
+    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
     if draw_cached_circle_is_elevated(c) {
         draw_cached_circle(state, c)
     }
@@ -695,7 +700,7 @@ draw_cached_circle_high :: #force_inline proc(
 
 //   Draw one cached filled circle only when it belongs to the lower geometry layer.
 draw_cached_filledcircle_low :: #force_inline proc(
-    state: ^Euclid_General_State, c: ^core.Shapes_Filled_Circle_Draw) {
+    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
     if !draw_cached_filledcircle_is_elevated(c) {
         draw_cached_filledcircle(state, c)
     }
@@ -703,7 +708,7 @@ draw_cached_filledcircle_low :: #force_inline proc(
 
 //   Draw one cached filled circle only when it belongs to the merged higher layer.
 draw_cached_filledcircle_high :: #force_inline proc(
-    state: ^Euclid_General_State, c: ^core.Shapes_Filled_Circle_Draw) {
+    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
     if draw_cached_filledcircle_is_elevated(c) {
         draw_cached_filledcircle(state, c)
     }
@@ -711,7 +716,7 @@ draw_cached_filledcircle_high :: #force_inline proc(
 
 //   Draw one cached polygon only when it belongs to the lower geometry layer.
 draw_cached_polygon_low :: #force_inline proc(
-    state: ^Euclid_General_State, poly: ^core.Shapes_Polygon_Draw) {
+    state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
     if !draw_cached_polygon_is_elevated(state, poly) {
         draw_cached_polygon(state, poly)
     }
@@ -719,7 +724,7 @@ draw_cached_polygon_low :: #force_inline proc(
 
 //   Draw one cached polygon only when it belongs to the merged higher layer.
 draw_cached_polygon_high :: #force_inline proc(
-    state: ^Euclid_General_State, poly: ^core.Shapes_Polygon_Draw) {
+    state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
     if draw_cached_polygon_is_elevated(state, poly) {
         draw_cached_polygon(state, poly)
     }
@@ -728,8 +733,8 @@ draw_cached_polygon_high :: #force_inline proc(
 //   Render one full cached pen item for the merged higher layer.
 draw_cached_pen_full :: proc(
     state: ^Euclid_General_State,
-    pen: ^core.Shapes_Pen_Draw,
-    compass_caster: ^core.Shapes_Compass_Draw) {
+    pen: ^shapemodel.Shapes_Pen_Draw,
+    compass_caster: ^shapemodel.Shapes_Compass_Draw) {
     draw_cached_pen_active_dot(state, pen)
     begin_tool_brush_mode(state)
     draw_cached_pen(state, pen, compass_caster)
@@ -739,8 +744,8 @@ draw_cached_pen_full :: proc(
 //   Render one full cached compass item for the merged higher layer.
 draw_cached_compass_full :: proc(
     state: ^Euclid_General_State,
-    comp: ^core.Shapes_Compass_Draw,
-    pen_caster: ^core.Shapes_Pen_Draw) {
+    comp: ^shapemodel.Shapes_Compass_Draw,
+    pen_caster: ^shapemodel.Shapes_Pen_Draw) {
     draw_cached_compass_active_dot(state, comp)
     begin_tool_brush_mode(state)
     draw_cached_compass(state, comp, pen_caster)
@@ -911,7 +916,7 @@ draw_tool_brush_segment :: #force_inline proc(
 //   - Uses projected hinge winding as primary rule.
 //   - Falls back to world-depth ordering near collinear poses.
 compass_draw_joint1_leg_last :: #force_inline proc(
-    comp: ^core.Shapes_Compass_Draw, c0, c1, c2: Vector2) -> bool {
+    comp: ^shapemodel.Shapes_Compass_Draw, c0, c1, c2: Vector2) -> bool {
     v01 := c0 - c1
     v21 := c2 - c1
     hinge_cross := v01.x * v21.y - v01.y * v21.x
@@ -978,7 +983,8 @@ begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
         state, s^.loc_material_specular_tint, material.specular_tint)
     set_tool_brush_uniform_float(
         state, s^.loc_material_shadow_limit, material.shadow_limit)
-    set_tool_brush_uniform_float(state, s^.loc_viewport_height, f32(rl.GetRenderHeight()))
+    set_tool_brush_uniform_float(state,
+        s^.loc_viewport_height, f32(rl.GetRenderHeight()))
     set_tool_brush_uniform_float(state, s^.loc_stroke_mode, 0.0)
     set_tool_brush_uniform_float(state, s^.loc_arc_intersections_enabled, 0.0)
     set_tool_brush_uniform_float(state, s^.loc_occluder_count, 0.0)
@@ -1192,7 +1198,7 @@ point_in_triangle :: #force_inline proc(point, a, b, c: Vector3) -> bool {
 
 //   Validate that one polygon triangle's local indices are in range.
 polygon_triangle_indices_valid :: #force_inline proc(
-    tri: core.Shapes_Polygon_Triangle, vertex_count: int) -> bool {
+    tri: shapemodel.Shapes_Polygon_Triangle, vertex_count: int) -> bool {
 
     return tri.a >= 0 && tri.a < vertex_count &&
         tri.b >= 0 && tri.b < vertex_count &&
@@ -1202,7 +1208,7 @@ polygon_triangle_indices_valid :: #force_inline proc(
 //   Resolve one stable polygon plane from cached polygon triangles.
 polygon_plane :: proc(
     state: ^Euclid_General_State,
-    polygon: ^core.Shapes_Polygon_Draw,
+    polygon: ^shapemodel.Shapes_Polygon_Draw,
     plane_point, plane_normal: ^Vector3) -> bool {
 
     if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
@@ -1220,7 +1226,7 @@ polygon_plane :: proc(
         local_b := tri.b - polygon^.first_vertex
         local_c := tri.c - polygon^.first_vertex
         if !polygon_triangle_indices_valid(
-            core.Shapes_Polygon_Triangle{local_a, local_b, local_c},
+            shapemodel.Shapes_Polygon_Triangle{local_a, local_b, local_c},
             polygon^.vertex_count) {
             continue
         }
@@ -1244,7 +1250,7 @@ polygon_plane :: proc(
 //   Return true when one point lies inside any cached triangle of one polygon.
 point_inside_polygon :: proc(
     state: ^Euclid_General_State,
-    polygon: ^core.Shapes_Polygon_Draw,
+    polygon: ^shapemodel.Shapes_Polygon_Draw,
     point: Vector3) -> bool {
 
     cache := &state^.shape_world^.draw_cache
@@ -1258,7 +1264,7 @@ point_inside_polygon :: proc(
         local_b := tri.b - polygon^.first_vertex
         local_c := tri.c - polygon^.first_vertex
         if !polygon_triangle_indices_valid(
-            core.Shapes_Polygon_Triangle{local_a, local_b, local_c},
+            shapemodel.Shapes_Polygon_Triangle{local_a, local_b, local_c},
             polygon^.vertex_count) {
             continue
         }
@@ -1275,7 +1281,7 @@ point_inside_polygon :: proc(
 //   Draw one world-space pen segment fragment with standard cached pen styling.
 draw_pen_segment_fragment :: #force_inline proc(
     state: ^Euclid_General_State,
-    pen: ^core.Shapes_Pen_Draw,
+    pen: ^shapemodel.Shapes_Pen_Draw,
     point0, point1: Vector3) {
 
     c0 := view_core.iso_to_cartesian(point0, state^.iso_scale^)
@@ -1292,8 +1298,8 @@ draw_pen_segment_fragment :: #force_inline proc(
 //   - ok: true when the segment clips against z=0 and the polygon plane resolves.
 pen_polygon_clip_context :: proc(
     state: ^Euclid_General_State,
-    pen: ^core.Shapes_Pen_Draw,
-    polygon: ^core.Shapes_Polygon_Draw,
+    pen: ^shapemodel.Shapes_Pen_Draw,
+    polygon: ^shapemodel.Shapes_Polygon_Draw,
     ctx: ^Pen_Polygon_Clip_Context) -> bool {
 
     if !z_split_clip_segment_halfspace(
@@ -1321,7 +1327,7 @@ pen_polygon_clip_context :: proc(
 
 //   Bias the nearer clip endpoint downward to stabilize front/back ordering.
 pen_polygon_apply_bottom_bias :: proc(
-    pen: ^core.Shapes_Pen_Draw, ctx: ^Pen_Polygon_Clip_Context) {
+    pen: ^shapemodel.Shapes_Pen_Draw, ctx: ^Pen_Polygon_Clip_Context) {
 
     ctx^.clip_start = ctx^.stage0_start
     ctx^.clip_end = ctx^.stage0_end
@@ -1354,7 +1360,7 @@ pen_polygon_measure_sides :: proc(ctx: ^Pen_Polygon_Clip_Context) {
 //   - ok: true when the contact point is inside the polygon.
 pen_polygon_same_side_part :: proc(
     state: ^Euclid_General_State,
-    polygon: ^core.Shapes_Polygon_Draw,
+    polygon: ^shapemodel.Shapes_Polygon_Draw,
     ctx: ^Pen_Polygon_Clip_Context,
     crossing: ^Pen_Polygon_Crossing) -> bool {
 
@@ -1389,7 +1395,7 @@ pen_polygon_same_side_part :: proc(
 //   - ok: true when the intersection is computable and inside the polygon.
 pen_polygon_resolve_crossing_point :: proc(
     state: ^Euclid_General_State,
-    polygon: ^core.Shapes_Polygon_Draw,
+    polygon: ^shapemodel.Shapes_Polygon_Draw,
     ctx: ^Pen_Polygon_Clip_Context,
     out: ^Vector3) -> bool {
 
@@ -1423,7 +1429,7 @@ pen_polygon_resolve_crossing_point :: proc(
 //   - ok: true when the split point lies inside the polygon.
 pen_polygon_split_part :: proc(
     state: ^Euclid_General_State,
-    polygon: ^core.Shapes_Polygon_Draw,
+    polygon: ^shapemodel.Shapes_Polygon_Draw,
     ctx: ^Pen_Polygon_Clip_Context,
     crossing: ^Pen_Polygon_Crossing) -> bool {
 
@@ -1453,8 +1459,8 @@ pen_polygon_split_part :: proc(
 //   Build one pen/polygon crossing event using z=0 clipping as stage one.
 build_pen_polygon_crossing :: proc(
     state: ^Euclid_General_State,
-    pen: ^core.Shapes_Pen_Draw,
-    polygon: ^core.Shapes_Polygon_Draw,
+    pen: ^shapemodel.Shapes_Pen_Draw,
+    polygon: ^shapemodel.Shapes_Polygon_Draw,
     crossing: ^Pen_Polygon_Crossing) -> bool {
 
     ctx: Pen_Polygon_Clip_Context
@@ -1478,20 +1484,20 @@ build_pen_polygon_crossing :: proc(
 //   - pen: The pen draw item when found.
 //   - pen_index: Cache index of the pen item, or -1.
 find_cached_pen_item :: proc(
-    cache: ^core.Shapes_Draw_Cache) -> (core.Shapes_Pen_Draw, int) {
+    cache: ^shapemodel.Shapes_Draw_Cache) -> (shapemodel.Shapes_Pen_Draw, int) {
 
-    pen := core.Shapes_Pen_Draw{}
+    pen := shapemodel.Shapes_Pen_Draw{}
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
-        case core.Shapes_Pen_Draw:
+        case shapemodel.Shapes_Pen_Draw:
             return item_typed, i
-        case core.Shapes_Label_Draw,
-            core.Shapes_Point_Draw,
-            core.Shapes_Line_Draw,
-            core.Shapes_Circle_Draw,
-            core.Shapes_Filled_Circle_Draw,
-            core.Shapes_Polygon_Draw,
-            core.Shapes_Compass_Draw:
+        case shapemodel.Shapes_Label_Draw,
+            shapemodel.Shapes_Point_Draw,
+            shapemodel.Shapes_Line_Draw,
+            shapemodel.Shapes_Circle_Draw,
+            shapemodel.Shapes_Filled_Circle_Draw,
+            shapemodel.Shapes_Polygon_Draw,
+            shapemodel.Shapes_Compass_Draw:
         }
     }
     return pen, -1
@@ -1499,19 +1505,19 @@ find_cached_pen_item :: proc(
 
 //   Find the first cached compass draw item in the merged cache.
 find_cached_compass_item :: proc(
-    cache: ^core.Shapes_Draw_Cache) -> (core.Shapes_Compass_Draw, int) {
-    compass := core.Shapes_Compass_Draw{}
+    cache: ^shapemodel.Shapes_Draw_Cache) -> (shapemodel.Shapes_Compass_Draw, int) {
+    compass := shapemodel.Shapes_Compass_Draw{}
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
-        case core.Shapes_Compass_Draw:
+        case shapemodel.Shapes_Compass_Draw:
             return item_typed, i
-        case core.Shapes_Label_Draw,
-            core.Shapes_Point_Draw,
-            core.Shapes_Line_Draw,
-            core.Shapes_Circle_Draw,
-            core.Shapes_Filled_Circle_Draw,
-            core.Shapes_Polygon_Draw,
-            core.Shapes_Pen_Draw:
+        case shapemodel.Shapes_Label_Draw,
+            shapemodel.Shapes_Point_Draw,
+            shapemodel.Shapes_Line_Draw,
+            shapemodel.Shapes_Circle_Draw,
+            shapemodel.Shapes_Filled_Circle_Draw,
+            shapemodel.Shapes_Polygon_Draw,
+            shapemodel.Shapes_Pen_Draw:
         }
     }
     return compass, -1
@@ -1520,14 +1526,14 @@ find_cached_compass_item :: proc(
 //   Find one elevated polygon that crosses the given pen segment.
 find_pen_crossing_polygon :: proc(
     state: ^Euclid_General_State,
-    pen: ^core.Shapes_Pen_Draw,
+    pen: ^shapemodel.Shapes_Pen_Draw,
     pen_index: int,
     out_crossing: ^Pen_Polygon_Crossing) -> bool {
 
     cache := &state^.shape_world^.draw_cache
     for i in 0..<cache^.item_count {
         switch &item_typed in &cache^.items[i] {
-        case core.Shapes_Polygon_Draw:
+        case shapemodel.Shapes_Polygon_Draw:
             if !draw_cached_polygon_is_elevated(state, &item_typed) {
                 continue
             }
@@ -1543,13 +1549,13 @@ find_pen_crossing_polygon :: proc(
             trial.polygon = item_typed
             out_crossing^ = trial
             return true
-        case core.Shapes_Label_Draw,
-            core.Shapes_Point_Draw,
-            core.Shapes_Line_Draw,
-            core.Shapes_Circle_Draw,
-            core.Shapes_Filled_Circle_Draw,
-            core.Shapes_Pen_Draw,
-            core.Shapes_Compass_Draw:
+        case shapemodel.Shapes_Label_Draw,
+            shapemodel.Shapes_Point_Draw,
+            shapemodel.Shapes_Line_Draw,
+            shapemodel.Shapes_Circle_Draw,
+            shapemodel.Shapes_Filled_Circle_Draw,
+            shapemodel.Shapes_Pen_Draw,
+            shapemodel.Shapes_Compass_Draw:
         }
     }
     return false
@@ -1573,14 +1579,15 @@ find_pen_polygon_crossing :: proc(
 draw_pen_polygon_crossing :: proc(
     state: ^Euclid_General_State,
     crossing: ^Pen_Polygon_Crossing,
-    compass_caster: ^core.Shapes_Compass_Draw) {
+    compass_caster: ^shapemodel.Shapes_Compass_Draw) {
 
     draw_cached_pen_active_dot(state, &crossing^.pen)
 
     begin_tool_brush_mode(state)
     if crossing^.has_back {
         set_pen_compass_occluders(state, &crossing^.pen, compass_caster)
-        draw_pen_segment_fragment(state, &crossing^.pen, crossing^.back0, crossing^.back1)
+        draw_pen_segment_fragment(
+            state, &crossing^.pen, crossing^.back0, crossing^.back1)
         clear_tool_brush_occluder(state)
     }
     end_tool_brush_mode(state)
@@ -1718,10 +1725,12 @@ project_iso_points_batch_with_components :: proc(
 
 
 //   Render one cached label draw item.
-draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Draw) {
-    label := core.Shape_Label{mime = p.mime, byte_offset = p.source_offset,
+draw_cached_label :: proc(
+    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Label_Draw) {
+    label := shapemodel.Shape_Label{mime = p.mime, byte_offset = p.source_offset,
         byte_count = p.source_count, revision = p.source_revision}
-    source, found := core.shape_label_source(&state.shape_world.label_store, label)
+    source, found :=
+        shapemodel.shape_label_source(&state.shape_world.label_store, label)
     if !found {
         return
     }
@@ -1741,7 +1750,7 @@ draw_cached_label :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Label_Dr
 
 //   Render one cached point floor shadow.
 draw_cached_point_shadow :: proc(
-    state: ^Euclid_General_State, p: ^core.Shapes_Point_Draw) {
+    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
     if !shadow_point_is_elevated(p^.point1) {
         return
     }
@@ -1753,7 +1762,8 @@ draw_cached_point_shadow :: proc(
 
 
 //   Render one cached line floor shadow.
-draw_cached_line_shadow :: proc(state: ^Euclid_General_State, l: ^core.Shapes_Line_Draw) {
+draw_cached_line_shadow :: proc(
+    state: ^Euclid_General_State, l: ^shapemodel.Shapes_Line_Draw) {
     line_points := [2]Vector3{l^.point1, l^.point2}
     if !has_any_elevated_shadow_point(line_points[:]) {
         return
@@ -1762,7 +1772,8 @@ draw_cached_line_shadow :: proc(state: ^Euclid_General_State, l: ^core.Shapes_Li
     // Shadow pass keeps only the visible-above-plane fragment for split lines.
     clipped0 := Vector3{}
     clipped1 := Vector3{}
-    if !z_split_clip_segment_halfspace(l^.point1, l^.point2, true, &clipped0, &clipped1) {
+    if !z_split_clip_segment_halfspace(
+        l^.point1, l^.point2, true, &clipped0, &clipped1) {
         return
     }
 
@@ -1778,7 +1789,7 @@ draw_cached_line_shadow :: proc(state: ^Euclid_General_State, l: ^core.Shapes_Li
 
 //   Render one cached circle/arc floor shadow.
 draw_cached_circle_shadow :: proc(
-    state: ^Euclid_General_State, c: ^core.Shapes_Circle_Draw) {
+    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
     circle_points := [3]Vector3{c^.center, c^.start, c^.end}
     if !has_any_elevated_shadow_point(circle_points[:]) {
         return
@@ -1815,7 +1826,7 @@ draw_cached_circle_shadow :: proc(
 
 //   Render one cached filled-circle floor shadow.
 draw_cached_filledcircle_shadow :: proc(
-    state: ^Euclid_General_State, c: ^core.Shapes_Filled_Circle_Draw) {
+    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
     circle_points := [3]Vector3{c^.center, c^.start, c^.end}
     if !has_any_elevated_shadow_point(circle_points[:]) {
         return
@@ -1839,7 +1850,8 @@ draw_cached_filledcircle_shadow :: proc(
 
 
 //   Render one cached point draw item.
-draw_cached_point :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Point_Draw) {
+draw_cached_point :: proc(
+    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
     rl.DrawCircleV(c, p^.brush_size, p^.color)
 }
@@ -1847,7 +1859,7 @@ draw_cached_point :: proc(state: ^Euclid_General_State, p: ^core.Shapes_Point_Dr
 
 //   Render one cached line draw item.
 draw_cached_line :: proc(
-    state: ^Euclid_General_State, l: ^core.Shapes_Line_Draw, keep_above: bool) {
+    state: ^Euclid_General_State, l: ^shapemodel.Shapes_Line_Draw, keep_above: bool) {
     clipped0 := Vector3{}
     clipped1 := Vector3{}
     if !z_split_clip_segment_halfspace(
@@ -1867,7 +1879,8 @@ draw_cached_line :: proc(
 
 
 //   Render one cached circle/arc draw item.
-draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^core.Shapes_Circle_Draw) {
+draw_cached_circle :: proc(
+    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
     geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
@@ -1892,7 +1905,7 @@ draw_cached_circle :: proc(state: ^Euclid_General_State, c: ^core.Shapes_Circle_
 
 //   Render one cached filled-circle draw item.
 draw_cached_filledcircle :: proc(
-    state: ^Euclid_General_State, c: ^core.Shapes_Filled_Circle_Draw) {
+    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
     geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
     isocenter := view_core.iso_to_cartesian(geom.center, state^.iso_scale^)
 
@@ -1924,13 +1937,13 @@ draw_cached_filledcircle :: proc(
 //   Batch-project cached polygon vertices into screen space.
 project_cached_polygon_vertices :: #force_inline proc(
     state: ^Euclid_General_State,
-    poly: ^core.Shapes_Polygon_Draw,
+    poly: ^shapemodel.Shapes_Polygon_Draw,
     projected: []Vector2) -> bool {
 
     cache := &state^.shape_world^.draw_cache
     vertices := cache^.polygon_vertices[
         poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
-    xs, ys, zs: [core.MAX_DRAW_CACHE_POLYGON_VERTICES]f32
+    xs, ys, zs: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]f32
 
     _ = project_iso_points_batch_with_components(
         state,
@@ -1947,8 +1960,8 @@ project_cached_polygon_vertices :: #force_inline proc(
 
 //   Draw all cached triangles for a polygon using projected vertex positions.
 draw_cached_polygon_triangles :: #force_inline proc(
-    cache: ^core.Shapes_Draw_Cache,
-    poly: ^core.Shapes_Polygon_Draw,
+    cache: ^shapemodel.Shapes_Draw_Cache,
+    poly: ^shapemodel.Shapes_Polygon_Draw,
     projected: []Vector2,
     color: rl.Color) {
 
@@ -1975,7 +1988,7 @@ draw_cached_polygon_triangles :: #force_inline proc(
 
 //   Render one cached polygon floor shadow.
 draw_cached_polygon_shadow :: proc(
-    state: ^Euclid_General_State, poly: ^core.Shapes_Polygon_Draw) {
+    state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
     if poly^.vertex_count < 3 || poly^.triangle_count <= 0 {
         return
     }
@@ -1987,7 +2000,7 @@ draw_cached_polygon_shadow :: proc(
         return
     }
 
-    projected: [core.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
+    projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
     for i in 0..<poly^.vertex_count {
         projected[i] = shadow_to_screen(vertices[i], state)
     }
@@ -1998,12 +2011,12 @@ draw_cached_polygon_shadow :: proc(
 
 //   Render one cached polygon draw item.
 draw_cached_polygon :: proc(
-    state: ^Euclid_General_State, poly: ^core.Shapes_Polygon_Draw) {
+    state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
     if poly^.vertex_count < 3 || poly^.triangle_count <= 0 {
         return
     }
 
-    projected: [core.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
+    projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
     if !project_cached_polygon_vertices(state, poly, projected[:]) {
         return
     }
@@ -2016,8 +2029,8 @@ draw_cached_polygon :: proc(
 //   Upload relevant compass legs as casters for one pen receiver.
 set_pen_compass_occluders :: proc(
     state: ^Euclid_General_State,
-    pen: ^core.Shapes_Pen_Draw,
-    compass: ^core.Shapes_Compass_Draw) {
+    pen: ^shapemodel.Shapes_Pen_Draw,
+    compass: ^shapemodel.Shapes_Compass_Draw) {
     ctx := Tool_Brush_Occluder_Context{}
     if compass != nil {
         receiver := make_tool_brush_occluder(
@@ -2036,8 +2049,8 @@ set_pen_compass_occluders :: proc(
 //   Render one cached pen tool draw item.
 draw_cached_pen :: proc(
     state: ^Euclid_General_State,
-    pen: ^core.Shapes_Pen_Draw,
-    compass_caster: ^core.Shapes_Compass_Draw) {
+    pen: ^shapemodel.Shapes_Pen_Draw,
+    compass_caster: ^shapemodel.Shapes_Compass_Draw) {
     c0 := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
@@ -2049,7 +2062,7 @@ draw_cached_pen :: proc(
 
 //   Render active-end indicator for cached pen tool.
 draw_cached_pen_active_dot :: proc(
-    state: ^Euclid_General_State, pen: ^core.Shapes_Pen_Draw) {
+    state: ^Euclid_General_State, pen: ^shapemodel.Shapes_Pen_Draw) {
     c0 := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
@@ -2304,8 +2317,8 @@ draw_cached_compass_leg :: proc(
 //   Render one cached compass tool draw item.
 draw_cached_compass :: proc(
     state: ^Euclid_General_State,
-    comp: ^core.Shapes_Compass_Draw,
-    pen_caster: ^core.Shapes_Pen_Draw) {
+    comp: ^shapemodel.Shapes_Compass_Draw,
+    pen_caster: ^shapemodel.Shapes_Pen_Draw) {
     ctx := Compass_Leg_Draw_Context{
         state = state,
         comp = comp,
@@ -2342,7 +2355,7 @@ draw_cached_compass :: proc(
 
 //   Render active-end indicator for cached compass tool.
 draw_cached_compass_active_dot :: proc(
-    state: ^Euclid_General_State, comp: ^core.Shapes_Compass_Draw) {
+    state: ^Euclid_General_State, comp: ^shapemodel.Shapes_Compass_Draw) {
     c0 := view_core.iso_to_cartesian(comp^.joint1, state^.iso_scale^)
     c2 := view_core.iso_to_cartesian(comp^.joint2, state^.iso_scale^)
 
@@ -2363,7 +2376,8 @@ draw_cached_compass_active_dot :: proc(
 
 
 //   Render floor shadow for cached pen tool geometry.
-draw_cached_pen_shadow :: proc(state: ^Euclid_General_State, pen: ^core.Shapes_Pen_Draw) {
+draw_cached_pen_shadow :: proc(
+    state: ^Euclid_General_State, pen: ^shapemodel.Shapes_Pen_Draw) {
     s0 := shadow_to_screen(pen^.joint1, state)
     s1 := shadow_to_screen(pen^.joint2, state)
 
@@ -2406,7 +2420,7 @@ draw_outside_arc_compass_shadow_cached :: proc(
 
 //   Render floor shadow for cached compass tool geometry.
 draw_cached_compass_shadow :: proc(
-    state: ^Euclid_General_State, comp: ^core.Shapes_Compass_Draw) {
+    state: ^Euclid_General_State, comp: ^shapemodel.Shapes_Compass_Draw) {
     s0 := shadow_to_screen(comp^.joint1, state)
     s1 := shadow_to_screen(comp^.pivot, state)
     s2 := shadow_to_screen(comp^.joint2, state)

@@ -1,7 +1,9 @@
-package core
+package shapemodel
 
 import "core:unicode/utf8"
 import rl "vendor:raylib"
+
+Vector3 :: rl.Vector3
 
 MAX_SHAPE_ENTITIES :: MAX_SHAPESPOINTS
 MAX_SHAPE_VERTEX_REFERENCES :: MAX_SHAPE_ENTITIES

@@ -255,7 +255,7 @@ mailbox or copying large query and result payloads through the links.
 
 | Path | Boundary and policy | Julia execution | Display publication |
 | --- | --- | --- | --- |
-| Shared transport | `src/core/core.odin`, `src/bridge/communication_link.odin`, `src/bridge/runtime_service.odin` | `src/bridge/runtime_service.odin` | `src/bridge/runtime_service.odin` |
+| Shared transport | `src/bridge/model/`, `src/bridge/communication_link.odin`, `src/bridge/runtime_service.odin` | `src/bridge/runtime_service.odin` | `src/bridge/runtime_service.odin` |
 | Terminal actors | `src/view/terminal_service.odin`, `src/core/protocol/` | `src/julia/host/`, `src/julia/actors/`, `src/julia/repl/` | `src/view/terminal/`, `src/terminal/` |
 | Presentation/Dynview | `src/julia/bridge/presentation.jl`, `src/bridge/abi-presentation.odin` | Direct callback during content execution | `src/view/presentation_runtime.odin`, `src/bridge/dynview_native_tex.odin`, `src/dynview/` |
 | Animation ticks | `src/bridge/animations.odin` | `src/julia/policy/`, `src/julia/runtime_host.jl`, content modules | `src/bridge/scene_commands.odin`, `src/view/simulation_executor.odin` |

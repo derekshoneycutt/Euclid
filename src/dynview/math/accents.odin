@@ -1,15 +1,16 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 
 // Math_Glyph_Accent_Input contains immutable sources and one measured base box.
 Math_Glyph_Accent_Input :: struct {
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     font_size: f32,
     child_width, child_ascent, child_descent: f32,
     base_attachment: f32,
-    sources: [2]app_core.Font_Math_Stretch_Source,
+    sources: [2]fontmodel.Font_Math_Stretch_Source,
     brace_mode: i32,
 }
 
@@ -20,7 +21,7 @@ Math_Glyph_Accent_Geometry :: struct {
     child_x, accent_x, accent_line_top: f32,
     width, ascent, descent, scale, raster_ascent: f32,
     top_accent_attachment: f32,
-    construction: app_core.Font_Math_Stretch_Construction,
+    construction: fontmodel.Font_Math_Stretch_Construction,
 }
 
 Math_Accent_Construction_Bounds :: struct {
@@ -29,7 +30,7 @@ Math_Accent_Construction_Bounds :: struct {
 }
 
 Math_Accent_Source_Selection :: struct {
-    source: app_core.Font_Math_Stretch_Source,
+    source: fontmodel.Font_Math_Stretch_Source,
     flattened: bool,
     valid: bool,
 }
@@ -39,15 +40,15 @@ Math_Accent_Resolution :: struct {
     flattened: bool,
     accent_base_height: f32,
     scale: f32,
-    source: app_core.Font_Math_Stretch_Source,
-    construction: app_core.Font_Math_Stretch_Construction,
+    source: fontmodel.Font_Math_Stretch_Source,
+    construction: fontmodel.Font_Math_Stretch_Construction,
     bounds: Math_Accent_Construction_Bounds,
 }
 
 //   Return the intrinsic accent glyph when no wider construction is available.
 math_accent_intrinsic_construction :: proc(
-    source: app_core.Font_Math_Stretch_Source,
-    generation: u64) -> app_core.Font_Math_Stretch_Construction {
+    source: fontmodel.Font_Math_Stretch_Source,
+    generation: u64) -> fontmodel.Font_Math_Stretch_Construction {
 
     variants := source.variants
     if !variants.valid || variants.generation != generation ||
@@ -55,7 +56,7 @@ math_accent_intrinsic_construction :: proc(
         return {}
     }
     variant := variants.values[0]
-    construction := app_core.Font_Math_Stretch_Construction{
+    construction := fontmodel.Font_Math_Stretch_Construction{
         valid = true, generation = generation,
         base_glyph_id = variants.base_glyph_id,
         advance = f32(max(1, variant.advance)), count = 1,
@@ -68,7 +69,7 @@ math_accent_intrinsic_construction :: proc(
 
 //   Return raw ink bounds for one horizontal construction.
 math_accent_construction_bounds :: proc(
-    construction: app_core.Font_Math_Stretch_Construction) ->
+    construction: fontmodel.Font_Math_Stretch_Construction) ->
         Math_Accent_Construction_Bounds {
 
     result: Math_Accent_Construction_Bounds

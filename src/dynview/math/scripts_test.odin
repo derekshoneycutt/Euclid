@@ -1,11 +1,12 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 import "core:testing"
 
 //   Build deterministic script constants whose 26.6 values map directly at 32 px.
-math_script_test_constants :: proc() -> app_core.Font_Math_Constants {
-    constants := app_core.Font_Math_Constants{
+math_script_test_constants :: proc() -> fontmodel.Font_Math_Constants {
+    constants := fontmodel.Font_Math_Constants{
         valid = true,
         generation = 11,
         base_pixel_size = 32,
@@ -27,9 +28,9 @@ math_script_test_constants :: proc() -> app_core.Font_Math_Constants {
 //   Build one two-range table in the test generation.
 math_script_test_kern_table :: proc(
     corner: u8,
-    maximum, low, high: i32) -> app_core.Font_Math_Kern_Table {
+    maximum, low, high: i32) -> fontmodel.Font_Math_Kern_Table {
 
-    table := app_core.Font_Math_Kern_Table{
+    table := fontmodel.Font_Math_Kern_Table{
         valid = true, generation = 11, glyph_id = 9, corner = corner, count = 2}
     table.entries[0] = {maximum, low}
     table.entries[1] = {maximum+1, high}

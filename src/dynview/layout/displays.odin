@@ -1,6 +1,7 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
 
 // Retain one resolved block measure for composition and final placement.
 Document_Block_Measure :: struct {
@@ -18,7 +19,7 @@ Document_Horizontal_Placement :: struct {
 
 // Resolve one block's content origin and width from semantic margin levels.
 document_block_measure :: #force_inline proc(
-    block: app_core.Dynview_Document_Block,
+    block: dynviewmodel.Dynview_Document_Block,
     available_width, font_size: f32,
     label_column: f32 = 0,
     label_width: f32 = 0) -> Document_Block_Measure {
@@ -50,7 +51,7 @@ document_block_measure :: #force_inline proc(
 
 // Resolve the first-line indent supported by one semantic paragraph format.
 document_block_first_line_indent :: #force_inline proc(
-    block: app_core.Dynview_Document_Block,
+    block: dynviewmodel.Dynview_Document_Block,
     font_size: f32) -> f32 {
 
     if block.kind != .Paragraph || block.no_indent || block.alignment != .Left {
@@ -61,7 +62,7 @@ document_block_first_line_indent :: #force_inline proc(
 
 // Resolve one semantic line's horizontal origin within the document content width.
 document_line_horizontal_offset :: #force_inline proc(
-    block: app_core.Dynview_Document_Block,
+    block: dynviewmodel.Dynview_Document_Block,
     line_width, available_width: f32) -> f32 {
 
     remaining := max(0, available_width-line_width)
@@ -79,9 +80,9 @@ document_line_horizontal_offset :: #force_inline proc(
 
 // Place paragraph alignment and dedicated display centering without changing widths.
 document_place_block_horizontally :: proc(
-    block: app_core.Dynview_Document_Block,
-    lines: []app_core.Dynview_Document_Layout_Line,
-    display_rows: []app_core.Dynview_Document_Display_Row,
+    block: dynviewmodel.Dynview_Document_Block,
+    lines: []dynviewmodel.Dynview_Document_Layout_Line,
+    display_rows: []dynviewmodel.Dynview_Document_Display_Row,
     placement: Document_Horizontal_Placement) {
 
     for &line, line_index in lines {

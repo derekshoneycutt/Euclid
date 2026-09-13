@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 import view_core "../core"
 import view_font "../font"
 import "core:strings"
@@ -37,7 +38,7 @@ Text_Button_Colors :: struct {
 
 //   Resolve whether this text button currently owns the shared press state.
 text_button_owns_press :: #force_inline proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     id: int) -> bool {
 
     return press_owner^.active &&
@@ -47,7 +48,7 @@ text_button_owns_press :: #force_inline proc(
 
 //   Capture shared press ownership for a text button when it is newly pressed.
 text_button_try_capture_press :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     params: Text_Button_Params,
     hovered: bool,
     can_interact: bool,
@@ -66,7 +67,7 @@ text_button_try_capture_press :: proc(
 
 //   Release shared press ownership and resolve whether the button was clicked.
 text_button_release_press :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     mouse: Input_Frame,
     can_interact: bool,
     hovered_item: bool,
@@ -148,7 +149,7 @@ text_button_draw_label :: proc(
 //   Resolve one text button interaction without issuing drawing commands.
 update_text_button :: proc(
     params: Text_Button_Params,
-    press_owner: ^core.Ui_Press_Owner_State) -> Text_Button_Result {
+    press_owner: ^viewmodel.Ui_Press_Owner_State) -> Text_Button_Result {
 
     button_rect := clamp_non_negative_rect(params.rect)
     local_mouse := text_button_local_mouse(params.mouse, params.scroll_offset)

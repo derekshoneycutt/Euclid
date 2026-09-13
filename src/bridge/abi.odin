@@ -1,5 +1,10 @@
 package bridge
 
+import rl "vendor:raylib"
+
+import bridgemodel "model"
+import shapemodel "../shapes/model"
+
 // Julia module provides the Odin-Julia Bridge to coordinate all actions between the 2
 // languages. Most of these are wrappers around Odin module functions with some specific
 // behavior for simplicity on the animation.
@@ -15,10 +20,9 @@ package bridge
 // it can feel a little tight here. Ultimately, the Julia is more in control of the catalogue,
 // though it is stored and chosen from via the Odin.
 
-import "../core"
 
-MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
-MAX_SHAPESCONSTRAINTS :: core.MAX_SHAPESCONSTRAINTS
+MAX_SHAPESPOINTS :: shapemodel.MAX_SHAPESPOINTS
+MAX_SHAPESCONSTRAINTS :: shapemodel.MAX_SHAPESCONSTRAINTS
 
 ANIMATION_RESET_MIN_INTERVAL :: 0.35
 FLOOR_CONTACT_Z_EPSILON :: 0.015
@@ -51,7 +55,7 @@ BRIDGE_STATUS_SCHEMA_MISMATCH :: 9
 BRIDGE_STATUS_INVALID_UTF8 :: 10
 BRIDGE_STATUS_UNSUPPORTED_MIME :: 11
 
-Bridge_Color :: core.Bridge_Color
+Bridge_Color :: bridgemodel.Bridge_Color
 
 // Carry presentation values shared by shape construction exports.
 Bridge_Shape_Style :: struct {
@@ -61,7 +65,7 @@ Bridge_Shape_Style :: struct {
 
 // Carry one positioned shape's construction values within the ABI parameter budget.
 Bridge_Positioned_Shape_Input :: struct {
-    position: core.Vector3,
+    position: rl.Vector3,
     style: Bridge_Shape_Style,
 }
 
@@ -139,7 +143,7 @@ Bridge_Shape_View :: struct {
     has_transform: u8,
     has_style: u8,
     has_active_feature: u8,
-    position: core.Vector3,
+    position: rl.Vector3,
     color: Bridge_Color,
     active_color: Bridge_Color,
     has_active_color: u8,

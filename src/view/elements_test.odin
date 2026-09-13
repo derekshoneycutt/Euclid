@@ -1,6 +1,7 @@
 package view
 
-import "../core"
+import viewmodel "model"
+
 
 import "core:math"
 import "core:math/linalg"
@@ -51,7 +52,7 @@ append_tool_brush_occluder_filters_and_caps_context :: proc(t: ^testing.T) {
     append_tool_brush_occluder(&ctx, receiver, nearby2)
     append_tool_brush_occluder(&ctx, receiver, nearby3)
 
-    testing.expect_value(t, ctx.count, core.MAX_TOOL_BRUSH_OCCLUDERS)
+    testing.expect_value(t, ctx.count, viewmodel.MAX_TOOL_BRUSH_OCCLUDERS)
     testing.expect_value(t, ctx.occluders[0].p0, nearby1.p0)
     testing.expect_value(t, ctx.occluders[1].p0, nearby2.p0)
 }
@@ -136,7 +137,7 @@ make_compass_arc_occluders_preserves_attachment_slots :: proc(t: ^testing.T) {
 
     ctx := make_compass_arc_occluders(leg1, leg2)
 
-    testing.expect_value(t, ctx.count, core.MAX_TOOL_BRUSH_OCCLUDERS)
+    testing.expect_value(t, ctx.count, viewmodel.MAX_TOOL_BRUSH_OCCLUDERS)
     testing.expect_value(t, ctx.occluders[0].depth0, leg1.depth0)
     testing.expect_value(t, ctx.occluders[1].depth0, leg2.depth0)
 }

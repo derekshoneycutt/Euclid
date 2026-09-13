@@ -1,5 +1,16 @@
 package view
 
+import rl "vendor:raylib"
+
+import bridgemodel "../bridge/model"
+import dynviewmodel "../dynview/model"
+
+import fontmodel "font/model"
+
+import shapemodel "../shapes/model"
+
+import storage "../core/storage"
+
 import "../diagnostics"
 
 import "core:log"
@@ -20,28 +31,28 @@ import app_evidence_trace "../evidence/trace"
 View_Snapshot_Published_Expected :: struct {
     text: string,
     fallback_storage: [^]u8,
-    record_storage: [^]app_core.Dynview_Command,
+    record_storage: [^]dynviewmodel.Dynview_Command,
     block_id: i32,
 }
 
 View_Snapshot_Publication_Fixture :: struct {
     state: ^app_core.Euclid_General_State,
     service: ^app_bridge.Julia_Runtime_Service,
-    animation: ^app_core.Euclid_Julia_Animation_Interface,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
 Copy_Hit_Target_Fixture :: struct {
-    items: [2]app_core.Dynview_Layout_Item,
-    lines: [6]app_core.Dynview_Layout_Line,
+    items: [2]dynviewmodel.Dynview_Layout_Item,
+    lines: [6]dynviewmodel.Dynview_Layout_Line,
     layout: app_dyncompile.Copy_Hit_Target_Layout,
 }
 
 //   Initialize caller-owned bounded layout storage for direct layout unit tests.
 dynview_test_layout_builders_init :: proc(
     t: ^testing.T,
-    cache: ^app_core.Dynview_Compile_Cache,
-    arena: ^app_core.Arena_Owner) {
-    testing.expect(t, app_core.arena_owner_init(arena))
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    arena: ^storage.Arena_Owner) {
+    testing.expect(t, storage.arena_owner_init(arena))
     testing.expect_value(t, app_dynlayout.layout_builders_init(cache, arena),
         dyncore.DYNVIEW_STATUS_OK)
 }
@@ -50,38 +61,38 @@ dynview_test_layout_builders_init :: proc(
 view_snapshot_test_record_builders_init :: proc(
     t: ^testing.T, snapshot: ^app_bridge.View_Snapshot) {
 
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.command_builder, app_core.DYNVIEW_MAX_COMMANDS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.math_program_builder, app_core.DYNVIEW_MAX_MATH_PROGRAMS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
+    testing.expect_value(t, storage.bounded_element_builder_init(
+        &snapshot^.command_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
+        &snapshot^.math_program_builder, dynviewmodel.DYNVIEW_MAX_MATH_PROGRAMS,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
         &snapshot^.math_table_descriptor_builder,
-        app_core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.math_command_builder, app_core.DYNVIEW_MAX_MATH_COMMANDS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.math_node_builder, app_core.DYNVIEW_MAX_MATH_NODES,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_byte_builder_init(
-        &snapshot^.document_text_builder, app_core.DYNVIEW_MAX_DOCUMENT_BYTES,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.document_builder, app_core.DYNVIEW_MAX_DOCUMENTS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.document_block_builder, app_core.DYNVIEW_MAX_DOCUMENT_BLOCKS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &snapshot^.document_inline_builder, app_core.DYNVIEW_MAX_DOCUMENT_INLINES,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
+        dynviewmodel.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
+        &snapshot^.math_command_builder, dynviewmodel.DYNVIEW_MAX_MATH_COMMANDS,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
+        &snapshot^.math_node_builder, dynviewmodel.DYNVIEW_MAX_MATH_NODES,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_byte_builder_init(
+        &snapshot^.document_text_builder, dynviewmodel.DYNVIEW_MAX_DOCUMENT_BYTES,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
+        &snapshot^.document_builder, dynviewmodel.DYNVIEW_MAX_DOCUMENTS,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
+        &snapshot^.document_block_builder, dynviewmodel.DYNVIEW_MAX_DOCUMENT_BLOCKS,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
+        &snapshot^.document_inline_builder, dynviewmodel.DYNVIEW_MAX_DOCUMENT_INLINES,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
         &snapshot^.document_display_row_builder,
-        app_core.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+        dynviewmodel.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
 }
 
 //   Initialize and seal both slot-owned text builders for direct snapshot tests.
@@ -89,27 +100,27 @@ view_snapshot_test_text_builders_init :: proc(
     t: ^testing.T, snapshot: ^app_bridge.View_Snapshot,
     fallback_text, command_text: string) {
 
-    testing.expect(t, app_core.arena_owner_init(
-        &snapshot^.arena, app_core.VIEW_SNAPSHOT_ARENA_RESERVATION))
-    testing.expect_value(t, app_core.bounded_byte_builder_init(
-        &snapshot^.presentation_builder, app_core.VIEW_SNAPSHOT_TEXT_CAPACITY,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_byte_builder_init(
-        &snapshot^.command_text_builder, app_core.DYNVIEW_MAX_TEXT_BYTES,
-        &snapshot^.arena), app_core.Bounded_Builder_Status.Ok)
+    testing.expect(t, storage.arena_owner_init(
+        &snapshot^.arena, bridgemodel.VIEW_SNAPSHOT_ARENA_RESERVATION))
+    testing.expect_value(t, storage.bounded_byte_builder_init(
+        &snapshot^.presentation_builder, bridgemodel.VIEW_SNAPSHOT_TEXT_CAPACITY,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_byte_builder_init(
+        &snapshot^.command_text_builder, dynviewmodel.DYNVIEW_MAX_TEXT_BYTES,
+        &snapshot^.arena), storage.Bounded_Builder_Status.Ok)
     view_snapshot_test_record_builders_init(t, snapshot)
-    testing.expect_value(t, app_core.bounded_byte_builder_append(
+    testing.expect_value(t, storage.bounded_byte_builder_append(
         &snapshot^.presentation_builder, transmute([]u8)fallback_text),
-        app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, app_core.bounded_byte_builder_append(
+        storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_byte_builder_append(
         &snapshot^.command_text_builder, transmute([]u8)command_text),
-        app_core.Bounded_Builder_Status.Ok)
-    fallback, fallback_status := app_core.bounded_byte_builder_seal(
+        storage.Bounded_Builder_Status.Ok)
+    fallback, fallback_status := storage.bounded_byte_builder_seal(
         &snapshot^.presentation_builder)
-    commands, command_status := app_core.bounded_byte_builder_seal(
+    commands, command_status := storage.bounded_byte_builder_seal(
         &snapshot^.command_text_builder)
-    testing.expect_value(t, fallback_status, app_core.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, command_status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, fallback_status, storage.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, command_status, storage.Bounded_Builder_Status.Ok)
     snapshot^.presentation_bytes = fallback
     snapshot^.command_text = commands
 }
@@ -121,7 +132,7 @@ view_snapshot_test_payloads_init :: proc(
 
     view_snapshot_test_text_builders_init(t, snapshot, fallback_text, "")
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot,
-        {commands = []app_core.Dynview_Command{{block_id = block_id}}}))
+        {commands = []dynviewmodel.Dynview_Command{{block_id = block_id}}}))
 }
 
 //   Rebuild text and one command payload after a prepared slot reset.
@@ -132,7 +143,7 @@ view_snapshot_test_payloads_build :: proc(
     testing.expect(t, app_bridge.build_view_snapshot_text_payloads(
         snapshot, fallback_text, nil))
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(snapshot,
-        {commands = []app_core.Dynview_Command{{block_id = block_id}}}))
+        {commands = []dynviewmodel.Dynview_Command{{block_id = block_id}}}))
 }
 
 //   Require a retired slot to be free without resetting its arena early.
@@ -147,7 +158,7 @@ view_snapshot_expect_released_without_reset :: proc(
 //   Set one complete snapshot's publication identity for direct display tests.
 view_snapshot_test_complete :: proc(
     snapshot: ^app_bridge.View_Snapshot,
-    animation: ^app_core.Euclid_Julia_Animation_Interface,
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
     generation, runtime_generation, animation_generation: u64) {
 
     snapshot^.state = .Complete
@@ -160,7 +171,7 @@ view_snapshot_test_complete :: proc(
 //   Require every display content slice to alias its published snapshot payload.
 view_snapshot_expect_content_aliases :: proc(
     t: ^testing.T, snapshot: ^app_bridge.View_Snapshot,
-    runtime: ^app_core.Dynview_System) {
+    runtime: ^dynviewmodel.Dynview_System) {
 
     testing.expect_value(t, raw_data(runtime^.content.commands),
         raw_data(snapshot^.commands))
@@ -176,7 +187,7 @@ view_snapshot_expect_content_aliases :: proc(
 
 //   Require derived math mutations to remain isolated from immutable content.
 view_snapshot_expect_math_working_isolation :: proc(
-    t: ^testing.T, runtime: ^app_core.Dynview_System) {
+    t: ^testing.T, runtime: ^dynviewmodel.Dynview_System) {
 
     app_dyncompile.prepare_math_working_records(runtime)
     runtime^.compile_cache.math_programs[0].draw_width = 42
@@ -203,7 +214,7 @@ view_snapshot_expect_published_generation :: proc(
 //   Verify cell height participates in Dynview font invalidation identity.
 @(test)
 dynview_track_font_retains_canonical_cell_metrics :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
     runtime^.compile_cache.is_valid = true
 
@@ -226,14 +237,14 @@ dynview_track_font_retains_canonical_cell_metrics :: proc(t: ^testing.T) {
 // Verify an effective variant publication invalidates even at the same generation number.
 @(test)
 dynview_track_prose_fonts_includes_effective_variant :: proc(t: ^testing.T) {
-    arena: app_core.Arena_Owner
-    testing.expect(t, app_core.arena_owner_init(&arena))
-    defer app_core.arena_owner_destroy(&arena)
-    allocator := app_core.arena_owner_allocator(&arena)
-    runtime := new(app_core.Dynview_System, allocator)
-    count := int(app_core.Font_Key.Math_Regular)
-    keys: [int(app_core.Font_Key.Math_Regular)]app_core.Font_Key
-    generations: [int(app_core.Font_Key.Math_Regular)]u64
+    arena: storage.Arena_Owner
+    testing.expect(t, storage.arena_owner_init(&arena))
+    defer storage.arena_owner_destroy(&arena)
+    allocator := storage.arena_owner_allocator(&arena)
+    runtime := new(dynviewmodel.Dynview_System, allocator)
+    count := int(fontmodel.Font_Key.Math_Regular)
+    keys: [int(fontmodel.Font_Key.Math_Regular)]fontmodel.Font_Key
+    generations: [int(fontmodel.Font_Key.Math_Regular)]u64
     for index in 0..<count {
         keys[index] = .Regular
         generations[index] = 1
@@ -242,7 +253,7 @@ dynview_track_prose_fonts_includes_effective_variant :: proc(t: ^testing.T) {
     runtime^.pending_invalidation_mask = 0
     runtime^.compile_cache.is_valid = true
 
-    keys[int(app_core.Font_Key.Bold)] = .Bold
+    keys[int(fontmodel.Font_Key.Bold)] = .Bold
     app_dynview.track_prose_fonts(runtime, keys[:], generations[:])
 
     testing.expect(t,
@@ -275,7 +286,7 @@ presentation_native_error_underline_style_is_stable :: proc(t: ^testing.T) {
 
     style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_UNDERLINE)
     testing.expect(t, style.underline)
-    testing.expect_value(t, style.font_flags, app_core.Font_Variant_Flags.Regular)
+    testing.expect_value(t, style.font_flags, fontmodel.Font_Variant_Flags.Regular)
 }
 
 //   Verify the Julia interface staging slots alternate between the two slots.
@@ -324,14 +335,14 @@ view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(
 
 // Create one transform-and-style entity for scene command tests.
 scene_command_test_entity :: proc(
-    world: ^app_core.Shape_World,
-    position: app_core.Vector3) -> app_core.Shape_Entity {
-    entity: app_core.Shape_Entity
-    assert(app_core.shape_world_create_entity(world, &entity) == .Ok)
-    assert(app_core.shape_component_insert(&world^.transforms, &world^.registry,
-        entity, app_core.Shape_Transform{position = position}) == .Ok)
-    assert(app_core.shape_component_insert(&world^.render_styles, &world^.registry,
-        entity, app_core.Shape_Render_Style{}) == .Ok)
+    world: ^shapemodel.Shape_World,
+    position: rl.Vector3) -> shapemodel.Shape_Entity {
+    entity: shapemodel.Shape_Entity
+    assert(shapemodel.shape_world_create_entity(world, &entity) == .Ok)
+    assert(shapemodel.shape_component_insert(&world^.transforms, &world^.registry,
+        entity, shapemodel.Shape_Transform{position = position}) == .Ok)
+    assert(shapemodel.shape_component_insert(&world^.render_styles, &world^.registry,
+        entity, shapemodel.Shape_Render_Style{}) == .Ok)
     return entity
 }
 
@@ -340,11 +351,11 @@ scene_command_test_entity :: proc(
 scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
+    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    world := new(app_core.Shape_World, context.allocator)
+    world := new(shapemodel.Shape_World, context.allocator)
     defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
@@ -355,22 +366,22 @@ scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
 
     state^.scene_command_batch_target = &batch
     first_command, first_captured := app_bridge.capture_shape_command(
-        state, .Set_Shape_Position, app_core.shape_entity_pack(first))
+        state, .Set_Shape_Position, shapemodel.shape_entity_pack(first))
     first_command^.position = {1, 2, 3}
     testing.expect(t, first_captured)
     second_command, second_captured := app_bridge.capture_shape_command(
-        state, .Set_Shape_Position, app_core.shape_entity_pack(second))
+        state, .Set_Shape_Position, shapemodel.shape_entity_pack(second))
     second_command^.position = {4, 5, 6}
     testing.expect(t, second_captured)
     state^.scene_command_batch_target = nil
 
     testing.expect(t, app_bridge.commit_scene_command_batch(state, &batch))
-    transform_0, ok_0 := app_core.shape_component_get(
+    transform_0, ok_0 := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, first)
-    transform_1, ok_1 := app_core.shape_component_get(
+    transform_1, ok_1 := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, second)
-    testing.expect(t, ok_0 && transform_0^.position == app_core.Vector3{1, 2, 3})
-    testing.expect(t, ok_1 && transform_1^.position == app_core.Vector3{4, 5, 6})
+    testing.expect(t, ok_0 && transform_0^.position == rl.Vector3{1, 2, 3})
+    testing.expect(t, ok_1 && transform_1^.position == rl.Vector3{4, 5, 6})
 }
 
 //   Verify an invalid tail command rejects the whole batch atomically.
@@ -378,11 +389,11 @@ scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
 scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
+    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    world := new(app_core.Shape_World, context.allocator)
+    world := new(shapemodel.Shape_World, context.allocator)
     defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
@@ -391,16 +402,16 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
     batch.commands[0] = app_bridge.Scene_Command{
         kind = .Set_Shape_Position,
-        entity = app_core.shape_entity_pack(entity), position = {1, 2, 3}}
+        entity = shapemodel.shape_entity_pack(entity), position = {1, 2, 3}}
     batch.commands[1] = app_bridge.Scene_Command{
         kind = .Set_Shape_Position,
-        entity = app_core.shape_entity_pack({slot = 2, generation = 1}),
+        entity = shapemodel.shape_entity_pack({slot = 2, generation = 1}),
         position = {4, 5, 6}}
 
     testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
-    transform, found := app_core.shape_component_get(
+    transform, found := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, entity)
-    testing.expect(t, found && transform^.position == app_core.Vector3{9, 9, 9})
+    testing.expect(t, found && transform^.position == rl.Vector3{9, 9, 9})
 }
 
 //   Verify overflow and stale-animation commands reject the batch atomically.
@@ -408,11 +419,11 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
 scene_command_batch_rejects_overflow_and_stale_animation :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
+    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    current := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    current := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(current)
-    stale := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    stale := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(stale)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = current
@@ -432,9 +443,9 @@ animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(
     defer free(state)
     service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
-    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
+    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    current := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    current := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(current)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = current
@@ -463,17 +474,17 @@ animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(
 scene_command_batch_defers_shape_style_until_commit :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
+    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    world := new(app_core.Shape_World, context.allocator)
+    world := new(shapemodel.Shape_World, context.allocator)
     defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
     state^.shape_world = world
     entity := scene_command_test_entity(world, {})
-    style, found := app_core.shape_component_get_mut(
+    style, found := shapemodel.shape_component_get_mut(
         &world^.render_styles, &world^.registry, entity)
     testing.expect(t, found)
     style^.offset = 1
@@ -481,7 +492,7 @@ scene_command_batch_defers_shape_style_until_commit :: proc(t: ^testing.T) {
 
     app_bridge.begin_scene_command_batch(state, &batch)
     command, captured := app_bridge.capture_shape_command(
-        state, .Set_Shape_Offset, app_core.shape_entity_pack(entity))
+        state, .Set_Shape_Offset, shapemodel.shape_entity_pack(entity))
     command^.scalar = 2
     testing.expect(t, captured)
     testing.expect_value(t, style^.offset, f32(1))
@@ -498,11 +509,11 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
 
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
+    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
-    world := new(app_core.Shape_World, context.allocator)
+    world := new(shapemodel.Shape_World, context.allocator)
     defer free(world)
     state^.julia_interface = interface
     state^.julia_interface^.current_animation = animation
@@ -511,13 +522,13 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
     batch := app_bridge.Scene_Command_Batch{animation = animation, command_count = 2}
     batch.commands[0] = app_bridge.Scene_Command{
         kind = .Set_Shape_Position,
-        entity = app_core.shape_entity_pack(entity), position = {1, 2, 3}}
+        entity = shapemodel.shape_entity_pack(entity), position = {1, 2, 3}}
     batch.commands[1] = app_bridge.Scene_Command{kind = .Set_Tool_Lock}
 
     testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
-    transform, found := app_core.shape_component_get(
+    transform, found := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, entity)
-    testing.expect(t, found && transform^.position == app_core.Vector3{9, 9, 9})
+    testing.expect(t, found && transform^.position == rl.Vector3{9, 9, 9})
 }
 
 //   Verify the animation query snapshot is immutable while the worker ticks.
@@ -525,25 +536,25 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
 animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    world := new(app_core.Shape_World, context.allocator)
+    world := new(shapemodel.Shape_World, context.allocator)
     defer free(world)
     state^.shape_world = world
-    status := app_core.shape_world_create_entity(world, &state^.world_pen.joint1)
-    testing.expect_value(t, status, app_core.Shape_World_Status.Ok)
-    status = app_core.shape_component_insert(&world^.transforms, &world^.registry,
+    status := shapemodel.shape_world_create_entity(world, &state^.world_pen.joint1)
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    status = shapemodel.shape_component_insert(&world^.transforms, &world^.registry,
         state^.world_pen.joint1,
-        app_core.Shape_Transform{position = {1, 2, 3}})
-    testing.expect_value(t, status, app_core.Shape_World_Status.Ok)
+        shapemodel.Shape_Transform{position = {1, 2, 3}})
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     snapshot: app_bridge.Animation_Query_Snapshot
     app_bridge.capture_animation_query_snapshot(state, &snapshot)
 
-    transform, found := app_core.shape_component_get_mut(
+    transform, found := shapemodel.shape_component_get_mut(
         &world^.transforms, &world^.registry, state^.world_pen.joint1)
     testing.expect(t, found)
     transform^.position = {4, 5, 6}
     state^.animation_query_snapshot_target = &snapshot
     testing.expect(
-        t, app_bridge.get_pen_joint1_position(state) == app_core.Vector3{1, 2, 3})
+        t, app_bridge.get_pen_joint1_position(state) == rl.Vector3{1, 2, 3})
     state^.animation_query_snapshot_target = nil
 }
 
@@ -552,9 +563,9 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
 animation_tick_rejects_stale_generation_and_sequence :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
+    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
-    animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
     service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
@@ -699,37 +710,37 @@ julia_reload_failure_records_package_revision :: proc(t: ^testing.T) {
 @(test)
 font_weight_resolution_prefers_heaviest_requested_flag :: proc(t: ^testing.T) {
     // Ensures font-weight resolution chooses the heaviest requested weight when multiple flags are set.
-    flags := app_core.Font_Variant_Flags(
-        u32(app_core.Font_Variant_Flags.Light) |
-        u32(app_core.Font_Variant_Flags.Bold) |
-        u32(app_core.Font_Variant_Flags.Italic))
+    flags := fontmodel.Font_Variant_Flags(
+        u32(fontmodel.Font_Variant_Flags.Light) |
+        u32(fontmodel.Font_Variant_Flags.Bold) |
+        u32(fontmodel.Font_Variant_Flags.Italic))
 
-    resolved := app_core.font_resolve_weight_from_flags(flags)
-    testing.expect_value(t, resolved, app_core.Font_Weight.Bold)
+    resolved := fontmodel.font_resolve_weight_from_flags(flags)
+    testing.expect_value(t, resolved, fontmodel.Font_Weight.Bold)
 
-    heavier := app_core.Font_Variant_Flags(
+    heavier := fontmodel.Font_Variant_Flags(
         u32(flags) |
-        u32(app_core.Font_Variant_Flags.Extrabold) |
-        u32(app_core.Font_Variant_Flags.Black))
-    resolved_heavier := app_core.font_resolve_weight_from_flags(heavier)
-    testing.expect_value(t, resolved_heavier, app_core.Font_Weight.Black)
+        u32(fontmodel.Font_Variant_Flags.Extrabold) |
+        u32(fontmodel.Font_Variant_Flags.Black))
+    resolved_heavier := fontmodel.font_resolve_weight_from_flags(heavier)
+    testing.expect_value(t, resolved_heavier, fontmodel.Font_Weight.Black)
 }
 
 //   Verify installed recursive math records and cache invalidation state.
 view_snapshot_expect_recursive_math_content :: proc(
     t: ^testing.T,
-    runtime: ^app_core.Dynview_System) {
+    runtime: ^dynviewmodel.Dynview_System) {
     testing.expect_value(t, runtime^.command_buffer.command_count, 1)
     testing.expect_value(t, runtime^.command_buffer.text_bytes_len, len("semantic"))
     testing.expect(t, string(runtime^.command_buffer.text_view) == "semantic")
     testing.expect_value(t, runtime^.compile_cache.math_program_count, 1)
     testing.expect(t, runtime^.content.math_programs[0].valid)
     testing.expect_value(t, runtime^.content.math_nodes[0].kind,
-        app_core.Dynview_Math_Node_Kind.Glyph_Run)
+        dynviewmodel.Dynview_Math_Node_Kind.Glyph_Run)
     testing.expect_value(t, runtime^.content.math_commands[0].kind,
-        app_core.Dynview_Command_Kind.Math_Glyph_Run)
+        dynviewmodel.Dynview_Command_Kind.Math_Glyph_Run)
     testing.expect_value(t, runtime^.command_buffer.commands[0].kind,
-        app_core.Dynview_Command_Kind.Begin_Block)
+        dynviewmodel.Dynview_Command_Kind.Begin_Block)
     testing.expect_value(t, runtime^.compile_cache.math_programs[0].valid, false)
     view_snapshot_expect_math_working_isolation(t, runtime)
     testing.expect(t, !runtime^.compile_cache.is_valid)
@@ -742,19 +753,19 @@ view_snapshot_copy_preserves_recursive_math_spans :: proc(t: ^testing.T) {
     snapshot := new(app_bridge.View_Snapshot, context.allocator)
     defer free(snapshot)
     view_snapshot_test_text_builders_init(t, snapshot, "fallback", "semantic")
-    defer app_core.arena_owner_destroy(&snapshot^.arena)
-    runtime := new(app_core.Dynview_System, context.allocator)
+    defer storage.arena_owner_destroy(&snapshot^.arena)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
 
-    commands := []app_core.Dynview_Command{{kind = .Math_Block}}
-    programs := []app_core.Dynview_Math_Program{{
+    commands := []dynviewmodel.Dynview_Command{{kind = .Math_Block}}
+    programs := []dynviewmodel.Dynview_Math_Program{{
         valid = true,
         root_node_index = 0,
         node_count = 1,
         command_count = 1,
     }}
-    math_commands := []app_core.Dynview_Command{{kind = .Math_Glyph_Run}}
-    nodes := []app_core.Dynview_Math_Node{{kind = .Glyph_Run}}
+    math_commands := []dynviewmodel.Dynview_Command{{kind = .Math_Glyph_Run}}
+    nodes := []dynviewmodel.Dynview_Math_Node{{kind = .Glyph_Run}}
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
         snapshot, {commands = commands, math_programs = programs,
             math_commands = math_commands, math_nodes = nodes}))
@@ -796,7 +807,7 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
     fixture := View_Snapshot_Publication_Fixture{
         new(app_core.Euclid_General_State, context.allocator),
         new(app_bridge.Julia_Runtime_Service, context.allocator),
-        new(app_core.Euclid_Julia_Animation_Interface, context.allocator)}
+        new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)}
     defer free(fixture.animation)
     defer free(fixture.service)
     defer free(fixture.state)
@@ -815,7 +826,7 @@ view_snapshot_publication_records_animation_generation :: proc(t: ^testing.T) {
         t, &service^.view_snapshots[0], "fallback", "")
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
         &service^.view_snapshots[0], {}))
-    defer app_core.arena_owner_destroy(&service^.view_snapshots[0].arena)
+    defer storage.arena_owner_destroy(&service^.view_snapshots[0].arena)
 
     testing.expect(t, app_bridge.publish_available_view_snapshot(state))
     view_snapshot_expect_publication_evidence(t, state)
@@ -838,7 +849,7 @@ dynview_publication_requires_valid_view_snapshot :: proc(t: ^testing.T) {
     snapshot := &service^.view_snapshots[0]
     view_snapshot_test_complete(snapshot, animation, 11, 3, 7)
     view_snapshot_test_text_builders_init(t, snapshot, "fallback", "")
-    defer app_core.arena_owner_destroy(&snapshot^.arena)
+    defer storage.arena_owner_destroy(&snapshot^.arena)
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
         snapshot, {}))
     snapshot^.stream_open_block = true
@@ -853,7 +864,7 @@ presentation_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.
     fixture := View_Snapshot_Publication_Fixture{
         new(app_core.Euclid_General_State, context.allocator),
         new(app_bridge.Julia_Runtime_Service, context.allocator),
-        new(app_core.Euclid_Julia_Animation_Interface, context.allocator)}
+        new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)}
     defer free(fixture.animation)
     defer free(fixture.service)
     defer free(fixture.state)
@@ -863,16 +874,16 @@ presentation_semantic_rollback_preserves_published_fallback :: proc(t: ^testing.
     first := &fixture.service^.view_snapshots[0]
     view_snapshot_test_complete(first, fixture.animation, 1, 3, 7)
     view_snapshot_test_payloads_init(t, first, "published fallback", 1)
-    defer app_core.arena_owner_destroy(&first^.arena)
+    defer storage.arena_owner_destroy(&first^.arena)
     testing.expect(t, app_bridge.publish_available_view_snapshot(fixture.state))
 
     candidate := &fixture.service^.view_snapshots[1]
     view_snapshot_test_complete(candidate, fixture.animation, 2, 3, 7)
     view_snapshot_test_text_builders_init(t, candidate, "candidate fallback", "")
-    defer app_core.arena_owner_destroy(&candidate^.arena)
+    defer storage.arena_owner_destroy(&candidate^.arena)
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(candidate, {
         document_text = []u8{'x'},
-        documents = []app_core.Dynview_Document{{source_count = 2}},
+        documents = []dynviewmodel.Dynview_Document{{source_count = 2}},
     }))
 
     testing.expect(t, !app_bridge.publish_available_view_snapshot(fixture.state))
@@ -892,7 +903,7 @@ view_snapshot_validation_rejects_incomplete_streams :: proc(t: ^testing.T) {
     view_snapshot_test_text_builders_init(t, snapshot, "", "")
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
         snapshot, {}))
-    defer app_core.arena_owner_destroy(&snapshot^.arena)
+    defer storage.arena_owner_destroy(&snapshot^.arena)
 
     testing.expect(t, app_bridge.view_snapshot_is_valid(snapshot))
     snapshot^.stream_open_block = true
@@ -908,8 +919,8 @@ view_snapshot_validation_rejects_all_malformed_text_spans :: proc(t: ^testing.T)
     snapshot := new(app_bridge.View_Snapshot, context.allocator)
     defer free(snapshot)
     view_snapshot_test_text_builders_init(t, snapshot, "same", "text")
-    defer app_core.arena_owner_destroy(&snapshot^.arena)
-    malformed := [5]app_core.Dynview_Command{
+    defer storage.arena_owner_destroy(&snapshot^.arena)
+    malformed := [5]dynviewmodel.Dynview_Command{
         {text_offset = 4, text_len = 1},
         {script_base_text_offset = 4, script_base_text_len = 1},
         {script_sup_text_offset = 4, script_sup_text_len = 1},
@@ -917,7 +928,7 @@ view_snapshot_validation_rejects_all_malformed_text_spans :: proc(t: ^testing.T)
         {radical_index_text_offset = 4, radical_index_text_len = 1},
     }
     testing.expect(t, app_bridge.build_view_snapshot_record_payloads(
-        snapshot, {commands = []app_core.Dynview_Command{{}}}))
+        snapshot, {commands = []dynviewmodel.Dynview_Command{{}}}))
     for command in malformed {
         snapshot^.commands[0] = command
         testing.expect(t, !app_bridge.view_snapshot_is_valid(snapshot))
@@ -987,7 +998,7 @@ view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
     first := &service^.view_snapshots[0]
     view_snapshot_test_complete(first, animation, 1, 2, 3)
     view_snapshot_test_payloads_init(t, first, "first", 1)
-    defer app_core.arena_owner_destroy(&first^.arena)
+    defer storage.arena_owner_destroy(&first^.arena)
 
     testing.expect(t, app_bridge.publish_available_view_snapshot(state))
     first_storage := raw_data(first^.presentation_bytes)
@@ -999,7 +1010,7 @@ view_snapshot_fallback_lifetime_survives_stale_and_repeated_publication :: proc(
     fixture := View_Snapshot_Publication_Fixture{state, service, animation}
     second := &service^.view_snapshots[1]
     view_snapshot_expect_stale_candidate_rejected(t, fixture, first_expected)
-    defer app_core.arena_owner_destroy(&second^.arena)
+    defer storage.arena_owner_destroy(&second^.arena)
     view_snapshot_expect_replacement_published(t, fixture, first)
 }
 
@@ -1050,12 +1061,13 @@ stale_view_snapshot_clears_previous_animation_commands :: proc(t: ^testing.T) {
     defer free(service)
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    interface := new(app_core.Euclid_Julia_Interface, context.allocator)
+    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(interface)
     previous_animation :=
-        new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+        new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(previous_animation)
-    current_animation := new(app_core.Euclid_Julia_Animation_Interface, context.allocator)
+    current_animation :=
+        new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(current_animation)
 
     service^.published_view_snapshot_index = 0
@@ -1077,7 +1089,7 @@ stale_view_snapshot_clears_previous_animation_commands :: proc(t: ^testing.T) {
 @(test)
 dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T) {
     // Validates dynview text span extraction bounds checks for base and scripted spans.
-    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
+    buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     text := "abc"
     for i in 0..<len(text) {
@@ -1091,7 +1103,7 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
     out_of_bounds := dyncore.text_span_from_buffer(buffer, 2, 5)
     testing.expect_value(t, out_of_bounds, "")
 
-    cmd := app_core.Dynview_Command{
+    cmd := dynviewmodel.Dynview_Command{
         script_base_text_offset = 0,
         script_base_text_len = 3,
         script_sup_text_offset = 1,
@@ -1109,16 +1121,16 @@ dynview_text_span_and_script_attach_helpers_respect_bounds :: proc(t: ^testing.T
 dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(
     t: ^testing.T) {
     // Verifies style placement can force a line break and apply configured indentation at the next line start.
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    testing.expect_value(t, app_core.bounded_element_builder_append(
-        &cache^.layout_item_builder, []app_core.Dynview_Layout_Item{{}}),
-        app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_append(
+        &cache^.layout_item_builder, []dynviewmodel.Dynview_Layout_Item{{}}),
+        storage.Bounded_Builder_Status.Ok)
     cache^.layout_items = cache^.layout_item_builder.storage[:1]
     cache^.layout_item_count = 1
     state := app_dynlayout.Dynview_Layout_State{col = 2, line_index = 0}
@@ -1141,16 +1153,16 @@ dynview_layout_prepare_style_placement_forces_line_break_and_indent :: proc(
 @(test)
 dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T) {
     // Confirms pushed layout items capture block metadata and advance line-column bookkeeping correctly.
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     state := app_dynlayout.Dynview_Layout_State{
         active_block_id = 7, line_index = 2, col = 1}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
-    item := app_core.Dynview_Layout_Item{
+    item := dynviewmodel.Dynview_Layout_Item{
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         col_span = 3,
         ascent = 8,
@@ -1176,12 +1188,12 @@ dynview_layout_push_item_records_block_and_column_metadata :: proc(t: ^testing.T
 //   Verify layout context derives one canonical cell and centered text baseline.
 @(test)
 dynview_layout_context_derives_canonical_grid_metrics :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_font_size = 16
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
+    buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
@@ -1198,16 +1210,16 @@ dynview_layout_context_derives_canonical_grid_metrics :: proc(t: ^testing.T) {
 //   Verify panel capacity and item origins use style-independent canonical columns.
 @(test)
 dynview_layout_columns_use_canonical_cell_width :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_panel_width = 80
     cache^.last_cell_width = 8
     state := app_dynlayout.Dynview_Layout_State{col = 3}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
-    item := app_core.Dynview_Layout_Item{
+    item := dynviewmodel.Dynview_Layout_Item{
         kind = .Text_Run,
         style_id = dyncore.DYNVIEW_STYLE_BOLD,
         col_span = 2,
@@ -1223,19 +1235,19 @@ dynview_layout_columns_use_canonical_cell_width :: proc(t: ^testing.T) {
 //   Verify mixed baseline and non-baseline items compose one integral row band.
 @(test)
 dynview_layout_mixed_line_aggregates_grid_rows :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
     state := app_dynlayout.Dynview_Layout_State{row = 3}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
     app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
-    text := app_core.Dynview_Layout_Item{
+    text := dynviewmodel.Dynview_Layout_Item{
         kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
-    shape := app_core.Dynview_Layout_Item{
+    shape := dynviewmodel.Dynview_Layout_Item{
         kind = .Inline_Box, col_span = 1, draw_height = 50}
 
     text_status := app_dynlayout.layout_push_item(cache, &state, &acc, text)
@@ -1256,12 +1268,12 @@ dynview_layout_mixed_line_aggregates_grid_rows :: proc(t: ^testing.T) {
 //   Verify paragraph spacing rounds outward without moving off the row lattice.
 @(test)
 dynview_layout_paragraph_spacing_rounds_to_rows :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_font_size = 16
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
+    buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
@@ -1278,20 +1290,20 @@ dynview_layout_paragraph_spacing_rounds_to_rows :: proc(t: ^testing.T) {
 //   Verify content and scroll-step metrics derive from finalized row spans.
 @(test)
 dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_font_size = 16
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
+    buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
     ctx := app_dynlayout.layout_build_context(cache, buffer, &state, &acc)
-    item := app_core.Dynview_Layout_Item{
+    item := dynviewmodel.Dynview_Layout_Item{
         kind = .Inline_Box, col_span = 1, draw_height = 50}
     push_status := app_dynlayout.layout_push_item(cache, &state, &acc, item)
 
@@ -1307,7 +1319,7 @@ dynview_layout_metrics_derive_from_rows :: proc(t: ^testing.T) {
 //   Verify presentation scrolling consumes finalized row-derived layout metrics.
 @(test)
 dynview_presentation_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
     runtime^.enabled = true
     runtime^.command_buffer.command_count = 1
@@ -1332,10 +1344,10 @@ dynview_presentation_scroll_metrics_use_grid_rows :: proc(t: ^testing.T) {
 // Verify semantic documents use their exact authoritative extent for scrolling.
 @(test)
 dynview_document_scroll_metrics_override_legacy_rows :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
-    documents := [1]app_core.Dynview_Document{{block_count = 1}}
-    lines := [2]app_core.Dynview_Document_Layout_Line{{}, {}}
+    documents := [1]dynviewmodel.Dynview_Document{{block_count = 1}}
+    lines := [2]dynviewmodel.Dynview_Document_Layout_Line{{}, {}}
     runtime^.enabled = true
     runtime^.content.documents = documents[:]
     runtime^.compile_cache.document_layout_is_valid = true
@@ -1372,7 +1384,7 @@ copy_hit_target_fixture :: proc() -> Copy_Hit_Target_Fixture {
 
 //   Bind fixture-backed row records to one compile cache.
 copy_hit_target_fixture_bind :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     fixture: ^Copy_Hit_Target_Fixture) {
     cache^.last_cell_height = 22
     cache^.layout_items = fixture^.items[:]
@@ -1384,24 +1396,24 @@ copy_hit_target_fixture_bind :: proc(
 //   Verify copy hit geometry spans canonical rows after applying panel scroll.
 @(test)
 dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
-    arena: app_core.Arena_Owner
-    testing.expect(t, app_core.arena_owner_init(&arena))
-    defer app_core.arena_owner_destroy(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    arena: storage.Arena_Owner
+    testing.expect(t, storage.arena_owner_init(&arena))
+    defer storage.arena_owner_destroy(&arena)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    testing.expect_value(t, app_core.bounded_element_builder_init(
-        &cache^.copy_hit_target_builder, app_core.DYNVIEW_MAX_COMMANDS, &arena),
-        app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, storage.bounded_element_builder_init(
+        &cache^.copy_hit_target_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, &arena),
+        storage.Bounded_Builder_Status.Ok)
     fixture := copy_hit_target_fixture()
     copy_hit_target_fixture_bind(cache, &fixture)
 
     hover_bottom, status := app_dyncompile.rebuild_one_copy_hit_target(
         cache, {block_id = 9}, fixture.layout, fixture.layout.panel.y)
 
-    targets, view_status := app_core.bounded_element_builder_view(
+    targets, view_status := storage.bounded_element_builder_view(
         &cache^.copy_hit_target_builder)
     testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, view_status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, view_status, storage.Bounded_Builder_Status.Ok)
     testing.expect_value(t, len(targets), 1)
     target := targets[0]
     testing.expect_value(t, target.hover_rect.y, f32(126))
@@ -1427,11 +1439,11 @@ dynview_math_block_columns_use_intrinsic_width :: proc(t: ^testing.T) {
 //   Verify outer math placement includes visual padding and preserves its baseline.
 @(test)
 dynview_math_block_placement_includes_visual_padding :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    item := app_core.Dynview_Layout_Item{
+    item := dynviewmodel.Dynview_Layout_Item{
         kind = .Math_Block,
         col_span = 2,
         draw_width = 13,
@@ -1460,11 +1472,11 @@ dynview_math_block_placement_includes_visual_padding :: proc(t: ^testing.T) {
 //   Verify oversized outer math keeps intrinsic width and centers into its reservation.
 @(test)
 dynview_math_block_overflow_is_symmetric_and_explicit :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
-    program := app_core.Dynview_Math_Program{
+    program := dynviewmodel.Dynview_Math_Program{
         draw_width = 24,
         ascent = 12,
         descent = 4,
@@ -1490,19 +1502,19 @@ dynview_math_block_overflow_is_symmetric_and_explicit :: proc(t: ^testing.T) {
 //   Verify text and padded outer math resolve to one canonical line baseline.
 @(test)
 dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
     app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
-    text := app_core.Dynview_Layout_Item{
+    text := dynviewmodel.Dynview_Layout_Item{
         kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
-    math_item := app_core.Dynview_Layout_Item{
+    math_item := dynviewmodel.Dynview_Layout_Item{
         kind = .Math_Block, col_span = 2, draw_width = 13, draw_height = 32,
         ascent = 25, descent = 7,
         visual_padding_top = 3, visual_padding_bottom = 4}
@@ -1527,12 +1539,12 @@ dynview_math_block_aligns_with_text_baseline :: proc(t: ^testing.T) {
 
 //   Finalize one line holding a single math block of the requested vertical extent.
 dynview_test_finalize_math_line :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^app_dynlayout.Dynview_Layout_State,
     acc: ^app_dynlayout.Dynview_Layout_Line_Accumulator,
     ascent, descent: f32) -> i32 {
 
-    item := app_core.Dynview_Layout_Item{
+    item := dynviewmodel.Dynview_Layout_Item{
         kind = .Math_Block, col_span = 1, draw_width = 8,
         draw_height = ascent + descent, ascent = ascent, descent = descent}
     if status := app_dynlayout.layout_push_item(cache, state, acc, item);
@@ -1545,18 +1557,18 @@ dynview_test_finalize_math_line :: proc(
 //   Verify inline math within the lineskip allowance keeps its line one row tall.
 @(test)
 dynview_line_permits_ink_overflow_into_neighbor_leading :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
     app_dynlayout.layout_seed_line_accumulator(&acc, 0, 12, 4)
 
-    text := app_core.Dynview_Layout_Item{
+    text := dynviewmodel.Dynview_Layout_Item{
         kind = .Text_Run, col_span = 1, draw_height = 16, ascent = 12, descent = 4}
     text_status := app_dynlayout.layout_push_item(cache, &state, &acc, text)
     first_status := app_dynlayout.layout_finalize_line(cache, &state, &acc, 12, 4)
@@ -1573,11 +1585,11 @@ dynview_line_permits_ink_overflow_into_neighbor_leading :: proc(t: ^testing.T) {
 //   Verify ink beyond the lineskip allowance still reserves an additional row.
 @(test)
 dynview_line_reserves_row_when_ink_exceeds_allowance :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
     state := app_dynlayout.Dynview_Layout_State{}
@@ -1594,11 +1606,11 @@ dynview_line_reserves_row_when_ink_exceeds_allowance :: proc(t: ^testing.T) {
 //   Verify an oversized inline line preserves geometry and centers its clipping.
 expect_oversized_inline_line_grid_placement :: proc(
     t: ^testing.T,
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     style: dyncore.Dynview_Text_Style,
     cells: app_dynlayout.Cell_Metrics) {
 
-    cmd := app_core.Dynview_Command{
+    cmd := dynviewmodel.Dynview_Command{
         kind = .Inline_Line,
         inline_atom_dimension = 4,
         inline_atom_stroke = 4,
@@ -1622,13 +1634,13 @@ expect_oversized_inline_line_grid_placement :: proc(
 //   Verify inline lines preserve intrinsic length and stroke inside grid placement.
 @(test)
 dynview_inline_line_uses_intrinsic_grid_embedding :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    cache^ = app_core.Dynview_Compile_Cache{
+    cache^ = dynviewmodel.Dynview_Compile_Cache{
         last_cell_width = 8,
         last_cell_height = 22,
     }
-    cmd := app_core.Dynview_Command{
+    cmd := dynviewmodel.Dynview_Command{
         kind = .Inline_Line,
         inline_atom_dimension = 2.25,
         inline_atom_stroke = 4,
@@ -1661,25 +1673,25 @@ dynview_inline_line_uses_intrinsic_grid_embedding :: proc(t: ^testing.T) {
 //   Verify every inline shape family reports stroke-inclusive intrinsic bounds.
 @(test)
 dynview_inline_shape_families_report_intrinsic_bounds :: proc(t: ^testing.T) {
-    box := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
+    box := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
         kind = .Inline_Box, inline_atom_dimension = 2.5,
         inline_box_height = 3, inline_atom_stroke = 2}, 8)
-    filled_box := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
+    filled_box := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
         kind = .Inline_Filled_Box, inline_atom_dimension = 2.5,
         inline_box_height = 3, inline_outline_stroke = 3}, 8)
-    circle := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
+    circle := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
         kind = .Inline_Circle, inline_atom_dimension = 1.25,
         inline_atom_stroke = 2}, 8)
-    filled_circle := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
+    filled_circle := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
         kind = .Inline_Filled_Circle, inline_atom_dimension = 1.25,
         inline_outline_stroke = 3}, 8)
-    perpendicular := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
+    perpendicular := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
         kind = .Inline_Perpendicular, inline_atom_dimension = 4,
         inline_box_height = 5, inline_atom_stroke = 2}, 8)
-    triangle := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
+    triangle := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
         kind = .Inline_Triangle, inline_atom_dimension = 4,
         inline_box_height = 5, inline_atom_stroke = 2}, 8)
-    pentagon := app_dynlayout.inline_shape_geometry(app_core.Dynview_Command{
+    pentagon := app_dynlayout.inline_shape_geometry(dynviewmodel.Dynview_Command{
         kind = .Inline_Pentagon, inline_atom_dimension = 4,
         inline_box_height = 5, inline_atom_stroke = 2}, 8)
 
@@ -1700,11 +1712,11 @@ dynview_inline_shape_families_report_intrinsic_bounds :: proc(t: ^testing.T) {
 //   Verify one tall box retains intrinsic geometry inside centered grid rows.
 expect_tall_inline_box_grid_placement :: proc(
     t: ^testing.T,
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     bold: dyncore.Dynview_Text_Style,
     cells: app_dynlayout.Cell_Metrics) {
 
-    box_cmd := app_core.Dynview_Command{
+    box_cmd := dynviewmodel.Dynview_Command{
         kind = .Inline_Box,
         inline_atom_dimension = 2.5,
         inline_box_height = 4,
@@ -1732,11 +1744,11 @@ expect_tall_inline_box_grid_placement :: proc(
 //   Verify one oversized triangle retains geometry and centers its clipping.
 expect_oversized_inline_triangle_grid_placement :: proc(
     t: ^testing.T,
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     bold: dyncore.Dynview_Text_Style,
     cells: app_dynlayout.Cell_Metrics) {
 
-    triangle_cmd := app_core.Dynview_Command{
+    triangle_cmd := dynviewmodel.Dynview_Command{
         kind = .Inline_Triangle,
         inline_atom_dimension = 10,
         inline_box_height = 2,
@@ -1761,7 +1773,7 @@ expect_oversized_inline_triangle_grid_placement :: proc(
 //   Verify shape grid placement preserves tall geometry and symmetric overflow.
 @(test)
 dynview_inline_shapes_use_centered_grid_placement :: proc(t: ^testing.T) {
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.last_cell_height = 22
@@ -1775,7 +1787,7 @@ dynview_inline_shapes_use_centered_grid_placement :: proc(t: ^testing.T) {
 //   Verify pie sections retain tight wedge bounds including outline stroke.
 @(test)
 dynview_inline_pie_section_retains_tight_visual_bounds :: proc(t: ^testing.T) {
-    cmd := app_core.Dynview_Command{
+    cmd := dynviewmodel.Dynview_Command{
         kind = .Inline_Pie_Section,
         inline_atom_dimension = 1,
         inline_outline_stroke = 2,
@@ -1801,21 +1813,21 @@ dynview_inline_pie_section_retains_tight_visual_bounds :: proc(t: ^testing.T) {
 @(test)
 dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T) {
     // Checks wrapped text-run consumption emits layout items and lines with a valid reported last line index.
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
-    arena: app_core.Arena_Owner
+    arena: storage.Arena_Owner
     dynview_test_layout_builders_init(t, cache, &arena)
-    defer app_core.arena_owner_destroy(&arena)
+    defer storage.arena_owner_destroy(&arena)
     cache^.last_panel_width = 48
     cache.last_cell_width = 8
     cache.last_cell_height = 22
     cache.last_font_size = 12
 
-    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
+    buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     state := app_dynlayout.Dynview_Layout_State{}
     acc := app_dynlayout.Dynview_Layout_Line_Accumulator{}
-    cmd := app_core.Dynview_Command{
+    cmd := dynviewmodel.Dynview_Command{
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         has_brush_color = true,
         brush_color = {64, 99, 216, 255},
@@ -1893,19 +1905,19 @@ dynview_math_size_helpers_scale_with_content_and_kind :: proc(t: ^testing.T) {
 @(test)
 dynview_measure_math_program_aggregates_child_metrics :: proc(t: ^testing.T) {
     // Confirms math program measurement aggregates child command metrics into non-zero outer dimensions.
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.last_cell_width = 8
     cache^.math_program_count = 1
     cache^.math_command_count = 1
 
-    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
+    buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     buffer.text_bytes[0] = 'a'
     buffer.text_bytes[1] = 'b'
     buffer.text_bytes_len = 2
 
-    cache^.math_commands[0] = app_core.Dynview_Command{
+    cache^.math_commands[0] = dynviewmodel.Dynview_Command{
         kind = .Text_Run,
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         text_offset = 0,
@@ -1964,13 +1976,13 @@ dynview_large_operator_gap_for_integral_is_tighter_than_sum :: proc(t: ^testing.
 @(test)
 dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
     // Ensures math program measurement rejects invalid or out-of-range command windows.
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
 
-    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
+    buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
 
-    invalid_program := app_core.Dynview_Math_Program{}
+    invalid_program := dynviewmodel.Dynview_Math_Program{}
     invalid_program.valid = false
     testing.expect(t, !app_math.measure_math_program(
         cache, buffer, &invalid_program, 12))
@@ -1990,8 +2002,8 @@ dynview_measure_math_program_rejects_invalid_shapes :: proc(t: ^testing.T) {
 
 //   Seed a cache with two text-run commands over a 3-byte buffer.
 dynview_seed_two_command_cache :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer) {
 
     cache^.last_cell_width = 8
     cache^.math_program_count = 2
@@ -2002,13 +2014,13 @@ dynview_seed_two_command_cache :: proc(
     buffer.text_bytes[2] = 'c'
     buffer.text_bytes_len = 3
 
-    cache^.math_commands[0] = app_core.Dynview_Command{
+    cache^.math_commands[0] = dynviewmodel.Dynview_Command{
         kind = .Text_Run,
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         text_offset = 0,
         text_len = 2,
     }
-    cache^.math_commands[1] = app_core.Dynview_Command{
+    cache^.math_commands[1] = dynviewmodel.Dynview_Command{
         kind = .Text_Run,
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
         text_offset = 2,
@@ -2020,10 +2032,10 @@ dynview_seed_two_command_cache :: proc(
 @(test)
 dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T) {
     // Confirms measured width increases when additional child commands are included in the same math program.
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
 
-    buffer := new(app_core.Dynview_Command_Buffer, context.allocator)
+    buffer := new(dynviewmodel.Dynview_Command_Buffer, context.allocator)
     defer free(buffer)
     dynview_seed_two_command_cache(cache, buffer)
 
@@ -2049,7 +2061,7 @@ dynview_measure_math_program_sums_multiple_command_widths :: proc(t: ^testing.T)
 @(test)
 dynview_reset_cache_clears_layout_state :: proc(t: ^testing.T) {
     // Verifies layout cache reset clears counters, aggregate metrics, and layout validity state.
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache)
     cache^.layout_line_count = 2
     cache.layout_item_count = 3

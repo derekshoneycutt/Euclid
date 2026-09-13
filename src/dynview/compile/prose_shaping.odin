@@ -1,25 +1,30 @@
 package dynview_compile
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
+import storage "../../core/storage"
+
 
 import "base:runtime"
 
 // Number of JuliaMono variants preceding the dedicated math face.
-DOCUMENT_PROSE_FONT_COUNT :: int(app_core.Font_Key.Math_Regular)
+DOCUMENT_PROSE_FONT_COUNT :: int(fontmodel.Font_Key.Math_Regular)
 
 // Identify one effective resident face borrowed for a prose rebuild.
 Document_Prose_Font :: struct {
-    effective_key: app_core.Font_Key,
+    effective_key: fontmodel.Font_Key,
     generation: u64,
     raster_ascent: f32,
 }
 
 // Request exact-generation shaping into caller-owned temporary storage.
 Document_Prose_Shape_Request :: struct {
-    key: app_core.Font_Key,
+    key: fontmodel.Font_Key,
     generation: u64,
     text: string,
-    output: []app_core.Shaped_Glyph,
+    output: []fontmodel.Shaped_Glyph,
 }
 
 // Shape one prose run without retaining its source or output storage.
@@ -29,8 +34,8 @@ Document_Prose_Shape_Handler :: #type proc(
 
 // Query one exact-generation prose glyph's ink extents.
 Document_Prose_Extents_Handler :: #type proc(
-    user_data: rawptr, key: app_core.Font_Key,
-    generation: u64, glyph_id: u32) -> (app_core.Font_Glyph_Extents, bool)
+    user_data: rawptr, key: fontmodel.Font_Key,
+    generation: u64, glyph_id: u32) -> (fontmodel.Font_Glyph_Extents, bool)
 
 // Borrow immutable face identities, callbacks, and workspace for one rebuild.
 Document_Prose_Shaping_Service :: struct {
@@ -39,7 +44,7 @@ Document_Prose_Shaping_Service :: struct {
     base_pixel_size: f32,
     shape: Document_Prose_Shape_Handler,
     glyph_extents: Document_Prose_Extents_Handler,
-    glyph_workspace: []app_core.Shaped_Glyph,
+    glyph_workspace: []fontmodel.Shaped_Glyph,
 }
 
 // Hold one shaped prose run's aggregate advance and ink measurements.
@@ -51,32 +56,32 @@ Document_Shaped_Run_Metrics :: struct {
 
 // Build bounded prose runs and glyphs before atomic cache publication.
 Document_Shaped_Builder :: struct {
-    runs: app_core.Bounded_Element_Builder(app_core.Dynview_Document_Shaped_Run),
-    glyphs: app_core.Bounded_Element_Builder(app_core.Shaped_Glyph),
+    runs: storage.Bounded_Element_Builder(dynviewmodel.Dynview_Document_Shaped_Run),
+    glyphs: storage.Bounded_Element_Builder(fontmodel.Shaped_Glyph),
     initialized: bool,
 }
 
 // Describe one complete prose run presented for transactional append.
 Document_Shaped_Append :: struct {
-    run: app_core.Dynview_Document_Shaped_Run,
-    glyphs: []app_core.Shaped_Glyph,
+    run: dynviewmodel.Dynview_Document_Shaped_Run,
+    glyphs: []fontmodel.Shaped_Glyph,
 }
 
 // Initialize prose shaping builders through a supplied allocator.
 document_shaped_builder_init :: proc(
     builder: ^Document_Shaped_Builder,
-    allocator: runtime.Allocator) -> app_core.Bounded_Builder_Status {
+    allocator: runtime.Allocator) -> storage.Bounded_Builder_Status {
 
     if builder == nil {
         return .Invalid_Argument
     }
-    run_status := app_core.bounded_element_builder_init_with_allocator(
-        &builder^.runs, app_core.DYNVIEW_MAX_DOCUMENT_SHAPED_RUNS, allocator)
+    run_status := storage.bounded_element_builder_init_with_allocator(
+        &builder^.runs, dynviewmodel.DYNVIEW_MAX_DOCUMENT_SHAPED_RUNS, allocator)
     if run_status != .Ok {
         return run_status
     }
-    glyph_status := app_core.bounded_element_builder_init_with_allocator(
-        &builder^.glyphs, app_core.DYNVIEW_MAX_DOCUMENT_SHAPED_GLYPHS, allocator)
+    glyph_status := storage.bounded_element_builder_init_with_allocator(
+        &builder^.glyphs, dynviewmodel.DYNVIEW_MAX_DOCUMENT_SHAPED_GLYPHS, allocator)
     if glyph_status != .Ok {
         builder^ = {}
         return glyph_status
@@ -88,7 +93,7 @@ document_shaped_builder_init :: proc(
 // Append one complete prose run without exposing a partial glyph span.
 document_shaped_builder_append :: proc(
     builder: ^Document_Shaped_Builder,
-    append: Document_Shaped_Append) -> app_core.Bounded_Builder_Status {
+    append: Document_Shaped_Append) -> storage.Bounded_Builder_Status {
 
     run := append.run
     if builder == nil || !builder^.initialized || run.inline_index < 0 ||
@@ -96,12 +101,12 @@ document_shaped_builder_append :: proc(
         run.font_generation == 0 || run.base_pixel_size <= 0 {
         return .Invalid_Argument
     }
-    glyph_status := app_core.bounded_element_builder_reserve(
+    glyph_status := storage.bounded_element_builder_reserve(
         &builder^.glyphs, len(append.glyphs))
     if glyph_status != .Ok {
         return glyph_status
     }
-    run_status := app_core.bounded_element_builder_reserve(&builder^.runs, 1)
+    run_status := storage.bounded_element_builder_reserve(&builder^.runs, 1)
     if run_status != .Ok {
         return run_status
     }
@@ -115,7 +120,7 @@ document_shaped_builder_append :: proc(
 }
 
 // Remove every sealed prose shaping alias from a compile cache.
-clear_document_shaped_records :: proc(cache: ^app_core.Dynview_Compile_Cache) {
+clear_document_shaped_records :: proc(cache: ^dynviewmodel.Dynview_Compile_Cache) {
     if cache == nil {
         return
     }
@@ -153,21 +158,21 @@ document_shaped_builder_can_seal :: proc(
 // Seal validated prose records and publish both immutable slices atomically.
 document_shaped_builder_seal :: proc(
     builder: ^Document_Shaped_Builder,
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     inline_count, text_count: int,
-    current_generations: []u64) -> app_core.Bounded_Builder_Status {
+    current_generations: []u64) -> storage.Bounded_Builder_Status {
 
     if cache == nil || !document_shaped_builder_can_seal(
         builder, inline_count, text_count, current_generations) {
         clear_document_shaped_records(cache)
         return .Invalid_Argument
     }
-    runs, run_status := app_core.bounded_element_builder_seal(&builder^.runs)
+    runs, run_status := storage.bounded_element_builder_seal(&builder^.runs)
     if run_status != .Ok {
         clear_document_shaped_records(cache)
         return run_status
     }
-    glyphs, glyph_status := app_core.bounded_element_builder_seal(&builder^.glyphs)
+    glyphs, glyph_status := storage.bounded_element_builder_seal(&builder^.glyphs)
     if glyph_status != .Ok {
         clear_document_shaped_records(cache)
         return glyph_status
@@ -181,7 +186,7 @@ document_shaped_builder_seal :: proc(
 document_shaped_run_metrics :: proc(
     service: Document_Prose_Shaping_Service,
     font: Document_Prose_Font,
-    glyphs: []app_core.Shaped_Glyph) -> (Document_Shaped_Run_Metrics, bool) {
+    glyphs: []fontmodel.Shaped_Glyph) -> (Document_Shaped_Run_Metrics, bool) {
 
     pen_x, pen_y: i32
     top, bottom: i32
@@ -207,7 +212,7 @@ document_shaped_run_metrics :: proc(
 
 // Report whether HarfBuzz clusters remain ordered inside one source byte span.
 document_shaped_clusters_are_valid :: proc(
-    glyphs: []app_core.Shaped_Glyph, text_count: int) -> bool {
+    glyphs: []fontmodel.Shaped_Glyph, text_count: int) -> bool {
 
     previous: u32
     for glyph, index in glyphs {
@@ -224,8 +229,8 @@ document_append_measured_run :: proc(
     builder: ^Document_Shaped_Builder,
     service: Document_Prose_Shaping_Service,
     font: Document_Prose_Font,
-    glyphs: []app_core.Shaped_Glyph,
-    run: app_core.Dynview_Document_Shaped_Run) -> app_core.Bounded_Builder_Status {
+    glyphs: []fontmodel.Shaped_Glyph,
+    run: dynviewmodel.Dynview_Document_Shaped_Run) -> storage.Bounded_Builder_Status {
 
     metrics, measured := document_shaped_run_metrics(
         service, font, glyphs)
@@ -242,7 +247,7 @@ document_append_measured_run :: proc(
 // Resolve one nonempty inline text span without escaping snapshot-owned bytes.
 document_inline_text :: proc(
     document_text: []u8,
-    item: app_core.Dynview_Document_Inline) -> (string, bool) {
+    item: dynviewmodel.Dynview_Document_Inline) -> (string, bool) {
 
     if item.text_offset < 0 || item.text_count <= 0 ||
         item.text_count > len(document_text)-item.text_offset {
@@ -257,15 +262,15 @@ document_shape_inline :: proc(
     builder: ^Document_Shaped_Builder,
     service: Document_Prose_Shaping_Service,
     document_text: []u8,
-    item: app_core.Dynview_Document_Inline,
-    inline_index: int) -> app_core.Bounded_Builder_Status {
+    item: dynviewmodel.Dynview_Document_Inline,
+    inline_index: int) -> storage.Bounded_Builder_Status {
 
     text, text_ok := document_inline_text(document_text, item)
     if !text_ok {
         return .Invalid_Argument
     }
-    requested_key := app_core.font_key_from_flags(
-        app_core.Font_Variant_Flags(item.font_flags))
+    requested_key := fontmodel.font_key_from_flags(
+        fontmodel.Font_Variant_Flags(item.font_flags))
     font := service.fonts[int(requested_key)]
     glyph_count, shaped := service.shape(service.user_data, {
         font.effective_key, font.generation, text, service.glyph_workspace})
@@ -308,8 +313,8 @@ document_prose_shaping_service_ready :: proc(
 // Shape every text and space inline in immutable semantic document order.
 document_shape_all_inlines :: proc(
     builder: ^Document_Shaped_Builder,
-    runtime: ^app_core.Dynview_System,
-    service: Document_Prose_Shaping_Service) -> app_core.Bounded_Builder_Status {
+    runtime: ^dynviewmodel.Dynview_System,
+    service: Document_Prose_Shaping_Service) -> storage.Bounded_Builder_Status {
 
     for item, inline_index in runtime^.content.document_inlines {
         if item.kind != .Text && item.kind != .Space {
@@ -326,9 +331,9 @@ document_shape_all_inlines :: proc(
 
 // Snapshot effective generations by cache key for final publication validation.
 document_prose_generations :: proc(
-    service: Document_Prose_Shaping_Service) -> [app_core.FONT_KEY_COUNT]u64 {
+    service: Document_Prose_Shaping_Service) -> [fontmodel.FONT_KEY_COUNT]u64 {
 
-    result: [app_core.FONT_KEY_COUNT]u64
+    result: [fontmodel.FONT_KEY_COUNT]u64
     for font in service.fonts {
         result[int(font.effective_key)] = font.generation
     }
@@ -337,9 +342,9 @@ document_prose_generations :: proc(
 
 // Build and atomically seal authoritative JuliaMono measurements for semantic prose.
 rebuild_document_shaped_cache :: proc(
-    runtime: ^app_core.Dynview_System,
-    arena: ^app_core.Arena_Owner,
-    service: Document_Prose_Shaping_Service) -> app_core.Bounded_Builder_Status {
+    runtime: ^dynviewmodel.Dynview_System,
+    arena: ^storage.Arena_Owner,
+    service: Document_Prose_Shaping_Service) -> storage.Bounded_Builder_Status {
 
     cache := &runtime^.compile_cache
     clear_document_shaped_records(cache)
@@ -349,7 +354,7 @@ rebuild_document_shaped_cache :: proc(
     }
     builder: Document_Shaped_Builder
     status := document_shaped_builder_init(
-        &builder, app_core.arena_owner_allocator(arena))
+        &builder, storage.arena_owner_allocator(arena))
     if status == .Ok {
         status = document_shape_all_inlines(&builder, runtime, service)
     }

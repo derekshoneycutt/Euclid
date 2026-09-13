@@ -1,5 +1,7 @@
 package view
 
+import bridgemodel "../bridge/model"
+
 import "../files"
 import julia "../bridge"
 import evidence_profile "../evidence/profile"
@@ -23,7 +25,7 @@ JULIA_UNRESPONSIVE_SECONDS :: 10.0
 
 //   Created Julia runtime service plus its completed initialize request id.
 Loading_Julia_Service :: struct {
-    service:       ^julia.Julia_Runtime_Service,
+    service:       ^bridgemodel.Julia_Runtime_Service,
     initialize_id: u64,
 }
 
@@ -86,8 +88,8 @@ finish_startup_worker :: proc(worker: ^thread.Thread, progress: f32) {
 
 //   Draw startup frames until the requested Julia worker event is available.
 finish_julia_startup_request :: proc(
-    service: ^julia.Julia_Runtime_Service, request_id: u64,
-    expected_kind: julia.Julia_Event_Kind, progress: f32) -> bool {
+    service: ^bridgemodel.Julia_Runtime_Service, request_id: u64,
+    expected_kind: bridgemodel.Julia_Event_Kind, progress: f32) -> bool {
 
     started_at := rl.GetTime()
     reported_unresponsive := false
@@ -181,7 +183,7 @@ loading_start_julia_service :: proc(
 //   Report content startup failure and release the partially initialized session.
 loading_content_failed :: proc(
     state: ^Euclid_General_State,
-    julia_service: ^julia.Julia_Runtime_Service) -> (^Euclid_General_State, bool) {
+    julia_service: ^bridgemodel.Julia_Runtime_Service) -> (^Euclid_General_State, bool) {
     fmt.eprintln("Julia content initialization failed.")
     shutdown_runtime_session(Euclid_Runtime_Session{
         state = state,
@@ -196,7 +198,7 @@ loading_content_failed :: proc(
 //   - state: Initialized general state when ok.
 //   - ok: true when state was created and content initialization completed.
 loading_load_content :: proc(
-    julia_service: ^julia.Julia_Runtime_Service,
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings,
     initialize_id: u64) -> (^Euclid_General_State, bool) {
 
@@ -254,7 +256,7 @@ loading_initialize_graphics_phase :: proc(
 //   Pair initialized runtime owners for transfer to the window loop.
 loading_runtime_session :: proc(
     state: ^Euclid_General_State,
-    service: ^julia.Julia_Runtime_Service) -> (Euclid_Runtime_Session, bool) {
+    service: ^bridgemodel.Julia_Runtime_Service) -> (Euclid_Runtime_Session, bool) {
     presentation := create_presentation_runtime()
     if presentation == nil {
         _ = shutdown_runtime_session({

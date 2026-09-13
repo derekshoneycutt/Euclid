@@ -1,22 +1,27 @@
 package bridge
 
+import rl "vendor:raylib"
+
+import shapemodel "../shapes/model"
+
 import "../core"
 import "../shapes"
 
 // Resolve one packed direct constraint target against the canonical world.
 constraint_target :: proc(
     state: ^core.Euclid_General_State,
-    packed: u64) -> (core.Shape_Entity, bool) {
+    packed: u64) -> (shapemodel.Shape_Entity, bool) {
     return bridge_shape_resolve(state, packed)
 }
 
 // Decode one bridge movement policy after validating its enum range.
 constraint_movement :: proc(
-    movement: i32) -> (core.Shape_Constraint_Movement_Policy, bool) {
-    if movement < 0 || movement > i32(core.Shape_Constraint_Movement_Policy.Move_Second) {
+    movement: i32) -> (shapemodel.Shape_Constraint_Movement_Policy, bool) {
+    if movement < 0 ||
+       movement > i32(shapemodel.Shape_Constraint_Movement_Policy.Move_Second) {
         return {}, false
     }
-    return core.Shape_Constraint_Movement_Policy(movement), true
+    return shapemodel.Shape_Constraint_Movement_Policy(movement), true
 }
 
 // Append one floor constraint naming its transform directly.
@@ -50,7 +55,7 @@ create_snap_to_floor_constraint :: proc "c" (
 @(export)
 create_snap_point_constraint :: proc "c" (
     state: ^core.Euclid_General_State, point: u64,
-    position: core.Vector3, enabled: u8) -> i32 {
+    position: rl.Vector3, enabled: u8) -> i32 {
     context = state^.saved_context
     entity, found := constraint_target(state, point)
     if !found {return BRIDGE_STATUS_NOT_FOUND}
@@ -96,7 +101,7 @@ create_min_angle_constraint :: proc "c" (
 
 // Validate and append one direct-target angle constraint.
 create_angle_constraint :: proc(
-    state: ^core.Euclid_General_State, kind: core.Shape_Constraint_Kind,
+    state: ^core.Euclid_General_State, kind: shapemodel.Shape_Constraint_Kind,
     input: Bridge_Angle_Constraint_Input) -> i32 {
     first_entity, first_found := constraint_target(state, input.first)
     pivot_entity, pivot_found := constraint_target(state, input.pivot)

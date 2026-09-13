@@ -1,6 +1,6 @@
 package font
 
-import "../../core"
+import fontmodel "model"
 
 import stbtt "vendor:stb/truetype"
 
@@ -50,10 +50,10 @@ Font_Glyph_Page_Request :: struct {
     cancellation: Font_Prepare_Cancellation,
 }
 
-Prepared_Font_Allocation_Mode :: core.Prepared_Font_Allocation_Mode
-Prepared_Glyph :: core.Prepared_Glyph
-Prepared_Rectangle :: core.Prepared_Rectangle
-Prepared_Font :: core.Prepared_Font
+Prepared_Font_Allocation_Mode :: fontmodel.Prepared_Font_Allocation_Mode
+Prepared_Glyph :: fontmodel.Prepared_Glyph
+Prepared_Rectangle :: fontmodel.Prepared_Rectangle
+Prepared_Font :: fontmodel.Prepared_Font
 
 //   Query an optional caller-owned cancellation capability.
 prepare_cancellation_requested :: proc(

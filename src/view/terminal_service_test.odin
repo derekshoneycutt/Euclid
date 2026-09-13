@@ -1,5 +1,11 @@
 package view
 
+import viewterminalmodel "terminal/model"
+
+import bridgemodel "../bridge/model"
+
+import animation_model "../core/animation"
+
 import "base:runtime"
 import bridge "../bridge"
 import "../core"
@@ -15,7 +21,7 @@ import "core:time"
 
 // Dispatch one test envelope through the same display-owned Terminal path as production.
 terminal_service_test_route_egress :: proc(
-    user_data: rawptr, message: ^core.Julia_Host_Egress) -> bool {
+    user_data: rawptr, message: ^bridgemodel.Julia_Host_Egress) -> bool {
     state := cast(^core.Euclid_General_State)user_data
     _ = terminal_service_dispatch_egress(state, message)
     return false
@@ -24,7 +30,7 @@ terminal_service_test_route_egress :: proc(
 // Initialize one link-only Julia service without starting or entering libjulia.
 terminal_service_test_runtime_init :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State) {
-    service := new(core.Julia_Runtime_Service, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     testing.expect_value(t, bridge.init_julia_runtime_channels(service),
         runtime.Allocator_Error.None)
     service.lifecycle = .Ready
@@ -54,7 +60,7 @@ terminal_service_test_dispatch_egress :: proc(
 
 // Produce two ordered output batches and one completion as the simulated Julia owner.
 terminal_service_test_send_evaluation_result :: proc(
-    t: ^testing.T, service: ^core.Julia_Runtime_Service,
+    t: ^testing.T, service: ^bridgemodel.Julia_Runtime_Service,
     request: protocol.Evaluation_Requested) {
     first := protocol.Terminal_Output_Batch{
         request_id = request.request_id,
@@ -64,24 +70,24 @@ terminal_service_test_send_evaluation_result :: proc(
     second := first
     second.bytes = "second\n"
     testing.expect_value(t, bridge.send_terminal_output(service, first),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
     testing.expect_value(t, bridge.send_terminal_output(service, second),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
     testing.expect_value(t, bridge.send_terminal_egress(service,
         protocol.Evaluation_Completed{
             request_id = request.request_id,
             animation_generation = request.animation_generation,
             succeeded = true,
-        }), core.Communication_Send_Outcome.Sent)
+        }), bridgemodel.Communication_Send_Outcome.Sent)
 }
 
 // Initialize the animation arena and selected Terminal descriptor for service tests.
 terminal_service_test_state_init :: proc(
     t: ^testing.T, state: ^core.Euclid_General_State,
-    animation: ^core.Euclid_Julia_Animation_Interface, generation: u64) {
-    testing.expect(t, core.animation_memory_init(&state^.animation_memory))
-    testing.expect_value(t, core.animation_memory_begin_generation(
-        &state^.animation_memory, generation), core.Animation_Memory_Status.Ok)
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface, generation: u64) {
+    testing.expect(t, animation_model.animation_memory_init(&state^.animation_memory))
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &state^.animation_memory, generation), animation_model.Animation_Memory_Status.Ok)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.selected_animation = animation
     state^.julia_interface^.current_animation = animation
@@ -132,9 +138,9 @@ terminal_service_test_real_pty_lifecycle :: proc(t: ^testing.T) {
     when ODIN_OS == .Linux {
         state := new(core.Euclid_General_State, context.allocator)
         defer free(state, context.allocator)
-        animation: core.Euclid_Julia_Animation_Interface
+        animation: bridgemodel.Euclid_Julia_Animation_Interface
         terminal_service_test_state_init(t, state, &animation, 1)
-        defer core.animation_memory_destroy(&state^.animation_memory)
+        defer animation_model.animation_memory_destroy(&state^.animation_memory)
         testing.expect(t, terminalview.terminal_init_for_animation(
             &state^.terminal, &state^.animation_memory, 1))
         defer terminalview.terminal_destroy(&state^.terminal)
@@ -157,7 +163,8 @@ terminal_service_test_real_pty_lifecycle :: proc(t: ^testing.T) {
         testing.expect(t, shell_service_submit(
             state, "/bin/bash --noprofile --norc"))
         shell_service_update(state, &runtime)
-        testing.expect_value(t, state^.shell.phase, core.Shell_Launch_Phase.Running)
+        testing.expect_value(t, state^.shell.phase,
+            viewterminalmodel.Shell_Launch_Phase.Running)
         events: [64]input.Input_Event
         frame := terminal_service_test_command_frame(
             events[:], "printf interactive-ok; exit")
@@ -172,8 +179,8 @@ terminal_service_test_real_pty_lifecycle :: proc(t: ^testing.T) {
 terminal_service_test_selection_identity :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    animation: core.Euclid_Julia_Animation_Interface
-    previous: core.Euclid_Julia_Animation_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
+    previous: bridgemodel.Euclid_Julia_Animation_Interface
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.julia_interface^.selected_animation = &animation
     state^.julia_interface^.current_animation = &previous
@@ -190,9 +197,9 @@ terminal_service_test_selection_identity :: proc(t: ^testing.T) {
 terminal_service_test_entry_waits_for_julia_session :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    animation: core.Euclid_Julia_Animation_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
     terminal_service_test_state_init(t, state, &animation, 4)
-    defer core.animation_memory_destroy(&state^.animation_memory)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
     testing.expect(t, terminal_service_enter(state))
@@ -209,7 +216,7 @@ terminal_service_test_entry_waits_for_julia_session :: proc(t: ^testing.T) {
         state^.julia_runtime_service, protocol.Terminal_Session_Ready{
             animation_generation = 4,
             banner = "Julia Version test\n\x1b[1mready\x1b[0m\n",
-        }), core.Communication_Send_Outcome.Sent)
+        }), bridgemodel.Communication_Send_Outcome.Sent)
     testing.expect_value(t, terminal_service_test_dispatch_egress(t, state), 1)
     testing.expect(t, terminal_service_test_contains(state, "Julia Version test"))
     testing.expect(t, !terminal_service_test_contains(state, "Euclid Terminal"))
@@ -221,9 +228,9 @@ terminal_service_test_entry_waits_for_julia_session :: proc(t: ^testing.T) {
 terminal_service_test_generation_reentry_is_pristine :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    animation: core.Euclid_Julia_Animation_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
     terminal_service_test_state_init(t, state, &animation, 7)
-    defer core.animation_memory_destroy(&state^.animation_memory)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
     testing.expect(t, terminal_service_enter(state))
@@ -231,8 +238,8 @@ terminal_service_test_generation_reentry_is_pristine :: proc(t: ^testing.T) {
         &state^.terminal, "old generation\n")
 
     terminalview.terminal_destroy(&state^.terminal)
-    testing.expect_value(t, core.animation_memory_begin_generation(
-        &state^.animation_memory, 8), core.Animation_Memory_Status.Ok)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &state^.animation_memory, 8), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, terminal_service_enter(state))
     testing.expect_value(t, state^.terminal.animation_generation, u64(8))
     testing.expect(t, !terminal_service_test_contains(state, "old generation"))
@@ -244,9 +251,9 @@ terminal_service_test_generation_reentry_is_pristine :: proc(t: ^testing.T) {
 terminal_service_test_typed_evaluation_round_trip :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    animation: core.Euclid_Julia_Animation_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
     terminal_service_test_state_init(t, state, &animation, 12)
-    defer core.animation_memory_destroy(&state^.animation_memory)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
     testing.expect(t, terminal_service_enter(state))
@@ -257,7 +264,7 @@ terminal_service_test_typed_evaluation_round_trip :: proc(t: ^testing.T) {
         &state^.julia_runtime_service^.request_link, started))
     state^.terminal.julia_session_ready = true
     testing.expect_value(t, terminal_service_submit_evaluation(state, "1 + 1"),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
 
     ingress, received := bridge.communication_link_try_recv(
         &state^.julia_runtime_service^.request_link)
@@ -283,13 +290,13 @@ terminal_service_test_typed_evaluation_round_trip :: proc(t: ^testing.T) {
 terminal_service_test_completion_candidate_freshness :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    animation: core.Euclid_Julia_Animation_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
     terminal_service_test_state_init(t, state, &animation, 16)
-    defer core.animation_memory_destroy(&state^.animation_memory)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
     testing.expect(t, terminal_service_enter(state))
     testing.expect(t, termhist.termhist_insert_text(state^.terminal.history, "pri"))
     request := terminalview.terminal_request_completion(&state^.terminal)
-    result := core.Julia_Host_Egress(protocol.Completion_Result{
+    result := bridgemodel.Julia_Host_Egress(protocol.Completion_Result{
         request_id = request.request_id,
         animation_generation = 16,
         found = false,
@@ -300,7 +307,7 @@ terminal_service_test_completion_candidate_freshness :: proc(t: ^testing.T) {
     testing.expect(t, terminal_service_test_contains(state, "print  println"))
 
     stale_request := terminalview.terminal_request_completion(&state^.terminal)
-    stale := core.Julia_Host_Egress(protocol.Completion_Result{
+    stale := bridgemodel.Julia_Host_Egress(protocol.Completion_Result{
         request_id = stale_request.request_id,
         animation_generation = 15,
         found = false,
@@ -317,15 +324,15 @@ terminal_service_test_completion_candidate_freshness :: proc(t: ^testing.T) {
 terminal_service_test_rejects_stale_generation_egress :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    animation: core.Euclid_Julia_Animation_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
     terminal_service_test_state_init(t, state, &animation, 20)
-    defer core.animation_memory_destroy(&state^.animation_memory)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
     terminal_service_test_runtime_init(t, state)
     defer terminal_service_test_runtime_destroy(state)
     testing.expect(t, terminal_service_enter(state))
     terminalview.terminal_destroy(&state^.terminal)
-    testing.expect_value(t, core.animation_memory_begin_generation(
-        &state^.animation_memory, 21), core.Animation_Memory_Status.Ok)
+    testing.expect_value(t, animation_model.animation_memory_begin_generation(
+        &state^.animation_memory, 21), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, terminal_service_enter(state))
 
     stale := protocol.Terminal_Output_Batch{
@@ -334,7 +341,7 @@ terminal_service_test_rejects_stale_generation_egress :: proc(t: ^testing.T) {
         bytes = "stale output\n",
     }
     testing.expect_value(t, bridge.send_terminal_output(
-        state^.julia_runtime_service, stale), core.Communication_Send_Outcome.Sent)
+        state^.julia_runtime_service, stale), bridgemodel.Communication_Send_Outcome.Sent)
     _, received_event := bridge.try_route_julia_egress(
         state^.julia_runtime_service)
     testing.expect(t, !received_event)
@@ -347,16 +354,16 @@ terminal_service_test_rejects_stale_generation_egress :: proc(t: ^testing.T) {
 terminal_service_test_dispatches_fixed_response_families :: proc(t: ^testing.T) {
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    animation: core.Euclid_Julia_Animation_Interface
+    animation: bridgemodel.Euclid_Julia_Animation_Interface
     terminal_service_test_state_init(t, state, &animation, 30)
-    defer core.animation_memory_destroy(&state^.animation_memory)
+    defer animation_model.animation_memory_destroy(&state^.animation_memory)
     testing.expect(t, terminal_service_enter(state))
     testing.expect(t, terminalview.terminal_begin_eval(&state^.terminal, "read()"))
     request_id := state^.terminal.pending_eval_request_id
     state^.terminal.geometry.generation = 4
     geometry := state^.terminal.geometry
 
-    messages := [5]core.Julia_Host_Egress{
+    messages := [5]bridgemodel.Julia_Host_Egress{
         protocol.Terminal_Input_Acquired{
             request_id = request_id, animation_generation = 30},
         protocol.Terminal_Input_Released{
@@ -377,7 +384,7 @@ terminal_service_test_dispatches_fixed_response_families :: proc(t: ^testing.T) 
     testing.expect_value(t, state^.terminal.julia_geometry_generation, u64(4))
     testing.expect(t, state^.terminal.julia_capabilities_observed)
 
-    stale := core.Julia_Host_Egress(protocol.Terminal_Session_Stopped{
+    stale := bridgemodel.Julia_Host_Egress(protocol.Terminal_Session_Stopped{
         animation_generation = 29})
     testing.expect(t, !terminal_service_dispatch_egress(state, &stale))
     terminalview.terminal_destroy(&state^.terminal)

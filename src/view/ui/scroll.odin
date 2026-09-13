@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 
 import rl "vendor:raylib"
 
@@ -74,7 +75,7 @@ Scroll_Container_Begin_Params :: struct {
     scroll_offset:          rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     wheel_step:             f32,
-    press_owner:            ^core.Ui_Press_Owner_State,
+    press_owner:            ^viewmodel.Ui_Press_Owner_State,
     state_in:               Scroll_Container_State,
 }
 
@@ -142,7 +143,7 @@ Scroll_Container_End_Params :: struct {
     mouse_input:            Input_Frame,
     scroll_offset:          rl.Vector2,
     interaction_space_rect: rl.Rectangle,
-    press_owner:            ^core.Ui_Press_Owner_State,
+    press_owner:            ^viewmodel.Ui_Press_Owner_State,
 }
 
 // Inputs for resolving scrolling and capture before rendering.
@@ -155,7 +156,7 @@ Scroll_Container_Update_Params :: struct {
     scroll_offset: rl.Vector2,
     interaction_space_rect: rl.Rectangle,
     wheel_step: f32,
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     state_in: Scroll_Container_State,
 }
 
@@ -275,7 +276,7 @@ scroll_container_in_interaction_space :: #force_inline proc(
 
 //   Return whether the shared press owner currently belongs to this scrollbar.
 scroll_container_owns_press :: #force_inline proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     id: int) -> bool {
 
     return press_owner^.active &&
@@ -285,7 +286,7 @@ scroll_container_owns_press :: #force_inline proc(
 
 //   Capture shared press ownership for a scrollbar thumb when available.
 scroll_container_try_capture_press :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     id: int,
     input: Scrollbar_Capture_Input,
     is_dragging_thumb: ^bool,
@@ -305,7 +306,7 @@ scroll_container_try_capture_press :: proc(
 
 //   Release shared press ownership when a scrollbar thumb drag ends.
 scroll_container_release_press :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     id: int,
     is_dragging_thumb: ^bool,
     drag_offset_y: ^f32) {
@@ -455,7 +456,7 @@ scroll_overflow_hint :: proc(
 
 //   Build the no-scrollbar end result, releasing any owned press.
 scroll_container_end_no_scrollbar :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     id: int,
     scroll_y_out: f32,
     state_out: ^Scroll_Container_State) -> Scroll_Container_End_Result {

@@ -1,50 +1,55 @@
 package dynview_math
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
+import storage "../../core/storage"
+
 import "base:runtime"
 
 // Build bounded shaped runs and glyphs before atomic cache publication.
 Dynview_Shaped_Builder :: struct {
-    runs: app_core.Bounded_Element_Builder(app_core.Dynview_Shaped_Run),
-    glyphs: app_core.Bounded_Element_Builder(app_core.Shaped_Glyph),
+    runs: storage.Bounded_Element_Builder(dynviewmodel.Dynview_Shaped_Run),
+    glyphs: storage.Bounded_Element_Builder(fontmodel.Shaped_Glyph),
     font_generation: u64,
     initialized: bool,
 }
 
 Dynview_Shaped_Append :: struct {
     math_command_index: int,
-    site: app_core.Dynview_Shaped_Site,
+    site: dynviewmodel.Dynview_Shaped_Site,
     text_offset, text_len: int,
-    glyphs: []app_core.Shaped_Glyph,
-    metrics: app_core.Dynview_Shaped_Run,
+    glyphs: []fontmodel.Shaped_Glyph,
+    metrics: dynviewmodel.Dynview_Shaped_Run,
 }
 
 //   Initialize empty shaped-record builders in the display-cache arena.
 shaped_builder_init :: proc(
     builder: ^Dynview_Shaped_Builder,
-    arena: ^app_core.Arena_Owner,
-    font_generation: u64) -> app_core.Bounded_Builder_Status {
+    arena: ^storage.Arena_Owner,
+    font_generation: u64) -> storage.Bounded_Builder_Status {
 
     return shaped_builder_init_with_allocator(
-        builder, app_core.arena_owner_allocator(arena), font_generation)
+        builder, storage.arena_owner_allocator(arena), font_generation)
 }
 
 //   Initialize shaped-record builders through a supplied allocator for failure tests.
 shaped_builder_init_with_allocator :: proc(
     builder: ^Dynview_Shaped_Builder,
     allocator: runtime.Allocator,
-    font_generation: u64) -> app_core.Bounded_Builder_Status {
+    font_generation: u64) -> storage.Bounded_Builder_Status {
 
     if builder == nil || font_generation == 0 {
         return .Invalid_Argument
     }
-    run_status := app_core.bounded_element_builder_init_with_allocator(
-        &builder^.runs, app_core.DYNVIEW_MAX_SHAPED_RUNS, allocator)
+    run_status := storage.bounded_element_builder_init_with_allocator(
+        &builder^.runs, dynviewmodel.DYNVIEW_MAX_SHAPED_RUNS, allocator)
     if run_status != .Ok {
         return run_status
     }
-    glyph_status := app_core.bounded_element_builder_init_with_allocator(
-        &builder^.glyphs, app_core.FONT_SHAPED_GLYPH_CAPACITY, allocator)
+    glyph_status := storage.bounded_element_builder_init_with_allocator(
+        &builder^.glyphs, fontmodel.FONT_SHAPED_GLYPH_CAPACITY, allocator)
     if glyph_status != .Ok {
         builder^ = {}
         return glyph_status
@@ -58,7 +63,7 @@ shaped_builder_init_with_allocator :: proc(
 shaped_run_from_append :: proc(
     builder: ^Dynview_Shaped_Builder,
     append: Dynview_Shaped_Append,
-    glyph_start: int) -> app_core.Dynview_Shaped_Run {
+    glyph_start: int) -> dynviewmodel.Dynview_Shaped_Run {
     return {
         math_command_index = append.math_command_index,
         site = append.site,
@@ -82,18 +87,18 @@ shaped_run_from_append :: proc(
 //   Append one complete shaped run without publishing a partial span.
 shaped_builder_append :: proc(
     builder: ^Dynview_Shaped_Builder,
-    append: Dynview_Shaped_Append) -> app_core.Bounded_Builder_Status {
+    append: Dynview_Shaped_Append) -> storage.Bounded_Builder_Status {
 
     if builder == nil || !builder^.initialized || append.math_command_index < 0 ||
         append.text_offset < 0 || append.text_len <= 0 || len(append.glyphs) <= 0 {
         return .Invalid_Argument
     }
-    glyph_status := app_core.bounded_element_builder_reserve(
+    glyph_status := storage.bounded_element_builder_reserve(
         &builder^.glyphs, len(append.glyphs))
     if glyph_status != .Ok {
         return glyph_status
     }
-    run_status := app_core.bounded_element_builder_reserve(&builder^.runs, 1)
+    run_status := storage.bounded_element_builder_reserve(&builder^.runs, 1)
     if run_status != .Ok {
         return run_status
     }
@@ -109,22 +114,22 @@ shaped_builder_append :: proc(
 //   Seal valid shaped spans and publish them to layout records atomically.
 shaped_builder_seal :: proc(
     builder: ^Dynview_Shaped_Builder,
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     text_bytes_len: int,
     math_command_count: int,
-    current_font_generation: u64) -> app_core.Bounded_Builder_Status {
+    current_font_generation: u64) -> storage.Bounded_Builder_Status {
 
     if !shaped_builder_can_seal(
         builder, cache, text_bytes_len, math_command_count, current_font_generation) {
         clear_shaped_records(cache)
         return .Invalid_Argument
     }
-    runs, run_status := app_core.bounded_element_builder_seal(&builder^.runs)
+    runs, run_status := storage.bounded_element_builder_seal(&builder^.runs)
     if run_status != .Ok {
         clear_shaped_records(cache)
         return run_status
     }
-    glyphs, glyph_status := app_core.bounded_element_builder_seal(&builder^.glyphs)
+    glyphs, glyph_status := storage.bounded_element_builder_seal(&builder^.glyphs)
     if glyph_status != .Ok {
         clear_shaped_records(cache)
         return glyph_status
@@ -143,7 +148,7 @@ shaped_builder_seal :: proc(
 //   Reject stale generations and malformed run, text, glyph, or layout spans.
 shaped_builder_can_seal :: proc(
     builder: ^Dynview_Shaped_Builder,
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     text_bytes_len: int,
     math_command_count: int,
     current_font_generation: u64) -> bool {
@@ -172,7 +177,7 @@ shaped_builder_can_seal :: proc(
 }
 
 //   Remove all shaped aliases and restore math commands to fallback behavior.
-clear_shaped_records :: proc(cache: ^app_core.Dynview_Compile_Cache) {
+clear_shaped_records :: proc(cache: ^dynviewmodel.Dynview_Compile_Cache) {
     if cache == nil {
         return
     }

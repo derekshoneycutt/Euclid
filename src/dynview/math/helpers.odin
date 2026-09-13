@@ -1,6 +1,7 @@
 package dynview_math
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
 import dyncore "../core"
 
 //   Draw text for each delimiter kind, indexed by kind minus one.
@@ -8,7 +9,7 @@ DELIMITER_TEXTS :: [DELIMITER_KIND_COUNT]string{
     "(", ")", "[", "]", "{", "}", "|", "‖", "⌈", "⌉", "⌊", "⌋", "⟨", "⟩",
 }
 
-Dynview_Matrix_Column_Alignment :: app_core.Dynview_Matrix_Column_Alignment
+Dynview_Matrix_Column_Alignment :: dynviewmodel.Dynview_Matrix_Column_Alignment
 
 Script_Draw_Offsets :: struct {
     script_font_size: f32,
@@ -111,7 +112,7 @@ matrix_row_gap :: #force_inline proc(font_size: f32) -> f32 {
 
 //   Return the environment-selected default gap between table rows.
 math_table_default_row_gap :: #force_inline proc(
-    spacing: app_core.Dynview_Math_Table_Row_Spacing, font_size: f32) -> f32 {
+    spacing: dynviewmodel.Dynview_Math_Table_Row_Spacing, font_size: f32) -> f32 {
 
     switch spacing {
     case .Matrix: return matrix_row_gap(font_size)
@@ -124,7 +125,7 @@ math_table_default_row_gap :: #force_inline proc(
 
 //   Return minimum ascent and descent for one table row strut policy.
 math_table_row_strut :: #force_inline proc(
-    spacing: app_core.Dynview_Math_Table_Row_Spacing,
+    spacing: dynviewmodel.Dynview_Math_Table_Row_Spacing,
     font_size: f32) -> (ascent, descent: f32) {
 
     switch spacing {
@@ -138,7 +139,7 @@ math_table_row_strut :: #force_inline proc(
 
 //   Resolve one typed table length against the active math font size.
 math_table_length_px :: #force_inline proc(
-    length: app_core.Dynview_Math_Length, font_size, default_value: f32) -> f32 {
+    length: dynviewmodel.Dynview_Math_Length, font_size, default_value: f32) -> f32 {
 
     switch length.unit {
     case .Default: return default_value
@@ -162,7 +163,7 @@ math_table_rule_separation :: #force_inline proc(font_size: f32) -> f32 {
 
 //   Resolve one complete column-boundary span including rules.
 math_table_column_boundary_width :: #force_inline proc(
-    descriptor: ^app_core.Dynview_Math_Table_Descriptor,
+    descriptor: ^dynviewmodel.Dynview_Math_Table_Descriptor,
     boundary: int,
     font_size, base_advance: f32) -> f32 {
 
@@ -187,7 +188,7 @@ math_table_column_boundary_width :: #force_inline proc(
 
 //   Resolve one row-boundary span including row additions and rules.
 math_table_row_boundary_height :: #force_inline proc(
-    descriptor: ^app_core.Dynview_Math_Table_Descriptor,
+    descriptor: ^dynviewmodel.Dynview_Math_Table_Descriptor,
     boundary: int,
     font_size: f32) -> f32 {
 
@@ -210,7 +211,7 @@ math_table_row_boundary_height :: #force_inline proc(
 
 //   Return the signed row adjustment preceding rule ink at one boundary.
 math_table_row_rule_offset :: #force_inline proc(
-    descriptor: ^app_core.Dynview_Math_Table_Descriptor,
+    descriptor: ^dynviewmodel.Dynview_Math_Table_Descriptor,
     boundary: int,
     font_size: f32) -> f32 {
 
@@ -223,8 +224,9 @@ math_table_row_rule_offset :: #force_inline proc(
 
 //   Resolve one matrix command's bounded native table descriptor.
 matrix_descriptor_from_command :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    cmd: app_core.Dynview_Command) -> (^app_core.Dynview_Math_Table_Descriptor, bool) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    cmd: dynviewmodel.Dynview_Command) -> (
+        ^dynviewmodel.Dynview_Math_Table_Descriptor, bool) {
 
     index := int(cmd.table_descriptor_index)
     if cache == nil || index < 0 || index >= cache^.math_table_descriptor_count {

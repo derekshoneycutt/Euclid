@@ -1,6 +1,9 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import storage "../../core/storage"
+
 
 //   Accumulated item range and vertical extents for one document layout line.
 Dynview_Layout_Line_Accumulator :: struct {
@@ -12,7 +15,7 @@ Dynview_Layout_Line_Accumulator :: struct {
 
 //   Block-level alignment, indentation, spacing, and line-height controls.
 Dynview_Block_Format :: struct {
-    alignment: app_core.Dynview_Text_Alignment,
+    alignment: dynviewmodel.Dynview_Text_Alignment,
     indent_cols: int,
     paragraph_spacing_before: f32,
     paragraph_spacing_after: f32,
@@ -31,8 +34,8 @@ Dynview_Layout_State :: struct {
 
 //   Shared inputs and mutable accumulators for one document layout build.
 Dynview_Layout_Build_Context :: struct {
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Layout_State,
     acc: ^Dynview_Layout_Line_Accumulator,
     font_size: f32,
@@ -97,7 +100,7 @@ Document_Break_State :: struct {
 
 // Report which breaker produced a complete line sequence.
 Document_Break_Result :: struct {
-    status: app_core.Bounded_Builder_Status,
+    status: storage.Bounded_Builder_Status,
     fallback: Document_Break_Fallback,
 }
 
@@ -120,7 +123,7 @@ Document_Break_Quality :: struct {
 
 // Group mutable bounded-search inputs and work accounting.
 Document_Break_Search_Context :: struct {
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     candidates: []Document_Break_Candidate,
     states: []Document_Break_State,
     available_width: f32,
@@ -142,5 +145,5 @@ Document_Break_Transition :: struct {
 Document_Break_Scratch :: struct {
     candidates: []Document_Break_Candidate,
     states: []Document_Break_State,
-    status: app_core.Bounded_Builder_Status,
+    status: storage.Bounded_Builder_Status,
 }

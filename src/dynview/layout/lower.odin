@@ -1,24 +1,27 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import storage "../../core/storage"
+
 
 // Mutable bounded storage for one semantic document layout transaction.
 Document_Layout_Builders :: struct {
-    nodes: app_core.Bounded_Element_Builder(app_core.Dynview_Document_Layout_Node),
-    blocks: app_core.Bounded_Element_Builder(app_core.Dynview_Document_Layout_Block),
-    lines: app_core.Bounded_Element_Builder(app_core.Dynview_Document_Layout_Line),
-    items: app_core.Bounded_Element_Builder(app_core.Dynview_Document_Layout_Item),
-    copy_targets: app_core.Bounded_Element_Builder(
-        app_core.Dynview_Document_Layout_Copy_Target),
+    nodes: storage.Bounded_Element_Builder(dynviewmodel.Dynview_Document_Layout_Node),
+    blocks: storage.Bounded_Element_Builder(dynviewmodel.Dynview_Document_Layout_Block),
+    lines: storage.Bounded_Element_Builder(dynviewmodel.Dynview_Document_Layout_Line),
+    items: storage.Bounded_Element_Builder(dynviewmodel.Dynview_Document_Layout_Item),
+    copy_targets: storage.Bounded_Element_Builder(
+        dynviewmodel.Dynview_Document_Layout_Copy_Target),
 }
 
 Document_Shaped_Run_Ref :: struct {
-    run: ^app_core.Dynview_Document_Shaped_Run,
+    run: ^dynviewmodel.Dynview_Document_Shaped_Run,
     index: int,
 }
 
 Document_Display_Program_Node_Result :: struct {
-    node: app_core.Dynview_Document_Layout_Node,
+    node: dynviewmodel.Dynview_Document_Layout_Node,
     next: int,
     ok: bool,
 }
@@ -26,37 +29,37 @@ Document_Display_Program_Node_Result :: struct {
 // Initialize every semantic layout builder in the worker-owned cache arena.
 document_layout_builders_init :: proc(
     builders: ^Document_Layout_Builders,
-    arena: ^app_core.Arena_Owner) -> app_core.Bounded_Builder_Status {
+    arena: ^storage.Arena_Owner) -> storage.Bounded_Builder_Status {
 
     if builders == nil || arena == nil {
         return .Invalid_Argument
     }
-    allocator := app_core.arena_owner_allocator(arena)
-    status := app_core.bounded_element_builder_init_with_allocator(
-        &builders^.nodes, app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_NODES, allocator)
+    allocator := storage.arena_owner_allocator(arena)
+    status := storage.bounded_element_builder_init_with_allocator(
+        &builders^.nodes, dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_NODES, allocator)
     if status == .Ok {
-        status = app_core.bounded_element_builder_init_with_allocator(
-            &builders^.blocks, app_core.DYNVIEW_MAX_DOCUMENT_BLOCKS, allocator)
+        status = storage.bounded_element_builder_init_with_allocator(
+            &builders^.blocks, dynviewmodel.DYNVIEW_MAX_DOCUMENT_BLOCKS, allocator)
     }
     if status == .Ok {
-        status = app_core.bounded_element_builder_init_with_allocator(
-            &builders^.lines, app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_LINES, allocator)
+        status = storage.bounded_element_builder_init_with_allocator(
+            &builders^.lines, dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_LINES, allocator)
     }
     if status == .Ok {
-        status = app_core.bounded_element_builder_init_with_allocator(
-            &builders^.items, app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_ITEMS, allocator)
+        status = storage.bounded_element_builder_init_with_allocator(
+            &builders^.items, dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_ITEMS, allocator)
     }
     if status == .Ok {
-        status = app_core.bounded_element_builder_init_with_allocator(
+        status = storage.bounded_element_builder_init_with_allocator(
             &builders^.copy_targets,
-            app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_COPY_TARGETS, allocator)
+            dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_COPY_TARGETS, allocator)
     }
     return status
 }
 
 // Resolve the Phase 3 shaped prose run for one semantic inline index.
 document_shaped_run_for_inline :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     inline_index: int) -> (Document_Shaped_Run_Ref, bool) {
 
     for run, run_index in cache^.document_shaped_runs {
@@ -72,9 +75,9 @@ document_shaped_run_for_inline :: proc(
 
 // Scale one authoritative prose measurement to the tracked layout font size.
 document_prose_node :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    item: app_core.Dynview_Document_Inline,
-    inline_index: int) -> (app_core.Dynview_Document_Layout_Node, bool) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    item: dynviewmodel.Dynview_Document_Inline,
+    inline_index: int) -> (dynviewmodel.Dynview_Document_Layout_Node, bool) {
 
     shaped, found := document_shaped_run_for_inline(cache, inline_index)
     if !found || shaped.run^.base_pixel_size <= 0 {
@@ -82,7 +85,7 @@ document_prose_node :: proc(
     }
     run := shaped.run
     scale := cache^.last_font_size/run^.base_pixel_size
-    kind := app_core.Dynview_Document_Layout_Node_Kind.Box
+    kind := dynviewmodel.Dynview_Document_Layout_Node_Kind.Box
     break_allowed := false
     if item.kind == .Space {
         kind = .Glue
@@ -108,9 +111,9 @@ document_prose_node :: proc(
 
 // Resolve one already-measured semantic math program as an atomic box.
 document_math_node :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    item: app_core.Dynview_Document_Inline,
-    inline_index: int) -> (app_core.Dynview_Document_Layout_Node, bool) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    item: dynviewmodel.Dynview_Document_Inline,
+    inline_index: int) -> (dynviewmodel.Dynview_Document_Layout_Node, bool) {
 
     program_id := item.math_program_id
     if program_id < 0 || program_id >= cache^.math_program_count {
@@ -130,9 +133,9 @@ document_math_node :: proc(
 
 // Convert one semantic Euclid shape to the legacy intrinsic-geometry payload.
 document_shape_command :: proc(
-    shape: app_core.Dynview_Document_Shape) -> (app_core.Dynview_Command, bool) {
+    shape: dynviewmodel.Dynview_Document_Shape) -> (dynviewmodel.Dynview_Command, bool) {
 
-    command := app_core.Dynview_Command{
+    command := dynviewmodel.Dynview_Command{
         inline_atom_dimension = shape.width,
         inline_box_height = shape.height,
         inline_atom_stroke = shape.thickness,
@@ -161,7 +164,7 @@ document_shape_command :: proc(
 
 // Measure one semantic shape with the established stroke-inclusive geometry.
 document_shape_geometry :: proc(
-    shape: app_core.Dynview_Document_Shape,
+    shape: dynviewmodel.Dynview_Document_Shape,
     cell_width: f32) -> (Inline_Shape_Geometry, bool) {
 
     command, ok := document_shape_command(shape)
@@ -173,9 +176,9 @@ document_shape_geometry :: proc(
 
 // Measure one semantic Euclid shape using its established font-relative dimensions.
 document_shape_node :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    item: app_core.Dynview_Document_Inline,
-    inline_index: int) -> (app_core.Dynview_Document_Layout_Node, bool) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    item: dynviewmodel.Dynview_Document_Inline,
+    inline_index: int) -> (dynviewmodel.Dynview_Document_Layout_Node, bool) {
 
     if !item.shape.present || item.shape.kind == .None {
         return {}, false
@@ -194,9 +197,9 @@ document_shape_node :: proc(
 
 // Lower one semantic inline to one measured horizontal-list node.
 document_lower_inline :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    item: app_core.Dynview_Document_Inline,
-    inline_index: int) -> (app_core.Dynview_Document_Layout_Node, bool) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    item: dynviewmodel.Dynview_Document_Inline,
+    inline_index: int) -> (dynviewmodel.Dynview_Document_Layout_Node, bool) {
 
     switch item.kind {
     case .Text, .Space:
@@ -219,17 +222,17 @@ document_lower_inline :: proc(
 // Append one measured node to the bounded document layout transaction.
 document_append_layout_node :: proc(
     builders: ^Document_Layout_Builders,
-    node: app_core.Dynview_Document_Layout_Node) -> app_core.Bounded_Builder_Status {
+    node: dynviewmodel.Dynview_Document_Layout_Node) -> storage.Bounded_Builder_Status {
 
-    return app_core.bounded_element_builder_append(
-        &builders^.nodes, []app_core.Dynview_Document_Layout_Node{node})
+    return storage.bounded_element_builder_append(
+        &builders^.nodes, []dynviewmodel.Dynview_Document_Layout_Node{node})
 }
 
 // Resolve one display program through its source-mapping math inline.
 document_display_program_node :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    content: ^app_core.Dynview_Content_View,
-    block: app_core.Dynview_Document_Block,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    content: ^dynviewmodel.Dynview_Content_View,
+    block: dynviewmodel.Dynview_Document_Block,
     program_id, search_start: int) -> Document_Display_Program_Node_Result {
 
     end := block.inline_start+block.inline_count
@@ -245,10 +248,10 @@ document_display_program_node :: proc(
 
 // Lower one technical display block as ordered row math boxes and align spacers.
 document_lower_display_block :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    content: ^app_core.Dynview_Content_View,
-    block: app_core.Dynview_Document_Block,
-    builders: ^Document_Layout_Builders) -> app_core.Bounded_Builder_Status {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    content: ^dynviewmodel.Dynview_Content_View,
+    block: dynviewmodel.Dynview_Document_Block,
+    builders: ^Document_Layout_Builders) -> storage.Bounded_Builder_Status {
 
     if block.display_row_start < 0 || block.display_row_count <= 0 ||
         block.display_row_count >
@@ -283,10 +286,10 @@ document_lower_display_block :: proc(
 
 // Lower one semantic block's contiguous inline range into measured nodes.
 document_lower_block :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    content: ^app_core.Dynview_Content_View,
-    block: app_core.Dynview_Document_Block,
-    builders: ^Document_Layout_Builders) -> app_core.Bounded_Builder_Status {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    content: ^dynviewmodel.Dynview_Content_View,
+    block: dynviewmodel.Dynview_Document_Block,
+    builders: ^Document_Layout_Builders) -> storage.Bounded_Builder_Status {
 
     if block.inline_start < 0 || block.inline_count < 0 ||
         block.inline_count > len(content^.document_inlines)-block.inline_start {
@@ -311,8 +314,8 @@ document_lower_block :: proc(
 
 // Lower all semantic blocks and preserve each block's bounded node range.
 document_lower_all_blocks :: proc(
-    runtime: ^app_core.Dynview_System,
-    builders: ^Document_Layout_Builders) -> app_core.Bounded_Builder_Status {
+    runtime: ^dynviewmodel.Dynview_System,
+    builders: ^Document_Layout_Builders) -> storage.Bounded_Builder_Status {
 
     content := &runtime^.content
     cache := &runtime^.compile_cache
@@ -322,13 +325,13 @@ document_lower_all_blocks :: proc(
         if status != .Ok {
             return status
         }
-        record := app_core.Dynview_Document_Layout_Block{
+        record := dynviewmodel.Dynview_Document_Layout_Block{
             source_block_index = block_index,
             node_start = node_start,
             node_count = builders^.nodes.count-node_start,
         }
-        status = app_core.bounded_element_builder_append(
-            &builders^.blocks, []app_core.Dynview_Document_Layout_Block{record})
+        status = storage.bounded_element_builder_append(
+            &builders^.blocks, []dynviewmodel.Dynview_Document_Layout_Block{record})
         if status != .Ok {
             return status
         }

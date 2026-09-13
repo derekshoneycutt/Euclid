@@ -1,7 +1,12 @@
 package dynview_core
 
+import dynviewmodel "../model"
+
+import animation_model "../../core/animation"
+
+import storage "../../core/storage"
+
 import "core:mem"
-import app_core "../../core"
 import dynparse "../parse"
 
 DYNVIEW_DOCUMENT_GRAMMAR_REVISION :: u32(30)
@@ -68,7 +73,7 @@ Dynview_Document_Probe :: struct {
 // Retain one owner-side lookup outcome and its validated insertion position.
 Dynview_Document_Lookup :: struct {
     probe: Dynview_Document_Probe,
-    handle: app_core.Dynview_Document_Handle,
+    handle: dynviewmodel.Dynview_Document_Handle,
     status: Dynview_Document_Status,
 }
 
@@ -92,11 +97,11 @@ Dynview_Document_Build :: struct {
 
 //   Intern one source under the production grammar and semantic profile.
 document_store_intern :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     source: string,
     parse_mode: dynparse.Tex_Source_Mode,
     root_style: dynparse.Tex_Math_Root_Style) -> (
-        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+        dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
     key := document_store_key(source, DYNVIEW_DOCUMENT_SEMANTIC_PROFILE_DEFAULT,
         parse_mode, root_style, document_store_source_hash(source))
     return document_store_intern_keyed(store, source, key)
@@ -104,10 +109,10 @@ document_store_intern :: proc(
 
 //   Intern one complete key, permitting deterministic collision and revision tests.
 document_store_intern_keyed :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     source: string,
     key: Dynview_Document_Key) -> (
-        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+        dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
     lookup := document_store_find(store, source, key)
     if lookup.status != .Not_Found {
         return lookup.handle, lookup.status
@@ -128,11 +133,11 @@ document_store_intern_keyed :: proc(
 
 //   Look up one production-key document without parsing or allocating semantics.
 document_store_lookup :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     source: string,
     parse_mode: dynparse.Tex_Source_Mode,
     root_style: dynparse.Tex_Math_Root_Style) -> (
-        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+        dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
     key := document_store_key(source, DYNVIEW_DOCUMENT_SEMANTIC_PROFILE_DEFAULT,
         parse_mode, root_style, document_store_source_hash(source))
     return document_store_lookup_keyed(store, source, key)
@@ -140,17 +145,17 @@ document_store_lookup :: proc(
 
 //   Look up one exact source and complete semantic key without parsing.
 document_store_lookup_keyed :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     source: string,
     key: Dynview_Document_Key) -> (
-        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+        dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
     lookup := document_store_find(store, source, key)
     return lookup.handle, lookup.status
 }
 
 //   Validate and probe one exact key while recording owner-side diagnostics once.
 document_store_find :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     source: string,
     key: Dynview_Document_Key) -> Dynview_Document_Lookup {
     if store == nil || !store.initialized || store.memory == nil ||
@@ -220,10 +225,10 @@ dynview_parse_build_keyed :: proc(
 
 //   Commit one joined parse result into the current display-owned generation.
 document_store_commit :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     source: string,
     result: ^Dynview_Parse_Result) -> (
-        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+        dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
     if store == nil || result == nil || !result.ready ||
         store.generation == 0 || result.generation != store.generation {
         return {}, .Illegal_State
@@ -240,10 +245,10 @@ document_store_commit :: proc(
 
 //   Insert one validated result at its owner-thread lookup position.
 document_store_commit_at :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     source: string,
     result: ^Dynview_Parse_Result,
-    index: int) -> (app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+    index: int) -> (dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
     build := Dynview_Document_Build{
         source = source,
         key = result.key,
@@ -255,8 +260,8 @@ document_store_commit_at :: proc(
 
 //   Resolve one current-generation handle without following stale storage.
 document_store_resolve :: proc(
-    store: ^app_core.Dynview_Document_Store,
-    handle: app_core.Dynview_Document_Handle) -> (
+    store: ^dynviewmodel.Dynview_Document_Store,
+    handle: dynviewmodel.Dynview_Document_Handle) -> (
         Dynview_Document, Dynview_Document_Status) {
     if store == nil || !store.initialized || store.generation == 0 ||
         handle.generation != store.generation {
@@ -285,14 +290,14 @@ document_store_resolve :: proc(
 
 //   Snapshot logical store use and backing animation-memory pressure.
 document_store_diagnostics :: proc(
-    store: ^app_core.Dynview_Document_Store) ->
-        app_core.Dynview_Document_Store_Diagnostics {
+    store: ^dynviewmodel.Dynview_Document_Store) ->
+        dynviewmodel.Dynview_Document_Store_Diagnostics {
     if store == nil {
         return {}
     }
-    arena := app_core.Arena_Owner_Diagnostics{}
+    arena := storage.Arena_Owner_Diagnostics{}
     if store.memory != nil {
-        arena = app_core.animation_memory_diagnostics(store.memory)
+        arena = animation_model.animation_memory_diagnostics(store.memory)
     }
     return {
         initialized = store.initialized,
@@ -357,7 +362,7 @@ document_store_key_valid :: proc(
 
 //   Probe the bounded index, comparing complete keys and exact source bytes.
 document_store_probe :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     source: string,
     key: Dynview_Document_Key) -> Dynview_Document_Probe {
     start := int(key.source_hash % u64(len(store.entries)))
@@ -377,7 +382,7 @@ document_store_probe :: proc(
 
 //   Compare one complete parse key, including exact retained source bytes.
 document_store_entry_matches :: proc(
-    entry: ^app_core.Dynview_Document_Entry,
+    entry: ^dynviewmodel.Dynview_Document_Entry,
     source: string,
     key: Dynview_Document_Key) -> bool {
     if entry.source_hash != key.source_hash ||
@@ -394,8 +399,8 @@ document_store_entry_matches :: proc(
 
 //   Return a stable handle and cached outcome for one exact intern hit.
 document_store_hit :: proc(
-    store: ^app_core.Dynview_Document_Store,
-    index: int) -> (app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+    store: ^dynviewmodel.Dynview_Document_Store,
+    index: int) -> (dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
     store.intern_hits += 1
     entry := &store.entries[index]
     status := Dynview_Document_Status.Ok
@@ -459,10 +464,10 @@ document_store_align :: #force_inline proc(offset, alignment: int) -> int {
 
 //   Allocate, populate, and then publish one immutable index entry.
 document_store_insert :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     index: int,
     build: ^Dynview_Document_Build) -> (
-        app_core.Dynview_Document_Handle, Dynview_Document_Status) {
+        dynviewmodel.Dynview_Document_Handle, Dynview_Document_Status) {
     build.layout = {byte_count = len(build.source)}
     if build.parse_status == .Ok {
         build.layout = document_store_blob_layout(len(build.source), build.output)
@@ -478,7 +483,7 @@ document_store_insert :: proc(
     store.blob_bytes += build.layout.byte_count
     store.peak_entry_count = max(store.peak_entry_count, store.entry_count)
     store.peak_blob_bytes = max(store.peak_blob_bytes, store.blob_bytes)
-    handle := app_core.Dynview_Document_Handle{
+    handle := dynviewmodel.Dynview_Document_Handle{
         generation = store.generation,
         index = u32(index),
     }
@@ -489,7 +494,7 @@ document_store_insert :: proc(
 
 //   Allocate one aligned arena blob after enforcing the independent byte quota.
 document_store_allocate_blob :: proc(
-    store: ^app_core.Dynview_Document_Store,
+    store: ^dynviewmodel.Dynview_Document_Store,
     byte_count: int) -> ([]u64, Dynview_Document_Status) {
     if byte_count > store.byte_quota-store.blob_bytes {
         store.quota_rejections += 1
@@ -507,8 +512,8 @@ document_store_allocate_blob :: proc(
 //   Populate one unpublished entry and its single arena-owned blob.
 document_store_build_entry :: proc(
     build: ^Dynview_Document_Build,
-    blob: []u64) -> app_core.Dynview_Document_Entry {
-    entry := app_core.Dynview_Document_Entry{
+    blob: []u64) -> dynviewmodel.Dynview_Document_Entry {
+    entry := dynviewmodel.Dynview_Document_Entry{
         source_hash = build.key.source_hash,
         source_length = build.key.source_length,
         grammar_revision = build.key.grammar_revision,
@@ -533,7 +538,7 @@ document_store_build_entry :: proc(
 
 //   Copy exact semantic prefixes into aligned regions of one unpublished blob.
 document_store_copy_semantics :: proc(
-    entry: ^app_core.Dynview_Document_Entry,
+    entry: ^dynviewmodel.Dynview_Document_Entry,
     bytes: []u8,
     output: ^dynparse.Tex_Semantic_Output,
     layout: Dynview_Document_Blob_Layout) {
@@ -568,7 +573,7 @@ document_store_copy_semantics :: proc(
 
 //   Copy structured document records into their aligned blob regions.
 document_store_copy_document_semantics :: proc(
-    entry: ^app_core.Dynview_Document_Entry,
+    entry: ^dynviewmodel.Dynview_Document_Entry,
     bytes: []u8,
     output: ^dynparse.Tex_Semantic_Output,
     layout: Dynview_Document_Blob_Layout) {
@@ -586,7 +591,7 @@ document_store_copy_document_semantics :: proc(
 //   Resolve aligned semantic prefixes from one validated immutable blob.
 document_store_resolve_semantics :: proc(
     document: ^Dynview_Document,
-    entry: ^app_core.Dynview_Document_Entry,
+    entry: ^dynviewmodel.Dynview_Document_Entry,
     bytes: []u8) {
     if document.parse_status != .Ok {
         return
@@ -618,7 +623,7 @@ document_store_typed_slice :: proc($T: typeid, bytes: []u8,
 
 //   View the logical byte prefix of one arena-owned aligned allocation.
 document_store_blob_bytes :: proc(
-    entry: ^app_core.Dynview_Document_Entry) -> []u8 {
+    entry: ^dynviewmodel.Dynview_Document_Entry) -> []u8 {
     if entry == nil || len(entry.blob) == 0 {
         return nil
     }

@@ -1,11 +1,16 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
+import storage "../../core/storage"
+
 import dynmath "../math"
 
 Document_Copy_Run :: struct {
-    run: app_core.Dynview_Document_Shaped_Run,
-    glyphs: []app_core.Shaped_Glyph,
+    run: dynviewmodel.Dynview_Document_Shaped_Run,
+    glyphs: []fontmodel.Shaped_Glyph,
     scale: f32,
 }
 
@@ -15,17 +20,17 @@ Document_Copy_Cluster :: struct {
 }
 
 Document_Display_Compose_Context :: struct {
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     builders: ^Document_Layout_Builders,
-    block: app_core.Dynview_Document_Layout_Block,
-    source: app_core.Dynview_Document_Block,
-    rows: []app_core.Dynview_Document_Display_Row,
+    block: dynviewmodel.Dynview_Document_Layout_Block,
+    source: dynviewmodel.Dynview_Document_Block,
+    rows: []dynviewmodel.Dynview_Document_Display_Row,
     block_index: int,
     available_width: f32,
 }
 
 Document_Display_Measurement :: struct {
-    rows: []app_core.Dynview_Document_Display_Row,
+    rows: []dynviewmodel.Dynview_Document_Display_Row,
     max_primary: f32,
     max_secondary: f32,
     numbered_width: f32,
@@ -36,16 +41,16 @@ Document_Display_Measurement :: struct {
 
 // Document_Block_Compose_Context groups immutable inputs for per-block composition.
 Document_Block_Compose_Context :: struct {
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     builders: ^Document_Layout_Builders,
-    source_blocks: []app_core.Dynview_Document_Block,
-    display_rows: []app_core.Dynview_Document_Display_Row,
+    source_blocks: []dynviewmodel.Dynview_Document_Block,
+    display_rows: []dynviewmodel.Dynview_Document_Display_Row,
     available_width: f32,
     label_columns: []f32,
 }
 
 // Clear every semantic document-layout alias without touching command layout.
-document_layout_clear :: proc(cache: ^app_core.Dynview_Compile_Cache) {
+document_layout_clear :: proc(cache: ^dynviewmodel.Dynview_Compile_Cache) {
     if cache == nil {
         return
     }
@@ -62,7 +67,7 @@ document_layout_clear :: proc(cache: ^app_core.Dynview_Compile_Cache) {
 }
 
 // Report whether every prose inline has the Phase 3 measurement required to lower it.
-document_layout_inputs_ready :: proc(runtime: ^app_core.Dynview_System) -> bool {
+document_layout_inputs_ready :: proc(runtime: ^dynviewmodel.Dynview_System) -> bool {
     cache := &runtime^.compile_cache
     shaped_index := 0
     for item, inline_index in runtime^.content.document_inlines {
@@ -79,9 +84,9 @@ document_layout_inputs_ready :: proc(runtime: ^app_core.Dynview_System) -> bool 
 }
 
 // Measure every document-owned math program before semantic layout consumes it.
-document_measure_math_programs :: proc(runtime: ^app_core.Dynview_System) -> bool {
+document_measure_math_programs :: proc(runtime: ^dynviewmodel.Dynview_System) -> bool {
     cache := &runtime^.compile_cache
-    measured: [app_core.DYNVIEW_MAX_MATH_PROGRAMS]bool
+    measured: [dynviewmodel.DYNVIEW_MAX_MATH_PROGRAMS]bool
     for item in runtime^.content.document_inlines {
         if item.kind != .Math {continue}
         program_id := item.math_program_id
@@ -104,25 +109,25 @@ document_measure_math_programs :: proc(runtime: ^app_core.Dynview_System) -> boo
 // Append one source-span target for a non-prose atomic item.
 document_layout_append_atomic_copy_target :: proc(
     builders: ^Document_Layout_Builders,
-    item: app_core.Dynview_Document_Layout_Item) -> app_core.Bounded_Builder_Status {
+    item: dynviewmodel.Dynview_Document_Layout_Item) -> storage.Bounded_Builder_Status {
 
     if item.source_count <= 0 {
         return .Ok
     }
-    target := app_core.Dynview_Document_Layout_Copy_Target{
+    target := dynviewmodel.Dynview_Document_Layout_Copy_Target{
         line_index = item.line_index, item_index = builders^.items.count,
         offset = item.source_offset, count = item.source_count,
         x = item.x, width = item.width,
     }
-    return app_core.bounded_element_builder_append(
+    return storage.bounded_element_builder_append(
         &builders^.copy_targets,
-        []app_core.Dynview_Document_Layout_Copy_Target{target})
+        []dynviewmodel.Dynview_Document_Layout_Copy_Target{target})
 }
 
 // Resolve and validate the sealed shaping span used by one prose layout item.
 document_layout_copy_run :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    item: app_core.Dynview_Document_Layout_Item) -> (Document_Copy_Run, bool) {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    item: dynviewmodel.Dynview_Document_Layout_Item) -> (Document_Copy_Run, bool) {
 
     if item.shaped_run_index < 0 ||
         item.shaped_run_index >= len(cache^.document_shaped_runs) {
@@ -143,7 +148,7 @@ document_layout_copy_run :: proc(
 
 // Aggregate adjacent glyphs that map to the same canonical UTF-8 cluster.
 document_layout_copy_cluster :: proc(
-    glyphs: []app_core.Shaped_Glyph,
+    glyphs: []fontmodel.Shaped_Glyph,
     start: int) -> Document_Copy_Cluster {
 
     result := Document_Copy_Cluster{end = start+1, advance = glyphs[start].x_advance}
@@ -157,9 +162,9 @@ document_layout_copy_cluster :: proc(
 
 // Append canonical UTF-8 spans from one shaped run's ordered glyph clusters.
 document_layout_append_prose_copy_targets :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     builders: ^Document_Layout_Builders,
-    item: app_core.Dynview_Document_Layout_Item) -> app_core.Bounded_Builder_Status {
+    item: dynviewmodel.Dynview_Document_Layout_Item) -> storage.Bounded_Builder_Status {
 
     shaped, ok := document_layout_copy_run(cache, item)
     if !ok {
@@ -172,16 +177,16 @@ document_layout_append_prose_copy_targets :: proc(
         if cluster.end < len(shaped.glyphs) {
             span_end = int(shaped.glyphs[cluster.end].cluster)
         }
-        target := app_core.Dynview_Document_Layout_Copy_Target{
+        target := dynviewmodel.Dynview_Document_Layout_Copy_Target{
             line_index = item.line_index, item_index = builders^.items.count,
             offset = shaped.run.text_offset+int(shaped.glyphs[start].cluster),
             count = span_end-int(shaped.glyphs[start].cluster),
             x = pen_x, width = f32(cluster.advance)*shaped.scale,
             canonical_text = true,
         }
-        status := app_core.bounded_element_builder_append(
+        status := storage.bounded_element_builder_append(
             &builders^.copy_targets,
-            []app_core.Dynview_Document_Layout_Copy_Target{target})
+            []dynviewmodel.Dynview_Document_Layout_Copy_Target{target})
         if status != .Ok {
             return status
         }
@@ -193,9 +198,9 @@ document_layout_append_prose_copy_targets :: proc(
 
 // Append copy geometry using shaped clusters for prose and source spans for atoms.
 document_layout_append_copy_targets :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     builders: ^Document_Layout_Builders,
-    item: app_core.Dynview_Document_Layout_Item) -> app_core.Bounded_Builder_Status {
+    item: dynviewmodel.Dynview_Document_Layout_Item) -> storage.Bounded_Builder_Status {
 
     if item.box_kind == .Prose {
         return document_layout_append_prose_copy_targets(cache, builders, item)
@@ -205,7 +210,7 @@ document_layout_append_copy_targets :: proc(
 
 // Resolve one node's horizontal extent under its line's glue adjustment.
 document_layout_node_width :: proc(
-    node: app_core.Dynview_Document_Layout_Node,
+    node: dynviewmodel.Dynview_Document_Layout_Node,
     adjustment_ratio: f32) -> f32 {
 
     if node.kind != .Glue {
@@ -221,8 +226,8 @@ document_layout_node_width :: proc(
 document_layout_line_selection_separator :: proc(
     builders: ^Document_Layout_Builders,
     line_index: int,
-    line: app_core.Dynview_Document_Layout_Line) ->
-        app_core.Dynview_Document_Selection_Separator {
+    line: dynviewmodel.Dynview_Document_Layout_Line) ->
+        dynviewmodel.Dynview_Document_Selection_Separator {
 
     if line_index > 0 && builders^.lines.storage[line_index-1].block_index !=
         line.block_index {
@@ -239,7 +244,7 @@ document_layout_line_selection_separator :: proc(
 document_layout_mark_line_selection_separator :: proc(
     builders: ^Document_Layout_Builders,
     first_target: int,
-    separator: app_core.Dynview_Document_Selection_Separator) {
+    separator: dynviewmodel.Dynview_Document_Selection_Separator) {
 
     if first_target < builders^.copy_targets.count {
         builders^.copy_targets.storage[first_target].separator_before = separator
@@ -248,9 +253,9 @@ document_layout_mark_line_selection_separator :: proc(
 
 // Resolve visual list transitions to canonical copied-text separators.
 document_layout_block_selection_separator :: proc(
-    source_blocks: []app_core.Dynview_Document_Block,
+    source_blocks: []dynviewmodel.Dynview_Document_Block,
     source_index: int) -> (
-        app_core.Dynview_Document_Selection_Separator, bool) {
+        dynviewmodel.Dynview_Document_Selection_Separator, bool) {
 
     if source_index <= 0 || source_index >= len(source_blocks) {
         return .None, false
@@ -275,9 +280,9 @@ document_layout_block_selection_separator :: proc(
 document_layout_begin_line :: proc(
     builders: ^Document_Layout_Builders,
     line_index: int,
-    line: ^app_core.Dynview_Document_Layout_Line) -> (
+    line: ^dynviewmodel.Dynview_Document_Layout_Line) -> (
         first_target: int,
-        separator: app_core.Dynview_Document_Selection_Separator) {
+        separator: dynviewmodel.Dynview_Document_Selection_Separator) {
 
     line^.item_start = builders^.items.count
     return builders^.copy_targets.count,
@@ -286,10 +291,10 @@ document_layout_begin_line :: proc(
 
 // Append positioned boxes from one broken node range into final item storage.
 document_layout_place_line :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     builders: ^Document_Layout_Builders,
     line_index: int,
-    line: ^app_core.Dynview_Document_Layout_Line) -> app_core.Bounded_Builder_Status {
+    line: ^dynviewmodel.Dynview_Document_Layout_Line) -> storage.Bounded_Builder_Status {
 
     first_target, separator := document_layout_begin_line(builders, line_index, line)
     x: f32
@@ -297,7 +302,7 @@ document_layout_place_line :: proc(
         line^.node_start:line^.node_start+line^.node_count] {
         node_width := document_layout_node_width(node, line^.adjustment_ratio)
         if node.kind == .Box || node.kind == .Glue {
-            item := app_core.Dynview_Document_Layout_Item{
+            item := dynviewmodel.Dynview_Document_Layout_Item{
                 box_kind = node.box_kind, inline_index = node.inline_index,
                 shaped_run_index = node.shaped_run_index, line_index = line_index,
                 source_offset = node.source_offset, source_count = node.source_count,
@@ -309,8 +314,8 @@ document_layout_place_line :: proc(
             if status != .Ok {
                 return status
             }
-            status = app_core.bounded_element_builder_append(
-                &builders^.items, []app_core.Dynview_Document_Layout_Item{item})
+            status = storage.bounded_element_builder_append(
+                &builders^.items, []dynviewmodel.Dynview_Document_Layout_Item{item})
             if status != .Ok {
                 return status
             }
@@ -326,7 +331,7 @@ document_layout_place_line :: proc(
 
 // Retain one block's breaker outcome for diagnostics and evidence snapshots.
 document_layout_record_break_result :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     result: Document_Break_Result) {
 
     if result.fallback == .None {
@@ -338,9 +343,9 @@ document_layout_record_break_result :: proc(
 
 // Position and summarize every newly broken line for one semantic block.
 document_layout_finish_block :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     builders: ^Document_Layout_Builders,
-    block_index, node_start, line_start: int) -> app_core.Bounded_Builder_Status {
+    block_index, node_start, line_start: int) -> storage.Bounded_Builder_Status {
 
     for line_index in line_start..<builders^.lines.count {
         line := &builders^.lines.storage[line_index]
@@ -386,7 +391,7 @@ document_display_number_width :: proc(
 // Measure shared columns and numbering space for one technical display block.
 document_layout_measure_display :: proc(
     ctx: Document_Display_Compose_Context) -> (
-        Document_Display_Measurement, app_core.Bounded_Builder_Status) {
+        Document_Display_Measurement, storage.Bounded_Builder_Status) {
 
     source, block := ctx.source, ctx.block
     if source.display_row_count <= 0 || source.display_row_start < 0 ||
@@ -425,8 +430,8 @@ document_layout_measure_display :: proc(
 document_layout_append_display_row :: proc(
     ctx: Document_Display_Compose_Context,
     measured: Document_Display_Measurement,
-    row: app_core.Dynview_Document_Display_Row,
-    relative_index, cursor: int) -> (int, app_core.Bounded_Builder_Status) {
+    row: dynviewmodel.Dynview_Document_Display_Row,
+    relative_index, cursor: int) -> (int, storage.Bounded_Builder_Status) {
 
     node_count := 3 if row.secondary_program_id >= 0 else 1
     width := ctx.builders^.nodes.storage[cursor].width
@@ -444,7 +449,7 @@ document_layout_append_display_row :: proc(
         ctx.source.display_kind != .Align && row.number > 0 && !number_below {
         content_width = measured.numbered_width
     }
-    line := app_core.Dynview_Document_Layout_Line{
+    line := dynviewmodel.Dynview_Document_Layout_Line{
         node_start = cursor-ctx.block.node_start, node_count = node_count,
         block_index = ctx.block_index, natural_width = width, width = width,
         overfull = width > content_width || number_below,
@@ -456,14 +461,14 @@ document_layout_append_display_row :: proc(
             ctx.cache^.last_font_size*1.2 if number_below else 0,
         display_content_width = content_width,
     }
-    status := app_core.bounded_element_builder_append(
-        &ctx.builders^.lines, []app_core.Dynview_Document_Layout_Line{line})
+    status := storage.bounded_element_builder_append(
+        &ctx.builders^.lines, []dynviewmodel.Dynview_Document_Layout_Line{line})
     return cursor+node_count, status
 }
 
 // Compose one technical display as exactly one immutable line per semantic row.
 document_layout_compose_display :: proc(
-    ctx: Document_Display_Compose_Context) -> app_core.Bounded_Builder_Status {
+    ctx: Document_Display_Compose_Context) -> storage.Bounded_Builder_Status {
 
     measured, status := document_layout_measure_display(ctx)
     if status != .Ok {return status}
@@ -478,13 +483,13 @@ document_layout_compose_display :: proc(
 
 // Break and position every lowered semantic block against the real content width.
 document_layout_compose_blocks :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     builders: ^Document_Layout_Builders,
-    source_blocks: []app_core.Dynview_Document_Block,
-    display_rows: []app_core.Dynview_Document_Display_Row,
-    available_width: f32) -> app_core.Bounded_Builder_Status {
+    source_blocks: []dynviewmodel.Dynview_Document_Block,
+    display_rows: []dynviewmodel.Dynview_Document_Display_Row,
+    available_width: f32) -> storage.Bounded_Builder_Status {
 
-    label_columns: [app_core.DYNVIEW_MAX_DOCUMENT_BLOCKS+1]f32
+    label_columns: [dynviewmodel.DYNVIEW_MAX_DOCUMENT_BLOCKS+1]f32
     if !document_layout_measure_list_columns(
         builders, source_blocks, available_width, cache^.last_font_size,
         label_columns[:]) {return .Invalid_Argument}
@@ -503,7 +508,7 @@ document_layout_compose_blocks :: proc(
 // Measure one bounded shared label column for every semantic list identity.
 document_layout_measure_list_columns :: proc(
     builders: ^Document_Layout_Builders,
-    source_blocks: []app_core.Dynview_Document_Block,
+    source_blocks: []dynviewmodel.Dynview_Document_Block,
     available_width, font_size: f32,
     columns: []f32) -> bool {
 
@@ -531,8 +536,8 @@ document_layout_measure_list_columns :: proc(
 // Resolve one block's label column and final content geometry.
 document_layout_resolve_block_measure :: proc(
     ctx: Document_Block_Compose_Context,
-    block: app_core.Dynview_Document_Layout_Block,
-    source: app_core.Dynview_Document_Block) -> (Document_Block_Measure, bool) {
+    block: dynviewmodel.Dynview_Document_Layout_Block,
+    source: dynviewmodel.Dynview_Document_Block) -> (Document_Block_Measure, bool) {
 
     label_column: f32
     if source.list_kind != .None {
@@ -554,10 +559,10 @@ document_layout_resolve_block_measure :: proc(
 // Compose one block's technical-display rows or optimally broken prose lines.
 document_layout_compose_block_lines :: proc(
     ctx: Document_Block_Compose_Context,
-    block: app_core.Dynview_Document_Layout_Block,
-    source: app_core.Dynview_Document_Block,
+    block: dynviewmodel.Dynview_Document_Layout_Block,
+    source: dynviewmodel.Dynview_Document_Block,
     block_index: int,
-    content_width: f32) -> app_core.Bounded_Builder_Status {
+    content_width: f32) -> storage.Bounded_Builder_Status {
 
     if source.kind == .Display && source.display_kind != .Plain {
         return document_layout_compose_display({
@@ -577,7 +582,7 @@ document_layout_compose_block_lines :: proc(
 // Break and finalize one validated semantic document block.
 document_layout_compose_block :: proc(
     ctx: Document_Block_Compose_Context,
-    block_index: int) -> app_core.Bounded_Builder_Status {
+    block_index: int) -> storage.Bounded_Builder_Status {
 
     block := ctx.builders^.blocks.storage[block_index]
     if block.source_block_index < 0 ||
@@ -607,14 +612,14 @@ document_layout_compose_block :: proc(
 
 // Seal all semantic layout families and publish one complete document cache.
 document_layout_seal :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    builders: ^Document_Layout_Builders) -> app_core.Bounded_Builder_Status {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    builders: ^Document_Layout_Builders) -> storage.Bounded_Builder_Status {
 
-    nodes, node_status := app_core.bounded_element_builder_seal(&builders^.nodes)
-    blocks, block_status := app_core.bounded_element_builder_seal(&builders^.blocks)
-    lines, line_status := app_core.bounded_element_builder_seal(&builders^.lines)
-    items, item_status := app_core.bounded_element_builder_seal(&builders^.items)
-    copy_targets, copy_status := app_core.bounded_element_builder_seal(
+    nodes, node_status := storage.bounded_element_builder_seal(&builders^.nodes)
+    blocks, block_status := storage.bounded_element_builder_seal(&builders^.blocks)
+    lines, line_status := storage.bounded_element_builder_seal(&builders^.lines)
+    items, item_status := storage.bounded_element_builder_seal(&builders^.items)
+    copy_targets, copy_status := storage.bounded_element_builder_seal(
         &builders^.copy_targets)
     if node_status != .Ok {
         return node_status
@@ -642,8 +647,8 @@ document_layout_seal :: proc(
 
 // Build the authoritative measured semantic document layout.
 rebuild_document_layout_cache :: proc(
-    runtime: ^app_core.Dynview_System,
-    arena: ^app_core.Arena_Owner) -> app_core.Bounded_Builder_Status {
+    runtime: ^dynviewmodel.Dynview_System,
+    arena: ^storage.Arena_Owner) -> storage.Bounded_Builder_Status {
 
     cache := &runtime^.compile_cache
     document_layout_clear(cache)

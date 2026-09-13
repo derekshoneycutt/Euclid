@@ -1,6 +1,9 @@
 package dynview_core
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import storage "../../core/storage"
+
 
 DYNVIEW_STATUS_OK :: 0
 DYNVIEW_STATUS_INVALID_ARGUMENT :: 2
@@ -8,7 +11,7 @@ DYNVIEW_STATUS_OUT_OF_CAPACITY :: 5
 DYNVIEW_STATUS_ILLEGAL_STATE :: 6
 
 //   Mark one command stream invalid while preserving its first compile error.
-mark_stream_error :: proc(runtime: ^app_core.Dynview_System, code: i32) {
+mark_stream_error :: proc(runtime: ^dynviewmodel.Dynview_System, code: i32) {
     if runtime == nil {
         return
     }
@@ -22,7 +25,7 @@ mark_stream_error :: proc(runtime: ^app_core.Dynview_System, code: i32) {
 
 //   Return the active immutable command prefix or the worker staging prefix.
 command_buffer_commands :: #force_inline proc(
-    buffer: ^app_core.Dynview_Command_Buffer) -> []app_core.Dynview_Command {
+    buffer: ^dynviewmodel.Dynview_Command_Buffer) -> []dynviewmodel.Dynview_Command {
 
     if buffer^.command_view != nil {
         return buffer^.command_view
@@ -32,7 +35,7 @@ command_buffer_commands :: #force_inline proc(
 
 //   Return the active immutable text prefix or the worker staging prefix.
 command_buffer_text :: #force_inline proc(
-    buffer: ^app_core.Dynview_Command_Buffer) -> []u8 {
+    buffer: ^dynviewmodel.Dynview_Command_Buffer) -> []u8 {
 
     if buffer^.text_view != nil {
         return buffer^.text_view
@@ -42,7 +45,7 @@ command_buffer_text :: #force_inline proc(
 
 //   Extract a text span from the shared dynview byte buffer using explicit bounds.
 text_span_from_buffer :: #force_inline proc(
-    buffer: ^app_core.Dynview_Command_Buffer,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     text_offset, text_len: int) -> string {
 
     if text_offset < 0 || text_len < 0 {
@@ -57,15 +60,15 @@ text_span_from_buffer :: #force_inline proc(
 
 //   Extract the validated text payload for one dynview command.
 text_for_command :: #force_inline proc(
-    buffer: ^app_core.Dynview_Command_Buffer,
-    command: app_core.Dynview_Command) -> string {
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
+    command: dynviewmodel.Dynview_Command) -> string {
 
     return text_span_from_buffer(buffer, command.text_offset, command.text_len)
 }
 
 //   Convert bounded-builder status to the stable Dynview compile status surface.
 compiled_builder_status :: #force_inline proc(
-    status: app_core.Bounded_Builder_Status) -> i32 {
+    status: storage.Bounded_Builder_Status) -> i32 {
     switch status {
     case .Ok:
         return DYNVIEW_STATUS_OK

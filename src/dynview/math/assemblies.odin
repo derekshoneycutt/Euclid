@@ -1,18 +1,19 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
 
-Math_Stretch_Construction :: app_core.Font_Math_Stretch_Construction
+
+Math_Stretch_Construction :: fontmodel.Font_Math_Stretch_Construction
 
 Stretch_Recipe :: struct {
     count: int,
-    parts: [app_core.FONT_MATH_GLYPH_PART_CAPACITY]app_core.Font_Math_Glyph_Part,
+    parts: [fontmodel.FONT_MATH_GLYPH_PART_CAPACITY]fontmodel.Font_Math_Glyph_Part,
 }
 
 //   Return the smallest ready-made variant meeting the requested raw advance.
 math_stretch_ready_variant :: proc(
-    variants: app_core.Font_Math_Glyph_Variants,
-    target_advance: i32) -> (app_core.Font_Math_Glyph_Variant, bool) {
+    variants: fontmodel.Font_Math_Glyph_Variants,
+    target_advance: i32) -> (fontmodel.Font_Math_Glyph_Variant, bool) {
 
     if !variants.valid || variants.count <= 0 ||
         variants.count > len(variants.values) || target_advance <= 0 {
@@ -32,7 +33,7 @@ math_stretch_ready_variant :: proc(
 
 //   Expand one recipe with the same repetition count for every extender.
 math_stretch_expand_recipe :: proc(
-    assembly: app_core.Font_Math_Glyph_Assembly,
+    assembly: fontmodel.Font_Math_Glyph_Assembly,
     repetitions: int) -> (Stretch_Recipe, bool) {
 
     recipe: Stretch_Recipe
@@ -111,7 +112,7 @@ math_stretch_relax_overlaps :: proc(
 math_stretch_position_recipe :: proc(
     recipe: Stretch_Recipe,
     overlaps: []f32,
-    assembly: app_core.Font_Math_Glyph_Assembly) -> Math_Stretch_Construction {
+    assembly: fontmodel.Font_Math_Glyph_Assembly) -> Math_Stretch_Construction {
 
     result := Math_Stretch_Construction{
         valid = true, assembled = true,
@@ -137,15 +138,15 @@ math_stretch_position_recipe :: proc(
 
 //   Construct the smallest symmetric assembly that can reach the target advance.
 math_stretch_select_assembly :: proc(
-    assembly: app_core.Font_Math_Glyph_Assembly,
+    assembly: fontmodel.Font_Math_Glyph_Assembly,
     generation: u64,
     target_advance: i32) -> Math_Stretch_Construction {
 
     if assembly.generation != generation {
         return {}
     }
-    overlaps: [app_core.FONT_MATH_GLYPH_PART_CAPACITY-1]f32
-    for repetitions in 0..=app_core.FONT_MATH_GLYPH_PART_CAPACITY {
+    overlaps: [fontmodel.FONT_MATH_GLYPH_PART_CAPACITY-1]f32
+    for repetitions in 0..=fontmodel.FONT_MATH_GLYPH_PART_CAPACITY {
         recipe, expanded := math_stretch_expand_recipe(assembly, repetitions)
         if !expanded {
             continue
@@ -171,8 +172,8 @@ math_stretch_select_assembly :: proc(
 
 //   Select a ready-made variant or construct the smallest symmetric assembly.
 math_stretch_select :: proc(
-    variants: app_core.Font_Math_Glyph_Variants,
-    assembly: app_core.Font_Math_Glyph_Assembly,
+    variants: fontmodel.Font_Math_Glyph_Variants,
+    assembly: fontmodel.Font_Math_Glyph_Assembly,
     generation: u64,
     target_advance: i32) -> Math_Stretch_Construction {
 

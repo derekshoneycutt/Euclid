@@ -1,5 +1,13 @@
 package view
 
+import bridgemodel "../bridge/model"
+
+import dynviewmodel "../dynview/model"
+
+import animation_model "../core/animation"
+
+import presentation_model "../bridge/presentation"
+
 import bridge "../bridge"
 import "../core"
 import "../taskpool"
@@ -11,14 +19,14 @@ import "core:thread"
 // Presentation_Test_Fixture owns the heap-backed state used by Phase 4 tests.
 Presentation_Test_Fixture :: struct {
     state: ^core.Euclid_General_State,
-    service: ^core.Julia_Runtime_Service,
+    service: ^bridgemodel.Julia_Runtime_Service,
     presentation: ^Presentation_Runtime,
 }
 
 //   Allocate the minimal typed state needed to exercise presentation admission.
 presentation_test_fixture_create :: proc(t: ^testing.T) -> Presentation_Test_Fixture {
     state := new(core.Euclid_General_State, context.allocator)
-    service := new(core.Julia_Runtime_Service, context.allocator)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     presentation := create_presentation_runtime()
     testing.expect(t, state != nil && service != nil && presentation != nil)
     link_error := bridge.communication_link_init(
@@ -26,16 +34,16 @@ presentation_test_fixture_create :: proc(t: ^testing.T) -> Presentation_Test_Fix
         bridge.JULIA_EVENT_LINK_POOL_CAPACITY)
     testing.expect_value(t, link_error, runtime.Allocator_Error.None)
     state^.julia_runtime_service = service
-    state^.julia_interface = new(core.Euclid_Julia_Interface, context.allocator)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     state^.simulation_executor = new(core.Simulation_Executor, context.allocator)
     state^.julia_interface^.current_animation =
         &state^.julia_interface^.null_animation
-    testing.expect(t, core.animation_storage_init(
+    testing.expect(t, bridge.animation_storage_init(
         &state^.animation_memory, &state^.animation_values,
         &state^.dynview_documents))
-    testing.expect_value(t, core.animation_storage_begin_generation(
+    testing.expect_value(t, bridge.animation_storage_begin_generation(
         &state^.animation_memory, &state^.animation_values,
-        &state^.dynview_documents, 3), core.Animation_Memory_Status.Ok)
+        &state^.dynview_documents, 3), animation_model.Animation_Memory_Status.Ok)
     testing.expect(t, taskpool.task_pool_init(
         &state^.simulation_executor^.pool, 1, 2))
     testing.expect(t, bridge.view_snapshot_slots_init(service))
@@ -45,7 +53,7 @@ presentation_test_fixture_create :: proc(t: ^testing.T) -> Presentation_Test_Fix
     service^.reload_state = .Idle
     service^.published_view_snapshot_index = 0
     service^.view_snapshots[0].state = .Published
-    state^.dynview.content.commands = []core.Dynview_Command{{kind = .Divider}}
+    state^.dynview.content.commands = []dynviewmodel.Dynview_Command{{kind = .Divider}}
     return {state = state, service = service, presentation = presentation}
 }
 
@@ -69,7 +77,7 @@ presentation_test_fixture_destroy :: proc(
     free(state^.simulation_executor)
     bridge.view_snapshot_slots_destroy(service)
     bridge.communication_link_destroy(&service^.event_link)
-    core.animation_storage_destroy(
+    bridge.animation_storage_destroy(
         &state^.animation_memory, &state^.animation_values,
         &state^.dynview_documents)
     free(state^.julia_interface)
@@ -81,9 +89,9 @@ presentation_test_fixture_destroy :: proc(
 presentation_test_message :: proc(
     state: ^core.Euclid_General_State,
     generation: u64,
-    bytes: []u8) -> ^core.Julia_Host_Egress {
-    message := new(core.Julia_Host_Egress, context.allocator)
-    message^ = core.Julia_Host_Egress(core.View_Content_Ready{
+    bytes: []u8) -> ^bridgemodel.Julia_Host_Egress {
+    message := new(bridgemodel.Julia_Host_Egress, context.allocator)
+    message^ = bridgemodel.Julia_Host_Egress(bridgemodel.View_Content_Ready{
         runtime_generation = 3,
         animation_generation = 5,
         presentation_generation = generation,
@@ -122,7 +130,7 @@ presentation_test_wait_for_idle :: proc(
 //   Verify literal staging preserves embedded zero bytes for visible text.
 @(test)
 presentation_literal_staging_preserves_exact_bytes :: proc(t: ^testing.T) {
-    staging := new(core.Dynview_System, context.allocator)
+    staging := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(staging)
     staging^.enabled = true
     source_bytes := []u8{'a', 0, '\\', 'b'}
@@ -132,7 +140,7 @@ presentation_literal_staging_preserves_exact_bytes :: proc(t: ^testing.T) {
         staging, {source = source, mode = .Plain}))
     testing.expect_value(t, staging^.command_buffer.command_count, 3)
     text_command := staging^.command_buffer.commands[1]
-    testing.expect_value(t, text_command.kind, core.Dynview_Command_Kind.Text_Run)
+    testing.expect_value(t, text_command.kind, dynviewmodel.Dynview_Command_Kind.Text_Run)
     testing.expect(t, presentation_test_bytes_equal(
         staging^.command_buffer.text_bytes[
             text_command.text_offset:text_command.text_offset+text_command.text_len],
@@ -151,13 +159,13 @@ presentation_admission_is_bounded_and_clears_visible_state :: proc(t: ^testing.T
     first := presentation_test_message(state, 11, first_bytes)
     second := presentation_test_message(state, 12, second_bytes)
 
-    first_content, _ := first^.(core.View_Content_Ready)
+    first_content, _ := first^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, first, first_content)
     testing.expect(t, presentation^.pending == first)
     testing.expect_value(t, service^.published_view_snapshot_index, -1)
     testing.expect_value(t, len(state^.dynview.content.commands), 0)
 
-    second_content, _ := second^.(core.View_Content_Ready)
+    second_content, _ := second^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, second, second_content)
     testing.expect(t, presentation^.pending == second)
     testing.expect_value(t, presentation^.newest_generation, u64(12))
@@ -175,7 +183,7 @@ presentation_parse_miss_then_cache_hit_publishes :: proc(t: ^testing.T) {
         fixture.state, fixture.service, fixture.presentation
     source_bytes := []u8{'$', 'x', '^', '2', '$'}
     first := presentation_test_message(state, 21, source_bytes)
-    first_content, _ := first^.(core.View_Content_Ready)
+    first_content, _ := first^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, first, first_content)
     presentation_start_pending(state, presentation)
     testing.expect(t, presentation^.active.submitted)
@@ -190,7 +198,7 @@ presentation_parse_miss_then_cache_hit_publishes :: proc(t: ^testing.T) {
     free(returned)
 
     second := presentation_test_message(state, 22, source_bytes)
-    second_content, _ := second^.(core.View_Content_Ready)
+    second_content, _ := second^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, second, second_content)
     presentation_start_pending(state, presentation)
     testing.expect(t, !presentation^.active.submitted)
@@ -212,7 +220,7 @@ presentation_rejected_tex_publishes_exact_literal :: proc(t: ^testing.T) {
         fixture.state, fixture.service, fixture.presentation
     source_bytes := []u8{'\\', 't', 'e', 'x', 't', 'b', 'f', '{', 'x'}
     message := presentation_test_message(state, 31, source_bytes)
-    content, _ := message^.(core.View_Content_Ready)
+    content, _ := message^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, message, content)
     presentation_start_pending(state, presentation)
     presentation_test_wait_for_idle(state, presentation)
@@ -222,9 +230,9 @@ presentation_rejected_tex_publishes_exact_literal :: proc(t: ^testing.T) {
     commands := state^.dynview.content.commands
     testing.expect_value(t, len(commands), 3)
     literal := commands[1]
-    testing.expect_value(t, literal.kind, core.Dynview_Command_Kind.Text_Run)
+    testing.expect_value(t, literal.kind, dynviewmodel.Dynview_Command_Kind.Text_Run)
     testing.expect_value(t, state^.dynview.content.presentation_mime,
-        core.Presentation_Mime.Text_Latex)
+        presentation_model.Presentation_Mime.Text_Latex)
     testing.expect(t, presentation_test_bytes_equal(
         state^.dynview.content.presentation_bytes, source_bytes))
     testing.expect(t, presentation_test_bytes_equal(
@@ -246,7 +254,7 @@ presentation_lifecycle_change_cancels_stale_parse :: proc(t: ^testing.T) {
     presentation_sync_lifecycle(state, presentation)
     source_bytes := []u8{'$', '\\', 'f', 'r', 'a', 'c', '{', '1', '}', '{', '2', '}', '$'}
     message := presentation_test_message(state, 41, source_bytes)
-    content, _ := message^.(core.View_Content_Ready)
+    content, _ := message^.(bridgemodel.View_Content_Ready)
     presentation_admit(state, presentation, message, content)
     presentation_start_pending(state, presentation)
     testing.expect(t, presentation^.active.submitted)

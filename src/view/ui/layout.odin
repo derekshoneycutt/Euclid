@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 
 import rl "vendor:raylib"
 
@@ -16,9 +17,9 @@ layout_terminal_rect :: proc(text_rect: rl.Rectangle) -> rl.Rectangle {
 
 //   Compute UI regions from clamped vertical and horizontal split coordinates.
 compute_ui_regions :: proc(
-    mode: core.Ui_Layout_Mode,
-    vertical_split_x, horizontal_split_y: f32) -> core.Ui_Regions {
-    regions := core.Ui_Regions{}
+    mode: viewmodel.Ui_Layout_Mode,
+    vertical_split_x, horizontal_split_y: f32) -> viewmodel.Ui_Regions {
+    regions := viewmodel.Ui_Regions{}
     split_x := clamp(vertical_split_x, f32(WORLD_MIN_WIDTH),
         f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
     split_y := clamp(horizontal_split_y, f32(WORLD_MIN_HEIGHT),
@@ -58,7 +59,7 @@ ui_rect_valid :: #force_inline proc(rect: rl.Rectangle) -> bool {
 }
 
 //   Validate that every UI region has non-negative dimensions.
-validate_ui_regions :: proc(regions: core.Ui_Regions) -> bool {
+validate_ui_regions :: proc(regions: viewmodel.Ui_Regions) -> bool {
     rects := [?]rl.Rectangle{
         regions.world_rect,
         regions.tree_rect,

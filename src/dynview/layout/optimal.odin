@@ -1,6 +1,9 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import storage "../../core/storage"
+
 import "base:runtime"
 
 DOCUMENT_BREAK_LINE_PENALTY :: 10.0
@@ -9,19 +12,19 @@ DOCUMENT_BREAK_FITNESS_DEMERITS :: 3000.0
 // Return production limits for one bounded paragraph search.
 document_optimal_break_limits :: proc() -> Document_Break_Limits {
     return {
-        candidates = app_core.DYNVIEW_MAX_DOCUMENT_BREAK_CANDIDATES,
-        states = app_core.DYNVIEW_MAX_DOCUMENT_BREAK_STATES,
-        work = app_core.DYNVIEW_MAX_DOCUMENT_BREAK_WORK,
+        candidates = dynviewmodel.DYNVIEW_MAX_DOCUMENT_BREAK_CANDIDATES,
+        states = dynviewmodel.DYNVIEW_MAX_DOCUMENT_BREAK_STATES,
+        work = dynviewmodel.DYNVIEW_MAX_DOCUMENT_BREAK_WORK,
     }
 }
 
 // Delegate a whole paragraph to the established deterministic greedy breaker.
 document_optimal_fallback :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     block_index: int,
     width: Document_Break_Width,
-    lines: ^app_core.Bounded_Element_Builder(
-        app_core.Dynview_Document_Layout_Line),
+    lines: ^storage.Bounded_Element_Builder(
+        dynviewmodel.Dynview_Document_Layout_Line),
     reason: Document_Break_Fallback) -> Document_Break_Result {
 
     return {
@@ -33,7 +36,7 @@ document_optimal_fallback :: proc(
 
 // Collect legal boundaries and the terminal paragraph boundary into fixed storage.
 document_break_collect_candidates :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     candidates: []Document_Break_Candidate) -> (int, Document_Break_Fallback) {
 
     if len(candidates) < 1 {
@@ -71,7 +74,7 @@ document_break_collect_candidates :: proc(
 
 // Measure natural width and usable glue over one trimmed candidate line.
 document_break_measure_line :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     start, raw_end: int) -> Document_Break_Measurement {
 
     result: Document_Break_Measurement
@@ -234,7 +237,7 @@ document_break_best_terminal :: proc(
 
 // Search all bounded candidate transitions and retain one state per terminal fitness.
 document_break_search :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     candidates: []Document_Break_Candidate,
     width: Document_Break_Width,
     states: []Document_Break_State,
@@ -267,14 +270,14 @@ document_break_search :: proc(
 
 // Append one reconstructed search state as a public line record.
 document_break_append_state :: proc(
-    lines: ^app_core.Bounded_Element_Builder(
-        app_core.Dynview_Document_Layout_Line),
+    lines: ^storage.Bounded_Element_Builder(
+        dynviewmodel.Dynview_Document_Layout_Line),
     state: Document_Break_State,
     block_index: int,
-    available_width: f32) -> app_core.Bounded_Builder_Status {
+    available_width: f32) -> storage.Bounded_Builder_Status {
 
-    return app_core.bounded_element_builder_append(lines,
-        []app_core.Dynview_Document_Layout_Line{{
+    return storage.bounded_element_builder_append(lines,
+        []dynviewmodel.Dynview_Document_Layout_Line{{
             node_start = state.line_start,
             node_count = state.line_end-state.line_start,
             block_index = block_index,
@@ -291,10 +294,10 @@ document_break_publish_path :: proc(
     states: []Document_Break_State,
     terminal_state, block_index: int,
     available_width: f32,
-    lines: ^app_core.Bounded_Element_Builder(
-        app_core.Dynview_Document_Layout_Line)) -> app_core.Bounded_Builder_Status {
+    lines: ^storage.Bounded_Element_Builder(
+        dynviewmodel.Dynview_Document_Layout_Line)) -> storage.Bounded_Builder_Status {
 
-    path: [app_core.DYNVIEW_MAX_DOCUMENT_LAYOUT_LINES]int
+    path: [dynviewmodel.DYNVIEW_MAX_DOCUMENT_LAYOUT_LINES]int
     count := 0
     for state_index := terminal_state; state_index >= 0; {
         state := states[state_index]
@@ -311,7 +314,7 @@ document_break_publish_path :: proc(
     if count > lines.max_count-lines.count {
         return .Limit_Exceeded
     }
-    reserve_status := app_core.bounded_element_builder_reserve(lines, count)
+    reserve_status := storage.bounded_element_builder_reserve(lines, count)
     if reserve_status != .Ok {
         return reserve_status
     }
@@ -333,14 +336,14 @@ document_break_allocate_scratch :: proc(
     allocator: runtime.Allocator) -> Document_Break_Scratch {
 
     candidate_capacity := min(limits.candidates, node_count+1,
-        app_core.DYNVIEW_MAX_DOCUMENT_BREAK_CANDIDATES)
+        dynviewmodel.DYNVIEW_MAX_DOCUMENT_BREAK_CANDIDATES)
     candidates, candidate_error := make(
         []Document_Break_Candidate, candidate_capacity, allocator)
     if candidate_error != nil {
         return {status = .Allocation_Failed}
     }
     state_capacity := min(limits.states, candidate_capacity*4,
-        app_core.DYNVIEW_MAX_DOCUMENT_BREAK_STATES)
+        dynviewmodel.DYNVIEW_MAX_DOCUMENT_BREAK_STATES)
     states, state_error := make([]Document_Break_State, state_capacity, allocator)
     if state_error != nil {
         return {status = .Allocation_Failed}
@@ -350,11 +353,11 @@ document_break_allocate_scratch :: proc(
 
 // Break one paragraph optimally within explicit storage and work bounds.
 document_optimal_break_with_limits :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     block_index: int,
     width: Document_Break_Width,
-    lines: ^app_core.Bounded_Element_Builder(
-        app_core.Dynview_Document_Layout_Line),
+    lines: ^storage.Bounded_Element_Builder(
+        dynviewmodel.Dynview_Document_Layout_Line),
     limits: Document_Break_Limits) -> Document_Break_Result {
 
     if width.available <= 0 || lines == nil || limits.candidates < 1 ||
@@ -387,11 +390,11 @@ document_optimal_break_with_limits :: proc(
 
 // Break one paragraph using production optimal-search limits.
 document_optimal_break :: proc(
-    nodes: []app_core.Dynview_Document_Layout_Node,
+    nodes: []dynviewmodel.Dynview_Document_Layout_Node,
     block_index: int,
     available_width: f32,
-    lines: ^app_core.Bounded_Element_Builder(
-        app_core.Dynview_Document_Layout_Line),
+    lines: ^storage.Bounded_Element_Builder(
+        dynviewmodel.Dynview_Document_Layout_Line),
     first_line_indent: f32 = 0) -> Document_Break_Result {
 
     return document_optimal_break_with_limits(

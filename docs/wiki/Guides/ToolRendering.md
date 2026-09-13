@@ -13,7 +13,7 @@ hiding geometric color or creating a separate glowing rim.
 - `src/view/shaders/stroke3d.vs` forwards batched vertex color data.
 - `src/view/shaders/stroke3d.fs` owns coverage, reconstructed normals, shadows,
   linear-light shading, and the titanium response.
-- `src/core/core.odin` owns shader handles and cached uniform locations only.
+- `src/view/model/model.odin` owns shader handles and cached uniform locations only.
 
 Scene geometry remains frame-local. The render state does not retain tool
 occluders or allocate per frame.

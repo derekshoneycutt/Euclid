@@ -1,5 +1,7 @@
 package bridge
 
+import shapemodel "../shapes/model"
+
 import "../core"
 import "../particles"
 
@@ -8,16 +10,16 @@ import rl "vendor:raylib"
 // Resolve one tool transform from the active immutable snapshot or canonical world.
 tool_position :: proc(
     state: ^core.Euclid_General_State,
-    entity: core.Shape_Entity) -> (core.Vector3, bool) {
+    entity: shapemodel.Shape_Entity) -> (rl.Vector3, bool) {
     snapshot := active_animation_query_snapshot(state)
     if snapshot != nil {
-        transform, found := core.shape_component_get(
+        transform, found := shapemodel.shape_component_get(
             &snapshot^.shapes.transforms, &snapshot^.shapes.registry, entity)
         if found {return transform^.position, true}
         return {}, false
     }
     if state^.shape_world == nil {return {}, false}
-    transform, found := core.shape_component_get(
+    transform, found := shapemodel.shape_component_get(
         &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
     if !found {return {}, false}
     return transform^.position, true
@@ -26,7 +28,7 @@ tool_position :: proc(
 // Resolve the direct snap constraint owned by one canonical tool joint.
 tool_lock_constraint :: proc(
     state: ^core.Euclid_General_State,
-    entity: core.Shape_Entity) -> (^core.Shape_Constraint, bool) {
+    entity: shapemodel.Shape_Entity) -> (^shapemodel.Shape_Constraint, bool) {
     if state^.shape_world == nil {return nil, false}
     index: u16
     switch entity {
@@ -52,16 +54,16 @@ tool_lock_constraint :: proc(
 
 // Move one canonical tool joint and emit owner-side floor contact effects.
 set_tool_position :: proc(
-    state: ^core.Euclid_General_State, entity: core.Shape_Entity,
-    position: core.Vector3, sweep: bool) {
+    state: ^core.Euclid_General_State, entity: shapemodel.Shape_Entity,
+    position: rl.Vector3, sweep: bool) {
     command, captured := append_scene_command(state, .Set_Tool_Position)
     if command != nil {
-        command^.entity = core.shape_entity_pack(entity)
+        command^.entity = shapemodel.shape_entity_pack(entity)
         command^.position = position
         command^.flag = sweep
     }
     if captured || state^.shape_world == nil {return}
-    transform, found := core.shape_component_get_mut(
+    transform, found := shapemodel.shape_component_get_mut(
         &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
     if !found {return}
     transform^.position = position
@@ -80,11 +82,11 @@ set_tool_position :: proc(
 
 // Enable or disable one canonical tool joint's direct snap constraint.
 set_tool_lock :: proc(
-    state: ^core.Euclid_General_State, entity: core.Shape_Entity,
-    position: core.Vector3, enabled, sweep: bool) {
+    state: ^core.Euclid_General_State, entity: shapemodel.Shape_Entity,
+    position: rl.Vector3, enabled, sweep: bool) {
     command, captured := append_scene_command(state, .Set_Tool_Lock)
     if command != nil {
-        command^.entity = core.shape_entity_pack(entity)
+        command^.entity = shapemodel.shape_entity_pack(entity)
         command^.position = position
         command^.flag = enabled
         command^.integer = int(sweep)
@@ -106,7 +108,7 @@ set_tool_lock :: proc(
 @(export)
 show_pen :: proc "c" (state: ^core.Euclid_General_State) {
     context = state^.saved_context
-    _ = shape_set_visible(state, core.shape_entity_pack(state^.world_pen.shape), 1)
+    _ = shape_set_visible(state, shapemodel.shape_entity_pack(state^.world_pen.shape), 1)
 }
 
 //   Disable drawing for the pen host point.
@@ -116,7 +118,7 @@ show_pen :: proc "c" (state: ^core.Euclid_General_State) {
 @(export)
 hide_pen :: proc "c" (state: ^core.Euclid_General_State) {
     context = state^.saved_context
-    _ = shape_set_visible(state, core.shape_entity_pack(state^.world_pen.shape), 0)
+    _ = shape_set_visible(state, shapemodel.shape_entity_pack(state^.world_pen.shape), 0)
 }
 
 //   Set pen active marker index and active highlight color.
@@ -131,7 +133,7 @@ set_pen_active :: proc "c" (
 
     context = state^.saved_context
     if active_abi < 0 || active_abi > i32(max(u16)) {return}
-    packed := core.shape_entity_pack(state^.world_pen.shape)
+    packed := shapemodel.shape_entity_pack(state^.world_pen.shape)
     _ = shape_set_active_color(state, packed, color)
     _ = shape_set_active_feature(state, packed, u16(active_abi))
 }
@@ -145,7 +147,7 @@ clear_pen_active :: proc "c" (
     state: ^core.Euclid_General_State) {
     context = state^.saved_context
     _ = shape_set_active_feature(
-        state, core.shape_entity_pack(state^.world_pen.shape), max(u16))
+        state, shapemodel.shape_entity_pack(state^.world_pen.shape), max(u16))
 }
 
 //   Enable or disable drawing-sound accumulation.
@@ -184,7 +186,7 @@ simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f3
 //   - state: Global runtime state passed from the host application.
 //   - pos: Target world-space position for joint1 and its lock restriction.
 @(export)
-lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
+lock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: rl.Vector3) {
     context = state^.saved_context
     set_tool_lock(state, state^.world_pen.joint1, pos, true, false)
 }
@@ -205,7 +207,7 @@ unlock_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
 //   - state: Global runtime state passed from the host application.
 //   - pos: Target world-space position for joint1.
 @(export)
-move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
+move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: rl.Vector3) {
     context = state^.saved_context
     set_tool_position(state, state^.world_pen.joint1, pos, false)
 }
@@ -218,7 +220,7 @@ move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
 // Returns:
 //   - Current joint1 position, or {0, 0, 0} when joint1 is unavailable.
 @(export)
-get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
+get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> rl.Vector3 {
     context = state^.saved_context
     position, found := tool_position(state, state^.world_pen.joint1)
     if found {return position}
@@ -231,7 +233,7 @@ get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> core.
 //   - state: Global runtime state passed from the host application.
 //   - pos: Target world-space position for joint2 and its lock restriction.
 @(export)
-lock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
+lock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: rl.Vector3) {
     context = state^.saved_context
     set_tool_lock(state, state^.world_pen.joint2, pos, true, false)
 }
@@ -252,7 +254,7 @@ unlock_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
 //   - state: Global runtime state passed from the host application.
 //   - pos: Target world-space position for joint2.
 @(export)
-move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector3) {
+move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: rl.Vector3) {
     context = state^.saved_context
     set_tool_position(state, state^.world_pen.joint2, pos, false)
 }
@@ -265,7 +267,7 @@ move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: core.Vector
 // Returns:
 //   - Current joint2 position, or {0, 0, 0} when joint2 is unavailable.
 @(export)
-get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.Vector3 {
+get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> rl.Vector3 {
     context = state^.saved_context
     position, found := tool_position(state, state^.world_pen.joint2)
     if found {return position}
@@ -280,7 +282,7 @@ get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> core.
 show_compass :: proc "c" (state: ^core.Euclid_General_State) {
     context = state^.saved_context
     _ = shape_set_visible(
-        state, core.shape_entity_pack(state^.world_compass.shape), 1)
+        state, shapemodel.shape_entity_pack(state^.world_compass.shape), 1)
 }
 
 //   Disable drawing for the compass host point.
@@ -291,7 +293,7 @@ show_compass :: proc "c" (state: ^core.Euclid_General_State) {
 hide_compass :: proc "c" (state: ^core.Euclid_General_State) {
     context = state^.saved_context
     _ = shape_set_visible(
-        state, core.shape_entity_pack(state^.world_compass.shape), 0)
+        state, shapemodel.shape_entity_pack(state^.world_compass.shape), 0)
 }
 
 //   Set compass active marker index and active highlight color.
@@ -306,7 +308,7 @@ set_compass_active :: proc "c" (
 
     context = state^.saved_context
     if active_abi < 0 || active_abi > i32(max(u16)) {return}
-    packed := core.shape_entity_pack(state^.world_compass.shape)
+    packed := shapemodel.shape_entity_pack(state^.world_compass.shape)
     _ = shape_set_active_color(state, packed, color)
     _ = shape_set_active_feature(state, packed, u16(active_abi))
 }
@@ -320,7 +322,7 @@ clear_compass_active :: proc "c" (
     state: ^core.Euclid_General_State) {
     context = state^.saved_context
     _ = shape_set_active_feature(
-        state, core.shape_entity_pack(state^.world_compass.shape), max(u16))
+        state, shapemodel.shape_entity_pack(state^.world_compass.shape), max(u16))
 }
 
 //   Move compass joint1, optionally emit sweep dust, and enable its lock constraint.
@@ -331,7 +333,7 @@ clear_compass_active :: proc "c" (
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
 lock_compass_joint1 :: proc "c" (
-    state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+    state: ^core.Euclid_General_State, pos: rl.Vector3, sweep: bool) {
     context = state^.saved_context
     set_tool_lock(state, state^.world_compass.joint1, pos, true, sweep)
 }
@@ -354,7 +356,7 @@ unlock_compass_joint1 :: proc "c" (state: ^core.Euclid_General_State) {
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
 move_compass_joint1 :: proc "c" (
-    state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+    state: ^core.Euclid_General_State, pos: rl.Vector3, sweep: bool) {
     context = state^.saved_context
     set_tool_position(state, state^.world_compass.joint1, pos, sweep)
 }
@@ -368,7 +370,7 @@ move_compass_joint1 :: proc "c" (
 //   - Current joint1 position, or {0, 0, 0} when joint1 is unavailable.
 @(export)
 get_compass_joint1_position :: proc "c" (
-    state: ^core.Euclid_General_State) -> core.Vector3 {
+    state: ^core.Euclid_General_State) -> rl.Vector3 {
     context = state^.saved_context
     position, found := tool_position(state, state^.world_compass.joint1)
     if found {return position}
@@ -383,7 +385,7 @@ get_compass_joint1_position :: proc "c" (
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
 lock_compass_joint2 :: proc "c" (
-    state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+    state: ^core.Euclid_General_State, pos: rl.Vector3, sweep: bool) {
     context = state^.saved_context
     set_tool_lock(state, state^.world_compass.joint2, pos, true, sweep)
 }
@@ -406,7 +408,7 @@ unlock_compass_joint2 :: proc "c" (state: ^core.Euclid_General_State) {
 //   - sweep: When true, emit sweep dust for floor-contact motion.
 @(export)
 move_compass_joint2 :: proc "c" (
-    state: ^core.Euclid_General_State, pos: core.Vector3, sweep: bool) {
+    state: ^core.Euclid_General_State, pos: rl.Vector3, sweep: bool) {
     context = state^.saved_context
     set_tool_position(state, state^.world_compass.joint2, pos, sweep)
 }
@@ -420,7 +422,7 @@ move_compass_joint2 :: proc "c" (
 //   - Current joint2 position, or {0, 0, 0} when joint2 is unavailable.
 @(export)
 get_compass_joint2_position :: proc "c" (
-    state: ^core.Euclid_General_State) -> core.Vector3 {
+    state: ^core.Euclid_General_State) -> rl.Vector3 {
     context = state^.saved_context
     position, found := tool_position(state, state^.world_compass.joint2)
     if found {return position}
@@ -435,7 +437,7 @@ get_compass_joint2_position :: proc "c" (
 //   - color: RGBA color payload in bridge format.
 @(export)
 emit_trailing_particle :: proc "c" (
-    state: ^core.Euclid_General_State, pos: core.Vector3, color: Bridge_Color) {
+    state: ^core.Euclid_General_State, pos: rl.Vector3, color: Bridge_Color) {
 
     if capture_particle_command(state, .Emit_Trailing_Particle, pos, color) {
         return
@@ -454,7 +456,7 @@ emit_trailing_particle :: proc "c" (
 //   - color: RGBA color payload in bridge format.
 @(export)
 emit_flicker_particle :: proc "c" (
-    state: ^core.Euclid_General_State, pos: core.Vector3, color: Bridge_Color) {
+    state: ^core.Euclid_General_State, pos: rl.Vector3, color: Bridge_Color) {
 
     if capture_particle_command(state, .Emit_Flicker_Particle, pos, color) {
         return

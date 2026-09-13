@@ -1,6 +1,7 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 
 LARGE_OP_KIND_NONE :: 0
 LARGE_OP_KIND_SUM :: 1
@@ -106,7 +107,7 @@ Math_Constant :: enum u8 {
 
 //   Report whether one immutable constants snapshot matches its requested generation.
 math_constants_are_current :: #force_inline proc(
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64) -> bool {
 
     return constants.valid && generation != 0 &&
@@ -115,7 +116,7 @@ math_constants_are_current :: #force_inline proc(
 
 //   Return one raw MATH constant from a generation-matched snapshot.
 math_constant_raw :: #force_inline proc(
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     constant: Math_Constant) -> (i32, bool) {
 
@@ -131,7 +132,7 @@ math_constant_raw :: #force_inline proc(
 //   - The captured ratio for a current generation, or one when unavailable. Applying it
 //     at the display root keeps every MATH-relative construction consistent.
 math_text_match_scale :: #force_inline proc(
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64) -> f32 {
 
     if !math_constants_are_current(constants, generation) ||
@@ -143,7 +144,7 @@ math_text_match_scale :: #force_inline proc(
 
 //   Scale one positional 26.6 MATH constant to the requested pixel size.
 math_constant_position_px :: #force_inline proc(
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     constant: Math_Constant,
     requested_size: f32) -> (f32, bool) {
@@ -157,7 +158,7 @@ math_constant_position_px :: #force_inline proc(
 
 //   Resolve font-provided scaling for one recursive math style level.
 math_style_scale :: proc(
-    constants: app_core.Font_Math_Constants,
+    constants: fontmodel.Font_Math_Constants,
     generation: u64,
     style: Math_Style) -> (f32, bool) {
 

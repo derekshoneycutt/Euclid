@@ -119,7 +119,7 @@ This is a hybrid model:
 | Copy affordances | `src/view/core/copy_interaction.odin` | Copy icon interaction and clipboard action. |
 | Input boundary | `src/view/input/` | Device polling, event storage, hotkeys, and Terminal encoding. |
 | Font service | `src/view/font/` | Face preparation, publication, lookup, and shaping identity. |
-| Shared state | `src/core/core.odin` | UI regions, press owner, runtime settings, selection, GIF state. |
+| Shared state | `src/view/model/model.odin` | UI regions, press owner, interaction, selection, and GIF state. |
 
 ## Ownership Model
 
@@ -590,17 +590,17 @@ Before drawing, `terminal_service_update`:
 1. confirms the committed Terminal animation is selected;
 1. initializes generation-scoped Terminal state when needed;
 1. requests and waits for the matching Julia session;
-4. derives the same content panel used by later drawing;
-5. resolves font, Terminal geometry, layout, and mouse coordinates;
-6. resolves scrollbar capture and wheel ownership, then commits local scrolling;
-7. routes a content frame that excludes scrollbar or foreign UI-owned input while
+1. derives the same content panel used by later drawing;
+1. resolves font, Terminal geometry, layout, and mouse coordinates;
+1. resolves scrollbar capture and wheel ownership, then commits local scrolling;
+1. routes a content frame that excludes scrollbar or foreign UI-owned input while
     retaining fields required by established local or child capture;
-8. prepares hyperlink hover from the committed scroll position;
-9. consumes the UI-prepared effective focus and transition;
-10. updates local editor, selection, completion, and link behavior;
-11. applies submissions and completion requests;
-12. updates the active native shell session and terminal graphics;
-13. publishes clipboard and hyperlink actions through display-owned adapters.
+1. prepares hyperlink hover from the committed scroll position;
+1. consumes the UI-prepared effective focus and transition;
+1. updates local editor, selection, completion, and link behavior;
+1. applies submissions and completion requests;
+1. updates the active native shell session and terminal graphics;
+1. publishes clipboard and hyperlink actions through display-owned adapters.
 
 Terminal initialization and input routing are service work, not draw work. Julia never
 receives a pointer to the visible Terminal state.

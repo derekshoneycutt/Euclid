@@ -1,4 +1,4 @@
-package core
+package animation
 
 import "core:mem"
 import "core:testing"
@@ -24,7 +24,7 @@ animation_value_store_test_destroy :: proc(
 
 //   Verify duplicate sets overwrite one bound entry without additional allocation.
 @(test)
-core_test_animation_value_store_overwrites_bound_key :: proc(t: ^testing.T) {
+animation_model_test_animation_value_store_overwrites_bound_key :: proc(t: ^testing.T) {
     memory: Animation_Memory
     store: Animation_Value_Store
     testing.expect(t, animation_value_store_test_init(&memory, &store, 1))
@@ -46,7 +46,7 @@ core_test_animation_value_store_overwrites_bound_key :: proc(t: ^testing.T) {
 
 //   Verify schema and size drift reject mutation of an existing binding.
 @(test)
-core_test_animation_value_store_rejects_schema_drift :: proc(t: ^testing.T) {
+animation_model_test_animation_value_store_rejects_schema_drift :: proc(t: ^testing.T) {
     memory: Animation_Memory
     store: Animation_Value_Store
     testing.expect(t, animation_value_store_test_init(&memory, &store, 3))
@@ -65,7 +65,8 @@ core_test_animation_value_store_rejects_schema_drift :: proc(t: ^testing.T) {
 
 //   Verify per-value and aggregate FFI quotas reject before canonical mutation.
 @(test)
-core_test_animation_value_store_rejects_quota_overflow :: proc(t: ^testing.T) {
+animation_model_test_animation_value_store_rejects_quota_overflow :: proc(
+    t: ^testing.T) {
     memory: Animation_Memory
     store: Animation_Value_Store
     testing.expect(t, animation_value_store_test_init(&memory, &store, 4))
@@ -89,7 +90,7 @@ core_test_animation_value_store_rejects_quota_overflow :: proc(t: ^testing.T) {
 
 //   Verify generation reset retires keys, reuses the first block, and keeps peaks.
 @(test)
-core_test_animation_value_store_resets_generation :: proc(t: ^testing.T) {
+animation_model_test_animation_value_store_resets_generation :: proc(t: ^testing.T) {
     memory: Animation_Memory
     store: Animation_Value_Store
     testing.expect(t, animation_value_store_test_init(&memory, &store, 8))
@@ -118,7 +119,8 @@ core_test_animation_value_store_resets_generation :: proc(t: ^testing.T) {
 
 //   Verify destruction releases backing storage and retains terminal high waters.
 @(test)
-core_test_animation_value_store_destroy_preserves_diagnostics :: proc(t: ^testing.T) {
+animation_model_test_animation_value_store_destroy_preserves_diagnostics :: proc(
+    t: ^testing.T) {
     memory: Animation_Memory
     store: Animation_Value_Store
     testing.expect(t, animation_value_store_test_init(&memory, &store, 12))
@@ -138,7 +140,7 @@ core_test_animation_value_store_destroy_preserves_diagnostics :: proc(t: ^testin
 
 //   Verify packed snapshots remain immutable after canonical overwrite.
 @(test)
-core_test_animation_value_snapshot_is_immutable :: proc(t: ^testing.T) {
+animation_model_test_animation_value_snapshot_is_immutable :: proc(t: ^testing.T) {
     memory: Animation_Memory
     store: Animation_Value_Store
     testing.expect(t, animation_value_store_test_init(&memory, &store, 4))
@@ -158,7 +160,7 @@ core_test_animation_value_snapshot_is_immutable :: proc(t: ^testing.T) {
 
 //   Verify pending reads choose the newest duplicate before snapshot state.
 @(test)
-core_test_animation_value_pending_reads_newest_write :: proc(t: ^testing.T) {
+animation_model_test_animation_value_pending_reads_newest_write :: proc(t: ^testing.T) {
     pending: Animation_Value_Pending_Writes
     identity := Animation_Value_Identity{5, 3, 9, 10}
     testing.expect_value(t, animation_value_pending_append(
@@ -174,7 +176,8 @@ core_test_animation_value_pending_reads_newest_write :: proc(t: ^testing.T) {
 
 //   Verify conflicting duplicates and capacity exhaustion poison pending state.
 @(test)
-core_test_animation_value_pending_rejection_is_terminal :: proc(t: ^testing.T) {
+animation_model_test_animation_value_pending_rejection_is_terminal :: proc(
+    t: ^testing.T) {
     pending: Animation_Value_Pending_Writes
     identity := Animation_Value_Identity{6, 1, 2, 3}
     _ = animation_value_pending_append(&pending, identity, []u8{1})
@@ -187,7 +190,8 @@ core_test_animation_value_pending_rejection_is_terminal :: proc(t: ^testing.T) {
 
 //   Verify malformed packed spans reject without changing destination bytes.
 @(test)
-core_test_animation_value_snapshot_rejects_malformed_span :: proc(t: ^testing.T) {
+animation_model_test_animation_value_snapshot_rejects_malformed_span :: proc(
+    t: ^testing.T) {
     snapshot: Animation_Value_Snapshot
     snapshot.entry_count = 1
     snapshot.entries[0] = {key = 1, schema_low = 2, schema_high = 3,

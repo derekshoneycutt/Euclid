@@ -1,5 +1,11 @@
 package bridge
 
+import dynviewmodel "../dynview/model"
+
+import fontmodel "../view/font/model"
+
+import presentation_model "presentation"
+
 import "../core"
 import dyncore "../dynview/core"
 import dynparse "../dynview/parse"
@@ -10,7 +16,7 @@ DYNVIEW_NATIVE_SCRIPT_SUB_DROP :: f32(0.30)
 DYNVIEW_NATIVE_SCRIPT_GAP :: f32(0.04)
 DYNVIEW_NATIVE_ACCENT_THICKNESS :: f32(0.08)
 DYNVIEW_NATIVE_ACCENT_OFFSET :: f32(0.10)
-DYNVIEW_NATIVE_COMMAND_KINDS :: [11]core.Dynview_Command_Kind{
+DYNVIEW_NATIVE_COMMAND_KINDS :: [11]dynviewmodel.Dynview_Command_Kind{
     .Text_Run, .Math_Glyph_Run, .Accent_Bar, .Radical_Bar, .Script_Attach,
     .Large_Op, .Frac, .Stretch_Delimiter, .Matrix, .Style_Override, .Stack,
 }
@@ -33,7 +39,7 @@ Dynview_Native_Math_Styles :: struct {
 
 // Group mutable staging state used by one native math import transaction.
 Dynview_Native_Math_Import :: struct {
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document,
     styles: Dynview_Native_Math_Styles,
     program_base: int,
@@ -65,7 +71,8 @@ Dynview_Native_Document_Offsets :: struct {
 
 //   Classify canonical presentation bytes without changing their source representation.
 presentation_source_mode :: proc(
-    mime: core.Presentation_Mime, source: string) -> Presentation_Source_Mode {
+    mime: presentation_model.Presentation_Mime,
+    source: string) -> Presentation_Source_Mode {
     switch mime {
     case .Text_Plain:
         return .Plain
@@ -77,14 +84,15 @@ presentation_source_mode :: proc(
 }
 
 //   Borrow exact canonical bytes for copy text and literal parse-failure rendering.
-presentation_literal_source :: proc(content: core.Presented_Text) -> string {
+presentation_literal_source :: proc(
+    content: presentation_model.Presented_Text) -> string {
     return transmute(string)content.bytes
 }
 
 //   Intern one document and replay its immutable native semantics into staging.
 dynview_native_import_document :: proc(
     state: ^core.Euclid_General_State,
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     source: string,
     text_style: i32) -> i32 {
     text := dynparse.tex_document_trim(source)
@@ -114,7 +122,7 @@ dynview_native_import_document :: proc(
 //   Intern and replay one normalized whole-math source inside an open block.
 dynview_native_import_math_source :: proc(
     state: ^core.Euclid_General_State,
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     source: string,
     root_style: dynparse.Tex_Math_Root_Style,
     text_style: i32) -> i32 {
@@ -139,9 +147,9 @@ dynview_native_document_styles :: #force_inline proc(
         text = text_style,
         math = dyncore.DYNVIEW_STYLE_ITALIC,
         regular = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |
-            i32(core.Font_Variant_Flags.Regular),
+            i32(fontmodel.Font_Variant_Flags.Regular),
         mathbb = dyncore.DYNVIEW_STYLE_CUSTOM_FONT |
-            i32(core.Font_Variant_Flags.Regular),
+            i32(fontmodel.Font_Variant_Flags.Regular),
     }
 }
 
@@ -159,7 +167,7 @@ dynview_native_store_status :: proc(
 
 //   Copy one authoritative semantic document into snapshot staging.
 dynview_native_replay_document :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document,
     text_style: i32) -> i32 {
     if !dynview_native_record_capacity_available(runtime, document) ||
@@ -184,24 +192,24 @@ dynview_native_replay_document :: proc(
 
 //   Check exact document byte, descriptor, block, and inline capacities before mutation.
 dynview_native_document_capacity_available :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document) -> bool {
 
     cache := &runtime.compile_cache
     return cache.document_text_count + len(document.source) + len(document.text) <=
-        core.DYNVIEW_MAX_DOCUMENT_BYTES &&
-        cache.document_count < core.DYNVIEW_MAX_DOCUMENTS &&
+        dynviewmodel.DYNVIEW_MAX_DOCUMENT_BYTES &&
+        cache.document_count < dynviewmodel.DYNVIEW_MAX_DOCUMENTS &&
         cache.document_block_count + len(document.document_blocks) <=
-            core.DYNVIEW_MAX_DOCUMENT_BLOCKS &&
+            dynviewmodel.DYNVIEW_MAX_DOCUMENT_BLOCKS &&
         cache.document_inline_count + len(document.document_inlines) <=
-            core.DYNVIEW_MAX_DOCUMENT_INLINES &&
+            dynviewmodel.DYNVIEW_MAX_DOCUMENT_INLINES &&
         cache.document_display_row_count + len(document.document_display_rows) <=
-            core.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS
+            dynviewmodel.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS
 }
 
 //   Copy one complete semantic document and rewrite all ranges to staging offsets.
 dynview_native_import_document_semantics :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document,
     program_base: int) -> i32 {
 
@@ -230,7 +238,7 @@ dynview_native_import_document_semantics :: proc(
 
 // Copy and rewrite all technical display rows into snapshot staging.
 dynview_native_import_document_rows :: proc(
-    cache: ^core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     document: ^dyncore.Dynview_Document,
     source_offset, program_base: int) -> i32 {
 
@@ -246,7 +254,7 @@ dynview_native_import_document_rows :: proc(
 
 // Copy and rewrite all document blocks into snapshot staging.
 dynview_native_import_document_blocks :: proc(
-    cache: ^core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     document: ^dyncore.Dynview_Document,
     offsets: Dynview_Native_Document_Offsets) -> i32 {
 
@@ -265,7 +273,7 @@ dynview_native_import_document_blocks :: proc(
 
 // Copy and rewrite all document inlines into snapshot staging.
 dynview_native_import_document_inlines :: proc(
-    cache: ^core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     document: ^dyncore.Dynview_Document,
     source_offset, text_offset, program_base: int) -> i32 {
 
@@ -281,7 +289,7 @@ dynview_native_import_document_inlines :: proc(
 
 //   Copy exact source and semantic text into staging-owned document bytes.
 dynview_native_copy_document_text :: proc(
-    cache: ^core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     document: ^dyncore.Dynview_Document) -> (int, int) {
 
     source_offset := cache.document_text_count
@@ -295,7 +303,7 @@ dynview_native_copy_document_text :: proc(
 
 //   Publish one semantic document descriptor after all child records are copied.
 dynview_native_publish_document :: proc(
-    cache: ^core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     document: ^dyncore.Dynview_Document,
     offsets: Dynview_Native_Document_Offsets) {
 
@@ -319,7 +327,7 @@ dynview_native_document_block :: proc(
     block: dynparse.Tex_Document_Block,
     document: ^dyncore.Dynview_Document,
     source_base, inline_base, display_row_base: int) -> (
-        core.Dynview_Document_Block, bool) {
+        dynviewmodel.Dynview_Document_Block, bool) {
 
     if !dynview_native_span_valid(
         block.source.offset, block.source.length, len(document.source)) ||
@@ -330,23 +338,23 @@ dynview_native_document_block :: proc(
         return {}, false
     }
     return {
-        kind = core.Dynview_Document_Block_Kind(block.kind),
+        kind = dynviewmodel.Dynview_Document_Block_Kind(block.kind),
         inline_start = inline_base + block.inline_start,
         inline_count = block.inline_count,
         source_offset = source_base + block.source.offset,
         source_count = block.source.length,
-        alignment = core.Dynview_Document_Alignment(block.format.alignment),
+        alignment = dynviewmodel.Dynview_Document_Alignment(block.format.alignment),
         no_indent = block.format.no_indent,
-        container_kind = core.Dynview_Document_Container_Kind(
+        container_kind = dynviewmodel.Dynview_Document_Container_Kind(
             block.format.container_kind),
         container_depth = block.format.container_depth,
         left_margin_levels = block.format.left_margin_levels,
         right_margin_levels = block.format.right_margin_levels,
-        list_kind = core.Dynview_Document_List_Kind(block.format.list_kind),
+        list_kind = dynviewmodel.Dynview_Document_List_Kind(block.format.list_kind),
         list_id = block.format.list_id,
         item_ordinal = block.format.item_ordinal,
         item_first_block = block.format.item_first_block,
-        display_kind = core.Dynview_Document_Display_Kind(block.display_kind),
+        display_kind = dynviewmodel.Dynview_Document_Display_Kind(block.display_kind),
         display_row_start = display_row_base+block.display_row_start,
         display_row_count = block.display_row_count,
         display_numbered = block.display_numbered,
@@ -357,7 +365,7 @@ dynview_native_document_block :: proc(
 dynview_native_document_display_row :: proc(
     row: dynparse.Tex_Document_Display_Row,
     document: ^dyncore.Dynview_Document,
-    source_base, program_base: int) -> (core.Dynview_Document_Display_Row, bool) {
+    source_base, program_base: int) -> (dynviewmodel.Dynview_Document_Display_Row, bool) {
 
     if !dynview_native_span_valid(
         row.source.offset, row.source.length, len(document.source)) ||
@@ -371,15 +379,15 @@ dynview_native_document_display_row :: proc(
         primary_program_id = program_base+row.primary_program,
         secondary_program_id = program_base+row.secondary_program if
             row.secondary_program >= 0 else -1,
-        alignment = core.Dynview_Document_Alignment(row.alignment),
+        alignment = dynviewmodel.Dynview_Document_Alignment(row.alignment),
         suppress_number = row.suppress_number,
     }, true
 }
 
 // Assign stable document-local numbers to eligible rows in one display block.
 dynview_native_number_display_rows :: proc(
-    cache: ^core.Dynview_Compile_Cache,
-    block: core.Dynview_Document_Block,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    block: dynviewmodel.Dynview_Document_Block,
     next_number: ^int) {
 
     if !block.display_numbered {return}
@@ -401,7 +409,7 @@ dynview_native_document_inline :: proc(
     item: dynparse.Tex_Document_Inline,
     document: ^dyncore.Dynview_Document,
     source_base, text_base, program_base: int) -> (
-        core.Dynview_Document_Inline, bool) {
+        dynviewmodel.Dynview_Document_Inline, bool) {
 
     if !dynview_native_span_valid(
         item.source.offset, item.source.length, len(document.source)) ||
@@ -414,17 +422,17 @@ dynview_native_document_inline :: proc(
     if item.math_program >= 0 {
         program_id = program_base + item.math_program
     }
-    result := core.Dynview_Document_Inline{
-        kind = core.Dynview_Document_Inline_Kind(item.kind),
+    result := dynviewmodel.Dynview_Document_Inline{
+        kind = dynviewmodel.Dynview_Document_Inline_Kind(item.kind),
         source_offset = source_base + item.source.offset,
         source_count = item.source.length,
         text_offset = text_base + item.text.offset,
         text_count = item.text.length,
         font_flags = item.font_flags,
         color = dynview_native_document_color(item.color),
-        space_kind = core.Dynview_Document_Space_Kind(item.space_kind),
+        space_kind = dynviewmodel.Dynview_Document_Space_Kind(item.space_kind),
         shape = dynview_native_document_shape(item.shape),
-        root_style = core.Dynview_Math_Style_Level(item.root_style),
+        root_style = dynviewmodel.Dynview_Math_Style_Level(item.root_style),
         math_program_id = program_id,
         penalty = item.penalty,
     }
@@ -433,11 +441,11 @@ dynview_native_document_inline :: proc(
 
 //   Copy one parser shape payload without retaining parser-owned storage.
 dynview_native_document_shape :: proc(
-    shape: dynparse.Tex_Document_Shape) -> core.Dynview_Document_Shape {
+    shape: dynparse.Tex_Document_Shape) -> dynviewmodel.Dynview_Document_Shape {
 
-    result := core.Dynview_Document_Shape{
+    result := dynviewmodel.Dynview_Document_Shape{
         present = shape.present,
-        kind = core.Dynview_Document_Shape_Kind(shape.kind),
+        kind = dynviewmodel.Dynview_Document_Shape_Kind(shape.kind),
         color = dynview_native_document_color(shape.color),
         width = shape.width,
         height = shape.height,
@@ -456,7 +464,7 @@ dynview_native_document_shape :: proc(
 
 //   Copy one parser color into a render-package-independent semantic wrapper.
 dynview_native_document_color :: #force_inline proc(
-    color: dynparse.Tex_Document_Color) -> core.Dynview_Document_Color {
+    color: dynparse.Tex_Document_Color) -> dynviewmodel.Dynview_Document_Color {
     return {
         present = color.present,
         value = {color.red, color.green, color.blue, color.alpha},
@@ -471,7 +479,7 @@ dynview_native_span_valid :: #force_inline proc(
 
 //   Translate document-store failures to stable bridge status and stream failure.
 dynview_native_store_failure :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     status: dyncore.Dynview_Document_Status) -> i32 {
     if status == .Out_Of_Capacity || status == .Allocation_Failed {
         return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
@@ -484,7 +492,7 @@ dynview_native_store_failure :: proc(
 
 //   Capture mutable counters touched by one native math import transaction.
 dynview_math_import_checkpoint :: #force_inline proc(
-    runtime: ^core.Dynview_System) -> Dynview_Math_Import_Checkpoint {
+    runtime: ^dynviewmodel.Dynview_System) -> Dynview_Math_Import_Checkpoint {
 
     return {
         runtime^.command_buffer.text_bytes_len,
@@ -501,7 +509,7 @@ dynview_math_import_checkpoint :: #force_inline proc(
 
 //   Restore mutable counters after a rejected math import.
 dynview_math_import_rollback :: #force_inline proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     checkpoint: Dynview_Math_Import_Checkpoint) {
 
     runtime^.command_buffer.text_bytes_len = checkpoint.text_bytes_len
@@ -518,7 +526,7 @@ dynview_math_import_rollback :: #force_inline proc(
 
 //   Copy one resolved native math document into mutable snapshot staging atomically.
 dynview_native_import_math :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document,
     styles: Dynview_Native_Math_Styles) -> i32 {
     checkpoint := dynview_math_import_checkpoint(runtime)
@@ -548,16 +556,16 @@ dynview_native_import_math :: proc(
 
 //   Check exact program, command, descriptor, and text capacities before mutation.
 dynview_native_math_capacity_available :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document) -> bool {
     return dynview_native_record_capacity_available(runtime, document) &&
         runtime.command_buffer.text_bytes_len + len(document.text) +
-            document.plain_text.length <= core.DYNVIEW_MAX_TEXT_BYTES
+            document.plain_text.length <= dynviewmodel.DYNVIEW_MAX_TEXT_BYTES
 }
 
 //   Check exact native semantic-record capacities before importing any records.
 dynview_native_record_capacity_available :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document) -> bool {
     cache := &runtime.compile_cache
     default_tables := 0
@@ -567,16 +575,16 @@ dynview_native_record_capacity_available :: proc(
         }
     }
     return cache.math_program_count + len(document.programs) <=
-        core.DYNVIEW_MAX_MATH_PROGRAMS &&
+        dynviewmodel.DYNVIEW_MAX_MATH_PROGRAMS &&
         cache.math_command_count + len(document.ops) <=
-            core.DYNVIEW_MAX_MATH_COMMANDS &&
+            dynviewmodel.DYNVIEW_MAX_MATH_COMMANDS &&
         cache.math_table_descriptor_count + len(document.table_descriptors) +
-            default_tables <= core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS
+            default_tables <= dynviewmodel.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS
 }
 
 //   Import native descriptors and linked programs using staging-relative indices.
 dynview_native_import_math_records :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document,
     styles: Dynview_Native_Math_Styles,
     blob_offset: int) -> i32 {
@@ -619,16 +627,16 @@ dynview_native_import_table_descriptors :: proc(
 
 //   Convert one parser table descriptor to native layout-independent metadata.
 dynview_native_table_descriptor :: proc(
-    source: dynparse.Tex_Table_Descriptor) -> core.Dynview_Math_Table_Descriptor {
-    result := core.Dynview_Math_Table_Descriptor{
+    source: dynparse.Tex_Table_Descriptor) -> dynviewmodel.Dynview_Math_Table_Descriptor {
+    result := dynviewmodel.Dynview_Math_Table_Descriptor{
         rows = source.rows,
         columns = source.columns,
-        cell_style = core.Dynview_Math_Style_Level(source.cell_style),
-        row_spacing = core.Dynview_Math_Table_Row_Spacing(source.row_spacing),
+        cell_style = dynviewmodel.Dynview_Math_Style_Level(source.cell_style),
+        row_spacing = dynviewmodel.Dynview_Math_Table_Row_Spacing(source.row_spacing),
     }
     for alignment, index in source.alignments {
         result.column_alignments[index] =
-            core.Dynview_Matrix_Column_Alignment(alignment)
+            dynviewmodel.Dynview_Matrix_Column_Alignment(alignment)
     }
     for gap, index in source.boundary_gaps {
         result.column_boundary_gaps[index] = dynview_native_table_length(gap)
@@ -643,8 +651,8 @@ dynview_native_table_descriptor :: proc(
 
 //   Convert one parser table length to the existing native unit enum.
 dynview_native_table_length :: proc(
-    source: dynparse.Tex_Table_Length) -> core.Dynview_Math_Length {
-    unit: core.Dynview_Math_Length_Unit
+    source: dynparse.Tex_Table_Length) -> dynviewmodel.Dynview_Math_Length {
+    unit: dynviewmodel.Dynview_Math_Length_Unit
     switch source.unit {
     case .Default: unit = .Default
     case .Zero: unit = .Zero
@@ -689,15 +697,15 @@ dynview_native_import_program :: proc(
 //   Convert one parser operation and rewrite all references to staging indices.
 dynview_native_command :: proc(
     ctx: ^Dynview_Native_Math_Import,
-    op: ^dynparse.Tex_Math_Op) -> (core.Dynview_Command, i32) {
+    op: ^dynparse.Tex_Math_Op) -> (dynviewmodel.Dynview_Command, i32) {
     kind, valid := dynview_native_command_kind(op.kind)
     if !valid || !dynview_native_op_references_valid(ctx.document, op) {
         return {}, BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    command := core.Dynview_Command{
+    command := dynviewmodel.Dynview_Command{
         kind = kind,
-        math_atom_class = core.Dynview_Math_Atom_Class(op.atom_class),
-        math_glue_kind = core.Dynview_Math_Glue_Kind(op.glue_kind),
+        math_atom_class = dynviewmodel.Dynview_Math_Atom_Class(op.atom_class),
+        math_glue_kind = dynviewmodel.Dynview_Math_Glue_Kind(op.glue_kind),
         block_id = ctx.runtime.command_buffer.stream_open_block_id,
         style_id = dynview_native_style_id(op, ctx.styles),
         table_descriptor_index = dynview_native_table_id(ctx, op),
@@ -724,7 +732,7 @@ dynview_native_command :: proc(
 dynview_native_apply_program_ids :: proc(
     ctx: ^Dynview_Native_Math_Import,
     op: ^dynparse.Tex_Math_Op,
-    command: ^core.Dynview_Command) {
+    command: ^dynviewmodel.Dynview_Command) {
     command.math_program_id = dynview_native_program_id(ctx, op.child_program)
     command.secondary_math_program_id =
         dynview_native_program_id(ctx, op.secondary_program)
@@ -762,7 +770,7 @@ dynview_native_mode_code :: #force_inline proc(
 
 //   Map parser operation kinds to established compile-cache command kinds.
 dynview_native_command_kind :: proc(
-    kind: dynparse.Tex_Math_Op_Kind) -> (core.Dynview_Command_Kind, bool) {
+    kind: dynparse.Tex_Math_Op_Kind) -> (dynviewmodel.Dynview_Command_Kind, bool) {
     index := int(kind)-int(dynparse.Tex_Math_Op_Kind.Text_Run)
     if index < 0 || index >= len(DYNVIEW_NATIVE_COMMAND_KINDS) {
         return .Text_Run, false
@@ -844,8 +852,8 @@ dynview_native_table_id :: proc(
 //   Build default centered matrix metadata from retained decimal dimensions.
 dynview_native_default_table :: proc(
     document: ^dyncore.Dynview_Document,
-    op: ^dynparse.Tex_Math_Op) -> core.Dynview_Math_Table_Descriptor {
-    result := core.Dynview_Math_Table_Descriptor{
+    op: ^dynparse.Tex_Math_Op) -> dynviewmodel.Dynview_Math_Table_Descriptor {
+    result := dynviewmodel.Dynview_Math_Table_Descriptor{
         rows = dynview_native_small_integer(document, op.radical_index_text),
         columns = dynview_native_small_integer(document, op.superscript_text),
         cell_style = .Text,
@@ -874,7 +882,7 @@ dynview_native_small_integer :: proc(
 
 //   Rewrite all semantic text spans against the copied staging text base.
 dynview_native_apply_spans :: proc(
-    command: ^core.Dynview_Command,
+    command: ^dynviewmodel.Dynview_Command,
     op: ^dynparse.Tex_Math_Op,
     blob_offset: int) {
     command.text_offset = blob_offset + op.text.offset
@@ -891,7 +899,7 @@ dynview_native_apply_spans :: proc(
 
 //   Publish one top-level math command after every semantic record is valid.
 dynview_native_push_math_block :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     document: ^dyncore.Dynview_Document,
     style_id: i32,
     plain_offset, plain_count: int) -> i32 {

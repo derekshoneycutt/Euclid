@@ -1,24 +1,27 @@
 package bridge
 
+import shapemodel "../shapes/model"
+
 import "../core"
 import "../particles"
 import "../shapes"
+import view_core "../view/core"
 
 import rl "vendor:raylib"
 
 // Group immutable component sources selected for one bridge query.
 Bridge_Shape_Query_Source :: struct {
-    registry: ^core.Shape_Registry,
-    transforms: ^core.Shape_Component_Set(core.Shape_Transform),
-    render_styles: ^core.Shape_Component_Set(core.Shape_Render_Style),
-    active_features: ^core.Shape_Component_Set(core.Shape_Active_Feature),
-    geometries: ^core.Shape_Component_Set(core.Shape_Geometry),
-    labels: ^core.Shape_Component_Set(core.Shape_Label),
-    label_store: ^core.Shape_Label_Store,
+    registry: ^shapemodel.Shape_Registry,
+    transforms: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Transform),
+    render_styles: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Render_Style),
+    active_features: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Active_Feature),
+    geometries: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Geometry),
+    labels: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Label),
+    label_store: ^shapemodel.Shape_Label_Store,
 }
 
 // Map canonical world outcomes to stable bridge status values.
-bridge_shape_status :: proc(status: core.Shape_World_Status) -> i32 {
+bridge_shape_status :: proc(status: shapemodel.Shape_World_Status) -> i32 {
     switch status {
     case .Ok: return BRIDGE_STATUS_OK
     case .Invalid_Argument: return BRIDGE_STATUS_INVALID_ARGUMENT
@@ -32,7 +35,8 @@ bridge_shape_status :: proc(status: core.Shape_World_Status) -> i32 {
 }
 
 // Resolve the authoritative canonical world owned by one runtime state.
-bridge_shape_world :: proc(state: ^core.Euclid_General_State) -> ^core.Shape_World {
+bridge_shape_world :: proc(
+    state: ^core.Euclid_General_State) -> ^shapemodel.Shape_World {
     if state == nil {
         return nil
     }
@@ -42,10 +46,11 @@ bridge_shape_world :: proc(state: ^core.Euclid_General_State) -> ^core.Shape_Wor
 // Decode and validate one packed entity against the authoritative registry.
 bridge_shape_resolve :: proc(
     state: ^core.Euclid_General_State,
-    packed: u64) -> (core.Shape_Entity, bool) {
+    packed: u64) -> (shapemodel.Shape_Entity, bool) {
     world := bridge_shape_world(state)
-    entity := core.shape_entity_unpack(packed)
-    return entity, world != nil && core.shape_registry_resolves(&world.registry, entity)
+    entity := shapemodel.shape_entity_unpack(packed)
+    return entity, world != nil &&
+        shapemodel.shape_registry_resolves(&world.registry, entity)
 }
 
 // Select worker-owned projections during capture and canonical state otherwise.
@@ -75,9 +80,9 @@ bridge_shape_style :: proc(style: Bridge_Shape_Style) -> shapes.Shape_Style {
 
 // Pack one standalone entity constructor result for ABI return.
 bridge_shape_entity_result :: proc(
-    entity: core.Shape_Entity,
-    status: core.Shape_World_Status) -> Bridge_Shape_Entity_Result {
-    return {bridge_shape_status(status), core.shape_entity_pack(entity)}
+    entity: shapemodel.Shape_Entity,
+    status: shapemodel.Shape_World_Status) -> Bridge_Shape_Entity_Result {
+    return {bridge_shape_status(status), shapemodel.shape_entity_pack(entity)}
 }
 
 // Create one standalone transform-backed point in the canonical world.
@@ -100,12 +105,12 @@ shape_create_label :: proc "c" (
     input: Bridge_Positioned_Shape_Input) -> Bridge_Shape_Entity_Result {
     context = state.saved_context
     if source == nil || mime < 0 ||
-        mime > i32(core.Shape_Text_Mime.Text_Latex) {
+        mime > i32(shapemodel.Shape_Text_Mime.Text_Latex) {
         return {BRIDGE_STATUS_INVALID_ARGUMENT, 0}
     }
     text := string(source)
     handle, status := shapes.world_create_label(state.shape_world, {
-        source = text, mime = core.Shape_Text_Mime(mime),
+        source = text, mime = shapemodel.Shape_Text_Mime(mime),
         position = input.position, style = bridge_shape_style(input.style)})
     return bridge_shape_entity_result(handle.entity, status)
 }
@@ -114,105 +119,129 @@ shape_create_label :: proc "c" (
 @(export)
 shape_create_line :: proc "c" (
     state: ^core.Euclid_General_State,
-    first, second: core.Vector3,
+    first, second: rl.Vector3,
     style: Bridge_Shape_Style) -> Bridge_Shape_Line_Result {
     context = state.saved_context
     handle, status := shapes.world_create_line(
         state.shape_world, first, second, bridge_shape_style(style))
-    return {bridge_shape_status(status), core.shape_entity_pack(handle.shape),
-        core.shape_entity_pack(handle.first), core.shape_entity_pack(handle.second)}
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.first),
+        shapemodel.shape_entity_pack(handle.second),
+    }
 }
 
 // Create one outlined arc with direct packed transform handles.
 @(export)
 shape_create_arc :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: core.Vector3,
-    arc: core.Bridge_Arc_Geometry,
+    center: rl.Vector3,
+    arc: shapemodel.Bridge_Arc_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Arc_Result {
     context = state.saved_context
     handle, status := shapes.world_create_arc(state.shape_world, {
         center = center, radius = arc.radius, start_theta = arc.start_theta,
         end_theta = arc.end_theta, style = bridge_shape_style(style)})
-    return {bridge_shape_status(status), core.shape_entity_pack(handle.shape),
-        core.shape_entity_pack(handle.center), core.shape_entity_pack(handle.start),
-        core.shape_entity_pack(handle.finish)}
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.center),
+        shapemodel.shape_entity_pack(handle.start),
+        shapemodel.shape_entity_pack(handle.finish),
+    }
 }
 
 // Create one filled arc with direct packed transform handles.
 @(export)
 shape_create_filled_arc :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: core.Vector3,
-    arc: core.Bridge_Arc_Geometry,
+    center: rl.Vector3,
+    arc: shapemodel.Bridge_Arc_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Arc_Result {
     context = state.saved_context
     handle, status := shapes.world_create_filled_arc(state.shape_world, {
         center = center, radius = arc.radius, start_theta = arc.start_theta,
         end_theta = arc.end_theta, style = bridge_shape_style(style)})
-    return {bridge_shape_status(status), core.shape_entity_pack(handle.shape),
-        core.shape_entity_pack(handle.center), core.shape_entity_pack(handle.start),
-        core.shape_entity_pack(handle.finish)}
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.center),
+        shapemodel.shape_entity_pack(handle.start),
+        shapemodel.shape_entity_pack(handle.finish),
+    }
 }
 
 // Create one triangle with direct packed ordered vertex handles.
 @(export)
 shape_create_triangle :: proc "c" (
     state: ^core.Euclid_General_State,
-    vertices: [3]core.Vector3,
+    vertices: [3]rl.Vector3,
     style: Bridge_Shape_Style) -> Bridge_Shape_Triangle_Result {
     context = state.saved_context
     handle, status := shapes.world_create_triangle(
         state.shape_world, vertices, bridge_shape_style(style))
-    return {bridge_shape_status(status), core.shape_entity_pack(handle.shape),
-        core.shape_entity_pack(handle.first), core.shape_entity_pack(handle.second),
-        core.shape_entity_pack(handle.third)}
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.first),
+        shapemodel.shape_entity_pack(handle.second),
+        shapemodel.shape_entity_pack(handle.third),
+    }
 }
 
 // Create one square with direct packed ordered vertex handles.
 @(export)
 shape_create_square :: proc "c" (
     state: ^core.Euclid_General_State,
-    vertices: core.Bridge_Square_Vertices,
+    vertices: shapemodel.Bridge_Square_Vertices,
     style: Bridge_Shape_Style) -> Bridge_Shape_Square_Result {
     context = state.saved_context
     handle, status := shapes.world_create_square(
         state.shape_world, vertices.vertices, bridge_shape_style(style))
     packed: [4]u64
     for entity, index in handle.vertices {
-        packed[index] = core.shape_entity_pack(entity)
+        packed[index] = shapemodel.shape_entity_pack(entity)
     }
-    return {bridge_shape_status(status), core.shape_entity_pack(handle.shape), packed}
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        packed,
+    }
 }
 
 // Create one pentagon with direct packed ordered vertex handles.
 @(export)
 shape_create_pentagon :: proc "c" (
     state: ^core.Euclid_General_State,
-    vertices: core.Bridge_Pentagon_Vertices,
+    vertices: shapemodel.Bridge_Pentagon_Vertices,
     style: Bridge_Shape_Style) -> Bridge_Shape_Pentagon_Result {
     context = state.saved_context
     handle, status := shapes.world_create_pentagon(
         state.shape_world, vertices.vertices, bridge_shape_style(style))
     packed: [5]u64
     for entity, index in handle.vertices {
-        packed[index] = core.shape_entity_pack(entity)
+        packed[index] = shapemodel.shape_entity_pack(entity)
     }
-    return {bridge_shape_status(status), core.shape_entity_pack(handle.shape), packed}
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        packed,
+    }
 }
 
 // Project one entity's transform and render style into a bridge view.
 shape_view_project_presentation :: proc(
     source: ^Bridge_Shape_Query_Source,
-    entity: core.Shape_Entity,
+    entity: shapemodel.Shape_Entity,
     view: ^Bridge_Shape_View) {
-    transform, has_transform := core.shape_component_get(
+    transform, has_transform := shapemodel.shape_component_get(
         source^.transforms, source^.registry, entity)
     if has_transform {
         view^.has_transform = 1
         view^.position = transform.position
     }
-    style, has_style := core.shape_component_get(
+    style, has_style := shapemodel.shape_component_get(
         source^.render_styles, source^.registry, entity)
     if has_style {
         view^.has_style = 1
@@ -230,15 +259,15 @@ shape_view_project_presentation :: proc(
 // Project one entity's semantic components into a bridge view.
 shape_view_project_semantics :: proc(
     source: ^Bridge_Shape_Query_Source,
-    entity: core.Shape_Entity,
+    entity: shapemodel.Shape_Entity,
     view: ^Bridge_Shape_View) {
-    feature, has_feature := core.shape_component_get(
+    feature, has_feature := shapemodel.shape_component_get(
         source^.active_features, source^.registry, entity)
     if has_feature {
         view^.has_active_feature = 1
         view^.active_feature = feature.index
     }
-    geometry, has_geometry := core.shape_component_get(
+    geometry, has_geometry := shapemodel.shape_component_get(
         source^.geometries, source^.registry, entity)
     if has_geometry {
         view^.kind = i32(geometry.kind)
@@ -252,8 +281,8 @@ shape_get_view :: proc "c" (
     packed: u64) -> Bridge_Shape_View {
     context = state.saved_context
     source, available := bridge_shape_query_source(state)
-    entity := core.shape_entity_unpack(packed)
-    if !available || !core.shape_registry_resolves(source.registry, entity) {
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
         return {status = BRIDGE_STATUS_NOT_FOUND, entity = packed}
     }
     view := Bridge_Shape_View{status = BRIDGE_STATUS_OK, entity = packed, kind = -1}
@@ -274,13 +303,13 @@ shape_copy_label_source :: proc "c" (
         return {status = BRIDGE_STATUS_INVALID_ARGUMENT}
     }
     source, available := bridge_shape_query_source(state)
-    entity := core.shape_entity_unpack(packed)
-    if !available || !core.shape_registry_resolves(source.registry, entity) {
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
         return {status = BRIDGE_STATUS_NOT_FOUND}
     }
-    label, found := core.shape_component_get(source.labels, source.registry, entity)
+    label, found := shapemodel.shape_component_get(source.labels, source.registry, entity)
     if !found {return {status = BRIDGE_STATUS_NOT_FOUND}}
-    text, valid := core.shape_label_source(source.label_store, label^)
+    text, valid := shapemodel.shape_label_source(source.label_store, label^)
     if !valid || len(text) > int(capacity) {
         return {status = BRIDGE_STATUS_OUT_OF_CAPACITY}
     }
@@ -294,7 +323,7 @@ shape_copy_label_source :: proc "c" (
 shape_set_position :: proc "c" (
     state: ^core.Euclid_General_State,
     packed: u64,
-    position: core.Vector3) -> i32 {
+    position: rl.Vector3) -> i32 {
     context = state.saved_context
     command, captured := capture_shape_command(state, .Set_Shape_Position, packed)
     if command != nil {
@@ -303,7 +332,7 @@ shape_set_position :: proc "c" (
     if captured {return BRIDGE_STATUS_OK}
     entity, found := bridge_shape_resolve(state, packed)
     if !found {return BRIDGE_STATUS_NOT_FOUND}
-    transform, has_transform := core.shape_component_get_mut(
+    transform, has_transform := shapemodel.shape_component_get_mut(
         &state.shape_world.transforms, &state.shape_world.registry, entity)
     if !has_transform {return BRIDGE_STATUS_NOT_FOUND}
     transform.position = position
@@ -318,15 +347,17 @@ shape_set_visible_local :: proc(
     kick_dust: bool) -> (i32, bool) {
     entity, found := bridge_shape_resolve(state, packed)
     if !found {return BRIDGE_STATUS_NOT_FOUND, false}
-    style, has_style := core.shape_component_get_mut(
+    style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style {return BRIDGE_STATUS_NOT_FOUND, false}
     target_visible := visible != 0
     emitted := false
     if style^.visible && !target_visible {
         emitted = particles.emit_shape_world_hide_burst(
-            state^.particle_system, state^.shape_world, entity,
-            state^.iso_scale, kick_dust)
+            state^.particle_system, state^.shape_world, entity, kick_dust)
+        if emitted && kick_dust && state^.iso_scale != nil {
+            view_core.screenshake_on_dust_kick(state^.iso_scale)
+        }
     }
     style^.visible = target_visible
     return BRIDGE_STATUS_OK, emitted
@@ -362,7 +393,7 @@ shape_set_color :: proc "c" (
     if captured {return BRIDGE_STATUS_OK}
     entity, found := bridge_shape_resolve(state, packed)
     if !found {return BRIDGE_STATUS_NOT_FOUND}
-    style, has_style := core.shape_component_get_mut(
+    style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style {return BRIDGE_STATUS_NOT_FOUND}
     style.color = {color.r, color.g, color.b, color.a}
@@ -384,7 +415,7 @@ shape_set_active_color :: proc "c" (
     if captured {return BRIDGE_STATUS_OK}
     entity, found := bridge_shape_resolve(state, packed)
     if !found {return BRIDGE_STATUS_NOT_FOUND}
-    style, has_style := core.shape_component_get_mut(
+    style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style {return BRIDGE_STATUS_NOT_FOUND}
     style.active_color = rl.Color{color.r, color.g, color.b, color.a}
@@ -406,7 +437,7 @@ shape_set_brush_size :: proc "c" (
     if captured {return BRIDGE_STATUS_OK}
     entity, found := bridge_shape_resolve(state, packed)
     if !found {return BRIDGE_STATUS_NOT_FOUND}
-    style, has_style := core.shape_component_get_mut(
+    style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style {return BRIDGE_STATUS_NOT_FOUND}
     style.brush_size = brush_size
@@ -427,7 +458,7 @@ shape_set_offset :: proc "c" (
     if captured {return BRIDGE_STATUS_OK}
     entity, found := bridge_shape_resolve(state, packed)
     if !found {return BRIDGE_STATUS_NOT_FOUND}
-    style, has_style := core.shape_component_get_mut(
+    style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style {return BRIDGE_STATUS_NOT_FOUND}
     style.offset = offset
@@ -449,7 +480,7 @@ shape_set_active_feature :: proc "c" (
     if captured {return BRIDGE_STATUS_OK}
     entity, found := bridge_shape_resolve(state, packed)
     if !found {return BRIDGE_STATUS_NOT_FOUND}
-    feature, has_feature := core.shape_component_get_mut(
+    feature, has_feature := shapemodel.shape_component_get_mut(
         &state.shape_world.active_features, &state.shape_world.registry, entity)
     if !has_feature {return BRIDGE_STATUS_NOT_FOUND}
     feature.index = active_feature

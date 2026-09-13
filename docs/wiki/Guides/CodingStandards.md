@@ -12,6 +12,7 @@ enforcement.
 1. [Upstream Style Relationship](#upstream-style-relationship)
 1. [Fast Compliance Checklist](#fast-compliance-checklist)
 1. [Global Rules](#global-rules)
+1. [Package Dependency Direction](#package-dependency-direction)
 1. [Verification Gate](#verification-gate)
 1. [Odin-Julia Boundary Rules](#odin-julia-boundary-rules)
 1. [Odin Rules (Required)](#odin-rules-required)
@@ -103,6 +104,22 @@ Before marking work complete, verify all items below:
   match language conventions.
 - Canonical validation occurs at boundaries; internal code does not repeatedly
   normalize bad input.
+
+## Package Dependency Direction
+
+Root package `src/core` is application composition, not a universal model package.
+It MUST retain only `Euclid_General_State`, `Euclid_Run_Settings`, and records whose
+purpose intrinsically requires complete application state. A type does not belong in
+root core merely because `Euclid_General_State` reaches it.
+
+Subsystem and model packages are substrate and MUST NOT import root core. Executable
+entry points and behavior in `src/view` and `src/bridge` are coordinators and MAY import
+root core. More-specific model packages beneath those coordinators remain substrate and
+MUST remain composition-independent. Production consumers MUST import the package that
+owns a model directly; root-core forwarding aliases are forbidden.
+
+`tools/analysis_settings.jl` enforces these layers. Substrate-to-composition edges and
+cycles among architecture layers are blocking findings.
 
 ## Verification Gate
 

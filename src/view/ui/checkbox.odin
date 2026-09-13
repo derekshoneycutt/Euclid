@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 import view_core "../core"
 import view_font "../font"
 import "core:strings"
@@ -62,7 +63,7 @@ checkbox_label_layout :: proc(
 
 //   Resolve whether this checkbox currently owns the shared press state.
 checkbox_owns_press :: #force_inline proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     id: int) -> bool {
 
     return press_owner^.active &&
@@ -72,7 +73,7 @@ checkbox_owns_press :: #force_inline proc(
 
 //   Capture shared press ownership for a checkbox when it is newly pressed.
 checkbox_try_capture_press :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     params: Checkbox_Params,
     hovered: bool,
     can_interact: bool,
@@ -91,7 +92,7 @@ checkbox_try_capture_press :: proc(
 
 //   Release shared press ownership and resolve checkbox toggle output.
 checkbox_release_press :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     params: Checkbox_Params,
     can_interact: bool,
     hovered_item: bool,
@@ -183,7 +184,7 @@ checkbox_draw_box_marks :: proc(
 //   Resolve hover capture and release for one checkbox, writing toggle state.
 checkbox_resolve_interaction :: proc(
     params: Checkbox_Params,
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     local_mouse: rl.Vector2,
     hit_rect: rl.Rectangle,
     out: ^Checkbox_Result) {
@@ -212,7 +213,7 @@ checkbox_resolve_interaction :: proc(
 //   Resolve one checkbox interaction without issuing drawing commands.
 update_checkbox :: proc(
     params: Checkbox_Params,
-    press_owner: ^core.Ui_Press_Owner_State) -> Checkbox_Result {
+    press_owner: ^viewmodel.Ui_Press_Owner_State) -> Checkbox_Result {
 
     drawn_rect := clamp_non_negative_rect(params.rect)
     box_rect := checkbox_box_drawn_rect(drawn_rect)

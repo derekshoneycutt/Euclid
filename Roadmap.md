@@ -94,15 +94,16 @@ General features:
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
   - [X] Label
-  - [ ] Roulette tool
-  - [ ] Cardioids & Limacons
+  - [ ] Roulette (Ellipse, Cardioid, Limacon)
+  - [ ] Lenses
+  - [ ] Lunes
 - [X] Basic, layered particle system
   - [X] Dust
   - [X] Embers
   - [X] Flickers
 - [X] Comprehensive Odin-Julia Bridge interface between the two languages
 - [X] Basic state-machine supported julia animations structure
-- [X] Initial library of standard animations for drawing primitives
+- [X] Initial library of standard animations for drawing primitives2
 - [X] Restart and Pause functionality
 - [X] GIF Saving
 - [X] Initial Settings panel
@@ -198,14 +199,13 @@ Content (24+ animations):
   - $(\pi_1(R_n)\cong F_n)$Free group$F_n$via the rose$R_n$(draw roses of size$n_a$;
    where for $m$passes$n_a$varies constantly +1 for each$a\in \{1, ..., m\}$,
    line disintegrating as drawing with new effect)
-- Possibly Roulettes? (tusi couples, trochoids, cyclocloids,)
 - Logic, Tarski, etc.?
 
 Core Features:
 
 - Better than raylib... sdl3? Maybe...
 - Improved terminal input IME, acessibility, etc. (need off raylib)
-- More primitives (gnomons, strings--small connectors, logic)
+- More primitives (gnomons, strings--small connectors)
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support

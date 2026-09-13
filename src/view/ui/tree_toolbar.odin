@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 
 import rl "vendor:raylib"
 
@@ -16,7 +17,7 @@ Tree_Toolbar_Hit :: struct {
 Tree_Toolbar_Context :: struct {
     panel:            rl.Rectangle,
     mouse_input:      Input_Frame,
-    press_owner:      ^core.Ui_Press_Owner_State,
+    press_owner:      ^viewmodel.Ui_Press_Owner_State,
     show_tree:        bool,
     show_gif:         bool,
     show_settings:    bool,

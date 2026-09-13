@@ -1,5 +1,9 @@
 package bridge
 
+import bridgemodel "model"
+
+import presentation_model "presentation"
+
 import "../core"
 import protocol "../core/protocol"
 
@@ -16,7 +20,7 @@ Communication_Link_Oversized_Message :: struct {
 }
 
 Communication_Link_Egress_Collector :: struct {
-    messages: [2]^core.Julia_Host_Egress,
+    messages: [2]^bridgemodel.Julia_Host_Egress,
     count: int,
 }
 
@@ -24,7 +28,7 @@ COMMUNICATION_LINK_MAX_ENVELOPE_COEXISTENCE :: 33
 
 // Retain routed test envelopes in arrival order for ownership assertions.
 communication_link_test_collect_egress :: proc(
-    user_data: rawptr, message: ^core.Julia_Host_Egress) -> bool {
+    user_data: rawptr, message: ^bridgemodel.Julia_Host_Egress) -> bool {
     collector := cast(^Communication_Link_Egress_Collector)user_data
     assert(collector != nil && collector^.count < len(collector^.messages))
     collector^.messages[collector^.count] = message
@@ -34,7 +38,8 @@ communication_link_test_collect_egress :: proc(
 
 // Publish one typed content completion through the worker-owned transport helper.
 communication_link_test_send_invoke_completion :: proc(
-    service: ^Julia_Runtime_Service, request_id: u64) -> core.Communication_Send_Outcome {
+    service: ^Julia_Runtime_Service,
+    request_id: u64) -> bridgemodel.Communication_Send_Outcome {
     return send_typed_julia_completion(service, {
         protocol = .Runtime_Content_Initialize,
         request_kind = .Invoke,
@@ -52,20 +57,20 @@ when core.HARNESS_ENABLED {
     communication_link_test_expect_control_families :: proc(
         t: ^testing.T, service: ^Julia_Runtime_Service,
         expected_state: ^core.Euclid_General_State,
-        tick_handle: core.Animation_Tick_Slot_Handle,
-        lifecycle_handle: core.Animation_Lifecycle_Slot_Handle) {
+        tick_handle: bridgemodel.Animation_Tick_Slot_Handle,
+        lifecycle_handle: bridgemodel.Animation_Lifecycle_Slot_Handle) {
         initialize_message, _ := communication_link_try_recv(&service.request_link)
         content_message, _ := communication_link_try_recv(&service.request_link)
         tick_message, _ := communication_link_try_recv(&service.request_link)
         lifecycle_message, _ := communication_link_try_recv(&service.request_link)
         harness_message, _ := communication_link_try_recv(&service.request_link)
-        _, initialize_ok := initialize_message^.(core.Runtime_Initialize_Requested)
+        _, initialize_ok := initialize_message^.(bridgemodel.Runtime_Initialize_Requested)
         content, content_ok :=
-            content_message^.(core.Runtime_Content_Initialize_Requested)
-        tick, tick_ok := tick_message^.(core.Animation_Tick_Requested)
+            content_message^.(bridgemodel.Runtime_Content_Initialize_Requested)
+        tick, tick_ok := tick_message^.(bridgemodel.Animation_Tick_Requested)
         lifecycle, lifecycle_ok :=
-            lifecycle_message^.(core.Animation_Lifecycle_Requested)
-        harness, harness_ok := harness_message^.(core.Harness_Scenario_Requested)
+            lifecycle_message^.(bridgemodel.Animation_Lifecycle_Requested)
+        harness, harness_ok := harness_message^.(bridgemodel.Harness_Scenario_Requested)
         testing.expect(t, initialize_ok && content_ok && tick_ok &&
             lifecycle_ok && harness_ok)
         testing.expect_value(t, tick.handle, tick_handle)
@@ -73,8 +78,8 @@ when core.HARNESS_ENABLED {
         testing.expect_value(t, content.native_state, expected_state)
         testing.expect_value(t, harness.scenario_name, "typed_case")
         testing.expect_value(t, harness.step_count, i64(8))
-        messages := [5]^core.Julia_Host_Ingress{initialize_message, content_message,
-            tick_message, lifecycle_message, harness_message}
+        messages := [5]^bridgemodel.Julia_Host_Ingress{initialize_message,
+            content_message, tick_message, lifecycle_message, harness_message}
         for message in messages {
             testing.expect(t, communication_link_return(&service.request_link, message))
         }
@@ -125,14 +130,14 @@ terminal_ingress_pressure_preserves_caller_source :: proc(t: ^testing.T) {
         code = source,
     }
     testing.expect_value(t, send_terminal_evaluation(service, request),
-        core.Communication_Send_Outcome.Queue_Full)
+        bridgemodel.Communication_Send_Outcome.Queue_Full)
     testing.expect_value(t, request.code, source)
 
     message, received := communication_link_try_recv(&service.request_link)
     testing.expect(t, received)
     testing.expect(t, communication_link_return(&service.request_link, message))
     testing.expect_value(t, send_terminal_evaluation(service, request),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
 }
 
 // Verify oversized terminal source fails without taking caller ownership.
@@ -144,16 +149,16 @@ terminal_ingress_allocation_failure_preserves_caller_source :: proc(t: ^testing.
     source := string(oversized[:])
     request := protocol.Evaluation_Requested{code = source}
     testing.expect_value(t, send_terminal_evaluation(service, request),
-        core.Communication_Send_Outcome.Allocation_Failed)
+        bridgemodel.Communication_Send_Outcome.Allocation_Failed)
     testing.expect_value(t, request.code, source)
 }
 
 // Round-trip one fixed ingress variant through display-owned allocation and return.
 terminal_transport_expect_fixed_ingress :: proc(
     t: ^testing.T, service: ^Julia_Runtime_Service,
-    value: core.Julia_Host_Ingress) {
+    value: bridgemodel.Julia_Host_Ingress) {
     testing.expect_value(t, send_terminal_ingress(service, value),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
     message, received := communication_link_try_recv(&service.request_link)
     testing.expect(t, received)
     testing.expect(t, communication_link_return(&service.request_link, message))
@@ -162,9 +167,9 @@ terminal_transport_expect_fixed_ingress :: proc(
 // Round-trip one fixed egress variant through worker-owned allocation and return.
 terminal_transport_expect_fixed_egress :: proc(
     t: ^testing.T, service: ^Julia_Runtime_Service,
-    value: core.Julia_Host_Egress) {
+    value: bridgemodel.Julia_Host_Egress) {
     testing.expect_value(t, send_terminal_egress(service, value),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
     message, received := communication_link_try_recv(&service.event_link)
     testing.expect(t, received)
     testing.expect(t, communication_link_return(&service.event_link, message))
@@ -175,7 +180,7 @@ terminal_transport_expect_fixed_egress :: proc(
 terminal_transport_round_trips_fixed_message_families :: proc(t: ^testing.T) {
     service := communication_link_test_service(t)
     defer communication_link_test_service_destroy(service)
-    ingress := [5]core.Julia_Host_Ingress{
+    ingress := [5]bridgemodel.Julia_Host_Ingress{
         protocol.Terminal_Session_Started{animation_generation = 3},
         protocol.Terminal_Session_Closed{animation_generation = 3},
         protocol.Terminal_Interactive_Input{animation_generation = 3},
@@ -185,7 +190,7 @@ terminal_transport_round_trips_fixed_message_families :: proc(t: ^testing.T) {
     for value in ingress {
         terminal_transport_expect_fixed_ingress(t, service, value)
     }
-    egress := [8]core.Julia_Host_Egress{
+    egress := [8]bridgemodel.Julia_Host_Egress{
         protocol.Evaluation_Incomplete{animation_generation = 3},
         protocol.Evaluation_Completed{animation_generation = 3},
         protocol.Completion_Failed{animation_generation = 3},
@@ -212,7 +217,7 @@ terminal_transport_round_trips_completion_payloads :: proc(t: ^testing.T) {
         cursor_byte = 3,
     }
     testing.expect_value(t, send_terminal_completion_request(service, request),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
     ingress, ingress_received := communication_link_try_recv(&service.request_link)
     testing.expect(t, ingress_received)
     cloned_request, is_request := ingress^.(protocol.Completion_Requested)
@@ -227,7 +232,7 @@ terminal_transport_round_trips_completion_payloads :: proc(t: ^testing.T) {
         insertion = "alpha",
     }
     testing.expect_value(t, send_terminal_completion_result(service, result),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
     egress, egress_received := communication_link_try_recv(&service.event_link)
     testing.expect(t, egress_received)
     cloned_result, is_result := egress^.(protocol.Completion_Result)
@@ -247,7 +252,7 @@ terminal_transport_clones_session_ready_banner :: proc(t: ^testing.T) {
     banner := string(source[:])
     testing.expect_value(t, send_terminal_session_ready(service, {
         animation_generation = 3, banner = banner,
-    }), core.Communication_Send_Outcome.Sent)
+    }), bridgemodel.Communication_Send_Outcome.Sent)
     source[0] = 'X'
     message, received := communication_link_try_recv(&service.event_link)
     testing.expect(t, received)
@@ -266,22 +271,22 @@ terminal_transport_rejects_all_messages_during_shutdown :: proc(t: ^testing.T) {
     service.lifecycle = .Shutdown_Requested
     testing.expect_value(t, send_terminal_ingress(service,
         protocol.Terminal_Session_Closed{animation_generation = 3}),
-        core.Communication_Send_Outcome.Runtime_Stopping)
+        bridgemodel.Communication_Send_Outcome.Runtime_Stopping)
     testing.expect_value(t, send_terminal_evaluation(service,
         protocol.Evaluation_Requested{code = "1"}),
-        core.Communication_Send_Outcome.Runtime_Stopping)
+        bridgemodel.Communication_Send_Outcome.Runtime_Stopping)
     testing.expect_value(t, send_terminal_egress(service,
         protocol.Terminal_Session_Stopped{animation_generation = 3}),
-        core.Communication_Send_Outcome.Runtime_Stopping)
+        bridgemodel.Communication_Send_Outcome.Runtime_Stopping)
     testing.expect_value(t, send_terminal_output(service,
         protocol.Terminal_Output_Batch{bytes = "x"}),
-        core.Communication_Send_Outcome.Runtime_Stopping)
+        bridgemodel.Communication_Send_Outcome.Runtime_Stopping)
 }
 
 // Verify bounded transfer preserves pointer identity and producer-side reclamation.
 @(test)
 communication_link_round_trip_and_saturation :: proc(t: ^testing.T) {
-    link: core.Communication_Link(Communication_Link_Test_Message)
+    link: bridgemodel.Communication_Link(Communication_Link_Test_Message)
     testing.expect_value(t, communication_link_init(&link, 2, 64 * 1024),
         runtime.Allocator_Error.None)
     defer communication_link_destroy(&link)
@@ -314,7 +319,7 @@ communication_link_round_trip_and_saturation :: proc(t: ^testing.T) {
 // Verify pool exhaustion is observable without an ambient allocator fallback.
 @(test)
 communication_link_reports_allocation_failure :: proc(t: ^testing.T) {
-    link: core.Communication_Link(Communication_Link_Oversized_Message)
+    link: bridgemodel.Communication_Link(Communication_Link_Oversized_Message)
     testing.expect_value(t, communication_link_init(&link, 1, 4 * 1024),
         runtime.Allocator_Error.None)
     defer communication_link_destroy(&link)
@@ -329,8 +334,8 @@ communication_link_reports_allocation_failure :: proc(t: ^testing.T) {
 julia_runtime_link_pools_cover_envelope_budget :: proc(t: ^testing.T) {
     service := communication_link_test_service(t)
     defer communication_link_test_service_destroy(service)
-    requests: [COMMUNICATION_LINK_MAX_ENVELOPE_COEXISTENCE]^core.Julia_Host_Ingress
-    events: [COMMUNICATION_LINK_MAX_ENVELOPE_COEXISTENCE]^core.Julia_Host_Egress
+    requests: [COMMUNICATION_LINK_MAX_ENVELOPE_COEXISTENCE]^bridgemodel.Julia_Host_Ingress
+    events: [COMMUNICATION_LINK_MAX_ENVELOPE_COEXISTENCE]^bridgemodel.Julia_Host_Egress
 
     for index in 0..<COMMUNICATION_LINK_MAX_ENVELOPE_COEXISTENCE {
         request, request_error := communication_link_alloc(&service.request_link)
@@ -356,7 +361,7 @@ julia_runtime_links_round_trip_requests_and_events :: proc(t: ^testing.T) {
     testing.expect(t, sent)
     request_message, request_ok := communication_link_try_recv(&service.request_link)
     testing.expect(t, request_ok)
-    request, is_request := request_message^.(core.Runtime_Initialize_Requested)
+    request, is_request := request_message^.(bridgemodel.Runtime_Initialize_Requested)
     testing.expect(t, is_request)
     testing.expect_value(t, request.request_id, request_id)
     testing.expect(t, communication_link_return(&service.request_link, request_message))
@@ -370,7 +375,7 @@ julia_runtime_links_round_trip_requests_and_events :: proc(t: ^testing.T) {
         request_kind = .Initialize,
         request_id = request_id,
         succeeded = true,
-    }), core.Communication_Send_Outcome.Sent)
+    }), bridgemodel.Communication_Send_Outcome.Sent)
     event, event_ok := try_route_julia_egress(service)
     testing.expect(t, event_ok)
     testing.expect_value(t, event.request_id, request_id)
@@ -385,10 +390,10 @@ when core.HARNESS_ENABLED {
     defer communication_link_test_service_destroy(service)
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    tick_handle := core.Animation_Tick_Slot_Handle{
+    tick_handle := bridgemodel.Animation_Tick_Slot_Handle{
         index = 2, reservation_generation = 11,
     }
-    lifecycle_handle := core.Animation_Lifecycle_Slot_Handle{
+    lifecycle_handle := bridgemodel.Animation_Lifecycle_Slot_Handle{
         index = 0, reservation_generation = 12,
     }
 
@@ -415,7 +420,7 @@ when core.HARNESS_ENABLED {
     shutdown_message, shutdown_received :=
         communication_link_try_recv(&service.request_link)
     testing.expect(t, shutdown_received)
-    _, shutdown_ok := shutdown_message^.(core.Runtime_Shutdown_Requested)
+    _, shutdown_ok := shutdown_message^.(bridgemodel.Runtime_Shutdown_Requested)
     testing.expect(t, shutdown_ok)
     testing.expect(t, communication_link_return(&service.request_link, shutdown_message))
     }
@@ -431,14 +436,14 @@ when core.HARNESS_ENABLED {
     source[0] = 'X'
     message, received := communication_link_try_recv(&service.request_link)
     testing.expect(t, received)
-    request, is_request := message^.(core.Harness_Scenario_Requested)
+    request, is_request := message^.(bridgemodel.Harness_Scenario_Requested)
     testing.expect(t, is_request)
     testing.expect_value(t, request.scenario_name, "typed_case")
     testing.expect_value(t, request.step_count, i64(12))
     testing.expect(t, communication_link_return(&service.request_link, message))
     testing.expect_value(t, drain_julia_ingress_returns(service), 1)
 
-    oversized := make([]u8, core.HARNESS_SCENARIO_NAME_CAPACITY + 1,
+    oversized := make([]u8, bridgemodel.HARNESS_SCENARIO_NAME_CAPACITY + 1,
         context.allocator)
     defer delete(oversized, context.allocator)
     rejected_id, rejected := try_submit_harness_scenario(
@@ -456,7 +461,7 @@ julia_control_completion_rejects_mismatched_request_identity :: proc(t: ^testing
     service.active_request_id = 41
     service.active_request_kind = .Animation_Tick
     service.animation_tick_pending = true
-    handle := core.Animation_Tick_Slot_Handle{
+    handle := bridgemodel.Animation_Tick_Slot_Handle{
         index = 1, reservation_generation = 9,
     }
     testing.expect_value(t, send_typed_julia_completion(service, {
@@ -473,7 +478,7 @@ julia_control_completion_rejects_mismatched_request_identity :: proc(t: ^testing
         request_id = 42,
         slot_index = 1,
         succeeded = true,
-    }), core.Communication_Send_Outcome.Sent)
+    }), bridgemodel.Communication_Send_Outcome.Sent)
     _, routed := try_route_julia_egress(service)
     testing.expect(t, !routed)
     testing.expect_value(t, service.active_request_id, u64(41))
@@ -482,7 +487,7 @@ julia_control_completion_rejects_mismatched_request_identity :: proc(t: ^testing
 
 // Initialize one complete tick slot and its active transport correlation.
 communication_link_test_prepare_tick_completion :: proc(
-    service: ^Julia_Runtime_Service) -> core.Animation_Tick_Completed {
+    service: ^Julia_Runtime_Service) -> bridgemodel.Animation_Tick_Completed {
     service.active_request_id = 41
     service.active_request_kind = .Animation_Tick
     service.animation_tick_pending = true
@@ -534,14 +539,14 @@ animation_tick_completion_rejects_stale_handles :: proc(t: ^testing.T) {
         accept_animation_tick_completion(service, stale_incarnation)
     testing.expect(t, !incarnation_accepted)
     testing.expect_value(t, service.animation_tick_slots[1].state,
-        core.Animation_Tick_Slot_State.Complete)
+        bridgemodel.Animation_Tick_Slot_State.Complete)
     stale_animation := completed
     stale_animation.animation_generation -= 1
     service.animation_tick_slots[1].generation -= 1
     _, animation_accepted := accept_animation_tick_completion(service, stale_animation)
     testing.expect(t, !animation_accepted)
     testing.expect_value(t, service.animation_tick_slots[1].state,
-        core.Animation_Tick_Slot_State.Free)
+        bridgemodel.Animation_Tick_Slot_State.Free)
     testing.expect_value(t, service.active_request_id, u64(0))
     testing.expect(t, !service.animation_tick_pending)
 }
@@ -566,7 +571,7 @@ animation_tick_slot_reuse_advances_reservation_generation :: proc(t: ^testing.T)
 // Initialize one completed lifecycle slot and its active transport correlation.
 communication_link_test_prepare_lifecycle_completion :: proc(
     service: ^Julia_Runtime_Service,
-    succeeded: bool) -> core.Animation_Lifecycle_Completed {
+    succeeded: bool) -> bridgemodel.Animation_Lifecycle_Completed {
     service.active_request_id = 51
     service.active_request_kind = .Invoke
     slot := &service.animation_lifecycle_slot
@@ -607,7 +612,7 @@ animation_lifecycle_completion_accepts_once :: proc(t: ^testing.T) {
     testing.expect(t, accepted)
     testing.expect(t, event.succeeded)
     testing.expect_value(t, service.animation_lifecycle_slot.state,
-        core.Animation_Lifecycle_Slot_State.Free)
+        bridgemodel.Animation_Lifecycle_Slot_State.Free)
     _, duplicate_accepted := accept_animation_lifecycle_completion(service, completed)
     testing.expect(t, !duplicate_accepted)
 }
@@ -624,7 +629,7 @@ animation_lifecycle_completion_accepts_rollback :: proc(t: ^testing.T) {
     testing.expect(t, !event.succeeded)
     testing.expect_value(t, service.active_request_id, u64(0))
     testing.expect_value(t, service.animation_lifecycle_slot.state,
-        core.Animation_Lifecycle_Slot_State.Free)
+        bridgemodel.Animation_Lifecycle_Slot_State.Free)
 }
 
 // Verify stale lifecycle handles and echoed generations cannot recycle the slot.
@@ -643,7 +648,7 @@ animation_lifecycle_completion_rejects_stale_identity :: proc(t: ^testing.T) {
         accept_animation_lifecycle_completion(service, stale_generation)
     testing.expect(t, !generation_accepted)
     testing.expect_value(t, service.animation_lifecycle_slot.state,
-        core.Animation_Lifecycle_Slot_State.Complete)
+        bridgemodel.Animation_Lifecycle_Slot_State.Complete)
     testing.expect_value(t, service.active_request_id, u64(51))
 }
 
@@ -671,14 +676,14 @@ julia_egress_router_transfers_startup_view_content :: proc(t: ^testing.T) {
     bytes, bytes_error := communication_link_alloc_bytes(&service.event_link, 3)
     testing.expect_value(t, bytes_error, runtime.Allocator_Error.None)
     copy(bytes, []u8{'t', 'e', 'x'})
-    content_message^ = core.Julia_Host_Egress(core.View_Content_Ready{
+    content_message^ = bridgemodel.Julia_Host_Egress(bridgemodel.View_Content_Ready{
         presentation_generation = 7,
         content = {mime = .Text_Latex, bytes = bytes},
     })
     testing.expect(t, communication_link_try_send(
         &service.event_link, content_message))
     testing.expect_value(t, communication_link_test_send_invoke_completion(
-        service, 9), core.Communication_Send_Outcome.Sent)
+        service, 9), bridgemodel.Communication_Send_Outcome.Sent)
 
     _, content_is_event := try_route_julia_egress(service)
     testing.expect(t, !content_is_event)
@@ -692,7 +697,7 @@ julia_egress_router_transfers_startup_view_content :: proc(t: ^testing.T) {
     event, ok := try_route_julia_egress(service)
     testing.expect(t, ok)
     testing.expect_value(t, event.request_id, u64(9))
-    content, is_content := collector.messages[0]^.(core.View_Content_Ready)
+    content, is_content := collector.messages[0]^.(bridgemodel.View_Content_Ready)
     testing.expect(t, is_content)
     testing.expect_value(t, string(content.content.bytes), "tex")
     testing.expect(t, return_julia_egress(service, collector.messages[0]))
@@ -711,9 +716,9 @@ julia_egress_router_preserves_terminal_event_order :: proc(t: ^testing.T) {
         request_id = 7,
         animation_generation = 3,
         bytes = "ordered",
-    }), core.Communication_Send_Outcome.Sent)
+    }), bridgemodel.Communication_Send_Outcome.Sent)
     testing.expect_value(t, communication_link_test_send_invoke_completion(
-        service, 9), core.Communication_Send_Outcome.Sent)
+        service, 9), bridgemodel.Communication_Send_Outcome.Sent)
 
     _, event_received := try_route_julia_egress(service)
     testing.expect(t, !event_received)
@@ -768,8 +773,8 @@ julia_request_link_rejects_work_after_shutdown_begins :: proc(t: ^testing.T) {
     testing.expect_value(t, rejected_id, u64(0))
     testing.expect_value(t, service.next_request_id, u64(2))
     testing.expect_value(t, send_julia_ingress_control(
-        service, core.Runtime_Initialize_Requested{request_id = 2}),
-        core.Communication_Send_Outcome.Runtime_Stopping)
+        service, bridgemodel.Runtime_Initialize_Requested{request_id = 2}),
+        bridgemodel.Communication_Send_Outcome.Runtime_Stopping)
 }
 
 // Verify shutdown admission recovers after full ingress and completes through the router.
@@ -805,7 +810,7 @@ julia_shutdown_recovers_from_ingress_saturation :: proc(t: ^testing.T) {
         request_kind = .Shutdown,
         request_id = shutdown_id,
         succeeded = true,
-    }), core.Communication_Send_Outcome.Sent)
+    }), bridgemodel.Communication_Send_Outcome.Sent)
     testing.expect(t, wait_runtime_shutdown_completion(
         service, shutdown_id, time.tick_now(), 1.0))
     testing.expect_value(t, service.lifecycle, Julia_Lifecycle_State.Stopped)
@@ -816,7 +821,7 @@ communication_link_fill_event_queue :: proc(
     t: ^testing.T, service: ^Julia_Runtime_Service) {
     for request_id in 1..=JULIA_EVENT_CAPACITY {
         testing.expect_value(t, communication_link_test_send_invoke_completion(
-            service, u64(request_id)), core.Communication_Send_Outcome.Sent)
+            service, u64(request_id)), bridgemodel.Communication_Send_Outcome.Sent)
     }
 }
 
@@ -839,7 +844,7 @@ communication_link_flush_pending_view_content :: proc(
     testing.expect(t, communication_link_return(&service.event_link, first))
     testing.expect_value(t, drain_julia_egress_returns(service), 1)
     testing.expect_value(t, flush_pending_view_content(service),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
 }
 
 // Verify saturated presentation delivery retains only the newest exact pooled bytes.
@@ -847,31 +852,32 @@ communication_link_flush_pending_view_content :: proc(
 julia_view_content_retry_replaces_and_reclaims_nested_bytes :: proc(t: ^testing.T) {
     service := communication_link_test_service(t)
     defer communication_link_test_service_destroy(service)
-    interface: core.Euclid_Julia_Interface
+    interface: bridgemodel.Euclid_Julia_Interface
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
     state.julia_runtime_service = service
     state.julia_interface = &interface
     communication_link_fill_event_queue(t, service)
 
-    maximum_source: [core.PRESENTATION_MAX_SOURCE_BYTES]u8
+    maximum_source: [presentation_model.PRESENTATION_MAX_SOURCE_BYTES]u8
     maximum_outcome := send_presented_text(state, .Text_Latex, maximum_source[:])
     testing.expect_value(t, maximum_outcome,
-        core.Communication_Send_Outcome.Queue_Full)
+        bridgemodel.Communication_Send_Outcome.Queue_Full)
     newest_text: string = "newest"
     newest_source := transmute([]u8)newest_text
     newest_outcome := send_presented_text(state, .Text_Plain, newest_source)
     testing.expect_value(t, newest_outcome,
-        core.Communication_Send_Outcome.Queue_Full)
+        bridgemodel.Communication_Send_Outcome.Queue_Full)
     if service.pending_view_content == nil {
         return
     }
-    pending, is_content := service.pending_view_content^.(core.View_Content_Ready)
+    pending, is_content := service.pending_view_content^.(bridgemodel.View_Content_Ready)
     testing.expect(t, is_content)
     if !is_content {
         return
     }
-    testing.expect_value(t, pending.content.mime, core.Presentation_Mime.Text_Plain)
+    testing.expect_value(t, pending.content.mime,
+        presentation_model.Presentation_Mime.Text_Plain)
     testing.expect_value(t, string(pending.content.bytes), "newest")
 
     communication_link_flush_pending_view_content(t, service)
@@ -885,7 +891,7 @@ julia_view_content_retry_replaces_and_reclaims_nested_bytes :: proc(t: ^testing.
 publish_presented_text_clones_exact_counted_bytes :: proc(t: ^testing.T) {
     service := communication_link_test_service(t)
     defer communication_link_test_service_destroy(service)
-    interface: core.Euclid_Julia_Interface
+    interface: bridgemodel.Euclid_Julia_Interface
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
     state.saved_context = context
@@ -897,9 +903,10 @@ publish_presented_text_clones_exact_counted_bytes :: proc(t: ^testing.T) {
         state, 1, raw_data(source[:]), i32(len(source))), i32(BRIDGE_STATUS_OK))
     message, received := communication_link_try_recv(&service.event_link)
     testing.expect(t, received)
-    content, is_content := message^.(core.View_Content_Ready)
+    content, is_content := message^.(bridgemodel.View_Content_Ready)
     testing.expect(t, is_content)
-    testing.expect_value(t, content.content.mime, core.Presentation_Mime.Text_Latex)
+    testing.expect_value(t, content.content.mime,
+        presentation_model.Presentation_Mime.Text_Latex)
     testing.expect_value(t, len(content.content.bytes), len(source))
     testing.expect(t, content.content.bytes[1] == 0)
     testing.expect(t, communication_link_return(&service.event_link, message))
@@ -908,7 +915,8 @@ publish_presented_text_clones_exact_counted_bytes :: proc(t: ^testing.T) {
     testing.expect_value(t, publish_presented_text(state, 9, nil, 0),
         i32(BRIDGE_STATUS_INVALID_ARGUMENT))
     testing.expect_value(t, publish_presented_text(
-        state, 0, raw_data(source[:]), i32(core.PRESENTATION_MAX_SOURCE_BYTES + 1)),
+        state, 0, raw_data(source[:]),
+        i32(presentation_model.PRESENTATION_MAX_SOURCE_BYTES + 1)),
         i32(BRIDGE_STATUS_INVALID_ARGUMENT))
 }
 
@@ -917,19 +925,19 @@ publish_presented_text_clones_exact_counted_bytes :: proc(t: ^testing.T) {
 julia_event_link_covers_maximum_presentation_budget :: proc(t: ^testing.T) {
     service := communication_link_test_service(t)
     defer communication_link_test_service_destroy(service)
-    interface: core.Euclid_Julia_Interface
+    interface: bridgemodel.Euclid_Julia_Interface
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
     state.julia_runtime_service = service
     state.julia_interface = &interface
-    source: [core.PRESENTATION_MAX_SOURCE_BYTES]u8
+    source: [presentation_model.PRESENTATION_MAX_SOURCE_BYTES]u8
 
     for _ in 0..<JULIA_EVENT_CAPACITY {
         testing.expect_value(t, send_presented_text(state, .Text_Latex, source[:]),
-            core.Communication_Send_Outcome.Sent)
+            bridgemodel.Communication_Send_Outcome.Sent)
     }
     testing.expect_value(t, send_presented_text(state, .Text_Latex, source[:]),
-        core.Communication_Send_Outcome.Queue_Full)
+        bridgemodel.Communication_Send_Outcome.Queue_Full)
     testing.expect(t, service.pending_view_content != nil)
 
     first, received := communication_link_try_recv(&service.event_link)
@@ -937,7 +945,7 @@ julia_event_link_covers_maximum_presentation_budget :: proc(t: ^testing.T) {
     testing.expect(t, communication_link_return(&service.event_link, first))
     testing.expect_value(t, drain_julia_egress_returns(service), 1)
     testing.expect_value(t, flush_pending_view_content(service),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
 
     for _ in 0..<JULIA_EVENT_CAPACITY {
         message, ok := communication_link_try_recv(&service.event_link)
@@ -946,7 +954,7 @@ julia_event_link_covers_maximum_presentation_budget :: proc(t: ^testing.T) {
     }
     testing.expect_value(t, drain_julia_egress_returns(service), JULIA_EVENT_CAPACITY)
     testing.expect_value(t, send_presented_text(state, .Text_Latex, source[:]),
-        core.Communication_Send_Outcome.Sent)
+        bridgemodel.Communication_Send_Outcome.Sent)
     final_message, final_received := communication_link_try_recv(&service.event_link)
     testing.expect(t, final_received)
     testing.expect(t, communication_link_return(&service.event_link, final_message))

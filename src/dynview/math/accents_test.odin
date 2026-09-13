@@ -1,11 +1,12 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 import "core:testing"
 
 //   Build deterministic accent constants at the 32-pixel shaping size.
-math_accent_test_constants :: proc() -> app_core.Font_Math_Constants {
-    constants := app_core.Font_Math_Constants{
+math_accent_test_constants :: proc() -> fontmodel.Font_Math_Constants {
+    constants := fontmodel.Font_Math_Constants{
         valid = true, generation = 23, base_pixel_size = 32}
     constants.values[int(Math_Constant.Accent_Base_Height)] = 10*64
     constants.values[int(Math_Constant.Flattened_Accent_Base_Height)] = 12*64
@@ -14,8 +15,8 @@ math_accent_test_constants :: proc() -> app_core.Font_Math_Constants {
 
 //   Build one ready horizontal accent source with exact metrics.
 math_accent_test_ready_source :: proc(
-    glyph_id: u32) -> app_core.Font_Math_Stretch_Source {
-    source := app_core.Font_Math_Stretch_Source{raster_ascent = 24}
+    glyph_id: u32) -> fontmodel.Font_Math_Stretch_Source {
+    source := fontmodel.Font_Math_Stretch_Source{raster_ascent = 24}
     source.variants = {
         valid = true, generation = 23, base_glyph_id = glyph_id, count = 1}
     source.variants.values[0] = {
@@ -28,7 +29,7 @@ math_accent_test_ready_source :: proc(
 
 //   Build one combining-mark source with degenerate reported horizontal ink.
 math_accent_test_degenerate_source :: proc(
-    glyph_id: u32) -> app_core.Font_Math_Stretch_Source {
+    glyph_id: u32) -> fontmodel.Font_Math_Stretch_Source {
 
     source := math_accent_test_ready_source(glyph_id)
     source.variants.values[0].advance = 1
@@ -39,7 +40,7 @@ math_accent_test_degenerate_source :: proc(
 
 //   Build one two-part horizontal assembly source.
 math_accent_test_assembly_source :: proc(
-    glyph_id: u32) -> app_core.Font_Math_Stretch_Source {
+    glyph_id: u32) -> fontmodel.Font_Math_Stretch_Source {
     source := math_accent_test_ready_source(glyph_id)
     source.assembly = {
         valid = true, generation = 23, base_glyph_id = glyph_id,
@@ -56,7 +57,7 @@ math_accent_test_assembly_source :: proc(
 //   Verify a narrow accent aligns font attachment points and preserves ink bounds.
 @(test)
 math_glyph_accent_aligns_narrow_attachment_points :: proc(t: ^testing.T) {
-    sources := [2]app_core.Font_Math_Stretch_Source{
+    sources := [2]fontmodel.Font_Math_Stretch_Source{
         math_accent_test_ready_source(40), math_accent_test_ready_source(41)}
     geometry := math_glyph_accent_geometry({
         constants = math_accent_test_constants(), generation = 23, font_size = 32,
@@ -73,7 +74,7 @@ math_glyph_accent_aligns_narrow_attachment_points :: proc(t: ^testing.T) {
 //   Verify zero-width combining metrics still produce finite visible geometry.
 @(test)
 math_glyph_accent_recovers_degenerate_combining_bounds :: proc(t: ^testing.T) {
-    sources := [2]app_core.Font_Math_Stretch_Source{
+    sources := [2]fontmodel.Font_Math_Stretch_Source{
         math_accent_test_degenerate_source(42),
         math_accent_test_degenerate_source(43)}
     geometry := math_glyph_accent_geometry({
@@ -90,7 +91,7 @@ math_glyph_accent_recovers_degenerate_combining_bounds :: proc(t: ^testing.T) {
 //   Verify wide and high bases select assemblies and the flattened source.
 @(test)
 math_glyph_accent_selects_wide_flattened_assembly :: proc(t: ^testing.T) {
-    sources := [2]app_core.Font_Math_Stretch_Source{
+    sources := [2]fontmodel.Font_Math_Stretch_Source{
         math_accent_test_assembly_source(50),
         math_accent_test_assembly_source(60)}
     geometry := math_glyph_accent_geometry({
@@ -109,7 +110,7 @@ math_glyph_accent_selects_wide_flattened_assembly :: proc(t: ^testing.T) {
 math_glyph_accent_places_underbrace_below_base :: proc(t: ^testing.T) {
     constants := math_accent_test_constants()
     constants.values[int(Math_Constant.Stretch_Stack_Gap_Below_Min)] = 3*64
-    sources := [2]app_core.Font_Math_Stretch_Source{
+    sources := [2]fontmodel.Font_Math_Stretch_Source{
         math_accent_test_assembly_source(70), math_accent_test_assembly_source(80)}
     geometry := math_glyph_accent_geometry({
         constants = constants, generation = 23, font_size = 32,

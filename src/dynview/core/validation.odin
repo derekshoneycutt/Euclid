@@ -1,12 +1,13 @@
 package dynview_core
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
 
 import "core:math"
 
 //   Return whether one typed table length is finite, bounded, and canonical.
 math_length_is_valid :: proc(
-    length: app_core.Dynview_Math_Length, allow_negative: bool) -> bool {
+    length: dynviewmodel.Dynview_Math_Length, allow_negative: bool) -> bool {
 
     value := length.value
     if math.is_nan(value) || math.is_inf(value) || abs(value) > 1024 {
@@ -23,7 +24,7 @@ math_length_is_valid :: proc(
 
 //   Return whether one native table descriptor is canonical and bounded.
 math_table_descriptor_is_valid :: proc(
-    descriptor: app_core.Dynview_Math_Table_Descriptor) -> bool {
+    descriptor: dynviewmodel.Dynview_Math_Table_Descriptor) -> bool {
 
     if descriptor.rows <= 0 || descriptor.rows > 16 ||
         descriptor.columns <= 0 || descriptor.columns > 16 ||

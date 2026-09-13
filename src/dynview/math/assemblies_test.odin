@@ -1,14 +1,17 @@
 package dynview_math
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
 import "core:testing"
 
 //   Build one deterministic variant and symmetric three-part assembly fixture.
 math_stretch_test_records :: proc() -> (
-    app_core.Font_Math_Glyph_Variants,
-    app_core.Font_Math_Glyph_Assembly) {
+    fontmodel.Font_Math_Glyph_Variants,
+    fontmodel.Font_Math_Glyph_Assembly) {
 
-    variants := app_core.Font_Math_Glyph_Variants{
+    variants := fontmodel.Font_Math_Glyph_Variants{
         valid = true, generation = 9, base_glyph_id = 1, count = 2}
     variants.values[0] = {
         glyph_id = 10, advance = 800,
@@ -16,7 +19,7 @@ math_stretch_test_records :: proc() -> (
     variants.values[1] = {
         glyph_id = 11, advance = 1200,
         extents = {y_bearing = 900, height = -1000}}
-    assembly := app_core.Font_Math_Glyph_Assembly{
+    assembly := fontmodel.Font_Math_Glyph_Assembly{
         valid = true, generation = 9, base_glyph_id = 1,
         min_connector_overlap = 100, count = 3}
     assembly.values[0] = {
@@ -67,7 +70,7 @@ math_stretch_rejects_stale_and_over_capacity_records :: proc(t: ^testing.T) {
 //   Verify invisible delimiter sides need no font record and remain zero width.
 @(test)
 math_stretch_preserves_invisible_delimiter :: proc(t: ^testing.T) {
-    sources: [2]app_core.Font_Math_Stretch_Source
+    sources: [2]fontmodel.Font_Math_Stretch_Source
     variants, assembly := math_stretch_test_records()
     sources[0] = {
         raster_ascent = 24, variants = variants, assembly = assembly}
@@ -85,7 +88,7 @@ math_stretch_preserves_invisible_delimiter :: proc(t: ^testing.T) {
 stretch_delimiter_item_uses_ink_width_without_trailing_cell_space :: proc(
     t: ^testing.T) {
 
-    item: app_core.Dynview_Layout_Item
+    item: dynviewmodel.Dynview_Layout_Item
     selected := Stretch_Delimiter_Selection{ok = true}
     selected.widths[0] = 3
     stretch_delimiter_apply_item(&item, {
@@ -97,7 +100,7 @@ stretch_delimiter_item_uses_ink_width_without_trailing_cell_space :: proc(
 //   Verify a stale second side rejects without returning a partial construction.
 @(test)
 math_stretch_rejects_partial_delimiter_selection :: proc(t: ^testing.T) {
-    sources: [2]app_core.Font_Math_Stretch_Source
+    sources: [2]fontmodel.Font_Math_Stretch_Source
     variants, assembly := math_stretch_test_records()
     sources[0] = {variants = variants, assembly = assembly}
     variants.generation = 8
@@ -113,7 +116,7 @@ math_stretch_rejects_partial_delimiter_selection :: proc(t: ^testing.T) {
 //   Verify cumulative assembly advances position later parts toward the ink top.
 @(test)
 math_stretch_ink_bounds_follow_bottom_up_part_offsets :: proc(t: ^testing.T) {
-    construction := app_core.Font_Math_Stretch_Construction{
+    construction := fontmodel.Font_Math_Stretch_Construction{
         valid = true, assembled = true, count = 2}
     construction.parts[0] = {
         glyph_id = 20, extents = {y_bearing = 200, height = -300}}
@@ -130,7 +133,7 @@ math_stretch_ink_bounds_follow_bottom_up_part_offsets :: proc(t: ^testing.T) {
 //   Verify each visible delimiter seals its own extent-derived vertical center.
 @(test)
 math_stretch_centers_delimiter_sides_independently :: proc(t: ^testing.T) {
-    sources: [2]app_core.Font_Math_Stretch_Source
+    sources: [2]fontmodel.Font_Math_Stretch_Source
     variants, assembly := math_stretch_test_records()
     variants.values[1].extents = {y_bearing = 900, height = -1000}
     sources[0] = {variants = variants, assembly = assembly}
@@ -150,7 +153,7 @@ math_stretch_centers_delimiter_sides_independently :: proc(t: ^testing.T) {
 //   Verify degree raise remains a percentage while radical kerns scale as positions.
 @(test)
 radical_math_metrics_preserve_degree_constant_units :: proc(t: ^testing.T) {
-    constants := app_core.Font_Math_Constants{
+    constants := fontmodel.Font_Math_Constants{
         valid = true, generation = 9, base_pixel_size = 32}
     constants.values[int(Math_Constant.Radical_Display_Style_Vertical_Gap)] = 128
     constants.values[int(Math_Constant.Radical_Rule_Thickness)] = 64

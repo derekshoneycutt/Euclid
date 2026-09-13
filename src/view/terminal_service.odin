@@ -1,5 +1,7 @@
 package view
 
+import bridgemodel "../bridge/model"
+
 import "../core"
 import protocol "../core/protocol"
 import evidence_session "../evidence/session"
@@ -61,7 +63,7 @@ terminal_service_request_session :: proc(state: ^core.Euclid_General_State) {
 // Submit one correlated evaluation through the display-owned Julia ingress link.
 terminal_service_submit_evaluation :: proc(
     state: ^core.Euclid_General_State, text: string,
-    mode: protocol.Evaluation_Mode = .Normal) -> core.Communication_Send_Outcome {
+    mode: protocol.Evaluation_Mode = .Normal) -> bridgemodel.Communication_Send_Outcome {
     if state == nil || state^.julia_runtime_service == nil ||
         !state^.terminal.initialized || !terminalview.terminal_begin_eval(
             &state^.terminal, text) {
@@ -121,7 +123,7 @@ terminal_service_dispatch_completion :: proc(
 // Dispatch one borrowed evaluation lifecycle value on the display thread.
 terminal_service_dispatch_evaluation :: proc(
     state: ^core.Euclid_General_State,
-    message: ^core.Julia_Host_Egress) -> bool {
+    message: ^bridgemodel.Julia_Host_Egress) -> bool {
     #partial switch payload in message^ {
     case protocol.Terminal_Output_Batch:
         return terminal_service_dispatch_output(state, payload)
@@ -141,7 +143,7 @@ terminal_service_dispatch_evaluation :: proc(
 // Dispatch one borrowed completion value on the display thread.
 terminal_service_dispatch_completion_result :: proc(
     state: ^core.Euclid_General_State,
-    message: ^core.Julia_Host_Egress) -> bool {
+    message: ^bridgemodel.Julia_Host_Egress) -> bool {
     #partial switch payload in message^ {
     case protocol.Completion_Result:
         if terminal_service_generation_matches(state, payload.animation_generation) {
@@ -172,7 +174,7 @@ terminal_service_dispatch_completion_result :: proc(
 // Dispatch one borrowed interactive-input lease value on the display thread.
 terminal_service_dispatch_input :: proc(
     state: ^core.Euclid_General_State,
-    message: ^core.Julia_Host_Egress) -> bool {
+    message: ^bridgemodel.Julia_Host_Egress) -> bool {
     #partial switch payload in message^ {
     case protocol.Terminal_Input_Acquired:
         if terminal_service_generation_matches(state, payload.animation_generation) &&
@@ -213,7 +215,7 @@ terminal_service_session_ready :: proc(
 // Dispatch one borrowed Terminal observation or lifecycle value on the display thread.
 terminal_service_dispatch_observation :: proc(
     state: ^core.Euclid_General_State,
-    message: ^core.Julia_Host_Egress) -> bool {
+    message: ^bridgemodel.Julia_Host_Egress) -> bool {
     #partial switch payload in message^ {
     case protocol.Terminal_Geometry_Observed:
         if terminal_service_generation_matches(state, payload.animation_generation) &&
@@ -242,7 +244,7 @@ terminal_service_dispatch_observation :: proc(
 // Dispatch one borrowed terminal egress value through its display-owned message family.
 terminal_service_dispatch_egress :: proc(
     state: ^core.Euclid_General_State,
-    message: ^core.Julia_Host_Egress) -> bool {
+    message: ^bridgemodel.Julia_Host_Egress) -> bool {
     return terminal_tick_dispatch_egress(state, message) ||
         terminal_service_dispatch_evaluation(state, message) ||
         terminal_service_dispatch_completion_result(state, message) ||

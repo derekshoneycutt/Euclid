@@ -1,11 +1,12 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 import "core:testing"
 
 //   Build one fake corner table with exact low, middle, and high ranges.
-math_kern_test_table :: proc(corner: u8) -> app_core.Font_Math_Kern_Table {
-    table := app_core.Font_Math_Kern_Table{
+math_kern_test_table :: proc(corner: u8) -> fontmodel.Font_Math_Kern_Table {
+    table := fontmodel.Font_Math_Kern_Table{
         valid = true, generation = 17, glyph_id = 9, corner = corner, count = 3}
     table.entries[0] = {-64, -12}
     table.entries[1] = {64, 7}

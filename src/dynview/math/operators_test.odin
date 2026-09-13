@@ -1,11 +1,12 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 import "core:testing"
 
 //   Build deterministic display-operator constants at the native test size.
-math_operator_test_constants :: proc() -> app_core.Font_Math_Constants {
-    constants := app_core.Font_Math_Constants{
+math_operator_test_constants :: proc() -> fontmodel.Font_Math_Constants {
+    constants := fontmodel.Font_Math_Constants{
         valid = true, generation = 17, base_pixel_size = 32}
     constants.values[int(Math_Constant.Display_Operator_Min_Height)] = 20 * 64
     constants.values[int(Math_Constant.Axis_Height)] = 4 * 64

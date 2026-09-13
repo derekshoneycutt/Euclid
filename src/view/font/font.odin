@@ -1,7 +1,7 @@
 package font
 
-import "../../core"
 import "../../files"
+import fontmodel "model"
 
 import "core:mem"
 import vmem "core:mem/virtual"
@@ -12,13 +12,13 @@ import "core:path/filepath"
 import rl "vendor:raylib"
 
 // Maximum runes in either required startup seed policy.
-FONT_SEED_CODEPOINT_CAPACITY :: core.FONT_SEED_CODEPOINT_CAPACITY
+FONT_SEED_CODEPOINT_CAPACITY :: fontmodel.FONT_SEED_CODEPOINT_CAPACITY
 
 // Maximum face glyphs admitted to one prepared atlas page.
 FONT_GLYPH_PAGE_REQUEST_CAPACITY :: 256
 
 // Number of indexed font variants through the final `Font_Key` value.
-FONT_KEY_COUNT :: core.FONT_KEY_COUNT
+FONT_KEY_COUNT :: fontmodel.FONT_KEY_COUNT
 
 // Pixel height used for synchronous and asynchronously prepared JuliaMono fonts.
 JULIA_MONO_FONT_SIZE :: 32
@@ -48,14 +48,14 @@ FONT_FILENAMES :: [FONT_KEY_COUNT]string{
     "NewCMSansMath-Regular.otf",
 }
 
-Font_Key :: core.Font_Key
-Font_Load_State :: core.Font_Load_State
-Font_Cache_Entry :: core.Font_Cache_Entry
-Font_Cache :: core.Font_Cache
-Font_Shaping_Telemetry :: core.Font_Shaping_Telemetry
-Font_Glyph_State :: core.Font_Glyph_State
-Font_Glyph_Record :: core.Font_Glyph_Record
-Font_Glyph_Page :: core.Font_Glyph_Page
+Font_Key :: fontmodel.Font_Key
+Font_Load_State :: fontmodel.Font_Load_State
+Font_Cache_Entry :: fontmodel.Font_Cache_Entry
+Font_Cache :: fontmodel.Font_Cache
+Font_Shaping_Telemetry :: fontmodel.Font_Shaping_Telemetry
+Font_Glyph_State :: fontmodel.Font_Glyph_State
+Font_Glyph_Record :: fontmodel.Font_Glyph_Record
+Font_Glyph_Page :: fontmodel.Font_Glyph_Page
 
 // Borrowed display-thread glyph data normalized across seed and paged textures.
 Resolved_Glyph :: struct {
@@ -320,7 +320,7 @@ font_generation_request_glyph :: proc(
         return false
     }
     if font_generation_required_page_count(entry, 1) >
-        core.FONT_GLYPH_PAGE_CAPACITY {
+        fontmodel.FONT_GLYPH_PAGE_CAPACITY {
         glyph.state = .Capacity_Blocked
         entry.capacity_rejection_count += 1
         return false
@@ -736,7 +736,7 @@ cache_glyph_page_can_publish :: proc(
     if entry == nil || prepared == nil ||
         prepared.generation != entry.generation ||
         entry.generation != entry.requested_generation ||
-        entry.page_count >= core.FONT_GLYPH_PAGE_CAPACITY {
+        entry.page_count >= fontmodel.FONT_GLYPH_PAGE_CAPACITY {
         return false
     }
     for glyph in prepared.glyphs {
@@ -881,8 +881,8 @@ cache_terminal_resolver :: proc(cache: ^Font_Cache) -> Font_Resolver {
 }
 
 //   Convert dynview's weight and italic flags to one indexed cache key.
-font_key_from_flags :: proc(flags: core.Font_Variant_Flags) -> Font_Key {
-    return core.font_key_from_flags(flags)
+font_key_from_flags :: proc(flags: fontmodel.Font_Variant_Flags) -> Font_Key {
+    return fontmodel.font_key_from_flags(flags)
 }
 
 //   Build generation-owned shaping and GPU candidates from one prepared font.
@@ -976,7 +976,7 @@ cache_shape :: proc(
 // Describe the resident face that currently satisfies one requested JuliaMono key.
 cache_shaping_identity :: proc(
     cache: ^Font_Cache,
-    requested_key: Font_Key) -> (core.Font_Shaping_Identity, bool) {
+    requested_key: Font_Key) -> (fontmodel.Font_Shaping_Identity, bool) {
 
     if cache == nil || requested_key == .Math_Regular {
         return {}, false
@@ -1007,7 +1007,7 @@ cache_shape_generation :: proc(
 // Query one glyph through one exact resident face generation.
 cache_glyph_extents_generation :: proc(
     cache: ^Font_Cache, key: Font_Key, generation: u64,
-    glyph_id: u32) -> (core.Font_Glyph_Extents, bool) {
+    glyph_id: u32) -> (fontmodel.Font_Glyph_Extents, bool) {
 
     if !cache_generation_is_resident(cache, key, generation) {
         return {}, false

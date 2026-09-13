@@ -1,5 +1,7 @@
 package view
 
+import viewterminalmodel "terminal/model"
+
 import "../core"
 import "../files"
 import shell "../terminal/shell"
@@ -18,7 +20,7 @@ shell_service_resolve_terminfo_directory :: proc(directory: string) -> string {
         return packaged
     }
     source, error := filepath.join(
-        []string{directory, core.SHELL_TERMINFO_RELATIVE_DIRECTORY},
+        []string{directory, viewterminalmodel.SHELL_TERMINFO_RELATIVE_DIRECTORY},
         context.temp_allocator)
     if error != nil || !os.is_directory(source) {
         return ""
@@ -33,7 +35,9 @@ shell_service_runtime_init :: proc(state: ^core.Euclid_General_State) -> bool {
         return false
     }
     if !termsession.terminal_session_init(
-        &state^.shell.session, {id = core.SHELL_SESSION_OWNER_ID, generation = 1},
+        &state^.shell.session, {
+            id = viewterminalmodel.SHELL_SESSION_OWNER_ID, generation = 1,
+        },
         termsession.native_terminal_backend_make(&state^.shell.backend)) {
         termsession.native_terminal_backend_destroy(&state^.shell.backend)
         return false
@@ -56,7 +60,7 @@ shell_service_begin_generation :: proc(
     termsession.terminal_session_destroy(&state^.shell.session)
     state^.shell.phase = .Inactive
     return termsession.terminal_session_init(&state^.shell.session,
-        {id = core.SHELL_SESSION_OWNER_ID, generation = generation},
+        {id = viewterminalmodel.SHELL_SESSION_OWNER_ID, generation = generation},
         termsession.native_terminal_backend_make(&state^.shell.backend))
 }
 
@@ -99,8 +103,8 @@ shell_service_fail :: proc(state: ^core.Euclid_General_State, message: string) {
 shell_service_environment :: proc(
     state: ^core.Euclid_General_State) -> ([3]termsession.Environment_Change, int) {
     changes: [3]termsession.Environment_Change
-    changes[0] = {kind = .Set, key = "TERM", value = core.SHELL_TERMINFO_NAME}
-    terminfo := core.shell_terminfo_directory(&state^.shell)
+    changes[0] = {kind = .Set, key = "TERM", value = viewterminalmodel.SHELL_TERMINFO_NAME}
+    terminfo := viewterminalmodel.shell_terminfo_directory(&state^.shell)
     if len(terminfo) > 0 {
         changes[1] = {kind = .Set, key = "TERMINFO", value = terminfo}
         changes[2] = {kind = .Set, key = "COLORTERM", value = "truecolor"}
@@ -155,7 +159,7 @@ shell_service_submit :: proc(
     }
     environment, count := shell_service_environment(state)
     plan := termsession.process_plan_build_resolved(
-        &resolved.command, core.shell_working_directory(&state^.shell),
+        &resolved.command, viewterminalmodel.shell_working_directory(&state^.shell),
         environment[:count])
     if plan.kind != .Success {
         shell_service_fail(state, "error: command cannot form a process plan")

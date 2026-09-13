@@ -3,7 +3,7 @@ package files
 // This just encodes gif files. Internal encoder memory is session-local and owned by a
 // dedicated virtual arena on Gif_Encode_State.
 
-import "../core"
+import gifmodel "gif_model"
 
 import "core:mem"
 import vmem "core:mem/virtual"
@@ -43,10 +43,10 @@ GIF_IMAGE_LOCAL_COLOR_TABLE_FLAG :: 0x80
 
 GIF_TRAILER :: 0x3B
 
-Gif_Encode_Result :: core.Gif_Encode_Result
-Gif_Encode_Frame :: core.Gif_Encode_Frame
-Gif_Encode_Buffer :: core.Gif_Encode_Buffer
-Gif_Encode_State :: core.Gif_Encode_State
+Gif_Encode_Result :: gifmodel.Gif_Encode_Result
+Gif_Encode_Frame :: gifmodel.Gif_Encode_Frame
+Gif_Encode_Buffer :: gifmodel.Gif_Encode_Buffer
+Gif_Encode_State :: gifmodel.Gif_Encode_State
 
 #assert((GIF_DITHER_TILE_SIZE & (GIF_DITHER_TILE_SIZE - 1)) == 0)
 

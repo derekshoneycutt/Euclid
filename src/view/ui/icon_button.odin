@@ -1,6 +1,7 @@
 package ui
 
-import "../../core"
+import viewmodel "../model"
+
 import view_core "../core"
 
 import rl "vendor:raylib"
@@ -42,7 +43,7 @@ Icon_Button_Result :: struct {
 
 //   Return whether this icon button owns the shared press state.
 icon_button_owns_press :: #force_inline proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     id: int) -> bool {
 
     return press_owner^.active &&
@@ -52,7 +53,7 @@ icon_button_owns_press :: #force_inline proc(
 
 //   Capture shared press ownership for an icon button on initial click.
 icon_button_try_capture_press :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     params: Icon_Button_Params,
     hovered: bool,
     owns_press: ^bool) {
@@ -70,7 +71,7 @@ icon_button_try_capture_press :: proc(
 
 //   Release shared press ownership for an icon button when the mouse hold ends.
 icon_button_release_press :: proc(
-    press_owner: ^core.Ui_Press_Owner_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
     owns_press: ^bool,
     mouse: Input_Frame) {
 
@@ -154,7 +155,7 @@ draw_icon_button_glyph :: proc(
 //   Resolve one icon button interaction without issuing drawing commands.
 update_icon_button :: proc(
     params: Icon_Button_Params,
-    press_owner: ^core.Ui_Press_Owner_State) -> Icon_Button_Result {
+    press_owner: ^viewmodel.Ui_Press_Owner_State) -> Icon_Button_Result {
     slot_rect := clamp_non_negative_rect(params.rect)
     local_mouse := icon_button_local_mouse(params.mouse, params.scroll_offset)
 

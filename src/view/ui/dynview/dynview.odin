@@ -1,5 +1,8 @@
 package ui_dynview
 
+import viewmodel "../../model"
+import dynviewmodel "../../../dynview/model"
+
 import "../../../core"
 import dynmath "../../../dynview/math"
 import dyncore "../../../dynview/core"
@@ -68,7 +71,7 @@ draw_presentation_fallback_text :: proc(
 //   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
 draw_presentation_styled_or_fallback :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     fallback: Fallback_Text_Content,
     params: Presentation_Draw_Params) {
 
@@ -85,7 +88,7 @@ draw_presentation_styled_or_fallback :: proc(
 // Draw available authoritative or cached Dynview content for the presentation panel.
 draw_presentation_dynview :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     params: Presentation_Draw_Params) -> bool {
 
     runtime := &state^.dynview
@@ -111,7 +114,7 @@ draw_presentation_dynview :: proc(
 //   Draw one measured child math program with a shared baseline.
 draw_math_program_at :: proc(
     ctx: Layout_Draw_Context,
-    program: core.Dynview_Math_Program,
+    program: dynviewmodel.Dynview_Math_Program,
     position: Program_Draw_Position) {
 
     runtime := ctx.runtime

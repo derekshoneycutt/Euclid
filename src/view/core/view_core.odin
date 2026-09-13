@@ -1,6 +1,9 @@
 package view_core
 
+import viewmodel "../model"
+
 import "../../core"
+import particlemodel "../../particles/model"
 
 import rl "vendor:raylib"
 
@@ -44,13 +47,13 @@ SURFACE_EDGE_COLOR :: rl.Color{96, 65, 76, 255}
 
 TREE_FONT_SIZE :: 16
 
-TOOL_LENGTH :: core.TOOL_LENGTH
+TOOL_LENGTH :: viewmodel.TOOL_LENGTH
 
-Vector2 :: core.Vector2
-Vector3 :: core.Vector3
-Iso_Scale :: core.Iso_Scale
-Particle :: core.Particle
-Particle_System :: core.Particle_System
-Euclid_Drawing_Surface :: core.Euclid_Drawing_Surface
+Vector2 :: rl.Vector2
+Vector3 :: rl.Vector3
+Iso_Scale :: viewmodel.Iso_Scale
+Particle :: particlemodel.Particle
+Particle_System :: particlemodel.Particle_System
+Euclid_Drawing_Surface :: viewmodel.Euclid_Drawing_Surface
 Euclid_General_State :: core.Euclid_General_State
 Euclid_Run_Settings :: core.Euclid_Run_Settings

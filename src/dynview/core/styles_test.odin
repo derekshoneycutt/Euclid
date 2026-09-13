@@ -1,16 +1,17 @@
 package dynview_core
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 
 import "core:testing"
 
 //   Verify custom font style flags decode to the expected weight and italic.
 @(test)
 custom_font_style_flags_decode_correctly :: proc(t: ^testing.T) {
-    custom_flags := app_core.Font_Variant_Flags(
-        u32(app_core.Font_Variant_Flags.Light) |
-        u32(app_core.Font_Variant_Flags.Bold) |
-        u32(app_core.Font_Variant_Flags.Italic))
+    custom_flags := fontmodel.Font_Variant_Flags(
+        u32(fontmodel.Font_Variant_Flags.Light) |
+        u32(fontmodel.Font_Variant_Flags.Bold) |
+        u32(fontmodel.Font_Variant_Flags.Italic))
     style_id := DYNVIEW_STYLE_CUSTOM_FONT | i32(u32(custom_flags) &
         u32(DYNVIEW_STYLE_CUSTOM_FONT_MASK))
 

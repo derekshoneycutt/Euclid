@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import "../../core/protocol"
 import termgrid "../../terminal/grid"
 import termemulator "../../terminal/emulator"
@@ -65,7 +66,7 @@ terminal_dimensions_from_viewport :: proc(
 //   - Records rejected candidates, always refreshes metrics for valid candidates, and
 //     advances geometry generation exactly once for changed dimensions.
 terminal_accept_geometry :: proc(
-    term: ^core.Terminal_State, candidate: Terminal_Dimension_Candidate,
+    term: ^viewterminalmodel.Terminal_State, candidate: Terminal_Dimension_Candidate,
     column_width, line_height: f32) -> Terminal_Geometry_Change {
     if !candidate.valid {
         term.rejected_geometry_count += 1
@@ -100,7 +101,7 @@ terminal_accept_geometry :: proc(
 // Side effects:
 //   - Replaces retained query geometry with rounded positive integer dimensions.
 terminal_publish_query_geometry :: proc(
-    term: ^core.Terminal_State, dimensions: protocol.Terminal_Dimensions,
+    term: ^viewterminalmodel.Terminal_State, dimensions: protocol.Terminal_Dimensions,
     column_width, line_height: f32) {
     title_state := term.output_interpreter.title_state
     if title_state == nil {
@@ -131,9 +132,9 @@ terminal_output_row_column_offset :: proc(
 
 // Relocate one primary view endpoint through an unpublished semantic reflow.
 terminal_reflow_view_position :: proc(
-    term: ^core.Terminal_State, prepared: ^termgrid.Prepared_Primary_Reflow,
-    position: core.Terminal_View_Position) ->
-    (core.Terminal_View_Position, bool) {
+    term: ^viewterminalmodel.Terminal_State, prepared: ^termgrid.Prepared_Primary_Reflow,
+    position: viewterminalmodel.Terminal_View_Position) ->
+    (viewterminalmodel.Terminal_View_Position, bool) {
     cells, found := terminal_output_row(term, position.line)
     logical_row, logical_found := terminal_output_logical_row(term, position.line)
     if !found || !logical_found { return {}, false }
@@ -182,7 +183,7 @@ terminal_discard_prepared_resize :: proc(prepared: ^Prepared_Terminal_Resize) {
 
 // Prepare a relocated live placement checkpoint without mutating the store.
 terminal_prepare_resize_placements :: proc(
-    term: ^core.Terminal_State, prepared: ^Prepared_Terminal_Resize,
+    term: ^viewterminalmodel.Terminal_State, prepared: ^Prepared_Terminal_Resize,
     allocator: mem.Allocator) -> bool {
     attachments := term.synchronized_output.attachments
     if !termattachment.placement_checkpoint_init(
@@ -196,7 +197,7 @@ terminal_prepare_resize_placements :: proc(
 
 // Prepare primary selection and viewport anchors in replacement coordinates.
 terminal_prepare_resize_view_state :: proc(
-    term: ^core.Terminal_State, prepared: ^Prepared_Terminal_Resize) {
+    term: ^viewterminalmodel.Terminal_State, prepared: ^Prepared_Terminal_Resize) {
     if !term.output_interpreter.alternate_screen_active &&
         (term.view_selection_active || term.view_selection_dragging) {
         prepared.selection_anchor = term.view_selection_anchor
@@ -213,7 +214,7 @@ terminal_prepare_resize_view_state :: proc(
     if term.output_interpreter.alternate_screen_active ||
         term.scroll_offset_y <= 0 { return }
     pitch := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
-    anchor := core.Terminal_View_Position{
+    anchor := viewterminalmodel.Terminal_View_Position{
         line = int(term.scroll_offset_y / pitch),
     }
     relocated, retained := terminal_reflow_view_position(
@@ -223,7 +224,7 @@ terminal_prepare_resize_view_state :: proc(
 
 // Prepare semantic primary and coordinate-preserving alternate grid replacements.
 terminal_prepare_resize_grids :: proc(
-    term: ^core.Terminal_State, prepared: ^Prepared_Terminal_Resize,
+    term: ^viewterminalmodel.Terminal_State, prepared: ^Prepared_Terminal_Resize,
     dimensions: protocol.Terminal_Dimensions, allocator: mem.Allocator) -> bool {
     primary_grid := &term.output_grid
     alternate_grid := &term.output_alternate_grid
@@ -264,7 +265,7 @@ terminal_prepare_resize_grids :: proc(
 // Side effects:
 //   - Allocates prepared grid and checkpoint storage without changing visible state.
 terminal_prepare_display_resize :: proc(
-    term: ^core.Terminal_State, dimensions: protocol.Terminal_Dimensions,
+    term: ^viewterminalmodel.Terminal_State, dimensions: protocol.Terminal_Dimensions,
     allocator: mem.Allocator) -> (Prepared_Terminal_Resize, bool) {
     prepared: Prepared_Terminal_Resize
     if !terminal_prepare_resize_grids(
@@ -303,7 +304,8 @@ terminal_prepare_display_resize :: proc(
 // Returns:
 //   - True when both the endpoint line and its real or virtual column remain visible.
 terminal_resize_selection_position_valid :: proc(
-    term: ^core.Terminal_State, position: core.Terminal_View_Position,
+    term: ^viewterminalmodel.Terminal_State,
+    position: viewterminalmodel.Terminal_View_Position,
     dimensions: protocol.Terminal_Dimensions) -> bool {
     real_lines := terminal_line_count(term)
     if terminal_prompt_visible(term) {
@@ -330,7 +332,7 @@ terminal_resize_selection_position_valid :: proc(
 // Side effects:
 //   - Clears active and dragging flags when either endpoint is no longer representable.
 terminal_reconcile_selection_after_resize :: proc(
-    term: ^core.Terminal_State, dimensions: protocol.Terminal_Dimensions) {
+    term: ^viewterminalmodel.Terminal_State, dimensions: protocol.Terminal_Dimensions) {
     if !term.view_selection_active && !term.view_selection_dragging {
         return
     }
@@ -346,7 +348,7 @@ terminal_reconcile_selection_after_resize :: proc(
 
 // Publish prepared grid and history storage and return superseded grid owners.
 terminal_publish_resize_resources :: proc(
-    term: ^core.Terminal_State, prepared: ^Prepared_Terminal_Resize,
+    term: ^viewterminalmodel.Terminal_State, prepared: ^Prepared_Terminal_Resize,
     alternate_active: bool) -> Terminal_Superseded_Display {
     primary_grid := &term.output_grid
     alternate_grid := &term.output_alternate_grid
@@ -372,7 +374,7 @@ terminal_publish_resize_resources :: proc(
 
 // Publish resized ordinary and synchronized checkpoint storage.
 terminal_publish_resize_checkpoints :: proc(
-    term: ^core.Terminal_State, prepared: ^Prepared_Terminal_Resize) {
+    term: ^viewterminalmodel.Terminal_State, prepared: ^Prepared_Terminal_Resize) {
     termgrid.display_checkpoint_destroy(term.output_checkpoint)
     term.output_checkpoint^ = prepared.checkpoint
     prepared.checkpoint = {}
@@ -384,7 +386,7 @@ terminal_publish_resize_checkpoints :: proc(
 
 // Publish relocated selection and viewport state after replacement content exists.
 terminal_publish_resize_view_state :: proc(
-    term: ^core.Terminal_State, prepared: ^Prepared_Terminal_Resize,
+    term: ^viewterminalmodel.Terminal_State, prepared: ^Prepared_Terminal_Resize,
     dimensions: protocol.Terminal_Dimensions, alternate_active: bool) {
     if !alternate_active &&
         (term.view_selection_active || term.view_selection_dragging) &&
@@ -410,7 +412,7 @@ terminal_finish_display_resize :: proc(
 
 // Publish prepared grids and reconcile interpreter geometry after resize.
 terminal_publish_display_resize :: proc(
-    term: ^core.Terminal_State, prepared: ^Prepared_Terminal_Resize,
+    term: ^viewterminalmodel.Terminal_State, prepared: ^Prepared_Terminal_Resize,
     dimensions, old_dimensions: protocol.Terminal_Dimensions,
     alternate_active: bool) -> Terminal_Superseded_Display {
     superseded := terminal_publish_resize_resources(
@@ -440,7 +442,7 @@ terminal_publish_display_resize :: proc(
 //   - Replaces both grids and checkpoint, reconciles interpreter state and selection,
 //     and releases superseded checkpoint storage after all preparation succeeds.
 terminal_resize_display_grids :: proc(
-    term: ^core.Terminal_State, dimensions: protocol.Terminal_Dimensions,
+    term: ^viewterminalmodel.Terminal_State, dimensions: protocol.Terminal_Dimensions,
     allocator: mem.Allocator) -> bool {
     if term == nil {
         return false
@@ -489,7 +491,7 @@ terminal_resize_display_grids :: proc(
 //   - May transactionally resize display resources, update accepted metrics, advance
 //     generation, increment rejection diagnostics, and log failed resize attempts.
 terminal_update_geometry :: proc(
-    term: ^core.Terminal_State, font: rl.Font,
+    term: ^viewterminalmodel.Terminal_State, font: rl.Font,
     bounds: rl.Rectangle) -> Terminal_Geometry_Change {
     padded := terminal_padded_bounds(bounds)
     column_width := terminal_column_width(font)

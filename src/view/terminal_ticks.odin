@@ -1,5 +1,9 @@
 package view
 
+import viewterminalmodel "terminal/model"
+
+import bridgemodel "../bridge/model"
+
 import "../bridge"
 import "../core"
 import "../core/protocol"
@@ -75,7 +79,7 @@ terminal_tick_stop :: proc(
 
 // Record one deterministic update in bounded coalesced publisher state.
 terminal_tick_record_step :: proc(
-    publisher: ^core.Terminal_Tick_Publisher, simulation_tick: u64) {
+    publisher: ^viewterminalmodel.Terminal_Tick_Publisher, simulation_tick: u64) {
     if publisher == nil || !publisher^.active { return }
     if publisher^.pulse_pending {
         publisher^.pulse.last_simulation_tick = simulation_tick
@@ -122,7 +126,7 @@ terminal_tick_publish :: proc(state: ^core.Euclid_General_State) {
 // Dispatch one Julia tick stream control request on the display thread.
 terminal_tick_dispatch_egress :: proc(
     state: ^core.Euclid_General_State,
-    message: ^core.Julia_Host_Egress) -> bool {
+    message: ^bridgemodel.Julia_Host_Egress) -> bool {
     #partial switch payload in message^ {
     case protocol.Tick_Stream_Configure_Requested:
         return terminal_tick_configure(state, payload)

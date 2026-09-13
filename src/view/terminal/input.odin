@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import "../../core/protocol"
 import termemulator "../../terminal/emulator"
 import termhist "../../terminal/history"
@@ -12,7 +13,7 @@ import rl "vendor:raylib"
 
 // Arm or expire the synchronized-output safety deadline on the display clock.
 terminal_update_synchronized_output :: proc(
-    term: ^core.Terminal_State, now: f64) {
+    term: ^viewterminalmodel.Terminal_State, now: f64) {
     synchronized := term.synchronized_output
     if !synchronized.active {
         return
@@ -41,7 +42,7 @@ terminal_update_synchronized_output :: proc(
 // Side effects:
 //   - Mutates the live input line, cursor, and committed scrollback via termhist.
 terminal_update_keyboard :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame,
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     focused: bool = true) -> Terminal_Keyboard_Update {
     if !focused || term.awaiting_eval || !term.banner_ready {
         return {}
@@ -65,7 +66,7 @@ terminal_update_keyboard :: proc(
 // Side effects:
 //   - Consumes leading mode triggers or inserts complete UTF-8 codepoints into termhist.
 terminal_update_char_input :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame) -> bool {
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame) -> bool {
     if terminal_clipboard_paste_requested(frame) {
         return terminal_insert_clipboard_text(term, input.input_get_clipboard_text())
     }
@@ -112,7 +113,7 @@ terminal_update_char_input :: proc(
 // Side effects:
 //   - Replaces Normal mode only at byte-zero of a non-continuation input line.
 terminal_try_enter_mode :: proc(
-    term: ^core.Terminal_State, mode: protocol.Evaluation_Mode) -> bool {
+    term: ^viewterminalmodel.Terminal_State, mode: protocol.Evaluation_Mode) -> bool {
     if term.input_mode != .Normal || term.collecting_continuation {
         return false
     }
@@ -136,7 +137,7 @@ terminal_try_enter_mode :: proc(
 // Side effects:
 //   - May replace Normal mode with Help when the trigger is valid at byte zero.
 terminal_enter_help_mode_on_question_mark :: proc(
-    term: ^core.Terminal_State, codepoint: rune) -> bool {
+    term: ^viewterminalmodel.Terminal_State, codepoint: rune) -> bool {
     if codepoint != '?' {
         return false
     }
@@ -156,7 +157,7 @@ terminal_enter_help_mode_on_question_mark :: proc(
 // Side effects:
 //   - May replace Normal mode with Pkg when the trigger is valid at byte zero.
 terminal_enter_pkg_mode_on_bracket :: proc(
-    term: ^core.Terminal_State, codepoint: rune) -> bool {
+    term: ^viewterminalmodel.Terminal_State, codepoint: rune) -> bool {
     if codepoint != ']' {
         return false
     }
@@ -175,7 +176,7 @@ terminal_enter_pkg_mode_on_bracket :: proc(
 // Side effects:
 //   - May replace Normal mode with Shell when the trigger is valid at byte zero.
 terminal_enter_shell_mode_on_semicolon :: proc(
-    term: ^core.Terminal_State, codepoint: rune) -> bool {
+    term: ^viewterminalmodel.Terminal_State, codepoint: rune) -> bool {
     if codepoint != ';' {
         return false
     }
@@ -189,7 +190,7 @@ terminal_enter_shell_mode_on_semicolon :: proc(
 //
 // Side effects:
 //   - Releases the borrowed preview view and zeros its replacement bounds.
-terminal_clear_completion_preview :: proc(term: ^core.Terminal_State) {
+terminal_clear_completion_preview :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term == nil {
         return
     }
@@ -208,7 +209,7 @@ terminal_clear_completion_preview :: proc(term: ^core.Terminal_State) {
 // Side effects:
 //   - Releases retained source and preview views, clears correlation and debounce state,
 //     and permits a later completion transaction.
-terminal_clear_completion :: proc(term: ^core.Terminal_State) {
+terminal_clear_completion :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term == nil {
         return
     }
@@ -231,7 +232,7 @@ terminal_clear_completion :: proc(term: ^core.Terminal_State) {
 //
 // Side effects:
 //   - Records one debounce deadline only for nonempty editable input outside evaluation.
-terminal_schedule_completion :: proc(term: ^core.Terminal_State, now: f64) {
+terminal_schedule_completion :: proc(term: ^viewterminalmodel.Terminal_State, now: f64) {
     if term == nil || term.awaiting_eval || term.history == nil ||
         len(termhist.termhist_current_text(term.history)) == 0 {
         return
@@ -252,7 +253,7 @@ terminal_schedule_completion :: proc(term: ^core.Terminal_State, now: f64) {
 // Side effects:
 //   - May snapshot current input and begin a completion transaction.
 terminal_take_scheduled_completion :: proc(
-    term: ^core.Terminal_State, now: f64) -> Terminal_Completion_Request {
+    term: ^viewterminalmodel.Terminal_State, now: f64) -> Terminal_Completion_Request {
     if term == nil || !term.completion_request_scheduled ||
         now < term.completion_request_due || term.pending_completion_request_id != 0 {
         return {}
@@ -273,7 +274,8 @@ terminal_take_scheduled_completion :: proc(
 //   - Clears older completion state, copies current input, advances request identity, and
 //     records the exact source and cursor snapshot required for response validation.
 terminal_request_completion :: proc(
-    term: ^core.Terminal_State, show_candidates := true) -> Terminal_Completion_Request {
+    term: ^viewterminalmodel.Terminal_State,
+    show_candidates := true) -> Terminal_Completion_Request {
     source := termhist.termhist_current_text(term.history)
     if len(source) > len(term.pending_completion_storage) {
         return {}
@@ -310,7 +312,8 @@ terminal_request_completion :: proc(
 //   - Marks the response received, copies valid insertion bytes into retained storage,
 //     or clears the completion transaction when no result or invalid size is returned.
 terminal_set_completion_preview :: proc(
-    term: ^core.Terminal_State, preview: Terminal_Completion_Preview) -> bool {
+    term: ^viewterminalmodel.Terminal_State,
+    preview: Terminal_Completion_Preview) -> bool {
     if term == nil || term.history == nil ||
         term.completion_result_received ||
         preview.request_id != term.pending_completion_request_id ||
@@ -351,7 +354,7 @@ terminal_set_completion_preview :: proc(
 // Side effects:
 //   - Clears completion state only for the matching current transaction.
 terminal_fail_completion :: proc(
-    term: ^core.Terminal_State, request_id: protocol.Request_Id) -> bool {
+    term: ^viewterminalmodel.Terminal_State, request_id: protocol.Request_Id) -> bool {
     if term == nil || term.history == nil || term.completion_result_received ||
         request_id != term.pending_completion_request_id ||
         termhist.termhist_cursor(term.history) != term.pending_completion_cursor ||
@@ -372,7 +375,8 @@ terminal_fail_completion :: proc(
 //
 // Side effects:
 //   - Replaces the preview range in termhist and clears the completion transaction.
-terminal_accept_completion_preview :: proc(term: ^core.Terminal_State) -> bool {
+terminal_accept_completion_preview :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> bool {
     if term == nil || term.history == nil ||
         len(term.completion_preview_insertion) == 0 ||
         termhist.termhist_cursor(term.history) != term.pending_completion_cursor ||
@@ -397,7 +401,8 @@ terminal_accept_completion_preview :: proc(term: ^core.Terminal_State) -> bool {
 //
 // Side effects:
 //   - Restores Normal mode when the guard conditions hold.
-terminal_try_exit_mode_on_empty_backspace :: proc(term: ^core.Terminal_State) -> bool {
+terminal_try_exit_mode_on_empty_backspace :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> bool {
     if term.input_mode != .Normal &&
        len(termhist.termhist_current_text(term.history)) == 0 {
         term.input_mode = .Normal
@@ -418,7 +423,7 @@ terminal_try_exit_mode_on_empty_backspace :: proc(term: ^core.Terminal_State) ->
 // Side effects:
 //   - May change prompt mode, delete text, move the cursor, or accept a completion.
 terminal_update_horizontal_editing :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame) -> bool {
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame) -> bool {
     handled := false
     if input.input_key_pressed_or_repeat(frame, .Backspace) {
         if !terminal_try_exit_mode_on_empty_backspace(term) {
@@ -455,7 +460,7 @@ terminal_update_horizontal_editing :: proc(
 // Side effects:
 //   - May browse history, restore prompt metadata, or move to input start or end.
 terminal_update_history_navigation :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame) -> bool {
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame) -> bool {
     handled := false
     if input.input_key_pressed_or_repeat(frame, .Up) {
         terminal_history_browse_prev(term)
@@ -489,7 +494,7 @@ terminal_update_history_navigation :: proc(
 //   - Mutates termhist, may accept a completion preview, browse history, or leave an
 //     empty non-normal mode.
 terminal_update_editing_keys :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame) -> bool {
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame) -> bool {
     horizontal := terminal_update_horizontal_editing(term, frame)
     history := terminal_update_history_navigation(term, frame)
     return horizontal || history
@@ -502,7 +507,7 @@ terminal_update_editing_keys :: proc(
 //
 // Side effects:
 //   - Snapshots the live prompt mode as the draft's mode on first browse.
-terminal_history_browse_prev :: proc(term: ^core.Terminal_State) {
+terminal_history_browse_prev :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term.history.history_index == term.history.history_len {
         term.input_mode_backup = term.input_mode
     }
@@ -521,7 +526,7 @@ terminal_history_browse_prev :: proc(term: ^core.Terminal_State) {
 // Side effects:
 //   - Restores the pre-browse mode at the history tail; otherwise applies the selected
 //     entry's recorded prompt mode.
-terminal_history_browse_next :: proc(term: ^core.Terminal_State) {
+terminal_history_browse_next :: proc(term: ^viewterminalmodel.Terminal_State) {
     if !termhist.termhist_history_next(term.history) {
         return
     }
@@ -582,7 +587,7 @@ terminal_history_tag_for_mode :: proc(mode: protocol.Evaluation_Mode) -> int {
 //
 // Returns:
 //   - True only for an empty, non-continuation Normal-mode line with history present.
-terminal_can_exit_on_ctrl_d :: proc(term: ^core.Terminal_State) -> bool {
+terminal_can_exit_on_ctrl_d :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
     return term.history != nil && term.input_mode == .Normal &&
            !term.collecting_continuation &&
            len(termhist.termhist_current_text(term.history)) == 0
@@ -601,7 +606,8 @@ terminal_can_exit_on_ctrl_d :: proc(term: ^core.Terminal_State) -> bool {
 //   - Applies editing before shortcut priority, may cancel package mode, request/accept
 //     completion, synthesize `exit()` for Ctrl+D, or commit input on Enter.
 terminal_update_navigation_keys :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame) -> Terminal_Keyboard_Update {
+    term: ^viewterminalmodel.Terminal_State,
+    frame: input.Input_Frame) -> Terminal_Keyboard_Update {
     cursor_moved := terminal_update_editing_keys(term, frame)
     if input.input_chord_pressed(frame, .C, {.Control}) &&
         terminal_cancel_pkg_mode(term) {
@@ -648,7 +654,7 @@ terminal_update_navigation_keys :: proc(
 // Side effects:
 //   - Starts, extends, or releases the mouse-driven view selection.
 terminal_update_mouse_selection :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame,
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     font: rl.Font, bounds: rl.Rectangle) {
     mode := termemulator.interpreter_input_mode(&term.output_interpreter)
     if mode.mouse_tracking != .None && mode.mouse_sgr_encoding &&

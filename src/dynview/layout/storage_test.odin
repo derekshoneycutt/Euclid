@@ -1,6 +1,9 @@
 package dynview_layout
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import storage "../../core/storage"
+
 import dyncore "../core"
 import dynmath "../math"
 
@@ -9,10 +12,10 @@ import "core:testing"
 //   Verify sealed layout records preserve order, indexes, and grid placement.
 @(test)
 layout_storage_publishes_ordered_records :: proc(t: ^testing.T) {
-    arena: app_core.Arena_Owner
-    testing.expect(t, app_core.arena_owner_init(&arena))
-    defer app_core.arena_owner_destroy(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    arena: storage.Arena_Owner
+    testing.expect(t, storage.arena_owner_init(&arena))
+    defer storage.arena_owner_destroy(&arena)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
     testing.expect_value(
         t, layout_builders_init(cache, &arena), dyncore.DYNVIEW_STATUS_OK)
@@ -48,18 +51,18 @@ layout_storage_publishes_ordered_records :: proc(t: ^testing.T) {
 //   Verify both layout record families reject one record beyond their maxima.
 @(test)
 layout_storage_rejects_exact_limit_overflow :: proc(t: ^testing.T) {
-    arena: app_core.Arena_Owner
-    testing.expect(t, app_core.arena_owner_init(&arena))
-    defer app_core.arena_owner_destroy(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    arena: storage.Arena_Owner
+    testing.expect(t, storage.arena_owner_init(&arena))
+    defer storage.arena_owner_destroy(&arena)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
     testing.expect_value(
         t, layout_builders_init(cache, &arena), dyncore.DYNVIEW_STATUS_OK)
-    cache^.layout_item_builder.count = app_core.DYNVIEW_MAX_LAYOUT_ITEMS
+    cache^.layout_item_builder.count = dynviewmodel.DYNVIEW_MAX_LAYOUT_ITEMS
     item_status := layout_push_item(
         cache, &Dynview_Layout_State{}, &Dynview_Layout_Line_Accumulator{}, {})
 
-    cache^.layout_line_builder.count = app_core.DYNVIEW_MAX_LAYOUT_LINES
+    cache^.layout_line_builder.count = dynviewmodel.DYNVIEW_MAX_LAYOUT_LINES
     line_status := layout_finalize_line(
         cache, &Dynview_Layout_State{}, &Dynview_Layout_Line_Accumulator{}, 12, 4)
 
@@ -72,10 +75,10 @@ layout_storage_rejects_exact_limit_overflow :: proc(t: ^testing.T) {
 //   Verify resetting a partial layout clears all arena-backed record aliases.
 @(test)
 layout_storage_reset_clears_partial_aliases :: proc(t: ^testing.T) {
-    arena: app_core.Arena_Owner
-    testing.expect(t, app_core.arena_owner_init(&arena))
-    defer app_core.arena_owner_destroy(&arena)
-    cache := new(app_core.Dynview_Compile_Cache, context.allocator)
+    arena: storage.Arena_Owner
+    testing.expect(t, storage.arena_owner_init(&arena))
+    defer storage.arena_owner_destroy(&arena)
+    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
     defer free(cache, context.allocator)
     testing.expect_value(
         t, layout_builders_init(cache, &arena), dyncore.DYNVIEW_STATUS_OK)

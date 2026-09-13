@@ -1,11 +1,12 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 import "core:testing"
 
 //   Build deterministic fraction constants whose 26.6 values map directly at 32 px.
-math_fraction_test_constants :: proc() -> app_core.Font_Math_Constants {
-    constants := app_core.Font_Math_Constants{
+math_fraction_test_constants :: proc() -> fontmodel.Font_Math_Constants {
+    constants := fontmodel.Font_Math_Constants{
         valid = true, generation = 13, base_pixel_size = 32}
     constants.values[int(Math_Constant.Axis_Height)] = 4 * 64
     constants.values[int(Math_Constant.Fraction_Rule_Thickness)] = 2 * 64

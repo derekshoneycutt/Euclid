@@ -1,8 +1,8 @@
 #+test
 package font
 
-import app_core "../../core"
 import "../../taskpool"
+import fontmodel "model"
 
 import "core:mem"
 import "core:os"
@@ -360,8 +360,10 @@ view_expect_math_vertical_variants :: proc(
     t: ^testing.T, capability: ^Font_Math_Shaping_Capability) {
 
     sum_glyph, sum_ok := harfbuzz_nominal_glyph(&capability^.resource, '∑')
-    variants: [app_core.FONT_MATH_GLYPH_VARIANT_CAPACITY]app_core.Font_Math_Glyph_Variant
-    repeated: [app_core.FONT_MATH_GLYPH_VARIANT_CAPACITY]app_core.Font_Math_Glyph_Variant
+    variants:
+        [fontmodel.FONT_MATH_GLYPH_VARIANT_CAPACITY]fontmodel.Font_Math_Glyph_Variant
+    repeated:
+        [fontmodel.FONT_MATH_GLYPH_VARIANT_CAPACITY]fontmodel.Font_Math_Glyph_Variant
     result := math_shaping_vertical_variants(capability, 7, sum_glyph, variants[:])
     repeated_result := math_shaping_vertical_variants(
         capability, 7, sum_glyph, repeated[:])
@@ -385,7 +387,7 @@ view_expect_math_vertical_assembly :: proc(
     t: ^testing.T, capability: ^Font_Math_Shaping_Capability) {
 
     surd_glyph, surd_ok := harfbuzz_nominal_glyph(&capability^.resource, '√')
-    parts: [app_core.FONT_MATH_GLYPH_PART_CAPACITY]app_core.Font_Math_Glyph_Part
+    parts: [fontmodel.FONT_MATH_GLYPH_PART_CAPACITY]fontmodel.Font_Math_Glyph_Part
     result := math_shaping_vertical_assembly(capability, 7, surd_glyph, parts[:])
     stale := math_shaping_vertical_assembly(capability, 6, surd_glyph, parts[:])
     testing.expect(t, surd_ok && result.ok && !stale.ok)
@@ -406,10 +408,11 @@ view_expect_math_horizontal_accent_variants :: proc(
 
     glyph, glyph_ok := harfbuzz_nominal_glyph(
         &capability^.resource, rune(0x0302))
-    variants: [app_core.FONT_MATH_GLYPH_VARIANT_CAPACITY]app_core.Font_Math_Glyph_Variant
+    variants:
+        [fontmodel.FONT_MATH_GLYPH_VARIANT_CAPACITY]fontmodel.Font_Math_Glyph_Variant
     variant_result := math_shaping_horizontal_variants(
         capability, 7, glyph, variants[:])
-    parts: [app_core.FONT_MATH_GLYPH_PART_CAPACITY]app_core.Font_Math_Glyph_Part
+    parts: [fontmodel.FONT_MATH_GLYPH_PART_CAPACITY]fontmodel.Font_Math_Glyph_Part
     assembly_result := math_shaping_horizontal_assembly(
         capability, 7, glyph, parts[:])
     testing.expect(t, glyph_ok)
@@ -468,7 +471,7 @@ view_expect_math_glyph_kern_tables :: proc(
     corners := [4]Harfbuzz_Math_Kern{
         .Top_Right, .Top_Left, .Bottom_Right, .Bottom_Left}
     for corner in corners {
-        entries: [app_core.FONT_MATH_KERN_ENTRY_CAPACITY]app_core.Font_Math_Kern_Entry
+        entries: [fontmodel.FONT_MATH_KERN_ENTRY_CAPACITY]fontmodel.Font_Math_Kern_Entry
         result := math_shaping_glyph_kern_table(
             capability, 7, glyph_id, corner, entries[:])
         testing.expect(t, result.ok)
@@ -626,7 +629,7 @@ view_test_worker_math_shaping_failed_sync_preserves_previous :: proc(t: ^testing
 @(test)
 view_test_font_flags_map_to_cache_keys :: proc(t: ^testing.T) {
     cases := [?]struct {
-        flags: app_core.Font_Variant_Flags,
+        flags: fontmodel.Font_Variant_Flags,
         key: Font_Key,
     }{
         {.Regular, .Regular},
@@ -639,8 +642,8 @@ view_test_font_flags_map_to_cache_keys :: proc(t: ^testing.T) {
     }
     for test_case in cases {
         testing.expect_value(t, font_key_from_flags(test_case.flags), test_case.key)
-        italic_flags := app_core.Font_Variant_Flags(
-            u32(test_case.flags) | u32(app_core.Font_Variant_Flags.Italic))
+        italic_flags := fontmodel.Font_Variant_Flags(
+            u32(test_case.flags) | u32(fontmodel.Font_Variant_Flags.Italic))
         testing.expect_value(t, int(font_key_from_flags(italic_flags)),
             int(test_case.key) + 1)
     }
@@ -935,7 +938,7 @@ view_test_page_capacity_blocks_scheduling :: proc(t: ^testing.T) {
     entry.state = .Ready
     entry.generation = 1
     entry.requested_generation = 1
-    entry.page_count = app_core.FONT_GLYPH_PAGE_CAPACITY
+    entry.page_count = fontmodel.FONT_GLYPH_PAGE_CAPACITY
     testing.expect(t, font_generation_glyphs_init(
         entry, 2, context.allocator))
     testing.expect(t, !font_generation_request_glyph(entry, 1))
@@ -951,7 +954,7 @@ view_test_page_capacity_blocks_scheduling :: proc(t: ^testing.T) {
 @(test)
 view_test_final_queued_page_blocks_new_demand :: proc(t: ^testing.T) {
     entry: Font_Cache_Entry
-    entry.page_count = app_core.FONT_GLYPH_PAGE_CAPACITY - 1
+    entry.page_count = fontmodel.FONT_GLYPH_PAGE_CAPACITY - 1
     entry.pending_glyph_count = 1
     entry.queued_demand_count = 1
     testing.expect(t, font_generation_glyphs_init(
@@ -1074,7 +1077,7 @@ view_test_codepoint_resolver_status :: proc(t: ^testing.T) {
     pending_count := entry.pending_glyph_count
     _, unsupported_status := cache_terminal_resolve_codepoint(
         &cache, .Regular, rune(0x10ffff))
-    entry.page_count = app_core.FONT_GLYPH_PAGE_CAPACITY
+    entry.page_count = fontmodel.FONT_GLYPH_PAGE_CAPACITY
     _, capacity_status := cache_terminal_resolve_codepoint(
         &cache, .Regular, 'α')
 

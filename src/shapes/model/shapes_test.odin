@@ -1,4 +1,4 @@
-package core
+package shapemodel
 
 import "core:testing"
 

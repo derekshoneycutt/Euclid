@@ -1,11 +1,12 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 import "core:testing"
 
 //   Build deterministic stack constants whose 26.6 values map directly at 32 px.
-math_stack_test_constants :: proc() -> app_core.Font_Math_Constants {
-    constants := app_core.Font_Math_Constants{
+math_stack_test_constants :: proc() -> fontmodel.Font_Math_Constants {
+    constants := fontmodel.Font_Math_Constants{
         valid = true, generation = 17, base_pixel_size = 32}
     constants.values[int(Math_Constant.Stack_Top_Display_Style_Shift_Up)] = 5 * 64
     constants.values[int(Math_Constant.Stack_Bottom_Display_Style_Shift_Down)] = 4 * 64

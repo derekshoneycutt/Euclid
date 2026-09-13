@@ -1,5 +1,7 @@
 package ui
 
+import viewmodel "../model"
+
 // Shared UI constants and basic drawing helpers for panel modules.
 
 import view_core "../core"
@@ -114,7 +116,7 @@ Input_Frame :: input.Input_Frame
 
 // Geometry-stage result carried into static routing and later frame preparation.
 Ui_Geometry_Preparation :: struct {
-    pointer_capture: core.Ui_Press_Owner_State,
+    pointer_capture: viewmodel.Ui_Press_Owner_State,
     compile_dynview: bool,
 }
 
@@ -193,7 +195,7 @@ prepare_ui_geometry :: proc(
 prepare_ui_static_interaction :: proc(
     state: ^core.Euclid_General_State,
     frame: Input_Frame,
-    capture: core.Ui_Press_Owner_State) {
+    capture: viewmodel.Ui_Press_Owner_State) {
     _ = ui_route_interaction_frame(&state^.ui_runtime, {
         frame = frame,
         terminal_present = is_terminal_selected(state),
@@ -204,7 +206,7 @@ prepare_ui_static_interaction :: proc(
 // Return a frame copy containing only pointer fields routed to the tree surface.
 ui_tree_input_frame :: proc(
     frame: Input_Frame,
-    routed: core.Ui_Surface_Interaction) -> Input_Frame {
+    routed: viewmodel.Ui_Surface_Interaction) -> Input_Frame {
     if routed.pointer && routed.wheel {
         return input.input_frame_filter_pointer(frame, {
             .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels, .Wheel})

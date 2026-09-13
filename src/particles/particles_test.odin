@@ -1,10 +1,11 @@
 package particles
 
+import particlemodel "model"
+import shapemodel "../shapes/model"
+
 import "core:math"
 import "core:testing"
 
-import app_core "../core"
-import app_view_core "../view/core"
 import test_helpers "../test_helpers"
 
 EPS :: f32(1e-5)
@@ -43,7 +44,7 @@ dust_grid_cell_index_clamps_bounds :: proc(t: ^testing.T) {
 //   Verify slot reservation prefers dead slots and wraps at the particle cap.
 @(test)
 reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 3
     ps^.next_index = 0
@@ -70,7 +71,7 @@ reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
 //   Verify the reservation ring index wraps back to zero at the cap.
 @(test)
 reserve_dead_particle_slot_ring_advances :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
     ps^.next_index = MAX_PARTICLES - 1
 
@@ -82,7 +83,7 @@ reserve_dead_particle_slot_ring_advances :: proc(t: ^testing.T) {
 
 //   Capture one low-particle slot's current position and velocity.
 dust_slot_snapshot :: #force_inline proc(
-    ps: ^app_core.Particle_System, index: int) -> Dust_Slot_Snapshot {
+    ps: ^particlemodel.Particle_System, index: int) -> Dust_Slot_Snapshot {
 
     return Dust_Slot_Snapshot{
         ps^.low_particles.pos_x[index],
@@ -95,7 +96,7 @@ dust_slot_snapshot :: #force_inline proc(
 //   Assert one low-particle slot still matches a prior snapshot.
 expect_dust_slot_unchanged :: proc(
     t: ^testing.T,
-    ps: ^app_core.Particle_System,
+    ps: ^particlemodel.Particle_System,
     index: int,
     before: Dust_Slot_Snapshot) {
 
@@ -112,7 +113,7 @@ expect_dust_slot_unchanged :: proc(
 //   Verify a non-overlapping dust pair keeps positions and velocities unchanged.
 @(test)
 resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.low_particles.pos_x[0] = 0.2
@@ -140,7 +141,7 @@ resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
 //   Verify an approaching overlapping pair receives a separating impulse.
 @(test)
 resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.low_particles.pos_x[0] = 0.4
@@ -170,7 +171,7 @@ resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
 //   Verify a separating overlapping pair repositions but skips the impulse.
 @(test)
 resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.low_particles.pos_x[0] = 0.4
@@ -202,7 +203,7 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
 //   Verify exactly coincident particles separate along a deterministic direction.
 @(test)
 resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.low_particles.pos_x[0] = 0.5
@@ -223,9 +224,9 @@ resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testin
 //   Verify two fresh particle systems produce identical seeded random ranges.
 @(test)
 particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) {
-    first := new(app_core.Particle_System, context.allocator)
+    first := new(particlemodel.Particle_System, context.allocator)
     defer free(first)
-    second := new(app_core.Particle_System, context.allocator)
+    second := new(particlemodel.Particle_System, context.allocator)
     defer free(second)
 
     testing.expect_value(t,
@@ -239,10 +240,10 @@ particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) 
 //   Verify dense-bucket collision resolution rotates samples and tracks counts.
 @(test)
 resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
-    ps^.use_max_dust_particles = app_core.DUST_GRID_BUCKET_CAP + 8
+    ps^.use_max_dust_particles = particlemodel.DUST_GRID_BUCKET_CAP + 8
     for i in 0..<ps^.use_max_dust_particles {
         ps^.low_particles[i].alive = true
         ps^.low_particles.pos_x[i] = 0.5
@@ -254,7 +255,7 @@ resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
     testing.expect_value(t, ps^.dust_collision_frame, u64(1))
     testing.expect_value(t,
         ps^.dust_counts[dust_grid_cell_index(0.5, 0.5)],
-        i32(app_core.DUST_GRID_BUCKET_CAP))
+        i32(particlemodel.DUST_GRID_BUCKET_CAP))
     testing.expect_value(t,
         ps^.dust_seen_counts[dust_grid_cell_index(0.5, 0.5)],
         i32(ps^.use_max_dust_particles))
@@ -263,7 +264,7 @@ resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
 //   Verify reset_particles zeroes runtime state and marks every slot dead.
 @(test)
 reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.use_max_dust_particles = 2
@@ -288,54 +289,10 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     testing.expect_value(t, ps^.high_particles.age[0], 0.0)
 }
 
-//   Verify a single dust kick adds trauma and resets the screenshake clock.
-@(test)
-screenshake_on_dust_kick_adds_trauma :: proc(t: ^testing.T) {
-    scale: app_core.Iso_Scale
-
-    app_view_core.screenshake_on_dust_kick(&scale)
-
-    testing.expect(t, scale.screenshake_trauma > 0)
-    testing.expect_value(t, scale.screenshake_elapsed, 0.0)
-}
-
-//   Verify a batched dust kick produces a stronger aggregated impulse.
-@(test)
-screenshake_on_dust_kick_batch_uses_stronger_aggregated_impulse :: proc(t: ^testing.T) {
-    single: app_core.Iso_Scale
-    batch: app_core.Iso_Scale
-
-    app_view_core.screenshake_on_dust_kick(&single)
-    app_view_core.screenshake_on_dust_kick_batch(&batch, 8)
-
-    testing.expect(t, batch.screenshake_trauma > single.screenshake_trauma)
-}
-
-//   Verify screenshake decays over time and clears fully at the max time.
-@(test)
-screenshake_update_decays_and_clears_deterministically :: proc(t: ^testing.T) {
-    scale: app_core.Iso_Scale
-
-    app_view_core.screenshake_on_dust_kick(&scale)
-    before := scale.screenshake_trauma
-
-    app_view_core.screenshake_update(&scale, 0.01)
-
-    testing.expect(t, scale.screenshake_trauma < before)
-    testing.expect(t, scale.screenshake_offset_x != 0 || scale.screenshake_offset_y != 0)
-
-    app_view_core.screenshake_update(&scale, app_view_core.SCREENSHAKE_MAX_TIME)
-
-    testing.expect_value(t, scale.screenshake_trauma, 0.0)
-    testing.expect_value(t, scale.screenshake_elapsed, 0.0)
-    testing.expect_value(t, scale.screenshake_offset_x, 0.0)
-    testing.expect_value(t, scale.screenshake_offset_y, 0.0)
-}
-
 //   Verify slot reservation wraps to index zero when every slot is alive.
 @(test)
 reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
     ps^.use_max_dust_particles = 2
@@ -351,31 +308,31 @@ reserve_dead_low_particle_slot_wraps_when_all_slots_alive :: proc(t: ^testing.T)
 
 //   Seed one world line with direct endpoint transforms and configurable visibility.
 seed_shape_world_particle_line :: proc(
-    world: ^app_core.Shape_World,
+    world: ^shapemodel.Shape_World,
     visible: bool) {
-    shape, first, second: app_core.Shape_Entity
-    assert(app_core.shape_world_create_entity(world, &shape) == .Ok)
-    assert(app_core.shape_world_create_entity(world, &first) == .Ok)
-    assert(app_core.shape_world_create_entity(world, &second) == .Ok)
-    assert(app_core.shape_component_insert(&world.transforms, &world.registry,
-        first, app_core.Shape_Transform{position = {0, 0, 0}}) == .Ok)
-    assert(app_core.shape_component_insert(&world.transforms, &world.registry,
-        second, app_core.Shape_Transform{position = {1, 0, 0}}) == .Ok)
-    assert(app_core.shape_component_insert(&world.render_styles, &world.registry,
-        shape, app_core.Shape_Render_Style{visible = visible}) == .Ok)
-    geometry := app_core.Shape_Geometry{kind = .Line}
+    shape, first, second: shapemodel.Shape_Entity
+    assert(shapemodel.shape_world_create_entity(world, &shape) == .Ok)
+    assert(shapemodel.shape_world_create_entity(world, &first) == .Ok)
+    assert(shapemodel.shape_world_create_entity(world, &second) == .Ok)
+    assert(shapemodel.shape_component_insert(&world.transforms, &world.registry,
+        first, shapemodel.Shape_Transform{position = {0, 0, 0}}) == .Ok)
+    assert(shapemodel.shape_component_insert(&world.transforms, &world.registry,
+        second, shapemodel.Shape_Transform{position = {1, 0, 0}}) == .Ok)
+    assert(shapemodel.shape_component_insert(&world.render_styles, &world.registry,
+        shape, shapemodel.Shape_Render_Style{visible = visible}) == .Ok)
+    geometry := shapemodel.Shape_Geometry{kind = .Line}
     geometry.payload.line = {first = first, second = second}
-    assert(app_core.shape_component_insert(&world.geometries, &world.registry,
+    assert(shapemodel.shape_component_insert(&world.geometries, &world.registry,
         shape, geometry) == .Ok)
 }
 
 //   Verify world clear particles resolve direct line entities without child topology.
 @(test)
 emit_shape_world_clear_burst_spawns_dust_for_direct_line :: proc(t: ^testing.T) {
-    particles := new(app_core.Particle_System, context.allocator)
+    particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles)
     particles.use_max_dust_particles = 4
-    world: app_core.Shape_World
+    world: shapemodel.Shape_World
     seed_shape_world_particle_line(&world, true)
 
     emit_shape_world_clear_burst(particles, &world)
@@ -387,10 +344,10 @@ emit_shape_world_clear_burst_spawns_dust_for_direct_line :: proc(t: ^testing.T) 
 //   Verify hidden world geometry does not participate in clear particle emission.
 @(test)
 emit_shape_world_clear_burst_skips_hidden_geometry :: proc(t: ^testing.T) {
-    particles := new(app_core.Particle_System, context.allocator)
+    particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles)
     particles.use_max_dust_particles = 4
-    world: app_core.Shape_World
+    world: shapemodel.Shape_World
     seed_shape_world_particle_line(&world, false)
 
     emit_shape_world_clear_burst(particles, &world)
@@ -403,7 +360,7 @@ emit_shape_world_clear_burst_skips_hidden_geometry :: proc(t: ^testing.T) {
 //   Verify out-of-bounds particles clamp to the bounds and bounce their velocity.
 @(test)
 clamp_xy_bounds_index_bounces_particles_back_inside_bounds :: proc(t: ^testing.T) {
-    ps := new(app_core.Particle_System, context.allocator)
+    ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 1
 

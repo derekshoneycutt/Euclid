@@ -1,6 +1,9 @@
 package dynview_compile
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import storage "../../core/storage"
+
 import dyncore "../core"
 import dynlayout "../layout"
 import dynmath "../math"
@@ -9,9 +12,9 @@ import "core:os"
 import rl "vendor:raylib"
 
 Dynview_Compile_State :: struct {
-    plain_text_builder: app_core.Bounded_Byte_Builder,
-    copy_payload_builder: app_core.Bounded_Byte_Builder,
-    copy_block_builder: app_core.Bounded_Element_Builder(app_core.Dynview_Copy_Block),
+    plain_text_builder: storage.Bounded_Byte_Builder,
+    copy_payload_builder: storage.Bounded_Byte_Builder,
+    copy_block_builder: storage.Bounded_Element_Builder(dynviewmodel.Dynview_Copy_Block),
     open_block: bool,
     block_id: i32,
     block_kind: i32,
@@ -26,14 +29,14 @@ Dynview_Compile_State :: struct {
 
 //   Uniform handler shape for one dynview command kind during compilation.
 Compile_Command_Handler :: #type proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32
+    cmd: dynviewmodel.Dynview_Command) -> i32
 
 //   Dispatch table mapping each dynview command kind to its compile handler.
 COMPILE_COMMAND_HANDLERS ::
-    [app_core.Dynview_Command_Kind]Compile_Command_Handler{
+    [dynviewmodel.Dynview_Command_Kind]Compile_Command_Handler{
     .Begin_Block = compile_handle_begin_block,
     .End_Block = compile_handle_end_block,
     .Text_Run = compile_text_run,
@@ -78,11 +81,11 @@ Visible_Copy_Block_Rows :: struct {
 
 //   Append one compiled plain-text byte through the bounded cache builder.
 append_compiled_byte :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State,
     value: u8) -> i32 {
 
-    status := app_core.bounded_byte_builder_append(
+    status := storage.bounded_byte_builder_append(
         &state^.plain_text_builder, []u8{value})
     if status == .Ok {
         cache^.compiled_plain_text_len = state^.plain_text_builder.count
@@ -92,8 +95,8 @@ append_compiled_byte :: proc(
 
 //   Copy one command text slice into compiled plain-text cache with bounds checks.
 append_compiled_text_slice :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
     offset, count: int) -> i32 {
 
@@ -105,7 +108,7 @@ append_compiled_text_slice :: proc(
         return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
-    status := app_core.bounded_byte_builder_append(
+    status := storage.bounded_byte_builder_append(
         &state^.plain_text_builder, text_bytes[offset:offset + count])
     if status == .Ok {
         cache^.compiled_plain_text_len = state^.plain_text_builder.count
@@ -115,11 +118,11 @@ append_compiled_text_slice :: proc(
 
 //   Append one byte to compiled copy payload cache and report capacity errors.
 append_copy_payload_byte :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State,
     value: u8) -> i32 {
 
-    status := app_core.bounded_byte_builder_append(
+    status := storage.bounded_byte_builder_append(
         &state^.copy_payload_builder, []u8{value})
     if status == .Ok {
         cache^.compiled_copy_payload_len = state^.copy_payload_builder.count
@@ -137,9 +140,9 @@ require_open_block :: #force_inline proc(open_block: bool) -> i32 {
 
 //   Apply begin-block ordering rule.
 compile_begin_block :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     if state^.open_block {
         return dyncore.DYNVIEW_STATUS_ILLEGAL_STATE
@@ -153,7 +156,7 @@ compile_begin_block :: #force_inline proc(
     state^.block_payload_start = cache^.compiled_copy_payload_len
     state^.block_has_copy_payload = false
     if !state^.presentation_consumed && len(state^.presentation_bytes) > 0 {
-        status := app_core.bounded_byte_builder_append(
+        status := storage.bounded_byte_builder_append(
             &state^.copy_payload_builder, state^.presentation_bytes)
         if status != .Ok {
             return dyncore.compiled_builder_status(status)
@@ -167,7 +170,7 @@ compile_begin_block :: #force_inline proc(
 
 //   Apply end-block ordering rule.
 compile_end_block :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State) -> i32 {
 
     if !state^.open_block {
@@ -176,7 +179,7 @@ compile_end_block :: #force_inline proc(
 
     if state^.block_has_copy_payload {
         payload_len := cache^.compiled_copy_payload_len - state^.block_payload_start
-        block := app_core.Dynview_Copy_Block{
+        block := dynviewmodel.Dynview_Copy_Block{
             block_id = state^.block_id,
             block_kind = state^.block_kind,
             row_start = state^.block_row_start,
@@ -184,8 +187,8 @@ compile_end_block :: #force_inline proc(
             payload_offset = state^.block_payload_start,
             payload_len = payload_len,
         }
-        status := app_core.bounded_element_builder_append(
-            &state^.copy_block_builder, []app_core.Dynview_Copy_Block{block})
+        status := storage.bounded_element_builder_append(
+            &state^.copy_block_builder, []dynviewmodel.Dynview_Copy_Block{block})
         if status != .Ok {
             return dyncore.compiled_builder_status(status)
         }
@@ -198,10 +201,10 @@ compile_end_block :: #force_inline proc(
 
 //   Apply text-run compilation rule.
 compile_text_run :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -214,10 +217,10 @@ compile_text_run :: #force_inline proc(
 
 //   Apply recursive script-wrapper compilation using grouped parent serialization.
 compile_script_attach_recursive :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -260,7 +263,7 @@ compile_script_attach_recursive :: #force_inline proc(
 
 //   Append a wrapped text group: prefix bytes, body bytes, then a closing byte.
 append_compiled_group :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State,
     prefix, body: string,
     close: u8) -> i32 {
@@ -282,8 +285,8 @@ append_compiled_group :: proc(
 
 //   Append one wrapped group only when its body is non-empty.
 append_compiled_optional_group :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
     group: Compiled_Optional_Group) -> i32 {
 
@@ -296,10 +299,10 @@ append_compiled_optional_group :: proc(
 
 //   Apply display-style large-operator compilation with canonical limits ordering.
 compile_large_op_recursive :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -335,7 +338,7 @@ compile_large_op_recursive :: #force_inline proc(
 //   Apply inline-line compilation rule.
 compile_inline_line :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -353,7 +356,7 @@ compile_inline_line :: #force_inline proc(
 //   Apply inline-box compilation rule.
 compile_inline_box :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -372,7 +375,7 @@ compile_inline_box :: #force_inline proc(
 //   Apply inline-circle compilation rule.
 compile_inline_circle :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -390,7 +393,7 @@ compile_inline_circle :: #force_inline proc(
 //   Apply inline-filled-box compilation rule.
 compile_inline_filled_box :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -409,7 +412,7 @@ compile_inline_filled_box :: #force_inline proc(
 //   Apply inline-filled-circle compilation rule.
 compile_inline_filled_circle :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -427,7 +430,7 @@ compile_inline_filled_circle :: #force_inline proc(
 //   Apply inline pie-section compilation rule.
 compile_inline_pie_section :: #force_inline proc(
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     status := require_open_block(state^.open_block)
     if status != dyncore.DYNVIEW_STATUS_OK {
@@ -444,7 +447,7 @@ compile_inline_pie_section :: #force_inline proc(
 
 //   Apply newline-like command rule shared by line-break and divider.
 compile_newline_command :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State) -> i32 {
 
     status := require_open_block(state^.open_block)
@@ -470,91 +473,91 @@ compile_newline_command :: #force_inline proc(
 
 //   Adapt compile_begin_block (no command buffer) to the uniform table shape.
 compile_handle_begin_block :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_begin_block(cache, state, cmd)
 }
 
 //   Adapt compile_end_block (no command payload) to the uniform table shape.
 compile_handle_end_block :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_end_block(cache, state)
 }
 
 //   Adapt newline commands (no command payload) to the uniform table shape.
 compile_handle_newline :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_newline_command(cache, state)
 }
 
 //   Adapt compile_inline_line (no cache or buffer) to the uniform table shape.
 compile_handle_inline_line :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_inline_line(state, cmd)
 }
 
 //   Adapt compile_inline_box (no cache or buffer) to the uniform table shape.
 compile_handle_inline_box :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_inline_box(state, cmd)
 }
 
 //   Adapt compile_inline_circle (no cache or buffer) to the uniform table shape.
 compile_handle_inline_circle :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_inline_circle(state, cmd)
 }
 
 //   Adapt compile_inline_filled_box (no cache or buffer) to the uniform shape.
 compile_handle_inline_filled_box :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_inline_filled_box(state, cmd)
 }
 
 //   Adapt compile_inline_filled_circle (no cache or buffer) to the uniform shape.
 compile_handle_inline_filled_circle :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_inline_filled_circle(state, cmd)
 }
 
 //   Adapt compile_inline_pie_section (no cache or buffer) to the uniform shape.
 compile_handle_inline_pie_section :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
     return compile_inline_pie_section(state, cmd)
 }
 
 //   Compile one command into cache and enforce the ordering contract.
 compile_command :: #force_inline proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    buffer: ^app_core.Dynview_Command_Buffer,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    buffer: ^dynviewmodel.Dynview_Command_Buffer,
     state: ^Dynview_Compile_State,
-    cmd: app_core.Dynview_Command) -> i32 {
+    cmd: dynviewmodel.Dynview_Command) -> i32 {
 
     kind := cmd.kind
     if kind < .Begin_Block || kind > .Inline_Pentagon {
@@ -570,26 +573,26 @@ compile_command :: #force_inline proc(
 
 //   Initialize bounded storage for one compiled Dynview cache transaction.
 compiled_builders_init :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State,
-    cache_arena: ^app_core.Arena_Owner) -> i32 {
-    plain_status := app_core.bounded_byte_builder_init(
-        &state^.plain_text_builder, app_core.DYNVIEW_MAX_TEXT_BYTES, cache_arena)
+    cache_arena: ^storage.Arena_Owner) -> i32 {
+    plain_status := storage.bounded_byte_builder_init(
+        &state^.plain_text_builder, dynviewmodel.DYNVIEW_MAX_TEXT_BYTES, cache_arena)
     if plain_status != .Ok {
         return dyncore.compiled_builder_status(plain_status)
     }
-    copy_status := app_core.bounded_byte_builder_init(
-        &state^.copy_payload_builder, app_core.DYNVIEW_MAX_TEXT_BYTES, cache_arena)
+    copy_status := storage.bounded_byte_builder_init(
+        &state^.copy_payload_builder, dynviewmodel.DYNVIEW_MAX_TEXT_BYTES, cache_arena)
     if copy_status != .Ok {
         return dyncore.compiled_builder_status(copy_status)
     }
-    block_status := app_core.bounded_element_builder_init(
-        &state^.copy_block_builder, app_core.DYNVIEW_MAX_COMMANDS, cache_arena)
+    block_status := storage.bounded_element_builder_init(
+        &state^.copy_block_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, cache_arena)
     if block_status != .Ok {
         return dyncore.compiled_builder_status(block_status)
     }
-    target_status := app_core.bounded_element_builder_init(
-        &cache^.copy_hit_target_builder, app_core.DYNVIEW_MAX_COMMANDS, cache_arena)
+    target_status := storage.bounded_element_builder_init(
+        &cache^.copy_hit_target_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, cache_arena)
     if target_status != .Ok {
         return dyncore.compiled_builder_status(target_status)
     }
@@ -598,19 +601,19 @@ compiled_builders_init :: proc(
 
 //   Seal and publish all compiled text and copy-block payloads atomically.
 compiled_builders_seal :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State) -> i32 {
-    plain_text, plain_status := app_core.bounded_byte_builder_seal(
+    plain_text, plain_status := storage.bounded_byte_builder_seal(
         &state^.plain_text_builder)
     if plain_status != .Ok {
         return dyncore.compiled_builder_status(plain_status)
     }
-    copy_payload, copy_status := app_core.bounded_byte_builder_seal(
+    copy_payload, copy_status := storage.bounded_byte_builder_seal(
         &state^.copy_payload_builder)
     if copy_status != .Ok {
         return dyncore.compiled_builder_status(copy_status)
     }
-    copy_blocks, block_status := app_core.bounded_element_builder_seal(
+    copy_blocks, block_status := storage.bounded_element_builder_seal(
         &state^.copy_block_builder)
     if block_status != .Ok {
         return dyncore.compiled_builder_status(block_status)
@@ -623,8 +626,8 @@ compiled_builders_seal :: proc(
 
 //   Validate ordering contract and materialize stream text for host rendering.
 rebuild_compiled_plain_text :: proc(
-    runtime: ^app_core.Dynview_System,
-    cache_arena: ^app_core.Arena_Owner) -> i32 {
+    runtime: ^dynviewmodel.Dynview_System,
+    cache_arena: ^storage.Arena_Owner) -> i32 {
 
     cache := &runtime^.compile_cache
     buffer := &runtime^.command_buffer
@@ -659,7 +662,7 @@ rebuild_compiled_plain_text :: proc(
 
 //   Rebuild presentation copy icon hit targets from compiled copy blocks.
 rebuild_copy_hit_targets :: proc(
-    runtime: ^app_core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     layout: Copy_Hit_Target_Layout) -> i32 {
 
     if runtime == nil {
@@ -673,7 +676,7 @@ rebuild_copy_hit_targets :: proc(
     if !cache^.is_valid || (!semantic_document && !cache^.layout_is_valid) {
         return dyncore.DYNVIEW_STATUS_OK
     }
-    clear_status := app_core.bounded_element_builder_clear(
+    clear_status := storage.bounded_element_builder_clear(
         &cache^.copy_hit_target_builder)
     if clear_status != .Ok {
         return dyncore.compiled_builder_status(clear_status)
@@ -687,7 +690,7 @@ rebuild_copy_hit_targets :: proc(
 
 // Rebuild copy hit targets for the legacy compiled command layout.
 rebuild_legacy_copy_hit_targets :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     layout: Copy_Hit_Target_Layout) -> i32 {
 
     panel_top := layout.panel.y
@@ -696,12 +699,12 @@ rebuild_legacy_copy_hit_targets :: proc(
         next_bottom, status := rebuild_one_copy_hit_target(cache,
             cache^.copy_blocks[i], layout, last_hover_bottom)
         if status != dyncore.DYNVIEW_STATUS_OK {
-            _ = app_core.bounded_element_builder_clear(&cache^.copy_hit_target_builder)
+            _ = storage.bounded_element_builder_clear(&cache^.copy_hit_target_builder)
             return status
         }
         last_hover_bottom = next_bottom
     }
-    targets, view_status := app_core.bounded_element_builder_view(
+    targets, view_status := storage.bounded_element_builder_view(
         &cache^.copy_hit_target_builder)
     if view_status != .Ok {
         return dyncore.compiled_builder_status(view_status)
@@ -713,7 +716,7 @@ rebuild_legacy_copy_hit_targets :: proc(
 
 //   Build the authored document copy action from sealed semantic block bounds.
 rebuild_document_copy_hit_target :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
     layout: Copy_Hit_Target_Layout) -> i32 {
 
     blocks := cache^.document_layout_blocks
@@ -733,7 +736,7 @@ rebuild_document_copy_hit_target :: proc(
     if status != dyncore.DYNVIEW_STATUS_OK {
         return status
     }
-    targets, view_status := app_core.bounded_element_builder_view(
+    targets, view_status := storage.bounded_element_builder_view(
         &cache^.copy_hit_target_builder)
     if view_status != .Ok {
         return dyncore.compiled_builder_status(view_status)
@@ -746,8 +749,8 @@ rebuild_document_copy_hit_target :: proc(
 //   Build one copy hit target for a block when its rows are visible on the panel.
 //   Returns the updated last-hover bottom edge (unchanged when nothing was added).
 rebuild_one_copy_hit_target :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    block: app_core.Dynview_Copy_Block,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    block: dynviewmodel.Dynview_Copy_Block,
     layout: Copy_Hit_Target_Layout,
     last_hover_bottom: f32) -> (f32, i32) {
 
@@ -775,8 +778,8 @@ rebuild_one_copy_hit_target :: proc(
 
 //   Append the hit target for a visible copy block and return its hover bottom.
 append_visible_copy_hit_target :: proc(
-    cache: ^app_core.Dynview_Compile_Cache,
-    block: app_core.Dynview_Copy_Block,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    block: dynviewmodel.Dynview_Copy_Block,
     layout: Copy_Hit_Target_Layout,
     rows: Visible_Copy_Block_Rows) -> (f32, i32) {
 
@@ -799,15 +802,15 @@ append_visible_copy_hit_target :: proc(
         layout.icon_x_pad
     icon_y := max(panel_top + 1, min(
         rows.top + 2, panel_bottom - layout.icon_size - 1))
-    target := app_core.Dynview_Copy_Hit_Target{
+    target := dynviewmodel.Dynview_Copy_Hit_Target{
         block_id = block.block_id,
         payload_offset = block.payload_offset,
         payload_len = block.payload_len,
         rect = {icon_x, icon_y, layout.icon_size, layout.icon_size},
         hover_rect = hover_rect,
     }
-    status := app_core.bounded_element_builder_append(
-        &cache^.copy_hit_target_builder, []app_core.Dynview_Copy_Hit_Target{target})
+    status := storage.bounded_element_builder_append(
+        &cache^.copy_hit_target_builder, []dynviewmodel.Dynview_Copy_Hit_Target{target})
     if status != .Ok {
         return rows.last_hover_bottom, dyncore.compiled_builder_status(status)
     }
@@ -816,7 +819,7 @@ append_visible_copy_hit_target :: proc(
 
 //   Return compiled copy payload string for one hit target index.
 copy_target_payload :: proc(
-    runtime: ^app_core.Dynview_System, target_index: int) -> string {
+    runtime: ^dynviewmodel.Dynview_System, target_index: int) -> string {
     if runtime == nil || runtime^.cache_access_state != .Display_Readable {
         return ""
     }
@@ -839,7 +842,7 @@ copy_target_payload :: proc(
 }
 
 //   Clear worker-built views after a failed compile without touching semantic input.
-clear_partial_derived_views :: proc(cache: ^app_core.Dynview_Compile_Cache) {
+clear_partial_derived_views :: proc(cache: ^dynviewmodel.Dynview_Compile_Cache) {
     if cache == nil {
         return
     }
@@ -859,7 +862,7 @@ clear_partial_derived_views :: proc(cache: ^app_core.Dynview_Compile_Cache) {
 }
 
 //   Seed mutable math measurement records from the immutable published content.
-prepare_math_working_records :: proc(runtime: ^app_core.Dynview_System) {
+prepare_math_working_records :: proc(runtime: ^dynviewmodel.Dynview_System) {
     content := &runtime^.content
     cache := &runtime^.compile_cache
     cache^.math_program_count = len(content^.math_programs)
@@ -875,8 +878,8 @@ prepare_math_working_records :: proc(runtime: ^app_core.Dynview_System) {
 
 //   Rebuild compiled text, shaped math, and layout views in dependency order.
 compile_derived_views :: proc(
-    runtime: ^app_core.Dynview_System,
-    cache_arena: ^app_core.Arena_Owner,
+    runtime: ^dynviewmodel.Dynview_System,
+    cache_arena: ^storage.Arena_Owner,
     shaping_service: dynmath.Math_Shaping_Service,
     prose_service: Document_Prose_Shaping_Service) -> i32 {
     status := rebuild_compiled_plain_text(runtime, cache_arena)
@@ -913,8 +916,8 @@ compile_derived_views :: proc(
 //   - Resets `cache_arena` before mutating derived cache state for one rebuild.
 //   - Leaves the arena and cache unchanged when no rebuild is required.
 compile_if_needed :: proc(
-    runtime: ^app_core.Dynview_System,
-    cache_arena: ^app_core.Arena_Owner,
+    runtime: ^dynviewmodel.Dynview_System,
+    cache_arena: ^storage.Arena_Owner,
     shaping_service: dynmath.Math_Shaping_Service = {},
     prose_service: Document_Prose_Shaping_Service = {}) {
 
@@ -932,7 +935,7 @@ compile_if_needed :: proc(
     cache := &runtime^.compile_cache
     clear_partial_derived_views(cache)
     dynmath.clear_shaped_records(cache)
-    app_core.arena_owner_reset(cache_arena)
+    storage.arena_owner_reset(cache_arena)
     if runtime^.command_buffer.command_view != nil {
         prepare_math_working_records(runtime)
     }
@@ -956,7 +959,7 @@ compile_if_needed :: proc(
 }
 
 //   Mark one rebuild failure and discard all partially derived cache views.
-fail_compile_rebuild :: proc(runtime: ^app_core.Dynview_System, status: i32) {
+fail_compile_rebuild :: proc(runtime: ^dynviewmodel.Dynview_System, status: i32) {
     dyncore.mark_stream_error(runtime, status)
     clear_partial_derived_views(&runtime^.compile_cache)
     dynmath.clear_shaped_records(&runtime^.compile_cache)
@@ -964,8 +967,8 @@ fail_compile_rebuild :: proc(runtime: ^app_core.Dynview_System, status: i32) {
 
 //   Validate worker ownership and arena lifetime before one invalidated rebuild.
 compile_worker_can_rebuild :: #force_inline proc(
-    runtime: ^app_core.Dynview_System,
-    cache_arena: ^app_core.Arena_Owner) -> bool {
+    runtime: ^dynviewmodel.Dynview_System,
+    cache_arena: ^storage.Arena_Owner) -> bool {
 
     if runtime^.cache_access_state != .Worker_Mutable ||
         runtime^.cache_worker_thread_id != os.get_current_thread_id() {
@@ -980,7 +983,7 @@ compile_worker_can_rebuild :: #force_inline proc(
 
 //   Translate bounded shaping storage failures into stable Dynview status values.
 shaped_builder_error_status :: #force_inline proc(
-    status: app_core.Bounded_Builder_Status) -> i32 {
+    status: storage.Bounded_Builder_Status) -> i32 {
 
     switch status {
     case .Invalid_Argument:
@@ -994,7 +997,7 @@ shaped_builder_error_status :: #force_inline proc(
 }
 
 //   Return whether the current command stream or layout inputs require compilation.
-compile_is_needed :: proc(runtime: ^app_core.Dynview_System) -> bool {
+compile_is_needed :: proc(runtime: ^dynviewmodel.Dynview_System) -> bool {
     if runtime == nil || !runtime^.enabled {
         return false
     }
@@ -1007,7 +1010,7 @@ compile_is_needed :: proc(runtime: ^app_core.Dynview_System) -> bool {
 
 //   Return compiled text when validation succeeds without mutating compile state.
 presentation_text_or_fallback :: proc(
-    runtime: ^app_core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     fallback_text: string) -> string {
 
     if runtime == nil || !runtime^.enabled ||
@@ -1023,7 +1026,7 @@ presentation_text_or_fallback :: proc(
 
 //   Recompute copy hit-target cache for the current presentation panel and scroll.
 refresh_presentation_copy_targets :: proc(
-    runtime: ^app_core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     layout: Copy_Hit_Target_Layout) {
 
     if !runtime^.enabled {

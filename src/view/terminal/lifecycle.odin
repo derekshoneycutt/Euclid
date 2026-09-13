@@ -1,6 +1,9 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
+import animation_model "../../core/animation"
+
 import "../../core/protocol"
 import termclipboard "../../terminal/clipboard"
 import gfxprotocol "../../terminal/graphics/protocol"
@@ -33,7 +36,7 @@ terminal_prompt_line :: proc(text: string) -> string {
 
 // Publish retained editable-text buffers after all arena allocations succeed.
 terminal_publish_retained_text :: proc(
-    term: ^core.Terminal_State, eval, completion, preview: []u8) {
+    term: ^viewterminalmodel.Terminal_State, eval, completion, preview: []u8) {
     term.pending_eval_storage = eval
     term.pending_completion_storage = completion
     term.completion_preview_storage = preview
@@ -41,7 +44,7 @@ terminal_publish_retained_text :: proc(
 
 // Allocate and publish all retained editable-text buffers transactionally.
 terminal_init_retained_text :: proc(
-    term: ^core.Terminal_State, allocator: mem.Allocator) -> bool {
+    term: ^viewterminalmodel.Terminal_State, allocator: mem.Allocator) -> bool {
     eval, eval_error := make(
         []u8, protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES, allocator)
     completion, completion_error := make(
@@ -57,7 +60,7 @@ terminal_init_retained_text :: proc(
 
 // Publish retained display handles after all arena allocations succeed.
 terminal_publish_retained_display :: proc(
-    term: ^core.Terminal_State, title: ^termemulator.Terminal_Title_State,
+    term: ^viewterminalmodel.Terminal_State, title: ^termemulator.Terminal_Title_State,
     checkpoint: ^termgrid.Display_Checkpoint,
     synchronized: ^termemulator.Synchronized_Output_State,
     attachments: ^termattachment.Store) {
@@ -80,7 +83,7 @@ terminal_publish_retained_display :: proc(
 //   - Allocates four fixed retained-storage blocks and publishes them into terminal
 //     state only after all allocations succeed.
 terminal_init_retained_storage :: proc(
-    term: ^core.Terminal_State, allocator: mem.Allocator) -> bool {
+    term: ^viewterminalmodel.Terminal_State, allocator: mem.Allocator) -> bool {
     title_storage, title_error := make(
         []termemulator.Terminal_Title_State, 1, allocator)
     checkpoint_storage, checkpoint_error := make(
@@ -124,7 +127,7 @@ terminal_init_retained_storage :: proc(
 //
 // Side effects:
 //   - Sets generation-one dimensions, configured limits, and zeroed scroll metrics.
-terminal_init_geometry :: proc(term: ^core.Terminal_State) {
+terminal_init_geometry :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.geometry = {
         dimensions = {columns = TERMINAL_GRID_COLUMNS, rows = TERMINAL_GRID_ROWS},
         generation = 1,
@@ -136,13 +139,13 @@ terminal_init_geometry :: proc(term: ^core.Terminal_State) {
 
 // Release terminal semantic owners after initialization fails.
 terminal_rollback_init :: proc(
-    term: ^core.Terminal_State, history: ^termhist.Termhist_State) {
+    term: ^viewterminalmodel.Terminal_State, history: ^termhist.Termhist_State) {
     termhist.termhist_destroy(history)
 }
 
 // Build an unpublished terminal candidate and release every partial owner on failure.
 terminal_construct_candidate :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     allocator: mem.Allocator,
     ambiguous_width: termgrid.Ambiguous_Width_Mode) -> bool {
     history := &term.history_storage
@@ -167,7 +170,7 @@ terminal_construct_candidate :: proc(
 
 // Initialize one terminal model from an explicit owner allocator and generation.
 terminal_init_with_allocator :: proc(
-    term: ^core.Terminal_State, allocator: mem.Allocator, generation: u64,
+    term: ^viewterminalmodel.Terminal_State, allocator: mem.Allocator, generation: u64,
     ambiguous_width: termgrid.Ambiguous_Width_Mode = .Narrow) -> bool {
     if term == nil || allocator.procedure == nil || generation == 0 {
         return false
@@ -188,14 +191,15 @@ terminal_init_with_allocator :: proc(
 
 // Initialize one production terminal model in the current animation generation.
 terminal_init_for_animation :: proc(
-    term: ^core.Terminal_State, memory: ^core.Animation_Memory,
+    term: ^viewterminalmodel.Terminal_State, memory: ^animation_model.Animation_Memory,
     generation: u64,
     ambiguous_width: termgrid.Ambiguous_Width_Mode = .Narrow) -> bool {
     if memory == nil || memory.generation != generation {
         return false
     }
     return terminal_init_with_allocator(
-        term, core.animation_memory_allocator(memory), generation, ambiguous_width)
+        term, animation_model.animation_memory_allocator(memory),
+        generation, ambiguous_width)
 }
 
 //   Allocate test-owned terminal state with the explicitly supplied context allocator.
@@ -210,7 +214,7 @@ terminal_init_for_animation :: proc(
 //   - Initializes history, reserves terminal virtual storage, allocates retained buffers
 //     and display resources, and rolls back every acquired resource on failure.
 terminal_init :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     ambiguous_width: termgrid.Ambiguous_Width_Mode = .Narrow) -> bool {
     return terminal_init_with_allocator(
         term, context.allocator, 1, ambiguous_width)
@@ -229,7 +233,7 @@ terminal_init :: proc(
 //   - Initializes checkpoint storage, binds the interpreter to both grids and retained
 //     title state, and enables line-feed column reset compatibility.
 terminal_output_init_interpreter :: proc(
-    term: ^core.Terminal_State, allocator: mem.Allocator) -> bool {
+    term: ^viewterminalmodel.Terminal_State, allocator: mem.Allocator) -> bool {
     if !termgrid.display_checkpoint_init(
         term.output_checkpoint, &term.output_grid, &term.output_scrollback,
         allocator) {
@@ -263,20 +267,20 @@ terminal_output_init_interpreter :: proc(
 }
 
 // Release primary display resources after output initialization fails.
-terminal_output_rollback_primary :: proc(term: ^core.Terminal_State) {
+terminal_output_rollback_primary :: proc(term: ^viewterminalmodel.Terminal_State) {
     termgrid.grid_destroy(&term.output_grid)
     termgrid.scrollback_destroy(&term.output_scrollback)
 }
 
 // Release both display grids and scrollback after interpreter initialization fails.
-terminal_output_rollback_grids :: proc(term: ^core.Terminal_State) {
+terminal_output_rollback_grids :: proc(term: ^viewterminalmodel.Terminal_State) {
     termgrid.grid_destroy(&term.output_alternate_grid)
     terminal_output_rollback_primary(term)
 }
 
 // Initialize and publish primary scrollback and grid transactionally.
 terminal_output_init_primary :: proc(
-    term: ^core.Terminal_State, retained_allocator,
+    term: ^viewterminalmodel.Terminal_State, retained_allocator,
     resizable_allocator: mem.Allocator,
     ambiguous_width: termgrid.Ambiguous_Width_Mode) -> bool {
     scrollback: termgrid.Scrollback
@@ -310,7 +314,7 @@ terminal_output_init_primary :: proc(
 
 // Initialize attachment storage and graphics framing as one ordered service.
 terminal_output_init_attachment_services :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     retained_allocator, resizable_allocator: mem.Allocator) -> bool {
     attachments := term.synchronized_output.attachments
     if !termattachment.store_init_with_allocators(
@@ -328,7 +332,8 @@ terminal_output_init_attachment_services :: proc(
 }
 
 // Release graphics framing before the attachment store that owns its transfers.
-terminal_output_destroy_attachment_services :: proc(term: ^core.Terminal_State) {
+terminal_output_destroy_attachment_services :: proc(
+    term: ^viewterminalmodel.Terminal_State) {
     gfxprotocol.graphics_parser_destroy(term.output_interpreter.title_state.graphics)
     termattachment.store_destroy(term.synchronized_output.attachments)
 }
@@ -347,7 +352,7 @@ terminal_output_destroy_attachment_services :: proc(term: ^core.Terminal_State) 
 //   - Allocates and publishes scrollback, primary and alternate grids, checkpoint, and
 //     interpreter state, with transactional rollback on any failure.
 terminal_output_init :: proc(
-    term: ^core.Terminal_State, retained_allocator,
+    term: ^viewterminalmodel.Terminal_State, retained_allocator,
     resizable_allocator: mem.Allocator,
     ambiguous_width: termgrid.Ambiguous_Width_Mode) -> bool {
 
@@ -388,7 +393,8 @@ terminal_output_init :: proc(
 // Side effects:
 //   - Emits one debug or warning log record containing bounded parser, grid, and
 //     scrollback diagnostics.
-terminal_teardown_has_rejections :: proc(term: ^core.Terminal_State) -> bool {
+terminal_teardown_has_rejections :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> bool {
     interpreter := &term.output_interpreter
     grid := &term.output_grid
     synchronized := term.synchronized_output
@@ -412,7 +418,7 @@ terminal_teardown_has_rejections :: proc(term: ^core.Terminal_State) -> bool {
 }
 
 // Report bounded command-index occupancy, malformed lifecycle, and eviction outcomes.
-terminal_log_shell_index_teardown :: proc(term: ^core.Terminal_State) {
+terminal_log_shell_index_teardown :: proc(term: ^viewterminalmodel.Terminal_State) {
     shell := term.shell_integration
     log.debugf(
         "terminal shell command_blocks=%d lifecycle_malformed=%d command_evictions=%d",
@@ -421,7 +427,7 @@ terminal_log_shell_index_teardown :: proc(term: ^core.Terminal_State) {
 }
 
 // Emit warning-level terminal teardown diagnostics with rejection detail.
-terminal_log_teardown_rejections :: proc(term: ^core.Terminal_State) {
+terminal_log_teardown_rejections :: proc(term: ^viewterminalmodel.Terminal_State) {
     interpreter := &term.output_interpreter
     grid := &term.output_grid
     scrollback := &term.output_scrollback
@@ -455,7 +461,7 @@ terminal_log_teardown_rejections :: proc(term: ^core.Terminal_State) {
 }
 
 // Emit compact debug-level terminal teardown diagnostics without rejections.
-terminal_log_teardown_clean :: proc(term: ^core.Terminal_State) {
+terminal_log_teardown_clean :: proc(term: ^viewterminalmodel.Terminal_State) {
     interpreter := &term.output_interpreter
     grid := &term.output_grid
     scrollback := &term.output_scrollback
@@ -475,7 +481,7 @@ terminal_log_teardown_clean :: proc(term: ^core.Terminal_State) {
 }
 
 //   Report bounded terminal parser and grid counters before storage is released.
-terminal_log_teardown :: proc(term: ^core.Terminal_State) {
+terminal_log_teardown :: proc(term: ^viewterminalmodel.Terminal_State) {
     if terminal_teardown_has_rejections(term) {
         terminal_log_teardown_rejections(term)
     } else {
@@ -484,7 +490,7 @@ terminal_log_teardown :: proc(term: ^core.Terminal_State) {
 }
 
 // Release display models and transfer services in dependency order.
-terminal_output_destroy :: proc(term: ^core.Terminal_State) {
+terminal_output_destroy :: proc(term: ^viewterminalmodel.Terminal_State) {
     termgrid.grid_destroy(&term.output_grid)
     termgrid.grid_destroy(&term.output_alternate_grid)
     termgrid.scrollback_destroy(&term.output_scrollback)
@@ -502,7 +508,7 @@ terminal_output_destroy :: proc(term: ^core.Terminal_State) {
 // Side effects:
 //   - Logs final diagnostics, destroys history and display resources, releases retained
 //     source views, destroys the storage arena, and clears published storage handles.
-terminal_destroy_semantics :: proc(term: ^core.Terminal_State) {
+terminal_destroy_semantics :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term == nil {
         return
     }
@@ -535,7 +541,7 @@ terminal_destroy_semantics :: proc(term: ^core.Terminal_State) {
 }
 
 // Release semantic terminal owners before the animation owner resets shared memory.
-terminal_destroy :: proc(term: ^core.Terminal_State) {
+terminal_destroy :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term == nil || !term.initialized {
         return
     }
@@ -544,7 +550,7 @@ terminal_destroy :: proc(term: ^core.Terminal_State) {
 }
 
 // Borrow the last validated local working-directory URI observed through OSC 7.
-terminal_observed_cwd_uri :: proc(term: ^core.Terminal_State) -> string {
+terminal_observed_cwd_uri :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
     if term == nil || term.shell_integration == nil {
         return ""
     }
@@ -563,7 +569,8 @@ terminal_observed_cwd_uri :: proc(term: ^core.Terminal_State) -> string {
 //
 // Side effects:
 //   - Clears completion state and replaces any prior pending evaluation source.
-terminal_begin_eval :: proc(term: ^core.Terminal_State, source: string) -> bool {
+terminal_begin_eval :: proc(
+    term: ^viewterminalmodel.Terminal_State, source: string) -> bool {
     if term == nil {
         return false
     }
@@ -592,7 +599,7 @@ terminal_begin_eval :: proc(term: ^core.Terminal_State, source: string) -> bool 
 // Side effects:
 //   - Forces the primary screen, clears evaluation/checkpoint/completion state, releases
 //     pending source ownership, and appends one blank output line.
-terminal_complete_eval :: proc(term: ^core.Terminal_State) {
+terminal_complete_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term == nil {
         return
     }
@@ -610,7 +617,7 @@ terminal_complete_eval :: proc(term: ^core.Terminal_State) {
 }
 
 // Restore the synchronized pre-submission output checkpoint when available.
-terminal_restore_output_checkpoint :: proc(term: ^core.Terminal_State) {
+terminal_restore_output_checkpoint :: proc(term: ^viewterminalmodel.Terminal_State) {
     termemulator.interpreter_publish_synchronized_output(
         &term.output_interpreter, true)
     if termgrid.display_checkpoint_restore(
@@ -645,7 +652,7 @@ terminal_continuation_indent :: proc(source: string) -> string {
 // Side effects:
 //   - Clears request/completion state, transfers pending source back through termhist,
 //     releases the owned source copy, and enters continuation collection.
-terminal_continue_eval :: proc(term: ^core.Terminal_State) {
+terminal_continue_eval :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term == nil || term.history == nil {
         return
     }
@@ -680,7 +687,8 @@ terminal_continue_eval :: proc(term: ^core.Terminal_State) {
 //
 // Returns:
 //   - The supplied line unchanged.
-terminal_eval_source :: proc(term: ^core.Terminal_State, line: string) -> string {
+terminal_eval_source :: proc(
+    term: ^viewterminalmodel.Terminal_State, line: string) -> string {
     return line
 }
 
@@ -691,7 +699,7 @@ terminal_eval_source :: proc(term: ^core.Terminal_State, line: string) -> string
 //
 // Returns:
 //   - True after the banner is ready and while no evaluation is pending.
-terminal_prompt_visible :: proc(term: ^core.Terminal_State) -> bool {
+terminal_prompt_visible :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
     return term != nil && term.banner_ready && !term.awaiting_eval
 }
 
@@ -702,7 +710,7 @@ terminal_prompt_visible :: proc(term: ^core.Terminal_State) -> bool {
 //
 // Returns:
 //   - Continuation prefix while collecting incomplete input; otherwise the active mode prompt.
-terminal_prompt_prefix :: proc(term: ^core.Terminal_State) -> string {
+terminal_prompt_prefix :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
     if term != nil && term.collecting_continuation {
         return TERMINAL_CONTINUATION_PROMPT
     }
@@ -728,7 +736,8 @@ terminal_prompt_prefix :: proc(term: ^core.Terminal_State) -> string {
 //
 // Returns:
 //   - The active mode's primary prompt prefix.
-terminal_primary_prompt_prefix :: proc(term: ^core.Terminal_State) -> string {
+terminal_primary_prompt_prefix :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> string {
     if term != nil && term.input_mode == .Pkg {
         return TERMINAL_PKG_PROMPT
     }
@@ -748,7 +757,8 @@ terminal_primary_prompt_prefix :: proc(term: ^core.Terminal_State) -> string {
 //
 // Returns:
 //   - The active evaluation mode, or Normal for nil state.
-terminal_input_mode :: proc(term: ^core.Terminal_State) -> protocol.Evaluation_Mode {
+terminal_input_mode :: proc(
+    term: ^viewterminalmodel.Terminal_State) -> protocol.Evaluation_Mode {
     if term == nil {
         return .Normal
     }
@@ -762,7 +772,7 @@ terminal_input_mode :: proc(term: ^core.Terminal_State) -> protocol.Evaluation_M
 //
 // Returns:
 //   - True only while the active evaluation mode is Help.
-terminal_is_help_mode :: proc(term: ^core.Terminal_State) -> bool {
+terminal_is_help_mode :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
     return term != nil && term.input_mode == .Help
 }
 
@@ -773,7 +783,7 @@ terminal_is_help_mode :: proc(term: ^core.Terminal_State) -> bool {
 //
 // Returns:
 //   - True only while the active evaluation mode is Pkg.
-terminal_is_pkg_mode :: proc(term: ^core.Terminal_State) -> bool {
+terminal_is_pkg_mode :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
     return term != nil && term.input_mode == .Pkg
 }
 
@@ -789,7 +799,7 @@ terminal_is_pkg_mode :: proc(term: ^core.Terminal_State) -> bool {
 //
 // Side effects:
 //   - Restores Normal mode only when Help is currently active.
-terminal_exit_help_mode :: proc(term: ^core.Terminal_State) {
+terminal_exit_help_mode :: proc(term: ^viewterminalmodel.Terminal_State) {
     if term != nil && term.input_mode == .Help {
         term.input_mode = .Normal
     }
@@ -805,7 +815,7 @@ terminal_exit_help_mode :: proc(term: ^core.Terminal_State) {
 //
 // Side effects:
 //   - Clears editable input and completion state.
-terminal_cancel_pkg_mode :: proc(term: ^core.Terminal_State) -> bool {
+terminal_cancel_pkg_mode :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
     if term == nil || term.input_mode != .Pkg {
         return false
     }
@@ -830,7 +840,7 @@ terminal_cancel_pkg_mode :: proc(term: ^core.Terminal_State) -> bool {
 //
 // Side effects:
 //   - Appends the banner as styled output runs via termhist.
-terminal_display_banner :: proc(term: ^core.Terminal_State, text: string) {
+terminal_display_banner :: proc(term: ^viewterminalmodel.Terminal_State, text: string) {
     if term == nil || term.history == nil {
         return
     }
@@ -841,7 +851,7 @@ terminal_display_banner :: proc(term: ^core.Terminal_State, text: string) {
 
 // Apply local cursor-movement effects and return the resulting completion request.
 terminal_apply_keyboard_update :: proc(
-    term: ^core.Terminal_State, keyboard: Terminal_Keyboard_Update,
+    term: ^viewterminalmodel.Terminal_State, keyboard: Terminal_Keyboard_Update,
     now: f64) -> Terminal_Completion_Request {
     if keyboard.cursor_moved {
         term.view_selection_active = false
@@ -872,7 +882,7 @@ terminal_apply_keyboard_update :: proc(
 //   - Mutates the live input line, cursor, and committed scrollback via termhist.
 //   - Mutates the mouse-driven view selection and may write to the clipboard.
 terminal_update :: proc(
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     request: Terminal_Update_Request) -> Terminal_Frame_Update {
     if term == nil || term.history == nil {
         return {}
@@ -914,7 +924,7 @@ terminal_update :: proc(
 //   - Appends a bold prompt run plus the committed input line, then clears
 //     the live line via termhist. Does not append any output line; the
 //     caller appends the real evaluated result once it arrives.
-terminal_submit :: proc(term: ^core.Terminal_State) -> string {
+terminal_submit :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
     text := termhist.termhist_current_text(term.history)
     if term.collecting_continuation {
         terminal_restore_output_checkpoint(term)
@@ -939,7 +949,7 @@ terminal_submit :: proc(term: ^core.Terminal_State) -> string {
 
 // Append one submitted physical row with its prompt and input styles.
 terminal_append_submitted_line :: proc(
-    term: ^core.Terminal_State, prefix, line: string,
+    term: ^viewterminalmodel.Terminal_State, prefix, line: string,
     prompt_style, input_style: termgrid.Cell_Style) {
     termgrid.grid_set_style(&term.output_grid, prompt_style)
     termgrid.grid_write(&term.output_grid, prefix)
@@ -960,7 +970,7 @@ terminal_append_submitted_line :: proc(
 //   - Writes mode-aware first prefix, continuation prefixes, default-color source cells, and
 //     CRLF row endings; restores the prior grid style before return.
 terminal_append_submitted_input :: proc(
-    term: ^core.Terminal_State, text: string,
+    term: ^viewterminalmodel.Terminal_State, text: string,
     prompt_style: termhist.Termhist_Text_Style) {
     saved_style := term.output_grid.style
     prompt_cell_style := termgrid.Cell_Style{

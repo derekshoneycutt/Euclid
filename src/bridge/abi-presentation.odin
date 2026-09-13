@@ -1,9 +1,13 @@
 package bridge
 
+import bridgemodel "model"
+import presentation_model "presentation"
+
 import "../core"
 
 //   Decode the stable ABI MIME value into its native representation.
-presentation_mime_from_abi :: proc(value: i32) -> (core.Presentation_Mime, bool) {
+presentation_mime_from_abi :: proc(
+    value: i32) -> (presentation_model.Presentation_Mime, bool) {
     switch value {
     case 0:
         return .Text_Plain, true
@@ -14,7 +18,8 @@ presentation_mime_from_abi :: proc(value: i32) -> (core.Presentation_Mime, bool)
 }
 
 //   Map presentation transport outcomes onto the stable bridge status contract.
-presentation_bridge_status :: proc(outcome: core.Communication_Send_Outcome) -> i32 {
+presentation_bridge_status :: proc(
+    outcome: bridgemodel.Communication_Send_Outcome) -> i32 {
     switch outcome {
     case .Sent, .Queue_Full:
         return BRIDGE_STATUS_OK
@@ -35,7 +40,8 @@ publish_presented_text :: proc "c" (
         state^.julia_interface == nil {
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
-    if byte_count < 0 || byte_count > i32(core.PRESENTATION_MAX_SOURCE_BYTES) ||
+    if byte_count < 0 ||
+        byte_count > i32(presentation_model.PRESENTATION_MAX_SOURCE_BYTES) ||
         (source == nil && byte_count > 0) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }

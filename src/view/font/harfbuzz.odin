@@ -1,6 +1,6 @@
 package font
 
-import "../../core"
+import fontmodel "model"
 
 import "core:c"
 
@@ -123,11 +123,11 @@ Math_Kern_Query_Result :: struct {
     ok: bool,
 }
 
-Shaped_Glyph :: core.Shaped_Glyph
-Font_Shaping_Resource :: core.Font_Shaping_Resource
-Font_Math_Shaping_Capability :: core.Font_Math_Shaping_Capability
-Font_Math_Constants :: core.Font_Math_Constants
-Font_Glyph_Extents :: core.Font_Glyph_Extents
+Shaped_Glyph :: fontmodel.Shaped_Glyph
+Font_Shaping_Resource :: fontmodel.Font_Shaping_Resource
+Font_Math_Shaping_Capability :: fontmodel.Font_Math_Shaping_Capability
+Font_Math_Constants :: fontmodel.Font_Math_Constants
+Font_Glyph_Extents :: fontmodel.Font_Glyph_Extents
 
 // Harfbuzz_Math_Constant mirrors hb_ot_math_constant_t values 0 through 55.
 Harfbuzz_Math_Constant :: enum c.int {
@@ -404,7 +404,7 @@ harfbuzz_shaper_finish_init :: proc(
     shaper.buffer = hb_buffer_create()
     if shaper.buffer == nil || hb_buffer_pre_allocate(
         cast(^Harfbuzz_Buffer)shaper.buffer,
-        u32(core.FONT_SHAPED_GLYPH_CAPACITY)) == 0 {
+        u32(fontmodel.FONT_SHAPED_GLYPH_CAPACITY)) == 0 {
         harfbuzz_shaper_destroy(shaper)
         return false
     }
@@ -590,7 +590,7 @@ math_shaping_copy_kern_table :: proc(
     glyph_id: u32,
     corner: Harfbuzz_Math_Kern,
     native: []Harfbuzz_Math_Kern_Entry,
-    output: []core.Font_Math_Kern_Entry) -> bool {
+    output: []fontmodel.Font_Math_Kern_Entry) -> bool {
 
     previous_height: i32
     for entry, index in native {
@@ -622,15 +622,15 @@ math_shaping_glyph_kern_table :: proc(
     generation: u64,
     glyph_id: u32,
     corner: Harfbuzz_Math_Kern,
-    output: []core.Font_Math_Kern_Entry) -> Math_Kern_Query_Result {
+    output: []fontmodel.Font_Math_Kern_Entry) -> Math_Kern_Query_Result {
 
     if !math_shaping_generation_matches(capability, generation) ||
         !math_shaping_has_glyph(capability, glyph_id) ||
         corner < .Top_Right || corner > .Bottom_Left || len(output) <= 0 ||
-        len(output) > core.FONT_MATH_KERN_ENTRY_CAPACITY {
+        len(output) > fontmodel.FONT_MATH_KERN_ENTRY_CAPACITY {
         return {}
     }
-    native: [core.FONT_MATH_KERN_ENTRY_CAPACITY]Harfbuzz_Math_Kern_Entry
+    native: [fontmodel.FONT_MATH_KERN_ENTRY_CAPACITY]Harfbuzz_Math_Kern_Entry
     count := u32(len(output))
     available := hb_ot_math_get_glyph_kernings(
         cast(^Harfbuzz_Font)capability.resource.font,
@@ -652,14 +652,14 @@ math_shaping_directional_variants :: proc(
     generation: u64,
     glyph_id: u32,
     direction: Harfbuzz_Direction,
-    output: []core.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
+    output: []fontmodel.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
 
     if !math_shaping_generation_matches(capability, generation) ||
         !math_shaping_has_glyph(capability, glyph_id) || len(output) <= 0 ||
-        len(output) > core.FONT_MATH_GLYPH_VARIANT_CAPACITY {
+        len(output) > fontmodel.FONT_MATH_GLYPH_VARIANT_CAPACITY {
         return {}
     }
-    native: [core.FONT_MATH_GLYPH_VARIANT_CAPACITY]Harfbuzz_Math_Glyph_Variant
+    native: [fontmodel.FONT_MATH_GLYPH_VARIANT_CAPACITY]Harfbuzz_Math_Glyph_Variant
     count := u32(len(output))
     available := hb_ot_math_get_glyph_variants(
         cast(^Harfbuzz_Font)capability.resource.font, glyph_id, direction,
@@ -683,7 +683,7 @@ math_shaping_vertical_variants :: proc(
     capability: ^Font_Math_Shaping_Capability,
     generation: u64,
     glyph_id: u32,
-    output: []core.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
+    output: []fontmodel.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
 
     return math_shaping_directional_variants(
         capability, generation, glyph_id, .Top_To_Bottom, output)
@@ -694,7 +694,7 @@ math_shaping_horizontal_variants :: proc(
     capability: ^Font_Math_Shaping_Capability,
     generation: u64,
     glyph_id: u32,
-    output: []core.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
+    output: []fontmodel.Font_Math_Glyph_Variant) -> Math_Variant_Query_Result {
 
     return math_shaping_directional_variants(
         capability, generation, glyph_id, .Left_To_Right, output)
@@ -703,7 +703,7 @@ math_shaping_horizontal_variants :: proc(
 //   Validate and copy native assembly parts into bounded application records.
 math_shaping_copy_assembly_parts :: proc(
     native: []Harfbuzz_Math_Glyph_Part,
-    output: []core.Font_Math_Glyph_Part) -> bool {
+    output: []fontmodel.Font_Math_Glyph_Part) -> bool {
 
     for part, index in native {
         if part.glyph == 0 || part.full_advance <= 0 ||
@@ -727,14 +727,14 @@ math_shaping_directional_assembly :: proc(
     generation: u64,
     glyph_id: u32,
     direction: Harfbuzz_Direction,
-    output: []core.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
+    output: []fontmodel.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
 
     if !math_shaping_generation_matches(capability, generation) ||
         !math_shaping_has_glyph(capability, glyph_id) || len(output) <= 0 ||
-        len(output) > core.FONT_MATH_GLYPH_PART_CAPACITY {
+        len(output) > fontmodel.FONT_MATH_GLYPH_PART_CAPACITY {
         return {}
     }
-    native: [core.FONT_MATH_GLYPH_PART_CAPACITY]Harfbuzz_Math_Glyph_Part
+    native: [fontmodel.FONT_MATH_GLYPH_PART_CAPACITY]Harfbuzz_Math_Glyph_Part
     count := u32(len(output))
     italic_correction: i32
     font := cast(^Harfbuzz_Font)capability^.resource.font
@@ -758,7 +758,7 @@ math_shaping_vertical_assembly :: proc(
     capability: ^Font_Math_Shaping_Capability,
     generation: u64,
     glyph_id: u32,
-    output: []core.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
+    output: []fontmodel.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
 
     return math_shaping_directional_assembly(
         capability, generation, glyph_id, .Top_To_Bottom, output)
@@ -769,7 +769,7 @@ math_shaping_horizontal_assembly :: proc(
     capability: ^Font_Math_Shaping_Capability,
     generation: u64,
     glyph_id: u32,
-    output: []core.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
+    output: []fontmodel.Font_Math_Glyph_Part) -> Math_Assembly_Query_Result {
 
     return math_shaping_directional_assembly(
         capability, generation, glyph_id, .Left_To_Right, output)

@@ -1,5 +1,7 @@
 package ui
 
+import viewterminalmodel "../terminal/model"
+
 import "../../core"
 import termemulator "../../terminal/emulator"
 import "../font"
@@ -44,7 +46,7 @@ terminal_content_panel :: proc(panel: rl.Rectangle) -> rl.Rectangle {
 
 // Poll one terminal frame using the same bounds later supplied to drawing.
 terminal_update :: proc(
-    term: ^core.Terminal_State, frame: input.Input_Frame,
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     font_face: rl.Font, bounds: rl.Rectangle) -> Terminal_Frame_Update {
     resolved := terminalview.terminal_resolve_mouse_frame(term, frame, bounds)
     return terminalview.terminal_update(term, {
@@ -57,12 +59,12 @@ terminal_update :: proc(
 }
 
 // Return the bounded output row count currently visible to the terminal UI.
-terminal_line_count :: proc(term: ^core.Terminal_State) -> int {
+terminal_line_count :: proc(term: ^viewterminalmodel.Terminal_State) -> int {
     return terminalview.terminal_line_count(term)
 }
 
 // Return one terminal output row as selectable UTF-8 text.
-terminal_line_text :: proc(term: ^core.Terminal_State, line: int) -> string {
+terminal_line_text :: proc(term: ^viewterminalmodel.Terminal_State, line: int) -> string {
     return terminalview.terminal_line_text(term, line)
 }
 

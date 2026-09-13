@@ -1,6 +1,11 @@
 package dynview_math
 
-import app_core "../../core"
+import dynviewmodel "../model"
+
+import fontmodel "../../view/font/model"
+
+import storage "../../core/storage"
+
 import dyncore "../core"
 import "core:testing"
 
@@ -103,8 +108,8 @@ math_shaping_test_kern_table :: proc(
 }
 
 //   Build deterministic OpenType MATH constants for shaping tests.
-math_shaping_test_constants :: proc() -> app_core.Font_Math_Constants {
-    constants := app_core.Font_Math_Constants{
+math_shaping_test_constants :: proc() -> fontmodel.Font_Math_Constants {
+    constants := fontmodel.Font_Math_Constants{
         valid = true, generation = 7, base_pixel_size = 32}
     constants.values[int(Math_Constant.Script_Percent_Scale_Down)] = 80
     constants.values[int(Math_Constant.Script_Script_Percent_Scale_Down)] = 60
@@ -128,7 +133,7 @@ math_shaping_test_constants :: proc() -> app_core.Font_Math_Constants {
 //   Build one fake shaping service over caller-owned temporary workspaces.
 math_shaping_test_service :: proc(
     projection_workspace: []u8,
-    glyph_workspace: []app_core.Shaped_Glyph) -> Math_Shaping_Service {
+    glyph_workspace: []fontmodel.Shaped_Glyph) -> Math_Shaping_Service {
 
     return {
         generation = 7,
@@ -148,7 +153,8 @@ math_shaping_test_service :: proc(
 }
 
 //   Populate the nested script, fraction, and radical measurement fixture.
-math_shaping_test_populate_recursive_fixture :: proc(runtime: ^app_core.Dynview_System) {
+math_shaping_test_populate_recursive_fixture :: proc(
+    runtime: ^dynviewmodel.Dynview_System) {
     copy(runtime^.command_buffer.text_bytes[:4], []u8{'x', '2', 'y', '3'})
     runtime^.command_buffer.text_bytes_len = 4
     cache := &runtime^.compile_cache
@@ -187,7 +193,7 @@ math_shaping_test_populate_recursive_fixture :: proc(runtime: ^app_core.Dynview_
 //   Verify cached NewCM metrics replace synthetic math-glyph measurements.
 math_shaping_expect_cached_run :: proc(
     t: ^testing.T,
-    runtime: ^app_core.Dynview_System) {
+    runtime: ^dynviewmodel.Dynview_System) {
     cache := &runtime^.compile_cache
     command := cache^.math_commands[0]
     run, run_ok := shaped_run_for_command(cache, command, .Primary)
@@ -206,7 +212,7 @@ math_shaping_expect_cached_run :: proc(
 
 //   Verify one fake display operator's published variant identity and contents.
 math_shaping_expect_operator_variants :: proc(
-    t: ^testing.T, cache: ^app_core.Dynview_Compile_Cache) {
+    t: ^testing.T, cache: ^dynviewmodel.Dynview_Compile_Cache) {
 
     variants := cache^.math_operator_variants[1]
     testing.expect(t, variants.valid && variants.extended_shape)
@@ -217,7 +223,7 @@ math_shaping_expect_operator_variants :: proc(
 }
 
 //   Install the two-command fixture for intrinsic metric tests.
-math_shaping_populate_intrinsic_fixture :: proc(runtime: ^app_core.Dynview_System) {
+math_shaping_populate_intrinsic_fixture :: proc(runtime: ^dynviewmodel.Dynview_System) {
     copy(runtime^.command_buffer.text_bytes[:2], []u8{'x', 'S'})
     runtime^.command_buffer.text_bytes_len = 2
     cache := &runtime^.compile_cache
@@ -238,21 +244,21 @@ math_shaping_populate_intrinsic_fixture :: proc(runtime: ^app_core.Dynview_Syste
 //   Verify cached NewCM metrics replace synthetic math-glyph measurements.
 @(test)
 dynview_math_shaping_measures_cached_intrinsic_metrics :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
-    testing.expect(t, app_core.arena_owner_init(&runtime^.cache_arena))
-    defer app_core.arena_owner_destroy(&runtime^.cache_arena)
+    testing.expect(t, storage.arena_owner_init(&runtime^.cache_arena))
+    defer storage.arena_owner_destroy(&runtime^.cache_arena)
     math_shaping_populate_intrinsic_fixture(runtime)
     cache := &runtime^.compile_cache
     projection: [16]u8
-    glyphs: [8]app_core.Shaped_Glyph
+    glyphs: [8]fontmodel.Shaped_Glyph
 
     status := rebuild_shaped_math_cache(runtime, &runtime^.cache_arena,
         math_shaping_test_service(projection[:], glyphs[:]))
     measured := measure_math_program(
         cache, &runtime^.command_buffer, &cache^.math_programs[0], 32)
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     testing.expect(t, measured)
     testing.expect_value(t, cache^.math_programs[0].draw_width, f32(10))
     testing.expect_value(t, cache^.math_programs[0].ascent, f32(10))
@@ -277,7 +283,7 @@ dynview_math_shaping_measures_cached_intrinsic_metrics :: proc(t: ^testing.T) {
 //   Verify bar and glyph accents inherit published MATH geometry.
 math_shaping_expect_recursive_accents :: proc(
     t: ^testing.T,
-    runtime: ^app_core.Dynview_System) {
+    runtime: ^dynviewmodel.Dynview_System) {
 
     cache := &runtime^.compile_cache
     bar_item, bar_ok := math_program_item({
@@ -301,8 +307,8 @@ math_shaping_expect_recursive_accents :: proc(
 
 //   Build one fixture command item with the default math style.
 math_shaping_fixture_item :: proc(
-    runtime: ^app_core.Dynview_System,
-    command_index: int) -> (app_core.Dynview_Layout_Item, bool) {
+    runtime: ^dynviewmodel.Dynview_System,
+    command_index: int) -> (dynviewmodel.Dynview_Layout_Item, bool) {
 
     return math_program_item({
         cache = &runtime^.compile_cache,
@@ -316,7 +322,7 @@ math_shaping_fixture_item :: proc(
 //   Verify sealed recursive radical, fraction, and script geometry.
 math_shaping_expect_recursive_geometry :: proc(
     t: ^testing.T,
-    runtime: ^app_core.Dynview_System) {
+    runtime: ^dynviewmodel.Dynview_System) {
 
     cache := &runtime^.compile_cache
     radical_item, radical_ok := math_shaping_fixture_item(runtime, 4)
@@ -340,21 +346,21 @@ math_shaping_expect_recursive_geometry :: proc(
 //   Verify scripts, fractions, radicals, nesting, and grid width use shaped metrics.
 @(test)
 dynview_math_shaping_propagates_recursive_metrics :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
-    testing.expect(t, app_core.arena_owner_init(&runtime^.cache_arena))
-    defer app_core.arena_owner_destroy(&runtime^.cache_arena)
+    testing.expect(t, storage.arena_owner_init(&runtime^.cache_arena))
+    defer storage.arena_owner_destroy(&runtime^.cache_arena)
     math_shaping_test_populate_recursive_fixture(runtime)
     cache := &runtime^.compile_cache
     projection: [16]u8
-    glyphs: [8]app_core.Shaped_Glyph
+    glyphs: [8]fontmodel.Shaped_Glyph
 
     status := rebuild_shaped_math_cache(runtime, &runtime^.cache_arena,
         math_shaping_test_service(projection[:], glyphs[:]))
     measured := measure_math_program(
         cache, &runtime^.command_buffer, &cache^.math_programs[4], 32)
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     testing.expect(t, measured)
     testing.expect(t, cache^.math_programs[1].draw_width > 19)
     testing.expect(t, cache^.math_programs[3].draw_width > 20)
@@ -370,10 +376,10 @@ dynview_math_shaping_propagates_recursive_metrics :: proc(t: ^testing.T) {
 //   Verify recursive matrix columns inherit proportional shaped cell widths.
 @(test)
 dynview_math_shaping_measures_matrix_cells :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
-    testing.expect(t, app_core.arena_owner_init(&runtime^.cache_arena))
-    defer app_core.arena_owner_destroy(&runtime^.cache_arena)
+    testing.expect(t, storage.arena_owner_init(&runtime^.cache_arena))
+    defer storage.arena_owner_destroy(&runtime^.cache_arena)
     copy(runtime^.command_buffer.text_bytes[:4], []u8{'x', 'y', '1', '2'})
     runtime^.command_buffer.text_bytes_len = 4
     cache := &runtime^.compile_cache
@@ -395,14 +401,14 @@ dynview_math_shaping_measures_matrix_cells :: proc(t: ^testing.T) {
     cache^.math_programs[0] = {valid = true, command_count = 2}
     cache^.math_programs[1] = {valid = true, command_start = 2, command_count = 1}
     projection: [16]u8
-    glyphs: [8]app_core.Shaped_Glyph
+    glyphs: [8]fontmodel.Shaped_Glyph
 
     status := rebuild_shaped_math_cache(runtime, &runtime^.cache_arena,
         math_shaping_test_service(projection[:], glyphs[:]))
     measured := measure_math_program(
         cache, &runtime^.command_buffer, &cache^.math_programs[1], 32)
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     testing.expect(t, measured)
     testing.expect_value(t, len(cache^.shaped_runs), 2)
     testing.expect(t, cache^.math_kern_tables[0].valid)
@@ -412,10 +418,10 @@ dynview_math_shaping_measures_matrix_cells :: proc(t: ^testing.T) {
 //   Verify missing glyphs retain whole-run synthetic fallback without partial spans.
 @(test)
 dynview_math_shaping_missing_glyph_uses_whole_run_fallback :: proc(t: ^testing.T) {
-    runtime := new(app_core.Dynview_System, context.allocator)
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
-    testing.expect(t, app_core.arena_owner_init(&runtime^.cache_arena))
-    defer app_core.arena_owner_destroy(&runtime^.cache_arena)
+    testing.expect(t, storage.arena_owner_init(&runtime^.cache_arena))
+    defer storage.arena_owner_destroy(&runtime^.cache_arena)
     copy(runtime^.command_buffer.text_bytes[:2], []u8{'?', 'x'})
     runtime^.command_buffer.text_bytes_len = 2
     cache := &runtime^.compile_cache
@@ -427,14 +433,14 @@ dynview_math_shaping_missing_glyph_uses_whole_run_fallback :: proc(t: ^testing.T
     cache^.math_program_count = 1
     cache^.math_programs[0] = {valid = true, command_count = 1}
     projection: [16]u8
-    glyphs: [8]app_core.Shaped_Glyph
+    glyphs: [8]fontmodel.Shaped_Glyph
 
     status := rebuild_shaped_math_cache(runtime, &runtime^.cache_arena,
         math_shaping_test_service(projection[:], glyphs[:]))
     measured := measure_math_program(
         cache, &runtime^.command_buffer, &cache^.math_programs[0], 32)
 
-    testing.expect_value(t, status, app_core.Bounded_Builder_Status.Ok)
+    testing.expect_value(t, status, storage.Bounded_Builder_Status.Ok)
     testing.expect_value(t, len(cache^.shaped_runs), 0)
     testing.expect_value(t, len(cache^.math_kern_tables), 0)
     testing.expect(t, measured)

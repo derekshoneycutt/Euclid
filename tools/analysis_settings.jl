@@ -34,6 +34,8 @@ const RuleResponses = Dict(
     "NAMING-POLICY-DRIFT" => Fail,
     "CALL-ROOT-POLICY-DRIFT" => Fail,
     "IMPORT-POLICY-DRIFT" => Fail,
+    "ARCHITECTURE-FORBIDDEN-DEPENDENCY" => Fail,
+    "ARCHITECTURE-DEPENDENCY-CYCLE" => Fail,
     "COMMON-LINE-90" => Warn,
     "COMMON-LINE-100" => Warn,
     "COMMON-LINE-120" => Fail,
@@ -84,11 +86,11 @@ const AnimationLoopReason =
 
 # Columns: id, path, procedure, operation, target, minimum, maximum, reason.
 const CustomTestAllocationReviews = [
-    ("test-core-arena-owner-growth-buffer", "src/core/arena_owner_test.odin",
-        "core_test_arena_owner_reset_releases_growth_blocks", "make", "[]u8", 1, 1,
+    ("test-core-arena-owner-growth-buffer", "src/core/storage/arena_owner_test.odin",
+        "storage_test_arena_owner_reset_releases_growth_blocks", "make", "[]u8", 1, 1,
         "Arena-backed test payload is invalidated by reset and released by destroy."),
-    ("test-core-arena-owner-destroy-buffer", "src/core/arena_owner_test.odin",
-        "core_test_arena_owner_destroy_preserves_diagnostics", "make", "[]u8", 1, 1,
+    ("test-core-arena-owner-destroy-buffer", "src/core/storage/arena_owner_test.odin",
+        "storage_test_arena_owner_destroy_preserves_diagnostics", "make", "[]u8", 1, 1,
         "Arena-backed test payload is released by the owner destruction under test."),
     ("test-evidence-allocation-baseline-buffer",
         "src/evidence/allocation/allocation_test.odin",
@@ -242,6 +244,38 @@ function euclid_naming_settings()
     return NamingSettings(conventions)
 end
 
+"""Enforce application composition, coordinator, and substrate dependency direction."""
+function euclid_architecture_settings()
+    return ArchitectureSettings(
+        [
+            ArchitectureLayer("substrate", [
+                ".",
+                "src/bridge/model",
+                "src/bridge/presentation",
+                "src/core/animation",
+                "src/core/protocol",
+                "src/core/storage",
+                "src/view/font/model",
+                "src/view/model",
+                "src/view/terminal/model",
+            ]),
+            ArchitectureLayer("composition", ["src/core"]),
+            ArchitectureLayer("coordinator", [
+                "src/main.odin",
+                "src/main_test.odin",
+                "src/harness",
+                "src/bridge",
+                "src/view",
+            ]),
+        ],
+        [
+            ArchitectureDependency("substrate", "substrate"),
+            ArchitectureDependency("composition", "substrate"),
+            ArchitectureDependency("coordinator", "substrate"),
+            ArchitectureDependency("coordinator", "composition"),
+        ])
+end
+
 """Add reviewed animation complexity exceptions to the reviews list."""
 function add_animation_reviews!(reviews)
     path = "src/content/nullanimation.jl"
@@ -260,7 +294,7 @@ end
 function add_builder_test_allocation_procs!(reviews)
     push!(reviews, ReviewedComplexity(
         "test-bounded-builder-allocator-parameters",
-        "src/core/bounded_builder_test.odin",
+        "src/core/storage/bounded_builder_test.odin",
         :odin,
         "bounded_builder_test_allocator_proc",
         :parameters,
@@ -351,7 +385,7 @@ AnalysisSettings(
         BaseSettings.function_metrics.julia_cyclomatic,
         BaseSettings.function_metrics.odin_cyclomatic,
         animation_loop_reviews()),
-    default_architecture_settings(),
+    euclid_architecture_settings(),
     AllocationSettings(
         BaseSettings.allocations.known_procedures,
         [
@@ -368,7 +402,7 @@ AnalysisSettings(
             # Shared arena ownership reserves virtual storage with explicit lifecycle.
             ReviewedAllocationPolicy(
                 "core-arena-owner-growing-reservation",
-                "src/core/arena_owner.odin",
+                "src/core/storage/arena_owner.odin",
                 "arena_owner_growing_init",
                 :arena,
                 "Owner-scoped growing storage is reset in bulk and explicitly destroyed.";
@@ -378,7 +412,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "test-core-arena-owner-partial-init",
-                "src/core/arena_owner_test.odin",
+                "src/core/storage/arena_owner_test.odin",
                 "arena_owner_test_init_failure",
                 :arena,
                 "Test reservation is deliberately followed by failure to verify cleanup.";
@@ -390,7 +424,7 @@ AnalysisSettings(
             # Shared bounded builders grow within an explicit bulk-lifetime owner.
             ReviewedAllocationPolicy(
                 "core-bounded-byte-builder-growth",
-                "src/core/bounded_builder.odin",
+                "src/core/storage/bounded_builder.odin",
                 "bounded_byte_builder_reserve",
                 :custom,
                 "Hard-limit-checked geometric byte storage is reclaimed by the allocator owner at reset or destruction.";
@@ -401,7 +435,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "core-bounded-element-builder-growth",
-                "src/core/bounded_builder.odin",
+                "src/core/storage/bounded_builder.odin",
                 "bounded_element_builder_reserve",
                 :custom,
                 "Hard-limit-checked geometric plain-element storage is reclaimed by the allocator owner at reset or destruction.";
@@ -412,7 +446,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "core-animation-value-store-payload",
-                "src/core/animation_value_store.odin",
+                "src/core/animation/value_store.odin",
                 "animation_value_store_insert",
                 :custom,
                 "Quota-checked opaque payload is retired by shared animation-memory reset or destruction.";
@@ -423,7 +457,7 @@ AnalysisSettings(
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "core-animation-value-pending-payload",
-                "src/core/animation_value_store.odin",
+                "src/core/animation/value_store.odin",
                 "animation_value_pending_allocate_storage",
                 :custom,
                 "Validated pending payload storage is retired by shared animation-memory reset or destruction.";
@@ -955,8 +989,8 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "test-animation-memory-generation-payload",
-                "src/core/animation_memory_test.odin",
-                "core_test_animation_memory_advances_generation",
+                "src/core/animation/memory_test.odin",
+                "animation_model_test_animation_memory_advances_generation",
                 :custom,
                 "Test payload is invalidated by generation reset and its arena is destroyed by deferred fixture teardown.";
                 operation="make",
@@ -967,8 +1001,8 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "test-animation-memory-destroy-payload",
-                "src/core/animation_memory_test.odin",
-                "core_test_animation_memory_destroy_preserves_diagnostics",
+                "src/core/animation/memory_test.odin",
+                "animation_model_test_animation_memory_destroy_preserves_diagnostics",
                 :custom,
                 "Test payload is released by the explicit destroy whose terminal diagnostics the test verifies.";
                 operation="make",
@@ -984,7 +1018,7 @@ AnalysisSettings(
                 :custom,
                 "Exact-size immutable kern-table storage is reclaimed when the cache arena is reset or destroyed.";
                 operation="make",
-                target="[]app_core.Font_Math_Kern_Table",
+                target="[]fontmodel.Font_Math_Kern_Table",
                 allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
@@ -997,7 +1031,7 @@ AnalysisSettings(
                 :custom,
                 "Exact-size immutable accent-source storage is reclaimed when the cache arena is reset or destroyed.";
                 operation="make",
-                target="[][2]app_core.Font_Math_Stretch_Source",
+                target="[][2]fontmodel.Font_Math_Stretch_Source",
                 allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
@@ -1174,7 +1208,7 @@ AnalysisSettings(
                 :unknown,
                 "A dedicated arena is used to allocate lookup information.";
                 operation="make",
-                target="[]core.Euclid_Julia_Animation_Lookup_Entry",
+                target="[]bridgemodel.Euclid_Julia_Animation_Lookup_Entry",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
@@ -1184,7 +1218,7 @@ AnalysisSettings(
                 :unknown,
                 "A dedicated arena is used to allocate new animation registries.";
                 operation="new",
-                target="core.Euclid_Julia_Animation_Interface",
+                target="bridgemodel.Euclid_Julia_Animation_Interface",
                 certainty=:definite,
                 response=Ignore),
             # Bridge Runtime Service Allocations ; these allocate the main bridge runtime
@@ -1267,7 +1301,7 @@ AnalysisSettings(
                 :context,
                 "Display-owned Dynview staging persists for one process run and is explicitly destroyed with its presentation runtime.";
                 operation="new",
-                target="core.Dynview_System",
+                target="dynviewmodel.Dynview_System",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1329,7 +1363,7 @@ AnalysisSettings(
                 :custom,
                 "Compile-cache fixture storage is reclaimed by deferred arena-owner destruction.";
                 operation="new",
-                target="app_core.Dynview_Compile_Cache",
+                target="dynviewmodel.Dynview_Compile_Cache",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1341,7 +1375,7 @@ AnalysisSettings(
                 :custom,
                 "Compile-cache fixture storage is reclaimed by deferred arena-owner destruction.";
                 operation="new",
-                target="app_core.Dynview_Compile_Cache",
+                target="dynviewmodel.Dynview_Compile_Cache",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1353,7 +1387,7 @@ AnalysisSettings(
                 :custom,
                 "Runtime fixture storage is reclaimed by deferred runtime-arena destruction.";
                 operation="new",
-                target="app_core.Dynview_System",
+                target="dynviewmodel.Dynview_System",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1437,7 +1471,7 @@ AnalysisSettings(
                 :custom,
                 "Runtime fixture storage belongs to the caller-provided arena owner.";
                 operation="new",
-                target="app_core.Dynview_System",
+                target="dynviewmodel.Dynview_System",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1449,7 +1483,7 @@ AnalysisSettings(
                 :custom,
                 "Runtime fixture storage is reclaimed by deferred arena-owner destruction.";
                 operation="new",
-                target="app_core.Dynview_System",
+                target="dynviewmodel.Dynview_System",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1567,7 +1601,7 @@ AnalysisSettings(
                 :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="core.Shape_World",
+                target="shapemodel.Shape_World",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,

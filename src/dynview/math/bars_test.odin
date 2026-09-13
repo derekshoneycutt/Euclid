@@ -1,11 +1,12 @@
 package dynview_math
 
-import app_core "../../core"
+import fontmodel "../../view/font/model"
+
 import "core:testing"
 
 //   Build deterministic overbar and underbar constants at the native test size.
-math_bar_test_constants :: proc() -> app_core.Font_Math_Constants {
-    constants := app_core.Font_Math_Constants{
+math_bar_test_constants :: proc() -> fontmodel.Font_Math_Constants {
+    constants := fontmodel.Font_Math_Constants{
         valid = true, generation = 15, base_pixel_size = 32}
     constants.values[int(Math_Constant.Overbar_Vertical_Gap)] = 3 * 64
     constants.values[int(Math_Constant.Overbar_Rule_Thickness)] = 2 * 64

@@ -1,11 +1,16 @@
 package view
 
+import animation_model "../core/animation"
+import bridgemodel "../bridge/model"
+
+import presentation_model "../bridge/presentation"
+
+import storage "../core/storage"
+
 import julia "../bridge"
-import "../core"
 import evidence_allocation "../evidence/allocation"
 import artifact "../evidence/artifact"
 import capture "../evidence/capture"
-import "../evidence/observe"
 import scenario "../evidence/scenario"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
@@ -171,7 +176,7 @@ scenario_runtime_update :: proc(
     status := scenario.runner_update(&runtime.runner, {
         now_ns = now_ns,
         events = state.evidence_session.events[:state.evidence_session.event_count],
-        display = observe.display(state),
+        display = observe_display_state(state),
         actions = {
             user_data = rawptr(runtime),
             issue = scenario_runtime_issue,
@@ -323,7 +328,7 @@ scenario_issue_view_content :: proc(
     if service == nil || state.julia_interface == nil {
         return false
     }
-    mime := core.Presentation_Mime.Text_Plain
+    mime := presentation_model.Presentation_Mime.Text_Plain
     if command.view_content_mime == .Text_Latex {
         mime = .Text_Latex
     }
@@ -479,15 +484,15 @@ scenario_arena_snapshot :: proc(
     #partial switch kind {
     case .Animation:
         scenario_add_arena_diagnostics(&snapshot,
-            core.animation_memory_diagnostics(&state^.animation_memory))
+            animation_model.animation_memory_diagnostics(&state^.animation_memory))
     case .Snapshot_Slots:
         for &slot in state^.julia_runtime_service^.view_snapshots {
             scenario_add_arena_diagnostics(
-                &snapshot, core.arena_owner_diagnostics(&slot.arena))
+                &snapshot, storage.arena_owner_diagnostics(&slot.arena))
         }
     case .Display_Cache:
         scenario_add_arena_diagnostics(&snapshot,
-            core.arena_owner_diagnostics(&state^.dynview.cache_arena))
+            storage.arena_owner_diagnostics(&state^.dynview.cache_arena))
     }
     return snapshot
 }
@@ -495,7 +500,7 @@ scenario_arena_snapshot :: proc(
 //   Aggregate one owner diagnostic into a fixed scenario arena sample.
 scenario_add_arena_diagnostics :: proc(
     snapshot: ^evidence_allocation.Arena_Snapshot,
-    diagnostics: core.Arena_Owner_Diagnostics) {
+    diagnostics: storage.Arena_Owner_Diagnostics) {
 
     if diagnostics.initialized {
         snapshot^.initialized_count += 1
@@ -668,8 +673,8 @@ scenario_runtime_succeeded :: proc(runtime: ^Scenario_Runtime) -> bool {
 
 //   Find one registered animation by exact display name without allocation.
 scenario_find_animation :: proc(
-    interface: ^core.Euclid_Julia_Interface,
-    name: string) -> ^core.Euclid_Julia_Animation_Interface {
+    interface: ^bridgemodel.Euclid_Julia_Interface,
+    name: string) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
     if interface == nil || len(name) == 0 {
         return nil
     }

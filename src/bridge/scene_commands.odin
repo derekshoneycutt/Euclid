@@ -1,5 +1,12 @@
 package bridge
 
+import rl "vendor:raylib"
+
+import bridgemodel "model"
+import shapemodel "../shapes/model"
+
+import animation_model "../core/animation"
+
 import "../core"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
@@ -9,7 +16,7 @@ import evidence_trace "../evidence/trace"
 // immutable query snapshot. The display thread validates the entire completed batch
 // before applying any command, so invalid or overflowed batches cannot partially commit.
 
-SCENE_COMMAND_BATCH_CAPACITY :: core.SCENE_COMMAND_BATCH_CAPACITY
+SCENE_COMMAND_BATCH_CAPACITY :: bridgemodel.SCENE_COMMAND_BATCH_CAPACITY
 
 //   Per-kind validator shape: report whether one command is valid against state.
 Scene_Command_Validator :: #type proc(
@@ -76,10 +83,10 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
 
 // Core owns these data shapes because they are referenced by Euclid_General_State.
 // Bridge owns their capture, validation, and commit behavior.
-Scene_Command_Kind :: core.Scene_Command_Kind
-Scene_Command :: core.Scene_Command
-Scene_Command_Batch :: core.Scene_Command_Batch
-Animation_Query_Snapshot :: core.Animation_Query_Snapshot
+Scene_Command_Kind :: bridgemodel.Scene_Command_Kind
+Scene_Command :: bridgemodel.Scene_Command
+Scene_Command_Batch :: bridgemodel.Scene_Command_Batch
+Animation_Query_Snapshot :: bridgemodel.Animation_Query_Snapshot
 
 //   Copy the canonical values a Julia animation may query during one asynchronous tick.
 // The snapshot remains worker-owned until that tick completes; callbacks must not read
@@ -98,7 +105,7 @@ capture_animation_query_snapshot :: proc(
         snapshot^.shapes.label_store = world^.label_store
     }
     snapshot^.animation_values_valid =
-        core.animation_value_store_pack(
+        animation_model.animation_value_store_pack(
             &state^.animation_values,
             state^.animation_values.generation,
             &snapshot^.animation_values) == .Ok
@@ -185,7 +192,7 @@ capture_flag_command :: proc "contextless" (
 //   Capture one particle emission with the position and color observed by Julia.
 capture_particle_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
-    position: core.Vector3, color: Bridge_Color) -> bool {
+    position: rl.Vector3, color: Bridge_Color) -> bool {
 
     command, captured := append_scene_command(state, kind)
     if command != nil {
@@ -199,7 +206,7 @@ capture_particle_command :: proc "contextless" (
 // Resolve one packed command identity against the current canonical world.
 validate_command_shape_entity :: proc(
     state: ^core.Euclid_General_State,
-    command: ^Scene_Command) -> (core.Shape_Entity, bool) {
+    command: ^Scene_Command) -> (shapemodel.Shape_Entity, bool) {
     return bridge_shape_resolve(state, command^.entity)
 }
 
@@ -207,7 +214,7 @@ validate_command_shape_entity :: proc(
 validate_command_shape_transform :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
-    return found && core.shape_component_contains(
+    return found && shapemodel.shape_component_contains(
         &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
 }
 
@@ -215,7 +222,7 @@ validate_command_shape_transform :: proc(
 validate_command_shape_style :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
-    return found && core.shape_component_contains(
+    return found && shapemodel.shape_component_contains(
         &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
 }
 
@@ -223,7 +230,7 @@ validate_command_shape_style :: proc(
 validate_command_shape_active_feature :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
-    return found && core.shape_component_contains(
+    return found && shapemodel.shape_component_contains(
         &state^.shape_world^.active_features, &state^.shape_world^.registry, entity)
 }
 
@@ -266,14 +273,14 @@ apply_set_shape_position :: proc(
 // Apply one packed tool transform mutation with its owner-side effects.
 apply_set_tool_position :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_tool_position(state, core.shape_entity_unpack(command^.entity),
+    set_tool_position(state, shapemodel.shape_entity_unpack(command^.entity),
         command^.position, command^.flag)
 }
 
 // Apply one packed tool snap-lock mutation.
 apply_set_tool_lock :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_tool_lock(state, core.shape_entity_unpack(command^.entity),
+    set_tool_lock(state, shapemodel.shape_entity_unpack(command^.entity),
         command^.position, command^.flag, command^.integer != 0)
 }
 
@@ -322,7 +329,7 @@ validate_scene_command_batch :: proc(
     if !scene_command_batch_wellformed(state, batch) {
         return false
     }
-    if core.animation_value_store_validate_pending(
+    if animation_model.animation_value_store_validate_pending(
         &state^.animation_values,
         state^.animation_values.generation,
         &batch^.animation_value_writes) != .Ok {
@@ -380,7 +387,7 @@ commit_scene_command_batch :: proc(
         record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
     }
-    if core.animation_value_store_apply_pending(
+    if animation_model.animation_value_store_apply_pending(
         &state^.animation_values,
         state^.animation_values.generation,
         &batch^.animation_value_writes) != .Ok {

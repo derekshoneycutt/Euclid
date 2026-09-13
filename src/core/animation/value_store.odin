@@ -1,4 +1,6 @@
-package core
+package animation
+
+import storage "../storage"
 
 import "base:runtime"
 import "core:mem"
@@ -6,7 +8,7 @@ import "core:mem"
 ANIMATION_VALUE_ENTRY_CAPACITY :: 256
 ANIMATION_VALUE_MAX_PAYLOAD_BYTES :: 16*int(mem.Kilobyte)
 ANIMATION_VALUE_TOTAL_PAYLOAD_BYTES :: 64*int(mem.Kilobyte)
-ANIMATION_VALUE_PENDING_WRITE_CAPACITY :: SCENE_COMMAND_BATCH_CAPACITY
+ANIMATION_VALUE_PENDING_WRITE_CAPACITY :: 64
 ANIMATION_VALUE_RESERVED_KEY :: u64(0)
 
 // Report canonical animation-value operation outcomes without bridge coupling.
@@ -85,7 +87,7 @@ Animation_Value_Store_Diagnostics :: struct {
     generation_resets : u64,
 
     // Current and lifetime backing-arena usage.
-    arena : Arena_Owner_Diagnostics,
+    arena : storage.Arena_Owner_Diagnostics,
 }
 
 // Index canonical opaque values allocated from shared animation memory.

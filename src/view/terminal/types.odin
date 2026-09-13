@@ -1,6 +1,7 @@
 package terminalview
 
-import "../../core"
+import viewterminalmodel "model"
+
 import "../../core/protocol"
 import termattachment "../../terminal/attachment"
 import termgrid "../../terminal/grid"
@@ -70,26 +71,29 @@ Terminal_Hyperlink_Activation :: struct {
 // Semantic command-block range selected through local terminal actions.
 Terminal_Command_Range :: enum u8 {Command, Output}
 
+Terminal_Command_Search_Positions ::
+    [TERMINAL_COMMAND_SEARCH_POSITION_CAPACITY]viewterminalmodel.Terminal_View_Position
+
 // One bounded command-text candidate with grapheme-boundary view positions.
 Terminal_Command_Search_Workspace :: struct {
     text: [TERMINAL_COMMAND_SEARCH_TEXT_BYTE_CAPACITY]u8,
     boundaries: [TERMINAL_COMMAND_SEARCH_POSITION_CAPACITY]bool,
-    positions: [TERMINAL_COMMAND_SEARCH_POSITION_CAPACITY]core.Terminal_View_Position,
+    positions: Terminal_Command_Search_Positions,
     byte_count: int,
 }
 
 // Resolved view endpoints for one semantic command or output range.
 Terminal_Command_View_Range :: struct {
-    start: core.Terminal_View_Position,
-    end: core.Terminal_View_Position,
+    start: viewterminalmodel.Terminal_View_Position,
+    end: viewterminalmodel.Terminal_View_Position,
     valid: bool,
 }
 
 // One candidate match ordered by command index then command-local byte offset.
 Terminal_Command_Search_Match :: struct {
     block: termmodel.Command_Block,
-    start: core.Terminal_View_Position,
-    end: core.Terminal_View_Position,
+    start: viewterminalmodel.Terminal_View_Position,
+    end: viewterminalmodel.Terminal_View_Position,
     block_index: int,
     byte_offset: int,
     valid: bool,
@@ -149,8 +153,8 @@ Prepared_Terminal_Resize :: struct {
     primary: termgrid.Prepared_Primary_Reflow,
     alternate: termgrid.Prepared_Grid_Resize,
     placements: termattachment.Placement_Checkpoint,
-    selection_anchor: core.Terminal_View_Position,
-    selection_head: core.Terminal_View_Position,
+    selection_anchor: viewterminalmodel.Terminal_View_Position,
+    selection_head: viewterminalmodel.Terminal_View_Position,
     selection_retained: bool,
     scroll_offset_y: f32,
     checkpoint: termgrid.Display_Checkpoint,
@@ -265,7 +269,7 @@ Terminal_Prompt_Draw :: struct {
 
 // Complete state for drawing one single-line prompt and its overlays.
 Terminal_Single_Line_Prompt_Draw :: struct {
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     resolver: font.Font_Resolver,
     layout: Terminal_Draw_Layout,
     position: rl.Vector2,
@@ -276,7 +280,7 @@ Terminal_Single_Line_Prompt_Draw :: struct {
 
 // Complete state for drawing one physical row of a multiline prompt.
 Terminal_Multiline_Prompt_Row_Draw :: struct {
-    term: ^core.Terminal_State,
+    term: ^viewterminalmodel.Terminal_State,
     resolver: font.Font_Resolver,
     text: string,
     prompt_color: rl.Color,

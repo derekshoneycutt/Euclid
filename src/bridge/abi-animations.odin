@@ -1,5 +1,8 @@
 package bridge
 
+import animation_model "../core/animation"
+import bridgemodel "model"
+
 import "../julialib"
 import "../core"
 
@@ -18,7 +21,7 @@ Animation_Descriptor_Abi_Metadata :: struct {
 
 //   Convert a canonical animation-value result to its stable bridge status.
 animation_value_bridge_status :: proc "contextless" (
-    status: core.Animation_Value_Status) -> i32 {
+    status: animation_model.Animation_Value_Status) -> i32 {
     switch status {
     case .Ok:
         return BRIDGE_STATUS_OK
@@ -39,7 +42,8 @@ animation_value_bridge_status :: proc "contextless" (
 //   Build the canonical identity for the host's active animation generation.
 animation_value_identity :: proc "contextless" (
     state: ^core.Euclid_General_State,
-    identity_abi: Animation_Value_Abi_Identity) -> core.Animation_Value_Identity {
+    identity_abi: Animation_Value_Abi_Identity) ->
+        animation_model.Animation_Value_Identity {
     return {
         generation = state^.animation_values.generation,
         key = identity_abi.key,
@@ -68,7 +72,7 @@ set_animation_value :: proc "c" (
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
     if source == nil || byte_count <= 0 ||
-        byte_count > i32(core.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
+        byte_count > i32(animation_model.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     context = state^.saved_context
@@ -79,15 +83,16 @@ set_animation_value :: proc "c" (
         if state^.animation_query_snapshot_target == nil {
             return BRIDGE_STATUS_ILLEGAL_STATE
         }
-        return animation_value_bridge_status(core.animation_value_pending_append(
-            &state^.scene_command_batch_target^.animation_value_writes,
-            identity,
-            payload))
+        return animation_value_bridge_status(
+            animation_model.animation_value_pending_append(
+                &state^.scene_command_batch_target^.animation_value_writes,
+                identity,
+                payload))
     }
     if state^.animation_query_snapshot_target != nil {
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
-    return animation_value_bridge_status(core.animation_value_store_set(
+    return animation_value_bridge_status(animation_model.animation_value_store_set(
         &state^.animation_values, identity, payload))
 }
 
@@ -103,20 +108,20 @@ set_animation_value :: proc "c" (
 //   - Stable `BRIDGE_STATUS_*`; destination changes only on success.
 get_animation_query_value :: proc(
     state: ^core.Euclid_General_State,
-    identity: core.Animation_Value_Identity,
+    identity: animation_model.Animation_Value_Identity,
     payload: []u8) -> i32 {
     if state^.scene_command_batch_target == nil ||
         !state^.animation_query_snapshot_target^.animation_values_valid {
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
-    status := core.animation_value_pending_copy(
+    status := animation_model.animation_value_pending_copy(
         &state^.scene_command_batch_target^.animation_value_writes,
         identity,
         payload)
     if status != .Not_Found {
         return animation_value_bridge_status(status)
     }
-    return animation_value_bridge_status(core.animation_value_snapshot_copy(
+    return animation_value_bridge_status(animation_model.animation_value_snapshot_copy(
         &state^.animation_query_snapshot_target^.animation_values,
         identity,
         payload))
@@ -133,7 +138,7 @@ get_animation_value :: proc "c" (
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
     if destination == nil || byte_count <= 0 ||
-        byte_count > i32(core.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
+        byte_count > i32(animation_model.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     context = state^.saved_context
@@ -146,7 +151,7 @@ get_animation_value :: proc "c" (
     if state^.scene_command_batch_target != nil {
         return BRIDGE_STATUS_ILLEGAL_STATE
     }
-    return animation_value_bridge_status(core.animation_value_store_copy(
+    return animation_value_bridge_status(animation_model.animation_value_store_copy(
         &state^.animation_values, identity, payload))
 }
 
@@ -171,8 +176,8 @@ add_animation_descriptor :: proc "c" (
     metadata: Animation_Descriptor_Abi_Metadata) -> int {
 
     if state == nil || state^.julia_interface == nil || name == nil ||
-        metadata.node_kind < i32(core.Animation_Node_Kind.Category) ||
-        metadata.node_kind > i32(core.Animation_Node_Kind.Terminal) ||
+        metadata.node_kind < i32(bridgemodel.Animation_Node_Kind.Category) ||
+        metadata.node_kind > i32(bridgemodel.Animation_Node_Kind.Terminal) ||
         metadata.sibling_order < 0 {
         return -1
     }
@@ -182,7 +187,7 @@ add_animation_descriptor :: proc "c" (
         state, name, stable_id, parsed_stable_id, parent_stable_id) {
         return -1
     }
-    parent: ^core.Euclid_Julia_Animation_Interface
+    parent: ^bridgemodel.Euclid_Julia_Animation_Interface
     if parent_stable_id != nil && len(string(parent_stable_id)) > 0 {
         parent_ok: bool
         parent, parent_ok = resolve_parent_animation_by_stable_id(
@@ -196,7 +201,7 @@ add_animation_descriptor :: proc "c" (
     if !inserted {
         return -1
     }
-    node^.node_kind = core.Animation_Node_Kind(metadata.node_kind)
+    node^.node_kind = bridgemodel.Animation_Node_Kind(metadata.node_kind)
     node^.sibling_order = metadata.sibling_order
     return 1
 }

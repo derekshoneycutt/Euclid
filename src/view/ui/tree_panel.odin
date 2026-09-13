@@ -1,5 +1,8 @@
 package ui
 
+import viewmodel "../model"
+
+import bridgemodel "../../bridge/model"
 import "../../core"
 import view_core "../core"
 import view_font "../font"
@@ -7,18 +10,18 @@ import view_font "../font"
 import rl "vendor:raylib"
 
 Tree_Hit :: struct {
-    selected_node : ^core.Euclid_Julia_Animation_Interface,
-    toggled_node : ^core.Euclid_Julia_Animation_Interface,
-    hovered_node : ^core.Euclid_Julia_Animation_Interface,
-    hovered_expander_node : ^core.Euclid_Julia_Animation_Interface,
+    selected_node : ^bridgemodel.Euclid_Julia_Animation_Interface,
+    toggled_node : ^bridgemodel.Euclid_Julia_Animation_Interface,
+    hovered_node : ^bridgemodel.Euclid_Julia_Animation_Interface,
+    hovered_expander_node : ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
 //   Prepared tree scrolling and bounded hover identities for observational drawing.
 Tree_List_Preparation :: struct {
     scroll: Scroll_Container_Update_Result,
     content_height: f32,
-    hovered_node: ^core.Euclid_Julia_Animation_Interface,
-    hovered_expander_node: ^core.Euclid_Julia_Animation_Interface,
+    hovered_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    hovered_expander_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
 //   Mutable walk cursor: running content y plus the remaining row budget.
@@ -29,8 +32,8 @@ Tree_Walk_Cursor :: struct {
 
 //   Inputs for one tree list panel frame, grouped so the call passes one value.
 Tree_List_Params :: struct {
-    ji : ^core.Euclid_Julia_Interface,
-    ui_runtime : ^core.Euclid_Ui_Runtime_State,
+    ji : ^bridgemodel.Euclid_Julia_Interface,
+    ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
     list_panel : rl.Rectangle,
     mouse_input : Input_Frame,
     scroll_y : ^f32,
@@ -41,8 +44,8 @@ Tree_List_Params :: struct {
 //   Immutable per-frame tree walk inputs shared by every recursive row visit,
 //   grouped so the walk procs do not thread nine loose arguments.
 Tree_Walk_Context :: struct {
-    ji : ^core.Euclid_Julia_Interface,
-    ui_runtime : ^core.Euclid_Ui_Runtime_State,
+    ji : ^bridgemodel.Euclid_Julia_Interface,
+    ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
     panel : rl.Rectangle,
     scroll_y : f32,
     allow_clicks : bool,
@@ -51,8 +54,8 @@ Tree_Walk_Context :: struct {
     interaction_space_rect : rl.Rectangle,
     font : rl.Font,
     font_resolver : view_font.Font_Resolver,
-    hovered_node: ^core.Euclid_Julia_Animation_Interface,
-    hovered_expander_node: ^core.Euclid_Julia_Animation_Interface,
+    hovered_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    hovered_expander_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
 //   Resolve tree-toolbar interaction and commit its actions before rendering.
@@ -125,7 +128,7 @@ draw_tree_view :: proc(
 //   Cancel an in-flight GIF capture when the user refreshes while paused.
 cancel_gif_capture_if_paused_mid_capture :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State) {
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
 
     if !ui_runtime.simulation_paused {
         return
@@ -140,8 +143,8 @@ cancel_gif_capture_if_paused_mid_capture :: proc(
 //   Apply one toolbar interaction to tree panel state.
 apply_tree_toolbar_hit :: proc(
     state: ^core.Euclid_General_State,
-    ji: ^core.Euclid_Julia_Interface,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     toolbar_hit: Tree_Toolbar_Hit) {
 
     if toolbar_hit.refresh_requested {
@@ -177,7 +180,7 @@ apply_tree_toolbar_hit :: proc(
 
 //   Build a stable per-frame widget id for a node based on its pointer value.
 tree_node_press_id :: #force_inline proc(
-    node: ^core.Euclid_Julia_Animation_Interface) -> int {
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> int {
 
     if node == nil {
         return -1
@@ -188,8 +191,8 @@ tree_node_press_id :: #force_inline proc(
 
 //   Mark one animation selected and clear selection on others.
 set_selected_animation :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    selected: ^core.Euclid_Julia_Animation_Interface) {
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    selected: ^bridgemodel.Euclid_Julia_Animation_Interface) {
 
     if ji == nil || selected == nil {
         return
@@ -203,8 +206,8 @@ set_selected_animation :: proc(
 
 //   Count visible rows recursively with recursion guard limit.
 count_visible_tree_rows_limited :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    node: ^core.Euclid_Julia_Animation_Interface,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     remaining: int) -> int {
 
     if ji == nil || node == nil || remaining <= 0 {
@@ -228,7 +231,8 @@ count_visible_tree_rows_limited :: proc(
 }
 
 //   Count visible rows for all root trees with expansion state.
-count_visible_tree_rows_all_roots :: proc(ji: ^core.Euclid_Julia_Interface) -> int {
+count_visible_tree_rows_all_roots :: proc(
+    ji: ^bridgemodel.Euclid_Julia_Interface) -> int {
     if ji == nil {
         return 0
     }
@@ -245,8 +249,8 @@ count_visible_tree_rows_all_roots :: proc(ji: ^core.Euclid_Julia_Interface) -> i
 
 //   Find a target's row in one visible depth-first tree branch.
 tree_visible_row_limited :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    node, target: ^core.Euclid_Julia_Animation_Interface,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    node, target: ^bridgemodel.Euclid_Julia_Animation_Interface,
     row: ^int,
     remaining: int) -> (int, bool) {
 
@@ -275,8 +279,8 @@ tree_visible_row_limited :: proc(
 
 //   Find a target's row across all visible root trees.
 tree_visible_row :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    target: ^core.Euclid_Julia_Animation_Interface) -> (int, bool) {
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    target: ^bridgemodel.Euclid_Julia_Animation_Interface) -> (int, bool) {
 
     if ji == nil || target == nil {
         return 0, false
@@ -322,7 +326,7 @@ apply_pending_tree_reveal :: proc(
     if ui_runtime == nil || !ui_runtime^.tree_reveal_pending {
         return
     }
-    target: ^core.Euclid_Julia_Animation_Interface
+    target: ^bridgemodel.Euclid_Julia_Animation_Interface
     for node := params.ji^.animation_head; node != nil; node = node^.next_in_registry {
         if node^.stable_id == ui_runtime^.tree_reveal_stable_id {
             target = node
@@ -359,8 +363,8 @@ merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
 
 //   Apply selection/expand hits and sync related UI state.
 apply_tree_hit :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     hit: Tree_Hit) {
 
     if hit.toggled_node != nil {
@@ -376,8 +380,8 @@ apply_tree_hit :: proc(
 
 //   Advance content cursor for skipped offscreen child branches.
 accumulate_offscreen_child_rows :: proc(
-    ji: ^core.Euclid_Julia_Interface,
-    first_child: ^core.Euclid_Julia_Animation_Interface,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    first_child: ^bridgemodel.Euclid_Julia_Animation_Interface,
     content_y: ^f32,
     remaining: int) {
 
@@ -394,7 +398,7 @@ accumulate_offscreen_child_rows :: proc(
 //   Traverse child node branches and resolve interaction with depth tracking.
 walk_update_child_nodes_limited :: proc(
     ctx: Tree_Walk_Context,
-    first_child: ^core.Euclid_Julia_Animation_Interface,
+    first_child: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     content_y: ^f32,
     remaining: int) -> Tree_Hit {
@@ -416,8 +420,8 @@ walk_update_child_nodes_limited :: proc(
 
 //   Return first child pointer only when node is expanded.
 expanded_first_child :: #force_inline proc(
-    node: ^core.Euclid_Julia_Animation_Interface) ->
-    ^core.Euclid_Julia_Animation_Interface {
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface) ->
+    ^bridgemodel.Euclid_Julia_Animation_Interface {
 
     if node == nil || !node.is_expanded {
         return nil
@@ -429,7 +433,7 @@ expanded_first_child :: #force_inline proc(
 //   Resolve one node expander and record its hover and toggle identities.
 update_tree_node_expander_hit :: proc(
     ctx: Tree_Walk_Context,
-    node: ^core.Euclid_Julia_Animation_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     icon_rect: rl.Rectangle,
     toggle_triggered: bool,
     hit: ^Tree_Hit) {
@@ -458,7 +462,7 @@ update_tree_node_expander_hit :: proc(
 //   Draw one tree node label at its indented row position.
 draw_tree_node_label :: proc(
     ctx: Tree_Walk_Context,
-    node: ^core.Euclid_Julia_Animation_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     x, y: f32) {
 
     view_core.ui_text_shaped({
@@ -474,7 +478,7 @@ draw_tree_node_label :: proc(
 //   Resolve one tree row and capture selection, hover, and toggle identities.
 update_tree_node_row :: proc(
     ctx: Tree_Walk_Context,
-    node: ^core.Euclid_Julia_Animation_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     row_rect: rl.Rectangle,
     hit: ^Tree_Hit) {
@@ -512,7 +516,7 @@ update_tree_node_row :: proc(
 //   Walk and merge child-node hits for one expanded parent.
 walk_merge_child_hits :: proc(
     ctx: Tree_Walk_Context,
-    child_first: ^core.Euclid_Julia_Animation_Interface,
+    child_first: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     cursor: Tree_Walk_Cursor,
     hit: ^Tree_Hit) {
@@ -528,7 +532,7 @@ walk_merge_child_hits :: proc(
 //   Traverse one tree node branch with clipping-aware row handling.
 walk_update_tree_node_limited :: proc(
     ctx: Tree_Walk_Context,
-    node: ^core.Euclid_Julia_Animation_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     content_y: ^f32,
     remaining: int) -> Tree_Hit {
@@ -587,7 +591,7 @@ walk_update_tree_roots :: proc(
 //   Draw one prepared tree row without changing interaction or application state.
 draw_tree_node_row :: proc(
     ctx: Tree_Walk_Context,
-    node: ^core.Euclid_Julia_Animation_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     row_rect: rl.Rectangle) {
     indent_x := row_rect.x + f32(depth) * TREE_INDENT
@@ -615,7 +619,7 @@ draw_tree_node_row :: proc(
 //   Draw visible child branches without resolving any interaction.
 walk_draw_child_nodes_limited :: proc(
     ctx: Tree_Walk_Context,
-    first_child: ^core.Euclid_Julia_Animation_Interface,
+    first_child: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     content_y: ^f32,
     remaining: int) {
@@ -630,7 +634,7 @@ walk_draw_child_nodes_limited :: proc(
 //   Draw one visible tree branch with clipping-aware row handling.
 walk_draw_tree_node_limited :: proc(
     ctx: Tree_Walk_Context,
-    node: ^core.Euclid_Julia_Animation_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     content_y: ^f32,
     remaining: int) {

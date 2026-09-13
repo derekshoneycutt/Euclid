@@ -1,5 +1,7 @@
 package bridge
 
+import bridgemodel "model"
+
 import "../julialib"
 import "../core"
 import "../files"
@@ -61,7 +63,7 @@ end_julia :: proc() {
 //
 // Parameters:
 //   - iface: Inactive state-owned generation slot to prepare.
-prepare_julia_interface_generation :: proc(iface: ^core.Euclid_Julia_Interface) {
+prepare_julia_interface_generation :: proc(iface: ^bridgemodel.Euclid_Julia_Interface) {
     if iface == nil {
         return
     }
@@ -88,7 +90,7 @@ prepare_julia_interface_generation :: proc(iface: ^core.Euclid_Julia_Interface) 
 
 //   Resolve the Julia callback function handles for one interface generation slot.
 resolve_julia_interface_callbacks :: proc(
-    iface: ^core.Euclid_Julia_Interface, main_module: ^julialib.jl_module_t) {
+    iface: ^bridgemodel.Euclid_Julia_Interface, main_module: ^julialib.jl_module_t) {
 
     iface^.invoke_with_exception_diagnostics = julialib.jl_get_function(
         main_module, "invoke_with_exception_diagnostics")
@@ -100,7 +102,7 @@ resolve_julia_interface_callbacks :: proc(
 
 //   Return the inactive state-owned interface generation slot for staged registration.
 julia_interface_staging_slot :: proc(
-    state: ^core.Euclid_General_State) -> (^core.Euclid_Julia_Interface, int) {
+    state: ^core.Euclid_General_State) -> (^bridgemodel.Euclid_Julia_Interface, int) {
 
     if state == nil || state^.julia_interface_active_slot < 0 ||
         state^.julia_interface_active_slot >= len(state^.julia_interface_slots) {
@@ -113,7 +115,8 @@ julia_interface_staging_slot :: proc(
 
 //   Report whether the required Julia callbacks were resolved for an interface generation.
 //   Report whether every required Julia interface handle is present.
-julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bool {
+julia_interface_handles_valid :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface) -> bool {
     if iface == nil {
         return false
     }
@@ -163,7 +166,7 @@ ensure_julia_interface_registry_arena :: proc(state: ^core.Euclid_General_State)
 }
 
 //   Clear one interface registry while retaining its arena for reuse.
-clean_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
+clean_julia_interface_instance :: proc(iface: ^bridgemodel.Euclid_Julia_Interface) {
     if iface == nil {
         return
     }
@@ -198,7 +201,7 @@ destroy_julia_interface_resources :: proc(state: ^core.Euclid_General_State) {
 }
 
 //   Destroy registry allocations owned by one retired interface generation.
-destroy_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
+destroy_julia_interface_instance :: proc(iface: ^bridgemodel.Euclid_Julia_Interface) {
     if iface == nil {
         return
     }

@@ -1,6 +1,7 @@
 package dynview_layout
 
-import "../../core"
+import dynviewmodel "../model"
+
 import dyncore "../core"
 
 import rl "vendor:raylib"
@@ -12,7 +13,7 @@ Presentation_Fallback_Layout :: struct {
 
 // Report whether this runtime has a complete authoritative semantic document layout.
 document_layout_is_authoritative :: #force_inline proc(
-    runtime: ^core.Dynview_System) -> bool {
+    runtime: ^dynviewmodel.Dynview_System) -> bool {
 
     return runtime != nil && len(runtime^.content.documents) > 0 &&
         runtime^.compile_cache.document_layout_is_valid &&
@@ -32,7 +33,7 @@ fallback_row_count :: #force_inline proc(
 
 //   Return total content height using cached line metrics, else fallback row math.
 presentation_content_height_or_fallback :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     panel: rl.Rectangle,
     fallback: Presentation_Fallback_Layout) -> f32 {
 
@@ -56,7 +57,7 @@ presentation_content_height_or_fallback :: proc(
 
 //   Return scroll step derived from cached line metrics, else fallback to fixed row height.
 presentation_scroll_step_or_fallback :: proc(
-    runtime: ^core.Dynview_System,
+    runtime: ^dynviewmodel.Dynview_System,
     fallback_row_height: f32) -> f32 {
 
     if document_layout_is_authoritative(runtime) {

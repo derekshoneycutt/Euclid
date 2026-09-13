@@ -1,7 +1,8 @@
 package ui
 
+import viewmodel "../model"
+
 import view_core "../core"
-import "../../core"
 import view_font "../font"
 
 import "core:fmt"
@@ -17,7 +18,7 @@ Integer_Slider_Params :: struct {
     panel : rl.Rectangle,
     row_y : f32,
     mouse_input : Input_Frame,
-    ui_runtime : ^core.Euclid_Ui_Runtime_State,
+    ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
     press_id : int,
     label : string,
     value : ^int,
@@ -123,7 +124,7 @@ slider_apply_wheel_step :: proc(
 
 //   Return whether this slider currently owns the shared global press state.
 slider_owns_press :: #force_inline proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     press_id: int) -> bool {
 
     return ui_runtime.ui_press_owner.active &&
@@ -133,7 +134,7 @@ slider_owns_press :: #force_inline proc(
 
 //   Capture shared press ownership for this slider if no control currently owns it.
 slider_try_capture_press :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse_input: Input_Frame,
     press_id: int,
     hovered_hit: bool,
@@ -152,7 +153,7 @@ slider_try_capture_press :: proc(
 
 //   Release shared press ownership when the current mouse hold ends.
 slider_release_if_needed :: proc(
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse_input: Input_Frame,
     owns_press: ^bool) {
 

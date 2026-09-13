@@ -1,6 +1,6 @@
 package audio
 
-import "../core"
+import audiomodel "model"
 
 import "core:math/rand"
 import "core:strings"
@@ -25,8 +25,8 @@ CHALK_UPPER_TURN_MAX_PERCENT :: 78
 CHALK_TURN_SEARCH_SAMPLES :: 512
 CHALK_HIT_DURATION_SAMPLES :: 6174
 
-Chalk_Audio_Runtime :: core.Chalk_Audio_Runtime
-Vector3 :: core.Vector3
+Chalk_Audio_Runtime :: audiomodel.Chalk_Audio_Runtime
+Vector3 :: rl.Vector3
 
 //   Choose a quiet sample near a random point in one turnaround band.
 //

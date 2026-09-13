@@ -1,5 +1,9 @@
 package view
 
+import fontmodel "font/model"
+
+import storage "../core/storage"
+
 import "../core"
 import dyncompile "../dynview/compile"
 import dynmath "../dynview/math"
@@ -21,7 +25,7 @@ Simulation_Executor :: core.Simulation_Executor
 create_simulation_executor :: proc(
     state: ^Euclid_General_State) -> ^Simulation_Executor {
 
-    if state == nil || !core.arena_owner_init(&state^.dynview.cache_arena) {
+    if state == nil || !storage.arena_owner_init(&state^.dynview.cache_arena) {
         return nil
     }
     state^.dynview.cache_access_state = .Display_Readable
@@ -34,7 +38,7 @@ create_simulation_executor :: proc(
     executor^.prose_shaping_workspace = new(core.Document_Prose_Shaping_Workspace)
     if executor^.prose_shaping_workspace == nil {
         free(executor)
-        core.arena_owner_destroy(&state^.dynview.cache_arena)
+        storage.arena_owner_destroy(&state^.dynview.cache_arena)
         return nil
     }
     executor^.dynview_task.prose_shaping_workspace = executor^.prose_shaping_workspace
@@ -49,7 +53,7 @@ create_simulation_executor :: proc(
     if !taskpool.task_pool_init(&executor^.pool) {
         free(executor^.prose_shaping_workspace)
         free(executor)
-        core.arena_owner_destroy(&state^.dynview.cache_arena)
+        storage.arena_owner_destroy(&state^.dynview.cache_arena)
         return nil
     }
     return executor
@@ -65,7 +69,7 @@ destroy_simulation_executor :: proc(executor: ^Simulation_Executor) {
         runtime := &executor^.dynview_task.state^.dynview
         runtime^.cache_access_state = .Uninitialized
         dynmath.clear_shaped_records(&runtime^.compile_cache)
-        core.arena_owner_destroy(
+        storage.arena_owner_destroy(
             &runtime^.cache_arena)
     }
     free(executor^.prose_shaping_workspace)
@@ -198,7 +202,7 @@ prose_shaping_service :: proc(
         glyph_workspace = workspace^.glyphs[:],
     }
     for key_index in 0..<dyncompile.DOCUMENT_PROSE_FONT_COUNT {
-        requested_key := core.Font_Key(key_index)
+        requested_key := fontmodel.Font_Key(key_index)
         identity, ready :=
             font.cache_shaping_identity(&data^.state^.font_cache, requested_key)
         if !ready {
@@ -216,17 +220,17 @@ prose_shape_run :: proc(
     request: dyncompile.Document_Prose_Shape_Request) -> (int, bool) {
 
     return font.cache_shape_generation(
-        cast(^core.Font_Cache)user_data, request.key, request.generation,
+        cast(^fontmodel.Font_Cache)user_data, request.key, request.generation,
         request.text, request.output)
 }
 
 // Query exact-generation JuliaMono ink extents for one shaped glyph.
 prose_shape_glyph_extents :: proc(
-    user_data: rawptr, key: core.Font_Key,
-    generation: u64, glyph_id: u32) -> (core.Font_Glyph_Extents, bool) {
+    user_data: rawptr, key: fontmodel.Font_Key,
+    generation: u64, glyph_id: u32) -> (fontmodel.Font_Glyph_Extents, bool) {
 
     return font.cache_glyph_extents_generation(
-        cast(^core.Font_Cache)user_data, key, generation, glyph_id)
+        cast(^fontmodel.Font_Cache)user_data, key, generation, glyph_id)
 }
 
 //   Query one bounded corner table through the generation-checked capability.
@@ -236,7 +240,7 @@ math_shape_glyph_kern_table :: proc(
         dynmath.Math_Glyph_Kern_Table_Result {
 
     result := font.math_shaping_glyph_kern_table(
-        cast(^core.Font_Math_Shaping_Capability)user_data,
+        cast(^fontmodel.Font_Math_Shaping_Capability)user_data,
         request.generation, request.glyph_id,
         font.Harfbuzz_Math_Kern(request.corner), request.output)
     return {result.count, result.ok}
@@ -252,7 +256,7 @@ math_shape_run :: proc(
         role = .Italic
     }
     glyph_count, ok := font.math_shaping_shape(
-        cast(^core.Font_Math_Shaping_Capability)user_data,
+        cast(^fontmodel.Font_Math_Shaping_Capability)user_data,
         request.generation,
         {text = request.text, role = role,
             standalone_accent = request.standalone_accent,
@@ -268,7 +272,7 @@ math_shape_horizontal_glyph_variants :: proc(
     request: dynmath.Math_Glyph_Variants_Request) ->
         dynmath.Math_Glyph_Variants_Result {
 
-    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    capability := cast(^fontmodel.Font_Math_Shaping_Capability)user_data
     result := font.math_shaping_horizontal_variants(
         capability, request.generation, request.glyph_id, request.output)
     if !result.ok {
@@ -295,7 +299,7 @@ math_shape_horizontal_glyph_assembly :: proc(
     request: dynmath.Math_Glyph_Assembly_Request) ->
         dynmath.Math_Glyph_Assembly_Result {
 
-    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    capability := cast(^fontmodel.Font_Math_Shaping_Capability)user_data
     result := font.math_shaping_horizontal_assembly(
         capability, request.generation, request.glyph_id, request.output)
     if !result.ok {
@@ -319,7 +323,7 @@ math_shape_glyph_metrics :: proc(
     user_data: rawptr,
     request: dynmath.Math_Glyph_Metrics_Request) -> dynmath.Math_Glyph_Metrics_Result {
 
-    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    capability := cast(^fontmodel.Font_Math_Shaping_Capability)user_data
     extents, extents_ok := font.math_shaping_glyph_extents(
         capability, request.generation, request.glyph_id)
     italic, italic_ok := font.math_shaping_italic_correction(
@@ -335,12 +339,12 @@ math_shape_glyph_variants :: proc(
     request: dynmath.Math_Glyph_Variants_Request) -> dynmath.Math_Glyph_Variants_Result {
 
     result := font.math_shaping_vertical_variants(
-        cast(^core.Font_Math_Shaping_Capability)user_data,
+        cast(^fontmodel.Font_Math_Shaping_Capability)user_data,
         request.generation, request.glyph_id, request.output)
     if !result.ok {
         return {}
     }
-    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    capability := cast(^fontmodel.Font_Math_Shaping_Capability)user_data
     for index in 0..<result.count {
         variant := &request.output[index]
         extents, extents_ok := font.math_shaping_glyph_extents(
@@ -364,7 +368,7 @@ math_shape_glyph_assembly :: proc(
     user_data: rawptr,
     request: dynmath.Math_Glyph_Assembly_Request) -> dynmath.Math_Glyph_Assembly_Result {
 
-    capability := cast(^core.Font_Math_Shaping_Capability)user_data
+    capability := cast(^fontmodel.Font_Math_Shaping_Capability)user_data
     result := font.math_shaping_vertical_assembly(
         capability, request.generation, request.glyph_id, request.output)
     if !result.ok {

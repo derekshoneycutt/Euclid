@@ -1,5 +1,12 @@
 package bridge
 
+import bridgemodel "model"
+import dynviewmodel "../dynview/model"
+
+import presentation_model "presentation"
+
+import storage "../core/storage"
+
 import "base:runtime"
 import "../core"
 import protocol "../core/protocol"
@@ -21,14 +28,14 @@ import "core:time"
 // the persistent worker may call Julia. Snapshot and tick slots retain payloads outside
 // the channels so event draining never determines whether completed data survives.
 
-JULIA_REQUEST_CAPACITY :: core.JULIA_REQUEST_CAPACITY
-JULIA_EVENT_CAPACITY :: core.JULIA_EVENT_CAPACITY
-JULIA_REQUEST_LINK_POOL_CAPACITY :: core.JULIA_REQUEST_LINK_POOL_CAPACITY
-JULIA_EVENT_LINK_POOL_CAPACITY :: core.JULIA_EVENT_LINK_POOL_CAPACITY
-JULIA_EVIDENCE_HANDOFF_CAPACITY :: core.JULIA_EVIDENCE_HANDOFF_CAPACITY
-VIEW_SNAPSHOT_SLOT_COUNT :: core.VIEW_SNAPSHOT_SLOT_COUNT
-VIEW_SNAPSHOT_TEXT_CAPACITY :: core.VIEW_SNAPSHOT_TEXT_CAPACITY
-ANIMATION_TICK_SLOT_COUNT :: core.ANIMATION_TICK_SLOT_COUNT
+JULIA_REQUEST_CAPACITY :: bridgemodel.JULIA_REQUEST_CAPACITY
+JULIA_EVENT_CAPACITY :: bridgemodel.JULIA_EVENT_CAPACITY
+JULIA_REQUEST_LINK_POOL_CAPACITY :: bridgemodel.JULIA_REQUEST_LINK_POOL_CAPACITY
+JULIA_EVENT_LINK_POOL_CAPACITY :: bridgemodel.JULIA_EVENT_LINK_POOL_CAPACITY
+JULIA_EVIDENCE_HANDOFF_CAPACITY :: bridgemodel.JULIA_EVIDENCE_HANDOFF_CAPACITY
+VIEW_SNAPSHOT_SLOT_COUNT :: bridgemodel.VIEW_SNAPSHOT_SLOT_COUNT
+VIEW_SNAPSHOT_TEXT_CAPACITY :: bridgemodel.VIEW_SNAPSHOT_TEXT_CAPACITY
+ANIMATION_TICK_SLOT_COUNT :: bridgemodel.ANIMATION_TICK_SLOT_COUNT
 MAX_ACCUMULATED_ANIMATION_DT :: f32(0.25)
 
 // Stack-local Julia host handle retained by the worker's persistent GC frame.
@@ -137,8 +144,8 @@ Julia_Decoded_Control :: struct {
     request_kind: Julia_Request_Kind,
     request_id: u64,
     slot_index: i32,
-    tick_handle: core.Animation_Tick_Slot_Handle,
-    lifecycle_handle: core.Animation_Lifecycle_Slot_Handle,
+    tick_handle: bridgemodel.Animation_Tick_Slot_Handle,
+    lifecycle_handle: bridgemodel.Animation_Lifecycle_Slot_Handle,
     runtime_generation: u64,
     animation_generation: u64,
     sequence: u64,
@@ -151,7 +158,7 @@ Julia_Worker_Run_Result :: struct {
 }
 
 Julia_Animation_Tick_Submission :: struct {
-    handle: core.Animation_Tick_Slot_Handle,
+    handle: bridgemodel.Animation_Tick_Slot_Handle,
     animation_generation: u64,
     sequence: u64,
 }
@@ -181,52 +188,52 @@ JULIA_EVENT_HANDLERS ::
 
 // Core owns service storage because Euclid_General_State holds a concrete service pointer.
 // This package owns queue policy, worker behavior, publication, and lifecycle transitions.
-Julia_Request_Kind :: core.Julia_Request_Kind
-Julia_Event_Kind :: core.Julia_Event_Kind
-Animation_Tick_Slot_State :: core.Animation_Tick_Slot_State
-Animation_Tick_Slot :: core.Animation_Tick_Slot
+Julia_Request_Kind :: bridgemodel.Julia_Request_Kind
+Julia_Event_Kind :: bridgemodel.Julia_Event_Kind
+Animation_Tick_Slot_State :: bridgemodel.Animation_Tick_Slot_State
+Animation_Tick_Slot :: bridgemodel.Animation_Tick_Slot
 
-View_Snapshot_Slot_State :: core.View_Snapshot_Slot_State
-View_Snapshot :: core.View_Snapshot
+View_Snapshot_Slot_State :: bridgemodel.View_Snapshot_Slot_State
+View_Snapshot :: bridgemodel.View_Snapshot
 
 View_Snapshot_Record_Payloads :: struct {
-    commands: []core.Dynview_Command,
-    math_programs: []core.Dynview_Math_Program,
-    math_commands: []core.Dynview_Command,
-    math_nodes: []core.Dynview_Math_Node,
-    math_table_descriptors: []core.Dynview_Math_Table_Descriptor,
+    commands: []dynviewmodel.Dynview_Command,
+    math_programs: []dynviewmodel.Dynview_Math_Program,
+    math_commands: []dynviewmodel.Dynview_Command,
+    math_nodes: []dynviewmodel.Dynview_Math_Node,
+    math_table_descriptors: []dynviewmodel.Dynview_Math_Table_Descriptor,
     document_text: []u8,
-    documents: []core.Dynview_Document,
-    document_blocks: []core.Dynview_Document_Block,
-    document_inlines: []core.Dynview_Document_Inline,
-    document_display_rows: []core.Dynview_Document_Display_Row,
+    documents: []dynviewmodel.Dynview_Document,
+    document_blocks: []dynviewmodel.Dynview_Document_Block,
+    document_inlines: []dynviewmodel.Dynview_Document_Inline,
+    document_display_rows: []dynviewmodel.Dynview_Document_Display_Row,
 }
 
 View_Snapshot_Sealed_Records :: struct {
-    commands: []core.Dynview_Command,
-    programs: []core.Dynview_Math_Program,
-    descriptors: []core.Dynview_Math_Table_Descriptor,
-    math_commands: []core.Dynview_Command,
-    nodes: []core.Dynview_Math_Node,
+    commands: []dynviewmodel.Dynview_Command,
+    programs: []dynviewmodel.Dynview_Math_Program,
+    descriptors: []dynviewmodel.Dynview_Math_Table_Descriptor,
+    math_commands: []dynviewmodel.Dynview_Command,
+    nodes: []dynviewmodel.Dynview_Math_Node,
     document_text: []u8,
-    documents: []core.Dynview_Document,
-    document_blocks: []core.Dynview_Document_Block,
-    document_inlines: []core.Dynview_Document_Inline,
-    document_display_rows: []core.Dynview_Document_Display_Row,
+    documents: []dynviewmodel.Dynview_Document,
+    document_blocks: []dynviewmodel.Dynview_Document_Block,
+    document_inlines: []dynviewmodel.Dynview_Document_Inline,
+    document_display_rows: []dynviewmodel.Dynview_Document_Display_Row,
 }
 
 // Presentation_Snapshot_Request groups one current canonical materialization request.
 Presentation_Snapshot_Request :: struct {
-    content: core.View_Content_Ready,
+    content: bridgemodel.View_Content_Ready,
     source: string,
     mode: Presentation_Source_Mode,
     document: ^dyncore.Dynview_Document,
 }
 
-Julia_Lifecycle_State :: core.Julia_Lifecycle_State
-Julia_Reload_State :: core.Julia_Reload_State
-Julia_Event :: core.Julia_Event
-Julia_Runtime_Service :: core.Julia_Runtime_Service
+Julia_Lifecycle_State :: bridgemodel.Julia_Lifecycle_State
+Julia_Reload_State :: bridgemodel.Julia_Reload_State
+Julia_Event :: bridgemodel.Julia_Event
+Julia_Runtime_Service :: bridgemodel.Julia_Runtime_Service
 
 // Display-safe service diagnostics contain copied scalar state only. They never expose
 // worker-owned Julia handles or require a Julia call to inspect service health.
@@ -255,7 +262,7 @@ coalesce_animation_tick :: proc(service: ^Julia_Runtime_Service, dt: f32) {
 submit_animation_tick_slot :: proc(
     service: ^Julia_Runtime_Service, slot: ^Animation_Tick_Slot,
     slot_index: int, total_dt: f32) -> bool {
-    handle := core.Animation_Tick_Slot_Handle{
+    handle := bridgemodel.Animation_Tick_Slot_Handle{
         index = i32(slot_index),
         reservation_generation = slot^.reservation_generation,
     }
@@ -563,7 +570,7 @@ publish_available_view_snapshot :: proc(
 // until this procedure returns.
 publish_presentation_snapshot :: proc(
     state: ^core.Euclid_General_State,
-    staging: ^core.Dynview_System,
+    staging: ^dynviewmodel.Dynview_System,
     request: Presentation_Snapshot_Request) -> bool {
     if state == nil || staging == nil || state^.julia_runtime_service == nil {
         return false
@@ -581,7 +588,6 @@ publish_presentation_snapshot :: proc(
     slot^.generation = service^.view_snapshot_generation
     slot^.runtime_generation = request.content.runtime_generation
     slot^.animation_generation = request.content.animation_generation
-    slot^.host_state = state
     slot^.animation = request.content.animation
     slot^.presentation_mime = request.content.content.mime
     reset_view_snapshot_staging(staging)
@@ -600,7 +606,7 @@ publish_presentation_snapshot :: proc(
 
 //   Stage one output block whose canonical source is owned separately by the snapshot.
 stage_presentation_snapshot :: proc(
-    staging: ^core.Dynview_System,
+    staging: ^dynviewmodel.Dynview_System,
     request: Presentation_Snapshot_Request) -> bool {
     block_id := i32(0)
     if dynview_push_command(staging, {
@@ -626,7 +632,7 @@ stage_presentation_snapshot :: proc(
 
 //   Stage semantic content when available, otherwise preserve exact literal bytes.
 stage_presentation_content :: proc(
-    staging: ^core.Dynview_System,
+    staging: ^dynviewmodel.Dynview_System,
     request: Presentation_Snapshot_Request,
     block_id: i32) -> i32 {
     if request.document != nil && request.mode == .Math {
@@ -643,7 +649,7 @@ stage_presentation_content :: proc(
 
 //   Append exact bytes and one text-bearing command without a C-string conversion.
 stage_presentation_text_command :: proc(
-    staging: ^core.Dynview_System,
+    staging: ^dynviewmodel.Dynview_System,
     source: string,
     block_id: i32) -> i32 {
     offset, count: int
@@ -651,7 +657,7 @@ stage_presentation_text_command :: proc(
     if status != BRIDGE_STATUS_OK {
         return status
     }
-    command := core.Dynview_Command{
+    command := dynviewmodel.Dynview_Command{
         kind = .Text_Run,
         block_id = block_id,
         style_id = dyncore.DYNVIEW_STYLE_OUTPUT,
@@ -743,9 +749,9 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
         &slot^.presentation_builder, slot^.presentation_bytes,
         VIEW_SNAPSHOT_TEXT_CAPACITY) || !view_snapshot_text_payload_is_valid(
         &slot^.command_text_builder, slot^.command_text,
-        core.DYNVIEW_MAX_TEXT_BYTES) || !view_snapshot_text_payload_is_valid(
+        dynviewmodel.DYNVIEW_MAX_TEXT_BYTES) || !view_snapshot_text_payload_is_valid(
         &slot^.document_text_builder, slot^.document_text,
-        core.DYNVIEW_MAX_DOCUMENT_BYTES) {
+        dynviewmodel.DYNVIEW_MAX_DOCUMENT_BYTES) {
         return false
     }
     if !view_snapshot_record_payloads_are_valid(slot) {
@@ -778,20 +784,20 @@ view_snapshot_is_valid :: proc(slot: ^View_Snapshot) -> bool {
 
 //   Validate one sealed native table descriptor at the publication boundary.
 view_snapshot_math_table_descriptor_is_valid :: proc(
-    descriptor: core.Dynview_Math_Table_Descriptor) -> bool {
+    descriptor: dynviewmodel.Dynview_Math_Table_Descriptor) -> bool {
     return dyncore.math_table_descriptor_is_valid(descriptor)
 }
 
 //   Validate atom and explicit-glue metadata before snapshot publication.
 view_snapshot_math_command_semantics_are_valid :: proc(
-    command: core.Dynview_Command) -> bool {
+    command: dynviewmodel.Dynview_Command) -> bool {
 
     atom := i32(command.math_atom_class)
     glue := i32(command.math_glue_kind)
-    if atom < i32(core.Dynview_Math_Atom_Class.None) ||
-        atom > i32(core.Dynview_Math_Atom_Class.Inner) ||
-        glue < i32(core.Dynview_Math_Glue_Kind.None) ||
-        glue > i32(core.Dynview_Math_Glue_Kind.Thin) {
+    if atom < i32(dynviewmodel.Dynview_Math_Atom_Class.None) ||
+        atom > i32(dynviewmodel.Dynview_Math_Atom_Class.Inner) ||
+        glue < i32(dynviewmodel.Dynview_Math_Glue_Kind.None) ||
+        glue > i32(dynviewmodel.Dynview_Math_Glue_Kind.Thin) {
         return false
     }
     if command.math_glue_kind != .None {
@@ -803,28 +809,29 @@ view_snapshot_math_command_semantics_are_valid :: proc(
 //   Require every record slice to be the populated prefix of its sealed builder.
 view_snapshot_record_payloads_are_valid :: proc(slot: ^View_Snapshot) -> bool {
     return view_snapshot_record_payload_is_valid(
-        &slot^.command_builder, slot^.commands, core.DYNVIEW_MAX_COMMANDS) &&
+        &slot^.command_builder, slot^.commands, dynviewmodel.DYNVIEW_MAX_COMMANDS) &&
         view_snapshot_record_payload_is_valid(&slot^.math_program_builder,
-            slot^.math_programs, core.DYNVIEW_MAX_MATH_PROGRAMS) &&
+            slot^.math_programs, dynviewmodel.DYNVIEW_MAX_MATH_PROGRAMS) &&
         view_snapshot_record_payload_is_valid(&slot^.math_table_descriptor_builder,
-            slot^.math_table_descriptors, core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS) &&
+            slot^.math_table_descriptors,
+            dynviewmodel.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS) &&
         view_snapshot_record_payload_is_valid(&slot^.math_command_builder,
-            slot^.math_commands, core.DYNVIEW_MAX_MATH_COMMANDS) &&
+            slot^.math_commands, dynviewmodel.DYNVIEW_MAX_MATH_COMMANDS) &&
         view_snapshot_record_payload_is_valid(&slot^.math_node_builder,
-            slot^.math_nodes, core.DYNVIEW_MAX_MATH_NODES) &&
+            slot^.math_nodes, dynviewmodel.DYNVIEW_MAX_MATH_NODES) &&
         view_snapshot_record_payload_is_valid(&slot^.document_builder,
-            slot^.documents, core.DYNVIEW_MAX_DOCUMENTS) &&
+            slot^.documents, dynviewmodel.DYNVIEW_MAX_DOCUMENTS) &&
         view_snapshot_record_payload_is_valid(&slot^.document_block_builder,
-            slot^.document_blocks, core.DYNVIEW_MAX_DOCUMENT_BLOCKS) &&
+            slot^.document_blocks, dynviewmodel.DYNVIEW_MAX_DOCUMENT_BLOCKS) &&
         view_snapshot_record_payload_is_valid(&slot^.document_inline_builder,
-            slot^.document_inlines, core.DYNVIEW_MAX_DOCUMENT_INLINES) &&
+            slot^.document_inlines, dynviewmodel.DYNVIEW_MAX_DOCUMENT_INLINES) &&
         view_snapshot_record_payload_is_valid(&slot^.document_display_row_builder,
-            slot^.document_display_rows, core.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS)
+            slot^.document_display_rows, dynviewmodel.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS)
 }
 
 //   Require one record slice to alias its sealed builder's populated prefix.
 view_snapshot_record_payload_is_valid :: proc(
-    builder: ^$Builder/core.Bounded_Element_Builder($Element),
+    builder: ^$Builder/storage.Bounded_Element_Builder($Element),
     payload: []Element, max_count: int) -> bool {
 
     if builder == nil || !builder.sealed || builder.count != len(payload) ||
@@ -836,7 +843,7 @@ view_snapshot_record_payload_is_valid :: proc(
 
 //   Require one published byte slice to be the populated prefix of its sealed builder.
 view_snapshot_text_payload_is_valid :: proc(
-    builder: ^core.Bounded_Byte_Builder, payload: []u8, max_count: int) -> bool {
+    builder: ^storage.Bounded_Byte_Builder, payload: []u8, max_count: int) -> bool {
 
     if builder == nil || !builder.sealed || builder.count != len(payload) ||
         len(payload) > max_count {
@@ -847,7 +854,7 @@ view_snapshot_text_payload_is_valid :: proc(
 
 //   Validate every text-bearing span in one semantic command against the sealed blob.
 view_snapshot_command_text_spans_valid :: proc(
-    command: core.Dynview_Command, text_count: int) -> bool {
+    command: dynviewmodel.Dynview_Command, text_count: int) -> bool {
 
     spans := [5][2]int{
         {command.text_offset, command.text_len},
@@ -889,7 +896,7 @@ view_snapshot_math_records_are_valid :: proc(slot: ^View_Snapshot) -> bool {
 
 //   Validate one math program and its root against populated snapshot records.
 view_snapshot_math_program_is_valid :: proc(
-    slot: ^View_Snapshot, program: core.Dynview_Math_Program) -> bool {
+    slot: ^View_Snapshot, program: dynviewmodel.Dynview_Math_Program) -> bool {
 
     if !program.valid || !view_snapshot_range_is_valid(
         program.command_start, program.command_count, len(slot^.math_commands)) ||
@@ -906,7 +913,8 @@ view_snapshot_math_program_is_valid :: proc(
 
 //   Validate one node's contiguous and kind-specific child references.
 view_snapshot_math_node_is_valid :: proc(
-    node: core.Dynview_Math_Node, program: core.Dynview_Math_Program) -> bool {
+    node: dynviewmodel.Dynview_Math_Node,
+    program: dynviewmodel.Dynview_Math_Program) -> bool {
 
     if node.child_count < 0 || (node.child_count > 0 &&
         (!view_snapshot_node_index_is_valid(node.first_child, program, false) ||
@@ -936,7 +944,7 @@ view_snapshot_math_node_is_valid :: proc(
 
 //   Validate a required or optional node index within one program-owned range.
 view_snapshot_node_index_is_valid :: proc(
-    index: int, program: core.Dynview_Math_Program, optional: bool) -> bool {
+    index: int, program: dynviewmodel.Dynview_Math_Program, optional: bool) -> bool {
 
     if optional && index == -1 {
         return true
@@ -991,7 +999,7 @@ view_snapshot_documents_are_valid :: proc(slot: ^View_Snapshot) -> bool {
 
 // Validate flattened list labels, body ownership, and item-start adjacency.
 view_snapshot_document_list_sequence_is_valid :: proc(
-    blocks: []core.Dynview_Document_Block) -> bool {
+    blocks: []dynviewmodel.Dynview_Document_Block) -> bool {
 
     for block, index in blocks {
         if block.kind == .List_Item {
@@ -1011,7 +1019,7 @@ view_snapshot_document_list_sequence_is_valid :: proc(
 
 //   Validate one document descriptor before slicing any child records.
 view_snapshot_document_is_valid :: proc(
-    slot: ^View_Snapshot, document: core.Dynview_Document) -> bool {
+    slot: ^View_Snapshot, document: dynviewmodel.Dynview_Document) -> bool {
 
     return view_snapshot_span_is_valid(
         document.source_offset, document.source_count, len(slot^.document_text)) &&
@@ -1027,8 +1035,8 @@ view_snapshot_document_is_valid :: proc(
 
 //   Validate one block's kind, source, and child range within its document.
 view_snapshot_document_block_is_valid :: proc(
-    document: core.Dynview_Document,
-    block: core.Dynview_Document_Block) -> bool {
+    document: dynviewmodel.Dynview_Document,
+    block: dynviewmodel.Dynview_Document_Block) -> bool {
 
     kind := int(block.kind)
     alignment := int(block.alignment)
@@ -1038,14 +1046,14 @@ view_snapshot_document_block_is_valid :: proc(
     list_container := block.container_kind == .Itemize ||
         block.container_kind == .Enumerate ||
         block.container_kind == .Description
-    return kind >= int(core.Dynview_Document_Block_Kind.Paragraph) &&
-        kind <= int(core.Dynview_Document_Block_Kind.List_Item) &&
-        alignment >= int(core.Dynview_Document_Alignment.Left) &&
-        alignment <= int(core.Dynview_Document_Alignment.Right) &&
-        container_kind >= int(core.Dynview_Document_Container_Kind.None) &&
-        container_kind <= int(core.Dynview_Document_Container_Kind.Description) &&
-        list_kind >= int(core.Dynview_Document_List_Kind.None) &&
-        list_kind <= int(core.Dynview_Document_List_Kind.Description) &&
+    return kind >= int(dynviewmodel.Dynview_Document_Block_Kind.Paragraph) &&
+        kind <= int(dynviewmodel.Dynview_Document_Block_Kind.List_Item) &&
+        alignment >= int(dynviewmodel.Dynview_Document_Alignment.Left) &&
+        alignment <= int(dynviewmodel.Dynview_Document_Alignment.Right) &&
+        container_kind >= int(dynviewmodel.Dynview_Document_Container_Kind.None) &&
+        container_kind <= int(dynviewmodel.Dynview_Document_Container_Kind.Description) &&
+        list_kind >= int(dynviewmodel.Dynview_Document_List_Kind.None) &&
+        list_kind <= int(dynviewmodel.Dynview_Document_List_Kind.Description) &&
         block.container_depth <= 4 && block.left_margin_levels <= 4 &&
         block.right_margin_levels <= 4 &&
         (!list_container || has_list) &&
@@ -1066,8 +1074,8 @@ view_snapshot_document_block_is_valid :: proc(
 
 // Validate one display row's source range, programs, alignment, and number.
 view_snapshot_document_display_row_is_valid :: proc(
-    slot: ^View_Snapshot, document: core.Dynview_Document,
-    row: core.Dynview_Document_Display_Row) -> bool {
+    slot: ^View_Snapshot, document: dynviewmodel.Dynview_Document,
+    row: dynviewmodel.Dynview_Document_Display_Row) -> bool {
 
     alignment := int(row.alignment)
     return view_snapshot_subspan_is_valid(document.source_offset,
@@ -1077,20 +1085,20 @@ view_snapshot_document_display_row_is_valid :: proc(
         (row.secondary_program_id == -1 ||
             row.secondary_program_id >= 0 &&
             row.secondary_program_id < len(slot^.math_programs)) &&
-        alignment >= int(core.Dynview_Document_Alignment.Left) &&
-        alignment <= int(core.Dynview_Document_Alignment.Right) &&
+        alignment >= int(dynviewmodel.Dynview_Document_Alignment.Left) &&
+        alignment <= int(dynviewmodel.Dynview_Document_Alignment.Right) &&
         row.number >= 0
 }
 
 //   Validate one inline's semantic kind, byte spans, and optional math program.
 view_snapshot_document_inline_is_valid :: proc(
     slot: ^View_Snapshot,
-    document: core.Dynview_Document,
-    item: core.Dynview_Document_Inline) -> bool {
+    document: dynviewmodel.Dynview_Document,
+    item: dynviewmodel.Dynview_Document_Inline) -> bool {
 
     kind := int(item.kind)
-    if kind < int(core.Dynview_Document_Inline_Kind.Text) ||
-        kind > int(core.Dynview_Document_Inline_Kind.Forced_Break) ||
+    if kind < int(dynviewmodel.Dynview_Document_Inline_Kind.Text) ||
+        kind > int(dynviewmodel.Dynview_Document_Inline_Kind.Forced_Break) ||
         !view_snapshot_subspan_is_valid(document.source_offset,
             document.source_count, item.source_offset, item.source_count) ||
         !view_snapshot_subspan_is_valid(document.text_offset,
@@ -1101,16 +1109,16 @@ view_snapshot_document_inline_is_valid :: proc(
         root_style := int(item.root_style)
         return item.math_program_id >= 0 &&
             item.math_program_id < len(slot^.math_programs) &&
-            root_style >= int(core.Dynview_Math_Style_Level.Display) &&
-            root_style <= int(core.Dynview_Math_Style_Level.Text)
+            root_style >= int(dynviewmodel.Dynview_Math_Style_Level.Display) &&
+            root_style <= int(dynviewmodel.Dynview_Math_Style_Level.Text)
     }
     if item.math_program_id != -1 {
         return false
     }
     if item.kind == .Space {
         space_kind := int(item.space_kind)
-        return space_kind >= int(core.Dynview_Document_Space_Kind.Breakable) &&
-            space_kind <= int(core.Dynview_Document_Space_Kind.Controlled)
+        return space_kind >= int(dynviewmodel.Dynview_Document_Space_Kind.Breakable) &&
+            space_kind <= int(dynviewmodel.Dynview_Document_Space_Kind.Controlled)
     }
     return item.kind != .Shape || item.shape.present
 }
@@ -1224,7 +1232,6 @@ reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
     slot^.generation = 0
     slot^.runtime_generation = 0
     slot^.animation_generation = 0
-    slot^.host_state = nil
     slot^.animation = nil
     slot^.presentation_mime = .Text_Plain
     slot^.presentation_bytes = nil
@@ -1245,33 +1252,46 @@ reset_view_snapshot_slot_payload :: proc(slot: ^View_Snapshot) {
     slot^.document_display_rows = nil
 }
 
+//   Initialize the byte-backed builders for one view snapshot generation.
+prepare_view_snapshot_byte_builders :: proc(
+    slot: ^View_Snapshot) -> [3]storage.Bounded_Builder_Status {
+    return {
+        storage.bounded_byte_builder_init(
+            &slot^.presentation_builder, VIEW_SNAPSHOT_TEXT_CAPACITY, &slot^.arena),
+        storage.bounded_byte_builder_init(
+            &slot^.command_text_builder,
+            dynviewmodel.DYNVIEW_MAX_TEXT_BYTES, &slot^.arena),
+        storage.bounded_byte_builder_init(
+            &slot^.document_text_builder,
+            dynviewmodel.DYNVIEW_MAX_DOCUMENT_BYTES, &slot^.arena),
+    }
+}
+
 //   Initialize every future arena-backed payload builder for one free slot generation.
 prepare_view_snapshot_builders :: proc(slot: ^View_Snapshot) -> bool {
-    statuses := [12]core.Bounded_Builder_Status{
-        core.bounded_byte_builder_init(
-            &slot^.presentation_builder, VIEW_SNAPSHOT_TEXT_CAPACITY, &slot^.arena),
-        core.bounded_byte_builder_init(
-            &slot^.command_text_builder, core.DYNVIEW_MAX_TEXT_BYTES, &slot^.arena),
-        core.bounded_byte_builder_init(
-            &slot^.document_text_builder, core.DYNVIEW_MAX_DOCUMENT_BYTES, &slot^.arena),
-        core.bounded_element_builder_init(
-            &slot^.command_builder, core.DYNVIEW_MAX_COMMANDS, &slot^.arena),
-        core.bounded_element_builder_init(
-            &slot^.math_program_builder, core.DYNVIEW_MAX_MATH_PROGRAMS, &slot^.arena),
-        core.bounded_element_builder_init(&slot^.math_table_descriptor_builder,
-            core.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS, &slot^.arena),
-        core.bounded_element_builder_init(
-            &slot^.math_command_builder, core.DYNVIEW_MAX_MATH_COMMANDS, &slot^.arena),
-        core.bounded_element_builder_init(
-            &slot^.math_node_builder, core.DYNVIEW_MAX_MATH_NODES, &slot^.arena),
-        core.bounded_element_builder_init(
-            &slot^.document_builder, core.DYNVIEW_MAX_DOCUMENTS, &slot^.arena),
-        core.bounded_element_builder_init(&slot^.document_block_builder,
-            core.DYNVIEW_MAX_DOCUMENT_BLOCKS, &slot^.arena),
-        core.bounded_element_builder_init(&slot^.document_inline_builder,
-            core.DYNVIEW_MAX_DOCUMENT_INLINES, &slot^.arena),
-        core.bounded_element_builder_init(&slot^.document_display_row_builder,
-            core.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS, &slot^.arena),
+    byte_statuses := prepare_view_snapshot_byte_builders(slot)
+    statuses := [12]storage.Bounded_Builder_Status{
+        byte_statuses[0], byte_statuses[1], byte_statuses[2],
+        storage.bounded_element_builder_init(
+            &slot^.command_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, &slot^.arena),
+        storage.bounded_element_builder_init(
+            &slot^.math_program_builder,
+            dynviewmodel.DYNVIEW_MAX_MATH_PROGRAMS, &slot^.arena),
+        storage.bounded_element_builder_init(&slot^.math_table_descriptor_builder,
+            dynviewmodel.DYNVIEW_MAX_MATH_TABLE_DESCRIPTORS, &slot^.arena),
+        storage.bounded_element_builder_init(
+            &slot^.math_command_builder,
+            dynviewmodel.DYNVIEW_MAX_MATH_COMMANDS, &slot^.arena),
+        storage.bounded_element_builder_init(
+            &slot^.math_node_builder, dynviewmodel.DYNVIEW_MAX_MATH_NODES, &slot^.arena),
+        storage.bounded_element_builder_init(
+            &slot^.document_builder, dynviewmodel.DYNVIEW_MAX_DOCUMENTS, &slot^.arena),
+        storage.bounded_element_builder_init(&slot^.document_block_builder,
+            dynviewmodel.DYNVIEW_MAX_DOCUMENT_BLOCKS, &slot^.arena),
+        storage.bounded_element_builder_init(&slot^.document_inline_builder,
+            dynviewmodel.DYNVIEW_MAX_DOCUMENT_INLINES, &slot^.arena),
+        storage.bounded_element_builder_init(&slot^.document_display_row_builder,
+            dynviewmodel.DYNVIEW_MAX_DOCUMENT_DISPLAY_ROWS, &slot^.arena),
     }
     for status in statuses {
         if status != .Ok {
@@ -1286,12 +1306,12 @@ prepare_view_snapshot_slot :: proc(slot: ^View_Snapshot) -> bool {
     if slot == nil || slot^.state != .Free || !slot^.arena.initialized {
         return false
     }
-    core.arena_owner_reset(&slot^.arena)
+    storage.arena_owner_reset(&slot^.arena)
     reset_view_snapshot_slot_payload(slot)
     if prepare_view_snapshot_builders(slot) {
         return true
     }
-    core.arena_owner_reset(&slot^.arena)
+    storage.arena_owner_reset(&slot^.arena)
     slot^.presentation_builder = {}
     slot^.command_text_builder = {}
     slot^.command_builder = {}
@@ -1313,12 +1333,12 @@ view_snapshot_slots_init :: proc(service: ^Julia_Runtime_Service) -> bool {
         return false
     }
     for &slot, slot_index in service^.view_snapshots {
-        if core.arena_owner_init(
-            &slot.arena, core.VIEW_SNAPSHOT_ARENA_RESERVATION) {
+        if storage.arena_owner_init(
+            &slot.arena, bridgemodel.VIEW_SNAPSHOT_ARENA_RESERVATION) {
             continue
         }
         for initialized_index in 0..<slot_index {
-            core.arena_owner_destroy(&service^.view_snapshots[initialized_index].arena)
+            storage.arena_owner_destroy(&service^.view_snapshots[initialized_index].arena)
         }
         return false
     }
@@ -1331,7 +1351,7 @@ view_snapshot_slots_destroy :: proc(service: ^Julia_Runtime_Service) {
         return
     }
     for &slot in service^.view_snapshots {
-        core.arena_owner_destroy(&slot.arena)
+        storage.arena_owner_destroy(&slot.arena)
     }
 }
 
@@ -1340,7 +1360,7 @@ view_snapshot_slots_destroy :: proc(service: ^Julia_Runtime_Service) {
 // published without consulting Julia.
 build_generated_view_snapshot_payloads :: proc(
     slot: ^View_Snapshot,
-    staging: ^core.Dynview_System,
+    staging: ^dynviewmodel.Dynview_System,
     presentation: string) -> bool {
     if !build_view_snapshot_text_payloads(slot, presentation,
         staging^.command_buffer.text_bytes[:staging^.command_buffer.text_bytes_len]) {
@@ -1373,18 +1393,18 @@ build_view_snapshot_text_payloads :: proc(
     slot: ^View_Snapshot, presentation: string, command_text: []u8) -> bool {
 
     presentation_count := min(len(presentation), VIEW_SNAPSHOT_TEXT_CAPACITY)
-    presentation_status := core.bounded_byte_builder_append(
+    presentation_status := storage.bounded_byte_builder_append(
         &slot^.presentation_builder,
         transmute([]u8)presentation[:presentation_count])
-    command_status := core.bounded_byte_builder_append(
+    command_status := storage.bounded_byte_builder_append(
         &slot^.command_text_builder, command_text)
     if presentation_status != .Ok || command_status != .Ok {
         return false
     }
     presentation_payload, presentation_seal_status :=
-        core.bounded_byte_builder_seal(&slot^.presentation_builder)
+        storage.bounded_byte_builder_seal(&slot^.presentation_builder)
     command_payload, command_seal_status :=
-        core.bounded_byte_builder_seal(&slot^.command_text_builder)
+        storage.bounded_byte_builder_seal(&slot^.command_text_builder)
     if presentation_seal_status != .Ok || command_seal_status != .Ok {
         return false
     }
@@ -1423,26 +1443,26 @@ append_view_snapshot_record_payloads :: proc(
     slot: ^View_Snapshot,
     payloads: View_Snapshot_Record_Payloads) -> bool {
 
-    statuses := [10]core.Bounded_Builder_Status{
-        core.bounded_byte_builder_append(
+    statuses := [10]storage.Bounded_Builder_Status{
+        storage.bounded_byte_builder_append(
             &slot^.document_text_builder, payloads.document_text),
-        core.bounded_element_builder_append(
+        storage.bounded_element_builder_append(
             &slot^.command_builder, payloads.commands),
-        core.bounded_element_builder_append(
+        storage.bounded_element_builder_append(
             &slot^.math_program_builder, payloads.math_programs),
-        core.bounded_element_builder_append(
+        storage.bounded_element_builder_append(
             &slot^.math_table_descriptor_builder, payloads.math_table_descriptors),
-        core.bounded_element_builder_append(
+        storage.bounded_element_builder_append(
             &slot^.math_command_builder, payloads.math_commands),
-        core.bounded_element_builder_append(
+        storage.bounded_element_builder_append(
             &slot^.math_node_builder, payloads.math_nodes),
-        core.bounded_element_builder_append(
+        storage.bounded_element_builder_append(
             &slot^.document_builder, payloads.documents),
-        core.bounded_element_builder_append(
+        storage.bounded_element_builder_append(
             &slot^.document_block_builder, payloads.document_blocks),
-        core.bounded_element_builder_append(
+        storage.bounded_element_builder_append(
             &slot^.document_inline_builder, payloads.document_inlines),
-        core.bounded_element_builder_append(&slot^.document_display_row_builder,
+        storage.bounded_element_builder_append(&slot^.document_display_row_builder,
             payloads.document_display_rows),
     }
     for status in statuses {
@@ -1458,25 +1478,25 @@ seal_view_snapshot_record_payloads :: proc(
     slot: ^View_Snapshot) -> (View_Snapshot_Sealed_Records, bool) {
 
     commands, command_status :=
-        core.bounded_element_builder_seal(&slot^.command_builder)
+        storage.bounded_element_builder_seal(&slot^.command_builder)
     programs, program_status :=
-        core.bounded_element_builder_seal(&slot^.math_program_builder)
+        storage.bounded_element_builder_seal(&slot^.math_program_builder)
     descriptors, descriptor_status :=
-        core.bounded_element_builder_seal(&slot^.math_table_descriptor_builder)
+        storage.bounded_element_builder_seal(&slot^.math_table_descriptor_builder)
     math_commands, math_command_status :=
-        core.bounded_element_builder_seal(&slot^.math_command_builder)
+        storage.bounded_element_builder_seal(&slot^.math_command_builder)
     nodes, node_status :=
-        core.bounded_element_builder_seal(&slot^.math_node_builder)
+        storage.bounded_element_builder_seal(&slot^.math_node_builder)
     document_text, document_text_status :=
-        core.bounded_byte_builder_seal(&slot^.document_text_builder)
+        storage.bounded_byte_builder_seal(&slot^.document_text_builder)
     documents, document_status :=
-        core.bounded_element_builder_seal(&slot^.document_builder)
+        storage.bounded_element_builder_seal(&slot^.document_builder)
     document_blocks, block_status :=
-        core.bounded_element_builder_seal(&slot^.document_block_builder)
+        storage.bounded_element_builder_seal(&slot^.document_block_builder)
     document_inlines, inline_status :=
-        core.bounded_element_builder_seal(&slot^.document_inline_builder)
+        storage.bounded_element_builder_seal(&slot^.document_inline_builder)
     document_display_rows, row_status :=
-        core.bounded_element_builder_seal(&slot^.document_display_row_builder)
+        storage.bounded_element_builder_seal(&slot^.document_display_row_builder)
     if command_status != .Ok || program_status != .Ok || descriptor_status != .Ok ||
         math_command_status != .Ok || node_status != .Ok ||
         document_text_status != .Ok || document_status != .Ok ||
@@ -1490,7 +1510,7 @@ seal_view_snapshot_record_payloads :: proc(
 
 //   Reset worker-only semantic emission storage for one generation.
 // Capacity remains allocated; only populated lengths, errors, and cache validity are reset.
-reset_view_snapshot_staging :: proc(staging: ^core.Dynview_System) {
+reset_view_snapshot_staging :: proc(staging: ^dynviewmodel.Dynview_System) {
     staging^.content = {}
     staging^.command_buffer.command_count = 0
     staging^.command_buffer.text_bytes_len = 0
@@ -1516,7 +1536,7 @@ reset_view_snapshot_staging :: proc(staging: ^core.Dynview_System) {
 //   Install immutable snapshot aliases before invalidating display compilation caches.
 // The display thread retains the published slot until replacement or invalidation.
 install_view_snapshot_content :: proc(
-    slot: ^View_Snapshot, runtime: ^core.Dynview_System) {
+    slot: ^View_Snapshot, runtime: ^dynviewmodel.Dynview_System) {
 
     install_view_snapshot_aliases(slot, runtime)
     install_view_snapshot_buffer(slot, &runtime^.command_buffer)
@@ -1526,7 +1546,7 @@ install_view_snapshot_content :: proc(
 
 // Install immutable semantic aliases from one published snapshot.
 install_view_snapshot_aliases :: proc(
-    slot: ^View_Snapshot, runtime: ^core.Dynview_System) {
+    slot: ^View_Snapshot, runtime: ^dynviewmodel.Dynview_System) {
 
     runtime^.content = {
         revision = slot^.command_revision,
@@ -1551,7 +1571,7 @@ install_view_snapshot_aliases :: proc(
 
 // Install immutable command aliases from one published snapshot.
 install_view_snapshot_buffer :: proc(
-    slot: ^View_Snapshot, buffer: ^core.Dynview_Command_Buffer) {
+    slot: ^View_Snapshot, buffer: ^dynviewmodel.Dynview_Command_Buffer) {
 
     buffer^.revision = slot^.command_revision
     buffer^.command_count = len(slot^.commands)
@@ -1565,7 +1585,7 @@ install_view_snapshot_buffer :: proc(
 
 // Install semantic family counts and invalidate derived cache state.
 install_view_snapshot_cache_counts :: proc(
-    slot: ^View_Snapshot, cache: ^core.Dynview_Compile_Cache) {
+    slot: ^View_Snapshot, cache: ^dynviewmodel.Dynview_Compile_Cache) {
 
     cache^.math_program_count = len(slot^.math_programs)
     cache^.math_table_descriptor_count = len(slot^.math_table_descriptors)
@@ -1680,7 +1700,7 @@ diagnostic_occurrence_should_log :: proc(count: u64) -> bool {
 // The display owner must return every successful receive exactly once after all aliases
 // into the envelope, including nested presentation bytes, are no longer in use.
 try_receive_julia_egress :: proc(
-    service: ^Julia_Runtime_Service) -> (^core.Julia_Host_Egress, bool) {
+    service: ^Julia_Runtime_Service) -> (^bridgemodel.Julia_Host_Egress, bool) {
     if service == nil {
         return nil, false
     }
@@ -1690,14 +1710,14 @@ try_receive_julia_egress :: proc(
 //   Return one consumed Julia-owned egress envelope to its producer for reclamation.
 return_julia_egress :: proc(
     service: ^Julia_Runtime_Service,
-    message: ^core.Julia_Host_Egress) -> bool {
+    message: ^bridgemodel.Julia_Host_Egress) -> bool {
     return service != nil && message != nil &&
         communication_link_return(&service^.event_link, message)
 }
 
 //   Release nested display-owned storage from one ingress envelope.
 destroy_julia_ingress_message :: proc(
-    service: ^Julia_Runtime_Service, message: ^core.Julia_Host_Ingress) {
+    service: ^Julia_Runtime_Service, message: ^bridgemodel.Julia_Host_Ingress) {
     if request, ok := message^.(protocol.Evaluation_Requested); ok {
         communication_link_free_bytes(&service^.request_link,
             transmute([]u8)request.code)
@@ -1705,12 +1725,12 @@ destroy_julia_ingress_message :: proc(
               complete_ok {
         communication_link_free_bytes(&service^.request_link,
             transmute([]u8)request.code)
-    } else if request, harness_ok := message^.(core.Harness_Scenario_Requested);
+    } else if request, harness_ok := message^.(bridgemodel.Harness_Scenario_Requested);
               harness_ok {
         communication_link_free_bytes(&service^.request_link,
             transmute([]u8)request.scenario_name)
-    } else if request, content_ok := message^.(core.Scenario_View_Content_Requested);
-              content_ok {
+    } else if request, content_ok :=
+        message^.(bridgemodel.Scenario_View_Content_Requested); content_ok {
         communication_link_free_bytes(&service^.request_link, request.source)
     }
     message^ = {}
@@ -1733,7 +1753,7 @@ drain_julia_ingress_returns :: proc(service: ^Julia_Runtime_Service) -> int {
 //   Retain only the newest presentation until the display can validate its generation.
 retain_display_view_content :: proc(
     service: ^Julia_Runtime_Service,
-    message: ^core.Julia_Host_Egress) {
+    message: ^bridgemodel.Julia_Host_Egress) {
     if service^.display_pending_view_content != nil {
         _ = return_julia_egress(service, service^.display_pending_view_content)
     }
@@ -1751,20 +1771,20 @@ route_retained_display_view_content :: proc(service: ^Julia_Runtime_Service) {
 
 //   Normalize one typed completion envelope for display-owned metadata handling.
 decode_julia_completion :: proc(
-    message: ^core.Julia_Host_Egress) -> (Julia_Event, bool) {
-    if completed, ok := message^.(core.Runtime_Initialized); ok {
+    message: ^bridgemodel.Julia_Host_Egress) -> (Julia_Event, bool) {
+    if completed, ok := message^.(bridgemodel.Runtime_Initialized); ok {
         return julia_event_from_completion(
             completed.completion, .Initialize, .Initialized), true
     }
-    if completed, ok := message^.(core.Runtime_Content_Initialized); ok {
+    if completed, ok := message^.(bridgemodel.Runtime_Content_Initialized); ok {
         return julia_event_from_completion(
             completed.completion, .Invoke, .Invoke_Complete), true
     }
-    if completed, ok := message^.(core.Harness_Scenario_Completed); ok {
+    if completed, ok := message^.(bridgemodel.Harness_Scenario_Completed); ok {
         return julia_event_from_completion(
             completed.completion, .Invoke, .Invoke_Complete), true
     }
-    if completed, ok := message^.(core.Runtime_Shutdown_Completed); ok {
+    if completed, ok := message^.(bridgemodel.Runtime_Shutdown_Completed); ok {
         return julia_event_from_completion(
             completed.completion, .Shutdown, .Shutdown_Complete), true
     }
@@ -1774,7 +1794,7 @@ decode_julia_completion :: proc(
 //   Resolve whether one completion owns the exact worker-completed slot incarnation.
 animation_tick_completion_owns_slot :: proc(
     service: ^Julia_Runtime_Service,
-    completed: core.Animation_Tick_Completed) -> bool {
+    completed: bridgemodel.Animation_Tick_Completed) -> bool {
     index := int(completed.handle.index)
     if index < 0 || index >= len(service^.animation_tick_slots) {
         return false
@@ -1790,7 +1810,7 @@ animation_tick_completion_owns_slot :: proc(
 //   Match one exact slot completion against the active request and current animation.
 animation_tick_completion_matches :: proc(
     service: ^Julia_Runtime_Service,
-    completed: core.Animation_Tick_Completed) -> bool {
+    completed: bridgemodel.Animation_Tick_Completed) -> bool {
     return animation_tick_completion_owns_slot(service, completed) &&
         completed.completion.request_id == service^.active_request_id &&
         service^.active_request_kind == .Animation_Tick &&
@@ -1800,7 +1820,7 @@ animation_tick_completion_matches :: proc(
 //   Recycle a rejected completion only when its handle owns the exact completed slot.
 recycle_rejected_animation_tick :: proc(
     service: ^Julia_Runtime_Service,
-    completed: core.Animation_Tick_Completed) {
+    completed: bridgemodel.Animation_Tick_Completed) {
     if animation_tick_completion_owns_slot(service, completed) {
         service^.animation_tick_slots[completed.handle.index].state = .Free
     }
@@ -1809,7 +1829,7 @@ recycle_rejected_animation_tick :: proc(
 //   Validate and normalize one checked tick completion.
 accept_animation_tick_completion :: proc(
     service: ^Julia_Runtime_Service,
-    completed: core.Animation_Tick_Completed) -> (Julia_Event, bool) {
+    completed: bridgemodel.Animation_Tick_Completed) -> (Julia_Event, bool) {
     if !animation_tick_completion_matches(service, completed) {
         owns_active_slot := animation_tick_completion_owns_slot(service, completed) &&
             completed.completion.request_id == service^.active_request_id &&
@@ -1833,7 +1853,7 @@ accept_animation_tick_completion :: proc(
 //   Match one lifecycle completion to the exact completed transaction and active request.
 animation_lifecycle_completion_matches :: proc(
     service: ^Julia_Runtime_Service,
-    completed: core.Animation_Lifecycle_Completed) -> bool {
+    completed: bridgemodel.Animation_Lifecycle_Completed) -> bool {
     slot := &service^.animation_lifecycle_slot
     expected_success := slot^.outcome == .Committed
     return completed.handle.index == 0 && slot^.state == .Complete &&
@@ -1863,7 +1883,7 @@ accept_animation_lifecycle_event :: proc(
 //   Accept one exact lifecycle completion and release its bounded transaction slot.
 accept_animation_lifecycle_completion :: proc(
     service: ^Julia_Runtime_Service,
-    completed: core.Animation_Lifecycle_Completed) -> (Julia_Event, bool) {
+    completed: bridgemodel.Animation_Lifecycle_Completed) -> (Julia_Event, bool) {
     if !animation_lifecycle_completion_matches(service, completed) {
         log.warnf(
             "animation_lifecycle_completion_rejected request_id=%d slot_generation=%d runtime_generation=%d animation_generation=%d",
@@ -1884,14 +1904,14 @@ accept_animation_lifecycle_completion :: proc(
 //   Route checked animation tick and lifecycle completions to their slot owners.
 route_animation_egress_completion :: proc(
     service: ^Julia_Runtime_Service,
-    message: ^core.Julia_Host_Egress) -> Animation_Egress_Route_Result {
-    if completed, is_tick := message^.(core.Animation_Tick_Completed); is_tick {
+    message: ^bridgemodel.Julia_Host_Egress) -> Animation_Egress_Route_Result {
+    if completed, is_tick := message^.(bridgemodel.Animation_Tick_Completed); is_tick {
         event, accepted := accept_animation_tick_completion(service, completed)
         _ = return_julia_egress(service, message)
         return {event = event, accepted = accepted, handled = true}
     }
     if completed, is_lifecycle := message^.(
-        core.Animation_Lifecycle_Completed); is_lifecycle {
+        bridgemodel.Animation_Lifecycle_Completed); is_lifecycle {
         event, accepted := accept_animation_lifecycle_completion(service, completed)
         _ = return_julia_egress(service, message)
         return {event = event, accepted = accepted, handled = true}
@@ -1902,7 +1922,7 @@ route_animation_egress_completion :: proc(
 //   Route one borrowed egress envelope and return any accepted Julia event.
 route_julia_egress_message :: proc(
     service: ^Julia_Runtime_Service,
-    message: ^core.Julia_Host_Egress) -> (Julia_Event, bool) {
+    message: ^bridgemodel.Julia_Host_Egress) -> (Julia_Event, bool) {
     if service == nil || message == nil {
         return {}, false
     }
@@ -1923,7 +1943,7 @@ route_julia_egress_message :: proc(
         }
         return {}, false
     }
-    if _, is_content := message^.(core.View_Content_Ready); is_content &&
+    if _, is_content := message^.(bridgemodel.View_Content_Ready); is_content &&
         service^.lifecycle != .Shutdown_Requested &&
         service^.lifecycle != .Stopped {
         retain_display_view_content(service, message)
@@ -1959,7 +1979,7 @@ drain_julia_egress :: proc(service: ^Julia_Runtime_Service) -> int {
 //   Install the sole normal-runtime non-event destination and route startup content.
 configure_julia_egress_dispatch :: proc(
     service: ^Julia_Runtime_Service,
-    dispatch: core.Julia_Egress_Dispatch_Proc,
+    dispatch: bridgemodel.Julia_Egress_Dispatch_Proc,
     user_data: rawptr) {
     assert(service != nil && dispatch != nil)
     assert(service^.display_egress_dispatch == nil)
@@ -1987,8 +2007,8 @@ clear_julia_egress_dispatch :: proc(service: ^Julia_Runtime_Service) {
 
 //   Destroy one Julia-owned egress envelope and any nested pool allocation.
 destroy_julia_egress_message :: proc(
-    service: ^Julia_Runtime_Service, message: ^core.Julia_Host_Egress) {
-    if content, content_ok := message^.(core.View_Content_Ready); content_ok {
+    service: ^Julia_Runtime_Service, message: ^bridgemodel.Julia_Host_Egress) {
+    if content, content_ok := message^.(bridgemodel.View_Content_Ready); content_ok {
         communication_link_free_bytes(&service^.event_link, content.content.bytes)
     } else if output, output_ok := message^.(protocol.Terminal_Output_Batch); output_ok {
         communication_link_free_bytes(&service^.event_link,
@@ -2019,8 +2039,8 @@ drain_julia_egress_returns :: proc(service: ^Julia_Runtime_Service) -> int {
 
 //   Clone canonical presentation bytes into the Julia-owned egress pool.
 allocate_view_content_message :: proc(
-    state: ^core.Euclid_General_State, mime: core.Presentation_Mime,
-    source: []u8) -> (^core.Julia_Host_Egress, runtime.Allocator_Error) {
+    state: ^core.Euclid_General_State, mime: presentation_model.Presentation_Mime,
+    source: []u8) -> (^bridgemodel.Julia_Host_Egress, runtime.Allocator_Error) {
     service := state^.julia_runtime_service
     message, message_error := communication_link_alloc(&service^.event_link)
     if message_error != .None {
@@ -2042,7 +2062,7 @@ allocate_view_content_message :: proc(
     if service^.presentation_animation_override != nil {
         animation = service^.presentation_animation_override
     }
-    message^ = core.Julia_Host_Egress(core.View_Content_Ready{
+    message^ = bridgemodel.Julia_Host_Egress(bridgemodel.View_Content_Ready{
         request_id = service^.active_request_id,
         runtime_generation = service^.runtime_generation,
         animation_generation = animation_generation,
@@ -2057,8 +2077,8 @@ allocate_view_content_message :: proc(
 //   Clone requested scenario content into the Julia-owned egress pool.
 allocate_scenario_view_content_message :: proc(
     service: ^Julia_Runtime_Service,
-    request: core.Scenario_View_Content_Requested) ->
-    (^core.Julia_Host_Egress, runtime.Allocator_Error) {
+    request: bridgemodel.Scenario_View_Content_Requested) ->
+    (^bridgemodel.Julia_Host_Egress, runtime.Allocator_Error) {
     message, message_error := communication_link_alloc(&service^.event_link)
     if message_error != .None {
         return nil, message_error
@@ -2071,7 +2091,7 @@ allocate_scenario_view_content_message :: proc(
     }
     copy(bytes, request.source)
     generation := service^.presentation_generation + 1
-    message^ = core.Julia_Host_Egress(core.View_Content_Ready{
+    message^ = bridgemodel.Julia_Host_Egress(bridgemodel.View_Content_Ready{
         origin = request.origin,
         request_id = request.request_id,
         runtime_generation = request.runtime_generation,
@@ -2087,7 +2107,8 @@ allocate_scenario_view_content_message :: proc(
 //   Publish scenario content from the Julia owner, retaining the newest retry.
 send_scenario_presented_text :: proc(
     service: ^Julia_Runtime_Service,
-    request: core.Scenario_View_Content_Requested) -> core.Communication_Send_Outcome {
+    request: bridgemodel.Scenario_View_Content_Requested) ->
+        bridgemodel.Communication_Send_Outcome {
     _ = drain_julia_egress_returns(service)
     message, allocation_error := allocate_scenario_view_content_message(
         service, request)
@@ -2106,8 +2127,8 @@ send_scenario_presented_text :: proc(
 
 //   Enqueue canonical view content without blocking, retaining only the newest retry.
 send_presented_text :: proc(
-    state: ^core.Euclid_General_State, mime: core.Presentation_Mime,
-    source: []u8) -> core.Communication_Send_Outcome {
+    state: ^core.Euclid_General_State, mime: presentation_model.Presentation_Mime,
+    source: []u8) -> bridgemodel.Communication_Send_Outcome {
     service := state^.julia_runtime_service
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
@@ -2129,7 +2150,7 @@ send_presented_text :: proc(
 
 //   Reliably transfer one retained presentation before its request completion event.
 flush_pending_view_content :: proc(
-    service: ^Julia_Runtime_Service) -> core.Communication_Send_Outcome {
+    service: ^Julia_Runtime_Service) -> bridgemodel.Communication_Send_Outcome {
     message := service^.pending_view_content
     if message == nil {
         return .Sent
@@ -2151,7 +2172,7 @@ try_submit_runtime_initialize :: proc(
     }
     request_id := service^.next_request_id
     outcome := send_julia_ingress_control(
-        service, core.Runtime_Initialize_Requested{request_id = request_id})
+        service, bridgemodel.Runtime_Initialize_Requested{request_id = request_id})
     if !finish_julia_request_submission(
         service, request_id, .Initialize, outcome) {
         return 0, false
@@ -2168,7 +2189,7 @@ try_submit_runtime_content_initialize :: proc(
     }
     request_id := service^.next_request_id
     outcome := send_julia_ingress_control(service,
-        core.Runtime_Content_Initialize_Requested{
+        bridgemodel.Runtime_Content_Initialize_Requested{
             request_id = request_id,
             native_state = native_state,
         })
@@ -2186,7 +2207,7 @@ try_submit_animation_tick :: proc(
         return 0, false
     }
     request_id := service^.next_request_id
-    outcome := send_julia_ingress_control(service, core.Animation_Tick_Requested{
+    outcome := send_julia_ingress_control(service, bridgemodel.Animation_Tick_Requested{
         request_id = request_id,
         handle = submission.handle,
         animation_generation = submission.animation_generation,
@@ -2202,14 +2223,14 @@ try_submit_animation_tick :: proc(
 //   Submit one typed animation lifecycle transaction through its compatibility handler.
 try_submit_animation_lifecycle :: proc(
     service: ^Julia_Runtime_Service,
-    handle: core.Animation_Lifecycle_Slot_Handle,
+    handle: bridgemodel.Animation_Lifecycle_Slot_Handle,
     runtime_generation, animation_generation: u64) -> (u64, bool) {
     if service == nil {
         return 0, false
     }
     request_id := service^.next_request_id
     outcome := send_julia_ingress_control(
-        service, core.Animation_Lifecycle_Requested{
+        service, bridgemodel.Animation_Lifecycle_Requested{
             request_id = request_id,
             handle = handle,
             runtime_generation = runtime_generation,
@@ -2227,7 +2248,7 @@ when core.HARNESS_ENABLED {
         service: ^Julia_Runtime_Service, scenario_name: string,
         step_count: i64) -> (u64, bool) {
         if service == nil || len(scenario_name) == 0 ||
-            len(scenario_name) > core.HARNESS_SCENARIO_NAME_CAPACITY ||
+            len(scenario_name) > bridgemodel.HARNESS_SCENARIO_NAME_CAPACITY ||
             step_count < 0 {
             return 0, false
         }
@@ -2239,7 +2260,7 @@ when core.HARNESS_ENABLED {
         }
         copy(bytes, transmute([]u8)scenario_name)
         request_id := service^.next_request_id
-        request := core.Harness_Scenario_Requested{
+        request := bridgemodel.Harness_Scenario_Requested{
             request_id = request_id,
             scenario_name = string(bytes),
             step_count = step_count,
@@ -2263,7 +2284,7 @@ try_submit_runtime_shutdown :: proc(
     }
     request_id := service^.next_request_id
     outcome := send_julia_ingress_control(
-        service, core.Runtime_Shutdown_Requested{request_id = request_id})
+        service, bridgemodel.Runtime_Shutdown_Requested{request_id = request_id})
     if !finish_julia_request_submission(service, request_id, .Shutdown, outcome) {
         return 0, false
     }
@@ -2312,7 +2333,7 @@ wait_runtime_shutdown_completion :: proc(
 //   Enqueue one already-owned typed control value without blocking the display thread.
 send_julia_ingress_control :: proc(
     service: ^Julia_Runtime_Service,
-    value: core.Julia_Host_Ingress) -> core.Communication_Send_Outcome {
+    value: bridgemodel.Julia_Host_Ingress) -> bridgemodel.Communication_Send_Outcome {
     if service^.lifecycle == .Shutdown_Requested || service^.lifecycle == .Stopped {
         return .Runtime_Stopping
     }
@@ -2333,7 +2354,7 @@ send_julia_ingress_control :: proc(
 finish_julia_request_submission :: proc(
     service: ^Julia_Runtime_Service, request_id: u64,
     kind: Julia_Request_Kind,
-    outcome: core.Communication_Send_Outcome) -> bool {
+    outcome: bridgemodel.Communication_Send_Outcome) -> bool {
     if outcome != .Sent {
         service^.request_saturation_count += 1
         if diagnostic_occurrence_should_log(service^.request_saturation_count) {
@@ -2355,7 +2376,7 @@ finish_julia_request_submission :: proc(
 
 //   Return whether one ingress variant owns dynamic pooled bytes.
 terminal_ingress_has_dynamic_payload :: proc(
-    value: core.Julia_Host_Ingress) -> bool {
+    value: bridgemodel.Julia_Host_Ingress) -> bool {
     #partial switch _ in value {
     case protocol.Evaluation_Requested:
         return true
@@ -2368,7 +2389,7 @@ terminal_ingress_has_dynamic_payload :: proc(
 //   Clone and enqueue one typed Terminal ingress message without blocking.
 send_terminal_ingress :: proc(
     service: ^Julia_Runtime_Service,
-    value: core.Julia_Host_Ingress) -> core.Communication_Send_Outcome {
+    value: bridgemodel.Julia_Host_Ingress) -> bridgemodel.Communication_Send_Outcome {
     if service == nil || service^.lifecycle == .Shutdown_Requested ||
         service^.lifecycle == .Stopped {
         return .Runtime_Stopping
@@ -2392,7 +2413,7 @@ send_terminal_ingress :: proc(
 //   Clone evaluation source into the display-owned ingress pool and enqueue it.
 send_terminal_evaluation :: proc(
     service: ^Julia_Runtime_Service,
-    request: protocol.Evaluation_Requested) -> core.Communication_Send_Outcome {
+    request: protocol.Evaluation_Requested) -> bridgemodel.Communication_Send_Outcome {
     if service == nil ||
         len(request.code) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
         return .Allocation_Failed
@@ -2414,7 +2435,7 @@ send_terminal_evaluation :: proc(
     copy(bytes, transmute([]u8)request.code)
     cloned_request := request
     cloned_request.code = string(bytes)
-    message^ = core.Julia_Host_Ingress(cloned_request)
+    message^ = bridgemodel.Julia_Host_Ingress(cloned_request)
     if !communication_link_try_send(&service^.request_link, message) {
         destroy_julia_ingress_message(service, message)
         return .Queue_Full
@@ -2425,7 +2446,8 @@ send_terminal_evaluation :: proc(
 //   Clone scenario presentation source into the display-owned ingress pool.
 send_scenario_view_content :: proc(
     service: ^Julia_Runtime_Service,
-    request: core.Scenario_View_Content_Requested) -> core.Communication_Send_Outcome {
+    request: bridgemodel.Scenario_View_Content_Requested) ->
+        bridgemodel.Communication_Send_Outcome {
     if service == nil || service^.lifecycle != .Ready {
         return .Runtime_Stopping
     }
@@ -2443,7 +2465,7 @@ send_scenario_view_content :: proc(
     copy(bytes, request.source)
     cloned_request := request
     cloned_request.source = bytes
-    message^ = core.Julia_Host_Ingress(cloned_request)
+    message^ = bridgemodel.Julia_Host_Ingress(cloned_request)
     if !communication_link_try_send(&service^.request_link, message) {
         destroy_julia_ingress_message(service, message)
         return .Queue_Full
@@ -2454,7 +2476,7 @@ send_scenario_view_content :: proc(
 //   Clone completion source into the display-owned ingress pool and enqueue it.
 send_terminal_completion_request :: proc(
     service: ^Julia_Runtime_Service,
-    request: protocol.Completion_Requested) -> core.Communication_Send_Outcome {
+    request: protocol.Completion_Requested) -> bridgemodel.Communication_Send_Outcome {
     if service == nil ||
         len(request.code) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
         return .Allocation_Failed
@@ -2476,7 +2498,7 @@ send_terminal_completion_request :: proc(
     copy(bytes, transmute([]u8)request.code)
     cloned_request := request
     cloned_request.code = string(bytes)
-    message^ = core.Julia_Host_Ingress(cloned_request)
+    message^ = bridgemodel.Julia_Host_Ingress(cloned_request)
     if !communication_link_try_send(&service^.request_link, message) {
         destroy_julia_ingress_message(service, message)
         return .Queue_Full
@@ -2486,7 +2508,7 @@ send_terminal_completion_request :: proc(
 
 //   Return whether one egress variant owns dynamic pooled bytes.
 terminal_egress_has_dynamic_payload :: proc(
-    value: core.Julia_Host_Egress) -> bool {
+    value: bridgemodel.Julia_Host_Egress) -> bool {
     #partial switch _ in value {
     case protocol.Terminal_Output_Batch:
         return true
@@ -2501,7 +2523,7 @@ terminal_egress_has_dynamic_payload :: proc(
 //   Enqueue one typed worker-owned Terminal result without blocking.
 send_terminal_egress :: proc(
     service: ^Julia_Runtime_Service,
-    value: core.Julia_Host_Egress) -> core.Communication_Send_Outcome {
+    value: bridgemodel.Julia_Host_Egress) -> bridgemodel.Communication_Send_Outcome {
     if service == nil || service^.lifecycle == .Shutdown_Requested ||
         service^.lifecycle == .Stopped {
         return .Runtime_Stopping
@@ -2525,7 +2547,7 @@ send_terminal_egress :: proc(
 //   Clone ordered terminal bytes into the Julia-owned egress pool and enqueue them.
 send_terminal_output :: proc(
     service: ^Julia_Runtime_Service,
-    output: protocol.Terminal_Output_Batch) -> core.Communication_Send_Outcome {
+    output: protocol.Terminal_Output_Batch) -> bridgemodel.Communication_Send_Outcome {
     if service == nil ||
         len(output.bytes) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
         return .Allocation_Failed
@@ -2547,7 +2569,7 @@ send_terminal_output :: proc(
     copy(bytes, transmute([]u8)output.bytes)
     cloned_output := output
     cloned_output.bytes = string(bytes)
-    message^ = core.Julia_Host_Egress(cloned_output)
+    message^ = bridgemodel.Julia_Host_Egress(cloned_output)
     if !communication_link_try_send(&service^.event_link, message) {
         destroy_julia_egress_message(service, message)
         return .Queue_Full
@@ -2558,7 +2580,7 @@ send_terminal_output :: proc(
 //   Clone completion insertion into the Julia-owned egress pool and enqueue it.
 send_terminal_completion_result :: proc(
     service: ^Julia_Runtime_Service,
-    result: protocol.Completion_Result) -> core.Communication_Send_Outcome {
+    result: protocol.Completion_Result) -> bridgemodel.Communication_Send_Outcome {
     if service == nil ||
         len(result.insertion) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
         return .Allocation_Failed
@@ -2580,7 +2602,7 @@ send_terminal_completion_result :: proc(
     copy(bytes, transmute([]u8)result.insertion)
     cloned_result := result
     cloned_result.insertion = string(bytes)
-    message^ = core.Julia_Host_Egress(cloned_result)
+    message^ = bridgemodel.Julia_Host_Egress(cloned_result)
     if !communication_link_try_send(&service^.event_link, message) {
         destroy_julia_egress_message(service, message)
         return .Queue_Full
@@ -2591,7 +2613,7 @@ send_terminal_completion_result :: proc(
 //   Clone Julia's startup banner into the Julia-owned egress pool and enqueue it.
 send_terminal_session_ready :: proc(
     service: ^Julia_Runtime_Service,
-    ready: protocol.Terminal_Session_Ready) -> core.Communication_Send_Outcome {
+    ready: protocol.Terminal_Session_Ready) -> bridgemodel.Communication_Send_Outcome {
     if service == nil ||
         len(ready.banner) > protocol.TERMINAL_RETAINED_TEXT_MAX_BYTES {
         return .Allocation_Failed
@@ -2611,7 +2633,7 @@ send_terminal_session_ready :: proc(
     copy(bytes, transmute([]u8)ready.banner)
     cloned_ready := ready
     cloned_ready.banner = string(bytes)
-    message^ = core.Julia_Host_Egress(cloned_ready)
+    message^ = bridgemodel.Julia_Host_Egress(cloned_ready)
     if !communication_link_try_send(&service^.event_link, message) {
         destroy_julia_egress_message(service, message)
         return .Queue_Full
@@ -2699,7 +2721,8 @@ assert_julia_runtime_owner :: proc(state: ^core.Euclid_General_State) {
 
 //   Reserve the single bounded lifecycle slot and advance its incarnation.
 reserve_animation_lifecycle_slot :: proc(
-    service: ^Julia_Runtime_Service) -> (core.Animation_Lifecycle_Slot_Handle, bool) {
+    service: ^Julia_Runtime_Service) -> (
+        bridgemodel.Animation_Lifecycle_Slot_Handle, bool) {
     slot := &service^.animation_lifecycle_slot
     if slot^.state != .Free {
         return {}, false
@@ -2709,7 +2732,7 @@ reserve_animation_lifecycle_slot :: proc(
         slot^.reservation_generation = 1
     }
     slot^.state = .Pending
-    return core.Animation_Lifecycle_Slot_Handle{
+    return bridgemodel.Animation_Lifecycle_Slot_Handle{
         index = 0,
         reservation_generation = slot^.reservation_generation,
     }, true
@@ -2718,7 +2741,7 @@ reserve_animation_lifecycle_slot :: proc(
 //   Snapshot display-owned lifecycle intent into one reserved transaction slot.
 prepare_animation_lifecycle_slot :: proc(
     state: ^core.Euclid_General_State,
-    handle: core.Animation_Lifecycle_Slot_Handle) {
+    handle: bridgemodel.Animation_Lifecycle_Slot_Handle) {
     service := state^.julia_runtime_service
     selected := state^.julia_interface^.selected_animation
     if selected == nil {
@@ -2746,7 +2769,7 @@ wait_animation_lifecycle_completion :: proc(
         if !ok {
             return false
         }
-        if _, is_content := event_message^.(core.View_Content_Ready); is_content {
+        if _, is_content := event_message^.(bridgemodel.View_Content_Ready); is_content {
             retain_display_view_content(service, event_message)
             continue
         }
@@ -3062,18 +3085,18 @@ finalize_julia_worker_host :: proc(
 //   Initialize content and install the sole lifetime-stable native host binding.
 initialize_julia_content_control :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    request: core.Runtime_Content_Initialize_Requested) -> bool {
-    if request.native_state == nil {
+    request: bridgemodel.Runtime_Content_Initialize_Requested) -> bool {
+    native_state := cast(^core.Euclid_General_State)request.native_state
+    if native_state == nil {
         return false
     }
     if host^.runtime == nil {
-        host^.native_state = request.native_state
+        host^.native_state = native_state
         if !initialize_julia_runtime_host(service, host, host^.native_state) {
             return false
         }
     }
-    return host^.native_state == request.native_state &&
-        initialize_julia_state(request.native_state)
+    return host^.native_state == native_state && initialize_julia_state(native_state)
 }
 
 //   Initialize the Julia worker host and publish its resulting state.
@@ -3089,24 +3112,24 @@ execute_julia_runtime_initialize :: proc(
 //   Dispatch one typed control to its concrete owner-thread handler.
 execute_julia_control_handler :: proc(
     service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
-    message: ^core.Julia_Host_Ingress, event: ^Julia_Event) -> bool {
+    message: ^bridgemodel.Julia_Host_Ingress, event: ^Julia_Event) -> bool {
     shutting_down := false
     #partial switch request in message^ {
-    case core.Runtime_Initialize_Requested:
+    case bridgemodel.Runtime_Initialize_Requested:
         execute_julia_runtime_initialize(service, state, event)
-    case core.Runtime_Content_Initialize_Requested:
+    case bridgemodel.Runtime_Content_Initialize_Requested:
         event^.kind = .Invoke_Complete
         event^.succeeded = state^.initialized &&
             initialize_julia_content_control(service, &state^.host, request)
-    case core.Animation_Tick_Requested:
+    case bridgemodel.Animation_Tick_Requested:
         event^.kind = .Animation_Tick_Complete
         event^.succeeded = state^.host.runtime != nil &&
             generate_animation_tick(service, &state^.host, request)
-    case core.Animation_Lifecycle_Requested:
+    case bridgemodel.Animation_Lifecycle_Requested:
         event^.kind = .Invoke_Complete
         event^.succeeded = state^.host.runtime != nil &&
             update_animation_lifecycle(service, &state^.host, request)
-    case core.Harness_Scenario_Requested:
+    case bridgemodel.Harness_Scenario_Requested:
         when core.HARNESS_ENABLED {
             event^.kind = .Invoke_Complete
             event^.succeeded = state^.host.runtime != nil &&
@@ -3114,7 +3137,7 @@ execute_julia_control_handler :: proc(
         } else {
             event^.succeeded = false
         }
-    case core.Runtime_Shutdown_Requested:
+    case bridgemodel.Runtime_Shutdown_Requested:
         assert(os.get_current_thread_id() == service^.owner_thread_id)
         event^.kind = .Shutdown_Complete
         shutting_down = true
@@ -3127,7 +3150,7 @@ execute_julia_control_handler :: proc(
 //   Execute one typed control while borrowing its producer-owned ingress envelope.
 execute_julia_control :: proc(
     service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
-    message: ^core.Julia_Host_Ingress,
+    message: ^bridgemodel.Julia_Host_Ingress,
     decoded: Julia_Decoded_Control) -> (Julia_Event, bool) {
     event := Julia_Event{request_kind = decoded.request_kind,
         request_id = decoded.request_id, slot_index = decoded.slot_index,
@@ -3139,7 +3162,7 @@ execute_julia_control :: proc(
 }
 
 //   Convert shared worker completion storage into its typed transport fields.
-julia_completion_from_event :: proc(event: Julia_Event) -> core.Julia_Completion {
+julia_completion_from_event :: proc(event: Julia_Event) -> bridgemodel.Julia_Completion {
     return {
         request_id = event.request_id,
         succeeded = event.succeeded,
@@ -3150,7 +3173,7 @@ julia_completion_from_event :: proc(event: Julia_Event) -> core.Julia_Completion
 
 //   Normalize one typed completion for existing lifecycle and evidence handlers.
 julia_event_from_completion :: proc(
-    completion: core.Julia_Completion,
+    completion: bridgemodel.Julia_Completion,
     request_kind: Julia_Request_Kind,
     event_kind: Julia_Event_Kind) -> Julia_Event {
     return {
@@ -3164,40 +3187,49 @@ julia_event_from_completion :: proc(
     }
 }
 
+//   Encode one animation lifecycle completion with its repeated generation identity.
+encode_animation_lifecycle_completion :: proc(
+    message: ^bridgemodel.Julia_Host_Egress,
+    decoded: Julia_Decoded_Control,
+    completion: bridgemodel.Julia_Completion) {
+    message^ = bridgemodel.Julia_Host_Egress(
+        bridgemodel.Animation_Lifecycle_Completed{
+            completion = completion,
+            handle = decoded.lifecycle_handle,
+            runtime_generation = decoded.runtime_generation,
+            animation_generation = decoded.animation_generation,
+        })
+}
+
 //   Encode one typed completion with repeated request and slot identity.
 encode_typed_julia_completion :: proc(
-    message: ^core.Julia_Host_Egress, decoded: Julia_Decoded_Control,
+    message: ^bridgemodel.Julia_Host_Egress, decoded: Julia_Decoded_Control,
     event: Julia_Event) {
     completion := julia_completion_from_event(event)
     switch decoded.protocol {
     case .Runtime_Initialize:
-        message^ = core.Julia_Host_Egress(core.Runtime_Initialized{
+        message^ = bridgemodel.Julia_Host_Egress(bridgemodel.Runtime_Initialized{
             completion = completion,
         })
     case .Runtime_Content_Initialize:
-        message^ = core.Julia_Host_Egress(core.Runtime_Content_Initialized{
+        message^ = bridgemodel.Julia_Host_Egress(bridgemodel.Runtime_Content_Initialized{
             completion = completion,
         })
     case .Animation_Tick:
-        message^ = core.Julia_Host_Egress(core.Animation_Tick_Completed{
+        message^ = bridgemodel.Julia_Host_Egress(bridgemodel.Animation_Tick_Completed{
             completion = completion,
             handle = decoded.tick_handle,
             animation_generation = decoded.animation_generation,
             sequence = decoded.sequence,
         })
     case .Animation_Lifecycle:
-        message^ = core.Julia_Host_Egress(core.Animation_Lifecycle_Completed{
-            completion = completion,
-            handle = decoded.lifecycle_handle,
-            runtime_generation = decoded.runtime_generation,
-            animation_generation = decoded.animation_generation,
-        })
+        encode_animation_lifecycle_completion(message, decoded, completion)
     case .Harness_Scenario:
-        message^ = core.Julia_Host_Egress(core.Harness_Scenario_Completed{
+        message^ = bridgemodel.Julia_Host_Egress(bridgemodel.Harness_Scenario_Completed{
             completion = completion,
         })
     case .Runtime_Shutdown:
-        message^ = core.Julia_Host_Egress(core.Runtime_Shutdown_Completed{
+        message^ = bridgemodel.Julia_Host_Egress(bridgemodel.Runtime_Shutdown_Completed{
             completion = completion,
         })
     }
@@ -3207,7 +3239,7 @@ encode_typed_julia_completion :: proc(
 send_typed_julia_completion :: proc(
     service: ^Julia_Runtime_Service,
     decoded: Julia_Decoded_Control,
-    event: Julia_Event) -> core.Communication_Send_Outcome {
+    event: Julia_Event) -> bridgemodel.Communication_Send_Outcome {
     _ = drain_julia_egress_returns(service)
     pending_outcome := flush_pending_view_content(service)
     if pending_outcome != .Sent {
@@ -3227,15 +3259,15 @@ send_typed_julia_completion :: proc(
 
 //   Decode one animation control into a bridge-private compatibility request.
 decode_julia_animation_control :: proc(
-    message: ^core.Julia_Host_Ingress) -> (Julia_Decoded_Control, bool) {
+    message: ^bridgemodel.Julia_Host_Ingress) -> (Julia_Decoded_Control, bool) {
     #partial switch request in message^ {
-    case core.Animation_Tick_Requested:
+    case bridgemodel.Animation_Tick_Requested:
         return {protocol = .Animation_Tick, request_kind = .Animation_Tick,
             request_id = request.request_id, slot_index = request.handle.index,
             tick_handle = request.handle,
             animation_generation = request.animation_generation,
             sequence = request.sequence}, true
-    case core.Animation_Lifecycle_Requested:
+    case bridgemodel.Animation_Lifecycle_Requested:
         return {protocol = .Animation_Lifecycle, request_kind = .Invoke,
             request_id = request.request_id, slot_index = request.handle.index,
             lifecycle_handle = request.handle,
@@ -3247,25 +3279,25 @@ decode_julia_animation_control :: proc(
 
 //   Decode one runtime or harness control into a bridge-private execution record.
 decode_julia_control :: proc(
-    message: ^core.Julia_Host_Ingress) -> (Julia_Decoded_Control, bool) {
+    message: ^bridgemodel.Julia_Host_Ingress) -> (Julia_Decoded_Control, bool) {
     if decoded, ok := decode_julia_animation_control(message); ok {
         return decoded, true
     }
     #partial switch request in message^ {
-    case core.Runtime_Initialize_Requested:
+    case bridgemodel.Runtime_Initialize_Requested:
         return {protocol = .Runtime_Initialize, request_kind = .Initialize,
             request_id = request.request_id, slot_index = -1}, true
-    case core.Runtime_Content_Initialize_Requested:
+    case bridgemodel.Runtime_Content_Initialize_Requested:
         return {protocol = .Runtime_Content_Initialize, request_kind = .Invoke,
             request_id = request.request_id, slot_index = -1}, true
-    case core.Harness_Scenario_Requested:
+    case bridgemodel.Harness_Scenario_Requested:
         when core.HARNESS_ENABLED {
             return {protocol = .Harness_Scenario, request_kind = .Invoke,
                 request_id = request.request_id, slot_index = -1}, true
         } else {
             return {}, false
         }
-    case core.Runtime_Shutdown_Requested:
+    case bridgemodel.Runtime_Shutdown_Requested:
         return {protocol = .Runtime_Shutdown, request_kind = .Shutdown,
             request_id = request.request_id, slot_index = -1}, true
     }
@@ -3411,7 +3443,7 @@ julia_terminal_ingest_tick_pulse :: proc(
 
 //   Convert one Julia evaluation command into a producer-owned terminal envelope.
 send_terminal_value_until_sent :: proc(
-    service: ^Julia_Runtime_Service, value: core.Julia_Host_Egress) -> bool {
+    service: ^Julia_Runtime_Service, value: bridgemodel.Julia_Host_Egress) -> bool {
     for {
         outcome := send_terminal_egress(service, value)
         if outcome == .Sent { return true }
@@ -3451,7 +3483,7 @@ julia_terminal_emit_output :: proc(
 julia_terminal_emit_completion :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
     request_id: protocol.Request_Id, complete: bool) -> bool {
-    value := core.Julia_Host_Egress(protocol.Evaluation_Incomplete{
+    value := bridgemodel.Julia_Host_Egress(protocol.Evaluation_Incomplete{
         request_id = request_id,
         animation_generation = host^.terminal_generation,
     })
@@ -3569,7 +3601,7 @@ julia_terminal_emit_tick_stream :: proc(
             julialib.jl_get_nth_field(command, 1)))
         stream_generation := u64(julialib.jl_unbox_uint64(
             julialib.jl_get_nth_field(command, 2)))
-        value: core.Julia_Host_Egress
+        value: bridgemodel.Julia_Host_Egress
         if kind == 1 {
             value = protocol.Tick_Stream_Configure_Requested{
                 animation_generation = animation_generation,
@@ -3689,7 +3721,7 @@ julia_terminal_service :: proc(
 //   Dispatch one typed Terminal ingress envelope on the sole Julia owner thread.
 julia_terminal_dispatch_ingress :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    message: ^core.Julia_Host_Ingress) -> bool {
+    message: ^bridgemodel.Julia_Host_Ingress) -> bool {
     #partial switch payload in message^ {
     case protocol.Terminal_Session_Started:
         accepted := julia_terminal_session_call(
@@ -3733,7 +3765,7 @@ shutdown_julia_runtime_host :: proc(
 //   Execute one typed control and attach its bounded completion evidence.
 process_julia_worker_control :: proc(
     service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
-    message: ^core.Julia_Host_Ingress,
+    message: ^bridgemodel.Julia_Host_Ingress,
     decoded: Julia_Decoded_Control) -> Julia_Worker_Request_Result {
     event, shutting_down := execute_julia_control(
         service, state, message, decoded)
@@ -3749,7 +3781,7 @@ process_julia_worker_control :: proc(
 //   Dispatch and return one Terminal ingress envelope to its producer.
 process_julia_terminal_ingress :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
-    message: ^core.Julia_Host_Ingress) -> bool {
+    message: ^bridgemodel.Julia_Host_Ingress) -> bool {
     accepted := host^.runtime != nil &&
         julia_terminal_dispatch_ingress(service, host, message)
     _ = communication_link_return(&service^.request_link, message)
@@ -3760,8 +3792,8 @@ process_julia_terminal_ingress :: proc(
 //   Process one borrowed worker ingress envelope and report whether the loop may continue.
 process_julia_worker_ingress :: proc(
     service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
-    message: ^core.Julia_Host_Ingress) -> (Julia_Worker_Run_Result, bool) {
-    if request, is_content := message^.(core.Scenario_View_Content_Requested);
+    message: ^bridgemodel.Julia_Host_Ingress) -> (Julia_Worker_Run_Result, bool) {
+    if request, is_content := message^.(bridgemodel.Scenario_View_Content_Requested);
        is_content {
         current := state^.host.native_state != nil &&
             state^.host.native_state^.julia_interface != nil &&
@@ -3769,7 +3801,7 @@ process_julia_worker_ingress :: proc(
             request.animation_generation == service^.animation_generation &&
             request.animation ==
                 state^.host.native_state^.julia_interface^.current_animation
-        outcome := core.Communication_Send_Outcome.Runtime_Stopping
+        outcome := bridgemodel.Communication_Send_Outcome.Runtime_Stopping
         if current {
             outcome = send_scenario_presented_text(service, request)
         }
