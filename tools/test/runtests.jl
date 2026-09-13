@@ -1,5 +1,5 @@
 # Tooling tests for Euclid's verification adapter (tools/test_runner.jl and
-# tools/verify.jl). Run with the analysis project active so JSON3 resolves:
+# tools/verify.jl). Run with the analysis project active so JSON resolves:
 #
 #     julia --project=tools/analysis tools/test/runtests.jl
 
@@ -119,7 +119,7 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test !ScenarioRunner.scenario_passed(inconclusive)
         output = IOBuffer()
         ScenarioRunner.write_json_report(output, [inconclusive])
-        report = ScenarioRunner.JSON3.read(String(take!(output)))
+        report = ScenarioRunner.JSON.parse(String(take!(output)))
         @test !report.passed
         @test report.scenarios[1].result == "inconclusive"
     end
@@ -319,7 +319,7 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             "odin", "Odin", 1, UInt64(10), "PASS", "", [record])
         output = IOBuffer()
         TestRunner.write_json_report(output, [suite])
-        report = TestRunner.JSON3.read(String(take!(output)))
+        report = TestRunner.JSON.parse(String(take!(output)))
         @test report.schema_version == "2.0.0"
         @test report.tests[1].name == name
         @test report.tests[1].elapsed_ns === nothing

@@ -6,7 +6,7 @@ pushfirst!(LOAD_PATH, joinpath(@__DIR__, "analysis"))
 include("build_config.jl")
 
 using .EuclidBuildConfiguration: native_runtime_environment, native_test_linker_flags
-using JSON3
+using JSON
 
 """Build the shared compiler arguments and runtime environment for this workspace."""
 function provider_result()
@@ -27,7 +27,7 @@ end
 """Print exactly one provider JSON object or report a clear failure on stderr."""
 function main()
     try
-        JSON3.write(stdout, provider_result())
+        JSON.print(stdout, provider_result())
         println()
     catch exception
         println(stderr, "odin-test-arguments: ", sprint(showerror, exception))

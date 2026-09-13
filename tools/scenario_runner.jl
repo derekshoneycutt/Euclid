@@ -3,7 +3,7 @@
 module EuclidScenarioRunner
 
 using Dates
-using JSON3
+using JSON
 using UUIDs
 
 include(joinpath(@__DIR__, "evidence.jl"))
@@ -117,7 +117,7 @@ scenario_passed(record) = record.result == "passed" && record.trace_complete &&
 function write_json_report(io::IO, records)
     report = (schema_version=SCENARIO_SCHEMA_VERSION,
         passed=all(scenario_passed, records), scenarios=records)
-    println(io, JSON3.write(report))
+    println(io, JSON.json(report))
 end
 
 """Write concise human-readable scenario outcomes and artifact locations."""

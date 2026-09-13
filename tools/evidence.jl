@@ -2,7 +2,7 @@
 
 module EuclidEvidence
 
-using JSON3
+using JSON
 
 const TRACE_MAGIC = UInt8['E', 'U', 'C', 'L']
 const TRACE_HEADER_BYTES = 8
@@ -210,7 +210,7 @@ end
 function read_manifest(directory::AbstractString)
     path = joinpath(directory, "manifest.json")
     isfile(path) || error("missing artifact: manifest.json")
-    manifest = JSON3.read(read(path, String))
+    manifest = JSON.parse(read(path, String))
     manifest.schema_version == ARTIFACT_SCHEMA_VERSION || error(
         "unsupported manifest schema: $(manifest.schema_version)")
     manifest.result in ("passed", "failed", "inconclusive") || error(
@@ -294,8 +294,8 @@ function inspect_bundle(directory::AbstractString)
     for path in (trace_path, state_path, allocations_path)
         isfile(path) || error("manifest references missing artifact: $(basename(path))")
     end
-    state = JSON3.read(read(state_path, String))
-    allocations = JSON3.read(read(allocations_path, String))
+    state = JSON.parse(read(state_path, String))
+    allocations = JSON.parse(read(allocations_path, String))
     all(haskey(state, field) for field in REQUIRED_STATE_FIELDS) || error(
         "state artifact is missing required fields")
     all(haskey(allocations, field) for field in REQUIRED_ALLOCATION_FIELDS) || error(
@@ -384,7 +384,7 @@ function run_query(arguments::Vector{String})
         end
     end
     trace_path = resolve_query_trace_path(input)
-    println(JSON3.write(query_trace(trace_path; options...)))
+    println(JSON.json(query_trace(trace_path; options...)))
     return 0
 end
 
@@ -393,7 +393,7 @@ function run_discovery_command(command::AbstractString)
     records = Dict("capabilities" => capabilities, "schema" => scenario_schema)
     handler = get(records, command, nothing)
     handler === nothing && return nothing
-    println(JSON3.write(handler()))
+    println(JSON.json(handler()))
     return 0
 end
 
@@ -404,7 +404,7 @@ function run_bundle_command(command::AbstractString, directory::AbstractString)
         "summary" => bundle_summary)
     handler = get(handlers, command, nothing)
     handler === nothing && return nothing
-    println(JSON3.write(handler(directory)))
+    println(JSON.json(handler(directory)))
     return 0
 end
 

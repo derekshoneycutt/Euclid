@@ -8,7 +8,7 @@ using .EuclidBuildConfiguration: native_linker_flags, native_runtime_environment
 using Serialization
 
 pushfirst!(LOAD_PATH, joinpath(@__DIR__, "analysis"))
-using JSON3
+using JSON
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_EXE = Base.julia_cmd().exec[1]
@@ -297,7 +297,7 @@ function run_odin_suite(suite::SuiteDefinition; selected_package=nothing,
         runtime_environment !== nothing &&
             (command = addenv(command, runtime_environment))
         result = capture_command(command)
-        report = isfile(report_path) ? JSON3.read(read(report_path, String)) : nothing
+        report = isfile(report_path) ? JSON.parse(read(report_path, String)) : nothing
         records = report === nothing ? TestResult[] :
             odin_test_records(report, locations, result.output)
         status = odin_suite_status(result.exit_code,
@@ -443,11 +443,11 @@ end
 function write_json_report(io::IO, results::Vector{SuiteResult})
     passed = all(result -> result.status == "PASS", results)
     records = reduce(vcat, (result.records for result in results); init=TestResult[])
-    JSON3.pretty(io, (
+    JSON.print(io, (
         schema_version="2.0.0",
         passed,
         tests=records,
-        suites=suite_record.(results)))
+        suites=suite_record.(results)), 4)
     println(io)
 end
 

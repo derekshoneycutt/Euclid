@@ -7,16 +7,16 @@ const VERIFICATION_ANALYSIS_PROJECT = get(
     "ODIN_JULIA_ANALYSIS_PROJECT",
     joinpath(@__DIR__, "analysis"))
 
-# Activate the analyzer project so JSON3 is available when this script runs
+# Activate the analyzer project so JSON is available when this script runs
 # standalone; reactivation is a no-op when the driver already activated it.
-if !isdefined(Base, :JSON3) && Base.active_project() !=
+if !isdefined(Base, :JSON) && Base.active_project() !=
         joinpath(VERIFICATION_ANALYSIS_PROJECT, "Project.toml")
     Pkg.activate(VERIFICATION_ANALYSIS_PROJECT; io=devnull)
 end
 
 module EuclidVerification
 
-using JSON3
+using JSON
 
 include(joinpath(@__DIR__, "test_runner.jl"))
 using .EuclidTestRunner
@@ -218,9 +218,9 @@ end
 """Run analyzer regression tests and extract structured Julia test counts."""
 function run_analyzer_test_phase(trace::Bool=false)
     test_file = joinpath(ANALYSIS_PROJECT, "test", "runtests.jl")
-    expression = "using Test, JSON3; result=include($(repr(test_file))); " *
+    expression = "using Test, JSON; result=include($(repr(test_file))); " *
         "counts=Test.get_test_counts(result); println(\"$COUNT_MARKER\", " *
-        "JSON3.write(Dict(" *
+        "JSON.json(Dict(" *
         "\"passed\"=>counts.passes + counts.cumulative_passes, " *
         "\"failed\"=>counts.fails + counts.cumulative_fails, " *
         "\"errors\"=>counts.errors + counts.cumulative_errors, " *
@@ -244,7 +244,7 @@ end
 """Parse an analyzer JSON report; report-parse failure returns nothing, not a crash."""
 function parse_json_report(output::String)
     return try
-        JSON3.read(output)
+        JSON.parse(output)
     catch parse_error
         parse_error isa Exception || rethrow()
         nothing
@@ -551,7 +551,7 @@ function write_json_report(io::IO, results::Vector{PhaseResult})
         "schema_version" => "1.0.0",
         "passed" => all(result -> result.status == "PASS", results),
         "phases" => phase_json.(results))
-    JSON3.pretty(io, report)
+    JSON.print(io, report, 4)
     println(io)
 end
 
