@@ -315,6 +315,30 @@ scenario_select_animation :: proc(
     return true
 }
 
+//   Submit one scenario presentation override through the Julia-owner ingress path.
+scenario_issue_view_content :: proc(
+    state: ^Euclid_General_State, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> bool {
+    service := state.julia_runtime_service
+    if service == nil || state.julia_interface == nil {
+        return false
+    }
+    mime := core.Presentation_Mime.Text_Plain
+    if command.view_content_mime == .Text_Latex {
+        mime = .Text_Latex
+    }
+    outcome := julia.send_scenario_view_content(service, {
+        origin = identity^,
+        request_id = service.active_request_id,
+        runtime_generation = service.runtime_generation,
+        animation_generation = service.animation_generation,
+        animation = state.julia_interface.current_animation,
+        mime = mime,
+        source = transmute([]u8)scenario.text_string(&command.text),
+    })
+    return outcome == .Sent
+}
+
 //   Route one animation or Julia-service command through its ordinary owner API.
 scenario_issue_julia_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
@@ -338,6 +362,8 @@ scenario_issue_julia_action :: proc(
         return true, true
     case .Inject_Reload_Failure:
         return true, scenario_arm_reload_failure(state, command)
+    case .Set_View_Content:
+        return true, scenario_issue_view_content(state, command, identity)
     case:
         return false, false
     }

@@ -245,28 +245,6 @@ packaged_asset_path_with_config :: proc(
     return path
 }
 
-//   Remove the unpacked packaged-assets directory from writable storage.
-//
-// Parameters:
-//   - none.
-//
-// Returns:
-//   - none.
-//
-// Notes:
-//   - Intended for process shutdown cleanup.
-cleanup_packaged_assets_dir :: proc() {
-    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
-    if !unpack_ok {
-        return
-    }
-
-    _ = os.remove_all(unpack_dir)
-}
-
-
-
-
 //   Resolve executable directory once with standard validity checks.
 resolve_executable_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
     return resolve_executable_dir_with_config(nil, allocator)

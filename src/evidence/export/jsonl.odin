@@ -68,6 +68,7 @@ EVENT_KIND_NAMES :: #sparse [trace.Kind]string{
     .Dynview_Compiled = "dynview.compiled",
     .Presentation_Cleared = "presentation.cleared",
     .Presentation_Superseded = "presentation.superseded",
+    .Presentation_Semantic_Published = "presentation.semantic_published",
     .Terminal_Session_Ready = "terminal.session_ready",
     .Terminal_Raster_Published = "terminal.raster_published",
     .Animation_Frame_Presented = "terminal.animation_frame_presented",

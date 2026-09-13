@@ -8,7 +8,7 @@ import json "core:encoding/json"
 import "core:math"
 
 SCENARIO_COMMAND_CAPACITY :: 128
-SCENARIO_TEXT_CAPACITY :: 256
+SCENARIO_TEXT_CAPACITY :: 768
 SCENARIO_NAME_CAPACITY :: 64
 SCENARIO_DEFAULT_TIMEOUT_MS :: u32(5_000)
 SCENARIO_MAX_TIMEOUT_MS :: u32(60_000)
@@ -39,6 +39,7 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"constraint_solve_completed", .Constraint_Solve_Completed},
     {"presentation_cleared", .Presentation_Cleared},
     {"presentation_superseded", .Presentation_Superseded},
+    {"presentation_semantic_published", .Presentation_Semantic_Published},
     {"dynview_published", .Dynview_Published},
     {"frame_presented", .Frame_Presented},
     {"capture_completed", .Capture_Completed},
@@ -57,6 +58,7 @@ Command_Kind :: enum u8 {
     Key,
     Pause_Simulation,
     Resume_Simulation,
+    Set_View_Content,
     Set_View_Scroll,
     Set_Splitters,
     Request_Screenshot,
@@ -72,6 +74,12 @@ Command_Kind :: enum u8 {
     Assert_Allocation_Baseline,
     Assert_No_Bad_Frees,
     Shutdown,
+}
+
+// Canonical presentation MIME accepted by scenario-authored view content.
+View_Content_Mime :: enum u8 {
+    Text_Plain,
+    Text_Latex,
 }
 
 // Stable reason a bounded JSON Lines source could not become a complete program.
@@ -122,6 +130,7 @@ Command :: struct {
     // Operation identity and its inline payload or predicate text.
     kind : Command_Kind,
     text : Text,
+    view_content_mime : View_Content_Mime,
 
     // Optional produced alias and alias required by a later event wait.
     alias : Name,
@@ -136,6 +145,12 @@ Command :: struct {
     // Fixed numeric payload used by display-owned viewport actions.
     value : f32,
     secondary_value : f32,
+}
+
+// Temporary decoded payload for one exact view-content action object.
+Raw_View_Content :: struct {
+    mime: string,
+    source: string,
 }
 
 // Fixed-capacity scenario program produced from one complete JSON Lines source.
@@ -214,6 +229,7 @@ Raw_Command :: struct {
     key : string,
     screenshot : string,
     start_gif : string,
+    set_view_content : Raw_View_Content,
 
     // Event waits and display-state predicates.
     wait_event : string,
@@ -246,6 +262,39 @@ Scenario_Parsed_Line :: struct {
     value: json.Value,
     root: json.Object,
     error: Parse_Error,
+}
+
+//   Decode one exact MIME-bearing view-content action from the parsed root object.
+scenario_view_content_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    value, present := root["set_view_content"]
+    if !present {
+        return 0, true
+    }
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || len(payload) != 2 {
+        return 0, false
+    }
+    _, mime_present := payload["mime"]
+    _, source_present := payload["source"]
+    if !mime_present || !source_present {
+        return 0, false
+    }
+    switch raw.set_view_content.mime {
+    case "text/plain":
+        command^.view_content_mime = .Text_Plain
+    case "text/latex":
+        command^.view_content_mime = .Text_Latex
+    case:
+        return 0, false
+    }
+    content, copied := text_copy(raw.set_view_content.source)
+    if !copied {
+        return 0, false
+    }
+    command^.kind = .Set_View_Content
+    command^.text = content
+    return 1, true
 }
 
 //   Return one finite JSON number as f32 without accepting narrowing overflow.
@@ -492,7 +541,7 @@ runner_update_command :: proc(
          .Inject_Reload_Failure,
          .Type_Text, .Key,
          .Pause_Simulation, .Resume_Simulation,
-            .Set_View_Scroll, .Set_Splitters,
+            .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown:
         return runner_issue_action(runner, command, frame.actions)
@@ -536,7 +585,8 @@ runner_update :: proc(
         frame_boundary := command.kind == .Wait_Event ||
             command.kind == .Wait_State ||
             command.kind == .Wait_Terminal_Contains || command.kind == .Type_Text ||
-            command.kind == .Key || command.kind == .Set_View_Scroll ||
+            command.kind == .Key || command.kind == .Set_View_Content ||
+            command.kind == .Set_View_Scroll ||
             command.kind == .Set_Splitters
         runner.step += 1
         runner.deadline_ns = 0
@@ -655,6 +705,12 @@ command_from_raw :: proc(
     raw: Raw_Command, root: json.Object) -> (Command, Parse_Error) {
     command: Command
     selected := raw_command_select(raw, &command)
+    view_content_selected, view_content_valid :=
+        scenario_view_content_action_select(root, raw, &command)
+    if !view_content_valid {
+        return {}, .Invalid_Command
+    }
+    selected += view_content_selected
     numeric_selected, numeric_valid := scenario_numeric_action_select(root, &command)
     if !numeric_valid {
         return {}, .Invalid_Command
@@ -676,7 +732,8 @@ command_from_raw :: proc(
 //   Report whether one command intentionally carries no text payload.
 command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
     switch kind {
-    case .Set_View_Scroll, .Set_Splitters, .Assert_No_Bad_Frees, .Shutdown:
+    case .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
+         .Assert_No_Bad_Frees, .Shutdown:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,

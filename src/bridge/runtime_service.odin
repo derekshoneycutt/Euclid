@@ -504,13 +504,21 @@ publish_view_snapshot_slot :: proc(
     }
     slot^.state = .Published
     service^.published_view_snapshot_index = slot_index
+    correlation_kind := evidence_trace.Correlation_Kind.Animation
+    correlation := slot^.animation_generation
+    correlation_generation := slot^.animation_generation
+    if slot^.origin.kind != .None {
+        correlation_kind = slot^.origin.kind
+        correlation = slot^.origin.id
+        correlation_generation = slot^.origin.generation
+    }
     _ = evidence_session.session_record(
         &state^.evidence_session, &state^.evidence_ring, {
             lane = .Presentation,
             kind = .Dynview_Published,
-            correlation_kind = .Animation,
-            correlation = slot^.animation_generation,
-            generation = slot^.animation_generation,
+            correlation_kind = correlation_kind,
+            correlation = correlation,
+            generation = correlation_generation,
             revision = u64(slot^.generation),
             flags = {.Required},
         })
@@ -567,6 +575,7 @@ publish_presentation_snapshot :: proc(
     slot := &service^.view_snapshots[slot_index]
     service^.view_snapshot_generation += 1
     slot^.state = .Pending
+    slot^.origin = request.content.origin
     slot^.request_id = request.content.request_id
     slot^.generation = service^.view_snapshot_generation
     slot^.runtime_generation = request.content.runtime_generation
@@ -1699,6 +1708,9 @@ destroy_julia_ingress_message :: proc(
               harness_ok {
         communication_link_free_bytes(&service^.request_link,
             transmute([]u8)request.scenario_name)
+    } else if request, content_ok := message^.(core.Scenario_View_Content_Requested);
+              content_ok {
+        communication_link_free_bytes(&service^.request_link, request.source)
     }
     message^ = {}
     communication_link_free(&service^.request_link, message)
@@ -2041,6 +2053,56 @@ allocate_view_content_message :: proc(
     return message, .None
 }
 
+//   Clone requested scenario content into the Julia-owned egress pool.
+allocate_scenario_view_content_message :: proc(
+    service: ^Julia_Runtime_Service,
+    request: core.Scenario_View_Content_Requested) ->
+    (^core.Julia_Host_Egress, runtime.Allocator_Error) {
+    message, message_error := communication_link_alloc(&service^.event_link)
+    if message_error != .None {
+        return nil, message_error
+    }
+    bytes, bytes_error := communication_link_alloc_bytes(
+        &service^.event_link, len(request.source))
+    if bytes_error != .None {
+        communication_link_free(&service^.event_link, message)
+        return nil, bytes_error
+    }
+    copy(bytes, request.source)
+    generation := service^.presentation_generation + 1
+    message^ = core.Julia_Host_Egress(core.View_Content_Ready{
+        origin = request.origin,
+        request_id = request.request_id,
+        runtime_generation = request.runtime_generation,
+        animation_generation = request.animation_generation,
+        presentation_generation = generation,
+        animation = request.animation,
+        content = {mime = request.mime, bytes = bytes},
+    })
+    service^.presentation_generation = generation
+    return message, .None
+}
+
+//   Publish scenario content from the Julia owner, retaining the newest retry.
+send_scenario_presented_text :: proc(
+    service: ^Julia_Runtime_Service,
+    request: core.Scenario_View_Content_Requested) -> core.Communication_Send_Outcome {
+    _ = drain_julia_egress_returns(service)
+    message, allocation_error := allocate_scenario_view_content_message(
+        service, request)
+    if allocation_error != .None {
+        return .Allocation_Failed
+    }
+    if communication_link_try_send(&service^.event_link, message) {
+        return .Sent
+    }
+    if service^.pending_view_content != nil {
+        destroy_julia_egress_message(service, service^.pending_view_content)
+    }
+    service^.pending_view_content = message
+    return .Queue_Full
+}
+
 //   Enqueue canonical view content without blocking, retaining only the newest retry.
 send_presented_text :: proc(
     state: ^core.Euclid_General_State, mime: core.Presentation_Mime,
@@ -2351,6 +2413,35 @@ send_terminal_evaluation :: proc(
     copy(bytes, transmute([]u8)request.code)
     cloned_request := request
     cloned_request.code = string(bytes)
+    message^ = core.Julia_Host_Ingress(cloned_request)
+    if !communication_link_try_send(&service^.request_link, message) {
+        destroy_julia_ingress_message(service, message)
+        return .Queue_Full
+    }
+    return .Sent
+}
+
+//   Clone scenario presentation source into the display-owned ingress pool.
+send_scenario_view_content :: proc(
+    service: ^Julia_Runtime_Service,
+    request: core.Scenario_View_Content_Requested) -> core.Communication_Send_Outcome {
+    if service == nil || service^.lifecycle != .Ready {
+        return .Runtime_Stopping
+    }
+    _ = drain_julia_ingress_returns(service)
+    message, message_error := communication_link_alloc(&service^.request_link)
+    if message_error != .None {
+        return .Allocation_Failed
+    }
+    bytes, bytes_error := communication_link_alloc_bytes(
+        &service^.request_link, len(request.source))
+    if bytes_error != .None {
+        communication_link_free(&service^.request_link, message)
+        return .Allocation_Failed
+    }
+    copy(bytes, request.source)
+    cloned_request := request
+    cloned_request.source = bytes
     message^ = core.Julia_Host_Ingress(cloned_request)
     if !communication_link_try_send(&service^.request_link, message) {
         destroy_julia_ingress_message(service, message)
@@ -3662,6 +3753,21 @@ process_julia_terminal_ingress :: proc(
 process_julia_worker_ingress :: proc(
     service: ^Julia_Runtime_Service, state: ^Julia_Worker_State,
     message: ^core.Julia_Host_Ingress) -> (Julia_Worker_Run_Result, bool) {
+    if request, is_content := message^.(core.Scenario_View_Content_Requested);
+       is_content {
+        current := state^.host.native_state != nil &&
+            state^.host.native_state^.julia_interface != nil &&
+            request.runtime_generation == service^.runtime_generation &&
+            request.animation_generation == service^.animation_generation &&
+            request.animation ==
+                state^.host.native_state^.julia_interface^.current_animation
+        outcome := core.Communication_Send_Outcome.Runtime_Stopping
+        if current {
+            outcome = send_scenario_presented_text(service, request)
+        }
+        _ = communication_link_return(&service^.request_link, message)
+        return {}, outcome == .Sent || outcome == .Queue_Full
+    }
     decoded, is_control := decode_julia_control(message)
     if !is_control {
         return {}, process_julia_terminal_ingress(service, &state^.host, message)

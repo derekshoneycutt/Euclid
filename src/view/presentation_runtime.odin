@@ -47,16 +47,49 @@ presentation_record_event :: proc(
     state: ^core.Euclid_General_State,
     kind: evidence_trace.Kind,
     animation_generation: u64,
-    presentation_generation: u64) {
+    presentation_generation: u64,
+    origin: evidence_trace.Identity = {}) {
 
+    correlation_kind := evidence_trace.Correlation_Kind.Animation
+    correlation := animation_generation
+    generation := animation_generation
+    if origin.kind != .None {
+        correlation_kind = origin.kind
+        correlation = origin.id
+        generation = origin.generation
+    }
     _ = evidence_session.session_record(
         &state^.evidence_session, &state^.evidence_ring, {
             lane = .Presentation,
             kind = kind,
-            correlation_kind = .Animation,
-            correlation = animation_generation,
-            generation = animation_generation,
+            correlation_kind = correlation_kind,
+            correlation = correlation,
+            generation = generation,
             revision = presentation_generation,
+            flags = {.Required},
+        })
+}
+
+//   Record successful semantic publication under its originating action identity.
+presentation_record_semantic_published :: proc(
+    state: ^core.Euclid_General_State,
+    content: core.View_Content_Ready) {
+    correlation_kind := evidence_trace.Correlation_Kind.Animation
+    correlation := content.animation_generation
+    generation := content.animation_generation
+    if content.origin.kind != .None {
+        correlation_kind = content.origin.kind
+        correlation = content.origin.id
+        generation = content.origin.generation
+    }
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Presentation,
+            kind = .Presentation_Semantic_Published,
+            correlation_kind = correlation_kind,
+            correlation = correlation,
+            generation = generation,
+            revision = content.presentation_generation,
             flags = {.Required},
         })
 }
@@ -197,7 +230,7 @@ presentation_admit :: proc(
     runtime^.newest_generation = content.presentation_generation
     bridge.release_published_view_snapshot(state, service)
     presentation_record_event(state, .Presentation_Cleared,
-        content.animation_generation, content.presentation_generation)
+        content.animation_generation, content.presentation_generation, content.origin)
     if runtime^.pending != nil {
         _ = bridge.return_julia_egress(service, runtime^.pending)
     }
@@ -205,7 +238,7 @@ presentation_admit :: proc(
     presentation_cancel_active(state, runtime)
     if superseded {
         presentation_record_event(state, .Presentation_Superseded,
-            content.animation_generation, content.presentation_generation)
+            content.animation_generation, content.presentation_generation, content.origin)
     }
 }
 
@@ -373,8 +406,11 @@ presentation_materialize :: proc(
     runtime: ^Presentation_Runtime,
     request: bridge.Presentation_Snapshot_Request) {
     if presentation_content_is_current(state, runtime, request.content) {
-        _ = bridge.publish_presentation_snapshot(
+        published := bridge.publish_presentation_snapshot(
             state, runtime^.staging, request)
+        if published && request.document != nil {
+            presentation_record_semantic_published(state, request.content)
+        }
     }
 }
 

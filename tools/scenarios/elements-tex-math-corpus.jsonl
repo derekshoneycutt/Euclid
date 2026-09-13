@@ -1,0 +1,32 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Euclid's Elements","as":"elements"}
+{"wait_event":"animation_selected","correlation":"elements","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"elements","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"==> <-- -> <--> <| |> <= >=\n\n$$\\frac{2\\pi}{3}\\;\\;\\; \\sum \\left\\{\\begin{matrix} 1 & 2 & 3 & 4 \\\\ 5 & 6 & 7 & 8 \\end{matrix}\\right\\}\\;\\;\\; C_n = \\{e,\\rho,\\rho^2,\\dots,\\rho^{n-1}\\}\\;\\;\\; \\sqrt[3]{\\left(\\int_0^1\\begin{bmatrix} 1 & 2 & 3 & 4 \\\\ 5 & 6 & 7 & 8 \\end{bmatrix}\\right)}$$"},"as":"math-foundations"}
+{"wait_event":"presentation_semantic_published","correlation":"math-foundations","timeout_ms":10000}
+{"set_view_scroll":{"y":0}}
+{"screenshot":".build/elements-tex-math-foundations.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"$$x^2\\;\\;\\; x_i\\;\\;\\; x_i^2\\;\\;\\; V_A\\;\\;\\; x^{y_2}\\;\\;\\; \\left(\\frac{a}{b}\\right)^2$$\n\n$$\\frac{a+b}{c}\\;\\;\\; \\frac{x^2}{y_1}\\;\\;\\; \\frac{1}{1+\\frac{1}{x}}\\;\\;\\; \\frac{\\sqrt{x}}{\\overline{y}}$$"},"as":"math-scripts"}
+{"wait_event":"presentation_semantic_published","correlation":"math-scripts","timeout_ms":10000}
+{"set_view_scroll":{"y":0}}
+{"screenshot":".build/elements-tex-math-scripts.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"$$\\sum_{i=1}^{n} i\\;\\;\\; \\prod_{k=1}^{m} a_k\\;\\;\\; \\int_0^1 f(x)\\,dx\\;\\;\\; \\lim_{x\\to 0} f(x)$$\n\n$$\\sqrt{x}\\;\\;\\; \\sqrt[n]{x+1}\\;\\;\\; \\sqrt{\\frac{a}{b}}\\;\\;\\; \\left(\\frac{a}{b}\\right)\\;\\;\\; \\left\\{\\begin{array}{cc}a&b\\\\c&d\\end{array}\\right.$$\n\n$$x^2\\;\\;\\; x_i^2\\;\\;\\; \\sqrt{x}\\;\\;\\; \\sum_{i=1}^{n} i\\;\\;\\; \\prod_{k=1}^{m} a_k\\;\\;\\; \\int_0^1 f(x)\\,dx\\;\\;\\; \\lim_{x\\to 0} f(x)\\;\\;\\; \\frac{\\sqrt{x}}{\\overline{y}}$$"},"as":"math-operators"}
+{"wait_event":"presentation_semantic_published","correlation":"math-operators","timeout_ms":10000}
+{"set_view_scroll":{"y":0}}
+{"screenshot":".build/elements-tex-math-operators.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"$$\\begin{array}{@{}||l|r||@{}}\\hline x&\\frac{1}{2}\\\\[1em]\\hline y&\\sqrt{z}\\\\[-1pt]\\hline\\hline\\end{array}$$\n\n$$\\begin{cases}x^2&x>0\\\\-x&x\\le0\\end{cases}\\;\\begin{dcases}\\frac{1}{2}&x>0\\\\0&x\\le0\\end{dcases}\\;\\begin{aligned}a&=\\begin{smallmatrix}1&2\\\\3&4\\end{smallmatrix}\\\\b&=\\sqrt{z}\\end{aligned}$$"},"as":"math-layout"}
+{"wait_event":"presentation_semantic_published","correlation":"math-layout","timeout_ms":10000}
+{"set_view_scroll":{"y":0}}
+{"screenshot":".build/elements-tex-math-layout.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"$${\\textstyle \\frac{a}{b}}+\\frac{c}{d}\\;\\dfrac{1}{2}+\\tfrac{3}{4}\\;\\sum\\nolimits_{i=1}^n i+\\int\\limits_0^1 x\\;\\binom{n}{k}+\\dbinom{p}{q}+\\tbinom{r}{s}$$\n\n$$\\bigl(x\\bigr)+\\Bigl[x\\Bigr]+\\biggl\\{x\\biggr\\}\\;\\left\\{x\\middle|y\\middle\\|z\\right\\}\\;\\check a+\\breve b+\\acute c+\\grave d+\\mathring e\\;\\overset{!}{=}+\\underset{n}{x}\\;\\overbrace{a+b+c}^{n}+\\underbrace{x+y}_{m}$$"},"as":"math-styles"}
+{"wait_event":"presentation_semantic_published","correlation":"math-styles","timeout_ms":10000}
+{"set_view_scroll":{"y":0}}
+{"screenshot":".build/elements-tex-math-styles.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

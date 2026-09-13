@@ -238,6 +238,7 @@ View_Snapshot_Slot_State :: enum u8 {
 View_Snapshot :: struct {
     state: View_Snapshot_Slot_State,
     candidate_committed: bool,
+    origin: evidence_trace.Identity,
     request_id: u64,
     generation: u64,
     runtime_generation: u64,
@@ -368,6 +369,17 @@ Harness_Scenario_Requested :: struct {
     step_count: i64,
 }
 
+// Scenario_View_Content_Requested carries display-owned source to the Julia owner.
+Scenario_View_Content_Requested :: struct {
+    origin: evidence_trace.Identity,
+    request_id: u64,
+    runtime_generation: u64,
+    animation_generation: u64,
+    animation: ^Euclid_Julia_Animation_Interface,
+    mime: Presentation_Mime,
+    source: []u8,
+}
+
 Runtime_Shutdown_Requested :: struct {
     request_id: u64,
 }
@@ -420,6 +432,7 @@ Presented_Text :: struct {
 
 // View_Content_Ready carries independently replaceable presentation source.
 View_Content_Ready :: struct {
+    origin: evidence_trace.Identity,
     request_id: u64,
     runtime_generation: u64,
     animation_generation: u64,
@@ -444,6 +457,7 @@ Julia_Host_Ingress :: union {
     Animation_Tick_Requested,
     Animation_Lifecycle_Requested,
     Harness_Scenario_Requested,
+    Scenario_View_Content_Requested,
     Runtime_Shutdown_Requested,
     protocol.Terminal_Session_Started,
     protocol.Terminal_Session_Closed,

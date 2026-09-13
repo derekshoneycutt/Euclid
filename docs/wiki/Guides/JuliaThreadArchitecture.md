@@ -324,6 +324,7 @@ increasing `request_id`; its event repeats the kind, ID, slot index, and success
 | `Animation_Tick_Requested` | Run Julia loops against a checked query and command slot | `Animation_Tick_Complete` |
 | `Animation_Lifecycle_Requested` | Execute frozen selection, reset, or reload intent | `Invoke_Complete` |
 | `Harness_Scenario_Requested` | Run one bounded deterministic scenario | `Invoke_Complete` |
+| `Scenario_View_Content_Requested` | Validate captured selection identity and publish scenario content | Correlated presentation evidence |
 | `Runtime_Shutdown_Requested` | Tear Julia down and exit the worker loop | `Shutdown_Complete` |
 
 The owner loop exhaustively switches on this tagged union and calls concrete handlers.
@@ -711,9 +712,17 @@ Julia selects one canonical MIME representation and clones its exact bytes into 
 producer-owned bounded egress envelope. The display borrows that envelope until any
 native parse work joins, then returns it to the Julia owner for destruction.
 
+Debug scenarios use the same ownership boundary in the opposite direction. The display
+copies `set_view_content` source into a `Scenario_View_Content_Requested` envelope in
+the display-owned request-link pool. The Julia owner rejects stale captured selection
+identity, copies accepted content into its event-link pool, and publishes the ordinary
+`View_Content_Ready` value. Consumers always return each envelope to its producing link;
+neither thread allocates from or frees into the other producer's TLSF pool.
+
 Each `View_Snapshot` owns:
 
-- request ID, runtime generation, animation generation, and snapshot generation
+- origin correlation, request ID, runtime generation, animation generation, and
+  snapshot generation
 - producing-animation identity
 - one canonical MIME value and up to 32 KiB of exact presentation bytes
 - one growing arena and bounded builders for command text, commands, math programs,

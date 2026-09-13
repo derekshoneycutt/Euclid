@@ -128,6 +128,7 @@ Kind :: enum u16 {
     Gif_Failed = 367,
     Shape_Cache_Prepared = 368,
     Dynview_Compiled = 369,
+    Presentation_Semantic_Published = 370,
     Presentation_Cleared = 371,
     Presentation_Superseded = 372,
     Terminal_Session_Ready = 373,

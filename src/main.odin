@@ -4,7 +4,6 @@ import "core"
 import "diagnostics"
 import evidence_allocation "evidence/allocation"
 import evidence_session "evidence/session"
-import "files"
 import "view"
 
 import "core:fmt"
@@ -85,7 +84,6 @@ run_application :: proc(
 
     exit_code := view.run_window_loop(&settings)
 
-    files.cleanup_packaged_assets_dir()
     free_all(context.temp_allocator)
 
     log.infof("application_stop exit_code=%d", exit_code)

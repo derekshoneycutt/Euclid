@@ -74,6 +74,59 @@ scenario_test_reject_invalid_viewport_actions :: proc(t: ^testing.T) {
     }
 }
 
+// Verify view-content actions preserve exact source, MIME, alias, and empty content.
+@(test)
+scenario_test_parse_view_content_actions :: proc(t: ^testing.T) {
+    program: Program
+    source := "\\textbf{Point} $A_1$"
+    result := parse(
+        "{\"set_view_content\":{\"mime\":\"text/latex\",\"source\":\"\\\\textbf{Point} $A_1$\"},\"as\":\"latex\"}\n" +
+        "{\"set_view_content\":{\"mime\":\"text/plain\",\"source\":\"\"}}\n",
+        &program)
+    testing.expect_value(t, result, Parse_Error.None)
+    testing.expect_value(t, program.count, 2)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Set_View_Content)
+    testing.expect_value(t, program.commands[0].view_content_mime,
+        View_Content_Mime.Text_Latex)
+    testing.expect_value(t, text_string(&program.commands[0].text), source)
+    testing.expect_value(t, name_string(&program.commands[0].alias), "latex")
+    testing.expect_value(t, program.commands[1].view_content_mime,
+        View_Content_Mime.Text_Plain)
+    testing.expect_value(t, text_string(&program.commands[1].text), "")
+}
+
+// Verify the exact view-content capacity is accepted and one extra byte is rejected.
+@(test)
+scenario_test_view_content_respects_text_capacity :: proc(t: ^testing.T) {
+    accepted_bytes: [SCENARIO_TEXT_CAPACITY]u8
+    rejected_bytes: [SCENARIO_TEXT_CAPACITY + 1]u8
+    for &value in accepted_bytes { value = 'x' }
+    for &value in rejected_bytes { value = 'x' }
+    accepted, accepted_ok := text_copy(string(accepted_bytes[:]))
+    _, rejected_ok := text_copy(string(rejected_bytes[:]))
+    testing.expect(t, accepted_ok)
+    testing.expect_value(t, len(text_string(&accepted)), SCENARIO_TEXT_CAPACITY)
+    testing.expect(t, !rejected_ok)
+}
+
+// Verify view-content objects reject malformed shape, MIME, and competing actions.
+@(test)
+scenario_test_reject_invalid_view_content_actions :: proc(t: ^testing.T) {
+    invalid_sources := [?]string{
+        "{\"set_view_content\":{\"source\":\"x\"}}\n",
+        "{\"set_view_content\":{\"mime\":\"text/markdown\",\"source\":\"x\"}}\n",
+        "{\"set_view_content\":{\"mime\":\"text/plain\",\"source\":\"x\",\"extra\":1}}\n",
+        "{\"set_view_content\":{\"mime\":\"text/plain\",\"source\":\"x\"},\"shutdown\":true}\n",
+    }
+    for source in invalid_sources {
+        program: Program
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"set_view_content\":\"x\"}\n", &program), Parse_Error.Invalid_Json)
+}
+
 // Verify viewport actions yield a frame before the next scenario command executes.
 @(test)
 scenario_test_viewport_actions_create_frame_boundaries :: proc(t: ^testing.T) {
@@ -93,6 +146,25 @@ scenario_test_viewport_actions_create_frame_boundaries :: proc(t: ^testing.T) {
     testing.expect_value(t, runner.step, 1)
     testing.expect_value(t, runner_update(&runner, frame), Run_Status.Running)
     testing.expect_value(t, runner.step, 2)
+    testing.expect_value(t, runner_update(&runner, frame), Run_Status.Passed)
+}
+
+// Verify view-content publication yields a frame before later commands execute.
+@(test)
+scenario_test_view_content_creates_frame_boundary :: proc(t: ^testing.T) {
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"set_view_content\":{\"mime\":\"text/plain\",\"source\":\"Point\"}}\n" +
+        "{\"shutdown\":true}\n", &program), Parse_Error.None)
+    runner: Runner
+    runner_init(&runner, program)
+    frame := Runner_Frame{
+        display = {required_evidence_complete = true},
+        actions = {issue = scenario_test_runtime_action},
+    }
+
+    testing.expect_value(t, runner_update(&runner, frame), Run_Status.Running)
+    testing.expect_value(t, runner.step, 1)
     testing.expect_value(t, runner_update(&runner, frame), Run_Status.Passed)
 }
 
