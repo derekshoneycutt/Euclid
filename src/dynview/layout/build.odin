@@ -3,7 +3,6 @@ package dynview_layout
 import "../../core"
 import dyncore "../core"
 import dynmath "../math"
-import "../../grid"
 
 import "core:math"
 
@@ -162,7 +161,7 @@ layout_max_cols :: #force_inline proc(
 layout_cell_metrics :: #force_inline proc(
     cache: ^core.Dynview_Compile_Cache,
     base_ascent, base_descent: f32,
-    ascent_overflow: f32 = 0) -> grid.Cell_Metrics {
+    ascent_overflow: f32 = 0) -> Cell_Metrics {
 
     text_height := base_ascent + base_descent
     top_inset := max(0.0, (cache^.last_cell_height - text_height) * 0.5)
@@ -254,7 +253,7 @@ layout_push_item :: proc(
 //   Quantize one item's existing intrinsic bounds onto the canonical grid.
 layout_place_item_on_grid :: #force_inline proc(
     item: ^core.Dynview_Layout_Item,
-    cells: grid.Cell_Metrics) -> (grid.Embedded_Grid_Placement, bool) {
+    cells: Cell_Metrics) -> (Embedded_Grid_Placement, bool) {
 
     has_baseline := layout_item_has_baseline(item^)
     content_height := max(1.0, item^.draw_height)
@@ -273,7 +272,7 @@ layout_place_item_on_grid :: #force_inline proc(
             item^.descent + item^.visual_padding_bottom)
         baseline_from_top = item^.visual_padding_top + item^.ascent
     }
-    placement, ok := grid.place_embedded_content(cells, {
+    placement, ok := place_embedded_content(cells, {
         width = content_width,
         height = content_height,
         has_baseline = has_baseline,
@@ -292,7 +291,7 @@ layout_place_item_on_grid :: #force_inline proc(
 layout_measure_item_rows :: proc(
     cache: ^core.Dynview_Compile_Cache,
     start_index, item_count: int,
-    cells: grid.Cell_Metrics) -> (Line_Grid_Extents, bool) {
+    cells: Cell_Metrics) -> (Line_Grid_Extents, bool) {
 
     extents := Line_Grid_Extents{}
     item_end := start_index + item_count
@@ -341,7 +340,7 @@ layout_resolve_line_rows :: #force_inline proc(
 layout_apply_item_grid_offsets :: proc(
     cache: ^core.Dynview_Compile_Cache,
     line: ^core.Dynview_Layout_Line,
-    cells: grid.Cell_Metrics) {
+    cells: Cell_Metrics) {
 
     item_end := line^.item_start + line^.item_count
     for item_index in line^.item_start..<item_end {
@@ -362,7 +361,7 @@ layout_apply_item_grid_offsets :: proc(
 layout_item_ink_bottom :: #force_inline proc(
     item: core.Dynview_Layout_Item,
     line: core.Dynview_Layout_Line,
-    cells: grid.Cell_Metrics) -> f32 {
+    cells: Cell_Metrics) -> f32 {
 
     if !layout_item_has_baseline(item) {
         return f32(item.row_offset) * cells.cell_height + item.content_offset_y +
@@ -379,7 +378,7 @@ layout_item_ink_bottom :: #force_inline proc(
 layout_line_ink_slack_below :: proc(
     cache: ^core.Dynview_Compile_Cache,
     line: core.Dynview_Layout_Line,
-    cells: grid.Cell_Metrics) -> f32 {
+    cells: Cell_Metrics) -> f32 {
 
     band_height := f32(line.row_span) * cells.cell_height
     ink_bottom := f32(0)

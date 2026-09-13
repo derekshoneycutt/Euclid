@@ -1,9 +1,9 @@
 #+test
-package grid
+package dynview_layout
 
 import "core:testing"
 
-import test_helpers "../test_helpers"
+import test_helpers "../../test_helpers"
 
 // Verify exact cell multiples produce no centering remainder.
 @(test)

@@ -1,7 +1,6 @@
 package dynview_layout
 
 import app_core "../../core"
-import "../../grid"
 
 // Font-relative spacing inputs for pixel-native document vertical placement.
 Document_Vertical_Style :: struct {
@@ -195,7 +194,7 @@ document_place_line_contents :: proc(
 document_publish_block_reservation :: proc(
     block: ^app_core.Dynview_Document_Layout_Block,
     spacing: f32,
-    reservation: grid.Vertical_Reservation) {
+    reservation: Vertical_Reservation) {
 
     block^.height = block^.bottom-block^.top
     block^.spacing_before = spacing
@@ -249,14 +248,14 @@ document_list_block_top :: proc(
 
 // Reserve an exact block extent outward on the shared row grid.
 document_reserve_block_extent :: proc(
-    block_top, block_bottom, cell_height: f32) -> (grid.Vertical_Reservation, bool) {
+    block_top, block_bottom, cell_height: f32) -> (Vertical_Reservation, bool) {
 
     if block_top < 0 || block_bottom <= block_top || cell_height <= 0 {
         return {}, false
     }
     row_start := int(block_top/cell_height)
     reserved_top := f32(row_start)*cell_height
-    return grid.reserve_vertical_extent(
+    return reserve_vertical_extent(
         row_start, block_bottom-reserved_top, cell_height)
 }
 

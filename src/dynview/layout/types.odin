@@ -1,7 +1,6 @@
 package dynview_layout
 
 import app_core "../../core"
-import "../../grid"
 
 //   Accumulated item range and vertical extents for one document layout line.
 Dynview_Layout_Line_Accumulator :: struct {
@@ -39,7 +38,7 @@ Dynview_Layout_Build_Context :: struct {
     font_size: f32,
     base_ascent: f32,
     base_descent: f32,
-    grid_metrics: grid.Cell_Metrics,
+    grid_metrics: Cell_Metrics,
 }
 
 // Classify line adjustment so adjacent extreme lines can be discouraged.

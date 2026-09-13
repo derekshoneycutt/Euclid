@@ -16,7 +16,6 @@ import app_dynlayout "../dynview/layout"
 import app_dynview "../dynview"
 import app_math "../dynview/math"
 import app_evidence_trace "../evidence/trace"
-import app_grid "../grid"
 
 View_Snapshot_Published_Expected :: struct {
     text: string,
@@ -1597,7 +1596,7 @@ expect_oversized_inline_line_grid_placement :: proc(
     t: ^testing.T,
     cache: ^app_core.Dynview_Compile_Cache,
     style: dyncore.Dynview_Text_Style,
-    cells: app_grid.Cell_Metrics) {
+    cells: app_dynlayout.Cell_Metrics) {
 
     cmd := app_core.Dynview_Command{
         kind = .Inline_Line,
@@ -1703,7 +1702,7 @@ expect_tall_inline_box_grid_placement :: proc(
     t: ^testing.T,
     cache: ^app_core.Dynview_Compile_Cache,
     bold: dyncore.Dynview_Text_Style,
-    cells: app_grid.Cell_Metrics) {
+    cells: app_dynlayout.Cell_Metrics) {
 
     box_cmd := app_core.Dynview_Command{
         kind = .Inline_Box,
@@ -1735,7 +1734,7 @@ expect_oversized_inline_triangle_grid_placement :: proc(
     t: ^testing.T,
     cache: ^app_core.Dynview_Compile_Cache,
     bold: dyncore.Dynview_Text_Style,
-    cells: app_grid.Cell_Metrics) {
+    cells: app_dynlayout.Cell_Metrics) {
 
     triangle_cmd := app_core.Dynview_Command{
         kind = .Inline_Triangle,

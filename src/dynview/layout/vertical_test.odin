@@ -1,7 +1,6 @@
 package dynview_layout
 
 import app_core "../../core"
-import "../../grid"
 import "core:testing"
 
 // Verify document spacing remains proportional to the active prose size.
@@ -37,7 +36,7 @@ document_vertical_lines_fall_back_without_overlap :: proc(t: ^testing.T) {
 // Verify completed exact block height rounds outward with trailing padding only.
 @(test)
 document_vertical_block_reservation_contains_ink :: proc(t: ^testing.T) {
-    reservation, ok := grid.reserve_vertical_extent(2, 45, 20)
+    reservation, ok := reserve_vertical_extent(2, 45, 20)
 
     testing.expect(t, ok)
     testing.expect_value(t, reservation.row_start, 2)
