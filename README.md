@@ -287,6 +287,9 @@ LaTeX/Terminal compiler workloads into a platform-specific shared library beside
 executable. Build and run it with `julia tools/make.jl sysimage`, then
 `julia tools/make.jl run-only`. Ordinary build or asset
 commands remove an existing sysimage to prevent stale baked code from being used.
+Run `julia tools/make.jl sysimage-benchmark` to build the image and compare identical
+stock and custom-image headless harness launches. The informational report includes image
+build time and size, first custom launch, warm medians, speedup, and break-even launches.
 
 Additionally, there are some startup options that can affect application performance.
 
@@ -357,6 +360,8 @@ Commands:
   assets                       Build assets.pkg only.
   sysimage [--debug] [--strict]
                  Build the application, assets, and Julia sysimage.
+  sysimage-benchmark
+                 Build and compare stock and sysimage harness startup.
   harness                      Build and run the deterministic headless harness.
   unit [julia|odin] [OPTS]     Run all application tests or one language suite.
   vet [OPTS]                   Build and analyze the repository.
@@ -436,9 +441,12 @@ the Julia code, restarting the current animation according to the new code. If t
 animation cannot be found, will simply start the first animation in the tree. This can be
 helpful for simple animation updates.
 
-Animation content remains dynamically loaded when using a sysimage. Changes to baked core
-modules such as the bridge wrappers, TeX source facade, geometry helpers, animation
-helpers, or Terminal require rebuilding the sysimage and restarting Euclid.
+Animation catalog data, harness scenarios, the null animation, and individual animation
+implementations remain generation-owned and dynamically loaded when using a sysimage.
+Changes to those files continue to participate in asset hot reload. Changes to baked core
+modules such as bridge wrappers, the TeX source facade, geometry and animation helpers,
+runtime policy, evaluation, or Terminal require rebuilding the sysimage and restarting
+Euclid.
 
 ### Q: What is all this verification output?
 

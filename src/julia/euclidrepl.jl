@@ -846,8 +846,6 @@ function hide!(
     _hide_bridge_point(state_ptr, UInt64(index))
     return nothing
 end
-
-"""Hide a point-view handle by taking its index."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -857,8 +855,6 @@ function hide!(
     _hide_bridge_point(state_ptr, view.index)
     return nothing
 end
-
-"""Hide a line-shape handle by its host id."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -868,8 +864,6 @@ function hide!(
     _hide_bridge_point(state_ptr, shape.host_id)
     return nothing
 end
-
-"""Hide a circle-shape handle by its host id."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -879,8 +873,6 @@ function hide!(
     _hide_bridge_point(state_ptr, shape.host_id)
     return nothing
 end
-
-"""Hide a filled-circle-shape handle by its host id."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},

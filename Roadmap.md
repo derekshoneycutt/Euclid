@@ -203,11 +203,13 @@ Content (24+ animations):
 
 Core Features:
 
+- Better than raylib... sdl3? Maybe...
+- Improved terminal input IME, acessibility, etc. (need off raylib)
 - More primitives (gnomons, strings--small connectors, logic)
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support
-- Scratchpad animation recorder w/ playback (e.g. start_recording! ... end_recording!
+- TErminal animation recorder w/ playback (e.g. start_recording! ... end_recording!
  ... replay_recording!)
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods

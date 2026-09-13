@@ -5,6 +5,11 @@ if !isdefined(Main, :AnimationCatalog)
 end
 using .AnimationCatalog
 
+if !isdefined(Main, :AnimationCatalogGeneration)
+    include("../animation_catalog_generation.jl")
+end
+using .AnimationCatalogGeneration: AnimationDescriptors
+
 if !isdefined(Main, :EuclidAnimations)
     include("../animations.jl")
 end

@@ -5,8 +5,8 @@ using ..OdinJuliaBridge
 
 export AnimationDescriptor, AnimationImplementation,
     AnimationNodeKind, CategoryNode, LeafNode, TerminalNode,
-    AnimationDescriptors, animation, ensure_animation_loaded,
-    register_animation_catalog, validate_catalog
+    animation, ensure_animation_loaded, register_animation_catalog,
+    validate_catalog
 
 @enum AnimationNodeKind::UInt8 begin
     CategoryNode = 1
@@ -29,8 +29,6 @@ struct AnimationImplementation
     id::UUID
     entry::Function
 end
-
-include("animation_catalog_data.jl")
 
 """Construct a validated animation implementation result."""
 function animation(id::UUID, entry::Function)
@@ -108,10 +106,11 @@ end
 
 """Register validated metadata and bind the sole eager Terminal implementation."""
 function register_animation_catalog(
-    state_ptr::Ptr{Cvoid}, terminal_entry::Function)
+    state_ptr::Ptr{Cvoid}, terminal_entry::Function,
+    descriptors::Vector{AnimationDescriptor})
 
-    validate_catalog(AnimationDescriptors)
-    for descriptor in AnimationDescriptors
+    validate_catalog(descriptors)
+    for descriptor in descriptors
         parent_id = descriptor.parent_id
         parent_text = parent_id === nothing ? "" : string(parent_id)
         status = OdinJuliaBridge.add_animation_descriptor(
@@ -121,7 +120,7 @@ function register_animation_catalog(
             "host rejected animation descriptor: $(descriptor.id)"))
     end
     terminal = only(filter(
-        descriptor -> descriptor.kind == TerminalNode, AnimationDescriptors))
+        descriptor -> descriptor.kind == TerminalNode, descriptors))
     status = OdinJuliaBridge.bind_animation_entry(
         state_ptr, terminal_entry, string(terminal.id))
     status == 1 || throw(ErrorException("host rejected Terminal entry binding"))
@@ -147,16 +146,6 @@ function _load_animation(
         throw(ArgumentError("animation program returned an invalid result"))
     result.id == id || throw(ArgumentError("animation implementation id mismatch"))
     return result
-end
-
-"""Load one production animation into Main, which roots its named module."""
-function ensure_animation_loaded(id::UUID)
-    return _load_animation(@__DIR__, AnimationDescriptors, Main, id)
-end
-
-"""Load one production animation into an explicit generation owner."""
-function ensure_animation_loaded(owner::Module, id::UUID)
-    return _load_animation(@__DIR__, AnimationDescriptors, owner, id)
 end
 
 """Load one animation from an explicit catalog for contract tests."""

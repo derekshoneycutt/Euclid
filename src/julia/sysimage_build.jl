@@ -6,7 +6,8 @@ end
 
 const JuliaRoot = @__DIR__
 PackageCompiler.create_sysimage(
-    [:Colors, :LaTeXStrings, :Latexify];
+    [:Colors, :JuliaSyntax, :LaTeXStrings, :Latexify, :LinearAlgebra,
+        :Logging, :Pkg, :REPL, :UUIDs];
     sysimage_path=abspath(ARGS[1]),
     project=JuliaRoot,
     incremental=true,

@@ -15,6 +15,7 @@ Commands:
     assets                       Build assets.pkg only.
     sysimage [--debug] [--strict]
                                  Build the application, assets, and Julia sysimage.
+    sysimage-benchmark           Build and compare stock and sysimage harness startup.
     harness                      Build and run the deterministic headless harness.
     unit [julia|odin] [OPTS]     Run all application tests or one language suite.
     vet [OPTS]                   Build and analyze the repository.
@@ -53,7 +54,8 @@ Targeted statistics examples:
 show_help() = HELP_TEXT
 
 const DRIVER_COMMANDS = Set([
-    "help", "build", "run", "run-only", "assets", "sysimage", "harness",
+    "help", "build", "run", "run-only", "assets", "sysimage",
+    "sysimage-benchmark", "harness",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
     "analyzer-test", "wiki", "check-wiki", "clean"])
 
@@ -98,6 +100,15 @@ struct JuliaPackageDep
     version::String
 end
 
+"""Measured sysimage build and harness startup costs in seconds."""
+struct SysimageBenchmarkResult
+    build_seconds::Float64
+    image_bytes::Int64
+    custom_first_seconds::Float64
+    stock_median_seconds::Float64
+    custom_median_seconds::Float64
+end
+
 """Resolved build/vet/assets toggles derived from CLI arguments."""
 struct BuildPlanToggles
     do_build::Bool
@@ -113,7 +124,6 @@ const EVIDENCE_SCRIPT = joinpath(SCRIPT_DIR, "tools", "evidence.jl")
 const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
 const ASSETS_STAGING_DIR = joinpath(BIN_DIR, ".assets_staging")
 const ASSETS_ARCHIVE_PATH = joinpath(BIN_DIR, "assets.pkg")
-const JULIA_SYSIMAGE_PATH = joinpath(BIN_DIR, "euclid-sysimage." * Libdl.dlext)
 const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
 const WIKI_GENERATOR = joinpath(SCRIPT_DIR, "tools", "code_wiki.jl")
@@ -130,6 +140,7 @@ const HARNESS_BINARY_PATH = joinpath(
     BIN_DIR, is_windows() ? "euclid_harness.exe" : "euclid_harness")
 const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.bin")
 const HARNESS_ANIMATION_ID = "03bf688d-40d0-56a2-a6be-ca2656c9b10d"
+const SYSIMAGE_BENCHMARK_SAMPLES = 5
 
 """Return the expected output path for the Euclid application binary."""
 app_binary_path(debug::Bool=false) = debug ? debug_app_binary_path() :
@@ -138,6 +149,10 @@ app_binary_path(debug::Bool=false) = debug ? debug_app_binary_path() :
 """Return the isolated debug application output path."""
 debug_app_binary_path() = joinpath(
     SCRIPT_DIR, ".build", "debug", is_windows() ? "euclid.exe" : "euclid")
+
+"""Return the custom Julia sysimage path adjacent to its application binary."""
+julia_sysimage_path(debug::Bool=false) = joinpath(
+    dirname(app_binary_path(debug)), "euclid-sysimage." * Libdl.dlext)
 
 """Return the assets package path adjacent to the debug application."""
 debug_assets_archive_path() = joinpath(dirname(debug_app_binary_path()), "assets.pkg")
@@ -680,9 +695,9 @@ function report_odin_build_failure(build_result::CommandResult)
     end
 end
 
-"""Build and run the deterministic headless harness target."""
-function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
-    println("Running headless harness...")
+"""Build the deterministic headless harness target."""
+function build_harness(julia_linker_flags::String)
+    println("Building headless harness...")
     mkpath(BIN_DIR)
 
     cmd_parts = [
@@ -703,6 +718,12 @@ function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
     build_result.exit_code == 0 || error("Harness build failed.")
     stage_shared_raylib(dirname(HARNESS_BINARY_PATH))
 
+    return nothing
+end
+
+"""Run one deterministic harness case and return elapsed wall time in seconds."""
+function run_harness_once(runtime_dirs::Vector{String}; capture_output::Bool=false)
+    rm(HARNESS_TRACE_PATH; force=true)
     harness_args = [
         "--asset-root=" * BIN_DIR,
         "--animation-id=" * HARNESS_ANIMATION_ID,
@@ -715,10 +736,25 @@ function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
     if runtime_environment !== nothing
         harness_command = addenv(harness_command, runtime_environment)
     end
-    harness_result = run_command(harness_command; cwd=SCRIPT_DIR)
-    harness_result.exit_code == 0 || error("Harness execution failed.")
+    started = time_ns()
+    harness_result = run_command(
+        harness_command; cwd=SCRIPT_DIR, capture_output=capture_output)
+    elapsed_seconds = (time_ns() - started) / 1.0e9
+    if harness_result.exit_code != 0
+        print_captured_output("stdout:", harness_result.stdout)
+        print_captured_output("stderr:", harness_result.stderr)
+        error("Harness execution failed.")
+    end
     isfile(HARNESS_TRACE_PATH) || error(
         "Harness did not produce a semantic trace artifact.")
+    return elapsed_seconds
+end
+
+"""Build and run the deterministic headless harness target."""
+function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
+    build_harness(julia_linker_flags)
+    println("Running headless harness...")
+    run_harness_once(runtime_dirs)
     println("Wrote $(relpath(HARNESS_TRACE_PATH, SCRIPT_DIR))")
 end
 
@@ -871,31 +907,106 @@ function finalize_assets_archive()
     println("Wrote $ASSETS_ARCHIVE_PATH")
 end
 
-"""Build a custom Julia sysimage containing Euclid definitions and pure compiler workloads."""
-function build_julia_sysimage()
+"""Build a custom Julia sysimage beside the matching application binary."""
+function build_julia_sysimage(debug::Bool=false)
     println("Building Julia sysimage...")
-    mkpath(BIN_DIR)
+    image_path = julia_sysimage_path(debug)
+    mkpath(dirname(image_path))
 
     build_script = joinpath(SRC_DIR, "julia", "sysimage_build.jl")
     result = run_command(Cmd([
         JULIA_EXE,
         "--project=" * JULIA_TEST_PROJECT,
         build_script,
-        JULIA_SYSIMAGE_PATH,
+        image_path,
     ]); cwd=SCRIPT_DIR)
     println("Julia sysimage build exited $(result.exit_code)")
-    if result.exit_code != 0 || !isfile(JULIA_SYSIMAGE_PATH)
+    if result.exit_code != 0 || !isfile(image_path)
         error("Julia sysimage build failed.")
     end
 
-    println("Wrote $JULIA_SYSIMAGE_PATH")
+    println("Wrote $image_path")
+end
+
+"""Temporarily hide one file while executing a callback, restoring it on every exit."""
+function with_hidden_file(callback::Function, path::String)
+    isfile(path) || error("Required file does not exist: $path")
+    hidden_path = path * ".benchmark-stock"
+    ispath(hidden_path) && error("Benchmark staging path already exists: $hidden_path")
+    mv(path, hidden_path)
+    try
+        return callback()
+    finally
+        isfile(hidden_path) && mv(hidden_path, path; force=true)
+    end
+end
+
+"""Return the median of a nonempty startup timing sample."""
+function benchmark_median(samples::Vector{Float64})
+    isempty(samples) && error("Benchmark sample cannot be empty.")
+    ordered = sort(samples)
+    middle = length(ordered) ÷ 2 + 1
+    return isodd(length(ordered)) ? ordered[middle] :
+        (ordered[middle-1] + ordered[middle]) / 2
+end
+
+"""Return warm-start speedup and build-cost break-even launch count."""
+function sysimage_benchmark_summary(result::SysimageBenchmarkResult)
+    speedup = result.stock_median_seconds / result.custom_median_seconds
+    saved_seconds = result.stock_median_seconds - result.custom_median_seconds
+    break_even = saved_seconds > 0 ? result.build_seconds / saved_seconds : Inf
+    return speedup, break_even
+end
+
+"""Print the informational sysimage benchmark report."""
+function print_sysimage_benchmark(result::SysimageBenchmarkResult)
+    speedup, break_even = sysimage_benchmark_summary(result)
+    println("Sysimage benchmark")
+    println("  Image build:         $(round(result.build_seconds; digits=2)) s")
+    println("  Image size:          $(round(result.image_bytes / 2.0^20; digits=2)) MiB")
+    println("  Custom first launch: $(round(result.custom_first_seconds; digits=3)) s")
+    println("  Stock warm median:   $(round(result.stock_median_seconds; digits=3)) s")
+    println("  Custom warm median:  $(round(result.custom_median_seconds; digits=3)) s")
+    println("  Warm speedup:        $(round(speedup; digits=2))x")
+    break_even_text = isfinite(break_even) ?
+        string(round(break_even; digits=1)) : "never at measured warm timings"
+    println("  Break-even launches: $break_even_text")
+end
+
+"""Build once and compare identical stock and custom-image harness launches."""
+function run_sysimage_benchmark()
+    julia_flags, runtime_dirs = resolve_native_linker_flags(true)
+    remove_stale_julia_sysimage()
+    build_odin(julia_flags)
+    build_assets(true)
+    build_started = time_ns()
+    build_julia_sysimage()
+    build_seconds = (time_ns() - build_started) / 1.0e9
+    image_path = julia_sysimage_path()
+    image_bytes = filesize(image_path)
+    build_harness(julia_flags)
+
+    stock_samples = with_hidden_file(image_path) do
+        run_harness_once(runtime_dirs; capture_output=true)
+        [run_harness_once(runtime_dirs; capture_output=true) for _ in
+            1:SYSIMAGE_BENCHMARK_SAMPLES]
+    end
+    custom_first = run_harness_once(runtime_dirs; capture_output=true)
+    custom_samples = [run_harness_once(runtime_dirs; capture_output=true) for _ in
+        1:SYSIMAGE_BENCHMARK_SAMPLES]
+    result = SysimageBenchmarkResult(
+        build_seconds, image_bytes, custom_first,
+        benchmark_median(stock_samples), benchmark_median(custom_samples))
+    print_sysimage_benchmark(result)
+    return result
 end
 
 """Remove an old custom sysimage when this build did not explicitly regenerate it."""
-function remove_stale_julia_sysimage()
-    if isfile(JULIA_SYSIMAGE_PATH)
-        rm(JULIA_SYSIMAGE_PATH; force=true)
-        println("Removed stale $JULIA_SYSIMAGE_PATH")
+function remove_stale_julia_sysimage(debug::Bool=false)
+    image_path = julia_sysimage_path(debug)
+    if isfile(image_path)
+        rm(image_path; force=true)
+        println("Removed stale $image_path")
     end
 end
 
@@ -944,7 +1055,8 @@ function clean_build_files()
         joinpath(BIN_DIR, "libeuclid.so"),
         joinpath(BIN_DIR, "libeuclid.dll"),
         joinpath(BIN_DIR, "libeuclid.dylib"),
-        JULIA_SYSIMAGE_PATH,
+        julia_sysimage_path(),
+        julia_sysimage_path(true),
         joinpath(BIN_DIR, "build"),
         ASSETS_STAGING_DIR,
         joinpath(BIN_DIR, ".native_import_libs"),
@@ -1101,7 +1213,7 @@ function run_plan_packaging(
         println(stderr, "Skipping assets and sysimage because the build failed.")
     end
     plan.do_assets && build_ok && build_assets(plan.do_build, command.debug)
-    command.action == :sysimage && build_ok && build_julia_sysimage()
+    command.action == :sysimage && build_ok && build_julia_sysimage(command.debug)
     return nothing
 end
 
@@ -1129,7 +1241,7 @@ function prepare_build_plan(command::BuildCommand, plan::BuildPlanToggles)
     julia_flags, runtime_dirs = resolve_native_linker_flags(
         plan.do_build || command.action == :harness)
     if (plan.do_build || plan.do_assets) && command.action != :sysimage
-        remove_stale_julia_sysimage()
+        remove_stale_julia_sysimage(command.debug)
     end
     plan.do_vet && load_verification_adapter()
     return julia_flags, runtime_dirs
@@ -1258,6 +1370,12 @@ function execute_driver_action(invocation::DriverInvocation)
     invocation.action == :scenario && return run_scenario_command(invocation.arguments)
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
+    if invocation.action == :sysimage_benchmark
+        require_no_arguments(invocation)
+        ensure_required_commands(true, true, false, false)
+        run_sysimage_benchmark()
+        return 0
+    end
     if invocation.action in (:wiki, :check_wiki)
         require_no_arguments(invocation)
         ensure_required_commands(false, false, false, true)

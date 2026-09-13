@@ -313,6 +313,15 @@ end
 @testset "runtime generation isolation" begin
     first_generation = create_euclid_runtime_generation()
     second_generation = create_euclid_runtime_generation()
+    first_descriptors = Base.invokelatest(
+        getfield, first_generation.animation_catalog, :AnimationDescriptors)
+    second_descriptors = Base.invokelatest(
+        getfield, second_generation.animation_catalog, :AnimationDescriptors)
+
+    @test first_generation.animation_catalog !== second_generation.animation_catalog
+    @test first_descriptors !== second_descriptors
+    @test getfield(first_generation.content, :AnimationCatalog) === AnimationCatalog
+    @test getfield(second_generation.content, :AnimationCatalog) === AnimationCatalog
 
     first_implementation = load_generation_animation(
         first_generation, RuntimeHostPointId)

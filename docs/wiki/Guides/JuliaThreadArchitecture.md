@@ -385,6 +385,25 @@ After ten seconds without a startup completion, the loading label changes to
 `Julia is not responding` and logs the request ID. Startup continues waiting
 and rendering; closing the window terminates the process.
 
+### Sysimage Boundary
+
+The optional custom Julia sysimage freezes the stable startup graph: bridge wrappers,
+TeX and geometry support, animation helpers, runtime policy and hosting, evaluation,
+Terminal infrastructure, and their eager package dependencies. `script.jl` remains an
+idempotent bootstrap, loading this graph from source only when the image sentinel is
+absent.
+
+Catalog descriptor data, `nullanimation.jl`, harness scenarios, and individual animation
+implementations remain generation-owned. Every reload creates a fresh content module,
+includes that data again, and shares only the stable catalog machinery from the image.
+Core-runtime edits therefore require rebuilding the image and restarting Euclid, while
+animation and catalog-content edits retain the normal asset hot-reload behavior.
+
+`julia tools/make.jl sysimage-benchmark` builds the harness once and compares identical
+stock and image-backed runs. It reports image build cost and size, first custom startup,
+warm medians, speedup, and break-even launches without imposing a performance threshold.
+Ordinary build and asset commands remove the matching stale image deliberately.
+
 ## Normal Frame Integration
 
 The display loop performs Julia publication and submission at explicit points:

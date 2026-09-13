@@ -1,3 +1,5 @@
+using UUIDs
+
 if !isdefined(Main, :EuclidHost)
     include("runtime.jl")
     include("terminal.jl")
@@ -224,14 +226,17 @@ end
 function load_generation_animation_implementation(
     generation::EuclidRuntimeGeneration, terminal_animation_callback::Function,
     animation_id::UUID)
-    constructor = getfield(generation.animation_catalog, :AnimationImplementation)
+    constructor = Base.invokelatest(
+        getfield, generation.animation_catalog, :AnimationImplementation)
     if animation_id == UUID(UInt128(0))
         return constructor(
             animation_id, getfield(generation.null_animation, :animation_entry))
     end
-    descriptors = getfield(generation.animation_catalog, :AnimationDescriptors)
+    descriptors = Base.invokelatest(
+        getfield, generation.animation_catalog, :AnimationDescriptors)
     descriptor = only(filter(candidate -> candidate.id == animation_id, descriptors))
-    terminal_kind = getfield(generation.animation_catalog, :TerminalNode)
+    terminal_kind = Base.invokelatest(
+        getfield, generation.animation_catalog, :TerminalNode)
     descriptor.kind === terminal_kind &&
         return constructor(animation_id, terminal_animation_callback)
     return load_generation_animation(generation, animation_id)
@@ -398,12 +403,13 @@ function create_euclid_runtime_generation(
     Core.eval(content, :(const EuclidAnimations = $EuclidAnimations))
     Core.eval(content, :(const EuclidGeometry = $EuclidGeometry))
     Core.eval(content, :(const EuclidLatex = $EuclidLatex))
-    Base.include(content, joinpath(root, "animation_catalog.jl"))
+    Core.eval(content, :(const AnimationCatalog = $AnimationCatalog))
+    Base.include(content, joinpath(root, "animation_catalog_generation.jl"))
     Base.include(content, joinpath(root, "nullanimation.jl"))
     Base.include(content, joinpath(root, "harness_scenarios.jl"))
     return EuclidRuntimeGeneration(
         content,
-        Base.invokelatest(getfield, content, :AnimationCatalog),
+        Base.invokelatest(getfield, content, :AnimationCatalogGeneration),
         Base.invokelatest(getfield, content, :NullAnimation),
         Base.invokelatest(getfield, content, :EuclidHarnessScenarios))
 end
