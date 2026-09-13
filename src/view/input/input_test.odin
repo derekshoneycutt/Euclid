@@ -1229,7 +1229,7 @@ input_test_expect_dcs_query_response_fixtures :: proc(
         {{kind = .Decrqss_Unsupported, producer = producer}, "\eP0$r\e\\"},
         {{kind = .Xtgetcap,
             first = u32(termemulator.Terminal_Capability_Kind.Terminal_Name),
-            producer = producer}, "\eP1+r544e=746963746163637261776c\e\\"},
+            producer = producer}, "\eP1+r544e=6575636c6964\e\\"},
         {{kind = .Xtgetcap, first = u32(termemulator.Terminal_Capability_Kind.Colors),
             producer = producer}, "\eP1+r436f=323536\e\\"},
         {{kind = .Xtgetcap, first = u32(termemulator.Terminal_Capability_Kind.Rgb),

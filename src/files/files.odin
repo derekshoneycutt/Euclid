@@ -374,6 +374,20 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
         }
     }
 
+    when ODIN_OS == .Linux {
+        path, path_err := filepath.join(
+            []string{unpack_dir, "terminfo/e/euclid"}, context.temp_allocator)
+        if path_err != nil || !os.exists(path) {
+            return false
+        }
+    } else when ODIN_OS == .Darwin {
+        path, path_err := filepath.join(
+            []string{unpack_dir, "terminfo/65/euclid"}, context.temp_allocator)
+        if path_err != nil || !os.exists(path) {
+            return false
+        }
+    }
+
     return true
 }
 

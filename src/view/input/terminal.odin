@@ -666,7 +666,7 @@ input_terminal_format_xtgetcap_response :: proc(
     kind := termemulator.Terminal_Capability_Kind(response.first)
     value: string
     switch kind {
-    case .Terminal_Name: value = "\eP1+r544e=746963746163637261776c\e\\"
+    case .Terminal_Name: value = "\eP1+r544e=6575636c6964\e\\"
     case .Colors: value = "\eP1+r436f=323536\e\\"
     case .Rgb: value = "\eP1+r524742=38\e\\"
     case .Truecolor: value = "\eP1+r5463\e\\"

@@ -9,6 +9,8 @@ import "input"
 import terminalview "terminal"
 import "ui"
 
+import "core:fmt"
+import "core:os"
 import "core:strings"
 import "core:testing"
 import "core:time"
@@ -113,6 +115,23 @@ terminal_service_test_wait_for_shell :: proc(
     return false
 }
 
+// Pump one real native shell command until its visible grid contains text.
+terminal_service_test_wait_for_shell_text :: proc(
+    state: ^core.Euclid_General_State, runtime: ^input.Input_Runtime,
+    text: string) -> bool {
+    deadline := time.tick_since({}) + 5 * time.Second
+    for time.tick_since({}) < deadline {
+        shell_service_update(state, runtime)
+        if terminal_service_test_contains(state, text) {
+            return true
+        }
+        if state^.shell.phase == .Inactive {
+            return false
+        }
+    }
+    return false
+}
+
 // Build one ordered text-and-Enter frame for a running terminal process.
 terminal_service_test_command_frame :: proc(
     storage: []input.Input_Event, command: string) -> input.Input_Frame {
@@ -161,9 +180,46 @@ terminal_service_test_real_pty_lifecycle :: proc(t: ^testing.T) {
         events: [64]input.Input_Event
         frame := terminal_service_test_command_frame(
             events[:], "printf interactive-ok; exit")
-        shell_service_update(state, &runtime, frame, admit_input = true)
+        shell_service_update(state, &runtime, frame)
         testing.expect(t, terminal_service_test_wait_for_shell(state, &runtime))
         testing.expect(t, terminal_service_test_contains(state, "interactive-ok"))
+    }
+}
+
+// Verify nvim startup replies produce a visible alternate-screen document.
+@(test)
+terminal_service_test_nvim_visible_through_real_pty :: proc(t: ^testing.T) {
+    when ODIN_OS == .Linux {
+        if !os.is_file("/usr/bin/nvim") {
+            return
+        }
+        state := new(core.Euclid_General_State, context.allocator)
+        defer free(state, context.allocator)
+        animation: core.Euclid_Julia_Animation_Interface
+        terminal_service_test_state_init(t, state, &animation, 1)
+        defer core.animation_memory_destroy(&state^.animation_memory)
+        testing.expect(t, terminalview.terminal_init_for_animation(
+            &state^.terminal, &state^.animation_memory, 1))
+        defer terminalview.terminal_destroy(&state^.terminal)
+        testing.expect(t, shell_service_runtime_init(state))
+        defer shell_service_runtime_destroy(state)
+        directory := core.shell_working_directory(&state^.shell)
+        testing.expect(t, shell_service_store_paths(
+            state, directory, fmt.tprintf("%s/assets/terminfo", directory)))
+
+        runtime: input.Input_Runtime
+        command := fmt.tprintf(
+            "/usr/bin/nvim -u NONE -n %s/AGENTS.md", directory)
+        testing.expect(t, shell_service_submit(state, command))
+        testing.expect(t, terminal_service_test_wait_for_shell_text(
+            state, &runtime, "Euclid Agent Guide"))
+        testing.expect(t, state^.terminal.output_interpreter.alternate_screen_active)
+        testing.expect_value(t, runtime.byte_delivery_rejection_count, u64(0))
+
+        events: [16]input.Input_Event
+        frame := terminal_service_test_command_frame(events[:], ":qa!")
+        shell_service_update(state, &runtime, frame)
+        testing.expect(t, terminal_service_test_wait_for_shell(state, &runtime))
     }
 }
 

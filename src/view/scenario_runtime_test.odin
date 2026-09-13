@@ -34,6 +34,21 @@ scenario_runtime_expect_outcome_logs :: proc(t: ^testing.T, path: string) {
         "scenario_failed step=5 assertions=3 failures=1"))
 }
 
+// Verify a running native session remains eligible for scenario-driven input.
+@(test)
+scenario_runtime_terminal_input_tracks_foreground_owner :: proc(t: ^testing.T) {
+    state: Euclid_General_State
+    state.terminal.initialized = true
+    state.terminal.julia_session_ready = true
+    testing.expect(t, scenario_terminal_input_available(&state))
+
+    state.terminal.awaiting_eval = true
+    testing.expect(t, !scenario_terminal_input_available(&state))
+
+    state.shell.phase = .Running
+    testing.expect(t, scenario_terminal_input_available(&state))
+}
+
 // Verify ordinary state requests and orderly shutdown flow through the action sink.
 @(test)
 scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {

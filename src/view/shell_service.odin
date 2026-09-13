@@ -1,6 +1,7 @@
 package view
 
 import "../core"
+import "../files"
 import shell "../terminal/shell"
 import termsession "../terminal/session"
 import "input"
@@ -9,6 +10,21 @@ import terminalview "terminal"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
+
+// Resolve packaged terminfo, falling back to the source tree for development tests.
+shell_service_resolve_terminfo_directory :: proc(directory: string) -> string {
+    packaged := files.packaged_asset_path("terminfo", context.temp_allocator)
+    if os.is_directory(packaged) {
+        return packaged
+    }
+    source, error := filepath.join(
+        []string{directory, core.SHELL_TERMINFO_RELATIVE_DIRECTORY},
+        context.temp_allocator)
+    if error != nil || !os.is_directory(source) {
+        return ""
+    }
+    return source
+}
 
 // Initialize the display-owned native shell backend and immutable launch context.
 shell_service_runtime_init :: proc(state: ^core.Euclid_General_State) -> bool {
@@ -23,7 +39,8 @@ shell_service_runtime_init :: proc(state: ^core.Euclid_General_State) -> bool {
         return false
     }
     directory, error := os.get_working_directory(context.temp_allocator)
-    if error != nil || !shell_service_store_paths(state, directory) {
+    terminfo := shell_service_resolve_terminfo_directory(directory)
+    if error != nil || !shell_service_store_paths(state, directory, terminfo) {
         shell_service_runtime_destroy(state)
         return false
     }
@@ -45,16 +62,14 @@ shell_service_begin_generation :: proc(
 
 // Capture the bounded shell cwd and optional packaged terminfo directory.
 shell_service_store_paths :: proc(
-    state: ^core.Euclid_General_State, directory: string) -> bool {
+    state: ^core.Euclid_General_State, directory, terminfo: string) -> bool {
     runtime := &state^.shell
     if len(directory) == 0 || len(directory) > len(runtime^.working_directory) {
         return false
     }
     copy(runtime^.working_directory[:], transmute([]u8)directory)
     runtime^.working_directory_byte_count = len(directory)
-    paths := [2]string{directory, core.SHELL_TERMINFO_RELATIVE_DIRECTORY}
-    terminfo, error := filepath.join(paths[:], context.temp_allocator)
-    if error == nil && os.is_directory(terminfo) &&
+    if os.is_directory(terminfo) &&
        len(terminfo) <= len(runtime^.terminfo_directory) {
         copy(runtime^.terminfo_directory[:], transmute([]u8)terminfo)
         runtime^.terminfo_directory_byte_count = len(terminfo)
@@ -201,8 +216,7 @@ shell_service_input :: proc(
 shell_service_update :: proc(
     state: ^core.Euclid_General_State, runtime: ^input.Input_Runtime = nil,
     frame: input.Input_Frame = {},
-    geometry_change: terminalview.Terminal_Geometry_Change = {},
-    admit_input: bool = false) {
+    geometry_change: terminalview.Terminal_Geometry_Change = {}) {
     if state == nil || state^.shell.phase != .Running {
         return
     }
@@ -217,9 +231,7 @@ shell_service_update :: proc(
     }
     if !update.completion_available {
         shell_service_resize(state, geometry_change)
-        if admit_input {
-            shell_service_input(state, runtime, frame)
-        }
+        shell_service_input(state, runtime, frame)
         return
     }
     if update.completion.status != 0 {

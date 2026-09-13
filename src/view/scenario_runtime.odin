@@ -190,12 +190,20 @@ scenario_runtime_update :: proc(
     return status
 }
 
+// Report whether the Terminal can admit local or foreground-session input.
+scenario_terminal_input_available :: proc(state: ^Euclid_General_State) -> bool {
+    if state == nil || !state^.terminal.initialized ||
+        !state^.terminal.julia_session_ready {
+        return false
+    }
+    return !state^.terminal.awaiting_eval || state^.shell.phase == .Running
+}
+
 // Inject one complete UTF-8 text action into ordinary next-frame input.
 scenario_issue_terminal_text :: proc(
     runtime: ^Scenario_Runtime, text: string) -> bool {
-    terminal := &runtime.state.terminal
-    if runtime.input_runtime == nil || !terminal.initialized ||
-        !terminal.julia_session_ready || terminal.awaiting_eval {
+    if runtime == nil || runtime.input_runtime == nil ||
+        !scenario_terminal_input_available(runtime.state) {
         return false
     }
     events: [scenario.SCENARIO_TEXT_CAPACITY]input.Input_Event
@@ -215,9 +223,8 @@ scenario_issue_terminal_text :: proc(
 // Inject one supported portable key into ordinary next-frame input.
 scenario_issue_terminal_key :: proc(
     runtime: ^Scenario_Runtime, name: string) -> bool {
-    terminal := &runtime.state.terminal
-    if runtime.input_runtime == nil || !terminal.initialized ||
-        !terminal.julia_session_ready || terminal.awaiting_eval {
+    if runtime == nil || runtime.input_runtime == nil ||
+        !scenario_terminal_input_available(runtime.state) {
         return false
     }
     for entry in SCENARIO_KEY_NAMES {

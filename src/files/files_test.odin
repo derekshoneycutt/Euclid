@@ -72,6 +72,16 @@ build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
         }
     }
 
+    when ODIN_OS == .Linux {
+        if !write_required_entry(unpack_dir, "terminfo/e/euclid") {
+            return false
+        }
+    } else when ODIN_OS == .Darwin {
+        if !write_required_entry(unpack_dir, "terminfo/65/euclid") {
+            return false
+        }
+    }
+
     return true
 }
 

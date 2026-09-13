@@ -1,18 +1,16 @@
 # Euclid terminfo
 
 `euclid.terminfo` contains only capabilities backed by tests and the capability
-matrix at the repository root. Rebuild the packaged ncurses entry from the repository
-root after changing the source:
+matrix at the repository root. The asset build compiles the entry with the host's
+`tic` implementation:
 
 ```sh
-tic -x -o assets/terminfo assets/terminfo/euclid.terminfo
+julia tools/make.jl assets
 ```
 
-The repository retains entries compiled by both current Linux ncurses under
-`t/euclid` and Apple ncurses under `74/euclid`. Development changes to the
-source must regenerate and commit both entries on their respective hosts. Apple ncurses
-6.0 stores the `colors` numeric capability as `32767`, but retains `RGB` and expands the
-profile's indexed and direct-color controls correctly.
+Linux ncurses writes `terminfo/e/euclid`; Apple ncurses writes
+`terminfo/65/euclid`. These generated, platform-specific entries live only in
+`assets.pkg`, while the portable source remains in the repository.
 
 Terminal-attached child processes receive `TERM=euclid`, `COLORTERM=truecolor`,
 and an absolute `TERMINFO` path. The profile publishes ANSI, indexed, and direct RGB

@@ -325,19 +325,17 @@ terminal_service_update :: proc(
     }
     bounds := ui.terminal_content_panel(state^.ui_runtime.ui_regions.text_rect)
     terminal_font := font.cache_resolve(&state^.font_cache, .Regular)
-    shell_was_running := state^.shell.phase == .Running
     terminal_frame := terminal_service_routed_frame(state, frame)
     prepared := ui.terminal_prepare_frame(
         state, terminal_frame, terminal_font, bounds,
         input_runtime != nil && card(input_runtime^.mouse_captured) > 0)
+    shell_service_update(
+        state, input_runtime, prepared.content_frame, prepared.geometry_change)
     update := ui.terminal_update(
         &state^.terminal, prepared.content_frame, terminal_font, bounds)
     update.geometry_change = prepared.geometry_change
     terminal_service_apply_submission(state, update.submission)
     terminal_service_send_completion(state, update.completion)
-    shell_service_update(
-        state, input_runtime, prepared.content_frame, update.geometry_change,
-        shell_was_running)
     _ = terminalview.terminal_publish_clipboard_actions(
         &state^.terminal, state^.terminal.output_producer,
         {write = terminal_service_write_clipboard})

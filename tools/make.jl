@@ -773,6 +773,15 @@ function copy_directory_contents(source::String, destination::String)
     end
 end
 
+"""Compile the staged Euclid terminfo entry using the host ncurses layout."""
+function compile_staged_terminfo()
+    Sys.iswindows() && return
+    terminfo_dir = joinpath(ASSETS_STAGING_DIR, "terminfo")
+    source_path = joinpath(terminfo_dir, "euclid.terminfo")
+    result = run_command(Cmd(["tic", "-x", "-o", terminfo_dir, source_path]))
+    result.exit_code == 0 || error("Euclid terminfo compilation failed.")
+end
+
 """Create the compressed assets archive from staging content."""
 function create_assets_archive()
     result = run_command(
@@ -833,6 +842,7 @@ function stage_assets_content()
     copy_directory_contents(joinpath(SRC_DIR, "view", "shaders"),
         joinpath(ASSETS_STAGING_DIR, "shaders"))
     copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
+    compile_staged_terminfo()
 
     open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
         write(io, """
