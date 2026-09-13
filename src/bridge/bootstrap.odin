@@ -6,18 +6,8 @@ import "../files"
 
 import "base:runtime"
 import "core:fmt"
-import "core:os"
-import "core:path/filepath"
 import "core:strings"
 import vmem "core:mem/virtual"
-
-when ODIN_OS == .Windows {
-    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.dll"
-} else when ODIN_OS == .Darwin {
-    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.dylib"
-} else {
-    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.so"
-}
 
 Julia_Exception_Format :: struct {
     exception_type: cstring,
@@ -27,20 +17,9 @@ Julia_Exception_Format :: struct {
     backtrace: ^julialib.jl_value_t,
 }
 
-//   Resolve the optional custom Julia sysimage beside the Euclid executable.
+//   Resolve the mandatory verified Julia sysimage from packaged assets.
 resolve_julia_sysimage_path :: proc() -> (string, bool) {
-    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
-    if exe_err != nil || len(exe_dir) == 0 {
-        return "", false
-    }
-
-    image_path, path_err := filepath.join(
-        []string{exe_dir, JULIA_SYSIMAGE_FILENAME}, context.temp_allocator)
-    if path_err != nil || !os.exists(image_path) {
-        return "", false
-    }
-
-    return image_path, true
+    return files.resolve_packaged_sysimage_path(nil, context.temp_allocator)
 }
 
 //   Initialize the Julia runtime and load the packaged bridge script into Main.
@@ -57,13 +36,13 @@ initiate_julia :: proc() -> bool {
         project_path, context.temp_allocator)
 
     image_path, has_image := resolve_julia_sysimage_path()
-    if has_image {
-        fmt.println("Starting Julia with custom sysimage: ", image_path)
-        image_path_c := strings.clone_to_cstring(image_path, context.temp_allocator)
-        julialib.jl_init_with_image_file(nil, image_path_c)
-    } else {
-        julialib.jl_init()
+    if !has_image {
+        fmt.eprintln("Julia startup failed: packaged sysimage is missing or invalid")
+        return false
     }
+    fmt.println("Starting Julia with packaged sysimage: ", image_path)
+    image_path_c := strings.clone_to_cstring(image_path, context.temp_allocator)
+    julialib.jl_init_with_image_file(nil, image_path_c)
 
     return include_packaged_script(false)
 }

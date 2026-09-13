@@ -282,14 +282,12 @@ computers, to be honest, especially given LLVM may make this optimization in eit
 The single biggest performance tweak is the default-enabled GPU Dust Instancing, which
 will draw the dust particles with the GPU.
 
-The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
-LaTeX/Terminal compiler workloads into a platform-specific shared library beside the
-executable. Build and run it with `julia tools/make.jl sysimage`, then
-`julia tools/make.jl run-only`. Ordinary build or asset
-commands remove an existing sysimage to prevent stale baked code from being used.
-Run `julia tools/make.jl sysimage-benchmark` to build the image and compare identical
-stock and custom-image headless harness launches. The informational report includes image
-build time and size, first custom launch, warm medians, speedup, and break-even launches.
+Euclid requires Julia 1.13 and packages a compressed Julia sysimage inside `assets.pkg`.
+Normal build and asset commands fingerprint the stable Julia runtime and reuse the image
+from `.build/sysimage-cache` while those inputs remain unchanged. A stable-runtime,
+dependency, Julia, platform, or compiler-setting change triggers one automatic rebuild;
+animation-only changes continue to reuse the image. `julia tools/make.jl sysimage`
+forces a clean rebuild from Julia's stock image before packaging.
 
 Additionally, there are some startup options that can affect application performance.
 
@@ -359,9 +357,7 @@ Commands:
                  Run an existing application binary.
   assets                       Build assets.pkg only.
   sysimage [--debug] [--strict]
-                 Build the application, assets, and Julia sysimage.
-  sysimage-benchmark
-                 Build and compare stock and sysimage harness startup.
+                 Force rebuilding the Julia sysimage, application, and assets.
   harness                      Build and run the deterministic headless harness.
   unit [julia|odin] [OPTS]     Run all application tests or one language suite.
   vet [OPTS]                   Build and analyze the repository.
@@ -446,7 +442,8 @@ implementations remain generation-owned and dynamically loaded when using a sysi
 Changes to those files continue to participate in asset hot reload. Changes to baked core
 modules such as bridge wrappers, the TeX source facade, geometry and animation helpers,
 runtime policy, evaluation, or Terminal require rebuilding the sysimage and restarting
-Euclid.
+Euclid. A running process rejects an updated package whose sysimage fingerprint differs
+from the loaded runtime, preserving the active generation until the application restarts.
 
 ### Q: What is all this verification output?
 

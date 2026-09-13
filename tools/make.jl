@@ -14,8 +14,7 @@ Commands:
                                  Run an existing application binary.
     assets                       Build assets.pkg only.
     sysimage [--debug] [--strict]
-                                 Build the application, assets, and Julia sysimage.
-    sysimage-benchmark           Build and compare stock and sysimage harness startup.
+                                 Force rebuilding the Julia sysimage, application, and assets.
     harness                      Build and run the deterministic headless harness.
     unit [julia|odin] [OPTS]     Run all application tests or one language suite.
     vet [OPTS]                   Build and analyze the repository.
@@ -55,7 +54,7 @@ show_help() = HELP_TEXT
 
 const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage",
-    "sysimage-benchmark", "harness",
+    "harness",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
     "analyzer-test", "wiki", "check-wiki", "clean"])
 
@@ -70,6 +69,8 @@ end
 
 using Dates
 using Libdl
+using SHA
+using TOML
 using UUIDs
 
 include(joinpath(@__DIR__, "build_config.jl"))
@@ -100,13 +101,11 @@ struct JuliaPackageDep
     version::String
 end
 
-"""Measured sysimage build and harness startup costs in seconds."""
-struct SysimageBenchmarkResult
-    build_seconds::Float64
-    image_bytes::Int64
-    custom_first_seconds::Float64
-    stock_median_seconds::Float64
-    custom_median_seconds::Float64
+"""Validated generated Julia image and the identities governing its reuse."""
+struct JuliaSysimageArtifact
+    input_fingerprint::String
+    artifact_sha256::String
+    path::String
 end
 
 """Resolved build/vet/assets toggles derived from CLI arguments."""
@@ -124,6 +123,7 @@ const EVIDENCE_SCRIPT = joinpath(SCRIPT_DIR, "tools", "evidence.jl")
 const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
 const ASSETS_STAGING_DIR = joinpath(BIN_DIR, ".assets_staging")
 const ASSETS_ARCHIVE_PATH = joinpath(BIN_DIR, "assets.pkg")
+const SYSIMAGE_CACHE_ROOT = joinpath(SCRIPT_DIR, ".build", "sysimage-cache")
 const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
 const WIKI_GENERATOR = joinpath(SCRIPT_DIR, "tools", "code_wiki.jl")
@@ -140,7 +140,140 @@ const HARNESS_BINARY_PATH = joinpath(
     BIN_DIR, is_windows() ? "euclid_harness.exe" : "euclid_harness")
 const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.bin")
 const HARNESS_ANIMATION_ID = "03bf688d-40d0-56a2-a6be-ca2656c9b10d"
-const SYSIMAGE_BENCHMARK_SAMPLES = 5
+const SYSIMAGE_STABLE_INPUTS = String[
+    "Project.toml",
+    "Manifest.toml",
+    "sysimage_build.jl",
+    "sysimage_core.jl",
+    "sysimage_workload.jl",
+    "odin-julia-bridge.jl",
+    "latex.jl",
+    "geometry.jl",
+    "animations.jl",
+    "animation_catalog.jl",
+    "runtime.jl",
+    "terminal.jl",
+    "ticks.jl",
+    "euclidrepl.jl",
+    "terminal_container.jl",
+    "eval.jl",
+    "interpolation.jl",
+    "policy.jl",
+    "host.jl",
+    "runtime_host.jl",
+    "runtime_api.jl",
+    "bridge",
+    "latex",
+    "eval",
+    "policy",
+    "host",
+]
+
+"""Return canonical stable files whose bytes determine the Euclid sysimage."""
+function sysimage_stable_input_paths(root::String=JULIA_TEST_PROJECT)
+    paths = String[]
+    for relative in SYSIMAGE_STABLE_INPUTS
+        path = joinpath(root, relative)
+        if isdir(path)
+            for (directory, _, names) in walkdir(path), name in names
+                push!(paths, joinpath(directory, name))
+            end
+        elseif isfile(path)
+            push!(paths, path)
+        else
+            error("Missing stable sysimage input: $path")
+        end
+    end
+    sort!(paths; by=path -> replace(relpath(path, root), '\\' => '/'))
+    return paths
+end
+
+"""Return the toolchain identity that prevents incompatible image reuse."""
+function sysimage_toolchain_identity()
+    commit = string(Base.GIT_VERSION_INFO.commit)
+    cpu_target = get(ENV, "JULIA_CPU_TARGET", "native")
+    return "julia=$(VERSION);commit=$commit;kernel=$(Sys.KERNEL);arch=$(Sys.ARCH);" *
+        "cpu_target=$cpu_target"
+end
+
+"""Hash named files and toolchain identity using an unambiguous byte framing."""
+function fingerprint_sysimage_inputs(
+    paths::Vector{String}, root::String; identity::String=sysimage_toolchain_identity())
+    framed = IOBuffer()
+    identity_bytes = codeunits(identity)
+    write(framed, "identity\0", string(length(identity_bytes)), '\0', identity_bytes)
+    for path in paths
+        relative = replace(relpath(path, root), '\\' => '/')
+        contents = read(path)
+        write(framed, "file\0", string(ncodeunits(relative)), '\0', relative,
+            '\0', string(length(contents)), '\0', contents)
+    end
+    return bytes2hex(sha256(take!(framed)))
+end
+
+"""Return the deterministic identity of the current stable Julia image inputs."""
+function sysimage_input_fingerprint(root::String=JULIA_TEST_PROJECT)
+    paths = sysimage_stable_input_paths(root)
+    return fingerprint_sysimage_inputs(paths, root)
+end
+
+"""Return the platform-specific generated sysimage filename."""
+julia_sysimage_filename() = "euclid-sysimage." * Libdl.dlext
+
+"""Return the platform cache partition for generated Julia images."""
+function sysimage_platform_key()
+    architecture = Sys.ARCH == :x86_64 ? "amd64" :
+        Sys.ARCH == :aarch64 ? "arm64" : lowercase(string(Sys.ARCH))
+    kernel = Sys.iswindows() ? "nt" : lowercase(string(Sys.KERNEL))
+    return "$kernel-$architecture"
+end
+
+"""Return the cache directory for one stable-input fingerprint."""
+function sysimage_cache_dir(
+    fingerprint::String; cache_root::String=SYSIMAGE_CACHE_ROOT)
+    return joinpath(cache_root, sysimage_platform_key(), fingerprint)
+end
+
+"""Return the SHA-256 digest of one generated image."""
+sysimage_artifact_sha256(path::String) = bytes2hex(open(sha256, path))
+
+"""Write generated-image metadata after PackageCompiler succeeds."""
+function write_sysimage_cache_metadata(
+    path::String, artifact::JuliaSysimageArtifact)
+    metadata = Dict(
+        "schema_version" => 1,
+        "input_fingerprint" => artifact.input_fingerprint,
+        "artifact_sha256" => artifact.artifact_sha256,
+        "image_filename" => basename(artifact.path),
+        "toolchain_identity" => sysimage_toolchain_identity())
+    open(path, "w") do io
+        TOML.print(io, metadata; sorted=true)
+    end
+end
+
+"""Return a cached image only when its metadata and bytes remain valid."""
+function load_cached_julia_sysimage(
+    fingerprint::String; cache_root::String=SYSIMAGE_CACHE_ROOT)
+    directory = sysimage_cache_dir(fingerprint; cache_root)
+    image_path = joinpath(directory, julia_sysimage_filename())
+    metadata_path = joinpath(directory, "metadata.toml")
+    isfile(image_path) && isfile(metadata_path) || return nothing
+    metadata = try
+        TOML.parsefile(metadata_path)
+    catch error_object
+        error_object isa TOML.ParserError || rethrow()
+        return nothing
+    end
+    get(metadata, "schema_version", 0) == 1 || return nothing
+    get(metadata, "input_fingerprint", "") == fingerprint || return nothing
+    get(metadata, "image_filename", "") == basename(image_path) || return nothing
+    get(metadata, "toolchain_identity", "") == sysimage_toolchain_identity() ||
+        return nothing
+    expected_digest = get(metadata, "artifact_sha256", "")
+    length(expected_digest) == 64 || return nothing
+    sysimage_artifact_sha256(image_path) == expected_digest || return nothing
+    return JuliaSysimageArtifact(fingerprint, expected_digest, image_path)
+end
 
 """Return the expected output path for the Euclid application binary."""
 app_binary_path(debug::Bool=false) = debug ? debug_app_binary_path() :
@@ -149,10 +282,6 @@ app_binary_path(debug::Bool=false) = debug ? debug_app_binary_path() :
 """Return the isolated debug application output path."""
 debug_app_binary_path() = joinpath(
     SCRIPT_DIR, ".build", "debug", is_windows() ? "euclid.exe" : "euclid")
-
-"""Return the custom Julia sysimage path adjacent to its application binary."""
-julia_sysimage_path(debug::Bool=false) = joinpath(
-    dirname(app_binary_path(debug)), "euclid-sysimage." * Libdl.dlext)
 
 """Return the assets package path adjacent to the debug application."""
 debug_assets_archive_path() = joinpath(dirname(debug_app_binary_path()), "assets.pkg")
@@ -826,10 +955,12 @@ function create_assets_archive()
 end
 
 """Build and package runtime assets, then optionally generate runtime SBOM metadata."""
-function build_assets(do_build::Bool, debug::Bool=false)
+function build_assets(
+    do_build::Bool, debug::Bool=false; force_sysimage::Bool=false)
     println("Building assets package...")
     prepare_julia_packages()
-    stage_assets_content()
+    sysimage = ensure_julia_sysimage(; force=force_sysimage)
+    stage_assets_content(sysimage)
     finalize_assets_archive()
     if debug
         debug_archive = debug_assets_archive_path()
@@ -864,8 +995,8 @@ function prepare_julia_packages()
     end
 end
 
-"""Populate the assets staging directory with Julia, shader, and static content."""
-function stage_assets_content()
+"""Populate asset staging with source content and its mandatory Julia image."""
+function stage_assets_content(sysimage::JuliaSysimageArtifact)
     if ispath(ASSETS_STAGING_DIR)
         rm(ASSETS_STAGING_DIR; force=true, recursive=true)
     end
@@ -880,11 +1011,23 @@ function stage_assets_content()
     copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
     compile_staged_terminfo()
 
+    sysimage_relative_path = joinpath(
+        "sysimage", sysimage.input_fingerprint, julia_sysimage_filename())
+    staged_sysimage = joinpath(ASSETS_STAGING_DIR, sysimage_relative_path)
+    mkpath(dirname(staged_sysimage))
+    cp(sysimage.path, staged_sysimage; force=true)
+
     open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
         write(io, """
 package=assets.pkg
 julia_root=julia
 shader_root=shaders
+schema_version=2
+sysimage_path=$(replace(sysimage_relative_path, '\\' => '/'))
+sysimage_input_fingerprint=$(sysimage.input_fingerprint)
+sysimage_artifact_sha256=$(sysimage.artifact_sha256)
+sysimage_platform=$(sysimage_platform_key())
+sysimage_toolchain=$(sysimage_toolchain_identity())
 format=tar.gz
 """)
     end
@@ -907,107 +1050,43 @@ function finalize_assets_archive()
     println("Wrote $ASSETS_ARCHIVE_PATH")
 end
 
-"""Build a custom Julia sysimage beside the matching application binary."""
-function build_julia_sysimage(debug::Bool=false)
-    println("Building Julia sysimage...")
-    image_path = julia_sysimage_path(debug)
-    mkpath(dirname(image_path))
+"""Build or reuse the generated Julia image for the current stable inputs."""
+function ensure_julia_sysimage(; force::Bool=false)
+    fingerprint = sysimage_input_fingerprint()
+    cached = load_cached_julia_sysimage(fingerprint)
+    if !force && cached !== nothing
+        println("Reusing Julia sysimage $(cached.input_fingerprint)")
+        return cached
+    end
 
+    reason = force ? "forced rebuild" : "missing, stale, or invalid cache"
+    println("Building Julia sysimage ($reason)...")
+    final_directory = sysimage_cache_dir(fingerprint)
+    mkpath(dirname(final_directory))
     build_script = joinpath(SRC_DIR, "julia", "sysimage_build.jl")
-    result = run_command(Cmd([
-        JULIA_EXE,
-        "--project=" * JULIA_TEST_PROJECT,
-        build_script,
-        image_path,
-    ]); cwd=SCRIPT_DIR)
-    println("Julia sysimage build exited $(result.exit_code)")
-    if result.exit_code != 0 || !isfile(image_path)
-        error("Julia sysimage build failed.")
+    artifact = mktempdir(dirname(final_directory)) do candidate_directory
+        image_path = joinpath(candidate_directory, julia_sysimage_filename())
+        result = run_command(Cmd([
+            JULIA_EXE,
+            "--project=" * JULIA_TEST_PROJECT,
+            build_script,
+            image_path,
+        ]); cwd=SCRIPT_DIR)
+        println("Julia sysimage build exited $(result.exit_code)")
+        if result.exit_code != 0 || !isfile(image_path)
+            error("Julia sysimage build failed.")
+        end
+        digest = sysimage_artifact_sha256(image_path)
+        candidate = JuliaSysimageArtifact(fingerprint, digest, image_path)
+        write_sysimage_cache_metadata(
+            joinpath(candidate_directory, "metadata.toml"), candidate)
+        ispath(final_directory) && rm(final_directory; force=true, recursive=true)
+        mv(candidate_directory, final_directory)
+        return JuliaSysimageArtifact(
+            fingerprint, digest, joinpath(final_directory, basename(image_path)))
     end
-
-    println("Wrote $image_path")
-end
-
-"""Temporarily hide one file while executing a callback, restoring it on every exit."""
-function with_hidden_file(callback::Function, path::String)
-    isfile(path) || error("Required file does not exist: $path")
-    hidden_path = path * ".benchmark-stock"
-    ispath(hidden_path) && error("Benchmark staging path already exists: $hidden_path")
-    mv(path, hidden_path)
-    try
-        return callback()
-    finally
-        isfile(hidden_path) && mv(hidden_path, path; force=true)
-    end
-end
-
-"""Return the median of a nonempty startup timing sample."""
-function benchmark_median(samples::Vector{Float64})
-    isempty(samples) && error("Benchmark sample cannot be empty.")
-    ordered = sort(samples)
-    middle = length(ordered) ÷ 2 + 1
-    return isodd(length(ordered)) ? ordered[middle] :
-        (ordered[middle-1] + ordered[middle]) / 2
-end
-
-"""Return warm-start speedup and build-cost break-even launch count."""
-function sysimage_benchmark_summary(result::SysimageBenchmarkResult)
-    speedup = result.stock_median_seconds / result.custom_median_seconds
-    saved_seconds = result.stock_median_seconds - result.custom_median_seconds
-    break_even = saved_seconds > 0 ? result.build_seconds / saved_seconds : Inf
-    return speedup, break_even
-end
-
-"""Print the informational sysimage benchmark report."""
-function print_sysimage_benchmark(result::SysimageBenchmarkResult)
-    speedup, break_even = sysimage_benchmark_summary(result)
-    println("Sysimage benchmark")
-    println("  Image build:         $(round(result.build_seconds; digits=2)) s")
-    println("  Image size:          $(round(result.image_bytes / 2.0^20; digits=2)) MiB")
-    println("  Custom first launch: $(round(result.custom_first_seconds; digits=3)) s")
-    println("  Stock warm median:   $(round(result.stock_median_seconds; digits=3)) s")
-    println("  Custom warm median:  $(round(result.custom_median_seconds; digits=3)) s")
-    println("  Warm speedup:        $(round(speedup; digits=2))x")
-    break_even_text = isfinite(break_even) ?
-        string(round(break_even; digits=1)) : "never at measured warm timings"
-    println("  Break-even launches: $break_even_text")
-end
-
-"""Build once and compare identical stock and custom-image harness launches."""
-function run_sysimage_benchmark()
-    julia_flags, runtime_dirs = resolve_native_linker_flags(true)
-    remove_stale_julia_sysimage()
-    build_odin(julia_flags)
-    build_assets(true)
-    build_started = time_ns()
-    build_julia_sysimage()
-    build_seconds = (time_ns() - build_started) / 1.0e9
-    image_path = julia_sysimage_path()
-    image_bytes = filesize(image_path)
-    build_harness(julia_flags)
-
-    stock_samples = with_hidden_file(image_path) do
-        run_harness_once(runtime_dirs; capture_output=true)
-        [run_harness_once(runtime_dirs; capture_output=true) for _ in
-            1:SYSIMAGE_BENCHMARK_SAMPLES]
-    end
-    custom_first = run_harness_once(runtime_dirs; capture_output=true)
-    custom_samples = [run_harness_once(runtime_dirs; capture_output=true) for _ in
-        1:SYSIMAGE_BENCHMARK_SAMPLES]
-    result = SysimageBenchmarkResult(
-        build_seconds, image_bytes, custom_first,
-        benchmark_median(stock_samples), benchmark_median(custom_samples))
-    print_sysimage_benchmark(result)
-    return result
-end
-
-"""Remove an old custom sysimage when this build did not explicitly regenerate it."""
-function remove_stale_julia_sysimage(debug::Bool=false)
-    image_path = julia_sysimage_path(debug)
-    if isfile(image_path)
-        rm(image_path; force=true)
-        println("Removed stale $image_path")
-    end
+    println("Wrote $(artifact.path)")
+    return artifact
 end
 
 """Resolve native linker flags and runtime library directories."""
@@ -1055,8 +1134,6 @@ function clean_build_files()
         joinpath(BIN_DIR, "libeuclid.so"),
         joinpath(BIN_DIR, "libeuclid.dll"),
         joinpath(BIN_DIR, "libeuclid.dylib"),
-        julia_sysimage_path(),
-        julia_sysimage_path(true),
         joinpath(BIN_DIR, "build"),
         ASSETS_STAGING_DIR,
         joinpath(BIN_DIR, ".native_import_libs"),
@@ -1065,6 +1142,7 @@ function clean_build_files()
         joinpath(SCRIPT_DIR, ".build", "debug"),
         joinpath(SCRIPT_DIR, ".build", "reports"),
         joinpath(SCRIPT_DIR, ".build", "scenarios"),
+        SYSIMAGE_CACHE_ROOT,
         joinpath(SCRIPT_DIR, "__pycache__"),
     ]
 
@@ -1212,8 +1290,8 @@ function run_plan_packaging(
     if !build_ok && (plan.do_assets || command.action == :sysimage)
         println(stderr, "Skipping assets and sysimage because the build failed.")
     end
-    plan.do_assets && build_ok && build_assets(plan.do_build, command.debug)
-    command.action == :sysimage && build_ok && build_julia_sysimage(command.debug)
+    plan.do_assets && build_ok && build_assets(
+        plan.do_build, command.debug; force_sysimage=command.action == :sysimage)
     return nothing
 end
 
@@ -1240,9 +1318,6 @@ end
 function prepare_build_plan(command::BuildCommand, plan::BuildPlanToggles)
     julia_flags, runtime_dirs = resolve_native_linker_flags(
         plan.do_build || command.action == :harness)
-    if (plan.do_build || plan.do_assets) && command.action != :sysimage
-        remove_stale_julia_sysimage(command.debug)
-    end
     plan.do_vet && load_verification_adapter()
     return julia_flags, runtime_dirs
 end
@@ -1308,10 +1383,23 @@ end
 """Return whether a unit invocation includes the Odin application suite."""
 unit_command_runs_odin(arguments::Vector{String}) = !("julia" in arguments)
 
+"""Return whether assets.pkg contains the current mandatory sysimage identity."""
+function packaged_assets_are_current()
+    isfile(ASSETS_ARCHIVE_PATH) || return false
+    result = run_command(Cmd([
+        "tar", "-xOf", ASSETS_ARCHIVE_PATH, "./manifest.txt",
+    ]); capture_output=true)
+    result.exit_code == 0 || return false
+    expected = "sysimage_input_fingerprint=$(sysimage_input_fingerprint())"
+    expected_platform = "sysimage_platform=$(sysimage_platform_key())"
+    lines = split(result.stdout, '\n')
+    return expected in lines && expected_platform in lines
+end
+
 """Prepare packaged assets required by Odin runtime integration tests."""
 function prepare_unit_assets(arguments::Vector{String})
     unit_command_runs_odin(arguments) || return nothing
-    isfile(ASSETS_ARCHIVE_PATH) && return nothing
+    packaged_assets_are_current() && return nothing
     ensure_required_commands(false, true, false, false)
     build_assets(false)
     return nothing
@@ -1370,12 +1458,6 @@ function execute_driver_action(invocation::DriverInvocation)
     invocation.action == :scenario && return run_scenario_command(invocation.arguments)
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
-    if invocation.action == :sysimage_benchmark
-        require_no_arguments(invocation)
-        ensure_required_commands(true, true, false, false)
-        run_sysimage_benchmark()
-        return 0
-    end
     if invocation.action in (:wiki, :check_wiki)
         require_no_arguments(invocation)
         ensure_required_commands(false, false, false, true)

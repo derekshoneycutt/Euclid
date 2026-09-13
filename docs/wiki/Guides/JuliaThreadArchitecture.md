@@ -387,22 +387,26 @@ and rendering; closing the window terminates the process.
 
 ### Sysimage Boundary
 
-The optional custom Julia sysimage freezes the stable startup graph: bridge wrappers,
+The mandatory Julia 1.13 sysimage freezes the stable startup graph: bridge wrappers,
 TeX and geometry support, animation helpers, runtime policy and hosting, evaluation,
-Terminal infrastructure, and their eager package dependencies. `script.jl` remains an
-idempotent bootstrap, loading this graph from source only when the image sentinel is
-absent.
+Terminal infrastructure, and their eager package dependencies. PackageCompiler uses
+Julia 1.13 image compression, and `script.jl` remains an idempotent bootstrap guarded by
+the image sentinel.
 
 Catalog descriptor data, `nullanimation.jl`, harness scenarios, and individual animation
 implementations remain generation-owned. Every reload creates a fresh content module,
 includes that data again, and shares only the stable catalog machinery from the image.
 Core-runtime edits therefore require rebuilding the image and restarting Euclid, while
-animation and catalog-content edits retain the normal asset hot-reload behavior.
+animation and catalog-content edits retain the normal asset hot-reload behavior. Normal
+builds fingerprint the static graph, dependency lock, Julia toolchain, platform, and image
+options and reuse a verified image under `.build/sysimage-cache`. The `sysimage` command
+forces a clean stock-based rebuild; an existing Euclid image is never used as its base.
 
-`julia tools/make.jl sysimage-benchmark` builds the harness once and compares identical
-stock and image-backed runs. It reports image build cost and size, first custom startup,
-warm medians, speedup, and break-even launches without imposing a performance threshold.
-Ordinary build and asset commands remove the matching stale image deliberately.
+`assets.pkg` carries the image, input fingerprint, and artifact SHA-256. Startup verifies
+and materializes it at an immutable digest-addressed user-cache path before calling
+`jl_init_with_image_file`; corruption triggers one fresh extraction and then a hard
+failure, never stock-Julia fallback. Live asset reload compares the candidate fingerprint
+before publication. A changed image requires restart and cannot create a mixed runtime.
 
 ## Normal Frame Integration
 

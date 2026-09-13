@@ -11,6 +11,7 @@ PackageCompiler.create_sysimage(
     sysimage_path=abspath(ARGS[1]),
     project=JuliaRoot,
     incremental=true,
+    compress_sysimage=true,
     script=joinpath(JuliaRoot, "sysimage_core.jl"),
     precompile_execution_file=joinpath(JuliaRoot, "sysimage_workload.jl"),
     import_into_main=false)

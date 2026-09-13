@@ -1,5 +1,6 @@
 package files
 
+import "core:fmt"
 import "core:os"
 import "core:path/filepath"
 import "core:testing"
@@ -56,6 +57,31 @@ write_required_entry :: proc(root_dir, rel_path: string) -> bool {
     return os.write_entire_file(full_path, []u8{'x'}) == nil
 }
 
+//   Write the required image and its matching package manifest.
+write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    image_path := fmt.tprintf(
+        "sysimage/%s/%s", fingerprint, PACKAGED_SYSIMAGE_FILENAME)
+    if !write_required_entry(unpack_dir, image_path) {
+        return false
+    }
+    manifest_path, manifest_err := filepath.join(
+        []string{unpack_dir, "manifest.txt"}, context.allocator)
+    if manifest_err != nil {
+        return false
+    }
+    defer delete(manifest_path)
+    manifest := fmt.tprintf(
+        "schema_version=2\nsysimage_path=%s\n" +
+        "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
+        "sysimage_platform=%s\n",
+        image_path, fingerprint, fingerprint, PACKAGED_SYSIMAGE_PLATFORM)
+    if os.write_entire_file(manifest_path, manifest) != nil {
+        return false
+    }
+    return true
+}
+
 //   Build the full required unpack tree (scripts, icon, fonts, manifest).
 build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
     required := []string{
@@ -63,13 +89,15 @@ build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
         "NewCMSansMath-Regular.otf",
-        "manifest.txt",
     }
 
     for rel_path in required {
         if !write_required_entry(unpack_dir, rel_path) {
             return false
         }
+    }
+    if !write_test_sysimage_manifest(unpack_dir) {
+        return false
     }
 
     when ODIN_OS == .Linux {
@@ -173,6 +201,75 @@ prepare_unpack_directory_clears_and_recreates :: proc(t: ^testing.T) {
     testing.expect(t, prepare_unpack_directory(sandbox))
     testing.expect(t, os.is_directory(sandbox))
     testing.expect(t, !os.exists(nested_file_path))
+}
+
+//   Verify candidate publication replaces valid trees and preserves them on failure.
+@(test)
+publish_candidate_unpack_directory_is_transactional :: proc(t: ^testing.T) {
+    sandbox, ok := prepare_sandbox_dir("euclid_publish_unpack")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+    testing.expect(t, ok)
+    active := fmt.tprintf("%s/active", sandbox)
+    candidate := fmt.tprintf("%s/candidate", sandbox)
+    backup := fmt.tprintf("%s/backup", sandbox)
+    testing.expect(t, os.make_directory_all(active) == nil)
+    testing.expect(t, write_required_entry(active, "old.txt"))
+
+    testing.expect(t, !publish_candidate_unpack_directory(
+        fmt.tprintf("%s/missing", sandbox), active, backup))
+    testing.expect(t, os.exists(fmt.tprintf("%s/old.txt", active)))
+
+    testing.expect(t, os.make_directory_all(candidate) == nil)
+    testing.expect(t, write_required_entry(candidate, "new.txt"))
+    testing.expect(t, publish_candidate_unpack_directory(candidate, active, backup))
+    testing.expect(t, !os.exists(fmt.tprintf("%s/old.txt", active)))
+    testing.expect(t, os.exists(fmt.tprintf("%s/new.txt", active)))
+}
+
+//   Verify a rejected candidate archive leaves the active asset tree untouched.
+@(test)
+replace_packaged_asset_tree_preserves_active_on_rejection :: proc(t: ^testing.T) {
+    sandbox, ok := prepare_sandbox_dir("euclid_incompatible_unpack")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+    testing.expect(t, ok)
+    active := fmt.tprintf("%s/assets", sandbox)
+    archive := fmt.tprintf("%s/assets.pkg", sandbox)
+    testing.expect(t, os.make_directory_all(active) == nil)
+    testing.expect(t, write_required_entry(active, "active.txt"))
+    testing.expect(t, os.write_entire_file(archive, "invalid archive") == nil)
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    testing.expect(t, !replace_packaged_asset_tree(archive, active, fingerprint))
+    testing.expect(t, os.exists(fmt.tprintf("%s/active.txt", active)))
+}
+
+//   Verify digest-addressed image materialization reuses and repairs its cache.
+@(test)
+materialize_packaged_sysimage_repairs_corrupt_cache :: proc(t: ^testing.T) {
+    sandbox, ok := prepare_sandbox_dir("euclid_sysimage_materialize")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+    testing.expect(t, ok)
+    unpack_dir := fmt.tprintf("%s/assets", sandbox)
+    image_relative := fmt.tprintf("sysimage/input/%s", PACKAGED_SYSIMAGE_FILENAME)
+    testing.expect(t, os.make_directory_all(unpack_dir) == nil)
+    testing.expect(t, write_required_entry(unpack_dir, image_relative))
+    digest := "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    metadata := Packaged_Sysimage_Metadata{image_relative, "input", digest}
+
+    cached, cached_ok := materialize_packaged_sysimage(
+        unpack_dir, &metadata, context.allocator)
+    defer delete(cached)
+    testing.expect(t, cached_ok)
+    testing.expect(t, file_matches_sha256(cached, digest))
+    testing.expect(t, os.write_entire_file(cached, "corrupt") == nil)
+    repaired, repaired_ok := materialize_packaged_sysimage(
+        unpack_dir, &metadata, context.allocator)
+    defer delete(repaired)
+    testing.expect(t, repaired_ok)
+    testing.expect_value(t, repaired, cached)
+    testing.expect(t, file_matches_sha256(repaired, digest))
 }
 
 //   Verify resolve_writable_gif_output_dir rejects empty input and creates the dir.

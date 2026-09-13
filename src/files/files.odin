@@ -5,6 +5,7 @@ package files
 
 import "core:bytes"
 import "core:compress/gzip"
+import "core:crypto/sha2"
 import "core:fmt"
 import "core:mem"
 import "core:os"
@@ -16,6 +17,19 @@ ASSET_PACKAGE_ROOT_DIR :: "EuclidApp"
 ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
 GIF_OUTPUT_DIR_NAME :: "gifs"
+SYSIMAGE_CACHE_DIR_NAME :: "sysimages"
+ASSET_MANIFEST_MAX_BYTES :: 4096
+
+when ODIN_OS == .Windows {
+    PACKAGED_SYSIMAGE_FILENAME :: "euclid-sysimage.dll"
+    PACKAGED_SYSIMAGE_PLATFORM :: "nt-" + ODIN_ARCH_STRING
+} else when ODIN_OS == .Darwin {
+    PACKAGED_SYSIMAGE_FILENAME :: "euclid-sysimage.dylib"
+    PACKAGED_SYSIMAGE_PLATFORM :: "darwin-" + ODIN_ARCH_STRING
+} else {
+    PACKAGED_SYSIMAGE_FILENAME :: "euclid-sysimage.so"
+    PACKAGED_SYSIMAGE_PLATFORM :: "linux-" + ODIN_ARCH_STRING
+}
 
 Asset_Root_Config :: struct {
     asset_root_override: string,
@@ -26,6 +40,280 @@ Unpack_Targets :: struct {
     archive_path: string,
     unpack_dir:   string,
     ok:           bool,
+}
+
+Packaged_Sysimage_Metadata :: struct {
+    relative_path:     string,
+    input_fingerprint: string,
+    artifact_sha256:   string,
+}
+
+Manifest_Parse_State :: struct {
+    metadata:    Packaged_Sysimage_Metadata,
+    schema_seen: bool,
+    path_seen:   bool,
+    input_seen:  bool,
+    digest_seen: bool,
+    platform_ok: bool,
+}
+
+//   Release strings retained by packaged sysimage metadata.
+destroy_packaged_sysimage_metadata :: proc(
+    metadata: ^Packaged_Sysimage_Metadata, allocator: mem.Allocator) {
+    if metadata == nil {
+        return
+    }
+    delete(metadata.relative_path, allocator)
+    delete(metadata.input_fingerprint, allocator)
+    delete(metadata.artifact_sha256, allocator)
+    metadata^ = {}
+}
+
+//   Return whether text is one full lowercase SHA-256 digest.
+is_lower_sha256 :: proc(value: string) -> bool {
+    if len(value) != 64 {
+        return false
+    }
+    for character in value {
+        if !(character >= '0' && character <= '9') &&
+           !(character >= 'a' && character <= 'f') {
+            return false
+        }
+    }
+    return true
+}
+
+//   Capture one recognized manifest field while rejecting duplicates.
+assign_sysimage_manifest_field :: proc(
+    state: ^Manifest_Parse_State, key, value: string,
+    allocator: mem.Allocator) -> bool {
+    switch key {
+    case "schema_version":
+        if state.schema_seen || value != "2" { return false }
+        state.schema_seen = true
+    case "sysimage_path":
+        if state.path_seen { return false }
+        state.metadata.relative_path = strings.clone(value, allocator)
+        state.path_seen = true
+    case "sysimage_input_fingerprint":
+        if state.input_seen { return false }
+        state.metadata.input_fingerprint = strings.clone(value, allocator)
+        state.input_seen = true
+    case "sysimage_artifact_sha256":
+        if state.digest_seen { return false }
+        state.metadata.artifact_sha256 = strings.clone(value, allocator)
+        state.digest_seen = true
+    case "sysimage_platform":
+        state.platform_ok = value == PACKAGED_SYSIMAGE_PLATFORM
+    }
+    return true
+}
+
+//   Parse and validate bounded packaged sysimage metadata.
+parse_packaged_sysimage_manifest :: proc(
+    source: string, allocator: mem.Allocator) -> (Packaged_Sysimage_Metadata, bool) {
+    if len(source) == 0 || len(source) > ASSET_MANIFEST_MAX_BYTES {
+        return {}, false
+    }
+    state := Manifest_Parse_State{}
+    remaining := source
+    for len(remaining) > 0 {
+        newline := strings.index_byte(remaining, '\n')
+        line := remaining
+        if newline >= 0 {
+            line = remaining[:newline]
+            remaining = remaining[newline + 1:]
+        } else {
+            remaining = ""
+        }
+        separator := strings.index_byte(line, '=')
+        if separator <= 0 || !assign_sysimage_manifest_field(
+            &state, line[:separator], line[separator + 1:], allocator) {
+            destroy_packaged_sysimage_metadata(&state.metadata, allocator)
+            return {}, false
+        }
+    }
+    valid := state.schema_seen && state.path_seen && state.input_seen &&
+        state.digest_seen && state.platform_ok &&
+        is_safe_asset_relative_path(state.metadata.relative_path) &&
+        strings.has_prefix(state.metadata.relative_path, "sysimage/") &&
+        strings.has_suffix(state.metadata.relative_path, PACKAGED_SYSIMAGE_FILENAME) &&
+        is_lower_sha256(state.metadata.input_fingerprint) &&
+        is_lower_sha256(state.metadata.artifact_sha256)
+    if !valid {
+        destroy_packaged_sysimage_metadata(&state.metadata, allocator)
+    }
+    return state.metadata, valid
+}
+
+//   Read validated sysimage metadata from one extracted asset tree.
+read_packaged_sysimage_metadata :: proc(
+    unpack_dir: string, allocator: mem.Allocator) -> (Packaged_Sysimage_Metadata, bool) {
+    manifest_path, path_err := filepath.join(
+        []string{unpack_dir, "manifest.txt"}, context.temp_allocator)
+    if path_err != nil {
+        return {}, false
+    }
+    source, read_err := os.read_entire_file(manifest_path, context.temp_allocator)
+    if read_err != nil {
+        return {}, false
+    }
+    return parse_packaged_sysimage_manifest(string(source), allocator)
+}
+
+//   Compare a SHA-256 digest with its canonical lowercase hexadecimal form.
+sha256_digest_matches :: proc(digest: [32]byte, expected: string) -> bool {
+    HEX :: "0123456789abcdef"
+    hexadecimal := HEX
+    if len(expected) != 64 {
+        return false
+    }
+    for value, index in digest {
+          if expected[index * 2] != hexadecimal[value >> 4] ||
+              expected[index * 2 + 1] != hexadecimal[value & 0x0f] {
+            return false
+        }
+    }
+    return true
+}
+
+//   Verify one regular file against its expected SHA-256 without loading it whole.
+file_matches_sha256 :: proc(path, expected: string) -> bool {
+    file, open_err := os.open(path)
+    if open_err != nil {
+        return false
+    }
+    defer os.close(file)
+    hash := sha2.Context_256{}
+    sha2.init_256(&hash)
+    buffer: [64 * 1024]byte
+    for {
+        count, read_err := os.read(file, buffer[:])
+        if count > 0 {
+            sha2.update(&hash, buffer[:count])
+        }
+        if read_err == .EOF {
+            break
+        }
+        if read_err != nil {
+            return false
+        }
+        if count == 0 {
+            break
+        }
+    }
+    digest: [32]byte
+    sha2.final(&hash, digest[:])
+    return sha256_digest_matches(digest, expected)
+}
+
+//   Return the immutable cache root beside the mutable unpack directory.
+resolve_sysimage_cache_root :: proc(
+    unpack_dir: string, allocator: mem.Allocator) -> (string, bool) {
+    package_root := filepath.dir(unpack_dir)
+    path, path_err := filepath.join(
+        []string{package_root, SYSIMAGE_CACHE_DIR_NAME}, allocator)
+    return path, path_err == nil && len(path) > 0
+}
+
+//   Copy and atomically publish one verified image at an empty destination path.
+publish_verified_sysimage_copy :: proc(
+    source, destination, expected_digest: string) -> bool {
+    candidate := fmt.tprintf("%s.candidate", destination)
+    _ = os.remove(candidate)
+    if os.copy_file(candidate, source) != nil ||
+       !file_matches_sha256(candidate, expected_digest) ||
+       os.rename(candidate, destination) != nil ||
+       !file_matches_sha256(destination, expected_digest) {
+        _ = os.remove(candidate)
+        return false
+    }
+    return true
+}
+
+//   Materialize and verify one image at its immutable digest-addressed path.
+materialize_packaged_sysimage :: proc(
+    unpack_dir: string, metadata: ^Packaged_Sysimage_Metadata,
+    allocator: mem.Allocator) -> (string, bool) {
+    source, source_err := filepath.join(
+        []string{unpack_dir, metadata.relative_path}, context.temp_allocator)
+    if source_err != nil || !file_matches_sha256(source, metadata.artifact_sha256) {
+        return "", false
+    }
+    cache_root, root_ok := resolve_sysimage_cache_root(
+        unpack_dir, context.temp_allocator)
+    if !root_ok {
+        return "", false
+    }
+    directory, directory_err := filepath.join(
+        []string{cache_root, metadata.artifact_sha256}, context.temp_allocator)
+    if directory_err != nil || !ensure_directory_exists(directory) {
+        return "", false
+    }
+    destination, destination_err := filepath.join(
+        []string{directory, PACKAGED_SYSIMAGE_FILENAME}, allocator)
+    if destination_err != nil {
+        return "", false
+    }
+    if file_matches_sha256(destination, metadata.artifact_sha256) {
+        return destination, true
+    }
+    _ = os.remove(destination)
+    if !publish_verified_sysimage_copy(
+        source, destination, metadata.artifact_sha256) {
+        delete(destination, allocator)
+        return "", false
+    }
+    return destination, true
+}
+
+//   Materialize the image declared by the currently extracted asset tree.
+materialize_current_packaged_sysimage :: proc(
+    allocator: mem.Allocator) -> (string, bool) {
+    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    if !unpack_ok {
+        return "", false
+    }
+    metadata, metadata_ok := read_packaged_sysimage_metadata(
+        unpack_dir, context.temp_allocator)
+    if !metadata_ok {
+        return "", false
+    }
+    return materialize_packaged_sysimage(unpack_dir, &metadata, allocator)
+}
+
+//   Resolve the mandatory verified image, retrying one archive extraction on damage.
+resolve_packaged_sysimage_path :: proc(
+    config: ^Asset_Root_Config = nil,
+    allocator := context.temp_allocator) -> (string, bool) {
+    exe_dir, exe_ok := resolve_executable_dir_with_config(
+        config, context.temp_allocator)
+    if !exe_ok || !ensure_packaged_assets_unpacked_with_force(exe_dir, false) {
+        return "", false
+    }
+    path, ok := materialize_current_packaged_sysimage(allocator)
+    if ok {
+        return path, true
+    }
+    if !ensure_packaged_assets_unpacked_with_force(exe_dir, true) {
+        return "", false
+    }
+    return materialize_current_packaged_sysimage(allocator)
+}
+
+//   Return the active extracted package's validated sysimage input fingerprint.
+packaged_sysimage_input_fingerprint :: proc(
+    allocator: mem.Allocator) -> (string, bool) {
+    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    if !unpack_ok {
+        return "", false
+    }
+    metadata, metadata_ok := read_packaged_sysimage_metadata(
+        unpack_dir, context.temp_allocator)
+    if !metadata_ok {
+        return "", false
+    }
+    return strings.clone(metadata.input_fingerprint, allocator), true
 }
 
 //   Construct a packaged-asset-root config that can override the executable-root lookup.
@@ -169,6 +457,22 @@ reload_packaged_assets_root :: proc(config: ^Asset_Root_Config = nil) -> bool {
     }
 
     return ensure_packaged_assets_unpacked_with_force(exe_dir, true)
+}
+
+//   Reload assets only when their image fingerprint matches the active runtime.
+reload_compatible_packaged_assets_root :: proc(
+    expected_fingerprint: string,
+    config: ^Asset_Root_Config = nil) -> bool {
+    exe_dir, exe_ok := resolve_executable_dir_with_config(config, context.temp_allocator)
+    if !exe_ok || !is_lower_sha256(expected_fingerprint) {
+        return false
+    }
+    targets := resolve_unpack_targets(exe_dir)
+    if !targets.ok {
+        return false
+    }
+    return replace_packaged_asset_tree(
+        targets.archive_path, targets.unpack_dir, expected_fingerprint)
 }
 
 //   Force a fresh unpack of assets.pkg from an explicit root config.
@@ -327,15 +631,8 @@ resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string
     return unpack_dir, true
 }
 
-//   Check whether the unpack directory contains required baseline asset entries.
-//
-// Notes:
-//   - This is a lightweight readiness check, not a full archive integrity check.
-is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
-    if !os.is_directory(unpack_dir) {
-        return false
-    }
-
+//   Return whether all fixed baseline files exist in one extracted tree.
+baseline_asset_entries_exist :: proc(unpack_dir: string) -> bool {
     required_entries := []string{
         "julia/script.jl",
         "compass_icon.png",
@@ -351,22 +648,40 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
             return false
         }
     }
-
-    when ODIN_OS == .Linux {
-        path, path_err := filepath.join(
-            []string{unpack_dir, "terminfo/e/euclid"}, context.temp_allocator)
-        if path_err != nil || !os.exists(path) {
-            return false
-        }
-    } else when ODIN_OS == .Darwin {
-        path, path_err := filepath.join(
-            []string{unpack_dir, "terminfo/65/euclid"}, context.temp_allocator)
-        if path_err != nil || !os.exists(path) {
-            return false
-        }
-    }
-
     return true
+}
+
+//   Return whether this platform's compiled terminfo entry exists when required.
+platform_terminfo_exists :: proc(unpack_dir: string) -> bool {
+    relative_path := ""
+    when ODIN_OS == .Linux {
+        relative_path = "terminfo/e/euclid"
+    } else when ODIN_OS == .Darwin {
+        relative_path = "terminfo/65/euclid"
+    } else {
+        return true
+    }
+    path, path_err := filepath.join(
+        []string{unpack_dir, relative_path}, context.temp_allocator)
+    return path_err == nil && os.exists(path)
+}
+
+//   Check whether an unpack directory has baseline assets and a declared image.
+is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
+    if !os.is_directory(unpack_dir) || !baseline_asset_entries_exist(unpack_dir) {
+        return false
+    }
+    metadata, metadata_ok := read_packaged_sysimage_metadata(
+        unpack_dir, context.temp_allocator)
+    if !metadata_ok {
+        return false
+    }
+    image_path, image_err := filepath.join(
+        []string{unpack_dir, metadata.relative_path}, context.temp_allocator)
+    if image_err != nil || !os.exists(image_path) {
+        return false
+    }
+    return platform_terminfo_exists(unpack_dir)
 }
 
 //   Resolve archive/unpack paths and validate baseline unpack prerequisites.
@@ -441,6 +756,57 @@ decode_and_extract_archive_payload :: proc(archive_path, unpack_dir: string) -> 
     return true
 }
 
+//   Publish a validated candidate tree while preserving the previous tree on failure.
+publish_candidate_unpack_directory :: proc(
+    candidate_dir, unpack_dir, backup_dir: string) -> bool {
+    _ = os.remove_all(backup_dir)
+    had_active := os.is_directory(unpack_dir)
+    if had_active && os.rename(unpack_dir, backup_dir) != nil {
+        fmt.eprintln("asset unpack failed: could not preserve active asset tree")
+        return false
+    }
+    if os.rename(candidate_dir, unpack_dir) != nil {
+        if had_active {
+            _ = os.rename(backup_dir, unpack_dir)
+        }
+        fmt.eprintln("asset unpack failed: could not publish candidate asset tree")
+        return false
+    }
+    _ = os.remove_all(backup_dir)
+    return true
+}
+
+//   Extract and validate an archive into a sibling candidate directory.
+replace_packaged_asset_tree :: proc(
+    archive_path, unpack_dir: string,
+    expected_fingerprint: string = "") -> bool {
+    candidate_dir := fmt.tprintf("%s.candidate", unpack_dir)
+    backup_dir := fmt.tprintf("%s.previous", unpack_dir)
+    if !prepare_unpack_directory(candidate_dir) {
+        return false
+    }
+    if !decode_and_extract_archive_payload(archive_path, candidate_dir) ||
+       !is_assets_unpack_ready(candidate_dir) {
+        _ = os.remove_all(candidate_dir)
+        fmt.eprintln("asset unpack failed: candidate asset tree is incomplete")
+        return false
+    }
+    if len(expected_fingerprint) > 0 {
+        metadata, metadata_ok := read_packaged_sysimage_metadata(
+            candidate_dir, context.temp_allocator)
+        if !metadata_ok || metadata.input_fingerprint != expected_fingerprint {
+            _ = os.remove_all(candidate_dir)
+            fmt.eprintln("Julia asset reload requires restart: sysimage changed")
+            return false
+        }
+    }
+    if !publish_candidate_unpack_directory(candidate_dir, unpack_dir, backup_dir) {
+        _ = os.remove_all(candidate_dir)
+        return false
+    }
+    return true
+}
+
 //   Unpack assets.pkg for an executable directory with optional forced refresh.
 //
 // Notes:
@@ -458,9 +824,5 @@ ensure_packaged_assets_unpacked_with_force :: proc(
         return early_result
     }
 
-    if !prepare_unpack_directory(targets.unpack_dir) {
-        return false
-    }
-
-    return decode_and_extract_archive_payload(targets.archive_path, targets.unpack_dir)
+    return replace_packaged_asset_tree(targets.archive_path, targets.unpack_dir)
 }

@@ -91,8 +91,6 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test parse_driver_invocation(["evidence", "capabilities"]).action == :evidence
         @test parse_driver_invocation(["scenario", "example"]).action == :scenario
         @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
-        @test parse_driver_invocation(["sysimage-benchmark"]).action ==
-            :sysimage_benchmark
         @test_throws ErrorException parse_driver_invocation(["--run"])
         @test_throws ErrorException parse_driver_invocation(["-ABr"])
         @test_throws ErrorException parse_driver_invocation(["unknown"])
@@ -154,9 +152,6 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             odin_build_command("-ljulia", false, true))
         @test debug_assets_archive_path() ==
             joinpath(dirname(debug_app_binary_path()), "assets.pkg")
-        @test dirname(julia_sysimage_path()) == dirname(app_binary_path())
-        @test dirname(julia_sysimage_path(true)) ==
-            dirname(debug_app_binary_path())
         @test "-debug" in command
         @test "-o:none" in command
         @test "-vet" in command
@@ -237,28 +232,49 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test !unit_command_runs_odin(["julia"])
     end
 
-    @testset "sysimage benchmark calculations" begin
-        @test benchmark_median([4.0, 1.0, 3.0]) == 3.0
-        @test benchmark_median([4.0, 1.0, 3.0, 2.0]) == 2.5
-        @test_throws ErrorException benchmark_median(Float64[])
-
-        result = SysimageBenchmarkResult(120.0, 400_000_000, 1.2, 2.0, 0.5)
-        speedup, break_even = sysimage_benchmark_summary(result)
-        @test speedup == 4.0
-        @test break_even == 80.0
-        _, no_break_even = sysimage_benchmark_summary(
-            SysimageBenchmarkResult(120.0, 400_000_000, 1.2, 0.5, 0.5))
-        @test isinf(no_break_even)
+    @testset "sysimage input fingerprint" begin
+        relative_inputs = replace.(
+            relpath.(sysimage_stable_input_paths(), JULIA_TEST_PROJECT), '\\' => '/')
+        @test "animation_catalog.jl" in relative_inputs
+        @test !("animation_catalog_data.jl" in relative_inputs)
+        @test !("animation_catalog_generation.jl" in relative_inputs)
+        @test !("nullanimation.jl" in relative_inputs)
+        @test !any(startswith(path, "elements/") for path in relative_inputs)
 
         mktempdir() do root
-            image_path = joinpath(root, "image.so")
-            write(image_path, "image")
-            @test_throws ErrorException with_hidden_file(image_path) do
-                @test !isfile(image_path)
-                error("expected failure")
-            end
-            @test read(image_path, String) == "image"
-            @test !ispath(image_path * ".benchmark-stock")
+            first_path = joinpath(root, "first.jl")
+            second_path = joinpath(root, "second.jl")
+            write(first_path, "first")
+            write(second_path, "second")
+            identity = "julia=test;platform=test"
+            first = fingerprint_sysimage_inputs(
+                [first_path, second_path], root; identity)
+            @test first == fingerprint_sysimage_inputs(
+                [first_path, second_path], root; identity)
+            @test first != fingerprint_sysimage_inputs(
+                [first_path, second_path], root; identity=identity * ";changed")
+            write(second_path, "changed")
+            @test first != fingerprint_sysimage_inputs(
+                [first_path, second_path], root; identity)
+        end
+    end
+
+    @testset "sysimage cache validation" begin
+        mktempdir() do cache_root
+            fingerprint = repeat("a", 64)
+            directory = sysimage_cache_dir(fingerprint; cache_root)
+            mkpath(directory)
+            image_path = joinpath(directory, julia_sysimage_filename())
+            write(image_path, "image bytes")
+            artifact = JuliaSysimageArtifact(
+                fingerprint, sysimage_artifact_sha256(image_path), image_path)
+            write_sysimage_cache_metadata(joinpath(directory, "metadata.toml"), artifact)
+
+            cached = load_cached_julia_sysimage(fingerprint; cache_root)
+            @test cached !== nothing
+            @test cached.artifact_sha256 == artifact.artifact_sha256
+            write(image_path, "corrupt")
+            @test load_cached_julia_sysimage(fingerprint; cache_root) === nothing
         end
     end
 

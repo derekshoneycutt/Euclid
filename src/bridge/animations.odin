@@ -910,7 +910,10 @@ refresh_packaged_assets :: proc(
     state: ^core.Euclid_General_State,
     service: ^Julia_Runtime_Service, archive_mtime: i64) -> bool {
 
-    if !files.reload_packaged_assets_root() {
+    fingerprint, fingerprint_ok := files.packaged_sysimage_input_fingerprint(
+        context.temp_allocator)
+    if !fingerprint_ok ||
+       !files.reload_compatible_packaged_assets_root(fingerprint) {
         fmt.eprintln("Julia asset reload skipped: failed to re-extract assets package")
         mark_julia_reload_failed(service, archive_mtime)
         record_runtime_reload_event(state, "runtime.reload_rolled_back")
