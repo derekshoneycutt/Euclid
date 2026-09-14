@@ -12,13 +12,40 @@ DUST_GRID_CELL_SIZE :: 0.02
 DUST_GRID_DIM :: 50
 DUST_GRID_DIM_SQUARED :: DUST_GRID_DIM * DUST_GRID_DIM
 DUST_COLLISION_CELL_SAMPLE_CAP :: 128
-DUST_COLLISION_RADIUS :: 0.004
-DUST_COLLISION_GRID_CELL_SIZE :: DUST_COLLISION_RADIUS
+DUST_COLLISION_MIN_SEPARATION :: 0.004
+DUST_COLLISION_GRID_CELL_SIZE :: DUST_COLLISION_MIN_SEPARATION
 DUST_COLLISION_GRID_DIM :: 250
 DUST_COLLISION_GRID_CELL_COUNT :: DUST_COLLISION_GRID_DIM * DUST_COLLISION_GRID_DIM
 DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
 DUST_TOOL_CONTACT_CAP :: 64
 DUST_CONTACT_CANDIDATE_WORD_COUNT :: (MAX_LOW_PARTICLES + 63) / 64
+DUST_RELAXATION_LEAVES_PER_PARENT :: 16
+DUST_RELAXATION_LEAF_COUNT ::
+    DUST_GRID_DIM_SQUARED * DUST_RELAXATION_LEAVES_PER_PARENT
+SCENARIO_DUST_EMISSION_REQUEST_CAP :: 16
+
+// Spatial layout for one deterministic diagnostic dust emission.
+Dust_Emission_Distribution :: enum u8 {
+    Point,
+    Disc,
+    Grid,
+}
+
+// Describe one bounded worker-owned diagnostic dust emission request.
+Scenario_Dust_Emission_Request :: struct {
+    distribution: Dust_Emission_Distribution,
+    count: u32,
+    x, y, radius: f32,
+    seed: u64,
+    correlation: u64,
+    generation: u64,
+}
+
+// Fixed display-to-particle handoff storage for scenario dust requests.
+Dust_Emission_Request_Queue :: struct {
+    items: [SCENARIO_DUST_EMISSION_REQUEST_CAP]Scenario_Dust_Emission_Request,
+    count: int,
+}
 
 // Describe one ordered endpoint push with an optional sampled compass sweep.
 Dust_Tool_Contact :: struct {
@@ -86,6 +113,37 @@ Particle_System :: struct {
     dust_pair_count: int,
     dust_pair_dropped_count: int,
     dust_collision_frame: u64,
+    dust_collision_correction_count: int,
+    dust_collision_max_correction: f32,
+    dust_collision_rest_contact_count: int,
+    dust_floor_rest_count: int,
+    dust_collision_refined_cell_count: int,
+
+    dust_relaxation_parent_counts: [DUST_GRID_DIM_SQUARED]i32,
+    dust_relaxation_parent_levels: [DUST_GRID_DIM_SQUARED]u8,
+    dust_relaxation_leaf_counts: [DUST_RELAXATION_LEAF_COUNT]i32,
+    dust_relaxation_leaf_momentum_x: [DUST_RELAXATION_LEAF_COUNT]f32,
+    dust_relaxation_leaf_momentum_y: [DUST_RELAXATION_LEAF_COUNT]f32,
+    dust_relaxation_leaf_residual_energy: [DUST_RELAXATION_LEAF_COUNT]f32,
+    dust_relaxation_leaf_max_impulse: [DUST_RELAXATION_LEAF_COUNT]f32,
+    dust_relaxation_leaf_max_correction: [DUST_RELAXATION_LEAF_COUNT]f32,
+    dust_relaxation_leaf_quiet_frames: [DUST_RELAXATION_LEAF_COUNT]u16,
+    dust_relaxation_leaf_last_seen: [DUST_RELAXATION_LEAF_COUNT]u64,
+    dust_relaxation_leaf_indices: [MAX_LOW_PARTICLES]i32,
+    dust_relaxation_active_leaves: [DUST_RELAXATION_LEAF_COUNT]i32,
+    dust_relaxation_active_leaf_count: int,
+    dust_relaxation_dense_leaf_count: int,
+    dust_relaxation_energy_removed: f32,
+    dust_activity_frames: [MAX_LOW_PARTICLES]u8,
+    dust_contact_impulse: [MAX_LOW_PARTICLES]f32,
+    dust_contact_correction: [MAX_LOW_PARTICLES]f32,
+    dust_sleep_quiet_frames: [MAX_LOW_PARTICLES]u16,
+    dust_sleeping: [MAX_LOW_PARTICLES]bool,
+    dust_sleeping_count: int,
+    dust_sleep_transition_count: u64,
+    dust_wake_transition_count: u64,
+    dust_sleeping_pair_skip_count: u64,
+    dust_relaxation_frame: u64,
 
     next_index: int,
     spawn_timer: f32,

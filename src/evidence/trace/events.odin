@@ -116,6 +116,7 @@ Kind :: enum u16 {
     // Particles (320-359).
     Particle_Emission_Committed = 320,
     Particle_Emission_Rejected = 321,
+    Dust_Emission_Committed = 322,
 
     // View and presentation (360-419).
     Frame_Presented = 360,

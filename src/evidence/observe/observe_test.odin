@@ -25,6 +25,22 @@ observe_test_seed_display_scalars :: proc(source: ^Display_Source) {
     source^.shape_world^.transforms.count = 4
     source^.shape_world^.constraints.count = 3
     source^.particle_system^.next_index = 12
+    source^.particle_system^.use_max_dust_particles = 3
+    source^.particle_system^.low_particles[0].alive = true
+    source^.particle_system^.low_particles[1].alive = true
+    source^.particle_system^.low_particles[2].alive = true
+    source^.particle_system^.low_particles.pos_z[2] = 0.25
+    source^.particle_system^.dust_sleeping[1] = true
+    source^.particle_system^.dust_relaxation_dense_leaf_count = 2
+    source^.particle_system^.dust_collision_refined_cell_count = 4
+    source^.particle_system^.dust_pair_count = 7
+    source^.particle_system^.dust_pair_dropped_count = 3
+    source^.particle_system^.dust_sleeping_pair_skip_count = 11
+    source^.particle_system^.dust_collision_correction_count = 5
+    source^.particle_system^.dust_collision_max_correction = 0.125
+    source^.particle_system^.dust_relaxation_energy_removed = 0.25
+    source^.particle_system^.dust_sleep_transition_count = 13
+    source^.particle_system^.dust_wake_transition_count = 17
     source^.julia_service^.runtime_generation = 2
     source^.julia_service^.animation_tick_sequence = 9
 }
@@ -42,6 +58,20 @@ observe_test_expect_display_scalars :: proc(
     testing.expect_value(t, result.point_count, 4)
     testing.expect_value(t, result.constraint_count, 3)
     testing.expect_value(t, result.particle_count, 12)
+    testing.expect_value(t, result.dust_live_count, 3)
+    testing.expect_value(t, result.dust_grounded_awake_count, 1)
+    testing.expect_value(t, result.dust_grounded_sleeping_count, 1)
+    testing.expect_value(t, result.dust_airborne_count, 1)
+    testing.expect_value(t, result.dust_dense_leaf_count, 2)
+    testing.expect_value(t, result.dust_refined_cell_count, 4)
+    testing.expect_value(t, result.dust_collision_pair_count, 7)
+    testing.expect_value(t, result.dust_collision_dropped_pair_count, 3)
+    testing.expect_value(t, result.dust_sleeping_pair_skip_count, u64(11))
+    testing.expect_value(t, result.dust_collision_correction_count, 5)
+    testing.expect_value(t, result.dust_collision_max_correction, f32(0.125))
+    testing.expect_value(t, result.dust_relaxation_energy_removed, f32(0.25))
+    testing.expect_value(t, result.dust_sleep_transition_count, u64(13))
+    testing.expect_value(t, result.dust_wake_transition_count, u64(17))
     testing.expect_value(t, result.runtime_generation, u64(2))
     testing.expect_value(t, result.animation_tick_sequence, u64(9))
     testing.expect(t, result.required_evidence_complete)

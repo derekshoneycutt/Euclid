@@ -42,6 +42,7 @@ Display :: struct {
     fixed_step : u64,
     simulation_time : f32,
     simulation_paused : bool,
+    animation_policy_paused : bool,
 
     // Julia runtime lifecycle, active request, and submission pressure.
     runtime_lifecycle : bridgemodel.Julia_Lifecycle_State,
@@ -91,6 +92,22 @@ Display :: struct {
     point_count : int,
     constraint_count : int,
     particle_count : int,
+
+    // Particle-owned dust settling and bounded contact diagnostics.
+    dust_live_count : int,
+    dust_grounded_awake_count : int,
+    dust_grounded_sleeping_count : int,
+    dust_airborne_count : int,
+    dust_dense_leaf_count : int,
+    dust_refined_cell_count : int,
+    dust_collision_pair_count : int,
+    dust_collision_dropped_pair_count : int,
+    dust_sleeping_pair_skip_count : u64,
+    dust_collision_correction_count : int,
+    dust_collision_max_correction : f32,
+    dust_relaxation_energy_removed : f32,
+    dust_sleep_transition_count : u64,
+    dust_wake_transition_count : u64,
 
     // Dynamic-view activation and pending invalidation work.
     dynview_enabled : bool,
@@ -256,6 +273,7 @@ observe_display_ui :: proc(
     source: ^Display_Source, result: ^Display) {
     if source.ui_runtime != nil {
         result.simulation_paused = source.ui_runtime.simulation_paused
+        result.animation_policy_paused = source.ui_runtime.animation_policy_paused
         result.view_text_scroll_y = source.ui_runtime.view_text_scroll_y
         result.view_text_scroll_max = source.ui_runtime.view_text_scroll_max
         result.vertical_split_x = source.ui_runtime.vertical_split_x
@@ -265,6 +283,36 @@ observe_display_ui :: proc(
     }
     if source.gif_capture != nil {
         result.gif_capture_active = source.gif_capture.active
+    }
+}
+
+// Copy synchronized particle diagnostics and classify current dust populations.
+observe_display_particles :: proc(
+    particles: ^particlemodel.Particle_System, result: ^Display) {
+    if particles == nil {
+        return
+    }
+    result.particle_count = particles.next_index
+    result.dust_dense_leaf_count = particles.dust_relaxation_dense_leaf_count
+    result.dust_refined_cell_count = particles.dust_collision_refined_cell_count
+    result.dust_collision_pair_count = particles.dust_pair_count
+    result.dust_collision_dropped_pair_count = particles.dust_pair_dropped_count
+    result.dust_sleeping_pair_skip_count = particles.dust_sleeping_pair_skip_count
+    result.dust_collision_correction_count = particles.dust_collision_correction_count
+    result.dust_collision_max_correction = particles.dust_collision_max_correction
+    result.dust_relaxation_energy_removed = particles.dust_relaxation_energy_removed
+    result.dust_sleep_transition_count = particles.dust_sleep_transition_count
+    result.dust_wake_transition_count = particles.dust_wake_transition_count
+    for index in 0..<particles.use_max_dust_particles {
+        if !particles.low_particles[index].alive {continue}
+        result.dust_live_count += 1
+        if particles.low_particles.pos_z[index] > 0 {
+            result.dust_airborne_count += 1
+        } else if particles.dust_sleeping[index] {
+            result.dust_grounded_sleeping_count += 1
+        } else {
+            result.dust_grounded_awake_count += 1
+        }
     }
 }
 
@@ -307,9 +355,7 @@ display :: proc(source: ^Display_Source) -> Display {
         result.point_count = int(source.shape_world.transforms.count)
         result.constraint_count = int(source.shape_world.constraints.count)
     }
-    if source.particle_system != nil {
-        result.particle_count = source.particle_system.next_index
-    }
+    observe_display_particles(source.particle_system, &result)
     observe_display_julia_service(source.julia_service, &result)
     return result
 }

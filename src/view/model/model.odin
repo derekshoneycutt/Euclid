@@ -207,6 +207,7 @@ Euclid_Ui_Runtime_State :: struct {
     limit_fps: bool,
     display_fps: bool,
     simulation_paused: bool,
+    animation_policy_paused: bool,
     use_simd_batch_projection: bool,
     use_gpu_dust_instancing: bool,
     fps_avg_bucket_seconds: [60]f32,

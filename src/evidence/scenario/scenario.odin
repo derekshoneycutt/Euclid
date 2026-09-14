@@ -35,6 +35,7 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"terminal_raster_published", .Terminal_Raster_Published},
     {"animation_frame_presented", .Animation_Frame_Presented},
     {"animation_playback_completed", .Animation_Playback_Completed},
+    {"dust_emission_committed", .Dust_Emission_Committed},
     {"scene_batch_committed", .Scene_Batch_Committed},
     {"constraint_solve_completed", .Constraint_Solve_Completed},
     {"presentation_cleared", .Presentation_Cleared},
@@ -58,6 +59,11 @@ Command_Kind :: enum u8 {
     Key,
     Pause_Simulation,
     Resume_Simulation,
+    Pause_Animation,
+    Resume_Animation,
+    Emit_Dust,
+    Contact_Dust,
+    Kick_Dust,
     Set_View_Content,
     Set_View_Scroll,
     Set_Splitters,
@@ -80,6 +86,13 @@ Command_Kind :: enum u8 {
 View_Content_Mime :: enum u8 {
     Text_Plain,
     Text_Latex,
+}
+
+// Deterministic spatial layout used by one scenario dust emission.
+Dust_Distribution :: enum u8 {
+    Point,
+    Disc,
+    Grid,
 }
 
 // Stable reason a bounded JSON Lines source could not become a complete program.
@@ -145,12 +158,32 @@ Command :: struct {
     // Fixed numeric payload used by display-owned viewport actions.
     value : f32,
     secondary_value : f32,
+    tertiary_value : f32,
+    dust_count : u32,
+    dust_seed : u64,
+    dust_distribution : Dust_Distribution,
 }
 
 // Temporary decoded payload for one exact view-content action object.
 Raw_View_Content :: struct {
     mime: string,
     source: string,
+}
+
+// Temporary decoded payload for one exact scenario dust emission.
+Raw_Dust_Emission :: struct {
+    distribution: string,
+    count: i64,
+    x: f64,
+    y: f64,
+    radius: f64,
+    seed: u64,
+}
+
+// Temporary decoded payload for one exact scenario dust contact.
+Raw_Dust_Contact :: struct {
+    x: f64,
+    y: f64,
 }
 
 // Fixed-capacity scenario program produced from one complete JSON Lines source.
@@ -230,6 +263,8 @@ Raw_Command :: struct {
     screenshot : string,
     start_gif : string,
     set_view_content : Raw_View_Content,
+    emit_dust : Raw_Dust_Emission,
+    contact_dust : Raw_Dust_Contact,
 
     // Event waits and display-state predicates.
     wait_event : string,
@@ -294,6 +329,76 @@ scenario_view_content_action_select :: proc(
     }
     command^.kind = .Set_View_Content
     command^.text = content
+    return 1, true
+}
+
+// Decode one stable public dust-distribution spelling.
+scenario_dust_distribution :: proc(name: string) -> (Dust_Distribution, bool) {
+    switch name {
+    case "point": return .Point, true
+    case "disc": return .Disc, true
+    case "grid": return .Grid, true
+    }
+    return {}, false
+}
+
+// Copy validated dust-emission geometry and identity into one command.
+scenario_apply_dust_emission :: proc(
+    raw: Raw_Dust_Emission, payload: json.Object, command: ^Command) -> bool {
+    distribution, distribution_ok := scenario_dust_distribution(raw.distribution)
+    x, x_ok := scenario_json_f32(payload["x"])
+    y, y_ok := scenario_json_f32(payload["y"])
+    radius, radius_ok := scenario_json_f32(payload["radius"])
+    if !x_ok || !y_ok || !radius_ok || x < 0 || x > 1 || y < 0 || y > 1 ||
+        radius < 0 || radius > 1 || raw.count <= 0 ||
+        raw.count > i64(max(u32)) || !distribution_ok {
+        return false
+    }
+    command^.kind = .Emit_Dust
+    command^.dust_distribution = distribution
+    command^.value = x
+    command^.secondary_value = y
+    command^.tertiary_value = radius
+    command^.dust_count = u32(raw.count)
+    command^.dust_seed = raw.seed
+    return true
+}
+
+// Decode one exact bounded scenario dust-emission action.
+scenario_dust_emission_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    value, present := root["emit_dust"]
+    if !present {return 0, true}
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || len(payload) != 6 {return 0, false}
+    required := [?]string{"distribution", "count", "x", "y", "radius", "seed"}
+    for field in required {
+        if _, found := payload[field]; !found {return 0, false}
+    }
+    if !scenario_apply_dust_emission(raw.emit_dust, payload, command) {
+        return 0, false
+    }
+    return 1, true
+}
+
+// Decode one exact bounded scenario dust-contact action.
+scenario_dust_contact_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    value, present := root["contact_dust"]
+    if !present {return 0, true}
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || len(payload) != 2 {return 0, false}
+    x_value, x_present := payload["x"]
+    y_value, y_present := payload["y"]
+    if !x_present || !y_present {return 0, false}
+    x, x_ok := scenario_json_f32(x_value)
+    y, y_ok := scenario_json_f32(y_value)
+    if !x_ok || !y_ok || x < 0 || x > 1 || y < 0 || y > 1 {
+        return 0, false
+    }
+    command^.kind = .Contact_Dust
+    command^.value = x
+    command^.secondary_value = y
     return 1, true
 }
 
@@ -541,7 +646,9 @@ runner_update_command :: proc(
          .Inject_Reload_Failure,
          .Type_Text, .Key,
          .Pause_Simulation, .Resume_Simulation,
-            .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
+         .Pause_Animation, .Resume_Animation, .Emit_Dust,
+         .Contact_Dust, .Kick_Dust,
+         .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown:
         return runner_issue_action(runner, command, frame.actions)
@@ -586,6 +693,8 @@ runner_update :: proc(
             command.kind == .Wait_State ||
             command.kind == .Wait_Terminal_Contains || command.kind == .Type_Text ||
             command.kind == .Key || command.kind == .Set_View_Content ||
+            command.kind == .Emit_Dust || command.kind == .Contact_Dust ||
+            command.kind == .Kick_Dust ||
             command.kind == .Set_View_Scroll ||
             command.kind == .Set_Splitters
         runner.step += 1
@@ -619,6 +728,9 @@ raw_action_command_select :: proc(source: string, command: ^Command) -> int {
     case "reload_runtime": command.kind = .Reload_Runtime
     case "pause_simulation": command.kind = .Pause_Simulation
     case "resume_simulation": command.kind = .Resume_Simulation
+    case "pause_animation": command.kind = .Pause_Animation
+    case "resume_animation": command.kind = .Resume_Animation
+    case "kick_dust": command.kind = .Kick_Dust
     case "stop_gif": command.kind = .Stop_Gif
     case:
         return 2
@@ -711,6 +823,18 @@ command_from_raw :: proc(
         return {}, .Invalid_Command
     }
     selected += view_content_selected
+    dust_selected, dust_valid :=
+        scenario_dust_emission_action_select(root, raw, &command)
+    if !dust_valid {
+        return {}, .Invalid_Command
+    }
+    selected += dust_selected
+    contact_selected, contact_valid :=
+        scenario_dust_contact_action_select(root, raw, &command)
+    if !contact_valid {
+        return {}, .Invalid_Command
+    }
+    selected += contact_selected
     numeric_selected, numeric_valid := scenario_numeric_action_select(root, &command)
     if !numeric_valid {
         return {}, .Invalid_Command
@@ -732,13 +856,15 @@ command_from_raw :: proc(
 //   Report whether one command intentionally carries no text payload.
 command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
     switch kind {
-    case .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
+    case .Emit_Dust, .Contact_Dust, .Kick_Dust,
+         .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
          .Assert_No_Bad_Frees, .Shutdown:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
          .Type_Text, .Key,
          .Pause_Simulation, .Resume_Simulation,
+         .Pause_Animation, .Resume_Animation,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
          .Wait_State, .Wait_Terminal_Contains, .Assert_State,
          .Assert_Terminal_Contains,
@@ -919,9 +1045,18 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
             display.animation_tick_sequence == display.animation_last_committed_sequence
     case "simulation_paused": return display.simulation_paused
     case "simulation_running": return !display.simulation_paused
+    case "animation_paused": return display.animation_policy_paused
     case "dynview_enabled": return display.dynview_enabled
     case "gif_active": return display.gif_capture_active
     case "gif_idle": return !display.gif_capture_active
+    case "dust_settled":
+        return display.dust_live_count > 0 && display.dust_airborne_count == 0 &&
+            display.dust_grounded_awake_count == 0 &&
+            display.dust_grounded_sleeping_count == display.dust_live_count
+    case "dust_active":
+        return display.dust_live_count > 0 &&
+            (display.dust_airborne_count > 0 || display.dust_grounded_awake_count > 0)
+    case "dust_airborne": return display.dust_airborne_count > 0
     }
     return terminal_state_matches(name, display)
 }

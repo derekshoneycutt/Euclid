@@ -372,10 +372,7 @@ resolve_dust_pair_no_collision_keeps_state :: proc(t: ^testing.T) {
     before_a := dust_slot_snapshot(ps, 0)
     before_b := dust_slot_snapshot(ps, 1)
 
-    min_sep: f32 = DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = DUST_COLLISION_RADIUS *
-        DUST_COLLISION_RADIUS
-    resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+    resolve_dust_pair(ps, 0, 1)
 
     expect_dust_slot_unchanged(t, ps, 0, before_a)
     expect_dust_slot_unchanged(t, ps, 1, before_b)
@@ -400,10 +397,7 @@ resolve_dust_pair_overlap_with_approach_applies_impulse :: proc(t: ^testing.T) {
     before_x0 := ps^.low_particles.pos_x[0]
     before_x1 := ps^.low_particles.pos_x[1]
 
-    min_sep: f32 = DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = DUST_COLLISION_RADIUS *
-        DUST_COLLISION_RADIUS
-    resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+    resolve_dust_pair(ps, 0, 1)
 
     testing.expect(t, ps^.low_particles.pos_x[0] < before_x0)
     testing.expect(t, ps^.low_particles.pos_x[1] > before_x1)
@@ -430,10 +424,7 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
     before_x0 := ps^.low_particles.pos_x[0]
     before_x1 := ps^.low_particles.pos_x[1]
 
-    min_sep: f32 = DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = DUST_COLLISION_RADIUS *
-        DUST_COLLISION_RADIUS
-    resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+    resolve_dust_pair(ps, 0, 1)
 
     testing.expect(t, ps^.low_particles.pos_x[0] < before_x0)
     testing.expect(t, ps^.low_particles.pos_x[1] > before_x1)
@@ -443,25 +434,114 @@ resolve_dust_pair_overlap_with_separating_velocity_skips_impulse :: proc(t: ^tes
         "separating vx1 should be unchanged")
 }
 
-//   Verify exactly coincident particles separate along a deterministic direction.
+//   Verify exactly coincident particles use a stable separation direction.
 @(test)
 resolve_dust_pair_exact_overlap_uses_deterministic_separation :: proc(t: ^testing.T) {
+    first := new(particlemodel.Particle_System, context.allocator)
+    defer free(first)
+    second := new(particlemodel.Particle_System, context.allocator)
+    defer free(second)
+
+    first^.low_particles.pos_x[0] = 0.5
+    first^.low_particles.pos_y[0] = 0.5
+    first^.low_particles.pos_x[1] = 0.5
+    first^.low_particles.pos_y[1] = 0.5
+    second^.low_particles.pos_x[0] = 0.5
+    second^.low_particles.pos_y[0] = 0.5
+    second^.low_particles.pos_x[1] = 0.5
+    second^.low_particles.pos_y[1] = 0.5
+    first^.dust_collision_frame = 1
+    second^.dust_collision_frame = 200
+
+    resolve_dust_pair(first, 0, 1)
+    resolve_dust_pair(second, 0, 1)
+
+    dx := first^.low_particles.pos_x[1] - first^.low_particles.pos_x[0]
+    dy := first^.low_particles.pos_y[1] - first^.low_particles.pos_y[0]
+    testing.expect(t, dx * dx + dy * dy > 0)
+    testing.expect_value(t,
+        first^.low_particles.pos_x[0], second^.low_particles.pos_x[0])
+    testing.expect_value(t,
+        first^.low_particles.pos_y[0], second^.low_particles.pos_y[0])
+}
+
+//   Verify quiet approaching particles lose relative normal motion without rebounding.
+@(test)
+resolve_dust_pair_low_speed_contact_is_inelastic :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-
     ps^.low_particles.pos_x[0] = 0.5
     ps^.low_particles.pos_y[0] = 0.5
-    ps^.low_particles.pos_x[1] = 0.5
+    ps^.low_particles.pos_x[1] = 0.503
+    ps^.low_particles.pos_y[1] = 0.5
+    ps^.low_particles.vel_x[0] = 0.0001
+    ps^.low_particles.vel_x[1] = -0.0001
+
+    resolve_dust_pair(ps, 0, 1)
+
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], f32(0),
+        "quiet first particle should not rebound")
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[1], f32(0),
+        "quiet second particle should not rebound")
+    testing.expect_value(t, ps^.dust_collision_rest_contact_count, 1)
+}
+
+//   Verify the half-neighborhood discovers one contact across a grid boundary.
+@(test)
+resolve_dust_collisions_finds_cross_cell_contact_once :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    ps^.low_particles[0].alive = true
+    ps^.low_particles[1].alive = true
+    ps^.low_particles.pos_x[0] = 0.4999
+    ps^.low_particles.pos_y[0] = 0.5
+    ps^.low_particles.pos_x[1] = 0.5001
     ps^.low_particles.pos_y[1] = 0.5
 
-    min_sep: f32 = DUST_COLLISION_RADIUS * f32(2.0)
-    radius_sq: f32 = DUST_COLLISION_RADIUS *
-        DUST_COLLISION_RADIUS
-    resolve_dust_pair(ps, 0, 1, min_sep, radius_sq)
+    resolve_dust_collisions(ps)
 
-    dx := ps^.low_particles.pos_x[1] - ps^.low_particles.pos_x[0]
-    dy := ps^.low_particles.pos_y[1] - ps^.low_particles.pos_y[0]
-    testing.expect(t, dx * dx + dy * dy > 0)
+    testing.expect_value(t, ps^.dust_pair_count, 1)
+    testing.expect_value(t, ps^.dust_collision_correction_count, 1)
+}
+
+//   Verify gravity does not create a recurring bounce for grounded dust at rest.
+@(test)
+update_particle_dust_index_keeps_grounded_particle_at_rest :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0].alive = true
+    ps^.low_particles[0].life = 1
+    ps^.low_particles.pos_z[0] = DUST_FLOOR_Z
+
+    update_particle_dust_index(ps, 0)
+
+    testing.expect_value(t, ps^.low_particles.pos_z[0], f32(DUST_FLOOR_Z))
+    testing.expect_value(t, ps^.low_particles.vel_z[0], f32(0))
+    testing.expect_value(t, ps^.dust_floor_rest_count, 1)
+
+    update_particles(ps, 1.0 / 60.0)
+    testing.expect_value(t, ps^.dust_floor_rest_count, 1)
+}
+
+// Verify maximum authored vertical launch converges to grounded rest.
+@(test)
+update_particle_dust_index_settles_authored_vertical_launch :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0].alive = true
+    ps^.low_particles[0].life = 1
+    ps^.low_particles.vel_z[0] = DUST_VZ_MAX
+
+    for _ in 0..<120 {
+        integrate_dust_positions(ps)
+        update_particle_dust_index(ps, 0)
+    }
+
+    testing.expect_value(t, ps^.low_particles.pos_z[0], f32(DUST_FLOOR_Z))
+    testing.expect_value(t, ps^.low_particles.vel_z[0], f32(0))
 }
 
 //   Verify two fresh particle systems produce identical seeded random ranges.
@@ -480,9 +560,84 @@ particle_random_ranges_use_independent_seeded_generators :: proc(t: ^testing.T) 
         random_i32_range(second, -10, 10))
 }
 
-//   Verify dense-bucket collision resolution rotates samples and tracks counts.
+// Verify scenario emission is deterministic without consuming authored RNG state.
 @(test)
-resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
+scenario_dust_emission_is_deterministic_and_rng_isolated :: proc(t: ^testing.T) {
+    first := new(particlemodel.Particle_System, context.allocator)
+    defer free(first)
+    second := new(particlemodel.Particle_System, context.allocator)
+    defer free(second)
+    control := new(particlemodel.Particle_System, context.allocator)
+    defer free(control)
+    first^.use_max_dust_particles = 32
+    second^.use_max_dust_particles = 32
+    control^.use_max_dust_particles = 32
+    request := particlemodel.Scenario_Dust_Emission_Request{
+        distribution = .Disc, count = 16, x = 0.5, y = 0.5,
+        radius = 0.04, seed = 17}
+
+    testing.expect_value(t, emit_scenario_dust(first, request), 16)
+    testing.expect_value(t, emit_scenario_dust(second, request), 16)
+    for index in 0..<16 {
+        testing.expect_value(t,
+            first^.low_particles[index], second^.low_particles[index])
+        testing.expect_value(t,
+            first^.dust_slot_spawn_sequences[index], u64(index + 1))
+    }
+    testing.expect_value(t,
+        random_f32_range(first, -1, 1), random_f32_range(control, -1, 1))
+}
+
+// Verify identical emission, settle, contact, and kick streams remain deterministic.
+@(test)
+scenario_dust_settle_and_wake_stream_is_deterministic :: proc(t: ^testing.T) {
+    first := new(particlemodel.Particle_System, context.allocator)
+    defer free(first)
+    second := new(particlemodel.Particle_System, context.allocator)
+    defer free(second)
+    first^.use_max_dust_particles = 16
+    second^.use_max_dust_particles = 16
+    request := particlemodel.Scenario_Dust_Emission_Request{
+        distribution = .Point, count = 16, x = 0.51, y = 0.51, seed = 23}
+    testing.expect_value(t, emit_scenario_dust(first, request), 16)
+    testing.expect_value(t, emit_scenario_dust(second, request), 16)
+
+    for _ in 0..<360 {
+        update_particles(first, 1.0 / 60.0)
+        update_particles(second, 1.0 / 60.0)
+    }
+    testing.expect_value(t, first^.dust_sleeping_count, 16)
+    testing.expect_value(t, second^.dust_sleeping_count, 16)
+    for index in 0..<16 {
+        testing.expect(t, queue_dust_tool_contact(first,
+            {first^.low_particles.pos_x[index], first^.low_particles.pos_y[index], 0},
+            {}, {}, 0, false))
+        testing.expect(t, queue_dust_tool_contact(second,
+            {second^.low_particles.pos_x[index], second^.low_particles.pos_y[index], 0},
+            {}, {}, 0, false))
+    }
+    update_particles(first, 1.0 / 60.0)
+    update_particles(second, 1.0 / 60.0)
+    kick_existing_dust(first)
+    kick_existing_dust(second)
+    update_particles(first, 1.0 / 60.0)
+    update_particles(second, 1.0 / 60.0)
+
+    for index in 0..<16 {
+        testing.expect_value(t, first^.low_particles[index], second^.low_particles[index])
+        testing.expect_value(t, first^.dust_sleeping[index], second^.dust_sleeping[index])
+        testing.expect_value(t,
+            first^.dust_activity_frames[index], second^.dust_activity_frames[index])
+    }
+    testing.expect_value(t,
+        first^.dust_sleep_transition_count, second^.dust_sleep_transition_count)
+    testing.expect_value(t,
+        first^.dust_wake_transition_count, second^.dust_wake_transition_count)
+}
+
+//   Verify dense-bucket collision resolution bounds samples and tracks counts.
+@(test)
+resolve_dust_collisions_bounds_dense_bucket_samples :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
@@ -504,28 +659,492 @@ resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
         i32(ps^.use_max_dust_particles))
 }
 
-// Verify the fine collision grid keeps distributed high-count candidate work linear.
+//   Verify a quiet over-capacity cell retains stable sampled membership.
 @(test)
-resolve_dust_collisions_bounds_distributed_14000_candidate_work :: proc(
-    t: ^testing.T) {
+resolve_dust_collisions_keeps_sleeping_bucket_samples_stable :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-    ps^.use_max_dust_particles = 14_000
-    columns := 200
-    for particle_index in 0..<ps^.use_max_dust_particles {
-        cell_x := particle_index % columns
-        cell_y := particle_index / columns
-        ps^.low_particles[particle_index].alive = true
-        ps^.low_particles.pos_x[particle_index] =
-            (f32(cell_x) + 0.25) * DUST_COLLISION_GRID_CELL_SIZE
-        ps^.low_particles.pos_y[particle_index] =
-            (f32(cell_y) + 0.25) * DUST_COLLISION_GRID_CELL_SIZE
+    ps^.use_max_dust_particles = particlemodel.DUST_COLLISION_CELL_SAMPLE_CAP + 8
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.5
+        ps^.low_particles.pos_y[i] = 0.5
+        ps^.dust_sleeping[i] = true
+    }
+    resolve_dust_collisions(ps)
+    cell := dust_collision_grid_cell_index(0.5, 0.5)
+    first := int(ps^.dust_collision_offsets[cell])
+    expected: [DUST_COLLISION_CELL_SAMPLE_CAP]i32
+    for i in 0..<DUST_COLLISION_CELL_SAMPLE_CAP {
+        expected[i] = ps^.dust_buckets[first + i]
     }
 
     resolve_dust_collisions(ps)
 
+    for i in 0..<DUST_COLLISION_CELL_SAMPLE_CAP {
+        testing.expect_value(t, ps^.dust_buckets[first + i], expected[i])
+    }
+}
+
+//   Verify awake members displace sleeping work in a bounded dense cell.
+@(test)
+populate_dust_collision_grid_prioritizes_awake_members :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = particlemodel.DUST_COLLISION_CELL_SAMPLE_CAP + 1
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.5
+        ps^.low_particles.pos_y[i] = 0.5
+        ps^.dust_sleeping[i] = i < ps^.use_max_dust_particles - 1
+    }
+    prepare_dust_collision_grid(ps)
+
+    populate_dust_collision_grid(ps)
+
+    cell := dust_collision_grid_cell_index(0.5, 0.5)
+    first := int(ps^.dust_collision_offsets[cell])
+    testing.expect_value(t, ps^.dust_buckets[first],
+        i32(ps^.use_max_dust_particles - 1))
+}
+
+//   Verify overloaded fine-cell refinement retains spatially sparse children.
+@(test)
+refine_dust_collision_bucket_balances_spatial_children :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = DUST_COLLISION_CELL_SAMPLE_CAP + 8
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.5005
+        ps^.low_particles.pos_y[i] = 0.5005
+        if i >= DUST_COLLISION_CELL_SAMPLE_CAP {
+            ps^.low_particles.pos_x[i] = 0.5025
+            ps^.low_particles.pos_y[i] = 0.5025
+        }
+    }
+    build_exact_dust_grid(ps)
+    cell := dust_collision_grid_cell_index(0.501, 0.501)
+    prepare_dust_collision_grid(ps)
+    populate_dust_collision_grid(ps)
+    refine_dust_collision_bucket(ps, cell)
+
+    first := int(ps^.dust_collision_offsets[cell])
+    sparse_child_count: int
+    for index in 0..<int(ps^.dust_counts[cell]) {
+        particle_index := int(ps^.dust_buckets[first + index])
+        if dust_collision_refined_child(ps, particle_index) == 3 {
+            sparse_child_count += 1
+        }
+    }
+    testing.expect_value(t, sparse_child_count, 8)
+    testing.expect_value(t, ps^.dust_collision_refined_cell_count, 1)
+}
+
+// Seed live dust across every fine cell with deterministic wrapped layers.
+seed_distributed_collision_capacity :: proc(
+    ps: ^particlemodel.Particle_System, count: int) {
+    ps^.use_max_dust_particles = count
+    for particle_index in 0..<ps^.use_max_dust_particles {
+        cell := particle_index % DUST_COLLISION_GRID_CELL_COUNT
+        layer := particle_index / DUST_COLLISION_GRID_CELL_COUNT
+        cell_x := cell % DUST_COLLISION_GRID_DIM
+        cell_y := cell / DUST_COLLISION_GRID_DIM
+        offset := f32(0.25 + 0.5 * f32(layer))
+        ps^.low_particles[particle_index].alive = true
+        ps^.low_particles.pos_x[particle_index] =
+            (f32(cell_x) + offset) * DUST_COLLISION_GRID_CELL_SIZE
+        ps^.low_particles.pos_y[particle_index] =
+            (f32(cell_y) + offset) * DUST_COLLISION_GRID_CELL_SIZE
+    }
+}
+
+// Verify one distributed capacity case retains bounded collision work.
+expect_distributed_collision_capacity :: proc(t: ^testing.T, count: int) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    seed_distributed_collision_capacity(ps, count)
+
+    resolve_dust_collisions(ps)
+
     testing.expect(t, ps^.dust_collision_candidate_count <
-        u64(ps^.use_max_dust_particles * 5))
+        u64(ps^.use_max_dust_particles * 12))
+    testing.expect(t, ps^.dust_pair_count <= DUST_COLLISION_PAIR_CAP)
+    testing.expect_value(t, ps^.dust_pair_dropped_count, 0)
+}
+
+// Verify the fine collision grid keeps 14,000-particle candidate work bounded.
+@(test)
+resolve_dust_collisions_bounds_distributed_14000_candidate_work :: proc(
+    t: ^testing.T) {
+    expect_distributed_collision_capacity(t, 14_000)
+}
+
+// Verify the fine collision grid keeps 40,000-particle candidate work bounded.
+@(test)
+resolve_dust_collisions_bounds_distributed_40000_candidate_work :: proc(
+    t: ^testing.T) {
+    expect_distributed_collision_capacity(t, 40_000)
+}
+
+// Verify maximum-capacity collision work remains bounded without pair overflow.
+@(test)
+resolve_dust_collisions_bounds_maximum_capacity_work :: proc(t: ^testing.T) {
+    expect_distributed_collision_capacity(t, particlemodel.MAX_LOW_PARTICLES)
+}
+
+//   Verify dense residual damping preserves momentum while reducing variance.
+@(test)
+relax_dense_grounded_dust_preserves_momentum_and_reduces_variance :: proc(
+    t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 4
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.505
+        ps^.low_particles.pos_y[i] = 0.505
+        ps^.low_particles.vel_x[i] = f32(i) - 1.5
+    }
+    before_momentum := f32(0)
+    before_energy := f32(0)
+    for i in 0..<ps^.use_max_dust_particles {
+        before_momentum += ps^.low_particles.vel_x[i]
+        before_energy += ps^.low_particles.vel_x[i] * ps^.low_particles.vel_x[i]
+    }
+
+    relax_dense_grounded_dust(ps)
+
+    after_momentum := f32(0)
+    after_energy := f32(0)
+    for i in 0..<ps^.use_max_dust_particles {
+        after_momentum += ps^.low_particles.vel_x[i]
+        after_energy += ps^.low_particles.vel_x[i] * ps^.low_particles.vel_x[i]
+    }
+    test_helpers.expect_close(t, after_momentum, before_momentum,
+        "relaxation should preserve leaf momentum")
+    testing.expect(t, after_energy < before_energy)
+    testing.expect(t, ps^.dust_relaxation_energy_removed > 0)
+}
+
+//   Verify adaptive leaves preserve separate coherent streams within one parent.
+@(test)
+relax_dense_grounded_dust_keeps_refined_streams_separate :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = DUST_RELAXATION_SPLIT_2_ENTER
+    for i in 0..<ps^.use_max_dust_particles {
+        left := i < ps^.use_max_dust_particles / 2
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.404 if left else 0.416
+        ps^.low_particles.pos_y[i] = 0.405
+        ps^.low_particles.vel_x[i] = 0.01 if left else -0.01
+    }
+
+    relax_dense_grounded_dust(ps)
+
+    parent := dust_grid_cell_index(0.405, 0.405)
+    testing.expect_value(t, ps^.dust_relaxation_parent_levels[parent], u8(1))
+    for i in 0..<ps^.use_max_dust_particles {
+        expected := f32(0.01) if i < ps^.use_max_dust_particles / 2 else -0.01
+        test_helpers.expect_close(t, ps^.low_particles.vel_x[i], expected,
+            "refined coherent stream should remain unchanged")
+    }
+}
+
+//   Verify recently disturbed particles bypass dense residual damping.
+@(test)
+relax_dense_grounded_dust_respects_activity_grace :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 4
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.5
+        ps^.low_particles.pos_y[i] = 0.5
+        ps^.low_particles.vel_x[i] = f32(i)
+        ps^.dust_activity_frames[i] = 1
+    }
+
+    relax_dense_grounded_dust(ps)
+
+    for i in 0..<ps^.use_max_dust_particles {
+        testing.expect_value(t, ps^.low_particles.vel_x[i], f32(i))
+    }
+    testing.expect_value(t, ps^.dust_relaxation_dense_leaf_count, 0)
+}
+
+//   Verify a sustained quiet grounded leaf sleeps without moving afterward.
+@(test)
+relax_dense_grounded_dust_sleeps_sustained_quiet_leaf :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 4
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.5 + f32(i) * 0.0001
+        ps^.low_particles.pos_y[i] = 0.5
+    }
+    for _ in 0..<int(DUST_SLEEP_QUIET_FRAMES) {
+        relax_dense_grounded_dust(ps)
+    }
+
+    testing.expect_value(t, ps^.dust_sleeping_count, 4)
+    testing.expect_value(t, ps^.dust_sleep_transition_count, u64(4))
+    before_x := ps^.low_particles.pos_x[0]
+    ps^.low_particles.vel_x[0] = 1
+    integrate_dust_positions(ps)
+    testing.expect_value(t, ps^.low_particles.pos_x[0], before_x)
+}
+
+// Verify a quiet sparse particle sleeps while crossing relaxation-cell boundaries.
+@(test)
+relax_dense_grounded_dust_sleeps_sparse_leaf :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0].alive = true
+    ps^.low_particles.pos_x[0] = 0.5
+    ps^.low_particles.pos_y[0] = 0.5
+
+    for frame in 0..<int(DUST_SLEEP_QUIET_FRAMES) {
+        ps^.low_particles.pos_x[0] = 0.499 if frame % 2 == 0 else 0.501
+        relax_dense_grounded_dust(ps)
+    }
+
+    testing.expect(t, ps^.dust_sleeping[0])
+    testing.expect_value(t, ps^.dust_sleep_transition_count, u64(1))
+}
+
+// Verify contact work resets an otherwise quiet leaf's sleep accumulation.
+@(test)
+relax_dense_grounded_dust_rejects_active_contact_work :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 4
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.51 + f32(i) * 0.0001
+        ps^.low_particles.pos_y[i] = 0.51
+    }
+    relax_dense_grounded_dust(ps)
+    leaf := int(ps^.dust_relaxation_leaf_indices[0])
+    testing.expect_value(t, ps^.dust_relaxation_leaf_quiet_frames[leaf], u16(1))
+    ps^.dust_contact_impulse[0] = DUST_SLEEP_MAX_COLLISION_IMPULSE * 2
+    ps^.dust_contact_correction[1] = DUST_SLEEP_MAX_POSITION_CORRECTION * 2
+
+    relax_dense_grounded_dust(ps)
+
+    testing.expect_value(t, ps^.dust_relaxation_leaf_quiet_frames[leaf], u16(0))
+}
+
+//   Verify direct tool contact wakes sleeping dust before applying its push.
+@(test)
+push_dust_away_from_xy_index_wakes_sleeping_particle :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0].alive = true
+    ps^.low_particles.pos_x[0] = 0.505
+    ps^.low_particles.pos_y[0] = 0.5
+    ps^.dust_sleeping[0] = true
+    ps^.dust_sleeping_count = 1
+    radius := f32(DUST_CONTACT_PUSH_RADIUS)
+
+    push_dust_away_from_xy_index(ps, 0, {
+        0.5, 0.5, radius, radius * radius})
+
+    testing.expect(t, !ps^.dust_sleeping[0])
+    testing.expect_value(t, ps^.dust_sleeping_count, 0)
+    testing.expect_value(t, ps^.dust_wake_transition_count, u64(1))
+    testing.expect(t, ps^.low_particles.vel_x[0] > 0)
+}
+
+//   Verify queued tool contact wakes a sleeping particle in its cell halo.
+@(test)
+replay_dust_tool_contacts_wakes_sleeping_cell_halo :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0].alive = true
+    ps^.low_particles.pos_x[0] = 0.539
+    ps^.low_particles.pos_y[0] = 0.5
+    ps^.dust_sleeping[0] = true
+    ps^.dust_sleeping_count = 1
+    endpoint := Vector3{0.5, 0.5, 0}
+    testing.expect(t, queue_dust_tool_contact(
+        ps, endpoint, endpoint, endpoint, 0, false))
+    build_exact_dust_grid(ps)
+
+    replay_dust_tool_contacts(ps)
+
+    testing.expect(t, !ps^.dust_sleeping[0])
+    testing.expect_value(t, ps^.dust_wake_transition_count, u64(1))
+    testing.expect_value(t, ps^.low_particles.vel_x[0], f32(0))
+    testing.expect_value(t, ps^.low_particles.vel_y[0], f32(0))
+}
+
+//   Verify a clear kick wakes sleeping dust before applying authored velocity.
+@(test)
+kick_existing_dust_index_wakes_sleeping_particle :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0].alive = true
+    ps^.low_particles[0].life = 1
+    ps^.dust_sleeping[0] = true
+    ps^.dust_sleeping_count = 1
+
+    kick_existing_dust_index(ps, 0)
+
+    testing.expect(t, !ps^.dust_sleeping[0])
+    testing.expect_value(t, ps^.dust_sleeping_count, 0)
+    testing.expect_value(t, ps^.dust_wake_transition_count, u64(1))
+    testing.expect(t, ps^.low_particles.vel_z[0] > 0)
+}
+
+//   Verify active contact wakes a sleeping particle before pair response.
+@(test)
+resolve_dust_pair_active_contact_wakes_sleeping_particle :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.low_particles.pos_x[0] = 0.5
+    ps^.low_particles.pos_x[1] = 0.503
+    ps^.low_particles.vel_x[0] = 0.01
+    ps^.dust_sleeping[1] = true
+    ps^.dust_sleeping_count = 1
+
+    resolve_dust_pair(ps, 0, 1)
+
+    testing.expect(t, !ps^.dust_sleeping[1])
+    testing.expect_value(t, ps^.dust_wake_transition_count, u64(1))
+}
+
+// Verify negligible mixed contact does not restart a settled particle.
+@(test)
+resolve_dust_pair_quiet_contact_keeps_sleeping_particle :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.low_particles.pos_x[0] = 0.5
+    ps^.low_particles.pos_x[1] = 0.00385 + ps^.low_particles.pos_x[0]
+    ps^.low_particles.vel_x[0] = DUST_WAKE_NEIGHBOR_SPEED * 0.5
+    ps^.dust_sleeping[1] = true
+    ps^.dust_sleeping_count = 1
+
+    resolve_dust_pair(ps, 0, 1)
+
+    testing.expect(t, ps^.dust_sleeping[1])
+    testing.expect_value(t, ps^.dust_wake_transition_count, u64(0))
+    testing.expect_value(t, ps^.dust_sleeping_pair_skip_count, u64(1))
+}
+
+// Verify substantial overlap wakes and separates a sleeper despite low impact speed.
+@(test)
+resolve_dust_pair_penetration_wakes_sleeping_particle :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.low_particles.pos_x[0] = 0.5
+    ps^.low_particles.pos_x[1] = 0.503
+    ps^.low_particles.vel_x[0] = DUST_WAKE_NEIGHBOR_SPEED * 0.5
+    ps^.dust_sleeping[1] = true
+    ps^.dust_sleeping_count = 1
+
+    resolve_dust_pair(ps, 0, 1)
+
+    testing.expect(t, !ps^.dust_sleeping[1])
+    testing.expect_value(t, ps^.dust_wake_transition_count, u64(1))
+    separation := ps^.low_particles.pos_x[1] - ps^.low_particles.pos_x[0]
+    testing.expect(t, separation > f32(0.003))
+}
+
+//   Verify energetic contact wakes sleeping dust in the neighboring parent halo.
+@(test)
+resolve_dust_pair_energetic_contact_wakes_sleeping_halo :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 3
+    ps^.low_particles[0].alive = true
+    ps^.low_particles[1].alive = true
+    ps^.low_particles[2].alive = true
+    ps^.low_particles.pos_x[0] = 0.5
+    ps^.low_particles.pos_x[1] = 0.503
+    ps^.low_particles.pos_x[2] = 0.521
+    ps^.low_particles.pos_y[0] = 0.5
+    ps^.low_particles.pos_y[1] = 0.5
+    ps^.low_particles.pos_y[2] = 0.5
+    ps^.low_particles.vel_x[0] = 0.01
+    ps^.dust_sleeping[1] = true
+    ps^.dust_sleeping[2] = true
+    ps^.dust_sleeping_count = 2
+    build_exact_dust_grid(ps)
+
+    resolve_dust_pair(ps, 0, 1)
+
+    testing.expect(t, !ps^.dust_sleeping[1])
+    testing.expect(t, !ps^.dust_sleeping[2])
+    testing.expect_value(t, ps^.dust_wake_transition_count, u64(2))
+}
+
+//   Verify two sleeping particles skip internal collision response.
+@(test)
+resolve_dust_pair_sleeping_pair_skips_response :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.low_particles.pos_x[0] = 0.5
+    ps^.low_particles.pos_x[1] = 0.5001
+    ps^.dust_sleeping[0] = true
+    ps^.dust_sleeping[1] = true
+    before_x := ps^.low_particles.pos_x[0]
+
+    resolve_dust_pair(ps, 0, 1)
+
+    testing.expect_value(t, ps^.low_particles.pos_x[0], before_x)
+    testing.expect_value(t, ps^.dust_sleeping_pair_skip_count, u64(1))
+}
+
+//   Verify airborne dust cannot enter the grounded relaxation sleep path.
+@(test)
+relax_dense_grounded_dust_never_sleeps_airborne_particles :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 4
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles.pos_x[i] = 0.5
+        ps^.low_particles.pos_y[i] = 0.5
+        ps^.low_particles.pos_z[i] = 0.1
+    }
+    for _ in 0..<int(DUST_SLEEP_QUIET_FRAMES) {
+        relax_dense_grounded_dust(ps)
+    }
+
+    testing.expect_value(t, ps^.dust_sleeping_count, 0)
+}
+
+//   Verify the complete fixed-step path settles a dense grounded cluster.
+@(test)
+update_particles_settles_dense_grounded_cluster :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 8
+    for i in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[i].alive = true
+        ps^.low_particles[i].life = 1
+        ps^.low_particles.pos_x[i] = 0.51 + f32(i % 4) * 0.0002
+        ps^.low_particles.pos_y[i] = 0.51 + f32(i / 4) * 0.0002
+    }
+    for _ in 0..<180 {
+        update_particles(ps, 1.0 / 60.0)
+    }
+
+    testing.expect_value(t, ps^.dust_sleeping_count, ps^.use_max_dust_particles)
+    before_x := ps^.low_particles.pos_x[0]
+    before_y := ps^.low_particles.pos_y[0]
+    for _ in 0..<30 {
+        update_particles(ps, 1.0 / 60.0)
+    }
+    testing.expect_value(t, ps^.low_particles.pos_x[0], before_x)
+    testing.expect_value(t, ps^.low_particles.pos_y[0], before_y)
 }
 
 //   Verify reset_particles zeroes runtime state and marks every slot dead.
@@ -545,6 +1164,9 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     ps^.high_particles.age[0] = 0.75
     ps^.dust_collision_active_cell_count = 2
     ps^.dust_collision_candidate_count = 17
+    ps^.dust_relaxation_parent_levels[0] = 2
+    ps^.dust_relaxation_leaf_quiet_frames[0] = DUST_SLEEP_QUIET_FRAMES
+    ps^.dust_relaxation_leaf_last_seen[0] = 4
 
     reset_particles(ps)
 
@@ -552,6 +1174,9 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     testing.expect_value(t, ps^.spawn_timer, 0.0)
     testing.expect_value(t, ps^.dust_collision_active_cell_count, 0)
     testing.expect_value(t, ps^.dust_collision_candidate_count, u64(0))
+    testing.expect_value(t, ps^.dust_relaxation_parent_levels[0], u8(0))
+    testing.expect_value(t, ps^.dust_relaxation_leaf_quiet_frames[0], u16(0))
+    testing.expect_value(t, ps^.dust_relaxation_leaf_last_seen[0], u64(0))
     testing.expect(t, !ps^.low_particles.alive[0])
     testing.expect_value(t, ps^.low_particles.age[0], 0.0)
     testing.expect(t, !ps^.particles.alive[0])

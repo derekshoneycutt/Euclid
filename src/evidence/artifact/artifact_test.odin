@@ -72,6 +72,7 @@ artifact_test_expect_viewport_state :: proc(t: ^testing.T, directory: string) {
     testing.expect(t, strings.contains(text, "\"view_text_scroll_max\":120"))
     testing.expect(t, strings.contains(text, "\"vertical_split_x\":640"))
     testing.expect(t, strings.contains(text, "\"horizontal_split_y\":360"))
+    testing.expect(t, strings.contains(text, "\"animation_policy_paused\":true"))
 }
 
 // Build the canonical failed bundle payload used by the artifact integration test.
@@ -82,6 +83,7 @@ artifact_test_failure_bundle_data :: proc(
         events = events,
         state = {
             fixed_step = 9,
+            animation_policy_paused = true,
             view_text_scroll_y = 90.5,
             view_text_scroll_max = 120,
             vertical_split_x = 640,

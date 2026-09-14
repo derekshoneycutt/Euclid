@@ -132,18 +132,42 @@ artifact_manifest_json :: proc(manifest: Manifest) -> string {
         manifest.trace_complete, manifest.last_trace_sequence)
 }
 
+// Serialize particle settling diagnostics as an embeddable JSON object body.
+artifact_dust_state_json :: proc(state: observe.Display) -> string {
+    return fmt.tprintf(
+        "\"dust_live_count\":%d,\"dust_grounded_awake_count\":%d," +
+        "\"dust_grounded_sleeping_count\":%d,\"dust_airborne_count\":%d," +
+        "\"dust_dense_leaf_count\":%d,\"dust_refined_cell_count\":%d," +
+        "\"dust_collision_pair_count\":%d," +
+        "\"dust_collision_dropped_pair_count\":%d," +
+        "\"dust_sleeping_pair_skip_count\":%d," +
+        "\"dust_collision_correction_count\":%d," +
+        "\"dust_collision_max_correction\":%g," +
+        "\"dust_relaxation_energy_removed\":%g," +
+        "\"dust_sleep_transition_count\":%d,\"dust_wake_transition_count\":%d",
+        state.dust_live_count, state.dust_grounded_awake_count,
+        state.dust_grounded_sleeping_count, state.dust_airborne_count,
+        state.dust_dense_leaf_count, state.dust_refined_cell_count,
+        state.dust_collision_pair_count, state.dust_collision_dropped_pair_count,
+        state.dust_sleeping_pair_skip_count, state.dust_collision_correction_count,
+        state.dust_collision_max_correction, state.dust_relaxation_energy_removed,
+        state.dust_sleep_transition_count, state.dust_wake_transition_count)
+}
+
 //   Serialize the synchronized display and Julia-host observation snapshot.
 artifact_state_json :: proc(
     state: observe.Display, julia_host: observe.Julia_Host) -> string {
-    return fmt.tprintf(
+    dust_json := artifact_dust_state_json(state)
+    result := fmt.tprintf(
         "{{\"fixed_step\":%d,\"simulation_time\":%g," +
-        "\"simulation_paused\":%v,\"runtime_lifecycle\":%d," +
+        "\"simulation_paused\":%v,\"animation_policy_paused\":%v," +
+        "\"runtime_lifecycle\":%d," +
         "\"runtime_generation\":%d,\"active_runtime_request_id\":%d," +
         "\"failed_runtime_request_count\":%d,\"animation_generation\":%d," +
         "\"animation_tick_sequence\":%d," +
         "\"animation_last_committed_sequence\":%d," +
         "\"point_count\":%d,\"constraint_count\":%d," +
-        "\"particle_count\":%d,\"dynview_enabled\":%v," +
+        "\"particle_count\":%d,%s,\"dynview_enabled\":%v," +
         "\"view_text_scroll_y\":%g,\"view_text_scroll_max\":%g," +
         "\"vertical_split_x\":%g,\"horizontal_split_y\":%g," +
         "\"gif_capture_active\":%v,\"gif_captured_frames\":%d," +
@@ -152,11 +176,12 @@ artifact_state_json :: proc(
         "\"julia_active_request_id\":%d,\"julia_failed_requests\":%d," +
         "\"julia_event_count\":%d,\"julia_evidence_complete\":%v}}\n",
         state.fixed_step, state.simulation_time, state.simulation_paused,
-        state.runtime_lifecycle, state.runtime_generation,
+        state.animation_policy_paused, state.runtime_lifecycle,
+        state.runtime_generation,
         state.active_runtime_request_id, state.failed_runtime_request_count,
         state.animation_generation, state.animation_tick_sequence,
         state.animation_last_committed_sequence, state.point_count,
-        state.constraint_count, state.particle_count, state.dynview_enabled,
+        state.constraint_count, state.particle_count, dust_json, state.dynview_enabled,
         state.view_text_scroll_y, state.view_text_scroll_max,
         state.vertical_split_x, state.horizontal_split_y,
         state.gif_capture_active, state.gif_captured_frames,
@@ -164,6 +189,8 @@ artifact_state_json :: proc(
         state.trace.pending_drops, julia_host.lifecycle,
         julia_host.active_request_id, julia_host.failed_request_count,
         julia_host.trace.event_count, julia_host.trace.evidence_complete)
+    delete(dust_json)
+    return result
 }
 
 //   Encode one unsigned 16-bit value in canonical little-endian order.

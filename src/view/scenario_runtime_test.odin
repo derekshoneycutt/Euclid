@@ -10,7 +10,9 @@ import capture "../evidence/capture"
 import "../diagnostics"
 import artifact "../evidence/artifact"
 import scenario "../evidence/scenario"
+import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
+import particlemodel "../particles/model"
 
 import "core:log"
 import "core:os"
@@ -95,6 +97,143 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
     context.logger = log.nil_logger()
     diagnostics.logging_stop(&logging_state)
     scenario_runtime_expect_outcome_logs(t, path)
+}
+
+// Verify animation policy can pause independently from particle simulation.
+@(test)
+scenario_runtime_animation_pause_uses_display_owned_state :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    runtime := Scenario_Runtime{state = state}
+    identity: evidence_trace.Identity
+    pause := scenario.Command{kind = .Pause_Animation}
+    resume := scenario.Command{kind = .Resume_Animation}
+
+    handled, accepted := scenario_issue_display_action(&runtime, &pause, &identity)
+    testing.expect(t, handled && accepted)
+    testing.expect(t, state^.ui_runtime.animation_policy_paused)
+    testing.expect(t, !state^.ui_runtime.simulation_paused)
+    handled, accepted = scenario_issue_display_action(&runtime, &resume, &identity)
+    testing.expect(t, handled && accepted)
+    testing.expect(t, !state^.ui_runtime.animation_policy_paused)
+}
+
+// Verify emit_dust queues one bounded worker request with scenario correlation.
+@(test)
+scenario_runtime_dust_emission_queues_particle_request :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    particle_system := new(particlemodel.Particle_System, context.allocator)
+    defer free(particle_system)
+    executor := new(Simulation_Executor, context.allocator)
+    defer free(executor)
+    particle_system^.use_max_dust_particles = 100
+    state^.particle_system = particle_system
+    state^.simulation_executor = executor
+    runtime := Scenario_Runtime{state = state}
+    command := scenario.Command{
+        kind = .Emit_Dust, dust_distribution = .Grid, dust_count = 50,
+        value = 0.5, secondary_value = 0.4, tertiary_value = 0.2,
+        dust_seed = 9}
+    identity := evidence_trace.Identity{.Scenario_Action, 12, 1}
+
+    handled, accepted := scenario_issue_generic_action(
+        &runtime, &command, &identity)
+
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t, executor^.particle_task.dust_emission_queue.count, 1)
+    request := executor^.particle_task.dust_emission_queue.items[0]
+    testing.expect_value(t, request.count, u32(50))
+    testing.expect_value(t, request.distribution,
+        particlemodel.Dust_Emission_Distribution.Grid)
+    testing.expect_value(t, request.correlation, u64(12))
+    testing.expect_value(t, request.generation, u64(1))
+}
+
+// Verify dust disturbances cross bounded owner requests without direct kick mutation.
+@(test)
+scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    particle_system := new(particlemodel.Particle_System, context.allocator)
+    defer free(particle_system)
+    executor := new(Simulation_Executor, context.allocator)
+    defer free(executor)
+    state^.particle_system = particle_system
+    state^.simulation_executor = executor
+    runtime := Scenario_Runtime{state = state}
+    identity: evidence_trace.Identity
+
+    contact := scenario.Command{
+        kind = .Contact_Dust, value = 0.25, secondary_value = 0.75}
+    handled, accepted := scenario_issue_generic_action(
+        &runtime, &contact, &identity)
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t, particle_system^.dust_tool_contact_count, 1)
+
+    kick := scenario.Command{kind = .Kick_Dust}
+    handled, accepted = scenario_issue_generic_action(&runtime, &kick, &identity)
+    testing.expect(t, handled && accepted)
+    testing.expect(t, executor^.particle_task.scenario_dust_kick_requested)
+}
+
+// Verify the particle worker consumes one scenario clear-kick request.
+@(test)
+scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    particle_system := new(particlemodel.Particle_System, context.allocator)
+    defer free(particle_system)
+    particle_system^.use_max_dust_particles = 1
+    particle_system^.low_particles[0].alive = true
+    particle_system^.low_particles[0].life = 1
+    particle_system^.dust_sleeping[0] = true
+    particle_system^.dust_sleeping_count = 1
+    state^.particle_system = particle_system
+    data := Simulation_Task_Data{
+        state = state, scenario_dust_kick_requested = true}
+
+    consume_scenario_dust_requests(&data)
+
+    testing.expect(t, !data.scenario_dust_kick_requested)
+    testing.expect(t, !particle_system^.dust_sleeping[0])
+    testing.expect_value(t, particle_system^.dust_wake_transition_count, u64(1))
+}
+
+// Verify the particle worker emits queued dust and records correlated completion.
+@(test)
+scenario_dust_emission_commits_on_particle_worker :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    particle_system := new(particlemodel.Particle_System, context.allocator)
+    defer free(particle_system)
+    particle_system^.use_max_dust_particles = 16
+    state^.particle_system = particle_system
+    state^.evidence_session.enabled = true
+    state^.evidence_session.lanes = evidence_session.ALL_LANES
+    state^.evidence_session.required_evidence_complete = true
+    data := new(Simulation_Task_Data, context.allocator)
+    defer free(data)
+    data^.state = state
+    data^.dust_emission_queue.count = 1
+    data^.dust_emission_queue.items[0] = {
+        distribution = .Point, count = 8, x = 0.5, y = 0.5,
+        seed = 3, correlation = 14, generation = 1}
+    evidence_trace.ring_init(&data^.evidence_ring, .Particle_Worker)
+
+    consume_scenario_dust_requests(data)
+    evidence_session.session_accept_ring(
+        &state^.evidence_session, &data^.evidence_ring)
+
+    testing.expect_value(t, data^.dust_emission_queue.count, 0)
+    testing.expect_value(t, particle_system^.dust_spawn_sequence, u64(8))
+    testing.expect_value(t, state^.evidence_session.event_count, 1)
+    event := state^.evidence_session.events[0]
+    testing.expect_value(t, event.kind,
+        evidence_trace.Kind.Dust_Emission_Committed)
+    testing.expect_value(t, event.correlation, u64(14))
+    testing.expect_value(t, event.payload.counts.first, u32(8))
+    testing.expect_value(t, event.payload.counts.second, u32(8))
 }
 
 // Verify viewport actions remain deferred until the next pre-geometry boundary.

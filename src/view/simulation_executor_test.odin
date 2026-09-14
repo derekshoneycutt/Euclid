@@ -12,6 +12,7 @@ import shapemodel "../shapes/model"
 import storage "../core/storage"
 
 import app_core "../core"
+import "../particles"
 import "../dynview"
 import dyncompile "../dynview/compile"
 import dyncore "../dynview/core"
@@ -249,6 +250,49 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
         point.entity)
     testing.expect(t, found)
     testing.expect_value(t, transform^.position.z, f32(0))
+}
+
+// Verify the joined particle worker emits, settles, observes, and wakes dust.
+@(test)
+parallel_simulation_step_settles_and_wakes_scenario_dust :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
+    defer free(state^.particle_system)
+    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+    state^.particle_system^.use_max_dust_particles = 16
+    executor := create_simulation_executor(state)
+    testing.expect(t, executor != nil)
+    state^.simulation_executor = executor
+    defer destroy_simulation_executor(executor)
+    executor^.particle_task.dust_emission_queue.count = 1
+    executor^.particle_task.dust_emission_queue.items[0] = {
+        distribution = .Point, count = 16, x = 0.51, y = 0.51,
+        seed = 23}
+
+    for _ in 0..<360 {
+        run_parallel_simulation_step(executor, 1.0 / 60.0)
+        if state^.particle_system^.dust_sleeping_count == 16 {break}
+    }
+    settled := observe_display_state(state)
+    testing.expect_value(t, settled.dust_live_count, 16)
+    testing.expect_value(t, settled.dust_grounded_sleeping_count, 16)
+    testing.expect_value(t, settled.dust_grounded_awake_count, 0)
+    for index in 0..<16 {
+        testing.expect(t, particles.queue_dust_tool_contact(
+            state^.particle_system,
+            {state^.particle_system^.low_particles.pos_x[index],
+                state^.particle_system^.low_particles.pos_y[index], 0},
+            {}, {}, 0, false))
+    }
+
+    run_parallel_simulation_step(executor, 1.0 / 60.0)
+
+    disturbed := observe_display_state(state)
+    testing.expect_value(t, disturbed.dust_grounded_sleeping_count, 0)
+    testing.expect_value(t, disturbed.dust_grounded_awake_count, 16)
+    testing.expect_value(t, disturbed.dust_wake_transition_count, u64(16))
 }
 
 //   Verify terminal Dynview arena diagnostics after executor destruction.

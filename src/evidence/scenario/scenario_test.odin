@@ -127,6 +127,67 @@ scenario_test_reject_invalid_view_content_actions :: proc(t: ^testing.T) {
         "{\"set_view_content\":\"x\"}\n", &program), Parse_Error.Invalid_Json)
 }
 
+// Verify scenario dust emission preserves its deterministic bounded payload.
+@(test)
+scenario_test_parse_dust_emission :: proc(t: ^testing.T) {
+    program: Program
+    source := "{\"emit_dust\":{\"distribution\":\"disc\",\"count\":20000," +
+        "\"x\":0.5,\"y\":0.4,\"radius\":0.03,\"seed\":7},\"as\":\"dust\"}\n"
+    testing.expect_value(t, parse(source, &program), Parse_Error.None)
+    command := &program.commands[0]
+    testing.expect_value(t, command.kind, Command_Kind.Emit_Dust)
+    testing.expect_value(t, command.dust_distribution, Dust_Distribution.Disc)
+    testing.expect_value(t, command.dust_count, u32(20_000))
+    testing.expect_value(t, command.value, f32(0.5))
+    testing.expect_value(t, command.secondary_value, f32(0.4))
+    testing.expect_value(t, command.tertiary_value, f32(0.03))
+    testing.expect_value(t, command.dust_seed, u64(7))
+    testing.expect_value(t, name_string(&command.alias), "dust")
+}
+
+// Verify malformed, out-of-range, and competing dust emissions are rejected.
+@(test)
+scenario_test_reject_invalid_dust_emission :: proc(t: ^testing.T) {
+    invalid_sources := [?]string{
+        "{\"emit_dust\":{\"distribution\":\"disc\",\"count\":0,\"x\":0.5,\"y\":0.5,\"radius\":0.1,\"seed\":1}}\n",
+        "{\"emit_dust\":{\"distribution\":\"cloud\",\"count\":1,\"x\":0.5,\"y\":0.5,\"radius\":0.1,\"seed\":1}}\n",
+        "{\"emit_dust\":{\"distribution\":\"point\",\"count\":1,\"x\":-1,\"y\":0.5,\"radius\":0,\"seed\":1}}\n",
+        "{\"emit_dust\":{\"distribution\":\"grid\",\"count\":1,\"x\":0.5,\"y\":0.5,\"radius\":2,\"seed\":1}}\n",
+        "{\"emit_dust\":{\"distribution\":\"point\",\"count\":1,\"x\":0.5,\"y\":0.5,\"radius\":0,\"seed\":1,\"extra\":1}}\n",
+        "{\"emit_dust\":{\"distribution\":\"point\",\"count\":1,\"x\":0.5,\"y\":0.5,\"radius\":0,\"seed\":1},\"shutdown\":true}\n",
+    }
+    for source in invalid_sources {
+        program: Program
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
+}
+
+// Verify dust disturbance commands are exact, bounded scenario actions.
+@(test)
+scenario_test_parse_dust_disturbance_actions :: proc(t: ^testing.T) {
+    program: Program
+    source := "{\"contact_dust\":{\"x\":0.25,\"y\":0.75}}\n" +
+        "{\"do\":\"kick_dust\"}\n" +
+        "{\"do\":\"pause_animation\"}\n" +
+        "{\"do\":\"resume_animation\"}\n"
+    testing.expect_value(t, parse(source, &program), Parse_Error.None)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Contact_Dust)
+    testing.expect_value(t, program.commands[0].value, f32(0.25))
+    testing.expect_value(t, program.commands[0].secondary_value, f32(0.75))
+    testing.expect_value(t, program.commands[1].kind, Command_Kind.Kick_Dust)
+    testing.expect_value(t, program.commands[2].kind, Command_Kind.Pause_Animation)
+    testing.expect_value(t, program.commands[3].kind, Command_Kind.Resume_Animation)
+
+    invalid_sources := [?]string{
+        "{\"contact_dust\":{\"x\":-1,\"y\":0.5}}\n",
+        "{\"contact_dust\":{\"x\":0.5,\"y\":2}}\n",
+        "{\"contact_dust\":{\"x\":0.5,\"y\":0.5,\"z\":0}}\n",
+    }
+    for invalid in invalid_sources {
+        testing.expect_value(t, parse(invalid, &program), Parse_Error.Invalid_Command)
+    }
+}
+
 // Verify viewport actions yield a frame before the next scenario command executes.
 @(test)
 scenario_test_viewport_actions_create_frame_boundaries :: proc(t: ^testing.T) {
@@ -186,6 +247,22 @@ scenario_test_animation_idle_state :: proc(t: ^testing.T) {
         animation_tick_sequence = 2,
         animation_last_committed_sequence = 1,
     }))
+}
+
+// Verify dust predicates distinguish complete rest from local and airborne activity.
+@(test)
+scenario_test_dust_state_predicates :: proc(t: ^testing.T) {
+    settled := observe.Display{
+        dust_live_count = 8, dust_grounded_sleeping_count = 8}
+    testing.expect(t, state_matches("dust_settled", settled))
+    testing.expect(t, !state_matches("dust_active", settled))
+    testing.expect(t, !state_matches("dust_settled", observe.Display{
+        dust_live_count = 8, dust_grounded_sleeping_count = 7,
+        dust_grounded_awake_count = 1}))
+    testing.expect(t, state_matches("dust_active", observe.Display{
+        dust_live_count = 8, dust_grounded_awake_count = 1}))
+    testing.expect(t, state_matches("dust_airborne", observe.Display{
+        dust_live_count = 8, dust_airborne_count = 1}))
 }
 
 // Verify Terminal input and cell assertions are bounded scenario commands.

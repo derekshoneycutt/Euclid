@@ -1,0 +1,8 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"emit_dust":{"distribution":"disc","count":20000,"x":0.5,"y":0.5,"radius":0.04,"seed":1},"as":"dust"}
+{"wait_event":"dust_emission_committed","correlation":"dust","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"screenshot":".build/dust-emission-acceptance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

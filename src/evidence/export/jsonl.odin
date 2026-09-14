@@ -56,6 +56,7 @@ EVENT_KIND_NAMES :: #sparse [trace.Kind]string{
     .Compass_Visibility_Committed = "compass.visibility_committed",
     .Particle_Emission_Committed = "particle.emission_committed",
     .Particle_Emission_Rejected = "particle.emission_rejected",
+    .Dust_Emission_Committed = "particle.dust_emission_committed",
     .Frame_Presented = "frame.presented",
     .Dynview_Published = "dynview.published",
     .Capture_Requested = "capture.requested",

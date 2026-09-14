@@ -4,6 +4,8 @@ import animation_model "../core/animation"
 import bridgemodel "../bridge/model"
 
 import presentation_model "../bridge/presentation"
+import particlemodel "../particles/model"
+import "../particles"
 
 import storage "../core/storage"
 
@@ -427,6 +429,12 @@ scenario_issue_display_action :: proc(
     case .Resume_Simulation:
         state.ui_runtime.simulation_paused = false
         return true, true
+    case .Pause_Animation:
+        state.ui_runtime.animation_policy_paused = true
+        return true, true
+    case .Resume_Animation:
+        state.ui_runtime.animation_policy_paused = false
+        return true, true
     case .Request_Screenshot:
         if !capture.checkpoint_request(
             &runtime.capture, u32(runtime.runner.step), identity^,
@@ -580,19 +588,65 @@ scenario_record_allocation_evidence :: proc(
         })
 }
 
+// Queue one bounded scenario dust request for the next particle step.
+scenario_issue_particle_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> (bool, bool) {
+    executor := runtime.state^.simulation_executor
+    particle_system := runtime.state^.particle_system
+    #partial switch command.kind {
+    case .Contact_Dust:
+        if particle_system == nil {return true, false}
+        accepted := particles.queue_dust_tool_contact(
+            particle_system, {command.value, command.secondary_value, 0},
+            {}, {}, 0, false)
+        return true, accepted
+    case .Kick_Dust:
+        if executor == nil || particle_system == nil ||
+            executor^.particle_task.scenario_dust_kick_requested {
+            return true, false
+        }
+        executor^.particle_task.scenario_dust_kick_requested = true
+        return true, true
+    case .Emit_Dust:
+        if executor == nil || particle_system == nil ||
+            command.dust_count > u32(particle_system^.use_max_dust_particles) {
+            return true, false
+        }
+        queue := &executor^.particle_task.dust_emission_queue
+        if queue^.count >= particlemodel.SCENARIO_DUST_EMISSION_REQUEST_CAP {
+            return true, false
+        }
+        queue^.items[queue^.count] = {
+            distribution = particlemodel.Dust_Emission_Distribution(
+                command.dust_distribution),
+            count = command.dust_count, x = command.value,
+            y = command.secondary_value, radius = command.tertiary_value,
+            seed = command.dust_seed, correlation = identity.id,
+            generation = identity.generation,
+        }
+        queue^.count += 1
+        return true, true
+    case:
+        return false, false
+    }
+}
+
 //   Route one generic scenario command through ordinary Euclid request state and APIs.
 scenario_issue_generic_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
     text := scenario.text_string(&command.text)
     #partial switch command.kind {
-    case .Type_Text:
-        return true, scenario_issue_terminal_text(runtime, text)
-    case .Key:
-        return true, scenario_issue_terminal_key(runtime, text)
+    case .Type_Text: return true, scenario_issue_terminal_text(runtime, text)
+    case .Key: return true, scenario_issue_terminal_key(runtime, text)
     case .Wait_Terminal_Contains, .Assert_Terminal_Contains:
         return true, scenario_terminal_contains(runtime.state, text)
     case:
+    }
+    if handled, accepted := scenario_issue_particle_action(
+        runtime, command, identity); handled {
+        return handled, accepted
     }
     if handled, accepted := scenario_issue_julia_action(
         runtime, command, identity); handled {

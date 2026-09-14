@@ -686,7 +686,9 @@ run_deterministic_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> b
 
     state^.current_delta_time = dt
     julia.publish_available_animation_tick(state)
-    julia.schedule_animation_tick(state, dt)
+    if !state^.ui_runtime.animation_policy_paused {
+        julia.schedule_animation_tick(state, dt)
+    }
     run_parallel_simulation_step(state^.simulation_executor, dt)
     state^.fixed_step += 1
     terminal_tick_record_step(&state^.terminal_tick_publisher, state^.fixed_step)

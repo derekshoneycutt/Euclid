@@ -21,6 +21,35 @@ Simulation_Task_Data :: core.Simulation_Task_Data
 Frame_Preparation_Task_Data :: core.Frame_Preparation_Task_Data
 Simulation_Executor :: core.Simulation_Executor
 
+// Consume bounded scenario dust requests before ordinary fixed-step integration.
+consume_scenario_dust_requests :: proc(data: ^Simulation_Task_Data) {
+    queue := &data^.dust_emission_queue
+    for index in 0..<queue^.count {
+        request := queue^.items[index]
+        emitted := particles.emit_scenario_dust(
+            data^.state^.particle_system, request)
+        _ = evidence_session.session_record(
+            &data^.state^.evidence_session, &data^.evidence_ring, {
+                lane = .Domain,
+                kind = .Dust_Emission_Committed,
+                correlation_kind = .Scenario_Action,
+                correlation = request.correlation,
+                generation = request.generation,
+                tick = data^.state^.fixed_step + 1,
+                flags = {.Required},
+                payload = {counts = {
+                    first = request.count,
+                    second = u32(emitted),
+                }},
+            })
+    }
+    queue^.count = 0
+    if data^.scenario_dust_kick_requested {
+        particles.kick_existing_dust(data^.state^.particle_system)
+        data^.scenario_dust_kick_requested = false
+    }
+}
+
 //   Create and start the persistent fixed-step worker pool.
 create_simulation_executor :: proc(
     state: ^Euclid_General_State) -> ^Simulation_Executor {
@@ -80,6 +109,7 @@ destroy_simulation_executor :: proc(executor: ^Simulation_Executor) {
 update_particles_task :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     data := cast(^Simulation_Task_Data)payload
+    consume_scenario_dust_requests(data)
     particles.update_particles(data^.state^.particle_system, data^.dt)
     _ = evidence_session.session_record(
         &data^.state^.evidence_session, &data^.evidence_ring, {

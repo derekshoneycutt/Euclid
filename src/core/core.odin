@@ -33,6 +33,8 @@ Simulation_Task_Data :: struct {
     state: ^Euclid_General_State,
     dt: f32,
     evidence_ring: evidence_trace.Ring,
+    dust_emission_queue: particlemodel.Dust_Emission_Request_Queue,
+    scenario_dust_kick_requested: bool,
 }
 
 Math_Shaping_Workspace :: struct {
