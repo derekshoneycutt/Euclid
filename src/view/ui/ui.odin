@@ -35,6 +35,11 @@ TREE_TOOLBAR_BUTTON_SIZE :: 20
 TREE_TOOLBAR_GAP :: 6
 TREE_TOOLBAR_EDGE_PAD :: 4
 TREE_TOOLBAR_BUTTON_GAP :: 4
+ANIMATION_CONTROL_BUTTON_SIZE :: f32(30)
+ANIMATION_CONTROL_BUTTON_GAP :: f32(4)
+ANIMATION_CONTROL_PADDING :: f32(6)
+ANIMATION_CONTROL_EDGE_INSET :: f32(12)
+ANIMATION_CONTROL_ICON_SCALE :: f32(0.74)
 SETTINGS_TRACK_HEIGHT :: 8
 SETTINGS_KNOB_WIDTH :: 10
 WHEEL_SCROLL_MULTIPLIER :: 2
@@ -122,6 +127,7 @@ Ui_Geometry_Preparation :: struct {
 
 // Fixed frame-local control results prepared before services and rendering.
 Ui_Control_Preparation :: struct {
+    animation_controls: Animation_Control_Preparation,
     tree_toolbar: Tree_Toolbar_Preparation,
     settings: Settings_View_Preparation,
     gif: Gif_View_Preparation,
@@ -221,13 +227,28 @@ ui_tree_input_frame :: proc(
     return input.input_frame_filter_pointer(frame, {.Screen_Position})
 }
 
+// Return pointer input only when the animation overlay owns this frame.
+ui_animation_control_input_frame :: proc(
+    frame: Input_Frame,
+    routed: viewmodel.Ui_Interaction_Frame) -> Input_Frame {
+    target := routed.pointer_target
+    if target.kind == .Control && animation_control_id(target.id) {
+        return input.input_frame_filter_pointer(frame, {
+            .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels})
+    }
+    return input.input_frame_filter_pointer(frame, {.Screen_Position})
+}
+
 // Resolve geometry-known controls and commit their actions before services run.
 prepare_ui_controls :: proc(
     state: ^core.Euclid_General_State,
     frame: Input_Frame) -> Ui_Control_Preparation {
+    animation_frame := ui_animation_control_input_frame(
+        frame, state^.ui_runtime.interaction_frame)
     routed_frame := ui_tree_input_frame(
         frame, state^.ui_runtime.interaction_frame.tree)
     result := Ui_Control_Preparation{}
+    result.animation_controls = prepare_animation_controls(state, animation_frame)
     tree_panel := state^.ui_runtime.ui_regions.tree_rect
     result.tree_toolbar = prepare_tree_view_controls(state, tree_panel, routed_frame)
     _, list_panel := build_tree_view_panels(tree_panel)
@@ -272,6 +293,9 @@ draw_ui_panels :: proc(
     controls: Ui_Control_Preparation,
     layout_interaction: Ui_Layout_Interaction_Preparation) {
     regions := state^.ui_runtime.ui_regions
+
+    draw_animation_controls(
+        state, input_frame, controls.animation_controls)
 
     bottom_bar := rl.Rectangle{
         regions.world_rect.x,

@@ -49,6 +49,40 @@ ui_regions_clamp_all_pane_minimums :: proc(t: ^testing.T) {
     testing.expect(t, maximums.text_rect.height >= 0)
 }
 
+// Verify animation controls remain inset from the world's moving bottom-left edge.
+@(test)
+animation_controls_follow_world_splitters :: proc(t: ^testing.T) {
+    world := rl.Rectangle{0, 0, 640, 480}
+    slots := animation_control_layout_slots(world)
+    testing.expect_value(t, slots.panel.x, ANIMATION_CONTROL_EDGE_INSET)
+    testing.expect_value(t, slots.panel.y + slots.panel.height,
+        world.height - ANIMATION_CONTROL_EDGE_INSET)
+    testing.expect_value(t, slots.refresh.width, ANIMATION_CONTROL_BUTTON_SIZE)
+    testing.expect_value(t, slots.pause.x - slots.refresh.x,
+        ANIMATION_CONTROL_BUTTON_SIZE + ANIMATION_CONTROL_BUTTON_GAP)
+
+    resized := animation_control_layout_slots({0, 0, 480, 320})
+    testing.expect_value(t, resized.panel.x, slots.panel.x)
+    testing.expect_value(t, resized.panel.y - slots.panel.y, f32(-160))
+}
+
+// Verify relocated controls preserve reset, unpause, and pause-toggle semantics.
+@(test)
+animation_controls_apply_existing_actions :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    state^.julia_interface = &ji
+    state^.ui_runtime.simulation_paused = true
+
+    apply_animation_control_hit(state, {refresh_requested = true})
+    testing.expect(t, !state^.ui_runtime.simulation_paused)
+    testing.expect(t, ji.pending_animation_reset)
+
+    apply_animation_control_hit(state, {toggle_pause_requested = true})
+    testing.expect(t, state^.ui_runtime.simulation_paused)
+}
+
 // Verify Terminal entry focuses once while window activation only changes effective focus.
 @(test)
 ui_focus_terminal_entry_and_window_activation :: proc(t: ^testing.T) {
@@ -141,6 +175,17 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
     testing.expect(t, routed.terminal.wheel)
     testing.expect(t, !routed.presentation.pointer)
     testing.expect(t, !routed.tree.wheel)
+
+    controls := animation_control_layout_slots(runtime.ui_regions.world_rect)
+    animation := ui_route_interaction_frame(&runtime, {
+        frame = {mouse_position = {
+            controls.pause.x + 1, controls.pause.y + 1}},
+    })
+    testing.expect_value(t, animation.hover.kind,
+        viewmodel.Ui_Interaction_Target_Kind.Control)
+    testing.expect_value(t, animation.hover.id, ANIMATION_PAUSE_BUTTON_ID)
+    testing.expect_value(t, animation.hover.focus.kind,
+        viewmodel.Ui_Focus_Kind.None)
 }
 
 // Verify capture from frame start outranks new hover and suppresses wheel routing.

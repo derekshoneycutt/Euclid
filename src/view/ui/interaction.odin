@@ -32,6 +32,15 @@ ui_interaction_target :: #force_inline proc(
     return {kind = kind, focus = {kind = focus}, id = id}
 }
 
+// Classify icon-button capture between the world overlay and tree controls.
+ui_icon_button_capture_target :: proc(
+    capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
+    if animation_control_id(capture.id) {
+        return ui_interaction_target(.Control, id = capture.id)
+    }
+    return ui_interaction_target(.Control, .Tree, capture.id)
+}
+
 // Classify legacy singleton capture until widget call sites register with the router.
 ui_capture_target :: proc(
     capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
@@ -46,9 +55,11 @@ ui_capture_target :: proc(
         return ui_interaction_target(.Scrollbar, focus, capture.id)
     case .Dynview_Selection, .Copy_Icon:
         return ui_interaction_target(.Control, .Presentation, capture.id)
+    case .Icon_Button:
+        return ui_icon_button_capture_target(capture)
     case .None:
         return {}
-    case .List_Item, .Icon_Button, .Text_Button, .Checkbox, .Slider:
+    case .List_Item, .Text_Button, .Checkbox, .Slider:
         return ui_interaction_target(.Control, .Tree, capture.id)
     }
     return {}
@@ -78,6 +89,11 @@ ui_hover_target :: proc(
     }
     if rl.CheckCollisionPointRec(mouse, regions.tree_rect) {
         return ui_interaction_target(.Panel_Content, .Tree)
+    }
+    control_id, over_control := animation_control_hit_test(
+        regions.world_rect, runtime^.gif_capture_phase, mouse)
+    if over_control {
+        return ui_interaction_target(.Control, id = control_id)
     }
     if rl.CheckCollisionPointRec(mouse, regions.world_rect) {
         return ui_interaction_target(.World)

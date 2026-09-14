@@ -64,7 +64,6 @@ prepare_tree_view_controls :: proc(
     panel: rl.Rectangle,
     mouse_input: Input_Frame) -> Tree_Toolbar_Preparation {
 
-    ji := state.julia_interface
     ui_runtime := &state.ui_runtime
     toolbar_panel, _ := build_tree_view_panels(panel)
 
@@ -76,9 +75,8 @@ prepare_tree_view_controls :: proc(
         show_tree = show_tree,
         show_gif = ui_runtime.show_tree_gif,
         show_settings = ui_runtime.show_tree_settings,
-        simulation_paused = ui_runtime.simulation_paused,
     })
-    apply_tree_toolbar_hit(state, ji, ui_runtime, toolbar_hit)
+    apply_tree_toolbar_hit(ui_runtime, toolbar_hit)
     return prepared
 }
 
@@ -101,7 +99,6 @@ draw_tree_view :: proc(
         show_tree = show_tree,
         show_gif = ui_runtime.show_tree_gif,
         show_settings = ui_runtime.show_tree_settings,
-        simulation_paused = ui_runtime.simulation_paused,
     }, prepared.tree_toolbar)
 
     if ui_runtime.show_tree_settings {
@@ -125,37 +122,10 @@ draw_tree_view :: proc(
     }, prepared.tree)
 }
 
-//   Cancel an in-flight GIF capture when the user refreshes while paused.
-cancel_gif_capture_if_paused_mid_capture :: proc(
-    state: ^core.Euclid_General_State,
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-
-    if !ui_runtime.simulation_paused {
-        return
-    }
-    phase := ui_runtime.gif_capture_phase
-    if phase == .Armed || phase == .Recording || phase == .Finalizing {
-        view_core.cancel_gif_capture_with_note(state,
-            "Canceled: refresh during pause interrupts GIF capture.")
-    }
-}
-
 //   Apply one toolbar interaction to tree panel state.
 apply_tree_toolbar_hit :: proc(
-    state: ^core.Euclid_General_State,
-    ji: ^bridgemodel.Euclid_Julia_Interface,
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     toolbar_hit: Tree_Toolbar_Hit) {
-
-    if toolbar_hit.refresh_requested {
-        cancel_gif_capture_if_paused_mid_capture(state, ui_runtime)
-        ui_runtime.simulation_paused = false
-        ji.pending_animation_reset = true
-    }
-
-    if toolbar_hit.toggle_pause_requested {
-        ui_runtime.simulation_paused = !ui_runtime.simulation_paused
-    }
 
     if toolbar_hit.toggle_tree_requested {
         ui_runtime.show_tree_gif = false
