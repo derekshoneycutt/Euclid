@@ -281,10 +281,9 @@ parallel_simulation_step_settles_and_wakes_scenario_dust :: proc(t: ^testing.T) 
     testing.expect_value(t, settled.dust_grounded_awake_count, 0)
     for index in 0..<16 {
         testing.expect(t, particles.queue_dust_tool_contact(
-            state^.particle_system,
-            {state^.particle_system^.low_particles.pos_x[index],
-                state^.particle_system^.low_particles.pos_y[index], 0},
-            {}, {}, 0, false))
+            state^.particle_system, {endpoint = {
+                state^.particle_system^.low_particles.pos_x[index],
+                state^.particle_system^.low_particles.pos_y[index], 0}}))
     }
 
     run_parallel_simulation_step(executor, 1.0 / 60.0)

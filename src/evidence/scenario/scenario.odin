@@ -21,6 +21,12 @@ Event_Kind_Entry :: struct {
     kind : trace.Kind,
 }
 
+// Stable payload-free action spelling paired with its command identity.
+Action_Kind_Entry :: struct {
+    name : string,
+    kind : Command_Kind,
+}
+
 // Event names accepted by `wait_event`; spellings are part of the scenario format.
 EVENT_KINDS :: [?]Event_Kind_Entry {
     {"runtime_ready", .Runtime_Ready},
@@ -80,6 +86,18 @@ Command_Kind :: enum u8 {
     Assert_Allocation_Baseline,
     Assert_No_Bad_Frees,
     Shutdown,
+}
+
+// Payload-free action names accepted by the `do` scenario field.
+ACTION_KINDS :: [?]Action_Kind_Entry {
+    {"reset_animation", .Reset_Animation},
+    {"reload_runtime", .Reload_Runtime},
+    {"pause_simulation", .Pause_Simulation},
+    {"resume_simulation", .Resume_Simulation},
+    {"pause_animation", .Pause_Animation},
+    {"resume_animation", .Resume_Animation},
+    {"kick_dust", .Kick_Dust},
+    {"stop_gif", .Stop_Gif},
 }
 
 // Canonical presentation MIME accepted by scenario-authored view content.
@@ -723,20 +741,14 @@ raw_action_command_select :: proc(source: string, command: ^Command) -> int {
     if len(source) == 0 {
         return 0
     }
-    switch source {
-    case "reset_animation": command.kind = .Reset_Animation
-    case "reload_runtime": command.kind = .Reload_Runtime
-    case "pause_simulation": command.kind = .Pause_Simulation
-    case "resume_simulation": command.kind = .Resume_Simulation
-    case "pause_animation": command.kind = .Pause_Animation
-    case "resume_animation": command.kind = .Resume_Animation
-    case "kick_dust": command.kind = .Kick_Dust
-    case "stop_gif": command.kind = .Stop_Gif
-    case:
-        return 2
+    for entry in ACTION_KINDS {
+        if entry.name == source {
+            command.kind = entry.kind
+            command.text, _ = text_copy(source)
+            return 1
+        }
     }
-    command.text, _ = text_copy(source)
-    return 1
+    return 2
 }
 
 //   Select every populated action field and return the number selected.
@@ -802,6 +814,24 @@ command_apply_options :: proc(raw: Raw_Command, command: ^Command) -> Parse_Erro
     return .None
 }
 
+//   Select structured object and numeric actions while preserving exact-one semantics.
+scenario_structured_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    selected := 0
+    count, valid := scenario_view_content_action_select(root, raw, command)
+    if !valid {return 0, false}
+    selected += count
+    count, valid = scenario_dust_emission_action_select(root, raw, command)
+    if !valid {return 0, false}
+    selected += count
+    count, valid = scenario_dust_contact_action_select(root, raw, command)
+    if !valid {return 0, false}
+    selected += count
+    count, valid = scenario_numeric_action_select(root, command)
+    if !valid {return 0, false}
+    return selected + count, true
+}
+
 //   Convert one decoded JSON object into exactly one bounded command.
 //
 // Parameters:
@@ -817,29 +847,12 @@ command_from_raw :: proc(
     raw: Raw_Command, root: json.Object) -> (Command, Parse_Error) {
     command: Command
     selected := raw_command_select(raw, &command)
-    view_content_selected, view_content_valid :=
-        scenario_view_content_action_select(root, raw, &command)
-    if !view_content_valid {
+    structured_selected, structured_valid :=
+        scenario_structured_action_select(root, raw, &command)
+    if !structured_valid {
         return {}, .Invalid_Command
     }
-    selected += view_content_selected
-    dust_selected, dust_valid :=
-        scenario_dust_emission_action_select(root, raw, &command)
-    if !dust_valid {
-        return {}, .Invalid_Command
-    }
-    selected += dust_selected
-    contact_selected, contact_valid :=
-        scenario_dust_contact_action_select(root, raw, &command)
-    if !contact_valid {
-        return {}, .Invalid_Command
-    }
-    selected += contact_selected
-    numeric_selected, numeric_valid := scenario_numeric_action_select(root, &command)
-    if !numeric_valid {
-        return {}, .Invalid_Command
-    }
-    selected += numeric_selected
+    selected += structured_selected
     if selected != 1 {
         return {}, .Invalid_Command
     }
@@ -1027,15 +1040,8 @@ terminal_state_matches :: proc(name: string, display: observe.Display) -> bool {
     return false
 }
 
-//   Evaluate one stable scalar-state predicate.
-//
-// Parameters:
-//   - name: Public scenario state-predicate spelling.
-//   - display: Current pointer-free display observation.
-//
-// Returns:
-//   - True when the named predicate currently holds; false for unknown names.
-state_matches :: proc(name: string, display: observe.Display) -> bool {
+//   Evaluate runtime and animation scalar-state predicates.
+runtime_state_matches :: proc(name: string, display: observe.Display) -> bool {
     switch name {
     case "runtime_ready": return display.runtime_lifecycle == .Ready
     case "runtime_idle": return display.active_runtime_request_id == 0
@@ -1046,9 +1052,13 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "simulation_paused": return display.simulation_paused
     case "simulation_running": return !display.simulation_paused
     case "animation_paused": return display.animation_policy_paused
-    case "dynview_enabled": return display.dynview_enabled
-    case "gif_active": return display.gif_capture_active
-    case "gif_idle": return !display.gif_capture_active
+    }
+    return false
+}
+
+//   Evaluate dust lifecycle scalar-state predicates.
+dust_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
     case "dust_settled":
         return display.dust_live_count > 0 && display.dust_airborne_count == 0 &&
             display.dust_grounded_awake_count == 0 &&
@@ -1058,7 +1068,25 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
             (display.dust_airborne_count > 0 || display.dust_grounded_awake_count > 0)
     case "dust_airborne": return display.dust_airborne_count > 0
     }
-    return terminal_state_matches(name, display)
+    return false
+}
+
+//   Evaluate one stable scalar-state predicate.
+//
+// Parameters:
+//   - name: Public scenario state-predicate spelling.
+//   - display: Current pointer-free display observation.
+//
+// Returns:
+//   - True when the named predicate currently holds; false for unknown names.
+state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "dynview_enabled": return display.dynview_enabled
+    case "gif_active": return display.gif_capture_active
+    case "gif_idle": return !display.gif_capture_active
+    }
+    return runtime_state_matches(name, display) ||
+        dust_state_matches(name, display) || terminal_state_matches(name, display)
 }
 
 //   Return running before the deadline and fail at or after it.

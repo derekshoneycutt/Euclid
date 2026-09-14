@@ -197,6 +197,29 @@ expect_dust_slot_unchanged :: proc(
         "no collision should keep vy")
 }
 
+//   Assert two particle systems have matching low-particle slots and RNG state.
+expect_dust_systems_match :: proc(
+    t: ^testing.T, actual, expected: ^particlemodel.Particle_System) {
+    for index in 0..<expected^.use_max_dust_particles {
+        actual_slot := dust_slot_snapshot(actual, index)
+        expected_slot := dust_slot_snapshot(expected, index)
+        test_helpers.expect_close(t, actual_slot.x, expected_slot.x, "slot x")
+        test_helpers.expect_close(t, actual_slot.y, expected_slot.y, "slot y")
+        test_helpers.expect_close(t, actual_slot.vx, expected_slot.vx, "slot vx")
+        test_helpers.expect_close(t, actual_slot.vy, expected_slot.vy, "slot vy")
+    }
+    testing.expect_value(t, actual^.rng_state, expected^.rng_state)
+}
+
+//   Queue one point contact at every live low-particle slot.
+queue_dust_slot_contacts :: proc(
+    t: ^testing.T, ps: ^particlemodel.Particle_System) {
+    for index in 0..<ps^.use_max_dust_particles {
+        testing.expect(t, queue_dust_tool_contact(ps, {endpoint = {
+            ps^.low_particles.pos_x[index], ps^.low_particles.pos_y[index], 0}}))
+    }
+}
+
 // Verify deferred replay preserves endpoint and sampled sweep responses.
 @(test)
 replay_dust_tool_contact_matches_immediate_reference :: proc(t: ^testing.T) {
@@ -227,19 +250,13 @@ replay_dust_tool_contact_matches_immediate_reference :: proc(t: ^testing.T) {
             math.lerp(first.y, second.y, interpolation))
     }
     testing.expect(t, queue_dust_tool_contact(
-        actual, endpoint, first, second, sample_count, true))
+        actual, {endpoint = endpoint, segment_first = first,
+            segment_second = second, sample_count = i32(sample_count),
+            has_sweep = true}))
     build_exact_dust_grid(actual)
     replay_dust_tool_contacts(actual)
 
-    for index in 0..<expected^.use_max_dust_particles {
-        expected_slot := dust_slot_snapshot(expected, index)
-        actual_slot := dust_slot_snapshot(actual, index)
-        test_helpers.expect_close(t, actual_slot.x, expected_slot.x, "segment x")
-        test_helpers.expect_close(t, actual_slot.y, expected_slot.y, "segment y")
-        test_helpers.expect_close(t, actual_slot.vx, expected_slot.vx, "segment vx")
-        test_helpers.expect_close(t, actual_slot.vy, expected_slot.vy, "segment vy")
-    }
-    testing.expect_value(t, actual^.rng_state, expected^.rng_state)
+    expect_dust_systems_match(t, actual, expected)
     testing.expect_value(t, actual^.dust_tool_contact_count, 0)
 }
 
@@ -259,8 +276,7 @@ dust_tool_contact_replays_before_fixed_step_integration :: proc(t: ^testing.T) {
 
     push_dust_away_from_xy(expected, endpoint.x, endpoint.y)
     update_particles(expected, f32(1.0 / 60.0))
-    testing.expect(t, queue_dust_tool_contact(
-        actual, endpoint, {}, {}, 0, false))
+    testing.expect(t, queue_dust_tool_contact(actual, {endpoint = endpoint}))
     update_particles(actual, f32(1.0 / 60.0))
 
     testing.expect_value(t, actual^.low_particles[0], expected^.low_particles[0])
@@ -277,8 +293,7 @@ dust_tool_contact_excludes_later_spawned_slots :: proc(t: ^testing.T) {
     expected^.use_max_dust_particles = 1
     actual^.use_max_dust_particles = 1
     endpoint := Vector3{0.2, 0.25, 0}
-    testing.expect(t, queue_dust_tool_contact(
-        actual, endpoint, {}, {}, 0, false))
+    testing.expect(t, queue_dust_tool_contact(actual, {endpoint = endpoint}))
 
     spawn_dust_particle(expected, endpoint, rl.WHITE)
     spawn_dust_particle(actual, endpoint, rl.WHITE)
@@ -305,8 +320,7 @@ dust_tool_contact_flush_precedes_later_emission_rng :: proc(t: ^testing.T) {
 
     push_dust_away_from_xy(expected, endpoint.x, endpoint.y)
     spawn_dust_particle(expected, endpoint, rl.WHITE)
-    testing.expect(t, queue_dust_tool_contact(
-        actual, endpoint, {}, {}, 0, false))
+    testing.expect(t, queue_dust_tool_contact(actual, {endpoint = endpoint}))
     flush_dust_tool_contacts(actual)
     spawn_dust_particle(actual, endpoint, rl.WHITE)
 
@@ -321,11 +335,11 @@ dust_tool_contact_queue_is_bounded :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
     for _ in 0..<DUST_TOOL_CONTACT_CAP {
-        testing.expect(t, queue_dust_tool_contact(ps, {}, {}, {}, 0, false))
+        testing.expect(t, queue_dust_tool_contact(ps, {}))
     }
 
     testing.expect(t, !can_queue_dust_tool_contacts(ps, 1))
-    testing.expect(t, !queue_dust_tool_contact(ps, {}, {}, {}, 0, false))
+    testing.expect(t, !queue_dust_tool_contact(ps, {}))
     testing.expect_value(t, ps^.dust_tool_contact_count, DUST_TOOL_CONTACT_CAP)
     testing.expect_value(t, ps^.dust_tool_contact_overflow_count, 1)
 }
@@ -341,8 +355,7 @@ exact_dust_grid_rebuild_tracks_contact_displacement :: proc(t: ^testing.T) {
 
     build_exact_dust_grid(ps)
     old_cell := dust_grid_cell_index(0.0197, 0.25)
-    testing.expect(t, queue_dust_tool_contact(
-        ps, endpoint, {}, {}, 0, false))
+    testing.expect(t, queue_dust_tool_contact(ps, {endpoint = endpoint}))
     replay_dust_tool_contacts(ps)
     build_exact_dust_grid(ps)
 
@@ -608,14 +621,8 @@ scenario_dust_settle_and_wake_stream_is_deterministic :: proc(t: ^testing.T) {
     }
     testing.expect_value(t, first^.dust_sleeping_count, 16)
     testing.expect_value(t, second^.dust_sleeping_count, 16)
-    for index in 0..<16 {
-        testing.expect(t, queue_dust_tool_contact(first,
-            {first^.low_particles.pos_x[index], first^.low_particles.pos_y[index], 0},
-            {}, {}, 0, false))
-        testing.expect(t, queue_dust_tool_contact(second,
-            {second^.low_particles.pos_x[index], second^.low_particles.pos_y[index], 0},
-            {}, {}, 0, false))
-    }
+    queue_dust_slot_contacts(t, first)
+    queue_dust_slot_contacts(t, second)
     update_particles(first, 1.0 / 60.0)
     update_particles(second, 1.0 / 60.0)
     kick_existing_dust(first)
@@ -623,12 +630,9 @@ scenario_dust_settle_and_wake_stream_is_deterministic :: proc(t: ^testing.T) {
     update_particles(first, 1.0 / 60.0)
     update_particles(second, 1.0 / 60.0)
 
-    for index in 0..<16 {
-        testing.expect_value(t, first^.low_particles[index], second^.low_particles[index])
-        testing.expect_value(t, first^.dust_sleeping[index], second^.dust_sleeping[index])
-        testing.expect_value(t,
-            first^.dust_activity_frames[index], second^.dust_activity_frames[index])
-    }
+    expect_dust_systems_match(t, first, second)
+    testing.expect_value(t, first^.dust_sleeping, second^.dust_sleeping)
+    testing.expect_value(t, first^.dust_activity_frames, second^.dust_activity_frames)
     testing.expect_value(t,
         first^.dust_sleep_transition_count, second^.dust_sleep_transition_count)
     testing.expect_value(t,
@@ -972,8 +976,8 @@ replay_dust_tool_contacts_wakes_sleeping_cell_halo :: proc(t: ^testing.T) {
     ps^.dust_sleeping[0] = true
     ps^.dust_sleeping_count = 1
     endpoint := Vector3{0.5, 0.5, 0}
-    testing.expect(t, queue_dust_tool_contact(
-        ps, endpoint, endpoint, endpoint, 0, false))
+    testing.expect(t, queue_dust_tool_contact(ps, {endpoint = endpoint,
+        segment_first = endpoint, segment_second = endpoint}))
     build_exact_dust_grid(ps)
 
     replay_dust_tool_contacts(ps)

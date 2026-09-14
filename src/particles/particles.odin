@@ -1269,25 +1269,17 @@ can_queue_dust_tool_contacts :: proc(ps: ^Particle_System, count: int) -> bool {
 
 // Queue one ordered tool contact for replay by the particle worker.
 queue_dust_tool_contact :: proc(
-    ps: ^Particle_System,
-    endpoint, segment_first, segment_second: Vector3,
-    sample_count: int,
-    has_sweep: bool) -> bool {
+    ps: ^Particle_System, contact: particlemodel.Dust_Tool_Contact) -> bool {
     if ps == nil || ps^.dust_tool_contact_count >= DUST_TOOL_CONTACT_CAP {
         if ps != nil {
             ps^.dust_tool_contact_overflow_count += 1
         }
         return false
     }
-    ps^.dust_tool_contacts[ps^.dust_tool_contact_count] =
-        particlemodel.Dust_Tool_Contact{
-            endpoint = endpoint,
-            segment_first = segment_first,
-            segment_second = segment_second,
-            max_spawn_sequence = ps^.dust_spawn_sequence,
-            sample_count = i32(sample_count),
-            has_sweep = has_sweep && sample_count > 0,
-        }
+    stored_contact := contact
+    stored_contact.max_spawn_sequence = ps^.dust_spawn_sequence
+    stored_contact.has_sweep = stored_contact.has_sweep && stored_contact.sample_count > 0
+    ps^.dust_tool_contacts[ps^.dust_tool_contact_count] = stored_contact
     ps^.dust_tool_contact_count += 1
     return true
 }
@@ -1766,12 +1758,8 @@ refine_dust_collision_bucket :: proc(ps: ^Particle_System, cell: int) {
     ps^.dust_collision_refined_cell_count += 1
 }
 
-// Build sampled collision buckets from exact membership and resolve pairs.
-resolve_dust_collisions_on_fine_grid :: proc(ps: ^Particle_System) {
-    if ps^.use_max_dust_particles < 1 {
-        return
-    }
-
+// Reset bounded fine-grid collision storage and per-frame diagnostics.
+reset_dust_collision_frame :: proc(ps: ^Particle_System) {
     mem.set(&ps^.dust_counts[0], 0, size_of(ps^.dust_counts))
     mem.set(&ps^.dust_seen_counts[0], 0, size_of(ps^.dust_seen_counts))
     ps^.dust_collision_active_cell_count = 0
@@ -1785,32 +1773,51 @@ resolve_dust_collisions_on_fine_grid :: proc(ps: ^Particle_System) {
     mem.set(&ps^.dust_contact_correction[0], 0,
         size_of(ps^.dust_contact_correction))
     ps^.dust_collision_frame += 1
+}
 
-    prepare_dust_collision_grid(ps)
-    populate_dust_collision_grid(ps)
+// Rebalance every overloaded active collision bucket across spatial quotas.
+refine_dust_collision_buckets :: proc(ps: ^Particle_System) {
     ps^.dust_collision_refined_cell_count = 0
     for active_index in 0..<ps^.dust_collision_active_cell_count {
         refine_dust_collision_bucket(
             ps, int(ps^.dust_collision_active_cells[active_index]))
     }
+}
 
+// Collect bounded collision pairs from every active fine-grid cell.
+collect_dust_collision_pairs :: proc(ps: ^Particle_System, min_sep_sq: f32) {
+    for index in 0..<ps^.dust_collision_active_cell_count {
+        cell := int(ps^.dust_collision_active_cells[index])
+        count := int(ps^.dust_counts[cell])
+        cell_y := cell / DUST_COLLISION_GRID_DIM
+        cell_x := cell % DUST_COLLISION_GRID_DIM
+        ps^.dust_collision_candidate_count += resolve_dust_collisions_on_grid(
+            ps, {cell_y, cell_x, cell, count, min_sep_sq})
+    }
+}
+
+// Apply every collision pair retained by the bounded collection pass.
+resolve_cached_dust_collision_pairs :: proc(ps: ^Particle_System) {
+    for index in 0..<ps^.dust_pair_count {
+        resolve_dust_pair(ps, int(ps^.dust_pair_a[index]),
+            int(ps^.dust_pair_b[index]))
+    }
+}
+
+// Build sampled collision buckets from exact membership and resolve pairs.
+resolve_dust_collisions_on_fine_grid :: proc(ps: ^Particle_System) {
+    if ps^.use_max_dust_particles < 1 {
+        return
+    }
+
+    reset_dust_collision_frame(ps)
+    prepare_dust_collision_grid(ps)
+    populate_dust_collision_grid(ps)
+    refine_dust_collision_buckets(ps)
     min_sep_sq: f32 = DUST_COLLISION_MIN_SEPARATION *
         DUST_COLLISION_MIN_SEPARATION
-
-    for i in 0..<ps^.dust_collision_active_cell_count {
-        ca := int(ps^.dust_collision_active_cells[i])
-        na := int(ps^.dust_counts[ca])
-        cy := ca / DUST_COLLISION_GRID_DIM
-        cx := ca % DUST_COLLISION_GRID_DIM
-        ps^.dust_collision_candidate_count += resolve_dust_collisions_on_grid(
-            ps, {cy, cx, ca, na, min_sep_sq})
-    }
-
-    for i in 0..<ps^.dust_pair_count {
-        ia := int(ps^.dust_pair_a[i])
-        ib := int(ps^.dust_pair_b[i])
-        resolve_dust_pair(ps, ia, ib)
-    }
+    collect_dust_collision_pairs(ps, min_sep_sq)
+    resolve_cached_dust_collision_pairs(ps)
 }
 
 // Build current exact membership and resolve pairwise dust collisions.
@@ -1849,8 +1856,8 @@ dust_relaxation_leaf_index :: #force_inline proc(
     return parent * DUST_RELAXATION_LEAVES_PER_PARENT + local_y * 4 + local_x
 }
 
-// Build adaptive grounded-cell occupancy in fixed storage.
-prepare_dust_relaxation :: proc(ps: ^Particle_System) {
+// Clear bounded adaptive relaxation accumulators for a new frame.
+reset_dust_relaxation_accumulators :: proc(ps: ^Particle_System) {
     mem.set(&ps^.dust_relaxation_parent_counts[0], 0,
         size_of(ps^.dust_relaxation_parent_counts))
     mem.set(&ps^.dust_relaxation_leaf_counts[0], 0,
@@ -1867,19 +1874,14 @@ prepare_dust_relaxation :: proc(ps: ^Particle_System) {
         size_of(ps^.dust_relaxation_leaf_max_correction))
     ps^.dust_relaxation_active_leaf_count = 0
     ps^.dust_relaxation_frame += 1
-    for i in 0..<ps^.use_max_dust_particles {
-        if ps.low_particles[i].alive && ps.low_particles.pos_z[i] <= DUST_FLOOR_Z &&
-            ps^.dust_activity_frames[i] == 0 {
-            parent := dust_grid_cell_index(
-                ps.low_particles.pos_x[i], ps.low_particles.pos_y[i])
-            ps^.dust_relaxation_parent_counts[parent] += 1
-        }
-    }
+}
+
+// Apply occupancy hysteresis and invalidate leaves whose subdivision changed.
+update_dust_relaxation_levels :: proc(ps: ^Particle_System) {
     for parent in 0..<DUST_GRID_DIM_SQUARED {
         old_level := ps^.dust_relaxation_parent_levels[parent]
         new_level := dust_relaxation_level(
-            ps^.dust_relaxation_parent_counts[parent],
-            old_level)
+            ps^.dust_relaxation_parent_counts[parent], old_level)
         ps^.dust_relaxation_parent_levels[parent] = new_level
         if new_level != old_level {
             first_leaf := parent * DUST_RELAXATION_LEAVES_PER_PARENT
@@ -1888,6 +1890,20 @@ prepare_dust_relaxation :: proc(ps: ^Particle_System) {
             }
         }
     }
+}
+
+// Build adaptive grounded-cell occupancy in fixed storage.
+prepare_dust_relaxation :: proc(ps: ^Particle_System) {
+    reset_dust_relaxation_accumulators(ps)
+    for i in 0..<ps^.use_max_dust_particles {
+        if ps.low_particles[i].alive && ps.low_particles.pos_z[i] <= DUST_FLOOR_Z &&
+            ps^.dust_activity_frames[i] == 0 {
+            parent := dust_grid_cell_index(
+                ps.low_particles.pos_x[i], ps.low_particles.pos_y[i])
+            ps^.dust_relaxation_parent_counts[parent] += 1
+        }
+    }
+    update_dust_relaxation_levels(ps)
 }
 
 // Deposit quiet grounded particle momentum into adaptive relaxation leaves.

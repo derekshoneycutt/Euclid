@@ -414,6 +414,39 @@ scenario_issue_viewport_action :: proc(
     return true, true
 }
 
+//   Apply one display-owned simulation or animation policy command.
+scenario_issue_simulation_policy_action :: proc(
+    state: ^Euclid_General_State, command: ^scenario.Command) -> (bool, bool) {
+    #partial switch command.kind {
+    case .Pause_Simulation: state.ui_runtime.simulation_paused = true
+    case .Resume_Simulation: state.ui_runtime.simulation_paused = false
+    case .Pause_Animation: state.ui_runtime.animation_policy_paused = true
+    case .Resume_Animation: state.ui_runtime.animation_policy_paused = false
+    case: return false, false
+    }
+    return true, true
+}
+
+//   Route one screenshot or GIF command through display-owned capture state.
+scenario_issue_capture_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> (bool, bool) {
+    #partial switch command.kind {
+    case .Request_Screenshot:
+        if !capture.checkpoint_request(
+            &runtime.capture, u32(runtime.runner.step), identity^,
+            scenario.text_string(&command.text)) {
+            return true, false
+        }
+        identity.kind = .Capture
+    case .Start_Gif, .Stop_Gif:
+        runtime.state.ui_runtime.save_gif_requested = true
+        identity.kind = .Capture
+    case: return false, false
+    }
+    return true, true
+}
+
 //   Route one display or capture command through display-owned state.
 scenario_issue_display_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
@@ -422,31 +455,15 @@ scenario_issue_display_action :: proc(
     if handled, accepted := scenario_issue_viewport_action(runtime, command); handled {
         return handled, accepted
     }
+    if handled, accepted := scenario_issue_simulation_policy_action(
+        state, command); handled {
+        return handled, accepted
+    }
+    if handled, accepted := scenario_issue_capture_action(
+        runtime, command, identity); handled {
+        return handled, accepted
+    }
     #partial switch command.kind {
-    case .Pause_Simulation:
-        state.ui_runtime.simulation_paused = true
-        return true, true
-    case .Resume_Simulation:
-        state.ui_runtime.simulation_paused = false
-        return true, true
-    case .Pause_Animation:
-        state.ui_runtime.animation_policy_paused = true
-        return true, true
-    case .Resume_Animation:
-        state.ui_runtime.animation_policy_paused = false
-        return true, true
-    case .Request_Screenshot:
-        if !capture.checkpoint_request(
-            &runtime.capture, u32(runtime.runner.step), identity^,
-            scenario.text_string(&command.text)) {
-            return true, false
-        }
-        identity.kind = .Capture
-        return true, true
-    case .Start_Gif, .Stop_Gif:
-        state.ui_runtime.save_gif_requested = true
-        identity.kind = .Capture
-        return true, true
     case .Checkpoint:
         return true, scenario_issue_checkpoint_action(state, identity)
     case .Shutdown:
@@ -588,6 +605,32 @@ scenario_record_allocation_evidence :: proc(
         })
 }
 
+// Queue one validated deterministic dust emission for the particle worker.
+scenario_queue_dust_emission :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> bool {
+    executor := runtime.state^.simulation_executor
+    particle_system := runtime.state^.particle_system
+    if executor == nil || particle_system == nil ||
+        command.dust_count > u32(particle_system^.use_max_dust_particles) {
+        return false
+    }
+    queue := &executor^.particle_task.dust_emission_queue
+    if queue^.count >= particlemodel.SCENARIO_DUST_EMISSION_REQUEST_CAP {
+        return false
+    }
+    queue^.items[queue^.count] = {
+        distribution = particlemodel.Dust_Emission_Distribution(
+            command.dust_distribution),
+        count = command.dust_count, x = command.value,
+        y = command.secondary_value, radius = command.tertiary_value,
+        seed = command.dust_seed, correlation = identity.id,
+        generation = identity.generation,
+    }
+    queue^.count += 1
+    return true
+}
+
 // Queue one bounded scenario dust request for the next particle step.
 scenario_issue_particle_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
@@ -598,8 +641,8 @@ scenario_issue_particle_action :: proc(
     case .Contact_Dust:
         if particle_system == nil {return true, false}
         accepted := particles.queue_dust_tool_contact(
-            particle_system, {command.value, command.secondary_value, 0},
-            {}, {}, 0, false)
+            particle_system, {
+                endpoint = {command.value, command.secondary_value, 0}})
         return true, accepted
     case .Kick_Dust:
         if executor == nil || particle_system == nil ||
@@ -609,24 +652,7 @@ scenario_issue_particle_action :: proc(
         executor^.particle_task.scenario_dust_kick_requested = true
         return true, true
     case .Emit_Dust:
-        if executor == nil || particle_system == nil ||
-            command.dust_count > u32(particle_system^.use_max_dust_particles) {
-            return true, false
-        }
-        queue := &executor^.particle_task.dust_emission_queue
-        if queue^.count >= particlemodel.SCENARIO_DUST_EMISSION_REQUEST_CAP {
-            return true, false
-        }
-        queue^.items[queue^.count] = {
-            distribution = particlemodel.Dust_Emission_Distribution(
-                command.dust_distribution),
-            count = command.dust_count, x = command.value,
-            y = command.secondary_value, radius = command.tertiary_value,
-            seed = command.dust_seed, correlation = identity.id,
-            generation = identity.generation,
-        }
-        queue^.count += 1
-        return true, true
+        return true, scenario_queue_dust_emission(runtime, command, identity)
     case:
         return false, false
     }
