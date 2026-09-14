@@ -98,12 +98,17 @@ Gif_Capture_Session :: struct {
 
 Ui_Layout_Mode :: enum { Baseline }
 
+// Ui_Accordion_Section identifies the one expanded auxiliary application view.
+Ui_Accordion_Section :: enum u8 {
+    Library,
+    Save_Gif,
+    Settings,
+}
+
 Ui_Regions :: struct {
     world_rect: rl.Rectangle,
-    tree_rect: rl.Rectangle,
+    accordion_rect: rl.Rectangle,
     text_rect: rl.Rectangle,
-    settings_rect: rl.Rectangle,
-    gif_rect: rl.Rectangle,
     terminal_rect: rl.Rectangle,
 }
 
@@ -130,7 +135,7 @@ Ui_Focus_Kind :: enum u8 {
     None,
     Terminal,
     Presentation,
-    Tree,
+    Accordion,
     Input_Box,
 }
 
@@ -175,7 +180,7 @@ Ui_Interaction_Frame :: struct {
     wheel_target: Ui_Interaction_Target,
     terminal: Ui_Surface_Interaction,
     presentation: Ui_Surface_Interaction,
-    tree: Ui_Surface_Interaction,
+    accordion: Ui_Surface_Interaction,
     terminal_focus_changed: bool,
     terminal_focused: bool,
 }
@@ -190,8 +195,7 @@ Euclid_Ui_Runtime_State :: struct {
     tree_scroll_dragging: bool,
     tree_scroll_drag_off: f32,
     ui_press_owner: Ui_Press_Owner_State,
-    show_tree_settings: bool,
-    show_tree_gif: bool,
+    active_accordion_section: Ui_Accordion_Section,
     settings_slider_dragging: bool,
     settings_slider_drag_offset_x: f32,
     text_scroll_dragging: bool,

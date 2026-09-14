@@ -16,7 +16,7 @@
 1. [Scrolling](#scrolling)
 1. [Presentation Panel](#presentation-panel)
 1. [Terminal Panel](#terminal-panel)
-1. [Tree And Utility Panels](#tree-and-utility-panels)
+1. [Accordion And Animation Controls](#accordion-and-animation-controls)
 1. [Fonts And Text Drawing](#fonts-and-text-drawing)
 1. [GIF Capture Coordination](#gif-capture-coordination)
 1. [Allocation And Lifetime](#allocation-and-lifetime)
@@ -36,7 +36,7 @@ This guide documents the current implementation. It focuses on:
 - frame ordering and display-thread ownership;
 - fixed-window panel layout and splitter behavior;
 - input snapshots, widget interaction, and shared press capture;
-- presentation, Terminal, tree, settings, and GIF panel composition;
+- presentation, Terminal, accordion, animation controls, settings, and GIF composition;
 - scrolling, text selection, copy affordances, fonts, and drawing;
 - current verification surfaces and architectural limitations.
 
@@ -112,8 +112,9 @@ This is a hybrid model:
 | Terminal facade | `src/view/ui/terminal.odin` | Terminal panel layout, scroll container, and draw calls. |
 | Terminal service | `src/view/terminal_service.odin` | Terminal lifecycle, input update, Julia messages, and links. |
 | Terminal rendering | `src/view/terminal/` | Grid, prompt, selection, links, attachments, and overlays. |
-| Tree panel | `src/view/ui/tree_panel.odin` | Catalogue traversal, row interaction, reveal, and scrolling. |
-| Tree toolbar | `src/view/ui/tree_toolbar.odin` | Refresh, pause, tree, GIF, and settings actions. |
+| Accordion | `src/view/ui/accordion.odin` | Section layout, header interaction, and one-expanded-section policy. |
+| Accordion children | `src/view/ui/tree_panel.odin` | Accordion orchestration plus catalogue traversal, reveal, and scrolling. |
+| Animation controls | `src/view/ui/animation_controls.odin` | World-anchored refresh and pause/play interaction and drawing. |
 | Utility panels | `settings_panel.odin`, `gif_panel.odin` | Runtime settings and GIF controls. |
 | Basic widgets | `*button.odin`, `checkbox.odin`, `sliders.odin` | Shared press/release and visuals. |
 | Copy affordances | `src/view/core/copy_interaction.odin` | Copy icon interaction and clipboard action. |
@@ -140,8 +141,8 @@ allowed to call Raylib drawing and resource APIs.
 | GIF state and capture | Display-owned GIF coordinator | UI requests actions; capture commits after presentation. |
 
 The UI may call application services, such as animation reset or GIF capture, but it
-does not bypass their ownership. A toolbar click sets display-owned request state; the
-normal frame and service paths perform the operation.
+does not bypass their ownership. An animation-control or accordion-child click sets
+display-owned request state; the normal frame and service paths perform the operation.
 
 ## Frame Lifecycle
 
@@ -162,7 +163,7 @@ sequenceDiagram
     I->>U: Raw frame snapshot
     U->>U: Prepare geometry and snapshot pointer capture
     U->>U: Resolve static focus, hover, pointer, and wheel targets
-    U->>U: Update toolbar, settings, GIF, and tree controls
+    U->>U: Update animation controls, accordion headers, and active child
     U->>T: Raw frame, router result, and prepared panel geometry
     T->>T: Refine Terminal scrollbar routing and update sessions
     T->>S: Continue fixed-step and frame preparation
@@ -182,7 +183,8 @@ The concrete high-level order is:
 1. poll one device-independent `Input_Frame`;
 1. call `ui.prepare_ui_geometry`;
 1. call `ui.prepare_ui_static_interaction`;
-1. call `ui.prepare_ui_controls` for toolbar, settings, GIF, and tree interaction;
+1. call `ui.prepare_ui_controls` for animation controls, accordion headers, and the
+    active Library, Save GIF, or Settings child;
 1. update the selected Terminal and active shell session;
 1. advance fixed-step simulation;
 1. run and join frame preparation that depends on the new UI geometry;
@@ -234,7 +236,7 @@ The baseline starts with:
 ```text
 +------------------------------+-------------------+
 |                              |                   |
-|          world_rect          |     tree_rect     |
+|          world_rect          |  accordion_rect   |
 |                              |                   |
 +------------------------------+                   |
 |          text_rect           |                   |
@@ -242,10 +244,10 @@ The baseline starts with:
 +------------------------------+-------------------+
 ```
 
-`settings_rect` and `gif_rect` alias the tree list area because those panels replace
-the catalogue rather than coexist with it. `terminal_rect` is a clamped inset of the
-text region. Panel drawing applies additional container borders and padding where
-required.
+`accordion_rect` is the complete right-side region. The accordion derives three
+full-width headers and one flexible content rectangle inside it; only the active child
+receives that content rectangle. `terminal_rect` is a clamped inset of the text region.
+Panel drawing applies additional container borders and padding where required.
 
 `validate_ui_regions` rejects negative dimensions. The frame falls back to baseline
 split positions if validation fails.
@@ -283,11 +285,12 @@ flowchart TD
     Clear[Clear window background]
     World[Draw geometry world]
     Presentation[Draw text or Terminal panel]
-    Tree[Draw tree, settings, or GIF panel]
+    Controls[Draw animation controls over world]
+    Accordion[Draw accordion and active child]
     Splitters[Draw splitter feedback and cursor]
     Overlay[Draw optional FPS overlay]
 
-    Clear --> World --> Presentation --> Tree --> Splitters --> Overlay
+    Clear --> World --> Presentation --> Controls --> Accordion --> Splitters --> Overlay
 ```
 
 The UI owns panel composition, not the internal world rendering order. `draw_world`
@@ -319,7 +322,7 @@ window session.
 | Layout | `current_layout_mode`, `ui_regions`, split positions and hover fades |
 | Scroll | Tree and presentation offsets, drag flags, and drag offsets |
 | Interaction | Shared `ui_press_owner`, Dynview selection |
-| Right-panel mode | `show_tree_settings`, `show_tree_gif` |
+| Accordion | `active_accordion_section` selects Library, Save GIF, or Settings |
 | Settings | FPS, simulation pause, SIMD, GPU dust, and slider state |
 | FPS reporting | Fixed rolling bucket arrays, cursor, elapsed time, and average |
 | GIF capture | Request flag, phase, frame counters, options, status, and last path |
@@ -400,7 +403,8 @@ state serializes ordinary UI press transactions so overlapping widgets do not bo
 capture the same press.
 
 Press ownership is distinct from logical focus. Logical focus persists after release
-and currently selects Terminal, Presentation, or Tree as the ordinary keyboard target.
+and currently selects Terminal, Presentation, or Accordion as the ordinary keyboard
+target.
 The interaction router classifies the legacy owner into a typed frame-local capture
 target. It snapshots that identity before interaction updates so release-frame routing
 cannot fall through to a newly hovered panel. Terminal child mouse capture remains an
@@ -414,13 +418,16 @@ capture snapshot. It publishes one `Ui_Interaction_Frame` containing:
 
 - logical and effective keyboard focus;
 - topmost hover, pointer capture, pointer target, and wheel target identities;
-- narrow keyboard, pointer, and wheel eligibility for Terminal, Presentation, and Tree;
+- narrow keyboard, pointer, and wheel eligibility for Terminal, Presentation, and
+    Accordion;
 - the effective Terminal focus transition used by rendering and child protocols.
 
 Targets carry an interaction class, focus surface, and stable ID. Static resolution
-places splitters above Terminal, Presentation, Tree, and world content. Existing capture
-outranks current hover. A wheel delta receives the hovered target only when no pointer
-capture is active, so it cannot follow a drag into another panel.
+places splitters above Terminal, Presentation, Accordion, and world content. Animation
+controls are explicit `.Control` targets above the world, so their hit rectangles
+consume pointer input without allowing the same edge to reach world interaction.
+Existing capture outranks current hover. A wheel delta receives the hovered target only
+when no pointer capture is active, so it cannot follow a drag into another panel.
 
 Terminal preparation refines its coarse content target once scrollbar geometry exists.
 The complete visible track then replaces content for hover, pointer, and eligible wheel
@@ -440,17 +447,21 @@ Each basic widget exposes an update procedure and a prepared-result draw procedu
 Panel preparation commits actions and values; drawing only selects visual state from
 the prepared result.
 
-The tree toolbar uses icon buttons for:
+The world animation overlay uses icon buttons for:
 
 | ID | Action |
 | ---: | --- |
-| 2001 | Request animation refresh. |
-| 2002 | Toggle simulation pause and play. |
-| 2003 | Show or hide the GIF panel. |
-| 2004 | Show or hide the settings panel. |
-| 2005 | Return to or retain the tree catalogue. |
+| 2101 | Request animation refresh. |
+| 2102 | Toggle simulation pause and play. |
 
-Tree, settings, and GIF modes are mutually resolved by `apply_tree_toolbar_hit`.
+The controls are anchored to the lower-left edge of the current `world_rect`, so they
+follow splitter changes. They are hidden while GIF capture is recording. Refresh also
+resumes simulation, requests the normal animation-reset path, and cancels an in-flight
+capture when refreshing from a paused capture.
+
+Accordion headers are full-width text buttons with IDs 2201 through 2203. Clicking a
+header assigns `active_accordion_section`; selecting the already expanded header leaves
+it expanded because exactly one section is always active.
 
 ### Checkboxes
 
@@ -656,12 +667,34 @@ foreign UI capture removes fresh Terminal presses, levels, motion, and wheel. Ex
 local selection or hyperlink capture retains its real release point, while existing child
 protocol capture retains resolved motion and release data outside content.
 
-## Tree And Utility Panels
+## Accordion And Animation Controls
+
+### Landscape Accordion
+
+The current landscape layout assigns the complete right-side region to an
+orientation-neutral accordion. Its ordered sections are Library, Save GIF, and
+Settings. Every section keeps a header visible, and the active section receives all
+remaining height between the headers. The enum-backed `active_accordion_section` is the
+single source of truth, so contradictory combinations of visible utility panels cannot
+occur.
+
+The accordion component owns header geometry, header interaction, labels, disclosure
+icons, and the one-expanded-section invariant. `tree_panel.odin` orchestrates the
+active child because the Library was the original right-side owner; the Library, GIF,
+and Settings implementations retain their existing domain behavior. The abstraction
+does not encode right-side or landscape placement, allowing another layout mode to
+place the same component elsewhere.
+
+### Animation Controls
+
+Refresh and pause/play are not accordion sections. They are a compact overlay inside
+the lower-left corner of the current world viewport. Preparation resolves and commits
+their actions before simulation, while drawing consumes the prepared button results.
+Their explicit control targets outrank ordinary world interaction.
 
 ### Tree Catalogue
 
-The right-side outer container is divided into a 28-pixel toolbar and a list panel with
-a six-pixel gap. Before services run, the list counts visible rows, applies pending
+When Library is active, its accordion content counts visible rows, applies pending
 reveal state, updates scrolling, and walks visible roots to resolve hover, selection,
 and expansion. Expansion recounts topology and reclamps scrolling in the same update.
 Rendering repeats the bounded walk only to issue draw calls.
@@ -672,7 +705,7 @@ becomes visible. This survives catalogue replacement better than retaining row g
 
 ### Settings Panel
 
-Settings replaces the catalogue list while the toolbar remains visible. It contains:
+When Settings is active, its controls occupy the accordion content region. It contains:
 
 - a maximum-dust-particle slider;
 - current low, middle, and high particle render counts;
@@ -687,9 +720,9 @@ such as target FPS, the control also calls the appropriate display-thread Raylib
 
 ### GIF Panel
 
-GIF controls also replace the catalogue list. The panel contains downsample and frame
-step sliders, a Save/Cancel button, current phase, status notes, and the final path after
-success.
+When Save GIF is active, its controls occupy the accordion content region. The panel
+contains downsample and frame step sliders, a Save/Cancel button, current phase, status
+notes, and the final path after success.
 
 The button sets `save_gif_requested`; the owning GIF update path interprets that request
 and advances the phase. Controls are disabled where recording or finalization policy
@@ -766,7 +799,7 @@ temporary allocator already reset at frame completion.
 
 | Test area | Coverage |
 | --- | --- |
-| `src/view/ui/ui_test.odin` | Router priority, focus, capture, wheel ownership, regions, splitters, tree layout, and scrolling. |
+| `src/view/ui/ui_test.odin` | Router priority, focus, capture, wheel ownership, regions, splitters, animation controls, accordion layout, tree layout, and scrolling. |
 | `src/view/ui/dynview/selection_test.odin` | Selection modes, hit boundaries, capture, and source extraction. |
 | `src/view/core/copy_interaction_test.odin` | Copy target identity, hover, press, release, and animation state. |
 | `src/view/input/input_test.odin` | Device-independent events, correlation, hotkeys, Terminal encoding. |
@@ -808,7 +841,7 @@ the artifact manifest and semantic trace remain authoritative.
 The current UI is coherent enough for the present application, but several constraints
 are important when changing it:
 
-1. Logical keyboard focus exists for Terminal, Presentation, and Tree, but keyboard
+1. Logical keyboard focus exists for Terminal, Presentation, and Accordion, but keyboard
     traversal, modal focus, and control-level focus are not implemented.
 1. `Ui_Press_Owner_State` is pointer capture, not focus, and covers one press at a time.
 1. Terminal child mouse capture and UI widget capture are independent mechanisms.
@@ -834,6 +867,8 @@ migration and the deliberately deferred keyboard traversal and modal-focus work.
 1. Add its rectangle to `Ui_Regions` only if it has independent geometry.
 1. Derive the rectangle in `compute_ui_regions` and include it in validation.
 1. Decide whether it coexists with or replaces existing right/presentation content.
+1. For an accordion child, extend `Ui_Accordion_Section`, its label mapping, section
+    count, child preparation, child drawing, and focused selection tests together.
 1. Keep service work before drawing and Raylib calls on the display thread.
 1. Define clipping, scroll, font, and press-ID policy explicitly.
 1. Add region and minimum-size tests.
@@ -873,9 +908,14 @@ The current UI depends on these invariants:
 1. At most one shared UI press owner is active at a time.
 1. Scroll offsets remain clamped to the current content and viewport extents.
 1. Tree traversal is bounded by registered animation count.
+1. Exactly one accordion section is expanded, and only that child receives content
+    interaction.
+1. Animation controls are anchored to `world_rect`, outrank world input, and are absent
+    while GIF recording is active.
 1. Presentation selection is reconciled when content mode or revision changes.
 1. Every pointer edge and wheel delta reaches at most one routed top-level surface.
-1. Control, tree, presentation, copy, and Terminal interaction commits before drawing.
+1. Control, accordion, presentation, copy, and Terminal interaction commits before
+    drawing.
 1. Repeating drawing for one prepared frame cannot duplicate a UI action.
 1. Terminal state and messages are accepted only for the matching animation generation.
 1. Worker-prepared state commits before the display consumes it.

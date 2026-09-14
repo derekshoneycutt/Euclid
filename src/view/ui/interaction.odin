@@ -38,7 +38,7 @@ ui_icon_button_capture_target :: proc(
     if animation_control_id(capture.id) {
         return ui_interaction_target(.Control, id = capture.id)
     }
-    return ui_interaction_target(.Control, .Tree, capture.id)
+    return ui_interaction_target(.Control, .Accordion, capture.id)
 }
 
 // Classify legacy singleton capture until widget call sites register with the router.
@@ -49,7 +49,7 @@ ui_capture_target :: proc(
     case .Splitter:
         return ui_interaction_target(.Splitter, id = capture.id)
     case .Scrollbar:
-        focus := viewmodel.Ui_Focus_Kind.Tree
+        focus := viewmodel.Ui_Focus_Kind.Accordion
         if capture.id == UI_PRESENTATION_SCROLLBAR_ID { focus = .Presentation }
         if capture.id == UI_TERMINAL_SCROLLBAR_ID { focus = .Terminal }
         return ui_interaction_target(.Scrollbar, focus, capture.id)
@@ -60,7 +60,7 @@ ui_capture_target :: proc(
     case .None:
         return {}
     case .List_Item, .Text_Button, .Checkbox, .Slider:
-        return ui_interaction_target(.Control, .Tree, capture.id)
+        return ui_interaction_target(.Control, .Accordion, capture.id)
     }
     return {}
 }
@@ -87,8 +87,8 @@ ui_hover_target :: proc(
     if rl.CheckCollisionPointRec(mouse, regions.text_rect) {
         return ui_interaction_target(.Panel_Content, .Presentation)
     }
-    if rl.CheckCollisionPointRec(mouse, regions.tree_rect) {
-        return ui_interaction_target(.Panel_Content, .Tree)
+    if rl.CheckCollisionPointRec(mouse, regions.accordion_rect) {
+        return ui_interaction_target(.Panel_Content, .Accordion)
     }
     control_id, over_control := animation_control_hit_test(
         regions.world_rect, runtime^.gif_capture_phase, mouse)
@@ -188,10 +188,10 @@ ui_refresh_surface_interaction :: proc(frame: ^viewmodel.Ui_Interaction_Frame) {
         pointer = frame^.pointer_target.focus.kind == .Presentation,
         wheel = frame^.wheel_target.focus.kind == .Presentation,
     }
-    frame^.tree = {
-        keyboard = frame^.effective_focus.kind == .Tree,
-        pointer = frame^.pointer_target.focus.kind == .Tree,
-        wheel = frame^.wheel_target.focus.kind == .Tree,
+    frame^.accordion = {
+        keyboard = frame^.effective_focus.kind == .Accordion,
+        pointer = frame^.pointer_target.focus.kind == .Accordion,
+        wheel = frame^.wheel_target.focus.kind == .Accordion,
     }
 }
 

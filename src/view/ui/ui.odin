@@ -30,11 +30,12 @@ SCROLLBAR_WIDTH :: 8
 SCROLLBAR_THUMB_MIN_HEIGHT :: 24
 DYNVIEW_COPY_ICON_SIZE :: 14
 DYNVIEW_COPY_ICON_X_PAD :: 6
-TREE_TOOLBAR_HEIGHT :: 28
-TREE_TOOLBAR_BUTTON_SIZE :: 20
-TREE_TOOLBAR_GAP :: 6
-TREE_TOOLBAR_EDGE_PAD :: 4
-TREE_TOOLBAR_BUTTON_GAP :: 4
+ACCORDION_HEADER_HEIGHT :: f32(34)
+ACCORDION_PANEL_INSET :: f32(6)
+ACCORDION_HEADER_PADDING :: f32(10)
+ACCORDION_DISCLOSURE_SIZE :: f32(14)
+ACCORDION_HEADER_LABEL_GAP :: f32(8)
+ACCORDION_HEADER_TEXT_OFFSET_Y :: f32(7)
 ANIMATION_CONTROL_BUTTON_SIZE :: f32(30)
 ANIMATION_CONTROL_BUTTON_GAP :: f32(4)
 ANIMATION_CONTROL_PADDING :: f32(6)
@@ -128,7 +129,7 @@ Ui_Geometry_Preparation :: struct {
 // Fixed frame-local control results prepared before services and rendering.
 Ui_Control_Preparation :: struct {
     animation_controls: Animation_Control_Preparation,
-    tree_toolbar: Tree_Toolbar_Preparation,
+    accordion: Accordion_Preparation,
     settings: Settings_View_Preparation,
     gif: Gif_View_Preparation,
     tree: Tree_List_Preparation,
@@ -209,8 +210,8 @@ prepare_ui_static_interaction :: proc(
     })
 }
 
-// Return a frame copy containing only pointer fields routed to the tree surface.
-ui_tree_input_frame :: proc(
+// Return a frame copy containing only pointer fields routed to the accordion.
+ui_accordion_input_frame :: proc(
     frame: Input_Frame,
     routed: viewmodel.Ui_Surface_Interaction) -> Input_Frame {
     if routed.pointer && routed.wheel {
@@ -245,27 +246,29 @@ prepare_ui_controls :: proc(
     frame: Input_Frame) -> Ui_Control_Preparation {
     animation_frame := ui_animation_control_input_frame(
         frame, state^.ui_runtime.interaction_frame)
-    routed_frame := ui_tree_input_frame(
-        frame, state^.ui_runtime.interaction_frame.tree)
+    routed_frame := ui_accordion_input_frame(
+        frame, state^.ui_runtime.interaction_frame.accordion)
     result := Ui_Control_Preparation{}
     result.animation_controls = prepare_animation_controls(state, animation_frame)
-    tree_panel := state^.ui_runtime.ui_regions.tree_rect
-    result.tree_toolbar = prepare_tree_view_controls(state, tree_panel, routed_frame)
-    _, list_panel := build_tree_view_panels(tree_panel)
-    if state^.ui_runtime.show_tree_settings {
-        result.settings = prepare_settings_view(state, list_panel, routed_frame)
-    } else if state^.ui_runtime.show_tree_gif {
-        result.gif = prepare_gif_view(state, list_panel, routed_frame)
-    } else {
+    accordion_panel := state^.ui_runtime.ui_regions.accordion_rect
+    result.accordion = prepare_accordion_view(
+        state, accordion_panel, routed_frame)
+    content_panel := result.accordion.layout.content
+    switch state^.ui_runtime.active_accordion_section {
+    case .Library:
         result.tree = prepare_tree_list_panel({
             ji = state^.julia_interface,
             ui_runtime = &state^.ui_runtime,
-            list_panel = list_panel,
+            list_panel = content_panel,
             mouse_input = routed_frame,
             scroll_y = &state^.ui_runtime.tree_scroll_y,
             font = view_font.cache_borrow(&state^.font_cache, .Regular),
             font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
         })
+    case .Save_Gif:
+        result.gif = prepare_gif_view(state, content_panel, routed_frame)
+    case .Settings:
+        result.settings = prepare_settings_view(state, content_panel, routed_frame)
     }
     return result
 }
@@ -314,6 +317,6 @@ draw_ui_panels :: proc(
         WINDOW_HEIGHT,
     }
     rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
-    draw_tree_view(state, regions.tree_rect, input_frame, controls)
+    draw_accordion_view(state, regions.accordion_rect, input_frame, controls)
     draw_splitters(&state^.ui_runtime, input_frame_mouse_position(input_frame))
 }

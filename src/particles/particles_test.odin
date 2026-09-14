@@ -155,6 +155,31 @@ reserve_dead_low_particle_slot_prefers_dead_then_wraps :: proc(t: ^testing.T) {
     testing.expect_value(t, idx2, 0)
 }
 
+// Verify exact-grid active-cell storage accepts every possible cell once.
+@(test)
+exact_dust_grid_tracks_all_cells_at_capacity :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = DUST_GRID_DIM_SQUARED
+    for index in 0..<DUST_GRID_DIM_SQUARED {
+        cell_x := index % DUST_GRID_DIM
+        cell_y := index / DUST_GRID_DIM
+        ps^.low_particles[index].alive = true
+        ps^.low_particles.pos_x[index] =
+            (f32(cell_x) + 0.5) * DUST_GRID_CELL_SIZE
+        ps^.low_particles.pos_y[index] =
+            (f32(cell_y) + 0.5) * DUST_GRID_CELL_SIZE
+    }
+
+    build_exact_dust_grid(ps)
+
+    testing.expect_value(t, ps^.dust_active_cell_count, DUST_GRID_DIM_SQUARED)
+    for index in 0..<DUST_GRID_DIM_SQUARED {
+        testing.expect_value(t, ps^.dust_active_cells[index], i32(index))
+        testing.expect_value(t, ps^.dust_exact_counts[index], i32(1))
+    }
+}
+
 //   Verify the reservation ring index wraps back to zero at the cap.
 @(test)
 reserve_dead_particle_slot_ring_advances :: proc(t: ^testing.T) {

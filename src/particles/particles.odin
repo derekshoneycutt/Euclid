@@ -1235,15 +1235,15 @@ build_exact_dust_grid :: proc(ps: ^Particle_System) {
         cell := dust_grid_cell_index(
             ps.low_particles.pos_x[particle_index],
             ps.low_particles.pos_y[particle_index])
-        if ps^.dust_exact_counts[cell] == 0 {
-            ps^.dust_active_cells[ps^.dust_active_cell_count] = i32(cell)
-            ps^.dust_active_cell_count += 1
-        }
         ps^.dust_exact_counts[cell] += 1
     }
 
     ps^.dust_exact_offsets[0] = 0
     for cell in 0..<DUST_GRID_DIM_SQUARED {
+        if ps^.dust_exact_counts[cell] > 0 {
+            ps^.dust_active_cells[ps^.dust_active_cell_count] = i32(cell)
+            ps^.dust_active_cell_count += 1
+        }
         ps^.dust_exact_offsets[cell + 1] =
             ps^.dust_exact_offsets[cell] + ps^.dust_exact_counts[cell]
         ps^.dust_exact_cursors[cell] = ps^.dust_exact_offsets[cell]

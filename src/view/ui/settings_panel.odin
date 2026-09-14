@@ -300,18 +300,6 @@ draw_settings_view :: proc(
 
     _ = draw_container(panel, .Grey)
 
-    header_y := int(panel.y + SETTINGS_HEADER_TOP_OFFSET)
-    regular_font := view_font.cache_borrow(&state.font_cache, .Regular)
-    resolver := view_font.cache_terminal_resolver(&state.font_cache)
-    view_core.ui_text_shaped({
-        resolver = resolver,
-        key = .Regular,
-        text = "Settings",
-        position = {panel.x + SETTINGS_PANEL_INSET, f32(header_y)},
-        color = UI_TEXT_COLOR,
-        font = view_core.ui_text_font(regular_font),
-    })
-
     draw_settings_controls(state, panel, mouse_input, prepared)
 }
 

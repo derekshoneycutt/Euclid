@@ -58,94 +58,72 @@ Tree_Walk_Context :: struct {
     hovered_expander_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
-//   Resolve tree-toolbar interaction and commit its actions before rendering.
-prepare_tree_view_controls :: proc(
+// Prepare accordion headers and commit one active section before child updates.
+prepare_accordion_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
-    mouse_input: Input_Frame) -> Tree_Toolbar_Preparation {
-
-    ui_runtime := &state.ui_runtime
-    toolbar_panel, _ := build_tree_view_panels(panel)
-
-    show_tree := !ui_runtime.show_tree_gif && !ui_runtime.show_tree_settings
-    prepared, toolbar_hit := update_tree_toolbar(Tree_Toolbar_Context{
-        panel = toolbar_panel,
+    mouse_input: Input_Frame) -> Accordion_Preparation {
+    ui_runtime := &state^.ui_runtime
+    active_before := ui_runtime^.active_accordion_section
+    prepared := prepare_accordion(Accordion_Context{
+        panel = panel,
         mouse_input = mouse_input,
-        press_owner = &ui_runtime.ui_press_owner,
-        show_tree = show_tree,
-        show_gif = ui_runtime.show_tree_gif,
-        show_settings = ui_runtime.show_tree_settings,
-    })
-    apply_tree_toolbar_hit(ui_runtime, toolbar_hit)
+        press_owner = &ui_runtime^.ui_press_owner,
+        active = ui_runtime^.active_accordion_section,
+        font = view_font.cache_borrow(&state^.font_cache, .Regular),
+        font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+    }, &ui_runtime^.active_accordion_section)
+    if active_before != ui_runtime^.active_accordion_section {
+        ui_runtime^.tree_scroll_dragging = false
+    }
     return prepared
 }
 
-//   Render the right-side tree panel from prepared toolbar interaction.
-draw_tree_view :: proc(
+// Render the active child into the accordion's flexible content rectangle.
+draw_accordion_active_content :: proc(
+    state: ^core.Euclid_General_State,
+    content_panel: rl.Rectangle,
+    mouse_input: Input_Frame,
+    prepared: Ui_Control_Preparation) {
+    ji := state.julia_interface
+    ui_runtime := &state.ui_runtime
+    switch ui_runtime^.active_accordion_section {
+    case .Library:
+        draw_tree_list_panel(Tree_List_Params{
+            ji = ji,
+            ui_runtime = ui_runtime,
+            list_panel = content_panel,
+            mouse_input = mouse_input,
+            scroll_y = &state^.ui_runtime.tree_scroll_y,
+            font = view_font.cache_borrow(&state.font_cache, .Regular),
+            font_resolver = view_font.cache_terminal_resolver(&state.font_cache),
+        }, prepared.tree)
+    case .Save_Gif:
+        draw_gif_view(state, content_panel, mouse_input, prepared.gif)
+    case .Settings:
+        draw_settings_view(state, content_panel, mouse_input, prepared.settings)
+    }
+}
+
+// Render the active accordion child and all persistent section headers.
+draw_accordion_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
     mouse_input: Input_Frame,
     prepared: Ui_Control_Preparation) {
-
-    ji := state.julia_interface
-    ui_runtime := &state.ui_runtime
+    ui_runtime := &state^.ui_runtime
     _ = draw_container(panel, .Dark_Red)
-    toolbar_panel, list_panel := build_tree_view_panels(panel)
-    show_tree := !ui_runtime.show_tree_gif && !ui_runtime.show_tree_settings
-    draw_tree_toolbar(Tree_Toolbar_Context{
-        panel = toolbar_panel,
+    draw_accordion_active_content(
+        state, prepared.accordion.layout.content, mouse_input, prepared)
+
+    draw_accordion(Accordion_Context{
+        panel = panel,
         mouse_input = mouse_input,
-        press_owner = &ui_runtime.ui_press_owner,
-        show_tree = show_tree,
-        show_gif = ui_runtime.show_tree_gif,
-        show_settings = ui_runtime.show_tree_settings,
-    }, prepared.tree_toolbar)
-
-    if ui_runtime.show_tree_settings {
-        draw_settings_view(state, list_panel, mouse_input, prepared.settings)
-        return
-    }
-
-    if ui_runtime.show_tree_gif {
-        draw_gif_view(state, list_panel, mouse_input, prepared.gif)
-        return
-    }
-
-    draw_tree_list_panel(Tree_List_Params{
-        ji = ji,
-        ui_runtime = ui_runtime,
-        list_panel = list_panel,
-        mouse_input = mouse_input,
-        scroll_y = &state^.ui_runtime.tree_scroll_y,
-        font = view_font.cache_borrow(&state.font_cache, .Regular),
-        font_resolver = view_font.cache_terminal_resolver(&state.font_cache),
-    }, prepared.tree)
-}
-
-//   Apply one toolbar interaction to tree panel state.
-apply_tree_toolbar_hit :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    toolbar_hit: Tree_Toolbar_Hit) {
-
-    if toolbar_hit.toggle_tree_requested {
-        ui_runtime.show_tree_gif = false
-        ui_runtime.show_tree_settings = false
-        ui_runtime.tree_scroll_dragging = false
-    }
-
-    if toolbar_hit.toggle_settings_requested {
-        ui_runtime.show_tree_settings = !ui_runtime.show_tree_settings
-        ui_runtime.show_tree_gif = ui_runtime.show_tree_gif &&
-            !ui_runtime.show_tree_settings
-        ui_runtime.tree_scroll_dragging = false
-    }
-
-    if toolbar_hit.toggle_gif_requested {
-        ui_runtime.show_tree_gif = !ui_runtime.show_tree_gif
-        ui_runtime.show_tree_settings = ui_runtime.show_tree_settings &&
-            !ui_runtime.show_tree_gif
-        ui_runtime.tree_scroll_dragging = false
-    }
+        press_owner = &ui_runtime^.ui_press_owner,
+        active = ui_runtime^.active_accordion_section,
+        font = view_font.cache_borrow(&state^.font_cache, .Regular),
+        font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+    }, prepared.accordion)
 }
 
 //   Build a stable per-frame widget id for a node based on its pointer value.
@@ -639,34 +617,6 @@ walk_draw_tree_roots :: proc(ctx: Tree_Walk_Context) {
                 ctx, node, 0, &content_y, ctx.ji.animation_count)
         }
     }
-}
-
-//   Build toolbar and list panel rectangles inside tree container.
-build_tree_view_panels :: proc(
-    panel: rl.Rectangle) -> (rl.Rectangle, rl.Rectangle) {
-
-    inner_x := panel.x + 6
-    inner_y := panel.y + 6
-    inner_w := panel.width - 12
-    inner_h := panel.height - 12
-
-    toolbar_panel := rl.Rectangle{
-        inner_x,
-        inner_y,
-        inner_w,
-        TREE_TOOLBAR_HEIGHT,
-    }
-
-    list_panel := rl.Rectangle{
-        inner_x,
-        inner_y + TREE_TOOLBAR_HEIGHT + TREE_TOOLBAR_GAP,
-        inner_w,
-        inner_h - TREE_TOOLBAR_HEIGHT - TREE_TOOLBAR_GAP,
-    }
-
-    list_panel = clamp_non_negative_rect(list_panel)
-
-    return toolbar_panel, list_panel
 }
 
 //   Commit tree scroll drag state from one update result.

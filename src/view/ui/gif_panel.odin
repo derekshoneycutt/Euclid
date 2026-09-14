@@ -209,16 +209,6 @@ draw_gif_view :: proc(
 
     _ = draw_container(panel, .Grey)
 
-    gif_section_y := panel.y + SETTINGS_HEADER_TOP_OFFSET
-    view_core.ui_text_shaped({
-        resolver = resolver,
-        key = .Regular,
-        text = "GIF Export",
-        position = {panel.x + SETTINGS_PANEL_INSET, gif_section_y},
-        color = UI_TEXT_COLOR,
-        font = view_core.ui_text_font(regular_font),
-    })
-
     draw_settings_integer_slider_prepared(gif_slider_params(ctx,
         prepared.rows.sliders.downsample_y, 6201, "Downsample",
         &ctx.ui_runtime.gif_downsample_factor), prepared.downsample)

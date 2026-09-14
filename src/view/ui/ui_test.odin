@@ -24,11 +24,9 @@ ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
     testing.expect_value(t, regions.world_rect.width, VIEW_WIDTH)
     testing.expect_value(t, regions.world_rect.height, VIEW_HEIGHT)
     testing.expect_value(
-        t, regions.tree_rect.x, VIEW_WIDTH + TREE_PANEL_PADDING)
+        t, regions.accordion_rect.x, VIEW_WIDTH + TREE_PANEL_PADDING)
     testing.expect_value(
         t, regions.text_rect.y, VIEW_HEIGHT + TREE_PANEL_PADDING)
-    testing.expect_value(t, regions.settings_rect.width, regions.gif_rect.width)
-    testing.expect_value(t, regions.settings_rect.height, regions.gif_rect.height)
     testing.expect(t, regions.terminal_rect.width >= 0)
     testing.expect(t, regions.terminal_rect.height >= 0)
 }
@@ -45,7 +43,7 @@ ui_regions_clamp_all_pane_minimums :: proc(t: ^testing.T) {
         f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
     testing.expect_value(t, maximums.world_rect.height,
         f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
-    testing.expect(t, maximums.tree_rect.width >= 0)
+    testing.expect(t, maximums.accordion_rect.width >= 0)
     testing.expect(t, maximums.text_rect.height >= 0)
 }
 
@@ -116,16 +114,16 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
     }
     _ = ui_reconcile_focus(&runtime, {window_focused = true}, true)
 
-    tree := runtime.ui_regions.tree_rect
+    tree := runtime.ui_regions.accordion_rect
     moved := ui_reconcile_focus(&runtime, {
         window_focused = true,
         mouse_position = {tree.x + 1, tree.y + 1},
         mouse_pressed = {.Left},
     }, true)
     testing.expect_value(t, moved.logical_focus.kind,
-        viewmodel.Ui_Focus_Kind.Tree)
+        viewmodel.Ui_Focus_Kind.Accordion)
     testing.expect_value(t, moved.effective_focus.kind,
-        viewmodel.Ui_Focus_Kind.Tree)
+        viewmodel.Ui_Focus_Kind.Accordion)
     testing.expect(t, !moved.terminal_focused)
     testing.expect(t, moved.terminal_focus_changed)
 
@@ -174,7 +172,7 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
     testing.expect(t, routed.terminal.pointer)
     testing.expect(t, routed.terminal.wheel)
     testing.expect(t, !routed.presentation.pointer)
-    testing.expect(t, !routed.tree.wheel)
+    testing.expect(t, !routed.accordion.wheel)
 
     controls := animation_control_layout_slots(runtime.ui_regions.world_rect)
     animation := ui_route_interaction_frame(&runtime, {
@@ -210,12 +208,12 @@ ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
     testing.expect_value(t, routed.hover.focus.kind,
         viewmodel.Ui_Focus_Kind.Terminal)
     testing.expect_value(t, routed.pointer_capture.focus.kind,
-        viewmodel.Ui_Focus_Kind.Tree)
+        viewmodel.Ui_Focus_Kind.Accordion)
     testing.expect_value(t, routed.pointer_target.focus.kind,
-        viewmodel.Ui_Focus_Kind.Tree)
+        viewmodel.Ui_Focus_Kind.Accordion)
     testing.expect_value(t, routed.wheel_target.kind,
         viewmodel.Ui_Interaction_Target_Kind.None)
-    testing.expect(t, routed.tree.pointer)
+    testing.expect(t, routed.accordion.pointer)
     testing.expect(t, !routed.terminal.pointer)
 }
 
@@ -250,15 +248,15 @@ ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
 
 // Verify tree routing independently filters pointer edges and wheel input.
 @(test)
-ui_tree_input_frame_filters_independent_pointer_classes :: proc(t: ^testing.T) {
+ui_accordion_input_frame_filters_independent_pointer_classes :: proc(t: ^testing.T) {
     frame := Input_Frame{mouse_position = {12, 18}, mouse_pressed = {.Left},
         mouse_down = {.Left}, mouse_wheel_delta = -2}
-    wheel_only := ui_tree_input_frame(frame, {wheel = true})
+    wheel_only := ui_accordion_input_frame(frame, {wheel = true})
     testing.expect(t, card(wheel_only.mouse_pressed) == 0)
     testing.expect(t, card(wheel_only.mouse_down) == 0)
     testing.expect_value(t, wheel_only.mouse_wheel_delta, f32(-2))
 
-    pointer_only := ui_tree_input_frame(frame, {pointer = true})
+    pointer_only := ui_accordion_input_frame(frame, {pointer = true})
     testing.expect(t, .Left in pointer_only.mouse_pressed)
     testing.expect(t, .Left in pointer_only.mouse_down)
     testing.expect_value(t, pointer_only.mouse_wheel_delta, f32(0))
@@ -443,7 +441,7 @@ validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {
     testing.expect(t, !validate_ui_regions(regions))
 
     regions.world_rect = rl.Rectangle{0, 0, 1, 10}
-    regions.tree_rect = rl.Rectangle{0, 0, 10, -1}
+    regions.accordion_rect = rl.Rectangle{0, 0, 10, -1}
     testing.expect(t, !validate_ui_regions(regions))
 }
 
@@ -733,16 +731,48 @@ pending_tree_reveal_applies_display_state :: proc(t: ^testing.T) {
     testing.expect(t, ui_runtime.tree_reveal_pending)
 }
 
-//   Verify build_tree_view_panels clamps small panels to non-negative rects.
+// Verify accordion headers retain order while the active child consumes free height.
 @(test)
-build_tree_view_panels_clamps_small_panels :: proc(t: ^testing.T) {
-    // Confirms tiny tree panels still produce a fixed-height toolbar and non-negative list viewport dimensions.
-    panel := rl.Rectangle{0, 0, 8, 8}
-    toolbar, list := build_tree_view_panels(panel)
+accordion_layout_places_active_content_after_selected_header :: proc(t: ^testing.T) {
+    panel := rl.Rectangle{10, 20, 300, 500}
+    layout := accordion_layout(panel, .Save_Gif)
+    testing.expect_value(t, layout.headers[0].y, f32(26))
+    testing.expect_value(t, layout.headers[1].y,
+        layout.headers[0].y + ACCORDION_HEADER_HEIGHT)
+    testing.expect_value(t, layout.content.y,
+        layout.headers[1].y + ACCORDION_HEADER_HEIGHT)
+    testing.expect_value(t, layout.headers[2].y,
+        layout.content.y + layout.content.height)
+    testing.expect_value(t, layout.content.height,
+        panel.height - ACCORDION_PANEL_INSET * 2 -
+            ACCORDION_HEADER_HEIGHT * ACCORDION_SECTION_COUNT)
+}
 
-    testing.expect(t, toolbar.height == TREE_TOOLBAR_HEIGHT)
-    testing.expect(t, list.width >= 0)
-    testing.expect(t, list.height >= 0)
+// Verify a header click selects exactly one section and moves expanded content.
+@(test)
+accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
+    owner: viewmodel.Ui_Press_Owner_State
+    active := viewmodel.Ui_Accordion_Section.Library
+    panel := rl.Rectangle{10, 20, 300, 500}
+    settings := accordion_layout(panel, .Library).headers[int(
+        viewmodel.Ui_Accordion_Section.Settings)]
+    mouse_position := input.Input_Position{settings.x + 2, settings.y + 2}
+    pressed_context := Accordion_Context{panel = panel,
+        mouse_input = {mouse_position = mouse_position,
+            mouse_pressed = {.Left}, mouse_down = {.Left}},
+        press_owner = &owner, active = active}
+    _ = prepare_accordion(pressed_context, &active)
+    testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Library)
+
+    released_context := pressed_context
+    released_context.mouse_input = {
+        mouse_position = mouse_position, mouse_released = {.Left}}
+    prepared := prepare_accordion(released_context, &active)
+    testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Settings)
+    settings_index := int(viewmodel.Ui_Accordion_Section.Settings)
+    testing.expect_value(t, prepared.layout.content.y,
+        prepared.layout.headers[settings_index].y + ACCORDION_HEADER_HEIGHT)
+    testing.expect(t, !owner.active)
 }
 
 //   Verify the tree row-count guard stops recursive walks.

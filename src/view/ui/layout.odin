@@ -29,7 +29,7 @@ compute_ui_regions :: proc(
     case .Baseline:
         regions.world_rect = rl.Rectangle{0, 0, split_x, split_y}
 
-        regions.tree_rect = rl.Rectangle{
+        regions.accordion_rect = rl.Rectangle{
             split_x + TREE_PANEL_PADDING,
             TREE_PANEL_PADDING,
             f32(WINDOW_WIDTH) - split_x - TREE_PANEL_PADDING * 2,
@@ -43,9 +43,6 @@ compute_ui_regions :: proc(
             f32(WINDOW_HEIGHT) - split_y - TREE_PANEL_PADDING * 2,
         }
 
-        _, list_panel := build_tree_view_panels(regions.tree_rect)
-        regions.settings_rect = list_panel
-        regions.gif_rect = list_panel
         regions.terminal_rect = layout_terminal_rect(regions.text_rect)
     }
 
@@ -62,10 +59,8 @@ ui_rect_valid :: #force_inline proc(rect: rl.Rectangle) -> bool {
 validate_ui_regions :: proc(regions: viewmodel.Ui_Regions) -> bool {
     rects := [?]rl.Rectangle{
         regions.world_rect,
-        regions.tree_rect,
+        regions.accordion_rect,
         regions.text_rect,
-        regions.settings_rect,
-        regions.gif_rect,
         regions.terminal_rect,
     }
     for rect in rects {
