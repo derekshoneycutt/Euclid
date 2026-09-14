@@ -14,14 +14,11 @@ import "core:thread"
 
 import rl "vendor:raylib"
 
-STARTUP_SPINNER_OFFSETS :: [8]rl.Vector2{
-    {0, -18}, {13, -13}, {18, 0}, {13, 13},
-    {0, 18}, {-13, 13}, {-18, 0}, {-13, -13},
-}
 STARTUP_TRACK_COLOR :: rl.Color{86, 55, 66, 255}
 STARTUP_PROGRESS_COLOR :: rl.Color{175, 150, 150, 255}
 STARTUP_WARNING_TEXT :: cstring("Julia is not responding")
 JULIA_UNRESPONSIVE_SECONDS :: 10.0
+STARTUP_COMPLETION_SECONDS :: f32(0.24)
 
 //   Created Julia runtime service plus its completed initialize request id.
 Loading_Julia_Service :: struct {
@@ -34,25 +31,16 @@ Packaged_Assets_Worker_Result :: struct {
 }
 
 
-//   Draw one dependency-free startup frame with spinner and progress bar.
-draw_startup_frame :: proc(progress: f32, show_julia_warning := false) {
-    center := rl.Vector2{WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2 - 24}
-    active_dot := int(rl.GetTime() * 8) % len(STARTUP_SPINNER_OFFSETS)
-
+// Draw one startup frame from the progressively assembled UI silhouette.
+draw_startup_frame :: proc(
+    outline: ^Startup_Outline, progress: f32,
+    show_julia_warning := false) {
+    startup_outline_set_target(outline, progress)
+    startup_outline_advance(outline,
+        min(max(rl.GetFrameTime(), f32(0)), f32(0.05)))
     rl.BeginDrawing()
     rl.ClearBackground(BACKGROUND_COLOR)
-    for offset, index in STARTUP_SPINNER_OFFSETS {
-        color := STARTUP_TRACK_COLOR
-        if index == active_dot {
-            color = STARTUP_PROGRESS_COLOR
-        }
-        rl.DrawCircleV(center + offset, 4, color)
-    }
-    rl.DrawRectangleRec(
-        rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280, 4}, STARTUP_TRACK_COLOR)
-    rl.DrawRectangleRec(
-        rl.Rectangle{WINDOW_WIDTH / 2 - 140, 380, 280 * progress, 4},
-        STARTUP_PROGRESS_COLOR)
+    startup_outline_draw(outline, STARTUP_TRACK_COLOR, STARTUP_PROGRESS_COLOR)
     if show_julia_warning {
         regular_font := rl.GetFontDefault()
         font_size: f32 = 18
@@ -65,6 +53,23 @@ draw_startup_frame :: proc(progress: f32, show_julia_warning := false) {
     rl.EndDrawing()
 }
 
+// Quickly finish the assembled silhouette after every runtime owner is ready.
+finish_startup_outline :: proc(outline: ^Startup_Outline) {
+    started_at := rl.GetTime()
+    initial_distance := outline^.reveal_distance
+    for {
+        elapsed := f32(rl.GetTime() - started_at)
+        progress := clamp(elapsed / STARTUP_COMPLETION_SECONDS, f32(0), f32(1))
+        eased := 1 - (1 - progress) * (1 - progress) * (1 - progress)
+        outline^.reveal_distance = initial_distance +
+            (outline^.total_length - initial_distance) * eased
+        draw_startup_frame(outline, 1)
+        if progress >= 1 {return}
+        if rl.WindowShouldClose() {runtime.exit(0)}
+        free_all(context.temp_allocator)
+    }
+}
+
 
 //   Prepare packaged assets and publish readiness to the joining display thread.
 prepare_assets_worker :: proc(thread_handle: ^thread.Thread) {
@@ -74,12 +79,13 @@ prepare_assets_worker :: proc(thread_handle: ^thread.Thread) {
 }
 
 //   Keep drawing and pumping window events until one startup worker is ready.
-finish_startup_worker :: proc(worker: ^thread.Thread, progress: f32) {
+finish_startup_worker :: proc(
+    worker: ^thread.Thread, outline: ^Startup_Outline, progress: f32) {
     if worker == nil {
         return
     }
     for !thread.is_done(worker) {
-        draw_startup_frame(progress)
+        draw_startup_frame(outline, progress)
         _ = rl.WindowShouldClose()
         free_all(context.temp_allocator)
     }
@@ -89,7 +95,8 @@ finish_startup_worker :: proc(worker: ^thread.Thread, progress: f32) {
 //   Draw startup frames until the requested Julia worker event is available.
 finish_julia_startup_request :: proc(
     service: ^bridgemodel.Julia_Runtime_Service, request_id: u64,
-    expected_kind: bridgemodel.Julia_Event_Kind, progress: f32) -> bool {
+    expected_kind: bridgemodel.Julia_Event_Kind,
+    outline: ^Startup_Outline, progress: f32) -> bool {
 
     started_at := rl.GetTime()
     reported_unresponsive := false
@@ -108,7 +115,7 @@ finish_julia_startup_request :: proc(
                 reported_unresponsive = true
             }
         }
-        draw_startup_frame(progress, reported_unresponsive)
+        draw_startup_frame(outline, progress, reported_unresponsive)
         if rl.WindowShouldClose() {
             fmt.eprintln(
                 "Window closed before Julia startup completed; terminating process.")
@@ -119,7 +126,8 @@ finish_julia_startup_request :: proc(
 }
 
 //   Prepare packaged assets while keeping the startup window responsive.
-prepare_assets_with_loading :: proc(progress: f32) -> bool {
+prepare_assets_with_loading :: proc(
+    outline: ^Startup_Outline, progress: f32) -> bool {
     result: Packaged_Assets_Worker_Result
     worker := thread.create(prepare_assets_worker)
     if worker == nil {
@@ -128,13 +136,14 @@ prepare_assets_with_loading :: proc(progress: f32) -> bool {
     worker.data = &result
     worker.init_context = context
     thread.start(worker)
-    finish_startup_worker(worker, progress)
+    finish_startup_worker(worker, outline, progress)
     return result.ok
 }
 
 //   Display and begin timing one blocking startup phase.
-begin_startup_phase :: proc(label: string, progress: f32) -> f64 {
-    draw_startup_frame(progress)
+begin_startup_phase :: proc(
+    outline: ^Startup_Outline, label: string, progress: f32) -> f64 {
+    draw_startup_frame(outline, progress)
     fmt.println("Startup: ", label, "...")
     return rl.GetTime()
 }
@@ -151,7 +160,8 @@ end_startup_phase :: proc(label: string, started_at: f64) {
 //   - result: Created service and initialize id when ok.
 //   - ok: true when the service was created and initialized.
 loading_start_julia_service :: proc(
-    out: ^Loading_Julia_Service, profile_path: string = "") -> bool {
+    out: ^Loading_Julia_Service, outline: ^Startup_Outline,
+    profile_path: string = "") -> bool {
     julia_service, service_err := julia.create_julia_runtime_service(profile_path)
     if service_err != .None || julia_service == nil {
         fmt.eprintln("Failed to create Julia runtime service.")
@@ -168,7 +178,7 @@ loading_start_julia_service :: proc(
         return false
     }
     if !finish_julia_startup_request(
-        julia_service, initialize_id, .Initialized, 0.35) {
+        julia_service, initialize_id, .Initialized, outline, 0.35) {
         fmt.eprintln("Julia initialization failed.")
         log.errorf("julia_startup_failed phase=initialize_wait request_id=%d",
             initialize_id)
@@ -200,7 +210,8 @@ loading_content_failed :: proc(
 loading_load_content :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings,
-    initialize_id: u64) -> (^Euclid_General_State, bool) {
+    initialize_id: u64,
+    outline: ^Startup_Outline) -> (^Euclid_General_State, bool) {
 
     state := initiate_animations_state(julia_service, settings)
     if state == nil {
@@ -217,7 +228,7 @@ loading_load_content :: proc(
         return loading_content_failed(state, julia_service)
     }
     if !finish_julia_startup_request(
-        julia_service, content_id, .Invoke_Complete, 0.65) {
+        julia_service, content_id, .Invoke_Complete, outline, 0.65) {
         log.errorf("julia_startup_failed phase=content_wait request_id=%d",
             content_id)
         return loading_content_failed(state, julia_service)
@@ -230,10 +241,11 @@ loading_load_content :: proc(
 }
 
 //   Prepare packaged assets as one measured startup phase.
-loading_prepare_assets_phase :: proc(profile: ^evidence_profile.State) -> bool {
+loading_prepare_assets_phase :: proc(
+    profile: ^evidence_profile.State, outline: ^Startup_Outline) -> bool {
     evidence_profile.zone_begin(profile, "prepare assets")
-    started_at := begin_startup_phase("Preparing assets", 0.15)
-    assets_ok := prepare_assets_with_loading(0.15)
+    started_at := begin_startup_phase(outline, "Preparing assets", 0.15)
+    assets_ok := prepare_assets_with_loading(outline, 0.15)
     end_startup_phase("Preparing assets", started_at)
     evidence_profile.zone_end(profile)
     if !assets_ok {
@@ -245,9 +257,10 @@ loading_prepare_assets_phase :: proc(profile: ^evidence_profile.State) -> bool {
 //   Initialize presentation resources as one measured startup phase.
 loading_initialize_graphics_phase :: proc(
     profile: ^evidence_profile.State, state: ^Euclid_General_State,
-    settings: ^Euclid_Run_Settings) {
+    settings: ^Euclid_Run_Settings, outline: ^Startup_Outline) {
     evidence_profile.zone_begin(profile, "load graphics")
-    started_at := begin_startup_phase("Loading fonts and graphics", 0.85)
+    started_at := begin_startup_phase(
+        outline, "Loading fonts and graphics", 0.85)
     initialize_window_resources(state, settings)
     end_startup_phase("Loading fonts and graphics", started_at)
     evidence_profile.zone_end(profile)
@@ -283,32 +296,36 @@ initialize_window_runtime_with_loading :: proc(
     timing_profile: ^evidence_profile.State) -> (Euclid_Runtime_Session, bool) {
 
     startup_started_at := rl.GetTime()
-    if !loading_prepare_assets_phase(timing_profile) {
+    outline := startup_outline_create()
+    if !loading_prepare_assets_phase(timing_profile, &outline) {
         return {}, false
     }
 
     evidence_profile.zone_begin(timing_profile, "start Julia")
-    started_at := begin_startup_phase("Starting Julia", 0.35)
+    started_at := begin_startup_phase(&outline, "Starting Julia", 0.35)
     started_service: Loading_Julia_Service
     if !loading_start_julia_service(
-        &started_service, julia_worker_profile_path(settings^.profile_path)) {
+        &started_service, &outline,
+        julia_worker_profile_path(settings^.profile_path)) {
         return {}, false
     }
     end_startup_phase("Starting Julia", started_at)
     evidence_profile.zone_end(timing_profile)
 
     evidence_profile.zone_begin(timing_profile, "load content")
-    started_at = begin_startup_phase("Loading content", 0.65)
+    started_at = begin_startup_phase(&outline, "Loading content", 0.65)
     state, content_ok := loading_load_content(
-        started_service.service, settings, started_service.initialize_id)
+        started_service.service, settings, started_service.initialize_id,
+        &outline)
     if !content_ok {
         return {}, false
     }
     end_startup_phase("Loading content", started_at)
     evidence_profile.zone_end(timing_profile)
 
-    loading_initialize_graphics_phase(timing_profile, state, settings)
-    draw_startup_frame(1.0)
+    loading_initialize_graphics_phase(
+        timing_profile, state, settings, &outline)
+    finish_startup_outline(&outline)
     end_startup_phase("Total startup", startup_started_at)
     return loading_runtime_session(state, started_service.service)
 }

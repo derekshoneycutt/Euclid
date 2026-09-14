@@ -7,6 +7,7 @@
 1. [Source Map](#source-map)
 1. [Ownership Model](#ownership-model)
 1. [Frame Lifecycle](#frame-lifecycle)
+1. [Startup Assembly](#startup-assembly)
 1. [Window And Layout](#window-and-layout)
 1. [Panel Composition](#panel-composition)
 1. [UI Runtime State](#ui-runtime-state)
@@ -102,6 +103,7 @@ This is a hybrid model:
 | Area | Primary files | Responsibility |
 | --- | --- | --- |
 | Window and frame loop | `src/view/view.odin` | Window lifecycle, frame order, world and panel drawing. |
+| Startup presentation | `src/view/loading.odin`, `src/view/startup_outline.odin` | Loading milestones, fixed UI silhouette, warning, and ready handoff. |
 | Shared UI entry point | `src/view/ui/ui.odin` | Constants, frame preparation, panel draw dispatch. |
 | Region layout | `src/view/ui/layout.odin` | Clamp and derive all panel rectangles. |
 | Splitters | `src/view/ui/splitter.odin` | Resize hit testing, capture, drag, fade, and cursor. |
@@ -205,6 +207,39 @@ Three ordering details are especially important:
 - drawing consumes prepared records and does not commit UI interaction or actions.
 
 The second detail is a current limitation discussed below.
+
+## Startup Assembly
+
+The display thread opens the Raylib window before packaged assets, Julia content, and
+normal UI resources are ready. During that interval, `loading.odin` pumps window events
+and draws a dependency-free representation of the eventual interface. It does not enter
+the normal frame lifecycle or access application-owned widget state.
+
+`startup_outline.odin` builds one fixed-capacity sequence of line segments from the
+same pure layout helpers used by the real baseline UI. The sequence traces the world,
+presentation, accordion, accordion-header, and animation-control boundaries. It stores
+no dynamic memory and requires no font cache, texture, Julia state, or initialized
+presentation runtime.
+
+The assembling outline is the normal startup progress indicator; there is no separate
+spinner or progress bar. Its reveal target follows the coarse startup milestones:
+
+| Target | Startup phase |
+| ---: | --- |
+| 15% | Packaged assets |
+| 35% | Julia runtime initialization |
+| 65% | Julia content initialization |
+| 85% | Fonts and graphics |
+| 100% | All runtime owners ready |
+
+The outline advances at a stable rate but never beyond the current milestone. These
+targets communicate phase progress rather than estimated remaining time. Once startup
+is actually ready, a bounded 240-millisecond ease-out completes the remaining trace and
+the normal frame loop replaces it with the real UI.
+
+If a Julia startup request exceeds the unresponsive threshold, the default Raylib font
+draws `Julia is not responding` over the partial outline. This warning remains available
+before application fonts exist and is the only ordinary startup text.
 
 ## Window And Layout
 
@@ -799,6 +834,7 @@ temporary allocator already reset at frame completion.
 
 | Test area | Coverage |
 | --- | --- |
+| `src/view/startup_outline_test.odin` | Fixed-capacity silhouette geometry and bounded milestone reveal. |
 | `src/view/ui/ui_test.odin` | Router priority, focus, capture, wheel ownership, regions, splitters, animation controls, accordion layout, tree layout, and scrolling. |
 | `src/view/ui/dynview/selection_test.odin` | Selection modes, hit boundaries, capture, and source extraction. |
 | `src/view/core/copy_interaction_test.odin` | Copy target identity, hover, press, release, and animation state. |
@@ -923,3 +959,5 @@ The current UI depends on these invariants:
 1. Splitters cannot change capture framing during armed, recording, or finalizing GIF
    phases.
 1. Temporary frame allocations are released after presentation and evidence handling.
+1. Startup drawing remains allocation-free and independent of resources that are still
+    loading, and its reveal never exceeds the completed phase milestone.
