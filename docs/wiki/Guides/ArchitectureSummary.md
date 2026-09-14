@@ -469,36 +469,12 @@ mutate the ordered constraints and transforms in `Shape_World`. Persistent paylo
 fence storage are reused. The display may help execute queued work, but cannot advance
 until the complete batch joins.
 
-Tool motion commits bounded, ordered dust-contact intents before particle work begins.
-Before a later ordered particle mutation, pending contacts replay through exact
-contiguous grid membership; otherwise the particle task performs that replay before
-integration. The task rebuilds membership after displacement. Particle-particle
-collision budgeting uses a separate compact grid whose cell width matches the collision
-cutoff. Its deterministic per-cell reservoir does not limit exact tool-contact
-discovery.
+The particle task owns bounded dust contacts, collisions, settling, sleeping, waking,
+and ambient effects. It keeps all simulation storage fixed-capacity and performs every
+particle mutation inside the joined worker step.
 
-Grounded dust settling stays inside the particle task and uses fixed-capacity storage.
-A 50x50 parent grid chooses deterministic 1x1, 2x2, or 4x4 relaxation leaves with
-hysteresis. Dense leaves damp only velocity residuals around the leaf mean, preserving
-the leaf's total XY momentum. Sparse leaves do not receive residual damping, but their
-particles remain eligible for sleep.
-
-Sleep is grounded-only and requires sustained low leaf mean speed, residual energy,
-collision impulse, and position correction. Quiet duration is retained per particle so
-crossing an adaptive-cell boundary cannot indefinitely defer rest. Floor impacts below
-the rest threshold stop instead of entering a stable two-frame bounce. Tool contacts
-and clear kicks wake directly. Mixed particle contacts wake the directly contacted
-sleeper on either meaningful penetration or relative speed; only energetic impacts wake
-the parent halo. Sleeping pairs and shallow, sub-threshold mixed contacts skip response,
-preventing settled piles from churning without making them permeable.
-
-Scenario dust emission is queued into the particle task and uses request-local seeded
-randomness without advancing authored-emission RNG. `contact_dust` queues the ordinary
-tool-contact path, while `kick_dust` sets a bounded request consumed by the particle
-worker. `pause_animation` stops scheduling Julia animation policy ticks without pausing
-fixed-step particle physics, allowing deterministic settle/wake acceptance. Pointer-free
-observations expose dust populations, bounded collision work, relaxation work, and
-sleep/wake transitions to state predicates and scenario artifacts.
+Tool and scenario actions cross this boundary as bounded requests. Evidence reads
+pointer-free observations after the worker joins.
 
 The windowed wrapper adds GIF policy without changing this semantic boundary.
 
