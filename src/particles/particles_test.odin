@@ -34,6 +34,65 @@ normalize_theta_and_sweep_delta_are_stable :: proc(t: ^testing.T) {
         "sweep delta should wrap across zero")
 }
 
+//   Count live low-layer particles within the configured test capacity.
+count_live_low_particles :: proc(ps: ^particlemodel.Particle_System) -> int {
+    count: int
+    for alive in ps.low_particles.alive[:ps.use_max_dust_particles] {
+        if alive {
+            count += 1
+        }
+    }
+    return count
+}
+
+//   Verify outlined arc emission scales with visible arc length.
+@(test)
+circle_dust_emission_scales_with_arc_length :: proc(t: ^testing.T) {
+    quarter := new(particlemodel.Particle_System, context.allocator)
+    full := new(particlemodel.Particle_System, context.allocator)
+    defer free(quarter)
+    defer free(full)
+    quarter.use_max_dust_particles = 1000
+    full.use_max_dust_particles = 1000
+    color := rl.Color{255, 255, 255, 255}
+
+    emit_circle_dust(quarter, {{0, 0, 0}, {0.2, 0, 0}, {0, 0.2, 0}, 0, color})
+    emit_circle_dust(full, {
+        {0, 0, 0}, {0.2, 0, 0}, {0.2, 0, 0}, f32(2 * math.PI), color})
+
+    quarter_count := count_live_low_particles(quarter)
+    full_count := count_live_low_particles(full)
+    testing.expect(t, quarter_count < full_count)
+    testing.expect(t, full_count >= quarter_count * 3)
+}
+
+//   Verify filled arc emission occupies the sector interior instead of only its rim.
+@(test)
+filled_circle_dust_emission_samples_sector_interior :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps.use_max_dust_particles = 1000
+
+    emit_filled_circle_dust(ps, {
+        {0, 0, 0}, {0.2, 0, 0},
+        {0.1, math.sqrt(f32(3)) * 0.1, 0}, 0,
+        rl.Color{255, 255, 255, 255}})
+
+    interior_count: int
+    for index in 0..<ps.use_max_dust_particles {
+        if !ps.low_particles.alive[index] {
+            continue
+        }
+        radius_sq := ps.low_particles.pos_x[index] * ps.low_particles.pos_x[index] +
+            ps.low_particles.pos_y[index] * ps.low_particles.pos_y[index]
+        if radius_sq < 0.01 {
+            interior_count += 1
+        }
+    }
+    testing.expect(t, count_live_low_particles(ps) >= 200)
+    testing.expect(t, interior_count >= 40)
+}
+
 //   Verify dust_grid_cell_index clamps out-of-range coordinates to the grid.
 @(test)
 dust_grid_cell_index_clamps_bounds :: proc(t: ^testing.T) {

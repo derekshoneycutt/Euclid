@@ -113,8 +113,12 @@ DUST_COLLISION_GRID_NEIGHBORS :: [5][2]int{{0,0},{1,0},{-1,1},{0,1},{1,1}}
 CLEAR_BURST_POINT_COUNT :: 28
 CLEAR_BURST_LABEL_COUNT :: 12
 CLEAR_BURST_LINE_SAMPLES :: 96
-CLEAR_BURST_CIRCLE_SAMPLES :: 96
-CLEAR_BURST_FILLED_CIRCLE_SAMPLES :: 120
+CLEAR_BURST_ARC_DENSITY :: 192.0
+CLEAR_BURST_ARC_MIN_SAMPLES :: 2
+CLEAR_BURST_ARC_MAX_SAMPLES :: 900
+CLEAR_BURST_FILLED_CIRCLE_DENSITY :: 12000.0
+CLEAR_BURST_FILLED_CIRCLE_MIN_SAMPLES :: CLEAR_BURST_POINT_COUNT
+CLEAR_BURST_FILLED_CIRCLE_MAX_SAMPLES :: 900
 CLEAR_BURST_EDGE_REPEATS :: 1
 CLEAR_BURST_POLYGON_FILL_DENSITY :: 900.0
 CLEAR_BURST_POLYGON_FILL_MIN_SAMPLES :: 10
@@ -144,7 +148,6 @@ Circle_Dust_Emission :: struct {
     center, start, finish: Vector3,
     offset: f32,
     color: rl.Color,
-    sample_count: int,
 }
 
 // Group one world-backed clear-burst operation and its render color.
@@ -366,20 +369,24 @@ emit_shape_world_polygon_burst :: proc(
         ctx.particles, &vertices, len(entities), ctx.color)
 }
 
-//   Emit one world arc through the existing bounded sweep sampler.
+//   Resolve and emit one world arc using its geometry kind's density model.
 emit_shape_world_arc_burst :: proc(
     ctx: Shape_World_Burst_Context,
     geometry: shapemodel.Shape_Arc_Geometry,
     offset: f32,
-    sample_count: int) {
+    filled: bool) {
     center, center_ok := shape_world_burst_position(ctx.world, geometry.center)
     start, start_ok := shape_world_burst_position(ctx.world, geometry.start)
     finish, finish_ok := shape_world_burst_position(ctx.world, geometry.finish)
     if !center_ok || !start_ok || !finish_ok {
         return
     }
-    emit_circle_dust(ctx.particles, {
-        center, start, finish, offset, ctx.color, sample_count})
+    emission := Circle_Dust_Emission{center, start, finish, offset, ctx.color}
+    if filled {
+        emit_filled_circle_dust(ctx.particles, emission)
+    } else {
+        emit_circle_dust(ctx.particles, emission)
+    }
 }
 
 //   Emit one direct world geometry using the legacy sampling behavior.
@@ -402,10 +409,10 @@ emit_shape_world_geometry_burst :: proc(
         }
     case .Arc:
         emit_shape_world_arc_burst(ctx, geometry.payload.arc,
-            offset, CLEAR_BURST_CIRCLE_SAMPLES)
+            offset, false)
     case .Filled_Arc:
         emit_shape_world_arc_burst(ctx, geometry.payload.arc,
-            offset, CLEAR_BURST_FILLED_CIRCLE_SAMPLES)
+            offset, true)
     case .Polygon:
         emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
     case .Pen, .Compass:
@@ -984,6 +991,27 @@ compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
     return delta
 }
 
+//   Derive one bounded particle count from the rendered arc length.
+circle_dust_sample_count :: proc(start_radius, end_radius, sweep_delta: f32) -> int {
+    average_radius := (start_radius + end_radius) * 0.5
+    arc_length := average_radius * abs(sweep_delta)
+    count := int(math.round(f64(arc_length * CLEAR_BURST_ARC_DENSITY)))
+    return clamp(count, CLEAR_BURST_ARC_MIN_SAMPLES, CLEAR_BURST_ARC_MAX_SAMPLES)
+}
+
+//   Derive one bounded particle count from the rendered sector area.
+filled_circle_dust_sample_count :: proc(
+    start_radius, end_radius, sweep_delta: f32) -> int {
+    mean_radius_sq := (
+        start_radius * start_radius + start_radius * end_radius +
+        end_radius * end_radius) / 3.0
+    area := 0.5 * abs(sweep_delta) * mean_radius_sq
+    count := int(math.round(f64(area * CLEAR_BURST_FILLED_CIRCLE_DENSITY)))
+    return clamp(count,
+        CLEAR_BURST_FILLED_CIRCLE_MIN_SAMPLES,
+        CLEAR_BURST_FILLED_CIRCLE_MAX_SAMPLES)
+}
+
 //   Emit dust samples along a circular/arc sweep between start and finish points.
 emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
     start_vec := emission.start - emission.center
@@ -999,9 +1027,10 @@ emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
     end_theta := f32(math.atan2(end_vec.y, end_vec.x))
     sweep_delta := compute_sweep_delta(start_theta, end_theta) + emission.offset
 
-    clamped_sample_count := max(emission.sample_count, 2)
-    denom := f32(clamped_sample_count - 1)
-    for s in 0..<clamped_sample_count {
+    sample_count := circle_dust_sample_count(
+        start_radius, end_radius, sweep_delta)
+    denom := f32(sample_count - 1)
+    for s in 0..<sample_count {
         t := f32(s) / denom
         theta := start_theta + sweep_delta * t
         radius := math.lerp(start_radius, end_radius, t)
@@ -1010,9 +1039,36 @@ emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
         sample.x += f32(math.cos(theta)) * radius
         sample.y += f32(math.sin(theta)) * radius
 
-        for _ in 0..<2 {
-            spawn_dust_particle(ps, sample, emission.color)
-        }
+        spawn_dust_particle(ps, sample, emission.color)
+    }
+}
+
+//   Emit uniformly distributed dust throughout one rendered circular sector.
+emit_filled_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
+    start_vec := emission.start - emission.center
+    end_vec := emission.finish - emission.center
+    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
+    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
+    if start_radius <= 0 && end_radius <= 0 {
+        return
+    }
+
+    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
+    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
+    sweep_delta := compute_sweep_delta(start_theta, end_theta) + emission.offset
+    sample_count := filled_circle_dust_sample_count(
+        start_radius, end_radius, sweep_delta)
+
+    for _ in 0..<sample_count {
+        t := random_f32_range(ps, 0.0, 1.0)
+        theta := start_theta + sweep_delta * t
+        outer_radius := math.lerp(start_radius, end_radius, t)
+        radius := outer_radius * f32(math.sqrt(random_f32_range(ps, 0.0, 1.0)))
+
+        sample := emission.center
+        sample.x += f32(math.cos(theta)) * radius
+        sample.y += f32(math.sin(theta)) * radius
+        spawn_dust_particle(ps, sample, emission.color)
     }
 }
 
