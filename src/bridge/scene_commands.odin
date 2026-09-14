@@ -10,6 +10,7 @@ import animation_model "../core/animation"
 import "../core"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
+import "../particles"
 
 // Scene commands isolate asynchronous Julia callbacks from canonical display state.
 // The Julia owner thread writes one bounded batch while the display thread reads an
@@ -17,6 +18,7 @@ import evidence_trace "../evidence/trace"
 // before applying any command, so invalid or overflowed batches cannot partially commit.
 
 SCENE_COMMAND_BATCH_CAPACITY :: bridgemodel.SCENE_COMMAND_BATCH_CAPACITY
+#assert(particles.DUST_TOOL_CONTACT_CAP >= SCENE_COMMAND_BATCH_CAPACITY)
 
 //   Per-kind validator shape: report whether one command is valid against state.
 Scene_Command_Validator :: #type proc(
@@ -264,6 +266,20 @@ scene_command_batch_wellformed :: proc(
     return batch^.animation == state^.julia_interface^.current_animation
 }
 
+// Count commands that can enqueue one compound tool-contact intent.
+scene_command_batch_tool_contact_count :: proc(batch: ^Scene_Command_Batch) -> int {
+    count := 0
+    for command_index in 0..<batch^.command_count {
+        command := &batch^.commands[command_index]
+        produces_contact := command^.kind == .Set_Tool_Position ||
+            (command^.kind == .Set_Tool_Lock && command^.flag)
+        if produces_contact && tool_dust_contact_on_floor(command^.position) {
+            count += 1
+        }
+    }
+    return count
+}
+
 // Apply one validated packed-entity transform mutation.
 apply_set_shape_position :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
@@ -344,7 +360,9 @@ validate_scene_command_batch :: proc(
             return false
         }
     }
-    return true
+    contact_count := scene_command_batch_tool_contact_count(batch)
+    return contact_count == 0 || particles.can_queue_dust_tool_contacts(
+        state^.particle_system, contact_count)
 }
 
 //   Apply one set-drawing-sound-enabled command.

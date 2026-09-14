@@ -14,6 +14,18 @@ DUST_GRID_DIM_SQUARED :: DUST_GRID_DIM * DUST_GRID_DIM
 DUST_GRID_BUCKET_CAP :: 128
 DUST_GRID_BUCKET_COUNT :: DUST_GRID_DIM_SQUARED * DUST_GRID_BUCKET_CAP
 DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
+DUST_TOOL_CONTACT_CAP :: 64
+DUST_CONTACT_CANDIDATE_WORD_COUNT :: (MAX_LOW_PARTICLES + 63) / 64
+
+// Describe one ordered endpoint push with an optional sampled compass sweep.
+Dust_Tool_Contact :: struct {
+    endpoint: rl.Vector3,
+    segment_first: rl.Vector3,
+    segment_second: rl.Vector3,
+    max_spawn_sequence: u64,
+    sample_count: i32,
+    has_sweep: bool,
+}
 
 // Store one particle's simulation and rendering state.
 Particle :: struct {
@@ -42,6 +54,22 @@ Particle_System :: struct {
     low_particle_screens: [MAX_LOW_PARTICLES]rl.Vector2,
     particles: #soa[MAX_PARTICLES]Particle,
     high_particles: #soa[MAX_PARTICLES]Particle,
+
+    dust_exact_indices: [MAX_LOW_PARTICLES]i32,
+    dust_exact_counts: [DUST_GRID_DIM_SQUARED]i32,
+    dust_exact_offsets: [DUST_GRID_DIM_SQUARED + 1]i32,
+    dust_exact_cursors: [DUST_GRID_DIM_SQUARED]i32,
+    dust_active_cells: [DUST_GRID_DIM_SQUARED]i32,
+    dust_active_cell_count: int,
+
+    dust_tool_contacts: [DUST_TOOL_CONTACT_CAP]Dust_Tool_Contact,
+    dust_tool_contact_count: int,
+    dust_tool_contact_overflow_count: int,
+    dust_contact_candidate_bits: [DUST_CONTACT_CANDIDATE_WORD_COUNT]u64,
+    dust_contact_candidates: [MAX_LOW_PARTICLES]i32,
+    dust_contact_candidate_count: int,
+    dust_slot_spawn_sequences: [MAX_LOW_PARTICLES]u64,
+    dust_spawn_sequence: u64,
 
     dust_buckets: [DUST_GRID_BUCKET_COUNT]i32,
     dust_counts: [DUST_GRID_DIM_SQUARED]i32,

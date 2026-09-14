@@ -250,10 +250,10 @@ function load_tick_implementation(
         generation, host.terminal_animation_callback, animation_id)
 end
 
-"""Return the actor mirroring the native program active for one tick."""
-function adopt_animation_for_tick!(
+"""Return the live program actor matching one native tick, or `nothing`."""
+function current_animation_actor(
     host::EuclidRuntimeHost, payload::NativeAnimationTickPayload,
-    animation_id::UUID, implementation)
+    animation_id::UUID)
     state = host.reactor.animation_supervisor_state
     actor = state.active_program_actor
     current = actor !== nothing &&
@@ -261,7 +261,15 @@ function adopt_animation_for_tick!(
         state.active_animation_generation == payload.animation_generation &&
         state.active_animation_id == animation_id &&
         EuclidActorRuntime.is_live(host.reactor.actors, actor)
-    current && return actor
+    return current ? actor : nothing
+end
+
+"""Return the actor mirroring the native program active for one tick."""
+function adopt_animation_for_tick!(
+    host::EuclidRuntimeHost, payload::NativeAnimationTickPayload,
+    animation_id::UUID, implementation)
+    actor = current_animation_actor(host, payload, animation_id)
+    actor === nothing || return actor
     await_animation_supervisor!(host) || return nothing
     command = EuclidPolicy.AdoptActiveAnimation(
         payload.request_id, payload.runtime_generation,
@@ -289,12 +297,10 @@ function tick_completion_matches(
     completed.slot.reservation_generation == payload.reservation_generation
 end
 
-"""Execute one tick with an implementation resolved by the owning generation."""
-function animation_host_tick_with_implementation!(
+"""Execute one tick through an already-resolved live program actor."""
+function animation_host_tick_with_actor!(
     host::EuclidRuntimeHost, payload::NativeAnimationTickPayload,
-    animation_id::UUID, implementation)::Bool
-    actor = adopt_animation_for_tick!(host, payload, animation_id, implementation)
-    actor === nothing && return false
+    animation_id::UUID, actor::EuclidActorRuntime.ActorId)::Bool
     command = EuclidPolicy.TickAnimation(
         payload.request_id, payload.runtime_generation,
         payload.animation_generation, animation_id, actor, payload.sequence,
@@ -311,11 +317,23 @@ function animation_host_tick_with_implementation!(
     return tick_completion_matches(completed, payload, animation_id, actor)
 end
 
+"""Execute one tick with an implementation resolved by the owning generation."""
+function animation_host_tick_with_implementation!(
+    host::EuclidRuntimeHost, payload::NativeAnimationTickPayload,
+    animation_id::UUID, implementation)::Bool
+    actor = adopt_animation_for_tick!(host, payload, animation_id, implementation)
+    actor === nothing && return false
+    return animation_host_tick_with_actor!(host, payload, animation_id, actor)
+end
+
 """Execute one native-owned animation tick through the shared actor scheduler."""
 function animation_host_tick(
     host::EuclidRuntimeHost, payload::NativeAnimationTickPayload,
     stable_id::AbstractString)::Bool
     animation_id = UUID(String(stable_id))
+    actor = current_animation_actor(host, payload, animation_id)
+    actor === nothing || return animation_host_tick_with_actor!(
+        host, payload, animation_id, actor)
     generation = active_euclid_runtime_generation(host)
     implementation = load_tick_implementation(host, generation, animation_id)
     return animation_host_tick_with_implementation!(

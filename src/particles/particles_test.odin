@@ -6,6 +6,8 @@ import shapemodel "../shapes/model"
 import "core:math"
 import "core:testing"
 
+import rl "vendor:raylib"
+
 import test_helpers "../test_helpers"
 
 EPS :: f32(1e-5)
@@ -39,6 +41,32 @@ dust_grid_cell_index_clamps_bounds :: proc(t: ^testing.T) {
 
     max_idx := DUST_GRID_DIM * DUST_GRID_DIM - 1
     testing.expect_value(t, dust_grid_cell_index(99, 99), max_idx)
+}
+
+// Verify exact grid membership retains every particle above the collision sample cap.
+@(test)
+exact_dust_grid_retains_dense_cell_membership :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = particlemodel.DUST_GRID_BUCKET_CAP + 8
+    for index in 0..<ps^.use_max_dust_particles {
+        ps^.low_particles[index].alive = true
+        ps^.low_particles.pos_x[index] = 0.5
+        ps^.low_particles.pos_y[index] = 0.5
+    }
+
+    build_exact_dust_grid(ps)
+
+    cell := dust_grid_cell_index(0.5, 0.5)
+    testing.expect_value(t, ps^.dust_active_cell_count, 1)
+    testing.expect_value(t, ps^.dust_exact_counts[cell],
+        i32(ps^.use_max_dust_particles))
+    first := int(ps^.dust_exact_offsets[cell])
+    last := int(ps^.dust_exact_offsets[cell + 1])
+    testing.expect_value(t, last - first, ps^.use_max_dust_particles)
+    for index in 0..<ps^.use_max_dust_particles {
+        testing.expect_value(t, ps^.dust_exact_indices[first + index], i32(index))
+    }
 }
 
 //   Verify slot reservation prefers dead slots and wraps at the particle cap.
@@ -108,6 +136,162 @@ expect_dust_slot_unchanged :: proc(
         "no collision should keep vx")
     test_helpers.expect_close(t, ps^.low_particles.vel_y[index], before.vy,
         "no collision should keep vy")
+}
+
+// Verify deferred replay preserves endpoint and sampled sweep responses.
+@(test)
+replay_dust_tool_contact_matches_immediate_reference :: proc(t: ^testing.T) {
+    expected := new(particlemodel.Particle_System, context.allocator)
+    actual := new(particlemodel.Particle_System, context.allocator)
+    defer free(expected)
+    defer free(actual)
+    expected^.use_max_dust_particles = 4
+    actual^.use_max_dust_particles = 4
+    expected^.low_particles[0] = {pos_x = 0.2, pos_y = 0.25, alive = true}
+    expected^.low_particles[1] = {pos_x = 0.25, pos_y = 0.256, alive = true}
+    expected^.low_particles[2] = {pos_x = 0.2, pos_y = 0.25, alive = true}
+    expected^.low_particles[3] = {pos_x = 0.8, pos_y = 0.8, alive = true}
+    actual^.low_particles[0] = expected^.low_particles[0]
+    actual^.low_particles[1] = expected^.low_particles[1]
+    actual^.low_particles[2] = expected^.low_particles[2]
+    actual^.low_particles[3] = expected^.low_particles[3]
+
+    endpoint := Vector3{0.2, 0.25, 0}
+    first := Vector3{0.2, 0.25, 0}
+    second := Vector3{0.3, 0.25, 0}
+    sample_count := 24
+    push_dust_away_from_xy(expected, endpoint.x, endpoint.y)
+    for sample_index in 0..<sample_count {
+        interpolation := f32(sample_index) / f32(sample_count)
+        push_dust_away_from_xy(expected,
+            math.lerp(first.x, second.x, interpolation),
+            math.lerp(first.y, second.y, interpolation))
+    }
+    testing.expect(t, queue_dust_tool_contact(
+        actual, endpoint, first, second, sample_count, true))
+    build_exact_dust_grid(actual)
+    replay_dust_tool_contacts(actual)
+
+    for index in 0..<expected^.use_max_dust_particles {
+        expected_slot := dust_slot_snapshot(expected, index)
+        actual_slot := dust_slot_snapshot(actual, index)
+        test_helpers.expect_close(t, actual_slot.x, expected_slot.x, "segment x")
+        test_helpers.expect_close(t, actual_slot.y, expected_slot.y, "segment y")
+        test_helpers.expect_close(t, actual_slot.vx, expected_slot.vx, "segment vx")
+        test_helpers.expect_close(t, actual_slot.vy, expected_slot.vy, "segment vy")
+    }
+    testing.expect_value(t, actual^.rng_state, expected^.rng_state)
+    testing.expect_value(t, actual^.dust_tool_contact_count, 0)
+}
+
+// Verify deferred contacts retain the original pre-integration fixed-step timing.
+@(test)
+dust_tool_contact_replays_before_fixed_step_integration :: proc(t: ^testing.T) {
+    expected := new(particlemodel.Particle_System, context.allocator)
+    actual := new(particlemodel.Particle_System, context.allocator)
+    defer free(expected)
+    defer free(actual)
+    expected^.use_max_dust_particles = 1
+    actual^.use_max_dust_particles = 1
+    expected^.low_particles[0] = {
+        pos_x = 0.2, pos_y = 0.25, life = 100, size = 0.01, alive = true}
+    actual^.low_particles[0] = expected^.low_particles[0]
+    endpoint := Vector3{0.2, 0.25, 0}
+
+    push_dust_away_from_xy(expected, endpoint.x, endpoint.y)
+    update_particles(expected, f32(1.0 / 60.0))
+    testing.expect(t, queue_dust_tool_contact(
+        actual, endpoint, {}, {}, 0, false))
+    update_particles(actual, f32(1.0 / 60.0))
+
+    testing.expect_value(t, actual^.low_particles[0], expected^.low_particles[0])
+    testing.expect_value(t, actual^.rng_state, expected^.rng_state)
+}
+
+// Verify one deferred contact excludes dust emitted by a later scene command.
+@(test)
+dust_tool_contact_excludes_later_spawned_slots :: proc(t: ^testing.T) {
+    expected := new(particlemodel.Particle_System, context.allocator)
+    actual := new(particlemodel.Particle_System, context.allocator)
+    defer free(expected)
+    defer free(actual)
+    expected^.use_max_dust_particles = 1
+    actual^.use_max_dust_particles = 1
+    endpoint := Vector3{0.2, 0.25, 0}
+    testing.expect(t, queue_dust_tool_contact(
+        actual, endpoint, {}, {}, 0, false))
+
+    spawn_dust_particle(expected, endpoint, rl.WHITE)
+    spawn_dust_particle(actual, endpoint, rl.WHITE)
+    build_exact_dust_grid(actual)
+    replay_dust_tool_contacts(actual)
+
+    testing.expect_value(t, actual^.low_particles[0], expected^.low_particles[0])
+    testing.expect_value(t, actual^.rng_state, expected^.rng_state)
+}
+
+// Verify an ordered flush preserves RNG state before a later particle emission.
+@(test)
+dust_tool_contact_flush_precedes_later_emission_rng :: proc(t: ^testing.T) {
+    expected := new(particlemodel.Particle_System, context.allocator)
+    actual := new(particlemodel.Particle_System, context.allocator)
+    defer free(expected)
+    defer free(actual)
+    expected^.use_max_dust_particles = 2
+    actual^.use_max_dust_particles = 2
+    expected^.low_particles[0] = {
+        pos_x = 0.2, pos_y = 0.25, life = 100, alive = true}
+    actual^.low_particles[0] = expected^.low_particles[0]
+    endpoint := Vector3{0.2, 0.25, 0}
+
+    push_dust_away_from_xy(expected, endpoint.x, endpoint.y)
+    spawn_dust_particle(expected, endpoint, rl.WHITE)
+    testing.expect(t, queue_dust_tool_contact(
+        actual, endpoint, {}, {}, 0, false))
+    flush_dust_tool_contacts(actual)
+    spawn_dust_particle(actual, endpoint, rl.WHITE)
+
+    testing.expect_value(t, actual^.low_particles[0], expected^.low_particles[0])
+    testing.expect_value(t, actual^.low_particles[1], expected^.low_particles[1])
+    testing.expect_value(t, actual^.rng_state, expected^.rng_state)
+}
+
+// Verify queue admission is bounded and records rejected contact intents.
+@(test)
+dust_tool_contact_queue_is_bounded :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    for _ in 0..<DUST_TOOL_CONTACT_CAP {
+        testing.expect(t, queue_dust_tool_contact(ps, {}, {}, {}, 0, false))
+    }
+
+    testing.expect(t, !can_queue_dust_tool_contacts(ps, 1))
+    testing.expect(t, !queue_dust_tool_contact(ps, {}, {}, {}, 0, false))
+    testing.expect_value(t, ps^.dust_tool_contact_count, DUST_TOOL_CONTACT_CAP)
+    testing.expect_value(t, ps^.dust_tool_contact_overflow_count, 1)
+}
+
+// Verify rebuilding exact membership observes a contact crossing a cell boundary.
+@(test)
+exact_dust_grid_rebuild_tracks_contact_displacement :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0] = {pos_x = 0.0197, pos_y = 0.25, alive = true}
+    endpoint := Vector3{0.011, 0.25, 0}
+
+    build_exact_dust_grid(ps)
+    old_cell := dust_grid_cell_index(0.0197, 0.25)
+    testing.expect(t, queue_dust_tool_contact(
+        ps, endpoint, {}, {}, 0, false))
+    replay_dust_tool_contacts(ps)
+    build_exact_dust_grid(ps)
+
+    new_cell := dust_grid_cell_index(
+        ps^.low_particles.pos_x[0], ps^.low_particles.pos_y[0])
+    testing.expect(t, new_cell != old_cell)
+    testing.expect_value(t, ps^.dust_exact_counts[old_cell], i32(0))
+    testing.expect_value(t, ps^.dust_exact_counts[new_cell], i32(1))
 }
 
 //   Verify a non-overlapping dust pair keeps positions and velocities unchanged.

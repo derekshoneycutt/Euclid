@@ -232,3 +232,71 @@ bridge_tool_unlock_is_deferred_until_scene_commit :: proc(t: ^testing.T) {
     testing.expect(t, commit_scene_command_batch(state, &batch))
     testing.expect(t, !constraint^.enabled)
 }
+
+// Verify committed tool moves queue one ordered compound contact with floor-gated sweep.
+@(test)
+bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    particle_system := new(particlemodel.Particle_System, context.allocator)
+    defer free(particle_system, context.allocator)
+    state^.particle_system = particle_system
+    state^.world_compass, _ = shapes.world_create_compass(&world, {
+        joint1 = {0.1, 0.2, 0}, pivot = {0.25, 0.3, 0.01},
+        joint2 = {0.4, 0.2, 0}, limb_length = 0.2})
+
+    move_compass_joint1(state, {0.15, 0.2, 0}, true)
+    move_compass_joint2(state, {0.45, 0.2, 0}, true)
+    move_compass_joint1(state, {0.15, 0.2, 0.1}, true)
+    move_compass_joint2(state, {0.5, 0.2, 0}, true)
+
+    testing.expect_value(t, particle_system^.dust_tool_contact_count, 3)
+    first := &particle_system^.dust_tool_contacts[0]
+    second := &particle_system^.dust_tool_contacts[1]
+    third := &particle_system^.dust_tool_contacts[2]
+    testing.expect_value(t, first^.endpoint, rl.Vector3{0.15, 0.2, 0})
+    testing.expect_value(t, second^.endpoint, rl.Vector3{0.45, 0.2, 0})
+    testing.expect(t, first^.has_sweep)
+    testing.expect(t, second^.has_sweep)
+    testing.expect_value(t, third^.endpoint, rl.Vector3{0.5, 0.2, 0})
+    testing.expect(t, !third^.has_sweep)
+}
+
+// Verify queue-capacity preflight rejects a complete scene batch before mutation.
+@(test)
+bridge_tool_batch_rejects_full_contact_queue_transactionally :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    particle_system := new(particlemodel.Particle_System, context.allocator)
+    defer free(particle_system, context.allocator)
+    state^.particle_system = particle_system
+    particle_system^.dust_tool_contact_count = particlemodel.DUST_TOOL_CONTACT_CAP
+    state^.world_pen, _ = shapes.world_create_pen(&world, {
+        joint1 = {0.1, 0.2, 0}, joint2 = {0.2, 0.2, 0}, length = 0.1})
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    batch: Scene_Command_Batch
+
+    begin_scene_command_batch(state, &batch)
+    move_pen_joint1(state, {0.8, 0.7, 0})
+    end_scene_command_batch(state)
+    before := get_pen_joint1_position(state)
+
+    testing.expect(t, !commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, get_pen_joint1_position(state), before)
+    testing.expect_value(t, particle_system^.dust_tool_contact_count,
+        particlemodel.DUST_TOOL_CONTACT_CAP)
+
+    begin_scene_command_batch(state, &batch)
+    move_pen_joint1(state, {0.8, 0.7, 0.1})
+    end_scene_command_batch(state)
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, get_pen_joint1_position(state),
+        rl.Vector3{0.8, 0.7, 0.1})
+    testing.expect_value(t, particle_system^.dust_tool_contact_count,
+        particlemodel.DUST_TOOL_CONTACT_CAP)
+}

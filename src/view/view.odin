@@ -653,10 +653,10 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
 
     state^.accumulator += frame_dt
 
-    shapes.shape_world_update_previous_positions(state^.shape_world)
     step_count := 0
     for state^.accumulator >= FIXED_DT {
         // Never expose worker-commanded tool dimensions before constraints normalize them.
+        shapes.shape_world_update_previous_positions(state^.shape_world)
         run_windowed_fixed_step(state, FIXED_DT)
 
         state^.accumulator -= FIXED_DT

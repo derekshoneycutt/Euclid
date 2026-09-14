@@ -67,17 +67,16 @@ set_tool_position :: proc(
         &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
     if !found {return}
     transform^.position = position
-    push_dust_if_floor_contact(state, position)
+    first, second: rl.Vector3
+    floor_sweep := false
     if sweep && (entity == state^.world_compass.joint1 ||
         entity == state^.world_compass.joint2) {
-        first, first_found := tool_position(state, state^.world_compass.joint1)
-        second, second_found := tool_position(state, state^.world_compass.joint2)
-        if first_found && second_found &&
-            f32(abs(first.z)) <= FLOOR_CONTACT_Z_EPSILON &&
-            f32(abs(second.z)) <= FLOOR_CONTACT_Z_EPSILON {
-            push_dust_along_floor_segment(state, first, second)
-        }
+        first_found, second_found: bool
+        first, first_found = tool_position(state, state^.world_compass.joint1)
+        second, second_found = tool_position(state, state^.world_compass.joint2)
+        floor_sweep = first_found && second_found
     }
+    queue_tool_dust_contact(state, position, first, second, floor_sweep)
 }
 
 // Enable or disable one canonical tool joint's direct snap constraint.
@@ -443,6 +442,7 @@ emit_trailing_particle :: proc "c" (
         return
     }
     context = state^.saved_context
+    particles.flush_dust_tool_contacts(state^.particle_system)
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_trail_particles(
         state^.particle_system, state^.current_delta_time, {pos, rl_color})
@@ -462,6 +462,7 @@ emit_flicker_particle :: proc "c" (
         return
     }
     context = state^.saved_context
+    particles.flush_dust_tool_contacts(state^.particle_system)
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_flicker_particles(
         state^.particle_system, {pos, rl_color}, 10)

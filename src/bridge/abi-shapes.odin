@@ -353,6 +353,7 @@ shape_set_visible_local :: proc(
     target_visible := visible != 0
     emitted := false
     if style^.visible && !target_visible {
+        particles.flush_dust_tool_contacts(state^.particle_system)
         emitted = particles.emit_shape_world_hide_burst(
             state^.particle_system, state^.shape_world, entity, kick_dust)
         if emitted && kick_dust && state^.iso_scale != nil {

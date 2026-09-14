@@ -122,8 +122,15 @@ end
         host.reactor.actors.outgoing)
     @test host.reactor.animation_supervisor_state.active_animation_id ==
         RuntimeHostPointId
+    generation = host.active_generation
+    host.active_generation = nothing
+    next_payload = NativeAnimationTickPayload(
+        UInt64(81), UInt64(0), UInt64(2), UInt64(2),
+        Int32(0), UInt64(2), 0.25f0)
+    @test animation_host_tick(host, next_payload, string(RuntimeHostPointId))
+    host.active_generation = generation
     @test shutdown_euclid_reactor!(host)
-    @test length(calls) == 1
+    @test length(calls) == 2
 end
 
 @testset "runtime host bounds unresolved animation correlation" begin

@@ -591,6 +591,14 @@ dependencies, and every bounded point-list index. Commands are applied in
 callback order only after validation succeeds. Invalid, overflowed, stale, or
 exception-producing batches have no partial effect.
 
+Floor-level tool commands append bounded compound dust-contact intents instead of
+searching particle storage on the display thread. Each intent records the current dust
+birth sequence, so later particle-emission commands cannot retroactively participate in
+an earlier contact. A following particle emission or clear burst first replays pending
+contacts through the exact grid to preserve command and random-stream order. Otherwise,
+the particle task replays queued endpoint and compass-sweep samples in command order
+against exact grid membership before fixed-step integration.
+
 ### Fixed-Step Publication Boundary
 
 Each fixed step uses this order:

@@ -468,6 +468,15 @@ Particle tasks exclusively mutate `Particle_System`; constraint tasks exclusivel
 mutate the ordered constraints and transforms in `Shape_World`. Persistent payloads and
 fence storage are reused. The display may help execute queued work, but cannot advance
 until the complete batch joins.
+
+Tool motion commits bounded, ordered dust-contact intents before particle work begins.
+Before a later ordered particle mutation, pending contacts replay through exact
+contiguous grid membership; otherwise the particle task performs that replay before
+integration. The task rebuilds membership after displacement. Particle-particle
+collision budgeting remains a separate
+deterministic per-cell reservoir derived from that exact membership; it does not limit
+tool-contact discovery.
+
 The windowed wrapper adds GIF policy without changing this semantic boundary.
 
 ### Per-Frame Preparation

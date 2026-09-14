@@ -627,6 +627,7 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
             &state^.simulation_executor^.pool)
     }
     terminalview.terminal_destroy(&state^.terminal)
+    particles.flush_dust_tool_contacts(state^.particle_system)
     if particles.emit_shape_world_clear_burst(
         state^.particle_system, state^.shape_world) && state^.iso_scale != nil {
         view_core.screenshake_on_dust_kick(state^.iso_scale)
