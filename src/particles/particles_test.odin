@@ -48,7 +48,7 @@ dust_grid_cell_index_clamps_bounds :: proc(t: ^testing.T) {
 exact_dust_grid_retains_dense_cell_membership :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-    ps^.use_max_dust_particles = particlemodel.DUST_GRID_BUCKET_CAP + 8
+    ps^.use_max_dust_particles = particlemodel.DUST_COLLISION_CELL_SAMPLE_CAP + 8
     for index in 0..<ps^.use_max_dust_particles {
         ps^.low_particles[index].alive = true
         ps^.low_particles.pos_x[index] = 0.5
@@ -427,7 +427,7 @@ resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
 
-    ps^.use_max_dust_particles = particlemodel.DUST_GRID_BUCKET_CAP + 8
+    ps^.use_max_dust_particles = particlemodel.DUST_COLLISION_CELL_SAMPLE_CAP + 8
     for i in 0..<ps^.use_max_dust_particles {
         ps^.low_particles[i].alive = true
         ps^.low_particles.pos_x[i] = 0.5
@@ -438,11 +438,35 @@ resolve_dust_collisions_rotates_dense_bucket_samples :: proc(t: ^testing.T) {
 
     testing.expect_value(t, ps^.dust_collision_frame, u64(1))
     testing.expect_value(t,
-        ps^.dust_counts[dust_grid_cell_index(0.5, 0.5)],
-        i32(particlemodel.DUST_GRID_BUCKET_CAP))
+        ps^.dust_counts[dust_collision_grid_cell_index(0.5, 0.5)],
+        i32(particlemodel.DUST_COLLISION_CELL_SAMPLE_CAP))
     testing.expect_value(t,
-        ps^.dust_seen_counts[dust_grid_cell_index(0.5, 0.5)],
+        ps^.dust_seen_counts[dust_collision_grid_cell_index(0.5, 0.5)],
         i32(ps^.use_max_dust_particles))
+}
+
+// Verify the fine collision grid keeps distributed high-count candidate work linear.
+@(test)
+resolve_dust_collisions_bounds_distributed_14000_candidate_work :: proc(
+    t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 14_000
+    columns := 200
+    for particle_index in 0..<ps^.use_max_dust_particles {
+        cell_x := particle_index % columns
+        cell_y := particle_index / columns
+        ps^.low_particles[particle_index].alive = true
+        ps^.low_particles.pos_x[particle_index] =
+            (f32(cell_x) + 0.25) * DUST_COLLISION_GRID_CELL_SIZE
+        ps^.low_particles.pos_y[particle_index] =
+            (f32(cell_y) + 0.25) * DUST_COLLISION_GRID_CELL_SIZE
+    }
+
+    resolve_dust_collisions(ps)
+
+    testing.expect(t, ps^.dust_collision_candidate_count <
+        u64(ps^.use_max_dust_particles * 5))
 }
 
 //   Verify reset_particles zeroes runtime state and marks every slot dead.
@@ -460,11 +484,15 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     ps^.particles.age[0] = 0.5
     ps^.high_particles.alive[0] = true
     ps^.high_particles.age[0] = 0.75
+    ps^.dust_collision_active_cell_count = 2
+    ps^.dust_collision_candidate_count = 17
 
     reset_particles(ps)
 
     testing.expect_value(t, ps^.next_index, 0)
     testing.expect_value(t, ps^.spawn_timer, 0.0)
+    testing.expect_value(t, ps^.dust_collision_active_cell_count, 0)
+    testing.expect_value(t, ps^.dust_collision_candidate_count, u64(0))
     testing.expect(t, !ps^.low_particles.alive[0])
     testing.expect_value(t, ps^.low_particles.age[0], 0.0)
     testing.expect(t, !ps^.particles.alive[0])

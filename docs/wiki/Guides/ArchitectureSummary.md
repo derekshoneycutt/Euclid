@@ -473,9 +473,9 @@ Tool motion commits bounded, ordered dust-contact intents before particle work b
 Before a later ordered particle mutation, pending contacts replay through exact
 contiguous grid membership; otherwise the particle task performs that replay before
 integration. The task rebuilds membership after displacement. Particle-particle
-collision budgeting remains a separate
-deterministic per-cell reservoir derived from that exact membership; it does not limit
-tool-contact discovery.
+collision budgeting uses a separate compact grid whose cell width matches the collision
+cutoff. Its deterministic per-cell reservoir does not limit exact tool-contact
+discovery.
 
 The windowed wrapper adds GIF policy without changing this semantic boundary.
 

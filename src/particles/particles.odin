@@ -89,7 +89,7 @@ DUST_EXISTING_UP_KICK_MIN :: 0.0012
 DUST_EXISTING_UP_KICK_MAX :: 0.0148
 DUST_EXISTING_XY_KICK :: 0.0011
 
-DUST_COLLISION_RADIUS :: 0.004
+DUST_COLLISION_RADIUS :: particlemodel.DUST_COLLISION_RADIUS
 DUST_COLLISION_RESTITUTION :: 0.42
 DUST_COLLISION_POSITION_SLOP :: 0.0001
 DUST_COLLISION_ZERO_DISTANCE_SQ :: 1e-12
@@ -100,13 +100,15 @@ PARTICLE_RANDOM_SEED :: u64(0x9e3779b97f4a7c15)
 DUST_GRID_CELL_SIZE :: particlemodel.DUST_GRID_CELL_SIZE
 DUST_GRID_DIM :: particlemodel.DUST_GRID_DIM
 DUST_GRID_DIM_SQUARED :: particlemodel.DUST_GRID_DIM_SQUARED
-DUST_GRID_BUCKET_CAP :: particlemodel.DUST_GRID_BUCKET_CAP
-DUST_GRID_BUCKET_COUNT :: particlemodel.DUST_GRID_BUCKET_COUNT
+DUST_COLLISION_CELL_SAMPLE_CAP :: particlemodel.DUST_COLLISION_CELL_SAMPLE_CAP
+DUST_COLLISION_GRID_CELL_SIZE :: particlemodel.DUST_COLLISION_GRID_CELL_SIZE
+DUST_COLLISION_GRID_DIM :: particlemodel.DUST_COLLISION_GRID_DIM
+DUST_COLLISION_GRID_CELL_COUNT :: particlemodel.DUST_COLLISION_GRID_CELL_COUNT
 DUST_COLLISION_PAIR_CAP :: particlemodel.DUST_COLLISION_PAIR_CAP
 DUST_TOOL_CONTACT_CAP :: particlemodel.DUST_TOOL_CONTACT_CAP
 DUST_CONTACT_CANDIDATE_WORD_COUNT :: particlemodel.DUST_CONTACT_CANDIDATE_WORD_COUNT
 
-DUST_GRID_NEIGHBORS :: [5][2]int{{0,0},{1,0},{-1,1},{0,1},{1,1}}
+DUST_COLLISION_GRID_NEIGHBORS :: [5][2]int{{0,0},{1,0},{-1,1},{0,1},{1,1}}
 
 CLEAR_BURST_POINT_COUNT :: 28
 CLEAR_BURST_LABEL_COUNT :: 12
@@ -154,7 +156,7 @@ Shape_World_Burst_Context :: struct {
 
 Dust_Collision_Grid :: struct {
     cell_y, cell_x, cell_index, cell_count: int,
-    radius_sq, min_sep: f32,
+    radius_sq: f32,
 }
 
 Dust_Pair_Response :: struct {
@@ -519,7 +521,7 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
     }
 
     build_exact_dust_grid(ps)
-    resolve_dust_collisions_from_exact_grid(ps)
+    resolve_dust_collisions_on_fine_grid(ps)
 
     update_mid_ember_particles(ps, dt)
 
@@ -599,6 +601,8 @@ reset_particles :: proc(ps: ^Particle_System) {
     ps.dust_tool_contact_count = 0
     ps.dust_tool_contact_overflow_count = 0
     ps.dust_active_cell_count = 0
+    ps.dust_collision_active_cell_count = 0
+    ps.dust_collision_candidate_count = 0
     ps.dust_contact_candidate_count = 0
     ps.dust_spawn_sequence = 0
     for i in 0..<ps^.use_max_dust_particles {
@@ -1296,29 +1300,43 @@ cache_dust_collision_pair :: #force_inline proc(ps: ^Particle_System, ia, ib: in
     ps^.dust_pair_count += 1
 }
 
+// Map x/y position into the fine collision-grid cell index.
+dust_collision_grid_cell_index :: proc(x, y: f32) -> int {
+    cell_x := clamp(int(x / DUST_COLLISION_GRID_CELL_SIZE),
+        0, DUST_COLLISION_GRID_DIM - 1)
+    cell_y := clamp(int(y / DUST_COLLISION_GRID_CELL_SIZE),
+        0, DUST_COLLISION_GRID_DIM - 1)
+    return cell_y * DUST_COLLISION_GRID_DIM + cell_x
+}
+
 //   Resolve dust collisions for one cell against configured neighbor cells.
 resolve_dust_collisions_on_grid :: proc(
     ps: ^Particle_System,
-    grid: Dust_Collision_Grid) {
+    grid: Dust_Collision_Grid) -> u64 {
 
     if grid.cell_count == 0 {
-        return
+        return 0
     }
 
-    for off in DUST_GRID_NEIGHBORS {
+    candidate_count: u64
+    for off in DUST_COLLISION_GRID_NEIGHBORS {
         ncx, ncy := grid.cell_x + off[0], grid.cell_y + off[1]
-        if ncx < 0 || ncx >= DUST_GRID_DIM || ncy < 0 || ncy >= DUST_GRID_DIM {
+        if ncx < 0 || ncx >= DUST_COLLISION_GRID_DIM ||
+            ncy < 0 || ncy >= DUST_COLLISION_GRID_DIM {
             continue
         }
-        cb := ncy * DUST_GRID_DIM + ncx
+        cb := ncy * DUST_COLLISION_GRID_DIM + ncx
         nb := int(ps^.dust_counts[cb])
         same_cell := grid.cell_index == cb
 
         for li in 0..<grid.cell_count {
-            ia := int(ps^.dust_buckets[grid.cell_index * DUST_GRID_BUCKET_CAP + li])
+            ia := int(ps^.dust_buckets[
+                ps^.dust_collision_offsets[grid.cell_index] + i32(li)])
             lj_start := li + 1 if same_cell else 0
             for lj in lj_start..<nb {
-                ib := int(ps^.dust_buckets[cb * DUST_GRID_BUCKET_CAP + lj])
+                ib := int(ps^.dust_buckets[
+                    ps^.dust_collision_offsets[cb] + i32(lj)])
+                candidate_count += 1
                 dx := ps.low_particles.pos_x[ib] - ps.low_particles.pos_x[ia]
                 dy := ps.low_particles.pos_y[ib] - ps.low_particles.pos_y[ia]
                 dist_sq := dx * dx + dy * dy
@@ -1328,61 +1346,89 @@ resolve_dust_collisions_on_grid :: proc(
             }
         }
     }
+    return candidate_count
 }
 
-// Retain a fair bounded collision sample from exact cell membership.
-populate_dust_collision_grid :: proc(
-    ps: ^Particle_System) {
-    for active_index in 0..<ps^.dust_active_cell_count {
-        cell := int(ps^.dust_active_cells[active_index])
-        first := int(ps^.dust_exact_offsets[cell])
-        last := int(ps^.dust_exact_offsets[cell + 1])
-        for exact_index in first..<last {
-            particle_index := int(ps^.dust_exact_indices[exact_index])
-            ps^.dust_seen_counts[cell] += 1
-            if ps^.dust_counts[cell] < i32(DUST_GRID_BUCKET_CAP) {
-                slot := cell * DUST_GRID_BUCKET_CAP + int(ps^.dust_counts[cell])
-                ps^.dust_buckets[slot] = i32(particle_index)
-                ps^.dust_counts[cell] += 1
-                continue
-            }
-            sample := u64(ps^.dust_seen_counts[cell])
+// Count fine-grid occupancy and assign compact sampled-cell ranges.
+prepare_dust_collision_grid :: proc(ps: ^Particle_System) {
+    for particle_index in 0..<ps^.use_max_dust_particles {
+        if !ps.low_particles[particle_index].alive {continue}
+        cell := dust_collision_grid_cell_index(
+            ps.low_particles.pos_x[particle_index],
+            ps.low_particles.pos_y[particle_index])
+        if ps^.dust_seen_counts[cell] == 0 {
+            ps^.dust_collision_active_cells[ps^.dust_collision_active_cell_count] =
+                i32(cell)
+            ps^.dust_collision_active_cell_count += 1
+        }
+        ps^.dust_seen_counts[cell] += 1
+    }
+    ps^.dust_collision_offsets[0] = 0
+    for cell in 0..<DUST_COLLISION_GRID_CELL_COUNT {
+        count := min(ps^.dust_seen_counts[cell],
+            i32(DUST_COLLISION_CELL_SAMPLE_CAP))
+        ps^.dust_counts[cell] = count
+        ps^.dust_collision_offsets[cell + 1] =
+            ps^.dust_collision_offsets[cell] + count
+    }
+    }
+
+    // Fill compact fine-grid ranges with a bounded deterministic cell reservoir.
+    populate_dust_collision_grid :: proc(ps: ^Particle_System) {
+    mem.set(&ps^.dust_counts[0], 0, size_of(ps^.dust_counts))
+    for particle_index in 0..<ps^.use_max_dust_particles {
+        if !ps.low_particles[particle_index].alive {continue}
+        cell := dust_collision_grid_cell_index(
+            ps.low_particles.pos_x[particle_index],
+            ps.low_particles.pos_y[particle_index])
+        seen := ps^.dust_counts[cell] + 1
+        ps^.dust_counts[cell] = seen
+        slot := seen - 1
+        if seen > i32(DUST_COLLISION_CELL_SAMPLE_CAP) {
             seed := u64(u32(cell)) * 0x9e3779b185ebca87 ~
                 u64(u32(particle_index)) * 0xc2b2ae3d27d4eb4f ~
                 ps^.dust_collision_frame
-            replacement := int(dust_collision_hash(seed) % sample)
-            if replacement < DUST_GRID_BUCKET_CAP {
-                ps^.dust_buckets[cell * DUST_GRID_BUCKET_CAP + replacement] =
-                    i32(particle_index)
-            }
+            slot = i32(dust_collision_hash(seed) % u64(seen))
         }
+        if slot < i32(DUST_COLLISION_CELL_SAMPLE_CAP) {
+            ps^.dust_buckets[ps^.dust_collision_offsets[cell] + slot] =
+                i32(particle_index)
+        }
+    }
+    for active_index in 0..<ps^.dust_collision_active_cell_count {
+        cell := ps^.dust_collision_active_cells[active_index]
+        ps^.dust_counts[cell] = min(
+            ps^.dust_counts[cell], i32(DUST_COLLISION_CELL_SAMPLE_CAP))
     }
 }
 
 // Build sampled collision buckets from exact membership and resolve pairs.
-resolve_dust_collisions_from_exact_grid :: proc(ps: ^Particle_System) {
+resolve_dust_collisions_on_fine_grid :: proc(ps: ^Particle_System) {
     if ps^.use_max_dust_particles < 1 {
         return
     }
 
-    mem.set(&ps^.dust_buckets[0], 0, size_of(ps^.dust_buckets))
     mem.set(&ps^.dust_counts[0], 0, size_of(ps^.dust_counts))
     mem.set(&ps^.dust_seen_counts[0], 0, size_of(ps^.dust_seen_counts))
+    ps^.dust_collision_active_cell_count = 0
+    ps^.dust_collision_candidate_count = 0
     ps^.dust_pair_count = 0
     ps^.dust_pair_dropped_count = 0
     ps^.dust_collision_frame += 1
 
+    prepare_dust_collision_grid(ps)
     populate_dust_collision_grid(ps)
 
     radius_sq : f32 = DUST_COLLISION_RADIUS * DUST_COLLISION_RADIUS
     min_sep : f32 = DUST_COLLISION_RADIUS * 2.0
 
-    for i in 0..<ps^.dust_active_cell_count {
-        ca := int(ps^.dust_active_cells[i])
+    for i in 0..<ps^.dust_collision_active_cell_count {
+        ca := int(ps^.dust_collision_active_cells[i])
         na := int(ps^.dust_counts[ca])
-        cy := ca / DUST_GRID_DIM
-        cx := ca % DUST_GRID_DIM
-        resolve_dust_collisions_on_grid(ps, {cy, cx, ca, na, radius_sq, min_sep})
+        cy := ca / DUST_COLLISION_GRID_DIM
+        cx := ca % DUST_COLLISION_GRID_DIM
+        ps^.dust_collision_candidate_count += resolve_dust_collisions_on_grid(
+            ps, {cy, cx, ca, na, radius_sq})
     }
 
     for i in 0..<ps^.dust_pair_count {
@@ -1395,7 +1441,7 @@ resolve_dust_collisions_from_exact_grid :: proc(ps: ^Particle_System) {
 // Build current exact membership and resolve pairwise dust collisions.
 resolve_dust_collisions :: proc(ps: ^Particle_System) {
     build_exact_dust_grid(ps)
-    resolve_dust_collisions_from_exact_grid(ps)
+    resolve_dust_collisions_on_fine_grid(ps)
 }
 
 //   Batch update for mid-layer ember particles.
