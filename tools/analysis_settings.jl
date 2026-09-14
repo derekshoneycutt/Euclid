@@ -36,6 +36,7 @@ const RuleResponses = Dict(
     "IMPORT-POLICY-DRIFT" => Fail,
     "ARCHITECTURE-FORBIDDEN-DEPENDENCY" => Fail,
     "ARCHITECTURE-DEPENDENCY-CYCLE" => Fail,
+    "ODIN-UNRESOLVED-INTERNAL-IMPORT" => Report,
     "COMMON-LINE-90" => Warn,
     "COMMON-LINE-100" => Warn,
     "COMMON-LINE-120" => Fail,
@@ -80,6 +81,8 @@ const RuleResponses = Dict(
     "REVIEWED-DIAGNOSTIC-POLICY-DRIFT" => Fail,
     "JULIA-DOC-MISSING" => Fail,
     "ODIN-DOC-MISSING" => Fail)
+
+const DisabledRules = ("JULIA-UNRESOLVED-INTERNAL-IMPORT",)
 
 const AnimationLoopReason =
     "Animation state-machine loops enumerate every construction step in play order."
@@ -223,7 +226,7 @@ function euclid_rule_settings()
     return [
         RuleSetting(
             setting.rule_id,
-            setting.enabled,
+            setting.enabled && setting.rule_id ∉ DisabledRules,
             get(RuleResponses, setting.rule_id, Report))
         for setting in BaseSettings.rules
     ]
