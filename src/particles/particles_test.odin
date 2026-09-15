@@ -543,6 +543,157 @@ resolve_dust_collisions_finds_cross_cell_contact_once :: proc(t: ^testing.T) {
     testing.expect_value(t, ps^.dust_collision_correction_count, 1)
 }
 
+// Configure one live grounded collision particle at a deterministic position.
+dust_collision_test_particle :: proc(ps: ^Particle_System, index: int,
+        position: Vector2) {
+    ps^.low_particles[index] = {
+        pos_x = position.x,
+        pos_y = position.y,
+        pos_z = DUST_FLOOR_Z,
+        life = 1,
+        color = rl.WHITE,
+        alive = true,
+    }
+}
+
+// Verify aggregate-interior contacts are rejected before pair-cache insertion.
+@(test)
+dust_collision_aggregate_interior_produces_no_cached_pair :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 3
+    for index in 0..<3 {
+        dust_collision_test_particle(ps, index, {0.5, 0.5})
+        ps^.dust_aggregate[index] = true
+    }
+
+    resolve_dust_collisions(ps)
+
+    testing.expect_value(t, ps^.dust_pair_count, 0)
+    testing.expect_value(t, ps^.dust_field_suppressed_pair_count, u64(3))
+    testing.expect_value(t, ps^.dust_collision_correction_count, 0)
+}
+
+// Verify mixed aggregate-boundary contacts retain ordinary pair response.
+@(test)
+dust_collision_mixed_pair_retains_impulse :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    dust_collision_test_particle(ps, 0, {0.5, 0.5})
+    dust_collision_test_particle(ps, 1, {0.503, 0.5})
+    ps^.dust_aggregate[0] = true
+    ps^.low_particles.vel_x[0] = 0.01
+    ps^.low_particles.vel_x[1] = -0.01
+
+    resolve_dust_collisions(ps)
+
+    testing.expect_value(t, ps^.dust_pair_count, 1)
+    testing.expect_value(t, ps^.dust_field_suppressed_pair_count, u64(0))
+    testing.expect(t, ps^.low_particles.vel_x[0] < 0)
+    testing.expect(t, ps^.low_particles.vel_x[1] > 0)
+}
+
+// Verify sparse nonaggregate contacts retain positional correction.
+@(test)
+dust_collision_sparse_pair_retains_correction :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    dust_collision_test_particle(ps, 0, {0.5, 0.5})
+    dust_collision_test_particle(ps, 1, {0.503, 0.5})
+
+    resolve_dust_collisions(ps)
+
+    testing.expect_value(t, ps^.dust_pair_count, 1)
+    testing.expect_value(t, ps^.dust_collision_correction_count, 1)
+    testing.expect_value(t, ps^.dust_field_suppressed_pair_count, u64(0))
+}
+
+// Verify mixed-pair impulse is retained by aggregate field authority.
+@(test)
+dust_collision_boundary_impulse_enters_field :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    dust_collision_test_particle(ps, 0, {0.5, 0.5})
+    dust_collision_test_particle(ps, 1, {0.503, 0.5})
+    ps^.dust_aggregate[0] = true
+    ps^.low_particles.vel_x[0] = 0.01
+    ps^.low_particles.vel_x[1] = -0.01
+    resolve_dust_collisions(ps)
+    collision_velocity := ps^.low_particles.vel_x[0]
+
+    dust_field_update_aggregate(ps, f32(1.0 / 60.0))
+
+    testing.expect(t, collision_velocity < 0)
+    testing.expect(t, ps^.low_particles.vel_x[0] < 0)
+    testing.expect(t, ps^.dust_field_peak_speed > 0)
+}
+
+// Verify aggregate tool momentum creates bounded local field activity.
+@(test)
+dust_tool_contact_creates_local_field_activity :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    dust_collision_test_particle(ps, 0, {0.505, 0.5})
+    ps^.dust_aggregate[0] = true
+    endpoint := Vector3{0.5, 0.5, 0}
+    testing.expect(t, queue_dust_tool_contact(ps, {endpoint = endpoint}))
+    build_exact_dust_grid(ps)
+
+    replay_dust_tool_contacts(ps)
+    dust_field_update_aggregate(ps, f32(1.0 / 60.0))
+
+    testing.expect(t, ps^.low_particles.vel_x[0] > 0)
+    testing.expect(t, ps^.dust_field_peak_speed > 0)
+    testing.expect(t, ps^.dust_field.active_count > 0)
+}
+
+// Verify aggregate contact wakes direct support without waking the parent halo.
+@(test)
+dust_tool_contact_aggregate_wake_avoids_parent_halo :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    dust_collision_test_particle(ps, 0, {0.505, 0.5})
+    dust_collision_test_particle(ps, 1, {0.519, 0.5})
+    ps^.dust_aggregate[0] = true
+    ps^.dust_aggregate[1] = true
+    ps^.dust_sleeping[0] = true
+    ps^.dust_sleeping[1] = true
+    ps^.dust_sleeping_count = 2
+    endpoint := Vector3{0.5, 0.5, 0}
+    testing.expect(t, queue_dust_tool_contact(ps, {endpoint = endpoint}))
+    build_exact_dust_grid(ps)
+
+    replay_dust_tool_contacts(ps)
+
+    testing.expect(t, !ps^.dust_sleeping[0])
+    testing.expect(t, ps^.dust_sleeping[1])
+    testing.expect_value(t, ps^.dust_sleeping_count, 1)
+    testing.expect_value(t, ps^.dust_field_wake_transition_count, u64(1))
+}
+
+// Verify authored vertical kick returns aggregate dust to airborne particle authority.
+@(test)
+dust_kick_creates_airborne_nonaggregate_particle :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    dust_collision_test_particle(ps, 0, {0.5, 0.5})
+    ps^.dust_aggregate[0] = true
+
+    kick_existing_dust_index(ps, 0)
+    integrate_dust_positions(ps)
+    update_particle_dust_index(ps, 0)
+    dust_field_prepare_membership(ps)
+
+    testing.expect(t, ps^.low_particles.pos_z[0] > DUST_FLOOR_Z)
+    testing.expect(t, !ps^.dust_aggregate[0])
+}
+
 //   Verify gravity does not create a recurring bounce for grounded dust at rest.
 @(test)
 update_particle_dust_index_keeps_grounded_particle_at_rest :: proc(t: ^testing.T) {
@@ -662,6 +813,9 @@ scenario_dust_settle_and_wake_stream_is_deterministic :: proc(t: ^testing.T) {
         first^.dust_sleep_transition_count, second^.dust_sleep_transition_count)
     testing.expect_value(t,
         first^.dust_wake_transition_count, second^.dust_wake_transition_count)
+    testing.expect_value(t, first^.dust_aggregate_count, second^.dust_aggregate_count)
+    testing.expect_value(t, first^.dust_field_suppressed_pair_count,
+        second^.dust_field_suppressed_pair_count)
 }
 
 //   Verify dense-bucket collision resolution bounds samples and tracks counts.
@@ -800,6 +954,8 @@ expect_distributed_collision_capacity :: proc(t: ^testing.T, count: int) {
         u64(ps^.use_max_dust_particles * 12))
     testing.expect(t, ps^.dust_pair_count <= DUST_COLLISION_PAIR_CAP)
     testing.expect_value(t, ps^.dust_pair_dropped_count, 0)
+    testing.expect(t, ps^.dust_field_suppressed_pair_count <=
+        ps^.dust_collision_candidate_count)
 }
 
 // Verify the fine collision grid keeps 14,000-particle candidate work bounded.
@@ -1193,6 +1349,7 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     ps^.high_particles.age[0] = 0.75
     ps^.dust_collision_active_cell_count = 2
     ps^.dust_collision_candidate_count = 17
+    ps^.dust_field_suppressed_pair_count = 11
     ps^.dust_relaxation_parent_levels[0] = 2
     ps^.dust_relaxation_leaf_quiet_frames[0] = DUST_SLEEP_QUIET_FRAMES
     ps^.dust_relaxation_leaf_last_seen[0] = 4
@@ -1203,6 +1360,7 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     testing.expect_value(t, ps^.spawn_timer, 0.0)
     testing.expect_value(t, ps^.dust_collision_active_cell_count, 0)
     testing.expect_value(t, ps^.dust_collision_candidate_count, u64(0))
+    testing.expect_value(t, ps^.dust_field_suppressed_pair_count, u64(0))
     testing.expect_value(t, ps^.dust_relaxation_parent_levels[0], u8(0))
     testing.expect_value(t, ps^.dust_relaxation_leaf_quiet_frames[0], u16(0))
     testing.expect_value(t, ps^.dust_relaxation_leaf_last_seen[0], u64(0))

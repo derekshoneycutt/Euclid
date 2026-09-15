@@ -157,6 +157,7 @@ Particle_System :: struct {
     dust_field_quiet_frames: [MAX_LOW_PARTICLES]u16,
     dust_aggregate_count: int,
     dust_field_pressure_node_count: int,
+    dust_field_suppressed_pair_count: u64,
     dust_field_peak_density: f32,
     dust_field_peak_speed: f32,
     dust_field_kinetic_measure: f32,

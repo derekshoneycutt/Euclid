@@ -1369,6 +1369,7 @@ wake_dust_tool_point_halo :: proc(
             for exact_index in first..<last {
                 particle_index := int(ps^.dust_exact_indices[exact_index])
                 if ps^.dust_sleeping[particle_index] &&
+                    !ps^.dust_aggregate[particle_index] &&
                     ps^.dust_slot_spawn_sequences[particle_index] <= max_spawn_sequence {
                     wake_dust_particle(ps, particle_index)
                 }
@@ -1529,8 +1530,12 @@ wake_dust_pair :: proc(
     if !energetic && correction <= DUST_SLEEP_MAX_POSITION_CORRECTION {return false}
     if sleeping_a {wake_dust_particle(ps, ia)}
     if sleeping_b {wake_dust_particle(ps, ib)}
-    if energetic && sleeping_a {wake_dust_collision_halo(ps, ia)}
-    if energetic && sleeping_b {wake_dust_collision_halo(ps, ib)}
+    if energetic && sleeping_a && !ps^.dust_aggregate[ia] {
+        wake_dust_collision_halo(ps, ia)
+    }
+    if energetic && sleeping_b && !ps^.dust_aggregate[ib] {
+        wake_dust_collision_halo(ps, ib)
+    }
     return true
 }
 
@@ -1568,8 +1573,20 @@ resolve_dust_pair :: proc(
     apply_dust_pair_impulse(ps, ia, ib, nx, ny)
 }
 
-//   Cache one detected dust collision pair in the static per-frame pair list.
+// Report whether one pair belongs entirely to the grounded aggregate interior.
+dust_pair_is_aggregate_interior :: #force_inline proc(
+        ps: ^Particle_System, ia, ib: int) -> bool {
+    return ps^.dust_aggregate[ia] && ps^.dust_aggregate[ib] &&
+        ps^.low_particles.pos_z[ia] <= DUST_FLOOR_Z &&
+        ps^.low_particles.pos_z[ib] <= DUST_FLOOR_Z
+}
+
+// Cache one nonsuppressed dust collision pair in the static per-frame list.
 cache_dust_collision_pair :: #force_inline proc(ps: ^Particle_System, ia, ib: int) {
+    if dust_pair_is_aggregate_interior(ps, ia, ib) {
+        ps^.dust_field_suppressed_pair_count += 1
+        return
+    }
     if ps^.dust_pair_count >= DUST_COLLISION_PAIR_CAP {
         ps^.dust_pair_dropped_count += 1
         return
@@ -1774,6 +1791,7 @@ reset_dust_collision_frame :: proc(ps: ^Particle_System) {
     ps^.dust_collision_candidate_count = 0
     ps^.dust_pair_count = 0
     ps^.dust_pair_dropped_count = 0
+    ps^.dust_field_suppressed_pair_count = 0
     ps^.dust_collision_correction_count = 0
     ps^.dust_collision_max_correction = 0
     ps^.dust_collision_rest_contact_count = 0

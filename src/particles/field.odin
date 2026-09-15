@@ -454,6 +454,7 @@ dust_field_reset_state :: proc(ps: ^Particle_System) {
     dust_field_reset_active(&ps^.dust_field)
     ps^.dust_aggregate_count = 0
     ps^.dust_field_pressure_node_count = 0
+    ps^.dust_field_suppressed_pair_count = 0
     ps^.dust_field_peak_density = 0
     ps^.dust_field_peak_speed = 0
     ps^.dust_field_kinetic_measure = 0
