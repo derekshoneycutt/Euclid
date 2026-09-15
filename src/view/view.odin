@@ -109,6 +109,15 @@ Frame_Draw_Preparation :: struct {
     layout_interaction: ui.Ui_Layout_Interaction_Preparation,
 }
 
+// Poll one input frame and accept its live logical extent before UI geometry.
+poll_window_frame_boundary :: proc(
+    state: ^Euclid_General_State,
+    input_runtime: ^input.Input_Runtime) -> input.Input_Frame {
+    frame := input.input_poll_frame(input_runtime)
+    _ = apply_window_metrics(state, ui.ui_current_window_metrics())
+    return frame
+}
+
 
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
@@ -235,7 +244,7 @@ run_window_frame :: proc(
     julia.publish_available_view_snapshot(state, false)
     service_presentation_runtime(state, presentation)
     service_scenario_before_ui(ctx)
-    input_frame := input.input_poll_frame(input_runtime)
+    input_frame := poll_window_frame_boundary(state, input_runtime)
     ui_geometry := ui.prepare_ui_geometry(state, input_frame)
     ui.prepare_ui_static_interaction(
         state, input_frame, ui_geometry.pointer_capture)
@@ -485,18 +494,43 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
 //
 // Notes:
 //   - Should be paired with rl.CloseWindow on shutdown.
-open_window :: proc(settings: ^Euclid_Run_Settings) {
+set_window_config_flags :: proc(settings: ^Euclid_Run_Settings) {
+    resizable := settings^.window.mode == .Resizable
     if settings.do_antialiasing && settings.do_vsync {
-        rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_HIGHDPI})
+        if resizable {
+            rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_HIGHDPI,
+                .WINDOW_RESIZABLE})
+        } else {
+            rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_HIGHDPI})
+        }
     } else if settings.do_antialiasing {
-        rl.SetConfigFlags({.MSAA_4X_HINT, .WINDOW_HIGHDPI})
+        if resizable {
+            rl.SetConfigFlags({.MSAA_4X_HINT, .WINDOW_HIGHDPI, .WINDOW_RESIZABLE})
+        } else {
+            rl.SetConfigFlags({.MSAA_4X_HINT, .WINDOW_HIGHDPI})
+        }
     } else if settings.do_vsync {
-        rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI})
+        if resizable {
+            rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .WINDOW_RESIZABLE})
+        } else {
+            rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI})
+        }
+    } else if resizable {
+        rl.SetConfigFlags({.WINDOW_HIGHDPI, .WINDOW_RESIZABLE})
     } else {
         rl.SetConfigFlags({.WINDOW_HIGHDPI})
     }
+}
 
-    rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE)
+//   Open the startup window at the configured logical extent and resize policy.
+//
+// Notes:
+//   - Should be paired with rl.CloseWindow on shutdown.
+open_window :: proc(settings: ^Euclid_Run_Settings) {
+    set_window_config_flags(settings)
+
+    rl.InitWindow(
+        i32(settings^.window.width), i32(settings^.window.height), WINDOW_TITLE)
     rl.SetTargetFPS(LIMIT_FPS)
 }
 
@@ -731,7 +765,8 @@ record_gif_capture_transition :: proc(
         kind = .Gif_Started
     } else if previous == .Recording && current == .Saved {
         kind = .Gif_Completed
-    } else if previous == .Recording && current == .Error {
+    } else if current == .Error &&
+        (previous == .Armed || previous == .Recording || previous == .Finalizing) {
         kind = .Gif_Failed
         flags += {.Failure}
     } else {
@@ -746,6 +781,27 @@ record_gif_capture_transition :: proc(
             tick = state^.fixed_step,
             flags = flags,
         })
+}
+
+// Abort protected GIF work before accepting a changed logical window extent.
+apply_window_metrics :: proc(
+    state: ^Euclid_General_State,
+    metrics: viewmodel.Ui_Window_Metrics) -> bool {
+    runtime := &state^.ui_runtime
+    dimensions_changed := runtime^.window != metrics
+    protected := runtime^.gif_capture_phase == .Armed ||
+        runtime^.gif_capture_phase == .Recording ||
+        runtime^.gif_capture_phase == .Finalizing
+    if dimensions_changed && protected {
+        previous := runtime^.gif_capture_phase
+        view_core.gif_capture_abort_session(&state^.gif_capture)
+        runtime^.gif_capture_phase = .Error
+        runtime^.gif_capture_frame_counter = 0
+        view_core.set_gif_status_note(runtime,
+            "Window resized; GIF capture cancelled.")
+        record_gif_capture_transition(state, previous, .Error)
+    }
+    return ui.ui_apply_window_metrics(runtime, metrics)
 }
 
 //   Record one post-join constraint summary for semantic trace consumers.

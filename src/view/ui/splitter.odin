@@ -25,30 +25,39 @@ Splitter_Geometry :: struct {
 
 //   Build centered visible and hit rectangles for one splitter axis.
 splitter_geometry :: proc(
-    axis: Splitter_Axis, split_x, split_y: f32) -> Splitter_Geometry {
+    axis: Splitter_Axis, mode: viewmodel.Ui_Layout_Mode,
+    split_x, split_y: f32,
+    window: viewmodel.Ui_Window_Metrics) -> Splitter_Geometry {
 
     if axis == .Vertical {
         return {
             visible_rect = {split_x - SPLITTER_VISIBLE_WIDTH * 0.5, 0,
-                SPLITTER_VISIBLE_WIDTH, WINDOW_HEIGHT},
+                SPLITTER_VISIBLE_WIDTH, f32(window.height)},
             hit_rect = {split_x - SPLITTER_HIT_WIDTH * 0.5, 0,
-                SPLITTER_HIT_WIDTH, WINDOW_HEIGHT},
+                SPLITTER_HIT_WIDTH, f32(window.height)},
         }
     }
+    horizontal_width := split_x
+    if mode == .Portrait { horizontal_width = f32(window.width) }
     return {
         visible_rect = {0, split_y - SPLITTER_VISIBLE_WIDTH * 0.5,
-            split_x, SPLITTER_VISIBLE_WIDTH},
+            horizontal_width, SPLITTER_VISIBLE_WIDTH},
         hit_rect = {0, split_y - SPLITTER_HIT_WIDTH * 0.5,
-            split_x, SPLITTER_HIT_WIDTH},
+            horizontal_width, SPLITTER_HIT_WIDTH},
     }
 }
 
 //   Select the nearest hovered splitter, preferring vertical on an exact tie.
 splitter_hovered_axis :: proc(
-    mouse: rl.Vector2, split_x, split_y: f32) -> (Splitter_Axis, bool) {
+    mouse: rl.Vector2, mode: viewmodel.Ui_Layout_Mode,
+    split_x, split_y: f32,
+    window: viewmodel.Ui_Window_Metrics) -> (Splitter_Axis, bool) {
 
-    vertical := splitter_geometry(.Vertical, split_x, split_y)
-    horizontal := splitter_geometry(.Horizontal, split_x, split_y)
+    horizontal := splitter_geometry(.Horizontal, mode, split_x, split_y, window)
+    if mode == .Portrait {
+        return .Horizontal, rl.CheckCollisionPointRec(mouse, horizontal.hit_rect)
+    }
+    vertical := splitter_geometry(.Vertical, mode, split_x, split_y, window)
     over_vertical := rl.CheckCollisionPointRec(mouse, vertical.hit_rect)
     over_horizontal := rl.CheckCollisionPointRec(mouse, horizontal.hit_rect)
     if over_vertical && over_horizontal {
@@ -78,15 +87,36 @@ splitter_positions_are_mutable :: #force_inline proc(
 }
 
 //   Clamp one requested vertical split while preserving both horizontal pane minimums.
-splitter_clamp_vertical :: #force_inline proc(value: f32) -> f32 {
-    return clamp(value, f32(WORLD_MIN_WIDTH),
-        f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
+splitter_clamp_vertical :: #force_inline proc(
+    value: f32, window_width: int) -> f32 {
+    return layout_clamp_split(value, f32(window_width),
+        WORLD_MIN_WIDTH, RIGHT_PANEL_MIN_WIDTH)
 }
 
 //   Clamp one requested horizontal split while preserving both vertical pane minimums.
-splitter_clamp_horizontal :: #force_inline proc(value: f32) -> f32 {
-    return clamp(value, f32(WORLD_MIN_HEIGHT),
-        f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
+splitter_clamp_horizontal :: #force_inline proc(
+    value: f32, window_height: int) -> f32 {
+    return layout_clamp_split(value, f32(window_height),
+        WORLD_MIN_HEIGHT, BOTTOM_PANEL_MIN_HEIGHT)
+}
+
+//   Update normalized landscape split intent from current clamped pixels.
+splitter_store_ratios :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
+    if ui_runtime^.current_layout_mode == .Portrait {
+        if ui_runtime^.window.height > 0 {
+            ui_runtime^.portrait.world_height_ratio =
+                ui_runtime^.horizontal_split_y / f32(ui_runtime^.window.height)
+        }
+        return
+    }
+    if ui_runtime^.window.width > 0 {
+        ui_runtime^.landscape.vertical_ratio = ui_runtime^.vertical_split_x /
+            f32(ui_runtime^.window.width)
+    }
+    if ui_runtime^.window.height > 0 {
+        ui_runtime^.landscape.horizontal_ratio = ui_runtime^.horizontal_split_y /
+            f32(ui_runtime^.window.height)
+    }
 }
 
 //   Report whether one splitter owns the shared UI press capture.
@@ -123,8 +153,13 @@ set_splitter_positions :: proc(
         return false
     }
     splitter_release_capture(ui_runtime)
-    ui_runtime^.vertical_split_x = splitter_clamp_vertical(vertical)
-    ui_runtime^.horizontal_split_y = splitter_clamp_horizontal(horizontal)
+    if ui_runtime^.current_layout_mode == .Landscape {
+        ui_runtime^.vertical_split_x = splitter_clamp_vertical(
+            vertical, ui_runtime^.window.width)
+    }
+    ui_runtime^.horizontal_split_y = splitter_clamp_horizontal(
+        horizontal, ui_runtime^.window.height)
+    splitter_store_ratios(ui_runtime)
     ui_runtime^.vertical_split_hover = 0
     ui_runtime^.horizontal_split_hover = 0
     return true
@@ -144,7 +179,8 @@ splitter_try_capture :: proc(
     press_id := SPLITTER_VERTICAL_PRESS_ID
     split_position := ui_runtime.vertical_split_x
     mouse_position := mouse_input.mouse_position.x
-    if hovered_axis == .Horizontal {
+    if hovered_axis == .Horizontal ||
+        ui_runtime^.current_layout_mode == .Portrait {
         press_id = SPLITTER_HORIZONTAL_PRESS_ID
         split_position = ui_runtime.horizontal_split_y
         mouse_position = mouse_input.mouse_position.y
@@ -164,12 +200,15 @@ splitter_apply_drag :: proc(
     }
     if splitter_owns_press(ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID) {
         ui_runtime.vertical_split_x = splitter_clamp_vertical(
-            mouse_input.mouse_position.x + ui_runtime.splitter_drag_offset)
+            mouse_input.mouse_position.x + ui_runtime.splitter_drag_offset,
+            ui_runtime^.window.width)
     } else if splitter_owns_press(
         ui_runtime.ui_press_owner, SPLITTER_HORIZONTAL_PRESS_ID) {
         ui_runtime.horizontal_split_y = splitter_clamp_horizontal(
-            mouse_input.mouse_position.y + ui_runtime.splitter_drag_offset)
+            mouse_input.mouse_position.y + ui_runtime.splitter_drag_offset,
+            ui_runtime^.window.height)
     }
+    splitter_store_ratios(ui_runtime)
 }
 
 //   Update splitter capture, positions, and hover fades before layout is prepared.
@@ -180,7 +219,9 @@ update_splitters :: proc(
 
     locked := splitters_locked_for_gif(ui_runtime.gif_capture_phase)
     axis, hovered := splitter_hovered_axis(input_frame_mouse_position(mouse_input),
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
+        ui_runtime^.current_layout_mode,
+        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
+        ui_runtime^.window)
     if locked {
         splitter_release_capture(ui_runtime)
         hovered = false
@@ -213,7 +254,9 @@ draw_splitters :: proc(
     mouse_position: rl.Vector2) {
 
     axis, hovered := splitter_hovered_axis(mouse_position,
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
+        ui_runtime^.current_layout_mode,
+        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
+        ui_runtime^.window)
     vertical_owned := splitter_owns_press(
         ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID)
     horizontal_owned := splitter_owns_press(
@@ -229,11 +272,14 @@ draw_splitters :: proc(
         rl.SetMouseCursor(.DEFAULT)
     }
 
-    vertical := splitter_geometry(.Vertical,
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
-    horizontal := splitter_geometry(.Horizontal,
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
-    if ui_runtime.vertical_split_hover > 0 {
+    vertical := splitter_geometry(.Vertical, ui_runtime^.current_layout_mode,
+        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
+        ui_runtime^.window)
+    horizontal := splitter_geometry(.Horizontal, ui_runtime^.current_layout_mode,
+        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
+        ui_runtime^.window)
+    if ui_runtime^.current_layout_mode == .Landscape &&
+        ui_runtime.vertical_split_hover > 0 {
         rl.DrawRectangleRec(vertical.visible_rect,
             rl.Fade(SPLITTER_COLOR, ui_runtime.vertical_split_hover))
     }

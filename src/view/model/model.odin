@@ -96,13 +96,43 @@ Gif_Capture_Session :: struct {
     source_height: int,
 }
 
-Ui_Layout_Mode :: enum { Baseline }
+Layout_Preference :: enum u8 {
+    Auto,
+    Landscape,
+    Portrait,
+}
+
+Ui_Layout_Mode :: enum u8 {
+    Landscape,
+    Portrait,
+}
+
+// Ui_Window_Metrics records the display thread's authoritative logical extent.
+Ui_Window_Metrics :: struct {
+    width: int,
+    height: int,
+}
+
+// Ui_Landscape_Layout_State retains split intent independently of pixel extent.
+Ui_Landscape_Layout_State :: struct {
+    vertical_ratio: f32,
+    horizontal_ratio: f32,
+    active_section: Ui_Accordion_Section,
+}
+
+// Ui_Portrait_Layout_State retains portrait split and accordion intent.
+Ui_Portrait_Layout_State :: struct {
+    world_height_ratio: f32,
+    active_section: Ui_Accordion_Section,
+    entered: bool,
+}
 
 // Ui_Accordion_Section identifies the one expanded auxiliary application view.
 Ui_Accordion_Section :: enum u8 {
     Library,
     Save_Gif,
     Settings,
+    View,
 }
 
 Ui_Regions :: struct {
@@ -196,6 +226,7 @@ Euclid_Ui_Runtime_State :: struct {
     tree_scroll_drag_off: f32,
     ui_press_owner: Ui_Press_Owner_State,
     active_accordion_section: Ui_Accordion_Section,
+    presentation_visible: bool,
     settings_slider_dragging: bool,
     settings_slider_drag_offset_x: f32,
     text_scroll_dragging: bool,
@@ -231,6 +262,10 @@ Euclid_Ui_Runtime_State :: struct {
     gif_status_note_len: int,
     last_gif_path: [260]u8,
     last_gif_path_len: int,
+    window: Ui_Window_Metrics,
+    layout_preference: Layout_Preference,
+    landscape: Ui_Landscape_Layout_State,
+    portrait: Ui_Portrait_Layout_State,
     current_layout_mode: Ui_Layout_Mode,
     ui_regions: Ui_Regions,
     interaction: Ui_Interaction_State,

@@ -5,6 +5,8 @@ import bridgemodel "../bridge/model"
 import shapemodel "../shapes/model"
 
 import view_core "core"
+import viewmodel "model"
+import "ui"
 import "../core"
 import "../dynview"
 import evidence_allocation "../evidence/allocation"
@@ -256,6 +258,58 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
     return true
 }
 
+//   Derive initial split pixels and portrait-entry state from the resolved mode.
+init_ui_layout_pixels :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, width, height: int) {
+    if runtime^.current_layout_mode == .Portrait {
+        runtime^.vertical_split_x = f32(width)
+        runtime^.horizontal_split_y = f32(height) * runtime^.portrait.world_height_ratio
+        runtime^.portrait.entered = true
+        return
+    }
+    runtime^.vertical_split_x = f32(width) * runtime^.landscape.vertical_ratio
+    runtime^.horizontal_split_y = f32(height) * runtime^.landscape.horizontal_ratio
+}
+
+//   Initialize display-owned UI policy and layout memory from run settings.
+init_ui_runtime_fields :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, settings: ^Euclid_Run_Settings) {
+    runtime^.limit_fps = settings^.limit_fps
+    runtime^.simulation_paused = false
+    runtime^.use_simd_batch_projection =
+        settings^.use_simd_batch_projection && view_core.simd_batch_projection_available()
+    runtime^.use_gpu_dust_instancing = false
+    runtime^.window = {
+        width = settings^.window.width,
+        height = settings^.window.height,
+    }
+    runtime^.layout_preference = settings^.window.layout
+    runtime^.landscape = {
+        vertical_ratio = f32(view_core.VIEW_WIDTH) / f32(view_core.WINDOW_WIDTH),
+        horizontal_ratio = f32(view_core.VIEW_HEIGHT) / f32(view_core.WINDOW_HEIGHT),
+        active_section = .Library,
+    }
+    runtime^.portrait = {
+        world_height_ratio = 0.5,
+        active_section = .View,
+    }
+    runtime^.current_layout_mode = ui.resolve_initial_layout_mode(
+        settings^.window.layout,
+        f32(settings^.window.width), f32(settings^.window.height))
+    runtime^.active_accordion_section = runtime^.landscape.active_section
+    if runtime^.current_layout_mode == .Portrait {
+        runtime^.active_accordion_section = runtime^.portrait.active_section
+    }
+    runtime^.presentation_visible =
+        runtime^.current_layout_mode == .Landscape ||
+        runtime^.active_accordion_section == .View
+    init_ui_layout_pixels(runtime, settings^.window.width, settings^.window.height)
+    runtime^.gif_downsample_factor = 2
+    runtime^.gif_frame_step = 2
+    runtime^.gif_capture_phase = .Idle
+    view_core.clear_gif_status_note(runtime)
+}
+
 //   Populate the simulation/UI scalar fields on the general state.
 init_runtime_fields :: proc(
     state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
@@ -267,18 +321,8 @@ init_runtime_fields :: proc(
     state^.simulation_time = 0
     state^.current_delta_time = view_core.FIXED_DT
     state^.accumulator = 0
-    state^.ui_runtime.limit_fps = settings^.limit_fps
-    state^.ui_runtime.simulation_paused = false
-    state^.ui_runtime.use_simd_batch_projection =
-        settings^.use_simd_batch_projection && view_core.simd_batch_projection_available()
-    state^.ui_runtime.use_gpu_dust_instancing = false
-    state^.ui_runtime.vertical_split_x = view_core.VIEW_WIDTH
-    state^.ui_runtime.horizontal_split_y = view_core.VIEW_HEIGHT
+    init_ui_runtime_fields(&state^.ui_runtime, settings)
     dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
-    state^.ui_runtime.gif_downsample_factor = 2
-    state^.ui_runtime.gif_frame_step = 2
-    state^.ui_runtime.gif_capture_phase = .Idle
-    view_core.clear_gif_status_note(&state^.ui_runtime)
     view_core.screenshake_clear(state^.iso_scale)
 }
 

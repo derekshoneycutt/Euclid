@@ -8,7 +8,7 @@ import "core:math"
 
 import rl "vendor:raylib"
 
-STARTUP_OUTLINE_SEGMENT_CAP :: 32
+STARTUP_OUTLINE_SEGMENT_CAP :: 36
 STARTUP_OUTLINE_SECONDS :: f32(5.0)
 STARTUP_OUTLINE_STROKE_WIDTH :: f32(2.0)
 STARTUP_OUTLINE_TIP_RADIUS :: f32(3.5)
@@ -27,6 +27,9 @@ Startup_Outline :: struct {
     total_length: f32,
     reveal_distance: f32,
     target_distance: f32,
+    metrics: viewmodel.Ui_Window_Metrics,
+    layout: viewmodel.Ui_Layout_Mode,
+    layout_preference: viewmodel.Layout_Preference,
 }
 
 // Append one nonempty segment to bounded startup outline storage.
@@ -54,23 +57,74 @@ startup_outline_append_rect :: proc(
     startup_outline_append_segment(outline, bottom_left, top_left)
 }
 
-// Build the default landscape UI silhouette from authoritative layout helpers.
-startup_outline_create :: proc() -> Startup_Outline {
+// Build one startup silhouette from authoritative live-layout helpers.
+startup_outline_create :: proc(
+    metrics: viewmodel.Ui_Window_Metrics = {WINDOW_WIDTH, WINDOW_HEIGHT},
+    layout: viewmodel.Ui_Layout_Mode = .Landscape,
+    preference: viewmodel.Layout_Preference = .Auto) -> Startup_Outline {
     outline: Startup_Outline
-    regions := ui.compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
+    outline.metrics = metrics
+    outline.layout = layout
+    outline.layout_preference = preference
+    vertical := f32(metrics.width) * f32(VIEW_WIDTH) / f32(WINDOW_WIDTH)
+    horizontal := f32(metrics.height) * f32(VIEW_HEIGHT) / f32(WINDOW_HEIGHT)
+    if layout == .Portrait {
+        vertical = f32(metrics.width)
+        horizontal = f32(metrics.height) * 0.5
+    }
+    regions := ui.compute_ui_regions(
+        layout, f32(metrics.width), f32(metrics.height), vertical, horizontal)
+    sections := ui.accordion_sections_for_layout(layout, "Animation")
     accordion := ui.accordion_layout(
-        regions.accordion_rect, viewmodel.Ui_Accordion_Section.Library)
+        regions.accordion_rect, sections,
+        layout == .Portrait ? .View : .Library)
     controls := ui.animation_control_layout_slots(regions.world_rect)
 
     startup_outline_append_rect(&outline, regions.world_rect)
     startup_outline_append_rect(&outline, regions.text_rect)
     startup_outline_append_rect(&outline, regions.accordion_rect)
-    for header in accordion.headers {
-        startup_outline_append_rect(&outline, header)
+    for index in 0..<sections.count {
+        startup_outline_append_rect(&outline, accordion.headers[index])
     }
     startup_outline_append_rect(&outline, controls.refresh)
     startup_outline_append_rect(&outline, controls.pause)
     return outline
+}
+
+// Rebuild changed startup geometry while preserving reveal and milestone fractions.
+startup_outline_rebuild :: proc(
+    outline: ^Startup_Outline, metrics: viewmodel.Ui_Window_Metrics,
+    layout: viewmodel.Ui_Layout_Mode) -> bool {
+    if outline^.metrics == metrics && outline^.layout == layout { return false }
+    reveal_ratio: f32
+    target_ratio: f32
+    if outline^.total_length > 0 {
+        reveal_ratio = outline^.reveal_distance / outline^.total_length
+        target_ratio = outline^.target_distance / outline^.total_length
+    }
+    rebuilt := startup_outline_create(metrics, layout, outline^.layout_preference)
+    rebuilt.reveal_distance = rebuilt.total_length * clamp(reveal_ratio, f32(0), f32(1))
+    rebuilt.target_distance = rebuilt.total_length * clamp(target_ratio, f32(0), f32(1))
+    outline^ = rebuilt
+    return true
+}
+
+// Reconcile startup geometry against one live logical window sample.
+startup_outline_reconcile :: proc(
+    outline: ^Startup_Outline, metrics: viewmodel.Ui_Window_Metrics) -> bool {
+    layout := ui.resolve_layout_mode(outline^.layout_preference, outline^.layout,
+        f32(metrics.width), f32(metrics.height))
+    return startup_outline_rebuild(outline, metrics, layout)
+}
+
+// Center one startup warning extent within the live logical window.
+startup_warning_position :: proc(
+    metrics: viewmodel.Ui_Window_Metrics,
+    text_width, text_height: f32) -> rl.Vector2 {
+    return {
+        f32(metrics.width) / 2 - text_width / 2,
+        f32(metrics.height) / 2 - text_height / 2,
+    }
 }
 
 // Set the bounded loading milestone that the outline may reveal toward.

@@ -311,20 +311,17 @@ terminal_service_routed_frame :: proc(
     return result
 }
 
-// Update the selected fixed-panel Terminal before simulation preparation.
-terminal_service_update :: proc(
+// Continue non-visual Terminal owners while its selected View is hidden.
+terminal_service_update_hidden :: proc(
+    state: ^core.Euclid_General_State) {
+    shell_service_update(state)
+    terminal_graphics_update(state)
+}
+
+// Prepare and service one visible Terminal panel frame.
+terminal_service_update_visible :: proc(
     state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
     frame: input.Input_Frame) -> ui.Terminal_Prepared_Frame {
-    if !terminal_animation_selected(state) {
-        return {}
-    }
-    if !state^.terminal.initialized && !terminal_service_enter(state) {
-        return {}
-    }
-    terminal_service_request_session(state)
-    if !state^.terminal.julia_session_ready {
-        return {}
-    }
     bounds := ui.terminal_content_panel(state^.ui_runtime.ui_regions.text_rect)
     terminal_font := font.cache_resolve(&state^.font_cache, .Regular)
     terminal_frame := terminal_service_routed_frame(state, frame)
@@ -346,4 +343,25 @@ terminal_service_update :: proc(
         &state^.terminal, update.hyperlink_activation,
         {activate = terminal_service_open_uri})
     return prepared
+}
+
+// Update the selected fixed-panel Terminal before simulation preparation.
+terminal_service_update :: proc(
+    state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
+    frame: input.Input_Frame) -> ui.Terminal_Prepared_Frame {
+    if !terminal_animation_selected(state) {
+        return {}
+    }
+    if !state^.terminal.initialized && !terminal_service_enter(state) {
+        return {}
+    }
+    terminal_service_request_session(state)
+    if !ui.ui_presentation_is_visible(&state^.ui_runtime) {
+        terminal_service_update_hidden(state)
+        return {}
+    }
+    if !state^.terminal.julia_session_ready {
+        return {}
+    }
+    return terminal_service_update_visible(state, input_runtime, frame)
 }

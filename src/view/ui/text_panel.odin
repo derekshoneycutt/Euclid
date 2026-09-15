@@ -82,7 +82,8 @@ presentation_scroll_is_available :: #force_inline proc(
 
     return state != nil && state^.julia_interface != nil &&
         state^.julia_interface^.selected_animation != nil &&
-        !is_terminal_selected(state)
+        !is_terminal_selected(state) &&
+        ui_presentation_is_visible(&state^.ui_runtime)
 }
 
 //   Apply a requested presentation scroll before the next layout interaction pass.
@@ -166,6 +167,7 @@ prepare_presentation_interaction :: proc(
     if state == nil || state^.julia_interface == nil || is_terminal_selected(state) {
         return {}
     }
+    if !ui_presentation_is_visible(&state^.ui_runtime) { return {} }
     text_panel := view_text_content_panel(panel)
     view_text := julia.current_view_snapshot_text(state)
     content_h := dynlayout.presentation_content_height_or_fallback(&state.dynview,
@@ -191,6 +193,7 @@ draw_view_text_panel :: proc(
     if state == nil || state.julia_interface == nil {
         return
     }
+    if !ui_presentation_is_visible(&state^.ui_runtime) { return }
 
     ui_runtime := &state.ui_runtime
     _ = draw_container(panel, .Dark_Red)

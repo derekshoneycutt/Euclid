@@ -35,7 +35,7 @@ catalogue, settings, GIF controls, and shared panel chrome.
 This guide documents the current implementation. It focuses on:
 
 - frame ordering and display-thread ownership;
-- fixed-window panel layout and splitter behavior;
+- fixed or resizable landscape panel layout and splitter behavior;
 - input snapshots, widget interaction, and shared press capture;
 - presentation, Terminal, accordion, animation controls, settings, and GIF composition;
 - scrolling, text selection, copy affordances, fonts, and drawing;
@@ -103,7 +103,7 @@ This is a hybrid model:
 | Area | Primary files | Responsibility |
 | --- | --- | --- |
 | Window and frame loop | `src/view/view.odin` | Window lifecycle, frame order, world and panel drawing. |
-| Startup presentation | `src/view/loading.odin`, `src/view/startup_outline.odin` | Loading milestones, fixed UI silhouette, warning, and ready handoff. |
+| Startup presentation | `src/view/loading.odin`, `src/view/startup_outline.odin` | Loading milestones, reference UI silhouette, warning, and ready handoff. |
 | Shared UI entry point | `src/view/ui/ui.odin` | Constants, frame preparation, panel draw dispatch. |
 | Region layout | `src/view/ui/layout.odin` | Clamp and derive all panel rectangles. |
 | Splitters | `src/view/ui/splitter.odin` | Resize hit testing, capture, drag, fade, and cursor. |
@@ -163,7 +163,7 @@ sequenceDiagram
     F->>F: Publish available font and presentation results
     I->>I: Poll one Input_Frame
     I->>U: Raw frame snapshot
-    U->>U: Prepare geometry and snapshot pointer capture
+    U->>U: Sample logical extent, release stale resize capture, prepare geometry
     U->>U: Resolve static focus, hover, pointer, and wheel targets
     U->>U: Update animation controls, accordion headers, and active child
     U->>T: Raw frame, router result, and prepared panel geometry
@@ -199,7 +199,8 @@ The concrete high-level order is:
 Three ordering details are especially important:
 
 - splitter changes happen before `Ui_Regions` and Dynview panel tracking;
-- capture identity from frame start survives splitter and widget release updates;
+- a logical resize releases stale UI capture before frame capture is snapshotted;
+- without a resize, capture identity from frame start survives widget release updates;
 - static routing and geometry-known controls precede Terminal processing;
 - Terminal scrollbar geometry refines the static panel target before input consumption;
 - presentation scrolling, copy targets, and selection update after authoritative
@@ -216,10 +217,16 @@ and draws a dependency-free representation of the eventual interface. It does no
 the normal frame lifecycle or access application-owned widget state.
 
 `startup_outline.odin` builds one fixed-capacity sequence of line segments from the
-same pure layout helpers used by the real baseline UI. The sequence traces the world,
+same pure layout helpers used by the resolved live UI. The sequence traces the world,
 presentation, accordion, accordion-header, and animation-control boundaries. It stores
 no dynamic memory and requires no font cache, texture, Julia state, or initialized
 presentation runtime.
+
+Every startup frame samples the live logical extent and resolves layout with the normal
+forced-mode or automatic hysteresis policy. A size or orientation change rebuilds the
+fixed-capacity geometry while preserving both revealed and milestone target fractions
+of total outline length. The normal UI therefore inherits the composition assembled
+during startup without a reference-size handoff.
 
 The assembling outline is the normal startup progress indicator; there is no separate
 spinner or progress bar. Its reveal target follows the coarse startup milestones:
@@ -239,23 +246,33 @@ the normal frame loop replaces it with the real UI.
 
 If a Julia startup request exceeds the unresponsive threshold, the default Raylib font
 draws `Julia is not responding` over the partial outline. This warning remains available
-before application fonts exist and is the only ordinary startup text.
+before application fonts exist, is centered from the live logical extent, and is the
+only ordinary startup text.
 
 ## Window And Layout
 
-### Fixed Window
+### Window Policy
 
-The current window is initialized at `1280x720`. `open_window` enables high-DPI output
-and optional multisampling and VSync, but it does not enable Raylib's resizable-window
-flag. UI layout therefore targets one logical window size rather than querying a
-changing client extent.
+The default window remains fixed at `1280x720`. Startup policy may instead request a
+landscape or portrait-sized preset, bounded custom dimensions, and an opt-in resizable
+window. `open_window` applies the requested initial extent and enables Raylib's
+resizable flag only for `--window-mode=resizable`. Layout preference is stored
+independently as Auto, Landscape, or Portrait. Forced modes remain fixed. Auto enters
+portrait below aspect ratio `0.9`, enters landscape above `1.1`, and retains its current
+mode inside that hysteresis band.
+
+Each normal frame samples Raylib's logical screen width and height before UI routing.
+Those dimensions become `Euclid_Ui_Runtime_State.window` and are authoritative for
+region calculation, splitter geometry, panel fills, hit testing, viewport fitting,
+Dynview tracking, and Terminal panel preparation. Framebuffer dimensions remain a
+capture concern and do not drive UI layout.
 
 The baseline starts with:
 
 | Constant | Value | Meaning |
 | --- | ---: | --- |
-| `WINDOW_WIDTH` | 1280 | Logical window width. |
-| `WINDOW_HEIGHT` | 720 | Logical window height. |
+| `WINDOW_WIDTH` | 1280 | Default and reference logical width. |
+| `WINDOW_HEIGHT` | 720 | Default and reference logical height. |
 | `VIEW_WIDTH` | 900 | Initial vertical split position. |
 | `VIEW_HEIGHT` | 500 | Initial horizontal split position. |
 | `WORLD_MIN_WIDTH` | 320 | Minimum world-side width. |
@@ -265,8 +282,8 @@ The baseline starts with:
 
 ### Regions
 
-`compute_ui_regions` clamps the vertical and horizontal split positions and fills one
-`Ui_Regions` value:
+`compute_ui_regions` accepts the resolved layout mode, live logical extent, and split
+positions. Landscape clamps both axes and fills this topology:
 
 ```text
 +------------------------------+-------------------+
@@ -284,13 +301,51 @@ full-width headers and one flexible content rectangle inside it; only the active
 receives that content rectangle. `terminal_rect` is a clamped inset of the text region.
 Panel drawing applies additional container borders and padding where required.
 
-`validate_ui_regions` rejects negative dimensions. The frame falls back to baseline
-split positions if validation fails.
+Portrait uses a full-width world above a full-width accordion:
+
+```text
++--------------------------------------------------+
+|                    world_rect                    |
++--------------------------------------------------+
+|                 accordion_rect                   |
++--------------------------------------------------+
+```
+
+Portrait derives `text_rect` from the content geometry of its first View descriptor;
+`terminal_rect` remains the same clamped inset of that region. Expanding View renders
+the existing Presentation or Terminal surface there. Collapsed View content does not
+receive preparation, interaction, focus, or drawing. Its Presentation state and selected
+Terminal generation remain owned by their existing subsystems for the next expansion.
+
+### Presentation Visibility
+
+The display publishes one `presentation_visible` fact after layout resolution and after
+an accordion section commit. Landscape always publishes visible; portrait publishes
+visible only while View is active. Presentation and Terminal consumers read that fact
+rather than independently deriving composition state.
+
+Hiding View clears Presentation or Terminal pointer capture, drag transactions, and
+effective focus, including one Terminal focus-out transition. It retains Presentation
+scroll and selection, Dynview documents, Terminal scrollback and editor state, and the
+selected Terminal generation. Reopening View does not synthesize focus; an ordinary
+press inside its content must establish Presentation or Terminal focus again.
+
+Terminal selection, not visibility, owns generation initialization and Julia session
+retry. While hidden, the display continues Julia egress dispatch, drains native PTY
+output without forwarding UI input or geometry, and advances Terminal graphics service
+bookkeeping. Visible preparation adds panel geometry, routed input, clipboard,
+hyperlink, and drawing work.
+
+When the extent can satisfy both preferred pane minima, normal clamps preserve them.
+For smaller window-manager-assigned extents, the split remains inside the available
+extent and child rectangles clamp to nonnegative dimensions. `validate_ui_regions`
+still rejects any invalid result before publication.
 
 ### Splitters
 
-The vertical splitter spans the window height. The horizontal splitter spans only the
-left side up to the vertical split. Each has:
+In landscape, the vertical splitter spans the live window height and the horizontal
+splitter spans only the live left side. Portrait exposes only one horizontal splitter,
+spanning the full width between the world and accordion. Each active splitter has:
 
 - a 3-pixel visible line;
 - an 8-pixel centered hit rectangle;
@@ -310,6 +365,18 @@ Debug/test scenarios may request both splitter positions atomically with
 after the current frame is prepared, then applies the same pane-minimum clamps before
 the next frame computes `Ui_Regions`. A pending or active GIF capture rejects the
 request, preserving capture geometry.
+
+Landscape split intent is retained as normalized width and height ratios. Portrait
+retains an independent normalized world-height ratio. Runtime initialization uses
+landscape ratios equivalent to `900x500` at `1280x720` and a portrait ratio of `0.5`.
+User drags and scenario mutations update only the active layout's ratios after
+clamping; a later resize or mode transition derives pixels from that retained intent.
+Portrait scenario splitter mutations ignore the vertical payload.
+
+A logical extent change is a UI geometry boundary. Before routing the new frame, the
+display releases widget, scrollbar, slider, splitter, and Dynview-selection capture,
+clears their drag offsets and splitter hover fades, and then recomputes regions. This
+does not reset animation, Presentation, Terminal, or simulation state.
 
 ## Panel Composition
 
@@ -354,17 +421,21 @@ window session.
 
 | State group | Representative fields |
 | --- | --- |
-| Layout | `current_layout_mode`, `ui_regions`, split positions and hover fades |
+| Layout | Preference, resolved mode, live metrics, published Presentation visibility, independent landscape/portrait ratios and accordion sections, regions, split pixels, and hover fades |
 | Scroll | Tree and presentation offsets, drag flags, and drag offsets |
 | Interaction | Shared `ui_press_owner`, Dynview selection |
-| Accordion | `active_accordion_section` selects Library, Save GIF, or Settings |
+| Accordion | `active_accordion_section` selects View, Library, Save GIF, or Settings from the current layout descriptors |
 | Settings | FPS, simulation pause, SIMD, GPU dust, and slider state |
 | FPS reporting | Fixed rolling bucket arrays, cursor, elapsed time, and average |
 | GIF capture | Request flag, phase, frame counters, options, status, and last path |
 
-Runtime initialization sets the split positions to `VIEW_WIDTH` and `VIEW_HEIGHT` and
-the GIF downsample factor to two. Other zero-valued fields use their enum or scalar
-defaults unless startup settings override them.
+Runtime initialization stores the requested initial extent, resolves the initial mode,
+initializes landscape ratios from `VIEW_WIDTH` and `VIEW_HEIGHT`, initializes the
+portrait world ratio to one half, and sets the GIF downsample factor to two. The first
+portrait entry selects View. A later mode transition saves the source layout's active
+accordion section, releases stale capture, and restores the destination layout's ratios
+and section. The first normal frame reconciles the requested extent with Raylib's
+actual logical extent.
 
 The runtime stores interaction state that must survive frames, but it does not own
 Terminal grids, Dynview documents, fonts, animation catalogue nodes, shapes, or
@@ -704,21 +775,23 @@ protocol capture retains resolved motion and release data outside content.
 
 ## Accordion And Animation Controls
 
-### Landscape Accordion
+### Layout Accordions
 
-The current landscape layout assigns the complete right-side region to an
-orientation-neutral accordion. Its ordered sections are Library, Save GIF, and
-Settings. Every section keeps a header visible, and the active section receives all
-remaining height between the headers. The enum-backed `active_accordion_section` is the
-single source of truth, so contradictory combinations of visible utility panels cannot
-occur.
+Landscape assigns the complete right-side region to an orientation-neutral accordion
+with Library, Save GIF, and Settings descriptors. Portrait assigns the full lower
+region to the same component and prepends View. The View label borrows the selected
+catalogue node's exact name for one frame and falls back to `Animation` when no usable
+name exists; it is never retained across Julia generation changes. Every section keeps
+a header visible, and the active section receives all remaining height between the
+headers. Each layout remembers its own active section across transitions. The
+enum-backed `active_accordion_section` is the source of truth for the resolved layout.
 
-The accordion component owns header geometry, header interaction, labels, disclosure
-icons, and the one-expanded-section invariant. `tree_panel.odin` orchestrates the
-active child because the Library was the original right-side owner; the Library, GIF,
-and Settings implementations retain their existing domain behavior. The abstraction
-does not encode right-side or landscape placement, allowing another layout mode to
-place the same component elsewhere.
+The accordion component consumes a bounded ordered descriptor set and owns header
+geometry, stable section-derived IDs, interaction, labels, disclosure icons, and the
+one-expanded-section invariant. `tree_panel.odin` orchestrates the active child because
+the Library was the original right-side owner. View dispatches to the existing
+Presentation or Terminal preparation and drawing paths; Library, GIF, and Settings
+retain their existing domain behavior. No presentation or terminal state is duplicated.
 
 ### Animation Controls
 
@@ -795,17 +868,24 @@ stateDiagram-v2
     Idle --> Armed: Save request
     Armed --> Recording: Capture begins
     Armed --> Idle: Cancel request
+    Armed --> Error: Logical resize
     Recording --> Finalizing: Stop condition
     Recording --> Error: Frame submission fails
+    Recording --> Error: Logical resize
     Finalizing --> Saved: Encoder completes
     Finalizing --> Error: Encoder fails
+    Finalizing --> Error: Logical resize
     Saved --> Idle: New request lifecycle
     Error --> Idle: New request lifecycle
 ```
 
 While capture requires stable framing, splitter interaction is locked. Frame submission
 occurs after the presented frame and is skipped while simulation is paused. Status and
-path strings live in bounded arrays in UI runtime state.
+path strings live in bounded arrays in UI runtime state. A logical extent change during
+Armed, Recording, or Finalizing aborts active encoder work, clears frozen dimensions,
+records the existing required GIF failure evidence, publishes Error with
+`Window resized; GIF capture cancelled.`, and accepts the new UI geometry in that same
+frame boundary.
 
 ## Allocation And Lifetime
 
@@ -881,7 +961,6 @@ are important when changing it:
     traversal, modal focus, and control-level focus are not implemented.
 1. `Ui_Press_Owner_State` is pointer capture, not focus, and covers one press at a time.
 1. Terminal child mouse capture and UI widget capture are independent mechanisms.
-1. The window uses fixed logical dimensions and has only the baseline layout mode.
 1. Accessibility navigation is not implemented.
 
 The repository root document `staging_uifocus.md` records the completed interaction

@@ -174,6 +174,39 @@ terminal_service_test_real_pty_lifecycle :: proc(t: ^testing.T) {
     }
 }
 
+// Verify a hidden selected Terminal drains PTY output without resetting its generation.
+@(test)
+terminal_service_test_hidden_view_preserves_session_and_output :: proc(t: ^testing.T) {
+    when ODIN_OS == .Linux {
+        state := new(core.Euclid_General_State, context.allocator)
+        defer free(state, context.allocator)
+        animation: bridgemodel.Euclid_Julia_Animation_Interface
+        terminal_service_test_state_init(t, state, &animation, 2)
+        defer animation_model.animation_memory_destroy(&state^.animation_memory)
+        testing.expect(t, terminalview.terminal_init_for_animation(
+            &state^.terminal, &state^.animation_memory, 2))
+        defer terminalview.terminal_destroy(&state^.terminal)
+        testing.expect(t, shell_service_runtime_init(state))
+        defer shell_service_runtime_destroy(state)
+        terminalview.terminal_append_ansi_output(&state^.terminal, "before-hide\n")
+
+        testing.expect(t, shell_service_submit(
+            state, "/bin/printf output-while-hidden"))
+        deadline := time.tick_since({}) + 5 * time.Second
+        for state^.shell.phase != .Inactive && time.tick_since({}) < deadline {
+            _ = terminal_service_update(state, nil, {})
+        }
+
+        testing.expect_value(t, state^.shell.phase,
+            viewterminalmodel.Shell_Launch_Phase.Inactive)
+        testing.expect(t, state^.terminal.initialized)
+        testing.expect_value(t, state^.terminal.animation_generation, u64(2))
+        testing.expect(t, terminal_service_test_contains(state, "before-hide"))
+        testing.expect(t, terminal_service_test_contains(
+            state, "output-while-hidden"))
+    }
+}
+
 // Verify requested selection cannot activate Terminal before the switch commits.
 @(test)
 terminal_service_test_selection_identity :: proc(t: ^testing.T) {

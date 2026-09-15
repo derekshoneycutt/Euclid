@@ -6,6 +6,7 @@ import "../files"
 import julia "../bridge"
 import evidence_profile "../evidence/profile"
 import evidence_session "../evidence/session"
+import "ui"
 
 import "base:runtime"
 import "core:fmt"
@@ -35,6 +36,8 @@ Packaged_Assets_Worker_Result :: struct {
 draw_startup_frame :: proc(
     outline: ^Startup_Outline, progress: f32,
     show_julia_warning := false) {
+    metrics := ui.ui_current_window_metrics()
+    _ = startup_outline_reconcile(outline, metrics)
     startup_outline_set_target(outline, progress)
     startup_outline_advance(outline,
         min(max(rl.GetFrameTime(), f32(0)), f32(0.05)))
@@ -46,7 +49,7 @@ draw_startup_frame :: proc(
         font_size: f32 = 18
         text_width := rl.MeasureTextEx(
             regular_font, STARTUP_WARNING_TEXT, font_size, 0).x
-        text_position := rl.Vector2{WINDOW_WIDTH / 2 - text_width / 2, 402}
+        text_position := startup_warning_position(metrics, text_width, font_size)
         rl.DrawTextEx(regular_font, STARTUP_WARNING_TEXT, text_position, font_size, 0,
             UI_TEXT_COLOR)
     }
@@ -296,7 +299,10 @@ initialize_window_runtime_with_loading :: proc(
     timing_profile: ^evidence_profile.State) -> (Euclid_Runtime_Session, bool) {
 
     startup_started_at := rl.GetTime()
-    outline := startup_outline_create()
+    metrics := ui.ui_current_window_metrics()
+    layout := ui.resolve_initial_layout_mode(settings^.window.layout,
+        f32(metrics.width), f32(metrics.height))
+    outline := startup_outline_create(metrics, layout, settings^.window.layout)
     if !loading_prepare_assets_phase(timing_profile, &outline) {
         return {}, false
     }

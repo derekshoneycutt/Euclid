@@ -11,14 +11,26 @@ import "core:fmt"
 import "core:log"
 import "core:os"
 import "core:strconv"
+import "core:strings"
 
 COMMAND_LINE_PATH_MAX_BYTES :: 4096
 DIAGNOSTICS_OPTION_PREFIX :: "--diagnostics="
 DUST_PARTICLE_MAX_PREFIX :: "--dust-particle-max="
+WINDOW_PRESET_PREFIX :: "--window-preset="
+WINDOW_SIZE_PREFIX :: "--window-size="
+WINDOW_MODE_PREFIX :: "--window-mode="
+LAYOUT_PREFIX :: "--layout="
 TIMING_PROFILE_PREFIX :: "--timing-profile="
 PROFILE_OPTION_PREFIX :: "--profile=spall:"
 SEMANTIC_TRACE_OUTPUT_PREFIX :: "--semantic-trace-output="
 SEMANTIC_TRACE_EVENTS_PREFIX :: "--semantic-trace-events="
+WINDOW_LANDSCAPE_WIDTH :: 1280
+WINDOW_LANDSCAPE_HEIGHT :: 720
+WINDOW_PORTRAIT_WIDTH :: 640
+WINDOW_PORTRAIT_HEIGHT :: 720
+WINDOW_MIN_WIDTH :: 320
+WINDOW_MIN_HEIGHT :: 240
+WINDOW_MAX_EXTENT :: 16384
 when core.SCENARIOS_ENABLED {
     SCENARIO_INPUT_PREFIX :: "--scenario="
     SCENARIO_ARTIFACT_PREFIX :: "--scenario-artifacts="
@@ -115,6 +127,117 @@ parse_dust_particle_max_param :: proc(
 
     settings.dust_particle_max = int(value)
     return true
+}
+
+//  Return the fixed landscape startup policy retained by a no-argument launch.
+default_window_startup_policy :: proc() -> core.Window_Startup_Policy {
+    return {
+        width = WINDOW_LANDSCAPE_WIDTH,
+        height = WINDOW_LANDSCAPE_HEIGHT,
+        mode = .Fixed,
+        layout = .Auto,
+    }
+}
+
+//  Apply one semantic window-size preset without overriding a custom size.
+parse_window_preset_param :: proc(
+    arg: string, policy: ^core.Window_Startup_Policy) -> bool {
+    if !strings.has_prefix(arg, WINDOW_PRESET_PREFIX) {
+        return false
+    }
+    value := arg[len(WINDOW_PRESET_PREFIX):]
+    if value != "landscape" && value != "portrait" {
+        fmt.println("Invalid --window-preset value: ", value)
+        return true
+    }
+    if policy.custom_size_set {
+        return true
+    }
+    if value == "landscape" {
+        policy.width = WINDOW_LANDSCAPE_WIDTH
+        policy.height = WINDOW_LANDSCAPE_HEIGHT
+    } else {
+        policy.width = WINDOW_PORTRAIT_WIDTH
+        policy.height = WINDOW_PORTRAIT_HEIGHT
+    }
+    return true
+}
+
+//  Parse one positive decimal window extent inside the supported launch range.
+parse_window_extent :: proc(text: string, minimum: int) -> (int, bool) {
+    value, ok := strconv.parse_i64_of_base(text, 10)
+    if !ok || value < i64(minimum) || value > WINDOW_MAX_EXTENT {
+        return 0, false
+    }
+    return int(value), true
+}
+
+//  Apply one custom WIDTHxHEIGHT option transactionally.
+parse_window_size_param :: proc(
+    arg: string, policy: ^core.Window_Startup_Policy) -> bool {
+    if !strings.has_prefix(arg, WINDOW_SIZE_PREFIX) {
+        return false
+    }
+    value := arg[len(WINDOW_SIZE_PREFIX):]
+    separator := strings.index_byte(value, 'x')
+    if separator < 1 || separator == len(value) - 1 {
+        fmt.println("Invalid --window-size value: ", value)
+        return true
+    }
+    width, width_ok := parse_window_extent(value[:separator], WINDOW_MIN_WIDTH)
+    height, height_ok := parse_window_extent(value[separator + 1:], WINDOW_MIN_HEIGHT)
+    if !width_ok || !height_ok {
+        fmt.println("Invalid --window-size value: ", value)
+        return true
+    }
+    policy.width = width
+    policy.height = height
+    policy.custom_size_set = true
+    return true
+}
+
+//  Apply one fixed or resizable window policy option.
+parse_window_mode_param :: proc(
+    arg: string, policy: ^core.Window_Startup_Policy) -> bool {
+    if !strings.has_prefix(arg, WINDOW_MODE_PREFIX) {
+        return false
+    }
+    switch arg[len(WINDOW_MODE_PREFIX):] {
+    case "fixed":
+        policy.mode = .Fixed
+    case "resizable":
+        policy.mode = .Resizable
+    case:
+        fmt.println("Invalid --window-mode value: ", arg[len(WINDOW_MODE_PREFIX):])
+    }
+    return true
+}
+
+//  Apply one automatic or forced layout preference option.
+parse_layout_param :: proc(
+    arg: string, policy: ^core.Window_Startup_Policy) -> bool {
+    if !strings.has_prefix(arg, LAYOUT_PREFIX) {
+        return false
+    }
+    switch arg[len(LAYOUT_PREFIX):] {
+    case "auto":
+        policy.layout = .Auto
+    case "landscape":
+        policy.layout = .Landscape
+    case "portrait":
+        policy.layout = .Portrait
+    case:
+        fmt.println("Invalid --layout value: ", arg[len(LAYOUT_PREFIX):])
+    }
+    return true
+}
+
+//  Apply one typed startup-window option and report whether it matched.
+parse_window_policy_param :: proc(
+    arg: string, policy: ^core.Window_Startup_Policy) -> bool {
+    return parse_window_preset_param(arg, policy) ||
+        parse_window_size_param(arg, policy) ||
+        parse_window_mode_param(arg, policy) || parse_layout_param(arg, policy)
 }
 
 //  Apply one window-configuration flag and report whether it matched.
@@ -313,6 +436,14 @@ parse_semantic_trace_argument :: proc(
     return false, false
 }
 
+//  Print startup-window options and their default policy.
+print_window_policy_help :: proc() {
+    fmt.println("  --window-preset=landscape|portrait  Set initial window size.")
+    fmt.println("  --window-size=WIDTHxHEIGHT           Set a custom initial size.")
+    fmt.println("  --window-mode=fixed|resizable        Set resize policy. (default: fixed)")
+    fmt.println("  --layout=auto|landscape|portrait     Set layout policy. (default: auto)")
+}
+
 //  Print supported application options and their defaults.
 print_command_line_help :: proc() {
     fmt.println("Usage: ./euclid [options]")
@@ -322,6 +453,7 @@ print_command_line_help :: proc() {
     fmt.println("  -V, --no-vsync           Disable VSYNC.")
     fmt.println("  -a, --antialiasing       Enable anti-aliasing. (default)")
     fmt.println("  -A, --no-antialiasing    Disable anti-aliasing.")
+    print_window_policy_help()
     fmt.println(fmt.tprintf(
         "  --dust-particle-max=N    Set maximum dust particles, 0-%d. (default: %d)",
         particlemodel.MAX_LOW_PARTICLES,
@@ -361,6 +493,7 @@ parse_command_line_param :: proc(arg: string, settings: ^core.Euclid_Run_Setting
     }
     if parse_short_flags_param(arg, settings) ||
         parse_dust_particle_max_param(arg, settings) ||
+        parse_window_policy_param(arg, &settings.window) ||
         parse_window_flag(arg, settings) || parse_runtime_flag(arg, settings) {
         return
     }
@@ -370,6 +503,24 @@ parse_command_line_param :: proc(arg: string, settings: ^core.Euclid_Run_Setting
         return
     }
     fmt.println("Unrecognized parameter: ", arg)
+}
+
+//  Report the resolved application startup settings before opening the window.
+print_startup_settings :: proc(settings: ^core.Euclid_Run_Settings) {
+    fmt.println("Using antialiasing: ", settings.do_antialiasing)
+    fmt.println("Using vsync: ", settings.do_vsync)
+    fmt.println("Maximum dust particles: ", settings.dust_particle_max)
+    fmt.println("Limiting FPS: ", settings.limit_fps)
+    fmt.println("Using SIMD projection when available: ",
+        settings.use_simd_batch_projection)
+    fmt.println("Using GPU dust instancing when available: ",
+        settings.use_gpu_dust_instancing)
+    fmt.println(fmt.tprintf(
+        "Window startup policy: %dx%d, %v, layout %v",
+        settings.window.width,
+        settings.window.height,
+        settings.window.mode,
+        settings.window.layout))
 }
 
 //  Parse command-line parameters into complete application startup settings.
@@ -382,6 +533,7 @@ parse_command_line :: proc() -> core.Euclid_Run_Settings {
         limit_fps = true,
         use_simd_batch_projection = true,
         use_gpu_dust_instancing = true,
+        window = default_window_startup_policy(),
         evidence = {
             lanes = evidence_session.ALL_LANES,
         },
@@ -402,14 +554,7 @@ parse_command_line :: proc() -> core.Euclid_Run_Settings {
     }
 
     if settings.do_run {
-        fmt.println("Using antialiasing: ", settings.do_antialiasing)
-        fmt.println("Using vsync: ", settings.do_vsync)
-        fmt.println("Maximum dust particles: ", settings.dust_particle_max)
-        fmt.println("Limiting FPS: ", settings.limit_fps)
-        fmt.println("Using SIMD projection when available: ",
-            settings.use_simd_batch_projection)
-        fmt.println("Using GPU dust instancing when available: ",
-            settings.use_gpu_dust_instancing)
+        print_startup_settings(&settings)
     }
 
     return settings

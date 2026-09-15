@@ -182,6 +182,57 @@ gif_capture_transitions_record_required_evidence :: proc(t: ^testing.T) {
     testing.expect(t, .Failure in events[2].flags)
 }
 
+// Verify a logical resize aborts every protected GIF phase before geometry changes.
+@(test)
+gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
+    phases := [3]viewmodel.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
+    for phase in phases {
+        state := new(app_core.Euclid_General_State, context.allocator)
+        state^.ui_runtime.window = {1280, 720}
+        state^.ui_runtime.gif_capture_phase = phase
+        state^.gif_capture.source_width = 900
+        state^.gif_capture.source_height = 500
+        testing.expect(t, evidence_session.session_init(&state^.evidence_session, {
+            enabled = true, output_mode = .Sink, lanes = {.Presentation},
+        }))
+        evidence_trace.ring_init(&state^.evidence_ring, .Display)
+
+        testing.expect(t, apply_window_metrics(state, {640, 900}))
+        testing.expect_value(t, state^.ui_runtime.window,
+            viewmodel.Ui_Window_Metrics{640, 900})
+        testing.expect_value(t, state^.ui_runtime.gif_capture_phase,
+            viewmodel.Gif_Capture_Phase.Error)
+        testing.expect_value(t, state^.gif_capture.source_width, 0)
+        testing.expect_value(t, state^.gif_capture.source_height, 0)
+        note := string(state^.ui_runtime.gif_status_note[
+            :state^.ui_runtime.gif_status_note_len])
+        testing.expect_value(t, note, "Window resized; GIF capture cancelled.")
+        events: [1]evidence_trace.Event
+        count := evidence_trace.ring_drain(&state^.evidence_ring, events[:])
+        testing.expect_value(t, count, 1)
+        testing.expect_value(t, events[0].kind, evidence_trace.Kind.Gif_Failed)
+        testing.expect(t, .Failure in events[0].flags)
+        free(state, context.allocator)
+    }
+}
+
+// Verify unchanged metrics and unprotected phases do not alter GIF policy.
+@(test)
+gif_capture_resize_ignores_stable_or_unprotected_state :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.ui_runtime.window = {1280, 720}
+    state^.ui_runtime.gif_capture_phase = .Recording
+    testing.expect(t, !apply_window_metrics(state, {1280, 720}))
+    testing.expect_value(t, state^.ui_runtime.gif_capture_phase,
+        viewmodel.Gif_Capture_Phase.Recording)
+
+    state^.ui_runtime.gif_capture_phase = .Saved
+    testing.expect(t, apply_window_metrics(state, {640, 900}))
+    testing.expect_value(t, state^.ui_runtime.gif_capture_phase,
+        viewmodel.Gif_Capture_Phase.Saved)
+}
+
 //   Verify gif_output_filename produces an Euclid-prefixed .gif name.
 @(test)
 gif_output_filename_has_expected_shape :: proc(t: ^testing.T) {

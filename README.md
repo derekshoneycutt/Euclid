@@ -290,7 +290,7 @@ pass the extracted content root explicitly into each generation. A separate cont
 fingerprint refreshes `assets.pkg` without invalidating the sysimage. `julia
 tools/make.jl sysimage` forces a clean rebuild from Julia's stock image before packaging.
 
-Additionally, there are some startup options that can affect application performance.
+Additionally, startup options control window policy and application performance.
 
 ```text
 Usage: ./euclid [options]
@@ -300,6 +300,10 @@ Options:
   -V, --no-vsync           Disable VSYNC.
   -a, --antialiasing       Enable anti-aliasing. (default)
   -A, --no-antialiasing    Disable anti-aliasing.
+  --window-preset=landscape|portrait  Set initial window size.
+  --window-size=WIDTHxHEIGHT           Set a custom initial size.
+  --window-mode=fixed|resizable        Set resize policy. (default: fixed)
+  --layout=auto|landscape|portrait     Set layout policy. (default: auto)
   --dust-particle-max=N    Set maximum dust particles, 0-8192. (default: 8192)
   -f, --limit-fps          Limit rendering to 60 FPS. (default)
   -F, --no-limit-fps       Disable the 60 FPS limit.

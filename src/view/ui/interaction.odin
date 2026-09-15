@@ -65,6 +65,80 @@ ui_capture_target :: proc(
     return {}
 }
 
+// Compute presentation visibility from the resolved composition.
+ui_composition_presentation_visible :: #force_inline proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
+    return runtime^.current_layout_mode == .Landscape ||
+        runtime^.active_accordion_section == .View
+}
+
+// Report the display-owned presentation visibility published for this frame.
+ui_presentation_is_visible :: #force_inline proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
+    return runtime != nil && runtime^.presentation_visible
+}
+
+// Return whether shared capture belongs to hidden Presentation or Terminal UI.
+ui_presentation_owns_capture :: proc(
+    owner: viewmodel.Ui_Press_Owner_State) -> bool {
+    if owner.kind == .Dynview_Selection || owner.kind == .Copy_Icon {
+        return true
+    }
+    return owner.kind == .Scrollbar &&
+        (owner.id == UI_PRESENTATION_SCROLLBAR_ID ||
+         owner.id == UI_TERMINAL_SCROLLBAR_ID)
+}
+
+// Clear focus and pointer transactions when composition hides the presentation.
+ui_hide_presentation_interaction :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
+    if ui_presentation_owns_capture(runtime^.ui_press_owner) {
+        runtime^.ui_press_owner = {}
+    }
+    runtime^.text_scroll_dragging = false
+    runtime^.text_scroll_drag_off = 0
+    runtime^.terminal_scroll_dragging = false
+    runtime^.terminal_scroll_drag_off = 0
+    runtime^.dynview_selection.dragging = false
+    focus := runtime^.interaction.logical_focus.kind
+    if focus == .Terminal || focus == .Presentation {
+        runtime^.interaction.logical_focus = {}
+    }
+    frame := &runtime^.interaction_frame
+    was_terminal_focused := frame^.terminal_focused ||
+        runtime^.interaction.terminal_effectively_focused
+    frame^.logical_focus = runtime^.interaction.logical_focus
+    frame^.effective_focus = runtime^.interaction.logical_focus
+    frame^.terminal_focused = false
+    frame^.terminal_focus_changed = was_terminal_focused
+    frame^.terminal = {}
+    frame^.presentation = {}
+    runtime^.interaction.terminal_effectively_focused = false
+}
+
+// Publish current composition visibility and reconcile hidden interaction once.
+ui_publish_presentation_visibility :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
+    visible := ui_composition_presentation_visible(runtime)
+    if runtime^.presentation_visible == visible { return false }
+    runtime^.presentation_visible = visible
+    if !visible { ui_hide_presentation_interaction(runtime) }
+    return true
+}
+
+// Resolve a visible Presentation or Terminal target.
+ui_presentation_target :: proc(
+    mouse: rl.Vector2, regions: viewmodel.Ui_Regions,
+    terminal_present: bool) -> viewmodel.Ui_Interaction_Target {
+    if terminal_present && rl.CheckCollisionPointRec(mouse, regions.terminal_rect) {
+        return ui_interaction_target(.Panel_Content, .Terminal)
+    }
+    if rl.CheckCollisionPointRec(mouse, regions.text_rect) {
+        return ui_interaction_target(.Panel_Content, .Presentation)
+    }
+    return {}
+}
+
 // Resolve the topmost static target under the current pointer sample.
 ui_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
@@ -73,7 +147,9 @@ ui_hover_target :: proc(
     mouse := input_frame_mouse_position(frame)
     if !splitters_locked_for_gif(runtime^.gif_capture_phase) {
         axis, hovered := splitter_hovered_axis(mouse,
-            runtime^.vertical_split_x, runtime^.horizontal_split_y)
+            runtime^.current_layout_mode,
+            runtime^.vertical_split_x, runtime^.horizontal_split_y,
+            runtime^.window)
         if hovered {
             id := SPLITTER_VERTICAL_PRESS_ID
             if axis == .Horizontal { id = SPLITTER_HORIZONTAL_PRESS_ID }
@@ -81,11 +157,9 @@ ui_hover_target :: proc(
         }
     }
     regions := runtime^.ui_regions
-    if terminal_present && rl.CheckCollisionPointRec(mouse, regions.terminal_rect) {
-        return ui_interaction_target(.Panel_Content, .Terminal)
-    }
-    if rl.CheckCollisionPointRec(mouse, regions.text_rect) {
-        return ui_interaction_target(.Panel_Content, .Presentation)
+    if ui_presentation_is_visible(runtime) {
+        target := ui_presentation_target(mouse, regions, terminal_present)
+        if target.kind != .None { return target }
     }
     if rl.CheckCollisionPointRec(mouse, regions.accordion_rect) {
         return ui_interaction_target(.Panel_Content, .Accordion)
@@ -108,9 +182,10 @@ ui_route_logical_focus :: proc(
     pointer_target: viewmodel.Ui_Interaction_Target) -> viewmodel.Ui_Focus_Target {
     result := runtime^.interaction.logical_focus
     terminal_present := input.terminal_present
-    if terminal_present && !runtime^.interaction.terminal_was_present {
+    visible := ui_presentation_is_visible(runtime)
+    if terminal_present && visible && !runtime^.interaction.terminal_was_present {
         result = {kind = .Terminal}
-    } else if !terminal_present && result.kind == .Terminal {
+    } else if (!terminal_present || !visible) && result.kind == .Terminal {
         result = {}
     }
     if input_frame_left_pressed(input.frame) && !input.capture.active {
@@ -123,8 +198,8 @@ ui_route_logical_focus :: proc(
 ui_terminal_effectively_focused :: #force_inline proc(
     logical_focus: viewmodel.Ui_Focus_Target,
     window_focused: bool,
-    terminal_present: bool) -> bool {
-    return window_focused && terminal_present &&
+    terminal_present, presentation_visible: bool) -> bool {
+    return window_focused && terminal_present && presentation_visible &&
         logical_focus.kind == .Terminal
 }
 
@@ -138,7 +213,8 @@ ui_route_interaction_frame :: proc(
     if capture.kind != .None { pointer_target = capture }
     logical_focus := ui_route_logical_focus(runtime, input, pointer_target)
     terminal_focused := ui_terminal_effectively_focused(
-        logical_focus, input.frame.window_focused, input.terminal_present)
+        logical_focus, input.frame.window_focused, input.terminal_present,
+        ui_presentation_is_visible(runtime))
     wheel_target: viewmodel.Ui_Interaction_Target
     if input.frame.mouse_wheel_delta != 0 && capture.kind == .None {
         wheel_target = hover

@@ -172,6 +172,86 @@ clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
     return clamped
 }
 
+// Release display-owned pointer state whose geometry is invalid after a resize.
+ui_release_geometry_capture :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
+    runtime^.ui_press_owner = {}
+    runtime^.tree_scroll_dragging = false
+    runtime^.tree_scroll_drag_off = 0
+    runtime^.settings_slider_dragging = false
+    runtime^.settings_slider_drag_offset_x = 0
+    runtime^.text_scroll_dragging = false
+    runtime^.text_scroll_drag_off = 0
+    runtime^.terminal_scroll_dragging = false
+    runtime^.terminal_scroll_drag_off = 0
+    runtime^.dynview_selection.dragging = false
+    runtime^.splitter_drag_offset = 0
+    runtime^.vertical_split_hover = 0
+    runtime^.horizontal_split_hover = 0
+}
+
+// Save the active accordion section into the current layout's independent memory.
+ui_save_layout_section :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
+    if runtime^.current_layout_mode == .Portrait {
+        runtime^.portrait.active_section = runtime^.active_accordion_section
+    } else {
+        runtime^.landscape.active_section = runtime^.active_accordion_section
+    }
+}
+
+// Restore one resolved layout and its independent accordion memory.
+ui_transition_layout :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    destination: viewmodel.Ui_Layout_Mode) -> bool {
+    if destination == runtime^.current_layout_mode { return false }
+    ui_save_layout_section(runtime)
+    ui_release_geometry_capture(runtime)
+    runtime^.current_layout_mode = destination
+    if destination == .Portrait {
+        if !runtime^.portrait.entered {
+            runtime^.portrait.active_section = .View
+        }
+        runtime^.active_accordion_section = runtime^.portrait.active_section
+        runtime^.portrait.entered = true
+    } else {
+        runtime^.active_accordion_section = runtime^.landscape.active_section
+    }
+    _ = ui_publish_presentation_visibility(runtime)
+    return true
+}
+
+// Apply one logical extent and derive active-layout split pixels from intent.
+ui_apply_window_metrics :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    metrics: viewmodel.Ui_Window_Metrics) -> bool {
+    changed := runtime^.window != metrics
+    if changed {
+        ui_release_geometry_capture(runtime)
+        runtime^.window = metrics
+    }
+    resolved := resolve_layout_mode(runtime^.layout_preference,
+        runtime^.current_layout_mode, f32(metrics.width), f32(metrics.height))
+    transitioned := ui_transition_layout(runtime, resolved)
+    if resolved == .Portrait {
+        runtime^.vertical_split_x = f32(metrics.width)
+        runtime^.horizontal_split_y = splitter_clamp_horizontal(
+            runtime^.portrait.world_height_ratio * f32(metrics.height), metrics.height)
+    } else {
+        runtime^.vertical_split_x = splitter_clamp_vertical(
+            runtime^.landscape.vertical_ratio * f32(metrics.width), metrics.width)
+        runtime^.horizontal_split_y = splitter_clamp_horizontal(
+            runtime^.landscape.horizontal_ratio * f32(metrics.height), metrics.height)
+    }
+    return changed || transitioned
+}
+
+// Read the current positive logical Raylib extent for frame geometry.
+ui_current_window_metrics :: proc() -> viewmodel.Ui_Window_Metrics {
+    return {
+        width = int(max(i32(1), rl.GetScreenWidth())),
+        height = int(max(i32(1), rl.GetScreenHeight())),
+    }
+}
+
 // Prepare panel geometry while preserving capture identity from frame start.
 prepare_ui_geometry :: proc(
     state: ^core.Euclid_General_State,
@@ -181,12 +261,16 @@ prepare_ui_geometry :: proc(
     frame_dt := min(f32(0.05), max(f32(0), rl.GetFrameTime()))
     update_splitters(ui_runtime, mouse_input, frame_dt)
     regions := compute_ui_regions(ui_runtime.current_layout_mode,
+        f32(ui_runtime^.window.width), f32(ui_runtime^.window.height),
         ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
     if !validate_ui_regions(regions) {
         fmt.println("[ui] Warning: invalid regions; using baseline fallback")
-        regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
+        regions = compute_ui_regions(.Landscape,
+            f32(ui_runtime^.window.width), f32(ui_runtime^.window.height),
+            ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
     }
     state^.ui_runtime.ui_regions = regions
+    _ = ui_publish_presentation_visibility(ui_runtime)
     view_core.fit_iso_scale_to_viewport(
         state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
@@ -255,6 +339,7 @@ prepare_ui_controls :: proc(
         state, accordion_panel, routed_frame)
     content_panel := result.accordion.layout.content
     switch state^.ui_runtime.active_accordion_section {
+    case .View:
     case .Library:
         result.tree = prepare_tree_list_panel({
             ji = state^.julia_interface,
@@ -277,6 +362,10 @@ prepare_ui_controls :: proc(
 prepare_ui_layout_interaction :: proc(
     state: ^core.Euclid_General_State,
     frame: Input_Frame) -> Ui_Layout_Interaction_Preparation {
+    if !ui_presentation_is_visible(&state^.ui_runtime) {
+        state^.ui_runtime.view_text_scroll_max = 0
+        return {}
+    }
     routed := state^.ui_runtime.interaction_frame.presentation
     presentation_frame := input.input_frame_filter_pointer(frame,
         routed.pointer ? input.Input_Pointer_Fields{
@@ -288,23 +377,19 @@ prepare_ui_layout_interaction :: proc(
         routed.keyboard)}
 }
 
-//   Render all UI panels in baseline layout.
-draw_ui_panels :: proc(
+// Draw the landscape Presentation and right-side accordion composition.
+draw_landscape_panels :: proc(
     state: ^core.Euclid_General_State,
     input_frame: Input_Frame,
     terminal_frame: Terminal_Prepared_Frame,
     controls: Ui_Control_Preparation,
     layout_interaction: Ui_Layout_Interaction_Preparation) {
     regions := state^.ui_runtime.ui_regions
-
-    draw_animation_controls(
-        state, input_frame, controls.animation_controls)
-
     bottom_bar := rl.Rectangle{
         regions.world_rect.x,
         regions.world_rect.y + regions.world_rect.height,
         regions.world_rect.width,
-        WINDOW_HEIGHT - regions.world_rect.height,
+        f32(state^.ui_runtime.window.height) - regions.world_rect.height,
     }
     rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
     draw_view_text_panel(state, regions.text_rect, terminal_frame,
@@ -313,10 +398,47 @@ draw_ui_panels :: proc(
     right_bar := rl.Rectangle{
         regions.world_rect.x + regions.world_rect.width,
         0,
-        WINDOW_WIDTH - regions.world_rect.width,
-        WINDOW_HEIGHT,
+        f32(state^.ui_runtime.window.width) - regions.world_rect.width,
+        f32(state^.ui_runtime.window.height),
     }
     rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
-    draw_accordion_view(state, regions.accordion_rect, input_frame, controls)
+    draw_accordion_view(state, regions.accordion_rect, input_frame, {
+        controls, terminal_frame, layout_interaction.presentation})
+}
+
+// Draw the portrait world-above-accordion composition.
+draw_portrait_panels :: proc(
+    state: ^core.Euclid_General_State,
+    input_frame: Input_Frame,
+    terminal_frame: Terminal_Prepared_Frame,
+    controls: Ui_Control_Preparation,
+    layout_interaction: Ui_Layout_Interaction_Preparation) {
+    regions := state^.ui_runtime.ui_regions
+    lower_bar := rl.Rectangle{
+        0,
+        regions.world_rect.height,
+        f32(state^.ui_runtime.window.width),
+        f32(state^.ui_runtime.window.height) - regions.world_rect.height,
+    }
+    rl.DrawRectangleRec(lower_bar, UI_BACK_COLOR)
+    draw_accordion_view(state, regions.accordion_rect, input_frame, {
+        controls, terminal_frame, layout_interaction.presentation})
+}
+
+//   Render UI panels for the resolved landscape or portrait composition.
+draw_ui_panels :: proc(
+    state: ^core.Euclid_General_State,
+    input_frame: Input_Frame,
+    terminal_frame: Terminal_Prepared_Frame,
+    controls: Ui_Control_Preparation,
+    layout_interaction: Ui_Layout_Interaction_Preparation) {
+    draw_animation_controls(state, input_frame, controls.animation_controls)
+    if state^.ui_runtime.current_layout_mode == .Portrait {
+        draw_portrait_panels(
+            state, input_frame, terminal_frame, controls, layout_interaction)
+    } else {
+        draw_landscape_panels(
+            state, input_frame, terminal_frame, controls, layout_interaction)
+    }
     draw_splitters(&state^.ui_runtime, input_frame_mouse_position(input_frame))
 }

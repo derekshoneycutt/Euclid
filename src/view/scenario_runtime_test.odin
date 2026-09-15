@@ -1,6 +1,7 @@
 package view
 
 import bridgemodel "../bridge/model"
+import viewmodel "model"
 
 import presentation_model "../bridge/presentation"
 
@@ -245,6 +246,12 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
     animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
     state^.julia_interface^.selected_animation = animation
+    state^.ui_runtime.window = {1280, 720}
+    state^.ui_runtime.presentation_visible = true
+    state^.ui_runtime.landscape = {
+        vertical_ratio = f32(900) / 1280,
+        horizontal_ratio = f32(500) / 720,
+    }
     state^.ui_runtime.vertical_split_x = 900
     state^.ui_runtime.horizontal_split_y = 500
     runtime := Scenario_Runtime{state = state}
@@ -266,6 +273,51 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
     testing.expect(t, scenario_runtime_apply_pending_ui(&runtime))
     testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(320))
     testing.expect_value(t, state^.ui_runtime.horizontal_split_y, f32(580))
+}
+
+// Verify portrait scenario splitter mutation ignores vertical and landscape intent.
+@(test)
+scenario_runtime_portrait_splitter_mutates_only_world_ratio :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.ui_runtime.window = {1280, 720}
+    state^.ui_runtime.landscape = {
+        vertical_ratio = f32(900) / 1280,
+        horizontal_ratio = f32(500) / 720,
+    }
+    state^.ui_runtime.vertical_split_x = 320
+    state^.ui_runtime.horizontal_split_y = 580
+    state^.ui_runtime.current_layout_mode = .Portrait
+    runtime := Scenario_Runtime{state = state}
+    identity: evidence_trace.Identity
+    landscape := state^.ui_runtime.landscape
+    splitters := scenario.Command{
+        kind = .Set_Splitters, value = 1000, secondary_value = 360}
+    handled, accepted := scenario_issue_display_action(
+        &runtime, &splitters, &identity)
+    testing.expect(t, handled && accepted)
+    testing.expect(t, scenario_runtime_apply_pending_ui(&runtime))
+    testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(320))
+    testing.expect_value(t, state^.ui_runtime.horizontal_split_y, f32(360))
+    testing.expect_value(t, state^.ui_runtime.portrait.world_height_ratio, f32(0.5))
+    testing.expect_value(t, state^.ui_runtime.landscape, landscape)
+}
+
+// Verify portrait startup resolves directly to the selected-title View section.
+@(test)
+runtime_fields_initialize_portrait_view :: proc(t: ^testing.T) {
+    settings := Euclid_Run_Settings{
+        window = {width = 640, height = 720, layout = .Portrait},
+    }
+    runtime: viewmodel.Euclid_Ui_Runtime_State
+    init_ui_runtime_fields(&runtime, &settings)
+    testing.expect_value(t, runtime.current_layout_mode,
+        viewmodel.Ui_Layout_Mode.Portrait)
+    testing.expect_value(t, runtime.active_accordion_section,
+        viewmodel.Ui_Accordion_Section.View)
+    testing.expect_value(t, runtime.portrait.active_section,
+        viewmodel.Ui_Accordion_Section.View)
+    testing.expect(t, runtime.portrait.entered)
 }
 
 // Verify a required screenshot keeps the run active until post-presentation completion.

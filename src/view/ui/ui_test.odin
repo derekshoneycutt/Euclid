@@ -14,11 +14,24 @@ import "../input"
 
 import rl "vendor:raylib"
 
+//   Build one default-size landscape UI runtime for interaction tests.
+make_baseline_ui_runtime :: proc() -> viewmodel.Euclid_Ui_Runtime_State {
+    return {
+        window = {WINDOW_WIDTH, WINDOW_HEIGHT},
+        vertical_split_x = VIEW_WIDTH,
+        horizontal_split_y = VIEW_HEIGHT,
+        presentation_visible = true,
+        ui_regions = compute_ui_regions(
+            .Landscape, WINDOW_WIDTH, WINDOW_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT),
+    }
+}
+
 //   Verify the baseline UI regions are valid and mutually consistent.
 @(test)
 ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
     // Verifies baseline UI region construction is internally consistent and matches fixed panel sizing contracts.
-    regions := compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
+    regions := compute_ui_regions(
+        .Landscape, WINDOW_WIDTH, WINDOW_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT)
 
     testing.expect(t, validate_ui_regions(regions))
     testing.expect_value(t, regions.world_rect.width, VIEW_WIDTH)
@@ -34,17 +47,73 @@ ui_regions_baseline_is_valid_and_consistent :: proc(t: ^testing.T) {
 //   Verify split coordinates preserve minimum sizes for all four panes.
 @(test)
 ui_regions_clamp_all_pane_minimums :: proc(t: ^testing.T) {
-    minimums := compute_ui_regions(.Baseline, 0, 0)
+    minimums := compute_ui_regions(.Landscape, WINDOW_WIDTH, WINDOW_HEIGHT, 0, 0)
     testing.expect_value(t, minimums.world_rect.width, f32(WORLD_MIN_WIDTH))
     testing.expect_value(t, minimums.world_rect.height, f32(WORLD_MIN_HEIGHT))
 
-    maximums := compute_ui_regions(.Baseline, WINDOW_WIDTH, WINDOW_HEIGHT)
+    maximums := compute_ui_regions(.Landscape, WINDOW_WIDTH, WINDOW_HEIGHT,
+        WINDOW_WIDTH, WINDOW_HEIGHT)
     testing.expect_value(t, maximums.world_rect.width,
         f32(WINDOW_WIDTH - RIGHT_PANEL_MIN_WIDTH))
     testing.expect_value(t, maximums.world_rect.height,
         f32(WINDOW_HEIGHT - BOTTOM_PANEL_MIN_HEIGHT))
     testing.expect(t, maximums.accordion_rect.width >= 0)
     testing.expect(t, maximums.text_rect.height >= 0)
+}
+
+//   Verify compact live extents degrade without inverted clamps or rectangles.
+@(test)
+ui_regions_compact_extent_remains_non_negative :: proc(t: ^testing.T) {
+    regions := compute_ui_regions(.Landscape, 320, 240, 225, 167)
+
+    testing.expect(t, validate_ui_regions(regions))
+    testing.expect_value(t, regions.world_rect.width, f32(225))
+    testing.expect_value(t, regions.world_rect.height, f32(167))
+    testing.expect(t, regions.accordion_rect.width >= 0)
+    testing.expect(t, regions.text_rect.height >= 0)
+    testing.expect(t, regions.world_rect.width <= 320)
+    testing.expect(t, regions.world_rect.height <= 240)
+}
+
+//   Verify forced modes and automatic hysteresis resolve deterministically.
+@(test)
+layout_mode_resolution_honors_preference_and_hysteresis :: proc(t: ^testing.T) {
+    testing.expect_value(t, resolve_initial_layout_mode(.Auto, 1280, 720),
+        viewmodel.Ui_Layout_Mode.Landscape)
+    testing.expect_value(t, resolve_initial_layout_mode(.Auto, 640, 720),
+        viewmodel.Ui_Layout_Mode.Portrait)
+    testing.expect_value(t, resolve_layout_mode(.Portrait, .Landscape, 1600, 700),
+        viewmodel.Ui_Layout_Mode.Portrait)
+    testing.expect_value(t, resolve_layout_mode(.Landscape, .Portrait, 600, 900),
+        viewmodel.Ui_Layout_Mode.Landscape)
+    testing.expect_value(t, resolve_layout_mode(.Auto, .Landscape, 89, 100),
+        viewmodel.Ui_Layout_Mode.Portrait)
+    testing.expect_value(t, resolve_layout_mode(.Auto, .Portrait, 111, 100),
+        viewmodel.Ui_Layout_Mode.Landscape)
+    testing.expect_value(t, resolve_layout_mode(.Auto, .Landscape, 100, 100),
+        viewmodel.Ui_Layout_Mode.Landscape)
+    testing.expect_value(t, resolve_layout_mode(.Auto, .Portrait, 100, 100),
+        viewmodel.Ui_Layout_Mode.Portrait)
+}
+
+//   Verify portrait uses one full-width world above a nonnegative accordion.
+@(test)
+ui_regions_portrait_is_full_width_and_compact_safe :: proc(t: ^testing.T) {
+    regions := compute_ui_regions(.Portrait, 640, 720, 0, 360)
+    testing.expect_value(t, regions.world_rect.width, f32(640))
+    testing.expect_value(t, regions.world_rect.height, f32(360))
+    testing.expect_value(t, regions.accordion_rect.x, f32(TREE_PANEL_PADDING))
+    testing.expect_value(t, regions.accordion_rect.width, f32(620))
+    view_layout := accordion_layout(
+        regions.accordion_rect, accordion_portrait_sections("Animation"), .View)
+    testing.expect_value(t, regions.text_rect, view_layout.content)
+    testing.expect(t, regions.terminal_rect.width >= 0)
+    testing.expect(t, validate_ui_regions(regions))
+
+    compact := compute_ui_regions(.Portrait, 200, 180, 0, 90)
+    testing.expect(t, validate_ui_regions(compact))
+    testing.expect(t, compact.world_rect.height <= 180)
+    testing.expect(t, compact.accordion_rect.height >= 0)
 }
 
 // Verify animation controls remain inset from the world's moving bottom-left edge.
@@ -85,7 +154,10 @@ animation_controls_apply_existing_actions :: proc(t: ^testing.T) {
 @(test)
 ui_focus_terminal_entry_and_window_activation :: proc(t: ^testing.T) {
     runtime := viewmodel.Euclid_Ui_Runtime_State{
-        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+        window = {WINDOW_WIDTH, WINDOW_HEIGHT},
+        presentation_visible = true,
+        ui_regions = compute_ui_regions(
+            .Landscape, WINDOW_WIDTH, WINDOW_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT),
     }
     focused := ui_reconcile_focus(&runtime, {window_focused = true}, true)
     testing.expect_value(t, focused.logical_focus.kind,
@@ -110,7 +182,10 @@ ui_focus_terminal_entry_and_window_activation :: proc(t: ^testing.T) {
 @(test)
 ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
     runtime := viewmodel.Euclid_Ui_Runtime_State{
-        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+        window = {WINDOW_WIDTH, WINDOW_HEIGHT},
+        presentation_visible = true,
+        ui_regions = compute_ui_regions(
+            .Landscape, WINDOW_WIDTH, WINDOW_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT),
     }
     _ = ui_reconcile_focus(&runtime, {window_focused = true}, true)
 
@@ -147,11 +222,7 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
 // Verify static routing declares splitter and panel priority independently of drawing.
 @(test)
 ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
-    runtime := viewmodel.Euclid_Ui_Runtime_State{
-        vertical_split_x = VIEW_WIDTH,
-        horizontal_split_y = VIEW_HEIGHT,
-        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
-    }
+    runtime := make_baseline_ui_runtime()
     splitter := ui_route_interaction_frame(&runtime, {
         frame = {mouse_position = {VIEW_WIDTH, 20}},
         terminal_present = true,
@@ -190,9 +261,12 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
 @(test)
 ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
     runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = {WINDOW_WIDTH, WINDOW_HEIGHT},
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
-        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+        presentation_visible = true,
+        ui_regions = compute_ui_regions(
+            .Landscape, WINDOW_WIDTH, WINDOW_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT),
     }
     terminal := runtime.ui_regions.terminal_rect
     routed := ui_route_interaction_frame(&runtime, {
@@ -221,9 +295,12 @@ ui_router_retains_captured_target_through_release :: proc(t: ^testing.T) {
 @(test)
 ui_router_refines_terminal_scrollbar_target :: proc(t: ^testing.T) {
     runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = {WINDOW_WIDTH, WINDOW_HEIGHT},
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
-        ui_regions = compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT),
+        presentation_visible = true,
+        ui_regions = compute_ui_regions(
+            .Landscape, WINDOW_WIDTH, WINDOW_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT),
     }
     terminal := runtime.ui_regions.terminal_rect
     _ = ui_route_interaction_frame(&runtime, {
@@ -293,8 +370,11 @@ ui_router_classifies_copy_capture_as_presentation :: proc(t: ^testing.T) {
 //   Verify splitter geometry uses an eight-pixel hit target and three-pixel line.
 @(test)
 splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
-    vertical := splitter_geometry(.Vertical, VIEW_WIDTH, VIEW_HEIGHT)
-    horizontal := splitter_geometry(.Horizontal, VIEW_WIDTH, VIEW_HEIGHT)
+    window := viewmodel.Ui_Window_Metrics{WINDOW_WIDTH, WINDOW_HEIGHT}
+    vertical := splitter_geometry(
+        .Vertical, .Landscape, VIEW_WIDTH, VIEW_HEIGHT, window)
+    horizontal := splitter_geometry(
+        .Horizontal, .Landscape, VIEW_WIDTH, VIEW_HEIGHT, window)
 
     testing.expect_value(t, vertical.hit_rect.width, f32(8))
     testing.expect_value(t, vertical.visible_rect.width, f32(3))
@@ -308,8 +388,10 @@ splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
 split_width_change_invalidates_dynview_panel_layout :: proc(t: ^testing.T) {
     runtime := new(dynviewmodel.Dynview_System, context.allocator)
     defer free(runtime)
-    baseline := compute_ui_regions(.Baseline, VIEW_WIDTH, VIEW_HEIGHT)
-    resized := compute_ui_regions(.Baseline, VIEW_WIDTH - 100, VIEW_HEIGHT)
+    baseline := compute_ui_regions(
+        .Landscape, WINDOW_WIDTH, WINDOW_HEIGHT, VIEW_WIDTH, VIEW_HEIGHT)
+    resized := compute_ui_regions(.Landscape, WINDOW_WIDTH, WINDOW_HEIGHT,
+        VIEW_WIDTH - 100, VIEW_HEIGHT)
 
     app_dynview.track_panel(runtime, view_text_content_panel(baseline.text_rect))
     runtime^.pending_invalidation_mask = 0
@@ -325,25 +407,121 @@ split_width_change_invalidates_dynview_panel_layout :: proc(t: ^testing.T) {
 @(test)
 splitter_intersection_selects_nearest_axis :: proc(t: ^testing.T) {
     axis, hovered := splitter_hovered_axis({VIEW_WIDTH - 1, VIEW_HEIGHT - 3},
-        VIEW_WIDTH, VIEW_HEIGHT)
+        .Landscape, VIEW_WIDTH, VIEW_HEIGHT, {WINDOW_WIDTH, WINDOW_HEIGHT})
     testing.expect(t, hovered)
     testing.expect_value(t, axis, Splitter_Axis.Vertical)
 
     axis, hovered = splitter_hovered_axis({VIEW_WIDTH - 3, VIEW_HEIGHT - 1},
-        VIEW_WIDTH, VIEW_HEIGHT)
+        .Landscape, VIEW_WIDTH, VIEW_HEIGHT, {WINDOW_WIDTH, WINDOW_HEIGHT})
     testing.expect(t, hovered)
     testing.expect_value(t, axis, Splitter_Axis.Horizontal)
 
     axis, hovered = splitter_hovered_axis({VIEW_WIDTH - 2, VIEW_HEIGHT - 2},
-        VIEW_WIDTH, VIEW_HEIGHT)
+        .Landscape, VIEW_WIDTH, VIEW_HEIGHT, {WINDOW_WIDTH, WINDOW_HEIGHT})
     testing.expect(t, hovered)
     testing.expect_value(t, axis, Splitter_Axis.Vertical)
+}
+
+//   Verify portrait exposes only one full-width horizontal splitter target.
+@(test)
+portrait_splitter_is_horizontal_and_full_width :: proc(t: ^testing.T) {
+    window := viewmodel.Ui_Window_Metrics{640, 720}
+    horizontal := splitter_geometry(.Horizontal, .Portrait, 640, 360, window)
+    testing.expect_value(t, horizontal.hit_rect.width, f32(640))
+
+    axis, hovered := splitter_hovered_axis(
+        {639, 360}, .Portrait, 640, 360, window)
+    testing.expect(t, hovered)
+    testing.expect_value(t, axis, Splitter_Axis.Horizontal)
+    axis, hovered = splitter_hovered_axis(
+        {640, 100}, .Portrait, 640, 360, window)
+    testing.expect(t, !hovered)
+}
+
+//   Verify hidden portrait presentation surfaces cannot win pointer routing.
+@(test)
+portrait_routes_origin_to_world_not_hidden_presentation :: proc(t: ^testing.T) {
+    runtime := make_baseline_ui_runtime()
+    runtime.current_layout_mode = .Portrait
+    runtime.ui_regions = compute_ui_regions(.Portrait, 640, 720, 0, 360)
+    frame := Input_Frame{mouse_position = {0, 0}}
+
+    target := ui_hover_target(&runtime, frame, true)
+    testing.expect_value(t, target.kind,
+        viewmodel.Ui_Interaction_Target_Kind.World)
+}
+
+//   Verify portrait routes only expanded View content to Presentation or Terminal.
+@(test)
+portrait_routes_expanded_view_content :: proc(t: ^testing.T) {
+    runtime := make_baseline_ui_runtime()
+    runtime.current_layout_mode = .Portrait
+    runtime.active_accordion_section = .View
+    runtime.ui_regions = compute_ui_regions(.Portrait, 640, 720, 0, 360)
+    _ = ui_publish_presentation_visibility(&runtime)
+    point := input.Input_Position{
+        runtime.ui_regions.terminal_rect.x + 1,
+        runtime.ui_regions.terminal_rect.y + 1,
+    }
+    terminal := ui_hover_target(&runtime, {mouse_position = point}, true)
+    testing.expect_value(t, terminal.focus.kind, viewmodel.Ui_Focus_Kind.Terminal)
+    presentation := ui_hover_target(&runtime, {mouse_position = point}, false)
+    testing.expect_value(t, presentation.focus.kind,
+        viewmodel.Ui_Focus_Kind.Presentation)
+
+    runtime.active_accordion_section = .Library
+    _ = ui_publish_presentation_visibility(&runtime)
+    hidden := ui_hover_target(&runtime, {mouse_position = point}, true)
+    testing.expect_value(t, hidden.focus.kind,
+        viewmodel.Ui_Focus_Kind.Accordion)
+}
+
+// Verify hiding View releases UI transactions without discarding selection or refocusing.
+@(test)
+portrait_view_hide_and_reopen_preserves_content_state :: proc(t: ^testing.T) {
+    runtime := make_baseline_ui_runtime()
+    runtime.current_layout_mode = .Portrait
+    runtime.active_accordion_section = .View
+    runtime.ui_regions = compute_ui_regions(.Portrait, 640, 720, 0, 360)
+    runtime.dynview_selection = {
+        mode = .Wrapped_Text, revision = 7, anchor = {2}, head = {5},
+        active = true, dragging = true,
+    }
+    runtime.ui_press_owner = {active = true, kind = .Dynview_Selection}
+    _ = ui_publish_presentation_visibility(&runtime)
+    _ = ui_reconcile_focus(&runtime, {window_focused = true}, true)
+
+    runtime.active_accordion_section = .Library
+    testing.expect(t, ui_publish_presentation_visibility(&runtime))
+    testing.expect(t, !runtime.ui_press_owner.active)
+    testing.expect(t, !runtime.dynview_selection.dragging)
+    testing.expect(t, runtime.dynview_selection.active)
+    testing.expect_value(t, runtime.dynview_selection.revision, u64(7))
+    testing.expect(t, runtime.interaction_frame.terminal_focus_changed)
+
+    runtime.active_accordion_section = .View
+    testing.expect(t, ui_publish_presentation_visibility(&runtime))
+    testing.expect_value(t, runtime.interaction.logical_focus.kind,
+        viewmodel.Ui_Focus_Kind.None)
+    terminal := runtime.ui_regions.terminal_rect
+    focused := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+        mouse_position = {terminal.x + 1, terminal.y + 1},
+        mouse_pressed = {.Left},
+    }, true)
+    testing.expect_value(t, focused.logical_focus.kind,
+        viewmodel.Ui_Focus_Kind.Terminal)
 }
 
 //   Verify splitter capture persists off-target, clamps, and releases on mouse-up.
 @(test)
 splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
     ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = {WINDOW_WIDTH, WINDOW_HEIGHT},
+        landscape = {
+            vertical_ratio = f32(VIEW_WIDTH) / f32(WINDOW_WIDTH),
+            horizontal_ratio = f32(VIEW_HEIGHT) / f32(WINDOW_HEIGHT),
+        },
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
     }
@@ -368,6 +546,11 @@ gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
     phases := [3]viewmodel.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
     for phase in phases {
         ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
+            window = {WINDOW_WIDTH, WINDOW_HEIGHT},
+            landscape = {
+                vertical_ratio = f32(VIEW_WIDTH) / f32(WINDOW_WIDTH),
+                horizontal_ratio = f32(VIEW_HEIGHT) / f32(WINDOW_HEIGHT),
+            },
             vertical_split_x = VIEW_WIDTH,
             horizontal_split_y = VIEW_HEIGHT,
             gif_capture_phase = phase,
@@ -386,6 +569,11 @@ gif_capture_phases_lock_splitters :: proc(t: ^testing.T) {
 @(test)
 scenario_splitter_positions_follow_ui_policy :: proc(t: ^testing.T) {
     ui_runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = {WINDOW_WIDTH, WINDOW_HEIGHT},
+        landscape = {
+            vertical_ratio = f32(VIEW_WIDTH) / f32(WINDOW_WIDTH),
+            horizontal_ratio = f32(VIEW_HEIGHT) / f32(WINDOW_HEIGHT),
+        },
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
         ui_press_owner = {active = true, kind = .Splitter,
@@ -407,6 +595,114 @@ scenario_splitter_positions_follow_ui_policy :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime.vertical_split_x, f32(WORLD_MIN_WIDTH))
 }
 
+//   Verify resize derives split pixels from intent and releases stale UI capture.
+@(test)
+window_resize_preserves_split_ratios_and_releases_capture :: proc(t: ^testing.T) {
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = {1280, 720},
+        landscape = {
+            vertical_ratio = 0.703125,
+            horizontal_ratio = f32(500) / f32(720),
+        },
+        vertical_split_x = 900,
+        horizontal_split_y = 500,
+        ui_press_owner = {active = true, kind = .Splitter,
+            id = SPLITTER_VERTICAL_PRESS_ID},
+        tree_scroll_dragging = true,
+        dynview_selection = {dragging = true},
+    }
+
+    testing.expect(t, ui_apply_window_metrics(&runtime, {1024, 768}))
+    testing.expect_value(t, runtime.vertical_split_x, f32(720))
+    testing.expect(t, abs(runtime.horizontal_split_y - f32(533.3333)) < 0.001)
+    testing.expect(t, !runtime.ui_press_owner.active)
+    testing.expect(t, !runtime.tree_scroll_dragging)
+    testing.expect(t, !runtime.dynview_selection.dragging)
+}
+
+//   Verify entering portrait restores its split and accordion intent.
+@(test)
+layout_transition_restores_portrait_state :: proc(t: ^testing.T) {
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = {1280, 720},
+        layout_preference = .Auto,
+        landscape = {
+            vertical_ratio = 0.7,
+            horizontal_ratio = 0.6,
+            active_section = .Settings,
+        },
+        portrait = {
+            world_height_ratio = 0.45,
+            active_section = .Save_Gif,
+            entered = true,
+        },
+        current_layout_mode = .Landscape,
+        active_accordion_section = .Settings,
+        ui_press_owner = {active = true, kind = .Splitter,
+            id = SPLITTER_VERTICAL_PRESS_ID},
+    }
+
+    testing.expect(t, ui_apply_window_metrics(&runtime, {640, 720}))
+    testing.expect_value(t, runtime.current_layout_mode,
+        viewmodel.Ui_Layout_Mode.Portrait)
+    testing.expect_value(t, runtime.horizontal_split_y, f32(324))
+    testing.expect_value(t, runtime.active_accordion_section,
+        viewmodel.Ui_Accordion_Section.Save_Gif)
+    testing.expect(t, runtime.portrait.entered)
+    testing.expect(t, !runtime.ui_press_owner.active)
+}
+
+//   Verify first portrait entry selects View regardless of unentered memory.
+@(test)
+layout_first_portrait_entry_selects_view :: proc(t: ^testing.T) {
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = {1280, 720},
+        layout_preference = .Auto,
+        landscape = {active_section = .Library},
+        portrait = {world_height_ratio = 0.5, active_section = .Settings},
+        current_layout_mode = .Landscape,
+        active_accordion_section = .Library,
+    }
+    testing.expect(t, ui_apply_window_metrics(&runtime, {640, 720}))
+    testing.expect_value(t, runtime.active_accordion_section,
+        viewmodel.Ui_Accordion_Section.View)
+    testing.expect_value(t, runtime.portrait.active_section,
+        viewmodel.Ui_Accordion_Section.View)
+    testing.expect(t, runtime.portrait.entered)
+}
+
+//   Verify returning to landscape preserves portrait edits and restores landscape.
+@(test)
+layout_transition_restores_landscape_state :: proc(t: ^testing.T) {
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = {640, 720},
+        layout_preference = .Auto,
+        landscape = {
+            vertical_ratio = 0.7,
+            horizontal_ratio = 0.6,
+            active_section = .Settings,
+        },
+        portrait = {
+            world_height_ratio = 0.5,
+            active_section = .Library,
+            entered = true,
+        },
+        current_layout_mode = .Portrait,
+        active_accordion_section = .Library,
+        horizontal_split_y = 360,
+    }
+    testing.expect(t, ui_apply_window_metrics(&runtime, {1280, 720}))
+    testing.expect_value(t, runtime.current_layout_mode,
+        viewmodel.Ui_Layout_Mode.Landscape)
+    testing.expect_value(t, runtime.vertical_split_x, f32(896))
+    testing.expect(t, abs(runtime.horizontal_split_y - f32(432)) < 0.001)
+    testing.expect_value(t, runtime.active_accordion_section,
+        viewmodel.Ui_Accordion_Section.Settings)
+    testing.expect_value(t, runtime.portrait.world_height_ratio, f32(0.5))
+    testing.expect_value(t, runtime.portrait.active_section,
+        viewmodel.Ui_Accordion_Section.Library)
+}
+
 //   Verify programmatic presentation scrolling clears capture and rejects Terminal.
 @(test)
 scenario_presentation_scroll_follows_ui_policy :: proc(t: ^testing.T) {
@@ -416,6 +712,7 @@ scenario_presentation_scroll_follows_ui_policy :: proc(t: ^testing.T) {
     animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
     defer free(animation)
     state^.julia_interface^.selected_animation = animation
+    state^.ui_runtime.presentation_visible = true
     state^.ui_runtime.ui_press_owner = {active = true, kind = .Scrollbar,
         id = UI_PRESENTATION_SCROLLBAR_ID}
     state^.ui_runtime.text_scroll_dragging = true
@@ -735,7 +1032,8 @@ pending_tree_reveal_applies_display_state :: proc(t: ^testing.T) {
 @(test)
 accordion_layout_places_active_content_after_selected_header :: proc(t: ^testing.T) {
     panel := rl.Rectangle{10, 20, 300, 500}
-    layout := accordion_layout(panel, .Save_Gif)
+    sections := accordion_landscape_sections()
+    layout := accordion_layout(panel, sections, .Save_Gif)
     testing.expect_value(t, layout.headers[0].y, f32(26))
     testing.expect_value(t, layout.headers[1].y,
         layout.headers[0].y + ACCORDION_HEADER_HEIGHT)
@@ -745,7 +1043,68 @@ accordion_layout_places_active_content_after_selected_header :: proc(t: ^testing
         layout.content.y + layout.content.height)
     testing.expect_value(t, layout.content.height,
         panel.height - ACCORDION_PANEL_INSET * 2 -
-            ACCORDION_HEADER_HEIGHT * ACCORDION_SECTION_COUNT)
+            ACCORDION_HEADER_HEIGHT * f32(sections.count))
+}
+
+// Verify portrait descriptors lead with the borrowed title and preserve utility order.
+@(test)
+accordion_portrait_descriptors_include_selected_title :: proc(t: ^testing.T) {
+    sections := accordion_portrait_sections("Euclid's Elements")
+    testing.expect_value(t, sections.count, 4)
+    testing.expect_value(t, sections.items[0].section,
+        viewmodel.Ui_Accordion_Section.View)
+    testing.expect_value(t, sections.items[0].label, "Euclid's Elements")
+    testing.expect_value(t, sections.items[1].section,
+        viewmodel.Ui_Accordion_Section.Library)
+    testing.expect_value(t, sections.items[3].section,
+        viewmodel.Ui_Accordion_Section.Settings)
+    testing.expect_value(t,
+        accordion_portrait_sections("").items[0].label, "Animation")
+}
+
+// Verify landscape retains three utility headers without a View descriptor.
+@(test)
+accordion_landscape_descriptors_remain_unchanged :: proc(t: ^testing.T) {
+    sections := accordion_landscape_sections()
+    testing.expect_value(t, sections.count, 3)
+    testing.expect_value(t, sections.items[0].section,
+        viewmodel.Ui_Accordion_Section.Library)
+    testing.expect_value(t, sections.items[1].section,
+        viewmodel.Ui_Accordion_Section.Save_Gif)
+    testing.expect_value(t, sections.items[2].section,
+        viewmodel.Ui_Accordion_Section.Settings)
+}
+
+// Verify portrait places View content after its first header and keeps four headers.
+@(test)
+accordion_portrait_layout_places_view_first :: proc(t: ^testing.T) {
+    panel := rl.Rectangle{10, 20, 300, 500}
+    sections := accordion_portrait_sections("Proposition I")
+    layout := accordion_layout(panel, sections, .View)
+    testing.expect_value(t, layout.content.y,
+        layout.headers[0].y + ACCORDION_HEADER_HEIGHT)
+    testing.expect_value(t, layout.headers[1].y,
+        layout.content.y + layout.content.height)
+    testing.expect_value(t, layout.content.height,
+        panel.height - ACCORDION_PANEL_INSET * 2 -
+            ACCORDION_HEADER_HEIGHT * f32(sections.count))
+}
+
+// Verify the selected catalogue title is borrowed with an Animation fallback.
+@(test)
+selected_animation_title_tracks_current_selection :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    animation := bridgemodel.Euclid_Julia_Animation_Interface{
+        name = "Proclus's Commentary"}
+    state^.julia_interface = &ji
+    testing.expect_value(t, selected_animation_title(state), "Animation")
+    ji.selected_animation = &animation
+    testing.expect_value(t, selected_animation_title(state),
+        "Proclus's Commentary")
+    animation.name = ""
+    testing.expect_value(t, selected_animation_title(state), "Animation")
 }
 
 // Verify a header click selects exactly one section and moves expanded content.
@@ -754,22 +1113,22 @@ accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
     active := viewmodel.Ui_Accordion_Section.Library
     panel := rl.Rectangle{10, 20, 300, 500}
-    settings := accordion_layout(panel, .Library).headers[int(
-        viewmodel.Ui_Accordion_Section.Settings)]
+    sections := accordion_landscape_sections()
+    settings_index := accordion_section_index(sections, .Settings)
+    settings := accordion_layout(panel, sections, .Library).headers[settings_index]
     mouse_position := input.Input_Position{settings.x + 2, settings.y + 2}
     pressed_context := Accordion_Context{panel = panel,
         mouse_input = {mouse_position = mouse_position,
             mouse_pressed = {.Left}, mouse_down = {.Left}},
         press_owner = &owner, active = active}
-    _ = prepare_accordion(pressed_context, &active)
+    _ = prepare_accordion(pressed_context, sections, &active)
     testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Library)
 
     released_context := pressed_context
     released_context.mouse_input = {
         mouse_position = mouse_position, mouse_released = {.Left}}
-    prepared := prepare_accordion(released_context, &active)
+    prepared := prepare_accordion(released_context, sections, &active)
     testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Settings)
-    settings_index := int(viewmodel.Ui_Accordion_Section.Settings)
     testing.expect_value(t, prepared.layout.content.y,
         prepared.layout.headers[settings_index].y + ACCORDION_HEADER_HEIGHT)
     testing.expect(t, !owner.active)

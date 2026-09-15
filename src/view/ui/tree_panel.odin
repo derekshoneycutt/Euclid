@@ -58,6 +58,24 @@ Tree_Walk_Context :: struct {
     hovered_expander_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
+// Frame-local prepared values consumed by accordion child drawing.
+Accordion_Draw_Preparation :: struct {
+    controls: Ui_Control_Preparation,
+    terminal: Terminal_Prepared_Frame,
+    presentation: Presentation_Preparation,
+}
+
+// Borrow the selected catalogue title for the current frame.
+selected_animation_title :: proc(state: ^core.Euclid_General_State) -> string {
+    if state == nil || state^.julia_interface == nil ||
+        state^.julia_interface^.selected_animation == nil {
+        return "Animation"
+    }
+    title := state^.julia_interface^.selected_animation^.name
+    if len(title) == 0 { return "Animation" }
+    return title
+}
+
 // Prepare accordion headers and commit one active section before child updates.
 prepare_accordion_view :: proc(
     state: ^core.Euclid_General_State,
@@ -65,6 +83,8 @@ prepare_accordion_view :: proc(
     mouse_input: Input_Frame) -> Accordion_Preparation {
     ui_runtime := &state^.ui_runtime
     active_before := ui_runtime^.active_accordion_section
+    sections := accordion_sections_for_layout(
+        ui_runtime^.current_layout_mode, selected_animation_title(state))
     prepared := prepare_accordion(Accordion_Context{
         panel = panel,
         mouse_input = mouse_input,
@@ -72,9 +92,10 @@ prepare_accordion_view :: proc(
         active = ui_runtime^.active_accordion_section,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
-    }, &ui_runtime^.active_accordion_section)
+    }, sections, &ui_runtime^.active_accordion_section)
     if active_before != ui_runtime^.active_accordion_section {
         ui_runtime^.tree_scroll_dragging = false
+        _ = ui_publish_presentation_visibility(ui_runtime)
     }
     return prepared
 }
@@ -84,10 +105,13 @@ draw_accordion_active_content :: proc(
     state: ^core.Euclid_General_State,
     content_panel: rl.Rectangle,
     mouse_input: Input_Frame,
-    prepared: Ui_Control_Preparation) {
+    prepared: Accordion_Draw_Preparation) {
     ji := state.julia_interface
     ui_runtime := &state.ui_runtime
     switch ui_runtime^.active_accordion_section {
+    case .View:
+        draw_view_text_panel(
+            state, content_panel, prepared.terminal, prepared.presentation)
     case .Library:
         draw_tree_list_panel(Tree_List_Params{
             ji = ji,
@@ -97,11 +121,12 @@ draw_accordion_active_content :: proc(
             scroll_y = &state^.ui_runtime.tree_scroll_y,
             font = view_font.cache_borrow(&state.font_cache, .Regular),
             font_resolver = view_font.cache_terminal_resolver(&state.font_cache),
-        }, prepared.tree)
+        }, prepared.controls.tree)
     case .Save_Gif:
-        draw_gif_view(state, content_panel, mouse_input, prepared.gif)
+        draw_gif_view(state, content_panel, mouse_input, prepared.controls.gif)
     case .Settings:
-        draw_settings_view(state, content_panel, mouse_input, prepared.settings)
+        draw_settings_view(
+            state, content_panel, mouse_input, prepared.controls.settings)
     }
 }
 
@@ -110,11 +135,11 @@ draw_accordion_view :: proc(
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
     mouse_input: Input_Frame,
-    prepared: Ui_Control_Preparation) {
+    prepared: Accordion_Draw_Preparation) {
     ui_runtime := &state^.ui_runtime
     _ = draw_container(panel, .Dark_Red)
     draw_accordion_active_content(
-        state, prepared.accordion.layout.content, mouse_input, prepared)
+        state, prepared.controls.accordion.layout.content, mouse_input, prepared)
 
     draw_accordion(Accordion_Context{
         panel = panel,
@@ -123,7 +148,7 @@ draw_accordion_view :: proc(
         active = ui_runtime^.active_accordion_section,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
-    }, prepared.accordion)
+    }, prepared.controls.accordion)
 }
 
 //   Build a stable per-frame widget id for a node based on its pointer value.

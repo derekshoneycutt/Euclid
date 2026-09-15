@@ -6,6 +6,75 @@ import evidence_session "evidence/session"
 
 import "core:testing"
 
+// Verify a no-argument launch retains the established fixed landscape-sized policy.
+@(test)
+window_policy_defaults_preserve_current_launch :: proc(t: ^testing.T) {
+    policy := default_window_startup_policy()
+
+    testing.expect_value(t, policy.width, 1280)
+    testing.expect_value(t, policy.height, 720)
+    testing.expect_value(t, policy.mode, core.Window_Mode.Fixed)
+    testing.expect_value(t, policy.layout, core.Layout_Preference.Auto)
+    testing.expect(t, !policy.custom_size_set)
+}
+
+// Verify all valid startup-window option classes produce typed settings.
+@(test)
+window_policy_arguments_parse_valid_values :: proc(t: ^testing.T) {
+    policy := default_window_startup_policy()
+
+    testing.expect(t, parse_window_policy_param(
+        "--window-preset=portrait", &policy))
+    testing.expect_value(t, policy.width, 640)
+    testing.expect_value(t, policy.height, 720)
+    parse_window_policy_param("--window-preset=landscape", &policy)
+    testing.expect_value(t, policy.width, 1280)
+    testing.expect(t, parse_window_policy_param(
+        "--window-mode=resizable", &policy))
+    testing.expect_value(t, policy.mode, core.Window_Mode.Resizable)
+    parse_window_policy_param("--window-mode=fixed", &policy)
+    testing.expect_value(t, policy.mode, core.Window_Mode.Fixed)
+    testing.expect(t, parse_window_policy_param("--layout=portrait", &policy))
+    testing.expect_value(t, policy.layout, core.Layout_Preference.Portrait)
+    parse_window_policy_param("--layout=landscape", &policy)
+    testing.expect_value(t, policy.layout, core.Layout_Preference.Landscape)
+}
+
+// Verify custom dimensions dominate presets while later custom dimensions win.
+@(test)
+window_policy_custom_size_has_preset_precedence :: proc(t: ^testing.T) {
+    policy := default_window_startup_policy()
+
+    parse_window_policy_param("--window-preset=portrait", &policy)
+    parse_window_policy_param("--window-size=900x1100", &policy)
+    parse_window_policy_param("--window-preset=landscape", &policy)
+    testing.expect_value(t, policy.width, 900)
+    testing.expect_value(t, policy.height, 1100)
+
+    parse_window_policy_param("--window-size=1024x768", &policy)
+    testing.expect_value(t, policy.width, 1024)
+    testing.expect_value(t, policy.height, 768)
+}
+
+// Verify malformed options are handled atomically and retain prior valid values.
+@(test)
+window_policy_invalid_values_preserve_prior_policy :: proc(t: ^testing.T) {
+    policy := default_window_startup_policy()
+    parse_window_policy_param("--window-size=800x600", &policy)
+    parse_window_policy_param("--window-size=100xgarbage", &policy)
+    parse_window_policy_param("--window-size=319x240", &policy)
+    parse_window_policy_param("--window-size=320x16385", &policy)
+    parse_window_policy_param("--window-mode=fluid", &policy)
+    parse_window_policy_param("--layout=square", &policy)
+    parse_window_policy_param("--window-preset=wide", &policy)
+
+    testing.expect_value(t, policy.width, 800)
+    testing.expect_value(t, policy.height, 600)
+    testing.expect_value(t, policy.mode, core.Window_Mode.Fixed)
+    testing.expect_value(t, policy.layout, core.Layout_Preference.Auto)
+    testing.expect(t, policy.custom_size_set)
+}
+
 // Verify diagnostics paths are bounded and invalid values preserve prior settings.
 @(test)
 diagnostics_argument_configures_logging_path :: proc(t: ^testing.T) {
