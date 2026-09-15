@@ -65,6 +65,13 @@ Vector_Dust_Field_Stencil :: struct {
     weights: [VECTOR_DUST_FIELD_STENCIL_CAP]f32,
 }
 
+// Cache one grounded particle's compact bilinear transfer coordinates.
+Vector_Dust_Transfer :: struct {
+    particle_index: i32,
+    base_node: i32,
+    fraction_x, fraction_y: f32,
+}
+
 // Describe one inclusive rectangular region of the vector-dust field.
 Vector_Dust_Field_Bounds :: struct {
     min_x, min_y: i32,
@@ -179,6 +186,8 @@ Particle_System :: struct {
     dust_collision_refined_cell_count: int,
 
     vector_dust_field: Vector_Dust_Field_State,
+    vector_dust_transfers: [MAX_LOW_PARTICLES]Vector_Dust_Transfer,
+    vector_dust_transfer_count: int,
     vector_dust_grounded_count: int,
     vector_dust_peak_speed_sq: f32,
     vector_dust_kinetic_measure: f32,

@@ -694,6 +694,7 @@ reset_particles :: proc(ps: ^Particle_System) {
     ps.dust_floor_rest_count = 0
     ps.dust_collision_refined_cell_count = 0
     vector_dust_field_clear(&ps^.vector_dust_field)
+    ps.vector_dust_transfer_count = 0
     ps.vector_dust_grounded_count = 0
     ps.vector_dust_peak_speed_sq = 0
     ps.vector_dust_kinetic_measure = 0

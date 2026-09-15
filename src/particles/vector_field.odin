@@ -9,6 +9,7 @@ import rl "vendor:raylib"
 Vector_Dust_Field_State :: particlemodel.Vector_Dust_Field_State
 Vector_Dust_Field_Stencil :: particlemodel.Vector_Dust_Field_Stencil
 Vector_Dust_Field_Bounds :: particlemodel.Vector_Dust_Field_Bounds
+Vector_Dust_Transfer :: particlemodel.Vector_Dust_Transfer
 
 Vector_Dust_Field_Neighbors :: struct {
     left, right, down, up: int,
@@ -21,19 +22,32 @@ VECTOR_DUST_PRESSURE_ACCELERATION_MAX :: f32(0.03)
 VECTOR_DUST_VISCOSITY :: f32(0.000048)
 VECTOR_DUST_DRAG_RATE :: f32(1.5)
 
-// Build the four-node bilinear stencil for one clamped board-space position.
-vector_dust_field_stencil :: proc(position: rl.Vector2) -> Vector_Dust_Field_Stencil {
+// Build compact transfer coordinates for one clamped board-space position.
+vector_dust_field_transfer :: proc(
+        position: rl.Vector2, particle_index: int = -1) -> Vector_Dust_Transfer {
     coordinates := dust_field_coordinates(position)
     base_x := min(int(math.floor(f64(coordinates.x))), DUST_FIELD_DIM - 2)
     base_y := min(int(math.floor(f64(coordinates.y))), DUST_FIELD_DIM - 2)
-    fraction_x := coordinates.x - f32(base_x)
-    fraction_y := coordinates.y - f32(base_y)
+    return {
+        particle_index = i32(particle_index),
+        base_node = i32(base_y * DUST_FIELD_DIM + base_x),
+        fraction_x = coordinates.x - f32(base_x),
+        fraction_y = coordinates.y - f32(base_y),
+    }
+}
+
+// Expand compact transfer coordinates into their four-node bilinear stencil.
+vector_dust_field_transfer_stencil :: #force_inline proc(
+        transfer: Vector_Dust_Transfer) -> Vector_Dust_Field_Stencil {
+    base := transfer.base_node
+    fraction_x := transfer.fraction_x
+    fraction_y := transfer.fraction_y
     return {
         indices = {
-            i32(base_y * DUST_FIELD_DIM + base_x),
-            i32(base_y * DUST_FIELD_DIM + base_x + 1),
-            i32((base_y + 1) * DUST_FIELD_DIM + base_x),
-            i32((base_y + 1) * DUST_FIELD_DIM + base_x + 1),
+            base,
+            base + 1,
+            base + DUST_FIELD_DIM,
+            base + DUST_FIELD_DIM + 1,
         },
         weights = {
             (1 - fraction_x) * (1 - fraction_y),
@@ -42,6 +56,11 @@ vector_dust_field_stencil :: proc(position: rl.Vector2) -> Vector_Dust_Field_Ste
             fraction_x * fraction_y,
         },
     }
+}
+
+// Build the four-node bilinear stencil for one clamped board-space position.
+vector_dust_field_stencil :: proc(position: rl.Vector2) -> Vector_Dust_Field_Stencil {
+    return vector_dust_field_transfer_stencil(vector_dust_field_transfer(position))
 }
 
 // Clear all five fixed field planes before the next particle-to-grid transfer.
@@ -105,9 +124,9 @@ vector_dust_field_solve_bounds :: proc(
 }
 
 // Deposit one particle's unit density and XY momentum in one stencil traversal.
-vector_dust_field_deposit :: proc(field: ^Vector_Dust_Field_State,
-    position, velocity: rl.Vector2) {
-    stencil := vector_dust_field_stencil(position)
+vector_dust_field_deposit_transfer :: proc(field: ^Vector_Dust_Field_State,
+        transfer: Vector_Dust_Transfer, velocity: rl.Vector2) {
+    stencil := vector_dust_field_transfer_stencil(transfer)
     vector_dust_field_include_stencil(field, stencil)
     for stencil_index in 0..<particlemodel.VECTOR_DUST_FIELD_STENCIL_CAP {
         node := int(stencil.indices[stencil_index])
@@ -116,6 +135,13 @@ vector_dust_field_deposit :: proc(field: ^Vector_Dust_Field_State,
         field^.momentum_x[node] += velocity.x * weight
         field^.momentum_y[node] += velocity.y * weight
     }
+}
+
+// Deposit one position's unit density and XY momentum.
+vector_dust_field_deposit :: proc(field: ^Vector_Dust_Field_State,
+        position, velocity: rl.Vector2) {
+    vector_dust_field_deposit_transfer(
+        field, vector_dust_field_transfer(position), velocity)
 }
 
 // Convert deposited momentum to velocity inside one inclusive rectangle.
@@ -138,9 +164,9 @@ vector_dust_field_normalize :: proc(
 }
 
 // Reconstruct one XY velocity from the four surrounding field nodes.
-vector_dust_field_sample :: proc(field: ^Vector_Dust_Field_State,
-    position: rl.Vector2) -> rl.Vector2 {
-    stencil := vector_dust_field_stencil(position)
+vector_dust_field_sample_transfer :: proc(
+        field: ^Vector_Dust_Field_State, transfer: Vector_Dust_Transfer) -> rl.Vector2 {
+    stencil := vector_dust_field_transfer_stencil(transfer)
     result: rl.Vector2
     for stencil_index in 0..<particlemodel.VECTOR_DUST_FIELD_STENCIL_CAP {
         node := int(stencil.indices[stencil_index])
@@ -149,6 +175,13 @@ vector_dust_field_sample :: proc(field: ^Vector_Dust_Field_State,
         result.y += field^.solved_velocity_y[node] * weight
     }
     return result
+}
+
+// Reconstruct one XY velocity at a board-space position.
+vector_dust_field_sample :: proc(field: ^Vector_Dust_Field_State,
+        position: rl.Vector2) -> rl.Vector2 {
+    return vector_dust_field_sample_transfer(
+        field, vector_dust_field_transfer(position))
 }
 
 // Evaluate yielded pressure for one deposited density value.
@@ -246,6 +279,7 @@ vector_dust_field_evolve :: proc(field: ^Vector_Dust_Field_State, dt: f32) {
 vector_dust_field_deposit_grounded :: proc(ps: ^Particle_System) {
     field := &ps^.vector_dust_field
     vector_dust_field_prepare(field)
+    ps^.vector_dust_transfer_count = 0
     for index in 0..<ps^.use_max_dust_particles {
         if !ps^.low_particles.alive[index] ||
             ps^.low_particles.pos_z[index] > DUST_FLOOR_Z {
@@ -255,7 +289,10 @@ vector_dust_field_deposit_grounded :: proc(ps: ^Particle_System) {
             ps^.low_particles.pos_y[index]}
         velocity := Vector2{ps^.low_particles.vel_x[index],
             ps^.low_particles.vel_y[index]}
-        vector_dust_field_deposit(field, position, velocity)
+        transfer := vector_dust_field_transfer(position, index)
+        ps^.vector_dust_transfers[ps^.vector_dust_transfer_count] = transfer
+        ps^.vector_dust_transfer_count += 1
+        vector_dust_field_deposit_transfer(field, transfer, velocity)
     }
 }
 
@@ -265,22 +302,17 @@ vector_dust_field_assign_grounded :: proc(ps: ^Particle_System) {
     ps^.vector_dust_grounded_count = 0
     ps^.vector_dust_peak_speed_sq = 0
     ps^.vector_dust_kinetic_measure = 0
-    for index in 0..<ps^.use_max_dust_particles {
-        if !ps^.low_particles.alive[index] ||
-            ps^.low_particles.pos_z[index] > DUST_FLOOR_Z {
-            continue
-        }
-        position := Vector2{ps^.low_particles.pos_x[index],
-            ps^.low_particles.pos_y[index]}
-        velocity := vector_dust_field_sample(field, position)
+    for transfer in ps^.vector_dust_transfers[:ps^.vector_dust_transfer_count] {
+        index := int(transfer.particle_index)
+        velocity := vector_dust_field_sample_transfer(field, transfer)
         ps^.low_particles.vel_x[index] = velocity.x
         ps^.low_particles.vel_y[index] = velocity.y
         speed_sq := velocity.x * velocity.x + velocity.y * velocity.y
-        ps^.vector_dust_grounded_count += 1
         ps^.vector_dust_peak_speed_sq = max(
             ps^.vector_dust_peak_speed_sq, speed_sq)
         ps^.vector_dust_kinetic_measure += speed_sq
     }
+    ps^.vector_dust_grounded_count = ps^.vector_dust_transfer_count
 }
 
 // Run one field-only grounded XY update after ballistic and contact mutations.

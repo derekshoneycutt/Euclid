@@ -49,6 +49,20 @@ vector_dust_corner_weights_and_indices_are_valid :: proc(t: ^testing.T) {
     }
 }
 
+// Verify compact transfer coordinates retain slot identity and bilinear position.
+@(test)
+vector_dust_transfer_caches_compact_coordinates :: proc(t: ^testing.T) {
+    transfer := vector_dust_field_transfer({0.347, 0.612}, 37)
+
+    testing.expect_value(t, transfer.particle_index, i32(37))
+    testing.expect_value(t, transfer.base_node, i32(153 * DUST_FIELD_DIM + 86))
+    test_helpers.expect_close(t, transfer.fraction_x, 0.75, "transfer fraction x")
+    test_helpers.expect_close(t, transfer.fraction_y, 0, "transfer fraction y")
+    stencil := vector_dust_field_transfer_stencil(transfer)
+    test_helpers.expect_close(t, vector_dust_test_weight_sum(stencil), 1,
+        "cached transfer should preserve unit weight")
+}
+
 // Verify one transfer conserves unit density and both momentum components.
 @(test)
 vector_dust_deposit_conserves_density_and_momentum :: proc(t: ^testing.T) {

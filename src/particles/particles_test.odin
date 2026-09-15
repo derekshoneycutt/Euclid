@@ -1400,6 +1400,32 @@ update_particles_bypasses_legacy_grounded_authorities :: proc(t: ^testing.T) {
     testing.expect_value(t, ps^.dust_sleeping_count, 0)
 }
 
+// Verify P2G caches grounded particles once in stable slot order.
+@(test)
+vector_dust_transfers_are_stable_and_grounded_only :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 4
+    ps^.low_particles[0] = {
+        pos_x = 0.2, pos_y = 0.3, pos_z = DUST_FLOOR_Z,
+        vel_x = 0.001, life = 10, alive = true}
+    ps^.low_particles[1] = {
+        pos_x = 0.4, pos_y = 0.5, pos_z = DUST_FLOOR_Z + 0.1,
+        vel_x = 0.007, life = 10, alive = true}
+    ps^.low_particles[3] = {
+        pos_x = 0.7, pos_y = 0.8, pos_z = DUST_FLOOR_Z,
+        vel_y = -0.002, life = 10, alive = true}
+
+    vector_dust_field_deposit_grounded(ps)
+
+    testing.expect_value(t, ps^.vector_dust_transfer_count, 2)
+    testing.expect_value(t, ps^.vector_dust_transfers[0].particle_index, i32(0))
+    testing.expect_value(t, ps^.vector_dust_transfers[1].particle_index, i32(3))
+    test_helpers.expect_close(t,
+        vector_dust_test_plane_sum(&ps^.vector_dust_field.density), 2,
+        "grounded transfer density")
+}
+
 //   Verify reset_particles zeroes runtime state and marks every slot dead.
 @(test)
 reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testing.T) {
@@ -1417,6 +1443,7 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     ps^.high_particles.age[0] = 0.75
     ps^.dust_collision_active_cell_count = 2
     ps^.dust_collision_candidate_count = 17
+    ps^.vector_dust_transfer_count = 2
     ps^.dust_field_suppressed_pair_count = 11
     ps^.dust_relaxation_parent_levels[0] = 2
     ps^.dust_relaxation_leaf_quiet_frames[0] = DUST_SLEEP_QUIET_FRAMES
@@ -1428,6 +1455,7 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     testing.expect_value(t, ps^.spawn_timer, 0.0)
     testing.expect_value(t, ps^.dust_collision_active_cell_count, 0)
     testing.expect_value(t, ps^.dust_collision_candidate_count, u64(0))
+    testing.expect_value(t, ps^.vector_dust_transfer_count, 0)
     testing.expect_value(t, ps^.dust_field_suppressed_pair_count, u64(0))
     testing.expect_value(t, ps^.dust_relaxation_parent_levels[0], u8(0))
     testing.expect_value(t, ps^.dust_relaxation_leaf_quiet_frames[0], u16(0))
