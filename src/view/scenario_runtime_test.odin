@@ -171,6 +171,8 @@ scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
         &runtime, &contact, &identity)
     testing.expect(t, handled && accepted)
     testing.expect_value(t, particle_system^.dust_tool_contact_count, 1)
+    testing.expect_value(t, particle_system^.dust_tool_contacts[0].source,
+        particlemodel.Dust_Tool_Contact_Source.Scenario)
 
     kick := scenario.Command{kind = .Kick_Dust}
     handled, accepted = scenario_issue_generic_action(&runtime, &kick, &identity)

@@ -113,6 +113,13 @@ Dust_Emission_Request_Queue :: struct {
     count: int,
 }
 
+// Identify the owner semantics used to coalesce adjacent tool contacts.
+Dust_Tool_Contact_Source :: enum u8 {
+    Point,
+    Compass_Span,
+    Scenario,
+}
+
 // Describe one ordered endpoint push with an optional sampled compass sweep.
 Dust_Tool_Contact :: struct {
     endpoint: rl.Vector3,
@@ -121,6 +128,7 @@ Dust_Tool_Contact :: struct {
     max_spawn_sequence: u64,
     sample_count: i32,
     has_sweep: bool,
+    source: Dust_Tool_Contact_Source,
 }
 
 // Store one particle's simulation and rendering state.
@@ -161,6 +169,7 @@ Particle_System :: struct {
     dust_tool_contacts: [DUST_TOOL_CONTACT_CAP]Dust_Tool_Contact,
     dust_tool_contact_count: int,
     dust_tool_contact_overflow_count: int,
+    dust_tool_contact_coalesced_count: u64,
     dust_contact_candidate_bits: [DUST_CONTACT_CANDIDATE_WORD_COUNT]u64,
     dust_contact_candidate_visit_count: u64,
     dust_slot_spawn_sequences: [MAX_LOW_PARTICLES]u64,

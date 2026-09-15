@@ -395,6 +395,42 @@ dust_tool_contact_queue_is_bounded :: proc(t: ^testing.T) {
     testing.expect_value(t, ps^.dust_tool_contact_overflow_count, 1)
 }
 
+// Verify adjacent redundant contacts coalesce without crossing source or spawn bounds.
+@(test)
+dust_tool_contacts_coalesce_only_with_matching_semantics :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    first_span := particlemodel.Dust_Tool_Contact{
+        endpoint = {0.1, 0.2, 0}, segment_first = {0.1, 0.2, 0},
+        segment_second = {0.4, 0.2, 0}, sample_count = 24,
+        has_sweep = true, source = .Compass_Span}
+    final_span := first_span
+    final_span.endpoint = {0.5, 0.2, 0}
+    final_span.segment_second = final_span.endpoint
+    duplicate := particlemodel.Dust_Tool_Contact{
+        endpoint = {0.7, 0.8, 0}, source = .Point}
+    testing.expect(t, queue_dust_tool_contact(ps, first_span))
+    testing.expect(t, queue_dust_tool_contact(ps, final_span))
+    testing.expect(t, queue_dust_tool_contact(ps, duplicate))
+    testing.expect(t, queue_dust_tool_contact(ps, duplicate))
+    scenario := duplicate
+    scenario.source = .Scenario
+    testing.expect(t, queue_dust_tool_contact(ps, scenario))
+    ps^.dust_spawn_sequence += 1
+    testing.expect(t, queue_dust_tool_contact(ps, scenario))
+
+    coalesce_dust_tool_contacts(ps)
+
+    testing.expect_value(t, ps^.dust_tool_contact_count, 4)
+    testing.expect_value(t, ps^.dust_tool_contact_coalesced_count, u64(2))
+    testing.expect_value(t, ps^.dust_tool_contacts[0], final_span)
+    testing.expect_value(t, ps^.dust_tool_contacts[1], duplicate)
+    testing.expect_value(t, ps^.dust_tool_contacts[2].source,
+        particlemodel.Dust_Tool_Contact_Source.Scenario)
+    testing.expect_value(t, ps^.dust_tool_contacts[2].max_spawn_sequence, u64(0))
+    testing.expect_value(t, ps^.dust_tool_contacts[3].max_spawn_sequence, u64(1))
+}
+
 // Verify rebuilding exact membership observes a contact crossing a cell boundary.
 @(test)
 exact_dust_grid_rebuild_tracks_contact_displacement :: proc(t: ^testing.T) {
@@ -1554,6 +1590,22 @@ reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testin
     testing.expect_value(t, ps^.particles.age[0], 0.0)
     testing.expect(t, !ps^.high_particles.alive[0])
     testing.expect_value(t, ps^.high_particles.age[0], 0.0)
+}
+
+//   Verify reset_particles clears queued contact state and diagnostics.
+@(test)
+reset_particles_clears_dust_tool_contact_state :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.dust_tool_contact_count = 2
+    ps^.dust_tool_contact_overflow_count = 3
+    ps^.dust_tool_contact_coalesced_count = 4
+
+    reset_particles(ps)
+
+    testing.expect_value(t, ps^.dust_tool_contact_count, 0)
+    testing.expect_value(t, ps^.dust_tool_contact_overflow_count, 0)
+    testing.expect_value(t, ps^.dust_tool_contact_coalesced_count, u64(0))
 }
 
 //   Verify slot reservation wraps to index zero when every slot is alive.

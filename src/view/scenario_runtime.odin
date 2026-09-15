@@ -642,7 +642,8 @@ scenario_issue_particle_action :: proc(
         if particle_system == nil {return true, false}
         accepted := particles.queue_dust_tool_contact(
             particle_system, {
-                endpoint = {command.value, command.secondary_value, 0}})
+                endpoint = {command.value, command.secondary_value, 0},
+                source = .Scenario})
         return true, accepted
     case .Kick_Dust:
         if executor == nil || particle_system == nil ||

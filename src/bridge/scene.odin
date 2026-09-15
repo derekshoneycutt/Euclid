@@ -4,6 +4,7 @@ import rl "vendor:raylib"
 
 import "../core"
 import "../particles"
+import particlemodel "../particles/model"
 
 import "core:math"
 
@@ -28,9 +29,14 @@ queue_tool_dust_contact :: proc(
     }
     floor_sweep := sweep &&
         tool_dust_contact_on_floor(first) && tool_dust_contact_on_floor(second)
+    source := particlemodel.Dust_Tool_Contact_Source.Point
+    if floor_sweep {
+        source = .Compass_Span
+    }
     accepted := particles.queue_dust_tool_contact(
         state^.particle_system, {
             endpoint = endpoint, segment_first = first, segment_second = second,
-            sample_count = COMPASS_LINE_DUST_SAMPLES, has_sweep = floor_sweep})
+            sample_count = COMPASS_LINE_DUST_SAMPLES, has_sweep = floor_sweep,
+            source = source})
     assert(accepted)
 }

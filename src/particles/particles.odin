@@ -692,12 +692,18 @@ reset_dust_relaxation_state :: proc(ps: ^Particle_System) {
         size_of(ps^.dust_relaxation_leaf_last_seen))
 }
 
+//   Clear queued tool contacts and their lifetime diagnostics.
+reset_dust_tool_contact_state :: proc(ps: ^Particle_System) {
+    ps.dust_tool_contact_count = 0
+    ps.dust_tool_contact_overflow_count = 0
+    ps.dust_tool_contact_coalesced_count = 0
+}
+
 //   Reset particle-system runtime counters and mark all particle slots as dead.
 reset_particles :: proc(ps: ^Particle_System) {
     ps.next_index = 0
     ps.spawn_timer = 0
-    ps.dust_tool_contact_count = 0
-    ps.dust_tool_contact_overflow_count = 0
+    reset_dust_tool_contact_state(ps)
     ps.dust_active_cell_count = 0
     ps.dust_collision_active_cell_count = 0
     ps.dust_collision_candidate_count = 0
@@ -1305,6 +1311,41 @@ queue_dust_tool_contact :: proc(
     return true
 }
 
+// Report whether one adjacent contact makes its predecessor redundant.
+dust_tool_contacts_can_coalesce :: proc(
+    previous, current: particlemodel.Dust_Tool_Contact) -> bool {
+    if previous.source != current.source ||
+        previous.max_spawn_sequence != current.max_spawn_sequence {
+        return false
+    }
+    switch current.source {
+    case .Compass_Span:
+        return previous.has_sweep && current.has_sweep
+    case .Point, .Scenario:
+        return !previous.has_sweep && !current.has_sweep &&
+            previous.endpoint == current.endpoint
+    }
+    return false
+}
+
+// Coalesce adjacent redundant contacts without changing raw queue admission.
+coalesce_dust_tool_contacts :: proc(ps: ^Particle_System) {
+    if ps == nil || ps^.dust_tool_contact_count < 2 {return}
+    write_count := 1
+    for read_index in 1..<ps^.dust_tool_contact_count {
+        current := ps^.dust_tool_contacts[read_index]
+        previous := &ps^.dust_tool_contacts[write_count - 1]
+        if dust_tool_contacts_can_coalesce(previous^, current) {
+            if current.source == .Compass_Span {previous^ = current}
+            ps^.dust_tool_contact_coalesced_count += 1
+            continue
+        }
+        ps^.dust_tool_contacts[write_count] = current
+        write_count += 1
+    }
+    ps^.dust_tool_contact_count = write_count
+}
+
 // Mark exact-grid members whose cells overlap one contact-space rectangle.
 mark_dust_contact_candidate_cells :: proc(
     ps: ^Particle_System, min_x, min_y, max_x, max_y: f32) {
@@ -1361,6 +1402,7 @@ replay_dust_tool_contacts :: proc(ps: ^Particle_System) {
     if ps == nil || ps^.dust_tool_contact_count == 0 {
         return
     }
+    coalesce_dust_tool_contacts(ps)
     ps^.dust_contact_candidate_visit_count = 0
     for contact_index in 0..<ps^.dust_tool_contact_count {
         intent := &ps^.dust_tool_contacts[contact_index]

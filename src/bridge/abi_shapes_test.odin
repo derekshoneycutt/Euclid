@@ -10,6 +10,7 @@ import shapemodel "../shapes/model"
 import "core:testing"
 
 import "../core"
+import "../particles"
 import "../shapes"
 
 // Build one bridge state around caller-owned canonical world storage.
@@ -259,8 +260,22 @@ bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
     testing.expect_value(t, second^.endpoint, rl.Vector3{0.45, 0.2, 0})
     testing.expect(t, first^.has_sweep)
     testing.expect(t, second^.has_sweep)
+    testing.expect_value(t, first^.source,
+        particlemodel.Dust_Tool_Contact_Source.Compass_Span)
+    testing.expect_value(t, second^.source,
+        particlemodel.Dust_Tool_Contact_Source.Compass_Span)
     testing.expect_value(t, third^.endpoint, rl.Vector3{0.5, 0.2, 0})
     testing.expect(t, !third^.has_sweep)
+    testing.expect_value(t, third^.source,
+        particlemodel.Dust_Tool_Contact_Source.Point)
+    expected_span := second^
+    expected_point := third^
+
+    particles.coalesce_dust_tool_contacts(particle_system)
+
+    testing.expect_value(t, particle_system^.dust_tool_contact_count, 2)
+    testing.expect_value(t, particle_system^.dust_tool_contacts[0], expected_span)
+    testing.expect_value(t, particle_system^.dust_tool_contacts[1], expected_point)
 }
 
 // Verify queue-capacity preflight rejects a complete scene batch before mutation.
