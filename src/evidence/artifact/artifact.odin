@@ -137,6 +137,9 @@ artifact_dust_state_json :: proc(state: observe.Display) -> string {
     return fmt.tprintf(
         "\"dust_live_count\":%d,\"dust_grounded_awake_count\":%d," +
         "\"dust_grounded_sleeping_count\":%d,\"dust_airborne_count\":%d," +
+        "\"vector_dust_grounded_count\":%d," +
+        "\"vector_dust_peak_speed_sq\":%g," +
+        "\"vector_dust_kinetic_measure\":%g," +
         "\"dust_dense_leaf_count\":%d,\"dust_refined_cell_count\":%d," +
         "\"dust_collision_pair_count\":%d," +
         "\"dust_collision_dropped_pair_count\":%d," +
@@ -147,6 +150,8 @@ artifact_dust_state_json :: proc(state: observe.Display) -> string {
         "\"dust_sleep_transition_count\":%d,\"dust_wake_transition_count\":%d",
         state.dust_live_count, state.dust_grounded_awake_count,
         state.dust_grounded_sleeping_count, state.dust_airborne_count,
+        state.vector_dust_grounded_count, state.vector_dust_peak_speed_sq,
+        state.vector_dust_kinetic_measure,
         state.dust_dense_leaf_count, state.dust_refined_cell_count,
         state.dust_collision_pair_count, state.dust_collision_dropped_pair_count,
         state.dust_sleeping_pair_skip_count, state.dust_collision_correction_count,

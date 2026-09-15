@@ -20,6 +20,8 @@ DUST_FIELD_DIM :: DUST_COLLISION_GRID_DIM + 1
 DUST_FIELD_NODE_COUNT :: DUST_FIELD_DIM * DUST_FIELD_DIM
 DUST_FIELD_ACTIVE_WORD_COUNT :: (DUST_FIELD_NODE_COUNT + 63) / 64
 DUST_FIELD_STENCIL_CAP :: 9
+VECTOR_DUST_FIELD_STENCIL_CAP :: 4
+VECTOR_DUST_SETTLED_SPEED_SQ :: f32(1e-8)
 DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
 DUST_TOOL_CONTACT_CAP :: 64
 DUST_CONTACT_CANDIDATE_WORD_COUNT :: (MAX_LOW_PARTICLES + 63) / 64
@@ -55,6 +57,21 @@ Dust_Field_State :: struct {
     active_bits: [DUST_FIELD_ACTIVE_WORD_COUNT]u64,
     active_nodes: [DUST_FIELD_NODE_COUNT]i32,
     active_count: int,
+}
+
+// Describe the four field nodes influencing one board-space position.
+Vector_Dust_Field_Stencil :: struct {
+    indices: [VECTOR_DUST_FIELD_STENCIL_CAP]i32,
+    weights: [VECTOR_DUST_FIELD_STENCIL_CAP]f32,
+}
+
+// Own the fixed physics planes for the field-only grounded-dust experiment.
+Vector_Dust_Field_State :: struct {
+    density: Dust_Field_Scalar,
+    velocity_x: Dust_Field_Scalar,
+    velocity_y: Dust_Field_Scalar,
+    next_velocity_x: Dust_Field_Scalar,
+    next_velocity_y: Dust_Field_Scalar,
 }
 
 // Spatial layout for one deterministic diagnostic dust emission.
@@ -152,6 +169,10 @@ Particle_System :: struct {
     dust_floor_rest_count: int,
     dust_collision_refined_cell_count: int,
 
+    vector_dust_field: Vector_Dust_Field_State,
+    vector_dust_grounded_count: int,
+    vector_dust_peak_speed_sq: f32,
+    vector_dust_kinetic_measure: f32,
     dust_field: Dust_Field_State,
     dust_aggregate: [MAX_LOW_PARTICLES]bool,
     dust_field_quiet_frames: [MAX_LOW_PARTICLES]u16,

@@ -566,12 +566,7 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
         update_particle_dust_index(ps, i)
     }
 
-    build_exact_dust_grid(ps)
-    dust_field_prepare_membership(ps)
-    resolve_dust_collisions_on_fine_grid(ps)
-    dust_field_update_aggregate(ps, dt)
-    relax_dense_grounded_dust(ps)
-    advance_dust_activity_grace(ps)
+    vector_dust_field_update_grounded(ps, dt)
 
     update_mid_ember_particles(ps, dt)
 
@@ -620,10 +615,10 @@ integrate_particle_positions_soa_batch :: proc(
     }
 }
 
-// Integrate only awake low-layer dust positions.
+// Integrate every live low-layer dust particle using its current velocity.
 integrate_dust_positions :: proc(ps: ^Particle_System) {
     for i in 0..<ps^.use_max_dust_particles {
-        if !ps.low_particles[i].alive || ps^.dust_sleeping[i] {
+        if !ps.low_particles[i].alive {
             continue
         }
         ps.low_particles.pos_x[i] += ps.low_particles.vel_x[i]
@@ -698,6 +693,10 @@ reset_particles :: proc(ps: ^Particle_System) {
     ps.dust_collision_rest_contact_count = 0
     ps.dust_floor_rest_count = 0
     ps.dust_collision_refined_cell_count = 0
+    vector_dust_field_clear(&ps^.vector_dust_field)
+    ps.vector_dust_grounded_count = 0
+    ps.vector_dust_peak_speed_sq = 0
+    ps.vector_dust_kinetic_measure = 0
     dust_field_reset_state(ps)
     ps.dust_contact_candidate_count = 0
     ps.dust_spawn_sequence = 0
@@ -2121,14 +2120,16 @@ update_particle_flicker_high_index :: proc(ps: ^Particle_System, i: int) {
 
 //   Update one low-layer dust particle physics, floor bounce, bounds clamp, and size fade.
 update_particle_dust_index :: proc(ps: ^Particle_System, i: int) {
-    if !ps.low_particles[i].alive || ps^.dust_sleeping[i] {
+    if !ps.low_particles[i].alive {
         return
     }
 
     ps.low_particles.vel_z[i] += DUST_GRAVITY
 
-    ps.low_particles.vel_x[i] *= DUST_DRAG_XY
-    ps.low_particles.vel_y[i] *= DUST_DRAG_XY
+    if ps.low_particles.pos_z[i] > DUST_FLOOR_Z {
+        ps.low_particles.vel_x[i] *= DUST_DRAG_XY
+        ps.low_particles.vel_y[i] *= DUST_DRAG_XY
+    }
     ps.low_particles.vel_z[i] *= DUST_DRAG_Z
 
     if ps.low_particles.pos_z[i] <= DUST_FLOOR_Z {

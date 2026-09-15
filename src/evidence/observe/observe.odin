@@ -98,6 +98,9 @@ Display :: struct {
     dust_grounded_awake_count : int,
     dust_grounded_sleeping_count : int,
     dust_airborne_count : int,
+    vector_dust_grounded_count : int,
+    vector_dust_peak_speed_sq : f32,
+    vector_dust_kinetic_measure : f32,
     dust_dense_leaf_count : int,
     dust_refined_cell_count : int,
     dust_collision_pair_count : int,
@@ -303,6 +306,9 @@ observe_display_particles :: proc(
     result.dust_relaxation_energy_removed = particles.dust_relaxation_energy_removed
     result.dust_sleep_transition_count = particles.dust_sleep_transition_count
     result.dust_wake_transition_count = particles.dust_wake_transition_count
+    result.vector_dust_grounded_count = particles.vector_dust_grounded_count
+    result.vector_dust_peak_speed_sq = particles.vector_dust_peak_speed_sq
+    result.vector_dust_kinetic_measure = particles.vector_dust_kinetic_measure
     for index in 0..<particles.use_max_dust_particles {
         if !particles.low_particles[index].alive {continue}
         result.dust_live_count += 1

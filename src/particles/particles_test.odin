@@ -795,8 +795,8 @@ scenario_dust_settle_and_wake_stream_is_deterministic :: proc(t: ^testing.T) {
         update_particles(first, 1.0 / 60.0)
         update_particles(second, 1.0 / 60.0)
     }
-    testing.expect_value(t, first^.dust_sleeping_count, 16)
-    testing.expect_value(t, second^.dust_sleeping_count, 16)
+    testing.expect_value(t, first^.dust_sleeping_count, 0)
+    testing.expect_value(t, second^.dust_sleeping_count, 0)
     queue_dust_slot_contacts(t, first)
     queue_dust_slot_contacts(t, second)
     update_particles(first, 1.0 / 60.0)
@@ -1059,27 +1059,21 @@ relax_dense_grounded_dust_respects_activity_grace :: proc(t: ^testing.T) {
     testing.expect_value(t, ps^.dust_relaxation_dense_leaf_count, 0)
 }
 
-//   Verify a sustained quiet grounded leaf sleeps without moving afterward.
+// Verify legacy sleep state cannot gate field-authority position integration.
 @(test)
-relax_dense_grounded_dust_sleeps_sustained_quiet_leaf :: proc(t: ^testing.T) {
+vector_dust_ignores_legacy_sleep_during_integration :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-    ps^.use_max_dust_particles = 4
-    for i in 0..<ps^.use_max_dust_particles {
-        ps^.low_particles[i].alive = true
-        ps^.low_particles.pos_x[i] = 0.5 + f32(i) * 0.0001
-        ps^.low_particles.pos_y[i] = 0.5
-    }
-    for _ in 0..<int(DUST_SLEEP_QUIET_FRAMES) {
-        relax_dense_grounded_dust(ps)
-    }
-
-    testing.expect_value(t, ps^.dust_sleeping_count, 4)
-    testing.expect_value(t, ps^.dust_sleep_transition_count, u64(4))
-    before_x := ps^.low_particles.pos_x[0]
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0].alive = true
+    ps^.low_particles.pos_x[0] = 0.5
     ps^.low_particles.vel_x[0] = 1
+    ps^.dust_sleeping[0] = true
+    ps^.dust_sleeping_count = 1
+
     integrate_dust_positions(ps)
-    testing.expect_value(t, ps^.low_particles.pos_x[0], before_x)
+
+    testing.expect_value(t, ps^.low_particles.pos_x[0], f32(1.5))
 }
 
 // Verify a quiet sparse particle sleeps while crossing relaxation-cell boundaries.
@@ -1306,7 +1300,7 @@ relax_dense_grounded_dust_never_sleeps_airborne_particles :: proc(t: ^testing.T)
     testing.expect_value(t, ps^.dust_sleeping_count, 0)
 }
 
-//   Verify the complete fixed-step path settles a dense grounded cluster.
+// Verify the complete fixed-step path damps a dense grounded cluster without sleeping.
 @(test)
 update_particles_settles_dense_grounded_cluster :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
@@ -1322,14 +1316,88 @@ update_particles_settles_dense_grounded_cluster :: proc(t: ^testing.T) {
         update_particles(ps, 1.0 / 60.0)
     }
 
-    testing.expect_value(t, ps^.dust_sleeping_count, ps^.use_max_dust_particles)
+    testing.expect_value(t, ps^.dust_sleeping_count, 0)
+    speed_before := math.abs(ps^.low_particles.vel_x[0]) +
+        math.abs(ps^.low_particles.vel_y[0])
     before_x := ps^.low_particles.pos_x[0]
     before_y := ps^.low_particles.pos_y[0]
     for _ in 0..<30 {
         update_particles(ps, 1.0 / 60.0)
     }
-    testing.expect_value(t, ps^.low_particles.pos_x[0], before_x)
-    testing.expect_value(t, ps^.low_particles.pos_y[0], before_y)
+    displacement := math.abs(ps^.low_particles.pos_x[0] - before_x) +
+        math.abs(ps^.low_particles.pos_y[0] - before_y)
+    speed_after := math.abs(ps^.low_particles.vel_x[0]) +
+        math.abs(ps^.low_particles.vel_y[0])
+    testing.expect(t, displacement < 0.0001)
+    testing.expect(t, speed_after <= speed_before)
+}
+
+// Verify grounded particles receive field velocity while airborne particles do not.
+@(test)
+vector_dust_update_affects_only_grounded_particles :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    ps^.low_particles[0] = {
+        pos_x = 0.25, pos_y = 0.75, pos_z = DUST_FLOOR_Z,
+        vel_x = 0.003, vel_y = -0.002, alive = true}
+    ps^.low_particles[1] = {
+        pos_x = 0.25, pos_y = 0.75, pos_z = DUST_FLOOR_Z + 0.1,
+        vel_x = -0.004, vel_y = 0.005, alive = true}
+    airborne_velocity := Vector2{
+        ps^.low_particles.vel_x[1], ps^.low_particles.vel_y[1]}
+
+    vector_dust_field_update_grounded(ps, f32(1.0 / 60.0))
+
+    testing.expect(t, ps^.low_particles.vel_x[0] > 0)
+    testing.expect(t, ps^.low_particles.vel_x[0] < 0.003)
+    testing.expect_value(t, ps^.low_particles.vel_x[1], airborne_velocity.x)
+    testing.expect_value(t, ps^.low_particles.vel_y[1], airborne_velocity.y)
+    test_helpers.expect_close(t,
+        vector_dust_test_plane_sum(&ps^.vector_dust_field.density), 1,
+        "only grounded density")
+}
+
+// Verify landing momentum enters the vector field before exact assignment.
+@(test)
+update_particles_deposits_landing_momentum :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 1
+    ps^.low_particles[0] = {
+        pos_x = 0.5, pos_y = 0.5, pos_z = 0.001,
+        vel_x = 0.003, vel_y = -0.002, vel_z = -0.01,
+        life = 10, alive = true}
+
+    update_particles(ps, f32(1.0 / 60.0))
+
+    testing.expect_value(t, ps^.low_particles.pos_z[0], f32(DUST_FLOOR_Z))
+    testing.expect(t, ps^.low_particles.vel_x[0] > 0)
+    testing.expect(t, ps^.low_particles.vel_y[0] < 0)
+    test_helpers.expect_close(t,
+        vector_dust_test_plane_sum(&ps^.vector_dust_field.density), 1,
+        "landing density")
+}
+
+// Verify the production step performs no legacy grounded solver work.
+@(test)
+update_particles_bypasses_legacy_grounded_authorities :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    for index in 0..<2 {
+        ps^.low_particles[index] = {
+            pos_x = 0.5, pos_y = 0.5, pos_z = DUST_FLOOR_Z,
+            life = 10, alive = true}
+    }
+
+    update_particles(ps, f32(1.0 / 60.0))
+
+    testing.expect_value(t, ps^.dust_collision_candidate_count, u64(0))
+    testing.expect_value(t, ps^.dust_pair_count, 0)
+    testing.expect_value(t, ps^.dust_aggregate_count, 0)
+    testing.expect_value(t, ps^.dust_relaxation_active_leaf_count, 0)
+    testing.expect_value(t, ps^.dust_sleeping_count, 0)
 }
 
 //   Verify reset_particles zeroes runtime state and marks every slot dead.

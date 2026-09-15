@@ -252,9 +252,9 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
     testing.expect_value(t, transform^.position.z, f32(0))
 }
 
-// Verify the joined particle worker emits, settles, observes, and wakes dust.
+// Verify the joined particle worker emits, damps, observes, and disturbs vector dust.
 @(test)
-parallel_simulation_step_settles_and_wakes_scenario_dust :: proc(t: ^testing.T) {
+parallel_simulation_step_damps_and_disturbs_vector_dust :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.particle_system = new(particlemodel.Particle_System, context.allocator)
@@ -273,12 +273,12 @@ parallel_simulation_step_settles_and_wakes_scenario_dust :: proc(t: ^testing.T) 
 
     for _ in 0..<360 {
         run_parallel_simulation_step(executor, 1.0 / 60.0)
-        if state^.particle_system^.dust_sleeping_count == 16 {break}
     }
     settled := observe_display_state(state)
     testing.expect_value(t, settled.dust_live_count, 16)
-    testing.expect_value(t, settled.dust_grounded_sleeping_count, 16)
-    testing.expect_value(t, settled.dust_grounded_awake_count, 0)
+    testing.expect_value(t, settled.dust_grounded_sleeping_count, 0)
+    testing.expect_value(t, settled.dust_grounded_awake_count, 16)
+    velocity_before := state^.particle_system^.low_particles.vel_x[0]
     for index in 0..<16 {
         testing.expect(t, particles.queue_dust_tool_contact(
             state^.particle_system, {endpoint = {
@@ -290,8 +290,9 @@ parallel_simulation_step_settles_and_wakes_scenario_dust :: proc(t: ^testing.T) 
 
     disturbed := observe_display_state(state)
     testing.expect_value(t, disturbed.dust_grounded_sleeping_count, 0)
-    testing.expect_value(t, disturbed.dust_grounded_awake_count, 16)
-    testing.expect_value(t, disturbed.dust_wake_transition_count, u64(16))
+    testing.expect_value(t, disturbed.dust_wake_transition_count, u64(0))
+    testing.expect(t,
+        state^.particle_system^.low_particles.vel_x[0] != velocity_before)
 }
 
 //   Verify terminal Dynview arena diagnostics after executor destruction.

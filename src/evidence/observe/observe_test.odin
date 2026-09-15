@@ -41,6 +41,9 @@ observe_test_seed_display_scalars :: proc(source: ^Display_Source) {
     source^.particle_system^.dust_relaxation_energy_removed = 0.25
     source^.particle_system^.dust_sleep_transition_count = 13
     source^.particle_system^.dust_wake_transition_count = 17
+    source^.particle_system^.vector_dust_grounded_count = 2
+    source^.particle_system^.vector_dust_peak_speed_sq = 0.03125
+    source^.particle_system^.vector_dust_kinetic_measure = 0.0625
     source^.julia_service^.runtime_generation = 2
     source^.julia_service^.animation_tick_sequence = 9
 }
@@ -72,6 +75,9 @@ observe_test_expect_display_scalars :: proc(
     testing.expect_value(t, result.dust_relaxation_energy_removed, f32(0.25))
     testing.expect_value(t, result.dust_sleep_transition_count, u64(13))
     testing.expect_value(t, result.dust_wake_transition_count, u64(17))
+    testing.expect_value(t, result.vector_dust_grounded_count, 2)
+    testing.expect_value(t, result.vector_dust_peak_speed_sq, f32(0.03125))
+    testing.expect_value(t, result.vector_dust_kinetic_measure, f32(0.0625))
     testing.expect_value(t, result.runtime_generation, u64(2))
     testing.expect_value(t, result.animation_tick_sequence, u64(9))
     testing.expect(t, result.required_evidence_complete)

@@ -2,6 +2,7 @@ package scenario
 
 // Package scenario validates and executes bounded semantic workflows.
 
+import particlemodel "../../particles/model"
 import "../observe"
 import trace "../trace"
 import json "core:encoding/json"
@@ -1061,11 +1062,14 @@ dust_state_matches :: proc(name: string, display: observe.Display) -> bool {
     switch name {
     case "dust_settled":
         return display.dust_live_count > 0 && display.dust_airborne_count == 0 &&
-            display.dust_grounded_awake_count == 0 &&
-            display.dust_grounded_sleeping_count == display.dust_live_count
+            display.vector_dust_grounded_count == display.dust_live_count &&
+            display.vector_dust_peak_speed_sq <=
+                particlemodel.VECTOR_DUST_SETTLED_SPEED_SQ
     case "dust_active":
         return display.dust_live_count > 0 &&
-            (display.dust_airborne_count > 0 || display.dust_grounded_awake_count > 0)
+            (display.dust_airborne_count > 0 ||
+                display.vector_dust_peak_speed_sq >
+                    particlemodel.VECTOR_DUST_SETTLED_SPEED_SQ)
     case "dust_airborne": return display.dust_airborne_count > 0
     }
     return false
