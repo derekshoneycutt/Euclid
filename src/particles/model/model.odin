@@ -16,6 +16,10 @@ DUST_COLLISION_MIN_SEPARATION :: 0.004
 DUST_COLLISION_GRID_CELL_SIZE :: DUST_COLLISION_MIN_SEPARATION
 DUST_COLLISION_GRID_DIM :: 250
 DUST_COLLISION_GRID_CELL_COUNT :: DUST_COLLISION_GRID_DIM * DUST_COLLISION_GRID_DIM
+DUST_FIELD_DIM :: DUST_COLLISION_GRID_DIM + 1
+DUST_FIELD_NODE_COUNT :: DUST_FIELD_DIM * DUST_FIELD_DIM
+DUST_FIELD_ACTIVE_WORD_COUNT :: (DUST_FIELD_NODE_COUNT + 63) / 64
+DUST_FIELD_STENCIL_CAP :: 9
 DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
 DUST_TOOL_CONTACT_CAP :: 64
 DUST_CONTACT_CANDIDATE_WORD_COUNT :: (MAX_LOW_PARTICLES + 63) / 64
@@ -23,6 +27,35 @@ DUST_RELAXATION_LEAVES_PER_PARENT :: 16
 DUST_RELAXATION_LEAF_COUNT ::
     DUST_GRID_DIM_SQUARED * DUST_RELAXATION_LEAVES_PER_PARENT
 SCENARIO_DUST_EMISSION_REQUEST_CAP :: 16
+
+// Store one fixed scalar plane over the global dust-field topology.
+Dust_Field_Scalar :: [DUST_FIELD_NODE_COUNT]f32
+
+// Describe normalized field nodes influencing one board-space position.
+Dust_Field_Stencil :: struct {
+    indices: [DUST_FIELD_STENCIL_CAP]i32,
+    weights: [DUST_FIELD_STENCIL_CAP]f32,
+    count: int,
+}
+
+// Own bounded CPU planes and sparse activity metadata for the aggregate dust field.
+Dust_Field_State :: struct {
+    candidate_density: Dust_Field_Scalar,
+    density: Dust_Field_Scalar,
+    momentum_x: Dust_Field_Scalar,
+    momentum_y: Dust_Field_Scalar,
+    velocity_x: Dust_Field_Scalar,
+    velocity_y: Dust_Field_Scalar,
+    next_velocity_x: Dust_Field_Scalar,
+    next_velocity_y: Dust_Field_Scalar,
+    color_r: Dust_Field_Scalar,
+    color_g: Dust_Field_Scalar,
+    color_b: Dust_Field_Scalar,
+    coverage: Dust_Field_Scalar,
+    active_bits: [DUST_FIELD_ACTIVE_WORD_COUNT]u64,
+    active_nodes: [DUST_FIELD_NODE_COUNT]i32,
+    active_count: int,
+}
 
 // Spatial layout for one deterministic diagnostic dust emission.
 Dust_Emission_Distribution :: enum u8 {
