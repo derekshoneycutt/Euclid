@@ -82,6 +82,7 @@ DUST_XY_MAX :: 1.0
 
 DUST_CONTACT_PUSH_RADIUS :: 0.01
 DUST_CONTACT_PUSH_SPEED :: 0.0035
+DUST_TOOL_SWEEP_MAX_INTERVALS :: 144
 
 DUST_KICK_FADE_MIN :: 0.03
 DUST_KICK_FADE_MAX :: 0.08
@@ -697,6 +698,7 @@ reset_dust_tool_contact_state :: proc(ps: ^Particle_System) {
     ps.dust_tool_contact_count = 0
     ps.dust_tool_contact_overflow_count = 0
     ps.dust_tool_contact_coalesced_count = 0
+    ps.dust_tool_contact_sample_count = 0
 }
 
 //   Reset particle-system runtime counters and mark all particle slots as dead.
@@ -1305,7 +1307,6 @@ queue_dust_tool_contact :: proc(
     }
     stored_contact := contact
     stored_contact.max_spawn_sequence = ps^.dust_spawn_sequence
-    stored_contact.has_sweep = stored_contact.has_sweep && stored_contact.sample_count > 0
     ps^.dust_tool_contacts[ps^.dust_tool_contact_count] = stored_contact
     ps^.dust_tool_contact_count += 1
     return true
@@ -1397,30 +1398,43 @@ replay_dust_point_contact :: proc(
     }
 }
 
-// Replay queued endpoint and sampled sweep pushes in original command order.
+// Return radius-bounded intervals for one compass span in board-space XY.
+dust_tool_sweep_interval_count :: proc(first, second: Vector3) -> int {
+    delta_x := second.x - first.x
+    delta_y := second.y - first.y
+    length := math.sqrt(delta_x * delta_x + delta_y * delta_y)
+    intervals := int(math.ceil(f64(length / f32(DUST_CONTACT_PUSH_RADIUS))))
+    return clamp(intervals, 1, DUST_TOOL_SWEEP_MAX_INTERVALS)
+}
+
+// Replay queued point or inclusive sampled-sweep pushes in command order.
 replay_dust_tool_contacts :: proc(ps: ^Particle_System) {
     if ps == nil || ps^.dust_tool_contact_count == 0 {
         return
     }
     coalesce_dust_tool_contacts(ps)
     ps^.dust_contact_candidate_visit_count = 0
+    ps^.dust_tool_contact_sample_count = 0
     for contact_index in 0..<ps^.dust_tool_contact_count {
         intent := &ps^.dust_tool_contacts[contact_index]
-        replay_dust_point_contact(ps, intent^.endpoint.x, intent^.endpoint.y,
-            intent^.max_spawn_sequence)
         if !intent^.has_sweep {
+            replay_dust_point_contact(ps, intent^.endpoint.x, intent^.endpoint.y,
+                intent^.max_spawn_sequence)
+            ps^.dust_tool_contact_sample_count += 1
             continue
         }
-        sample_count := int(intent^.sample_count)
-        inv_samples := f32(1.0) / f32(sample_count)
-        for sample_index in 0..<sample_count {
-            interpolation := f32(sample_index) * inv_samples
+        interval_count := dust_tool_sweep_interval_count(
+            intent^.segment_first, intent^.segment_second)
+        inv_intervals := f32(1.0) / f32(interval_count)
+        for sample_index in 0..=interval_count {
+            interpolation := f32(sample_index) * inv_intervals
             replay_dust_point_contact(ps,
                 math.lerp(intent^.segment_first.x, intent^.segment_second.x,
                     interpolation),
                 math.lerp(intent^.segment_first.y, intent^.segment_second.y,
                     interpolation),
                 intent^.max_spawn_sequence)
+                    ps^.dust_tool_contact_sample_count += 1
         }
     }
     ps^.dust_tool_contact_count = 0

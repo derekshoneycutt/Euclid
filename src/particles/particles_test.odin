@@ -245,7 +245,7 @@ queue_dust_slot_contacts :: proc(
     }
 }
 
-// Verify deferred replay preserves endpoint and sampled sweep responses.
+// Verify deferred replay matches canonical radius-based sweep responses.
 @(test)
 replay_dust_tool_contact_matches_immediate_reference :: proc(t: ^testing.T) {
     expected := new(particlemodel.Particle_System, context.allocator)
@@ -266,18 +266,16 @@ replay_dust_tool_contact_matches_immediate_reference :: proc(t: ^testing.T) {
     endpoint := Vector3{0.2, 0.25, 0}
     first := Vector3{0.2, 0.25, 0}
     second := Vector3{0.3, 0.25, 0}
-    sample_count := 24
-    push_dust_away_from_xy(expected, endpoint.x, endpoint.y)
-    for sample_index in 0..<sample_count {
-        interpolation := f32(sample_index) / f32(sample_count)
+    interval_count := dust_tool_sweep_interval_count(first, second)
+    for sample_index in 0..=interval_count {
+        interpolation := f32(sample_index) / f32(interval_count)
         push_dust_away_from_xy(expected,
             math.lerp(first.x, second.x, interpolation),
             math.lerp(first.y, second.y, interpolation))
     }
     testing.expect(t, queue_dust_tool_contact(
         actual, {endpoint = endpoint, segment_first = first,
-            segment_second = second, sample_count = i32(sample_count),
-            has_sweep = true}))
+            segment_second = second, has_sweep = true}))
     build_exact_dust_grid(actual)
     replay_dust_tool_contacts(actual)
 
@@ -285,30 +283,110 @@ replay_dust_tool_contact_matches_immediate_reference :: proc(t: ^testing.T) {
     testing.expect_value(t, actual^.dust_tool_contact_count, 0)
 }
 
-// Verify sampled sweeps visit only each point's local exact-grid neighborhood.
+// Verify sweep intervals follow contact radius and remain statically bounded.
+@(test)
+dust_tool_sweep_intervals_follow_radius :: proc(t: ^testing.T) {
+    origin := Vector3{}
+    radius := f32(DUST_CONTACT_PUSH_RADIUS)
+    testing.expect_value(t, dust_tool_sweep_interval_count(origin, origin), 1)
+    testing.expect_value(t, dust_tool_sweep_interval_count(
+        origin, {radius * 0.5, 0, 0}), 1)
+    testing.expect_value(t, dust_tool_sweep_interval_count(
+        origin, {radius, 0, 0}), 1)
+    testing.expect_value(t, dust_tool_sweep_interval_count(
+        origin, {0.08, 0.06, 0}), 10)
+    testing.expect_value(t, dust_tool_sweep_interval_count(
+        origin, {1, 1, 0}), 142)
+    testing.expect_value(t, dust_tool_sweep_interval_count(
+        origin, {2, 2, 0}), DUST_TOOL_SWEEP_MAX_INTERVALS)
+}
+
+// Verify generated samples include both endpoints with radius-bounded gaps.
+@(test)
+dust_tool_sweep_sampling_is_inclusive_and_radius_bounded :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    first := Vector3{0.1, 0.2, 0}
+    second := Vector3{0.125, 0.2, 0}
+    interval_count := dust_tool_sweep_interval_count(first, second)
+    spacing := (second.x - first.x) / f32(interval_count)
+    testing.expect(t, spacing <= f32(DUST_CONTACT_PUSH_RADIUS))
+    testing.expect(t, queue_dust_tool_contact(ps, {
+        endpoint = second, segment_first = first, segment_second = second,
+        has_sweep = true, source = .Compass_Span}))
+
+    replay_dust_tool_contacts(ps)
+
+    testing.expect_value(t, interval_count, 3)
+    testing.expect_value(t, ps^.dust_tool_contact_sample_count, u64(4))
+
+    testing.expect(t, queue_dust_tool_contact(ps, {endpoint = first}))
+    replay_dust_tool_contacts(ps)
+    testing.expect_value(t, ps^.dust_tool_contact_sample_count, u64(1))
+
+    testing.expect(t, queue_dust_tool_contact(ps, {
+        endpoint = first, segment_first = first, segment_second = first,
+        has_sweep = true, source = .Compass_Span}))
+    replay_dust_tool_contacts(ps)
+    testing.expect_value(t, ps^.dust_tool_contact_sample_count, u64(2))
+}
+
+// Verify reversing a span preserves its response away from exact-center RNG cases.
+@(test)
+dust_tool_sweep_response_is_orientation_symmetric :: proc(t: ^testing.T) {
+    forward := new(particlemodel.Particle_System, context.allocator)
+    reverse := new(particlemodel.Particle_System, context.allocator)
+    defer free(forward)
+    defer free(reverse)
+    forward^.use_max_dust_particles = 2
+    reverse^.use_max_dust_particles = 2
+    forward^.low_particles[0] = {
+        pos_x = 0.095, pos_y = 0.5, life = 100, alive = true}
+    forward^.low_particles[1] = {
+        pos_x = 0.905, pos_y = 0.5, life = 100, alive = true}
+    reverse^.low_particles[0] = forward^.low_particles[0]
+    reverse^.low_particles[1] = forward^.low_particles[1]
+    first := Vector3{0.1, 0.5, 0}
+    second := Vector3{0.9, 0.5, 0}
+    testing.expect(t, queue_dust_tool_contact(forward, {
+        segment_first = first, segment_second = second, has_sweep = true}))
+    testing.expect(t, queue_dust_tool_contact(reverse, {
+        segment_first = second, segment_second = first, has_sweep = true}))
+    build_exact_dust_grid(forward)
+    build_exact_dust_grid(reverse)
+
+    replay_dust_tool_contacts(forward)
+    replay_dust_tool_contacts(reverse)
+
+    expect_dust_systems_match(t, forward, reverse)
+    testing.expect_value(t, forward^.dust_tool_contact_sample_count, u64(81))
+    testing.expect_value(t, reverse^.dust_tool_contact_sample_count, u64(81))
+}
+
+// Verify radius-based sweeps visit only each sample's local grid neighborhood.
 @(test)
 dust_tool_sweep_queries_local_candidates_per_sample :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 2
     ps^.low_particles[0] = {
-        pos_x = 0.105, pos_y = 0.5, life = 100, alive = true}
+        pos_x = 0.095, pos_y = 0.5, life = 100, alive = true}
     ps^.low_particles[1] = {
-        pos_x = 0.895, pos_y = 0.5, life = 100, alive = true}
+        pos_x = 0.905, pos_y = 0.5, life = 100, alive = true}
     testing.expect(t, queue_dust_tool_contact(ps, {
         endpoint = {0.9, 0.5, 0},
         segment_first = {0.1, 0.5, 0},
         segment_second = {0.9, 0.5, 0},
-        sample_count = 2,
         has_sweep = true,
     }))
     build_exact_dust_grid(ps)
 
     replay_dust_tool_contacts(ps)
 
-    testing.expect_value(t, ps^.dust_contact_candidate_visit_count, u64(2))
-    testing.expect(t, ps^.low_particles.vel_x[0] > 0)
-    testing.expect(t, ps^.low_particles.vel_x[1] < 0)
+    testing.expect_value(t, ps^.dust_tool_contact_sample_count, u64(81))
+    testing.expect(t, ps^.dust_contact_candidate_visit_count < 20)
+    testing.expect(t, ps^.low_particles.vel_x[0] < 0)
+    testing.expect(t, ps^.low_particles.vel_x[1] > 0)
 }
 
 // Verify deferred contacts retain the original pre-integration fixed-step timing.
@@ -402,8 +480,8 @@ dust_tool_contacts_coalesce_only_with_matching_semantics :: proc(t: ^testing.T) 
     defer free(ps)
     first_span := particlemodel.Dust_Tool_Contact{
         endpoint = {0.1, 0.2, 0}, segment_first = {0.1, 0.2, 0},
-        segment_second = {0.4, 0.2, 0}, sample_count = 24,
-        has_sweep = true, source = .Compass_Span}
+        segment_second = {0.4, 0.2, 0}, has_sweep = true,
+        source = .Compass_Span}
     final_span := first_span
     final_span.endpoint = {0.5, 0.2, 0}
     final_span.segment_second = final_span.endpoint
@@ -1600,12 +1678,14 @@ reset_particles_clears_dust_tool_contact_state :: proc(t: ^testing.T) {
     ps^.dust_tool_contact_count = 2
     ps^.dust_tool_contact_overflow_count = 3
     ps^.dust_tool_contact_coalesced_count = 4
+    ps^.dust_tool_contact_sample_count = 5
 
     reset_particles(ps)
 
     testing.expect_value(t, ps^.dust_tool_contact_count, 0)
     testing.expect_value(t, ps^.dust_tool_contact_overflow_count, 0)
     testing.expect_value(t, ps^.dust_tool_contact_coalesced_count, u64(0))
+    testing.expect_value(t, ps^.dust_tool_contact_sample_count, u64(0))
 }
 
 //   Verify slot reservation wraps to index zero when every slot is alive.

@@ -126,7 +126,6 @@ Dust_Tool_Contact :: struct {
     segment_first: rl.Vector3,
     segment_second: rl.Vector3,
     max_spawn_sequence: u64,
-    sample_count: i32,
     has_sweep: bool,
     source: Dust_Tool_Contact_Source,
 }
@@ -170,6 +169,7 @@ Particle_System :: struct {
     dust_tool_contact_count: int,
     dust_tool_contact_overflow_count: int,
     dust_tool_contact_coalesced_count: u64,
+    dust_tool_contact_sample_count: u64,
     dust_contact_candidate_bits: [DUST_CONTACT_CANDIDATE_WORD_COUNT]u64,
     dust_contact_candidate_visit_count: u64,
     dust_slot_spawn_sequences: [MAX_LOW_PARTICLES]u64,

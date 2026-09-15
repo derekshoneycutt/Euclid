@@ -36,7 +36,6 @@ queue_tool_dust_contact :: proc(
     accepted := particles.queue_dust_tool_contact(
         state^.particle_system, {
             endpoint = endpoint, segment_first = first, segment_second = second,
-            sample_count = COMPASS_LINE_DUST_SAMPLES, has_sweep = floor_sweep,
-            source = source})
+            has_sweep = floor_sweep, source = source})
     assert(accepted)
 }
