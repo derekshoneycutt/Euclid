@@ -1426,6 +1426,67 @@ vector_dust_transfers_are_stable_and_grounded_only :: proc(t: ^testing.T) {
         "grounded transfer density")
 }
 
+// Verify the fused low-dust pass matches the former stable three-pass sequence.
+expect_low_dust_deposit_state_equal :: proc(t: ^testing.T,
+        actual, expected: ^particlemodel.Particle_System) {
+    for index in 0..<expected^.use_max_dust_particles {
+        testing.expect_value(t, actual^.low_particles[index],
+            expected^.low_particles[index])
+    }
+    testing.expect_value(t, actual^.dust_floor_rest_count,
+        expected^.dust_floor_rest_count)
+    testing.expect_value(t, actual^.vector_dust_field.support_bounds,
+        expected^.vector_dust_field.support_bounds)
+    testing.expect_value(t, actual^.vector_dust_transfer_count,
+        expected^.vector_dust_transfer_count)
+    for index in 0..<expected^.vector_dust_transfer_count {
+        testing.expect_value(t, actual^.vector_dust_transfers[index],
+            expected^.vector_dust_transfers[index])
+    }
+    for node in 0..<DUST_FIELD_NODE_COUNT {
+        testing.expect_value(t, actual^.vector_dust_field.density[node],
+            expected^.vector_dust_field.density[node])
+        testing.expect_value(t, actual^.vector_dust_field.momentum_x[node],
+            expected^.vector_dust_field.momentum_x[node])
+        testing.expect_value(t, actual^.vector_dust_field.momentum_y[node],
+            expected^.vector_dust_field.momentum_y[node])
+    }
+}
+
+// Verify the fused low-dust pass matches the former stable three-pass sequence.
+@(test)
+update_and_deposit_low_dust_matches_sequential_reference :: proc(t: ^testing.T) {
+    expected := new(particlemodel.Particle_System, context.allocator)
+    defer free(expected)
+    actual := new(particlemodel.Particle_System, context.allocator)
+    defer free(actual)
+    expected^.use_max_dust_particles = 5
+    actual^.use_max_dust_particles = expected^.use_max_dust_particles
+    expected^.low_particles[0] = {
+        pos_x = 0.3, pos_y = 0.4, pos_z = DUST_FLOOR_Z,
+        vel_x = 0.001, vel_y = -0.002, life = 10, alive = true}
+    expected^.low_particles[1] = {
+        pos_x = 0.5, pos_y = 0.6, pos_z = 0.001,
+        vel_x = 0.003, vel_y = 0.002, vel_z = -0.01, life = 10, alive = true}
+    expected^.low_particles[2] = {
+        pos_x = 0.7, pos_y = 0.8, pos_z = 0.2,
+        vel_x = -0.004, vel_y = 0.005, vel_z = 0.003, life = 10, alive = true}
+    expected^.low_particles[4] = {
+        pos_x = 1, pos_y = 0, pos_z = DUST_FLOOR_Z,
+        vel_x = 0.01, vel_y = -0.01, life = 10, alive = true}
+    for index in 0..<5 {
+        actual^.low_particles[index] = expected^.low_particles[index]
+    }
+
+    integrate_dust_positions(expected)
+    for index in 0..<5 {
+        update_particle_dust_index(expected, index)
+    }
+    vector_dust_field_deposit_grounded(expected)
+    update_and_deposit_low_dust(actual)
+    expect_low_dust_deposit_state_equal(t, actual, expected)
+}
+
 //   Verify reset_particles zeroes runtime state and marks every slot dead.
 @(test)
 reset_particles_clears_runtime_state_and_marks_all_slots_dead :: proc(t: ^testing.T) {

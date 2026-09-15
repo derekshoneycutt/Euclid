@@ -276,23 +276,34 @@ vector_dust_field_evolve :: proc(field: ^Vector_Dust_Field_State, dt: f32) {
 }
 
 // Deposit every grounded particle into the field in stable slot order.
-vector_dust_field_deposit_grounded :: proc(ps: ^Particle_System) {
+vector_dust_field_begin_deposit :: proc(ps: ^Particle_System) {
     field := &ps^.vector_dust_field
     vector_dust_field_prepare(field)
     ps^.vector_dust_transfer_count = 0
+}
+
+// Cache and deposit one grounded particle after its local transition update.
+vector_dust_field_deposit_grounded_index :: proc(
+        ps: ^Particle_System, index: int) {
+    position := Vector2{ps^.low_particles.pos_x[index],
+        ps^.low_particles.pos_y[index]}
+    velocity := Vector2{ps^.low_particles.vel_x[index],
+        ps^.low_particles.vel_y[index]}
+    transfer := vector_dust_field_transfer(position, index)
+    ps^.vector_dust_transfers[ps^.vector_dust_transfer_count] = transfer
+    ps^.vector_dust_transfer_count += 1
+    vector_dust_field_deposit_transfer(&ps^.vector_dust_field, transfer, velocity)
+}
+
+// Deposit every grounded particle into the field in stable slot order.
+vector_dust_field_deposit_grounded :: proc(ps: ^Particle_System) {
+    vector_dust_field_begin_deposit(ps)
     for index in 0..<ps^.use_max_dust_particles {
         if !ps^.low_particles.alive[index] ||
             ps^.low_particles.pos_z[index] > DUST_FLOOR_Z {
             continue
         }
-        position := Vector2{ps^.low_particles.pos_x[index],
-            ps^.low_particles.pos_y[index]}
-        velocity := Vector2{ps^.low_particles.vel_x[index],
-            ps^.low_particles.vel_y[index]}
-        transfer := vector_dust_field_transfer(position, index)
-        ps^.vector_dust_transfers[ps^.vector_dust_transfer_count] = transfer
-        ps^.vector_dust_transfer_count += 1
-        vector_dust_field_deposit_transfer(field, transfer, velocity)
+        vector_dust_field_deposit_grounded_index(ps, index)
     }
 }
 
@@ -318,6 +329,12 @@ vector_dust_field_assign_grounded :: proc(ps: ^Particle_System) {
 // Run one field-only grounded XY update after ballistic and contact mutations.
 vector_dust_field_update_grounded :: proc(ps: ^Particle_System, dt: f32) {
     vector_dust_field_deposit_grounded(ps)
+    vector_dust_field_evolve(&ps^.vector_dust_field, dt)
+    vector_dust_field_assign_grounded(ps)
+}
+
+// Solve and assign a field whose grounded deposits were prepared by the caller.
+vector_dust_field_finish_grounded :: proc(ps: ^Particle_System, dt: f32) {
     vector_dust_field_evolve(&ps^.vector_dust_field, dt)
     vector_dust_field_assign_grounded(ps)
 }

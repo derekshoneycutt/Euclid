@@ -542,7 +542,7 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
         replay_dust_tool_contacts(ps)
     }
 
-    integrate_dust_positions(ps)
+    update_and_deposit_low_dust(ps)
 
     integrate_particle_positions_soa_batch({
         ps.particles.pos_x[:],
@@ -562,11 +562,7 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
         ps.high_particles.vel_z[:],
     })
 
-    for i in 0..<ps^.use_max_dust_particles {
-        update_particle_dust_index(ps, i)
-    }
-
-    vector_dust_field_update_grounded(ps, dt)
+    vector_dust_field_finish_grounded(ps, dt)
 
     update_mid_ember_particles(ps, dt)
 
@@ -624,6 +620,23 @@ integrate_dust_positions :: proc(ps: ^Particle_System) {
         ps.low_particles.pos_x[i] += ps.low_particles.vel_x[i]
         ps.low_particles.pos_y[i] += ps.low_particles.vel_y[i]
         ps.low_particles.pos_z[i] += ps.low_particles.vel_z[i]
+    }
+}
+
+// Integrate, transition, and deposit live low dust in stable slot order.
+update_and_deposit_low_dust :: proc(ps: ^Particle_System) {
+    vector_dust_field_begin_deposit(ps)
+    for index in 0..<ps^.use_max_dust_particles {
+        if !ps^.low_particles.alive[index] {
+            continue
+        }
+        ps^.low_particles.pos_x[index] += ps^.low_particles.vel_x[index]
+        ps^.low_particles.pos_y[index] += ps^.low_particles.vel_y[index]
+        ps^.low_particles.pos_z[index] += ps^.low_particles.vel_z[index]
+        update_particle_dust_index(ps, index)
+        if ps^.low_particles.pos_z[index] <= DUST_FLOOR_Z {
+            vector_dust_field_deposit_grounded_index(ps, index)
+        }
     }
 }
 
