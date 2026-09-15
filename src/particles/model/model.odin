@@ -65,13 +65,22 @@ Vector_Dust_Field_Stencil :: struct {
     weights: [VECTOR_DUST_FIELD_STENCIL_CAP]f32,
 }
 
+// Describe one inclusive rectangular region of the vector-dust field.
+Vector_Dust_Field_Bounds :: struct {
+    min_x, min_y: i32,
+    max_x, max_y: i32,
+    valid: bool,
+}
+
 // Own the fixed physics planes for the field-only grounded-dust experiment.
 Vector_Dust_Field_State :: struct {
     density: Dust_Field_Scalar,
-    velocity_x: Dust_Field_Scalar,
-    velocity_y: Dust_Field_Scalar,
-    next_velocity_x: Dust_Field_Scalar,
-    next_velocity_y: Dust_Field_Scalar,
+    momentum_x: Dust_Field_Scalar,
+    momentum_y: Dust_Field_Scalar,
+    solved_velocity_x: Dust_Field_Scalar,
+    solved_velocity_y: Dust_Field_Scalar,
+    support_bounds: Vector_Dust_Field_Bounds,
+    previous_solve_bounds: Vector_Dust_Field_Bounds,
 }
 
 // Spatial layout for one deterministic diagnostic dust emission.
