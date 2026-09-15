@@ -285,6 +285,32 @@ replay_dust_tool_contact_matches_immediate_reference :: proc(t: ^testing.T) {
     testing.expect_value(t, actual^.dust_tool_contact_count, 0)
 }
 
+// Verify sampled sweeps visit only each point's local exact-grid neighborhood.
+@(test)
+dust_tool_sweep_queries_local_candidates_per_sample :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    ps^.low_particles[0] = {
+        pos_x = 0.105, pos_y = 0.5, life = 100, alive = true}
+    ps^.low_particles[1] = {
+        pos_x = 0.895, pos_y = 0.5, life = 100, alive = true}
+    testing.expect(t, queue_dust_tool_contact(ps, {
+        endpoint = {0.9, 0.5, 0},
+        segment_first = {0.1, 0.5, 0},
+        segment_second = {0.9, 0.5, 0},
+        sample_count = 2,
+        has_sweep = true,
+    }))
+    build_exact_dust_grid(ps)
+
+    replay_dust_tool_contacts(ps)
+
+    testing.expect_value(t, ps^.dust_contact_candidate_visit_count, u64(2))
+    testing.expect(t, ps^.low_particles.vel_x[0] > 0)
+    testing.expect(t, ps^.low_particles.vel_x[1] < 0)
+}
+
 // Verify deferred contacts retain the original pre-integration fixed-step timing.
 @(test)
 dust_tool_contact_replays_before_fixed_step_integration :: proc(t: ^testing.T) {
@@ -1139,9 +1165,9 @@ push_dust_away_from_xy_index_wakes_sleeping_particle :: proc(t: ^testing.T) {
     testing.expect(t, ps^.low_particles.vel_x[0] > 0)
 }
 
-//   Verify queued tool contact wakes a sleeping particle in its cell halo.
+//   Verify queued contact leaves sleeping dust outside its exact radius untouched.
 @(test)
-replay_dust_tool_contacts_wakes_sleeping_cell_halo :: proc(t: ^testing.T) {
+replay_dust_tool_contacts_does_not_wake_sleeping_cell_halo :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
     ps^.use_max_dust_particles = 1
@@ -1157,8 +1183,9 @@ replay_dust_tool_contacts_wakes_sleeping_cell_halo :: proc(t: ^testing.T) {
 
     replay_dust_tool_contacts(ps)
 
-    testing.expect(t, !ps^.dust_sleeping[0])
-    testing.expect_value(t, ps^.dust_wake_transition_count, u64(1))
+    testing.expect(t, ps^.dust_sleeping[0])
+    testing.expect_value(t, ps^.dust_sleeping_count, 1)
+    testing.expect_value(t, ps^.dust_wake_transition_count, u64(0))
     testing.expect_value(t, ps^.low_particles.vel_x[0], f32(0))
     testing.expect_value(t, ps^.low_particles.vel_y[0], f32(0))
 }

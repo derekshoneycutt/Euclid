@@ -712,7 +712,7 @@ reset_particles :: proc(ps: ^Particle_System) {
     ps.vector_dust_peak_speed_sq = 0
     ps.vector_dust_kinetic_measure = 0
     dust_field_reset_state(ps)
-    ps.dust_contact_candidate_count = 0
+    ps.dust_contact_candidate_visit_count = 0
     ps.dust_spawn_sequence = 0
     reset_dust_relaxation_state(ps)
     for i in 0..<ps^.use_max_dust_particles {
@@ -1327,81 +1327,31 @@ mark_dust_contact_candidate_cells :: proc(
     }
 }
 
-// Collect the ordered unique slot union covered by every queued tool contact.
-collect_dust_contact_candidates :: proc(ps: ^Particle_System) {
+// Mark exact-grid candidates local to one point-contact radius.
+collect_dust_point_candidates :: proc(ps: ^Particle_System, x, y, radius: f32) {
     mem.set(&ps^.dust_contact_candidate_bits[0], 0,
         size_of(ps^.dust_contact_candidate_bits))
-    ps^.dust_contact_candidate_count = 0
+    mark_dust_contact_candidate_cells(ps,
+        x - radius, y - radius, x + radius, y + radius)
+}
+
+// Apply one point push to local candidates in ascending particle-slot order.
+replay_dust_point_contact :: proc(
+    ps: ^Particle_System, x, y: f32, max_spawn_sequence: u64) {
     radius := f32(DUST_CONTACT_PUSH_RADIUS)
-    for contact_index in 0..<ps^.dust_tool_contact_count {
-        intent := &ps^.dust_tool_contacts[contact_index]
-        mark_dust_contact_candidate_cells(ps,
-            intent^.endpoint.x - radius, intent^.endpoint.y - radius,
-            intent^.endpoint.x + radius, intent^.endpoint.y + radius)
-        if intent^.has_sweep {
-            mark_dust_contact_candidate_cells(ps,
-                min(intent^.segment_first.x, intent^.segment_second.x) - radius,
-                min(intent^.segment_first.y, intent^.segment_second.y) - radius,
-                max(intent^.segment_first.x, intent^.segment_second.x) + radius,
-                max(intent^.segment_first.y, intent^.segment_second.y) + radius)
-        }
-    }
+    contact := Dust_Contact_Push{x, y, radius, radius * radius}
+    collect_dust_point_candidates(ps, x, y, radius)
     word_count := (ps^.use_max_dust_particles + 63) / 64
     for word_index in 0..<word_count {
         word := ps^.dust_contact_candidate_bits[word_index]
         for bit_index in 0..<64 {
             particle_index := word_index * 64 + bit_index
-            if particle_index >= ps^.use_max_dust_particles {
-                break
+            if particle_index >= ps^.use_max_dust_particles {break}
+            if word & (u64(1) << u64(bit_index)) == 0 {continue}
+            ps^.dust_contact_candidate_visit_count += 1
+            if ps^.dust_slot_spawn_sequences[particle_index] <= max_spawn_sequence {
+                push_dust_away_from_xy_index(ps, particle_index, contact)
             }
-            if word & (u64(1) << u64(bit_index)) != 0 {
-                ps^.dust_contact_candidates[ps^.dust_contact_candidate_count] =
-                    i32(particle_index)
-                ps^.dust_contact_candidate_count += 1
-            }
-        }
-    }
-}
-
-// Wake sleeping dust in contact-intersected parent cells and one-cell halo.
-wake_dust_tool_point_halo :: proc(
-    ps: ^Particle_System, x, y, radius: f32, max_spawn_sequence: u64) {
-    first_x := clamp(int((x - radius) / DUST_GRID_CELL_SIZE) - 1,
-        0, DUST_GRID_DIM - 1)
-    first_y := clamp(int((y - radius) / DUST_GRID_CELL_SIZE) - 1,
-        0, DUST_GRID_DIM - 1)
-    last_x := clamp(int((x + radius) / DUST_GRID_CELL_SIZE) + 1,
-        0, DUST_GRID_DIM - 1)
-    last_y := clamp(int((y + radius) / DUST_GRID_CELL_SIZE) + 1,
-        0, DUST_GRID_DIM - 1)
-    for cell_y in first_y..=last_y {
-        for cell_x in first_x..=last_x {
-            cell := cell_y * DUST_GRID_DIM + cell_x
-            first := int(ps^.dust_exact_offsets[cell])
-            last := int(ps^.dust_exact_offsets[cell + 1])
-            for exact_index in first..<last {
-                particle_index := int(ps^.dust_exact_indices[exact_index])
-                if ps^.dust_sleeping[particle_index] &&
-                    !ps^.dust_aggregate[particle_index] &&
-                    ps^.dust_slot_spawn_sequences[particle_index] <= max_spawn_sequence {
-                    wake_dust_particle(ps, particle_index)
-                }
-            }
-        }
-    }
-}
-
-// Apply one point push to contact candidates in ascending particle-slot order.
-replay_dust_point_contact :: proc(
-    ps: ^Particle_System, x, y: f32, max_spawn_sequence: u64) {
-    radius := f32(DUST_CONTACT_PUSH_RADIUS)
-    contact := Dust_Contact_Push{x, y, radius, radius * radius}
-    wake_dust_tool_point_halo(ps, x, y, radius, max_spawn_sequence)
-    for candidate_index in 0..<ps^.dust_contact_candidate_count {
-        particle_index := int(ps^.dust_contact_candidates[candidate_index])
-        if ps.low_particles[particle_index].alive &&
-            ps^.dust_slot_spawn_sequences[particle_index] <= max_spawn_sequence {
-            push_dust_away_from_xy_index(ps, particle_index, contact)
         }
     }
 }
@@ -1411,7 +1361,7 @@ replay_dust_tool_contacts :: proc(ps: ^Particle_System) {
     if ps == nil || ps^.dust_tool_contact_count == 0 {
         return
     }
-    collect_dust_contact_candidates(ps)
+    ps^.dust_contact_candidate_visit_count = 0
     for contact_index in 0..<ps^.dust_tool_contact_count {
         intent := &ps^.dust_tool_contacts[contact_index]
         replay_dust_point_contact(ps, intent^.endpoint.x, intent^.endpoint.y,
