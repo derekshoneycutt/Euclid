@@ -297,7 +297,7 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
-- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
+- `sweep` : Retained for API symmetry; joint 1 always produces only point-like ground contact
 """
 function lock_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
@@ -337,7 +337,7 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
-- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
+- `sweep` : Retained for API symmetry; joint 1 always produces only point-like ground contact
 """
 function move_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
@@ -379,7 +379,7 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
-- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
+- `sweep` : (Default true) When true, sweeps the grounded area between the previous and current compass legs; false produces only point-like tip contact
 """
 function lock_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
@@ -419,7 +419,7 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
-- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
+- `sweep` : (Default true) When true, sweeps the grounded area between the previous and current compass legs; false produces only point-like tip contact
 """
 function move_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)

@@ -1083,8 +1083,8 @@ dust_tool_contacts_can_coalesce :: proc(
         return false
     }
     switch current.source {
-    case .Compass_Span:
-        return previous.has_sweep && current.has_sweep
+    case .Compass_Filled_Sweep:
+        return previous == current
     case .Point, .Scenario:
         return !previous.has_sweep && !current.has_sweep &&
             previous.endpoint == current.endpoint
@@ -1100,7 +1100,6 @@ coalesce_dust_tool_contacts :: proc(ps: ^Particle_System) {
         current := ps^.dust_tool_contacts[read_index]
         previous := &ps^.dust_tool_contacts[write_count - 1]
         if dust_tool_contacts_can_coalesce(previous^, current) {
-            if current.source == .Compass_Span {previous^ = current}
             ps^.dust_tool_contact_coalesced_count += 1
             continue
         }
@@ -1119,6 +1118,50 @@ dust_tool_sweep_interval_count :: proc(first, second: Vector3) -> int {
     return clamp(intervals, 1, DUST_TOOL_SWEEP_MAX_INTERVALS)
 }
 
+// Return intervals covering the largest corresponding filled-leg displacement.
+dust_filled_sweep_interval_count :: proc(
+    intent: ^particlemodel.Dust_Tool_Contact) -> int {
+    first_count := dust_tool_sweep_interval_count(
+        intent^.previous_segment_first, intent^.segment_first)
+    second_count := dust_tool_sweep_interval_count(
+        intent^.previous_segment_second, intent^.segment_second)
+    return max(first_count, second_count)
+}
+
+// Apply one interpolated leg of a compound filled-compass sweep.
+apply_dust_filled_sweep_leg :: proc(
+    ps: ^Particle_System, intent: ^particlemodel.Dust_Tool_Contact,
+    sweep_t: f32) {
+    first := math.lerp(intent^.previous_segment_first, intent^.segment_first, sweep_t)
+    second := math.lerp(
+        intent^.previous_segment_second, intent^.segment_second, sweep_t)
+    interval_count := dust_tool_sweep_interval_count(first, second)
+    endpoint_motion := intent^.segment_second - intent^.previous_segment_second
+    for sample_index in 0..=interval_count {
+        leg_t := f32(sample_index) / f32(interval_count)
+        previous := math.lerp(
+            intent^.previous_segment_first, intent^.previous_segment_second, leg_t)
+        current := math.lerp(intent^.segment_first, intent^.segment_second, leg_t)
+        position := math.lerp(first, second, leg_t)
+        motion := current - previous
+        if motion.x == 0 && motion.y == 0 {motion = endpoint_motion}
+        ps^.dust_tool_contact_field_node_visit_count +=
+            dust_field_apply_tool_motion(&ps^.dust_field,
+                {position.x, position.y}, {motion.x, motion.y})
+        ps^.dust_tool_contact_sample_count += 1
+    }
+}
+
+// Apply one filled-compass contact over its complete ruled sweep area.
+apply_dust_filled_sweep_to_field :: proc(
+    ps: ^Particle_System, intent: ^particlemodel.Dust_Tool_Contact) {
+    interval_count := dust_filled_sweep_interval_count(intent)
+    for sweep_index in 0..=interval_count {
+        apply_dust_filled_sweep_leg(
+            ps, intent, f32(sweep_index) / f32(interval_count))
+    }
+}
+
 // Apply queued contacts to deposited field momentum in command order.
 apply_dust_tool_contacts_to_field :: proc(ps: ^Particle_System) {
     if ps == nil {return}
@@ -1129,6 +1172,10 @@ apply_dust_tool_contacts_to_field :: proc(ps: ^Particle_System) {
     field := &ps^.dust_field
     for contact_index in 0..<ps^.dust_tool_contact_count {
         intent := &ps^.dust_tool_contacts[contact_index]
+        if intent^.source == .Compass_Filled_Sweep {
+            apply_dust_filled_sweep_to_field(ps, intent)
+            continue
+        }
         if !intent^.has_sweep {
             ps^.dust_tool_contact_field_node_visit_count +=
                 dust_field_apply_tool_point(

@@ -63,20 +63,27 @@ set_tool_position :: proc(
         command^.flag = sweep
     }
     if captured || state^.shape_world == nil {return}
+    previous_first, previous_first_found := tool_position(
+        state, state^.world_compass.joint1)
+    previous_second, previous_second_found := tool_position(
+        state, state^.world_compass.joint2)
     transform, found := shapemodel.shape_component_get_mut(
         &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
     if !found {return}
     transform^.position = position
-    first, second: rl.Vector3
-    floor_sweep := false
-    if sweep && (entity == state^.world_compass.joint1 ||
-        entity == state^.world_compass.joint2) {
-        first_found, second_found: bool
-        first, first_found = tool_position(state, state^.world_compass.joint1)
-        second, second_found = tool_position(state, state^.world_compass.joint2)
-        floor_sweep = first_found && second_found
+    if sweep && entity == state^.world_compass.joint2 &&
+        previous_first_found && previous_second_found {
+        current_first, current_first_found := tool_position(
+            state, state^.world_compass.joint1)
+        current_second, current_second_found := tool_position(
+            state, state^.world_compass.joint2)
+        if current_first_found && current_second_found {
+            queue_compass_filled_dust_contact(state, previous_first,
+                previous_second, current_first, current_second)
+            return
+        }
     }
-    queue_tool_dust_contact(state, position, first, second, floor_sweep)
+    queue_tool_dust_contact(state, position)
 }
 
 // Enable or disable one canonical tool joint's direct snap constraint.

@@ -75,13 +75,15 @@ Dust_Emission_Request_Queue :: struct {
 // Identify the owner semantics used to coalesce adjacent tool contacts.
 Dust_Tool_Contact_Source :: enum u8 {
     Point,
-    Compass_Span,
+    Compass_Filled_Sweep,
     Scenario,
 }
 
-// Describe one ordered endpoint push with an optional sampled compass sweep.
+// Describe one ordered point push or compound filled-compass sweep.
 Dust_Tool_Contact :: struct {
     endpoint: rl.Vector3,
+    previous_segment_first: rl.Vector3,
+    previous_segment_second: rl.Vector3,
     segment_first: rl.Vector3,
     segment_second: rl.Vector3,
     max_spawn_sequence: u64,

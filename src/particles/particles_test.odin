@@ -165,22 +165,25 @@ dust_tool_contact_queue_is_bounded :: proc(t: ^testing.T) {
     testing.expect_value(t, ps^.dust_tool_contact_overflow_count, 1)
 }
 
-// Verify adjacent redundant contacts coalesce without crossing source or spawn bounds.
+// Verify only exact duplicate filled sweeps coalesce within one spawn boundary.
 @(test)
 dust_tool_contacts_coalesce_only_with_matching_semantics :: proc(t: ^testing.T) {
     ps := new(particlemodel.Particle_System, context.allocator)
     defer free(ps)
-    first_span := particlemodel.Dust_Tool_Contact{
+    first_sweep := particlemodel.Dust_Tool_Contact{
         endpoint = {0.1, 0.2, 0}, segment_first = {0.1, 0.2, 0},
         segment_second = {0.4, 0.2, 0}, has_sweep = true,
-        source = .Compass_Span}
-    final_span := first_span
-    final_span.endpoint = {0.5, 0.2, 0}
-    final_span.segment_second = final_span.endpoint
+        previous_segment_first = {0.1, 0.2, 0},
+        previous_segment_second = {0.4, 0.2, 0},
+        source = .Compass_Filled_Sweep}
+    distinct_sweep := first_sweep
+    distinct_sweep.endpoint = {0.5, 0.2, 0}
+    distinct_sweep.segment_second = distinct_sweep.endpoint
     duplicate := particlemodel.Dust_Tool_Contact{
         endpoint = {0.7, 0.8, 0}, source = .Point}
-    testing.expect(t, queue_dust_tool_contact(ps, first_span))
-    testing.expect(t, queue_dust_tool_contact(ps, final_span))
+    testing.expect(t, queue_dust_tool_contact(ps, first_sweep))
+    testing.expect(t, queue_dust_tool_contact(ps, first_sweep))
+    testing.expect(t, queue_dust_tool_contact(ps, distinct_sweep))
     testing.expect(t, queue_dust_tool_contact(ps, duplicate))
     testing.expect(t, queue_dust_tool_contact(ps, duplicate))
     scenario := duplicate
@@ -191,10 +194,42 @@ dust_tool_contacts_coalesce_only_with_matching_semantics :: proc(t: ^testing.T) 
 
     coalesce_dust_tool_contacts(ps)
 
-    testing.expect_value(t, ps^.dust_tool_contact_count, 4)
+    testing.expect_value(t, ps^.dust_tool_contact_count, 5)
     testing.expect_value(t, ps^.dust_tool_contact_coalesced_count, u64(2))
-    testing.expect_value(t, ps^.dust_tool_contacts[0], final_span)
-    testing.expect_value(t, ps^.dust_tool_contacts[1], duplicate)
+    testing.expect_value(t, ps^.dust_tool_contacts[0], first_sweep)
+    testing.expect_value(t, ps^.dust_tool_contacts[1], distinct_sweep)
+    testing.expect_value(t, ps^.dust_tool_contacts[2], duplicate)
+}
+
+// Verify a compound filled sweep reaches interior nodes but not distant support.
+@(test)
+dust_filled_compass_sweep_covers_ruled_sector :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    interior := [3][2]int{{110, 110}, {120, 120}, {130, 110}}
+    outside := [2]int{175, 175}
+    for point in interior {
+        ps^.dust_field.density[point.y * DUST_FIELD_DIM + point.x] = 1
+    }
+    outside_node := outside.y * DUST_FIELD_DIM + outside.x
+    ps^.dust_field.density[outside_node] = 1
+    ps^.dust_field.support_bounds = {110, 110, 175, 175, true}
+    testing.expect(t, queue_dust_tool_contact(ps, {
+        endpoint = {0.4, 0.6, 0},
+        previous_segment_first = {0.4, 0.4, 0},
+        previous_segment_second = {0.6, 0.4, 0},
+        segment_first = {0.4, 0.4, 0}, segment_second = {0.4, 0.6, 0},
+        has_sweep = true, source = .Compass_Filled_Sweep}))
+
+    apply_dust_tool_contacts_to_field(ps)
+
+    for point in interior {
+        node := point.y * DUST_FIELD_DIM + point.x
+        testing.expect(t, ps^.dust_field.momentum_x[node] < 0)
+        testing.expect(t, ps^.dust_field.momentum_y[node] > 0)
+    }
+    testing.expect_value(t, ps^.dust_field.momentum_x[outside_node], f32(0))
+    testing.expect_value(t, ps^.dust_field.momentum_y[outside_node], f32(0))
 }
 
 // Verify floor-tool force never changes an airborne particle's ballistic state.

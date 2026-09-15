@@ -234,7 +234,21 @@ bridge_tool_unlock_is_deferred_until_scene_commit :: proc(t: ^testing.T) {
     testing.expect(t, !constraint^.enabled)
 }
 
-// Verify committed tool moves queue one ordered compound contact with floor-gated sweep.
+// Assert one compound contact carries the expected previous and current legs.
+expect_compass_filled_sweep :: proc(t: ^testing.T,
+    contact: ^particlemodel.Dust_Tool_Contact) {
+    testing.expect(t, contact^.has_sweep)
+    testing.expect_value(t, contact^.source,
+        particlemodel.Dust_Tool_Contact_Source.Compass_Filled_Sweep)
+    testing.expect_value(t, contact^.previous_segment_first,
+        rl.Vector3{0.15, 0.2, 0})
+    testing.expect_value(t, contact^.previous_segment_second,
+        rl.Vector3{0.4, 0.2, 0})
+    testing.expect_value(t, contact^.segment_first, rl.Vector3{0.15, 0.2, 0})
+    testing.expect_value(t, contact^.segment_second, rl.Vector3{0.45, 0.2, 0})
+}
+
+// Verify committed compass moves retain ordered previous and current leg geometry.
 @(test)
 bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
     world: shapemodel.Shape_World
@@ -258,24 +272,18 @@ bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
     third := &particle_system^.dust_tool_contacts[2]
     testing.expect_value(t, first^.endpoint, rl.Vector3{0.15, 0.2, 0})
     testing.expect_value(t, second^.endpoint, rl.Vector3{0.45, 0.2, 0})
-    testing.expect(t, first^.has_sweep)
-    testing.expect(t, second^.has_sweep)
+    testing.expect(t, !first^.has_sweep)
     testing.expect_value(t, first^.source,
-        particlemodel.Dust_Tool_Contact_Source.Compass_Span)
-    testing.expect_value(t, second^.source,
-        particlemodel.Dust_Tool_Contact_Source.Compass_Span)
+        particlemodel.Dust_Tool_Contact_Source.Point)
+    expect_compass_filled_sweep(t, second)
     testing.expect_value(t, third^.endpoint, rl.Vector3{0.5, 0.2, 0})
     testing.expect(t, !third^.has_sweep)
     testing.expect_value(t, third^.source,
         particlemodel.Dust_Tool_Contact_Source.Point)
-    expected_span := second^
-    expected_point := third^
-
     particles.coalesce_dust_tool_contacts(particle_system)
 
-    testing.expect_value(t, particle_system^.dust_tool_contact_count, 2)
-    testing.expect_value(t, particle_system^.dust_tool_contacts[0], expected_span)
-    testing.expect_value(t, particle_system^.dust_tool_contacts[1], expected_point)
+    testing.expect_value(t, particle_system^.dust_tool_contact_count, 3)
+    testing.expect_value(t, particle_system^.dust_tool_contact_coalesced_count, u64(0))
 }
 
 // Verify queue-capacity preflight rejects a complete scene batch before mutation.

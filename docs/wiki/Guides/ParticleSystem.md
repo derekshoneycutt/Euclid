@@ -164,26 +164,37 @@ state competing with this result.
 ## Tool Contacts
 
 The display queues bounded contact intents instead of searching particle storage.
-Each intent records its source, endpoint or compass segment, and spawn-sequence cutoff.
-The worker preserves command order and coalesces adjacent redundant contacts with the
-same source semantics.
+Each intent records its source, geometry, and spawn-sequence cutoff. The worker preserves
+command order and coalesces only adjacent contacts with identical source semantics and
+geometry.
 
-A point contact contributes one sample. A compass sweep selects an interval count from
-its geometric length and contact radius, then samples both endpoints inclusively. This
-prevents unsampled bands without replaying a fixed excessive count for short sweeps.
+Pens, ordinary compass movement, outlined circles, and outline highlights use point
+contacts. Each contributes one radial-away sample at the authored tip. A filled-circle
+update instead records the previous and current compass legs as one compound joint-2
+contact. The worker interpolates complete legs across that motion, then samples along
+each leg. Both interval counts derive from geometric distance and contact radius, so
+sample spacing remains bounded in both dimensions and no radial or angular bands are
+skipped.
 
 ```mermaid
 flowchart LR
     Queue[Bounded contact queue] --> Coalesce[Coalesce adjacent redundant intents]
-    Coalesce --> Sample[Radius-based inclusive samples]
+    Coalesce --> Kind{Contact kind}
+    Kind -->|Point or outline| Point[One radial sample]
+    Kind -->|Filled compass| Legs[Interpolate previous to current legs]
+    Legs --> Sample[Radius-based samples along each leg]
+    Point --> Bounds[Intersect field support]
     Sample --> Bounds[Intersect field support]
     Bounds --> Occupied[Visit occupied nodes inside radius]
-    Occupied --> Momentum[Add density-weighted radial momentum]
+    Occupied --> Momentum[Add density-weighted momentum]
 ```
 
-At an occupied node, radial contact momentum scales by local density. Empty nodes are
-ignored. Diagnostics retain overflow, coalesced-contact, generated-sample, and visited
-field-node counts so contact cost can be explained without per-node trace events.
+At an occupied node, contact momentum scales by local density. Point contacts push
+radially away from their sample. Filled-compass contacts follow local authored leg
+motion, including when a sample lies exactly on an occupied field node. Empty nodes are
+ignored, and airborne particles never enter this grounded field path. Diagnostics
+retain overflow, coalesced-contact, generated-sample, and visited field-node counts so
+contact cost can be explained without per-node trace events.
 
 ## Rendering
 

@@ -159,38 +159,72 @@ dust_field_deposit :: proc(field: ^Dust_Field_State,
         field, dust_field_transfer(position), velocity)
 }
 
-// Add one radial tool-velocity impulse to occupied nodes inside current support.
-dust_field_apply_tool_point :: proc(
-    field: ^Dust_Field_State, position: rl.Vector2) -> u64 {
-    if !field^.support_bounds.valid {return 0}
+// Intersect one tool sample's radius with occupied field support.
+dust_field_tool_bounds :: proc(
+    field: ^Dust_Field_State, position: rl.Vector2) -> Dust_Field_Bounds {
     radius := f32(DUST_CONTACT_PUSH_RADIUS)
-    first_x := max(int(math.ceil(f64((position.x - radius) /
-        DUST_FIELD_SPACING))), int(field^.support_bounds.min_x))
-    first_y := max(int(math.ceil(f64((position.y - radius) /
-        DUST_FIELD_SPACING))), int(field^.support_bounds.min_y))
-    last_x := min(int(math.floor(f64((position.x + radius) /
-        DUST_FIELD_SPACING))), int(field^.support_bounds.max_x))
-    last_y := min(int(math.floor(f64((position.y + radius) /
-        DUST_FIELD_SPACING))), int(field^.support_bounds.max_y))
-    if first_x > last_x || first_y > last_y {return 0}
+    return {
+        min_x = i32(max(int(math.ceil(f64((position.x - radius) /
+            DUST_FIELD_SPACING))), int(field^.support_bounds.min_x))),
+        min_y = i32(max(int(math.ceil(f64((position.y - radius) /
+            DUST_FIELD_SPACING))), int(field^.support_bounds.min_y))),
+        max_x = i32(min(int(math.floor(f64((position.x + radius) /
+            DUST_FIELD_SPACING))), int(field^.support_bounds.max_x))),
+        max_y = i32(min(int(math.floor(f64((position.y + radius) /
+            DUST_FIELD_SPACING))), int(field^.support_bounds.max_y))),
+        valid = true,
+    }
+}
+
+// Add one radial or authored-direction impulse to occupied nodes near a tool sample.
+dust_field_apply_tool_impulse :: proc(
+    field: ^Dust_Field_State, position, direction: rl.Vector2,
+    directional: bool) -> u64 {
+    if !field^.support_bounds.valid {return 0}
+    direction_length := f32(math.sqrt(f64(
+        direction.x * direction.x + direction.y * direction.y)))
+    if directional && direction_length <= DUST_DENSITY_EPSILON {return 0}
+    radius := f32(DUST_CONTACT_PUSH_RADIUS)
+    bounds := dust_field_tool_bounds(field, position)
+    if bounds.min_x > bounds.max_x || bounds.min_y > bounds.max_y {return 0}
     visits: u64
-    for y in first_y..=last_y {
-        for x in first_x..=last_x {
+    for y in int(bounds.min_y)..=int(bounds.max_y) {
+        for x in int(bounds.min_x)..=int(bounds.max_x) {
             visits += 1
             node := y * DUST_FIELD_DIM + x
             density := field^.density[node]
             delta_x := f32(x) * DUST_FIELD_SPACING - position.x
             delta_y := f32(y) * DUST_FIELD_SPACING - position.y
             distance_sq := delta_x * delta_x + delta_y * delta_y
-            if density <= DUST_DENSITY_EPSILON || distance_sq == 0 ||
-                distance_sq > radius * radius {continue}
+            if density <= DUST_DENSITY_EPSILON || distance_sq > radius * radius {
+                continue
+            }
             distance := f32(math.sqrt(f64(distance_sq)))
-            impulse := DUST_CONTACT_PUSH_SPEED * (1 - distance / radius) / distance
-            field^.momentum_x[node] += density * delta_x * impulse
-            field^.momentum_y[node] += density * delta_y * impulse
+            falloff := DUST_CONTACT_PUSH_SPEED * (1 - distance / radius)
+            if directional {
+                field^.momentum_x[node] +=
+                    density * direction.x * falloff / direction_length
+                field^.momentum_y[node] +=
+                    density * direction.y * falloff / direction_length
+            } else if distance > 0 {
+                field^.momentum_x[node] += density * delta_x * falloff / distance
+                field^.momentum_y[node] += density * delta_y * falloff / distance
+            }
         }
     }
     return visits
+}
+
+// Add one radial tool-velocity impulse to occupied nodes inside current support.
+dust_field_apply_tool_point :: proc(
+    field: ^Dust_Field_State, position: rl.Vector2) -> u64 {
+    return dust_field_apply_tool_impulse(field, position, {}, false)
+}
+
+// Add one motion-directed filled-sweep impulse to nearby occupied nodes.
+dust_field_apply_tool_motion :: proc(
+    field: ^Dust_Field_State, position, direction: rl.Vector2) -> u64 {
+    return dust_field_apply_tool_impulse(field, position, direction, true)
 }
 
 // Convert deposited momentum to velocity inside one inclusive rectangle.

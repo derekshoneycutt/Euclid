@@ -1843,7 +1843,7 @@ function animate_draw_filledcircle(
         joint_point[2] + radius * Float32(sin(theta)),
         0f0]
 
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint_point)
+    OdinJuliaBridge.lock_compass_joint1(state_ptr, joint_point; sweep = false)
     OdinJuliaBridge.set_compass_active(state_ptr, 3, color)
     OdinJuliaBridge.lock_compass_joint2(state_ptr, end_point)
     OdinJuliaBridge.show_compass(state_ptr)

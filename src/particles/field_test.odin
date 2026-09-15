@@ -141,6 +141,22 @@ dust_tool_points_accumulate_overlaps :: proc(t: ^testing.T) {
         "overlapping tool momentum")
 }
 
+// Verify authored sweep motion affects an occupied node exactly under its sample.
+@(test)
+dust_tool_motion_pushes_exact_center_in_authored_direction :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    center := 125 * DUST_FIELD_DIM + 125
+    field^.density[center] = 2
+    field^.support_bounds = {125, 125, 125, 125, true}
+
+    visits := dust_field_apply_tool_motion(field, {0.5, 0.5}, {0, 0.1})
+
+    testing.expect_value(t, visits, u64(1))
+    testing.expect_value(t, field^.momentum_x[center], f32(0))
+    testing.expect(t, field^.momentum_y[center] > 0)
+}
+
 // Verify tool force is bounded by occupied support and ignores empty nodes.
 @(test)
 dust_tool_point_respects_support_and_zero_density :: proc(t: ^testing.T) {
