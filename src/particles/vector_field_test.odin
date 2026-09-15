@@ -95,6 +95,75 @@ vector_dust_boundary_deposit_is_conservative :: proc(t: ^testing.T) {
         "boundary y momentum")
 }
 
+// Verify tool force adds density-weighted radial momentum without changing density.
+@(test)
+vector_dust_tool_point_adds_density_weighted_momentum :: proc(t: ^testing.T) {
+    field := new(Vector_Dust_Field_State, context.allocator)
+    defer free(field)
+    center := 125 * DUST_FIELD_DIM + 125
+    right := center + 1
+    field^.density[center] = 3
+    field^.density[right] = 2
+    field^.support_bounds = {125, 125, 126, 125, true}
+
+    visits := vector_dust_field_apply_tool_point(field, {0.5, 0.5})
+
+    testing.expect_value(t, visits, u64(2))
+    testing.expect_value(t, field^.momentum_x[center], f32(0))
+    testing.expect_value(t, field^.momentum_y[center], f32(0))
+    test_helpers.expect_close(t, field^.momentum_x[right], f32(0.0042),
+        "density-weighted radial x momentum")
+    testing.expect_value(t, field^.momentum_y[right], f32(0))
+    testing.expect_value(t, field^.density[center], f32(3))
+    testing.expect_value(t, field^.density[right], f32(2))
+
+    field^.density[right + 1] = 1
+    field^.momentum_x[right + 1] = field^.momentum_x[right] / 2
+    vector_dust_field_normalize(field, {126, 125, 127, 125, true})
+    test_helpers.expect_close(t, field^.momentum_x[right],
+        field^.momentum_x[right + 1], "density-independent velocity increment")
+}
+
+// Verify overlapping tool samples accumulate momentum in command order.
+@(test)
+vector_dust_tool_points_accumulate_overlaps :: proc(t: ^testing.T) {
+    field := new(Vector_Dust_Field_State, context.allocator)
+    defer free(field)
+    node := 125 * DUST_FIELD_DIM + 126
+    field^.density[node] = 1
+    field^.support_bounds = {126, 125, 126, 125, true}
+
+    _ = vector_dust_field_apply_tool_point(field, {0.5, 0.5})
+    first_momentum := field^.momentum_x[node]
+    _ = vector_dust_field_apply_tool_point(field, {0.5, 0.5})
+
+    test_helpers.expect_close(t, field^.momentum_x[node], 2 * first_momentum,
+        "overlapping tool momentum")
+}
+
+// Verify tool force is bounded by occupied support and ignores empty nodes.
+@(test)
+vector_dust_tool_point_respects_support_and_zero_density :: proc(t: ^testing.T) {
+    field := new(Vector_Dust_Field_State, context.allocator)
+    defer free(field)
+    field^.support_bounds = {0, 0, 2, 2, true}
+    field^.density[1] = 1
+    outside := 3 * DUST_FIELD_DIM + 3
+    field^.density[outside] = 1
+
+    visits := vector_dust_field_apply_tool_point(field, {0, 0})
+
+    testing.expect_value(t, visits, u64(9))
+    testing.expect(t, field^.momentum_x[1] > 0)
+    testing.expect_value(t, field^.momentum_y[1], f32(0))
+    testing.expect_value(t, field^.momentum_x[outside], f32(0))
+    testing.expect_value(t, field^.momentum_y[outside], f32(0))
+
+    field^.support_bounds = {200, 200, 202, 202, true}
+    testing.expect_value(t,
+        vector_dust_field_apply_tool_point(field, {0, 0}), u64(0))
+}
+
 // Verify normalization and reconstruction preserve a deposited particle velocity.
 @(test)
 vector_dust_round_trip_preserves_single_velocity :: proc(t: ^testing.T) {

@@ -24,7 +24,6 @@ VECTOR_DUST_FIELD_STENCIL_CAP :: 4
 VECTOR_DUST_SETTLED_SPEED_SQ :: f32(1e-8)
 DUST_COLLISION_PAIR_CAP :: MAX_LOW_PARTICLES * 16
 DUST_TOOL_CONTACT_CAP :: 64
-DUST_CONTACT_CANDIDATE_WORD_COUNT :: (MAX_LOW_PARTICLES + 63) / 64
 DUST_RELAXATION_LEAVES_PER_PARENT :: 16
 DUST_RELAXATION_LEAF_COUNT ::
     DUST_GRID_DIM_SQUARED * DUST_RELAXATION_LEAVES_PER_PARENT
@@ -170,8 +169,7 @@ Particle_System :: struct {
     dust_tool_contact_overflow_count: int,
     dust_tool_contact_coalesced_count: u64,
     dust_tool_contact_sample_count: u64,
-    dust_contact_candidate_bits: [DUST_CONTACT_CANDIDATE_WORD_COUNT]u64,
-    dust_contact_candidate_visit_count: u64,
+    dust_tool_contact_field_node_visit_count: u64,
     dust_slot_spawn_sequences: [MAX_LOW_PARTICLES]u64,
     dust_spawn_sequence: u64,
 

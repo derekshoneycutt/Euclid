@@ -442,7 +442,6 @@ emit_trailing_particle :: proc "c" (
         return
     }
     context = state^.saved_context
-    particles.flush_dust_tool_contacts(state^.particle_system)
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_trail_particles(
         state^.particle_system, state^.current_delta_time, {pos, rl_color})
@@ -462,7 +461,6 @@ emit_flicker_particle :: proc "c" (
         return
     }
     context = state^.saved_context
-    particles.flush_dust_tool_contacts(state^.particle_system)
     rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_flicker_particles(
         state^.particle_system, {pos, rl_color}, 10)

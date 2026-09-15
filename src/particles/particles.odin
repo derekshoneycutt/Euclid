@@ -112,7 +112,6 @@ DUST_COLLISION_REFINED_CHILD_COUNT :: 4
 DUST_COLLISION_REFINED_CHILD_QUOTA ::
     DUST_COLLISION_CELL_SAMPLE_CAP / DUST_COLLISION_REFINED_CHILD_COUNT
 DUST_TOOL_CONTACT_CAP :: particlemodel.DUST_TOOL_CONTACT_CAP
-DUST_CONTACT_CANDIDATE_WORD_COUNT :: particlemodel.DUST_CONTACT_CANDIDATE_WORD_COUNT
 DUST_RELAXATION_LEAVES_PER_PARENT ::
     particlemodel.DUST_RELAXATION_LEAVES_PER_PARENT
 DUST_RELAXATION_LEAF_COUNT :: particlemodel.DUST_RELAXATION_LEAF_COUNT
@@ -150,10 +149,6 @@ CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES :: 900
 Particle_Emission :: struct {
     origin: Vector3,
     color: rl.Color,
-}
-
-Dust_Contact_Push :: struct {
-    x, y, radius, radius_sq: f32,
 }
 
 Particle_Soa_Batch :: struct {
@@ -267,73 +262,6 @@ emit_trail_particles :: proc(
                 ps, emission.origin.x, emission.origin.y, emission.origin.z,
                 emission.color)
         }
-    }
-}
-
-//   Push nearby dust particles away from a 2D contact position.
-//
-// Parameters:
-//   - ps: Particle system containing dust particles.
-//   - x: Contact x position.
-//   - y: Contact y position.
-//
-// Returns:
-//   - none.
-push_dust_away_from_xy_index :: proc(
-    ps: ^Particle_System, i: int, contact: Dust_Contact_Push) {
-    dx := ps.low_particles.pos_x[i] - contact.x
-    dy := ps.low_particles.pos_y[i] - contact.y
-    dist_sq := dx * dx + dy * dy
-    if dist_sq > contact.radius_sq {
-        return
-    }
-    wake_dust_particle(ps, i)
-
-    dist := f32(math.sqrt(f64(dist_sq)))
-    nx, ny: f32
-    if dist > f32(0.00001) {
-        inv_dist := f32(1.0) / dist
-        nx = dx * inv_dist
-        ny = dy * inv_dist
-    } else {
-        theta := random_f32_range(ps, f32(0.0), f32(2.0 * math.PI))
-        nx = f32(math.cos(theta))
-        ny = f32(math.sin(theta))
-    }
-
-    falloff := f32(1.0) - math.clamp(dist / contact.radius, f32(0.0), f32(1.0))
-    push := DUST_CONTACT_PUSH_SPEED * falloff
-
-    ps.low_particles.vel_x[i] += nx * push
-    ps.low_particles.vel_y[i] += ny * push
-
-    ps.low_particles.pos_x[i] += nx * push
-    ps.low_particles.pos_y[i] += ny * push
-    clamp_xy_bounds_index(ps, i)
-}
-
-//   Push nearby dust particles away from a 2D contact position.
-//
-// Parameters:
-//   - ps: Particle system containing dust particles.
-//   - x: Contact x position.
-//   - y: Contact y position.
-//
-// Returns:
-//   - none.
-push_dust_away_from_xy :: proc (ps: ^Particle_System, x, y: f32) {
-    if ps^.use_max_dust_particles < 1 {
-        return
-    }
-
-    push_radius := f32(DUST_CONTACT_PUSH_RADIUS)
-    contact := Dust_Contact_Push{x, y, push_radius, push_radius * push_radius}
-
-    for i in 0..<ps^.use_max_dust_particles {
-        if !ps.low_particles[i].alive {
-            continue
-        }
-        push_dust_away_from_xy_index(ps, i, contact)
     }
 }
 
@@ -538,12 +466,8 @@ emit_shape_world_clear_burst :: proc(
 //   - none.
 update_particles :: proc(ps: ^Particle_System, dt: f32) {
     ps^.dust_floor_rest_count = 0
-    if ps^.dust_tool_contact_count > 0 {
-        build_exact_dust_grid(ps)
-        replay_dust_tool_contacts(ps)
-    }
-
     update_and_deposit_low_dust(ps)
+    apply_dust_tool_contacts_to_field(ps)
 
     integrate_particle_positions_soa_batch({
         ps.particles.pos_x[:],
@@ -699,6 +623,7 @@ reset_dust_tool_contact_state :: proc(ps: ^Particle_System) {
     ps.dust_tool_contact_overflow_count = 0
     ps.dust_tool_contact_coalesced_count = 0
     ps.dust_tool_contact_sample_count = 0
+    ps.dust_tool_contact_field_node_visit_count = 0
 }
 
 //   Reset particle-system runtime counters and mark all particle slots as dead.
@@ -720,7 +645,6 @@ reset_particles :: proc(ps: ^Particle_System) {
     ps.vector_dust_peak_speed_sq = 0
     ps.vector_dust_kinetic_measure = 0
     dust_field_reset_state(ps)
-    ps.dust_contact_candidate_visit_count = 0
     ps.dust_spawn_sequence = 0
     reset_dust_relaxation_state(ps)
     for i in 0..<ps^.use_max_dust_particles {
@@ -1347,57 +1271,6 @@ coalesce_dust_tool_contacts :: proc(ps: ^Particle_System) {
     ps^.dust_tool_contact_count = write_count
 }
 
-// Mark exact-grid members whose cells overlap one contact-space rectangle.
-mark_dust_contact_candidate_cells :: proc(
-    ps: ^Particle_System, min_x, min_y, max_x, max_y: f32) {
-    first_x := clamp(int(min_x / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
-    first_y := clamp(int(min_y / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
-    last_x := clamp(int(max_x / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
-    last_y := clamp(int(max_y / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
-    for cell_y in first_y..=last_y {
-        for cell_x in first_x..=last_x {
-            cell := cell_y * DUST_GRID_DIM + cell_x
-            first := int(ps^.dust_exact_offsets[cell])
-            last := int(ps^.dust_exact_offsets[cell + 1])
-            for exact_index in first..<last {
-                particle_index := int(ps^.dust_exact_indices[exact_index])
-                word := particle_index / 64
-                bit := u64(particle_index % 64)
-                ps^.dust_contact_candidate_bits[word] |= u64(1) << bit
-            }
-        }
-    }
-}
-
-// Mark exact-grid candidates local to one point-contact radius.
-collect_dust_point_candidates :: proc(ps: ^Particle_System, x, y, radius: f32) {
-    mem.set(&ps^.dust_contact_candidate_bits[0], 0,
-        size_of(ps^.dust_contact_candidate_bits))
-    mark_dust_contact_candidate_cells(ps,
-        x - radius, y - radius, x + radius, y + radius)
-}
-
-// Apply one point push to local candidates in ascending particle-slot order.
-replay_dust_point_contact :: proc(
-    ps: ^Particle_System, x, y: f32, max_spawn_sequence: u64) {
-    radius := f32(DUST_CONTACT_PUSH_RADIUS)
-    contact := Dust_Contact_Push{x, y, radius, radius * radius}
-    collect_dust_point_candidates(ps, x, y, radius)
-    word_count := (ps^.use_max_dust_particles + 63) / 64
-    for word_index in 0..<word_count {
-        word := ps^.dust_contact_candidate_bits[word_index]
-        for bit_index in 0..<64 {
-            particle_index := word_index * 64 + bit_index
-            if particle_index >= ps^.use_max_dust_particles {break}
-            if word & (u64(1) << u64(bit_index)) == 0 {continue}
-            ps^.dust_contact_candidate_visit_count += 1
-            if ps^.dust_slot_spawn_sequences[particle_index] <= max_spawn_sequence {
-                push_dust_away_from_xy_index(ps, particle_index, contact)
-            }
-        }
-    }
-}
-
 // Return radius-bounded intervals for one compass span in board-space XY.
 dust_tool_sweep_interval_count :: proc(first, second: Vector3) -> int {
     delta_x := second.x - first.x
@@ -1407,19 +1280,20 @@ dust_tool_sweep_interval_count :: proc(first, second: Vector3) -> int {
     return clamp(intervals, 1, DUST_TOOL_SWEEP_MAX_INTERVALS)
 }
 
-// Replay queued point or inclusive sampled-sweep pushes in command order.
-replay_dust_tool_contacts :: proc(ps: ^Particle_System) {
-    if ps == nil || ps^.dust_tool_contact_count == 0 {
-        return
-    }
-    coalesce_dust_tool_contacts(ps)
-    ps^.dust_contact_candidate_visit_count = 0
+// Apply queued contacts to deposited field momentum in command order.
+apply_dust_tool_contacts_to_field :: proc(ps: ^Particle_System) {
+    if ps == nil {return}
     ps^.dust_tool_contact_sample_count = 0
+    ps^.dust_tool_contact_field_node_visit_count = 0
+    if ps^.dust_tool_contact_count == 0 {return}
+    coalesce_dust_tool_contacts(ps)
+    field := &ps^.vector_dust_field
     for contact_index in 0..<ps^.dust_tool_contact_count {
         intent := &ps^.dust_tool_contacts[contact_index]
         if !intent^.has_sweep {
-            replay_dust_point_contact(ps, intent^.endpoint.x, intent^.endpoint.y,
-                intent^.max_spawn_sequence)
+            ps^.dust_tool_contact_field_node_visit_count +=
+                vector_dust_field_apply_tool_point(
+                    field, {intent^.endpoint.x, intent^.endpoint.y})
             ps^.dust_tool_contact_sample_count += 1
             continue
         }
@@ -1428,25 +1302,22 @@ replay_dust_tool_contacts :: proc(ps: ^Particle_System) {
         inv_intervals := f32(1.0) / f32(interval_count)
         for sample_index in 0..=interval_count {
             interpolation := f32(sample_index) * inv_intervals
-            replay_dust_point_contact(ps,
+            position := Vector2{
                 math.lerp(intent^.segment_first.x, intent^.segment_second.x,
                     interpolation),
                 math.lerp(intent^.segment_first.y, intent^.segment_second.y,
-                    interpolation),
-                intent^.max_spawn_sequence)
+                    interpolation)}
+            ps^.dust_tool_contact_field_node_visit_count +=
+                vector_dust_field_apply_tool_point(field, position)
                     ps^.dust_tool_contact_sample_count += 1
         }
     }
     ps^.dust_tool_contact_count = 0
 }
 
-// Replay pending tool contacts before another ordered particle mutation.
-flush_dust_tool_contacts :: proc(ps: ^Particle_System) {
-    if ps == nil || ps^.dust_tool_contact_count == 0 {
-        return
-    }
-    build_exact_dust_grid(ps)
-    replay_dust_tool_contacts(ps)
+// Discard pending tool contacts at a runtime generation boundary.
+discard_dust_tool_contacts :: proc(ps: ^Particle_System) {
+    if ps != nil {ps^.dust_tool_contact_count = 0}
 }
 
 //   Return a deterministic frame-varying hash for dense collision sampling.

@@ -473,6 +473,14 @@ The particle task owns bounded dust contacts, collisions, settling, sleeping, wa
 and ambient effects. It keeps all simulation storage fixed-capacity and performs every
 particle mutation inside the joined worker step.
 
+Grounded dust XY velocity is owned by one PIC-style vector field. Each particle step
+integrates low dust, deposits grounded density and momentum, applies coalesced tool and
+scenario contacts as density-weighted field momentum, then normalizes, evolves, and
+samples the field back to grounded particles. Floor tools do not directly correct
+particle positions or affect airborne particles. Contacts queued before later same-step
+emissions may affect those grounded deposits through the shared field; animation reset
+discards pending contacts before beginning the next generation.
+
 Tool and scenario actions cross this boundary as bounded requests. Evidence reads
 pointer-free observations after the worker joins.
 
