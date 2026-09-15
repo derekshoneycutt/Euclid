@@ -89,6 +89,13 @@ navigation_order = 48
 owner = "guide_authors"
 
 [[guides]]
+title = "Particle System"
+path = "Guides/ParticleSystem.md"
+summary = "Grounded PIC field physics, airborne dust, contacts, rendering, and evidence."
+navigation_order = 49
+owner = "guide_authors"
+
+[[guides]]
 title = "Terminal Architecture"
 path = "Guides/TerminalArchitecture.md"
 summary = "Interactive Terminal ownership, session actors, native process integration, and EuclidRepl lifecycle."
@@ -123,6 +130,15 @@ guide_paths = [
     "Guides/CodingStandards.md#global-rules",
 ]
 symbol_prefixes = []
+
+[[guide_relations]]
+package_id = "odin:src:particles"
+guide_paths = [
+    "Guides/ParticleSystem.md#grounded-pic-field",
+    "Guides/ParticleSystem.md#tool-contacts",
+    "Guides/ParticleSystem.md#rendering",
+]
+symbol_prefixes = ["dust_", "particle_", "emit_", "queue_dust_"]
 
 [[guide_relations]]
 package_id = "julia:EuclidAnimations"

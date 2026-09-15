@@ -95,22 +95,16 @@ Display :: struct {
 
     // Particle-owned dust settling and bounded contact diagnostics.
     dust_live_count : int,
-    dust_grounded_awake_count : int,
-    dust_grounded_sleeping_count : int,
     dust_airborne_count : int,
-    vector_dust_grounded_count : int,
-    vector_dust_peak_speed_sq : f32,
-    vector_dust_kinetic_measure : f32,
-    dust_dense_leaf_count : int,
-    dust_refined_cell_count : int,
-    dust_collision_pair_count : int,
-    dust_collision_dropped_pair_count : int,
-    dust_sleeping_pair_skip_count : u64,
-    dust_collision_correction_count : int,
-    dust_collision_max_correction : f32,
-    dust_relaxation_energy_removed : f32,
-    dust_sleep_transition_count : u64,
-    dust_wake_transition_count : u64,
+    dust_grounded_count : int,
+    dust_peak_speed_sq : f32,
+    dust_kinetic_measure : f32,
+    dust_field_solve_node_count : int,
+    dust_tool_contact_overflow_count : int,
+    dust_tool_contact_coalesced_count : u64,
+    dust_tool_contact_sample_count : u64,
+    dust_tool_contact_field_node_visit_count : u64,
+    dust_rendered_count : int,
 
     // Dynamic-view activation and pending invalidation work.
     dynview_enabled : bool,
@@ -296,28 +290,28 @@ observe_display_particles :: proc(
         return
     }
     result.particle_count = particles.next_index
-    result.dust_dense_leaf_count = particles.dust_relaxation_dense_leaf_count
-    result.dust_refined_cell_count = particles.dust_collision_refined_cell_count
-    result.dust_collision_pair_count = particles.dust_pair_count
-    result.dust_collision_dropped_pair_count = particles.dust_pair_dropped_count
-    result.dust_sleeping_pair_skip_count = particles.dust_sleeping_pair_skip_count
-    result.dust_collision_correction_count = particles.dust_collision_correction_count
-    result.dust_collision_max_correction = particles.dust_collision_max_correction
-    result.dust_relaxation_energy_removed = particles.dust_relaxation_energy_removed
-    result.dust_sleep_transition_count = particles.dust_sleep_transition_count
-    result.dust_wake_transition_count = particles.dust_wake_transition_count
-    result.vector_dust_grounded_count = particles.vector_dust_grounded_count
-    result.vector_dust_peak_speed_sq = particles.vector_dust_peak_speed_sq
-    result.vector_dust_kinetic_measure = particles.vector_dust_kinetic_measure
+    result.dust_grounded_count = particles.dust_grounded_count
+    result.dust_peak_speed_sq = particles.dust_peak_speed_sq
+    result.dust_kinetic_measure = particles.dust_kinetic_measure
+    bounds := particles.dust_field.previous_solve_bounds
+    if bounds.valid {
+        width := int(bounds.max_x - bounds.min_x + 1)
+        height := int(bounds.max_y - bounds.min_y + 1)
+        result.dust_field_solve_node_count = width * height
+    }
+    result.dust_tool_contact_overflow_count =
+        particles.dust_tool_contact_overflow_count
+    result.dust_tool_contact_coalesced_count =
+        particles.dust_tool_contact_coalesced_count
+    result.dust_tool_contact_sample_count = particles.dust_tool_contact_sample_count
+    result.dust_tool_contact_field_node_visit_count =
+        particles.dust_tool_contact_field_node_visit_count
+    result.dust_rendered_count = particles.last_render_low
     for index in 0..<particles.use_max_dust_particles {
         if !particles.low_particles[index].alive {continue}
         result.dust_live_count += 1
         if particles.low_particles.pos_z[index] > 0 {
             result.dust_airborne_count += 1
-        } else if particles.dust_sleeping[index] {
-            result.dust_grounded_sleeping_count += 1
-        } else {
-            result.dust_grounded_awake_count += 1
         }
     }
 }

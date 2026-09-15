@@ -254,7 +254,7 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
 
 // Verify the joined particle worker emits, damps, observes, and disturbs vector dust.
 @(test)
-parallel_simulation_step_damps_and_disturbs_vector_dust :: proc(t: ^testing.T) {
+parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.particle_system = new(particlemodel.Particle_System, context.allocator)
@@ -276,8 +276,7 @@ parallel_simulation_step_damps_and_disturbs_vector_dust :: proc(t: ^testing.T) {
     }
     settled := observe_display_state(state)
     testing.expect_value(t, settled.dust_live_count, 16)
-    testing.expect_value(t, settled.dust_grounded_sleeping_count, 0)
-    testing.expect_value(t, settled.dust_grounded_awake_count, 16)
+    testing.expect_value(t, settled.dust_grounded_count, 16)
     velocity_before := state^.particle_system^.low_particles.vel_x[0]
     for index in 0..<16 {
         testing.expect(t, particles.queue_dust_tool_contact(
@@ -289,8 +288,7 @@ parallel_simulation_step_damps_and_disturbs_vector_dust :: proc(t: ^testing.T) {
     run_parallel_simulation_step(executor, 1.0 / 60.0)
 
     disturbed := observe_display_state(state)
-    testing.expect_value(t, disturbed.dust_grounded_sleeping_count, 0)
-    testing.expect_value(t, disturbed.dust_wake_transition_count, u64(0))
+    testing.expect_value(t, disturbed.dust_grounded_count, 16)
     testing.expect(t,
         state^.particle_system^.low_particles.vel_x[0] != velocity_before)
 }

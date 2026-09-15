@@ -26,7 +26,7 @@ end
 function write_bundle(directory::AbstractString)
     mkpath(directory)
     write(joinpath(directory, "manifest.json"), """
-        {"schema_version":1,"result":"passed","reason":"complete",\
+        {"schema_version":2,"result":"passed","reason":"complete",\
         "failed_step":0,"trace_complete":true,"last_trace_sequence":3,\
         "artifacts":{"trace":"evidence.bin","state":"state.json",\
         "allocations":"allocations.json"}}""")

@@ -254,16 +254,16 @@ scenario_test_animation_idle_state :: proc(t: ^testing.T) {
 @(test)
 scenario_test_dust_state_predicates :: proc(t: ^testing.T) {
     settled := observe.Display{
-        dust_live_count = 8, vector_dust_grounded_count = 8,
-        vector_dust_peak_speed_sq = particlemodel.VECTOR_DUST_SETTLED_SPEED_SQ}
+        dust_live_count = 8, dust_grounded_count = 8,
+        dust_peak_speed_sq = particlemodel.DUST_SETTLED_SPEED_SQ}
     testing.expect(t, state_matches("dust_settled", settled))
     testing.expect(t, !state_matches("dust_active", settled))
     testing.expect(t, !state_matches("dust_settled", observe.Display{
-        dust_live_count = 8, vector_dust_grounded_count = 7}))
+        dust_live_count = 8, dust_grounded_count = 7}))
     testing.expect(t, state_matches("dust_active", observe.Display{
-        dust_live_count = 8, vector_dust_grounded_count = 8,
-        vector_dust_peak_speed_sq =
-            particlemodel.VECTOR_DUST_SETTLED_SPEED_SQ * 2}))
+        dust_live_count = 8, dust_grounded_count = 8,
+        dust_peak_speed_sq =
+            particlemodel.DUST_SETTLED_SPEED_SQ * 2}))
     testing.expect(t, state_matches("dust_airborne", observe.Display{
         dust_live_count = 8, dust_airborne_count = 1}))
 }

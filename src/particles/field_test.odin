@@ -8,375 +8,406 @@ import rl "vendor:raylib"
 
 import test_helpers "../test_helpers"
 
-// Sum the retained weights in one normalized field stencil.
-dust_field_test_weight_sum :: proc(stencil: Dust_Field_Stencil) -> f32 {
-    sum: f32
-    for index in 0..<stencil.count {
-        sum += stencil.weights[index]
+// Sum all four weights in one vector-dust transfer stencil.
+dust_test_weight_sum :: proc(stencil: Dust_Field_Stencil) -> f32 {
+    result: f32
+    for weight in stencil.weights {
+        result += weight
     }
-    return sum
+    return result
 }
 
-// Verify interior deposition support preserves one complete contribution.
-@(test)
-dust_field_interior_weights_sum_to_one :: proc(t: ^testing.T) {
-    position := rl.Vector2{0.347, 0.612}
-    coordinates := dust_field_coordinates(position)
-    stencil := dust_field_stencil(position)
+// Sum one complete scalar field plane.
+dust_test_plane_sum :: proc(plane: ^particlemodel.Dust_Field_Scalar) -> f32 {
+    result: f32
+    for value in plane^ {
+        result += value
+    }
+    return result
+}
 
-    test_helpers.expect_close(t, coordinates.x, position.x * 250,
-        "board x should map to field intervals")
-    test_helpers.expect_close(t, coordinates.y, position.y * 250,
-        "board y should map to field intervals")
-    testing.expect_value(t, stencil.count, particlemodel.DUST_FIELD_STENCIL_CAP)
-    test_helpers.expect_close(t, dust_field_test_weight_sum(stencil), 1,
+// Verify interior bilinear support preserves one complete contribution.
+@(test)
+dust_interior_weights_sum_to_one :: proc(t: ^testing.T) {
+    stencil := dust_field_stencil({0.347, 0.612})
+
+    test_helpers.expect_close(t, dust_test_weight_sum(stencil), 1,
         "interior stencil should preserve unit weight")
 }
 
-// Verify corner truncation renormalizes all retained kernel support.
+// Verify board corners preserve one contribution and valid node indices.
 @(test)
-dust_field_corner_weights_sum_to_one :: proc(t: ^testing.T) {
-    stencil := dust_field_stencil({0, 0})
-
-    testing.expect_value(t, stencil.count, 4)
-    test_helpers.expect_close(t, dust_field_test_weight_sum(stencil), 1,
-        "corner stencil should preserve unit weight")
-}
-
-// Verify normalized sampling reconstructs a constant vector without drift.
-@(test)
-dust_field_constant_vector_reconstructs_exactly :: proc(t: ^testing.T) {
-    field := new(Dust_Field_State, context.allocator)
-    defer free(field)
-    for index in 0..<DUST_FIELD_NODE_COUNT {
-        field^.velocity_x[index] = 2.5
-        field^.velocity_y[index] = -1.25
-    }
-
-    sampled := dust_field_sample_vector(
-        &field^.velocity_x, &field^.velocity_y, {0.347, 0.612})
-
-    test_helpers.expect_close(t, sampled.x, 2.5, "constant x reconstruction")
-    test_helpers.expect_close(t, sampled.y, -1.25, "constant y reconstruction")
-}
-
-// Verify quadratic reconstruction retains an interior linear vector field.
-@(test)
-dust_field_linear_vector_reconstructs_within_tolerance :: proc(t: ^testing.T) {
-    field := new(Dust_Field_State, context.allocator)
-    defer free(field)
-    for node_index in 0..<DUST_FIELD_NODE_COUNT {
-        x := f32(node_index % DUST_FIELD_DIM) / f32(DUST_FIELD_INTERVAL_COUNT)
-        y := f32(node_index / DUST_FIELD_DIM) / f32(DUST_FIELD_INTERVAL_COUNT)
-        field^.velocity_x[node_index] = 2 * x - y
-        field^.velocity_y[node_index] = x + 3 * y
-    }
-    position := rl.Vector2{0.347, 0.612}
-
-    sampled := dust_field_sample_vector(
-        &field^.velocity_x, &field^.velocity_y, position)
-
-    test_helpers.expect_close(t, sampled.x, 2 * position.x - position.y,
-        "linear x reconstruction")
-    test_helpers.expect_close(t, sampled.y, position.x + 3 * position.y,
-        "linear y reconstruction")
-}
-
-// Deposit a deterministic scalar fixture into one empty field.
-dust_field_test_deposit_fixture :: proc(field: ^Dust_Field_State) {
-    dust_field_deposit_scalar(field, &field^.density, {0.25, 0.75}, 1.5)
-    dust_field_deposit_scalar(field, &field^.density, {0.251, 0.749}, 0.75)
-    dust_field_deposit_scalar(field, &field^.density, {0, 1}, 2.0)
-}
-
-// Verify repeated fixed-order deposition produces identical active field state.
-@(test)
-dust_field_repeated_deposition_is_deterministic :: proc(t: ^testing.T) {
-    first := new(Dust_Field_State, context.allocator)
-    second := new(Dust_Field_State, context.allocator)
-    defer free(first)
-    defer free(second)
-    dust_field_test_deposit_fixture(first)
-    dust_field_test_deposit_fixture(second)
-
-    testing.expect_value(t, second^.active_count, first^.active_count)
-    for active_index in 0..<first^.active_count {
-        node_index := int(first^.active_nodes[active_index])
-        testing.expect_value(t, second^.active_nodes[active_index], i32(node_index))
-        testing.expect_value(t, second^.density[node_index], first^.density[node_index])
-    }
-}
-
-// Verify sparse reset clears every plane and all metadata at prior support.
-@(test)
-dust_field_active_reset_clears_prior_support :: proc(t: ^testing.T) {
-    field := new(Dust_Field_State, context.allocator)
-    defer free(field)
-    position := rl.Vector2{0.25, 0.75}
-    stencil := dust_field_stencil(position)
-    dust_field_deposit_scalar(field, &field^.density, position, 2)
-    dust_field_deposit_vector(field, &field^.momentum_x,
-        &field^.momentum_y, position, {3, -4})
-
-    dust_field_reset_active(field)
-
-    testing.expect_value(t, field^.active_count, 0)
-    for stencil_index in 0..<stencil.count {
-        node_index := int(stencil.indices[stencil_index])
-        testing.expect_value(t, field^.density[node_index], f32(0))
-        testing.expect_value(t, field^.momentum_x[node_index], f32(0))
-        testing.expect_value(t, field^.momentum_y[node_index], f32(0))
-        word_index := node_index / 64
-        testing.expect_value(t, field^.active_bits[word_index], u64(0))
-    }
-}
-
-// Verify untouched scalar and vector planes reconstruct zero.
-@(test)
-dust_field_empty_sample_returns_zero :: proc(t: ^testing.T) {
-    field := new(Dust_Field_State, context.allocator)
-    defer free(field)
-
-    scalar := dust_field_sample_scalar(&field^.density, {0.5, 0.5})
-    vector := dust_field_sample_vector(
-        &field^.velocity_x, &field^.velocity_y, {0.5, 0.5})
-
-    testing.expect_value(t, scalar, f32(0))
-    testing.expect_value(t, vector, rl.Vector2{})
-}
-
-// Configure colocated grounded particles for deterministic density thresholds.
-dust_field_test_set_colocated :: proc(ps: ^Particle_System, count: int) {
-    ps^.use_max_dust_particles = 3
-    for index in 0..<3 {
-        ps^.low_particles.alive[index] = index < count
-        ps^.low_particles.pos_x[index] = 0.5
-        ps^.low_particles.pos_y[index] = 0.5
-        ps^.low_particles.pos_z[index] = DUST_FLOOR_Z
-        ps^.low_particles.life[index] = 1
-        ps^.low_particles.color[index] = rl.WHITE
-    }
-}
-
-// Build candidate density and apply membership hysteresis once.
-dust_field_test_classify :: proc(ps: ^Particle_System) {
-    dust_field_build_candidate_density(ps)
-    dust_field_classify_particles(ps)
-}
-
-// Verify compressed grounded material enters aggregate membership.
-@(test)
-dust_field_membership_enters_above_threshold :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    dust_field_test_set_colocated(ps, 3)
-
-    dust_field_test_classify(ps)
-
-    testing.expect_value(t, ps^.dust_aggregate_count, 3)
-    testing.expect(t, ps^.dust_aggregate[0])
-}
-
-// Verify aggregate membership persists between exit and entry thresholds.
-@(test)
-dust_field_membership_remains_through_hysteresis_band :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    dust_field_test_set_colocated(ps, 3)
-    dust_field_test_classify(ps)
-    dust_field_test_set_colocated(ps, 2)
-
-    dust_field_test_classify(ps)
-
-    testing.expect_value(t, ps^.dust_aggregate_count, 2)
-    testing.expect(t, ps^.dust_aggregate[0] && ps^.dust_aggregate[1])
-}
-
-// Verify aggregate membership exits below the lower density threshold.
-@(test)
-dust_field_membership_exits_below_lower_threshold :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    dust_field_test_set_colocated(ps, 3)
-    dust_field_test_classify(ps)
-    dust_field_test_set_colocated(ps, 1)
-
-    dust_field_test_classify(ps)
-
-    testing.expect_value(t, ps^.dust_aggregate_count, 0)
-    testing.expect(t, !ps^.dust_aggregate[0])
-}
-
-// Verify vertical motion always returns dust to individual particle authority.
-@(test)
-dust_field_airborne_membership_clears :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    dust_field_test_set_colocated(ps, 3)
-    dust_field_test_classify(ps)
-    ps^.low_particles.pos_z[0] = DUST_FLOOR_Z + 0.01
-
-    dust_field_test_classify(ps)
-
-    testing.expect(t, !ps^.dust_aggregate[0])
-    testing.expect_value(t, ps^.dust_aggregate_count, 2)
-}
-
-// Seed a rectangular field patch with uniform density and velocity.
-dust_field_test_seed_patch :: proc(ps: ^Particle_System, first, last: int,
-        density: f32, velocity: rl.Vector2) {
-    for y in first..=last {
-        for x in first..=last {
-            node := y * DUST_FIELD_DIM + x
-            dust_field_mark_active(&ps^.dust_field, node)
-            ps^.dust_field.density[node] = density
-            ps^.dust_field.momentum_x[node] = density * velocity.x
-            ps^.dust_field.momentum_y[node] = density * velocity.y
+dust_corner_weights_and_indices_are_valid :: proc(t: ^testing.T) {
+    corners := [4]rl.Vector2{{0, 0}, {1, 0}, {0, 1}, {1, 1}}
+    for corner in corners {
+        stencil := dust_field_stencil(corner)
+        test_helpers.expect_close(t, dust_test_weight_sum(stencil), 1,
+            "corner stencil should preserve unit weight")
+        for node in stencil.indices {
+            testing.expect(t, node >= 0 && node < i32(DUST_FIELD_NODE_COUNT))
         }
     }
 }
 
-// Verify a uniform field remains spatially uniform after one solve.
+// Verify compact transfer coordinates retain slot identity and bilinear position.
 @(test)
-dust_field_uniform_velocity_remains_uniform :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    dust_field_test_seed_patch(ps, 122, 128, 0.9, {0.002, -0.001})
+dust_transfer_caches_compact_coordinates :: proc(t: ^testing.T) {
+    transfer := dust_field_transfer({0.347, 0.612}, 37)
 
-    dust_field_evolve(ps, f32(1.0 / 60.0))
-
-    center := 125 * DUST_FIELD_DIM + 125
-    neighbor := center + 1
-    test_helpers.expect_close(t, ps^.dust_field.velocity_x[center],
-        ps^.dust_field.velocity_x[neighbor], "uniform x should remain uniform")
-    test_helpers.expect_close(t, ps^.dust_field.velocity_y[center],
-        ps^.dust_field.velocity_y[neighbor], "uniform y should remain uniform")
+    testing.expect_value(t, transfer.particle_index, i32(37))
+    testing.expect_value(t, transfer.base_node, i32(153 * DUST_FIELD_DIM + 86))
+    test_helpers.expect_close(t, transfer.fraction_x, 0.75, "transfer fraction x")
+    test_helpers.expect_close(t, transfer.fraction_y, 0, "transfer fraction y")
+    stencil := dust_field_transfer_stencil(transfer)
+    test_helpers.expect_close(t, dust_test_weight_sum(stencil), 1,
+        "cached transfer should preserve unit weight")
 }
 
-// Verify one nodal impulse transfers velocity to occupied neighbors.
+// Verify one transfer conserves unit density and both momentum components.
 @(test)
-dust_field_local_impulse_spreads_to_neighbors :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
+dust_deposit_conserves_density_and_momentum :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+
+    dust_field_deposit(field, {0.347, 0.612}, {2.5, -1.25})
+
+    test_helpers.expect_close(t, dust_test_plane_sum(&field^.density), 1,
+        "deposited density")
+    test_helpers.expect_close(t, dust_test_plane_sum(&field^.momentum_x), 2.5,
+        "deposited x momentum")
+    test_helpers.expect_close(t, dust_test_plane_sum(&field^.momentum_y), -1.25,
+        "deposited y momentum")
+}
+
+// Verify boundary transfer does not lose density or momentum.
+@(test)
+dust_boundary_deposit_is_conservative :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+
+    dust_field_deposit(field, {1, 1}, {0.75, -0.5})
+
+    test_helpers.expect_close(t, dust_test_plane_sum(&field^.density), 1,
+        "boundary density")
+    test_helpers.expect_close(t, dust_test_plane_sum(&field^.momentum_x), 0.75,
+        "boundary x momentum")
+    test_helpers.expect_close(t, dust_test_plane_sum(&field^.momentum_y), -0.5,
+        "boundary y momentum")
+}
+
+// Verify tool force adds density-weighted radial momentum without changing density.
+@(test)
+dust_tool_point_adds_density_weighted_momentum :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    center := 125 * DUST_FIELD_DIM + 125
+    right := center + 1
+    field^.density[center] = 3
+    field^.density[right] = 2
+    field^.support_bounds = {125, 125, 126, 125, true}
+
+    visits := dust_field_apply_tool_point(field, {0.5, 0.5})
+
+    testing.expect_value(t, visits, u64(2))
+    testing.expect_value(t, field^.momentum_x[center], f32(0))
+    testing.expect_value(t, field^.momentum_y[center], f32(0))
+    test_helpers.expect_close(t, field^.momentum_x[right], f32(0.0042),
+        "density-weighted radial x momentum")
+    testing.expect_value(t, field^.momentum_y[right], f32(0))
+    testing.expect_value(t, field^.density[center], f32(3))
+    testing.expect_value(t, field^.density[right], f32(2))
+
+    field^.density[right + 1] = 1
+    field^.momentum_x[right + 1] = field^.momentum_x[right] / 2
+    dust_field_normalize(field, {126, 125, 127, 125, true})
+    test_helpers.expect_close(t, field^.momentum_x[right],
+        field^.momentum_x[right + 1], "density-independent velocity increment")
+}
+
+// Verify overlapping tool samples accumulate momentum in command order.
+@(test)
+dust_tool_points_accumulate_overlaps :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    node := 125 * DUST_FIELD_DIM + 126
+    field^.density[node] = 1
+    field^.support_bounds = {126, 125, 126, 125, true}
+
+    _ = dust_field_apply_tool_point(field, {0.5, 0.5})
+    first_momentum := field^.momentum_x[node]
+    _ = dust_field_apply_tool_point(field, {0.5, 0.5})
+
+    test_helpers.expect_close(t, field^.momentum_x[node], 2 * first_momentum,
+        "overlapping tool momentum")
+}
+
+// Verify tool force is bounded by occupied support and ignores empty nodes.
+@(test)
+dust_tool_point_respects_support_and_zero_density :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    field^.support_bounds = {0, 0, 2, 2, true}
+    field^.density[1] = 1
+    outside := 3 * DUST_FIELD_DIM + 3
+    field^.density[outside] = 1
+
+    visits := dust_field_apply_tool_point(field, {0, 0})
+
+    testing.expect_value(t, visits, u64(9))
+    testing.expect(t, field^.momentum_x[1] > 0)
+    testing.expect_value(t, field^.momentum_y[1], f32(0))
+    testing.expect_value(t, field^.momentum_x[outside], f32(0))
+    testing.expect_value(t, field^.momentum_y[outside], f32(0))
+
+    field^.support_bounds = {200, 200, 202, 202, true}
+    testing.expect_value(t,
+        dust_field_apply_tool_point(field, {0, 0}), u64(0))
+}
+
+// Verify normalization and reconstruction preserve a deposited particle velocity.
+@(test)
+dust_round_trip_preserves_single_velocity :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    position := rl.Vector2{0.347, 0.612}
+    expected := rl.Vector2{0.003, -0.002}
+    dust_field_deposit(field, position, expected)
+
+    dust_field_normalize(field, field^.support_bounds)
+    field^.solved_velocity_x = field^.momentum_x
+    field^.solved_velocity_y = field^.momentum_y
+    actual := dust_field_sample(field, position)
+
+    test_helpers.expect_close(t, actual.x, expected.x, "round-trip x velocity")
+    test_helpers.expect_close(t, actual.y, expected.y, "round-trip y velocity")
+}
+
+// Verify bilinear reconstruction preserves a linear vector field.
+@(test)
+dust_linear_vector_reconstructs :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    for node in 0..<DUST_FIELD_NODE_COUNT {
+        x := f32(node % DUST_FIELD_DIM) / f32(DUST_FIELD_INTERVAL_COUNT)
+        y := f32(node / DUST_FIELD_DIM) / f32(DUST_FIELD_INTERVAL_COUNT)
+        field^.solved_velocity_x[node] = 2 * x - y
+        field^.solved_velocity_y[node] = x + 3 * y
+    }
+    position := rl.Vector2{0.347, 0.612}
+
+    actual := dust_field_sample(field, position)
+
+    test_helpers.expect_close(t, actual.x, 2 * position.x - position.y,
+        "linear x reconstruction")
+    test_helpers.expect_close(t, actual.y, position.x + 3 * position.y,
+        "linear y reconstruction")
+}
+
+// Seed every node with one uniform deposited density and momentum.
+dust_test_seed_uniform :: proc(field: ^Dust_Field_State,
+    density: f32, velocity: rl.Vector2) {
+    for node in 0..<DUST_FIELD_NODE_COUNT {
+        field^.density[node] = density
+        field^.momentum_x[node] = density * velocity.x
+        field^.momentum_y[node] = density * velocity.y
+    }
+    field^.support_bounds = {0, 0, DUST_FIELD_DIM - 1, DUST_FIELD_DIM - 1, true}
+}
+
+// Resolve one cardinal neighbor with the original flat-index semantics.
+dust_test_reference_neighbor :: proc(node, offset_x, offset_y: int) -> int {
+    x := clamp(node % DUST_FIELD_DIM + offset_x, 0, DUST_FIELD_DIM - 1)
+    y := clamp(node / DUST_FIELD_DIM + offset_y, 0, DUST_FIELD_DIM - 1)
+    return y * DUST_FIELD_DIM + x
+}
+
+// Evolve a field through the original flat traversal for comparison.
+dust_test_reference_evolve :: proc(field: ^Dust_Field_State, dt: f32) {
+    dust_field_normalize(field, field^.support_bounds)
+    for node in 0..<DUST_FIELD_NODE_COUNT {
+        left := dust_test_reference_neighbor(node, -1, 0)
+        right := dust_test_reference_neighbor(node, 1, 0)
+        down := dust_test_reference_neighbor(node, 0, -1)
+        up := dust_test_reference_neighbor(node, 0, 1)
+        next := dust_field_evolve_node(
+            field, node, {left, right, down, up}, dt)
+        field^.solved_velocity_x[node] = next.x
+        field^.solved_velocity_y[node] = next.y
+    }
+}
+
+// Verify bounded row traversal matches a full-grid solve for identical deposits.
+@(test)
+dust_bounded_solve_matches_full_reference :: proc(t: ^testing.T) {
+    actual := new(Dust_Field_State, context.allocator)
+    defer free(actual)
+    reference := new(Dust_Field_State, context.allocator)
+    defer free(reference)
+    positions := [4]rl.Vector2{{0, 0}, {0.43, 0.61}, {0.44, 0.62}, {1, 1}}
+    for position, index in positions {
+        velocity := rl.Vector2{f32(index - 2) * 0.001, f32(2 - index) * 0.002}
+        dust_field_deposit(actual, position, velocity)
+        dust_field_deposit(reference, position, velocity)
+    }
+    reference^.support_bounds = {0, 0, DUST_FIELD_DIM - 1, DUST_FIELD_DIM - 1, true}
+
+    dust_field_evolve(actual, f32(1.0 / 60.0))
+    dust_test_reference_evolve(reference, f32(1.0 / 60.0))
+
+    for node in 0..<DUST_FIELD_NODE_COUNT {
+        test_helpers.expect_close(t, actual^.solved_velocity_x[node],
+            reference^.solved_velocity_x[node], "bounded solve x")
+        test_helpers.expect_close(t, actual^.solved_velocity_y[node],
+            reference^.solved_velocity_y[node], "bounded solve y")
+    }
+}
+
+// Verify one solve preserves spatially uniform velocity apart from uniform drag.
+@(test)
+dust_uniform_velocity_remains_uniform :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    dust_test_seed_uniform(field, 0.9, {0.003, -0.002})
+
+    dust_field_evolve(field, f32(1.0 / 60.0))
+
+    center := 125 * DUST_FIELD_DIM + 125
+    test_helpers.expect_close(t, field^.solved_velocity_x[center],
+        field^.solved_velocity_x[center + 1],
+        "uniform x velocity")
+    test_helpers.expect_close(t, field^.solved_velocity_y[center],
+        field^.solved_velocity_y[center + 1],
+        "uniform y velocity")
+    testing.expect(t, field^.solved_velocity_x[center] > 0)
+    testing.expect(t, field^.solved_velocity_x[center] < 0.003)
+}
+
+// Verify sub-yield density cannot create pressure motion from rest.
+@(test)
+dust_below_yield_density_remains_still :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    dust_test_seed_uniform(field, 0.9, {})
+
+    dust_field_evolve(field, f32(1.0 / 60.0))
+
+    center := 125 * DUST_FIELD_DIM + 125
+    testing.expect_value(t, field^.solved_velocity_x[center], f32(0))
+    testing.expect_value(t, field^.solved_velocity_y[center], f32(0))
+}
+
+// Verify one asymmetric overdensity creates finite outward correction.
+@(test)
+dust_pressure_decompresses_boundedly :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
     center := 125 * DUST_FIELD_DIM + 125
     for node in center - 1..=center + 1 {
-        dust_field_mark_active(&ps^.dust_field, node)
-        ps^.dust_field.density[node] = 1
+        field^.density[node] = 1.2
     }
-    ps^.dust_field.momentum_x[center] = 0.003
+    field^.density[center] = 2
+    field^.support_bounds = {124, 125, 126, 125, true}
 
-    dust_field_evolve(ps, f32(1.0 / 60.0))
+    dust_field_evolve(field, f32(1.0 / 60.0))
 
-    testing.expect(t, ps^.dust_field.velocity_x[center + 1] > 0)
-    testing.expect(t, ps^.dust_field.velocity_x[center] >
-        ps^.dust_field.velocity_x[center + 1])
-}
-
-// Solve one uniform patch and return its center velocity magnitude.
-dust_field_test_density_decay :: proc(density: f32) -> f32 {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    dust_field_test_seed_patch(ps, 122, 128, density, {0.003, 0})
-    dust_field_evolve(ps, f32(1.0 / 60.0))
-    return ps^.dust_field.velocity_x[125 * DUST_FIELD_DIM + 125]
-}
-
-// Verify denser aggregate material loses uniform bulk speed more quickly.
-@(test)
-dust_field_higher_density_damps_faster :: proc(t: ^testing.T) {
-    lower := dust_field_test_density_decay(0.8)
-    higher := dust_field_test_density_decay(2.0)
-
-    testing.expect(t, higher < lower)
-    testing.expect(t, higher > 0)
-}
-
-// Verify sub-yield density cannot generate spontaneous pressure motion.
-@(test)
-dust_field_below_yield_density_remains_still :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    dust_field_test_seed_patch(ps, 122, 128, 0.9, {})
-
-    dust_field_evolve(ps, f32(1.0 / 60.0))
-
-    center := 125 * DUST_FIELD_DIM + 125
-    testing.expect_value(t, ps^.dust_field.velocity_x[center], f32(0))
-    testing.expect_value(t, ps^.dust_field.velocity_y[center], f32(0))
-    testing.expect_value(t, ps^.dust_field_pressure_node_count, 0)
-}
-
-// Verify an asymmetric overdensity creates finite outward correction.
-@(test)
-dust_field_excess_density_decompresses_boundedly :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    center := 125 * DUST_FIELD_DIM + 125
-    for node in center - 1..=center + 1 {
-        dust_field_mark_active(&ps^.dust_field, node)
-        ps^.dust_field.density[node] = 1.2
-    }
-    ps^.dust_field.density[center] = 2
-
-    dust_field_evolve(ps, f32(1.0 / 60.0))
-
-    correction := ps^.dust_field.velocity_x[center + 1]
+    correction := field^.solved_velocity_x[center + 1]
     testing.expect(t, correction > 0)
-    testing.expect(t, correction <=
-        DUST_FIELD_PRESSURE_ACCELERATION_MAX / 60)
+    testing.expect(t, correction <= DUST_PRESSURE_ACCELERATION_MAX / 60)
 }
 
-// Verify exact field assignment removes same-location velocity residuals.
+// Verify solving overwrites poisoned output throughout the current solve rectangle.
 @(test)
-dust_field_exact_assignment_removes_local_residual :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    ps^.use_max_dust_particles = 2
-    stencil := dust_field_stencil({0.5, 0.5})
-    for index in 0..<2 {
-        ps^.dust_aggregate[index] = true
-        ps^.low_particles.pos_x[index] = 0.5
-        ps^.low_particles.pos_y[index] = 0.5
-        ps^.low_particles.vel_x[index] = f32(index * 2 - 1)
+dust_solve_overwrites_current_output :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    for node in 0..<DUST_FIELD_NODE_COUNT {
+        field^.solved_velocity_x[node] = 17
+        field^.solved_velocity_y[node] = -23
     }
-    for stencil_index in 0..<stencil.count {
-        node := int(stencil.indices[stencil_index])
-        ps^.dust_field.velocity_x[node] = 0.002
-        ps^.dust_field.velocity_y[node] = -0.001
+    position := rl.Vector2{0.5, 0.5}
+    dust_field_deposit(field, position, {0.004, -0.003})
+    bounds := dust_field_solve_bounds(field^.support_bounds)
+
+    dust_field_evolve(field, f32(1.0 / 60.0))
+
+    for y in int(bounds.min_y)..=int(bounds.max_y) {
+        for x in int(bounds.min_x)..=int(bounds.max_x) {
+            node := y * DUST_FIELD_DIM + x
+            testing.expect(t, field^.solved_velocity_x[node] != 17)
+            testing.expect(t, field^.solved_velocity_y[node] != -23)
+        }
     }
-
-    dust_field_assign_particle_velocities(ps)
-
-    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], 0.002,
-        "first exact x assignment")
-    testing.expect_value(t, ps^.low_particles.vel_x[1], ps^.low_particles.vel_x[0])
-    testing.expect_value(t, ps^.low_particles.vel_y[1], ps^.low_particles.vel_y[0])
 }
 
-// Verify field activity wakes only aggregate particles in local support.
+// Verify preparing a disjoint step removes every prior deposition value.
 @(test)
-dust_field_dense_wake_remains_local :: proc(t: ^testing.T) {
-    ps := new(Particle_System, context.allocator)
-    defer free(ps)
-    ps^.use_max_dust_particles = 3
-    ps^.dust_sleeping_count = 3
-    for index in 0..<3 {
-        ps^.dust_aggregate[index] = true
-        ps^.dust_sleeping[index] = true
-        ps^.low_particles.pos_x[index] = 0.2 + f32(index) * 0.2
-        ps^.low_particles.pos_y[index] = 0.5
-    }
-    stencil := dust_field_stencil({0.2, 0.5})
-    for stencil_index in 0..<stencil.count {
-        node := int(stencil.indices[stencil_index])
-        ps^.dust_field.velocity_x[node] = 0.001
-    }
+dust_prepare_clears_previous_solve_region :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    old_position := rl.Vector2{0.1, 0.1}
+    old_node := int(dust_field_stencil(old_position).indices[0])
+    dust_field_deposit(field, old_position, {0.01, -0.02})
+    dust_field_evolve(field, f32(1.0 / 60.0))
+    testing.expect(t, field^.solved_velocity_x[old_node] != 0)
 
-    dust_field_assign_particle_velocities(ps)
-    dust_field_update_sleeping(ps)
+    dust_field_prepare(field)
+    dust_field_deposit(field, {0.9, 0.9}, {-0.03, 0.04})
 
-    testing.expect(t, !ps^.dust_sleeping[0])
-    testing.expect(t, ps^.dust_sleeping[1] && ps^.dust_sleeping[2])
-    testing.expect_value(t, ps^.dust_sleeping_count, 2)
-    testing.expect_value(t, ps^.dust_field_wake_transition_count, u64(1))
+    testing.expect_value(t, field^.density[old_node], f32(0))
+    testing.expect_value(t, field^.momentum_x[old_node], f32(0))
+    testing.expect_value(t, field^.momentum_y[old_node], f32(0))
+}
+
+// Verify an empty following step clears prior support and publishes no region.
+@(test)
+dust_empty_step_clears_bounds :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    dust_field_deposit(field, {0.5, 0.5}, {0.01, 0.02})
+    dust_field_evolve(field, f32(1.0 / 60.0))
+
+    dust_field_prepare(field)
+    dust_field_evolve(field, f32(1.0 / 60.0))
+
+    testing.expect(t, !field^.support_bounds.valid)
+    testing.expect(t, !field^.previous_solve_bounds.valid)
+    center := 125 * DUST_FIELD_DIM + 125
+    testing.expect_value(t, field^.momentum_x[center], f32(0))
+    testing.expect_value(t, field^.momentum_y[center], f32(0))
+}
+
+// Verify solve halos clamp to the board at both extreme corners.
+@(test)
+dust_solve_bounds_clamp_to_board :: proc(t: ^testing.T) {
+    lower := dust_field_stencil({0, 0})
+    upper := dust_field_stencil({1, 1})
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    dust_field_include_stencil(field, lower)
+    bounds := dust_field_solve_bounds(field^.support_bounds)
+    testing.expect_value(t, bounds, Dust_Field_Bounds{0, 0, 2, 2, true})
+
+    field^.support_bounds = {}
+    dust_field_include_stencil(field, upper)
+    bounds = dust_field_solve_bounds(field^.support_bounds)
+    testing.expect_value(t, bounds, Dust_Field_Bounds{
+        DUST_FIELD_DIM - 3, DUST_FIELD_DIM - 3,
+        DUST_FIELD_DIM - 1, DUST_FIELD_DIM - 1, true})
+}
+
+// Verify clearing removes prior values from every fixed physics plane.
+@(test)
+dust_clear_resets_all_planes :: proc(t: ^testing.T) {
+    field := new(Dust_Field_State, context.allocator)
+    defer free(field)
+    node := DUST_FIELD_NODE_COUNT / 2
+    field^.density[node] = 1
+    field^.momentum_x[node] = 2
+    field^.momentum_y[node] = 3
+    field^.solved_velocity_x[node] = 4
+    field^.solved_velocity_y[node] = 5
+
+    dust_field_clear(field)
+
+    testing.expect_value(t, field^, Dust_Field_State{})
 }

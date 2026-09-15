@@ -580,6 +580,9 @@ completed. The settings panel uses them for:
 - SIMD projection when available;
 - GPU dust instancing when the active OpenGL version supports it.
 
+The [Particle System guide](ParticleSystem.md#rendering) owns the corresponding
+all-sprite staging, upload, instanced draw, and immediate-mode fallback contracts.
+
 Unavailable optional features are forced false and shown with an unavailable label.
 
 ### Integer Sliders

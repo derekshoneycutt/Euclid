@@ -190,8 +190,7 @@ scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
     particle_system^.use_max_dust_particles = 1
     particle_system^.low_particles[0].alive = true
     particle_system^.low_particles[0].life = 1
-    particle_system^.dust_sleeping[0] = true
-    particle_system^.dust_sleeping_count = 1
+    before_velocity := particle_system^.low_particles.vel_z[0]
     state^.particle_system = particle_system
     data := Simulation_Task_Data{
         state = state, scenario_dust_kick_requested = true}
@@ -199,8 +198,7 @@ scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
     consume_scenario_dust_requests(&data)
 
     testing.expect(t, !data.scenario_dust_kick_requested)
-    testing.expect(t, !particle_system^.dust_sleeping[0])
-    testing.expect_value(t, particle_system^.dust_wake_transition_count, u64(1))
+    testing.expect(t, particle_system^.low_particles.vel_z[0] > before_velocity)
 }
 
 // Verify the particle worker emits queued dust and records correlated completion.

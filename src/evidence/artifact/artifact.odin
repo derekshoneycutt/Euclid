@@ -11,7 +11,7 @@ import allocation_evidence "../allocation"
 
 ARTIFACT_MAX_EVENTS :: trace.TRACE_RING_CAPACITY * 16
 
-ARTIFACT_SCHEMA_VERSION :: 1
+ARTIFACT_SCHEMA_VERSION :: 2
 
 // Stable scenario outcome serialized into the canonical manifest.
 Result :: enum u8 {
@@ -135,28 +135,24 @@ artifact_manifest_json :: proc(manifest: Manifest) -> string {
 // Serialize particle settling diagnostics as an embeddable JSON object body.
 artifact_dust_state_json :: proc(state: observe.Display) -> string {
     return fmt.tprintf(
-        "\"dust_live_count\":%d,\"dust_grounded_awake_count\":%d," +
-        "\"dust_grounded_sleeping_count\":%d,\"dust_airborne_count\":%d," +
-        "\"vector_dust_grounded_count\":%d," +
-        "\"vector_dust_peak_speed_sq\":%g," +
-        "\"vector_dust_kinetic_measure\":%g," +
-        "\"dust_dense_leaf_count\":%d,\"dust_refined_cell_count\":%d," +
-        "\"dust_collision_pair_count\":%d," +
-        "\"dust_collision_dropped_pair_count\":%d," +
-        "\"dust_sleeping_pair_skip_count\":%d," +
-        "\"dust_collision_correction_count\":%d," +
-        "\"dust_collision_max_correction\":%g," +
-        "\"dust_relaxation_energy_removed\":%g," +
-        "\"dust_sleep_transition_count\":%d,\"dust_wake_transition_count\":%d",
-        state.dust_live_count, state.dust_grounded_awake_count,
-        state.dust_grounded_sleeping_count, state.dust_airborne_count,
-        state.vector_dust_grounded_count, state.vector_dust_peak_speed_sq,
-        state.vector_dust_kinetic_measure,
-        state.dust_dense_leaf_count, state.dust_refined_cell_count,
-        state.dust_collision_pair_count, state.dust_collision_dropped_pair_count,
-        state.dust_sleeping_pair_skip_count, state.dust_collision_correction_count,
-        state.dust_collision_max_correction, state.dust_relaxation_energy_removed,
-        state.dust_sleep_transition_count, state.dust_wake_transition_count)
+        "\"dust_live_count\":%d,\"dust_airborne_count\":%d," +
+        "\"dust_grounded_count\":%d," +
+        "\"dust_peak_speed_sq\":%g," +
+        "\"dust_kinetic_measure\":%g," +
+        "\"dust_field_solve_node_count\":%d," +
+        "\"dust_tool_contact_overflow_count\":%d," +
+        "\"dust_tool_contact_coalesced_count\":%d," +
+        "\"dust_tool_contact_sample_count\":%d," +
+        "\"dust_tool_contact_field_node_visit_count\":%d," +
+        "\"dust_rendered_count\":%d",
+        state.dust_live_count, state.dust_airborne_count,
+        state.dust_grounded_count, state.dust_peak_speed_sq,
+        state.dust_kinetic_measure, state.dust_field_solve_node_count,
+        state.dust_tool_contact_overflow_count,
+        state.dust_tool_contact_coalesced_count,
+        state.dust_tool_contact_sample_count,
+        state.dust_tool_contact_field_node_visit_count,
+        state.dust_rendered_count)
 }
 
 //   Serialize the synchronized display and Julia-host observation snapshot.

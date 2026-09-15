@@ -75,7 +75,7 @@ If you are new, read in this order:
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution and GIF output internals. | `src/files/files.odin`, `src/files/gif_encode.odin` |
-| **Odin** | Particles | Multi-layer particle systems and visual effects. | `src/particles/particles.odin` |
+| **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/particles.odin` |
 | **---** | **--- Julia Modules ---** | **---** | **---** |
 | **Julia** | Runtime Bootstrap | Script loading, animation registration, and global frame dispatch. | `src/julia/script.jl` |
 | **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
@@ -469,9 +469,11 @@ mutate the ordered constraints and transforms in `Shape_World`. Persistent paylo
 fence storage are reused. The display may help execute queued work, but cannot advance
 until the complete batch joins.
 
-The particle task owns bounded dust contacts, collisions, settling, sleeping, waking,
-and ambient effects. It keeps all simulation storage fixed-capacity and performs every
-particle mutation inside the joined worker step.
+The particle task owns bounded dust contacts, airborne integration, grounded field
+physics, and ambient effects. It keeps all simulation storage fixed-capacity and
+performs every particle mutation inside the joined worker step. See the
+[Particle System guide](ParticleSystem.md) for the complete ownership and lifecycle
+contract.
 
 Grounded dust XY velocity is owned by one PIC-style vector field. Each particle step
 integrates low dust, deposits grounded density and momentum, applies coalesced tool and
