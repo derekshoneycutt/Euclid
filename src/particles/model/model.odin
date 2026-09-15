@@ -152,6 +152,17 @@ Particle_System :: struct {
     dust_floor_rest_count: int,
     dust_collision_refined_cell_count: int,
 
+    dust_field: Dust_Field_State,
+    dust_aggregate: [MAX_LOW_PARTICLES]bool,
+    dust_field_quiet_frames: [MAX_LOW_PARTICLES]u16,
+    dust_aggregate_count: int,
+    dust_field_pressure_node_count: int,
+    dust_field_peak_density: f32,
+    dust_field_peak_speed: f32,
+    dust_field_kinetic_measure: f32,
+    dust_field_sleep_transition_count: u64,
+    dust_field_wake_transition_count: u64,
+
     dust_relaxation_parent_counts: [DUST_GRID_DIM_SQUARED]i32,
     dust_relaxation_parent_levels: [DUST_GRID_DIM_SQUARED]u8,
     dust_relaxation_leaf_counts: [DUST_RELAXATION_LEAF_COUNT]i32,

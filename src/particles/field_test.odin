@@ -144,3 +144,239 @@ dust_field_empty_sample_returns_zero :: proc(t: ^testing.T) {
     testing.expect_value(t, scalar, f32(0))
     testing.expect_value(t, vector, rl.Vector2{})
 }
+
+// Configure colocated grounded particles for deterministic density thresholds.
+dust_field_test_set_colocated :: proc(ps: ^Particle_System, count: int) {
+    ps^.use_max_dust_particles = 3
+    for index in 0..<3 {
+        ps^.low_particles.alive[index] = index < count
+        ps^.low_particles.pos_x[index] = 0.5
+        ps^.low_particles.pos_y[index] = 0.5
+        ps^.low_particles.pos_z[index] = DUST_FLOOR_Z
+        ps^.low_particles.life[index] = 1
+        ps^.low_particles.color[index] = rl.WHITE
+    }
+}
+
+// Build candidate density and apply membership hysteresis once.
+dust_field_test_classify :: proc(ps: ^Particle_System) {
+    dust_field_build_candidate_density(ps)
+    dust_field_classify_particles(ps)
+}
+
+// Verify compressed grounded material enters aggregate membership.
+@(test)
+dust_field_membership_enters_above_threshold :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    dust_field_test_set_colocated(ps, 3)
+
+    dust_field_test_classify(ps)
+
+    testing.expect_value(t, ps^.dust_aggregate_count, 3)
+    testing.expect(t, ps^.dust_aggregate[0])
+}
+
+// Verify aggregate membership persists between exit and entry thresholds.
+@(test)
+dust_field_membership_remains_through_hysteresis_band :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    dust_field_test_set_colocated(ps, 3)
+    dust_field_test_classify(ps)
+    dust_field_test_set_colocated(ps, 2)
+
+    dust_field_test_classify(ps)
+
+    testing.expect_value(t, ps^.dust_aggregate_count, 2)
+    testing.expect(t, ps^.dust_aggregate[0] && ps^.dust_aggregate[1])
+}
+
+// Verify aggregate membership exits below the lower density threshold.
+@(test)
+dust_field_membership_exits_below_lower_threshold :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    dust_field_test_set_colocated(ps, 3)
+    dust_field_test_classify(ps)
+    dust_field_test_set_colocated(ps, 1)
+
+    dust_field_test_classify(ps)
+
+    testing.expect_value(t, ps^.dust_aggregate_count, 0)
+    testing.expect(t, !ps^.dust_aggregate[0])
+}
+
+// Verify vertical motion always returns dust to individual particle authority.
+@(test)
+dust_field_airborne_membership_clears :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    dust_field_test_set_colocated(ps, 3)
+    dust_field_test_classify(ps)
+    ps^.low_particles.pos_z[0] = DUST_FLOOR_Z + 0.01
+
+    dust_field_test_classify(ps)
+
+    testing.expect(t, !ps^.dust_aggregate[0])
+    testing.expect_value(t, ps^.dust_aggregate_count, 2)
+}
+
+// Seed a rectangular field patch with uniform density and velocity.
+dust_field_test_seed_patch :: proc(ps: ^Particle_System, first, last: int,
+        density: f32, velocity: rl.Vector2) {
+    for y in first..=last {
+        for x in first..=last {
+            node := y * DUST_FIELD_DIM + x
+            dust_field_mark_active(&ps^.dust_field, node)
+            ps^.dust_field.density[node] = density
+            ps^.dust_field.momentum_x[node] = density * velocity.x
+            ps^.dust_field.momentum_y[node] = density * velocity.y
+        }
+    }
+}
+
+// Verify a uniform field remains spatially uniform after one solve.
+@(test)
+dust_field_uniform_velocity_remains_uniform :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    dust_field_test_seed_patch(ps, 122, 128, 0.9, {0.002, -0.001})
+
+    dust_field_evolve(ps, f32(1.0 / 60.0))
+
+    center := 125 * DUST_FIELD_DIM + 125
+    neighbor := center + 1
+    test_helpers.expect_close(t, ps^.dust_field.velocity_x[center],
+        ps^.dust_field.velocity_x[neighbor], "uniform x should remain uniform")
+    test_helpers.expect_close(t, ps^.dust_field.velocity_y[center],
+        ps^.dust_field.velocity_y[neighbor], "uniform y should remain uniform")
+}
+
+// Verify one nodal impulse transfers velocity to occupied neighbors.
+@(test)
+dust_field_local_impulse_spreads_to_neighbors :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    center := 125 * DUST_FIELD_DIM + 125
+    for node in center - 1..=center + 1 {
+        dust_field_mark_active(&ps^.dust_field, node)
+        ps^.dust_field.density[node] = 1
+    }
+    ps^.dust_field.momentum_x[center] = 0.003
+
+    dust_field_evolve(ps, f32(1.0 / 60.0))
+
+    testing.expect(t, ps^.dust_field.velocity_x[center + 1] > 0)
+    testing.expect(t, ps^.dust_field.velocity_x[center] >
+        ps^.dust_field.velocity_x[center + 1])
+}
+
+// Solve one uniform patch and return its center velocity magnitude.
+dust_field_test_density_decay :: proc(density: f32) -> f32 {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    dust_field_test_seed_patch(ps, 122, 128, density, {0.003, 0})
+    dust_field_evolve(ps, f32(1.0 / 60.0))
+    return ps^.dust_field.velocity_x[125 * DUST_FIELD_DIM + 125]
+}
+
+// Verify denser aggregate material loses uniform bulk speed more quickly.
+@(test)
+dust_field_higher_density_damps_faster :: proc(t: ^testing.T) {
+    lower := dust_field_test_density_decay(0.8)
+    higher := dust_field_test_density_decay(2.0)
+
+    testing.expect(t, higher < lower)
+    testing.expect(t, higher > 0)
+}
+
+// Verify sub-yield density cannot generate spontaneous pressure motion.
+@(test)
+dust_field_below_yield_density_remains_still :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    dust_field_test_seed_patch(ps, 122, 128, 0.9, {})
+
+    dust_field_evolve(ps, f32(1.0 / 60.0))
+
+    center := 125 * DUST_FIELD_DIM + 125
+    testing.expect_value(t, ps^.dust_field.velocity_x[center], f32(0))
+    testing.expect_value(t, ps^.dust_field.velocity_y[center], f32(0))
+    testing.expect_value(t, ps^.dust_field_pressure_node_count, 0)
+}
+
+// Verify an asymmetric overdensity creates finite outward correction.
+@(test)
+dust_field_excess_density_decompresses_boundedly :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    center := 125 * DUST_FIELD_DIM + 125
+    for node in center - 1..=center + 1 {
+        dust_field_mark_active(&ps^.dust_field, node)
+        ps^.dust_field.density[node] = 1.2
+    }
+    ps^.dust_field.density[center] = 2
+
+    dust_field_evolve(ps, f32(1.0 / 60.0))
+
+    correction := ps^.dust_field.velocity_x[center + 1]
+    testing.expect(t, correction > 0)
+    testing.expect(t, correction <=
+        DUST_FIELD_PRESSURE_ACCELERATION_MAX / 60)
+}
+
+// Verify exact field assignment removes same-location velocity residuals.
+@(test)
+dust_field_exact_assignment_removes_local_residual :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 2
+    stencil := dust_field_stencil({0.5, 0.5})
+    for index in 0..<2 {
+        ps^.dust_aggregate[index] = true
+        ps^.low_particles.pos_x[index] = 0.5
+        ps^.low_particles.pos_y[index] = 0.5
+        ps^.low_particles.vel_x[index] = f32(index * 2 - 1)
+    }
+    for stencil_index in 0..<stencil.count {
+        node := int(stencil.indices[stencil_index])
+        ps^.dust_field.velocity_x[node] = 0.002
+        ps^.dust_field.velocity_y[node] = -0.001
+    }
+
+    dust_field_assign_particle_velocities(ps)
+
+    test_helpers.expect_close(t, ps^.low_particles.vel_x[0], 0.002,
+        "first exact x assignment")
+    testing.expect_value(t, ps^.low_particles.vel_x[1], ps^.low_particles.vel_x[0])
+    testing.expect_value(t, ps^.low_particles.vel_y[1], ps^.low_particles.vel_y[0])
+}
+
+// Verify field activity wakes only aggregate particles in local support.
+@(test)
+dust_field_dense_wake_remains_local :: proc(t: ^testing.T) {
+    ps := new(Particle_System, context.allocator)
+    defer free(ps)
+    ps^.use_max_dust_particles = 3
+    ps^.dust_sleeping_count = 3
+    for index in 0..<3 {
+        ps^.dust_aggregate[index] = true
+        ps^.dust_sleeping[index] = true
+        ps^.low_particles.pos_x[index] = 0.2 + f32(index) * 0.2
+        ps^.low_particles.pos_y[index] = 0.5
+    }
+    stencil := dust_field_stencil({0.2, 0.5})
+    for stencil_index in 0..<stencil.count {
+        node := int(stencil.indices[stencil_index])
+        ps^.dust_field.velocity_x[node] = 0.001
+    }
+
+    dust_field_assign_particle_velocities(ps)
+    dust_field_update_sleeping(ps)
+
+    testing.expect(t, !ps^.dust_sleeping[0])
+    testing.expect(t, ps^.dust_sleeping[1] && ps^.dust_sleeping[2])
+    testing.expect_value(t, ps^.dust_sleeping_count, 2)
+    testing.expect_value(t, ps^.dust_field_wake_transition_count, u64(1))
+}

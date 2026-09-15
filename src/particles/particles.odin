@@ -202,6 +202,9 @@ wake_dust_particle :: #force_inline proc(ps: ^Particle_System, i: int) {
         ps^.dust_sleeping[i] = false
         ps^.dust_sleeping_count -= 1
         ps^.dust_wake_transition_count += 1
+        if ps^.dust_aggregate[i] {
+            ps^.dust_field_wake_transition_count += 1
+        }
     }
     ps^.dust_sleep_quiet_frames[i] = 0
     ps^.dust_activity_frames[i] = DUST_ACTIVITY_GRACE_FRAMES
@@ -564,7 +567,9 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
     }
 
     build_exact_dust_grid(ps)
+    dust_field_prepare_membership(ps)
     resolve_dust_collisions_on_fine_grid(ps)
+    dust_field_update_aggregate(ps, dt)
     relax_dense_grounded_dust(ps)
     advance_dust_activity_grace(ps)
 
@@ -693,6 +698,7 @@ reset_particles :: proc(ps: ^Particle_System) {
     ps.dust_collision_rest_contact_count = 0
     ps.dust_floor_rest_count = 0
     ps.dust_collision_refined_cell_count = 0
+    dust_field_reset_state(ps)
     ps.dust_contact_candidate_count = 0
     ps.dust_spawn_sequence = 0
     reset_dust_relaxation_state(ps)
@@ -944,6 +950,8 @@ spawn_dust_particle_index_with_generator :: proc(
     ps^.dust_sleeping[i] = false
     ps^.dust_sleep_quiet_frames[i] = 0
     ps^.dust_activity_frames[i] = DUST_ACTIVITY_GRACE_FRAMES
+    ps^.dust_aggregate[i] = false
+    ps^.dust_field_quiet_frames[i] = 0
 }
 
 // Return one deterministic scenario-request position inside its selected layout.
@@ -1896,7 +1904,8 @@ update_dust_relaxation_levels :: proc(ps: ^Particle_System) {
 prepare_dust_relaxation :: proc(ps: ^Particle_System) {
     reset_dust_relaxation_accumulators(ps)
     for i in 0..<ps^.use_max_dust_particles {
-        if ps.low_particles[i].alive && ps.low_particles.pos_z[i] <= DUST_FLOOR_Z &&
+        if ps.low_particles[i].alive && !ps^.dust_aggregate[i] &&
+            ps.low_particles.pos_z[i] <= DUST_FLOOR_Z &&
             ps^.dust_activity_frames[i] == 0 {
             parent := dust_grid_cell_index(
                 ps.low_particles.pos_x[i], ps.low_particles.pos_y[i])
@@ -1910,8 +1919,8 @@ prepare_dust_relaxation :: proc(ps: ^Particle_System) {
 deposit_dust_relaxation_momentum :: proc(ps: ^Particle_System) {
     for i in 0..<ps^.use_max_dust_particles {
         ps^.dust_relaxation_leaf_indices[i] = -1
-        if !ps.low_particles[i].alive || ps.low_particles.pos_z[i] > DUST_FLOOR_Z ||
-            ps^.dust_activity_frames[i] > 0 {
+        if !ps.low_particles[i].alive || ps^.dust_aggregate[i] ||
+            ps.low_particles.pos_z[i] > DUST_FLOOR_Z || ps^.dust_activity_frames[i] > 0 {
             continue
         }
         leaf := dust_relaxation_leaf_index(ps, i)
