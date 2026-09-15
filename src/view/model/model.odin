@@ -58,7 +58,14 @@ Tool_Render_State :: struct {
     loc_occluder_tangent: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
 }
 
-// Dust_Render_State owns display-thread particle rendering resources and staging arrays.
+// Dust_Instance stores one tightly packed low-dust GPU instance.
+Dust_Instance :: struct {
+    screen_x, screen_y, diameter: f32,
+    red, green, blue, alpha: f32,
+    sprite_index: f32,
+}
+
+// Dust_Render_State owns display-thread particle rendering resources and staging.
 Dust_Render_State :: struct {
     texture: rl.Texture2D,
     ready: bool,
@@ -68,14 +75,10 @@ Dust_Render_State :: struct {
     vao_id: u32,
     quad_positions_vbo_id: u32,
     quad_texcoords_vbo_id: u32,
-    instance_geometry_vbo_id: u32,
-    instance_color_vbo_id: u32,
-    instance_sprite_index_vbo_id: u32,
+    instance_vbo_id: u32,
     viewport_location: i32,
     texture_location: i32,
-    instance_geometry: [particlemodel.MAX_LOW_PARTICLES][3]f32,
-    instance_colors: [particlemodel.MAX_LOW_PARTICLES][4]f32,
-    instance_sprite_indices: [particlemodel.MAX_LOW_PARTICLES]f32,
+    instances: [particlemodel.MAX_LOW_PARTICLES]Dust_Instance,
 }
 
 // Gif_Capture_Phase tracks display-owned GIF capture policy.
