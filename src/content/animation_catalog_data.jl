@@ -637,4 +637,24 @@ const AnimationDescriptors = AnimationDescriptor[
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
         "Convex Limaçon", 8, LeafNode,
         "curves/convex_limacon.jl"),
+    AnimationDescriptor(
+        UUID("ff3a997a-c536-43fa-ba37-9c380c3426fa"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Deltoid", 9, LeafNode,
+        "curves/deltoid.jl"),
+    AnimationDescriptor(
+        UUID("80aab994-2fc1-4c62-9adf-6e32cd54aca5"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Astroid", 10, LeafNode,
+        "curves/astroid.jl"),
+    AnimationDescriptor(
+        UUID("7d7dbc7a-c360-486d-b727-a9909d4c569e"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "5-Hypocycloid", 11, LeafNode,
+        "curves/five_hypocycloid.jl"),
+    AnimationDescriptor(
+        UUID("d6fcda98-5195-457d-8154-939930ec00c5"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "11⁄2-Hypocycloid", 12, LeafNode,
+        "curves/eleven_half_hypocycloid.jl"),
 ]

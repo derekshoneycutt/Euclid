@@ -62,7 +62,7 @@ end
 end
 
 @testset "complete production catalog contract" begin
-    @test length(AnimationDescriptors) == 128
+    @test length(AnimationDescriptors) == 132
     @test count(descriptor -> descriptor.kind == TerminalNode,
         AnimationDescriptors) == 1
     roots = filter(descriptor -> descriptor.parent_id === nothing,
@@ -76,12 +76,13 @@ end
     @test getproperty.(curves, :display_name) ==
         ["Circle", "Ellipse", "Cycloid", "Curtate Cycloid",
             "Prolate Cycloid", "Cardioid", "Limaçon", "Dimpled Limaçon",
-            "Convex Limaçon"]
-    @test getproperty.(curves, :sibling_order) == collect(0:8)
+            "Convex Limaçon", "Deltoid", "Astroid", "5-Hypocycloid",
+            "11⁄2-Hypocycloid"]
+    @test getproperty.(curves, :sibling_order) == collect(0:12)
     path_backed = filter(
         descriptor -> descriptor.implementation_path !== nothing,
         AnimationDescriptors)
-    @test length(path_backed) == 127
+    @test length(path_backed) == 131
     generation = create_euclid_runtime_generation(ProductionContentRoot)
     for descriptor in path_backed
         implementation = load_generation_animation(generation, descriptor.id)

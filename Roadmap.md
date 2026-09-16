@@ -91,12 +91,13 @@ Core Content (>163 animations; 98 complete):
   - [X] Limacon
   - [X] Dimpled Limacon
   - [X] Convex Limacon
-  - [ ] Deltoid
-  - [ ] Astroid
-  - [ ] k-Hypocycloids (k=5+, 2.n, etc.; tbd exact options)
+  - [X] Deltoid
+  - [X] Astroid
+  - [X] 5-Hypocycloid
+  - [X] 11⁄2-Hypocycloid
   - [ ] Nephroid
   - [ ] Epitrochoids (mulitply-dimpled trochoids?)
-  - [ ] Hypotrochoids (smooth star e.g. 5 point?)
+  - [ ] Hypotrochoids (e.g. smooth 5-point star?)
 
 General features:
 

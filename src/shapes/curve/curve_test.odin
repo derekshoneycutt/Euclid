@@ -110,6 +110,30 @@ trochoid_curve_explication_rejects_short_output :: proc(t: ^testing.T) {
     testing.expect_value(t, result.vertex_count, 0)
 }
 
+// Verify the longest planned rational hypocycloid closes without exhausting storage.
+@(test)
+trochoid_curve_eleven_half_hypocycloid_is_complete_and_closed :: proc(
+    t: ^testing.T) {
+    fixed_radius := f32(0.25)
+    rolling_radius := fixed_radius / 5.5
+    value := shapemodel.Shape_Trochoid{mode = .Internal,
+        fixed_radius = fixed_radius, rolling_radius = rolling_radius,
+        tracer_distance = rolling_radius, parameter_start = 0,
+        parameter_finish = 4 * math.PI, draw_parameter = 4 * math.PI}
+    vertices: [TROCHOID_MAX_VERTICES]Vector3
+    result := trochoid_explicate({}, value, vertices[:])
+
+    testing.expect_value(t, result.status, Curve_Explication_Status.Complete)
+    testing.expect(t, result.vertex_count > TROCHOID_BASE_SEGMENTS)
+    test_helpers.expect_vec3_close(t, vertices[0],
+        vertices[result.vertex_count - 1],
+        "11/2 hypocycloid should close after two fixed-center revolutions")
+    midpoint := trochoid_point({}, value, 2 * math.PI)
+    testing.expectf(t, math.abs(midpoint.x - vertices[0].x) > 1e-4 ||
+        math.abs(midpoint.y - vertices[0].y) > 1e-4,
+        "11/2 hypocycloid should not close after one fixed-center revolution")
+}
+
 // Verify two revolutions are centered on the literal rail with three cusp contacts.
 @(test)
 cycloid_curve_two_revolutions_use_literal_line :: proc(t: ^testing.T) {

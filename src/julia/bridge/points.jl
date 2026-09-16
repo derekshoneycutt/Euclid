@@ -270,6 +270,46 @@ function create_new_limacon(state_ptr::Ptr{Cvoid}, center, radius::Real,
         draw_parameter=draw_parameter, color=color, brush_size=brush_size)
 end
 
+"""Derive one rational-k hypocycloid's rolling radius and minimal period."""
+function _hypocycloid_parameters(fixed_radius::Real, k::Rational)
+    fixed_radius > 0 ||
+        throw(ArgumentError("hypocycloid fixed radius must be positive"))
+    k > 1 || throw(ArgumentError("hypocycloid k must be greater than one"))
+    rolling_radius = Float32(fixed_radius / k)
+    period = 2f0 * Float32(pi) * Float32(denominator(k))
+    isfinite(rolling_radius) && rolling_radius > 0 && isfinite(period) ||
+        throw(ArgumentError("hypocycloid parameters must be finite"))
+    return (; rolling_radius, period)
+end
+
+"""Create one closed hypocycloid with exact rational ratio `k = R/r`."""
+function create_new_hypocycloid(state_ptr::Ptr{Cvoid}, center,
+    fixed_radius::Real, k::Rational; parameter_start::Real=0f0,
+    parameter_finish::Union{Nothing,Real}=nothing,
+    draw_parameter::Union{Nothing,Real}=nothing,
+    color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
+    parameters = _hypocycloid_parameters(fixed_radius, k)
+    finish = parameter_finish === nothing ?
+        parameter_start + parameters.period : parameter_finish
+    frontier = draw_parameter === nothing ? finish : draw_parameter
+    create_new_trochoid(state_ptr, center; mode=TROCHOID_INTERNAL,
+        fixed_radius, rolling_radius=parameters.rolling_radius,
+        tracer_distance=parameters.rolling_radius, parameter_start,
+        parameter_finish=finish, draw_parameter=frontier, color, brush_size)
+end
+
+"""Create the three-cusped hypocycloid known as a deltoid."""
+function create_new_deltoid(state_ptr::Ptr{Cvoid}, center,
+    fixed_radius::Real; kwargs...)
+    create_new_hypocycloid(state_ptr, center, fixed_radius, 3 // 1; kwargs...)
+end
+
+"""Create the four-cusped hypocycloid known as an astroid."""
+function create_new_astroid(state_ptr::Ptr{Cvoid}, center,
+    fixed_radius::Real; kwargs...)
+    create_new_hypocycloid(state_ptr, center, fixed_radius, 4 // 1; kwargs...)
+end
+
 """Create one outlined arc from explicit coordinates."""
 function create_new_circle(state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real,
     radius::Real, start_theta::Real, sweep_theta::Real;

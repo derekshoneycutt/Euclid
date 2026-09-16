@@ -130,6 +130,12 @@ permanent guide and compass descend together, remain aligned while drawing, then
 together before either tool is hidden. Hiding a guide is intentionally silent; hiding
 the finished curve is the operation that emits clear dust.
 
+Hypocycloid families use one common fixed-circle scale so changes in `k = R/r` remain
+visually comparable. For reduced rational `k = p/q`, animate one uninterrupted parameter
+domain of `0..2pi*q`; scale draw duration with `q` to preserve angular speed. The fixed
+and internally rolling rings remain guides, while the compass from rolling center to
+tracer is the drawing instrument.
+
 ## Isometric Projection and Right-Hand Rule
 
 The isometric helper in `src/view/core/isomath.odin` uses a right-handed

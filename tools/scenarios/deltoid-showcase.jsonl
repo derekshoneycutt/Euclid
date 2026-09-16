@@ -1,0 +1,12 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Deltoid","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_event":"trochoid_frontier_committed","timeout_ms":10000}
+{"wait_event":"trochoid_frontier_committed","timeout_ms":10000}
+{"screenshot":".build/deltoid-construction.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"wait_event":"animation_cycle_boundary","timeout_ms":20000}
+{"screenshot":".build/deltoid-showcase.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

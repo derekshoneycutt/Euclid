@@ -152,6 +152,10 @@ internal mode uses `R - r` and requires `R > r`. Domains are directed, so either
 `finish > start` or `finish < start` is valid, and the reveal frontier must remain in
 that directed closed interval. Continuous parameters are interpolated before point
 evaluation. Mode is discrete and may change only while the curve is hidden.
+Hypocycloids are semantic internal trochoids with tracer distance `d = r`. For reduced
+`k = R/r = p/q`, the curve has `p` cusps and its minimal parameter period is `2pi*q`.
+Deltoids and astroids are the `k = 3` and `k = 4` conveniences over this same model;
+they do not introduce additional canonical shape or bridge types.
 
 A cycloid host references two endpoint transforms rather than owning a center transform.
 The rolling interval is centered on their directed line, and the circle advances without
@@ -161,12 +165,14 @@ Endpoint positions, radius, tracer parameters, domain, and frontier all interpol
 evaluation.
 
 Sampled curve vertices are never canonical. `src/shapes/curve/` refines a 48-segment
-full-domain lattice using midpoint chord error `0.0005`, maximum parameter step `pi/24`,
-and a hard limit of 192 segments/193 vertices per curve. Refining the complete domain
-before truncating at the exact frontier keeps established vertices stable as a drawing
-advances. Closure is represented only by the evaluated final endpoint; no floating-point
-closure inference or synthetic segment is added. Rendering and dust independently
-explicate canonical state, so particle behavior does not depend on a prepared frame.
+full-domain lattice using midpoint chord error `0.0005` and maximum parameter step
+`pi/24`. Trochoids permit at most 512 segments/513 vertices; cycloids retain their
+192-segment/193-vertex bound. The frame-local draw cache stores at most 2,560 sampled
+curve vertices across all visible curves. Refining the complete domain before truncating
+at the exact frontier keeps established vertices stable as a drawing advances. Closure
+is represented only by the evaluated final endpoint; no floating-point closure inference
+or synthetic segment is added. Rendering and dust independently explicate canonical
+state, so particle behavior does not depend on a prepared frame.
 
 ### Labels
 
