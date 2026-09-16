@@ -162,6 +162,81 @@ function set_trochoid_frontier(
         UInt64(entity)::UInt64, Cfloat(frontier)::Cfloat)::Int32
 end
 
+"""Build one field-for-field Cycloid ABI value from named scalar parameters."""
+function _cycloid_geometry(; rolling_radius::Real, tracer_distance::Real,
+    tracer_phase::Real, parameter_start::Real, parameter_finish::Real,
+    draw_parameter::Real)
+    BridgeCycloidGeometry(Cfloat(rolling_radius), Cfloat(tracer_distance),
+        Cfloat(tracer_phase), Cfloat(parameter_start), Cfloat(parameter_finish),
+        Cfloat(draw_parameter))
+end
+
+"""Create one animation-owned Cycloid from a literal two-point rail."""
+function create_new_cycloid(state_ptr::Ptr{Cvoid}, first, second;
+    rolling_radius::Real, tracer_distance::Real, tracer_phase::Real=0f0,
+    parameter_start::Real=0f0, parameter_finish::Real=4f0 * Float32(pi),
+    draw_parameter::Real=parameter_finish,
+    color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
+    first_value = (Cfloat(first[1]), Cfloat(first[2]), Cfloat(first[3]))
+    second_value = (Cfloat(second[1]), Cfloat(second[2]), Cfloat(second[3]))
+    geometry = _cycloid_geometry(; rolling_radius, tracer_distance, tracer_phase,
+        parameter_start, parameter_finish, draw_parameter)
+    style = _shape_style(color, brush_size)
+    @ccall shape_create_cycloid(state_ptr::Ptr{Cvoid},
+        first_value::NTuple{3, Cfloat}, second_value::NTuple{3, Cfloat},
+        geometry::BridgeCycloidGeometry,
+        style::BridgeShapeStyle)::BridgeShapeCycloidResult
+end
+
+"""Return one Cycloid host's literal endpoint positions and scalar geometry."""
+function get_cycloid_geometry(state_ptr::Ptr{Cvoid}, entity::Integer)
+    @ccall shape_get_cycloid(state_ptr::Ptr{Cvoid},
+        UInt64(entity)::UInt64)::BridgeShapeCycloidQueryResult
+end
+
+"""Atomically replace one Cycloid host's complete scalar description."""
+function set_cycloid_geometry(state_ptr::Ptr{Cvoid}, entity::Integer;
+    rolling_radius::Real, tracer_distance::Real, tracer_phase::Real=0f0,
+    parameter_start::Real, parameter_finish::Real, draw_parameter::Real)
+    geometry = _cycloid_geometry(; rolling_radius, tracer_distance, tracer_phase,
+        parameter_start, parameter_finish, draw_parameter)
+    @ccall shape_set_cycloid(state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
+        geometry::BridgeCycloidGeometry)::Int32
+end
+
+"""Advance one Cycloid's reveal frontier within its directed domain."""
+function set_cycloid_frontier(
+    state_ptr::Ptr{Cvoid}, entity::Integer, frontier::Real)
+    @ccall shape_set_cycloid_frontier(state_ptr::Ptr{Cvoid},
+        UInt64(entity)::UInt64, Cfloat(frontier)::Cfloat)::Int32
+end
+
+"""Create an ordinary Cycloid whose tracer lies on the rolling circle."""
+function create_new_ordinary_cycloid(state_ptr::Ptr{Cvoid}, first, second,
+    radius::Real; kwargs...)
+    radius > 0 || throw(ArgumentError("Cycloid radius must be positive"))
+    create_new_cycloid(state_ptr, first, second; rolling_radius=radius,
+        tracer_distance=radius, kwargs...)
+end
+
+"""Create a curtate Cycloid with its tracer strictly inside the rolling circle."""
+function create_new_curtate_cycloid(state_ptr::Ptr{Cvoid}, first, second,
+    radius::Real, tracer_distance::Real; kwargs...)
+    0 <= tracer_distance < radius ||
+        throw(ArgumentError("curtate Cycloid requires 0 <= tracer distance < radius"))
+    create_new_cycloid(state_ptr, first, second; rolling_radius=radius,
+        tracer_distance=tracer_distance, kwargs...)
+end
+
+"""Create a prolate Cycloid with its tracer strictly outside the rolling circle."""
+function create_new_prolate_cycloid(state_ptr::Ptr{Cvoid}, first, second,
+    radius::Real, tracer_distance::Real; kwargs...)
+    tracer_distance > radius > 0 ||
+        throw(ArgumentError("prolate Cycloid requires tracer distance > radius > 0"))
+    create_new_cycloid(state_ptr, first, second; rolling_radius=radius,
+        tracer_distance=tracer_distance, kwargs...)
+end
+
 """Create the internal-trochoid representation of an ellipse with semiaxes `a ≥ b`."""
 function create_new_ellipse(state_ptr::Ptr{Cvoid}, center, a::Real, b::Real;
     draw_parameter::Real=2f0 * Float32(pi),

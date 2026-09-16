@@ -603,13 +603,28 @@ const AnimationDescriptors = AnimationDescriptor[
         "Ellipse", 1, LeafNode,
         "curves/ellipse.jl"),
     AnimationDescriptor(
+        UUID("31458f6d-bc86-4a98-8629-b3bba8d16f53"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Cycloid", 2, LeafNode,
+        "curves/cycloid.jl"),
+    AnimationDescriptor(
+        UUID("0a8ada74-d72a-403d-a065-2269c72dfd4b"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Curtate Cycloid", 3, LeafNode,
+        "curves/curtate_cycloid.jl"),
+    AnimationDescriptor(
+        UUID("83f8bc57-b9ad-4956-b6d0-d8483c584e2e"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Prolate Cycloid", 4, LeafNode,
+        "curves/prolate_cycloid.jl"),
+    AnimationDescriptor(
         UUID("bad550b7-54c6-40df-adf1-c19e2e88fe25"),
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
-        "Cardioid", 2, LeafNode,
+        "Cardioid", 5, LeafNode,
         "curves/cardioid.jl"),
     AnimationDescriptor(
         UUID("c70ab98c-08e5-42bc-b198-78b0f54ecf55"),
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
-        "Limacon", 3, LeafNode,
+        "Limaçon", 6, LeafNode,
         "curves/limacon.jl"),
 ]

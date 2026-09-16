@@ -86,7 +86,7 @@ end
     geometry = extract_julia_module(config, "src/julia/geometry.jl")
     @test geometry.display_name == "EuclidGeometry"
     @test occursin("Shared geometric intersection helpers", geometry.doc_markdown)
-    @test length(filter(symbol -> !isempty(symbol.doc_markdown), geometry.symbols)) == 11
+    @test length(filter(symbol -> !isempty(symbol.doc_markdown), geometry.symbols)) == 15
 
     latex = extract_julia_module(config, "src/julia/latex.jl")
     @test latex.display_name == "EuclidLatex"

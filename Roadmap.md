@@ -58,13 +58,15 @@ Core Content (>163 animations; 98 complete):
   - [X] Section 6 (8 animations)
   - [X] Section 7 (17 animations)
   - [X] Section 8 (2 animations)
+- [ ] Tarski
+- [ ] Logic
 - [ ] Algebraic groups (14+ animations; 7 complete)
   - [ ] Definitions (14 animations)
-    - [X] $\mathbb{Z}_2$(irregular polygon reflecting about a line; special case of$C_n$)
+    - [X] $\mathbb{Z}_2$ (irregular poly reflecting about line; special case of $C_n$)
       - [X] Closure
       - [X] Identity
       - [X] Inverse
-    - [X] $C_n$(cyclic group of order$n$; writing a circle in unit dividing $2\pi$)
+    - [X] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
       - [X] Associativity
       - [X] Commutative (Abelian)
     - [ ] $D_n$(dihedral, symmetry of shape with$n$ sides)
@@ -79,6 +81,14 @@ Core Content (>163 animations; 98 complete):
     - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane --
      polygons translating/rotating/reflecting around another point)
   - [ ] Demonstrations ? Idk maybe. keep going back and forth lololololol
+- [ ] Curves
+  - [X] Circle
+  - [X] Ellipse
+  - [ ] Cycloid
+  - [ ] Curtate Cycloid
+  - [ ] Prolate Cycloid
+  - [X] Cardioid
+  - [X] Limacon
 
 General features:
 
@@ -94,7 +104,8 @@ General features:
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
   - [X] Label
-  - [X] Trochoid and Trochoid Tool
+  - [ ] Cycloids and Cycloid Tool
+  - [X] Trochoids and Trochoid Tool
   - [ ] Lenses & Lunes
 - [X] Basic, layered particle system
   - [X] Dust
@@ -110,7 +121,7 @@ General features:
 - [X] UUID animation handles
 - [X] Improved UI layout system
 - [X] Improved hybrid immediate mode, block-based view text rendering
-- [X] Scratchpad REPL
+- [X] Terminal / REPL
   - [X] Basic setup and availability
   - [X] Basic help feature
   - [X] Basic input tab completion support, including unicode characters & function names
@@ -118,6 +129,7 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
+- [ ] IME/Accesibility/etc. Features
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation
@@ -138,7 +150,8 @@ General features:
 - [X] Naive spatial-aware shape drawing
 - [X] Improved pen clipping through 3D polygons
 - [X] Resizable layout via Splitters
-- [X] Drawing Sounds (Initial procedural)
+- [ ] Drawing Sounds (In Progress)
+- [ ] SDL3 Migration
 
 Final tasks:
 
@@ -190,31 +203,28 @@ Content (24+ animations):
 - Group theory (8+ animations)
   - Klein 4 Group
   - Frieze groups
-  - $Sim(2)$(same as$E(2)$ but with scaling as well)
+  - $Sim(2)$ (same as $E(2)$ but with scaling as well)
   - $Aff(2)$ ($Sim(2)$ with shearing added)
   - Circle group $S^1$ (point of a circle rotating around said circle)
   - $\mathbb{R}/\mathbb{Z}$ (coil going up, animating on each full circle)
   - Free group $F_2$ from figure-8 (walking a cayley tree)
-  - $(\pi_1(R_n)\cong F_n)$Free group$F_n$via the rose$R_n$(draw roses of size$n_a$;
-   where for $m$passes$n_a$varies constantly +1 for each$a\in \{1, ..., m\}$,
+  - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$;
+   where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$,
    line disintegrating as drawing with new effect)
-- Logic, Tarski, etc.?
 
 Core Features:
 
-- Better than raylib... sdl3? Maybe...
-- Improved terminal input IME, acessibility, etc. (need off raylib)
 - More primitives (gnomons, strings--small connectors)
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support
-- TErminal animation recorder w/ playback (e.g. start_recording! ... end_recording!
+- Terminal animation recorder w/ playback (e.g. start_recording! ... end_recording!
  ... replay_recording!)
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
 - REPL-focused exercise suggestions
 - Persisting Terminals (runtime-only, as children in the trees of Terminal
- that can be navigated away from and returned to with persisted internal state;
+  that can be navigated away from and returned to with persisted internal state;
   exit cleans REPL state and removes from tree)
 - Declarative animations support
 - Animation slider
@@ -244,7 +254,7 @@ Core Features:
   - $PGL(2, C)$ (animated advanced transformation; changes center and
    radius because transformation preserves circles)
 - Complex numbers support handling
-- More primitives (ellipses/conic sections, spirals)
+- More primitives (spirals)
 - Scaled Cartesian coordinate system
 - Interactive mode animations w/ per-animation settings
 
@@ -265,42 +275,6 @@ Core Features:
 - Fields
 
 ## References
-
-Roulette can be a good basis for all cardioids, limacons, nephroids, ellipses, more
-
-Mechanically, every standard roulette can be animated using three primary components:
-
-1. A Base Circle ($C_{1}$): Center $(x_1, y_1)$, radius $R$, fixed in place.
-1. A Rolling Circle ($C_{2}$): Center $(x_2, y_2)$, radius $r$, which rotates
- around the base circle.
-1. A Tracing Arm ($d$): A physical extension from the center of $C_{2}$ holding
- the pen at distance $d$.
-
-The Universal Formula
-
-Let $\theta$ be the angle of the rolling circle's center relative to the base circle's
- center. The coordinates of the pen $(x, y)$ are given by:
-
-$$\begin{aligned}x&=(R\pm r)\cos (\theta )+d\cos \left(\theta \pm
-\frac{R}{r}\theta \right)\\
- y&=(R\pm r)\sin (\theta )+d\sin \left(\theta \pm \frac{R}{r}\theta \right)\end{aligned}$$
-
-Use $+$ for Epitrochoids (Circle rolling on the outside of the base circle).
-
-Use $-$ for Hypotrochoids (Circle rolling on the inside of the base circle).
-
-By exposing just three variables ($R$, $r$, and $d$) we automatically get support
-for curves:
-
-Target | Curve | Direction | Base Radius ($R$) | Rolling Radius ($r$) | Pen Distance ($d$) | Visual Mechanical Behavior
---- | --- | --- | --- | --- | --- | ---
-Cardioid | Outside | ($+$) | $R$ | $r = R$ | $d = r$ | Pen sits exactly on the rolling circle's rim.
-Limaçon (Inner Loop) | Outside | ($+$) | $R$ | $r = R$ | $d > r$ | Pen extends past the rolling circle's rim.
-Limaçon (Dimpled) | Outside | ($+$) | $R$ | $r = R$ | $d < r$ | Pen sits inside the rolling circle's rim.
-Nephroid | Outside | ($+$) | $R$ | $r = \frac{1}{2}R$ | $d = r$ | Two inward kidney-like cusps.
-Ellipse | Inside | ($-$) | $R$ | $r = \frac{1}{2}R$ | $d \neq r$ | Known as a Tusi Couple. A rolling circle half the size of the base circle collapses planetary motion into perfect lines/ellipses!
-
------------
 
 Schopenhauer uses a diagram like this, very roughly. It includes a square with the
 diagonals crossing. The top triangle made by this diagonal is shaded. On either side

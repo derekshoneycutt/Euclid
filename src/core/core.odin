@@ -91,6 +91,7 @@ Euclid_General_State :: struct {
 
     shape_world: ^shapemodel.Shape_World,
     world_trochoid_tool: shapemodel.Shape_Trochoid_Tool_Handle,
+    world_cycloid_tool: shapemodel.Shape_Cycloid_Tool_Handle,
     world_compass: shapemodel.Shape_Compass_Handle,
     world_pen: shapemodel.Shape_Pen_Handle,
 

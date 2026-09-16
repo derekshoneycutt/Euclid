@@ -358,16 +358,57 @@ emit_shape_world_trochoid_burst :: proc(
     }
 }
 
+// Resolve and emit one canonical literal-line cycloid through bounded explication.
+emit_shape_world_cycloid_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: shapemodel.Shape_Entity,
+    geometry: shapemodel.Shape_Cycloid_Geometry) {
+    first, first_ok := shape_world_burst_position(ctx.world, geometry.first)
+    second, second_ok := shape_world_burst_position(ctx.world, geometry.second)
+    value, value_ok := shapemodel.shape_component_get(
+        &ctx.world.cycloids, &ctx.world.registry, entity)
+    if !first_ok || !second_ok || !value_ok {
+        return
+    }
+    vertices: [curve.CYCLOID_MAX_VERTICES]Vector3
+    result := curve.cycloid_explicate(first, second, value^, vertices[:])
+    if result.status != .Invalid_Input && result.vertex_count > 1 {
+        emit_curve_polyline_dust(
+            ctx.particles, vertices[:result.vertex_count], ctx.color)
+    }
+}
+
+// Emit one constructed world geometry through its bounded shape explication.
+emit_shape_world_constructed_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: shapemodel.Shape_Entity,
+    geometry: shapemodel.Shape_Geometry) {
+    switch geometry.kind {
+    case .Arc:
+        emit_shape_world_arc_burst(ctx, entity, false)
+    case .Filled_Arc:
+        emit_shape_world_arc_burst(ctx, entity, true)
+    case .Trochoid:
+        emit_shape_world_trochoid_burst(ctx, entity)
+    case .Cycloid:
+        emit_shape_world_cycloid_burst(ctx, entity, geometry.payload.cycloid)
+    case .Polygon:
+        emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
+    case .Point, .Line, .Trochoid_Tool, .Cycloid_Tool, .Pen, .Compass:
+    }
+}
+
 //   Emit one direct world geometry using the legacy sampling behavior.
 emit_shape_world_geometry_burst :: proc(
     ctx: Shape_World_Burst_Context,
     entity: shapemodel.Shape_Entity,
     geometry: shapemodel.Shape_Geometry) {
-    switch geometry.kind {
-    case .Point:
+    if geometry.kind == .Point {
         position, found := shape_world_burst_position(ctx.world, entity)
         if found {emit_point_burst(ctx.particles, position, ctx.color)}
-    case .Line:
+        return
+    }
+    if geometry.kind == .Line {
         first, first_ok := shape_world_burst_position(
             ctx.world, geometry.payload.line.first)
         second, second_ok := shape_world_burst_position(
@@ -375,17 +416,9 @@ emit_shape_world_geometry_burst :: proc(
         if first_ok && second_ok {
             emit_line_dust(ctx.particles, first, second, ctx.color)
         }
-    case .Arc:
-        emit_shape_world_arc_burst(ctx, entity, false)
-    case .Filled_Arc:
-        emit_shape_world_arc_burst(ctx, entity, true)
-    case .Trochoid:
-        emit_shape_world_trochoid_burst(ctx, entity)
-    case .Trochoid_Tool:
-    case .Polygon:
-        emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
-    case .Pen, .Compass:
+        return
     }
+    emit_shape_world_constructed_burst(ctx, entity, geometry)
 }
 
 //   Emit clear dust for one visible entity before its presentation is hidden.
@@ -413,7 +446,7 @@ emit_shape_world_hide_burst :: proc(
     geometry, geometry_found := shapemodel.shape_component_get(
         &world.geometries, &world.registry, entity)
     if !geometry_found || geometry^.kind == .Pen || geometry^.kind == .Compass ||
-        geometry^.kind == .Trochoid_Tool {
+        geometry^.kind == .Trochoid_Tool || geometry^.kind == .Cycloid_Tool {
         return false
     }
     if kick_dust {kick_existing_dust(ps)}

@@ -127,6 +127,8 @@ const AnimationLoopFiles = [
     "src/content/algebra/groups/z_2_closure.jl",
     "src/content/algebra/groups/z_2_identity.jl",
     "src/content/algebra/groups/z_2_inverse.jl",
+    "src/content/curves/cardioid.jl",
+    "src/content/curves/cycloid_shared.jl",
     "src/content/elements/book1/commonnotions.jl",
     "src/content/elements/book1/def_001_point.jl",
     "src/content/elements/book1/def_002_line.jl",

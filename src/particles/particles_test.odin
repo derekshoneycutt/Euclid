@@ -3,6 +3,7 @@ package particles
 import particlemodel "model"
 import shapemodel "../shapes/model"
 import curve "../shapes/curve"
+import shapes "../shapes"
 
 import "core:math"
 import "core:testing"
@@ -108,6 +109,35 @@ trochoid_dust_emission_scales_with_revealed_length :: proc(t: ^testing.T) {
     full_count := count_live_low_particles(full)
     testing.expect(t, partial_count < full_count)
     testing.expect(t, partial_count >= CLEAR_BURST_CURVE_MIN_SAMPLES)
+}
+
+// Verify hiding the permanent cycloid guide neither emits nor kicks dust.
+@(test)
+cycloid_tool_hide_is_silent :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    particles := new(particlemodel.Particle_System, context.allocator)
+    defer free(world)
+    defer free(particles)
+    tool, status := shapes.world_create_cycloid_tool(world, {
+        first = {0, 0, 0}, second = {1, 0, 0}, rolling_radius = 0.05,
+        parameter_start = 0, parameter_finish = 2 * math.PI,
+        parameter = 0, style = {color = rl.WHITE, brush_size = 5},
+    })
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    style, found := shapemodel.shape_component_get_mut(
+        &world.render_styles, &world.registry, tool.shape)
+    testing.expect(t, found)
+    style.visible = true
+    particles.use_max_dust_particles = 1
+    particles.low_particles[0].alive = true
+    particles.low_particles[0].life = 10
+
+    emitted := emit_shape_world_hide_burst(particles, world, tool.shape)
+
+    testing.expect(t, !emitted)
+    testing.expect_value(t, particles.low_particles[0].age, f32(0))
+    testing.expect_value(t, particles.low_particles.vel_z[0], f32(0))
+    testing.expect_value(t, count_live_low_particles(particles), 1)
 }
 
 // Verify slot reservation prefers dead slots and wraps at the particle cap.

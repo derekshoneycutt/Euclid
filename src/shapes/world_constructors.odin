@@ -44,6 +44,31 @@ Trochoid_Tool_Input :: struct {
     style: Shape_Style,
 }
 
+// Supply literal rail, scalar geometry, and presentation for one cycloid.
+Cycloid_Input :: struct {
+    first: Vector3,
+    second: Vector3,
+    rolling_radius: f32,
+    tracer_distance: f32,
+    tracer_phase: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+    style: Shape_Style,
+}
+
+// Supply literal rail and rolling-circle values for the permanent guide.
+Cycloid_Tool_Input :: struct {
+    first: Vector3,
+    second: Vector3,
+    rolling_radius: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+    orientation_phase: f32,
+    style: Shape_Style,
+}
+
 // Supply canonical source and presentation values for one world label.
 World_Label_Input :: struct {
     source: string,
@@ -293,6 +318,79 @@ world_create_trochoid_tool :: proc(
     assert(status == .Ok)
     world_shape_publish_host(world, shape, input.style, {.Trochoid_Tool, {}})
     return {shape = shape}, .Ok
+}
+
+// Create one cycloid host with two authoritative endpoint transforms.
+world_create_cycloid :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Cycloid_Input) -> (
+        shapemodel.Shape_Cycloid_Handle, shapemodel.Shape_World_Status) {
+    value := shapemodel.Shape_Cycloid{rolling_radius = input.rolling_radius,
+        tracer_distance = input.tracer_distance, tracer_phase = input.tracer_phase,
+        parameter_start = input.parameter_start,
+        parameter_finish = input.parameter_finish, draw_parameter = input.draw_parameter,
+        previous_rolling_radius = input.rolling_radius,
+        previous_tracer_distance = input.tracer_distance,
+        previous_tracer_phase = input.tracer_phase,
+        previous_parameter_start = input.parameter_start,
+        previous_parameter_finish = input.parameter_finish,
+        previous_draw_parameter = input.draw_parameter}
+    if world == nil || !shapemodel.shape_cycloid_is_valid(value) ||
+        !shapemodel.shape_cycloid_line_is_valid(input.first, input.second,
+            input.rolling_radius, input.parameter_start, input.parameter_finish) {
+        return {}, .Invalid_Argument
+    }
+    needs := shapemodel.Shape_Construction_Needs{entities = 3, transforms = 2,
+        cycloids = 1, render_styles = 1, geometries = 1}
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_entity(world)
+    first := world_shape_append_transform(world, input.first)
+    second := world_shape_append_transform(world, input.second)
+    status := shapemodel.shape_component_insert(
+        &world.cycloids, &world.registry, shape, value)
+    assert(status == .Ok)
+    geometry := shapemodel.Shape_Geometry{kind = .Cycloid}
+    geometry.payload.cycloid = {first = first, second = second}
+    world_shape_publish_host(world, shape, input.style, geometry)
+    return {shape = shape, first = first, second = second}, .Ok
+}
+
+// Create the permanent cycloid guide with its own endpoint transforms.
+world_create_cycloid_tool :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Cycloid_Tool_Input) -> (
+        shapemodel.Shape_Cycloid_Tool_Handle, shapemodel.Shape_World_Status) {
+    value := shapemodel.Shape_Cycloid_Tool{rolling_radius = input.rolling_radius,
+        parameter_start = input.parameter_start,
+        parameter_finish = input.parameter_finish, parameter = input.parameter,
+        orientation_phase = input.orientation_phase,
+        previous_rolling_radius = input.rolling_radius,
+        previous_parameter_start = input.parameter_start,
+        previous_parameter_finish = input.parameter_finish,
+        previous_parameter = input.parameter,
+        previous_orientation_phase = input.orientation_phase}
+    if world == nil || !shapemodel.shape_cycloid_tool_is_valid(value) ||
+        !shapemodel.shape_cycloid_line_is_valid(input.first, input.second,
+            input.rolling_radius, input.parameter_start, input.parameter_finish) {
+        return {}, .Invalid_Argument
+    }
+    needs := shapemodel.Shape_Construction_Needs{entities = 3, transforms = 2,
+        cycloid_tools = 1, render_styles = 1, geometries = 1}
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_entity(world)
+    first := world_shape_append_transform(world, input.first)
+    second := world_shape_append_transform(world, input.second)
+    status := shapemodel.shape_component_insert(
+        &world.cycloid_tools, &world.registry, shape, value)
+    assert(status == .Ok)
+    geometry := shapemodel.Shape_Geometry{kind = .Cycloid_Tool}
+    geometry.payload.cycloid_tool = {first = first, second = second}
+    world_shape_publish_host(world, shape, input.style, geometry)
+    return {shape = shape, first = first, second = second}, .Ok
 }
 
 // Append ordered transform entities for one preflighted polygon.

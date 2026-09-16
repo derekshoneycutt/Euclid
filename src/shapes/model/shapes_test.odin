@@ -49,6 +49,39 @@ core_test_shape_trochoid_tool_validation :: proc(t: ^testing.T) {
     testing.expect(t, shape_trochoid_tool_is_valid(guide))
 }
 
+// Verify cycloid scalar and literal-line validation preserve no-slip travel.
+@(test)
+core_test_shape_cycloid_validation :: proc(t: ^testing.T) {
+    value := Shape_Cycloid{rolling_radius = 0.1, tracer_distance = 0.1,
+        parameter_start = 0, parameter_finish = 2, draw_parameter = 1}
+    testing.expect(t, shape_cycloid_is_valid(value))
+    testing.expect(t, shape_cycloid_line_is_valid(
+        {0, 0, 2}, {1, 0, 2}, value.rolling_radius,
+        value.parameter_start, value.parameter_finish))
+
+    testing.expect(t, !shape_cycloid_line_is_valid(
+        {0, 0, 2}, {0.1, 0, 2}, value.rolling_radius,
+        value.parameter_start, value.parameter_finish))
+    testing.expect(t, !shape_cycloid_line_is_valid(
+        {0, 0, 2}, {1, 0, 3}, value.rolling_radius,
+        value.parameter_start, value.parameter_finish))
+    value.draw_parameter = 3
+    testing.expect(t, !shape_cycloid_is_valid(value))
+}
+
+// Verify cycloid-guide validation requires a directed in-domain parameter.
+@(test)
+core_test_shape_cycloid_tool_validation :: proc(t: ^testing.T) {
+    guide := Shape_Cycloid_Tool{rolling_radius = 0.1,
+        parameter_start = 2, parameter_finish = -2, parameter = 0}
+    testing.expect(t, shape_cycloid_tool_is_valid(guide))
+    guide.parameter = 3
+    testing.expect(t, !shape_cycloid_tool_is_valid(guide))
+    guide.parameter = 0
+    guide.rolling_radius = 0
+    testing.expect(t, !shape_cycloid_tool_is_valid(guide))
+}
+
 // Verify registry rewind retains baseline identities and rejects stale animation handles.
 @(test)
 core_test_shape_registry_rewinds_animation_suffix :: proc(t: ^testing.T) {

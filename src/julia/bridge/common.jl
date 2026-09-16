@@ -97,6 +97,25 @@ struct BridgeTrochoidToolGeometry
     orientation_phase::Cfloat
 end
 
+"""Complete mutable literal-line cycloid description matching the native ABI."""
+struct BridgeCycloidGeometry
+    rolling_radius::Cfloat
+    tracer_distance::Cfloat
+    tracer_phase::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    draw_parameter::Cfloat
+end
+
+"""Complete permanent Cycloid-guide description matching the native ABI."""
+struct BridgeCycloidToolGeometry
+    rolling_radius::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    parameter::Cfloat
+    orientation_phase::Cfloat
+end
+
 """
 Four vertices for one square shape.
 
@@ -218,6 +237,23 @@ struct BridgeShapeTrochoidQueryResult
     geometry::BridgeTrochoidGeometry
 end
 
+"""Result of constructing one literal-line Cycloid and both endpoints."""
+struct BridgeShapeCycloidResult
+    status::Int32
+    host_id::UInt64
+    first_id::UInt64
+    second_id::UInt64
+end
+
+"""Pointer-free result of querying one Cycloid's line and scalar geometry."""
+struct BridgeShapeCycloidQueryResult
+    status::Int32
+    host_id::UInt64
+    first::NTuple{3,Cfloat}
+    second::NTuple{3,Cfloat}
+    geometry::BridgeCycloidGeometry
+end
+
 struct BridgeShapeTriangle
     status::Int32
     host_id::UInt64
@@ -256,11 +292,12 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(8)
+const BRIDGE_VERSION = Int32(9)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)
 const BRIDGE_FEATURE_TROCHOIDS = Int32(1 << 7)
+const BRIDGE_FEATURE_CYCLOIDS = Int32(1 << 8)
 
 const TROCHOID_EXTERNAL = Int32(0)
 const TROCHOID_INTERNAL = Int32(1)

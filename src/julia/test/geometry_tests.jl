@@ -32,6 +32,25 @@ end
     assert_point3_approx(rotated, (0.5f0, 2f0, 0.25f0), atol = 2f-5)
 end
 
+@testset "cycloid kinematics" begin
+    first = Float32[-0.4f0, 0f0, 0.25f0]
+    second = Float32[0.4f0, 0f0, 0.25f0]
+    finish = 4f0 * Float32(pi)
+    start = cycloid_point(first, second, 0.05f0, 0.05f0, 0f0;
+        parameter_finish=finish)
+    middle = cycloid_point(first, second, 0.05f0, 0.05f0,
+        2f0 * Float32(pi); parameter_finish=finish)
+    assert_point3_approx(start, (-0.1f0 * Float32(pi), 0f0, 0.25f0))
+    assert_point3_approx(middle, (0f0, 0f0, 0.25f0))
+
+    rotated = cycloid_tool_pose(Float32[1f0, 1f0, 3f0],
+        Float32[1f0, 2f0, 3f0], 0.1f0, 0f0;
+        parameter_start=-1f0, parameter_finish=1f0)
+    assert_point3_approx(rotated.contact, (1f0, 1.5f0, 3f0))
+    assert_point3_approx(rotated.rolling_center, (0.9f0, 1.5f0, 3f0))
+    @test rotated.rolling_orientation ≈ 0f0 atol = 1f-5
+end
+
 @testset "circle_line_intersections_xy" begin
     @testset "two intersections" begin
         line_a = Float32[-2f0, 0f0, 0f0]

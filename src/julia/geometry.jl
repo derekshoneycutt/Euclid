@@ -13,7 +13,8 @@ export circle_circle_intersections_xy, circle_line_intersections_xy,
     line_intersection_3d, marker_geometry, reflect_about_axis_x_half,
     TrochoidMode, TrochoidExternal, TrochoidInternal,
     trochoid_orbit_radius, trochoid_rolling_orientation,
-    trochoid_point, trochoid_tool_pose
+    trochoid_point, trochoid_tool_pose,
+    cycloid_line_basis, cycloid_contact_point, cycloid_point, cycloid_tool_pose
 
 @enum TrochoidMode::UInt8 TrochoidExternal=0 TrochoidInternal=1
 
@@ -61,6 +62,55 @@ function trochoid_tool_pose(center, mode::TrochoidMode, fixed_radius::Real,
         rolling_radius, parameter, rotation, orientation_phase)
     (fixed_center=Float32[center[1], center[2], center[3]],
         rolling_center=rolling_center, rolling_orientation=orientation)
+end
+
+"""Resolve one literal Cycloid rail's unit tangent and upward planar normal."""
+function cycloid_line_basis(first, second)
+    delta_x = Float32(second[1] - first[1])
+    delta_y = Float32(second[2] - first[2])
+    inverse_length = inv(sqrt(delta_x * delta_x + delta_y * delta_y))
+    tangent = Float32[delta_x * inverse_length, delta_y * inverse_length, 0f0]
+    tangent, Float32[-tangent[2], tangent[1], 0f0]
+end
+
+"""Resolve the centered no-slip contact point for one rolling parameter."""
+function cycloid_contact_point(first, second, rolling_radius::Real,
+    parameter_start::Real, parameter_finish::Real, parameter::Real)
+    tangent, _ = cycloid_line_basis(first, second)
+    midpoint = Float32[(first[1] + second[1]) / 2,
+        (first[2] + second[2]) / 2, (first[3] + second[3]) / 2]
+    parameter_midpoint = Float32((parameter_start + parameter_finish) / 2)
+    midpoint .+ tangent .* Float32(rolling_radius *
+        (parameter - parameter_midpoint))
+end
+
+"""Evaluate one point on a literal-line Cycloid."""
+function cycloid_point(first, second, rolling_radius::Real,
+    tracer_distance::Real, parameter::Real; parameter_start::Real=0f0,
+    parameter_finish::Real=4f0 * Float32(pi), tracer_phase::Real=0f0)
+    tangent, normal = cycloid_line_basis(first, second)
+    contact = cycloid_contact_point(first, second, rolling_radius,
+        parameter_start, parameter_finish, parameter)
+    center = contact .+ normal .* Float32(rolling_radius)
+    angle = Float32(parameter + tracer_phase)
+    center .- tangent .* Float32(tracer_distance * sin(angle)) .-
+        normal .* Float32(tracer_distance * cos(angle))
+end
+
+"""Resolve the literal rail, rolling center, and material orientation."""
+function cycloid_tool_pose(first, second, rolling_radius::Real,
+    parameter::Real; parameter_start::Real=0f0,
+    parameter_finish::Real=4f0 * Float32(pi), orientation_phase::Real=0f0)
+    tangent, normal = cycloid_line_basis(first, second)
+    contact = cycloid_contact_point(first, second, rolling_radius,
+        parameter_start, parameter_finish, parameter)
+    rolling_center = contact .+ normal .* Float32(rolling_radius)
+    orientation = Float32(atan(tangent[2], tangent[1]) - Float32(pi) / 2f0 -
+        parameter + orientation_phase)
+    (baseline_start=Float32[first[1], first[2], first[3]],
+        baseline_finish=Float32[second[1], second[2], second[3]],
+        contact=contact, rolling_center=rolling_center,
+        rolling_orientation=orientation)
 end
 
 struct MarkerGeometry

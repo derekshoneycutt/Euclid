@@ -38,6 +38,25 @@ Bridge_Trochoid_Tool_Geometry :: struct {
     orientation_phase: f32,
 }
 
+// Group one complete mutable literal-line cycloid description for bridge operations.
+Bridge_Cycloid_Geometry :: struct {
+    rolling_radius: f32,
+    tracer_distance: f32,
+    tracer_phase: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+}
+
+// Group one complete mutable permanent cycloid-guide description.
+Bridge_Cycloid_Tool_Geometry :: struct {
+    rolling_radius: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+    orientation_phase: f32,
+}
+
 // Group four vertices for one square bridge operation.
 Bridge_Square_Vertices :: struct {
     vertices: [4]Vector3,
@@ -55,6 +74,8 @@ Shape_Query_Snapshot :: struct {
     arcs: Shape_Component_Set(Shape_Arc),
     trochoids: Shape_Component_Set(Shape_Trochoid),
     trochoid_tools: Shape_Component_Set(Shape_Trochoid_Tool),
+    cycloids: Shape_Component_Set(Shape_Cycloid),
+    cycloid_tools: Shape_Component_Set(Shape_Cycloid_Tool),
     render_styles: Shape_Component_Set(Shape_Render_Style),
     active_features: Shape_Component_Set(Shape_Active_Feature),
     geometries: Shape_Component_Set(Shape_Geometry),
@@ -73,6 +94,7 @@ Shapes_Point_Type :: enum {
     Square,
     Pentagon,
     Trochoid_Tool,
+    Cycloid_Tool,
     Pen,
     Compass,
 }
@@ -175,6 +197,17 @@ Shapes_Trochoid_Tool_Draw :: struct {
     handle_finish: Vector3,
 }
 
+// Hold one resolved literal rail, rolling ring, and orientation handle.
+Shapes_Cycloid_Tool_Draw :: struct {
+    using base: Shapes_Draw_Base,
+    baseline_start: Vector3,
+    baseline_finish: Vector3,
+    rolling_center: Vector3,
+    rolling_radius: f32,
+    handle_start: Vector3,
+    handle_finish: Vector3,
+}
+
 Shapes_Draw_Cache_Item :: union {
     Shapes_Label_Draw,
     Shapes_Point_Draw,
@@ -184,6 +217,7 @@ Shapes_Draw_Cache_Item :: union {
     Shapes_Curve_Draw,
     Shapes_Polygon_Draw,
     Shapes_Trochoid_Tool_Draw,
+    Shapes_Cycloid_Tool_Draw,
     Shapes_Pen_Draw,
     Shapes_Compass_Draw,
 }
@@ -206,6 +240,8 @@ Shapes_Draw_Cache :: struct {
 
     trochoid_tool: Shapes_Trochoid_Tool_Draw,
     draw_trochoid_tool: bool,
+    cycloid_tool: Shapes_Cycloid_Tool_Draw,
+    draw_cycloid_tool: bool,
     pen: Shapes_Pen_Draw,
     draw_pen: bool,
     compass: Shapes_Compass_Draw,

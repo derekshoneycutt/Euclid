@@ -12,6 +12,12 @@ import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../particles"
 
+// Hold one resolved canonical Cycloid line.
+Command_Cycloid_Line :: struct {
+    first: rl.Vector3,
+    second: rl.Vector3,
+}
+
 // Scene commands isolate asynchronous Julia callbacks from canonical display state.
 // The Julia owner thread writes one bounded batch while the display thread reads an
 // immutable query snapshot. The display thread validates the entire completed batch
@@ -36,6 +42,11 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Shape_Trochoid_Frontier = validate_command_shape_trochoid_frontier,
     .Set_Trochoid_Tool = validate_command_trochoid_tool,
     .Set_Trochoid_Tool_Parameter = validate_command_trochoid_tool_parameter,
+    .Set_Shape_Cycloid = validate_command_shape_cycloid,
+    .Set_Shape_Cycloid_Frontier = validate_command_shape_cycloid_frontier,
+    .Set_Cycloid_Tool_Line = validate_command_cycloid_tool_line,
+    .Set_Cycloid_Tool = validate_command_cycloid_tool,
+    .Set_Cycloid_Tool_Parameter = validate_command_cycloid_tool_parameter,
     .Set_Shape_Visible = validate_command_shape_style,
     .Set_Shape_Active_Feature = validate_command_shape_active_feature,
     .Set_Tool_Position = validate_command_shape_transform,
@@ -63,6 +74,11 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Shape_Trochoid_Frontier = apply_set_shape_trochoid_frontier,
     .Set_Trochoid_Tool = apply_set_trochoid_tool,
     .Set_Trochoid_Tool_Parameter = apply_set_trochoid_tool_parameter,
+    .Set_Shape_Cycloid = apply_set_shape_cycloid,
+    .Set_Shape_Cycloid_Frontier = apply_set_shape_cycloid_frontier,
+    .Set_Cycloid_Tool_Line = apply_set_cycloid_tool_line,
+    .Set_Cycloid_Tool = apply_set_cycloid_tool,
+    .Set_Cycloid_Tool_Parameter = apply_set_cycloid_tool_parameter,
     .Set_Shape_Visible = apply_set_shape_visible,
     .Set_Shape_Active_Feature = apply_set_shape_active_feature,
     .Set_Tool_Position = apply_set_tool_position,
@@ -84,6 +100,11 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Shape_Trochoid_Frontier = .Trochoid_Frontier_Committed,
     .Set_Trochoid_Tool = .Trochoid_Tool_Geometry_Committed,
     .Set_Trochoid_Tool_Parameter = .Trochoid_Tool_Parameter_Committed,
+    .Set_Shape_Cycloid = .Cycloid_Geometry_Committed,
+    .Set_Shape_Cycloid_Frontier = .Cycloid_Frontier_Committed,
+    .Set_Cycloid_Tool_Line = .Cycloid_Tool_Geometry_Committed,
+    .Set_Cycloid_Tool = .Cycloid_Tool_Geometry_Committed,
+    .Set_Cycloid_Tool_Parameter = .Cycloid_Tool_Parameter_Committed,
     .Set_Shape_Visible = .Point_Visibility_Committed,
     .Set_Shape_Active_Feature = .Point_Style_Committed,
     .Set_Tool_Position = .Point_Position_Committed,
@@ -115,6 +136,8 @@ capture_animation_query_snapshot :: proc(
         snapshot^.shapes.arcs = world^.arcs
         snapshot^.shapes.trochoids = world^.trochoids
         snapshot^.shapes.trochoid_tools = world^.trochoid_tools
+        snapshot^.shapes.cycloids = world^.cycloids
+        snapshot^.shapes.cycloid_tools = world^.cycloid_tools
         snapshot^.shapes.render_styles = world^.render_styles
         snapshot^.shapes.active_features = world^.active_features
         snapshot^.shapes.geometries = world^.geometries
@@ -307,6 +330,96 @@ validate_command_trochoid_tool_parameter :: proc(
             &state^.shape_world^.registry, state^.world_trochoid_tool.shape)
 }
 
+// Resolve one canonical Cycloid host's current literal endpoint positions.
+command_cycloid_line :: proc(state: ^core.Euclid_General_State,
+    entity: shapemodel.Shape_Entity,
+    kind: shapemodel.Shape_Geometry_Kind) -> (Command_Cycloid_Line, bool) {
+    geometry, found := shapemodel.shape_component_get(
+        &state^.shape_world^.geometries, &state^.shape_world^.registry, entity)
+    if !found || geometry.kind != kind {
+        return {}, false
+    }
+    first_entity := geometry.payload.cycloid.first
+    second_entity := geometry.payload.cycloid.second
+    if kind == .Cycloid_Tool {
+        first_entity = geometry.payload.cycloid_tool.first
+        second_entity = geometry.payload.cycloid_tool.second
+    }
+    first, first_ok := shapemodel.shape_component_get(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry, first_entity)
+    second, second_ok := shapemodel.shape_component_get(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry, second_entity)
+    if !first_ok || !second_ok {return {}, false}
+    return {first.position, second.position}, true
+}
+
+// Validate one complete Cycloid mutation against its immutable literal rail.
+validate_command_shape_cycloid :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found || !shapemodel.shape_component_contains(&state^.shape_world^.cycloids,
+        &state^.shape_world^.registry, entity) ||
+        !shapemodel.shape_cycloid_is_valid(command^.cycloid) {
+        return false
+    }
+    line, line_ok := command_cycloid_line(state, entity, .Cycloid)
+    return line_ok && shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
+        command^.cycloid.rolling_radius, command^.cycloid.parameter_start,
+        command^.cycloid.parameter_finish)
+}
+
+// Validate one Cycloid reveal frontier against its directed domain.
+validate_command_shape_cycloid_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found {return false}
+    value, has_value := shapemodel.shape_component_get(&state^.shape_world^.cycloids,
+        &state^.shape_world^.registry, entity)
+    return has_value && shapemodel.shape_parameter_is_in_directed_domain(
+        value.parameter_start, value.parameter_finish, command^.scalar)
+}
+
+// Validate one atomic permanent-guide endpoint update against current scalar state.
+validate_command_cycloid_tool_line :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    expected := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    value, found := shapemodel.shape_component_get(
+        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        state^.world_cycloid_tool.shape)
+    return command^.entity == expected && found &&
+        shapemodel.shape_cycloid_line_is_valid(command^.position,
+            command^.second_position, value.rolling_radius,
+            value.parameter_start, value.parameter_finish)
+}
+
+// Validate one complete permanent Cycloid-guide scalar mutation.
+validate_command_cycloid_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    expected := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    if command^.entity != expected ||
+        !shapemodel.shape_cycloid_tool_is_valid(command^.cycloid_tool) {
+        return false
+    }
+    line, found := command_cycloid_line(
+        state, state^.world_cycloid_tool.shape, .Cycloid_Tool)
+    return found && shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
+        command^.cycloid_tool.rolling_radius,
+        command^.cycloid_tool.parameter_start,
+        command^.cycloid_tool.parameter_finish)
+}
+
+// Validate one permanent Cycloid-guide rolling parameter update.
+validate_command_cycloid_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    expected := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    value, found := shapemodel.shape_component_get(
+        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        state^.world_cycloid_tool.shape)
+    return command^.entity == expected && found &&
+        shapemodel.shape_parameter_is_in_directed_domain(
+            value.parameter_start, value.parameter_finish, command^.scalar)
+}
+
 // Validate one packed command target that requires an active-feature component.
 validate_command_shape_active_feature :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
@@ -436,6 +549,42 @@ apply_set_trochoid_tool :: proc(
 apply_set_trochoid_tool_parameter :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     _ = set_trochoid_tool_parameter(state, command^.scalar)
+}
+
+// Apply one validated complete Cycloid scalar mutation.
+apply_set_shape_cycloid :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.cycloid
+    _ = shape_set_cycloid(state, command^.entity, {value.rolling_radius,
+        value.tracer_distance, value.tracer_phase, value.parameter_start,
+        value.parameter_finish, value.draw_parameter})
+}
+
+// Apply one validated Cycloid reveal-frontier mutation.
+apply_set_shape_cycloid_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_cycloid_frontier(state, command^.entity, command^.scalar)
+}
+
+// Apply one validated atomic permanent-guide endpoint update.
+apply_set_cycloid_tool_line :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_cycloid_tool_line(state, command^.position, command^.second_position)
+}
+
+// Apply one validated complete permanent Cycloid-guide scalar mutation.
+apply_set_cycloid_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.cycloid_tool
+    _ = set_cycloid_tool_geometry(state, {value.rolling_radius,
+        value.parameter_start, value.parameter_finish, value.parameter,
+        value.orientation_phase})
+}
+
+// Apply one validated permanent Cycloid-guide rolling parameter update.
+apply_set_cycloid_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_cycloid_tool_parameter(state, command^.scalar)
 }
 
 // Apply one validated packed-entity visibility mutation.

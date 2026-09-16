@@ -48,6 +48,8 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"arc_geometry_committed", .Arc_Geometry_Committed},
     {"trochoid_frontier_committed", .Trochoid_Frontier_Committed},
     {"trochoid_tool_parameter_committed", .Trochoid_Tool_Parameter_Committed},
+    {"cycloid_frontier_committed", .Cycloid_Frontier_Committed},
+    {"cycloid_tool_parameter_committed", .Cycloid_Tool_Parameter_Committed},
     {"presentation_cleared", .Presentation_Cleared},
     {"presentation_superseded", .Presentation_Superseded},
     {"presentation_semantic_published", .Presentation_Semantic_Published},

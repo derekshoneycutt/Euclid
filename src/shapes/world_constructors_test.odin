@@ -107,6 +107,52 @@ shapes_test_world_rejects_invalid_trochoid_transactionally :: proc(t: ^testing.T
     testing.expect_value(t, world.geometries.count, u16(0))
 }
 
+// Verify cycloid curve and guide retain independent literal endpoint identities.
+@(test)
+shapes_test_world_creates_cycloid_and_guide :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    first := Vector3{-0.4, 0.2, 0}
+    second := Vector3{0.4, 0.2, 0}
+    curve, curve_status := world_create_cycloid(&world, {first = first,
+        second = second, rolling_radius = 0.05, tracer_distance = 0.05,
+        parameter_start = 0, parameter_finish = 4 * math.PI,
+        draw_parameter = 0, style = world_shape_test_style()})
+    guide, guide_status := world_create_cycloid_tool(&world, {first = first,
+        second = second, rolling_radius = 0.05, parameter_start = 0,
+        parameter_finish = 4 * math.PI, style = world_shape_test_style()})
+
+    testing.expect_value(t, curve_status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, guide_status, shapemodel.Shape_World_Status.Ok)
+    curve_geometry, curve_found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, curve.shape)
+    guide_geometry, guide_found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, guide.shape)
+    testing.expect(t, curve_found && guide_found)
+    testing.expect_value(t, curve_geometry.payload.cycloid.first, curve.first)
+    testing.expect_value(t, curve_geometry.payload.cycloid.second, curve.second)
+    testing.expect_value(t, guide_geometry.payload.cycloid_tool.first, guide.first)
+    testing.expect_value(t, guide_geometry.payload.cycloid_tool.second, guide.second)
+    testing.expect(t, curve.first != guide.first && curve.second != guide.second)
+    testing.expect_value(t, world.registry.entity_count, u32(6))
+    testing.expect_value(t, world.transforms.count, u16(4))
+}
+
+// Verify invalid rail travel leaves every world frontier unchanged.
+@(test)
+shapes_test_world_rejects_invalid_cycloid_transactionally :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    _, status := world_create_cycloid(&world, {first = {0, 0, 0},
+        second = {0.1, 0, 0}, rolling_radius = 0.1, tracer_distance = 0.1,
+        parameter_start = 0, parameter_finish = 4 * math.PI,
+        draw_parameter = 0, style = world_shape_test_style()})
+
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Invalid_Argument)
+    testing.expect_value(t, world.registry.entity_count, u32(0))
+    testing.expect_value(t, world.transforms.count, u16(0))
+    testing.expect_value(t, world.cycloids.count, u16(0))
+    testing.expect_value(t, world.geometries.count, u16(0))
+}
+
 // Verify polygon conveniences preserve authored vertex order in the reference pool.
 @(test)
 shapes_test_world_polygon_conveniences_preserve_order :: proc(t: ^testing.T) {

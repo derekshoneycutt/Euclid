@@ -33,15 +33,17 @@ BRIDGE_FEATURE_TYPED_ANIMATION_STATE :: (1 << 4)
 BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG :: (1 << 5)
 BRIDGE_FEATURE_MIME_PRESENTATION :: (1 << 6)
 BRIDGE_FEATURE_TROCHOIDS :: (1 << 7)
+BRIDGE_FEATURE_CYCLOIDS :: (1 << 8)
 
-BRIDGE_VERSION :: 8
+BRIDGE_VERSION :: 9
 BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
     BRIDGE_FEATURE_ANIMATION_STABLE_ID |
     BRIDGE_FEATURE_TYPED_ANIMATION_STATE |
     BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG |
     BRIDGE_FEATURE_MIME_PRESENTATION |
-    BRIDGE_FEATURE_TROCHOIDS
+    BRIDGE_FEATURE_TROCHOIDS |
+    BRIDGE_FEATURE_CYCLOIDS
 
 BRIDGE_STATUS_OK :: 0
 BRIDGE_STATUS_INVALID_INDEX :: 1
@@ -127,6 +129,23 @@ Bridge_Shape_Trochoid_Query_Result :: struct {
     status: i32,
     shape: u64,
     geometry: shapemodel.Bridge_Trochoid_Geometry,
+}
+
+// Return one cycloid host and both direct endpoint identities.
+Bridge_Shape_Cycloid_Result :: struct {
+    status: i32,
+    shape: u64,
+    first: u64,
+    second: u64,
+}
+
+// Return one cycloid's endpoint positions and complete mutable geometry.
+Bridge_Shape_Cycloid_Query_Result :: struct {
+    status: i32,
+    shape: u64,
+    first: rl.Vector3,
+    second: rl.Vector3,
+    geometry: shapemodel.Bridge_Cycloid_Geometry,
 }
 
 // Return one triangle host and its direct ordered vertex identities.

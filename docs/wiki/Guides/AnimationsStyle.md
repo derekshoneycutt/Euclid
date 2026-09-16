@@ -125,10 +125,10 @@ profile:
   elevated vertices.
 - Negative `z` is not the default way to communicate depth.
 
-Trochoid constructions keep the analytic curve on one constant-z plane. The permanent
-guide and compass descend together, remain aligned while drawing, then rise together
-before either tool is hidden. Hiding the guide is intentionally silent; hiding the
-finished curve is the operation that emits clear dust.
+Trochoid and cycloid constructions keep the analytic curve on one constant-z plane. The
+permanent guide and compass descend together, remain aligned while drawing, then rise
+together before either tool is hidden. Hiding a guide is intentionally silent; hiding
+the finished curve is the operation that emits clear dust.
 
 ## Isometric Projection and Right-Hand Rule
 
@@ -165,9 +165,9 @@ Current frame order is:
 | 1 | Drawing surface | Persistent background surface. |
 | 2 | Low cached geometry | Labels, points, lines, circles, and polygons. |
 | 3 | Low particles | Effects behind tool shadows and high geometry. |
-| 4 | Tool shadows | Trochoid guide, pen, and compass shadows. |
+| 4 | Tool shadows | Roulette guides, pen, and compass shadows. |
 | 5 | Mid particles | Effects between shadows and active tools. |
-| 6 | High cached tools | Trochoid guide, active tool dots, pen, and compass strokes. |
+| 6 | High cached tools | Roulette guides, active tool dots, pen, and compass strokes. |
 | 7 | High particles | Effects above tools. |
 
 Important implications:
@@ -177,9 +177,10 @@ Important implications:
   default mental model.
 - Pen/compass visuals are not depth-sorted against all geometry; they are drawn
   in a dedicated high layer near the end of the world pass.
-- The two-ring trochoid guide is drawn before the compass in the high tool layer so the
-  compass remains dominant at overlaps. Its short inward radial pipe marks rolling-body
-  orientation; it is not a tracer and does not draw the persistent curve.
+- The two-ring trochoid guide and line-based cycloid guide are drawn before the compass
+  in the high tool layer so the compass remains dominant at overlaps. Their short radial
+  pipes mark rolling-body orientation; they are not tracers and do not draw persistent
+  curves.
 - Particles are split across low/mid/high layers, so particle choice controls
   whether effects appear behind geometry, around tool shadows, or above tools.
 

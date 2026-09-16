@@ -15,11 +15,19 @@ Bridge_Shape_Query_Source :: struct {
     transforms: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Transform),
     arcs: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Arc),
     trochoids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Trochoid),
+    cycloids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid),
+    cycloid_tools: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid_Tool),
     render_styles: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Render_Style),
     active_features: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Active_Feature),
     geometries: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Geometry),
     labels: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Label),
     label_store: ^shapemodel.Shape_Label_Store,
+}
+
+// Hold one resolved literal Cycloid line.
+Bridge_Cycloid_Line :: struct {
+    first: rl.Vector3,
+    second: rl.Vector3,
 }
 
 // Map canonical world outcomes to stable bridge status values.
@@ -62,6 +70,7 @@ bridge_shape_query_source :: proc(
     if snapshot != nil {
         shapes := &snapshot.shapes
         return {&shapes.registry, &shapes.transforms, &shapes.arcs, &shapes.trochoids,
+            &shapes.cycloids, &shapes.cycloid_tools,
             &shapes.render_styles,
             &shapes.active_features, &shapes.geometries, &shapes.labels,
             &shapes.label_store}, true
@@ -71,6 +80,7 @@ bridge_shape_query_source :: proc(
         return {}, false
     }
     return {&world.registry, &world.transforms, &world.arcs, &world.trochoids,
+        &world.cycloids, &world.cycloid_tools,
         &world.render_styles,
         &world.active_features, &world.geometries, &world.labels,
         &world.label_store}, true
@@ -184,6 +194,35 @@ bridge_trochoid_value :: proc(
         draw_parameter = geometry.draw_parameter}
 }
 
+// Convert one bridge cycloid description into canonical scalar state.
+bridge_cycloid_value :: proc(
+    geometry: shapemodel.Bridge_Cycloid_Geometry) -> shapemodel.Shape_Cycloid {
+    return {rolling_radius = geometry.rolling_radius,
+        tracer_distance = geometry.tracer_distance,
+        tracer_phase = geometry.tracer_phase,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        draw_parameter = geometry.draw_parameter}
+}
+
+// Resolve one cycloid host's immutable endpoint references and current positions.
+bridge_cycloid_endpoints :: proc(source: ^Bridge_Shape_Query_Source,
+    entity: shapemodel.Shape_Entity) -> (Bridge_Cycloid_Line, bool) {
+    geometry, has_geometry := shapemodel.shape_component_get(
+        source^.geometries, source^.registry, entity)
+    if !has_geometry || geometry.kind != .Cycloid {
+        return {}, false
+    }
+    first, first_ok := shapemodel.shape_component_get(
+        source^.transforms, source^.registry, geometry.payload.cycloid.first)
+    second, second_ok := shapemodel.shape_component_get(
+        source^.transforms, source^.registry, geometry.payload.cycloid.second)
+    if !first_ok || !second_ok {
+        return {}, false
+    }
+    return {first.position, second.position}, true
+}
+
 // Create one outlined trochoid and return its packed host identity.
 @(export)
 shape_create_trochoid :: proc "c" (
@@ -201,6 +240,27 @@ shape_create_trochoid :: proc "c" (
         parameter_finish = value.parameter_finish,
         draw_parameter = value.draw_parameter, style = bridge_shape_style(style)})
     return {bridge_shape_status(status), shapemodel.shape_entity_pack(handle.shape)}
+}
+
+// Create one literal-line cycloid and return its host and endpoint identities.
+@(export)
+shape_create_cycloid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    first, second: rl.Vector3,
+    geometry: shapemodel.Bridge_Cycloid_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Cycloid_Result {
+    context = state.saved_context
+    value := bridge_cycloid_value(geometry)
+    handle, status := shapes.world_create_cycloid(state.shape_world, {
+        first = first, second = second, rolling_radius = value.rolling_radius,
+        tracer_distance = value.tracer_distance, tracer_phase = value.tracer_phase,
+        parameter_start = value.parameter_start,
+        parameter_finish = value.parameter_finish,
+        draw_parameter = value.draw_parameter, style = bridge_shape_style(style)})
+    return {bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.first),
+        shapemodel.shape_entity_pack(handle.second)}
 }
 
 // Create one triangle with direct packed ordered vertex handles.
@@ -357,6 +417,29 @@ shape_get_trochoid :: proc "c" (
         value.parameter_start, value.parameter_finish, value.draw_parameter}}
 }
 
+// Return one resolved cycloid host's endpoint positions and scalar geometry.
+@(export)
+shape_get_cycloid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64) -> Bridge_Shape_Cycloid_Query_Result {
+    context = state.saved_context
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    value, found := shapemodel.shape_component_get(
+        source.cycloids, source.registry, entity)
+    line, endpoints_ok := bridge_cycloid_endpoints(&source, entity)
+    if !found || !endpoints_ok {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    geometry := shapemodel.Bridge_Cycloid_Geometry{value.rolling_radius,
+        value.tracer_distance, value.tracer_phase, value.parameter_start,
+        value.parameter_finish, value.draw_parameter}
+    return {BRIDGE_STATUS_OK, packed, line.first, line.second, geometry}
+}
+
 // Copy one label's immutable source bytes from the active query projection.
 @(export)
 shape_copy_label_source :: proc "c" (
@@ -488,6 +571,68 @@ shape_set_trochoid_frontier :: proc "c" (
     if !found {return BRIDGE_STATUS_NOT_FOUND}
     current, has_value := shapemodel.shape_component_get_mut(
         &state.shape_world.trochoids, &state.shape_world.registry, entity)
+    if !has_value || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, frontier) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    current.draw_parameter = frontier
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live cycloid's complete scalar description against its immutable rail.
+@(export)
+shape_set_cycloid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    geometry: shapemodel.Bridge_Cycloid_Geometry) -> i32 {
+    context = state.saved_context
+    value := bridge_cycloid_value(geometry)
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    line, endpoints_ok := bridge_cycloid_endpoints(&source, entity)
+    if !shapemodel.shape_cycloid_is_valid(value) || !endpoints_ok ||
+        !shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
+            value.rolling_radius, value.parameter_start, value.parameter_finish) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(state, .Set_Shape_Cycloid, packed)
+    if command != nil {command.cycloid = value}
+    if captured {return BRIDGE_STATUS_OK}
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state.shape_world.cycloids, &state.shape_world.registry, entity)
+    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    previous := current^
+    current^ = value
+    current.previous_rolling_radius = previous.previous_rolling_radius
+    current.previous_tracer_distance = previous.previous_tracer_distance
+    current.previous_tracer_phase = previous.previous_tracer_phase
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_draw_parameter = previous.previous_draw_parameter
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live cycloid's reveal frontier without changing its complete domain.
+@(export)
+shape_set_cycloid_frontier :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    frontier: f32) -> i32 {
+    context = state.saved_context
+    if !shapemodel.shape_scalar_is_finite(frontier) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(
+        state, .Set_Shape_Cycloid_Frontier, packed)
+    if command != nil {command.scalar = frontier}
+    if captured {return BRIDGE_STATUS_OK}
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state.shape_world.cycloids, &state.shape_world.registry, entity)
     if !has_value || !shapemodel.shape_parameter_is_in_directed_domain(
         current.parameter_start, current.parameter_finish, frontier) {
         return BRIDGE_STATUS_INVALID_ARGUMENT

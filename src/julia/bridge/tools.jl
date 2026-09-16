@@ -33,6 +33,42 @@ function set_trochoid_tool_parameter(state_ptr::Ptr{Cvoid}, parameter::Real)
         Cfloat(parameter)::Cfloat)::Int32
 end
 
+"""Show the process-global literal-line Cycloid guide."""
+function show_cycloid_tool(state_ptr::Ptr{Cvoid})
+    @ccall show_cycloid_tool(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""Hide the process-global literal-line Cycloid guide."""
+function hide_cycloid_tool(state_ptr::Ptr{Cvoid})
+    @ccall hide_cycloid_tool(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""Atomically move both endpoints of the process-global Cycloid guide."""
+function set_cycloid_tool_line(state_ptr::Ptr{Cvoid}, first, second)
+    first_value = (Cfloat(first[1]), Cfloat(first[2]), Cfloat(first[3]))
+    second_value = (Cfloat(second[1]), Cfloat(second[2]), Cfloat(second[3]))
+    @ccall set_cycloid_tool_line(state_ptr::Ptr{Cvoid},
+        first_value::NTuple{3, Cfloat},
+        second_value::NTuple{3, Cfloat})::Int32
+end
+
+"""Atomically configure the process-global Cycloid guide."""
+function set_cycloid_tool_geometry(state_ptr::Ptr{Cvoid};
+    rolling_radius::Real, parameter_start::Real, parameter_finish::Real,
+    parameter::Real=parameter_start, orientation_phase::Real=0f0)
+    geometry = BridgeCycloidToolGeometry(Cfloat(rolling_radius),
+        Cfloat(parameter_start), Cfloat(parameter_finish), Cfloat(parameter),
+        Cfloat(orientation_phase))
+    @ccall set_cycloid_tool_geometry(state_ptr::Ptr{Cvoid},
+        geometry::BridgeCycloidToolGeometry)::Int32
+end
+
+"""Advance only the process-global Cycloid guide's rolling parameter."""
+function set_cycloid_tool_parameter(state_ptr::Ptr{Cvoid}, parameter::Real)
+    @ccall set_cycloid_tool_parameter(state_ptr::Ptr{Cvoid},
+        Cfloat(parameter)::Cfloat)::Int32
+end
+
 """
 Show the pen tool in the surface view.
 

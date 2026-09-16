@@ -32,6 +32,41 @@ World_Lerped_Trochoid_Tool :: struct {
     value: shapemodel.Shape_Trochoid_Tool,
 }
 
+// Hold one interpolated cycloid rail and mutable analytic description.
+World_Lerped_Cycloid :: struct {
+    first: Vector3,
+    second: Vector3,
+    value: shapemodel.Shape_Cycloid,
+}
+
+// Hold one interpolated cycloid-guide rail and mutable analytic description.
+World_Lerped_Cycloid_Tool :: struct {
+    first: Vector3,
+    second: Vector3,
+    value: shapemodel.Shape_Cycloid_Tool,
+}
+
+// Snapshot Cycloid scalar state before the next fixed-step mutation.
+shape_world_update_previous_cycloid_values :: proc(world: ^shapemodel.Shape_World) {
+    for index in 0..<world.cycloids.count {
+        value := &world.cycloids.values[index]
+        value.previous_rolling_radius = value.rolling_radius
+        value.previous_tracer_distance = value.tracer_distance
+        value.previous_tracer_phase = value.tracer_phase
+        value.previous_parameter_start = value.parameter_start
+        value.previous_parameter_finish = value.parameter_finish
+        value.previous_draw_parameter = value.draw_parameter
+    }
+    for index in 0..<world.cycloid_tools.count {
+        value := &world.cycloid_tools.values[index]
+        value.previous_rolling_radius = value.rolling_radius
+        value.previous_parameter_start = value.parameter_start
+        value.previous_parameter_finish = value.parameter_finish
+        value.previous_parameter = value.parameter
+        value.previous_orientation_phase = value.orientation_phase
+    }
+}
+
 // Snapshot every interpolated shape value before the next fixed-step mutation.
 shape_world_update_previous_values :: proc(world: ^shapemodel.Shape_World) {
     if world == nil {
@@ -66,6 +101,7 @@ shape_world_update_previous_values :: proc(world: ^shapemodel.Shape_World) {
         value.previous_rotation = value.rotation
         value.previous_orientation_phase = value.orientation_phase
     }
+    shape_world_update_previous_cycloid_values(world)
 }
 
 // Resolve one live transform and interpolate its previous and current positions.
@@ -337,6 +373,126 @@ world_cache_push_trochoid_tool :: proc(
     }
 }
 
+// Resolve and interpolate one literal-line cycloid description.
+world_lerped_cycloid :: proc(world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity,
+    geometry: shapemodel.Shape_Cycloid_Geometry,
+    alpha: f32) -> (World_Lerped_Cycloid, bool) {
+    first, first_ok := shape_world_lerped_position(world, geometry.first, alpha)
+    second, second_ok := shape_world_lerped_position(world, geometry.second, alpha)
+    current, value_ok := shapemodel.shape_component_get(
+        &world.cycloids, &world.registry, entity)
+    if !first_ok || !second_ok || !value_ok {
+        return {}, false
+    }
+    value := shapemodel.Shape_Cycloid{
+        rolling_radius = math.lerp(current.previous_rolling_radius,
+            current.rolling_radius, alpha),
+        tracer_distance = math.lerp(current.previous_tracer_distance,
+            current.tracer_distance, alpha),
+        tracer_phase = math.lerp(current.previous_tracer_phase,
+            current.tracer_phase, alpha),
+        parameter_start = math.lerp(current.previous_parameter_start,
+            current.parameter_start, alpha),
+        parameter_finish = math.lerp(current.previous_parameter_finish,
+            current.parameter_finish, alpha),
+        draw_parameter = math.lerp(current.previous_draw_parameter,
+            current.draw_parameter, alpha)}
+    valid := shapemodel.shape_cycloid_is_valid(value) &&
+        shapemodel.shape_cycloid_line_is_valid(first, second,
+            value.rolling_radius, value.parameter_start, value.parameter_finish)
+    return {first, second, value}, valid
+}
+
+// Push one visible cycloid as a bounded frame-local curve packet.
+world_cache_push_cycloid :: proc(world: ^shapemodel.Shape_World,
+    source: World_Draw_Source, geometry: shapemodel.Shape_Cycloid_Geometry,
+    alpha: f32) {
+    lerped, found := world_lerped_cycloid(world, source.entity, geometry, alpha)
+    if !found {
+        return
+    }
+    first_vertex, reserved := draw_cache_reserve_curve_vertices_storage(
+        &world.draw_cache, curve.CYCLOID_MAX_VERTICES)
+    if !reserved {
+        return
+    }
+    vertices := world.draw_cache.curve_vertices[
+        first_vertex:first_vertex + curve.CYCLOID_MAX_VERTICES]
+    result := curve.cycloid_explicate(
+        lerped.first, lerped.second, lerped.value, vertices)
+    draw_cache_finalize_curve_vertices_storage(&world.draw_cache,
+        first_vertex, curve.CYCLOID_MAX_VERTICES, result.vertex_count)
+    if result.status == .Invalid_Input || result.vertex_count < 2 {
+        draw_cache_rollback_curve_vertices_storage(
+            &world.draw_cache, first_vertex, result.vertex_count)
+        return
+    }
+    slot, has_slot := draw_cache_next_item_slot_storage(&world.draw_cache)
+    if !has_slot {
+        draw_cache_rollback_curve_vertices_storage(
+            &world.draw_cache, first_vertex, result.vertex_count)
+        return
+    }
+    slot^ = Shapes_Curve_Draw{world_make_draw_base(source, .Curve), first_vertex,
+        result.vertex_count, result.status == .Capacity_Limited}
+}
+
+// Resolve and interpolate the permanent literal-line cycloid guide.
+world_lerped_cycloid_tool :: proc(world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity,
+    geometry: shapemodel.Shape_Cycloid_Tool_Geometry,
+    alpha: f32) -> (World_Lerped_Cycloid_Tool, bool) {
+    first, first_ok := shape_world_lerped_position(world, geometry.first, alpha)
+    second, second_ok := shape_world_lerped_position(world, geometry.second, alpha)
+    current, value_ok := shapemodel.shape_component_get(
+        &world.cycloid_tools, &world.registry, entity)
+    if !first_ok || !second_ok || !value_ok {
+        return {}, false
+    }
+    value := shapemodel.Shape_Cycloid_Tool{
+        rolling_radius = math.lerp(current.previous_rolling_radius,
+            current.rolling_radius, alpha),
+        parameter_start = math.lerp(current.previous_parameter_start,
+            current.parameter_start, alpha),
+        parameter_finish = math.lerp(current.previous_parameter_finish,
+            current.parameter_finish, alpha),
+        parameter = math.lerp(current.previous_parameter, current.parameter, alpha),
+        orientation_phase = math.lerp(current.previous_orientation_phase,
+            current.orientation_phase, alpha)}
+    valid := shapemodel.shape_cycloid_tool_is_valid(value) &&
+        shapemodel.shape_cycloid_line_is_valid(first, second,
+            value.rolling_radius, value.parameter_start, value.parameter_finish)
+    return {first, second, value}, valid
+}
+
+// Push the permanent cycloid guide as one resolved high-layer tool packet.
+world_cache_push_cycloid_tool :: proc(world: ^shapemodel.Shape_World,
+    source: World_Draw_Source, geometry: shapemodel.Shape_Cycloid_Tool_Geometry,
+    alpha: f32) {
+    lerped, found := world_lerped_cycloid_tool(
+        world, source.entity, geometry, alpha)
+    if !found {
+        return
+    }
+    pose := curve.cycloid_tool_pose(lerped.first, lerped.second, lerped.value)
+    handle_direction := Vector3{math.cos(pose.rolling_orientation),
+        math.sin(pose.rolling_orientation), 0}
+    handle_start := pose.rolling_center +
+        handle_direction * lerped.value.rolling_radius
+    handle_finish := handle_start -
+        handle_direction * lerped.value.rolling_radius * 0.30
+    draw := Shapes_Cycloid_Tool_Draw{world_make_draw_base(source, .Cycloid_Tool),
+        pose.baseline_start, pose.baseline_finish, pose.rolling_center,
+        lerped.value.rolling_radius, handle_start, handle_finish}
+    world.draw_cache.cycloid_tool = draw
+    world.draw_cache.draw_cycloid_tool = true
+    slot, has_slot := draw_cache_next_item_slot_storage(&world.draw_cache)
+    if has_slot {
+        slot^ = draw
+    }
+}
+
 // Resolve ordered polygon entities into one reserved packet vertex span.
 world_cache_polygon_vertices :: proc(
     world: ^shapemodel.Shape_World,
@@ -436,29 +592,47 @@ world_cache_push_compass :: proc(
     }
 }
 
+// Push one visible instrument geometry and report whether it was handled.
+world_cache_push_instrument :: proc(
+    world: ^shapemodel.Shape_World,
+    source: World_Draw_Source,
+    geometry: shapemodel.Shape_Geometry,
+    alpha: f32) -> bool {
+    switch geometry.kind {
+    case .Trochoid_Tool:
+        world_cache_push_trochoid_tool(world, source, alpha)
+    case .Cycloid_Tool:
+        world_cache_push_cycloid_tool(
+            world, source, geometry.payload.cycloid_tool, alpha)
+    case .Pen:
+        world_cache_push_pen(world, source, geometry.payload.pen, alpha)
+    case .Compass:
+        world_cache_push_compass(world, source, geometry.payload.compass, alpha)
+    case .Point, .Line, .Arc, .Filled_Arc, .Trochoid, .Cycloid, .Polygon:
+        return false
+    }
+    return true
+}
+
 // Dispatch one visible direct geometry payload into the existing draw union.
 world_cache_push_geometry :: proc(
     world: ^shapemodel.Shape_World,
     source: World_Draw_Source,
     geometry: shapemodel.Shape_Geometry,
     alpha: f32) {
+    if world_cache_push_instrument(world, source, geometry, alpha) {return}
     switch geometry.kind {
-    case .Point:
-        world_cache_push_point(world, source, alpha)
-    case .Line:
-        world_cache_push_line(world, source, geometry.payload.line, alpha)
+    case .Point: world_cache_push_point(world, source, alpha)
+    case .Line: world_cache_push_line(world, source, geometry.payload.line, alpha)
     case .Arc, .Filled_Arc:
         world_cache_push_arc(world, source, geometry.payload.arc, geometry.kind, alpha)
-    case .Trochoid:
-        world_cache_push_trochoid(world, source, alpha)
-    case .Trochoid_Tool:
-        world_cache_push_trochoid_tool(world, source, alpha)
+    case .Trochoid: world_cache_push_trochoid(world, source, alpha)
+    case .Cycloid:
+        world_cache_push_cycloid(world, source, geometry.payload.cycloid, alpha)
     case .Polygon:
         world_cache_push_polygon(world, source, geometry.payload.polygon, alpha)
-    case .Pen:
-        world_cache_push_pen(world, source, geometry.payload.pen, alpha)
-    case .Compass:
-        world_cache_push_compass(world, source, geometry.payload.compass, alpha)
+    case .Trochoid_Tool, .Cycloid_Tool, .Pen, .Compass:
+        return
     }
 }
 

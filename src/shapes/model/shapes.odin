@@ -108,6 +108,36 @@ Shape_Trochoid_Tool :: struct {
     previous_orientation_phase: f32,
 }
 
+// Hold current and previous parameters for one mutable line-rolling cycloid.
+Shape_Cycloid :: struct {
+    rolling_radius: f32,
+    tracer_distance: f32,
+    tracer_phase: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+    previous_rolling_radius: f32,
+    previous_tracer_distance: f32,
+    previous_tracer_phase: f32,
+    previous_parameter_start: f32,
+    previous_parameter_finish: f32,
+    previous_draw_parameter: f32,
+}
+
+// Hold current and previous parameters for the permanent line-and-circle guide.
+Shape_Cycloid_Tool :: struct {
+    rolling_radius: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    parameter: f32,
+    orientation_phase: f32,
+    previous_rolling_radius: f32,
+    previous_parameter_start: f32,
+    previous_parameter_finish: f32,
+    previous_parameter: f32,
+    previous_orientation_phase: f32,
+}
+
 // Hold canonical presentation state for one renderable entity.
 Shape_Render_Style :: struct {
     color: rl.Color,
@@ -129,6 +159,8 @@ Shape_Geometry_Kind :: enum u8 {
     Filled_Arc,
     Trochoid,
     Trochoid_Tool,
+    Cycloid,
+    Cycloid_Tool,
     Polygon,
     Pen,
     Compass,
@@ -148,6 +180,18 @@ Shape_Trochoid_Geometry :: struct {}
 
 // Mark one host whose mutable parameters live in the trochoid-tool component set.
 Shape_Trochoid_Tool_Geometry :: struct {}
+
+// Name both immutable endpoint references required by one cycloid rail.
+Shape_Cycloid_Geometry :: struct {
+    first: Shape_Entity,
+    second: Shape_Entity,
+}
+
+// Name both immutable endpoint references required by one cycloid guide.
+Shape_Cycloid_Tool_Geometry :: struct {
+    first: Shape_Entity,
+    second: Shape_Entity,
+}
 
 // Locate one immutable ordered polygon span in the world reference pool.
 Shape_Polygon_Geometry :: struct {
@@ -176,6 +220,8 @@ Shape_Geometry :: struct {
         arc: Shape_Arc_Geometry,
         trochoid: Shape_Trochoid_Geometry,
         trochoid_tool: Shape_Trochoid_Tool_Geometry,
+        cycloid: Shape_Cycloid_Geometry,
+        cycloid_tool: Shape_Cycloid_Tool_Geometry,
         polygon: Shape_Polygon_Geometry,
         pen: Shape_Pen_Geometry,
         compass: Shape_Compass_Geometry,
@@ -304,6 +350,8 @@ Shape_Construction_Needs :: struct {
     arcs: int,
     trochoids: int,
     trochoid_tools: int,
+    cycloids: int,
+    cycloid_tools: int,
     render_styles: int,
     active_features: int,
     geometries: int,
@@ -343,6 +391,20 @@ Shape_Trochoid_Handle :: struct {
 // Identify the permanent trochoid-guide host whose transform is its fixed center.
 Shape_Trochoid_Tool_Handle :: struct {
     shape: Shape_Entity,
+}
+
+// Identify one cycloid host and its two literal rail endpoints.
+Shape_Cycloid_Handle :: struct {
+    shape: Shape_Entity,
+    first: Shape_Entity,
+    second: Shape_Entity,
+}
+
+// Identify the permanent cycloid guide and its two literal rail endpoints.
+Shape_Cycloid_Tool_Handle :: struct {
+    shape: Shape_Entity,
+    first: Shape_Entity,
+    second: Shape_Entity,
 }
 
 // Identify one variable-arity polygon host.
@@ -406,6 +468,8 @@ Shape_World :: struct {
     arcs: Shape_Component_Set(Shape_Arc),
     trochoids: Shape_Component_Set(Shape_Trochoid),
     trochoid_tools: Shape_Component_Set(Shape_Trochoid_Tool),
+    cycloids: Shape_Component_Set(Shape_Cycloid),
+    cycloid_tools: Shape_Component_Set(Shape_Cycloid_Tool),
     render_styles: Shape_Component_Set(Shape_Render_Style),
     active_features: Shape_Component_Set(Shape_Active_Feature),
     geometries: Shape_Component_Set(Shape_Geometry),
@@ -468,6 +532,50 @@ shape_trochoid_tool_is_valid :: proc(value: Shape_Trochoid_Tool) -> bool {
         return false
     }
     return value.mode != .Internal || value.fixed_radius > value.rolling_radius
+}
+
+// Validate one complete mutable cycloid scalar description.
+shape_cycloid_is_valid :: proc(value: Shape_Cycloid) -> bool {
+    finite := shape_scalar_is_finite(value.rolling_radius) &&
+        shape_scalar_is_finite(value.tracer_distance) &&
+        shape_scalar_is_finite(value.tracer_phase) &&
+        shape_scalar_is_finite(value.parameter_start) &&
+        shape_scalar_is_finite(value.parameter_finish) &&
+        shape_scalar_is_finite(value.draw_parameter)
+    return finite && value.rolling_radius > 0 && value.tracer_distance >= 0 &&
+        value.parameter_start != value.parameter_finish &&
+        shape_parameter_is_in_directed_domain(value.parameter_start,
+            value.parameter_finish, value.draw_parameter)
+}
+
+// Validate one complete mutable cycloid-guide scalar description.
+shape_cycloid_tool_is_valid :: proc(value: Shape_Cycloid_Tool) -> bool {
+    finite := shape_scalar_is_finite(value.rolling_radius) &&
+        shape_scalar_is_finite(value.parameter_start) &&
+        shape_scalar_is_finite(value.parameter_finish) &&
+        shape_scalar_is_finite(value.parameter) &&
+        shape_scalar_is_finite(value.orientation_phase)
+    return finite && value.rolling_radius > 0 &&
+        value.parameter_start != value.parameter_finish &&
+        shape_parameter_is_in_directed_domain(value.parameter_start,
+            value.parameter_finish, value.parameter)
+}
+
+// Validate a literal two-point rail against one no-slip rolling interval.
+shape_cycloid_line_is_valid :: proc(
+    first, second: Vector3,
+    rolling_radius, parameter_start, parameter_finish: f32) -> bool {
+    finite := shape_scalar_is_finite(first.x) && shape_scalar_is_finite(first.y) &&
+        shape_scalar_is_finite(first.z) && shape_scalar_is_finite(second.x) &&
+        shape_scalar_is_finite(second.y) && shape_scalar_is_finite(second.z)
+    if !finite || first.z != second.z {
+        return false
+    }
+    delta_x := second.x - first.x
+    delta_y := second.y - first.y
+    length_squared := delta_x * delta_x + delta_y * delta_y
+    travel := rolling_radius * math.abs(parameter_finish - parameter_start)
+    return length_squared > 0 && travel * travel <= length_squared
 }
 
 // Invalidate every published packet frontier before canonical world mutation.
@@ -752,6 +860,8 @@ shape_world_has_capacity :: proc(
         int(world.arcs.count) + needs.arcs <= component_capacity &&
         int(world.trochoids.count) + needs.trochoids <= component_capacity &&
         int(world.trochoid_tools.count) + needs.trochoid_tools <= component_capacity &&
+        int(world.cycloids.count) + needs.cycloids <= component_capacity &&
+        int(world.cycloid_tools.count) + needs.cycloid_tools <= component_capacity &&
         int(world.render_styles.count) + needs.render_styles <= component_capacity &&
         int(world.active_features.count) + needs.active_features <= component_capacity &&
         int(world.geometries.count) + needs.geometries <= component_capacity &&
@@ -892,6 +1002,7 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     if world.registry.baseline_frozen || world.transforms.baseline_frozen ||
         world.arcs.baseline_frozen || world.trochoids.baseline_frozen ||
         world.trochoid_tools.baseline_frozen ||
+        world.cycloids.baseline_frozen || world.cycloid_tools.baseline_frozen ||
         world.render_styles.baseline_frozen || world.active_features.baseline_frozen ||
         world.geometries.baseline_frozen || world.labels.baseline_frozen ||
         world.vertex_references.baseline_frozen || world.label_store.baseline_frozen ||
@@ -903,6 +1014,8 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     _ = shape_component_freeze_baseline(&world.arcs)
     _ = shape_component_freeze_baseline(&world.trochoids)
     _ = shape_component_freeze_baseline(&world.trochoid_tools)
+    _ = shape_component_freeze_baseline(&world.cycloids)
+    _ = shape_component_freeze_baseline(&world.cycloid_tools)
     _ = shape_component_freeze_baseline(&world.render_styles)
     _ = shape_component_freeze_baseline(&world.active_features)
     _ = shape_component_freeze_baseline(&world.geometries)
@@ -924,6 +1037,7 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
     if !world.registry.baseline_frozen || !world.transforms.baseline_frozen ||
         !world.arcs.baseline_frozen || !world.trochoids.baseline_frozen ||
         !world.trochoid_tools.baseline_frozen ||
+        !world.cycloids.baseline_frozen || !world.cycloid_tools.baseline_frozen ||
         !world.render_styles.baseline_frozen || !world.active_features.baseline_frozen ||
         !world.geometries.baseline_frozen || !world.labels.baseline_frozen ||
         !world.vertex_references.baseline_frozen || !world.label_store.baseline_frozen ||
@@ -935,6 +1049,8 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
     _ = shape_component_rewind_animation(&world.arcs)
     _ = shape_component_rewind_animation(&world.trochoids)
     _ = shape_component_rewind_animation(&world.trochoid_tools)
+    _ = shape_component_rewind_animation(&world.cycloids)
+    _ = shape_component_rewind_animation(&world.cycloid_tools)
     _ = shape_component_rewind_animation(&world.render_styles)
     _ = shape_component_rewind_animation(&world.active_features)
     _ = shape_component_rewind_animation(&world.geometries)

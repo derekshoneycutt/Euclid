@@ -107,6 +107,8 @@ Kind :: enum u16 {
     Arc_Geometry_Committed = 185,
     Trochoid_Geometry_Committed = 186,
     Trochoid_Frontier_Committed = 187,
+    Cycloid_Geometry_Committed = 188,
+    Cycloid_Frontier_Committed = 189,
 
     // Drawing tools (260-319).
     Pen_Joint_Committed = 260,
@@ -117,6 +119,8 @@ Kind :: enum u16 {
     Compass_Visibility_Committed = 265,
     Trochoid_Tool_Geometry_Committed = 266,
     Trochoid_Tool_Parameter_Committed = 267,
+    Cycloid_Tool_Geometry_Committed = 268,
+    Cycloid_Tool_Parameter_Committed = 269,
 
     // Particles (320-359).
     Particle_Emission_Committed = 320,

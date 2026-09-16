@@ -26,8 +26,15 @@ Shapes_Polygon_Triangle :: shapemodel.Shapes_Polygon_Triangle
 Shapes_Pen_Draw :: shapemodel.Shapes_Pen_Draw
 Shapes_Compass_Draw :: shapemodel.Shapes_Compass_Draw
 Shapes_Trochoid_Tool_Draw :: shapemodel.Shapes_Trochoid_Tool_Draw
+Shapes_Cycloid_Tool_Draw :: shapemodel.Shapes_Cycloid_Tool_Draw
 Shapes_Draw_Cache_Item :: shapemodel.Shapes_Draw_Cache_Item
 
+// Hold an optional instrument depth classification.
+Draw_Cache_Depth_Classification :: struct {
+    depth: f32,
+    flat: bool,
+    handled: bool,
+}
 
 Polygon_Cache_Range_Reservation :: struct {
     first_vertex : int,
@@ -56,6 +63,7 @@ draw_cache_reset_storage :: proc(cache: ^shapemodel.Shapes_Draw_Cache) {
     cache.polygon_triangle_count = 0
     cache.curve_vertex_count = 0
     cache.draw_trochoid_tool = false
+    cache.draw_cycloid_tool = false
     cache.draw_pen = false
     cache.draw_compass = false
 }
@@ -167,6 +175,40 @@ draw_cache_trochoid_tool_depth_and_flatness :: #force_inline proc(
         draw_cache_point_is_flat(tool.rolling_center)
 }
 
+// Return representative depth and flatness for one literal-line cycloid guide.
+draw_cache_cycloid_tool_depth_and_flatness :: #force_inline proc(
+    tool: Shapes_Cycloid_Tool_Draw) -> (f32, bool) {
+    midpoint := (tool.baseline_start + tool.baseline_finish) * 0.5
+    return draw_cache_visual_depth(midpoint),
+        draw_cache_point_is_flat(tool.baseline_start) &&
+        draw_cache_point_is_flat(tool.baseline_finish) &&
+        draw_cache_point_is_flat(tool.rolling_center)
+}
+
+// Return representative depth and flatness for one cached instrument item.
+draw_cache_instrument_depth_and_flatness :: proc(
+    item: ^Shapes_Draw_Cache_Item) -> Draw_Cache_Depth_Classification {
+    switch &typed in item {
+    case Shapes_Trochoid_Tool_Draw:
+        depth, flat := draw_cache_trochoid_tool_depth_and_flatness(typed)
+        return {depth, flat, true}
+    case Shapes_Cycloid_Tool_Draw:
+        depth, flat := draw_cache_cycloid_tool_depth_and_flatness(typed)
+        return {depth, flat, true}
+    case Shapes_Pen_Draw:
+        depth, flat := draw_cache_pen_depth_and_flatness(typed)
+        return {depth, flat, true}
+    case Shapes_Compass_Draw:
+        depth, flat := draw_cache_compass_depth_and_flatness(typed)
+        return {depth, flat, true}
+    case Shapes_Label_Draw, Shapes_Point_Draw, Shapes_Line_Draw,
+        Shapes_Circle_Draw, Shapes_Filled_Circle_Draw, Shapes_Curve_Draw,
+        Shapes_Polygon_Draw:
+        return {}
+    }
+    return {}
+}
+
 //   Return representative depth and flatness for one cached low-geometry item.
 //
 // Notes:
@@ -176,6 +218,8 @@ draw_cache_item_depth_and_flatness :: proc(
     cache: ^shapemodel.Shapes_Draw_Cache,
     item: ^Shapes_Draw_Cache_Item) -> (f32, bool) {
 
+    instrument := draw_cache_instrument_depth_and_flatness(item)
+    if instrument.handled {return instrument.depth, instrument.flat}
     switch &typed in item {
     case Shapes_Label_Draw:
         return draw_cache_visual_depth(typed.point1),
@@ -193,13 +237,11 @@ draw_cache_item_depth_and_flatness :: proc(
     case Shapes_Polygon_Draw:
         centroid, flat := draw_cache_polygon_centroid_and_flatness(cache, &typed)
         return draw_cache_visual_depth(centroid), flat
-    case Shapes_Trochoid_Tool_Draw:
-        return draw_cache_trochoid_tool_depth_and_flatness(typed)
-    case Shapes_Pen_Draw: return draw_cache_pen_depth_and_flatness(typed)
-    case Shapes_Compass_Draw: return draw_cache_compass_depth_and_flatness(typed)
-    case:
+    case Shapes_Trochoid_Tool_Draw, Shapes_Cycloid_Tool_Draw,
+        Shapes_Pen_Draw, Shapes_Compass_Draw:
         return 0, false
     }
+    return 0, false
 }
 
 //   Return true when lhs should be drawn earlier than rhs in the low-cache pass.

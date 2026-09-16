@@ -85,6 +85,17 @@ Pen_Polygon_Crossing :: struct {
     has_front: bool,
 }
 
+// Hold resolved ordering decisions for one merged-layer draw pass.
+High_Merged_Draw_Context :: struct {
+    crossing: Pen_Polygon_Crossing,
+    has_crossing: bool,
+    defer_guide: bool,
+    guide_index: int,
+    compass_index: int,
+    pen_receives_compass: bool,
+    compass_receives_pen: bool,
+}
+
 //   Resolved tool_brush shader program paths.
 Tool_Brush_Shader_Paths :: struct {
     vertex:   cstring,
@@ -478,6 +489,27 @@ draw_shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
     }
 }
 
+// Draw one cache position according to resolved merged-layer ordering.
+draw_shapes_high_merged_item :: proc(
+    state: ^Euclid_General_State,
+    cache: ^shapemodel.Shapes_Draw_Cache,
+    index: int,
+    ctx: ^High_Merged_Draw_Context) {
+    if ctx^.defer_guide && index == ctx^.guide_index {return}
+    if ctx^.defer_guide && index == ctx^.compass_index {
+        draw_cached_trochoid_tool_full(state, &cache^.trochoid_tool)
+    }
+    if ctx^.has_crossing && index == ctx^.crossing.polygon_index {
+        compass_caster: ^shapemodel.Shapes_Compass_Draw = nil
+        if ctx^.pen_receives_compass {compass_caster = &cache^.compass}
+        draw_pen_polygon_crossing(state, &ctx^.crossing, compass_caster)
+        return
+    }
+    if ctx^.has_crossing && index == ctx^.crossing.pen_index {return}
+    draw_cached_item_high_merged(state, &cache^.items[index],
+        ctx^.pen_receives_compass, ctx^.compass_receives_pen)
+}
+
 //   Render cached higher-layer items after shadows and particles.
 //
 // Parameters:
@@ -486,46 +518,23 @@ draw_shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
 // Returns:
 //   - none.
 draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
-    crossing := Pen_Polygon_Crossing {
-        pen_index = -1,
-        polygon_index = -1,
-    }
-    has_crossing := find_pen_polygon_crossing(state, &crossing)
+    ctx := High_Merged_Draw_Context{}
+    ctx.crossing.pen_index = -1
+    ctx.crossing.polygon_index = -1
+    ctx.has_crossing = find_pen_polygon_crossing(state, &ctx.crossing)
     cache := &state^.shape_world^.draw_cache
     _, pen_index := find_cached_pen_item(cache)
     _, compass_index := find_cached_compass_item(cache)
     _, guide_index := find_cached_trochoid_tool_item(cache)
-    defer_guide := trochoid_tool_defers_to_compass(guide_index, compass_index)
     pen_draw_index := pen_index
-    if has_crossing {
-        pen_draw_index = crossing.polygon_index
-    }
-    pen_receives_compass, compass_receives_pen :=
+    if ctx.has_crossing {pen_draw_index = ctx.crossing.polygon_index}
+    ctx.pen_receives_compass, ctx.compass_receives_pen =
         tool_brush_interaction_receivers(pen_draw_index, compass_index)
-
+    ctx.defer_guide = trochoid_tool_defers_to_compass(guide_index, compass_index)
+    ctx.guide_index = guide_index
+    ctx.compass_index = compass_index
     for i in 0..<cache^.item_count {
-        if defer_guide && i == guide_index {
-            continue
-        }
-        if defer_guide && i == compass_index {
-            draw_cached_trochoid_tool_full(state, &cache^.trochoid_tool)
-        }
-        if has_crossing {
-            if i == crossing.polygon_index {
-                compass_caster: ^shapemodel.Shapes_Compass_Draw = nil
-                if pen_receives_compass {
-                    compass_caster = &cache^.compass
-                }
-                draw_pen_polygon_crossing(state, &crossing, compass_caster)
-                continue
-            }
-            if i == crossing.pen_index {
-                continue
-            }
-        }
-
-        draw_cached_item_high_merged(state, &cache^.items[i],
-            pen_receives_compass, compass_receives_pen)
+        draw_shapes_high_merged_item(state, cache, i, &ctx)
     }
 }
 
@@ -540,6 +549,10 @@ draw_shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
     if state^.shape_world^.draw_cache.draw_trochoid_tool {
         draw_cached_trochoid_tool_shadow(
             state, &state^.shape_world^.draw_cache.trochoid_tool)
+    }
+    if state^.shape_world^.draw_cache.draw_cycloid_tool {
+        draw_cached_cycloid_tool_shadow(
+            state, &state^.shape_world^.draw_cache.cycloid_tool)
     }
     if state^.shape_world^.draw_cache.draw_pen {
         draw_cached_pen_shadow(state, &state^.shape_world^.draw_cache.pen)
@@ -578,7 +591,8 @@ draw_cached_item_low :: proc(state: ^Euclid_General_State,
         draw_cached_curve_low(state, &item_typed)
     case shapemodel.Shapes_Polygon_Draw:
         draw_cached_polygon_low(state, &item_typed)
-    case shapemodel.Shapes_Trochoid_Tool_Draw:
+    case shapemodel.Shapes_Trochoid_Tool_Draw,
+        shapemodel.Shapes_Cycloid_Tool_Draw:
     case shapemodel.Shapes_Pen_Draw,
         shapemodel.Shapes_Compass_Draw:
     }
@@ -610,30 +624,46 @@ draw_cached_compass_high_merged :: #force_inline proc(
     draw_cached_compass_full(state, compass, pen_caster)
 }
 
-//   Draw one cached item only when it belongs to the merged higher layer.
-draw_cached_item_high_merged :: proc(state: ^Euclid_General_State,
+// Draw one cached instrument in the merged higher layer when applicable.
+draw_cached_instrument_high_merged :: proc(state: ^Euclid_General_State,
     item: ^shapemodel.Shapes_Draw_Cache_Item,
-    pen_receives_compass, compass_receives_pen: bool) {
+    pen_receives_compass, compass_receives_pen: bool) -> bool {
     switch &item_typed in item {
-    case shapemodel.Shapes_Label_Draw:
-    case shapemodel.Shapes_Point_Draw:
-        draw_cached_point_high(state, &item_typed)
-    case shapemodel.Shapes_Line_Draw:
-        draw_cached_line_high(state, &item_typed)
-    case shapemodel.Shapes_Circle_Draw:
-        draw_cached_circle_high(state, &item_typed)
-    case shapemodel.Shapes_Filled_Circle_Draw:
-        draw_cached_filledcircle_high(state, &item_typed)
-    case shapemodel.Shapes_Curve_Draw:
-        draw_cached_curve_high(state, &item_typed)
-    case shapemodel.Shapes_Polygon_Draw:
-        draw_cached_polygon_high(state, &item_typed)
     case shapemodel.Shapes_Trochoid_Tool_Draw:
         draw_cached_trochoid_tool_full(state, &item_typed)
+    case shapemodel.Shapes_Cycloid_Tool_Draw:
+        draw_cached_cycloid_tool_full(state, &item_typed)
     case shapemodel.Shapes_Pen_Draw:
         draw_cached_pen_high_merged(state, &item_typed, pen_receives_compass)
     case shapemodel.Shapes_Compass_Draw:
         draw_cached_compass_high_merged(state, &item_typed, compass_receives_pen)
+    case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Point_Draw,
+        shapemodel.Shapes_Line_Draw, shapemodel.Shapes_Circle_Draw,
+        shapemodel.Shapes_Filled_Circle_Draw, shapemodel.Shapes_Curve_Draw,
+        shapemodel.Shapes_Polygon_Draw:
+        return false
+    }
+    return true
+}
+
+//   Draw one cached item only when it belongs to the merged higher layer.
+draw_cached_item_high_merged :: proc(state: ^Euclid_General_State,
+    item: ^shapemodel.Shapes_Draw_Cache_Item,
+    pen_receives_compass, compass_receives_pen: bool) {
+    if draw_cached_instrument_high_merged(
+        state, item, pen_receives_compass, compass_receives_pen) {return}
+    switch &item_typed in item {
+    case shapemodel.Shapes_Label_Draw:
+    case shapemodel.Shapes_Point_Draw: draw_cached_point_high(state, &item_typed)
+    case shapemodel.Shapes_Line_Draw: draw_cached_line_high(state, &item_typed)
+    case shapemodel.Shapes_Circle_Draw: draw_cached_circle_high(state, &item_typed)
+    case shapemodel.Shapes_Filled_Circle_Draw:
+        draw_cached_filledcircle_high(state, &item_typed)
+    case shapemodel.Shapes_Curve_Draw: draw_cached_curve_high(state, &item_typed)
+    case shapemodel.Shapes_Polygon_Draw: draw_cached_polygon_high(state, &item_typed)
+    case shapemodel.Shapes_Trochoid_Tool_Draw,
+        shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
+        shapemodel.Shapes_Compass_Draw:
     }
 }
 
@@ -643,6 +673,7 @@ draw_cached_item_shadow :: proc(state: ^Euclid_General_State,
     switch &item_typed in item {
     case shapemodel.Shapes_Label_Draw,
         shapemodel.Shapes_Trochoid_Tool_Draw,
+        shapemodel.Shapes_Cycloid_Tool_Draw,
         shapemodel.Shapes_Pen_Draw,
         shapemodel.Shapes_Compass_Draw:
     case shapemodel.Shapes_Point_Draw:
@@ -867,25 +898,29 @@ emit_trochoid_tool_ring_strip :: proc(samples: ^Trochoid_Tool_Ring_Samples) {
     }
 }
 
-// Draw one closed guide ring as one continuous shader-lit strip.
-draw_trochoid_tool_ring :: proc(
+// Draw one guide ring through the unshaded line fallback.
+draw_trochoid_tool_ring_fallback :: proc(
     state: ^Euclid_General_State,
     center: Vector3,
     radius, brush_size: f32,
     color: rl.Color) {
-    if !state^.stroke_3d.ready {
-        previous := trochoid_tool_ring_point(center, radius, 0)
-        for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
-            angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
-            current := trochoid_tool_ring_point(center, radius, angle)
-            first := view_core.iso_to_cartesian(previous, state^.iso_scale^)
-            second := view_core.iso_to_cartesian(current, state^.iso_scale^)
-            rl.DrawLineEx(first, second, brush_size, color)
-            previous = current
-        }
-        return
+    previous := trochoid_tool_ring_point(center, radius, 0)
+    for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
+        angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
+        current := trochoid_tool_ring_point(center, radius, angle)
+        first := view_core.iso_to_cartesian(previous, state^.iso_scale^)
+        second := view_core.iso_to_cartesian(current, state^.iso_scale^)
+        rl.DrawLineEx(first, second, brush_size, color)
+        previous = current
     }
+}
 
+// Draw one closed guide ring as one continuous shader-lit strip.
+draw_trochoid_tool_ring_shader :: proc(
+    state: ^Euclid_General_State,
+    center: Vector3,
+    radius, brush_size: f32,
+    color: rl.Color) {
     scale := get_tool_brush_render_scale()
     min_scale := math.max(math.min(scale.x, scale.y), 0.0001)
     brush_radius := brush_size * 0.5
@@ -916,6 +951,19 @@ draw_trochoid_tool_ring :: proc(
     set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 0.0)
 }
 
+// Select the available renderer for one closed guide ring.
+draw_trochoid_tool_ring :: proc(
+    state: ^Euclid_General_State,
+    center: Vector3,
+    radius, brush_size: f32,
+    color: rl.Color) {
+    if !state^.stroke_3d.ready {
+        draw_trochoid_tool_ring_fallback(state, center, radius, brush_size, color)
+        return
+    }
+    draw_trochoid_tool_ring_shader(state, center, radius, brush_size, color)
+}
+
 // Render the two-ring guide and its inward orientation handle in one shader binding.
 draw_cached_trochoid_tool_full :: proc(
     state: ^Euclid_General_State,
@@ -928,6 +976,28 @@ draw_cached_trochoid_tool_full :: proc(
     first := view_core.iso_to_cartesian(tool^.handle_start, state^.iso_scale^)
     second := view_core.iso_to_cartesian(tool^.handle_finish, state^.iso_scale^)
     draw_tool_brush_segment(state, first, second, tool^.brush_size, tool^.color)
+    end_tool_brush_mode(state)
+}
+
+// Render the exact endpoint rail, rolling ring, and orientation handle together.
+draw_cached_cycloid_tool_full :: proc(
+    state: ^Euclid_General_State,
+    tool: ^shapemodel.Shapes_Cycloid_Tool_Draw) {
+    begin_tool_brush_mode(state)
+    baseline_start := view_core.iso_to_cartesian(
+        tool^.baseline_start, state^.iso_scale^)
+    baseline_finish := view_core.iso_to_cartesian(
+        tool^.baseline_finish, state^.iso_scale^)
+    draw_tool_brush_segment(state, baseline_start, baseline_finish,
+        tool^.brush_size, tool^.color)
+    draw_trochoid_tool_ring(state, tool^.rolling_center,
+        tool^.rolling_radius, tool^.brush_size, tool^.color)
+    handle_start := view_core.iso_to_cartesian(
+        tool^.handle_start, state^.iso_scale^)
+    handle_finish := view_core.iso_to_cartesian(
+        tool^.handle_finish, state^.iso_scale^)
+    draw_tool_brush_segment(state, handle_start, handle_finish,
+        tool^.brush_size, tool^.color)
     end_tool_brush_mode(state)
 }
 
@@ -1678,6 +1748,7 @@ find_cached_pen_item :: proc(
             shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Polygon_Draw,
             shapemodel.Shapes_Trochoid_Tool_Draw,
+            shapemodel.Shapes_Cycloid_Tool_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
     }
@@ -1700,6 +1771,7 @@ find_cached_trochoid_tool_item :: proc(
             shapemodel.Shapes_Filled_Circle_Draw,
             shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Polygon_Draw,
+            shapemodel.Shapes_Cycloid_Tool_Draw,
             shapemodel.Shapes_Pen_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
@@ -1723,6 +1795,7 @@ find_cached_compass_item :: proc(
             shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Polygon_Draw,
             shapemodel.Shapes_Trochoid_Tool_Draw,
+            shapemodel.Shapes_Cycloid_Tool_Draw,
             shapemodel.Shapes_Pen_Draw:
         }
     }
@@ -1762,6 +1835,7 @@ find_pen_crossing_polygon :: proc(
             shapemodel.Shapes_Filled_Circle_Draw,
             shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Trochoid_Tool_Draw,
+            shapemodel.Shapes_Cycloid_Tool_Draw,
             shapemodel.Shapes_Pen_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
@@ -2008,6 +2082,20 @@ draw_cached_trochoid_tool_shadow :: proc(
     }
     draw_trochoid_tool_ring_shadow(state, tool^.fixed_center,
         tool^.fixed_radius, tool^.brush_size, tool^.color)
+    draw_trochoid_tool_ring_shadow(state, tool^.rolling_center,
+        tool^.rolling_radius, tool^.brush_size, tool^.color)
+    handle := shapemodel.Shapes_Line_Draw{tool^.base,
+        tool^.handle_start, tool^.handle_finish}
+    draw_cached_line_shadow(state, &handle)
+}
+
+// Render floor shadows for the exact rail, rolling ring, and orientation handle.
+draw_cached_cycloid_tool_shadow :: proc(
+    state: ^Euclid_General_State,
+    tool: ^shapemodel.Shapes_Cycloid_Tool_Draw) {
+    baseline := shapemodel.Shapes_Line_Draw{tool^.base,
+        tool^.baseline_start, tool^.baseline_finish}
+    draw_cached_line_shadow(state, &baseline)
     draw_trochoid_tool_ring_shadow(state, tool^.rolling_center,
         tool^.rolling_radius, tool^.brush_size, tool^.color)
     handle := shapemodel.Shapes_Line_Draw{tool^.base,

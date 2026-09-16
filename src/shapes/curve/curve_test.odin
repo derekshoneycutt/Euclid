@@ -109,3 +109,67 @@ trochoid_curve_explication_rejects_short_output :: proc(t: ^testing.T) {
     testing.expect_value(t, result.status, Curve_Explication_Status.Invalid_Input)
     testing.expect_value(t, result.vertex_count, 0)
 }
+
+// Verify two revolutions are centered on the literal rail with three cusp contacts.
+@(test)
+cycloid_curve_two_revolutions_use_literal_line :: proc(t: ^testing.T) {
+    value := shapemodel.Shape_Cycloid{rolling_radius = 0.05,
+        tracer_distance = 0.05, parameter_start = 0,
+        parameter_finish = 4 * math.PI, draw_parameter = 4 * math.PI}
+    first := Vector3{-0.4, 0, 2}
+    second := Vector3{0.4, 0, 2}
+
+    start := cycloid_point(first, second, value, 0)
+    middle := cycloid_point(first, second, value, 2 * math.PI)
+    finish := cycloid_point(first, second, value, 4 * math.PI)
+
+    testing.expectf(t, math.abs(start.y - 0) < 1e-5 &&
+        math.abs(middle.y - 0) < 1e-5 && math.abs(finish.y - 0) < 1e-5,
+        "ordinary cycloid cusps should touch the literal rail")
+    testing.expectf(t, math.abs(middle.x) < 1e-5,
+        "two-revolution travel should be centered on the rail")
+    testing.expectf(t, start.x > first.x && finish.x < second.x,
+        "literal rail should retain visible margins around wheel travel")
+}
+
+// Verify rotated rails determine both rolling centers and material orientation.
+@(test)
+cycloid_tool_pose_follows_endpoint_direction :: proc(t: ^testing.T) {
+    value := shapemodel.Shape_Cycloid_Tool{rolling_radius = 0.1,
+        parameter_start = -1, parameter_finish = 1, parameter = 0}
+    pose := cycloid_tool_pose({1, 1, 3}, {1, 2, 3}, value)
+
+    test_helpers.expect_vec3_close(t, pose.baseline_start, {1, 1, 3},
+        "tool should preserve the exact first rail endpoint")
+    test_helpers.expect_vec3_close(t, pose.baseline_finish, {1, 2, 3},
+        "tool should preserve the exact second rail endpoint")
+    test_helpers.expect_vec3_close(t, pose.contact, {1, 1.5, 3},
+        "centered parameter should contact the rail midpoint")
+    test_helpers.expect_vec3_close(t, pose.rolling_center, {0.9, 1.5, 3},
+        "rolling center should use the endpoint-derived planar normal")
+}
+
+// Verify adaptive reveal preserves completed boundaries and exact frontier.
+@(test)
+cycloid_curve_explication_preserves_revealed_prefix :: proc(t: ^testing.T) {
+    first := Vector3{-0.5, 0, 0}
+    second := Vector3{0.5, 0, 0}
+    value := shapemodel.Shape_Cycloid{rolling_radius = 0.05,
+        tracer_distance = 0.08, parameter_start = 0,
+        parameter_finish = 4 * math.PI, draw_parameter = 1.7 * math.PI}
+    partial: [CYCLOID_MAX_VERTICES]Vector3
+    partial_result := cycloid_explicate(first, second, value, partial[:])
+    value.draw_parameter = value.parameter_finish
+    complete: [CYCLOID_MAX_VERTICES]Vector3
+    complete_result := cycloid_explicate(first, second, value, complete[:])
+
+    testing.expect(t, partial_result.status != .Invalid_Input)
+    testing.expect(t, complete_result.status != .Invalid_Input)
+    for index in 0..<partial_result.vertex_count - 1 {
+        test_helpers.expect_vec3_close(t, partial[index], complete[index],
+            "advancing cycloid frontier should retain completed vertices")
+    }
+    expected := cycloid_point(first, second, value, 1.7 * math.PI)
+    test_helpers.expect_vec3_close(t, partial[partial_result.vertex_count - 1],
+        expected, "partial cycloid should include its exact frontier")
+}

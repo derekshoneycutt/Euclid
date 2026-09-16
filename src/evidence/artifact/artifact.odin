@@ -190,7 +190,6 @@ artifact_state_json :: proc(
         state.trace.pending_drops, julia_host.lifecycle,
         julia_host.active_request_id, julia_host.failed_request_count,
         julia_host.trace.event_count, julia_host.trace.evidence_complete)
-    delete(dust_json)
     return result
 }
 
@@ -222,7 +221,10 @@ artifact_encode_payload :: proc(
             .Point_Visibility_Committed, .Arc_Geometry_Committed,
             .Trochoid_Geometry_Committed, .Trochoid_Frontier_Committed,
             .Trochoid_Tool_Geometry_Committed,
-            .Trochoid_Tool_Parameter_Committed:
+            .Trochoid_Tool_Parameter_Committed,
+            .Cycloid_Geometry_Committed, .Cycloid_Frontier_Committed,
+            .Cycloid_Tool_Geometry_Committed,
+            .Cycloid_Tool_Parameter_Committed:
         artifact_put_u32(destination, 0, payload.point.point_index)
         artifact_put_u16(destination, 4, payload.point.field)
         destination[6] = payload.point.visible

@@ -87,6 +87,8 @@ inline pools, one ordered constraint store, and the derived draw cache.
 | `arcs` | Current and previous radius, start angle, and signed sweep | Entity construction order |
 | `trochoids` | Current and previous analytic curve parameters and directed reveal frontier | Entity construction order |
 | `trochoid_tools` | Current and previous two-ring guide parameters | Entity construction order |
+| `cycloids` | Current and previous rolling-line curve parameters and directed reveal frontier | Entity construction order |
+| `cycloid_tools` | Current and previous rolling-circle guide parameters | Entity construction order |
 | `geometries` | Kind-tagged direct entity references | Immutable after construction |
 | `labels` | MIME and source-span descriptors | Immutable after construction |
 | `vertex_references` | Variable-arity polygon topology | Caller-supplied vertex order |
@@ -130,6 +132,8 @@ references separate transform entities directly:
 | Arc or filled arc | Host transform is the center; mutable arc component stores radius, start angle, and signed sweep |
 | Trochoid | Host transform is the fixed center; mutable analytic component stores circle, tracer, domain, rotation, and frontier parameters |
 | Trochoid guide | Permanent host transform is the fixed center; rolling center and orientation cue are derived without child transforms |
+| Cycloid | Two endpoint transforms define the fixed line; the host owns radius, tracer, domain, phase, and frontier parameters |
+| Cycloid guide | Two endpoint transforms define the permanent fixed line; rolling center and orientation cue are derived without child transforms |
 | Polygon | Offset and count into ordered entity references |
 | Pen | Two joint transforms |
 | Compass | Two joint transforms and one pivot transform |
@@ -148,6 +152,13 @@ internal mode uses `R - r` and requires `R > r`. Domains are directed, so either
 `finish > start` or `finish < start` is valid, and the reveal frontier must remain in
 that directed closed interval. Continuous parameters are interpolated before point
 evaluation. Mode is discrete and may change only while the curve is hidden.
+
+A cycloid host references two endpoint transforms rather than owning a center transform.
+The rolling interval is centered on their directed line, and the circle advances without
+slipping by one radius per parameter radian. Tracer distance classifies the curve without
+stored mode state: `d = r` is ordinary, `d < r` is curtate, and `d > r` is prolate.
+Endpoint positions, radius, tracer parameters, domain, and frontier all interpolate before
+evaluation.
 
 Sampled curve vertices are never canonical. `src/shapes/curve/` refines a 48-segment
 full-domain lattice using midpoint chord error `0.0005`, maximum parameter step `pi/24`,
@@ -205,6 +216,7 @@ now a packed `Shape_Entity`, not a legacy point-array index.
 | Entity query | `Bridge_Shape_View` | `BridgePointView` |
 | Arc query | `Bridge_Shape_Arc_Query_Result` | `BridgeShapeArcQueryResult` |
 | Trochoid value/query | `Bridge_Trochoid_Geometry`, `Bridge_Shape_Trochoid_Query_Result` | `BridgeTrochoidGeometry`, `BridgeShapeTrochoidQueryResult` |
+| Cycloid value/query | `Bridge_Cycloid_Geometry`, `Bridge_Shape_Cycloid_Query_Result` | `BridgeCycloidGeometry`, `BridgeShapeCycloidQueryResult` |
 | Label query | Caller-owned byte destination | Copied Julia `String` or `nothing` |
 
 ABI structs must remain field-for-field compatible in order, width, and meaning. A field
@@ -216,11 +228,11 @@ wrappers, tests, and bridge-version review.
 
 | Family | Native exports | Contract |
 | --- | --- | --- |
-| Construction | `shape_create_point`, `shape_create_label`, line, arc, trochoid, and polygon variants | Return status-bearing packed handle groups |
-| Query | `shape_get_view`, `shape_get_arc`, `shape_get_trochoid`, `shape_copy_label_source` | Return pointer-free projections or copy into caller storage |
-| Mutation | Position, visibility, color, active color, brush, complete arc/trochoid geometry, trochoid frontier, active feature | Resolve required component or capture a scene command |
+| Construction | `shape_create_point`, `shape_create_label`, line, arc, trochoid, cycloid, and polygon variants | Return status-bearing packed handle groups |
+| Query | `shape_get_view`, `shape_get_arc`, `shape_get_trochoid`, `shape_get_cycloid`, `shape_copy_label_source` | Return pointer-free projections or copy into caller storage |
+| Mutation | Position, visibility, color, active color, brush, complete arc/trochoid/cycloid geometry, curve frontiers, active feature | Resolve required component or capture a scene command |
 | Constraints | Floor, snap, distance, angle, center-pivot, solve | Validate direct packed transform targets |
-| Tools | Pen, compass, and trochoid-guide visibility, configuration, motion, lock, and position operations | Address permanent baseline handles and constraints |
+| Tools | Pen, compass, trochoid-guide, and cycloid-guide visibility, configuration, motion, lock, and position operations | Address permanent baseline handles and constraints |
 
 Callers must inspect constructor and mutation status before using returned data. The
 shape-world status mapping used by the bridge is:
@@ -235,9 +247,10 @@ shape-world status mapping used by the bridge is:
 | Invalid UTF-8 | `BRIDGE_STATUS_INVALID_UTF8` (10) |
 | Unsupported MIME | `BRIDGE_STATUS_UNSUPPORTED_MIME` (11) |
 
-The bridge version is currently 8. `BRIDGE_FEATURE_TROCHOIDS` advertises curve and guide
-support. Feature flags advertise optional contracts, but
-version and flags do not replace exact ABI layout checks.
+The bridge version is currently 9. `BRIDGE_FEATURE_TROCHOIDS` and
+`BRIDGE_FEATURE_CYCLOIDS` advertise their curve and guide contracts. Feature flags
+advertise optional contracts, but version and flags do not replace exact ABI layout
+checks.
 
 ### Synchronous And Asynchronous Calls
 
@@ -298,7 +311,7 @@ Identity, constraints, bridge queries, and evidence must never derive truth from
 | `polygon_triangles` | Packet-local triangle indices produced by triangulation |
 | `polygon_ring_nodes` | Reused ear-clipping workspace; not published semantics |
 | `curve_vertices` | Up to 2,048 frame-local explicated curve vertices |
-| `pen`, `compass`, `trochoid_tool` | Dedicated tool copies used by high and shadow passes |
+| `pen`, `compass`, `trochoid_tool`, `cycloid_tool` | Dedicated tool copies used by high and shadow passes |
 | Counts and draw flags | Initialized prefixes and tool-presence publication state |
 
 Label items retain MIME, byte offset, byte count, and revision rather than copying text.
@@ -361,14 +374,14 @@ be reused.
 
 ## Lifetime And Retirement
 
-At startup, `make_shape_storage` allocates one world, constructs the trochoid guide,
-compass, and pen,
+At startup, `make_shape_storage` allocates one world, constructs the trochoid and cycloid
+guides, compass, and pen,
 freezes all current frontiers, settles tool constraints, and copies current transforms to
 their previous-position fields. The resulting prefix lives until application shutdown.
 
 ```mermaid
 flowchart LR
-    B[Permanent trochoid guide, pen, and compass baseline]
+    B[Permanent roulette guides, pen, and compass baseline]
     A1[Animation suffix generation N]
     R[Owner-controlled retirement]
     A2[Animation suffix generation N plus 1]

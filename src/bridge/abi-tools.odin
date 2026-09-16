@@ -7,6 +7,12 @@ import "../particles"
 
 import rl "vendor:raylib"
 
+// Hold one resolved permanent Cycloid tool line.
+Bridge_Cycloid_Tool_Line :: struct {
+    first: rl.Vector3,
+    second: rl.Vector3,
+}
+
 // Resolve one tool transform from the active immutable snapshot or canonical world.
 tool_position :: proc(
     state: ^core.Euclid_General_State,
@@ -37,6 +43,145 @@ bridge_trochoid_tool_value :: proc(
         fixed_radius = geometry.fixed_radius, rolling_radius = geometry.rolling_radius,
         parameter = geometry.parameter, rotation = geometry.rotation,
         orientation_phase = geometry.orientation_phase}
+}
+
+// Convert one bridge description into canonical literal-line guide state.
+bridge_cycloid_tool_value :: proc(
+    geometry: shapemodel.Bridge_Cycloid_Tool_Geometry) ->
+        shapemodel.Shape_Cycloid_Tool {
+    return {rolling_radius = geometry.rolling_radius,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        parameter = geometry.parameter,
+        orientation_phase = geometry.orientation_phase}
+}
+
+// Resolve the permanent Cycloid tool's endpoint positions from one query source.
+bridge_cycloid_tool_line :: proc(source: ^Bridge_Shape_Query_Source,
+    state: ^core.Euclid_General_State) -> (Bridge_Cycloid_Tool_Line, bool) {
+    first, first_ok := shapemodel.shape_component_get(source^.transforms,
+        source^.registry, state^.world_cycloid_tool.first)
+    second, second_ok := shapemodel.shape_component_get(source^.transforms,
+        source^.registry, state^.world_cycloid_tool.second)
+    if !first_ok || !second_ok {
+        return {}, false
+    }
+    return {first.position, second.position}, true
+}
+
+// Enable drawing for the process-global literal-line Cycloid guide.
+@(export)
+show_cycloid_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape), 1)
+}
+
+// Disable drawing for the process-global literal-line Cycloid guide.
+@(export)
+hide_cycloid_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape), 0)
+}
+
+// Atomically move both literal endpoints of the process-global Cycloid guide.
+@(export)
+set_cycloid_tool_line :: proc "c" (state: ^core.Euclid_General_State,
+    first, second: rl.Vector3) -> i32 {
+    context = state^.saved_context
+    source, available := bridge_shape_query_source(state)
+    if !available {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, found := shapemodel.shape_component_get(source.cycloid_tools,
+        source.registry, state^.world_cycloid_tool.shape)
+    if !found || !shapemodel.shape_cycloid_line_is_valid(first, second,
+        current.rolling_radius, current.parameter_start, current.parameter_finish) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Cycloid_Tool_Line)
+    if command != nil {
+        command^.entity = packed
+        command^.position = first
+        command^.second_position = second
+    }
+    if captured {return BRIDGE_STATUS_OK}
+    first_transform, first_ok := shapemodel.shape_component_get_mut(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry,
+        state^.world_cycloid_tool.first)
+    second_transform, second_ok := shapemodel.shape_component_get_mut(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry,
+        state^.world_cycloid_tool.second)
+    if !first_ok || !second_ok {return BRIDGE_STATUS_NOT_FOUND}
+    first_transform.position = first
+    second_transform.position = second
+    return BRIDGE_STATUS_OK
+}
+
+// Atomically configure the process-global Cycloid guide's scalar state.
+@(export)
+set_cycloid_tool_geometry :: proc "c" (state: ^core.Euclid_General_State,
+    geometry: shapemodel.Bridge_Cycloid_Tool_Geometry) -> i32 {
+    context = state^.saved_context
+    value := bridge_cycloid_tool_value(geometry)
+    source, available := bridge_shape_query_source(state)
+    if !available || !shapemodel.shape_cycloid_tool_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    line, line_ok := bridge_cycloid_tool_line(&source, state)
+    if !line_ok || !shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
+        value.rolling_radius, value.parameter_start, value.parameter_finish) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Cycloid_Tool)
+    if command != nil {
+        command^.entity = packed
+        command^.cycloid_tool = value
+    }
+    if captured {return BRIDGE_STATUS_OK}
+    current, found := shapemodel.shape_component_get_mut(
+        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        state^.world_cycloid_tool.shape)
+    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    previous := current^
+    current^ = value
+    current.previous_rolling_radius = previous.previous_rolling_radius
+    current.previous_parameter_start = previous.previous_parameter_start
+    current.previous_parameter_finish = previous.previous_parameter_finish
+    current.previous_parameter = previous.previous_parameter
+    current.previous_orientation_phase = previous.previous_orientation_phase
+    return BRIDGE_STATUS_OK
+}
+
+// Change only the process-global Cycloid guide's rolling parameter.
+@(export)
+set_cycloid_tool_parameter :: proc "c" (
+    state: ^core.Euclid_General_State, parameter: f32) -> i32 {
+    context = state^.saved_context
+    source, available := bridge_shape_query_source(state)
+    if !available {return BRIDGE_STATUS_NOT_FOUND}
+    current, found := shapemodel.shape_component_get(source.cycloid_tools,
+        source.registry, state^.world_cycloid_tool.shape)
+    if !found || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, parameter) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Cycloid_Tool_Parameter)
+    if command != nil {
+        command^.entity = packed
+        command^.scalar = parameter
+    }
+    if captured {return BRIDGE_STATUS_OK}
+    mutable, has_value := shapemodel.shape_component_get_mut(
+        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        state^.world_cycloid_tool.shape)
+    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    mutable.parameter = parameter
+    return BRIDGE_STATUS_OK
 }
 
 // Enable drawing for the process-global two-ring trochoid guide.
