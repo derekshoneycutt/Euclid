@@ -132,6 +132,7 @@ const AnimationLoopFiles = [
     "src/content/curves/cycloid_shared.jl",
     "src/content/curves/dimpled_limacon.jl",
     "src/content/curves/hypocycloid_shared.jl",
+    "src/content/curves/trochoid_examples_shared.jl",
     "src/content/elements/book1/commonnotions.jl",
     "src/content/elements/book1/def_001_point.jl",
     "src/content/elements/book1/def_002_line.jl",

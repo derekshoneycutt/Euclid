@@ -60,6 +60,15 @@ Core Content (>163 animations; 98 complete):
   - [X] Section 8 (2 animations)
 - [ ] Tarski
 - [ ] Logic
+  - [ ] Between-ness
+  - [ ] And
+  - [ ] Or
+  - [ ] Not
+  - [ ] If
+  - [ ] Iff
+  - [ ] Existence
+  - [ ] ForAll
+  - [ ] Sets
 - [ ] Algebraic groups (14+ animations; 7 complete)
   - [ ] Definitions (14 animations)
     - [X] $\mathbb{Z}_2$ (irregular poly reflecting about line; special case of $C_n$)
@@ -69,7 +78,7 @@ Core Content (>163 animations; 98 complete):
     - [X] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
       - [X] Associativity
       - [X] Commutative (Abelian)
-    - [ ] $D_n$(dihedral, symmetry of shape with$n$ sides)
+    - [ ] $D_n$ (dihedral, symmetry of shape with $n$ sides)
       - [ ] Non-Abelian
     - [ ] $(\mathbb{R}^2, +)$ (translation group -- moving shapes)
     - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations --
@@ -80,8 +89,7 @@ Core Content (>163 animations; 98 complete):
      infinite rotation fixed about center of polygon)
     - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane --
      polygons translating/rotating/reflecting around another point)
-  - [ ] Demonstrations ? Idk maybe. keep going back and forth lololololol
-- [ ] Curves
+- [X] Curves
   - [X] Circle
   - [X] Ellipse
   - [X] Cycloid
@@ -95,16 +103,16 @@ Core Content (>163 animations; 98 complete):
   - [X] Astroid
   - [X] 5-Hypocycloid
   - [X] 11⁄2-Hypocycloid
-  - [ ] Nephroid
-  - [ ] Epitrochoids (mulitply-dimpled trochoids?)
-  - [ ] Hypotrochoids (e.g. smooth 5-point star?)
+  - [X] Nephroid
+  - [X] 3-Dimple Epitrochoid
+  - [X] 5-Point Hypotrochoid
 
 General features:
 
 - [X] Windows, MacOS, Linux support
 - [X] CMake & Julia make script with static analysis report and testing options
 - [X] Primitives / Shape System
-  - [X] Sparse SoA simple animation-lifetime entity component system style structure
+  - [X] Sparse simple animation-lifetime component system
   - [X] Pen
   - [X] Compass
   - [X] Point

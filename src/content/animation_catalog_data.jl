@@ -657,4 +657,19 @@ const AnimationDescriptors = AnimationDescriptor[
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
         "11⁄2-Hypocycloid", 12, LeafNode,
         "curves/eleven_half_hypocycloid.jl"),
+    AnimationDescriptor(
+        UUID("5cea3464-3e41-444d-a326-2fbd9b20de7e"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Nephroid", 13, LeafNode,
+        "curves/nephroid.jl"),
+    AnimationDescriptor(
+        UUID("bf196800-9bc6-4612-bf22-00051d3152e6"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "3-Dimple Epitrochoid", 14, LeafNode,
+        "curves/three_dimple_epitrochoid.jl"),
+    AnimationDescriptor(
+        UUID("b0c35f2e-6108-4510-ab0e-cfa3a7269869"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "5-Point Hypotrochoid", 15, LeafNode,
+        "curves/five_point_hypotrochoid.jl"),
 ]

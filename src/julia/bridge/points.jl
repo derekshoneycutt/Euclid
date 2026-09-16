@@ -270,32 +270,58 @@ function create_new_limacon(state_ptr::Ptr{Cvoid}, center, radius::Real,
         draw_parameter=draw_parameter, color=color, brush_size=brush_size)
 end
 
-"""Derive one rational-k hypocycloid's rolling radius and minimal period."""
-function _hypocycloid_parameters(fixed_radius::Real, k::Rational)
-    fixed_radius > 0 ||
-        throw(ArgumentError("hypocycloid fixed radius must be positive"))
-    k > 1 || throw(ArgumentError("hypocycloid k must be greater than one"))
+"""Derive one rational Trochoid's rolling radius and minimal closure period."""
+function _rational_trochoid_parameters(fixed_radius::Real, k::Rational)
+    isfinite(fixed_radius) && fixed_radius > 0 ||
+        throw(ArgumentError("trochoid fixed radius must be finite and positive"))
+    k > 0 || throw(ArgumentError("trochoid k must be positive"))
     rolling_radius = Float32(fixed_radius / k)
     period = 2f0 * Float32(pi) * Float32(denominator(k))
     isfinite(rolling_radius) && rolling_radius > 0 && isfinite(period) ||
-        throw(ArgumentError("hypocycloid parameters must be finite"))
+        throw(ArgumentError("trochoid parameters must be finite"))
     return (; rolling_radius, period)
+end
+
+"""Create one rational Trochoid after validating mode and tracer geometry."""
+function _create_rational_trochoid(state_ptr::Ptr{Cvoid}, center,
+    mode, fixed_radius::Real, k::Rational, tracer_distance::Real;
+    parameter_start::Real=0f0, parameter_finish::Union{Nothing,Real}=nothing,
+    draw_parameter::Union{Nothing,Real}=nothing,
+    color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
+    parameters = _rational_trochoid_parameters(fixed_radius, k)
+    mode == TROCHOID_INTERNAL && k <= 1 &&
+        throw(ArgumentError("internal trochoid k must be greater than one"))
+    isfinite(tracer_distance) && tracer_distance >= 0 ||
+        throw(ArgumentError("trochoid tracer distance must be finite and nonnegative"))
+    finish = parameter_finish === nothing ?
+        parameter_start + parameters.period : parameter_finish
+    frontier = draw_parameter === nothing ? finish : draw_parameter
+    create_new_trochoid(state_ptr, center; mode, fixed_radius,
+        rolling_radius=parameters.rolling_radius, tracer_distance,
+        parameter_start, parameter_finish=finish, draw_parameter=frontier,
+        color, brush_size)
+end
+
+"""Create one closed external Trochoid with exact rational ratio `k = R/r`."""
+function create_new_epitrochoid(state_ptr::Ptr{Cvoid}, center,
+    fixed_radius::Real, k::Rational, tracer_distance::Real; kwargs...)
+    _create_rational_trochoid(state_ptr, center, TROCHOID_EXTERNAL,
+        fixed_radius, k, tracer_distance; kwargs...)
+end
+
+"""Create one closed internal Trochoid with exact rational ratio `k = R/r`."""
+function create_new_hypotrochoid(state_ptr::Ptr{Cvoid}, center,
+    fixed_radius::Real, k::Rational, tracer_distance::Real; kwargs...)
+    _create_rational_trochoid(state_ptr, center, TROCHOID_INTERNAL,
+        fixed_radius, k, tracer_distance; kwargs...)
 end
 
 """Create one closed hypocycloid with exact rational ratio `k = R/r`."""
 function create_new_hypocycloid(state_ptr::Ptr{Cvoid}, center,
-    fixed_radius::Real, k::Rational; parameter_start::Real=0f0,
-    parameter_finish::Union{Nothing,Real}=nothing,
-    draw_parameter::Union{Nothing,Real}=nothing,
-    color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
-    parameters = _hypocycloid_parameters(fixed_radius, k)
-    finish = parameter_finish === nothing ?
-        parameter_start + parameters.period : parameter_finish
-    frontier = draw_parameter === nothing ? finish : draw_parameter
-    create_new_trochoid(state_ptr, center; mode=TROCHOID_INTERNAL,
-        fixed_radius, rolling_radius=parameters.rolling_radius,
-        tracer_distance=parameters.rolling_radius, parameter_start,
-        parameter_finish=finish, draw_parameter=frontier, color, brush_size)
+    fixed_radius::Real, k::Rational; kwargs...)
+    parameters = _rational_trochoid_parameters(fixed_radius, k)
+    create_new_hypotrochoid(state_ptr, center, fixed_radius, k,
+        parameters.rolling_radius; kwargs...)
 end
 
 """Create the three-cusped hypocycloid known as a deltoid."""
@@ -308,6 +334,14 @@ end
 function create_new_astroid(state_ptr::Ptr{Cvoid}, center,
     fixed_radius::Real; kwargs...)
     create_new_hypocycloid(state_ptr, center, fixed_radius, 4 // 1; kwargs...)
+end
+
+"""Create the two-cusped epicycloid known as a Nephroid."""
+function create_new_nephroid(state_ptr::Ptr{Cvoid}, center,
+    fixed_radius::Real; kwargs...)
+    parameters = _rational_trochoid_parameters(fixed_radius, 2 // 1)
+    create_new_epitrochoid(state_ptr, center, fixed_radius, 2 // 1,
+        parameters.rolling_radius; kwargs...)
 end
 
 """Create one outlined arc from explicit coordinates."""

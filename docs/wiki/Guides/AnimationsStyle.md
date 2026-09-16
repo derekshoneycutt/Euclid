@@ -136,6 +136,11 @@ domain of `0..2pi*q`; scale draw duration with `q` to preserve angular speed. Th
 and internally rolling rings remain guides, while the compass from rolling center to
 tracer is the drawing instrument.
 
+Long rational Trochoid showcases may deliberately increase angular speed when preserving
+the baseline would make the construction drag. The 5-point Hypotrochoid covers its full
+`0..6pi` closure domain in 10 seconds rather than the 15-second baseline; it still uses
+one uninterrupted draw phase and one cycle boundary.
+
 ## Isometric Projection and Right-Hand Rule
 
 The isometric helper in `src/view/core/isomath.odin` uses a right-handed

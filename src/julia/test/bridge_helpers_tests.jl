@@ -132,22 +132,31 @@ end
 end
 
 @testset "hypocycloid rational parameters" begin
-    deltoid = OdinJuliaBridge._hypocycloid_parameters(0.24f0, 3 // 1)
-    astroid = OdinJuliaBridge._hypocycloid_parameters(0.24f0, 4 // 1)
-    five = OdinJuliaBridge._hypocycloid_parameters(0.25f0, 5 // 1)
-    eleven_half = OdinJuliaBridge._hypocycloid_parameters(0.22f0, 11 // 2)
-    reduced = OdinJuliaBridge._hypocycloid_parameters(0.22f0, 22 // 4)
+    nephroid = OdinJuliaBridge._rational_trochoid_parameters(0.16f0, 2 // 1)
+    deltoid = OdinJuliaBridge._rational_trochoid_parameters(0.24f0, 3 // 1)
+    astroid = OdinJuliaBridge._rational_trochoid_parameters(0.24f0, 4 // 1)
+    five = OdinJuliaBridge._rational_trochoid_parameters(0.25f0, 5 // 1)
+    star = OdinJuliaBridge._rational_trochoid_parameters(0.25f0, 5 // 3)
+    eleven_half = OdinJuliaBridge._rational_trochoid_parameters(0.22f0, 11 // 2)
+    reduced = OdinJuliaBridge._rational_trochoid_parameters(0.22f0, 22 // 4)
 
+    @test nephroid.rolling_radius ≈ 0.08f0
     @test deltoid.rolling_radius ≈ 0.08f0
     @test astroid.rolling_radius ≈ 0.06f0
     @test five.rolling_radius ≈ 0.05f0
+    @test star.rolling_radius ≈ 0.15f0
     @test eleven_half.rolling_radius ≈ 0.04f0
+    @test nephroid.period ≈ 2f0 * Float32(pi)
     @test deltoid.period ≈ 2f0 * Float32(pi)
     @test astroid.period ≈ 2f0 * Float32(pi)
     @test five.period ≈ 2f0 * Float32(pi)
+    @test star.period ≈ 6f0 * Float32(pi)
     @test eleven_half.period ≈ 4f0 * Float32(pi)
     @test reduced == eleven_half
-    @test_throws ArgumentError OdinJuliaBridge._hypocycloid_parameters(0f0, 3 // 1)
-    @test_throws ArgumentError OdinJuliaBridge._hypocycloid_parameters(1f0, 1 // 1)
-    @test_throws ArgumentError OdinJuliaBridge._hypocycloid_parameters(1f0, 1 // 2)
+    @test_throws ArgumentError OdinJuliaBridge._rational_trochoid_parameters(
+        0f0, 3 // 1)
+    @test_throws ArgumentError OdinJuliaBridge._rational_trochoid_parameters(
+        Inf, 3 // 1)
+    @test_throws ArgumentError OdinJuliaBridge._rational_trochoid_parameters(
+        1f0, 0 // 1)
 end

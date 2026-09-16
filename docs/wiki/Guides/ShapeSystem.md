@@ -152,10 +152,12 @@ internal mode uses `R - r` and requires `R > r`. Domains are directed, so either
 `finish > start` or `finish < start` is valid, and the reveal frontier must remain in
 that directed closed interval. Continuous parameters are interpolated before point
 evaluation. Mode is discrete and may change only while the curve is hidden.
-Hypocycloids are semantic internal trochoids with tracer distance `d = r`. For reduced
-`k = R/r = p/q`, the curve has `p` cusps and its minimal parameter period is `2pi*q`.
-Deltoids and astroids are the `k = 3` and `k = 4` conveniences over this same model;
-they do not introduce additional canonical shape or bridge types.
+For either mode and reduced `k = R/r = p/q`, the minimal parameter period is `2pi*q`.
+Epitrochoids and Hypotrochoids are semantic external and internal Trochoids with an
+arbitrary tracer distance `d`. Hypocycloids specialize the internal case to `d = r`,
+where the curve has `p` cusps. Deltoids and astroids are the `k = 3` and `k = 4`
+Hypocycloid conveniences; a Nephroid is the external `k = 2`, `d = r` epicycloid.
+These semantic constructors do not introduce additional canonical shape or bridge types.
 
 A cycloid host references two endpoint transforms rather than owning a center transform.
 The rolling interval is centered on their directed line, and the circle advances without
