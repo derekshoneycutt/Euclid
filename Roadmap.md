@@ -84,11 +84,19 @@ Core Content (>163 animations; 98 complete):
 - [ ] Curves
   - [X] Circle
   - [X] Ellipse
-  - [ ] Cycloid
-  - [ ] Curtate Cycloid
-  - [ ] Prolate Cycloid
+  - [X] Cycloid
+  - [X] Curtate Cycloid
+  - [X] Prolate Cycloid
   - [X] Cardioid
   - [X] Limacon
+  - [X] Dimpled Limacon
+  - [X] Convex Limacon
+  - [ ] Deltoid
+  - [ ] Astroid
+  - [ ] k-Hypocycloids (k=5+, 2.n, etc.; tbd exact options)
+  - [ ] Nephroid
+  - [ ] Epitrochoids (mulitply-dimpled trochoids?)
+  - [ ] Hypotrochoids (smooth star e.g. 5 point?)
 
 General features:
 
@@ -104,7 +112,7 @@ General features:
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
   - [X] Label
-  - [ ] Cycloids and Cycloid Tool
+  - [X] Cycloids and Cycloid Tool
   - [X] Trochoids and Trochoid Tool
   - [ ] Lenses & Lunes
 - [X] Basic, layered particle system

@@ -627,4 +627,14 @@ const AnimationDescriptors = AnimationDescriptor[
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
         "Limaçon", 6, LeafNode,
         "curves/limacon.jl"),
+    AnimationDescriptor(
+        UUID("93660ad7-cf39-42d6-bf3f-6cb6613617d3"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Dimpled Limaçon", 7, LeafNode,
+        "curves/dimpled_limacon.jl"),
+    AnimationDescriptor(
+        UUID("d0a14cf5-f5be-4ba6-aeb3-8f673093b7f0"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Convex Limaçon", 8, LeafNode,
+        "curves/convex_limacon.jl"),
 ]
