@@ -672,4 +672,19 @@ const AnimationDescriptors = AnimationDescriptor[
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
         "5-Point Hypotrochoid", 15, LeafNode,
         "curves/five_point_hypotrochoid.jl"),
+    AnimationDescriptor(
+        UUID("2905c158-007b-4412-be60-20a27decc0b2"),
+        nothing,
+        "Logic", 6, CategoryNode,
+        "logic/logic_overview.jl"),
+    AnimationDescriptor(
+        UUID("8785c9e6-53e9-4433-b1ae-7e18cef22c88"),
+        UUID("2905c158-007b-4412-be60-20a27decc0b2"),
+        "And", 0, LeafNode,
+        "logic/and.jl"),
+    AnimationDescriptor(
+        UUID("9f6972f7-949b-4290-bfda-11dcbfcab409"),
+        UUID("2905c158-007b-4412-be60-20a27decc0b2"),
+        "Not", 1, LeafNode,
+        "logic/not.jl"),
 ]

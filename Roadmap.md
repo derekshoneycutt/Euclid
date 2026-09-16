@@ -7,7 +7,7 @@ there are some things that do need to start early.
 
 ## v1
 
-Core Content (>163 animations; 98 complete):
+Core Content (>163 animations; 100 complete):
 
 - [ ] Euclid Elements, Book 1 "the intro core, pythagorus" (85 animations; 38 complete)
   - [X] Definitions (31 animations)
@@ -61,9 +61,9 @@ Core Content (>163 animations; 98 complete):
 - [ ] Tarski
 - [ ] Logic
   - [ ] Between-ness
-  - [ ] And
+  - [X] And
   - [ ] Or
-  - [ ] Not
+  - [X] Not
   - [ ] If
   - [ ] Iff
   - [ ] Existence
@@ -123,7 +123,7 @@ General features:
   - [X] Label
   - [X] Cycloids and Cycloid Tool
   - [X] Trochoids and Trochoid Tool
-  - [ ] Lenses & Lunes
+  - [X] Lenses & Lunes
 - [X] Basic, layered particle system
   - [X] Dust
   - [X] Embers

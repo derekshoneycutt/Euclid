@@ -69,6 +69,9 @@ balance of the complete scene, not fixed object types.
 - Use `khaki3` and `grey60` the same way you use `steelblue` and
   `palevioletred1`: as part of the shared palette, assigned by relationship and
   composition.
+- For Lens and Lune demonstrations, draw the two source circles as distinct
+  constructions before revealing the filled region. Region flickers belong to the
+  reveal itself and should run while fill alpha rises, not as a separate prelude.
 - For order/between demonstrations that use drag passes, the drag color SHOULD
   match the center or emphasized point of that statement. Do not use an
   unrelated shared highlight color when a specific point is the focus.

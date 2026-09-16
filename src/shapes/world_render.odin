@@ -20,6 +20,15 @@ World_Lerped_Arc :: struct {
     arc: shapemodel.Shape_Arc,
 }
 
+// Hold two interpolated circle centers and their immutable region description.
+World_Lerped_Circle_Region :: struct {
+    first_center, second_center: Vector3,
+    value: shapemodel.Shape_Circle_Region,
+}
+
+CIRCLE_REGION_ARC_SEGMENTS :: 48
+CIRCLE_REGION_VERTEX_COUNT :: CIRCLE_REGION_ARC_SEGMENTS * 2
+
 // Hold one interpolated trochoid center and its mutable analytic description.
 World_Lerped_Trochoid :: struct {
     center: Vector3,
@@ -259,6 +268,107 @@ world_cache_push_arc :: proc(
             lerped.center, lerped.arc.radius, lerped.arc.start_theta,
             lerped.arc.sweep_theta}
     }
+}
+
+// Resolve one region's direct centers and immutable operation and radii.
+world_lerped_circle_region :: proc(
+    world: ^shapemodel.Shape_World,
+    geometry: shapemodel.Shape_Circle_Region_Geometry,
+    alpha: f32) -> (World_Lerped_Circle_Region, bool) {
+    first, first_ok := shape_world_lerped_position(world, geometry.first_center, alpha)
+    second, second_ok := shape_world_lerped_position(
+        world, geometry.second_center, alpha)
+    if !first_ok || !second_ok {
+        return {}, false
+    }
+    return {first, second, geometry.value},
+        shapemodel.shape_circle_region_is_valid(geometry.value)
+}
+
+// Write one directed circle arc without duplicating its terminal endpoint.
+world_sample_region_arc :: proc(
+    vertices: []Vector3,
+    center: Vector3,
+    radius, start, sweep: f32) {
+    for index in 0..<len(vertices) {
+        parameter := f32(index) / f32(len(vertices))
+        angle := start + sweep * parameter
+        vertices[index] = {center.x + radius * math.cos(angle),
+            center.y + radius * math.sin(angle), center.z}
+    }
+}
+
+// Explicate one proper two-circle region into a closed ordered boundary ring.
+world_sample_circle_region :: proc(
+    region: World_Lerped_Circle_Region,
+    vertices: []Vector3) -> bool {
+    if len(vertices) != CIRCLE_REGION_VERTEX_COUNT {
+        return false
+    }
+    delta := region.second_center - region.first_center
+    distance := f32(math.sqrt(delta.x * delta.x + delta.y * delta.y))
+    first_radius := region.value.first_radius
+    second_radius := region.value.second_radius
+    if distance <= math.abs(first_radius - second_radius) ||
+        distance >= first_radius + second_radius {
+        return false
+    }
+    base := math.atan2(delta.y, delta.x)
+    first_half := math.acos(math.clamp((first_radius * first_radius +
+        distance * distance - second_radius * second_radius) /
+        (2 * first_radius * distance), -1, 1))
+    second_half := math.acos(math.clamp((second_radius * second_radius +
+        distance * distance - first_radius * first_radius) /
+        (2 * second_radius * distance), -1, 1))
+    first_vertices := vertices[:CIRCLE_REGION_ARC_SEGMENTS]
+    second_vertices := vertices[CIRCLE_REGION_ARC_SEGMENTS:]
+    if region.value.operation == .Intersection {
+        world_sample_region_arc(first_vertices, region.first_center, first_radius,
+            base - first_half, 2 * first_half)
+        world_sample_region_arc(second_vertices, region.second_center, second_radius,
+            base + math.PI - second_half, 2 * second_half)
+    } else {
+        world_sample_region_arc(first_vertices, region.first_center, first_radius,
+            base + first_half, 2 * math.PI - 2 * first_half)
+        world_sample_region_arc(second_vertices, region.second_center, second_radius,
+            base + math.PI + second_half, -2 * second_half)
+    }
+    return true
+}
+
+// Push one analytic circle region through shared polygon packet triangulation.
+world_cache_push_circle_region :: proc(
+    world: ^shapemodel.Shape_World,
+    source: World_Draw_Source,
+    geometry: shapemodel.Shape_Circle_Region_Geometry,
+    alpha: f32) {
+    region, found := world_lerped_circle_region(world, geometry, alpha)
+    if !found {return}
+    reservation := reserve_polygon_cache_ranges_storage(
+        &world.draw_cache, CIRCLE_REGION_VERTEX_COUNT)
+    if !reservation.ok {return}
+    vertices := world.draw_cache.polygon_vertices[
+        reservation.first_vertex:reservation.first_vertex + CIRCLE_REGION_VERTEX_COUNT]
+    if !world_sample_circle_region(region, vertices) {
+        rollback_polygon_cache_ranges_storage(&world.draw_cache,
+            CIRCLE_REGION_VERTEX_COUNT, reservation.max_triangle_count)
+        return
+    }
+    triangle_count := triangulate_polygon_ear_clip_storage(&world.draw_cache,
+        reservation.first_vertex, vertices, reservation.first_triangle)
+    finalize_polygon_triangle_reservation_storage(
+        &world.draw_cache, reservation.first_triangle, triangle_count)
+    slot, has_slot := draw_cache_next_item_slot_storage(&world.draw_cache)
+    if !has_slot {
+        rollback_polygon_cache_ranges_storage(
+            &world.draw_cache, CIRCLE_REGION_VERTEX_COUNT, triangle_count)
+        return
+    }
+    kind := Shapes_Point_Type.Lens
+    if region.value.operation == .Difference {kind = .Lune}
+    slot^ = Shapes_Polygon_Draw{world_make_draw_base(source, kind),
+        reservation.first_vertex, CIRCLE_REGION_VERTEX_COUNT,
+        reservation.first_triangle, triangle_count}
 }
 
 // Resolve and interpolate one host's trochoid description.
@@ -608,7 +718,8 @@ world_cache_push_instrument :: proc(
         world_cache_push_pen(world, source, geometry.payload.pen, alpha)
     case .Compass:
         world_cache_push_compass(world, source, geometry.payload.compass, alpha)
-    case .Point, .Line, .Arc, .Filled_Arc, .Trochoid, .Cycloid, .Polygon:
+    case .Point, .Line, .Arc, .Filled_Arc, .Circle_Region, .Trochoid,
+        .Cycloid, .Polygon:
         return false
     }
     return true
@@ -626,6 +737,9 @@ world_cache_push_geometry :: proc(
     case .Line: world_cache_push_line(world, source, geometry.payload.line, alpha)
     case .Arc, .Filled_Arc:
         world_cache_push_arc(world, source, geometry.payload.arc, geometry.kind, alpha)
+    case .Circle_Region:
+        world_cache_push_circle_region(
+            world, source, geometry.payload.circle_region, alpha)
     case .Trochoid: world_cache_push_trochoid(world, source, alpha)
     case .Cycloid:
         world_cache_push_cycloid(world, source, geometry.payload.cycloid, alpha)

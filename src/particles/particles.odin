@@ -300,6 +300,40 @@ emit_shape_world_arc_burst :: proc(
     }
 }
 
+// Emit one analytic two-circle region with bounded uniform disk sampling.
+emit_shape_world_circle_region_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    geometry: shapemodel.Shape_Circle_Region_Geometry) {
+    first, first_ok := shape_world_burst_position(ctx.world, geometry.first_center)
+    second, second_ok := shape_world_burst_position(ctx.world, geometry.second_center)
+    region := geometry.value
+    if !first_ok || !second_ok {
+        return
+    }
+    sample_count := clamp(int(math.round(f64(
+        math.PI * region.first_radius * region.first_radius *
+        CLEAR_BURST_POLYGON_FILL_DENSITY))),
+        CLEAR_BURST_POLYGON_FILL_MIN_SAMPLES,
+        CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES)
+    for _ in 0..<sample_count {
+        random_radius := random_f32_range(ctx.particles, 0, 1)
+        radius := region.first_radius * f32(math.sqrt(f64(random_radius)))
+        theta := random_f32_range(ctx.particles, 0, 2 * math.PI)
+        sample := first + Vector3{radius * f32(math.cos(theta)),
+            radius * f32(math.sin(theta)), 0}
+        delta := sample - second
+        inside_second := delta.x * delta.x + delta.y * delta.y <=
+            region.second_radius * region.second_radius
+        accepted := inside_second
+        if region.operation == .Difference {
+            accepted = !inside_second
+        }
+        if accepted {
+            spawn_dust_particle(ctx.particles, sample, ctx.color)
+        }
+    }
+}
+
 // Return the Euclidean length of one world-space curve segment.
 curve_segment_length :: #force_inline proc(first, second: Vector3) -> f32 {
     delta := second - first
@@ -394,7 +428,11 @@ emit_shape_world_constructed_burst :: proc(
         emit_shape_world_cycloid_burst(ctx, entity, geometry.payload.cycloid)
     case .Polygon:
         emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
-    case .Point, .Line, .Trochoid_Tool, .Cycloid_Tool, .Pen, .Compass:
+    case .Circle_Region:
+        emit_shape_world_circle_region_burst(
+            ctx, geometry.payload.circle_region)
+    case .Point, .Line, .Trochoid_Tool, .Cycloid_Tool,
+        .Pen, .Compass:
     }
 }
 

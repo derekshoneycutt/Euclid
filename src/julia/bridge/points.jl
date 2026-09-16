@@ -374,6 +374,35 @@ function create_new_filledcircle(state_ptr::Ptr{Cvoid}, center,
         start_theta, sweep_theta, color, brush_size)
 end
 
+"""Create one native two-circle region through its generic ABI constructor."""
+function _create_circle_region(operation::Integer, state_ptr::Ptr{Cvoid},
+    first_center, first_radius::Real, second_center, second_radius::Real, color)
+    first = (Cfloat(first_center[1]), Cfloat(first_center[2]), Cfloat(first_center[3]))
+    second = (Cfloat(second_center[1]), Cfloat(second_center[2]),
+        Cfloat(second_center[3]))
+    geometry = BridgeCircleRegionGeometry(
+        Int32(operation), Cfloat(first_radius), Cfloat(second_radius))
+    style = _shape_style(color, 0f0)
+    @ccall shape_create_circle_region(state_ptr::Ptr{Cvoid},
+        first::NTuple{3, Cfloat}, second::NTuple{3, Cfloat},
+        geometry::BridgeCircleRegionGeometry,
+        style::BridgeShapeStyle)::BridgeShapeCircleRegion
+end
+
+"""Create the filled intersection of two properly overlapping circles."""
+function create_new_lens(state_ptr::Ptr{Cvoid}, first_center, first_radius::Real,
+    second_center, second_radius::Real; color=BridgeColor(0, 0, 0, 0))
+    _create_circle_region(0, state_ptr, first_center, first_radius,
+        second_center, second_radius, color)
+end
+
+"""Create the filled directional difference of the first circle minus the second."""
+function create_new_lune(state_ptr::Ptr{Cvoid}, first_center, first_radius::Real,
+    second_center, second_radius::Real; color=BridgeColor(0, 0, 0, 0))
+    _create_circle_region(1, state_ptr, first_center, first_radius,
+        second_center, second_radius, color)
+end
+
 """Create one triangle from keyword vertex coordinates."""
 function create_new_triangle(state_ptr::Ptr{Cvoid};
     x1::Real=0f0, y1::Real=0f0, z1::Real=0f0,

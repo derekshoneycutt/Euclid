@@ -504,7 +504,11 @@ UI and cache preparation use explicit ordered stages around the fixed-step updat
 1. Begin Raylib drawing over committed state and fixed frame-local preparation records.
 
 Shape preparation reads settled `Shape_World` components and writes only its derived
-shape draw cache.
+shape draw cache. Lens and Lune state remains analytic as two centers, two radii, and
+an intersection or directional difference operation. The frame-local cache samples the
+two boundary arcs and triangulates the resulting simple polygon; v1 construction accepts
+only proper two-intersection overlaps, excluding tangent, disjoint, coincident, and
+contained-circle topologies.
 Dynview preparation reads immutable snapshots and writes only its compile and layout
 caches. The tasks may run concurrently because their ownership does not overlap.
 Display-only layout-dependent interaction consumes the caches after the fence joins;

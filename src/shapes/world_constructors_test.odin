@@ -65,6 +65,41 @@ shapes_test_world_creates_arc_variants :: proc(t: ^testing.T) {
     testing.expect_value(t, world.arcs.count, u16(2))
 }
 
+// Verify Lens and directional Lune constructors publish one shared region topology.
+@(test)
+shapes_test_world_creates_circle_region_variants :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    input := Circle_Region_Input{first_center = {0, 0, 0},
+        second_center = {1, 0, 0}, first_radius = 1, second_radius = 1,
+        style = world_shape_test_style()}
+    lens, lens_status := world_create_lens(&world, input)
+    lune, lune_status := world_create_lune(&world, input)
+    testing.expect_value(t, lens_status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, lune_status, shapemodel.Shape_World_Status.Ok)
+    lens_geometry, lens_found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, lens.shape)
+    lune_geometry, lune_found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, lune.shape)
+    testing.expect(t, lens_found && lune_found)
+    testing.expect_value(t, lens_geometry.payload.circle_region.value.operation,
+        shapemodel.Shape_Circle_Region_Operation.Intersection)
+    testing.expect_value(t, lune_geometry.payload.circle_region.value.operation,
+        shapemodel.Shape_Circle_Region_Operation.Difference)
+    testing.expect(t, lens.first_center != lens.second_center)
+}
+
+// Verify unsupported circle topology is rejected without partial publication.
+@(test)
+shapes_test_world_rejects_nonproper_circle_region :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    _, status := world_create_lens(&world, {first_center = {0, 0, 0},
+        second_center = {3, 0, 0}, first_radius = 1, second_radius = 1,
+        style = world_shape_test_style()})
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Invalid_Argument)
+    testing.expect_value(t, world.registry.entity_count, u32(0))
+    testing.expect_value(t, world.transforms.count, u16(0))
+}
+
 // Verify trochoid curve and guide constructors publish independent analytic hosts.
 @(test)
 shapes_test_world_creates_trochoid_and_guide :: proc(t: ^testing.T) {

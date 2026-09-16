@@ -15,6 +15,13 @@ Bridge_Arc_Geometry :: struct {
     sweep_theta: f32,
 }
 
+// Group one two-circle region operation and its radii for bridge construction.
+Bridge_Circle_Region_Geometry :: struct {
+    operation: i32,
+    first_radius: f32,
+    second_radius: f32,
+}
+
 // Group one complete mutable trochoid description for bridge operations.
 Bridge_Trochoid_Geometry :: struct {
     mode: i32,
@@ -89,6 +96,8 @@ Shapes_Point_Type :: enum {
     Line,
     Circle,
     Filled_Circle,
+    Lens,
+    Lune,
     Curve,
     Triangle,
     Square,

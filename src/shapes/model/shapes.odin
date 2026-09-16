@@ -66,6 +66,19 @@ Shape_Arc :: struct {
     previous_sweep_theta: f32,
 }
 
+// Select the Boolean operation represented by one bounded two-circle region.
+Shape_Circle_Region_Operation :: enum u8 {
+    Intersection,
+    Difference,
+}
+
+// Hold the immutable operation and radii for one two-circle filled region.
+Shape_Circle_Region :: struct {
+    operation: Shape_Circle_Region_Operation,
+    first_radius: f32,
+    second_radius: f32,
+}
+
 // Select whether the rolling circle travels outside or inside the fixed circle.
 Shape_Trochoid_Mode :: enum u8 {
     External,
@@ -157,6 +170,7 @@ Shape_Geometry_Kind :: enum u8 {
     Line,
     Arc,
     Filled_Arc,
+    Circle_Region,
     Trochoid,
     Trochoid_Tool,
     Cycloid,
@@ -174,6 +188,13 @@ Shape_Line_Geometry :: struct {
 
 // Mark one host whose mutable parameters live in the arc component set.
 Shape_Arc_Geometry :: struct {}
+
+// Name both circle-center transforms required by one filled region.
+Shape_Circle_Region_Geometry :: struct {
+    first_center: Shape_Entity,
+    second_center: Shape_Entity,
+    value: Shape_Circle_Region,
+}
 
 // Mark one host whose mutable parameters live in the trochoid component set.
 Shape_Trochoid_Geometry :: struct {}
@@ -218,6 +239,7 @@ Shape_Geometry :: struct {
     payload: struct #raw_union {
         line: Shape_Line_Geometry,
         arc: Shape_Arc_Geometry,
+        circle_region: Shape_Circle_Region_Geometry,
         trochoid: Shape_Trochoid_Geometry,
         trochoid_tool: Shape_Trochoid_Tool_Geometry,
         cycloid: Shape_Cycloid_Geometry,
@@ -383,6 +405,13 @@ Shape_Arc_Handle :: struct {
     shape: Shape_Entity,
 }
 
+// Identify one region host and its two circle-center transforms.
+Shape_Circle_Region_Handle :: struct {
+    shape: Shape_Entity,
+    first_center: Shape_Entity,
+    second_center: Shape_Entity,
+}
+
 // Identify one trochoid host whose transform is its fixed center.
 Shape_Trochoid_Handle :: struct {
     shape: Shape_Entity,
@@ -484,6 +513,13 @@ shape_arc_is_valid :: proc(arc: Shape_Arc) -> bool {
     return arc.radius >= 0 && !math.is_nan(arc.radius) && !math.is_inf(arc.radius) &&
         !math.is_nan(arc.start_theta) && !math.is_inf(arc.start_theta) &&
         !math.is_nan(arc.sweep_theta) && !math.is_inf(arc.sweep_theta)
+}
+
+// Validate one complete two-circle region value before publication or mutation.
+shape_circle_region_is_valid :: proc(region: Shape_Circle_Region) -> bool {
+    return region.first_radius > 0 && region.second_radius > 0 &&
+        shape_scalar_is_finite(region.first_radius) &&
+        shape_scalar_is_finite(region.second_radius)
 }
 
 // Return whether one scalar is finite.

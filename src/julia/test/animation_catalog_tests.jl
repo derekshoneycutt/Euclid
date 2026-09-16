@@ -62,14 +62,14 @@ end
 end
 
 @testset "complete production catalog contract" begin
-    @test length(AnimationDescriptors) == 135
+    @test length(AnimationDescriptors) == 138
     @test count(descriptor -> descriptor.kind == TerminalNode,
         AnimationDescriptors) == 1
     roots = filter(descriptor -> descriptor.parent_id === nothing,
         AnimationDescriptors)
     @test first(roots).kind == TerminalNode
     @test first(roots).display_name == "Terminal"
-    @test getproperty.(roots, :sibling_order) == collect(0:5)
+    @test getproperty.(roots, :sibling_order) == collect(0:6)
     curves_id = UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6")
     curves = sort(filter(descriptor -> descriptor.parent_id == curves_id,
         AnimationDescriptors); by=descriptor -> descriptor.sibling_order)
@@ -80,10 +80,15 @@ end
                 "11⁄2-Hypocycloid", "Nephroid", "3-Dimple Epitrochoid",
                 "5-Point Hypotrochoid"]
             @test getproperty.(curves, :sibling_order) == collect(0:15)
+    logic_id = UUID("2905c158-007b-4412-be60-20a27decc0b2")
+    logic = sort(filter(descriptor -> descriptor.parent_id == logic_id,
+        AnimationDescriptors); by=descriptor -> descriptor.sibling_order)
+    @test getproperty.(logic, :display_name) == ["And", "Not"]
+    @test getproperty.(logic, :sibling_order) == collect(0:1)
     path_backed = filter(
         descriptor -> descriptor.implementation_path !== nothing,
         AnimationDescriptors)
-    @test length(path_backed) == 134
+    @test length(path_backed) == 137
     generation = create_euclid_runtime_generation(ProductionContentRoot)
     for descriptor in path_backed
         implementation = load_generation_animation(generation, descriptor.id)

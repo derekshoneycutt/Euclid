@@ -187,6 +187,38 @@ world_render_triangulates_ordered_polygon_references :: proc(t: ^testing.T) {
     }
 }
 
+// Verify Lens and Lune analytic boundaries compile into triangulated polygon packets.
+@(test)
+world_render_triangulates_circle_regions :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    input := Circle_Region_Input{first_center = {0, 0, 0},
+        second_center = {1, 0, 0}, first_radius = 1, second_radius = 1}
+    lens, lens_status := world_create_lens(&world, input)
+    lune, lune_status := world_create_lune(&world, input)
+    testing.expect_value(t, lens_status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, lune_status, shapemodel.Shape_World_Status.Ok)
+    world_render_test_show(&world, lens.shape)
+    world_render_test_show(&world, lune.shape)
+
+    build_shape_world_draw_cache(&world, 1)
+
+    testing.expect_value(t, world.draw_cache.item_count, 2)
+    testing.expect_value(t, world.draw_cache.polygon_vertex_count,
+        CIRCLE_REGION_VERTEX_COUNT * 2)
+    testing.expect(t, world.draw_cache.polygon_triangle_count > 0)
+    lens_found := false
+    lune_found := false
+    for item in world.draw_cache.items[:world.draw_cache.item_count] {
+        #partial switch typed in item {
+        case Shapes_Polygon_Draw:
+            lens_found = lens_found || typed.kind == .Lens
+            lune_found = lune_found || typed.kind == .Lune
+        case:
+        }
+    }
+    testing.expect(t, lens_found && lune_found)
+}
+
 // Verify Unicode label metadata resolves immutable source while the packet is live.
 @(test)
 world_render_resolves_unicode_label_source_metadata :: proc(t: ^testing.T) {

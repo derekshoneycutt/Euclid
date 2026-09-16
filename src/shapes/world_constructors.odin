@@ -2,6 +2,8 @@ package shapes
 
 import shapemodel "model"
 
+import "core:math"
+
 import rl "vendor:raylib"
 
 // Supply presentation values shared by canonical shape constructors.
@@ -14,6 +16,14 @@ Shape_Style :: struct {
 Arc_Input :: struct {
     center: Vector3,
     radius, start_theta, sweep_theta: f32,
+    style: Shape_Style,
+}
+
+// Supply two circles and the Boolean operation for one filled region.
+Circle_Region_Input :: struct {
+    first_center, second_center: Vector3,
+    first_radius, second_radius: f32,
+    operation: shapemodel.Shape_Circle_Region_Operation,
     style: Shape_Style,
 }
 
@@ -256,6 +266,69 @@ world_create_filled_arc :: proc(
     world: ^shapemodel.Shape_World,
     input: Arc_Input) -> (shapemodel.Shape_Arc_Handle, shapemodel.Shape_World_Status) {
     return world_create_arc_kind(world, input, .Filled_Arc)
+}
+
+// Return whether two coplanar circles have exactly two distinct intersections.
+world_circle_region_input_is_valid :: proc(input: Circle_Region_Input) -> bool {
+    delta := input.second_center - input.first_center
+    distance_squared := delta.x * delta.x + delta.y * delta.y
+    distance := f32(math.sqrt(distance_squared))
+    radius_delta := math.abs(input.first_radius - input.second_radius)
+    return shapemodel.shape_circle_region_is_valid({operation = input.operation,
+        first_radius = input.first_radius, second_radius = input.second_radius}) &&
+        shapemodel.shape_scalar_is_finite(input.first_center.x) &&
+        shapemodel.shape_scalar_is_finite(input.first_center.y) &&
+        shapemodel.shape_scalar_is_finite(input.first_center.z) &&
+        shapemodel.shape_scalar_is_finite(input.second_center.x) &&
+        shapemodel.shape_scalar_is_finite(input.second_center.y) &&
+        shapemodel.shape_scalar_is_finite(input.second_center.z) &&
+        input.first_center.z == input.second_center.z &&
+        distance > radius_delta && distance < input.first_radius + input.second_radius
+}
+
+// Create one analytic two-circle filled region after complete capacity preflight.
+world_create_circle_region :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Circle_Region_Input) -> (
+    shapemodel.Shape_Circle_Region_Handle, shapemodel.Shape_World_Status) {
+    if world == nil || !world_circle_region_input_is_valid(input) {
+        return {}, .Invalid_Argument
+    }
+    needs := shapemodel.Shape_Construction_Needs{entities = 3, transforms = 2,
+        render_styles = 1, geometries = 1}
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_entity(world)
+    first := world_shape_append_transform(world, input.first_center)
+    second := world_shape_append_transform(world, input.second_center)
+    value := shapemodel.Shape_Circle_Region{operation = input.operation,
+        first_radius = input.first_radius, second_radius = input.second_radius}
+    geometry := shapemodel.Shape_Geometry{kind = .Circle_Region}
+    geometry.payload.circle_region = {
+        first_center = first, second_center = second, value = value}
+    world_shape_publish_host(world, shape, input.style, geometry)
+    return {shape = shape, first_center = first, second_center = second}, .Ok
+}
+
+// Create the intersection of two properly overlapping circles.
+world_create_lens :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Circle_Region_Input) -> (
+    shapemodel.Shape_Circle_Region_Handle, shapemodel.Shape_World_Status) {
+    value := input
+    value.operation = .Intersection
+    return world_create_circle_region(world, value)
+}
+
+// Create the directional difference of the first circle minus the second.
+world_create_lune :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Circle_Region_Input) -> (
+    shapemodel.Shape_Circle_Region_Handle, shapemodel.Shape_World_Status) {
+    value := input
+    value.operation = .Difference
+    return world_create_circle_region(world, value)
 }
 
 // Create one outlined trochoid whose host transform is its fixed center.

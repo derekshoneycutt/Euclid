@@ -34,8 +34,9 @@ BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG :: (1 << 5)
 BRIDGE_FEATURE_MIME_PRESENTATION :: (1 << 6)
 BRIDGE_FEATURE_TROCHOIDS :: (1 << 7)
 BRIDGE_FEATURE_CYCLOIDS :: (1 << 8)
+BRIDGE_FEATURE_CIRCLE_REGIONS :: (1 << 9)
 
-BRIDGE_VERSION :: 9
+BRIDGE_VERSION :: 10
 BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
     BRIDGE_FEATURE_ANIMATION_STABLE_ID |
@@ -43,7 +44,8 @@ BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG |
     BRIDGE_FEATURE_MIME_PRESENTATION |
     BRIDGE_FEATURE_TROCHOIDS |
-    BRIDGE_FEATURE_CYCLOIDS
+    BRIDGE_FEATURE_CYCLOIDS |
+    BRIDGE_FEATURE_CIRCLE_REGIONS
 
 BRIDGE_STATUS_OK :: 0
 BRIDGE_STATUS_INVALID_INDEX :: 1
@@ -109,6 +111,14 @@ Bridge_Shape_Line_Result :: struct {
 Bridge_Shape_Arc_Result :: struct {
     status: i32,
     shape: u64,
+}
+
+// Return one circle-region host and both direct center identities.
+Bridge_Shape_Circle_Region_Result :: struct {
+    status: i32,
+    shape: u64,
+    first_center: u64,
+    second_center: u64,
 }
 
 // Return one arc host and its complete mutable geometry.

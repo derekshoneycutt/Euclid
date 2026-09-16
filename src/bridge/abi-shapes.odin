@@ -180,6 +180,30 @@ shape_create_filled_arc :: proc "c" (
     }
 }
 
+// Create one two-circle filled region and return its direct packed identities.
+@(export)
+shape_create_circle_region :: proc "c" (
+    state: ^core.Euclid_General_State,
+    first_center, second_center: rl.Vector3,
+    geometry: shapemodel.Bridge_Circle_Region_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Circle_Region_Result {
+    context = state.saved_context
+    if geometry.operation < 0 || geometry.operation >
+        i32(shapemodel.Shape_Circle_Region_Operation.Difference) {
+        return {status = BRIDGE_STATUS_INVALID_ARGUMENT}
+    }
+    input := shapes.Circle_Region_Input{first_center = first_center,
+        second_center = second_center, first_radius = geometry.first_radius,
+        second_radius = geometry.second_radius,
+        operation = shapemodel.Shape_Circle_Region_Operation(geometry.operation),
+        style = bridge_shape_style(style)}
+    handle, status := shapes.world_create_circle_region(state.shape_world, input)
+    return {bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.first_center),
+        shapemodel.shape_entity_pack(handle.second_center)}
+}
+
 // Convert one bridge trochoid value into validated canonical state.
 bridge_trochoid_value :: proc(
     geometry: shapemodel.Bridge_Trochoid_Geometry) -> shapemodel.Shape_Trochoid {

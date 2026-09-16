@@ -76,6 +76,30 @@ bridge_shape_abi_queries_arc_geometry_snapshot :: proc(t: ^testing.T) {
         shapemodel.Bridge_Arc_Geometry{2, 1, 3})
 }
 
+// Verify the generic ABI preserves semantic operation and direct center identities.
+@(test)
+bridge_shape_abi_creates_circle_region :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    result := shape_create_circle_region(state, {0, 0, 0}, {1, 0, 0},
+        {i32(shapemodel.Shape_Circle_Region_Operation.Difference), 1, 1},
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t, result.status, i32(BRIDGE_STATUS_OK))
+    shape := shapemodel.shape_entity_unpack(result.shape)
+    first := shapemodel.shape_entity_unpack(result.first_center)
+    second := shapemodel.shape_entity_unpack(result.second_center)
+    geometry, found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, shape)
+    testing.expect(t, found)
+    testing.expect_value(t, geometry.payload.circle_region.value.operation,
+        shapemodel.Shape_Circle_Region_Operation.Difference)
+    testing.expect(t, shapemodel.shape_registry_resolves(&world.registry, first))
+    testing.expect(t, shapemodel.shape_registry_resolves(&world.registry, second))
+    testing.expect_value(t, shape_get_view(state, result.shape).kind,
+        i32(shapemodel.Shape_Geometry_Kind.Circle_Region))
+}
+
 // Verify stale packed arc identities cannot query a reused animation slot.
 @(test)
 bridge_shape_abi_rejects_stale_arc_generation :: proc(t: ^testing.T) {

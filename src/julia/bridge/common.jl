@@ -74,6 +74,13 @@ struct BridgeArcGeometry
     sweep_theta::Cfloat
 end
 
+"""Two-circle region operation and radii matching the native ABI layout."""
+struct BridgeCircleRegionGeometry
+    operation::Int32
+    first_radius::Cfloat
+    second_radius::Cfloat
+end
+
 """Complete mutable trochoid description matching the native ABI layout."""
 struct BridgeTrochoidGeometry
     mode::Int32
@@ -217,6 +224,14 @@ end
 
 const BridgeShapeFilledCircle = BridgeShapeCircle
 
+"""Result of constructing one circle region and its direct centers."""
+struct BridgeShapeCircleRegion
+    status::Int32
+    host_id::UInt64
+    first_center_id::UInt64
+    second_center_id::UInt64
+end
+
 """Pointer-free result of querying one arc host's mutable geometry."""
 struct BridgeShapeArcQueryResult
     status::Int32
@@ -292,12 +307,13 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(9)
+const BRIDGE_VERSION = Int32(10)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)
 const BRIDGE_FEATURE_TROCHOIDS = Int32(1 << 7)
 const BRIDGE_FEATURE_CYCLOIDS = Int32(1 << 8)
+const BRIDGE_FEATURE_CIRCLE_REGIONS = Int32(1 << 9)
 
 const TROCHOID_EXTERNAL = Int32(0)
 const TROCHOID_INTERNAL = Int32(1)
