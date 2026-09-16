@@ -247,17 +247,9 @@ struct AnimationState
     label_cprime_id::UInt64
     label_dprime_id::UInt64
     marker_abchost_id::UInt64
-    marker_abcstart_id::UInt64
-    marker_abcend_id::UInt64
     marker_aprime_bprime_cprime_host_id::UInt64
-    marker_aprime_bprime_cprime_start_id::UInt64
-    marker_aprime_bprime_cprime_end_id::UInt64
     marker_cbdhost_id::UInt64
-    marker_cbdstart_id::UInt64
-    marker_cbdend_id::UInt64
     marker_cprime_bprime_dprime_host_id::UInt64
-    marker_cprime_bprime_dprime_start_id::UInt64
-    marker_cprime_bprime_dprime_end_id::UInt64
     phase::Float32
     timer::Float32
 end
@@ -366,14 +358,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.edge_cprime_bprime_joint1_id, state.edge_cprime_bprime_joint2_id,
         state.label_aid, state.label_bid, state.label_cid, state.label_did,
         state.label_aprime_id, state.label_bprime_id, state.label_cprime_id,
-        state.label_dprime_id, state.marker_abchost_id, state.marker_abcstart_id,
-        state.marker_abcend_id, state.marker_aprime_bprime_cprime_host_id,
-        state.marker_aprime_bprime_cprime_start_id,
-        state.marker_aprime_bprime_cprime_end_id, state.marker_cbdhost_id,
-        state.marker_cbdstart_id, state.marker_cbdend_id,
+        state.label_dprime_id, state.marker_abchost_id,
+        state.marker_aprime_bprime_cprime_host_id, state.marker_cbdhost_id,
         state.marker_cprime_bprime_dprime_host_id,
-        state.marker_cprime_bprime_dprime_start_id,
-        state.marker_cprime_bprime_dprime_end_id,
         phase, timer)
 end
 
@@ -442,13 +429,9 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     label_d_prime_id = state.label_dprime_id
 
     marker_a_b_c_host_id = state.marker_abchost_id
-    marker_a_b_c_end_id = state.marker_abcend_id
     marker_a_prime_b_prime_c_prime_host_id = state.marker_aprime_bprime_cprime_host_id
-    marker_a_prime_b_prime_c_prime_end_id = state.marker_aprime_bprime_cprime_end_id
     marker_c_b_d_host_id = state.marker_cbdhost_id
-    marker_c_b_d_end_id = state.marker_cbdend_id
     marker_c_prime_b_prime_d_prime_host_id = state.marker_cprime_bprime_dprime_host_id
-    marker_c_prime_b_prime_d_prime_end_id = state.marker_cprime_bprime_dprime_end_id
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [edge_a_c_host_id, edge_c_d_host_id, edge_d_a_host_id, edge_c_b_host_id,
@@ -472,12 +455,14 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     OdinJuliaBridge.set_point_position(
         state_ptr, edge_c_prime_b_prime_joint2_id, EdgeCPrimeBPrimeStart)
 
-    OdinJuliaBridge.set_point_position(state_ptr, marker_a_b_c_end_id, MarkerABCStart)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker_a_prime_b_prime_c_prime_end_id, MarkerAPrimeBPrimeCPrimeStart)
-    OdinJuliaBridge.set_point_position(state_ptr, marker_c_b_d_end_id, MarkerCBDStart)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker_c_prime_b_prime_d_prime_end_id, MarkerCPrimeBPrimeDPrimeStart)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_a_b_c_host_id, MarkerRadius, ThetaBBA, 0f0)
+    OdinJuliaBridge.set_arc_geometry(state_ptr,
+        marker_a_prime_b_prime_c_prime_host_id, MarkerRadius, ThetaBPrimeBA, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_c_b_d_host_id, MarkerRadius, ThetaBBC, 0f0)
+    OdinJuliaBridge.set_arc_geometry(state_ptr,
+        marker_c_prime_b_prime_d_prime_host_id, MarkerRadius, ThetaBPrimeBC, 0f0)
 
 
     OdinJuliaBridge.hide_pen(state_ptr)
@@ -577,12 +562,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         label_a.index, label_b.index, label_c.index, label_d.index,
         label_a_prime.index, label_b_prime.index, label_c_prime.index,
         label_d_prime.index,
-        marker_a_b_c.host_id, marker_a_b_c.start_id, marker_a_b_c.end_id,
-        marker_a_prime_b_prime_c_prime.host_id,
-        marker_a_prime_b_prime_c_prime.start_id, marker_a_prime_b_prime_c_prime.end_id,
-        marker_c_b_d.host_id, marker_c_b_d.start_id, marker_c_b_d.end_id,
-        marker_c_prime_b_prime_d_prime.host_id, marker_c_prime_b_prime_d_prime.start_id,
-        marker_c_prime_b_prime_d_prime.end_id,
+        marker_a_b_c.host_id, marker_a_prime_b_prime_c_prime.host_id,
+        marker_c_b_d.host_id, marker_c_prime_b_prime_d_prime.host_id,
         0f0, 0f0)
     reset_cycle_state(state_ptr, state)
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
@@ -632,17 +613,9 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     label_d_prime_id = state.label_dprime_id
 
     marker_a_b_c_host_id = state.marker_abchost_id
-    marker_a_b_c_start_id = state.marker_abcstart_id
-    marker_a_b_c_end_id = state.marker_abcend_id
     marker_a_prime_b_prime_c_prime_host_id = state.marker_aprime_bprime_cprime_host_id
-    marker_a_prime_b_prime_c_prime_start_id = state.marker_aprime_bprime_cprime_start_id
-    marker_a_prime_b_prime_c_prime_end_id = state.marker_aprime_bprime_cprime_end_id
     marker_c_b_d_host_id = state.marker_cbdhost_id
-    marker_c_b_d_start_id = state.marker_cbdstart_id
-    marker_c_b_d_end_id = state.marker_cbdend_id
     marker_c_prime_b_prime_d_prime_host_id = state.marker_cprime_bprime_dprime_host_id
-    marker_c_prime_b_prime_d_prime_start_id = state.marker_cprime_bprime_dprime_start_id
-    marker_c_prime_b_prime_d_prime_end_id = state.marker_cprime_bprime_dprime_end_id
 
     if edge_a_c_host_id < 0 || edge_c_d_host_id < 0 || edge_d_a_host_id < 0
         return
@@ -837,9 +810,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerABCStart, AngleABCTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerPaleColor,
-            marker_host_id=marker_a_b_c_host_id,
-            marker_start_id=marker_a_b_c_start_id,
-            marker_end_id=marker_a_b_c_end_id)
+            marker_host_id=marker_a_b_c_host_id)
         timer += dt
         if timer >= CompassSweepDuration
             phase = PhaseCompassArcABCToAPrimeBPrimeCPrime
@@ -861,9 +832,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerAPrimeBPrimeCPrimeStart, AngleAPrimeBPrimeCPrimeTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerPaleColor,
-            marker_host_id=marker_a_prime_b_prime_c_prime_host_id,
-            marker_start_id=marker_a_prime_b_prime_c_prime_start_id,
-            marker_end_id=marker_a_prime_b_prime_c_prime_end_id)
+            marker_host_id=marker_a_prime_b_prime_c_prime_host_id)
         timer += dt
         if timer >= CompassSweepDuration
             phase = PhaseCompassArcAPrimeBPrimeCPrimeToCBD
@@ -885,9 +854,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerCBDStart, AngleCBDTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerSteelColor,
-            marker_host_id=marker_c_b_d_host_id,
-            marker_start_id=marker_c_b_d_start_id,
-            marker_end_id=marker_c_b_d_end_id)
+            marker_host_id=marker_c_b_d_host_id)
         timer += dt
         if timer >= CompassSweepDuration
             phase = PhaseCompassArcCBDToCPrimeBPrimeDPrime
@@ -909,9 +876,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerCPrimeBPrimeDPrimeStart, AngleCPrimeBPrimeDPrimeTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerSteelColor,
-            marker_host_id=marker_c_prime_b_prime_d_prime_host_id,
-            marker_start_id=marker_c_prime_b_prime_d_prime_start_id,
-            marker_end_id=marker_c_prime_b_prime_d_prime_end_id)
+            marker_host_id=marker_c_prime_b_prime_d_prime_host_id)
         timer += dt
         if timer >= CompassSweepDuration
             phase = PhaseCompassRiseAfterMarkers

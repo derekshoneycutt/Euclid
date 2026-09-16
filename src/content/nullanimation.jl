@@ -29,8 +29,6 @@ struct AnimationState
     line2_point1::Int64
     line2_point2::Int64
     circle_host::Int64
-    circle_start::Int64
-    circle_end::Int64
     curr_rotation::Float32
     pen_direction::Float32
     pen_rotation::Float32
@@ -48,7 +46,7 @@ function with_line_motion(
     return AnimationState(
         state.line1_host, state.line1_point1, state.line1_point2,
         state.line2_host, state.line2_point1, state.line2_point2,
-        state.circle_host, state.circle_start, state.circle_end,
+        state.circle_host,
         state.curr_rotation, pen_direction, pen_rotation,
         draw_line_flag, state.draw_circle_flag)
 end
@@ -61,7 +59,7 @@ function with_circle_motion(
     return AnimationState(
         state.line1_host, state.line1_point1, state.line1_point2,
         state.line2_host, state.line2_point1, state.line2_point2,
-        state.circle_host, state.circle_start, state.circle_end,
+        state.circle_host,
         curr_rotation, state.pen_direction, state.pen_rotation,
         state.draw_line_flag, draw_circle_flag)
 end
@@ -93,13 +91,13 @@ function initialize(state_ptr::Ptr{Cvoid})
     line2 = OdinJuliaBridge.create_new_line(state_ptr,
         [0f0, 0f0, 0f0], [0f0, 0f0, 0f0], PenDrawColor2, 5f0)
     circle = OdinJuliaBridge.create_new_circle(state_ptr,
-        [0.5f0, 0.5f0, 0f0], CircleRadius, StartRotation, StartRotation,
+        [0.5f0, 0.5f0, 0f0], CircleRadius, StartRotation, 0f0,
         CompassDrawColor, 5f0)
 
     state = AnimationState(
         line1.host_id, line1.joint1_id, line1.joint2_id,
         line2.host_id, line2.joint1_id, line2.joint2_id,
-        circle.host_id, circle.start_id, circle.end_id,
+        circle.host_id,
         StartRotation, -1f0, Float32(use_rotation), 0f0, 0f0)
     OdinJuliaBridge.set_animation_value!(state_ptr, StateKey, state)
 end
@@ -213,26 +211,21 @@ function draw_circle(state_ptr::Ptr{Cvoid}, dt::Float32)
 
     draw_circle_flag = state.draw_circle_flag
     circle_host = state.circle_host
-    circle_start = state.circle_start
-    circle_end = state.circle_end
-
-    circle_host_desc = OdinJuliaBridge.get_point(state_ptr, circle_host)
 
     if abs(curr_rotation - StartRotation) < dt * π/2 && curr_rotation <= StartRotation
         draw_circle_flag = Float32((Integer(draw_circle_flag) + 1) % 2)
     end
 
     if draw_circle_flag > 0
-        OdinJuliaBridge.set_point_position(state_ptr, circle_end,
-            StartRotationPos[1], StartRotationPos[2], StartRotationPos[3])
-        OdinJuliaBridge.set_point_position(state_ptr, circle_start,
-            out_pos[1], out_pos[2], out_pos[3])
+        sweep_theta = Float32(mod(StartRotation - curr_rotation, 2π))
+        OdinJuliaBridge.set_arc_geometry(
+            state_ptr, circle_host, CircleRadius, curr_rotation, sweep_theta)
         OdinJuliaBridge.set_point_brush(state_ptr, circle_host, 5f0)
         OdinJuliaBridge.show_point(state_ptr, circle_host)
     else
         OdinJuliaBridge.hide_point(state_ptr, circle_host)
-        OdinJuliaBridge.set_point_position(state_ptr, circle_start,
-            StartRotationPos[1], StartRotationPos[2], StartRotationPos[3])
+        OdinJuliaBridge.set_arc_geometry(
+            state_ptr, circle_host, CircleRadius, StartRotation, 0f0)
     end
 
     OdinJuliaBridge.lock_compass_joint2(state_ptr, out_pos, sweep = false)

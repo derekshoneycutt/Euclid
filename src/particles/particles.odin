@@ -126,8 +126,10 @@ Polygon_Fill_Triangles :: struct {
 }
 
 Circle_Dust_Emission :: struct {
-    center, start, finish: Vector3,
-    offset: f32,
+    center: Vector3,
+    radius: f32,
+    start_theta: f32,
+    sweep_theta: f32,
     color: rl.Color,
 }
 
@@ -277,16 +279,16 @@ emit_shape_world_polygon_burst :: proc(
 //   Resolve and emit one world arc using its geometry kind's density model.
 emit_shape_world_arc_burst :: proc(
     ctx: Shape_World_Burst_Context,
-    geometry: shapemodel.Shape_Arc_Geometry,
-    offset: f32,
+    entity: shapemodel.Shape_Entity,
     filled: bool) {
-    center, center_ok := shape_world_burst_position(ctx.world, geometry.center)
-    start, start_ok := shape_world_burst_position(ctx.world, geometry.start)
-    finish, finish_ok := shape_world_burst_position(ctx.world, geometry.finish)
-    if !center_ok || !start_ok || !finish_ok {
+    center, center_ok := shape_world_burst_position(ctx.world, entity)
+    arc, arc_ok := shapemodel.shape_component_get(
+        &ctx.world.arcs, &ctx.world.registry, entity)
+    if !center_ok || !arc_ok {
         return
     }
-    emission := Circle_Dust_Emission{center, start, finish, offset, ctx.color}
+    emission := Circle_Dust_Emission{
+        center, arc.radius, arc.start_theta, arc.sweep_theta, ctx.color}
     if filled {
         emit_filled_circle_dust(ctx.particles, emission)
     } else {
@@ -298,8 +300,7 @@ emit_shape_world_arc_burst :: proc(
 emit_shape_world_geometry_burst :: proc(
     ctx: Shape_World_Burst_Context,
     entity: shapemodel.Shape_Entity,
-    geometry: shapemodel.Shape_Geometry,
-    offset: f32) {
+    geometry: shapemodel.Shape_Geometry) {
     switch geometry.kind {
     case .Point:
         position, found := shape_world_burst_position(ctx.world, entity)
@@ -313,11 +314,9 @@ emit_shape_world_geometry_burst :: proc(
             emit_line_dust(ctx.particles, first, second, ctx.color)
         }
     case .Arc:
-        emit_shape_world_arc_burst(ctx, geometry.payload.arc,
-            offset, false)
+        emit_shape_world_arc_burst(ctx, entity, false)
     case .Filled_Arc:
-        emit_shape_world_arc_burst(ctx, geometry.payload.arc,
-            offset, true)
+        emit_shape_world_arc_burst(ctx, entity, true)
     case .Polygon:
         emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
     case .Pen, .Compass:
@@ -353,7 +352,7 @@ emit_shape_world_hide_burst :: proc(
     }
     if kick_dust {kick_existing_dust(ps)}
     emit_shape_world_geometry_burst(
-        {ps, world, style^.color}, entity, geometry^, style^.offset)
+        {ps, world, style^.color}, entity, geometry^)
     return true
 }
 
@@ -381,7 +380,7 @@ emit_shape_world_clear_burst :: proc(
         geometry, found := shapemodel.shape_component_get(
             &world.geometries, &world.registry, entity)
         if found {
-            emit_shape_world_geometry_burst(ctx, entity, geometry^, style.offset)
+            emit_shape_world_geometry_burst(ctx, entity, geometry^)
         }
     }
     return true
@@ -995,30 +994,19 @@ filled_circle_dust_sample_count :: proc(
 
 //   Emit dust samples along a circular/arc sweep between start and finish points.
 emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
-    start_vec := emission.start - emission.center
-    end_vec := emission.finish - emission.center
-
-    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
-    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
-    if start_radius <= 0 && end_radius <= 0 {
+    if emission.radius <= 0 {
         return
     }
-
-    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
-    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + emission.offset
-
     sample_count := circle_dust_sample_count(
-        start_radius, end_radius, sweep_delta)
+        emission.radius, emission.radius, emission.sweep_theta)
     denom := f32(sample_count - 1)
     for s in 0..<sample_count {
         t := f32(s) / denom
-        theta := start_theta + sweep_delta * t
-        radius := math.lerp(start_radius, end_radius, t)
+        theta := emission.start_theta + emission.sweep_theta * t
 
         sample := emission.center
-        sample.x += f32(math.cos(theta)) * radius
-        sample.y += f32(math.sin(theta)) * radius
+        sample.x += f32(math.cos(theta)) * emission.radius
+        sample.y += f32(math.sin(theta)) * emission.radius
 
         spawn_dust_particle(ps, sample, emission.color)
     }
@@ -1026,25 +1014,16 @@ emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
 
 //   Emit uniformly distributed dust throughout one rendered circular sector.
 emit_filled_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
-    start_vec := emission.start - emission.center
-    end_vec := emission.finish - emission.center
-    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
-    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
-    if start_radius <= 0 && end_radius <= 0 {
+    if emission.radius <= 0 {
         return
     }
-
-    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
-    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + emission.offset
     sample_count := filled_circle_dust_sample_count(
-        start_radius, end_radius, sweep_delta)
+        emission.radius, emission.radius, emission.sweep_theta)
 
     for _ in 0..<sample_count {
         t := random_f32_range(ps, 0.0, 1.0)
-        theta := start_theta + sweep_delta * t
-        outer_radius := math.lerp(start_radius, end_radius, t)
-        radius := outer_radius * f32(math.sqrt(random_f32_range(ps, 0.0, 1.0)))
+        theta := emission.start_theta + emission.sweep_theta * t
+        radius := emission.radius * f32(math.sqrt(random_f32_range(ps, 0.0, 1.0)))
 
         sample := emission.center
         sample.x += f32(math.cos(theta)) * radius

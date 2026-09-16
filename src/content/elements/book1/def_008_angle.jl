@@ -62,8 +62,6 @@ end
 """Stable native handles for the angle marker owned by the animation."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one plane-angle animation generation."""
@@ -107,12 +105,13 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     line2_host_id = state.line2.host
     line2_joint2_id = state.line2.joint2
     marker_host_id = state.marker.host
-    marker_end_id = state.marker.finish
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [
         marker_host_id, line2_host_id, line1_host_id])
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker_end_id, MarkerStart[1], MarkerStart[2], MarkerStart[3])
+    marker_start_theta = Float32(atan(
+        MarkerStart[2] - JointPoint[2], MarkerStart[1] - JointPoint[1]))
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, MarkerRadius, marker_start_theta, 0f0)
 
     OdinJuliaBridge.set_point_position(
         state_ptr, line2_joint2_id, Line2Start[1], Line2Start[2], Line2Start[3])
@@ -151,7 +150,7 @@ function initialize(state_ptr::Ptr{Cvoid})
     state = AnimationState(
         LineIds(line1.host_id, line1.joint1_id, line1.joint2_id),
         LineIds(line2.host_id, line2.joint1_id, line2.joint2_id),
-        CircleIds(marker.host_id, marker.start_id, marker.end_id),
+        CircleIds(marker.host_id),
         PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
@@ -172,8 +171,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line2_joint1_id = state.line2.joint1
     line2_joint2_id = state.line2.joint2
     marker_host_id = state.marker.host
-    marker_start_id = state.marker.start
-    marker_end_id = state.marker.finish
 
     if line1_host_id < 0
         return
@@ -251,9 +248,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerStart, AngleTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker_host_id,
-            marker_start_id=marker_start_id,
-            marker_end_id=marker_end_id)
+            marker_host_id=marker_host_id)
 
         timer += dt
         if timer >= CompassDrawDuration

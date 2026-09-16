@@ -2,6 +2,7 @@ package shapes
 
 import shapemodel "model"
 
+import "core:math"
 import "core:math/linalg"
 
 
@@ -12,14 +13,26 @@ World_Draw_Source :: struct {
     active_child: int,
 }
 
-// Snapshot every live transform's current position for later interpolation.
-shape_world_update_previous_positions :: proc(world: ^shapemodel.Shape_World) {
+// Hold one interpolated arc center and its mutable geometry.
+World_Lerped_Arc :: struct {
+    center: Vector3,
+    arc: shapemodel.Shape_Arc,
+}
+
+// Snapshot every interpolated shape value before the next fixed-step mutation.
+shape_world_update_previous_values :: proc(world: ^shapemodel.Shape_World) {
     if world == nil {
         return
     }
     for index in 0..<world.transforms.count {
         world.transforms.values[index].previous_position =
             world.transforms.values[index].position
+    }
+    for index in 0..<world.arcs.count {
+        arc := &world.arcs.values[index]
+        arc.previous_radius = arc.radius
+        arc.previous_start_theta = arc.start_theta
+        arc.previous_sweep_theta = arc.sweep_theta
     }
 }
 
@@ -134,26 +147,23 @@ world_cache_push_line :: proc(
     }
 }
 
-// Resolve one arc's direct transform references and active orientation.
-world_arc_draw_points :: proc(
+// Resolve and interpolate one host's center and mutable arc parameters.
+world_lerped_arc :: proc(
     world: ^shapemodel.Shape_World,
-    geometry: shapemodel.Shape_Arc_Geometry,
-    active_child: int,
-    alpha: f32) -> ([3]Vector3, bool) {
-    points: [3]Vector3
-    center_ok: bool
-    start_ok: bool
-    finish_ok: bool
-    points[0], center_ok = shape_world_lerped_position(world, geometry.center, alpha)
-    points[1], start_ok = shape_world_lerped_position(world, geometry.start, alpha)
-    points[2], finish_ok = shape_world_lerped_position(world, geometry.finish, alpha)
-    if !center_ok || !start_ok || !finish_ok {
+    entity: shapemodel.Shape_Entity,
+    alpha: f32) -> (World_Lerped_Arc, bool) {
+    center, center_ok := shape_world_lerped_position(world, entity, alpha)
+    arc, arc_ok := shapemodel.shape_component_get(
+        &world.arcs, &world.registry, entity)
+    if !center_ok || !arc_ok {
         return {}, false
     }
-    if active_child > 1 {
-        points[1], points[2] = points[2], points[1]
+    interpolated := shapemodel.Shape_Arc{
+        radius = math.lerp(arc.previous_radius, arc.radius, alpha),
+        start_theta = math.lerp(arc.previous_start_theta, arc.start_theta, alpha),
+        sweep_theta = math.lerp(arc.previous_sweep_theta, arc.sweep_theta, alpha),
     }
-    return points, true
+    return {center, interpolated}, true
 }
 
 // Push one visible outlined or filled arc into the world packet.
@@ -163,8 +173,7 @@ world_cache_push_arc :: proc(
     geometry: shapemodel.Shape_Arc_Geometry,
     kind: shapemodel.Shape_Geometry_Kind,
     alpha: f32) {
-    points, found := world_arc_draw_points(
-        world, geometry, source.active_child, alpha)
+    lerped, found := world_lerped_arc(world, source.entity, alpha)
     if !found {
         return
     }
@@ -174,11 +183,13 @@ world_cache_push_arc :: proc(
     }
     if kind == .Arc {
         slot^ = Shapes_Circle_Draw{world_make_draw_base(source, .Circle),
-            points[0], points[1], points[2], source.style.offset}
+            lerped.center, lerped.arc.radius, lerped.arc.start_theta,
+            lerped.arc.sweep_theta}
     } else {
         slot^ = Shapes_Filled_Circle_Draw{
             world_make_draw_base(source, .Filled_Circle),
-            points[0], points[1], points[2], source.style.offset}
+            lerped.center, lerped.arc.radius, lerped.arc.start_theta,
+            lerped.arc.sweep_theta}
     }
 }
 

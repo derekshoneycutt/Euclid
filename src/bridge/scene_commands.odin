@@ -31,7 +31,7 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Shape_Color = validate_command_shape_style,
     .Set_Shape_Active_Color = validate_command_shape_style,
     .Set_Shape_Brush = validate_command_shape_style,
-    .Set_Shape_Offset = validate_command_shape_style,
+    .Set_Shape_Arc = validate_command_shape_arc,
     .Set_Shape_Visible = validate_command_shape_style,
     .Set_Shape_Active_Feature = validate_command_shape_active_feature,
     .Set_Tool_Position = validate_command_shape_transform,
@@ -54,7 +54,7 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Shape_Color = apply_set_shape_color,
     .Set_Shape_Active_Color = apply_set_shape_active_color,
     .Set_Shape_Brush = apply_set_shape_brush,
-    .Set_Shape_Offset = apply_set_shape_offset,
+    .Set_Shape_Arc = apply_set_shape_arc,
     .Set_Shape_Visible = apply_set_shape_visible,
     .Set_Shape_Active_Feature = apply_set_shape_active_feature,
     .Set_Tool_Position = apply_set_tool_position,
@@ -71,7 +71,7 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Shape_Color = .Point_Style_Committed,
     .Set_Shape_Active_Color = .Point_Style_Committed,
     .Set_Shape_Brush = .Point_Style_Committed,
-    .Set_Shape_Offset = .Point_Style_Committed,
+    .Set_Shape_Arc = .Arc_Geometry_Committed,
     .Set_Shape_Visible = .Point_Visibility_Committed,
     .Set_Shape_Active_Feature = .Point_Style_Committed,
     .Set_Tool_Position = .Point_Position_Committed,
@@ -100,6 +100,7 @@ capture_animation_query_snapshot :: proc(
     if world != nil {
         snapshot^.shapes.registry = world^.registry
         snapshot^.shapes.transforms = world^.transforms
+        snapshot^.shapes.arcs = world^.arcs
         snapshot^.shapes.render_styles = world^.render_styles
         snapshot^.shapes.active_features = world^.active_features
         snapshot^.shapes.geometries = world^.geometries
@@ -228,6 +229,15 @@ validate_command_shape_style :: proc(
         &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
 }
 
+// Validate one complete arc mutation against host membership and value rules.
+validate_command_shape_arc :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    return found && shapemodel.shape_component_contains(
+        &state^.shape_world^.arcs, &state^.shape_world^.registry, entity) &&
+        shapemodel.shape_arc_is_valid(command^.arc)
+}
+
 // Validate one packed command target that requires an active-feature component.
 validate_command_shape_active_feature :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
@@ -318,10 +328,14 @@ apply_set_shape_brush :: proc(
     _ = shape_set_brush_size(state, command^.entity, command^.scalar)
 }
 
-// Apply one validated packed-entity offset mutation.
-apply_set_shape_offset :: proc(
+// Apply one validated complete arc mutation atomically.
+apply_set_shape_arc :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    _ = shape_set_offset(state, command^.entity, command^.scalar)
+    _ = shape_set_arc(state, command^.entity, {
+        radius = command^.arc.radius,
+        start_theta = command^.arc.start_theta,
+        sweep_theta = command^.arc.sweep_theta,
+    })
 }
 
 // Apply one validated packed-entity visibility mutation.

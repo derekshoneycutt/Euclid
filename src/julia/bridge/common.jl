@@ -71,7 +71,7 @@ Mirrors the Odin `Bridge_Arc_Geometry` ABI struct field-for-field.
 struct BridgeArcGeometry
     radius::Cfloat
     start_theta::Cfloat
-    end_theta::Cfloat
+    sweep_theta::Cfloat
 end
 
 """
@@ -143,7 +143,6 @@ struct BridgePointView
     active_color::BridgeColor
     has_active_color::UInt8
     brush_size::Cfloat
-    offset::Cfloat
     active_child::UInt16
 end
 
@@ -172,12 +171,16 @@ end
 struct BridgeShapeCircle
     status::Int32
     host_id::UInt64
-    center_id::UInt64
-    start_id::UInt64
-    end_id::UInt64
 end
 
 const BridgeShapeFilledCircle = BridgeShapeCircle
+
+"""Pointer-free result of querying one arc host's mutable geometry."""
+struct BridgeShapeArcQueryResult
+    status::Int32
+    host_id::UInt64
+    arc::BridgeArcGeometry
+end
 
 struct BridgeShapeTriangle
     status::Int32
@@ -217,7 +220,7 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(6)
+const BRIDGE_VERSION = Int32(7)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)

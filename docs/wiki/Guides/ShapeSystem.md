@@ -81,8 +81,9 @@ inline pools, one ordered constraint store, and the derived draw cache.
 | --- | --- | --- |
 | `registry` | Live entity slots and generations | Append-only slot order |
 | `transforms` | Current and previous world positions | Entity construction order |
-| `render_styles` | Color, brush, offset, visibility | Entity construction order |
-| `active_features` | Selected tool or arc subfeature | Entity construction order |
+| `render_styles` | Color, brush, visibility | Entity construction order |
+| `active_features` | Selected tool subfeature | Entity construction order |
+| `arcs` | Current and previous radius, start angle, and signed sweep | Entity construction order |
 | `geometries` | Kind-tagged direct entity references | Immutable after construction |
 | `labels` | MIME and source-span descriptors | Immutable after construction |
 | `vertex_references` | Variable-arity polygon topology | Caller-supplied vertex order |
@@ -123,7 +124,7 @@ references separate transform entities directly:
 | --- | --- |
 | Point | Host entity also owns its transform |
 | Line | First and second transforms |
-| Arc or filled arc | Center, start, and finish transforms |
+| Arc or filled arc | Host transform is the center; mutable arc component stores radius, start angle, and signed sweep |
 | Polygon | Offset and count into ordered entity references |
 | Pen | Two joint transforms |
 | Compass | Two joint transforms and one pivot transform |
@@ -131,6 +132,11 @@ references separate transform entities directly:
 Typed handles such as `Shape_Line_Handle` and `Shape_Compass_Handle` group the host,
 transform entities, and tool constraint indices for callers. They do not introduce a
 second ownership graph.
+
+An arc is one host entity, not an endpoint topology. Positive sweeps increase theta,
+negative sweeps decrease theta, zero is empty, and positive or negative `2pi` is an
+explicit full turn. Fixed-step snapshots preserve both current and previous arc values
+so rendering interpolates center, radius, start angle, and signed sweep together.
 
 ### Labels
 
@@ -178,6 +184,7 @@ now a packed `Shape_Entity`, not a legacy point-array index.
 | Status | `i32` | `Int32` |
 | Constructor result | Status plus packed handles | Isomorphic `BridgeShape*` struct |
 | Entity query | `Bridge_Shape_View` | `BridgePointView` |
+| Arc query | `Bridge_Shape_Arc_Query_Result` | `BridgeShapeArcQueryResult` |
 | Label query | Caller-owned byte destination | Copied Julia `String` or `nothing` |
 
 ABI structs must remain field-for-field compatible in order, width, and meaning. A field
@@ -190,8 +197,8 @@ wrappers, tests, and bridge-version review.
 | Family | Native exports | Contract |
 | --- | --- | --- |
 | Construction | `shape_create_point`, `shape_create_label`, line, arc, and polygon variants | Return status-bearing packed handle groups |
-| Query | `shape_get_view`, `shape_copy_label_source` | Return pointer-free projections or copy into caller storage |
-| Mutation | Position, visibility, color, active color, brush, offset, active feature | Resolve required component or capture a scene command |
+| Query | `shape_get_view`, `shape_get_arc`, `shape_copy_label_source` | Return pointer-free projections or copy into caller storage |
+| Mutation | Position, visibility, color, active color, brush, complete arc geometry, active feature | Resolve required component or capture a scene command |
 | Constraints | Floor, snap, distance, angle, center-pivot, solve | Validate direct packed transform targets |
 | Tools | Pen and compass visibility, active feature, motion, lock, position query | Address permanent baseline handles and constraints |
 

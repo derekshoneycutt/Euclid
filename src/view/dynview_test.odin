@@ -469,39 +469,6 @@ animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(
         "stale_sequence")
 }
 
-// Verify canonical shape style is deferred until the batch commits.
-@(test)
-scene_command_batch_defers_shape_style_until_commit :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State, context.allocator)
-    defer free(state)
-    interface := new(bridgemodel.Euclid_Julia_Interface, context.allocator)
-    defer free(interface)
-    animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
-    defer free(animation)
-    world := new(shapemodel.Shape_World, context.allocator)
-    defer free(world)
-    state^.julia_interface = interface
-    state^.julia_interface^.current_animation = animation
-    state^.shape_world = world
-    entity := scene_command_test_entity(world, {})
-    style, found := shapemodel.shape_component_get_mut(
-        &world^.render_styles, &world^.registry, entity)
-    testing.expect(t, found)
-    style^.offset = 1
-    batch: app_bridge.Scene_Command_Batch
-
-    app_bridge.begin_scene_command_batch(state, &batch)
-    command, captured := app_bridge.capture_shape_command(
-        state, .Set_Shape_Offset, shapemodel.shape_entity_pack(entity))
-    command^.scalar = 2
-    testing.expect(t, captured)
-    testing.expect_value(t, style^.offset, f32(1))
-    app_bridge.end_scene_command_batch(state)
-
-    testing.expect(t, app_bridge.commit_scene_command_batch(state, &batch))
-    testing.expect_value(t, style^.offset, f32(2))
-}
-
 // Verify an invalid packed tool lock rejects the batch atomically.
 @(test)
 scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(

@@ -6,6 +6,7 @@ import rl "vendor:raylib"
 
 import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
+import evidence_trace "../evidence/trace"
 
 import "core:testing"
 
@@ -47,6 +48,78 @@ bridge_shape_abi_round_trips_packed_line_handles :: proc(t: ^testing.T) {
     testing.expect(t, found)
     testing.expect_value(t, geometry.payload.line.first, first)
     testing.expect_value(t, geometry.payload.line.second, second)
+}
+
+// Verify arc queries return complete geometry and remain isolated by snapshots.
+@(test)
+bridge_shape_abi_queries_arc_geometry_snapshot :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    created := shape_create_arc(state, {1, 2, 3}, {4, 0.5, -1.5},
+        bridge_shape_test_input({}).style)
+    testing.expect_value(t, created.status, i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{4, 0.5, -1.5})
+    snapshot := new(bridgemodel.Animation_Query_Snapshot, context.allocator)
+    defer free(snapshot)
+    capture_animation_query_snapshot(state, snapshot)
+    state.animation_query_snapshot_target = snapshot
+    defer {state.animation_query_snapshot_target = nil}
+
+    testing.expect_value(t, shape_set_arc(state, created.shape, {2, 1, 3}),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{4, 0.5, -1.5})
+    state.animation_query_snapshot_target = nil
+    testing.expect_value(t, shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{2, 1, 3})
+}
+
+// Verify stale packed arc identities cannot query a reused animation slot.
+@(test)
+bridge_shape_abi_rejects_stale_arc_generation :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
+        &world), shapemodel.Shape_World_Status.Ok)
+    stale := shape_create_arc(state, {}, {1, 0, 1}, bridge_shape_test_input({}).style)
+    testing.expect_value(t, shapemodel.shape_world_rewind_animation(
+        &world), shapemodel.Shape_World_Status.Ok)
+    current := shape_create_arc(state, {}, {2, 0, 2}, bridge_shape_test_input({}).style)
+
+    testing.expect(t, stale.shape != current.shape)
+    testing.expect_value(t, shape_get_arc(state, stale.shape).status,
+        i32(BRIDGE_STATUS_NOT_FOUND))
+    testing.expect_value(t, shape_get_arc(state, current.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{2, 0, 2})
+}
+
+// Verify a captured complete arc mutation becomes visible only at batch commit.
+@(test)
+bridge_shape_arc_mutation_is_atomic_at_scene_commit :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    created := shape_create_arc(state, {}, {1, 0, 1}, bridge_shape_test_input({}).style)
+    batch: Scene_Command_Batch
+
+    begin_scene_command_batch(state, &batch)
+    testing.expect_value(t, shape_set_arc(state, created.shape, {3, -1, -2}),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{1, 0, 1})
+    end_scene_command_batch(state)
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    testing.expect_value(t, shape_get_arc(state, created.shape).arc,
+        shapemodel.Bridge_Arc_Geometry{3, -1, -2})
+    kind, _ := scene_command_evidence(&batch.commands[0])
+    testing.expect_value(t, kind, evidence_trace.Kind.Arc_Geometry_Committed)
 }
 
 // Verify null-terminated UTF-8 source is copied exactly and malformed bytes fail atomically.

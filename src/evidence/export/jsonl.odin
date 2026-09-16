@@ -48,6 +48,7 @@ EVENT_KIND_NAMES :: #sparse [trace.Kind]string{
     .Point_Visibility_Committed = "point.visibility_committed",
     .Constraint_Solve_Completed = "constraint.solve_completed",
     .Constraint_Solve_Failed = "constraint.solve_failed",
+    .Arc_Geometry_Committed = "arc.geometry_committed",
     .Pen_Joint_Committed = "pen.joint_committed",
     .Pen_Active_Committed = "pen.active_committed",
     .Pen_Visibility_Committed = "pen.visibility_committed",

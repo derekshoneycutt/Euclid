@@ -110,8 +110,6 @@ end
 """Stable native handles for one filled-circle marker."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one Axiom IV,5 animation generation."""
@@ -222,11 +220,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     ray_k_double_prime_joint2_id = state.ray_k_double_prime.joint2
 
     marker1_host_id = state.marker1.host
-    marker1_end_id = state.marker1.finish
     marker2_host_id = state.marker2.host
-    marker2_end_id = state.marker2.finish
     marker3_host_id = state.marker3.host
-    marker3_end_id = state.marker3.finish
 
     label_o_id = state.label_o
     label_h_id = state.label_h
@@ -257,9 +252,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     OdinJuliaBridge.set_point_position(
         state_ptr, ray_k_double_prime_joint2_id, RayKDoublePrimeStart)
 
-    OdinJuliaBridge.set_point_position(state_ptr, marker1_end_id, Marker1Start)
-    OdinJuliaBridge.set_point_position(state_ptr, marker2_end_id, Marker2Start)
-    OdinJuliaBridge.set_point_position(state_ptr, marker3_end_id, Marker3Start)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker1_host_id, MarkerRadius, 0f0, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker2_host_id, MarkerRadius, 0f0, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker3_host_id, MarkerRadius, 0f0, 0f0)
 
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, PhaseDescendToO, 0f0))
@@ -348,9 +346,8 @@ function initialize(state_ptr::Ptr{Cvoid})
             ray_h_double_prime.joint2_id),
         LineIds(ray_k_double_prime.host_id, ray_k_double_prime.joint1_id,
             ray_k_double_prime.joint2_id),
-        CircleIds(marker1.host_id, marker1.start_id, marker1.end_id),
-        CircleIds(marker2.host_id, marker2.start_id, marker2.end_id),
-        CircleIds(marker3.host_id, marker3.start_id, marker3.end_id),
+        CircleIds(marker1.host_id), CircleIds(marker2.host_id),
+        CircleIds(marker3.host_id),
         label_o.index, label_h.index, label_k.index, label_o_prime.index,
         label_h_prime.index, label_k_prime.index, label_o_double_prime.index,
         label_h_double_prime.index, label_k_double_prime.index, PhaseDescendToO, 0f0)
@@ -386,14 +383,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     ray_k_double_prime_joint2_id = state.ray_k_double_prime.joint2
 
     marker1_host_id = state.marker1.host
-    marker1_start_id = state.marker1.start
-    marker1_end_id = state.marker1.finish
     marker2_host_id = state.marker2.host
-    marker2_start_id = state.marker2.start
-    marker2_end_id = state.marker2.finish
     marker3_host_id = state.marker3.host
-    marker3_start_id = state.marker3.start
-    marker3_end_id = state.marker3.finish
 
     label_o_id = state.label_o
     label_h_id = state.label_h
@@ -486,9 +477,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker1Start, AngleTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker1_host_id,
-            marker_start_id=marker1_start_id,
-            marker_end_id=marker1_end_id)
+            marker_host_id=marker1_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -580,9 +569,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker2Start, AngleTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker2_host_id,
-            marker_start_id=marker2_start_id,
-            marker_end_id=marker2_end_id)
+            marker_host_id=marker2_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -677,9 +664,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker3Start, AngleTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker3_host_id,
-            marker_start_id=marker3_start_id,
-            marker_end_id=marker3_end_id)
+            marker_host_id=marker3_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration

@@ -2,17 +2,28 @@
 {"select_animation":"Terminal","as":"terminal"}
 {"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
 {"wait_state":"terminal_ready","timeout_ms":10000}
-{"type":"c=circle!([0.5,0.5,0],0.25)"}
-{"key":"enter"}
-{"wait_state":"terminal_idle","timeout_ms":10000}
-{"type":"println(c.host_id isa UInt64)"}
+{"type":"c=circle!([0.25,0.25,0],0.12; sweep_theta=0f0, duration=0.1); println(c.host_id isa UInt64)"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":10000}
 {"wait_terminal_contains":"true","timeout_ms":10000}
+{"type":"while status().active; sleep(0.01); end; circle!([0.5,0.25,0],0.12; start_theta=0f0,sweep_theta=1.5707964f0,duration=0.1,color=:steelblue); println(\"positive-started\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":15000}
+{"wait_terminal_contains":"positive-started","timeout_ms":10000}
+{"type":"while status().active; sleep(0.01); end; circle!([0.25,0.55,0],0.12; start_theta=0f0,sweep_theta=-1.5707964f0,duration=0.1,color=:palevioletred1); println(\"negative-started\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":15000}
+{"wait_terminal_contains":"negative-started","timeout_ms":10000}
+{"type":"while status().active; sleep(0.01); end; circle!([0.5,0.55,0],0.12; sweep_theta=6.2831855f0,duration=0.1,color=:khaki3); println(\"full-started\")"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":15000}
+{"wait_terminal_contains":"full-started","timeout_ms":10000}
 {"type":"while status().active; sleep(0.01); end; println(\"circle-finished\")"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":15000}
 {"wait_terminal_contains":"circle-finished","timeout_ms":10000}
+{"screenshot":".build/terminal-signed-sweep-arcs.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
 {"type":"hide!(c); println(\"circle-hidden\")"}
 {"key":"enter"}
 {"wait_state":"terminal_idle","timeout_ms":10000}

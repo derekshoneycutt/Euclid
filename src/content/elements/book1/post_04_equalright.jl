@@ -87,8 +87,6 @@ end
 """Stable native handles for one circle owned by the animation."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one equal-right-angles animation generation."""
@@ -159,14 +157,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     angle3_line2_joint1_id = state.lines[6].joint1
     angle3_line2_joint2_id = state.lines[6].joint2
     marker1_host_id = state.markers[1].host
-    marker1_start_id = state.markers[1].start
-    marker1_end_id = state.markers[1].finish
     marker2_host_id = state.markers[2].host
-    marker2_start_id = state.markers[2].start
-    marker2_end_id = state.markers[2].finish
     marker3_host_id = state.markers[3].host
-    marker3_start_id = state.markers[3].start
-    marker3_end_id = state.markers[3].finish
 
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, PhaseDescend, 0f0))
@@ -212,22 +204,16 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
         state_ptr, Marker1Start[1], Marker1Start[2], CompassTopZ)
     OdinJuliaBridge.set_point_position(
         state_ptr, marker1_host_id, Angle1JointPoint)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker1_start_id, Marker1Start)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker1_end_id, Marker1Start)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker1_host_id, MarkerRadius, Angle1StartΘ, 0f0)
     OdinJuliaBridge.set_point_position(
         state_ptr, marker2_host_id, Angle2JointPoint)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker2_start_id, Marker2Start)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker2_end_id, Marker2Start)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker2_host_id, MarkerRadius, Angle2StartΘ, 0f0)
     OdinJuliaBridge.set_point_position(
         state_ptr, marker3_host_id, Angle3JointPoint)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker3_start_id, Marker3Start)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker3_end_id, Marker3Start)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker3_host_id, MarkerRadius, Angle3StartΘ, 0f0)
 
     OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
     return true
@@ -238,17 +224,17 @@ function initialize(state_ptr::Ptr{Cvoid})
     marker1 = OdinJuliaBridge.create_new_circle(
         state_ptr,
         Angle1JointPoint,
-        MarkerRadius, Angle1StartΘ, Angle1StartΘ,
+        MarkerRadius, Angle1StartΘ, 0f0,
         MarkerColor, 0f0)
     marker2 = OdinJuliaBridge.create_new_circle(
         state_ptr,
         Angle2JointPoint,
-        MarkerRadius, Angle2StartΘ, Angle2StartΘ,
+        MarkerRadius, Angle2StartΘ, 0f0,
         MarkerColor, 0f0)
     marker3 = OdinJuliaBridge.create_new_circle(
         state_ptr,
         Angle3JointPoint,
-        MarkerRadius, Angle3StartΘ, Angle3StartΘ,
+        MarkerRadius, Angle3StartΘ, 0f0,
         MarkerColor, 0f0)
     angle1_line1 = OdinJuliaBridge.create_new_line(
         state_ptr, Angle1JointPoint, Angle1JointPoint,
@@ -278,9 +264,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(angle3_line1.host_id, angle3_line1.joint1_id, angle3_line1.joint2_id),
         LineIds(angle3_line2.host_id, angle3_line2.joint1_id, angle3_line2.joint2_id))
     markers = (
-        CircleIds(marker1.host_id, marker1.start_id, marker1.end_id),
-        CircleIds(marker2.host_id, marker2.start_id, marker2.end_id),
-        CircleIds(marker3.host_id, marker3.start_id, marker3.end_id))
+        CircleIds(marker1.host_id), CircleIds(marker2.host_id),
+        CircleIds(marker3.host_id))
     reset_cycle_state(
         state_ptr, AnimationState(lines, markers, PhaseDescend, 0f0))
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
@@ -313,14 +298,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     angle3_line2_joint1_id = state.lines[6].joint1
     angle3_line2_joint2_id = state.lines[6].joint2
     marker1_host_id = state.markers[1].host
-    marker1_start_id = state.markers[1].start
-    marker1_end_id = state.markers[1].finish
     marker2_host_id = state.markers[2].host
-    marker2_start_id = state.markers[2].start
-    marker2_end_id = state.markers[2].finish
     marker3_host_id = state.markers[3].host
-    marker3_start_id = state.markers[3].start
-    marker3_end_id = state.markers[3].finish
 
     if angle1_line1_host_id < 0 || angle1_line2_host_id < 0 ||
         angle2_line1_host_id < 0 || angle2_line2_host_id < 0 ||
@@ -505,9 +484,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker1Start, π/2f0, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker1_host_id,
-            marker_start_id=marker1_start_id,
-            marker_end_id=marker1_end_id)
+            marker_host_id=marker1_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -530,9 +507,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker2Start, π/2f0, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker2_host_id,
-            marker_start_id=marker2_start_id,
-            marker_end_id=marker2_end_id)
+            marker_host_id=marker2_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -555,9 +530,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker3Start, π/2f0, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker3_host_id,
-            marker_start_id=marker3_start_id,
-            marker_end_id=marker3_end_id)
+            marker_host_id=marker3_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -587,11 +560,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         angle2_end2_point = new_angle2_joint +
             [LineLength * cos(newθ + π/2f0), LineLength * sin(newθ + π/2f0), 0f0]
 
-        marker2_start = new_angle2_joint +
-            [MarkerRadius * cos(newθ), MarkerRadius * sin(newθ), 0f0]
-        marker2_end = new_angle2_joint +
-            [MarkerRadius * cos(newθ + π/2f0), MarkerRadius * sin(newθ + π/2f0), 0f0]
-
         OdinJuliaBridge.set_point_position(
             state_ptr, angle2_line1_joint1_id, new_angle2_joint)
         OdinJuliaBridge.set_point_position(
@@ -602,10 +570,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, angle2_line2_joint2_id, angle2_end2_point)
         OdinJuliaBridge.set_point_position(
             state_ptr, marker2_host_id, new_angle2_joint)
-        OdinJuliaBridge.set_point_position(
-            state_ptr, marker2_start_id, marker2_start)
-        OdinJuliaBridge.set_point_position(
-            state_ptr, marker2_end_id, marker2_end)
+        OdinJuliaBridge.set_arc_geometry(
+            state_ptr, marker2_host_id, MarkerRadius, newθ, π/2f0)
         
         timer += dt
         if timer >= MoveAngleDuration
@@ -625,11 +591,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
         angle3_end2_point = new_angle3_joint +
             [LineLength * cos(newθ + π/2f0), LineLength * sin(newθ + π/2f0), 0f0]
 
-        marker3_start = new_angle3_joint +
-            [MarkerRadius * cos(newθ), MarkerRadius * sin(newθ), 0f0]
-        marker3_end = new_angle3_joint +
-            [MarkerRadius * cos(newθ + π/2f0), MarkerRadius * sin(newθ + π/2f0), 0f0]
-
         OdinJuliaBridge.set_point_position(
             state_ptr, angle3_line1_joint1_id, new_angle3_joint)
         OdinJuliaBridge.set_point_position(
@@ -640,10 +601,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             state_ptr, angle3_line2_joint2_id, angle3_end2_point)
         OdinJuliaBridge.set_point_position(
             state_ptr, marker3_host_id, new_angle3_joint)
-        OdinJuliaBridge.set_point_position(
-            state_ptr, marker3_start_id, marker3_start)
-        OdinJuliaBridge.set_point_position(
-            state_ptr, marker3_end_id, marker3_end)
+        OdinJuliaBridge.set_arc_geometry(
+            state_ptr, marker3_host_id, MarkerRadius, newθ, π/2f0)
 
         timer += dt
         if timer >= MoveAngleDuration

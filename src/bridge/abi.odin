@@ -33,7 +33,7 @@ BRIDGE_FEATURE_TYPED_ANIMATION_STATE :: (1 << 4)
 BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG :: (1 << 5)
 BRIDGE_FEATURE_MIME_PRESENTATION :: (1 << 6)
 
-BRIDGE_VERSION :: 6
+BRIDGE_VERSION :: 7
 BRIDGE_FEATURE_FLAGS :: 1 |
     BRIDGE_FEATURE_ANIMATION_CYCLE_BOUNDARY |
     BRIDGE_FEATURE_ANIMATION_STABLE_ID |
@@ -101,13 +101,17 @@ Bridge_Shape_Line_Result :: struct {
     second: u64,
 }
 
-// Return one arc host and all direct transform identities.
+// Return one arc host identity.
 Bridge_Shape_Arc_Result :: struct {
     status: i32,
     shape: u64,
-    center: u64,
-    start: u64,
-    finish: u64,
+}
+
+// Return one arc host and its complete mutable geometry.
+Bridge_Shape_Arc_Query_Result :: struct {
+    status: i32,
+    shape: u64,
+    arc: shapemodel.Bridge_Arc_Geometry,
 }
 
 // Return one triangle host and its direct ordered vertex identities.
@@ -147,7 +151,6 @@ Bridge_Shape_View :: struct {
     active_color: Bridge_Color,
     has_active_color: u8,
     brush_size: f32,
-    offset: f32,
     active_feature: u16,
 }
 

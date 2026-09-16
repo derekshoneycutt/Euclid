@@ -49,6 +49,7 @@ const EVENT_NAMES = Dict{UInt16,String}(
     123 => "scene_command_rejected", 180 => "point_position_committed",
     181 => "point_style_committed", 182 => "point_visibility_committed",
     183 => "constraint_solve_completed", 184 => "constraint_solve_failed",
+    185 => "arc_geometry_committed",
     260 => "pen_joint_committed", 261 => "pen_active_committed",
     262 => "pen_visibility_committed", 263 => "compass_joint_committed",
     264 => "compass_active_committed", 265 => "compass_visibility_committed",

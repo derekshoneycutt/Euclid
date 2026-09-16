@@ -107,19 +107,15 @@ draw_cache_line_depth_and_flatness :: #force_inline proc(
 //   Return representative depth and flatness for one cached circle item.
 draw_cache_circle_depth_and_flatness :: #force_inline proc(
     circle: Shapes_Circle_Draw) -> (f32, bool) {
-    flat := draw_cache_point_is_flat(circle.center) &&
-        draw_cache_point_is_flat(circle.start) &&
-        draw_cache_point_is_flat(circle.end)
-    return draw_cache_visual_depth(circle.center), flat
+    return draw_cache_visual_depth(circle.center),
+        draw_cache_point_is_flat(circle.center)
 }
 
 //   Return representative depth and flatness for one cached filled-circle item.
 draw_cache_filledcircle_depth_and_flatness :: #force_inline proc(
     circle: Shapes_Filled_Circle_Draw) -> (f32, bool) {
-    flat := draw_cache_point_is_flat(circle.center) &&
-        draw_cache_point_is_flat(circle.start) &&
-        draw_cache_point_is_flat(circle.end)
-    return draw_cache_visual_depth(circle.center), flat
+    return draw_cache_visual_depth(circle.center),
+        draw_cache_point_is_flat(circle.center)
 }
 
 //   Return representative depth and flatness for one cached pen item.

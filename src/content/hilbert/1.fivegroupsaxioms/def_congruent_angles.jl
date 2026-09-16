@@ -93,11 +93,7 @@ struct AnimationState
     ray_k_prime_joint1::Int64
     ray_k_prime_joint2::Int64
     marker1_host::Int64
-    marker1_start::Int64
-    marker1_end::Int64
     marker2_host::Int64
-    marker2_start::Int64
-    marker2_end::Int64
     label_o::Int64
     label_h::Int64
     label_k::Int64
@@ -142,8 +138,7 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.ray_k_host, state.ray_k_joint1, state.ray_k_joint2,
         state.ray_h_prime_host, state.ray_h_prime_joint1, state.ray_h_prime_joint2,
         state.ray_k_prime_host, state.ray_k_prime_joint1, state.ray_k_prime_joint2,
-        state.marker1_host, state.marker1_start, state.marker1_end,
-        state.marker2_host, state.marker2_start, state.marker2_end,
+        state.marker1_host, state.marker2_host,
         state.label_o, state.label_h, state.label_k, state.label_o_prime,
         state.label_h_prime, state.label_k_prime, phase, timer)
 end
@@ -171,9 +166,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     ray_k_prime_host_id = state.ray_k_prime_host
     ray_k_prime_joint2_id = state.ray_k_prime_joint2
     marker1_host_id = state.marker1_host
-    marker1_end_id = state.marker1_end
     marker2_host_id = state.marker2_host
-    marker2_end_id = state.marker2_end
     label_o_id = state.label_o
     label_h_id = state.label_h
     label_k_id = state.label_k
@@ -192,8 +185,10 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     OdinJuliaBridge.set_point_position(state_ptr, ray_h_prime_joint2_id, RayHPrimeStart)
     OdinJuliaBridge.set_point_position(state_ptr, ray_k_prime_joint2_id, RayKPrimeStart)
 
-    OdinJuliaBridge.set_point_position(state_ptr, marker1_end_id, Marker1Start)
-    OdinJuliaBridge.set_point_position(state_ptr, marker2_end_id, Marker2Start)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker1_host_id, MarkerRadius, 0f0, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker2_host_id, MarkerRadius, 0f0, 0f0)
 
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, PhaseDescendToO, 0f0))
@@ -256,8 +251,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         ray_k.host_id, ray_k.joint1_id, ray_k.joint2_id,
         ray_h_prime.host_id, ray_h_prime.joint1_id, ray_h_prime.joint2_id,
         ray_k_prime.host_id, ray_k_prime.joint1_id, ray_k_prime.joint2_id,
-        marker1.host_id, marker1.start_id, marker1.end_id,
-        marker2.host_id, marker2.start_id, marker2.end_id,
+        marker1.host_id, marker2.host_id,
         label_o.index, label_h.index, label_k.index, label_o_prime.index,
         label_h_prime.index, label_k_prime.index, PhaseDescendToO, 0f0)
     reset_cycle_state(state_ptr, state)
@@ -285,11 +279,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     ray_k_prime_joint1_id = state.ray_k_prime_joint1
     ray_k_prime_joint2_id = state.ray_k_prime_joint2
     marker1_host_id = state.marker1_host
-    marker1_start_id = state.marker1_start
-    marker1_end_id = state.marker1_end
     marker2_host_id = state.marker2_host
-    marker2_start_id = state.marker2_start
-    marker2_end_id = state.marker2_end
     label_o_id = state.label_o
     label_h_id = state.label_h
     label_k_id = state.label_k
@@ -378,9 +368,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker1Start, AngleTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker1_host_id,
-            marker_start_id=marker1_start_id,
-            marker_end_id=marker1_end_id)
+            marker_host_id=marker1_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -472,9 +460,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker2Start, AngleTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker2_host_id,
-            marker_start_id=marker2_start_id,
-            marker_end_id=marker2_end_id)
+            marker_host_id=marker2_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration

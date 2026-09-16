@@ -57,8 +57,6 @@ struct AnimationState
     perp_line_joint1::Int64
     perp_line_joint2::Int64
     marker_host::Int64
-    marker_start::Int64
-    marker_end::Int64
     phase::Float32
     timer::Float32
 end
@@ -79,7 +77,7 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(
         state.line_host, state.line_joint1, state.line_joint2,
         state.perp_line_host, state.perp_line_joint1, state.perp_line_joint2,
-        state.marker_host, state.marker_start, state.marker_end, phase, timer)
+        state.marker_host, phase, timer)
 end
 
 """Get the view content for this animation"""
@@ -98,13 +96,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     perpline_host_id = state.perp_line_host
     perpline_joint2_id = state.perp_line_joint2
     marker_host_id = state.marker_host
-    marker_end_id = state.marker_end
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [
         marker_host_id, line_host_id, perpline_host_id])
 
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker_end_id, MarkerStart[1], MarkerStart[2], MarkerStart[3])
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, MarkerRadius, 7f0 * π / 4f0, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.set_point_position(
@@ -134,7 +131,7 @@ end
 function initialize(state_ptr::Ptr{Cvoid})
     marker = OdinJuliaBridge.create_new_circle(
         state_ptr,
-        PerpStartPoint, MarkerRadius, 7f0 * π / 4f0, 7f0 * π / 4f0,
+        PerpStartPoint, MarkerRadius, 7f0 * π / 4f0, 0f0,
         MarkerColor, 0f0)
     line = OdinJuliaBridge.create_new_line(
         state_ptr, StartPoint, StartPoint,
@@ -146,7 +143,7 @@ function initialize(state_ptr::Ptr{Cvoid})
     state = AnimationState(
         line.host_id, line.joint1_id, line.joint2_id,
         perpline.host_id, perpline.joint1_id, perpline.joint2_id,
-        marker.host_id, marker.start_id, marker.end_id, PhaseDescend, 0f0)
+        marker.host_id, PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
 end
@@ -166,8 +163,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     perpline_joint1_id = state.perp_line_joint1
     perpline_joint2_id = state.perp_line_joint2
     marker_host_id = state.marker_host
-    marker_start_id = state.marker_start
-    marker_end_id = state.marker_end
 
     if line_host_id < 0
         return
@@ -245,9 +240,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerStart, AngleTheta, MarkerRadius;
             brush=LineMaxBrush,
             color=MarkerColor,
-            marker_host_id=marker_host_id,
-            marker_start_id=marker_start_id,
-            marker_end_id=marker_end_id)
+            marker_host_id=marker_host_id)
 
         timer += dt
         if timer >= CompassDrawDuration

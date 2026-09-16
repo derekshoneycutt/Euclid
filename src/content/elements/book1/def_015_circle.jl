@@ -37,8 +37,6 @@ const HidePauseDuration = 1.5f0
 """Stable native handles for one circle owned by the animation."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one circle animation generation."""
@@ -75,13 +73,9 @@ end
 function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     center_point_id = state.center
     circle_hostid = state.circle.host
-    circle_endid = state.circle.finish
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [center_point_id, circle_hostid])
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle_endid, CircleStartPoint)
-    OdinJuliaBridge.set_point_offset(
-        state_ptr, circle_hostid, 0f0)
+    OdinJuliaBridge.set_arc_geometry(state_ptr, circle_hostid, Radius, 0f0, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -111,7 +105,7 @@ function initialize(state_ptr::Ptr{Cvoid})
 
     state = AnimationState(
         center_point.index,
-        CircleIds(circle.host_id, circle.start_id, circle.end_id),
+        CircleIds(circle.host_id),
         PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
@@ -127,8 +121,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
     center_point_id = state.center
     circle_hostid = state.circle.host
-    circle_startid = state.circle.start
-    circle_endid = state.circle.finish
 
     if center_point_id < 0
         return
@@ -183,18 +175,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             CircleStartPoint, CircleSweepTheta, Radius;
             brush=CircleBrush,
             color=CircleColor,
-            marker_host_id=circle_hostid,
-            marker_start_id=circle_startid,
-            marker_end_id=circle_endid)
+            marker_host_id=circle_hostid)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise
             timer = 0f0
-            OdinJuliaBridge.set_point_position(
-                state_ptr, circle_endid, CircleStartPoint)
-            OdinJuliaBridge.set_point_offset(
-                state_ptr, circle_hostid, 2f0π)
+            OdinJuliaBridge.set_arc_geometry(
+                state_ptr, circle_hostid, Radius, 0f0, CircleSweepTheta)
         end
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(

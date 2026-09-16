@@ -79,8 +79,6 @@ end
     @test_throws ArgumentError EuclidRepl.validated_start_theta(Inf32)
     @test_throws ArgumentError EuclidRepl.validated_start_theta(NaN32)
 
-    @test_throws ArgumentError EuclidRepl.validated_end_theta(NaN32)
-
     @test_throws ArgumentError EuclidRepl.validated_angle_theta(Inf32)
     @test_throws ArgumentError EuclidRepl.validated_angle_theta(NaN32)
 
@@ -109,9 +107,6 @@ end
     @test_throws ArgumentError EuclidRepl.validated_start_positions(
         Float64[1.0, 2.0, 3.0, 4.0])
 
-    @test EuclidRepl.effective_end_theta(0f0, Inf32) ≈ EuclidRepl.TWO_PI_F32
-    @test EuclidRepl.effective_end_theta(0f0, 10f0) ≈ EuclidRepl.TWO_PI_F32
-    @test EuclidRepl.effective_end_theta(0f0, 1f0) ≈ 1f0
 end
 
 @testset "EuclidRepl hide helpers" begin
@@ -128,11 +123,10 @@ end
         OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
         UInt8(0),
         0f0,
-        0f0,
         UInt16(0))
     line_shape = OdinJuliaBridge.BridgeShapeLine(0, 11, 12, 13)
-    circle_shape = OdinJuliaBridge.BridgeShapeCircle(0, 21, 21, 22, 23)
-    filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(0, 31, 31, 32, 33)
+    circle_shape = OdinJuliaBridge.BridgeShapeCircle(0, 21)
+    filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(0, 31)
 
     @test isnothing(EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 5))
     @test isnothing(EuclidRepl.hide!(

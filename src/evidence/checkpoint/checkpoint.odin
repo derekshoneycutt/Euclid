@@ -32,7 +32,6 @@ Point :: struct {
 
     // Drawing state needed to inspect the captured point.
     brush_size : f32,
-    offset : f32,
 
     // Stable source slot and its active child relationship.
     index : i32,

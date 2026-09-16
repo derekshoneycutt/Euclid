@@ -75,15 +75,11 @@ end
 
 struct CirclePayload <: ReplDrawPayload
     filled::Bool
-    full_sweep::Bool
     host_id::UInt64
-    start_id::UInt64
-    end_id::UInt64
     center::Vector{Float32}
     start_pos::Vector{Float32}
-    end_pos::Vector{Float32}
     radius::Float32
-    angle_theta::Float32
+    sweep_theta::Float32
     color
     brush::Float32
 end
@@ -295,16 +291,6 @@ function validated_start_theta(value::Real)::Float32
     return theta
 end
 
-"""Validate end theta and return it as `Float32`, allowing `Inf` sentinel."""
-function validated_end_theta(value::Real)::Float32
-    theta = Float32(value)
-    if isnan(theta)
-        throw(ArgumentError("end_theta must not be NaN"))
-    end
-
-    return theta
-end
-
 """Validate highlight angle theta as a finite Float32 value."""
 function validated_angle_theta(value::Real)::Float32
     theta = Float32(value)
@@ -384,28 +370,6 @@ function validate_transform_batch_lengths(
     end
 end
 
-"""Compute final end theta for REPL circle semantics."""
-function effective_end_theta(start_theta::Float32, end_theta::Float32)
-    if !isfinite(end_theta)
-        return start_theta + TWO_PI_F32
-    end
-
-    if end_theta - start_theta >= TWO_PI_F32
-        return start_theta + TWO_PI_F32
-    end
-
-    return end_theta
-end
-
-"""Return true when REPL semantics should treat the requested arc as full sweep."""
-function is_full_sweep_request(start_theta::Float32, end_theta::Float32)::Bool
-    if !isfinite(end_theta)
-        return true
-    end
-
-    return (end_theta - start_theta) >= TWO_PI_F32
-end
-
 """Compute a point on the XY circle at `theta`, keeping center z."""
 function point_on_circle(center::AbstractVector{<:Real}, radius::Real, theta::Real)
     center_vec = vec3("center", center)
@@ -446,13 +410,9 @@ end
 function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::CirclePayload)
     OdinJuliaBridge.set_point_color(state_ptr, payload.host_id, payload.color)
     OdinJuliaBridge.set_point_brush(state_ptr, payload.host_id, payload.brush)
-    OdinJuliaBridge.set_point_position(state_ptr, payload.start_id, payload.start_pos)
-    OdinJuliaBridge.set_point_position(state_ptr, payload.end_id, payload.end_pos)
-    if payload.full_sweep
-        OdinJuliaBridge.set_point_offset(state_ptr, payload.host_id, TWO_PI_F32)
-    else
-        OdinJuliaBridge.set_point_offset(state_ptr, payload.host_id, 0f0)
-    end
+    start_theta = theta_from_center(payload.center, payload.start_pos)
+    OdinJuliaBridge.set_arc_geometry(state_ptr, payload.host_id,
+        payload.radius, start_theta, payload.sweep_theta)
     OdinJuliaBridge.show_point(state_ptr, payload.host_id)
 end
 
@@ -504,14 +464,11 @@ function render_payload!(
             Float32(duration),
             payload.center,
             payload.start_pos,
-            payload.angle_theta,
+            payload.sweep_theta,
             payload.radius;
             brush=payload.brush,
             color=payload.color,
-            marker_host_id=payload.host_id,
-            marker_start_id=payload.start_id,
-            marker_end_id=payload.end_id,
-            full_sweep=payload.full_sweep)
+            marker_host_id=payload.host_id)
     else
         EuclidAnimations.animate_repl_draw_circle(
             state_ptr,
@@ -519,14 +476,11 @@ function render_payload!(
             Float32(duration),
             payload.center,
             payload.start_pos,
-            payload.angle_theta,
+            payload.sweep_theta,
             payload.radius;
             brush=payload.brush,
             color=payload.color,
-            marker_host_id=payload.host_id,
-            marker_start_id=payload.start_id,
-            marker_end_id=payload.end_id,
-            full_sweep=payload.full_sweep)
+            marker_host_id=payload.host_id)
     end
 end
 
@@ -982,45 +936,40 @@ Draw a circle, arc, or sector with compass animation and return a circle handle.
 
 Keywords:
 - `start_theta=0f0`
-- `end_theta=Inf32` (default full-circle sentinel)
+- `sweep_theta=2pi`
 - `filled=false`
 - `color=:steelblue`
 - `brush=5f0`
 - `duration=DEFAULT_CIRCLE_DURATION` (draw animation duration only)
 
-Circle rules:
-- full circle when `end_theta - start_theta >= 2pi` or `end_theta` is infinite,
-- full circles still start at `start_theta` and sweep one full turn.
+Positive sweeps increase theta and negative sweeps decrease theta. Full turns are
+represented explicitly by positive or negative `2pi` sweeps.
 """
 function circle!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::Real;
-    start_theta::Real=0f0, end_theta::Real=Inf32, filled::Bool=false,
+    start_theta::Real=0f0, sweep_theta::Real=TWO_PI_F32, filled::Bool=false,
     color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
     duration::Real=DEFAULT_CIRCLE_DURATION)
     center3 = vec3("center", center)
     brush_value = validated_brush(brush)
     draw_duration = validated_duration(duration)
     start_theta_valid = validated_start_theta(start_theta)
-    end_theta_valid = validated_end_theta(end_theta)
-    full_sweep = is_full_sweep_request(start_theta_valid, end_theta_valid)
+    sweep_theta_valid = validated_start_theta(sweep_theta)
     radius_valid = validated_radius(radius)
 
-    final_end_theta = effective_end_theta(start_theta_valid, end_theta_valid)
     start_pos = point_on_circle(center3, radius_valid, start_theta_valid)
-    end_pos = point_on_circle(center3, radius_valid, final_end_theta)
-    angle_theta = final_end_theta - start_theta_valid
 
     shape = if filled
         OdinJuliaBridge.create_new_filledcircle(state_ptr, center3, radius_valid,
-            start_theta_valid, final_end_theta, color, brush_value)
+            start_theta_valid, sweep_theta_valid, color, brush_value)
     else
         OdinJuliaBridge.create_new_circle(state_ptr, center3, radius_valid,
-            start_theta_valid, final_end_theta, color, brush_value)
+            start_theta_valid, sweep_theta_valid, color, brush_value)
     end
 
-    payload = CirclePayload(filled, full_sweep, shape.host_id, shape.start_id,
-        shape.end_id, center3, start_pos, end_pos, radius_valid, angle_theta,
+    payload = CirclePayload(filled, shape.host_id, center3, start_pos,
+        radius_valid, sweep_theta_valid,
         color, brush_value)
 
     job = ReplDrawJob(:circle, draw_duration, Float32(0.0), nothing, payload)

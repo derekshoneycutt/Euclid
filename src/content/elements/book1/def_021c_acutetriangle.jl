@@ -103,8 +103,6 @@ end
 """Stable native handles for one angle marker owned by the animation."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one acute-triangle animation generation."""
@@ -152,11 +150,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     line3_host_id = state.lines[3].host
     line3_joint2_id = state.lines[3].joint2
     marker1_host_id = state.markers[1].host
-    marker1_end_id = state.markers[1].finish
     marker2_host_id = state.markers[2].host
-    marker2_end_id = state.markers[2].finish
     marker3_host_id = state.markers[3].host
-    marker3_end_id = state.markers[3].finish
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [marker1_host_id, marker2_host_id, marker3_host_id,
@@ -169,12 +164,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     OdinJuliaBridge.set_point_position(
         state_ptr, line3_joint2_id, VertexC[1], VertexC[2], VertexC[3])
 
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker1_end_id, Marker1Start[1], Marker1Start[2], Marker1Start[3])
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker2_end_id, Marker2Start[1], Marker2Start[2], Marker2Start[3])
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker3_end_id, Marker3Start[1], Marker3Start[2], Marker3Start[3])
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker1_host_id, MarkerRadius, Marker1StartTheta, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker2_host_id, MarkerRadius, Marker2StartTheta, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker3_host_id, MarkerRadius, Marker3StartTheta, 0f0)
 
     OdinJuliaBridge.hide_pen(state_ptr)
     OdinJuliaBridge.hide_compass(state_ptr)
@@ -198,13 +193,13 @@ end
 """Initialize all objects for this animation"""
 function initialize(state_ptr::Ptr{Cvoid})
     marker1 = OdinJuliaBridge.create_new_filledcircle(state_ptr,
-        Marker1Center, MarkerRadius, Marker1StartTheta, Marker1StartTheta,
+        Marker1Center, MarkerRadius, Marker1StartTheta, 0f0,
         MarkerColor, 0f0)
     marker2 = OdinJuliaBridge.create_new_filledcircle(state_ptr,
-        Marker2Center, MarkerRadius, Marker2StartTheta, Marker2StartTheta,
+        Marker2Center, MarkerRadius, Marker2StartTheta, 0f0,
         MarkerColor, 0f0)
     marker3 = OdinJuliaBridge.create_new_filledcircle(state_ptr,
-        Marker3Center, MarkerRadius, Marker3StartTheta, Marker3StartTheta,
+        Marker3Center, MarkerRadius, Marker3StartTheta, 0f0,
         MarkerColor, 0f0)
     line1 = OdinJuliaBridge.create_new_line(
         state_ptr, VertexA, VertexA,
@@ -220,9 +215,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         LineIds(line1.host_id, line1.joint1_id, line1.joint2_id),
         LineIds(line2.host_id, line2.joint1_id, line2.joint2_id),
         LineIds(line3.host_id, line3.joint1_id, line3.joint2_id)), (
-        CircleIds(marker1.host_id, marker1.start_id, marker1.end_id),
-        CircleIds(marker2.host_id, marker2.start_id, marker2.end_id),
-        CircleIds(marker3.host_id, marker3.start_id, marker3.end_id)),
+        CircleIds(marker1.host_id), CircleIds(marker2.host_id),
+        CircleIds(marker3.host_id)),
         PhaseDescend, 0f0)
     reset_cycle_state(state_ptr, state)
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
@@ -246,14 +240,8 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line3_joint1_id = state.lines[3].joint1
     line3_joint2_id = state.lines[3].joint2
     marker1_host_id = state.markers[1].host
-    marker1_start_id = state.markers[1].start
-    marker1_end_id = state.markers[1].finish
     marker2_host_id = state.markers[2].host
-    marker2_start_id = state.markers[2].start
-    marker2_end_id = state.markers[2].finish
     marker3_host_id = state.markers[3].host
-    marker3_start_id = state.markers[3].start
-    marker3_end_id = state.markers[3].finish
 
     if line1_host_id < 0
         return
@@ -342,9 +330,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker1Start, Marker1SweepTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker1_host_id,
-            marker_start_id=marker1_start_id,
-            marker_end_id=marker1_end_id)
+            marker_host_id=marker1_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -367,9 +353,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker2Start, Marker2SweepTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker2_host_id,
-            marker_start_id=marker2_start_id,
-            marker_end_id=marker2_end_id)
+            marker_host_id=marker2_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -392,9 +376,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             Marker3Start, Marker3SweepTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker3_host_id,
-            marker_start_id=marker3_start_id,
-            marker_end_id=marker3_end_id)
+            marker_host_id=marker3_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration

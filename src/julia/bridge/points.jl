@@ -91,9 +91,9 @@ end
 
 """Create one arc variant through its native packed-handle constructor."""
 function _create_arc(filled::Bool, state_ptr::Ptr{Cvoid}, center,
-    radius::Real, start_theta::Real, end_theta::Real, color, brush_size::Real)
+    radius::Real, start_theta::Real, sweep_theta::Real, color, brush_size::Real)
     position = (Cfloat(center[1]), Cfloat(center[2]), Cfloat(center[3]))
-    arc = BridgeArcGeometry(Cfloat(radius), Cfloat(start_theta), Cfloat(end_theta))
+    arc = BridgeArcGeometry(Cfloat(radius), Cfloat(start_theta), Cfloat(sweep_theta))
     style = _shape_style(color, brush_size)
     if !filled
         return @ccall shape_create_arc(state_ptr::Ptr{Cvoid},
@@ -105,34 +105,40 @@ function _create_arc(filled::Bool, state_ptr::Ptr{Cvoid}, center,
         style::BridgeShapeStyle)::BridgeShapeFilledCircle
 end
 
+"""Return one arc host's current radius, start angle, and signed sweep."""
+function get_arc_geometry(state_ptr::Ptr{Cvoid}, entity::Integer)
+    @ccall shape_get_arc(
+        state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64)::BridgeShapeArcQueryResult
+end
+
 """Create one outlined arc from explicit coordinates."""
 function create_new_circle(state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real,
-    radius::Real, start_theta::Real, end_theta::Real;
+    radius::Real, start_theta::Real, sweep_theta::Real;
     color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
     _create_arc(false, state_ptr, (x, y, z), radius,
-        start_theta, end_theta, color, brush_size)
+        start_theta, sweep_theta, color, brush_size)
 end
 
 """Create one outlined arc from a center vector."""
 function create_new_circle(state_ptr::Ptr{Cvoid}, center,
-    radius::Real, start_theta::Real, end_theta::Real, color, brush_size::Real)
+    radius::Real, start_theta::Real, sweep_theta::Real, color, brush_size::Real)
     _create_arc(false, state_ptr, center, radius,
-        start_theta, end_theta, color, brush_size)
+        start_theta, sweep_theta, color, brush_size)
 end
 
 """Create one filled arc from explicit coordinates."""
 function create_new_filledcircle(state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real,
-    radius::Real, start_theta::Real, end_theta::Real;
+    radius::Real, start_theta::Real, sweep_theta::Real;
     color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
     _create_arc(true, state_ptr, (x, y, z), radius,
-        start_theta, end_theta, color, brush_size)
+        start_theta, sweep_theta, color, brush_size)
 end
 
 """Create one filled arc from a center vector."""
 function create_new_filledcircle(state_ptr::Ptr{Cvoid}, center,
-    radius::Real, start_theta::Real, end_theta::Real, color, brush_size::Real)
+    radius::Real, start_theta::Real, sweep_theta::Real, color, brush_size::Real)
     _create_arc(true, state_ptr, center, radius,
-        start_theta, end_theta, color, brush_size)
+        start_theta, sweep_theta, color, brush_size)
 end
 
 """Create one triangle from keyword vertex coordinates."""
@@ -297,10 +303,13 @@ end
 set_point_brush_size(state_ptr::Ptr{Cvoid}, entity::Integer, brush_size::Real) =
     set_point_brush(state_ptr, entity, brush_size)
 
-"""Set one packed entity's render offset."""
-function set_point_offset(state_ptr::Ptr{Cvoid}, entity::Integer, offset::Real)
-    @ccall shape_set_offset(state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
-        Cfloat(offset)::Cfloat)::Int32
+"""Atomically set one arc host's radius, start angle, and signed sweep."""
+function set_arc_geometry(state_ptr::Ptr{Cvoid}, entity::Integer,
+    radius::Real, start_theta::Real, sweep_theta::Real)
+    arc = BridgeArcGeometry(
+        Cfloat(radius), Cfloat(start_theta), Cfloat(sweep_theta))
+    @ccall shape_set_arc(state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
+        arc::BridgeArcGeometry)::Int32
 end
 
 """Select one packed entity's active geometry feature."""

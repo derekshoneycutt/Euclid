@@ -570,7 +570,7 @@ canonical scene state, and the host detaches every slot alias before completion.
 
 The command vocabulary covers current recurring animation mutations:
 
-- point position, color, brush, offset, and visibility
+- shape position, color, brush, visibility, and complete arc geometry
 - bounded point-hide batches
 - pen and compass locks, movement, visibility, and active state
 - drawing-sound state
@@ -590,6 +590,10 @@ checks counts, overflow, producing-animation identity, explicit indices, tool
 dependencies, and every bounded point-list index. Commands are applied in
 callback order only after validation succeeds. Invalid, overflowed, stale, or
 exception-producing batches have no partial effect.
+
+Arc mutation is one command containing radius, start angle, and signed sweep. The
+display therefore never observes a center/start/end partial update, and committed arc
+commands emit dedicated `arc.geometry_committed` semantic evidence.
 
 Floor-level tool commands append bounded compound dust-contact intents instead of
 searching particle storage on the display thread. Each intent records the current dust

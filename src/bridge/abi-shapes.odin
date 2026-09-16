@@ -13,6 +13,7 @@ import rl "vendor:raylib"
 Bridge_Shape_Query_Source :: struct {
     registry: ^shapemodel.Shape_Registry,
     transforms: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Transform),
+    arcs: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Arc),
     render_styles: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Render_Style),
     active_features: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Active_Feature),
     geometries: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Geometry),
@@ -59,7 +60,7 @@ bridge_shape_query_source :: proc(
     snapshot := active_animation_query_snapshot(state)
     if snapshot != nil {
         shapes := &snapshot.shapes
-        return {&shapes.registry, &shapes.transforms, &shapes.render_styles,
+        return {&shapes.registry, &shapes.transforms, &shapes.arcs, &shapes.render_styles,
             &shapes.active_features, &shapes.geometries, &shapes.labels,
             &shapes.label_store}, true
     }
@@ -67,7 +68,7 @@ bridge_shape_query_source :: proc(
     if world == nil {
         return {}, false
     }
-    return {&world.registry, &world.transforms, &world.render_styles,
+    return {&world.registry, &world.transforms, &world.arcs, &world.render_styles,
         &world.active_features, &world.geometries, &world.labels,
         &world.label_store}, true
 }
@@ -132,7 +133,7 @@ shape_create_line :: proc "c" (
     }
 }
 
-// Create one outlined arc with direct packed transform handles.
+// Create one outlined arc and return its packed host identity.
 @(export)
 shape_create_arc :: proc "c" (
     state: ^core.Euclid_General_State,
@@ -142,17 +143,14 @@ shape_create_arc :: proc "c" (
     context = state.saved_context
     handle, status := shapes.world_create_arc(state.shape_world, {
         center = center, radius = arc.radius, start_theta = arc.start_theta,
-        end_theta = arc.end_theta, style = bridge_shape_style(style)})
+        sweep_theta = arc.sweep_theta, style = bridge_shape_style(style)})
     return {
         bridge_shape_status(status),
         shapemodel.shape_entity_pack(handle.shape),
-        shapemodel.shape_entity_pack(handle.center),
-        shapemodel.shape_entity_pack(handle.start),
-        shapemodel.shape_entity_pack(handle.finish),
     }
 }
 
-// Create one filled arc with direct packed transform handles.
+// Create one filled arc and return its packed host identity.
 @(export)
 shape_create_filled_arc :: proc "c" (
     state: ^core.Euclid_General_State,
@@ -162,13 +160,10 @@ shape_create_filled_arc :: proc "c" (
     context = state.saved_context
     handle, status := shapes.world_create_filled_arc(state.shape_world, {
         center = center, radius = arc.radius, start_theta = arc.start_theta,
-        end_theta = arc.end_theta, style = bridge_shape_style(style)})
+        sweep_theta = arc.sweep_theta, style = bridge_shape_style(style)})
     return {
         bridge_shape_status(status),
         shapemodel.shape_entity_pack(handle.shape),
-        shapemodel.shape_entity_pack(handle.center),
-        shapemodel.shape_entity_pack(handle.start),
-        shapemodel.shape_entity_pack(handle.finish),
     }
 }
 
@@ -252,7 +247,6 @@ shape_view_project_presentation :: proc(
         view^.active_color = {active_color.r, active_color.g,
             active_color.b, active_color.a}
         view^.brush_size = style.brush_size
-        view^.offset = style.offset
     }
 }
 
@@ -289,6 +283,23 @@ shape_get_view :: proc "c" (
     shape_view_project_presentation(&source, entity, &view)
     shape_view_project_semantics(&source, entity, &view)
     return view
+}
+
+// Return one resolved arc host's complete mutable geometry.
+@(export)
+shape_get_arc :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64) -> Bridge_Shape_Arc_Query_Result {
+    context = state.saved_context
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    arc, found := shapemodel.shape_component_get(source.arcs, source.registry, entity)
+    if !found {return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}}
+    return {BRIDGE_STATUS_OK, packed,
+        {arc.radius, arc.start_theta, arc.sweep_theta}}
 }
 
 // Copy one label's immutable source bytes from the active query projection.
@@ -336,6 +347,34 @@ shape_set_position :: proc "c" (
         &state.shape_world.transforms, &state.shape_world.registry, entity)
     if !has_transform {return BRIDGE_STATUS_NOT_FOUND}
     transform.position = position
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live arc's complete mutable geometry by packed host identity.
+@(export)
+shape_set_arc :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    arc: shapemodel.Bridge_Arc_Geometry) -> i32 {
+    context = state.saved_context
+    value := shapemodel.Shape_Arc{radius = arc.radius,
+        start_theta = arc.start_theta, sweep_theta = arc.sweep_theta}
+    if !shapemodel.shape_arc_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(state, .Set_Shape_Arc, packed)
+    if command != nil {
+        command.arc = value
+    }
+    if captured {return BRIDGE_STATUS_OK}
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    current, has_arc := shapemodel.shape_component_get_mut(
+        &state.shape_world.arcs, &state.shape_world.registry, entity)
+    if !has_arc {return BRIDGE_STATUS_NOT_FOUND}
+    current.radius = value.radius
+    current.start_theta = value.start_theta
+    current.sweep_theta = value.sweep_theta
     return BRIDGE_STATUS_OK
 }
 
@@ -441,27 +480,6 @@ shape_set_brush_size :: proc "c" (
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style {return BRIDGE_STATUS_NOT_FOUND}
     style.brush_size = brush_size
-    return BRIDGE_STATUS_OK
-}
-
-// Set one live render style's presentation offset by packed entity identity.
-@(export)
-shape_set_offset :: proc "c" (
-    state: ^core.Euclid_General_State,
-    packed: u64,
-    offset: f32) -> i32 {
-    context = state.saved_context
-    command, captured := capture_shape_command(state, .Set_Shape_Offset, packed)
-    if command != nil {
-        command.scalar = offset
-    }
-    if captured {return BRIDGE_STATUS_OK}
-    entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
-    style, has_style := shapemodel.shape_component_get_mut(
-        &state.shape_world.render_styles, &state.shape_world.registry, entity)
-    if !has_style {return BRIDGE_STATUS_NOT_FOUND}
-    style.offset = offset
     return BRIDGE_STATUS_OK
 }
 

@@ -59,8 +59,6 @@ end
 """Stable native handles for one circle owned by the animation."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one Proclus isosceles animation generation."""
@@ -135,17 +133,9 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     line_c_a_host_id = line_c_a.host
     line_c_a_joint2_id = line_c_a.joint2
     circle1_host_id = circle1.host
-    circle1_start_id = circle1.start
-    circle1_end_id = circle1.finish
     circle2_host_id = circle2.host
-    circle2_start_id = circle2.start
-    circle2_end_id = circle2.finish
     circle3_host_id = circle3.host
-    circle3_start_id = circle3.start
-    circle3_end_id = circle3.finish
     circle4_host_id = circle4.host
-    circle4_start_id = circle4.start
-    circle4_end_id = circle4.finish
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [label_a_id, label_b_id, label_c_id,
@@ -167,30 +157,14 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
         state_ptr, line_c_b_joint2_id, Intersection)
     OdinJuliaBridge.set_point_position(
         state_ptr, line_c_a_joint2_id, Intersection)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle1_start_id, BPoint)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle1_end_id, BPoint)
-    OdinJuliaBridge.set_point_offset(
-        state_ptr, circle1_host_id, 0f0)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle2_start_id, APoint)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle2_end_id, APoint)
-    OdinJuliaBridge.set_point_offset(
-        state_ptr, circle2_host_id, 0f0)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle3_start_id, ExtBPoint)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle3_end_id, ExtBPoint)
-    OdinJuliaBridge.set_point_offset(
-        state_ptr, circle3_host_id, 0f0)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle4_start_id, ExtAPoint)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle4_end_id, ExtAPoint)
-    OdinJuliaBridge.set_point_offset(
-        state_ptr, circle4_host_id, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, circle1_host_id, Radius, 7f0 * π / 4f0, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, circle2_host_id, Radius, 3f0 * π / 4f0, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, circle3_host_id, ExtRadius, 7f0 * π / 4f0, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, circle4_host_id, ExtRadius, 3f0 * π / 4f0, 0f0)
 
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, PhasePenDescend, 0f0))
@@ -205,13 +179,13 @@ function initialize(state_ptr::Ptr{Cvoid})
     line_a_b = OdinJuliaBridge.create_new_line(
         state_ptr, APoint, APoint, LineABColor, 0f0)
     circle1 = OdinJuliaBridge.create_new_circle(
-        state_ptr, APoint, Radius, 7f0 * π / 4f0, 7f0 * π / 4f0, Circle1Color, 0f0)
+        state_ptr, APoint, Radius, 7f0 * π / 4f0, 0f0, Circle1Color, 0f0)
     circle2 = OdinJuliaBridge.create_new_circle(
-        state_ptr, BPoint, Radius, 3f0 * π / 4f0, 3f0 * π / 4f0, Circle2Color, 0f0)
+        state_ptr, BPoint, Radius, 3f0 * π / 4f0, 0f0, Circle2Color, 0f0)
     circle3 = OdinJuliaBridge.create_new_circle(
-        state_ptr, ExtAPoint, ExtRadius, 7f0 * π / 4f0, 7f0 * π / 4f0, Circle3Color, 0f0)
+        state_ptr, ExtAPoint, ExtRadius, 7f0 * π / 4f0, 0f0, Circle3Color, 0f0)
     circle4 = OdinJuliaBridge.create_new_circle(
-        state_ptr, ExtBPoint, ExtRadius, 3f0 * π / 4f0, 3f0 * π / 4f0, Circle4Color, 0f0)
+        state_ptr, ExtBPoint, ExtRadius, 3f0 * π / 4f0, 0f0, Circle4Color, 0f0)
     line_c_b = OdinJuliaBridge.create_new_line(
         state_ptr, Intersection, Intersection,
         LineCBColor, 0f0)
@@ -230,10 +204,8 @@ function initialize(state_ptr::Ptr{Cvoid})
         (LineIds(line_a_b.host_id, line_a_b.joint1_id, line_a_b.joint2_id),
             LineIds(line_c_b.host_id, line_c_b.joint1_id, line_c_b.joint2_id),
             LineIds(line_c_a.host_id, line_c_a.joint1_id, line_c_a.joint2_id)),
-        (CircleIds(circle1.host_id, circle1.start_id, circle1.end_id),
-            CircleIds(circle2.host_id, circle2.start_id, circle2.end_id),
-            CircleIds(circle3.host_id, circle3.start_id, circle3.end_id),
-            CircleIds(circle4.host_id, circle4.start_id, circle4.end_id)),
+        (CircleIds(circle1.host_id), CircleIds(circle2.host_id),
+            CircleIds(circle3.host_id), CircleIds(circle4.host_id)),
         (label_a.index, label_b.index, label_c.index), PhasePenDescend, 0f0)
     reset_cycle_state(state_ptr, state)
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
@@ -260,17 +232,9 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line_c_a_joint1_id = line_c_a.joint1
     line_c_a_joint2_id = line_c_a.joint2
     circle1_host_id = circle1.host
-    circle1_start_id = circle1.start
-    circle1_end_id = circle1.finish
     circle2_host_id = circle2.host
-    circle2_start_id = circle2.start
-    circle2_end_id = circle2.finish
     circle3_host_id = circle3.host
-    circle3_start_id = circle3.start
-    circle3_end_id = circle3.finish
     circle4_host_id = circle4.host
-    circle4_start_id = circle4.start
-    circle4_end_id = circle4.finish
 
     if line_a_b_host_id < 0 || line_c_b_host_id < 0 || line_c_a_host_id < 0 ||
         circle1_host_id < 0 || circle2_host_id < 0 ||
@@ -334,18 +298,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             BPoint, CircleSweepTheta, Radius;
             brush=CircleBrush,
             color=Circle1Color,
-            marker_host_id=circle1_host_id,
-            marker_start_id=circle1_start_id,
-            marker_end_id=circle1_end_id)
+            marker_host_id=circle1_host_id)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassArcToBA
             timer = 0f0
-            OdinJuliaBridge.set_point_position(
-                state_ptr, circle1_end_id, BPoint)
-            OdinJuliaBridge.set_point_offset(
-                state_ptr, circle1_host_id, 2f0π)
+            OdinJuliaBridge.set_arc_geometry(state_ptr, circle1_host_id,
+                Radius, 7f0 * π / 4f0, CircleSweepTheta)
         end
     elseif phase == PhaseCompassArcToBA
         EuclidAnimations.animate_compass_arcmove(
@@ -363,18 +323,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             APoint, CircleSweepTheta, Radius;
             brush=CircleBrush,
             color=Circle2Color,
-            marker_host_id=circle2_host_id,
-            marker_start_id=circle2_start_id,
-            marker_end_id=circle2_end_id)
+            marker_host_id=circle2_host_id)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise
             timer = 0f0
-            OdinJuliaBridge.set_point_position(
-                state_ptr, circle2_end_id, APoint)
-            OdinJuliaBridge.set_point_offset(
-                state_ptr, circle2_host_id, 2f0π)
+            OdinJuliaBridge.set_arc_geometry(state_ptr, circle2_host_id,
+                Radius, 3f0 * π / 4f0, CircleSweepTheta)
         end
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(
@@ -457,18 +413,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             ExtBPoint, CircleSweepTheta, ExtRadius;
             brush=CircleBrush,
             color=Circle3Color,
-            marker_host_id=circle3_host_id,
-            marker_start_id=circle3_start_id,
-            marker_end_id=circle3_end_id)
+            marker_host_id=circle3_host_id)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassArcToBA2
             timer = 0f0
-            OdinJuliaBridge.set_point_position(
-                state_ptr, circle3_end_id, ExtBPoint)
-            OdinJuliaBridge.set_point_offset(
-                state_ptr, circle3_host_id, 2f0π)
+            OdinJuliaBridge.set_arc_geometry(state_ptr, circle3_host_id,
+                ExtRadius, 7f0 * π / 4f0, CircleSweepTheta)
         end
     elseif phase == PhaseCompassArcToBA2
         EuclidAnimations.animate_compass_arcmove(
@@ -486,18 +438,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             ExtAPoint, CircleSweepTheta, ExtRadius;
             brush=CircleBrush,
             color=Circle4Color,
-            marker_host_id=circle4_host_id,
-            marker_start_id=circle4_start_id,
-            marker_end_id=circle4_end_id)
+            marker_host_id=circle4_host_id)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise2
             timer = 0f0
-            OdinJuliaBridge.set_point_position(
-                state_ptr, circle4_end_id, ExtAPoint)
-            OdinJuliaBridge.set_point_offset(
-                state_ptr, circle4_host_id, 2f0π)
+            OdinJuliaBridge.set_arc_geometry(state_ptr, circle4_host_id,
+                ExtRadius, 3f0 * π / 4f0, CircleSweepTheta)
         end
     elseif phase == PhaseCompassRise2
         EuclidAnimations.animate_compass_rise(

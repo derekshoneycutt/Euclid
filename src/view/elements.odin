@@ -109,8 +109,7 @@ Pen_Polygon_Clip_Context :: struct {
 Circle_Arc_Geometry :: struct {
     center:       Vector3,
     sweep_delta:  f32,
-    start_radius: f32,
-    end_radius:   f32,
+    radius:       f32,
     start_theta:  f32,
 }
 
@@ -632,15 +631,13 @@ draw_cached_point_is_elevated :: #force_inline proc(
 //   Return true when a cached circle draw item belongs to the elevated layer.
 draw_cached_circle_is_elevated :: #force_inline proc(
     c: ^shapemodel.Shapes_Circle_Draw) -> bool {
-    circle_points := [3]Vector3{c^.center, c^.start, c^.end}
-    return has_any_elevated_shadow_point(circle_points[:])
+    return shadow_point_is_elevated(c^.center)
 }
 
 //   Return true when a cached filled-circle draw item belongs to the elevated layer.
 draw_cached_filledcircle_is_elevated :: #force_inline proc(
     c: ^shapemodel.Shapes_Filled_Circle_Draw) -> bool {
-    circle_points := [3]Vector3{c^.center, c^.start, c^.end}
-    return has_any_elevated_shadow_point(circle_points[:])
+    return shadow_point_is_elevated(c^.center)
 }
 
 //   Return true when any cached polygon vertex belongs to the elevated layer.
@@ -1639,23 +1636,13 @@ shadow_to_screen :: proc(p: Vector3, state: ^Euclid_General_State) -> Vector2 {
     return view_core.iso_to_cartesian(p_shadow, state^.iso_scale^)
 }
 
-//   Derive shared arc geometry (center-relative vectors, radii, sweep).
+//   Package direct canonical arc parameters for shared sampling passes.
 circle_arc_geometry :: #force_inline proc(
-    start, finish, center: Vector3, offset: f32) -> Circle_Arc_Geometry {
-
-    start_vec := start - center
-    end_vec := finish - center
-    start_radius :=
-        f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
-    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
-    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
-    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + offset
+    center: Vector3, radius, start_theta, sweep_theta: f32) -> Circle_Arc_Geometry {
     return Circle_Arc_Geometry{
         center = center,
-        sweep_delta = sweep_delta,
-        start_radius = start_radius,
-        end_radius = end_radius,
+        sweep_delta = sweep_theta,
+        radius = radius,
         start_theta = start_theta,
     }
 }
@@ -1663,18 +1650,14 @@ circle_arc_geometry :: #force_inline proc(
 //   Sample the world-space arc points from start through the sweep.
 circle_arc_sample_world :: proc(
     geom: ^Circle_Arc_Geometry,
-    start: Vector3,
     arc_world: []Vector3) {
-
-    arc_world[0] = start
     seg_count := f32(len(arc_world) - 1)
-    for i in 1..<len(arc_world) {
+    for i in 0..<len(arc_world) {
         t := f32(i) / seg_count
         theta := geom^.start_theta + geom^.sweep_delta * t
-        radius := math.lerp(geom^.start_radius, geom^.end_radius, t)
         arc_world[i] = Vector3{
-            geom^.center.x + f32(math.cos(theta)) * radius,
-            geom^.center.y + f32(math.sin(theta)) * radius,
+            geom^.center.x + f32(math.cos(theta)) * geom^.radius,
+            geom^.center.y + f32(math.sin(theta)) * geom^.radius,
             geom^.center.z,
         }
     }
@@ -1790,16 +1773,16 @@ draw_cached_line_shadow :: proc(
 //   Render one cached circle/arc floor shadow.
 draw_cached_circle_shadow :: proc(
     state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
-    circle_points := [3]Vector3{c^.center, c^.start, c^.end}
-    if !has_any_elevated_shadow_point(circle_points[:]) {
+    if !shadow_point_is_elevated(c^.center) {
         return
     }
 
-    geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
+    geom := circle_arc_geometry(
+        c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
     thickness := math.max(c^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    circle_arc_sample_world(&geom, c^.start, arc_world[:])
+    circle_arc_sample_world(&geom, arc_world[:])
 
     for i in 1..=CIRCLE_ARC_SEGMENTS {
         clipped0 := Vector3{}
@@ -1827,17 +1810,16 @@ draw_cached_circle_shadow :: proc(
 //   Render one cached filled-circle floor shadow.
 draw_cached_filledcircle_shadow :: proc(
     state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
-    circle_points := [3]Vector3{c^.center, c^.start, c^.end}
-    if !has_any_elevated_shadow_point(circle_points[:]) {
+    if !shadow_point_is_elevated(c^.center) {
         return
     }
 
-    geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
-    avg_height := average_shadow_height(circle_points[:])
-    shadow_color := make_shadow_color(c^.color, avg_height)
+    geom := circle_arc_geometry(
+        c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
+    shadow_color := make_shadow_color(c^.color, c^.center.z)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    circle_arc_sample_world(&geom, c^.start, arc_world[:])
+    circle_arc_sample_world(&geom, arc_world[:])
 
     points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
     points[0] = shadow_to_screen(geom.center, state)
@@ -1881,10 +1863,11 @@ draw_cached_line :: proc(
 //   Render one cached circle/arc draw item.
 draw_cached_circle :: proc(
     state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
-    geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
+    geom := circle_arc_geometry(
+        c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    circle_arc_sample_world(&geom, c^.start, arc_world[:])
+    circle_arc_sample_world(&geom, arc_world[:])
 
     xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
     arc_screen: [CIRCLE_ARC_SEGMENTS + 1]Vector2
@@ -1906,11 +1889,12 @@ draw_cached_circle :: proc(
 //   Render one cached filled-circle draw item.
 draw_cached_filledcircle :: proc(
     state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
-    geom := circle_arc_geometry(c^.start, c^.end, c^.center, c^.offset)
+    geom := circle_arc_geometry(
+        c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
     isocenter := view_core.iso_to_cartesian(geom.center, state^.iso_scale^)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    circle_arc_sample_world(&geom, c^.start, arc_world[:])
+    circle_arc_sample_world(&geom, arc_world[:])
 
     xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
     arc_screen: [CIRCLE_ARC_SEGMENTS + 1]Vector2

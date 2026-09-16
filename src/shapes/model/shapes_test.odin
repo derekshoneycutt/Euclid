@@ -160,6 +160,27 @@ core_test_shape_component_rejects_stale_generation :: proc(t: ^testing.T) {
     testing.expect(t, !found)
 }
 
+// Create one animation entity populated across every rewindable component store.
+shape_test_create_rewind_entity :: proc(
+    t: ^testing.T, world: ^Shape_World) -> Shape_Entity {
+    animation: Shape_Entity
+    testing.expect_value(t, shape_world_create_entity(
+        world, &animation), Shape_World_Status.Ok)
+    testing.expect_value(t, shape_component_insert(&world.transforms,
+        &world.registry, animation, Shape_Transform{position = {4, 5, 6}}),
+        Shape_World_Status.Ok)
+    testing.expect_value(t, shape_component_insert(&world.arcs,
+        &world.registry, animation, Shape_Arc{radius = 1, sweep_theta = 2}),
+        Shape_World_Status.Ok)
+    testing.expect_value(t, shape_component_insert(&world.render_styles,
+        &world.registry, animation, Shape_Render_Style{visible = true}),
+        Shape_World_Status.Ok)
+    testing.expect_value(t, shape_component_insert(&world.active_features,
+        &world.registry, animation, Shape_Active_Feature{index = 2}),
+        Shape_World_Status.Ok)
+    return animation
+}
+
 // Verify world-level freeze and repeated rewind restore every inline component frontier.
 @(test)
 core_test_shape_world_repeated_rewind_restores_frontiers :: proc(t: ^testing.T) {
@@ -174,26 +195,18 @@ core_test_shape_world_repeated_rewind_restores_frontiers :: proc(t: ^testing.T) 
         &world), Shape_World_Status.Ok)
 
     for expected_generation in u32(1)..=u32(2) {
-        animation: Shape_Entity
-        testing.expect_value(t, shape_world_create_entity(
-            &world, &animation), Shape_World_Status.Ok)
+        animation := shape_test_create_rewind_entity(t, &world)
         testing.expect_value(t, animation.generation, expected_generation)
-        testing.expect_value(t, shape_component_insert(
-            &world.transforms, &world.registry, animation,
-            Shape_Transform{position = {4, 5, 6}}), Shape_World_Status.Ok)
-        testing.expect_value(t, shape_component_insert(
-            &world.render_styles, &world.registry, animation,
-            Shape_Render_Style{visible = true}), Shape_World_Status.Ok)
-        testing.expect_value(t, shape_component_insert(
-            &world.active_features, &world.registry, animation,
-            Shape_Active_Feature{index = 2}), Shape_World_Status.Ok)
 
         testing.expect_value(t, shape_world_rewind_animation(
             &world), Shape_World_Status.Ok)
         testing.expect_value(t, world.registry.entity_count, u32(1))
         testing.expect_value(t, world.transforms.count, u16(1))
-        testing.expect_value(t, world.render_styles.count, u16(0))
-        testing.expect_value(t, world.active_features.count, u16(0))
+        empty_counts := [3]u16{world.arcs.count, world.render_styles.count,
+                              world.active_features.count}
+        for count in empty_counts {
+            testing.expect_value(t, count, u16(0))
+        }
         testing.expect(t, shape_component_contains(
             &world.transforms, &world.registry, baseline))
         testing.expect(t, !shape_registry_resolves(&world.registry, animation))

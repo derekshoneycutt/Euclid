@@ -65,8 +65,6 @@ struct AnimationState
     half_ray_k_joint1::Int64
     half_ray_k_joint2::Int64
     marker_host::Int64
-    marker_start::Int64
-    marker_end::Int64
     point_o::Int64
     label_o::Int64
     label_h::Int64
@@ -92,7 +90,7 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(
         state.half_ray_h_host, state.half_ray_h_joint1, state.half_ray_h_joint2,
         state.half_ray_k_host, state.half_ray_k_joint1, state.half_ray_k_joint2,
-        state.marker_host, state.marker_start, state.marker_end, state.point_o,
+        state.marker_host, state.point_o,
         state.label_o, state.label_h, state.label_k, phase, timer)
 end
 
@@ -130,7 +128,6 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     half_ray_k_host_id = state.half_ray_k_host
     half_ray_k_joint2_id = state.half_ray_k_joint2
     marker_host_id = state.marker_host
-    marker_end_id = state.marker_end
     point_o_id = state.point_o
     label_o_id = state.label_o
     label_h_id = state.label_h
@@ -142,7 +139,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
 
     OdinJuliaBridge.set_point_position(state_ptr, half_ray_h_joint2_id, HalfRayHStart)
     OdinJuliaBridge.set_point_position(state_ptr, half_ray_k_joint2_id, HalfRayKStart)
-    OdinJuliaBridge.set_point_position(state_ptr, marker_end_id, MarkerStart)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, MarkerRadius, 0f0, 0f0)
 
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, PhaseDescendToO, 0f0))
@@ -182,7 +180,7 @@ function initialize(state_ptr::Ptr{Cvoid})
     state = AnimationState(
         half_ray_h.host_id, half_ray_h.joint1_id, half_ray_h.joint2_id,
         half_ray_k.host_id, half_ray_k.joint1_id, half_ray_k.joint2_id,
-        marker.host_id, marker.start_id, marker.end_id, point_o.index,
+        marker.host_id, point_o.index,
         label_o.index, label_h.index, label_k.index, PhaseDescendToO, 0f0)
     reset_cycle_state(state_ptr, state)
     OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
@@ -203,8 +201,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     half_ray_k_joint1_id = state.half_ray_k_joint1
     half_ray_k_joint2_id = state.half_ray_k_joint2
     marker_host_id = state.marker_host
-    marker_start_id = state.marker_start
-    marker_end_id = state.marker_end
     point_o_id = state.point_o
     label_o_id = state.label_o
     label_h_id = state.label_h
@@ -301,9 +297,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerStart, AngleTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker_host_id,
-            marker_start_id=marker_start_id,
-            marker_end_id=marker_end_id)
+            marker_host_id=marker_host_id)
 
         timer += dt
         if timer >= CompassDrawDuration

@@ -1,6 +1,7 @@
 package shapemodel
 
 import "core:unicode/utf8"
+import "core:math"
 import rl "vendor:raylib"
 
 Vector3 :: rl.Vector3
@@ -55,12 +56,21 @@ Shape_Transform :: struct {
     previous_position: Vector3,
 }
 
+// Hold current and previous parameters for one mutable planar arc.
+Shape_Arc :: struct {
+    radius: f32,
+    start_theta: f32,
+    sweep_theta: f32,
+    previous_radius: f32,
+    previous_start_theta: f32,
+    previous_sweep_theta: f32,
+}
+
 // Hold canonical presentation state for one renderable entity.
 Shape_Render_Style :: struct {
     color: rl.Color,
     active_color: Maybe(rl.Color),
     brush_size: f32,
-    offset: f32,
     visible: bool,
 }
 
@@ -86,12 +96,8 @@ Shape_Line_Geometry :: struct {
     second: Shape_Entity,
 }
 
-// Name the center and endpoint transforms required by one arc.
-Shape_Arc_Geometry :: struct {
-    center: Shape_Entity,
-    start: Shape_Entity,
-    finish: Shape_Entity,
-}
+// Mark one host whose mutable parameters live in the arc component set.
+Shape_Arc_Geometry :: struct {}
 
 // Locate one immutable ordered polygon span in the world reference pool.
 Shape_Polygon_Geometry :: struct {
@@ -243,6 +249,7 @@ Shape_Constraint_Store :: struct {
 Shape_Construction_Needs :: struct {
     entities: int,
     transforms: int,
+    arcs: int,
     render_styles: int,
     active_features: int,
     geometries: int,
@@ -269,12 +276,9 @@ Shape_Line_Handle :: struct {
     second: Shape_Entity,
 }
 
-// Identify an arc host and its center and endpoint transforms.
+// Identify one arc host whose transform is its center.
 Shape_Arc_Handle :: struct {
     shape: Shape_Entity,
-    center: Shape_Entity,
-    start: Shape_Entity,
-    finish: Shape_Entity,
 }
 
 // Identify one variable-arity polygon host.
@@ -335,6 +339,7 @@ Shape_World :: struct {
     draw_cache: Shapes_Draw_Cache,
     registry: Shape_Registry,
     transforms: Shape_Component_Set(Shape_Transform),
+    arcs: Shape_Component_Set(Shape_Arc),
     render_styles: Shape_Component_Set(Shape_Render_Style),
     active_features: Shape_Component_Set(Shape_Active_Feature),
     geometries: Shape_Component_Set(Shape_Geometry),
@@ -342,6 +347,13 @@ Shape_World :: struct {
     vertex_references: Shape_Vertex_Reference_Store,
     label_store: Shape_Label_Store,
     constraints: Shape_Constraint_Store,
+}
+
+// Validate one complete mutable arc value before publication or mutation.
+shape_arc_is_valid :: proc(arc: Shape_Arc) -> bool {
+    return arc.radius >= 0 && !math.is_nan(arc.radius) && !math.is_inf(arc.radius) &&
+        !math.is_nan(arc.start_theta) && !math.is_inf(arc.start_theta) &&
+        !math.is_nan(arc.sweep_theta) && !math.is_inf(arc.sweep_theta)
 }
 
 // Invalidate every published packet frontier before canonical world mutation.
@@ -621,6 +633,7 @@ shape_world_has_capacity :: proc(
     component_capacity := MAX_SHAPE_ENTITIES
     return int(world.registry.entity_count) + needs.entities <= MAX_SHAPE_ENTITIES &&
         int(world.transforms.count) + needs.transforms <= component_capacity &&
+        int(world.arcs.count) + needs.arcs <= component_capacity &&
         int(world.render_styles.count) + needs.render_styles <= component_capacity &&
         int(world.active_features.count) + needs.active_features <= component_capacity &&
         int(world.geometries.count) + needs.geometries <= component_capacity &&
@@ -759,6 +772,7 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
         return .Invalid_Argument
     }
     if world.registry.baseline_frozen || world.transforms.baseline_frozen ||
+        world.arcs.baseline_frozen ||
         world.render_styles.baseline_frozen || world.active_features.baseline_frozen ||
         world.geometries.baseline_frozen || world.labels.baseline_frozen ||
         world.vertex_references.baseline_frozen || world.label_store.baseline_frozen ||
@@ -767,6 +781,7 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     }
     _ = shape_registry_freeze_baseline(&world.registry)
     _ = shape_component_freeze_baseline(&world.transforms)
+    _ = shape_component_freeze_baseline(&world.arcs)
     _ = shape_component_freeze_baseline(&world.render_styles)
     _ = shape_component_freeze_baseline(&world.active_features)
     _ = shape_component_freeze_baseline(&world.geometries)
@@ -786,6 +801,7 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
         return .Invalid_Argument
     }
     if !world.registry.baseline_frozen || !world.transforms.baseline_frozen ||
+        !world.arcs.baseline_frozen ||
         !world.render_styles.baseline_frozen || !world.active_features.baseline_frozen ||
         !world.geometries.baseline_frozen || !world.labels.baseline_frozen ||
         !world.vertex_references.baseline_frozen || !world.label_store.baseline_frozen ||
@@ -794,6 +810,7 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
     }
     shape_world_invalidate_draw_cache(world)
     _ = shape_component_rewind_animation(&world.transforms)
+    _ = shape_component_rewind_animation(&world.arcs)
     _ = shape_component_rewind_animation(&world.render_styles)
     _ = shape_component_rewind_animation(&world.active_features)
     _ = shape_component_rewind_animation(&world.geometries)

@@ -50,9 +50,14 @@ struct ObjectIds
     joint2::Int64
 end
 
+"""Stable native host for one arc owned by the animation."""
+struct ArcIds
+    host::Int64
+end
+
 """Complete immutable state for one completeness animation generation."""
 struct AnimationState
-    circle::ObjectIds
+    circle::ArcIds
     tangent::ObjectIds
     trail::ObjectIds
     phase::Float32
@@ -89,7 +94,6 @@ end
 """Reset cycle timing transactionally before restoring visible animation state."""
 function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     circle_hostid = state.circle.host
-    circle_endid = state.circle.joint2
     tangent_host_id = state.tangent.host
     tangent_joint2_id = state.tangent.joint2
     trail_host_id = state.trail.host
@@ -102,8 +106,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     OdinJuliaBridge.hide_point_batch(state_ptr, [
         circle_hostid, tangent_host_id, trail_host_id])
 
-    OdinJuliaBridge.set_point_position(state_ptr, circle_endid, CircleStartPoint)
-    OdinJuliaBridge.set_point_offset(state_ptr, circle_hostid, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, circle_hostid, CircleRadius, 0f0, 0f0)
 
     OdinJuliaBridge.set_point_position(state_ptr, tangent_joint2_id, TangentPoint)
     OdinJuliaBridge.set_point_position(state_ptr, trail_joint2_id, CircleCenter)
@@ -138,7 +142,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, CircleCenter, CircleCenter, ExtensionColor, 0f0)
 
     state = AnimationState(
-        ObjectIds(circle.host_id, circle.start_id, circle.end_id),
+        ArcIds(circle.host_id),
         ObjectIds(tangent_ray.host_id, tangent_ray.joint1_id, tangent_ray.joint2_id),
         ObjectIds(center_trail.host_id, center_trail.joint1_id, center_trail.joint2_id),
         PhaseCompassDescend, 0f0)
@@ -155,8 +159,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
     status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
     circle_hostid = state.circle.host
-    circle_startid = state.circle.joint1
-    circle_endid = state.circle.joint2
     tangent_host_id = state.tangent.host
     tangent_joint1_id = state.tangent.joint1
     tangent_joint2_id = state.tangent.joint2
@@ -188,14 +190,12 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             CircleStartPoint, CircleSweepTheta, CircleRadius;
             brush=CircleBrush,
             color=CircleColor,
-            marker_host_id=circle_hostid,
-            marker_start_id=circle_startid,
-            marker_end_id=circle_endid)
+            marker_host_id=circle_hostid)
 
         timer += dt
         if timer >= CircleDrawDuration
-            OdinJuliaBridge.set_point_position(state_ptr, circle_endid, CircleStartPoint)
-            OdinJuliaBridge.set_point_offset(state_ptr, circle_hostid, 2f0 * π)
+            OdinJuliaBridge.set_arc_geometry(
+                state_ptr, circle_hostid, CircleRadius, 0f0, CircleSweepTheta)
             phase = PhaseReinforceSweepForward
             timer = 0f0
         end

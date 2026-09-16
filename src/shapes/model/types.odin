@@ -11,7 +11,7 @@ MAX_DRAW_CACHE_POLYGON_TRIANGLES :: MAX_SHAPESPOINTS
 Bridge_Arc_Geometry :: struct {
     radius:      f32,
     start_theta: f32,
-    end_theta:   f32,
+    sweep_theta: f32,
 }
 
 // Group four vertices for one square bridge operation.
@@ -28,6 +28,7 @@ Bridge_Pentagon_Vertices :: struct {
 Shape_Query_Snapshot :: struct {
     registry: Shape_Registry,
     transforms: Shape_Component_Set(Shape_Transform),
+    arcs: Shape_Component_Set(Shape_Arc),
     render_styles: Shape_Component_Set(Shape_Render_Style),
     active_features: Shape_Component_Set(Shape_Active_Feature),
     geometries: Shape_Component_Set(Shape_Geometry),
@@ -81,17 +82,17 @@ Shapes_Line_Draw :: struct {
 Shapes_Circle_Draw :: struct {
     using base: Shapes_Draw_Base,
     center: Vector3,
-    start: Vector3,
-    end: Vector3,
-    offset: f32,
+    radius: f32,
+    start_theta: f32,
+    sweep_theta: f32,
 }
 
 Shapes_Filled_Circle_Draw :: struct {
     using base: Shapes_Draw_Base,
     center: Vector3,
-    start: Vector3,
-    end: Vector3,
-    offset: f32,
+    radius: f32,
+    start_theta: f32,
+    sweep_theta: f32,
 }
 
 Shapes_Polygon_Ring_Node :: struct {

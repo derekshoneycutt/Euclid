@@ -33,7 +33,7 @@ world_render_snapshots_dense_transforms_for_interpolation :: proc(t: ^testing.T)
     point, status := world_create_point(&world, {2, 0, 0}, Shape_Style{})
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     world_render_test_show(&world, point.entity)
-    shape_world_update_previous_positions(&world)
+    shape_world_update_previous_values(&world)
     world_render_test_transform(&world, point.entity).position = {6, 0, 0}
 
     build_shape_world_draw_cache(&world, 0.25)
@@ -57,7 +57,7 @@ world_render_builds_direct_line_and_arc_items :: proc(t: ^testing.T) {
         &world, {0, 0, 0}, {2, 0, 0}, Shape_Style{})
     arc, arc_status := world_create_arc(&world, {
         center = {4, 0, 0}, radius = 2, start_theta = 0,
-        end_theta = 1, style = Shape_Style{}})
+        sweep_theta = 1, style = Shape_Style{}})
     testing.expect_value(t, line_status, shapemodel.Shape_World_Status.Ok)
     testing.expect_value(t, arc_status, shapemodel.Shape_World_Status.Ok)
     world_render_test_show(&world, line.shape)
@@ -87,7 +87,7 @@ world_render_builds_filled_arc_pen_and_compass_items :: proc(t: ^testing.T) {
     world: shapemodel.Shape_World
     filled, filled_status := world_create_filled_arc(&world, {
         center = {0, 0, 0}, radius = 1, start_theta = 0,
-        end_theta = 1, style = Shape_Style{}})
+        sweep_theta = 1, style = Shape_Style{}})
     pen, pen_status := world_create_pen(&world, {
         joint1 = {2, 0, 0}, joint2 = {3, 0, 0}, length = 1,
         style = Shape_Style{}})

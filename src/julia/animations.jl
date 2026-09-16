@@ -715,15 +715,12 @@ end
 """
 Animate a filled angle marker through 3D reflection arc motion.
 
-This animates the center/start/end point IDs with the same half-turn lift used
-by `transform_reflect2d_point`, and optionally swaps start/end IDs each frame
-to preserve interior sector orientation after reflection.
+This animates one arc host with the same half-turn lift used by
+`transform_reflect2d_point` while preserving interior sector orientation.
 """
 function animate_reflect2d_filled_angle_marker(
     state_ptr::Ptr{Cvoid},
-    marker_host_id::Integer,
-    marker_start_id::Integer,
-    marker_end_id::Integer;
+    marker_host_id::Integer;
     start_center::AbstractVector{<:Real}=[0f0,0f0,0f0],
     start_point::AbstractVector{<:Real}=[0f0,0f0,0f0],
     end_point::AbstractVector{<:Real}=[0f0,0f0,0f0],
@@ -750,9 +747,18 @@ function animate_reflect2d_filled_angle_marker(
     start_out, end_out = reflected_marker_endpoints(
         reflected_center, reflected_start, reflected_end, preserve_interior)
 
-    return write_marker_point_positions(
-        state_ptr, marker_host_id, marker_start_id, marker_end_id,
-        reflected_center, start_out, end_out)
+    host_status = OdinJuliaBridge.set_point_position_status(
+        state_ptr, marker_host_id, reflected_center)
+    if host_status != OdinJuliaBridge.BRIDGE_STATUS_OK
+        return host_status
+    end
+    radius = Float32(hypot(
+        start_out[1] - reflected_center[1], start_out[2] - reflected_center[2]))
+    start_theta = Float32(atan(
+        start_out[2] - reflected_center[2], start_out[1] - reflected_center[1]))
+    sweep_theta = ccw_sweep_xy(reflected_center, start_out, end_out)
+    return OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, radius, start_theta, sweep_theta)
 end
 
 
@@ -768,29 +774,6 @@ function reflected_marker_endpoints(
         end
     end
     return reflected_start, reflected_end
-end
-
-
-"""Write the three reflected marker point positions, returning the first failure."""
-function write_marker_point_positions(
-    state_ptr::Ptr{Cvoid},
-    marker_host_id::Integer, marker_start_id::Integer, marker_end_id::Integer,
-    reflected_center::AbstractVector{<:Real}, start_out::AbstractVector{<:Real},
-    end_out::AbstractVector{<:Real})
-
-    host_status = OdinJuliaBridge.set_point_position_status(
-        state_ptr, marker_host_id, reflected_center)
-    if host_status != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return host_status
-    end
-
-    start_status = OdinJuliaBridge.set_point_position_status(
-        state_ptr, marker_start_id, start_out)
-    if start_status != OdinJuliaBridge.BRIDGE_STATUS_OK
-        return start_status
-    end
-
-    return OdinJuliaBridge.set_point_position_status(state_ptr, marker_end_id, end_out)
 end
 
 
@@ -1756,8 +1739,6 @@ Parameters:
 - brush : Brush size for the marker host primitive.
 - color : Marker and trail color.
 - marker_host_id : Host id for the filled marker primitive.
-- marker_start_id : Start control point id for marker geometry.
-- marker_end_id : End control point id for marker geometry.
 
 Returns:
 
@@ -1770,9 +1751,7 @@ function animate_draw_circle(
     angle_theta::Real, radius::Real;
     brush::Real=0f0,
     color=:black,
-    marker_host_id::Integer=0,
-    marker_start_id::Integer=0,
-    marker_end_id::Integer=0)
+    marker_host_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
@@ -1791,8 +1770,8 @@ function animate_draw_circle(
 
     OdinJuliaBridge.set_point_color(state_ptr, marker_host_id, color)
     OdinJuliaBridge.set_point_brush(state_ptr, marker_host_id, brush)
-    OdinJuliaBridge.set_point_position(state_ptr, marker_start_id, start_point)
-    OdinJuliaBridge.set_point_position(state_ptr, marker_end_id, end_point)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, radius, start_theta, angle_theta * t)
     OdinJuliaBridge.show_point(state_ptr, marker_host_id)
 
     OdinJuliaBridge.emit_trailing_particle(state_ptr, end_point, color)
@@ -1815,8 +1794,6 @@ Parameters:
 - brush : Brush size for the marker host primitive.
 - color : Marker and trail color.
 - marker_host_id : Host id for the filled marker primitive.
-- marker_start_id : Start control point id for marker geometry.
-- marker_end_id : End control point id for marker geometry.
 
 Returns:
 
@@ -1829,9 +1806,7 @@ function animate_draw_filledcircle(
     angle_theta::Real, radius::Real;
     brush::Real=0f0,
     color=:black,
-    marker_host_id::Integer=0,
-    marker_start_id::Integer=0,
-    marker_end_id::Integer=0)
+    marker_host_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
     start_theta = Float32(atan(start_point[2] - joint_point[2],
@@ -1850,8 +1825,8 @@ function animate_draw_filledcircle(
 
     OdinJuliaBridge.set_point_color(state_ptr, marker_host_id, color)
     OdinJuliaBridge.set_point_brush(state_ptr, marker_host_id, brush)
-    OdinJuliaBridge.set_point_position(state_ptr, marker_start_id, start_point)
-    OdinJuliaBridge.set_point_position(state_ptr, marker_end_id, end_point)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, radius, start_theta, angle_theta * t)
     OdinJuliaBridge.show_point(state_ptr, marker_host_id)
 
     emit_filledcircle_radius_trail(state_ptr, joint_point, end_point, color)
@@ -2035,18 +2010,15 @@ function animate_repl_circle_phases(
     timer::Real, duration::Real,
     joint_point::AbstractVector{<:Real}, start_point::AbstractVector{<:Real},
     sweep::Tuple{<:Real,<:Real},
-    marker_host_id::Integer, full_sweep::Bool)
+    marker_host_id::Integer)
 
     angle_theta, radius = sweep
-    if full_sweep
-        OdinJuliaBridge.set_point_offset(state_ptr, marker_host_id, angle_theta)
-    else
-        OdinJuliaBridge.set_point_offset(state_ptr, marker_host_id, 0f0)
-    end
-
     draw_end = duration * (ReplDescendShare + ReplDrawShare)
-    final_theta = Float32(atan(start_point[2] - joint_point[2],
-        start_point[1] - joint_point[1])) + angle_theta
+    start_theta = Float32(atan(start_point[2] - joint_point[2],
+        start_point[1] - joint_point[1]))
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, radius, start_theta, angle_theta)
+    final_theta = start_theta + angle_theta
     end_point = Float32[
         joint_point[1] + radius * Float32(cos(final_theta)),
         joint_point[2] + radius * Float32(sin(final_theta)),
@@ -2068,10 +2040,7 @@ function animate_repl_draw_circle(
     radius::Real;
     brush::Real=0f0,
     color=:black,
-    marker_host_id::Integer=0,
-    marker_start_id::Integer=0,
-    marker_end_id::Integer=0,
-    full_sweep::Bool=false)
+    marker_host_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -2097,14 +2066,13 @@ function animate_repl_draw_circle(
         animate_draw_circle(
             state_ptr, timer - draw_start, draw_duration,
             joint_point, start_point, angle_theta, radius;
-            brush=brush, color=color, marker_host_id=marker_host_id,
-            marker_start_id=marker_start_id, marker_end_id=marker_end_id)
+            brush=brush, color=color, marker_host_id=marker_host_id)
         return
     end
 
     animate_repl_circle_phases(
         state_ptr, timer, duration, joint_point, start_point,
-        (angle_theta, radius), marker_host_id, full_sweep)
+        (angle_theta, radius), marker_host_id)
 end
 
 """Animate a REPL filled-circle draw with explicit compass descend, draw, and rise phases."""
@@ -2115,10 +2083,7 @@ function animate_repl_draw_filledcircle(
     angle_theta::Real, radius::Real;
     brush::Real=0f0,
     color=:black,
-    marker_host_id::Integer=0,
-    marker_start_id::Integer=0,
-    marker_end_id::Integer=0,
-    full_sweep::Bool=false)
+    marker_host_id::Integer=0)
 
     t = clamp(timer / duration, 0f0, 1f0)
 
@@ -2144,14 +2109,13 @@ function animate_repl_draw_filledcircle(
         animate_draw_filledcircle(
             state_ptr, timer - draw_start, draw_duration,
             joint_point, start_point, angle_theta, radius;
-            brush=brush, color=color, marker_host_id=marker_host_id,
-            marker_start_id=marker_start_id, marker_end_id=marker_end_id)
+            brush=brush, color=color, marker_host_id=marker_host_id)
         return
     end
 
     animate_repl_circle_phases(
         state_ptr, timer, duration, joint_point, start_point,
-        (angle_theta, radius), marker_host_id, full_sweep)
+        (angle_theta, radius), marker_host_id)
 end
 
 end

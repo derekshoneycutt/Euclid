@@ -78,8 +78,6 @@ struct AnimationState
     edge_b_c_joint1::Int64
     edge_b_c_joint2::Int64
     marker_host::Int64
-    marker_start::Int64
-    marker_end::Int64
     label_a::Int64
     label_b::Int64
     label_c::Int64
@@ -108,7 +106,7 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
         state.edge_a_b_host, state.edge_a_b_joint1, state.edge_a_b_joint2,
         state.edge_a_c_host, state.edge_a_c_joint1, state.edge_a_c_joint2,
         state.edge_b_c_host, state.edge_b_c_joint1, state.edge_b_c_joint2,
-        state.marker_host, state.marker_start, state.marker_end,
+        state.marker_host,
         state.label_a, state.label_b, state.label_c, state.label_h,
         state.label_k, phase, timer)
 end
@@ -139,7 +137,6 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     edge_b_c_host_id = state.edge_b_c_host
     edge_b_c_joint2_id = state.edge_b_c_joint2
     marker_host_id = state.marker_host
-    marker_end_id = state.marker_end
     label_a_id = state.label_a
     label_b_id = state.label_b
     label_c_id = state.label_c
@@ -153,7 +150,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     OdinJuliaBridge.set_point_position(state_ptr, edge_a_b_joint2_id, EdgeABStart)
     OdinJuliaBridge.set_point_position(state_ptr, edge_a_c_joint2_id, EdgeACStart)
     OdinJuliaBridge.set_point_position(state_ptr, edge_b_c_joint2_id, EdgeBCStart)
-    OdinJuliaBridge.set_point_position(state_ptr, marker_end_id, MarkerStart)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_host_id, MarkerRadius, ThetaAB, 0f0)
 
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, PhaseDescendToA, 0f0))
@@ -185,7 +183,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, EdgeBCStart, EdgeBCStart, EdgeBCColor, 0f0)
 
     marker = OdinJuliaBridge.create_new_filledcircle(state_ptr,
-        PointA, MarkerRadius, 0f0, 0f0,
+        PointA, MarkerRadius, ThetaAB, 0f0,
         MarkerColor, 0f0)
 
     label_a = OdinJuliaBridge.create_new_label(
@@ -203,7 +201,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         edge_a_b.host_id, edge_a_b.joint1_id, edge_a_b.joint2_id,
         edge_a_c.host_id, edge_a_c.joint1_id, edge_a_c.joint2_id,
         edge_b_c.host_id, edge_b_c.joint1_id, edge_b_c.joint2_id,
-        marker.host_id, marker.start_id, marker.end_id,
+        marker.host_id,
         label_a.index, label_b.index, label_c.index, label_h.index, label_k.index,
         PhaseDescendToA, 0f0)
     reset_cycle_state(state_ptr, state)
@@ -228,8 +226,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     edge_b_c_joint1_id = state.edge_b_c_joint1
     edge_b_c_joint2_id = state.edge_b_c_joint2
     marker_host_id = state.marker_host
-    marker_start_id = state.marker_start
-    marker_end_id = state.marker_end
     label_a_id = state.label_a
     label_b_id = state.label_b
     label_c_id = state.label_c
@@ -344,9 +340,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerStart, AngleTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker_host_id,
-            marker_start_id=marker_start_id,
-            marker_end_id=marker_end_id)
+            marker_host_id=marker_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration

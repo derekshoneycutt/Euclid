@@ -66,8 +66,6 @@ const HidePauseDuration = 1.5f0
 """Stable native handles for the circle owned by the animation."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one associativity animation generation."""
@@ -144,17 +142,14 @@ end
 """Reset the animation cycle while preserving its native handles."""
 function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     circle_hostid = state.circle.host
-    circle_endid = state.circle.finish
     point1id, point2id, point3id, point4id, point5id, point6id,
         point7id, point8id, point9id, point10id, point11id, point12id = state.points
 
     OdinJuliaBridge.hide_point_batch(state_ptr,
         [point1id, point2id, point3id, point4id, point5id, point6id, point7id, point8id,
          point9id, point10id, point11id, point12id, circle_hostid])
-    OdinJuliaBridge.set_point_position(
-        state_ptr, circle_endid, CircleStartPoint)
-    OdinJuliaBridge.set_point_offset(
-        state_ptr, circle_hostid, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, circle_hostid, Radius, 0f0, 0f0)
 
     OdinJuliaBridge.set_point_position(
         state_ptr, point1id, Point1)
@@ -229,7 +224,7 @@ function initialize(state_ptr::Ptr{Cvoid})
         state_ptr, Point12, Point12Color, 0f0)
 
     state = AnimationState(
-        CircleIds(circle.host_id, circle.start_id, circle.end_id),
+        CircleIds(circle.host_id),
         (point1.index, point2.index, point3.index, point4.index,
             point5.index, point6.index, point7.index, point8.index,
             point9.index, point10.index, point11.index, point12.index),
@@ -247,8 +242,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
     status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
     circle_hostid = state.circle.host
-    circle_startid = state.circle.start
-    circle_endid = state.circle.finish
     point1id, point2id, point3id, point4id, point5id, point6id,
         point7id, point8id, point9id, point10id, point11id, point12id = state.points
 
@@ -277,18 +270,14 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             CircleStartPoint, CircleSweepTheta, Radius;
             brush=CircleBrush,
             color=CircleColor,
-            marker_host_id=circle_hostid,
-            marker_start_id=circle_startid,
-            marker_end_id=circle_endid)
+            marker_host_id=circle_hostid)
 
         timer += dt
         if timer >= CircleDrawDuration
             phase = PhaseCompassRise
             timer = 0f0
-            OdinJuliaBridge.set_point_position(
-                state_ptr, circle_endid, CircleStartPoint)
-            OdinJuliaBridge.set_point_offset(
-                state_ptr, circle_hostid, 2f0π)
+            OdinJuliaBridge.set_arc_geometry(
+                state_ptr, circle_hostid, Radius, 0f0, CircleSweepTheta)
         end
     elseif phase == PhaseCompassRise
         EuclidAnimations.animate_compass_rise(

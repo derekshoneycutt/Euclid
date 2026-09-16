@@ -172,8 +172,6 @@ end
 """Stable native handles for one filled-circle marker."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one Axiom IV,6 animation generation."""
@@ -297,9 +295,7 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     edge_b_prime_c_prime_joint2_id = state.edge_b_prime_c_prime.joint2
 
     marker_a_host_id = state.marker_a.host
-    marker_a_end_id = state.marker_a.finish
     marker_a_prime_host_id = state.marker_a_prime.host
-    marker_a_prime_end_id = state.marker_a_prime.finish
 
     label_a_id = state.label_a
     label_b_id = state.label_b
@@ -327,10 +323,10 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     OdinJuliaBridge.set_point_position(
         state_ptr, edge_b_prime_c_prime_joint2_id, EdgeBPrimeCPrimeStart)
 
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker_a_end_id, MarkerAStart)
-    OdinJuliaBridge.set_point_position(
-        state_ptr, marker_a_prime_end_id, MarkerAPrimeStart)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_a_host_id, MarkerRadius, ThetaAAB, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, marker_a_prime_host_id, MarkerRadius, ThetaAPrimeAB, 0f0)
 
     status = OdinJuliaBridge.set_animation_value!(
         state_ptr, StateKey, with_timing(state, PhaseDescendToA, 0f0))
@@ -406,9 +402,7 @@ function initialize(state_ptr::Ptr{Cvoid})
             edge_a_prime_c_prime.joint2_id),
         LineIds(edge_b_prime_c_prime.host_id, edge_b_prime_c_prime.joint1_id,
             edge_b_prime_c_prime.joint2_id),
-        CircleIds(marker_a.host_id, marker_a.start_id, marker_a.end_id),
-        CircleIds(marker_a_prime.host_id, marker_a_prime.start_id,
-            marker_a_prime.end_id),
+        CircleIds(marker_a.host_id), CircleIds(marker_a_prime.host_id),
         label_a.index, label_b.index, label_c.index, label_a_prime.index,
         label_b_prime.index, label_c_prime.index, PhaseDescendToA, 0f0)
     reset_cycle_state(state_ptr, state)
@@ -444,11 +438,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     edge_b_prime_c_prime_joint2_id = state.edge_b_prime_c_prime.joint2
 
     marker_a_host_id = state.marker_a.host
-    marker_a_start_id = state.marker_a.start
-    marker_a_end_id = state.marker_a.finish
     marker_a_prime_host_id = state.marker_a_prime.host
-    marker_a_prime_start_id = state.marker_a_prime.start
-    marker_a_prime_end_id = state.marker_a_prime.finish
 
     label_a_id = state.label_a
     label_b_id = state.label_b
@@ -563,9 +553,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerAStart, AngleATheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker_a_host_id,
-            marker_start_id=marker_a_start_id,
-            marker_end_id=marker_a_end_id)
+            marker_host_id=marker_a_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration
@@ -684,9 +672,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerAPrimeStart, AngleAPrimeTheta, MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColor,
-            marker_host_id=marker_a_prime_host_id,
-            marker_start_id=marker_a_prime_start_id,
-            marker_end_id=marker_a_prime_end_id)
+            marker_host_id=marker_a_prime_host_id)
 
         timer += dt
         if timer >= MarkerDrawDuration

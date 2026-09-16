@@ -168,6 +168,10 @@ Each intent records its source, geometry, and spawn-sequence cutoff. The worker 
 command order and coalesces only adjacent contacts with identical source semantics and
 geometry.
 
+Shape hide and clear bursts sample canonical arcs directly from the host center and
+their radius, start angle, and signed sweep. They preserve sweep direction and require
+no synthetic endpoint entities or render-style offset.
+
 Pens, ordinary compass movement, outlined circles, and outline highlights use point
 contacts. Each contributes one radial-away sample at the authored tip. A filled-circle
 update instead records the previous and current compass legs as one compound joint-2

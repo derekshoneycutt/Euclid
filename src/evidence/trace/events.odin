@@ -104,6 +104,7 @@ Kind :: enum u16 {
     Point_Visibility_Committed = 182,
     Constraint_Solve_Completed = 183,
     Constraint_Solve_Failed = 184,
+    Arc_Geometry_Committed = 185,
 
     // Drawing tools (260-319).
     Pen_Joint_Committed = 260,

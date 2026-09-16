@@ -218,8 +218,8 @@ artifact_put_u64 :: proc(destination: []u8, offset: int, value: u64) {
 artifact_encode_payload :: proc(
     destination: []u8, kind: trace.Kind, payload: trace.Event_Payload) {
     #partial switch kind {
-    case .Point_Position_Committed, .Point_Style_Committed,
-         .Point_Visibility_Committed:
+        case .Point_Position_Committed, .Point_Style_Committed,
+            .Point_Visibility_Committed, .Arc_Geometry_Committed:
         artifact_put_u32(destination, 0, payload.point.point_index)
         artifact_put_u16(destination, 4, payload.point.field)
         destination[6] = payload.point.visible

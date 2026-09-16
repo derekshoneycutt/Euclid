@@ -251,7 +251,7 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
     }
     shapes.world_apply_all_constraints_to_error(
         world, view_core.ALLOWED_CONSTRAINT_ERROR)
-    shapes.shape_world_update_previous_positions(world)
+    shapes.shape_world_update_previous_values(world)
     out.world = world
     out.world_compass = world_compass
     out.world_pen = world_pen

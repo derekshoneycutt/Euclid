@@ -72,8 +72,6 @@ end
 """Stable native handles for one angle marker owned by the animation."""
 struct CircleIds
     host::Int64
-    start::Int64
-    finish::Int64
 end
 
 """Complete immutable state for one oblong animation generation."""
@@ -119,7 +117,6 @@ end
 function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
     line_joint2_ids = ntuple(i -> state.lines[i].joint2, 4)
     marker_host_ids = ntuple(i -> state.markers[i].host, 4)
-    marker_end_ids = ntuple(i -> state.markers[i].finish, 4)
 
     OdinJuliaBridge.hide_point_batch(state_ptr, [marker_host_ids..., marker_host_ids...])
 
@@ -128,9 +125,8 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
             state_ptr, line_joint2_ids[i],
             SideStarts[i][1], SideStarts[i][2], SideStarts[i][3])
 
-        OdinJuliaBridge.set_point_position(
-            state_ptr, marker_end_ids[i],
-            MarkerStarts[i][1], MarkerStarts[i][2], MarkerStarts[i][3])
+        OdinJuliaBridge.set_arc_geometry(
+            state_ptr, marker_host_ids[i], MarkerRadius, MarkerStartThetas[i], 0f0)
     end
 
     OdinJuliaBridge.hide_pen(state_ptr)
@@ -159,9 +155,9 @@ function initialize(state_ptr::Ptr{Cvoid})
         marker = OdinJuliaBridge.create_new_circle(
             state_ptr,
             MarkerCenters[i], MarkerRadius,
-            MarkerStartThetas[i], MarkerStartThetas[i],
+            MarkerStartThetas[i], 0f0,
             MarkerColors[i], 0f0)
-        CircleIds(marker.host_id, marker.start_id, marker.end_id)
+        CircleIds(marker.host_id)
     end
     lines = ntuple(4) do i
         line = OdinJuliaBridge.create_new_line(
@@ -188,8 +184,6 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
     line_joint1_ids = ntuple(i -> state.lines[i].joint1, 4)
     line_joint2_ids = ntuple(i -> state.lines[i].joint2, 4)
     marker_host_ids = ntuple(i -> state.markers[i].host, 4)
-    marker_start_ids = ntuple(i -> state.markers[i].start, 4)
-    marker_end_ids = ntuple(i -> state.markers[i].finish, 4)
 
     if line1_host_id < 0
         return
@@ -259,9 +253,7 @@ function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
             MarkerStarts[marker_index], MarkerSweeps[marker_index], MarkerRadius;
             brush=MarkerBrush,
             color=MarkerColors[marker_index],
-            marker_host_id=marker_host_ids[marker_index],
-            marker_start_id=marker_start_ids[marker_index],
-            marker_end_id=marker_end_ids[marker_index])
+            marker_host_id=marker_host_ids[marker_index])
 
         timer += dt
         if timer >= MarkerDrawDuration

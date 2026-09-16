@@ -2,9 +2,6 @@ package shapes
 
 import shapemodel "model"
 
-import "core:math"
-
-
 import rl "vendor:raylib"
 
 // Supply presentation values shared by canonical shape constructors.
@@ -16,7 +13,7 @@ Shape_Style :: struct {
 // Supply canonical arc geometry and presentation values.
 Arc_Input :: struct {
     center: Vector3,
-    radius, start_theta, end_theta: f32,
+    radius, start_theta, sweep_theta: f32,
     style: Shape_Style,
 }
 
@@ -163,35 +160,36 @@ world_create_line :: proc(
     return {shape = shape, first = first, second = second}, .Ok
 }
 
-// Calculate one arc endpoint in the center's plane.
-world_arc_endpoint :: proc(center: Vector3, radius, theta: f32) -> Vector3 {
-    return {center.x + radius*f32(math.cos(theta)),
-        center.y + radius*f32(math.sin(theta)), center.z}
-}
-
-// Create one arc variant with direct center and endpoint references.
+// Create one arc variant whose host transform is its center.
 world_create_arc_kind :: proc(
     world: ^shapemodel.Shape_World,
     input: Arc_Input,
     kind: shapemodel.Shape_Geometry_Kind) -> (
         shapemodel.Shape_Arc_Handle, shapemodel.Shape_World_Status) {
     needs := shapemodel.Shape_Construction_Needs{
-        entities = 3, transforms = 3, render_styles = 1, geometries = 1}
+        entities = 1, transforms = 1, arcs = 1, render_styles = 1, geometries = 1}
     if world == nil || kind != .Arc && kind != .Filled_Arc {
+        return {}, .Invalid_Argument
+    }
+    arc := shapemodel.Shape_Arc{radius = input.radius,
+        start_theta = input.start_theta,
+        sweep_theta = input.sweep_theta,
+        previous_radius = input.radius,
+        previous_start_theta = input.start_theta,
+        previous_sweep_theta = input.sweep_theta}
+    if !shapemodel.shape_arc_is_valid(arc) {
         return {}, .Invalid_Argument
     }
     if !shapemodel.shape_world_has_capacity(world, needs) {
         return {}, .Out_Of_Capacity
     }
     shape := world_shape_append_transform(world, input.center)
-    start := world_shape_append_transform(world, world_arc_endpoint(
-        input.center, input.radius, input.start_theta))
-    finish := world_shape_append_transform(world, world_arc_endpoint(
-        input.center, input.radius, input.end_theta))
     geometry := shapemodel.Shape_Geometry{kind = kind}
-    geometry.payload.arc = {center = shape, start = start, finish = finish}
+    arc_status := shapemodel.shape_component_insert(
+        &world.arcs, &world.registry, shape, arc)
+    assert(arc_status == .Ok)
     world_shape_publish_host(world, shape, input.style, geometry)
-    return {shape = shape, center = shape, start = start, finish = finish}, .Ok
+    return {shape = shape}, .Ok
 }
 
 // Create one outlined arc with direct transform references.

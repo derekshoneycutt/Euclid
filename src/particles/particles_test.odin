@@ -46,9 +46,10 @@ circle_dust_emission_scales_with_arc_length :: proc(t: ^testing.T) {
     full.use_max_dust_particles = 1000
     color := rl.Color{255, 255, 255, 255}
 
-    emit_circle_dust(quarter, {{0, 0, 0}, {0.2, 0, 0}, {0, 0.2, 0}, 0, color})
+    emit_circle_dust(quarter, {
+        center = {}, radius = 0.2, sweep_theta = f32(math.PI/2), color = color})
     emit_circle_dust(full, {
-        {0, 0, 0}, {0.2, 0, 0}, {0.2, 0, 0}, f32(2 * math.PI), color})
+        center = {}, radius = 0.2, sweep_theta = f32(2*math.PI), color = color})
 
     quarter_count := count_live_low_particles(quarter)
     full_count := count_live_low_particles(full)
@@ -63,10 +64,8 @@ filled_circle_dust_emission_samples_sector_interior :: proc(t: ^testing.T) {
     defer free(ps)
     ps.use_max_dust_particles = 1000
 
-    emit_filled_circle_dust(ps, {
-        {0, 0, 0}, {0.2, 0, 0},
-        {0.1, math.sqrt(f32(3)) * 0.1, 0}, 0,
-        rl.Color{255, 255, 255, 255}})
+    emit_filled_circle_dust(ps, {center = {}, radius = 0.2,
+        sweep_theta = f32(math.PI/3), color = rl.Color{255, 255, 255, 255}})
 
     interior_count: int
     for index in 0..<ps.use_max_dust_particles {

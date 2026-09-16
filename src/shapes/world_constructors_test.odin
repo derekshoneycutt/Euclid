@@ -32,12 +32,12 @@ shapes_test_world_creates_point_and_line_geometry :: proc(t: ^testing.T) {
     testing.expect_value(t, geometry.payload.line.second, line.second)
 }
 
-// Verify outlined and filled arcs retain direct center and endpoint identities.
+// Verify outlined and filled arcs retain one direct signed-sweep component each.
 @(test)
 shapes_test_world_creates_arc_variants :: proc(t: ^testing.T) {
     world: shapemodel.Shape_World
     input := Arc_Input{center = {1, 2, 3}, radius = 2,
-        start_theta = 0, end_theta = f32(math.PI), style = world_shape_test_style()}
+        start_theta = 0, sweep_theta = f32(math.PI), style = world_shape_test_style()}
     arc, arc_status := world_create_arc(&world, input)
     filled, filled_status := world_create_filled_arc(&world, input)
     testing.expect_value(t, arc_status, shapemodel.Shape_World_Status.Ok)
@@ -51,8 +51,18 @@ shapes_test_world_creates_arc_variants :: proc(t: ^testing.T) {
     testing.expect_value(t, arc_geometry.kind, shapemodel.Shape_Geometry_Kind.Arc)
     testing.expect_value(
         t, filled_geometry.kind, shapemodel.Shape_Geometry_Kind.Filled_Arc)
-    testing.expect_value(t, arc_geometry.payload.arc.center, arc.center)
-    testing.expect_value(t, filled_geometry.payload.arc.finish, filled.finish)
+    arc_value, arc_value_found := shapemodel.shape_component_get(
+        &world.arcs, &world.registry, arc.shape)
+    filled_value, filled_value_found := shapemodel.shape_component_get(
+        &world.arcs, &world.registry, filled.shape)
+    testing.expect(t, arc_value_found && filled_value_found)
+    testing.expect_value(t, arc_value.radius, f32(2))
+    testing.expect_value(t, arc_value.start_theta, f32(0))
+    testing.expect_value(t, arc_value.sweep_theta, f32(math.PI))
+    testing.expect_value(t, filled_value.sweep_theta, f32(math.PI))
+    testing.expect_value(t, world.registry.entity_count, u32(2))
+    testing.expect_value(t, world.transforms.count, u16(2))
+    testing.expect_value(t, world.arcs.count, u16(2))
 }
 
 // Verify polygon conveniences preserve authored vertex order in the reference pool.
