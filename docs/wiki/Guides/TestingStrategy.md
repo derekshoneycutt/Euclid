@@ -141,7 +141,7 @@ The principal command forms are:
 | Form | Purpose |
 | --- | --- |
 | `{"do":"ACTION"}` | Issue `reset_animation`, `reload_runtime`, pause/resume, or `stop_gif`. |
-| `{"select_animation":"NAME"}` | Select an animation by exact display name. |
+| `{"select_animation":"NAME"}` | Select by exact display name, or use `PARENT/NAME` to disambiguate duplicate leaf names. |
 | `{"scratchpad":"CODE"}` | Submit code through the asynchronous Scratchpad path. |
 | `{"set_view_scroll":{"y":Y}}` | Set non-Terminal presentation scroll in logical pixels. |
 | `{"set_splitters":{"vertical":X,"horizontal":Y}}` | Atomically set both pane splitters in logical pixels. |

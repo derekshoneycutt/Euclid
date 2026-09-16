@@ -1,6 +1,7 @@
 package shapes
 
 import shapemodel "model"
+import curve "curve"
 
 import "core:math"
 import "core:math/linalg"
@@ -19,6 +20,18 @@ World_Lerped_Arc :: struct {
     arc: shapemodel.Shape_Arc,
 }
 
+// Hold one interpolated trochoid center and its mutable analytic description.
+World_Lerped_Trochoid :: struct {
+    center: Vector3,
+    value: shapemodel.Shape_Trochoid,
+}
+
+// Hold one interpolated guide center and mutable analytic description.
+World_Lerped_Trochoid_Tool :: struct {
+    center: Vector3,
+    value: shapemodel.Shape_Trochoid_Tool,
+}
+
 // Snapshot every interpolated shape value before the next fixed-step mutation.
 shape_world_update_previous_values :: proc(world: ^shapemodel.Shape_World) {
     if world == nil {
@@ -33,6 +46,25 @@ shape_world_update_previous_values :: proc(world: ^shapemodel.Shape_World) {
         arc.previous_radius = arc.radius
         arc.previous_start_theta = arc.start_theta
         arc.previous_sweep_theta = arc.sweep_theta
+    }
+    for index in 0..<world.trochoids.count {
+        value := &world.trochoids.values[index]
+        value.previous_fixed_radius = value.fixed_radius
+        value.previous_rolling_radius = value.rolling_radius
+        value.previous_tracer_distance = value.tracer_distance
+        value.previous_tracer_phase = value.tracer_phase
+        value.previous_rotation = value.rotation
+        value.previous_parameter_start = value.parameter_start
+        value.previous_parameter_finish = value.parameter_finish
+        value.previous_draw_parameter = value.draw_parameter
+    }
+    for index in 0..<world.trochoid_tools.count {
+        value := &world.trochoid_tools.values[index]
+        value.previous_fixed_radius = value.fixed_radius
+        value.previous_rolling_radius = value.rolling_radius
+        value.previous_parameter = value.parameter
+        value.previous_rotation = value.rotation
+        value.previous_orientation_phase = value.orientation_phase
     }
 }
 
@@ -193,6 +225,118 @@ world_cache_push_arc :: proc(
     }
 }
 
+// Resolve and interpolate one host's trochoid description.
+world_lerped_trochoid :: proc(
+    world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity,
+    alpha: f32) -> (World_Lerped_Trochoid, bool) {
+    center, center_ok := shape_world_lerped_position(world, entity, alpha)
+    current, value_ok := shapemodel.shape_component_get(
+        &world.trochoids, &world.registry, entity)
+    if !center_ok || !value_ok {
+        return {}, false
+    }
+    value := shapemodel.Shape_Trochoid{mode = current.mode,
+        fixed_radius = math.lerp(
+            current.previous_fixed_radius, current.fixed_radius, alpha),
+        rolling_radius = math.lerp(
+            current.previous_rolling_radius, current.rolling_radius, alpha),
+        tracer_distance = math.lerp(
+            current.previous_tracer_distance, current.tracer_distance, alpha),
+        tracer_phase = math.lerp(
+            current.previous_tracer_phase, current.tracer_phase, alpha),
+        rotation = math.lerp(current.previous_rotation, current.rotation, alpha),
+        parameter_start = math.lerp(
+            current.previous_parameter_start, current.parameter_start, alpha),
+        parameter_finish = math.lerp(
+            current.previous_parameter_finish, current.parameter_finish, alpha),
+        draw_parameter = math.lerp(
+            current.previous_draw_parameter, current.draw_parameter, alpha)}
+    return {center, value}, shapemodel.shape_trochoid_is_valid(value)
+}
+
+// Push one visible trochoid as a bounded frame-local curve packet.
+world_cache_push_trochoid :: proc(
+    world: ^shapemodel.Shape_World,
+    source: World_Draw_Source,
+    alpha: f32) {
+    lerped, found := world_lerped_trochoid(world, source.entity, alpha)
+    if !found {
+        return
+    }
+    first, reserved := draw_cache_reserve_curve_vertices_storage(
+        &world.draw_cache, curve.TROCHOID_MAX_VERTICES)
+    if !reserved {
+        return
+    }
+    vertices := world.draw_cache.curve_vertices[
+        first:first + curve.TROCHOID_MAX_VERTICES]
+    result := curve.trochoid_explicate(lerped.center, lerped.value, vertices)
+    draw_cache_finalize_curve_vertices_storage(&world.draw_cache,
+        first, curve.TROCHOID_MAX_VERTICES, result.vertex_count)
+    if result.status == .Invalid_Input || result.vertex_count < 2 {
+        draw_cache_rollback_curve_vertices_storage(
+            &world.draw_cache, first, result.vertex_count)
+        return
+    }
+    slot, has_slot := draw_cache_next_item_slot_storage(&world.draw_cache)
+    if !has_slot {
+        draw_cache_rollback_curve_vertices_storage(
+            &world.draw_cache, first, result.vertex_count)
+        return
+    }
+    slot^ = Shapes_Curve_Draw{world_make_draw_base(source, .Curve), first,
+        result.vertex_count, result.status == .Capacity_Limited}
+}
+
+// Resolve and interpolate the permanent trochoid guide description.
+world_lerped_trochoid_tool :: proc(
+    world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity,
+    alpha: f32) -> (World_Lerped_Trochoid_Tool, bool) {
+    center, center_ok := shape_world_lerped_position(world, entity, alpha)
+    current, value_ok := shapemodel.shape_component_get(
+        &world.trochoid_tools, &world.registry, entity)
+    if !center_ok || !value_ok {
+        return {}, false
+    }
+    value := shapemodel.Shape_Trochoid_Tool{mode = current.mode,
+        fixed_radius = math.lerp(
+            current.previous_fixed_radius, current.fixed_radius, alpha),
+        rolling_radius = math.lerp(
+            current.previous_rolling_radius, current.rolling_radius, alpha),
+        parameter = math.lerp(current.previous_parameter, current.parameter, alpha),
+        rotation = math.lerp(current.previous_rotation, current.rotation, alpha),
+        orientation_phase = math.lerp(current.previous_orientation_phase,
+            current.orientation_phase, alpha)}
+    return {center, value}, shapemodel.shape_trochoid_tool_is_valid(value)
+}
+
+// Push the permanent guide as one resolved high-layer tool packet.
+world_cache_push_trochoid_tool :: proc(
+    world: ^shapemodel.Shape_World,
+    source: World_Draw_Source,
+    alpha: f32) {
+    lerped, found := world_lerped_trochoid_tool(world, source.entity, alpha)
+    if !found {
+        return
+    }
+    pose := curve.trochoid_tool_pose(lerped.center, lerped.value)
+    handle_direction := Vector3{math.cos(pose.rolling_orientation),
+        math.sin(pose.rolling_orientation), 0}
+    handle_start := pose.rolling_center + handle_direction * lerped.value.rolling_radius
+    handle_finish := handle_start - handle_direction * lerped.value.rolling_radius * 0.30
+    draw := Shapes_Trochoid_Tool_Draw{world_make_draw_base(source, .Trochoid_Tool),
+        pose.fixed_center, pose.rolling_center, lerped.value.fixed_radius,
+        lerped.value.rolling_radius, handle_start, handle_finish}
+    world.draw_cache.trochoid_tool = draw
+    world.draw_cache.draw_trochoid_tool = true
+    slot, has_slot := draw_cache_next_item_slot_storage(&world.draw_cache)
+    if has_slot {
+        slot^ = draw
+    }
+}
+
 // Resolve ordered polygon entities into one reserved packet vertex span.
 world_cache_polygon_vertices :: proc(
     world: ^shapemodel.Shape_World,
@@ -305,6 +449,10 @@ world_cache_push_geometry :: proc(
         world_cache_push_line(world, source, geometry.payload.line, alpha)
     case .Arc, .Filled_Arc:
         world_cache_push_arc(world, source, geometry.payload.arc, geometry.kind, alpha)
+    case .Trochoid:
+        world_cache_push_trochoid(world, source, alpha)
+    case .Trochoid_Tool:
+        world_cache_push_trochoid_tool(world, source, alpha)
     case .Polygon:
         world_cache_push_polygon(world, source, geometry.payload.polygon, alpha)
     case .Pen:

@@ -1,6 +1,7 @@
 package particles
 
 import shapemodel "../shapes/model"
+import curve "../shapes/curve"
 import particlemodel "model"
 
 // Simple particle system kinda took off away from me a bit here, but it has a few important
@@ -101,6 +102,9 @@ CLEAR_BURST_LINE_SAMPLES :: 96
 CLEAR_BURST_ARC_DENSITY :: 192.0
 CLEAR_BURST_ARC_MIN_SAMPLES :: 2
 CLEAR_BURST_ARC_MAX_SAMPLES :: 900
+CLEAR_BURST_CURVE_DENSITY :: CLEAR_BURST_ARC_DENSITY
+CLEAR_BURST_CURVE_MIN_SAMPLES :: CLEAR_BURST_ARC_MIN_SAMPLES
+CLEAR_BURST_CURVE_MAX_SAMPLES :: CLEAR_BURST_ARC_MAX_SAMPLES
 CLEAR_BURST_FILLED_CIRCLE_DENSITY :: 12000.0
 CLEAR_BURST_FILLED_CIRCLE_MIN_SAMPLES :: CLEAR_BURST_POINT_COUNT
 CLEAR_BURST_FILLED_CIRCLE_MAX_SAMPLES :: 900
@@ -296,6 +300,64 @@ emit_shape_world_arc_burst :: proc(
     }
 }
 
+// Return the Euclidean length of one world-space curve segment.
+curve_segment_length :: #force_inline proc(first, second: Vector3) -> f32 {
+    delta := second - first
+    return f32(math.sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z))
+}
+
+// Emit spatially uniform dust across one explicated ordered curve.
+emit_curve_polyline_dust :: proc(
+    ps: ^Particle_System, vertices: []Vector3, color: rl.Color) {
+    total_length: f32
+    for index in 1..<len(vertices) {
+        total_length += curve_segment_length(vertices[index - 1], vertices[index])
+    }
+    if total_length <= 0 {
+        return
+    }
+    sample_count := clamp(int(math.round(f64(total_length * CLEAR_BURST_CURVE_DENSITY))),
+        CLEAR_BURST_CURVE_MIN_SAMPLES, CLEAR_BURST_CURVE_MAX_SAMPLES)
+    segment_index := 1
+    consumed: f32
+    for sample_index in 0..<sample_count {
+        target := total_length * f32(sample_index) / f32(sample_count - 1)
+        segment_length := curve_segment_length(
+            vertices[segment_index - 1], vertices[segment_index])
+        for segment_index < len(vertices) - 1 && consumed + segment_length < target {
+            consumed += segment_length
+            segment_index += 1
+            segment_length = curve_segment_length(
+                vertices[segment_index - 1], vertices[segment_index])
+        }
+        progress: f32
+        if segment_length > 0 {
+            progress = (target - consumed) / segment_length
+        }
+        sample := vertices[segment_index - 1] +
+            (vertices[segment_index] - vertices[segment_index - 1]) * progress
+        spawn_dust_particle(ps, sample, color)
+    }
+}
+
+// Resolve and emit one canonical trochoid through shared bounded explication.
+emit_shape_world_trochoid_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: shapemodel.Shape_Entity) {
+    center, center_ok := shape_world_burst_position(ctx.world, entity)
+    value, value_ok := shapemodel.shape_component_get(
+        &ctx.world.trochoids, &ctx.world.registry, entity)
+    if !center_ok || !value_ok {
+        return
+    }
+    vertices: [curve.TROCHOID_MAX_VERTICES]Vector3
+    result := curve.trochoid_explicate(center, value^, vertices[:])
+    if result.status != .Invalid_Input && result.vertex_count > 1 {
+        emit_curve_polyline_dust(
+            ctx.particles, vertices[:result.vertex_count], ctx.color)
+    }
+}
+
 //   Emit one direct world geometry using the legacy sampling behavior.
 emit_shape_world_geometry_burst :: proc(
     ctx: Shape_World_Burst_Context,
@@ -317,6 +379,9 @@ emit_shape_world_geometry_burst :: proc(
         emit_shape_world_arc_burst(ctx, entity, false)
     case .Filled_Arc:
         emit_shape_world_arc_burst(ctx, entity, true)
+    case .Trochoid:
+        emit_shape_world_trochoid_burst(ctx, entity)
+    case .Trochoid_Tool:
     case .Polygon:
         emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
     case .Pen, .Compass:
@@ -347,7 +412,8 @@ emit_shape_world_hide_burst :: proc(
     }
     geometry, geometry_found := shapemodel.shape_component_get(
         &world.geometries, &world.registry, entity)
-    if !geometry_found || geometry^.kind == .Pen || geometry^.kind == .Compass {
+    if !geometry_found || geometry^.kind == .Pen || geometry^.kind == .Compass ||
+        geometry^.kind == .Trochoid_Tool {
         return false
     }
     if kick_dust {kick_existing_dust(ps)}

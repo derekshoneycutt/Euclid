@@ -15,6 +15,40 @@ core_test_shape_entity_pack_round_trip :: proc(t: ^testing.T) {
     testing.expect_value(t, shape_entity_pack({}), u64(0))
 }
 
+// Verify trochoid validation preserves directed domains and internal-circle limits.
+@(test)
+core_test_shape_trochoid_validation :: proc(t: ^testing.T) {
+    external := Shape_Trochoid{mode = .External, fixed_radius = 2,
+        rolling_radius = 1, tracer_distance = 0.5, parameter_start = 3,
+        parameter_finish = -1, draw_parameter = 1}
+    testing.expect(t, shape_trochoid_is_valid(external))
+
+    external.draw_parameter = 4
+    testing.expect(t, !shape_trochoid_is_valid(external))
+    external.draw_parameter = 1
+    external.rolling_radius = 0
+    testing.expect(t, !shape_trochoid_is_valid(external))
+
+    internal := Shape_Trochoid{mode = .Internal, fixed_radius = 2,
+        rolling_radius = 1, tracer_distance = 1, parameter_start = 0,
+        parameter_finish = 2, draw_parameter = 2}
+    testing.expect(t, shape_trochoid_is_valid(internal))
+    internal.rolling_radius = internal.fixed_radius
+    testing.expect(t, !shape_trochoid_is_valid(internal))
+}
+
+// Verify guide validation rejects degenerate circles and invalid internal rolling.
+@(test)
+core_test_shape_trochoid_tool_validation :: proc(t: ^testing.T) {
+    guide := Shape_Trochoid_Tool{mode = .External, fixed_radius = 1,
+        rolling_radius = 1}
+    testing.expect(t, shape_trochoid_tool_is_valid(guide))
+    guide.mode = .Internal
+    testing.expect(t, !shape_trochoid_tool_is_valid(guide))
+    guide.fixed_radius = 2
+    testing.expect(t, shape_trochoid_tool_is_valid(guide))
+}
+
 // Verify registry rewind retains baseline identities and rejects stale animation handles.
 @(test)
 core_test_shape_registry_rewinds_animation_suffix :: proc(t: ^testing.T) {

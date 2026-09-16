@@ -94,9 +94,8 @@ General features:
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
   - [X] Label
-  - [ ] Roulette (Ellipse, Cardioid, Limacon)
-  - [ ] Lenses
-  - [ ] Lunes
+  - [X] Trochoid and Trochoid Tool
+  - [ ] Lenses & Lunes
 - [X] Basic, layered particle system
   - [X] Dust
   - [X] Embers

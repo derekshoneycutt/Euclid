@@ -65,6 +65,48 @@ shapes_test_world_creates_arc_variants :: proc(t: ^testing.T) {
     testing.expect_value(t, world.arcs.count, u16(2))
 }
 
+// Verify trochoid curve and guide constructors publish independent analytic hosts.
+@(test)
+shapes_test_world_creates_trochoid_and_guide :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    curve, curve_status := world_create_trochoid(&world, {center = {1, 2, 3},
+        mode = .External, fixed_radius = 2, rolling_radius = 1,
+        tracer_distance = 0.5, parameter_start = 0, parameter_finish = 4,
+        draw_parameter = 1, style = world_shape_test_style()})
+    guide, guide_status := world_create_trochoid_tool(&world, {center = {1, 2, 3},
+        mode = .External, fixed_radius = 2, rolling_radius = 1,
+        style = world_shape_test_style()})
+
+    testing.expect_value(t, curve_status, shapemodel.Shape_World_Status.Ok)
+    testing.expect_value(t, guide_status, shapemodel.Shape_World_Status.Ok)
+    curve_geometry, curve_found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, curve.shape)
+    guide_geometry, guide_found := shapemodel.shape_component_get(
+        &world.geometries, &world.registry, guide.shape)
+    testing.expect(t, curve_found && guide_found)
+    testing.expect_value(t, curve_geometry.kind, shapemodel.Shape_Geometry_Kind.Trochoid)
+    testing.expect_value(t, guide_geometry.kind,
+        shapemodel.Shape_Geometry_Kind.Trochoid_Tool)
+    testing.expect_value(t, world.trochoids.count, u16(1))
+    testing.expect_value(t, world.trochoid_tools.count, u16(1))
+}
+
+// Verify invalid trochoid construction leaves every world frontier unchanged.
+@(test)
+shapes_test_world_rejects_invalid_trochoid_transactionally :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    _, status := world_create_trochoid(&world, {mode = .Internal,
+        fixed_radius = 1, rolling_radius = 1, tracer_distance = 1,
+        parameter_start = 0, parameter_finish = 2, draw_parameter = 0,
+        style = world_shape_test_style()})
+
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Invalid_Argument)
+    testing.expect_value(t, world.registry.entity_count, u32(0))
+    testing.expect_value(t, world.transforms.count, u16(0))
+    testing.expect_value(t, world.trochoids.count, u16(0))
+    testing.expect_value(t, world.geometries.count, u16(0))
+}
+
 // Verify polygon conveniences preserve authored vertex order in the reference pool.
 @(test)
 shapes_test_world_polygon_conveniences_preserve_order :: proc(t: ^testing.T) {

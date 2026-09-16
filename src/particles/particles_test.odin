@@ -2,6 +2,7 @@ package particles
 
 import particlemodel "model"
 import shapemodel "../shapes/model"
+import curve "../shapes/curve"
 
 import "core:math"
 import "core:testing"
@@ -80,6 +81,33 @@ filled_circle_dust_emission_samples_sector_interior :: proc(t: ^testing.T) {
     }
     testing.expect(t, count_live_low_particles(ps) >= 200)
     testing.expect(t, interior_count >= 40)
+}
+
+// Verify longer revealed trochoid intervals produce proportionally more hide dust.
+@(test)
+trochoid_dust_emission_scales_with_revealed_length :: proc(t: ^testing.T) {
+    partial := new(particlemodel.Particle_System, context.allocator)
+    full := new(particlemodel.Particle_System, context.allocator)
+    defer free(partial)
+    defer free(full)
+    partial.use_max_dust_particles = 1000
+    full.use_max_dust_particles = 1000
+    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 0.2,
+        rolling_radius = 0.2, tracer_distance = 0.2, parameter_start = 0,
+        parameter_finish = 2 * math.PI, draw_parameter = math.PI / 2}
+    vertices: [curve.TROCHOID_MAX_VERTICES]Vector3
+    partial_result := curve.trochoid_explicate({}, value, vertices[:])
+    emit_curve_polyline_dust(partial, vertices[:partial_result.vertex_count],
+        rl.Color{255, 255, 255, 255})
+    value.draw_parameter = value.parameter_finish
+    full_result := curve.trochoid_explicate({}, value, vertices[:])
+    emit_curve_polyline_dust(full, vertices[:full_result.vertex_count],
+        rl.Color{255, 255, 255, 255})
+
+    partial_count := count_live_low_particles(partial)
+    full_count := count_live_low_particles(full)
+    testing.expect(t, partial_count < full_count)
+    testing.expect(t, partial_count >= CLEAR_BURST_CURVE_MIN_SAMPLES)
 }
 
 // Verify slot reservation prefers dead slots and wraps at the particle cap.

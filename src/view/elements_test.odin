@@ -10,6 +10,20 @@ import "core:testing"
 
 TOOL_BRUSH_TEST_EPSILON :: f32(1e-4)
 
+// Verify guide ring sampling closes exactly at one full turn.
+@(test)
+trochoid_tool_ring_sampling_is_closed :: proc(t: ^testing.T) {
+    center := Vector3{1, 2, 3}
+    first := trochoid_tool_ring_point(center, 0.25, 0)
+    last := trochoid_tool_ring_point(center, 0.25, 2 * math.PI)
+
+    testing.expectf(t, math.abs(first.x - last.x) <= TOOL_BRUSH_TEST_EPSILON,
+        "guide ring should close in x")
+    testing.expectf(t, math.abs(first.y - last.y) <= TOOL_BRUSH_TEST_EPSILON,
+        "guide ring should close in y")
+    testing.expect_value(t, first.z, last.z)
+}
+
 
 //   Verify nearby and distant tool segments are classified by expanded bounds.
 @(test)
@@ -72,6 +86,15 @@ tool_brush_interaction_receivers_follow_cache_order :: proc(t: ^testing.T) {
     pen_receives, compass_receives = tool_brush_interaction_receivers(-1, 3)
     testing.expect(t, !pen_receives)
     testing.expect(t, !compass_receives)
+}
+
+// Verify the guide is deferred only when depth sorting placed it above the compass.
+@(test)
+trochoid_tool_always_draws_below_compass :: proc(t: ^testing.T) {
+    testing.expect(t, trochoid_tool_defers_to_compass(5, 2))
+    testing.expect(t, !trochoid_tool_defers_to_compass(2, 5))
+    testing.expect(t, !trochoid_tool_defers_to_compass(-1, 2))
+    testing.expect(t, !trochoid_tool_defers_to_compass(2, -1))
 }
 
 

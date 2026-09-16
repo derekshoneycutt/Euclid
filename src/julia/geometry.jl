@@ -10,7 +10,58 @@ module EuclidGeometry
 using LinearAlgebra
 
 export circle_circle_intersections_xy, circle_line_intersections_xy,
-    line_intersection_3d, marker_geometry, reflect_about_axis_x_half
+    line_intersection_3d, marker_geometry, reflect_about_axis_x_half,
+    TrochoidMode, TrochoidExternal, TrochoidInternal,
+    trochoid_orbit_radius, trochoid_rolling_orientation,
+    trochoid_point, trochoid_tool_pose
+
+@enum TrochoidMode::UInt8 TrochoidExternal=0 TrochoidInternal=1
+
+"""Return the rolling-center orbital radius for one valid circle pair."""
+function trochoid_orbit_radius(
+    mode::TrochoidMode, fixed_radius::Real, rolling_radius::Real)
+    mode == TrochoidExternal ? fixed_radius + rolling_radius :
+        fixed_radius - rolling_radius
+end
+
+"""Return one rolling circle's contact-aligned material orientation."""
+function trochoid_rolling_orientation(mode::TrochoidMode,
+    fixed_radius::Real, rolling_radius::Real, parameter::Real,
+    rotation::Real=0f0, phase::Real=0f0)
+    ratio = trochoid_orbit_radius(mode, fixed_radius, rolling_radius) /
+        rolling_radius
+    angle = mode == TrochoidExternal ? rotation + Float32(pi) + ratio * parameter +
+        phase : rotation - ratio * parameter + phase
+    Float32(angle)
+end
+
+"""Evaluate one planar trochoid point while preserving the center elevation."""
+function trochoid_point(center, mode::TrochoidMode, fixed_radius::Real,
+    rolling_radius::Real, tracer_distance::Real, parameter::Real;
+    rotation::Real=0f0, tracer_phase::Real=0f0)
+    orbit_radius = trochoid_orbit_radius(mode, fixed_radius, rolling_radius)
+    orbit_angle = parameter + rotation
+    tracer_angle = trochoid_rolling_orientation(mode, fixed_radius,
+        rolling_radius, parameter, rotation, tracer_phase)
+    Float32[center[1] + orbit_radius * cos(orbit_angle) +
+        tracer_distance * cos(tracer_angle),
+        center[2] + orbit_radius * sin(orbit_angle) +
+        tracer_distance * sin(tracer_angle), center[3]]
+end
+
+"""Resolve fixed center, rolling center, and body orientation for a guide pose."""
+function trochoid_tool_pose(center, mode::TrochoidMode, fixed_radius::Real,
+    rolling_radius::Real, parameter::Real; rotation::Real=0f0,
+    orientation_phase::Real=0f0)
+    orbit_radius = trochoid_orbit_radius(mode, fixed_radius, rolling_radius)
+    orbit_angle = parameter + rotation
+    rolling_center = Float32[center[1] + orbit_radius * cos(orbit_angle),
+        center[2] + orbit_radius * sin(orbit_angle), center[3]]
+    orientation = trochoid_rolling_orientation(mode, fixed_radius,
+        rolling_radius, parameter, rotation, orientation_phase)
+    (fixed_center=Float32[center[1], center[2], center[3]],
+        rolling_center=rolling_center, rolling_orientation=orientation)
+end
 
 struct MarkerGeometry
     start::Vector{Float32}

@@ -17,6 +17,21 @@ function assert_point3_approx(
     @test actual[3] ≈ expected[3] atol = atol
 end
 
+@testset "trochoid kinematics" begin
+    center = Float32[0f0, 0f0, 0.25f0]
+    external = trochoid_point(center, TrochoidExternal, 1f0, 1f0, 1f0, 0f0)
+    assert_point3_approx(external, (1f0, 0f0, 0.25f0))
+
+    internal = trochoid_tool_pose(center, TrochoidInternal, 3f0, 1f0,
+        Float32(pi) / 2f0)
+    assert_point3_approx(internal.rolling_center, (0f0, 2f0, 0.25f0))
+    @test internal.rolling_orientation ≈ -Float32(pi) atol = 1f-5
+
+    rotated = trochoid_point(center, TrochoidExternal, 1f0, 1f0, 0.5f0,
+        0f0; rotation=Float32(pi) / 2f0, tracer_phase=Float32(pi) / 2f0)
+    assert_point3_approx(rotated, (0.5f0, 2f0, 0.25f0), atol = 2f-5)
+end
+
 @testset "circle_line_intersections_xy" begin
     @testset "two intersections" begin
         line_a = Float32[-2f0, 0f0, 0f0]

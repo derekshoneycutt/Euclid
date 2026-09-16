@@ -405,6 +405,34 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
     testing.expect_value(t, identity.generation, u64(8))
 }
 
+// Verify a parent-qualified selector disambiguates duplicate leaf names.
+@(test)
+scenario_animation_selection_qualified_name :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state)
+    service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
+    defer free(service)
+    state^.julia_runtime_service = service
+    ji := &state^.julia_interface_slots[0]
+    state^.julia_interface = ji
+    nodes: [4]bridgemodel.Euclid_Julia_Animation_Interface
+    nodes[0].name = "Elements"
+    nodes[1].name = "Circle"
+    nodes[2].name = "Curves"
+    nodes[3].name = "Circle"
+    for i in 0..<len(nodes) - 1 {
+        nodes[i].next_in_registry = &nodes[i + 1]
+    }
+    nodes[1].parent = &nodes[0]
+    nodes[3].parent = &nodes[2]
+    ji.animation_head = &nodes[0]
+    ji.animation_count = len(nodes)
+
+    selected := scenario_find_animation(ji, "Curves/Circle")
+
+    testing.expect_value(t, selected, &nodes[3])
+}
+
 // Verify one queued view-content request retains exact source and lifecycle identity.
 scenario_expect_view_content_request :: proc(
     t: ^testing.T, service: ^bridgemodel.Julia_Runtime_Service,

@@ -74,6 +74,29 @@ struct BridgeArcGeometry
     sweep_theta::Cfloat
 end
 
+"""Complete mutable trochoid description matching the native ABI layout."""
+struct BridgeTrochoidGeometry
+    mode::Int32
+    fixed_radius::Cfloat
+    rolling_radius::Cfloat
+    tracer_distance::Cfloat
+    tracer_phase::Cfloat
+    rotation::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    draw_parameter::Cfloat
+end
+
+"""Complete permanent-guide description matching the native ABI layout."""
+struct BridgeTrochoidToolGeometry
+    mode::Int32
+    fixed_radius::Cfloat
+    rolling_radius::Cfloat
+    parameter::Cfloat
+    rotation::Cfloat
+    orientation_phase::Cfloat
+end
+
 """
 Four vertices for one square shape.
 
@@ -182,6 +205,19 @@ struct BridgeShapeArcQueryResult
     arc::BridgeArcGeometry
 end
 
+"""Result of constructing one animation-owned trochoid."""
+struct BridgeShapeTrochoidResult
+    status::Int32
+    host_id::UInt64
+end
+
+"""Pointer-free result of querying one trochoid's mutable geometry."""
+struct BridgeShapeTrochoidQueryResult
+    status::Int32
+    host_id::UInt64
+    geometry::BridgeTrochoidGeometry
+end
+
 struct BridgeShapeTriangle
     status::Int32
     host_id::UInt64
@@ -220,10 +256,14 @@ const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
 const BRIDGE_STATUS_NOT_FOUND = Int32(8)
 const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_VERSION = Int32(7)
+const BRIDGE_VERSION = Int32(8)
 const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
 const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
 const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)
+const BRIDGE_FEATURE_TROCHOIDS = Int32(1 << 7)
+
+const TROCHOID_EXTERNAL = Int32(0)
+const TROCHOID_INTERNAL = Int32(1)
 
 const ANIMATION_STABLE_ID_NAMESPACE = UUID("66f8da8f-bd5c-5f58-ae66-5cbaf6ea4d41")
 

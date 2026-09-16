@@ -19,11 +19,13 @@ Shapes_Point_Draw :: shapemodel.Shapes_Point_Draw
 Shapes_Line_Draw :: shapemodel.Shapes_Line_Draw
 Shapes_Circle_Draw :: shapemodel.Shapes_Circle_Draw
 Shapes_Filled_Circle_Draw :: shapemodel.Shapes_Filled_Circle_Draw
+Shapes_Curve_Draw :: shapemodel.Shapes_Curve_Draw
 Shapes_Polygon_Draw :: shapemodel.Shapes_Polygon_Draw
 Shapes_Polygon_Ring_Node :: shapemodel.Shapes_Polygon_Ring_Node
 Shapes_Polygon_Triangle :: shapemodel.Shapes_Polygon_Triangle
 Shapes_Pen_Draw :: shapemodel.Shapes_Pen_Draw
 Shapes_Compass_Draw :: shapemodel.Shapes_Compass_Draw
+Shapes_Trochoid_Tool_Draw :: shapemodel.Shapes_Trochoid_Tool_Draw
 Shapes_Draw_Cache_Item :: shapemodel.Shapes_Draw_Cache_Item
 
 
@@ -52,6 +54,8 @@ draw_cache_reset_storage :: proc(cache: ^shapemodel.Shapes_Draw_Cache) {
     cache.label_byte_count = 0
     cache.polygon_vertex_count = 0
     cache.polygon_triangle_count = 0
+    cache.curve_vertex_count = 0
+    cache.draw_trochoid_tool = false
     cache.draw_pen = false
     cache.draw_compass = false
 }
@@ -96,6 +100,24 @@ draw_cache_polygon_centroid_and_flatness :: proc(
     return sum * inv_count, flat
 }
 
+// Compute one curve centroid and whether all explicated vertices are flat.
+draw_cache_curve_centroid_and_flatness :: proc(
+    cache: ^shapemodel.Shapes_Draw_Cache,
+    curve: ^Shapes_Curve_Draw) -> (Vector3, bool) {
+    if curve^.vertex_count <= 0 {
+        return {}, false
+    }
+    vertices := cache.curve_vertices[
+        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
+    sum := Vector3{}
+    flat := true
+    for vertex in vertices {
+        sum += vertex
+        flat = flat && draw_cache_point_is_flat(vertex)
+    }
+    return sum / f32(len(vertices)), flat
+}
+
 //   Return representative depth and flatness for one cached line item.
 draw_cache_line_depth_and_flatness :: #force_inline proc(
     line: Shapes_Line_Draw) -> (f32, bool) {
@@ -136,6 +158,15 @@ draw_cache_compass_depth_and_flatness :: #force_inline proc(
     return draw_cache_visual_depth(centroid), flat
 }
 
+// Return representative depth and flatness for one planar trochoid guide.
+draw_cache_trochoid_tool_depth_and_flatness :: #force_inline proc(
+    tool: Shapes_Trochoid_Tool_Draw) -> (f32, bool) {
+    midpoint := (tool.fixed_center + tool.rolling_center) * 0.5
+    return draw_cache_visual_depth(midpoint),
+        draw_cache_point_is_flat(tool.fixed_center) &&
+        draw_cache_point_is_flat(tool.rolling_center)
+}
+
 //   Return representative depth and flatness for one cached low-geometry item.
 //
 // Notes:
@@ -156,9 +187,14 @@ draw_cache_item_depth_and_flatness :: proc(
     case Shapes_Circle_Draw: return draw_cache_circle_depth_and_flatness(typed)
     case Shapes_Filled_Circle_Draw:
         return draw_cache_filledcircle_depth_and_flatness(typed)
+    case Shapes_Curve_Draw:
+        centroid, flat := draw_cache_curve_centroid_and_flatness(cache, &typed)
+        return draw_cache_visual_depth(centroid), flat
     case Shapes_Polygon_Draw:
         centroid, flat := draw_cache_polygon_centroid_and_flatness(cache, &typed)
         return draw_cache_visual_depth(centroid), flat
+    case Shapes_Trochoid_Tool_Draw:
+        return draw_cache_trochoid_tool_depth_and_flatness(typed)
     case Shapes_Pen_Draw: return draw_cache_pen_depth_and_flatness(typed)
     case Shapes_Compass_Draw: return draw_cache_compass_depth_and_flatness(typed)
     case:
@@ -250,6 +286,33 @@ draw_cache_next_item_slot_storage :: #force_inline proc(
     slot := &cache.items[cache.item_count]
     cache.item_count += 1
     return slot, true
+}
+
+// Reserve one contiguous frame-local curve vertex span.
+draw_cache_reserve_curve_vertices_storage :: #force_inline proc(
+    cache: ^shapemodel.Shapes_Draw_Cache, count: int) -> (int, bool) {
+    if count <= 0 || cache.curve_vertex_count + count > len(cache.curve_vertices) {
+        return 0, false
+    }
+    first := cache.curve_vertex_count
+    cache.curve_vertex_count += count
+    return first, true
+}
+
+// Commit only the initialized prefix of the most recent curve reservation.
+draw_cache_finalize_curve_vertices_storage :: #force_inline proc(
+    cache: ^shapemodel.Shapes_Draw_Cache,
+    first, reserved_count, initialized_count: int) {
+    assert(cache.curve_vertex_count == first + reserved_count)
+    assert(initialized_count >= 0 && initialized_count <= reserved_count)
+    cache.curve_vertex_count = first + initialized_count
+}
+
+// Release the most recent initialized curve span after later packet failure.
+draw_cache_rollback_curve_vertices_storage :: #force_inline proc(
+    cache: ^shapemodel.Shapes_Draw_Cache, first, initialized_count: int) {
+    assert(cache.curve_vertex_count == first + initialized_count)
+    cache.curve_vertex_count = first
 }
 
 //   Reserve a contiguous polygon vertex range in one derived packet.

@@ -752,7 +752,23 @@ scenario_runtime_succeeded :: proc(runtime: ^Scenario_Runtime) -> bool {
     return runtime != nil && runtime.runner.status == .Passed
 }
 
-//   Find one registered animation by exact display name without allocation.
+//   Match an exact display name or one direct-parent-qualified display path.
+scenario_animation_name_matches :: proc(
+    animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    name: string) -> bool {
+    separator := strings.index_byte(name, '/')
+    if separator < 0 {
+        return animation.name == name
+    }
+    if separator == 0 || separator == len(name) - 1 ||
+        animation.parent == nil {
+        return false
+    }
+    return animation.parent.name == name[:separator] &&
+        animation.name == name[separator + 1:]
+}
+
+//   Find one registered animation by exact or parent-qualified name without allocation.
 scenario_find_animation :: proc(
     interface: ^bridgemodel.Euclid_Julia_Interface,
     name: string) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
@@ -762,7 +778,7 @@ scenario_find_animation :: proc(
     for animation := interface.animation_head;
         animation != nil;
         animation = animation.next_in_registry {
-        if animation.name == name {
+        if scenario_animation_name_matches(animation, name) {
             return animation
         }
     }

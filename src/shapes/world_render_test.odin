@@ -81,6 +81,55 @@ world_render_builds_direct_line_and_arc_items :: proc(t: ^testing.T) {
     testing.expect(t, arc_found)
 }
 
+// Verify a revealed trochoid compiles once into the dedicated curve vertex pool.
+@(test)
+world_render_builds_trochoid_curve_packet :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    trochoid, status := world_create_trochoid(&world, {center = {1, 2, 0},
+        mode = .External, fixed_radius = 0.2, rolling_radius = 0.2,
+        tracer_distance = 0.2, parameter_start = 0, parameter_finish = 6.28,
+        draw_parameter = 3.14, style = Shape_Style{}})
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    world_render_test_show(&world, trochoid.shape)
+
+    build_shape_world_draw_cache(&world, 1)
+
+    testing.expect_value(t, world.draw_cache.item_count, 1)
+    testing.expect(t, world.draw_cache.curve_vertex_count > 1)
+    item := world.draw_cache.items[0]
+    #partial switch typed in item {
+    case Shapes_Curve_Draw:
+        testing.expect_value(t, typed.first_vertex, 0)
+        testing.expect_value(t, typed.vertex_count, world.draw_cache.curve_vertex_count)
+    case:
+        testing.expect(t, false, "expected curve draw item")
+    }
+}
+
+// Verify the guide packet derives its rolling center and inward orientation handle.
+@(test)
+world_render_builds_trochoid_tool_packet :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    tool, status := world_create_trochoid_tool(&world, {center = {1, 2, 0},
+        mode = .External, fixed_radius = 2, rolling_radius = 1,
+        style = Shape_Style{}})
+    testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
+    world_render_test_show(&world, tool.shape)
+
+    build_shape_world_draw_cache(&world, 1)
+
+    testing.expect(t, world.draw_cache.draw_trochoid_tool)
+    draw := world.draw_cache.trochoid_tool
+    test_helpers.expect_vec3_close(t, draw.fixed_center, {1, 2, 0},
+        "guide fixed center should follow its host transform")
+    test_helpers.expect_vec3_close(t, draw.rolling_center, {4, 2, 0},
+        "external rolling center should use the summed radii")
+    test_helpers.expect_vec3_close(t, draw.handle_start, {3, 2, 0},
+        "orientation handle should begin on the contact-facing rolling rim")
+    test_helpers.expect_vec3_close(t, draw.handle_finish, {3.3, 2, 0},
+        "orientation handle should extend inward from the rolling rim")
+}
+
 // Verify filled arcs and direct-reference tools publish existing draw variants and flags.
 @(test)
 world_render_builds_filled_arc_pen_and_compass_items :: proc(t: ^testing.T) {

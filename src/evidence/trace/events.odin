@@ -105,6 +105,8 @@ Kind :: enum u16 {
     Constraint_Solve_Completed = 183,
     Constraint_Solve_Failed = 184,
     Arc_Geometry_Committed = 185,
+    Trochoid_Geometry_Committed = 186,
+    Trochoid_Frontier_Committed = 187,
 
     // Drawing tools (260-319).
     Pen_Joint_Committed = 260,
@@ -113,6 +115,8 @@ Kind :: enum u16 {
     Compass_Joint_Committed = 263,
     Compass_Active_Committed = 264,
     Compass_Visibility_Committed = 265,
+    Trochoid_Tool_Geometry_Committed = 266,
+    Trochoid_Tool_Parameter_Committed = 267,
 
     // Particles (320-359).
     Particle_Emission_Committed = 320,

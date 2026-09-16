@@ -25,6 +25,106 @@ tool_position :: proc(
     return transform^.position, true
 }
 
+// Convert one bridge guide description into canonical tool state.
+bridge_trochoid_tool_value :: proc(
+    geometry: shapemodel.Bridge_Trochoid_Tool_Geometry) ->
+        shapemodel.Shape_Trochoid_Tool {
+    if geometry.mode < 0 ||
+        geometry.mode > i32(shapemodel.Shape_Trochoid_Mode.Internal) {
+        return {}
+    }
+    return {mode = shapemodel.Shape_Trochoid_Mode(geometry.mode),
+        fixed_radius = geometry.fixed_radius, rolling_radius = geometry.rolling_radius,
+        parameter = geometry.parameter, rotation = geometry.rotation,
+        orientation_phase = geometry.orientation_phase}
+}
+
+// Enable drawing for the process-global two-ring trochoid guide.
+@(export)
+show_trochoid_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape), 1)
+}
+
+// Disable drawing for the process-global two-ring trochoid guide.
+@(export)
+hide_trochoid_tool :: proc "c" (state: ^core.Euclid_General_State) -> i32 {
+    context = state^.saved_context
+    return shape_set_visible(state,
+        shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape), 0)
+}
+
+// Move the process-global guide's fixed center and constant elevation.
+@(export)
+set_trochoid_tool_position :: proc "c" (
+    state: ^core.Euclid_General_State, position: rl.Vector3) -> i32 {
+    context = state^.saved_context
+    return shape_set_position(state,
+        shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape), position)
+}
+
+// Atomically configure the process-global guide's complete analytic state.
+@(export)
+set_trochoid_tool_geometry :: proc "c" (
+    state: ^core.Euclid_General_State,
+    geometry: shapemodel.Bridge_Trochoid_Tool_Geometry) -> i32 {
+    context = state^.saved_context
+    value := bridge_trochoid_tool_value(geometry)
+    if !shapemodel.shape_trochoid_tool_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Trochoid_Tool)
+    if command != nil {
+        command^.entity = packed
+        command^.trochoid_tool = value
+    }
+    if captured {return BRIDGE_STATUS_OK}
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry, entity)
+    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    style, has_style := shapemodel.shape_component_get(
+        &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
+    if !has_style || current.mode != value.mode && style.visible {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    previous := current^
+    current^ = value
+    current.previous_fixed_radius = previous.previous_fixed_radius
+    current.previous_rolling_radius = previous.previous_rolling_radius
+    current.previous_parameter = previous.previous_parameter
+    current.previous_rotation = previous.previous_rotation
+    current.previous_orientation_phase = previous.previous_orientation_phase
+    return BRIDGE_STATUS_OK
+}
+
+// Change only the process-global guide's rolling parameter.
+@(export)
+set_trochoid_tool_parameter :: proc "c" (
+    state: ^core.Euclid_General_State, parameter: f32) -> i32 {
+    context = state^.saved_context
+    if !shapemodel.shape_scalar_is_finite(parameter) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    packed := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
+    command, captured := append_scene_command(state, .Set_Trochoid_Tool_Parameter)
+    if command != nil {
+        command^.entity = packed
+        command^.scalar = parameter
+    }
+    if captured {return BRIDGE_STATUS_OK}
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry, entity)
+    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    current.parameter = parameter
+    return BRIDGE_STATUS_OK
+}
+
 // Resolve the direct snap constraint owned by one canonical tool joint.
 tool_lock_constraint :: proc(
     state: ^core.Euclid_General_State,

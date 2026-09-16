@@ -32,6 +32,10 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Shape_Active_Color = validate_command_shape_style,
     .Set_Shape_Brush = validate_command_shape_style,
     .Set_Shape_Arc = validate_command_shape_arc,
+    .Set_Shape_Trochoid = validate_command_shape_trochoid,
+    .Set_Shape_Trochoid_Frontier = validate_command_shape_trochoid_frontier,
+    .Set_Trochoid_Tool = validate_command_trochoid_tool,
+    .Set_Trochoid_Tool_Parameter = validate_command_trochoid_tool_parameter,
     .Set_Shape_Visible = validate_command_shape_style,
     .Set_Shape_Active_Feature = validate_command_shape_active_feature,
     .Set_Tool_Position = validate_command_shape_transform,
@@ -55,6 +59,10 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Shape_Active_Color = apply_set_shape_active_color,
     .Set_Shape_Brush = apply_set_shape_brush,
     .Set_Shape_Arc = apply_set_shape_arc,
+    .Set_Shape_Trochoid = apply_set_shape_trochoid,
+    .Set_Shape_Trochoid_Frontier = apply_set_shape_trochoid_frontier,
+    .Set_Trochoid_Tool = apply_set_trochoid_tool,
+    .Set_Trochoid_Tool_Parameter = apply_set_trochoid_tool_parameter,
     .Set_Shape_Visible = apply_set_shape_visible,
     .Set_Shape_Active_Feature = apply_set_shape_active_feature,
     .Set_Tool_Position = apply_set_tool_position,
@@ -72,6 +80,10 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Shape_Active_Color = .Point_Style_Committed,
     .Set_Shape_Brush = .Point_Style_Committed,
     .Set_Shape_Arc = .Arc_Geometry_Committed,
+    .Set_Shape_Trochoid = .Trochoid_Geometry_Committed,
+    .Set_Shape_Trochoid_Frontier = .Trochoid_Frontier_Committed,
+    .Set_Trochoid_Tool = .Trochoid_Tool_Geometry_Committed,
+    .Set_Trochoid_Tool_Parameter = .Trochoid_Tool_Parameter_Committed,
     .Set_Shape_Visible = .Point_Visibility_Committed,
     .Set_Shape_Active_Feature = .Point_Style_Committed,
     .Set_Tool_Position = .Point_Position_Committed,
@@ -101,6 +113,8 @@ capture_animation_query_snapshot :: proc(
         snapshot^.shapes.registry = world^.registry
         snapshot^.shapes.transforms = world^.transforms
         snapshot^.shapes.arcs = world^.arcs
+        snapshot^.shapes.trochoids = world^.trochoids
+        snapshot^.shapes.trochoid_tools = world^.trochoid_tools
         snapshot^.shapes.render_styles = world^.render_styles
         snapshot^.shapes.active_features = world^.active_features
         snapshot^.shapes.geometries = world^.geometries
@@ -238,6 +252,61 @@ validate_command_shape_arc :: proc(
         shapemodel.shape_arc_is_valid(command^.arc)
 }
 
+// Validate one complete trochoid mutation against host membership and value rules.
+validate_command_shape_trochoid :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found || !shapemodel.shape_trochoid_is_valid(command^.trochoid) {
+        return false
+    }
+    current, has_value := shapemodel.shape_component_get(
+        &state^.shape_world^.trochoids, &state^.shape_world^.registry, entity)
+    style, has_style := shapemodel.shape_component_get(
+        &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
+    return has_value && has_style &&
+        (current.mode == command^.trochoid.mode || !style.visible)
+}
+
+// Validate one reveal frontier against the target's complete directed domain.
+validate_command_shape_trochoid_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found {return false}
+    value, has_value := shapemodel.shape_component_get(
+        &state^.shape_world^.trochoids, &state^.shape_world^.registry, entity)
+    return has_value && shapemodel.shape_scalar_is_finite(command^.scalar) &&
+        shapemodel.shape_parameter_is_in_directed_domain(value.parameter_start,
+            value.parameter_finish, command^.scalar)
+}
+
+// Validate complete guide configuration against singleton identity and visibility.
+validate_command_trochoid_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    expected := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
+    if command^.entity != expected ||
+        !shapemodel.shape_trochoid_tool_is_valid(command^.trochoid_tool) {
+        return false
+    }
+    current, has_value := shapemodel.shape_component_get(
+        &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry,
+        state^.world_trochoid_tool.shape)
+    style, has_style := shapemodel.shape_component_get(
+        &state^.shape_world^.render_styles, &state^.shape_world^.registry,
+        state^.world_trochoid_tool.shape)
+    return has_value && has_style &&
+        (current.mode == command^.trochoid_tool.mode || !style.visible)
+}
+
+// Validate one finite rolling-parameter update for the singleton guide.
+validate_command_trochoid_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    expected := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
+    return command^.entity == expected &&
+        shapemodel.shape_scalar_is_finite(command^.scalar) &&
+        shapemodel.shape_component_contains(&state^.shape_world^.trochoid_tools,
+            &state^.shape_world^.registry, state^.world_trochoid_tool.shape)
+}
+
 // Validate one packed command target that requires an active-feature component.
 validate_command_shape_active_feature :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
@@ -336,6 +405,37 @@ apply_set_shape_arc :: proc(
         start_theta = command^.arc.start_theta,
         sweep_theta = command^.arc.sweep_theta,
     })
+}
+
+// Apply one validated complete trochoid mutation atomically.
+apply_set_shape_trochoid :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.trochoid
+    _ = shape_set_trochoid(state, command^.entity, {i32(value.mode),
+        value.fixed_radius, value.rolling_radius, value.tracer_distance,
+        value.tracer_phase, value.rotation, value.parameter_start,
+        value.parameter_finish, value.draw_parameter})
+}
+
+// Apply one validated trochoid reveal-frontier mutation.
+apply_set_shape_trochoid_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_trochoid_frontier(state, command^.entity, command^.scalar)
+}
+
+// Apply one validated complete singleton-guide configuration.
+apply_set_trochoid_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.trochoid_tool
+    _ = set_trochoid_tool_geometry(state, {i32(value.mode), value.fixed_radius,
+        value.rolling_radius, value.parameter, value.rotation,
+        value.orientation_phase})
+}
+
+// Apply one validated singleton-guide rolling parameter.
+apply_set_trochoid_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_trochoid_tool_parameter(state, command^.scalar)
 }
 
 // Apply one validated packed-entity visibility mutation.

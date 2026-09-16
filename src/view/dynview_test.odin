@@ -453,19 +453,21 @@ animation_tick_reject_reason_classifies_stale_generation_and_sequence :: proc(
     service^.animation_generation = 3
     service^.animation_last_committed_sequence = 7
 
-    slot := app_bridge.Animation_Tick_Slot{
+    slot := new(app_bridge.Animation_Tick_Slot, context.allocator)
+    defer free(slot)
+    slot^ = app_bridge.Animation_Tick_Slot{
         generation = 2,
         sequence = 8,
         animation = current,
     }
     testing.expect_value(
-        t, app_bridge.animation_tick_reject_reason(state, service, &slot),
+        t, app_bridge.animation_tick_reject_reason(state, service, slot),
         "stale_generation")
 
-    slot.generation = 3
-    slot.sequence = 7
+    slot^.generation = 3
+    slot^.sequence = 7
     testing.expect_value(
-        t, app_bridge.animation_tick_reject_reason(state, service, &slot),
+        t, app_bridge.animation_tick_reject_reason(state, service, slot),
         "stale_sequence")
 }
 
@@ -541,18 +543,20 @@ animation_tick_rejects_stale_generation_and_sequence :: proc(t: ^testing.T) {
     interface^.selected_animation = animation
     service^.animation_generation = 4
     service^.animation_last_committed_sequence = 8
-    slot := app_bridge.Animation_Tick_Slot{
+    slot := new(app_bridge.Animation_Tick_Slot, context.allocator)
+    defer free(slot)
+    slot^ = app_bridge.Animation_Tick_Slot{
         generation = 4, sequence = 9, animation = animation}
 
-    testing.expect(t, app_bridge.animation_tick_matches_current(state, service, &slot))
-    slot.generation = 3
-    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, &slot))
-    slot.generation = 4
-    slot.sequence = 8
-    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, &slot))
-    slot.sequence = 9
+    testing.expect(t, app_bridge.animation_tick_matches_current(state, service, slot))
+    slot^.generation = 3
+    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, slot))
+    slot^.generation = 4
+    slot^.sequence = 8
+    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, slot))
+    slot^.sequence = 9
     interface^.pending_animation_reset = true
-    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, &slot))
+    testing.expect(t, !app_bridge.animation_tick_matches_current(state, service, slot))
 }
 
 //   Verify tick coalescing caps the backlog without growing the queue.

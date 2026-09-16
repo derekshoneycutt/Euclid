@@ -33,6 +33,8 @@ CIRCLE_ARC_SEGMENTS :: 96
 COMPASS_TOPCIRCLE_SEGMENTS :: 48
 COMPASS_TOPCIRCLE_VECTORS :: COMPASS_TOPCIRCLE_SEGMENTS + 1
 COMPASS_TOPCIRCLE_RADIUS :: 0.25
+TROCHOID_TOOL_RING_SEGMENTS :: 64
+TROCHOID_TOOL_RING_VECTORS :: TROCHOID_TOOL_RING_SEGMENTS + 1
 COMPASS_HINGE_CROSS_EPSILON :: 0.0001
 COMPASS_DEPTH_TIE_EPSILON :: 0.0001
 
@@ -143,6 +145,14 @@ Compass_Arc_Samples :: struct {
     auxiliary:     [COMPASS_TOPCIRCLE_VECTORS]Vector2,
 }
 
+// Hold one closed guide ring's projected strip samples.
+Trochoid_Tool_Ring_Samples :: struct {
+    tangents_view: [TROCHOID_TOOL_RING_VECTORS]Vector3,
+    left:          [TROCHOID_TOOL_RING_VECTORS]Vector2,
+    right:         [TROCHOID_TOOL_RING_VECTORS]Vector2,
+    auxiliary:     [TROCHOID_TOOL_RING_VECTORS]Vector2,
+}
+
 //   Cached geometry and optional pen occluder used to draw both compass legs.
 Compass_Leg_Draw_Context :: struct {
     state:            ^Euclid_General_State,
@@ -250,6 +260,12 @@ tool_brush_interaction_receivers :: #force_inline proc(
     pen_receives_compass := pen_draw_index >= 0 && compass_index > pen_draw_index
     compass_receives_pen := compass_index >= 0 && pen_draw_index > compass_index
     return pen_receives_compass, compass_receives_pen
+}
+
+// Return whether a depth-sorted guide must move immediately before the compass.
+trochoid_tool_defers_to_compass :: #force_inline proc(
+    guide_index, compass_index: int) -> bool {
+    return guide_index >= 0 && compass_index >= 0 && guide_index > compass_index
 }
 
 
@@ -478,6 +494,8 @@ draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
     cache := &state^.shape_world^.draw_cache
     _, pen_index := find_cached_pen_item(cache)
     _, compass_index := find_cached_compass_item(cache)
+    _, guide_index := find_cached_trochoid_tool_item(cache)
+    defer_guide := trochoid_tool_defers_to_compass(guide_index, compass_index)
     pen_draw_index := pen_index
     if has_crossing {
         pen_draw_index = crossing.polygon_index
@@ -486,6 +504,12 @@ draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
         tool_brush_interaction_receivers(pen_draw_index, compass_index)
 
     for i in 0..<cache^.item_count {
+        if defer_guide && i == guide_index {
+            continue
+        }
+        if defer_guide && i == compass_index {
+            draw_cached_trochoid_tool_full(state, &cache^.trochoid_tool)
+        }
         if has_crossing {
             if i == crossing.polygon_index {
                 compass_caster: ^shapemodel.Shapes_Compass_Draw = nil
@@ -513,6 +537,10 @@ draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
 // Returns:
 //   - none.
 draw_shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
+    if state^.shape_world^.draw_cache.draw_trochoid_tool {
+        draw_cached_trochoid_tool_shadow(
+            state, &state^.shape_world^.draw_cache.trochoid_tool)
+    }
     if state^.shape_world^.draw_cache.draw_pen {
         draw_cached_pen_shadow(state, &state^.shape_world^.draw_cache.pen)
     }
@@ -546,8 +574,11 @@ draw_cached_item_low :: proc(state: ^Euclid_General_State,
         draw_cached_circle_low(state, &item_typed)
     case shapemodel.Shapes_Filled_Circle_Draw:
         draw_cached_filledcircle_low(state, &item_typed)
+    case shapemodel.Shapes_Curve_Draw:
+        draw_cached_curve_low(state, &item_typed)
     case shapemodel.Shapes_Polygon_Draw:
         draw_cached_polygon_low(state, &item_typed)
+    case shapemodel.Shapes_Trochoid_Tool_Draw:
     case shapemodel.Shapes_Pen_Draw,
         shapemodel.Shapes_Compass_Draw:
     }
@@ -593,8 +624,12 @@ draw_cached_item_high_merged :: proc(state: ^Euclid_General_State,
         draw_cached_circle_high(state, &item_typed)
     case shapemodel.Shapes_Filled_Circle_Draw:
         draw_cached_filledcircle_high(state, &item_typed)
+    case shapemodel.Shapes_Curve_Draw:
+        draw_cached_curve_high(state, &item_typed)
     case shapemodel.Shapes_Polygon_Draw:
         draw_cached_polygon_high(state, &item_typed)
+    case shapemodel.Shapes_Trochoid_Tool_Draw:
+        draw_cached_trochoid_tool_full(state, &item_typed)
     case shapemodel.Shapes_Pen_Draw:
         draw_cached_pen_high_merged(state, &item_typed, pen_receives_compass)
     case shapemodel.Shapes_Compass_Draw:
@@ -607,6 +642,7 @@ draw_cached_item_shadow :: proc(state: ^Euclid_General_State,
     item: ^shapemodel.Shapes_Draw_Cache_Item) {
     switch &item_typed in item {
     case shapemodel.Shapes_Label_Draw,
+        shapemodel.Shapes_Trochoid_Tool_Draw,
         shapemodel.Shapes_Pen_Draw,
         shapemodel.Shapes_Compass_Draw:
     case shapemodel.Shapes_Point_Draw:
@@ -617,6 +653,8 @@ draw_cached_item_shadow :: proc(state: ^Euclid_General_State,
         draw_cached_circle_shadow(state, &item_typed)
     case shapemodel.Shapes_Filled_Circle_Draw:
         draw_cached_filledcircle_shadow(state, &item_typed)
+    case shapemodel.Shapes_Curve_Draw:
+        draw_cached_curve_shadow(state, &item_typed)
     case shapemodel.Shapes_Polygon_Draw:
         draw_cached_polygon_shadow(state, &item_typed)
     }
@@ -638,6 +676,16 @@ draw_cached_circle_is_elevated :: #force_inline proc(
 draw_cached_filledcircle_is_elevated :: #force_inline proc(
     c: ^shapemodel.Shapes_Filled_Circle_Draw) -> bool {
     return shadow_point_is_elevated(c^.center)
+}
+
+// Return true when any explicated curve vertex belongs to the elevated layer.
+draw_cached_curve_is_elevated :: #force_inline proc(
+    state: ^Euclid_General_State,
+    curve: ^shapemodel.Shapes_Curve_Draw) -> bool {
+    cache := &state^.shape_world^.draw_cache
+    vertices := cache^.curve_vertices[
+        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
+    return has_any_elevated_shadow_point(vertices)
 }
 
 //   Return true when any cached polygon vertex belongs to the elevated layer.
@@ -711,6 +759,22 @@ draw_cached_filledcircle_high :: #force_inline proc(
     }
 }
 
+// Draw one cached curve only when all of it belongs to the lower geometry layer.
+draw_cached_curve_low :: #force_inline proc(
+    state: ^Euclid_General_State, curve: ^shapemodel.Shapes_Curve_Draw) {
+    if !draw_cached_curve_is_elevated(state, curve) {
+        draw_cached_curve(state, curve, false)
+    }
+}
+
+// Draw one cached curve in the higher layer when any vertex is elevated.
+draw_cached_curve_high :: #force_inline proc(
+    state: ^Euclid_General_State, curve: ^shapemodel.Shapes_Curve_Draw) {
+    if draw_cached_curve_is_elevated(state, curve) {
+        draw_cached_curve(state, curve, true)
+    }
+}
+
 //   Draw one cached polygon only when it belongs to the lower geometry layer.
 draw_cached_polygon_low :: #force_inline proc(
     state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
@@ -746,6 +810,124 @@ draw_cached_compass_full :: proc(
     draw_cached_compass_active_dot(state, comp)
     begin_tool_brush_mode(state)
     draw_cached_compass(state, comp, pen_caster)
+    end_tool_brush_mode(state)
+}
+
+// Return one planar world-space point on a guide ring.
+trochoid_tool_ring_point :: #force_inline proc(
+    center: Vector3, radius, angle: f32) -> Vector3 {
+    return {center.x + math.cos(angle) * radius,
+        center.y + math.sin(angle) * radius, center.z}
+}
+
+// Build one closed guide ring as a welded projected strip.
+build_trochoid_tool_ring_samples :: proc(
+    state: ^Euclid_General_State,
+    center: Vector3,
+    radius, coverage_radius: f32,
+    samples: ^Trochoid_Tool_Ring_Samples) -> bool {
+    for index in 0..=TROCHOID_TOOL_RING_SEGMENTS {
+        parameter := f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
+        angle := 2 * math.PI * parameter
+        center3d := trochoid_tool_ring_point(center, radius, angle)
+        tangent3d := Vector3{-math.sin(angle), math.cos(angle), 0}
+        projected := view_core.iso_to_cartesian(center3d, state^.iso_scale^)
+        tangent_point := view_core.iso_to_cartesian(
+            center3d + tangent3d, state^.iso_scale^)
+        tangent := tangent_point - projected
+        tangent_length := linalg.length(tangent)
+        if tangent_length <= 0.0001 {return false}
+        tangent /= tangent_length
+        perpendicular := Vector2{-tangent.y, tangent.x}
+        samples^.tangents_view[index] =
+            linalg.normalize(tool_brush_light_to_view(tangent3d))
+        samples^.left[index] = projected - perpendicular * coverage_radius
+        samples^.right[index] = projected + perpendicular * coverage_radius
+        samples^.auxiliary[index] = Vector2{
+            tool_brush_view_depth(center3d), parameter}
+    }
+    return true
+}
+
+// Emit one closed guide ring's connected strip triangles.
+emit_trochoid_tool_ring_strip :: proc(samples: ^Trochoid_Tool_Ring_Samples) {
+    for index in 0..<TROCHOID_TOOL_RING_SEGMENTS {
+        emit_tool_brush_strip_vertex(samples^.left[index],
+            samples^.auxiliary[index], samples^.tangents_view[index], 0)
+        emit_tool_brush_strip_vertex(samples^.right[index],
+            samples^.auxiliary[index], samples^.tangents_view[index], 255)
+        emit_tool_brush_strip_vertex(samples^.left[index + 1],
+            samples^.auxiliary[index + 1], samples^.tangents_view[index + 1], 0)
+        emit_tool_brush_strip_vertex(samples^.right[index],
+            samples^.auxiliary[index], samples^.tangents_view[index], 255)
+        emit_tool_brush_strip_vertex(samples^.right[index + 1],
+            samples^.auxiliary[index + 1], samples^.tangents_view[index + 1], 255)
+        emit_tool_brush_strip_vertex(samples^.left[index + 1],
+            samples^.auxiliary[index + 1], samples^.tangents_view[index + 1], 0)
+    }
+}
+
+// Draw one closed guide ring as one continuous shader-lit strip.
+draw_trochoid_tool_ring :: proc(
+    state: ^Euclid_General_State,
+    center: Vector3,
+    radius, brush_size: f32,
+    color: rl.Color) {
+    if !state^.stroke_3d.ready {
+        previous := trochoid_tool_ring_point(center, radius, 0)
+        for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
+            angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
+            current := trochoid_tool_ring_point(center, radius, angle)
+            first := view_core.iso_to_cartesian(previous, state^.iso_scale^)
+            second := view_core.iso_to_cartesian(current, state^.iso_scale^)
+            rl.DrawLineEx(first, second, brush_size, color)
+            previous = current
+        }
+        return
+    }
+
+    scale := get_tool_brush_render_scale()
+    min_scale := math.max(math.min(scale.x, scale.y), 0.0001)
+    brush_radius := brush_size * 0.5
+    coverage_radius := brush_radius + 1.0 / min_scale
+    side_extent := coverage_radius / math.max(brush_radius, 0.0001)
+    samples := Trochoid_Tool_Ring_Samples{}
+    if !build_trochoid_tool_ring_samples(
+        state, center, radius, coverage_radius, &samples) {return}
+
+    rlgl.DrawRenderBatchActive()
+    shader := &state^.stroke_3d
+    set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 1.0)
+    set_tool_brush_uniform_float(
+        state, shader^.loc_strip_alpha, f32(color.a) / 255.0)
+    set_tool_brush_uniform_vec3(state, shader^.loc_strip_color, Vector3{
+        f32(color.r) / 255.0, f32(color.g) / 255.0, f32(color.b) / 255.0})
+    set_tool_brush_uniform_float(state, shader^.loc_strip_side_extent, side_extent)
+    set_tool_brush_uniform_float(state, shader^.loc_arc_intersections_enabled, 0.0)
+
+    _ = rlgl.CheckRenderBatchLimit(TROCHOID_TOOL_RING_SEGMENTS * 6)
+    rlgl.SetTexture(rlgl.GetTextureIdDefault())
+    rlgl.DisableBackfaceCulling()
+    rlgl.Begin(rlgl.TRIANGLES)
+    emit_trochoid_tool_ring_strip(&samples)
+    rlgl.End()
+    rlgl.DrawRenderBatchActive()
+    rlgl.EnableBackfaceCulling()
+    set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 0.0)
+}
+
+// Render the two-ring guide and its inward orientation handle in one shader binding.
+draw_cached_trochoid_tool_full :: proc(
+    state: ^Euclid_General_State,
+    tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
+    begin_tool_brush_mode(state)
+    draw_trochoid_tool_ring(state, tool^.fixed_center,
+        tool^.fixed_radius, tool^.brush_size, tool^.color)
+    draw_trochoid_tool_ring(state, tool^.rolling_center,
+        tool^.rolling_radius, tool^.brush_size, tool^.color)
+    first := view_core.iso_to_cartesian(tool^.handle_start, state^.iso_scale^)
+    second := view_core.iso_to_cartesian(tool^.handle_finish, state^.iso_scale^)
+    draw_tool_brush_segment(state, first, second, tool^.brush_size, tool^.color)
     end_tool_brush_mode(state)
 }
 
@@ -1493,11 +1675,36 @@ find_cached_pen_item :: proc(
             shapemodel.Shapes_Line_Draw,
             shapemodel.Shapes_Circle_Draw,
             shapemodel.Shapes_Filled_Circle_Draw,
+            shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Polygon_Draw,
+            shapemodel.Shapes_Trochoid_Tool_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
     }
     return pen, -1
+}
+
+// Find the first cached trochoid-guide draw item in the merged cache.
+find_cached_trochoid_tool_item :: proc(
+    cache: ^shapemodel.Shapes_Draw_Cache) -> (
+        shapemodel.Shapes_Trochoid_Tool_Draw, int) {
+    tool := shapemodel.Shapes_Trochoid_Tool_Draw{}
+    for i in 0..<cache^.item_count {
+        switch &item_typed in &cache^.items[i] {
+        case shapemodel.Shapes_Trochoid_Tool_Draw:
+            return item_typed, i
+        case shapemodel.Shapes_Label_Draw,
+            shapemodel.Shapes_Point_Draw,
+            shapemodel.Shapes_Line_Draw,
+            shapemodel.Shapes_Circle_Draw,
+            shapemodel.Shapes_Filled_Circle_Draw,
+            shapemodel.Shapes_Curve_Draw,
+            shapemodel.Shapes_Polygon_Draw,
+            shapemodel.Shapes_Pen_Draw,
+            shapemodel.Shapes_Compass_Draw:
+        }
+    }
+    return tool, -1
 }
 
 //   Find the first cached compass draw item in the merged cache.
@@ -1513,7 +1720,9 @@ find_cached_compass_item :: proc(
             shapemodel.Shapes_Line_Draw,
             shapemodel.Shapes_Circle_Draw,
             shapemodel.Shapes_Filled_Circle_Draw,
+            shapemodel.Shapes_Curve_Draw,
             shapemodel.Shapes_Polygon_Draw,
+            shapemodel.Shapes_Trochoid_Tool_Draw,
             shapemodel.Shapes_Pen_Draw:
         }
     }
@@ -1551,6 +1760,8 @@ find_pen_crossing_polygon :: proc(
             shapemodel.Shapes_Line_Draw,
             shapemodel.Shapes_Circle_Draw,
             shapemodel.Shapes_Filled_Circle_Draw,
+            shapemodel.Shapes_Curve_Draw,
+            shapemodel.Shapes_Trochoid_Tool_Draw,
             shapemodel.Shapes_Pen_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
@@ -1769,6 +1980,54 @@ draw_cached_line_shadow :: proc(
     rl.DrawLineEx(s0, s1, thickness, shadow_color)
 }
 
+// Draw one elevated guide ring as ordinary segmented floor shadows.
+draw_trochoid_tool_ring_shadow :: proc(
+    state: ^Euclid_General_State,
+    center: Vector3,
+    radius, brush_size: f32,
+    color: rl.Color) {
+    previous := trochoid_tool_ring_point(center, radius, 0)
+    for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
+        angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
+        current := trochoid_tool_ring_point(center, radius, angle)
+        line := shapemodel.Shapes_Line_Draw{
+            base = {brush_size = brush_size, color = color},
+            point1 = previous, point2 = current}
+        draw_cached_line_shadow(state, &line)
+        previous = current
+    }
+}
+
+// Render elevated floor shadows for both guide rings and the orientation handle.
+draw_cached_trochoid_tool_shadow :: proc(
+    state: ^Euclid_General_State,
+    tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
+    if !shadow_point_is_elevated(tool^.fixed_center) &&
+        !shadow_point_is_elevated(tool^.rolling_center) {
+        return
+    }
+    draw_trochoid_tool_ring_shadow(state, tool^.fixed_center,
+        tool^.fixed_radius, tool^.brush_size, tool^.color)
+    draw_trochoid_tool_ring_shadow(state, tool^.rolling_center,
+        tool^.rolling_radius, tool^.brush_size, tool^.color)
+    handle := shapemodel.Shapes_Line_Draw{tool^.base,
+        tool^.handle_start, tool^.handle_finish}
+    draw_cached_line_shadow(state, &handle)
+}
+
+// Render floor shadows for every segment in one explicated curve packet.
+draw_cached_curve_shadow :: proc(
+    state: ^Euclid_General_State, curve: ^shapemodel.Shapes_Curve_Draw) {
+    cache := &state^.shape_world^.draw_cache
+    vertices := cache^.curve_vertices[
+        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
+    for index in 1..<len(vertices) {
+        line := shapemodel.Shapes_Line_Draw{
+            curve^.base, vertices[index - 1], vertices[index]}
+        draw_cached_line_shadow(state, &line)
+    }
+}
+
 
 //   Render one cached circle/arc floor shadow.
 draw_cached_circle_shadow :: proc(
@@ -1857,6 +2116,21 @@ draw_cached_line :: proc(
     c0 := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
     rl.DrawLineEx(c0, c1, l^.brush_size, color)
+}
+
+// Render every segment in one explicated curve using ordinary line styling.
+draw_cached_curve :: proc(
+    state: ^Euclid_General_State,
+    curve: ^shapemodel.Shapes_Curve_Draw,
+    keep_above: bool) {
+    cache := &state^.shape_world^.draw_cache
+    vertices := cache^.curve_vertices[
+        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
+    for index in 1..<len(vertices) {
+        line := shapemodel.Shapes_Line_Draw{
+            curve^.base, vertices[index - 1], vertices[index]}
+        draw_cached_line(state, &line, keep_above)
+    }
 }
 
 

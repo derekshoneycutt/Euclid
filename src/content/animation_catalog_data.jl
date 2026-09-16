@@ -587,4 +587,29 @@ const AnimationDescriptors = AnimationDescriptor[
         UUID("36baf769-897f-5e3d-8e7f-a5f7dd605dd7"),
         "Abelian", 1, LeafNode,
         "algebra/groups/C_n_abelian.jl"),
+    AnimationDescriptor(
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        nothing,
+        "Curves", 5, CategoryNode,
+        "curves/curves_overview.jl"),
+    AnimationDescriptor(
+        UUID("5eae70a6-d48e-4b85-9fe3-db3b2e82cb3b"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Circle", 0, LeafNode,
+        "curves/circle.jl"),
+    AnimationDescriptor(
+        UUID("9836d89f-5b15-45b6-be0a-92c2e61c541c"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Ellipse", 1, LeafNode,
+        "curves/ellipse.jl"),
+    AnimationDescriptor(
+        UUID("bad550b7-54c6-40df-adf1-c19e2e88fe25"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Cardioid", 2, LeafNode,
+        "curves/cardioid.jl"),
+    AnimationDescriptor(
+        UUID("c70ab98c-08e5-42bc-b198-78b0f54ecf55"),
+        UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
+        "Limacon", 3, LeafNode,
+        "curves/limacon.jl"),
 ]

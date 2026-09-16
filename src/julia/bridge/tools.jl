@@ -1,4 +1,38 @@
 
+"""Show the process-global two-ring trochoid guide."""
+function show_trochoid_tool(state_ptr::Ptr{Cvoid})
+    @ccall show_trochoid_tool(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""Hide the process-global two-ring trochoid guide."""
+function hide_trochoid_tool(state_ptr::Ptr{Cvoid})
+    @ccall hide_trochoid_tool(state_ptr::Ptr{Cvoid})::Int32
+end
+
+"""Move the process-global guide's fixed center and elevation."""
+function set_trochoid_tool_position(state_ptr::Ptr{Cvoid}, position)
+    value = (Cfloat(position[1]), Cfloat(position[2]), Cfloat(position[3]))
+    @ccall set_trochoid_tool_position(state_ptr::Ptr{Cvoid},
+        value::NTuple{3, Cfloat})::Int32
+end
+
+"""Atomically configure the process-global trochoid guide."""
+function set_trochoid_tool_geometry(state_ptr::Ptr{Cvoid}; mode,
+    fixed_radius::Real, rolling_radius::Real, parameter::Real=0f0,
+    rotation::Real=0f0, orientation_phase::Real=0f0)
+    geometry = BridgeTrochoidToolGeometry(Int32(mode), Cfloat(fixed_radius),
+        Cfloat(rolling_radius), Cfloat(parameter), Cfloat(rotation),
+        Cfloat(orientation_phase))
+    @ccall set_trochoid_tool_geometry(state_ptr::Ptr{Cvoid},
+        geometry::BridgeTrochoidToolGeometry)::Int32
+end
+
+"""Advance only the process-global guide's rolling parameter."""
+function set_trochoid_tool_parameter(state_ptr::Ptr{Cvoid}, parameter::Real)
+    @ccall set_trochoid_tool_parameter(state_ptr::Ptr{Cvoid},
+        Cfloat(parameter)::Cfloat)::Int32
+end
+
 """
 Show the pen tool in the surface view.
 

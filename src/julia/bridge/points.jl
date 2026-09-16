@@ -111,6 +111,90 @@ function get_arc_geometry(state_ptr::Ptr{Cvoid}, entity::Integer)
         state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64)::BridgeShapeArcQueryResult
 end
 
+"""Build one field-for-field trochoid ABI value from named analytic parameters."""
+function _trochoid_geometry(mode; fixed_radius::Real, rolling_radius::Real,
+    tracer_distance::Real, tracer_phase::Real, rotation::Real,
+    parameter_start::Real, parameter_finish::Real, draw_parameter::Real)
+    BridgeTrochoidGeometry(Int32(mode), Cfloat(fixed_radius), Cfloat(rolling_radius),
+        Cfloat(tracer_distance), Cfloat(tracer_phase), Cfloat(rotation),
+        Cfloat(parameter_start), Cfloat(parameter_finish), Cfloat(draw_parameter))
+end
+
+"""Create one animation-owned planar trochoid from its general description."""
+function create_new_trochoid(state_ptr::Ptr{Cvoid}, center;
+    mode=TROCHOID_EXTERNAL, fixed_radius::Real, rolling_radius::Real,
+    tracer_distance::Real, tracer_phase::Real=0f0, rotation::Real=0f0,
+    parameter_start::Real=0f0, parameter_finish::Real=2f0 * Float32(pi),
+    draw_parameter::Real=parameter_finish,
+    color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
+    position = (Cfloat(center[1]), Cfloat(center[2]), Cfloat(center[3]))
+    geometry = _trochoid_geometry(mode; fixed_radius, rolling_radius,
+        tracer_distance, tracer_phase, rotation, parameter_start,
+        parameter_finish, draw_parameter)
+    style = _shape_style(color, brush_size)
+    @ccall shape_create_trochoid(state_ptr::Ptr{Cvoid},
+        position::NTuple{3, Cfloat}, geometry::BridgeTrochoidGeometry,
+        style::BridgeShapeStyle)::BridgeShapeTrochoidResult
+end
+
+"""Return one trochoid host's complete current analytic description."""
+function get_trochoid_geometry(state_ptr::Ptr{Cvoid}, entity::Integer)
+    @ccall shape_get_trochoid(state_ptr::Ptr{Cvoid},
+        UInt64(entity)::UInt64)::BridgeShapeTrochoidQueryResult
+end
+
+"""Atomically replace one trochoid host's complete analytic description."""
+function set_trochoid_geometry(state_ptr::Ptr{Cvoid}, entity::Integer;
+    mode, fixed_radius::Real, rolling_radius::Real, tracer_distance::Real,
+    tracer_phase::Real=0f0, rotation::Real=0f0, parameter_start::Real,
+    parameter_finish::Real, draw_parameter::Real)
+    geometry = _trochoid_geometry(mode; fixed_radius, rolling_radius,
+        tracer_distance, tracer_phase, rotation, parameter_start,
+        parameter_finish, draw_parameter)
+    @ccall shape_set_trochoid(state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
+        geometry::BridgeTrochoidGeometry)::Int32
+end
+
+"""Advance one trochoid's reveal frontier within its directed domain."""
+function set_trochoid_frontier(
+    state_ptr::Ptr{Cvoid}, entity::Integer, frontier::Real)
+    @ccall shape_set_trochoid_frontier(state_ptr::Ptr{Cvoid},
+        UInt64(entity)::UInt64, Cfloat(frontier)::Cfloat)::Int32
+end
+
+"""Create the internal-trochoid representation of an ellipse with semiaxes `a ≥ b`."""
+function create_new_ellipse(state_ptr::Ptr{Cvoid}, center, a::Real, b::Real;
+    draw_parameter::Real=2f0 * Float32(pi),
+    color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
+    a >= b > 0 || throw(ArgumentError("ellipse semiaxes require a >= b > 0"))
+    create_new_trochoid(state_ptr, center; mode=TROCHOID_INTERNAL,
+        fixed_radius=a + b, rolling_radius=(a + b) / 2,
+        tracer_distance=(a - b) / 2, draw_parameter=draw_parameter,
+        color=color, brush_size=brush_size)
+end
+
+"""Create one external equal-radius cardioid."""
+function create_new_cardioid(state_ptr::Ptr{Cvoid}, center, radius::Real;
+    draw_parameter::Real=2f0 * Float32(pi),
+    color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
+    radius > 0 || throw(ArgumentError("cardioid radius must be positive"))
+    create_new_trochoid(state_ptr, center; fixed_radius=radius,
+        rolling_radius=radius, tracer_distance=radius,
+        draw_parameter=draw_parameter, color=color, brush_size=brush_size)
+end
+
+"""Create one equal-radius external limacon with explicit tracer distance."""
+function create_new_limacon(state_ptr::Ptr{Cvoid}, center, radius::Real,
+    tracer_distance::Real; draw_parameter::Real=2f0 * Float32(pi),
+    color=BridgeColor(0, 0, 0, 0), brush_size::Real=0f0)
+    radius > 0 || throw(ArgumentError("limacon radius must be positive"))
+    tracer_distance >= 0 ||
+        throw(ArgumentError("limacon tracer distance must be nonnegative"))
+    create_new_trochoid(state_ptr, center; fixed_radius=radius,
+        rolling_radius=radius, tracer_distance=tracer_distance,
+        draw_parameter=draw_parameter, color=color, brush_size=brush_size)
+end
+
 """Create one outlined arc from explicit coordinates."""
 function create_new_circle(state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real,
     radius::Real, start_theta::Real, sweep_theta::Real;

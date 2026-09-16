@@ -44,6 +44,7 @@ Session_Julia_Service :: struct {
 //   Allocated canonical shape world plus its baseline tools.
 Session_Shape_Storage :: struct {
     world : ^shapemodel.Shape_World,
+    world_trochoid_tool : shapemodel.Shape_Trochoid_Tool_Handle,
     world_compass : shapemodel.Shape_Compass_Handle,
     world_pen : shapemodel.Shape_Pen_Handle,
 }
@@ -237,6 +238,9 @@ make_drawing_surface :: proc() -> ^Euclid_Drawing_Surface {
 //   Allocate the canonical shape world and build its baseline tools.
 make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
     world := new(shapemodel.Shape_World, context.allocator)
+    world_trochoid_tool, trochoid_tool_status := shapes.world_create_trochoid_tool(
+        world, {mode = .External, fixed_radius = 0.2, rolling_radius = 0.1,
+            style = {color = view_core.TOOL_COLOR, brush_size = 5}})
     world_compass, compass_status := shapes.world_create_compass(world, {
         joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
         joint2 = {0.02, 0.02, 0}, limb_length = TOOL_LENGTH,
@@ -244,7 +248,7 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
     world_pen, pen_status := shapes.world_create_pen(world, {
         joint1 = {0, 0, 0}, joint2 = {0, 0, 0}, length = TOOL_LENGTH,
         style = {color = view_core.TOOL_COLOR, brush_size = 5}})
-    if compass_status != .Ok || pen_status != .Ok ||
+    if trochoid_tool_status != .Ok || compass_status != .Ok || pen_status != .Ok ||
         shapemodel.shape_world_freeze_baseline(world) != .Ok {
         free(world)
         return false
@@ -253,6 +257,7 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
         world, view_core.ALLOWED_CONSTRAINT_ERROR)
     shapes.shape_world_update_previous_values(world)
     out.world = world
+    out.world_trochoid_tool = world_trochoid_tool
     out.world_compass = world_compass
     out.world_pen = world_pen
     return true
@@ -368,6 +373,7 @@ init_animations_state_resources :: proc(
     state^.draw_surface = make_drawing_surface()
     state^.particle_system = particle_system
     state^.shape_world = shapes_state.world
+    state^.world_trochoid_tool = shapes_state.world_trochoid_tool
     state^.world_compass = shapes_state.world_compass
     state^.world_pen = shapes_state.world_pen
     init_runtime_fields(state, settings)

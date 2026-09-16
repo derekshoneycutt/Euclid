@@ -66,6 +66,48 @@ Shape_Arc :: struct {
     previous_sweep_theta: f32,
 }
 
+// Select whether the rolling circle travels outside or inside the fixed circle.
+Shape_Trochoid_Mode :: enum u8 {
+    External,
+    Internal,
+}
+
+// Hold current and previous parameters for one mutable planar trochoid.
+Shape_Trochoid :: struct {
+    mode: Shape_Trochoid_Mode,
+    fixed_radius: f32,
+    rolling_radius: f32,
+    tracer_distance: f32,
+    tracer_phase: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+    previous_fixed_radius: f32,
+    previous_rolling_radius: f32,
+    previous_tracer_distance: f32,
+    previous_tracer_phase: f32,
+    previous_rotation: f32,
+    previous_parameter_start: f32,
+    previous_parameter_finish: f32,
+    previous_draw_parameter: f32,
+}
+
+// Hold current and previous parameters for the permanent two-ring trochoid guide.
+Shape_Trochoid_Tool :: struct {
+    mode: Shape_Trochoid_Mode,
+    fixed_radius: f32,
+    rolling_radius: f32,
+    parameter: f32,
+    rotation: f32,
+    orientation_phase: f32,
+    previous_fixed_radius: f32,
+    previous_rolling_radius: f32,
+    previous_parameter: f32,
+    previous_rotation: f32,
+    previous_orientation_phase: f32,
+}
+
 // Hold canonical presentation state for one renderable entity.
 Shape_Render_Style :: struct {
     color: rl.Color,
@@ -85,6 +127,8 @@ Shape_Geometry_Kind :: enum u8 {
     Line,
     Arc,
     Filled_Arc,
+    Trochoid,
+    Trochoid_Tool,
     Polygon,
     Pen,
     Compass,
@@ -98,6 +142,12 @@ Shape_Line_Geometry :: struct {
 
 // Mark one host whose mutable parameters live in the arc component set.
 Shape_Arc_Geometry :: struct {}
+
+// Mark one host whose mutable parameters live in the trochoid component set.
+Shape_Trochoid_Geometry :: struct {}
+
+// Mark one host whose mutable parameters live in the trochoid-tool component set.
+Shape_Trochoid_Tool_Geometry :: struct {}
 
 // Locate one immutable ordered polygon span in the world reference pool.
 Shape_Polygon_Geometry :: struct {
@@ -124,6 +174,8 @@ Shape_Geometry :: struct {
     payload: struct #raw_union {
         line: Shape_Line_Geometry,
         arc: Shape_Arc_Geometry,
+        trochoid: Shape_Trochoid_Geometry,
+        trochoid_tool: Shape_Trochoid_Tool_Geometry,
         polygon: Shape_Polygon_Geometry,
         pen: Shape_Pen_Geometry,
         compass: Shape_Compass_Geometry,
@@ -250,6 +302,8 @@ Shape_Construction_Needs :: struct {
     entities: int,
     transforms: int,
     arcs: int,
+    trochoids: int,
+    trochoid_tools: int,
     render_styles: int,
     active_features: int,
     geometries: int,
@@ -278,6 +332,16 @@ Shape_Line_Handle :: struct {
 
 // Identify one arc host whose transform is its center.
 Shape_Arc_Handle :: struct {
+    shape: Shape_Entity,
+}
+
+// Identify one trochoid host whose transform is its fixed center.
+Shape_Trochoid_Handle :: struct {
+    shape: Shape_Entity,
+}
+
+// Identify the permanent trochoid-guide host whose transform is its fixed center.
+Shape_Trochoid_Tool_Handle :: struct {
     shape: Shape_Entity,
 }
 
@@ -340,6 +404,8 @@ Shape_World :: struct {
     registry: Shape_Registry,
     transforms: Shape_Component_Set(Shape_Transform),
     arcs: Shape_Component_Set(Shape_Arc),
+    trochoids: Shape_Component_Set(Shape_Trochoid),
+    trochoid_tools: Shape_Component_Set(Shape_Trochoid_Tool),
     render_styles: Shape_Component_Set(Shape_Render_Style),
     active_features: Shape_Component_Set(Shape_Active_Feature),
     geometries: Shape_Component_Set(Shape_Geometry),
@@ -356,6 +422,54 @@ shape_arc_is_valid :: proc(arc: Shape_Arc) -> bool {
         !math.is_nan(arc.sweep_theta) && !math.is_inf(arc.sweep_theta)
 }
 
+// Return whether one scalar is finite.
+shape_scalar_is_finite :: #force_inline proc(value: f32) -> bool {
+    return !math.is_nan(value) && !math.is_inf(value)
+}
+
+// Return whether a frontier lies in one directed closed parameter interval.
+shape_parameter_is_in_directed_domain :: proc(
+    start, finish, parameter: f32) -> bool {
+    if finish > start {
+        return parameter >= start && parameter <= finish
+    }
+    return parameter <= start && parameter >= finish
+}
+
+// Validate one complete mutable trochoid value before publication or mutation.
+shape_trochoid_is_valid :: proc(value: Shape_Trochoid) -> bool {
+    finite := shape_scalar_is_finite(value.fixed_radius) &&
+        shape_scalar_is_finite(value.rolling_radius) &&
+        shape_scalar_is_finite(value.tracer_distance) &&
+        shape_scalar_is_finite(value.tracer_phase) &&
+        shape_scalar_is_finite(value.rotation) &&
+        shape_scalar_is_finite(value.parameter_start) &&
+        shape_scalar_is_finite(value.parameter_finish) &&
+        shape_scalar_is_finite(value.draw_parameter)
+    if !finite || value.fixed_radius <= 0 || value.rolling_radius <= 0 ||
+        value.tracer_distance < 0 || value.parameter_start == value.parameter_finish {
+        return false
+    }
+    if value.mode == .Internal && value.fixed_radius <= value.rolling_radius {
+        return false
+    }
+    return shape_parameter_is_in_directed_domain(
+        value.parameter_start, value.parameter_finish, value.draw_parameter)
+}
+
+// Validate one complete mutable two-ring guide value before publication or mutation.
+shape_trochoid_tool_is_valid :: proc(value: Shape_Trochoid_Tool) -> bool {
+    finite := shape_scalar_is_finite(value.fixed_radius) &&
+        shape_scalar_is_finite(value.rolling_radius) &&
+        shape_scalar_is_finite(value.parameter) &&
+        shape_scalar_is_finite(value.rotation) &&
+        shape_scalar_is_finite(value.orientation_phase)
+    if !finite || value.fixed_radius <= 0 || value.rolling_radius <= 0 {
+        return false
+    }
+    return value.mode != .Internal || value.fixed_radius > value.rolling_radius
+}
+
 // Invalidate every published packet frontier before canonical world mutation.
 shape_world_invalidate_draw_cache :: proc(world: ^Shape_World) {
     if world == nil {
@@ -365,6 +479,8 @@ shape_world_invalidate_draw_cache :: proc(world: ^Shape_World) {
     world.draw_cache.label_byte_count = 0
     world.draw_cache.polygon_vertex_count = 0
     world.draw_cache.polygon_triangle_count = 0
+    world.draw_cache.curve_vertex_count = 0
+    world.draw_cache.draw_trochoid_tool = false
     world.draw_cache.draw_pen = false
     world.draw_cache.draw_compass = false
 }
@@ -634,6 +750,8 @@ shape_world_has_capacity :: proc(
     return int(world.registry.entity_count) + needs.entities <= MAX_SHAPE_ENTITIES &&
         int(world.transforms.count) + needs.transforms <= component_capacity &&
         int(world.arcs.count) + needs.arcs <= component_capacity &&
+        int(world.trochoids.count) + needs.trochoids <= component_capacity &&
+        int(world.trochoid_tools.count) + needs.trochoid_tools <= component_capacity &&
         int(world.render_styles.count) + needs.render_styles <= component_capacity &&
         int(world.active_features.count) + needs.active_features <= component_capacity &&
         int(world.geometries.count) + needs.geometries <= component_capacity &&
@@ -772,7 +890,8 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
         return .Invalid_Argument
     }
     if world.registry.baseline_frozen || world.transforms.baseline_frozen ||
-        world.arcs.baseline_frozen ||
+        world.arcs.baseline_frozen || world.trochoids.baseline_frozen ||
+        world.trochoid_tools.baseline_frozen ||
         world.render_styles.baseline_frozen || world.active_features.baseline_frozen ||
         world.geometries.baseline_frozen || world.labels.baseline_frozen ||
         world.vertex_references.baseline_frozen || world.label_store.baseline_frozen ||
@@ -782,6 +901,8 @@ shape_world_freeze_baseline :: proc(world: ^Shape_World) -> Shape_World_Status {
     _ = shape_registry_freeze_baseline(&world.registry)
     _ = shape_component_freeze_baseline(&world.transforms)
     _ = shape_component_freeze_baseline(&world.arcs)
+    _ = shape_component_freeze_baseline(&world.trochoids)
+    _ = shape_component_freeze_baseline(&world.trochoid_tools)
     _ = shape_component_freeze_baseline(&world.render_styles)
     _ = shape_component_freeze_baseline(&world.active_features)
     _ = shape_component_freeze_baseline(&world.geometries)
@@ -801,7 +922,8 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
         return .Invalid_Argument
     }
     if !world.registry.baseline_frozen || !world.transforms.baseline_frozen ||
-        !world.arcs.baseline_frozen ||
+        !world.arcs.baseline_frozen || !world.trochoids.baseline_frozen ||
+        !world.trochoid_tools.baseline_frozen ||
         !world.render_styles.baseline_frozen || !world.active_features.baseline_frozen ||
         !world.geometries.baseline_frozen || !world.labels.baseline_frozen ||
         !world.vertex_references.baseline_frozen || !world.label_store.baseline_frozen ||
@@ -811,6 +933,8 @@ shape_world_rewind_animation :: proc(world: ^Shape_World) -> Shape_World_Status 
     shape_world_invalidate_draw_cache(world)
     _ = shape_component_rewind_animation(&world.transforms)
     _ = shape_component_rewind_animation(&world.arcs)
+    _ = shape_component_rewind_animation(&world.trochoids)
+    _ = shape_component_rewind_animation(&world.trochoid_tools)
     _ = shape_component_rewind_animation(&world.render_styles)
     _ = shape_component_rewind_animation(&world.active_features)
     _ = shape_component_rewind_animation(&world.geometries)

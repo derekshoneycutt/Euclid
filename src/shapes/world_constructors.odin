@@ -17,6 +17,33 @@ Arc_Input :: struct {
     style: Shape_Style,
 }
 
+// Supply canonical trochoid geometry and presentation values.
+Trochoid_Input :: struct {
+    center: Vector3,
+    mode: shapemodel.Shape_Trochoid_Mode,
+    fixed_radius: f32,
+    rolling_radius: f32,
+    tracer_distance: f32,
+    tracer_phase: f32,
+    rotation: f32,
+    parameter_start: f32,
+    parameter_finish: f32,
+    draw_parameter: f32,
+    style: Shape_Style,
+}
+
+// Supply canonical geometry and presentation values for the permanent guide tool.
+Trochoid_Tool_Input :: struct {
+    center: Vector3,
+    mode: shapemodel.Shape_Trochoid_Mode,
+    fixed_radius: f32,
+    rolling_radius: f32,
+    parameter: f32,
+    rotation: f32,
+    orientation_phase: f32,
+    style: Shape_Style,
+}
+
 // Supply canonical source and presentation values for one world label.
 World_Label_Input :: struct {
     source: string,
@@ -204,6 +231,68 @@ world_create_filled_arc :: proc(
     world: ^shapemodel.Shape_World,
     input: Arc_Input) -> (shapemodel.Shape_Arc_Handle, shapemodel.Shape_World_Status) {
     return world_create_arc_kind(world, input, .Filled_Arc)
+}
+
+// Create one outlined trochoid whose host transform is its fixed center.
+world_create_trochoid :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Trochoid_Input) -> (
+        shapemodel.Shape_Trochoid_Handle, shapemodel.Shape_World_Status) {
+    value := shapemodel.Shape_Trochoid{mode = input.mode,
+        fixed_radius = input.fixed_radius, rolling_radius = input.rolling_radius,
+        tracer_distance = input.tracer_distance, tracer_phase = input.tracer_phase,
+        rotation = input.rotation, parameter_start = input.parameter_start,
+        parameter_finish = input.parameter_finish, draw_parameter = input.draw_parameter,
+        previous_fixed_radius = input.fixed_radius,
+        previous_rolling_radius = input.rolling_radius,
+        previous_tracer_distance = input.tracer_distance,
+        previous_tracer_phase = input.tracer_phase, previous_rotation = input.rotation,
+        previous_parameter_start = input.parameter_start,
+        previous_parameter_finish = input.parameter_finish,
+        previous_draw_parameter = input.draw_parameter}
+    if world == nil || !shapemodel.shape_trochoid_is_valid(value) {
+        return {}, .Invalid_Argument
+    }
+    needs := shapemodel.Shape_Construction_Needs{entities = 1, transforms = 1,
+        trochoids = 1, render_styles = 1, geometries = 1}
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_transform(world, input.center)
+    status := shapemodel.shape_component_insert(
+        &world.trochoids, &world.registry, shape, value)
+    assert(status == .Ok)
+    world_shape_publish_host(world, shape, input.style, {.Trochoid, {}})
+    return {shape = shape}, .Ok
+}
+
+// Create one two-ring guide whose host transform is its fixed center.
+world_create_trochoid_tool :: proc(
+    world: ^shapemodel.Shape_World,
+    input: Trochoid_Tool_Input) -> (
+        shapemodel.Shape_Trochoid_Tool_Handle, shapemodel.Shape_World_Status) {
+    value := shapemodel.Shape_Trochoid_Tool{mode = input.mode,
+        fixed_radius = input.fixed_radius, rolling_radius = input.rolling_radius,
+        parameter = input.parameter, rotation = input.rotation,
+        orientation_phase = input.orientation_phase,
+        previous_fixed_radius = input.fixed_radius,
+        previous_rolling_radius = input.rolling_radius,
+        previous_parameter = input.parameter, previous_rotation = input.rotation,
+        previous_orientation_phase = input.orientation_phase}
+    if world == nil || !shapemodel.shape_trochoid_tool_is_valid(value) {
+        return {}, .Invalid_Argument
+    }
+    needs := shapemodel.Shape_Construction_Needs{entities = 1, transforms = 1,
+        trochoid_tools = 1, render_styles = 1, geometries = 1}
+    if !shapemodel.shape_world_has_capacity(world, needs) {
+        return {}, .Out_Of_Capacity
+    }
+    shape := world_shape_append_transform(world, input.center)
+    status := shapemodel.shape_component_insert(
+        &world.trochoid_tools, &world.registry, shape, value)
+    assert(status == .Ok)
+    world_shape_publish_host(world, shape, input.style, {.Trochoid_Tool, {}})
+    return {shape = shape}, .Ok
 }
 
 // Append ordered transform entities for one preflighted polygon.

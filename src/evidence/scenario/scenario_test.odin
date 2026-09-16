@@ -325,6 +325,14 @@ scenario_test_presentation_lifecycle_events :: proc(t: ^testing.T) {
     testing.expect_value(t, superseded, trace.Kind.Presentation_Superseded)
 }
 
+// Verify native arc geometry commits are available to authored scenarios.
+@(test)
+scenario_test_arc_geometry_event :: proc(t: ^testing.T) {
+    kind, valid := event_kind("arc_geometry_committed")
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, trace.Kind.Arc_Geometry_Committed)
+}
+
 // Verify the scenario vocabulary exposes generation-owned animation lifecycle events.
 @(test)
 scenario_test_animation_loaded_event :: proc(t: ^testing.T) {

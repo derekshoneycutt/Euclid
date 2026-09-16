@@ -69,7 +69,7 @@ If you are new, read in this order:
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Font Cache | Required JuliaMono/NewCM residency, MATH-table admission, demand-paged glyphs, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
-| **Odin** | Geometry Kernel | Bounded entity registry, components, direct-target constraints, and derived render packets. | `src/shapes/model/`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
+| **Odin** | Geometry Kernel | Bounded entity registry, analytic curve evaluation, components, direct-target constraints, and derived render packets. | `src/shapes/model/`, `src/shapes/curve/`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
 | **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
@@ -83,7 +83,7 @@ If you are new, read in this order:
 | **Julia** | Application Reactor | One bounded actor scheduler for persistent Terminal roots, generation-scoped Terminal services, and animation policy supervision. | `src/julia/runtime.jl`, `src/julia/host/`, `src/julia/policy/`, `src/julia/terminal/` |
 | **Julia** | LaTeX Facade | Defines canonical TeX displayables and submits exact MIME bytes to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
 | **Julia Content** | Generation Bootstrap | Catalog descriptors, null behavior, and harness scenarios loaded into each generation. | `src/content/animation_catalog_generation.jl`, `src/content/nullanimation.jl`, `src/content/harness_scenarios.jl` |
-| **Julia Content** | Content Modules | Domain roots and leaf animation definitions loaded at startup or on demand. | `src/content/elements/`, `src/content/proclus/`, `src/content/hilbert/`, `src/content/algebra/` |
+| **Julia Content** | Content Modules | Domain roots and leaf animation definitions loaded at startup or on demand. | `src/content/elements/`, `src/content/proclus/`, `src/content/hilbert/`, `src/content/algebra/`, `src/content/curves/` |
 
 ### Cross-Module Contracts
 
@@ -654,7 +654,7 @@ Choose the owning module first, then touch that module's highlighted files.
 - **Julia bridge contract:** `src/bridge/abi*.odin` and
   `src/julia/odin-julia-bridge.jl`.
 - **New animation:** `src/content/elements/`, `src/content/proclus/`,
-  `src/content/hilbert/`, `src/content/algebra/`.
+  `src/content/hilbert/`, `src/content/algebra/`, `src/content/curves/`.
 - **Terminal or REPL:** `src/view/terminal/`, `src/julia/host/`,
   `src/julia/euclidrepl.jl`.
 
