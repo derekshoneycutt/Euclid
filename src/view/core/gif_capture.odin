@@ -9,6 +9,7 @@ import viewmodel "../model"
 
 import "../../core"
 import "../../files"
+import render_raylib "../render/raylib"
 
 import "core:fmt"
 import "core:os"
@@ -377,7 +378,7 @@ gif_capture_begin_session :: proc(
     state: ^core.Euclid_General_State) -> bool {
     ui_runtime := &state.ui_runtime
     capture_w, capture_h := gif_capture_source_dimensions(
-        ui_runtime.ui_regions.world_rect)
+        render_raylib.rectangle(ui_runtime.ui_regions.world_rect))
     downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
     out_w := max(1, capture_w / downsample)
     out_h := max(1, capture_h / downsample)

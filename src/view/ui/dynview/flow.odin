@@ -9,6 +9,7 @@ import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
 import view_core "../../core"
 import "../../font"
+import render_raylib "../../render/raylib"
 
 import "core:math"
 
@@ -172,9 +173,9 @@ command_draw_color :: #force_inline proc(
     style: dyncore.Dynview_Text_Style) -> rl.Color {
 
     if cmd.has_brush_color {
-        return cmd.brush_color
+        return render_raylib.color(cmd.brush_color)
     }
-    return style.color
+    return render_raylib.color(style.color)
 }
 
 //   Return edge_color unless it is fully transparent zero, else the fallback.
@@ -503,12 +504,13 @@ flow_draw_text_line_content :: proc(
             key = style_font_key(style),
             text = line_text,
             position = {line_x, row_y},
-            color = style.color,
+            color = render_raylib.color(style.color),
             font = text_font,
         })
     } else {
         view_core.ui_text(
-            line_text, int(line_x), int(row_y), style.color, text_font)
+            line_text, int(line_x), int(row_y),
+            render_raylib.color(style.color), text_font)
     }
 }
 
@@ -545,7 +547,7 @@ flow_draw_text_line :: proc(
             rl.Vector2{line_x, underline_y},
             rl.Vector2{line_x + f32(line_len)*advance, underline_y},
             1,
-            style.color)
+            render_raylib.color(style.color))
     }
 }
 
@@ -620,6 +622,19 @@ flow_consume_inline_line :: proc(
     wrap_if_full(flow, max_cols)
 }
 
+// Draw one inline box with independently resolved clockwise edge colors.
+draw_flow_inline_box_edges :: proc(
+    rect: rl.Rectangle, stroke: f32, edges: [4]rl.Color) {
+    top_left := rl.Vector2{rect.x, rect.y}
+    top_right := rl.Vector2{rect.x + rect.width, rect.y}
+    bottom_left := rl.Vector2{rect.x, rect.y + rect.height}
+    bottom_right := rl.Vector2{rect.x + rect.width, rect.y + rect.height}
+    rl.DrawLineEx(top_left, top_right, stroke, edges[0])
+    rl.DrawLineEx(top_right, bottom_right, stroke, edges[1])
+    rl.DrawLineEx(bottom_right, bottom_left, stroke, edges[2])
+    rl.DrawLineEx(bottom_left, top_left, stroke, edges[3])
+}
+
 //   Consume one inline-box atom in flow layout, optionally drawing it.
 flow_consume_inline_box :: proc(
     flow: ^Dynview_Flow_State,
@@ -641,19 +656,18 @@ flow_consume_inline_box :: proc(
         box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
         box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
         stroke := max(1.0, cmd.inline_atom_stroke)
-        top_left := rl.Vector2{box_x, box_y}
-        top_right := rl.Vector2{box_x + box_w, box_y}
-        bottom_left := rl.Vector2{box_x, box_y + box_h}
-        bottom_right := rl.Vector2{box_x + box_w, box_y + box_h}
         base_color := command_draw_color(cmd, style)
-        edge1 := shape_edge_color_or(cmd.shape_edge_color_1, base_color)
-        edge2 := shape_edge_color_or(cmd.shape_edge_color_2, base_color)
-        edge3 := shape_edge_color_or(cmd.shape_edge_color_3, base_color)
-        edge4 := shape_edge_color_or(cmd.shape_edge_color_4, base_color)
-        rl.DrawLineEx(top_left, top_right, stroke, edge1)
-        rl.DrawLineEx(top_right, bottom_right, stroke, edge2)
-        rl.DrawLineEx(bottom_right, bottom_left, stroke, edge3)
-        rl.DrawLineEx(bottom_left, top_left, stroke, edge4)
+        edges := [4]rl.Color{
+            shape_edge_color_or(
+                render_raylib.color(cmd.shape_edge_color_1), base_color),
+            shape_edge_color_or(
+                render_raylib.color(cmd.shape_edge_color_2), base_color),
+            shape_edge_color_or(
+                render_raylib.color(cmd.shape_edge_color_3), base_color),
+            shape_edge_color_or(
+                render_raylib.color(cmd.shape_edge_color_4), base_color),
+        }
+        draw_flow_inline_box_edges({box_x, box_y, box_w, box_h}, stroke, edges)
     }
 
     flow^.had_visible = true
@@ -754,7 +768,8 @@ flow_consume_inline_filled_box :: proc(
         rl.DrawRectangleRec(rect, command_draw_color(cmd, style))
         if cmd.inline_outline_stroke > 0 {
             rl.DrawRectangleLinesEx(
-                rect, max(1.0, cmd.inline_outline_stroke), style.color)
+                rect, max(1.0, cmd.inline_outline_stroke),
+                render_raylib.color(style.color))
         }
     }
 
@@ -776,10 +791,11 @@ draw_flow_inline_filled_circle :: #force_inline proc(
     rl.DrawCircleV(center, radius, command_draw_color(cmd, style))
 
     if cmd.inline_outline_stroke > 0 {
-        rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
+        rl.DrawCircleLines(
+            i32(center.x), i32(center.y), radius, render_raylib.color(style.color))
         if max(1.0, cmd.inline_outline_stroke) > 1 {
             rl.DrawCircleLines(i32(center.x), i32(center.y),
-                max(1.0, radius - 1), style.color)
+                max(1.0, radius - 1), render_raylib.color(style.color))
         }
     }
 }
@@ -841,7 +857,7 @@ draw_flow_inline_pie_section :: #force_inline proc(
             radius,
             cmd.pie_start_angle_degrees,
             cmd.pie_end_angle_degrees,
-            Pie_Section_Style{stroke, outline_color})
+            Pie_Section_Style{stroke, render_raylib.color(outline_color)})
     }
 }
 
@@ -878,7 +894,8 @@ flow_consume_inline_perpendicular :: proc(
         Flow_Shape_Span{0.34, 0.74})
     if frame.visible {
         draw_perpendicular_shape(frame.rect, max(1.0, cmd.inline_atom_stroke),
-            Perpendicular_Colors{command_draw_color(cmd, style), cmd.shape_edge_color_1})
+            Perpendicular_Colors{command_draw_color(cmd, style),
+                render_raylib.color(cmd.shape_edge_color_1)})
     }
 
     flow^.had_visible = true
@@ -899,9 +916,9 @@ flow_consume_inline_triangle :: proc(
         base_color := command_draw_color(cmd, style)
         draw_triangle_shape(frame.rect, cmd.shape_is_filled, Triangle_Colors{
             base_color,
-            shape_edge_color_or(cmd.shape_edge_color_1, base_color),
-            shape_edge_color_or(cmd.shape_edge_color_2, base_color),
-            shape_edge_color_or(cmd.shape_edge_color_3, base_color),
+            shape_edge_color_or(render_raylib.color(cmd.shape_edge_color_1), base_color),
+            shape_edge_color_or(render_raylib.color(cmd.shape_edge_color_2), base_color),
+            shape_edge_color_or(render_raylib.color(cmd.shape_edge_color_3), base_color),
         }, max(1.0, cmd.inline_atom_stroke))
     }
 
@@ -923,11 +940,11 @@ flow_consume_inline_pentagon :: proc(
         base_color := command_draw_color(cmd, style)
         draw_pentagon_shape(frame.rect, cmd.shape_is_filled, Pentagon_Colors{
             base_color,
-            shape_edge_color_or(cmd.shape_edge_color_1, base_color),
-            shape_edge_color_or(cmd.shape_edge_color_2, base_color),
-            shape_edge_color_or(cmd.shape_edge_color_3, base_color),
-            shape_edge_color_or(cmd.shape_edge_color_4, base_color),
-            shape_edge_color_or(cmd.shape_edge_color_5, base_color),
+            shape_edge_color_or(render_raylib.color(cmd.shape_edge_color_1), base_color),
+            shape_edge_color_or(render_raylib.color(cmd.shape_edge_color_2), base_color),
+            shape_edge_color_or(render_raylib.color(cmd.shape_edge_color_3), base_color),
+            shape_edge_color_or(render_raylib.color(cmd.shape_edge_color_4), base_color),
+            shape_edge_color_or(render_raylib.color(cmd.shape_edge_color_5), base_color),
         }, max(1.0, cmd.inline_atom_stroke))
     }
 

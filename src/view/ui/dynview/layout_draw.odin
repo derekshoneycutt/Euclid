@@ -1,5 +1,6 @@
 package ui_dynview
 
+import colormodel "../../../color/model"
 import dynviewmodel "../../../dynview/model"
 
 import fontmodel "../../font/model"
@@ -10,6 +11,7 @@ import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
 import view_core "../../core"
 import "../../font"
+import render_raylib "../../render/raylib"
 
 import "core:math"
 
@@ -325,7 +327,7 @@ draw_math_text :: proc(draw: Math_Text_Draw) {
     if draw.state == nil {
         view_core.ui_text_f32(
             draw.text, draw.position.x, draw.position.y,
-            draw.style.color, draw.font)
+            render_raylib.color(draw.style.color), draw.font)
         return
     }
     resolver := font.cache_terminal_resolver(&draw.state^.font_cache)
@@ -334,7 +336,7 @@ draw_math_text :: proc(draw: Math_Text_Draw) {
         key = style_font_key(draw.style),
         text = draw.text,
         position = draw.position,
-        color = draw.style.color,
+        color = render_raylib.color(draw.style.color),
         font = draw.font,
     })
 }
@@ -495,7 +497,7 @@ draw_recursive_accent_item :: proc(
     accent_style := dyncore.style_by_id(item.accent_style_id)
     if item.accent_mode > 2 {
         _ = draw_glyph_accent_construction(
-            ctx, item, draw_x, baseline_y, accent_style.color)
+            ctx, item, draw_x, baseline_y, render_raylib.color(accent_style.color))
         return
     }
     rl.DrawLineEx(
@@ -504,7 +506,7 @@ draw_recursive_accent_item :: proc(
         rl.Vector2{draw_x + item.accent_rule_right,
             baseline_y + item.accent_rule_center},
         item.accent_rule_thickness,
-        accent_style.color)
+        render_raylib.color(accent_style.color))
 }
 
 //   Derive the bar/hook geometry for one radical item.
@@ -590,7 +592,7 @@ draw_radical_index_text :: proc(
         site = .Radical_Index,
         position = index.position,
         font_size = index.font_size,
-        color = script_style.color,
+        color = render_raylib.color(script_style.color),
     }) {
         return
     }
@@ -703,7 +705,7 @@ draw_sealed_radical :: proc(
         layout.draw_x+item.math_stretch_left_x,
         layout.baseline_y,
         item.math_stretch_bottom,
-    }, radical_style.color) {
+    }, render_raylib.color(radical_style.color)) {
         return false
     }
     rl.DrawLineEx(
@@ -711,7 +713,7 @@ draw_sealed_radical :: proc(
             layout.baseline_y+item.radical_rule_center},
         {layout.draw_x+item.radical_rule_right,
             layout.baseline_y+item.radical_rule_center},
-        item.radical_rule_thickness, radical_style.color)
+        item.radical_rule_thickness, render_raylib.color(radical_style.color))
     _ = draw_radical_degree(layout, true)
     return true
 }
@@ -725,8 +727,8 @@ draw_fallback_radical_strokes :: proc(
     rl.DrawLineEx(
         {geometry.bar_start_x, geometry.bar_y},
         {geometry.bar_end_x, geometry.bar_y},
-        geometry.bar_thickness, style.color)
-    draw_radical_hook(geometry, style.color)
+        geometry.bar_thickness, render_raylib.color(style.color))
+    draw_radical_hook(geometry, render_raylib.color(style.color))
 }
 
 //   Draw one recursive radical wrapper by drawing the child math program first, then index and radical stroke.
@@ -827,7 +829,7 @@ draw_script_limit :: proc(
     if len(text) > 0 && !draw_cached_math_site({
         ctx = draw.ctx, item = draw.item, site = site,
         position = {draw.script_x, top}, font_size = draw.script.font_size,
-        color = draw.script.style.color}) {
+        color = render_raylib.color(draw.script.style.color)}) {
         draw_optional_math_text({
             state = draw.ctx.state, style = draw.script.style, text = text,
             position = {draw.script_x, top}, font = draw.font})
@@ -940,9 +942,9 @@ fraction_divider_color :: #force_inline proc(
     style: dyncore.Dynview_Text_Style) -> rl.Color {
 
     if item.accent_style_id > 0 {
-        return dyncore.style_by_id(item.accent_style_id).color
+        return render_raylib.color(dyncore.style_by_id(item.accent_style_id).color)
     }
-    return style.color
+    return render_raylib.color(style.color)
 }
 
 //   Draw the centered divider rule for one recursive fraction.
@@ -1063,7 +1065,7 @@ draw_delimiter_vert :: #force_inline proc(
     _ = family
     x := geom.draw_x + geom.width * 0.5
     rl.DrawLineEx(rl.Vector2{x, geom.top_y},
-        rl.Vector2{x, geom.bottom_y}, geom.thickness, style.color)
+        rl.Vector2{x, geom.bottom_y}, geom.thickness, render_raylib.color(style.color))
 }
 
 //   Render a double vertical bar as two lanes centered in the glyph frame.
@@ -1077,9 +1079,9 @@ draw_delimiter_double_vert :: #force_inline proc(
     x1 := geom.draw_x + geom.width * 0.5 - lane_gap
     x2 := geom.draw_x + geom.width * 0.5 + lane_gap
     rl.DrawLineEx(rl.Vector2{x1, geom.top_y},
-        rl.Vector2{x1, geom.bottom_y}, geom.thickness, style.color)
+        rl.Vector2{x1, geom.bottom_y}, geom.thickness, render_raylib.color(style.color))
     rl.DrawLineEx(rl.Vector2{x2, geom.top_y},
-        rl.Vector2{x2, geom.bottom_y}, geom.thickness, style.color)
+        rl.Vector2{x2, geom.bottom_y}, geom.thickness, render_raylib.color(style.color))
 }
 
 //   Render a bracket/ceil/floor as a vertical stem plus optional top/bottom hooks.
@@ -1096,14 +1098,17 @@ draw_delimiter_bracket :: #force_inline proc(
         hook_x = geom.draw_x + geom.width * 0.12
     }
     rl.DrawLineEx(rl.Vector2{stem_x, geom.top_y},
-        rl.Vector2{stem_x, geom.bottom_y}, geom.thickness, style.color)
+        rl.Vector2{stem_x, geom.bottom_y}, geom.thickness,
+        render_raylib.color(style.color))
     if family != .Floor {
         rl.DrawLineEx(rl.Vector2{stem_x, geom.top_y},
-            rl.Vector2{hook_x, geom.top_y}, geom.thickness, style.color)
+            rl.Vector2{hook_x, geom.top_y}, geom.thickness,
+            render_raylib.color(style.color))
     }
     if family != .Ceil {
         rl.DrawLineEx(rl.Vector2{stem_x, geom.bottom_y},
-            rl.Vector2{hook_x, geom.bottom_y}, geom.thickness, style.color)
+            rl.Vector2{hook_x, geom.bottom_y}, geom.thickness,
+            render_raylib.color(style.color))
     }
 }
 
@@ -1121,9 +1126,11 @@ draw_delimiter_angle :: #force_inline proc(
         rail_x = geom.draw_x + geom.width * 0.14
     }
     rl.DrawLineEx(rl.Vector2{rail_x, geom.top_y},
-        rl.Vector2{apex_x, geom.center_y}, geom.thickness, style.color)
+        rl.Vector2{apex_x, geom.center_y}, geom.thickness,
+        render_raylib.color(style.color))
     rl.DrawLineEx(rl.Vector2{apex_x, geom.center_y},
-        rl.Vector2{rail_x, geom.bottom_y}, geom.thickness, style.color)
+        rl.Vector2{rail_x, geom.bottom_y}, geom.thickness,
+        render_raylib.color(style.color))
 }
 
 //   Render line-only delimiter families (no sampled curves or cubic segments).
@@ -1167,7 +1174,8 @@ draw_stretch_delimiter_paren :: #force_inline proc(
             x1 = geom.draw_x + geom.width * (0.22 + 0.46 * curve1)
         }
 
-        rl.DrawLineEx(rl.Vector2{x0, y0}, rl.Vector2{x1, y1}, geom.thickness, style.color)
+        rl.DrawLineEx(rl.Vector2{x0, y0}, rl.Vector2{x1, y1}, geom.thickness,
+            render_raylib.color(style.color))
     }
 }
 
@@ -1265,17 +1273,17 @@ draw_stretch_delimiter_brace :: #force_inline proc(
         bend = f32(0.55),
     }
     draw_brace_curves(geom, cg, Cubic_Segment_Params{
-        color = style.color,
+        color = render_raylib.color(style.color),
         thickness = brace_thickness,
         segment_count = segment_count,
     })
 
     draw_brace_stem(geom, cg.stem_x, stem_len,
         Brace_Stem{geom.top_y + radius_px, geom.center_y - radius_px,
-            brace_thickness, style.color})
+            brace_thickness, render_raylib.color(style.color)})
     draw_brace_stem(geom, cg.stem_x, stem_len,
         Brace_Stem{geom.center_y + radius_px, geom.bottom_y - radius_px,
-            brace_thickness, style.color})
+            brace_thickness, render_raylib.color(style.color)})
 }
 
 //   Draw a font glyph fallback when no procedural family renderer is used.
@@ -1418,10 +1426,10 @@ draw_sealed_stretch_delimiters :: proc(
     right := item.math_stretch_constructions[1]
     left_ok := !left.valid || draw_stretch_construction(
         ctx, item, left, {draw_x+item.math_stretch_left_x, baseline_y,
-            item.math_stretch_vertical_origins[0]}, style.color)
+            item.math_stretch_vertical_origins[0]}, render_raylib.color(style.color))
     right_ok := !right.valid || draw_stretch_construction(
         ctx, item, right, {draw_x+item.math_stretch_right_x, baseline_y,
-            item.math_stretch_vertical_origins[1]}, style.color)
+            item.math_stretch_vertical_origins[1]}, render_raylib.color(style.color))
     return left_ok && right_ok
 }
 
@@ -1570,7 +1578,7 @@ matrix_draw_geometry :: proc(
         cols = descriptor^.columns,
         rule_thickness = dynmath.math_table_rule_thickness(ctx.font_size),
         rule_separation = dynmath.math_table_rule_separation(ctx.font_size),
-        color = style.color,
+        color = render_raylib.color(style.color),
     }
     for boundary in 0..=descriptor^.columns {
         geometry.column_boundaries[boundary] =
@@ -2135,7 +2143,7 @@ large_op_draw_limit :: #force_inline proc(
     if draw_cached_math_site({
         ctx = d.ctx, item = d.item, site = site,
         position = {position.x, position.top}, font_size = m.limit_font_size,
-        color = m.script_style.color}) {
+        color = render_raylib.color(m.script_style.color)}) {
         return
     }
     draw_math_text({
@@ -2166,7 +2174,7 @@ draw_large_op_variant :: proc(d: Math_Item_Draw) -> bool {
             d.draw_x + item.operator_glyph_x,
             d.item_y + item.operator_glyph_line_top,
         },
-        color = d.style.color,
+        color = render_raylib.color(d.style.color),
         font_size = item.operator_glyph_font_size,
         base_pixel_size = cache^.math_constants.base_pixel_size,
     })
@@ -2184,7 +2192,7 @@ draw_large_op_recursive_item :: #force_inline proc(d: Math_Item_Draw) {
     if !draw_large_op_variant(d) && !draw_cached_math_site({
         ctx = d.ctx, item = d.item, site = .Primary,
         position = {glyph_x, glyph_top}, font_size = m.glyph_font_size,
-        color = d.style.color}) {
+        color = render_raylib.color(d.style.color)}) {
         draw_math_text({
             state = d.ctx.state, style = d.style, text = d.text,
             position = {glyph_x, glyph_top},
@@ -2244,7 +2252,7 @@ text_run_draw_params :: #force_inline proc(
         item = item,
         text = resolved.text,
         resolved_font = resolved.resolved_font,
-        text_color = text_color,
+        text_color = render_raylib.color(text_color),
         draw_x = resolved.draw_x,
         item_y = item_y,
     }
@@ -2374,13 +2382,13 @@ draw_inline_box_outline :: #force_inline proc(
     bottom_left := rl.Vector2{left, bottom}
     bottom_right := rl.Vector2{right, bottom}
     rl.DrawLineEx(top_left, top_right, stroke,
-        shape_edge_color_or(item.shape_edge_color_1, color))
+        shape_edge_color_or(render_raylib.color(item.shape_edge_color_1), color))
     rl.DrawLineEx(top_right, bottom_right, stroke,
-        shape_edge_color_or(item.shape_edge_color_2, color))
+        shape_edge_color_or(render_raylib.color(item.shape_edge_color_2), color))
     rl.DrawLineEx(bottom_right, bottom_left, stroke,
-        shape_edge_color_or(item.shape_edge_color_3, color))
+        shape_edge_color_or(render_raylib.color(item.shape_edge_color_3), color))
     rl.DrawLineEx(bottom_left, top_left, stroke,
-        shape_edge_color_or(item.shape_edge_color_4, color))
+        shape_edge_color_or(render_raylib.color(item.shape_edge_color_4), color))
 }
 
 //   Draw one inline circle outline with optional inner stroke.
@@ -2445,7 +2453,8 @@ draw_inline_filled_box :: #force_inline proc(
     }
     rl.DrawRectangleRec(rect, color)
     if stroke > 0 {
-        rl.DrawRectangleLinesEx(rect, max(1.0, stroke), style.color)
+        rl.DrawRectangleLinesEx(
+            rect, max(1.0, stroke), render_raylib.color(style.color))
     }
 }
 
@@ -2465,7 +2474,7 @@ draw_inline_filled_circle :: #force_inline proc(
     if stroke > 0 {
         rl.DrawRing(center,
             max(0.0, radius - stroke * 0.5), radius + stroke * 0.5,
-            0, 360, 64, style.color)
+            0, 360, 64, render_raylib.color(style.color))
     }
 }
 
@@ -2502,7 +2511,8 @@ draw_inline_pie_section_item :: #force_inline proc(
         max(item.pie_center_offset_x, item.draw_width - item.pie_center_offset_x),
         max(item.pie_center_offset_y, item.draw_height - item.pie_center_offset_y))
     radius := max(0.5, visual_radius - item.inline_atom_stroke * 0.5)
-    outline_color := item.has_outline_color ? item.outline_color : style.color
+    outline_color := render_raylib.color(
+        item.has_outline_color ? item.outline_color : style.color)
     stroke := max(1.0, item.inline_outline_stroke)
     if item.pie_is_filled {
         draw_filled_pie_section(center, radius,
@@ -2529,9 +2539,9 @@ draw_inline_triangle_item :: #force_inline proc(
         item.shape_is_filled,
         Triangle_Colors{
             color,
-            shape_edge_color_or(item.shape_edge_color_1, color),
-            shape_edge_color_or(item.shape_edge_color_2, color),
-            shape_edge_color_or(item.shape_edge_color_3, color),
+            shape_edge_color_or(render_raylib.color(item.shape_edge_color_1), color),
+            shape_edge_color_or(render_raylib.color(item.shape_edge_color_2), color),
+            shape_edge_color_or(render_raylib.color(item.shape_edge_color_3), color),
         },
         stroke)
 }
@@ -2550,11 +2560,11 @@ draw_inline_pentagon_item :: #force_inline proc(
         item.shape_is_filled,
         Pentagon_Colors{
             color,
-            shape_edge_color_or(item.shape_edge_color_1, color),
-            shape_edge_color_or(item.shape_edge_color_2, color),
-            shape_edge_color_or(item.shape_edge_color_3, color),
-            shape_edge_color_or(item.shape_edge_color_4, color),
-            shape_edge_color_or(item.shape_edge_color_5, color),
+            shape_edge_color_or(render_raylib.color(item.shape_edge_color_1), color),
+            shape_edge_color_or(render_raylib.color(item.shape_edge_color_2), color),
+            shape_edge_color_or(render_raylib.color(item.shape_edge_color_3), color),
+            shape_edge_color_or(render_raylib.color(item.shape_edge_color_4), color),
+            shape_edge_color_or(render_raylib.color(item.shape_edge_color_5), color),
         },
         stroke)
 }
@@ -2578,7 +2588,8 @@ draw_cached_inline_advanced_item :: #force_inline proc(
         draw_perpendicular_shape(
             rect,
             stroke,
-            Perpendicular_Colors{item.brush_color, item.shape_edge_color_1})
+            Perpendicular_Colors{render_raylib.color(item.brush_color),
+                render_raylib.color(item.shape_edge_color_1)})
     case .Inline_Triangle:
         draw_inline_triangle_item(item, item_x, item_y, color)
     case .Inline_Pentagon:
@@ -2596,7 +2607,7 @@ draw_cached_inline_item :: proc(
     item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32) {
 
-    color := dynlayout.inline_draw_color(style, item)
+    color := render_raylib.color(dynlayout.inline_draw_color(style, item))
     switch item.kind {
     case .Inline_Line, .Inline_Box, .Inline_Circle:
         draw_cached_inline_basic_item(style, item, item_x, item_y, color)
@@ -2612,7 +2623,7 @@ draw_cached_inline_item :: proc(
 
 // Resolve one semantic color against the standard Dynview foreground.
 document_draw_color :: #force_inline proc(
-    color: dynviewmodel.Dynview_Document_Color) -> rl.Color {
+    color: dynviewmodel.Dynview_Document_Color) -> colormodel.Color_RGBA8 {
     return color.value if color.present else UI_TEXT_COLOR
 }
 
@@ -2725,7 +2736,7 @@ draw_document_prose_item :: proc(
             glyphs = cache^.document_shaped_glyphs[
                 run.glyph_start:run.glyph_start+run.glyph_count],
             position = {position.x, line_top},
-            color = document_draw_color(semantic_inline.color),
+            color = render_raylib.color(document_draw_color(semantic_inline.color)),
             font_size = ctx.font_size, base_pixel_size = run.base_pixel_size,
         },
         text = text,
@@ -2785,7 +2796,7 @@ draw_document_display_number :: proc(
         remaining /= 10
     }
     style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_DEFAULT)
-    color := style.color
+    color := render_raylib.color(style.color)
     baseline := origin.y+line.baseline+line.display_number_baseline_offset
     position := rl.Vector2{origin.x+line.display_number_x,
         baseline-ctx.font_size*0.8}

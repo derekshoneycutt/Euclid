@@ -1815,9 +1815,9 @@ dynview_layout_consume_text_run_wraps_and_places_segments :: proc(t: ^testing.T)
     testing.expect(t, last_line >= 0)
     for item_index in 0..<cache.layout_item_count {
         testing.expect(t, cache.layout_items[item_index].has_brush_color)
-        testing.expect_value(t, cache.layout_items[item_index].brush_color.r, u8(64))
-        testing.expect_value(t, cache.layout_items[item_index].brush_color.g, u8(99))
-        testing.expect_value(t, cache.layout_items[item_index].brush_color.b, u8(216))
+        testing.expect_value(t, cache.layout_items[item_index].brush_color.red, u8(64))
+        testing.expect_value(t, cache.layout_items[item_index].brush_color.green, u8(99))
+        testing.expect_value(t, cache.layout_items[item_index].brush_color.blue, u8(216))
     }
 }
 

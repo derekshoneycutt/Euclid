@@ -1,5 +1,6 @@
 package view_core
 
+import colormodel "../../color/model"
 import viewmodel "../model"
 
 import "../../core"
@@ -31,18 +32,18 @@ WINDOW_TITLE :: "Euclid's Elements"
 
 JULIA_MONO_FONT_LOAD_SIZE :: 64
 
-BACKGROUND_COLOR :: rl.Color{36, 5, 16, 255}
-TOOL_COLOR :: rl.Color{160, 135, 135, 255}
+BACKGROUND_COLOR :: colormodel.Color_RGBA8{36, 5, 16, 255}
+TOOL_COLOR :: colormodel.Color_RGBA8{160, 135, 135, 255}
 
-UI_BACK_COLOR :: rl.Color{66, 35, 46, 255}
-UI_BORDER_COLOR :: rl.Color{86, 55, 66, 255}
-UI_TEXT_COLOR :: rl.Color{175, 150, 150, 255}
+UI_BACK_COLOR :: colormodel.Color_RGBA8{66, 35, 46, 255}
+UI_BORDER_COLOR :: colormodel.Color_RGBA8{86, 55, 66, 255}
+UI_TEXT_COLOR :: colormodel.Color_RGBA8{175, 150, 150, 255}
 
-UI_COMPONENT_BACKGROUND_COLOR :: rl.Color{25, 25, 25, 255}
+UI_COMPONENT_BACKGROUND_COLOR :: colormodel.Color_RGBA8{25, 25, 25, 255}
 
-SURFACE_COLOR :: rl.Color{25, 25, 25, 255}
+SURFACE_COLOR :: colormodel.Color_RGBA8{25, 25, 25, 255}
 SURFACE_EDGE_SIZE :: 0.05
-SURFACE_EDGE_COLOR :: rl.Color{96, 65, 76, 255}
+SURFACE_EDGE_COLOR :: colormodel.Color_RGBA8{96, 65, 76, 255}
 
 
 TREE_FONT_SIZE :: 16

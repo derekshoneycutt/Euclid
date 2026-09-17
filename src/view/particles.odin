@@ -96,9 +96,9 @@ stage_low_particle_instances :: proc(
             screen_x = screen.x,
             screen_y = screen.y,
             diameter = diameter,
-            red = f32(dust_color.r) / 255.0,
-            green = f32(dust_color.g) / 255.0,
-            blue = f32(dust_color.b) / 255.0,
+            red = f32(dust_color.red) / 255.0,
+            green = f32(dust_color.green) / 255.0,
+            blue = f32(dust_color.blue) / 255.0,
             alpha = math.clamp(alpha * 210.0 / 255.0, 0.0, 1.0),
             sprite_index = f32(ps.low_particles.dust_sprite_index[i]),
         }
@@ -191,7 +191,7 @@ draw_low_particles_immediate :: proc(
         }
         radius := diameter * 0.5
 
-        rlgl.Color4ub(dust_color.r, dust_color.g, dust_color.b, a)
+        rlgl.Color4ub(dust_color.red, dust_color.green, dust_color.blue, a)
 
         rlgl.TexCoord2f(0.0, 0.0)
         rlgl.Vertex2f(screen.x - radius, screen.y - radius)
@@ -651,9 +651,12 @@ render_particle_ember_mid_index :: proc(
     particle_color := ps.particles.color[i]
     white_mix := math.lerp(ps.particles.ember_white_at_birth[i], 0.0, t)
 
-    r := u8(math.clamp(math.lerp(f32(particle_color.r), 255.0, white_mix), 0.0, 255.0))
-    g := u8(math.clamp(math.lerp(f32(particle_color.g), 255.0, white_mix), 0.0, 255.0))
-    b := u8(math.clamp(math.lerp(f32(particle_color.b), 255.0, white_mix), 0.0, 255.0))
+    r := u8(math.clamp(
+        math.lerp(f32(particle_color.red), 255.0, white_mix), 0.0, 255.0))
+    g := u8(math.clamp(
+        math.lerp(f32(particle_color.green), 255.0, white_mix), 0.0, 255.0))
+    b := u8(math.clamp(
+        math.lerp(f32(particle_color.blue), 255.0, white_mix), 0.0, 255.0))
 
     a := u8(math.clamp((1.0 - t) * 255.0, 0.0, 255.0))
 

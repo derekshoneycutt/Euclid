@@ -1,5 +1,6 @@
 package terminalview
 
+import colormodel "../../color/model"
 import viewterminalmodel "model"
 
 import "../../core/protocol"
@@ -187,10 +188,10 @@ Terminal_Draw_Layout :: struct {
 
 // Frame-local semantic colors supplied by the terminal container owner.
 Terminal_Draw_Theme :: struct {
-    default_foreground: rl.Color,
-    cursor_foreground: rl.Color,
-    selection_foreground: rl.Color,
-    selection_background: rl.Color,
+    default_foreground: colormodel.Color_RGBA8,
+    cursor_foreground: colormodel.Color_RGBA8,
+    selection_foreground: colormodel.Color_RGBA8,
+    selection_background: colormodel.Color_RGBA8,
 }
 
 // Complete frame-local request for terminal input and geometry update.

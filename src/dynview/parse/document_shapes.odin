@@ -1,5 +1,7 @@
 package dynview_parse
 
+import colornames "../../color/names"
+
 TEX_DOCUMENT_SHAPE_OPTION_CAPACITY :: 16
 
 // Retain one temporary shape option as a source view during parsing.
@@ -298,34 +300,19 @@ tex_document_option_color :: proc(
     return tex_document_resolve_color(value)
 }
 
-//   Resolve Colors.jl names and Euclid's explicit Julia-logo aliases.
+//   Resolve one shared source color into Dynview's optional parser representation.
 tex_document_resolve_color :: proc(name: string) -> (Tex_Document_Color, bool) {
-    for named in TEX_NAMED_COLORS {
-        if named.name == name {
-            return {
-                red = named.red,
-                green = named.green,
-                blue = named.blue,
-                alpha = 255,
-                present = true,
-            }, true
-        }
+    color, ok := colornames.resolve_named_color(name)
+    if !ok {
+        return {}, false
     }
-    return tex_document_resolve_project_color(name)
-}
-
-//   Resolve Euclid's named Julia palette into deterministic RGBA bytes.
-tex_document_resolve_project_color :: proc(
-    name: string) -> (Tex_Document_Color, bool) {
-    color := Tex_Document_Color{present = true, alpha = 255}
-    switch name {
-    case "julia_blue": color.red, color.green, color.blue = 64, 99, 216
-    case "julia_green": color.red, color.green, color.blue = 56, 152, 38
-    case "julia_purple": color.red, color.green, color.blue = 149, 88, 178
-    case "julia_red": color.red, color.green, color.blue = 203, 60, 51
-    case: return {}, false
-    }
-    return color, true
+    return {
+        present = true,
+        red = color.red,
+        green = color.green,
+        blue = color.blue,
+        alpha = color.alpha,
+    }, true
 }
 
 //   Parse one optional positive floating-point option.

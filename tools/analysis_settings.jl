@@ -250,7 +250,16 @@ function euclid_naming_settings()
             convention
         for convention in default_naming_settings().conventions
     ]
-    return NamingSettings(conventions)
+    return NamingSettings(conventions, [
+        ReviewedNamingPolicy(
+            "color-rgba8-standard-initialism",
+            "src/color/model/model.odin",
+            :odin,
+            :type,
+            "Color_RGBA8",
+            "RGBA8 is the standard channel and bit-depth spelling for this portable value.";
+            response=Ignore),
+    ])
 end
 
 """Enforce application composition, coordinator, and substrate dependency direction."""

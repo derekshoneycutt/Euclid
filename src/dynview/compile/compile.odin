@@ -1,5 +1,6 @@
 package dynview_compile
 
+import geometrymodel "../../geometry/model"
 import dynviewmodel "../model"
 
 import storage "../../core/storage"
@@ -807,7 +808,7 @@ append_visible_copy_hit_target :: proc(
         payload_offset = block.payload_offset,
         payload_len = block.payload_len,
         rect = {icon_x, icon_y, layout.icon_size, layout.icon_size},
-        hover_rect = hover_rect,
+        hover_rect = geometrymodel.Rectangle(hover_rect),
     }
     status := storage.bounded_element_builder_append(
         &cache^.copy_hit_target_builder, []dynviewmodel.Dynview_Copy_Hit_Target{target})

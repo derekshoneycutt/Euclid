@@ -107,7 +107,8 @@ prepare_animation_controls :: proc(
     if !animation_controls_visible(ui_runtime^.gif_capture_phase) {
         return {}
     }
-    slots := animation_control_layout_slots(ui_runtime^.ui_regions.world_rect)
+    slots := animation_control_layout_slots(
+        ui_raylib_rectangle(ui_runtime^.ui_regions.world_rect))
     pause_icon := ui_runtime^.simulation_paused ? Icon_Button_Id.Play : .Pause
     refresh := update_icon_button(animation_control_button_params(
         ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,

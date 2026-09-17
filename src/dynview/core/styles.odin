@@ -1,13 +1,12 @@
 package dynview_core
 
+import colormodel "../../color/model"
 import dynviewmodel "../model"
 
 import fontmodel "../../view/font/model"
 
 
-import rl "vendor:raylib"
-
-UI_TEXT_COLOR :: rl.Color{175, 150, 150, 255}
+UI_TEXT_COLOR :: colormodel.Color_RGBA8{175, 150, 150, 255}
 
 TEXT_PADDING :: 8
 
@@ -54,7 +53,7 @@ STYLE_DEFAULT :: Dynview_Text_Style{
 //   Fixed host-owned styles keyed by style id.
 STYLE_TABLE :: []Style_Entry{
     {DYNVIEW_STYLE_PROMPT, Dynview_Text_Style{
-        color = rl.Color{186, 198, 228, 255},
+        color = colormodel.Color_RGBA8{186, 198, 228, 255},
         font_flags = .Regular,
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,
@@ -66,7 +65,7 @@ STYLE_TABLE :: []Style_Entry{
         line_height_multiplier = 1.0,
     }},
     {DYNVIEW_STYLE_ERROR, Dynview_Text_Style{
-        color = rl.Color{220, 95, 95, 255},
+        color = colormodel.Color_RGBA8{220, 95, 95, 255},
         font_flags = .Regular,
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,
@@ -127,7 +126,7 @@ STYLE_TABLE :: []Style_Entry{
         line_height_multiplier = 1.0,
     }},
     {DYNVIEW_STYLE_INLINE_ATOM, Dynview_Text_Style{
-        color = rl.Color{170, 190, 218, 255},
+        color = colormodel.Color_RGBA8{170, 190, 218, 255},
         font_flags = .Regular,
         wrap_scale = 1.0,
         line_height_multiplier = 1.0,

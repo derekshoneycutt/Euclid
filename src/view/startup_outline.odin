@@ -3,6 +3,7 @@ package view
 import viewmodel "model"
 
 import "ui"
+import render_raylib "render/raylib"
 
 import "core:math"
 
@@ -76,13 +77,15 @@ startup_outline_create :: proc(
         layout, f32(metrics.width), f32(metrics.height), vertical, horizontal)
     sections := ui.accordion_sections_for_layout(layout, "Animation")
     accordion := ui.accordion_layout(
-        regions.accordion_rect, sections,
+        render_raylib.rectangle(regions.accordion_rect), sections,
         layout == .Portrait ? .View : .Library)
-    controls := ui.animation_control_layout_slots(regions.world_rect)
+    controls := ui.animation_control_layout_slots(
+        render_raylib.rectangle(regions.world_rect))
 
-    startup_outline_append_rect(&outline, regions.world_rect)
-    startup_outline_append_rect(&outline, regions.text_rect)
-    startup_outline_append_rect(&outline, regions.accordion_rect)
+    startup_outline_append_rect(&outline, render_raylib.rectangle(regions.world_rect))
+    startup_outline_append_rect(&outline, render_raylib.rectangle(regions.text_rect))
+    startup_outline_append_rect(
+        &outline, render_raylib.rectangle(regions.accordion_rect))
     for index in 0..<sections.count {
         startup_outline_append_rect(&outline, accordion.headers[index])
     }

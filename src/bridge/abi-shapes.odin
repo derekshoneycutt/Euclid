@@ -1,5 +1,6 @@
 package bridge
 
+import colormodel "../color/model"
 import shapemodel "../shapes/model"
 
 import "../core"
@@ -88,7 +89,7 @@ bridge_shape_query_source :: proc(
 
 // Convert ABI presentation values into canonical world construction style.
 bridge_shape_style :: proc(style: Bridge_Shape_Style) -> shapes.Shape_Style {
-    return {color = rl.Color{style.color.r, style.color.g,
+    return {color = colormodel.Color_RGBA8{style.color.r, style.color.g,
         style.color.b, style.color.a}, brush_size = style.brush_size}
 }
 
@@ -361,11 +362,12 @@ shape_view_project_presentation :: proc(
     if has_style {
         view^.has_style = 1
         view^.visible = u8(style.visible)
-        view^.color = {style.color.r, style.color.g, style.color.b, style.color.a}
+        view^.color = {style.color.red, style.color.green,
+            style.color.blue, style.color.alpha}
         active_color, has_active_color := style.active_color.?
         view^.has_active_color = u8(has_active_color)
-        view^.active_color = {active_color.r, active_color.g,
-            active_color.b, active_color.a}
+        view^.active_color = {active_color.red, active_color.green,
+            active_color.blue, active_color.alpha}
         view^.brush_size = style.brush_size
     }
 }
@@ -744,7 +746,7 @@ shape_set_active_color :: proc "c" (
     style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style {return BRIDGE_STATUS_NOT_FOUND}
-    style.active_color = rl.Color{color.r, color.g, color.b, color.a}
+    style.active_color = colormodel.Color_RGBA8{color.r, color.g, color.b, color.a}
     return BRIDGE_STATUS_OK
 }
 

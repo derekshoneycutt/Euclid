@@ -1,10 +1,9 @@
 package terminalview
 
+import colormodel "../../color/model"
 import "../../core/protocol"
 import termgrid "../../terminal/grid"
 import termemulator "../../terminal/emulator"
-
-import rl "vendor:raylib"
 
 // Primary Julia prompt for normal evaluation mode.
 TERMINAL_PROMPT :: "julia> "
@@ -37,19 +36,19 @@ TERMINAL_PADDING :: f32(10)
 TERMINAL_COMPLETION_DEBOUNCE_SECONDS :: f64(0.12)
 
 // Default terminal foreground color.
-TERMINAL_TEXT_COLOR :: rl.RAYWHITE
+TERMINAL_TEXT_COLOR :: colormodel.Color_RGBA8{245, 245, 245, 255}
 
 // Matches view.BACKGROUND_COLOR so glyphs read as inverted under the cursor block.
-TERMINAL_CURSOR_TEXT_COLOR :: rl.Color{36, 5, 16, 255}
+TERMINAL_CURSOR_TEXT_COLOR :: colormodel.Color_RGBA8{36, 5, 16, 255}
 
 // Prompt colors distinguish Julia's four input modes.
-TERMINAL_PROMPT_COLOR :: rl.Color{0x38, 0x98, 0x26, 0xFF}
-TERMINAL_HELP_PROMPT_COLOR :: rl.Color{0xD4, 0xB0, 0x06, 0xFF}
-TERMINAL_PKG_PROMPT_COLOR :: rl.Color{0x40, 0x63, 0xD8, 0xFF}
-TERMINAL_SHELL_PROMPT_COLOR :: rl.Color{0xCB, 0x3C, 0x33, 0xFF}
+TERMINAL_PROMPT_COLOR :: colormodel.Color_RGBA8{0x38, 0x98, 0x26, 0xFF}
+TERMINAL_HELP_PROMPT_COLOR :: colormodel.Color_RGBA8{0xD4, 0xB0, 0x06, 0xFF}
+TERMINAL_PKG_PROMPT_COLOR :: colormodel.Color_RGBA8{0x40, 0x63, 0xD8, 0xFF}
+TERMINAL_SHELL_PROMPT_COLOR :: colormodel.Color_RGBA8{0xCB, 0x3C, 0x33, 0xFF}
 
 // Muted foreground used for noncommitted inline completion insertion.
-TERMINAL_COMPLETION_PREVIEW_COLOR :: rl.Color{0x59, 0x59, 0x59, 0xFF}
+TERMINAL_COMPLETION_PREVIEW_COLOR :: colormodel.Color_RGBA8{0x59, 0x59, 0x59, 0xFF}
 
 // Termhist history-entry tags recording which prompt mode submitted a line.
 TERMINAL_HISTORY_TAG_NORMAL :: 0

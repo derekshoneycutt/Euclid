@@ -2,6 +2,7 @@
 
 package terminalview
 
+import colormodel "../../color/model"
 import animation_model "../../core/animation"
 import viewterminalmodel "model"
 import "../../core"
@@ -81,7 +82,7 @@ terminal_test_record_shape_fallback :: proc(
 terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
     palette: termpalette.Terminal_Palette_State
     termpalette.terminal_palette_init(&palette)
-    themed_default := rl.Color{12, 34, 56, 255}
+    themed_default := colormodel.Color_RGBA8{12, 34, 56, 255}
 
     testing.expect_value(t,
         terminal_resolve_foreground(&palette, {}, themed_default),
@@ -94,7 +95,7 @@ terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
     direct := termpalette.terminal_color_direct(0xAABBCCFF)
     testing.expect_value(t,
         terminal_resolve_foreground(&palette, direct, themed_default),
-        rl.Color{0xAA, 0xBB, 0xCC, 0xFF})
+        colormodel.Color_RGBA8{0xAA, 0xBB, 0xCC, 0xFF})
 }
 
 // Verify initialization never discards an already published terminal owner.
@@ -331,9 +332,9 @@ terminal_test_shell_command_search_input :: proc(t: ^testing.T) {
         &term, {kind = .Press, key = .Escape}))
     testing.expect(t, !shell.search_editing)
     testing.expect_value(t, terminal_command_status_color(0),
-        rl.Color{0x38, 0x98, 0x26, 0xFF})
+        colormodel.Color_RGBA8{0x38, 0x98, 0x26, 0xFF})
     testing.expect_value(t, terminal_command_status_color(1),
-        rl.Color{0xCB, 0x3C, 0x33, 0xFF})
+        colormodel.Color_RGBA8{0xCB, 0x3C, 0x33, 0xFF})
 }
 
 // Build one single-width test cell with inline UTF-8 storage.

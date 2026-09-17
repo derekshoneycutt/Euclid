@@ -1,5 +1,6 @@
 package terminalview
 
+import colormodel "../../color/model"
 import viewterminalmodel "model"
 
 import animation_model "../../core/animation"
@@ -20,8 +21,6 @@ import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:strings"
-
-import rl "vendor:raylib"
 
 //   Compose the committed scrollback line shown for one accepted input.
 //
@@ -1030,7 +1029,8 @@ terminal_prompt_palette_color :: proc(
 //
 // Returns:
 //   - The configured prompt color assigned to that mode.
-terminal_prompt_draw_color :: proc(mode: protocol.Evaluation_Mode) -> rl.Color {
+terminal_prompt_draw_color :: proc(
+    mode: protocol.Evaluation_Mode) -> colormodel.Color_RGBA8 {
     switch mode {
     case .Pkg:
         return TERMINAL_PKG_PROMPT_COLOR

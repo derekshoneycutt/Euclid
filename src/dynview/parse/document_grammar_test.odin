@@ -1,6 +1,7 @@
 package dynview_parse
 
 import "core:testing"
+import colornames "../../color/names"
 
 //   Verify nested styles and inline math publish ordered semantic inlines.
 @(test)
@@ -78,7 +79,7 @@ tex_parse_document_matches_shapes_fixture :: proc(t: ^testing.T) {
 //   Verify the complete generated Colors.jl registry and explicit Julia aliases.
 @(test)
 tex_parse_document_accepts_named_shape_colors :: proc(t: ^testing.T) {
-    testing.expect_value(t, len(TEX_NAMED_COLORS), 666)
+    testing.expect_value(t, len(colornames.NAMED_COLORS), 670)
     cases := [?]struct {
         name: string,
         red, green, blue: u8,
