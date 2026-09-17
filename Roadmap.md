@@ -146,6 +146,7 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
+  - [ ] Initial comprehensive shape drawing suite
 - [ ] IME/Accesibility/etc. Features
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
@@ -167,6 +168,7 @@ General features:
 - [X] Naive spatial-aware shape drawing
 - [X] Improved pen clipping through 3D polygons
 - [X] Resizable layout via Splitters
+- [X] Window sizing and portrait
 - [ ] Drawing Sounds (In Progress)
 - [ ] SDL3 Migration
 
@@ -183,6 +185,8 @@ Final tasks:
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
   - [X] Deterministic checkpoint snapshots and stable run/step identity
   - [X] Headless harness with stable-UUID scenario selection and Julia assertions
+  - [ ] Expanded and determinitive scenario definitions
+  - [ ] Declarative scenario expectation manifests and semantic regression suite
   - [ ] Running-app end-to-end harness
 - [ ] Runtime hardening
   - [ ] Julia/Odin boundary ownership and lifecycle audit
@@ -248,9 +252,7 @@ Core Features:
 - Transformations
   - Scaling
   - Shearing
-- Window sizing and portrait mode
 - Revisit sounds? Maybe
-- Alternative tree for connected view vs book view
 
 ## Brainstorming
 
