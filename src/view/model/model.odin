@@ -5,10 +5,9 @@ import geometrymodel "../../geometry/model"
 import dynviewmodel "../../dynview/model"
 import gifmodel "../../files/gif_model"
 import particlemodel "../../particles/model"
+import renderresource "../render/resource"
 
 import "core:encoding/uuid"
-
-import rl "vendor:raylib"
 
 TOOL_LENGTH :: 0.35
 MAX_TOOL_BRUSH_OCCLUDERS :: 2
@@ -29,9 +28,9 @@ Iso_Scale :: struct {
     screenshake_phase: f32,
 }
 
-// Tool_Render_State owns display-thread shader handles for the geometry tools.
+// Tool_Render_State owns tool shader policy and one typed display resource identity.
 Tool_Render_State :: struct {
-    shader: rl.Shader,
+    shader: renderresource.Shader_Handle,
     ready: bool,
     loc_light_dir: i32,
     loc_ambient: i32,
@@ -67,17 +66,17 @@ Dust_Instance :: struct {
     sprite_index: f32,
 }
 
-// Dust_Render_State owns display-thread particle rendering resources and staging.
+// Dust_Render_State owns particle rendering policy, typed identities, and CPU staging.
 Dust_Render_State :: struct {
-    texture: rl.Texture2D,
+    texture: renderresource.Texture_Handle,
     ready: bool,
     instancing_attempted: bool,
     instancing_ready: bool,
-    shader: rl.Shader,
-    vao_id: u32,
-    quad_positions_vbo_id: u32,
-    quad_texcoords_vbo_id: u32,
-    instance_vbo_id: u32,
+    shader: renderresource.Shader_Handle,
+    vertex_array: renderresource.Vertex_Array_Handle,
+    quad_positions_buffer: renderresource.Buffer_Handle,
+    quad_texcoords_buffer: renderresource.Buffer_Handle,
+    instance_buffer: renderresource.Buffer_Handle,
     viewport_location: i32,
     texture_location: i32,
     instances: [particlemodel.MAX_LOW_PARTICLES]Dust_Instance,

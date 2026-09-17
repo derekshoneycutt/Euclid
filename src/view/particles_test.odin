@@ -2,6 +2,7 @@ package view
 
 import colormodel "../color/model"
 import viewmodel "model"
+import renderresource "render/resource"
 import rendershader "render/shader"
 
 import particlemodel "../particles/model"
@@ -34,9 +35,10 @@ dust_partial_instancing_resources_are_cleaned :: proc(t: ^testing.T) {
     dust_render := new(viewmodel.Dust_Render_State, context.allocator)
     defer free(dust_render)
     dust_render^ = {
-        shader = {id = 7},
-        quad_positions_vbo_id = 11,
-        instance_vbo_id = 13,
+        shader = renderresource.Shader_Handle({slot = 1, generation = 7}),
+        quad_positions_buffer =
+            renderresource.Buffer_Handle({slot = 2, generation = 11}),
+        instance_buffer = renderresource.Buffer_Handle({slot = 3, generation = 13}),
         instancing_ready = true,
     }
 
@@ -48,9 +50,10 @@ dust_partial_instancing_resources_are_cleaned :: proc(t: ^testing.T) {
     testing.expect(t, !plan.vertex_array)
 
     clear_dust_instancing_resource_handles(dust_render)
-    testing.expect_value(t, dust_render^.shader.id, u32(0))
-    testing.expect_value(t, dust_render^.quad_positions_vbo_id, u32(0))
-    testing.expect_value(t, dust_render^.instance_vbo_id, u32(0))
+    testing.expect(t, !renderresource.shader_handle_valid(dust_render^.shader))
+    testing.expect(t,
+        !renderresource.buffer_handle_valid(dust_render^.quad_positions_buffer))
+    testing.expect(t, !renderresource.buffer_handle_valid(dust_render^.instance_buffer))
     testing.expect(t, !dust_render^.instancing_ready)
 }
 

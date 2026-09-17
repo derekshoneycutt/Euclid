@@ -275,6 +275,8 @@ function euclid_architecture_settings()
                 "src/core/storage",
                 "src/view/font/model",
                 "src/view/model",
+                "src/view/render/raylib",
+                "src/view/render/resource",
                 "src/view/terminal/model",
             ]),
             ArchitectureLayer("composition", ["src/core"]),

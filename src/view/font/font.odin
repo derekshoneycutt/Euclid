@@ -2,6 +2,8 @@ package font
 
 import "../../files"
 import fontmodel "model"
+import render_raylib "../render/raylib"
+import renderresource "../render/resource"
 
 import "core:mem"
 import vmem "core:mem/virtual"
@@ -366,18 +368,22 @@ font_generation_seed_records_init :: proc(
 }
 
 //   Destroy every display and native resource owned by one font generation.
-font_generation_destroy :: proc(entry: ^Font_Cache_Entry) {
+font_generation_destroy :: proc(
+    entry: ^Font_Cache_Entry, resources: ^render_raylib.Resource_Tables = nil) {
     if entry == nil {
         return
     }
     for page_index in 0..<int(entry.page_count) {
-        if rl.IsTextureValid(entry.pages[page_index].texture) {
-            rl.UnloadTexture(entry.pages[page_index].texture)
+        if resources != nil {
+            _ = render_raylib.resource_tables_release_texture(
+                resources, entry.pages[page_index].texture)
         }
+        entry.pages[page_index] = {}
     }
-    if rl.IsFontValid(entry.font) {
-        rl.UnloadFont(entry.font)
+    if resources != nil {
+        _ = render_raylib.resource_tables_release_font(resources, entry.font)
     }
+    entry.font = {}
     font_shaping_destroy(&entry.shaping)
     font_generation_glyphs_destroy(entry)
 }
@@ -409,7 +415,7 @@ font_shaping_create :: proc(
 
 //   Finalize and publish one synchronous required seed candidate.
 cache_publish_required_seed :: proc(
-    entry: ^Font_Cache_Entry, prepared: ^Prepared_Font,
+    cache: ^Font_Cache, entry: ^Font_Cache_Entry, prepared: ^Prepared_Font,
     shaping: ^Font_Shaping_Resource) -> bool {
 
     if !font_generation_seed_records_init(
@@ -424,7 +430,16 @@ cache_publish_required_seed :: proc(
         font_generation_glyphs_destroy(entry)
         return false
     }
-    entry.font = candidate
+    handle, stored := render_raylib.resource_tables_store_font(
+        cast(^render_raylib.Resource_Tables)cache.render_resources, candidate)
+    if !stored {
+        rl.UnloadFont(candidate)
+        font_shaping_destroy(shaping)
+        font_generation_glyphs_destroy(entry)
+        return false
+    }
+    entry.font = handle
+    entry.base_size = candidate.baseSize
     entry.shaping = shaping^
     entry.raster_ascent = raster_ascent
     return true
@@ -463,7 +478,7 @@ cache_load_required :: proc(cache: ^Font_Cache, key: Font_Key) -> bool {
         return false
     }
     entry := &cache.entries[int(key)]
-    return cache_publish_required_seed(entry, &prepared, &shaping)
+    return cache_publish_required_seed(cache, entry, &prepared, &shaping)
 }
 
 //   Load permanent text and math faces at startup.
@@ -474,9 +489,11 @@ cache_load_required :: proc(cache: ^Font_Cache, key: Font_Key) -> bool {
 // Side effects:
 //   - Loads required GPU fonts synchronously and records source-file baselines.
 //   - Rolls back all cache ownership if any required generation fails.
-cache_init :: proc(cache: ^Font_Cache) -> bool {
+cache_init :: proc(
+    cache: ^Font_Cache, resources: ^render_raylib.Resource_Tables) -> bool {
     assert(cache != nil)
     cache^ = {}
+    cache.render_resources = resources
     cache_source_paths_init(cache)
     rasterization_begin()
     required_keys := [?]Font_Key{.Regular, .Math_Regular}
@@ -516,7 +533,8 @@ cache_destroy :: proc(cache: ^Font_Cache) {
     }
     for entry_index in 0..<FONT_KEY_COUNT {
         entry := &cache.entries[entry_index]
-        font_generation_destroy(entry)
+        font_generation_destroy(
+            entry, cast(^render_raylib.Resource_Tables)cache.render_resources)
     }
     cache_preparation_arena_destroy(cache)
     cache^ = {}
@@ -595,9 +613,14 @@ cache_borrow :: proc(cache: ^Font_Cache, key: Font_Key) -> rl.Font {
     assert(cache != nil)
     entry := cache.entries[int(key)]
     if entry.resident {
-        return entry.font
+        native, found := render_raylib.resource_tables_resolve_font(
+            cast(^render_raylib.Resource_Tables)cache.render_resources, entry.font)
+        if found { return native }
     }
-    return cache.entries[int(Font_Key.Regular)].font
+    regular := cache.entries[int(Font_Key.Regular)]
+    native, _ := render_raylib.resource_tables_resolve_font(
+        cast(^render_raylib.Resource_Tables)cache.render_resources, regular.font)
+    return native
 }
 
 //   Record optional demand and borrow its resident font or Regular immediately.
@@ -611,7 +634,9 @@ cache_resolve :: proc(cache: ^Font_Cache, key: Font_Key) -> rl.Font {
     assert(cache != nil)
     entry := &cache.entries[int(key)]
     if entry.resident {
-        return entry.font
+        native, found := render_raylib.resource_tables_resolve_font(
+            cast(^render_raylib.Resource_Tables)cache.render_resources, entry.font)
+        if found { return native }
     }
     cache_request(cache, key)
     entry.fallback_resolution_count += 1
@@ -653,20 +678,28 @@ cache_generation_is_resident :: #force_inline proc(
 
 //   Normalize one resident glyph record to borrowed draw data.
 font_generation_resolve_glyph :: proc(
-    entry: ^Font_Cache_Entry, glyph_id: u32) -> (Resolved_Glyph, bool) {
+    cache: ^Font_Cache, entry: ^Font_Cache_Entry,
+    glyph_id: u32) -> (Resolved_Glyph, bool) {
 
     if entry == nil || glyph_id >= u32(len(entry.glyphs)) ||
         entry.glyphs[glyph_id].state != .Resident {
         return {}, false
     }
     glyph := entry.glyphs[glyph_id]
-    texture := entry.font.texture
+    font, found := render_raylib.resource_tables_resolve_font(
+        cast(^render_raylib.Resource_Tables)cache.render_resources, entry.font)
+    if !found { return {}, false }
+    texture := font.texture
     if glyph.page_index > 0 {
         page_index := int(glyph.page_index) - 1
-        if page_index >= int(entry.page_count) {
+        if cache == nil || page_index >= int(entry.page_count) {
             return {}, false
         }
-        texture = entry.pages[page_index].texture
+        page_texture, page_found := render_raylib.resource_tables_resolve_texture(
+            cast(^render_raylib.Resource_Tables)cache.render_resources,
+            entry.pages[page_index].texture)
+        if !page_found { return {}, false }
+        texture = page_texture
     }
     return {
         texture = texture,
@@ -674,7 +707,7 @@ font_generation_resolve_glyph :: proc(
         offset_x = glyph.offset_x,
         offset_y = glyph.offset_y,
         advance_x = glyph.advance_x,
-        base_size = entry.font.baseSize,
+        base_size = entry.base_size,
     }, true
 }
 
@@ -691,7 +724,7 @@ cache_terminal_resolve_glyph :: proc(
         return {}, false
     }
     entry := cache_effective_entry(cache, key)
-    resolved, resident := font_generation_resolve_glyph(entry, glyph_id)
+    resolved, resident := font_generation_resolve_glyph(cache, entry, glyph_id)
     if resident {
         return resolved, true
     }
@@ -714,7 +747,7 @@ cache_terminal_resolve_codepoint :: proc(
         entry.unsupported_codepoint_count += 1
         return {}, .Unsupported
     }
-    resolved, resident := font_generation_resolve_glyph(entry, glyph_id)
+    resolved, resident := font_generation_resolve_glyph(cache, entry, glyph_id)
     if resident {
         return resolved, .Resident
     }
@@ -794,7 +827,7 @@ cache_publish_glyph_records :: proc(
 //   Commit one immutable page descriptor and its publication telemetry.
 cache_commit_glyph_page :: proc(
     entry: ^Font_Cache_Entry, prepared: ^Prepared_Font,
-    task: ^Font_Prepare_Task, texture: rl.Texture2D) {
+    task: ^Font_Prepare_Task, texture: renderresource.Texture_Handle) {
 
     page_index := entry.page_count
     entry.pages[page_index] = {
@@ -829,9 +862,15 @@ cache_publish_glyph_page :: proc(
     if !finalized {
         return false
     }
+    handle, stored := render_raylib.resource_tables_store_texture(
+        cast(^render_raylib.Resource_Tables)cache.render_resources, texture)
+    if !stored {
+        rl.UnloadTexture(texture)
+        return false
+    }
     page_index := entry.page_count
     cache_publish_glyph_records(entry, prepared, task, page_index)
-    cache_commit_glyph_page(entry, prepared, task, texture)
+    cache_commit_glyph_page(entry, prepared, task, handle)
     prepare_destroy(prepared)
     return true
 }
@@ -896,12 +935,23 @@ cache_publication_candidates :: proc(
         return false
     }
     candidate.raster_ascent = prepared.raster_ascent
+    font: rl.Font
     if !font_generation_seed_records_init(
-        candidate, prepared, context.allocator) ||
-        !finalize(prepared, &candidate.font) {
-        font_generation_destroy(candidate)
+        candidate, prepared, context.allocator) || !finalize(prepared, &font) {
+        font_generation_destroy(candidate,
+            cast(^render_raylib.Resource_Tables)cache.render_resources)
         return false
     }
+    handle, stored := render_raylib.resource_tables_store_font(
+        cast(^render_raylib.Resource_Tables)cache.render_resources, font)
+    if !stored {
+        rl.UnloadFont(font)
+        font_generation_destroy(candidate,
+            cast(^render_raylib.Resource_Tables)cache.render_resources)
+        return false
+    }
+    candidate.font = handle
+    candidate.base_size = font.baseSize
     candidate.resident = true
     return true
 }
@@ -931,6 +981,7 @@ cache_publish :: proc(cache: ^Font_Cache, prepared: ^Prepared_Font) -> bool {
     previous := entry^
     candidate = {
         font = candidate.font,
+        base_size = candidate.base_size,
         shaping = candidate.shaping,
         raster_ascent = candidate.raster_ascent,
         generation = generation,
@@ -944,7 +995,8 @@ cache_publish :: proc(cache: ^Font_Cache, prepared: ^Prepared_Font) -> bool {
         glyph_allocator = candidate.glyph_allocator,
     }
     entry^ = candidate
-    font_generation_destroy(&previous)
+    font_generation_destroy(&previous,
+        cast(^render_raylib.Resource_Tables)cache.render_resources)
     return true
 }
 

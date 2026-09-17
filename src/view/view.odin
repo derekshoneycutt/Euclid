@@ -467,6 +467,7 @@ shutdown_window_runtime :: proc(
     session: Euclid_Runtime_Session,
     scenario_runtime: ^Scenario_Runtime = nil,
     artifact_output: string = "") -> int {
+    terminal_graphics_runtime_destroy(session.state)
     shutdown_window_resources(session.state)
     return shutdown_runtime_session(session, scenario_runtime, artifact_output)
 }
@@ -626,7 +627,8 @@ initialize_window_resources :: proc(
 
     init_tool_brush_shader(state)
 
-    required_fonts_ready := font.cache_init(&state^.font_cache)
+    required_fonts_ready := font.cache_init(
+        &state^.font_cache, &state^.render_resources)
     if !required_fonts_ready {
         fmt.eprintln("error: failed to load required JuliaMono or NewCM font")
     }
@@ -658,6 +660,7 @@ shutdown_window_resources :: proc(state : ^Euclid_General_State) {
     }
     shutdown_particle_render_resources(state)
     shutdown_tool_brush_shader(state)
+    render_raylib.resource_tables_shutdown(&state^.render_resources)
 }
 
 //   Update rolling FPS statistics used for average-FPS overlay display.

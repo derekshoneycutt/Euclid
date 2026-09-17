@@ -301,15 +301,15 @@ init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
         return
     }
 
-    s^.shader = rl.LoadShader(paths.vertex, paths.fragment)
-    if s^.shader.id == 0 {
+    shader := rl.LoadShader(paths.vertex, paths.fragment)
+    if shader.id == 0 {
         fmt.println("tool_brush shader failed to load; pen/compass 3D shading disabled")
         s^.ready = false
         return
     }
 
     locations: [rendershader.STROKE3D_UNIFORM_COUNT]i32
-    validation := resolve_shader_uniform_locations(&contract, s^.shader, locations[:])
+    validation := resolve_shader_uniform_locations(&contract, shader, locations[:])
     if validation.failure != .None {
         fmt.println(
             "tool_brush shader missing required uniforms; pen/compass 3D shading disabled")
@@ -317,14 +317,31 @@ init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
             fmt.println("tool_brush missing uniform ",
                 contract.uniforms[validation.requirement_index].name)
         }
-        rl.UnloadShader(s^.shader)
-        s^.shader = {}
+        rl.UnloadShader(shader)
+        s^.ready = false
+        return
+    }
+    if !tool_brush_store_shader(state, shader) {
         s^.ready = false
         return
     }
     tool_brush_cache_uniform_locations(s, &contract, locations[:])
 
     s^.ready = true
+}
+
+// Transfer one validated tool shader into display-owned native storage.
+tool_brush_store_shader :: proc(
+    state: ^Euclid_General_State, shader: rl.Shader) -> bool {
+    handle, stored := render_raylib.resource_tables_store_shader(
+        &state^.render_resources, shader)
+    if !stored {
+        rl.UnloadShader(shader)
+        fmt.println("tool_brush shader resource table is full; shading disabled")
+        return false
+    }
+    state^.stroke_3d.shader = handle
+    return true
 }
 
 //   Resolve and validate the tool_brush shader asset paths.
@@ -456,12 +473,9 @@ shader_location :: #force_inline proc(
 //   - none.
 shutdown_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
-
-    if !s^.ready {
-        return
-    }
-
-    rl.UnloadShader(s^.shader)
+    _ = render_raylib.resource_tables_release_shader(
+        &state^.render_resources, s^.shader)
+    s^.shader = {}
     s^.ready = false
 }
 
@@ -1059,8 +1073,11 @@ set_tool_brush_uniform_float :: #force_inline proc(
     if location < 0 {
         return
     }
+    shader, found := render_raylib.resource_tables_resolve_shader(
+        &state^.render_resources, state^.stroke_3d.shader)
+    if !found { return }
     local_value := value
-    rl.SetShaderValue(state^.stroke_3d.shader, location, &local_value, .FLOAT)
+    rl.SetShaderValue(shader, location, &local_value, .FLOAT)
 }
 
 
@@ -1070,8 +1087,11 @@ set_tool_brush_uniform_vec2 :: #force_inline proc(
     if location < 0 {
         return
     }
+    shader, found := render_raylib.resource_tables_resolve_shader(
+        &state^.render_resources, state^.stroke_3d.shader)
+    if !found { return }
     vec_data := [2]f32{value.x, value.y}
-    rl.SetShaderValue(state^.stroke_3d.shader, location, &vec_data[0], .VEC2)
+    rl.SetShaderValue(shader, location, &vec_data[0], .VEC2)
 }
 
 
@@ -1081,8 +1101,11 @@ set_tool_brush_uniform_vec3 :: #force_inline proc(
     if location < 0 {
         return
     }
+    shader, found := render_raylib.resource_tables_resolve_shader(
+        &state^.render_resources, state^.stroke_3d.shader)
+    if !found { return }
     vec_data := [3]f32{value.x, value.y, value.z}
-    rl.SetShaderValue(state^.stroke_3d.shader, location, &vec_data[0], .VEC3)
+    rl.SetShaderValue(shader, location, &vec_data[0], .VEC3)
 }
 
 
@@ -1265,6 +1288,12 @@ begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     if !s^.ready {
         return
     }
+    shader, found := render_raylib.resource_tables_resolve_shader(
+        &state^.render_resources, s^.shader)
+    if !found {
+        s^.ready = false
+        return
+    }
 
     light := -state^.iso_scale^.main_light_dir
     light = linalg.normalize(light)
@@ -1272,7 +1301,7 @@ begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
 
     light_dir_data := [3]f32{light.x, light.y, light.z}
     if s^.loc_light_dir >= 0 {
-        rl.SetShaderValue(s^.shader, s^.loc_light_dir, &light_dir_data[0], .VEC3)
+        rl.SetShaderValue(shader, s^.loc_light_dir, &light_dir_data[0], .VEC3)
     }
 
     set_tool_brush_uniform_float(state, s^.loc_ambient, STROKE3D_AMBIENT)
@@ -1290,7 +1319,7 @@ begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     set_tool_brush_uniform_float(state, s^.loc_arc_intersections_enabled, 0.0)
     set_tool_brush_uniform_float(state, s^.loc_occluder_count, 0.0)
 
-    rl.BeginShaderMode(s^.shader)
+    rl.BeginShaderMode(shader)
     rendermetrics.record(&state^.render_metrics, .Shader_Changes)
 }
 

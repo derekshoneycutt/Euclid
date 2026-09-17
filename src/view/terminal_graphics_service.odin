@@ -27,6 +27,7 @@ terminal_graphics_runtime_init :: proc(state: ^core.Euclid_General_State) -> boo
     if service == nil {
         return false
     }
+    service.resources = &state^.render_resources
     state^.terminal_graphics_user_data = service
     state^.terminal_graphics_release = terminal_graphics_release_callback
     state^.terminal_graphics_shutdown = terminal_graphics_shutdown_callback
