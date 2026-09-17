@@ -66,7 +66,7 @@ If you are new, read in this order:
 | **Odin** | Application Composition | Process-wide composition, run settings, and intrinsic task records. | `src/core/core.odin` |
 | **Odin** | Shared Foundations | Bounded storage, animation-generation memory, and native protocol contracts. | `src/core/storage/`, `src/core/animation/`, `src/core/protocol/` |
 | **Odin** | Coordinator Contracts | Bridge transport and presentation contracts plus display and Terminal runtime models. | `src/bridge/model/`, `src/bridge/presentation/`, `src/view/model/`, `src/view/terminal/model/` |
-| **Odin** | Rendering and UI | Frame loop wiring, shader contracts, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/render/shader/`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
+| **Odin** | Rendering and UI | Frame loop wiring, shader contracts, framebuffer capture, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/render/shader/`, `src/view/capture/`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Font Cache | Required JuliaMono/NewCM residency, MATH-table admission, demand-paged glyphs, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Bounded entity registry, analytic curve evaluation, components, direct-target constraints, and derived render packets. | `src/shapes/model/`, `src/shapes/curve/`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
@@ -529,6 +529,14 @@ revision, and fallback behavior. Raylib loaders consume those descriptors, valid
 every required uniform, and cache resolved locations in typed display-owned records.
 Dust VAO setup consumes the same attribute records verified against `Dust_Instance`;
 partial creation releases only live backend handles before selecting immediate quads.
+
+Framebuffer capture contracts are application-owned data under `src/view/capture`.
+Requests name the consumer, presented-frame identity, crop, output extent, and pixel
+format; completions carry classified failure or one owned RGBA8 frame. The Raylib child
+adapter alone acquires the framebuffer, owns native image transforms and lifetime, and
+materializes PNG output. Scenario screenshots and GIF encoding consume the same frame
+contract after presentation while preserving path validation, frozen GIF dimensions,
+resize cancellation, evidence correlation, and encoder ownership.
 
 Before Terminal service processing, UI preparation also reconciles display-owned
 logical focus against the resolved regions, active Terminal presentation, and OS window

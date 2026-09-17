@@ -18,14 +18,14 @@ import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import input "./input"
 import rendermetrics "../render/metrics"
+import viewcapture "./capture"
+import capture_raylib "./capture/raylib"
 import ui "./ui"
 
 import "core:unicode/utf8"
 import "core:log"
 import "core:os"
 import "core:strings"
-
-import rl "vendor:raylib"
 
 // Deferred display mutation applied before the next frame's UI geometry is prepared.
 Scenario_Ui_Mutation_Kind :: enum u8 {
@@ -724,6 +724,33 @@ scenario_runtime_issue :: proc(
     return {accepted = true, correlation = identity}
 }
 
+// Acquire one scenario screenshot and account for its framebuffer workload.
+scenario_acquire_screenshot :: proc(
+    runtime: ^Scenario_Runtime,
+    checkpoint: capture.Checkpoint) -> viewcapture.Completion {
+    result := capture_raylib.acquire({
+        target = .Scenario_Png,
+        identity = {
+            presented_frame = checkpoint.presented_frame,
+            fixed_step = checkpoint.fixed_step,
+        },
+        format = .Rgba8,
+    })
+    if result.readback_bytes > 0 {
+        rendermetrics.record(&runtime.state^.render_metrics, .Readback_Bytes,
+            result.readback_bytes)
+    }
+    if result.normalization_bytes > 0 {
+        rendermetrics.record(&runtime.state^.render_metrics, .Normalization_Bytes,
+            result.normalization_bytes)
+    }
+    if result.status != .Completed {
+        rendermetrics.record_failure(
+            &runtime.state^.render_metrics, .Readback_Failures)
+    }
+    return result
+}
+
 //   Materialize one requested screenshot after a complete frame presentation.
 scenario_runtime_capture_screenshot :: proc(
     user_data: rawptr, checkpoint: capture.Checkpoint) -> bool {
@@ -735,16 +762,18 @@ scenario_runtime_capture_screenshot :: proc(
     if path == nil {
         return false
     }
-    rl.TakeScreenshot(path)
-    succeeded := os.exists(capture.checkpoint_path_text(&runtime.capture))
+    completion := scenario_acquire_screenshot(runtime, checkpoint)
+    if completion.status != .Completed {
+        return false
+    }
+    defer viewcapture.frame_release(&completion.frame)
+    succeeded := capture_raylib.write_png(&completion.frame, path) &&
+        os.exists(capture.checkpoint_path_text(&runtime.capture))
     if !succeeded {
         rendermetrics.record_failure(
             &runtime.state^.render_metrics, .Readback_Failures)
         return false
     }
-    readback_bytes := rl.GetRenderWidth() * rl.GetRenderHeight() * 4
-    rendermetrics.record(
-        &runtime.state^.render_metrics, .Readback_Bytes, u64(readback_bytes))
     return true
 }
 
