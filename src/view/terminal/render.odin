@@ -551,7 +551,8 @@ terminal_commit_scroll :: proc(
 // Draw terminal foreground overlays after output rows and rasters.
 terminal_draw_foreground :: proc(
     term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
-    layout: Terminal_Draw_Layout, origin: rl.Vector2) {
+    layout: Terminal_Draw_Layout, origin: rl.Vector2,
+    composition: input.Input_Composition) {
     terminal_draw_output_cursor(
         term, font_resolver,
         terminal_output_cursor_presentation(term, layout.terminal_focused),
@@ -561,6 +562,11 @@ terminal_draw_foreground :: proc(
             term, font_resolver, layout,
             rl.Vector2{origin.x,
                 origin.y + f32(layout.line_count) * layout.line_height})
+        terminal_draw_composition(
+            term, font_resolver, layout,
+            rl.Vector2{origin.x,
+                origin.y + f32(layout.line_count) * layout.line_height},
+            composition)
     }
     if term.view_selection_active {
         terminal_draw_virtual_selection_rows(
@@ -590,7 +596,75 @@ terminal_draw_content :: proc(
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, draw.origin, .In_Front_Of_Text)
     terminal_draw_foreground(
-        term, font_resolver, draw.layout, draw.origin)
+        term, font_resolver, draw.layout, draw.origin, draw.frame.composition)
+}
+
+// Resolve reversible composition onto the physical prompt row containing the cursor.
+terminal_composition_draw :: proc(
+    term: ^viewterminalmodel.Terminal_State, font_face: rl.Font,
+    prompt_position: rl.Vector2, line_height: f32,
+    composition: input.Input_Composition) -> Terminal_Composition_Draw {
+    if !composition.active || len(composition.preedit) == 0 { return {} }
+    text := termhist.termhist_current_text(term.history)
+    cursor := termhist.termhist_cursor(term.history)
+    line, line_start := 0, 0
+    for byte, index in text[:cursor] {
+        if byte == '\n' { line, line_start = line + 1, index + 1 }
+    }
+    line_text := terminal_live_input_line_text(text, line)
+    local_cursor := cursor - line_start
+    suffix := line_text[local_cursor:]
+    prefix := TERMINAL_CONTINUATION_PROMPT
+    if line == 0 { prefix = terminal_primary_prompt_prefix(term) }
+    position := rl.Vector2{
+        prompt_position.x + terminal_text_column_width(font_face, prefix) +
+            terminal_position_x(font_face, line_text, local_cursor),
+        prompt_position.y + f32(line) * line_height,
+    }
+    preedit_width := terminal_text_column_width(font_face, composition.preedit)
+    suffix_width := terminal_text_column_width(font_face, suffix)
+    return {position, composition.preedit, suffix,
+        preedit_width, suffix_width, true}
+}
+
+// Draw the selected byte range within one already validated preedit snapshot.
+terminal_draw_composition_selection :: proc(
+    font_face: rl.Font, draw: Terminal_Composition_Draw,
+    selection: input.Input_Composition_Selection) {
+    selected_x := terminal_position_x(
+        font_face, draw.preedit, selection.start)
+    selected_width := terminal_position_x(
+        font_face, draw.preedit, selection.end) - selected_x
+    if selected_width <= 0 { return }
+    rl.DrawRectangleV({draw.position.x + selected_x, draw.position.y},
+        {selected_width, TERMINAL_FONT_SIZE},
+        render_raylib.color(TERMINAL_PREEDIT_SELECTION_COLOR))
+}
+
+// Draw reversible preedit at the live cursor without mutating committed editor text.
+terminal_draw_composition :: proc(
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
+    layout: Terminal_Draw_Layout, prompt_position: rl.Vector2,
+    composition: input.Input_Composition) {
+    font_face := terminal_font_resolve(resolver, .Regular)
+    draw := terminal_composition_draw(
+        term, font_face, prompt_position, layout.line_height, composition)
+    if !draw.valid { return }
+    rl.DrawRectangleV(draw.position,
+        {draw.preedit_width + draw.suffix_width, TERMINAL_FONT_SIZE},
+        render_raylib.color(layout.theme.cursor_foreground))
+    terminal_draw_composition_selection(font_face, draw, composition.selection)
+    _ = terminal_draw_shaped_prompt_span(
+        resolver, .Regular, draw.preedit, draw.position,
+        render_raylib.color(TERMINAL_PREEDIT_COLOR))
+    rl.DrawLineEx({draw.position.x, draw.position.y + TERMINAL_FONT_SIZE},
+        {draw.position.x + draw.preedit_width,
+            draw.position.y + TERMINAL_FONT_SIZE}, 1,
+        render_raylib.color(TERMINAL_PREEDIT_COLOR))
+    _ = terminal_draw_shaped_prompt_span(
+        resolver, .Regular, draw.suffix,
+        {draw.position.x + draw.preedit_width, draw.position.y},
+        render_raylib.color(layout.theme.default_foreground))
 }
 
 // Draw terminal overlays after the owning UI container closes its scissor region.

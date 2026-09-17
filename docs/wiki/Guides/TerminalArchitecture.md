@@ -150,6 +150,15 @@ window-focus sample. It combines logical Terminal focus, Terminal presentation, 
 activation. Local editing and child keyboard bytes require effective focus. DECSET 1004
 reports its transitions before any admitted pointer or keyboard bytes for that frame.
 
+The input runtime also owns one bounded UTF-8 composition snapshot under a distinct
+generational text-owner lease. Preedit and its half-open byte selection are routed in
+`Input_Frame` for reversible drawing at the live cursor and never mutate Terminal
+history. Commit is decoded once into the ordinary synthetic text-event queue, preserving
+the same editor and xterm/Kitty correlation route as Raylib's committed characters.
+Focus loss, hidden presentation, or generation replacement cancels active preedit.
+Raylib remains a commit-only adapter; tests inject start, update, commit, and cancel
+operations through the application-owned runtime contract.
+
 ```mermaid
 flowchart LR
     Output[Child mode-setting output]

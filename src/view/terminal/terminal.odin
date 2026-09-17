@@ -50,6 +50,10 @@ TERMINAL_SHELL_PROMPT_COLOR :: colormodel.Color_RGBA8{0xCB, 0x3C, 0x33, 0xFF}
 // Muted foreground used for noncommitted inline completion insertion.
 TERMINAL_COMPLETION_PREVIEW_COLOR :: colormodel.Color_RGBA8{0x59, 0x59, 0x59, 0xFF}
 
+// Reversible composition text and its selected segment use distinct quiet colors.
+TERMINAL_PREEDIT_COLOR :: colormodel.Color_RGBA8{0xD8, 0xC8, 0x72, 0xFF}
+TERMINAL_PREEDIT_SELECTION_COLOR :: colormodel.Color_RGBA8{0x54, 0x62, 0x70, 0xFF}
+
 // Termhist history-entry tags recording which prompt mode submitted a line.
 TERMINAL_HISTORY_TAG_NORMAL :: 0
 TERMINAL_HISTORY_TAG_HELP :: 1

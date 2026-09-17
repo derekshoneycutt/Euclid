@@ -1,6 +1,7 @@
 package input
 
 import "core:mem"
+import "core:unicode/utf8"
 
 import "../../core/protocol"
 
@@ -9,6 +10,9 @@ INPUT_EVENT_CAPACITY :: 128
 
 // Maximum synthetic events retained across frame boundaries.
 INPUT_INJECTED_EVENT_CAPACITY :: 512
+
+// Maximum reversible UTF-8 bytes retained for one active composition.
+INPUT_COMPOSITION_BYTE_CAPACITY :: 1024
 
 // Maximum encoded terminal bytes retained across display frames.
 INPUT_BYTE_QUEUE_CAPACITY :: 64 * 1024
@@ -36,6 +40,15 @@ Input_Runtime :: struct {
     injected_events: [INPUT_INJECTED_EVENT_CAPACITY]Input_Event,
     injected_event_count: int,
     injected_event_rejection_count: u64,
+
+    // Focus-owned reversible composition and cumulative boundary rejections.
+    text_owner: Input_Text_Owner,
+    composition_bytes: [INPUT_COMPOSITION_BYTE_CAPACITY]u8,
+    composition_byte_count: int,
+    composition_selection: Input_Composition_Selection,
+    composition_active: bool,
+    composition_rejection_count: u64,
+    composition_stale_cancel_count: u64,
 
     // Last window-focus sample used to report real transitions exactly once.
     window_focus_known: bool,
@@ -106,6 +119,122 @@ Input_Event_Correlation_Status :: enum u8 {
 // Fixed frame-local record of events already consumed by an extended encoder.
 Input_Event_Claim_State :: struct {
     claimed: [INPUT_EVENT_CAPACITY]bool,
+}
+
+// Report whether offset is a valid UTF-8 boundary within text.
+input_text_is_utf8_boundary :: proc(text: string, offset: int) -> bool {
+    if offset < 0 || offset > len(text) { return false }
+    return offset == 0 || offset == len(text) ||
+        (transmute([]u8)text)[offset] & 0xC0 != 0x80
+}
+
+// Cancel active preedit while preserving its owner identity.
+input_runtime_clear_composition :: proc(runtime: ^Input_Runtime) {
+    runtime^.composition_byte_count = 0
+    runtime^.composition_selection = {}
+    runtime^.composition_active = false
+}
+
+// Change focused text ownership and cancel preedit from a stale owner generation.
+input_runtime_set_text_owner :: proc(
+    runtime: ^Input_Runtime, owner: Input_Text_Owner) -> bool {
+    if runtime == nil { return false }
+    if runtime^.text_owner == owner { return true }
+    if runtime^.composition_active {
+        runtime^.composition_stale_cancel_count += 1
+    }
+    input_runtime_clear_composition(runtime)
+    runtime^.text_owner = owner
+    return true
+}
+
+// Start one empty reversible composition for the current focused owner.
+input_runtime_inject_composition_start :: proc(
+    runtime: ^Input_Runtime, owner: Input_Text_Owner) -> bool {
+    if runtime == nil || owner.kind == .None || runtime^.text_owner != owner {
+        if runtime != nil { runtime^.composition_rejection_count += 1 }
+        return false
+    }
+    input_runtime_clear_composition(runtime)
+    runtime^.composition_active = true
+    return true
+}
+
+// Replace active preedit and its half-open UTF-8 byte selection atomically.
+input_runtime_inject_composition_update :: proc(
+    runtime: ^Input_Runtime, owner: Input_Text_Owner, preedit: string,
+    selection: Input_Composition_Selection) -> bool {
+    valid := runtime != nil && runtime^.composition_active &&
+        runtime^.text_owner == owner && len(preedit) <= INPUT_COMPOSITION_BYTE_CAPACITY &&
+        utf8.valid_string(preedit) &&
+        input_text_is_utf8_boundary(preedit, selection.start) &&
+        input_text_is_utf8_boundary(preedit, selection.end) &&
+        selection.start <= selection.end
+    if !valid {
+        if runtime != nil { runtime^.composition_rejection_count += 1 }
+        return false
+    }
+    copy(runtime^.composition_bytes[:], transmute([]u8)preedit)
+    runtime^.composition_byte_count = len(preedit)
+    runtime^.composition_selection = selection
+    return true
+}
+
+// Commit UTF-8 exactly once through the ordinary synthetic text-event route.
+input_runtime_inject_composition_commit :: proc(
+    runtime: ^Input_Runtime, owner: Input_Text_Owner, text: string) -> bool {
+    if runtime == nil || !runtime^.composition_active ||
+        runtime^.text_owner != owner ||
+        len(text) > INPUT_COMPOSITION_BYTE_CAPACITY || !utf8.valid_string(text) {
+        if runtime != nil { runtime^.composition_rejection_count += 1 }
+        return false
+    }
+    rune_count := utf8.rune_count_in_string(text)
+    if rune_count > len(runtime^.injected_events) - runtime^.injected_event_count {
+        runtime^.injected_event_rejection_count += 1
+        return false
+    }
+    events: [INPUT_INJECTED_EVENT_CAPACITY]Input_Event
+    event_count := 0
+    for codepoint in text {
+        events[event_count] = {kind = .Text, codepoint = codepoint}
+        event_count += 1
+    }
+    if event_count > 0 && !input_runtime_inject_events(runtime, events[:event_count]) {
+        return false
+    }
+    input_runtime_clear_composition(runtime)
+    return true
+}
+
+// Cancel reversible composition for its current owner without committing text.
+input_runtime_inject_composition_cancel :: proc(
+    runtime: ^Input_Runtime, owner: Input_Text_Owner) -> bool {
+    if runtime == nil || !runtime^.composition_active ||
+        runtime^.text_owner != owner {
+        if runtime != nil { runtime^.composition_rejection_count += 1 }
+        return false
+    }
+    input_runtime_clear_composition(runtime)
+    return true
+}
+
+// Route current composition only to one focused, generation-current editor.
+input_runtime_route_text_owner :: proc(
+    runtime: ^Input_Runtime, frame: Input_Frame, owner: Input_Text_Owner,
+    focused: bool) -> Input_Frame {
+    result := frame
+    effective_owner := owner if focused else Input_Text_Owner{}
+    if !input_runtime_set_text_owner(runtime, effective_owner) || !focused {
+        return result
+    }
+    result.composition = {
+        owner = runtime^.text_owner,
+        preedit = string(runtime^.composition_bytes[:runtime^.composition_byte_count]),
+        selection = runtime^.composition_selection,
+        active = runtime^.composition_active,
+    }
+    return result
 }
 
 // Record one window-focus sample and return current state plus transition status.

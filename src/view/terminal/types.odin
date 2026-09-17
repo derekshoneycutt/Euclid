@@ -219,6 +219,16 @@ Terminal_Draw_Content_Context :: struct {
     hyperlink_hover: Terminal_Link_Hit,
 }
 
+// Resolved single-row placement for reversible composition and committed suffix text.
+Terminal_Composition_Draw :: struct {
+    position: rl.Vector2,
+    preedit: string,
+    suffix: string,
+    preedit_width: f32,
+    suffix_width: f32,
+    valid: bool,
+}
+
 // Frame-local source and destination geometry for one raster placement.
 Terminal_Raster_Geometry :: struct {
     source: termattachment.Pixel_Rectangle,
