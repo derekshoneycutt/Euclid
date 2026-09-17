@@ -10,6 +10,8 @@ hiding geometric color or creating a separate glowing rim.
 
 - `src/view/elements.odin` owns tool geometry, draw order, light conversion,
   bounded occluder selection, material upload, and shader fallback behavior.
+- `src/view/render/shader/` owns the backend-independent `stroke3d` and
+  `dust_instanced` shader ABI descriptors, state assumptions, and fallback identities.
 - `src/view/shaders/stroke3d.vs` forwards batched vertex color data.
 - `src/view/shaders/stroke3d.fs` owns coverage, reconstructed normals, shadows,
   linear-light shading, and the titanium response.
@@ -50,6 +52,12 @@ straight rods fall back to `DrawLineEx` and the hinge falls back to segmented
 `DrawLineEx` rendering. This fallback remains draw-order based and does not
 provide depth-aware crossings or welded attachment shading.
 
+The Raylib loader resolves every descriptor uniform once during initialization and
+then copies validated locations into the typed `Tool_Render_State` record. Draw-time
+code therefore does not search descriptors or perform name lookup. Contract revision,
+asset names, vertex channels, topology, straight-alpha blend, culling, target, and
+viewport assumptions remain data independent of the backend handle.
+
 ## Lighting Contract
 
 World light is transformed into the orthonormal isometric view basis before
@@ -85,8 +93,11 @@ stroke surface without claiming full world-space ray accuracy.
 `src/view/elements_test.odin` covers expanded bounds, fixed context capacity,
 cache-order depth gating, world-to-view basis projection, canonical view-depth
 ordering, arc parameter endpoints, attachment scaling, and stable leg slots.
-Runtime shader compilation is validated through the CMake `run` target. The
-complete repository gate is the CMake `check` target.
+`src/view/render/shader/contract_test.odin` covers required declarations, missing
+uniforms, exact fallback selection, and location-count mismatch. Dust tests bind the
+instance layout assertions to the production descriptor and cover partial-resource
+cleanup planning. Runtime shader compilation is validated through the CMake `run`
+target. The complete repository gate is the CMake `check` target.
 
 ## Decision Record
 

@@ -2,6 +2,7 @@ package view
 
 import colormodel "../color/model"
 import viewmodel "model"
+import rendershader "render/shader"
 
 import shapemodel "../shapes/model"
 
@@ -292,9 +293,10 @@ trochoid_tool_defers_to_compass :: #force_inline proc(
 //   - none.
 init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
+    contract := rendershader.STROKE3D_CONTRACT
 
     paths: Tool_Brush_Shader_Paths
-    if !tool_brush_shader_paths(&paths) {
+    if !tool_brush_shader_paths(&contract, &paths) {
         s^.ready = false
         return
     }
@@ -306,16 +308,21 @@ init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
         return
     }
 
-    tool_brush_cache_uniform_locations(s)
-    if !tool_brush_uniforms_valid(s) {
+    locations: [rendershader.STROKE3D_UNIFORM_COUNT]i32
+    validation := resolve_shader_uniform_locations(&contract, s^.shader, locations[:])
+    if validation.failure != .None {
         fmt.println(
             "tool_brush shader missing required uniforms; pen/compass 3D shading disabled")
-        fmt.println("tool_brush uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
-            " radius=", s^.loc_radius, " viewportHeight=", s^.loc_viewport_height)
+        if validation.requirement_index >= 0 {
+            fmt.println("tool_brush missing uniform ",
+                contract.uniforms[validation.requirement_index].name)
+        }
         rl.UnloadShader(s^.shader)
+        s^.shader = {}
         s^.ready = false
         return
     }
+    tool_brush_cache_uniform_locations(s, &contract, locations[:])
 
     s^.ready = true
 }
@@ -327,11 +334,13 @@ init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
 //
 // Returns:
 //   - ok: true when both paths resolve to existing files.
-tool_brush_shader_paths :: proc(paths: ^Tool_Brush_Shader_Paths) -> bool {
+tool_brush_shader_paths :: proc(
+    contract: ^rendershader.Shader_Program_Contract,
+    paths: ^Tool_Brush_Shader_Paths) -> bool {
     vertex_path :=
-        files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
+        files.packaged_asset_path(contract^.vertex_asset, context.temp_allocator)
     fragment_path :=
-        files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
+        files.packaged_asset_path(contract^.fragment_asset, context.temp_allocator)
     if len(vertex_path) == 0 || len(fragment_path) == 0 {
         fmt.println(
             "tool_brush shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
@@ -351,69 +360,91 @@ tool_brush_shader_paths :: proc(paths: ^Tool_Brush_Shader_Paths) -> bool {
     return true
 }
 
-//   Cache tool_brush uniform locations onto the stroke_3d render state.
-tool_brush_cache_uniform_locations :: proc(s: ^viewmodel.Tool_Render_State) {
-    s^.loc_light_dir = rl.GetShaderLocation(s^.shader, "uLightDirView")
-    s^.loc_ambient = rl.GetShaderLocation(s^.shader, "uAmbient")
-    s^.loc_diffuse = rl.GetShaderLocation(s^.shader, "uDiffuse")
-    s^.loc_material_roughness = rl.GetShaderLocation(s^.shader, "uMaterialRoughness")
-    s^.loc_material_fresnel_0 = rl.GetShaderLocation(s^.shader, "uMaterialFresnel0")
-    s^.loc_material_specular_tint =
-        rl.GetShaderLocation(s^.shader, "uMaterialSpecularTint")
-    s^.loc_material_shadow_limit =
-        rl.GetShaderLocation(s^.shader, "uMaterialShadowLimit")
-    s^.loc_p0 = rl.GetShaderLocation(s^.shader, "uP0")
-    s^.loc_p1 = rl.GetShaderLocation(s^.shader, "uP1")
-    s^.loc_radius = rl.GetShaderLocation(s^.shader, "uRadius")
-    s^.loc_viewport_height = rl.GetShaderLocation(s^.shader, "uViewportHeight")
-    s^.loc_stroke_mode = rl.GetShaderLocation(s^.shader, "uStrokeMode")
-    s^.loc_strip_alpha = rl.GetShaderLocation(s^.shader, "uStripAlpha")
-    s^.loc_strip_color = rl.GetShaderLocation(s^.shader, "uStripColor")
-    s^.loc_strip_side_extent = rl.GetShaderLocation(s^.shader, "uStripSideExtent")
-    s^.loc_arc_intersections_enabled =
-        rl.GetShaderLocation(s^.shader, "uArcIntersectionsEnabled")
-    s^.loc_intersection_depth_width =
-        rl.GetShaderLocation(s^.shader, "uIntersectionDepthWidth")
-    s^.loc_attachment_extent = rl.GetShaderLocation(s^.shader, "uAttachmentExtent")
-    s^.loc_occluder_count = rl.GetShaderLocation(s^.shader, "uOccluderCount")
-    s^.loc_occluder_p0[0] = rl.GetShaderLocation(s^.shader, "uOccluderP0[0]")
-    s^.loc_occluder_p0[1] = rl.GetShaderLocation(s^.shader, "uOccluderP0[1]")
-    s^.loc_occluder_p1[0] = rl.GetShaderLocation(s^.shader, "uOccluderP1[0]")
-    s^.loc_occluder_p1[1] = rl.GetShaderLocation(s^.shader, "uOccluderP1[1]")
-    s^.loc_occluder_radius[0] = rl.GetShaderLocation(s^.shader, "uOccluderRadius[0]")
-    s^.loc_occluder_radius[1] = rl.GetShaderLocation(s^.shader, "uOccluderRadius[1]")
-    s^.loc_occluder_depth0[0] = rl.GetShaderLocation(s^.shader, "uOccluderDepth0[0]")
-    s^.loc_occluder_depth0[1] = rl.GetShaderLocation(s^.shader, "uOccluderDepth0[1]")
-    s^.loc_occluder_depth1[0] = rl.GetShaderLocation(s^.shader, "uOccluderDepth1[0]")
-    s^.loc_occluder_depth1[1] = rl.GetShaderLocation(s^.shader, "uOccluderDepth1[1]")
-    s^.loc_occluder_tangent[0] = rl.GetShaderLocation(s^.shader, "uOccluderTangent[0]")
-    s^.loc_occluder_tangent[1] = rl.GetShaderLocation(s^.shader, "uOccluderTangent[1]")
+// Resolve every descriptor uniform and validate required locations.
+resolve_shader_uniform_locations :: proc(
+    contract: ^rendershader.Shader_Program_Contract,
+    shader: rl.Shader, locations: []i32) -> rendershader.Validation_Result {
+    if len(locations) != len(contract^.uniforms) {
+        return {.Location_Count, -1}
+    }
+    for requirement, index in contract^.uniforms {
+        locations[index] = rl.GetShaderLocation(shader, requirement.name)
+    }
+    return rendershader.validate_uniform_locations(contract, locations)
 }
 
-//   Return true when the required tool_brush uniforms were all located.
-tool_brush_uniforms_valid :: proc(s: ^viewmodel.Tool_Render_State) -> bool {
-    scalar_uniforms_valid := s^.loc_light_dir >= 0 && s^.loc_ambient >= 0 &&
-        s^.loc_diffuse >= 0 && s^.loc_material_roughness >= 0 &&
-        s^.loc_material_fresnel_0 >= 0 && s^.loc_material_specular_tint >= 0 &&
-        s^.loc_material_shadow_limit >= 0 && s^.loc_p0 >= 0 && s^.loc_p1 >= 0 &&
-        s^.loc_radius >= 0 && s^.loc_viewport_height >= 0 &&
-        s^.loc_stroke_mode >= 0 && s^.loc_strip_alpha >= 0 &&
-        s^.loc_strip_color >= 0 && s^.loc_strip_side_extent >= 0 &&
-        s^.loc_arc_intersections_enabled >= 0 &&
-        s^.loc_intersection_depth_width >= 0 && s^.loc_attachment_extent >= 0 &&
-        s^.loc_occluder_count >= 0
-    if !scalar_uniforms_valid {
-        return false
-    }
+// Cache validated descriptor locations in the typed stroke render record.
+tool_brush_cache_uniform_locations :: proc(
+    s: ^viewmodel.Tool_Render_State,
+    contract: ^rendershader.Shader_Program_Contract, locations: []i32) {
+    tool_brush_cache_material_locations(s, contract, locations)
+    tool_brush_cache_geometry_locations(s, contract, locations)
+    tool_brush_cache_occluder_locations(s, contract, locations)
+}
 
+// Cache frame and material descriptor locations in the typed stroke record.
+tool_brush_cache_material_locations :: proc(
+    s: ^viewmodel.Tool_Render_State,
+    contract: ^rendershader.Shader_Program_Contract, locations: []i32) {
+    s^.loc_light_dir = shader_location(contract, locations, .Light_Direction)
+    s^.loc_ambient = shader_location(contract, locations, .Ambient)
+    s^.loc_diffuse = shader_location(contract, locations, .Diffuse)
+    s^.loc_material_roughness = shader_location(contract, locations, .Material_Roughness)
+    s^.loc_material_fresnel_0 = shader_location(contract, locations, .Material_Fresnel0)
+    s^.loc_material_specular_tint =
+        shader_location(contract, locations, .Material_Specular_Tint)
+    s^.loc_material_shadow_limit =
+        shader_location(contract, locations, .Material_Shadow_Limit)
+}
+
+// Cache geometry descriptor locations in the typed stroke render record.
+tool_brush_cache_geometry_locations :: proc(
+    s: ^viewmodel.Tool_Render_State,
+    contract: ^rendershader.Shader_Program_Contract, locations: []i32) {
+    s^.loc_p0 = shader_location(contract, locations, .Segment_Start)
+    s^.loc_p1 = shader_location(contract, locations, .Segment_End)
+    s^.loc_radius = shader_location(contract, locations, .Segment_Radius)
+    s^.loc_viewport_height = shader_location(contract, locations, .Viewport)
+    s^.loc_stroke_mode = shader_location(contract, locations, .Stroke_Mode)
+    s^.loc_strip_alpha = shader_location(contract, locations, .Strip_Alpha)
+    s^.loc_strip_color = shader_location(contract, locations, .Strip_Color)
+    s^.loc_strip_side_extent = shader_location(contract, locations, .Strip_Side_Extent)
+    s^.loc_arc_intersections_enabled =
+        shader_location(contract, locations, .Arc_Intersections_Enabled)
+    s^.loc_intersection_depth_width =
+        shader_location(contract, locations, .Intersection_Depth_Width)
+    s^.loc_attachment_extent = shader_location(contract, locations, .Attachment_Extent)
+    s^.loc_occluder_count = shader_location(contract, locations, .Occluder_Count)
+}
+
+// Cache bounded occluder array locations in the typed stroke render record.
+tool_brush_cache_occluder_locations :: proc(
+    s: ^viewmodel.Tool_Render_State,
+    contract: ^rendershader.Shader_Program_Contract, locations: []i32) {
     for i in 0..<viewmodel.MAX_TOOL_BRUSH_OCCLUDERS {
-        if s^.loc_occluder_p0[i] < 0 || s^.loc_occluder_p1[i] < 0 ||
-            s^.loc_occluder_radius[i] < 0 || s^.loc_occluder_depth0[i] < 0 ||
-            s^.loc_occluder_depth1[i] < 0 || s^.loc_occluder_tangent[i] < 0 {
-            return false
-        }
+        element := u8(i)
+        s^.loc_occluder_p0[i] =
+            shader_location(contract, locations, .Occluder_Start, element)
+        s^.loc_occluder_p1[i] =
+            shader_location(contract, locations, .Occluder_End, element)
+        s^.loc_occluder_radius[i] =
+            shader_location(contract, locations, .Occluder_Radius, element)
+        s^.loc_occluder_depth0[i] =
+            shader_location(contract, locations, .Occluder_Depth_Start, element)
+        s^.loc_occluder_depth1[i] =
+            shader_location(contract, locations, .Occluder_Depth_End, element)
+        s^.loc_occluder_tangent[i] =
+            shader_location(contract, locations, .Occluder_Tangent, element)
     }
-    return true
+}
+
+// Return one validated location by semantic identity and array element.
+shader_location :: #force_inline proc(
+    contract: ^rendershader.Shader_Program_Contract, locations: []i32,
+    semantic: rendershader.Uniform_Semantic, element: u8 = 0) -> i32 {
+    index, ok := rendershader.uniform_index(contract, semantic, element)
+    assert(ok)
+    return locations[index]
 }
 
 //   Unload tool_brush shader resources and mark shader state as unavailable.
