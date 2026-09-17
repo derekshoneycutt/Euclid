@@ -14,6 +14,7 @@ import "../files"
 import view_core "core"
 import "font"
 import render_raylib "render/raylib"
+import rendermetrics "../render/metrics"
 
 import "core:fmt"
 import "core:math"
@@ -435,11 +436,14 @@ shutdown_tool_brush_shader :: proc(state: ^Euclid_General_State) {
 
 // Draw one projected surface interior and its distinct border triangles.
 draw_projected_surface :: proc(
+    state: ^Euclid_General_State,
     projected: [8]Vector2, edge_color, surface_color: rl.Color) {
     rl.DrawTriangle(projected[0], projected[1], projected[2], edge_color)
     rl.DrawTriangle(projected[3], projected[2], projected[1], edge_color)
     rl.DrawTriangle(projected[4], projected[5], projected[6], surface_color)
     rl.DrawTriangle(projected[7], projected[6], projected[5], surface_color)
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions, 4)
+    rendermetrics.record(&state^.render_metrics, .Generated_Indices, 12)
 }
 
 //   Render the base isometric drawing plane and its border triangles.
@@ -481,7 +485,7 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
             out = projected[:],
         })
 
-    draw_projected_surface(projected,
+    draw_projected_surface(state, projected,
         render_raylib.color(room.edge_color), render_raylib.color(room.color))
 }
 
@@ -940,6 +944,7 @@ draw_trochoid_tool_ring_shader :: proc(
         state, center, radius, coverage_radius, &samples) {return}
 
     rlgl.DrawRenderBatchActive()
+    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     shader := &state^.stroke_3d
     set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 1.0)
     set_tool_brush_uniform_float(
@@ -956,6 +961,7 @@ draw_trochoid_tool_ring_shader :: proc(
     emit_trochoid_tool_ring_strip(&samples)
     rlgl.End()
     rlgl.DrawRenderBatchActive()
+    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     rlgl.EnableBackfaceCulling()
     set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 0.0)
 }
@@ -1094,6 +1100,7 @@ set_tool_brush_occluders :: proc(
     }
 
     rlgl.DrawRenderBatchActive()
+    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     scale := get_tool_brush_render_scale()
     avg_scale := (scale.x + scale.y) * 0.5
 
@@ -1124,6 +1131,7 @@ clear_tool_brush_occluder :: #force_inline proc(state: ^Euclid_General_State) {
     }
 
     rlgl.DrawRenderBatchActive()
+    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     set_tool_brush_uniform_float(state, s^.loc_occluder_count, 0.0)
 }
 
@@ -1152,6 +1160,7 @@ draw_tool_brush_capsule :: #force_inline proc(
         finish + offset,
     }
     rl.DrawTriangleStrip(&vertices[0], len(vertices), color)
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 
@@ -1161,11 +1170,13 @@ draw_tool_brush_segment :: #force_inline proc(
     s := &state^.stroke_3d
     if s^.ready {
         rlgl.DrawRenderBatchActive()
+        rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
         set_tool_brush_segment(state, p0, p1, thickness)
         draw_tool_brush_capsule(state, p0, p1, thickness, color)
         return
     }
     rl.DrawLineEx(p0, p1, thickness, color)
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 
@@ -1249,6 +1260,7 @@ begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     set_tool_brush_uniform_float(state, s^.loc_occluder_count, 0.0)
 
     rl.BeginShaderMode(s^.shader)
+    rendermetrics.record(&state^.render_metrics, .Shader_Changes)
 }
 
 
@@ -1261,7 +1273,10 @@ end_tool_brush_mode :: proc(state: ^Euclid_General_State) {
         return
     }
     rlgl.DrawRenderBatchActive()
+    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
+    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     rl.EndShaderMode()
+    rendermetrics.record(&state^.render_metrics, .Shader_Changes)
 }
 
 //   Compute positive angular sweep between start and end angles.
@@ -1994,13 +2009,18 @@ project_iso_points_batch_with_components :: proc(
         params.zs[i] = p.z
     }
 
-    return view_core.iso_to_cartesian_components_batch_selected({
+    projected_count := view_core.iso_to_cartesian_components_batch_selected({
         params.xs[:count],
         params.ys[:count],
         params.zs[:count],
         params.out[:count],
         state^.iso_scale^,
     }, state^.ui_runtime.use_simd_batch_projection)
+    rendermetrics.record(
+        &state^.render_metrics, .Projected_Vertices, u64(projected_count))
+    rendermetrics.record(
+        &state^.render_metrics, .Generated_Vertices, u64(projected_count))
+    return projected_count
 }
 
 
@@ -2040,6 +2060,7 @@ draw_cached_point_shadow :: proc(
     shadow := shadow_to_screen(p^.point1, state)
     shadow_color := make_shadow_color(p^.color, p^.point1.z)
     rl.DrawCircleV(shadow, p^.brush_size, shadow_color)
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 
@@ -2066,6 +2087,7 @@ draw_cached_line_shadow :: proc(
     shadow_color := make_shadow_color(l^.color, avg_height)
     thickness := math.max(l^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
     rl.DrawLineEx(s0, s1, thickness, shadow_color)
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 // Draw one elevated guide ring as ordinary segmented floor shadows.
@@ -2164,6 +2186,7 @@ draw_cached_circle_shadow :: proc(
         clipped_avg_height := average_shadow_height(clipped_points[:])
         clipped_shadow_color := make_shadow_color(c^.color, clipped_avg_height)
         rl.DrawLineEx(s0, s1, thickness, clipped_shadow_color)
+        rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
     }
 }
 
@@ -2189,6 +2212,9 @@ draw_cached_filledcircle_shadow :: proc(
     }
 
     rl.DrawTriangleFan(&points[0], len(points), shadow_color)
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
+    rendermetrics.record(
+        &state^.render_metrics, .Generated_Indices, u64(CIRCLE_ARC_SEGMENTS * 3))
 }
 
 
@@ -2197,6 +2223,7 @@ draw_cached_point :: proc(
     state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
     rl.DrawCircleV(c, p^.brush_size, render_raylib.color(p^.color))
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 
@@ -2218,6 +2245,7 @@ draw_cached_line :: proc(
     c0 := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
     rl.DrawLineEx(c0, c1, l^.brush_size, render_raylib.color(color))
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 // Render every segment in one explicated curve using ordinary line styling.
@@ -2261,6 +2289,7 @@ draw_cached_circle :: proc(
             rl.DrawLineEx(
                 arc_screen[i - 1], arc_screen[i], c^.brush_size,
                 render_raylib.color(c^.color))
+            rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
     }
 }
 
@@ -2293,6 +2322,9 @@ draw_cached_filledcircle :: proc(
     }
 
     rl.DrawTriangleFan(&points[0], len(points), render_raylib.color(c^.color))
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
+    rendermetrics.record(
+        &state^.render_metrics, .Generated_Indices, u64(CIRCLE_ARC_SEGMENTS * 3))
 }
 
 
@@ -2322,6 +2354,7 @@ project_cached_polygon_vertices :: #force_inline proc(
 
 //   Draw all cached triangles for a polygon using projected vertex positions.
 draw_cached_polygon_triangles :: #force_inline proc(
+    metrics: ^rendermetrics.State,
     cache: ^shapemodel.Shapes_Draw_Cache,
     poly: ^shapemodel.Shapes_Polygon_Draw,
     projected: []Vector2,
@@ -2344,6 +2377,8 @@ draw_cached_polygon_triangles :: #force_inline proc(
         }
 
         rl.DrawTriangle(projected[i0], projected[i1], projected[i2], color)
+    rendermetrics.record(metrics, .Primitive_Submissions)
+    rendermetrics.record(metrics, .Generated_Indices, 3)
     }
 }
 
@@ -2368,7 +2403,8 @@ draw_cached_polygon_shadow :: proc(
     }
 
     shadow_color := make_shadow_color(poly^.color, average_shadow_height(vertices))
-    draw_cached_polygon_triangles(cache, poly, projected[:], shadow_color)
+    draw_cached_polygon_triangles(
+        &state^.render_metrics, cache, poly, projected[:], shadow_color)
 }
 
 //   Render one cached polygon draw item.
@@ -2385,7 +2421,8 @@ draw_cached_polygon :: proc(
 
     cache := &state^.shape_world^.draw_cache
     draw_cached_polygon_triangles(
-        cache, poly, projected[:], render_raylib.color(poly^.color))
+        &state^.render_metrics, cache, poly, projected[:],
+        render_raylib.color(poly^.color))
 }
 
 
@@ -2636,6 +2673,7 @@ draw_outside_arc_compass_cached :: proc(
     }
 
     rlgl.DrawRenderBatchActive()
+    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     set_compass_arc_shader_uniforms(draw, basis, side_extent)
 
     _ = rlgl.CheckRenderBatchLimit(COMPASS_TOPCIRCLE_SEGMENTS * 6)

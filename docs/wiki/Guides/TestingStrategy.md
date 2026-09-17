@@ -190,12 +190,18 @@ Orderly shutdown writes the following bundle:
 | `evidence.bin` | Canonical fixed-record semantic trace. |
 | `state.json` | Final display and Julia-host observations, including effective viewport values. |
 | `allocations.json` | Aggregate allocation totals plus retained arena baseline samples. |
+| `render_metrics.json` | Stable names plus last-frame, cumulative, high-water, overflow, and failure counters. |
 
 A screenshot is supporting visual evidence, not proof of scenario success. Require
 `manifest.json` to report `result: "passed"` and `trace_complete: true`, then inspect
 the relevant semantic records and final state. For viewport scenarios, compare
 `view_text_scroll_y` with `view_text_scroll_max` and verify both effective splitter
 coordinates in `state.json` before reviewing the image.
+
+Renderer comparisons must align values by `metric_names`; the three metric arrays use
+that exact order. Require matching schema versions and compare equivalent scenarios,
+configuration, and host conditions. Zero is a valid observation for operations the
+current renderer does not perform, not a missing field.
 
 The command builds the headed debug application once, gives every selected scenario a
 fresh directory under `.build/scenarios/`, and derives its reported result, reason,

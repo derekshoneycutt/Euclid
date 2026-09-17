@@ -7,6 +7,7 @@ import viewmodel "model"
 import "../files"
 import particlemodel "../particles/model"
 import view_core "core"
+import rendermetrics "../render/metrics"
 
 import "core:c"
 import "core:fmt"
@@ -60,9 +61,13 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
             ps.low_particles.pos_z[:ps^.use_max_dust_particles],
             ps.low_particle_screens[:], iso_scale},
         state^.ui_runtime.use_simd_batch_projection)
+    rendermetrics.record(
+        &state^.render_metrics, .Projected_Vertices, u64(projected_count))
 
     count_rendered := stage_low_particle_instances(
         ps, state, ps.low_particle_screens[:projected_count])
+    rendermetrics.record(
+        &state^.render_metrics, .Dust_Instances, u64(count_rendered))
     if state^.ui_runtime.use_gpu_dust_instancing &&
         state^.dust_render.instancing_ready &&
         draw_low_particle_instances(state, count_rendered) {
@@ -70,6 +75,7 @@ render_low_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State)
         return
     }
 
+    rendermetrics.record(&state^.render_metrics, .Fallback_Selections)
     draw_low_particles_immediate(ps, state, ps.low_particle_screens[:projected_count])
     ps.last_render_low = count_rendered
 }
@@ -113,25 +119,31 @@ stage_low_particle_instances :: proc(
 // Returns:
 //   - ok: true when the VAO was enabled for drawing.
 dust_upload_instance_buffer :: proc(
-    dust_render: ^viewmodel.Dust_Render_State, count: int) -> bool {
+    state: ^Euclid_General_State, count: int) -> bool {
 
+    dust_render := &state^.dust_render
     rlgl.DrawRenderBatchActive()
+    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     rlgl.UpdateVertexBuffer(
         dust_render^.instance_vbo_id,
         &dust_render^.instances[0],
         c.int(count * size_of(dust_render^.instances[0])),
         0)
+    rendermetrics.record(&state^.render_metrics, .Upload_Bytes,
+        u64(count * size_of(dust_render^.instances[0])))
 
     return rlgl.EnableVertexArray(dust_render^.vao_id)
 }
 
 //   Bind shader, viewport, and texture, then issue the instanced draw call.
 dust_issue_instanced_draw :: proc(
-    dust_render: ^viewmodel.Dust_Render_State, count: int) {
+    state: ^Euclid_General_State, count: int) {
 
+    dust_render := &state^.dust_render
     viewport := [2]f32{f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
     texture_slot := i32(0)
     rlgl.EnableShader(dust_render^.shader.id)
+    rendermetrics.record(&state^.render_metrics, .Shader_Changes)
     rlgl.SetUniform(
         dust_render^.viewport_location,
         &viewport[0],
@@ -144,9 +156,13 @@ dust_issue_instanced_draw :: proc(
         1)
     rlgl.ActiveTextureSlot(0)
     rlgl.EnableTexture(dust_render^.texture.id)
+    rendermetrics.record(&state^.render_metrics, .Texture_Changes)
     rlgl.DrawVertexArrayInstanced(0, 6, c.int(count))
+    rendermetrics.record(&state^.render_metrics, .Draw_Calls)
     rlgl.DisableTexture()
+    rendermetrics.record(&state^.render_metrics, .Texture_Changes)
     rlgl.DisableShader()
+    rendermetrics.record(&state^.render_metrics, .Shader_Changes)
     rlgl.DisableVertexArray()
 }
 
@@ -155,12 +171,25 @@ draw_low_particle_instances :: proc(state: ^Euclid_General_State, count: int) ->
     if count == 0 {
         return true
     }
-    dust_render := &state^.dust_render
-    if !dust_upload_instance_buffer(dust_render, count) {
+    if !dust_upload_instance_buffer(state, count) {
+        rendermetrics.record_failure(&state^.render_metrics, .Fallback_Selections)
         return false
     }
-    dust_issue_instanced_draw(dust_render, count)
+    dust_issue_instanced_draw(state, count)
     return true
+}
+
+// Emit one textured immediate-mode dust quad around a projected center.
+draw_low_particle_quad :: proc(
+    screen: Vector2, radius, tile_u, tile_v: f32) {
+    rlgl.TexCoord2f(0.0, 0.0)
+    rlgl.Vertex2f(screen.x - radius, screen.y - radius)
+    rlgl.TexCoord2f(0.0, tile_v)
+    rlgl.Vertex2f(screen.x - radius, screen.y + radius)
+    rlgl.TexCoord2f(tile_u, tile_v)
+    rlgl.Vertex2f(screen.x + radius, screen.y + radius)
+    rlgl.TexCoord2f(tile_u, 0.0)
+    rlgl.Vertex2f(screen.x + radius, screen.y - radius)
 }
 
 //   Render staged low particles through the original immediate-mode path.
@@ -170,6 +199,7 @@ draw_low_particles_immediate :: proc(
     screens: []Vector2) {
     dust_render := &state^.dust_render
     rlgl.SetTexture(dust_render^.texture.id)
+    rendermetrics.record(&state^.render_metrics, .Texture_Changes)
     rlgl.Begin(rlgl.QUADS)
     tile_u := 1.0 / f32(DUST_ATLAS_COLUMNS)
     tile_v := 1.0 / f32(DUST_ATLAS_ROWS)
@@ -193,18 +223,14 @@ draw_low_particles_immediate :: proc(
 
         rlgl.Color4ub(dust_color.red, dust_color.green, dust_color.blue, a)
 
-        rlgl.TexCoord2f(0.0, 0.0)
-        rlgl.Vertex2f(screen.x - radius, screen.y - radius)
-        rlgl.TexCoord2f(0.0, tile_v)
-        rlgl.Vertex2f(screen.x - radius, screen.y + radius)
-        rlgl.TexCoord2f(tile_u, tile_v)
-        rlgl.Vertex2f(screen.x + radius, screen.y + radius)
-        rlgl.TexCoord2f(tile_u, 0.0)
-        rlgl.Vertex2f(screen.x + radius, screen.y - radius)
+        draw_low_particle_quad(screen, radius, tile_u, tile_v)
+        rendermetrics.record(&state^.render_metrics, .Dust_Fallback_Quads)
     }
 
     rlgl.End()
+    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
     rlgl.SetTexture(0)
+    rendermetrics.record(&state^.render_metrics, .Texture_Changes)
 }
 
 //   Render alive mid-layer particles and update mid-layer render counters.
@@ -228,6 +254,8 @@ render_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State) {
         {ps.particles.pos_x[:], ps.particles.pos_y[:], ps.particles.pos_z[:],
             screens[:], iso_scale},
         state^.ui_runtime.use_simd_batch_projection)
+    rendermetrics.record(
+        &state^.render_metrics, .Projected_Vertices, u64(projected_count))
 
     count_rendered : int = 0
     for i in 0..<projected_count {
@@ -258,6 +286,8 @@ render_high_particles :: proc(ps: ^Particle_System, state: ^Euclid_General_State
         {ps.high_particles.pos_x[:], ps.high_particles.pos_y[:],
             ps.high_particles.pos_z[:], screens[:], iso_scale},
         state^.ui_runtime.use_simd_batch_projection)
+    rendermetrics.record(
+        &state^.render_metrics, .Projected_Vertices, u64(projected_count))
 
     count_rendered : int = 0
     for i in 0..<projected_count {

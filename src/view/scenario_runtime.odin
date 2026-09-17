@@ -17,6 +17,7 @@ import scenario "../evidence/scenario"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import input "./input"
+import rendermetrics "../render/metrics"
 import ui "./ui"
 
 import "core:unicode/utf8"
@@ -735,7 +736,16 @@ scenario_runtime_capture_screenshot :: proc(
         return false
     }
     rl.TakeScreenshot(path)
-    return os.exists(capture.checkpoint_path_text(&runtime.capture))
+    succeeded := os.exists(capture.checkpoint_path_text(&runtime.capture))
+    if !succeeded {
+        rendermetrics.record_failure(
+            &runtime.state^.render_metrics, .Readback_Failures)
+        return false
+    }
+    readback_bytes := rl.GetRenderWidth() * rl.GetRenderHeight() * 4
+    rendermetrics.record(
+        &runtime.state^.render_metrics, .Readback_Bytes, u64(readback_bytes))
+    return true
 }
 
 //   Report whether the scenario reached any terminal outcome.

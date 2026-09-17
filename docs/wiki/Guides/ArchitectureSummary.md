@@ -514,6 +514,14 @@ caches. The tasks may run concurrently because their ownership does not overlap.
 Display-only layout-dependent interaction consumes the caches after the fence joins;
 drawing does not mutate interaction state or publish actions.
 
+Renderer instrumentation is display-owned fixed storage using the leaf model under
+`src/render/metrics`. Each frame resets transient counters, records prepared
+geometry and exact backend operations, then commits cumulative and high-water values
+after post-presentation capture. The metric vocabulary remains stable even when a
+backend operation is absent; for example, explicit blend changes currently remain
+zero. Spall uses stable `service_results`, `frame_update`, `frame_prepare`,
+`render_submit`, and `capture_readback_encode` zones beneath `display_frame`.
+
 Before Terminal service processing, UI preparation also reconciles display-owned
 logical focus against the resolved regions, active Terminal presentation, and OS window
 activation. The resulting effective Terminal focus gates local and child keyboard

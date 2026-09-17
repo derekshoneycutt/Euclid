@@ -6,12 +6,14 @@ import "../observe"
 import trace "../trace"
 import "core:fmt"
 import "core:os"
+import "core:strings"
 import json "core:encoding/json"
 import allocation_evidence "../allocation"
+import rendermetrics "../../render/metrics"
 
 ARTIFACT_MAX_EVENTS :: trace.TRACE_RING_CAPACITY * 16
 
-ARTIFACT_SCHEMA_VERSION :: 2
+ARTIFACT_SCHEMA_VERSION :: 3
 
 // Stable scenario outcome serialized into the canonical manifest.
 Result :: enum u8 {
@@ -70,6 +72,38 @@ Bundle :: struct {
     julia_host : observe.Julia_Host,
     allocations : allocation_evidence.Snapshot,
     arena_baselines : allocation_evidence.Arena_Baselines,
+    render_metrics: rendermetrics.State,
+}
+
+// Append one fixed renderer snapshot as a canonical JSON number array.
+artifact_append_render_snapshot :: proc(
+    builder: ^strings.Builder, snapshot: rendermetrics.Snapshot) {
+    strings.write_byte(builder, '[')
+    for value, index in snapshot.values {
+        if index > 0 {
+            strings.write_byte(builder, ',')
+        }
+        strings.write_string(builder, fmt.tprintf("%d", value))
+    }
+    strings.write_byte(builder, ']')
+}
+
+// Serialize the stable renderer metric vocabulary and retained aggregate snapshots.
+artifact_render_metrics_json :: proc(metrics: rendermetrics.State) -> string {
+    builder := strings.builder_make(context.temp_allocator)
+    strings.write_string(&builder,
+        "{\"schema_version\":1,\"metric_names\":" +
+        rendermetrics.METRIC_NAMES_JSON + ",\"last_frame\":")
+    artifact_append_render_snapshot(&builder, metrics.frame)
+    strings.write_string(&builder, ",\"cumulative\":")
+    artifact_append_render_snapshot(&builder, metrics.cumulative)
+    strings.write_string(&builder, ",\"high_water\":")
+    artifact_append_render_snapshot(&builder, metrics.high_water)
+    strings.write_string(&builder, fmt.tprintf(
+        ",\"completed_frame_count\":%d,\"overflow_count\":%d," +
+        "\"failure_count\":%d}\n", metrics.completed_frame_count,
+        metrics.overflow_count, metrics.failure_count))
+    return strings.to_string(builder)
 }
 
 //   Serialize one retained arena checkpoint and its final assertion sample.
@@ -126,7 +160,8 @@ artifact_manifest_json :: proc(manifest: Manifest) -> string {
         "\"failed_step\":%d,\"trace_complete\":%v," +
         "\"last_trace_sequence\":%d,\"artifacts\":{{" +
         "\"trace\":\"evidence.bin\",\"state\":\"state.json\"," +
-        "\"allocations\":\"allocations.json\"}}}}\n",
+        "\"allocations\":\"allocations.json\"," +
+        "\"render_metrics\":\"render_metrics.json\"}}}}\n",
         ARTIFACT_SCHEMA_VERSION, artifact_result_name(manifest.result),
         artifact_reason_name(manifest.reason), manifest.failed_step,
         manifest.trace_complete, manifest.last_trace_sequence)
@@ -331,13 +366,19 @@ write_bundle :: proc(
         return false
     }
     allocations_json := artifact_allocations_json(bundle)
+    render_metrics_json := artifact_render_metrics_json(bundle.render_metrics)
+    if !json.is_valid(transmute([]byte)render_metrics_json) {
+        return false
+    }
     return os.write_entire_file(fmt.tprintf("%s/manifest.json", directory),
             manifest_json) == nil &&
         write_trace(fmt.tprintf("%s/evidence.bin", directory), bundle.events) &&
         os.write_entire_file(fmt.tprintf("%s/state.json", directory),
             state_json) == nil &&
         os.write_entire_file(fmt.tprintf("%s/allocations.json", directory),
-            allocations_json) == nil
+            allocations_json) == nil &&
+        os.write_entire_file(fmt.tprintf("%s/render_metrics.json", directory),
+            render_metrics_json) == nil
 }
 
 //   Return whether a bundle path is relative and contains no parent segment.
