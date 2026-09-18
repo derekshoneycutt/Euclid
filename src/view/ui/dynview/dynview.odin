@@ -13,7 +13,7 @@ import view_font "../../font"
 import rl "vendor:raylib"
 
 UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
-UI_TEXT_COLOR :: dyncore.UI_TEXT_COLOR
+UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
 
 //   Fallback wrapped-text layout metrics, grouped so the styled-or-fallback
 //   entry point passes typography settings as one coherent value.

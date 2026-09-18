@@ -15,8 +15,6 @@ import shapemodel "../shapes/model"
 import view_core "core"
 import "font"
 import "input"
-import rendermetrics "../render/metrics"
-import render_raylib "render/raylib"
 import terminalview "terminal"
 import "ui"
 import "../core"
@@ -111,15 +109,6 @@ Frame_Draw_Preparation :: struct {
     layout_interaction: ui.Ui_Layout_Interaction_Preparation,
 }
 
-// Values produced by input and simulation update before parallel frame preparation.
-Frame_Update_Preparation :: struct {
-    input_frame: input.Input_Frame,
-    terminal_frame: ui.Terminal_Prepared_Frame,
-    controls: ui.Ui_Control_Preparation,
-    compile_dynview: bool,
-    alpha: f32,
-}
-
 // Poll one input frame and accept its live logical extent before UI geometry.
 poll_window_frame_boundary :: proc(
     state: ^Euclid_General_State,
@@ -169,7 +158,6 @@ finish_window_frame :: proc(
         })
     evidence_session.session_accept_ring(
         &state^.evidence_session, &state^.evidence_ring)
-    rendermetrics.end_frame(&state^.render_metrics)
     evidence_profile.zone_end(display_profile)
     evidence_profile.frame(display_profile)
     free_all(context.temp_allocator)
@@ -241,87 +229,45 @@ service_scenario_after_present :: proc(ctx: Window_Frame_Context) {
     }
 }
 
-// Service asynchronous display-owned results before frame input is accepted.
-service_window_frame_results :: proc(
-    state: ^Euclid_General_State, ctx: Window_Frame_Context) {
+//   Run one window frame: async results, simulation update, draw, and GIF capture.
+run_window_frame :: proc(
+    state: ^Euclid_General_State,
+    ctx: Window_Frame_Context) {
+    input_runtime := ctx.input_runtime
+    presentation := ctx.presentation
+    display_profile := ctx.display_profile
+    evidence_profile.zone_begin(display_profile, "display_frame")
     font.cache_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
     sync_window_math_shaping(state)
     sync_window_prose_shaping(state)
     julia.publish_available_view_snapshot(state, false)
-    service_presentation_runtime(state, ctx.presentation)
-}
-
-// Poll input, resolve UI interaction, and advance fixed-step systems once.
-update_window_frame :: proc(
-    state: ^Euclid_General_State,
-    ctx: Window_Frame_Context) -> Frame_Update_Preparation {
+    service_presentation_runtime(state, presentation)
     service_scenario_before_ui(ctx)
-    input_frame := poll_window_frame_boundary(state, ctx.input_runtime)
+    input_frame := poll_window_frame_boundary(state, input_runtime)
     ui_geometry := ui.prepare_ui_geometry(state, input_frame)
     ui.prepare_ui_static_interaction(
         state, input_frame, ui_geometry.pointer_capture)
-    controls := ui.prepare_ui_controls(state, input_frame)
-    terminal_frame := terminal_service_update(
-        state, ctx.input_runtime, input_frame)
+    ui_controls := ui.prepare_ui_controls(state, input_frame)
+    terminal_frame := terminal_service_update(state, input_runtime, input_frame)
     alpha := accumulate_and_update_systems(state)
-    return {input_frame, terminal_frame, controls,
-        ui_geometry.compile_dynview, alpha}
-}
-
-// Join derived caches and produce the immutable values consumed by frame drawing.
-prepare_window_frame :: proc(
-    state: ^Euclid_General_State, ctx: Window_Frame_Context,
-    update: Frame_Update_Preparation) -> Frame_Draw_Preparation {
     run_parallel_frame_preparation_after_ui(
-        state, update.alpha, update.compile_dynview)
-    record_shape_preparation_metrics(state)
-    layout := ui.prepare_ui_layout_interaction(state, update.input_frame)
+        state, alpha, ui_geometry.compile_dynview)
+    ui_layout_interaction := ui.prepare_ui_layout_interaction(state, input_frame)
+    draw_preparation := Frame_Draw_Preparation{input_frame, terminal_frame,
+        ui_controls, ui_layout_interaction}
     audio.update_chalk_runtime(&state^.chalk_audio)
     service_scenario_before_present(ctx)
-    return {update.input_frame, update.terminal_frame, update.controls, layout}
-}
 
-//   Run one window frame: async results, simulation update, draw, and GIF capture.
-run_window_frame :: proc(
-    state: ^Euclid_General_State,
-    ctx: Window_Frame_Context) {
-    profile := ctx.display_profile
-    evidence_profile.zone_begin(profile, "display_frame")
-    rendermetrics.begin_frame(&state^.render_metrics)
-    evidence_profile.zone_begin(profile, "service_results")
-    service_window_frame_results(state, ctx)
-    evidence_profile.zone_end(profile)
-    evidence_profile.zone_begin(profile, "frame_update")
-    update := update_window_frame(state, ctx)
-    evidence_profile.zone_end(profile)
-    evidence_profile.zone_begin(profile, "frame_prepare")
-    prepared := prepare_window_frame(state, ctx, update)
-    evidence_profile.zone_end(profile)
-
-    evidence_profile.zone_begin(profile, "render_submit")
+    evidence_profile.zone_begin(display_profile, "frame_present")
     rl.BeginDrawing()
-        draw_frame(state, update.alpha, prepared)
+        draw_frame(state, alpha, draw_preparation)
     rl.EndDrawing()
-    evidence_profile.zone_end(profile)
+    evidence_profile.zone_end(display_profile)
 
-    evidence_profile.zone_begin(profile, "capture_readback_encode")
     service_scenario_after_present(ctx)
     run_gif_capture_frame(state)
-    evidence_profile.zone_end(profile)
-    finish_window_frame(state, profile)
-}
-
-// Record the joined shape cache workload that the current frame will submit.
-record_shape_preparation_metrics :: proc(state: ^Euclid_General_State) {
-    cache := &state^.shape_world^.draw_cache
-    metrics := &state^.render_metrics
-    rendermetrics.record(metrics, .Shape_Items, u64(cache^.item_count))
-    rendermetrics.record(metrics, .Curve_Vertices, u64(cache^.curve_vertex_count))
-    rendermetrics.record(
-        metrics, .Polygon_Vertices, u64(cache^.polygon_vertex_count))
-    rendermetrics.record(
-        metrics, .Polygon_Triangles, u64(cache^.polygon_triangle_count))
+    finish_window_frame(state, display_profile)
 }
 
 //   Build the screenshot sink routed through one active scenario runtime.
@@ -467,7 +413,6 @@ shutdown_window_runtime :: proc(
     session: Euclid_Runtime_Session,
     scenario_runtime: ^Scenario_Runtime = nil,
     artifact_output: string = "") -> int {
-    terminal_graphics_runtime_destroy(session.state)
     shutdown_window_resources(session.state)
     return shutdown_runtime_session(session, scenario_runtime, artifact_output)
 }
@@ -627,8 +572,7 @@ initialize_window_resources :: proc(
 
     init_tool_brush_shader(state)
 
-    required_fonts_ready := font.cache_init(
-        &state^.font_cache, &state^.render_resources)
+    required_fonts_ready := font.cache_init(&state^.font_cache)
     if !required_fonts_ready {
         fmt.eprintln("error: failed to load required JuliaMono or NewCM font")
     }
@@ -660,7 +604,6 @@ shutdown_window_resources :: proc(state : ^Euclid_General_State) {
     }
     shutdown_particle_render_resources(state)
     shutdown_tool_brush_shader(state)
-    render_raylib.resource_tables_shutdown(&state^.render_resources)
 }
 
 //   Update rolling FPS statistics used for average-FPS overlay display.
@@ -982,11 +925,7 @@ draw_world :: proc(state: ^Euclid_General_State) {
     world_rect := state^.ui_runtime.ui_regions.world_rect
     rl.BeginScissorMode(i32(world_rect.x), i32(world_rect.y),
         i32(world_rect.width), i32(world_rect.height))
-    rendermetrics.record(&state^.render_metrics, .Clip_Changes)
-    defer {
-        rl.EndScissorMode()
-        rendermetrics.record(&state^.render_metrics, .Clip_Changes)
-    }
+    defer rl.EndScissorMode()
 
     base_x_offset := state^.iso_scale^.x_offset
     base_y_offset := state^.iso_scale^.y_offset
@@ -1015,7 +954,7 @@ draw_world :: proc(state: ^Euclid_General_State) {
 draw_frame :: proc(
     state : ^Euclid_General_State, alpha: f32,
     prepared: Frame_Draw_Preparation) {
-    rl.ClearBackground(render_raylib.color(BACKGROUND_COLOR))
+    rl.ClearBackground(BACKGROUND_COLOR)
 
     draw_world(state)
 
@@ -1030,12 +969,10 @@ draw_frame :: proc(
 
         fps_text := fmt.tprintf("FPS: %d", rl.GetFPS())
         fps_text_c := strings.clone_to_cstring(fps_text, context.temp_allocator)
-        rl.DrawTextEx(mono_font, fps_text_c, rl.Vector2{10, 10}, 18, 0,
-            render_raylib.color(UI_TEXT_COLOR))
+        rl.DrawTextEx(mono_font, fps_text_c, rl.Vector2{10, 10}, 18, 0, UI_TEXT_COLOR)
 
         avg_text := fmt.tprintf("Avg FPS (60s): %.1f", state^.ui_runtime.fps_avg_live)
         avg_text_c := strings.clone_to_cstring(avg_text, context.temp_allocator)
-        rl.DrawTextEx(mono_font, avg_text_c, rl.Vector2{10, 30}, 18, 0,
-            render_raylib.color(UI_TEXT_COLOR))
+        rl.DrawTextEx(mono_font, avg_text_c, rl.Vector2{10, 30}, 18, 0, UI_TEXT_COLOR)
     }
 }

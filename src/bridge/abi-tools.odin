@@ -1,6 +1,5 @@
 package bridge
 
-import colormodel "../color/model"
 import shapemodel "../shapes/model"
 
 import "../core"
@@ -695,9 +694,9 @@ emit_trailing_particle :: proc "c" (
         return
     }
     context = state^.saved_context
-    application_color := colormodel.Color_RGBA8{color.r, color.g, color.b, color.a}
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_trail_particles(
-        state^.particle_system, state^.current_delta_time, {pos, application_color})
+        state^.particle_system, state^.current_delta_time, {pos, rl_color})
 }
 
 //   Emit flicker particles at a position using bridge color data.
@@ -714,7 +713,7 @@ emit_flicker_particle :: proc "c" (
         return
     }
     context = state^.saved_context
-    application_color := colormodel.Color_RGBA8{color.r, color.g, color.b, color.a}
+    rl_color := rl.Color{ color.r, color.g, color.b, color.a }
     particles.emit_flicker_particles(
-        state^.particle_system, {pos, application_color}, 10)
+        state^.particle_system, {pos, rl_color}, 10)
 }

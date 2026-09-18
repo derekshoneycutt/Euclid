@@ -1,6 +1,5 @@
 package ui
 
-import colormodel "../../color/model"
 import viewterminalmodel "../terminal/model"
 
 import "../../core"
@@ -72,10 +71,10 @@ terminal_line_text :: proc(term: ^viewterminalmodel.Terminal_State, line: int) -
 // Return the fixed semantic colors used by Terminal presentation.
 terminal_draw_theme :: proc() -> terminalview.Terminal_Draw_Theme {
     return {
-        default_foreground = colormodel.Color_RGBA8{175, 150, 150, 255},
+        default_foreground = UI_TEXT_COLOR,
         cursor_foreground = terminalview.TERMINAL_CURSOR_TEXT_COLOR,
-        selection_foreground = colormodel.WHITE,
-        selection_background = colormodel.Color_RGBA8{82, 96, 112, 255},
+        selection_foreground = rl.WHITE,
+        selection_background = rl.Color{82, 96, 112, 255},
     }
 }
 

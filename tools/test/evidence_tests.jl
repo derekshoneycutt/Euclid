@@ -26,21 +26,16 @@ end
 function write_bundle(directory::AbstractString)
     mkpath(directory)
     write(joinpath(directory, "manifest.json"), """
-        {"schema_version":3,"result":"passed","reason":"complete",\
+        {"schema_version":2,"result":"passed","reason":"complete",\
         "failed_step":0,"trace_complete":true,"last_trace_sequence":3,\
         "artifacts":{"trace":"evidence.bin","state":"state.json",\
-        "allocations":"allocations.json",\
-        "render_metrics":"render_metrics.json"}}""")
+        "allocations":"allocations.json"}}""")
     write(joinpath(directory, "state.json"), """
         {"runtime_generation":2,"animation_generation":3,\
         "animation_tick_sequence":4,"animation_last_committed_sequence":5}""")
     write(joinpath(directory, "allocations.json"), """
         {"live_allocations":0,"current_bytes":0,"peak_bytes":8,\
         "total_allocations":1,"bad_frees":0}""")
-    write(joinpath(directory, "render_metrics.json"), """
-        {"schema_version":1,"metric_names":["shape_items"],\
-        "last_frame":[2],"cumulative":[7],"high_water":[3],\
-        "completed_frame_count":2,"overflow_count":0,"failure_count":0}""")
     open(joinpath(directory, "evidence.bin"), "w") do io
         write(io, EuclidEvidence.TRACE_MAGIC)
         write_little_endian(io, UInt16(1))
@@ -75,7 +70,6 @@ end
         bundle = EuclidEvidence.inspect_bundle(directory)
         @test bundle.event_count == 3
         @test bundle.manifest.trace_complete
-        @test bundle.render_metrics.cumulative == [7]
 
         tail = EuclidEvidence.query_trace(joinpath(directory, "evidence.bin"); limit=2)
         @test getproperty.(tail, :sequence) == UInt64[2, 3]
@@ -123,15 +117,6 @@ end
     mktempdir() do directory
         write_bundle(directory)
         rm(joinpath(directory, "state.json"))
-        @test_throws ErrorException EuclidEvidence.inspect_bundle(directory)
-    end
-
-    mktempdir() do directory
-        write_bundle(directory)
-        write(joinpath(directory, "render_metrics.json"), """
-            {"schema_version":1,"metric_names":["shape_items"],\
-            "last_frame":[],"cumulative":[7],"high_water":[3],\
-            "completed_frame_count":2,"overflow_count":0,"failure_count":0}""")
         @test_throws ErrorException EuclidEvidence.inspect_bundle(directory)
     end
 

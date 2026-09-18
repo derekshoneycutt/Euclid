@@ -5,7 +5,6 @@ import viewmodel "../model"
 import dynviewmodel "../../dynview/model"
 
 import "../input"
-import render_raylib "../render/raylib"
 
 import rl "vendor:raylib"
 
@@ -36,19 +35,16 @@ draw_copy_hover_backgrounds :: proc(
         return
     }
 
-    hover_bg := rl.Color{
-        UI_BORDER_COLOR.red, UI_BORDER_COLOR.green, UI_BORDER_COLOR.blue, 28}
+    hover_bg := rl.Color{UI_BORDER_COLOR.r, UI_BORDER_COLOR.g, UI_BORDER_COLOR.b, 28}
     for i in 0..<cache^.copy_hit_target_count {
         target := cache^.copy_hit_targets[i]
-        hovered_block := rl.CheckCollisionPointRec(
-            mouse, render_raylib.rectangle(target.hover_rect))
-        hovered_icon := rl.CheckCollisionPointRec(
-            mouse, render_raylib.rectangle(target.rect))
+        hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
+        hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
         if !hovered_block && !hovered_icon {
             continue
         }
 
-        rl.DrawRectangleRec(render_raylib.rectangle(target.hover_rect), hover_bg)
+        rl.DrawRectangleRec(target.hover_rect, hover_bg)
     }
 }
 
@@ -68,8 +64,7 @@ copy_icon_find_hovered_index :: proc(
     mouse: rl.Vector2) -> int {
 
     for i in 0..<cache^.copy_hit_target_count {
-        if rl.CheckCollisionPointRec(
-            mouse, render_raylib.rectangle(cache^.copy_hit_targets[i].rect)) {
+        if rl.CheckCollisionPointRec(mouse, cache^.copy_hit_targets[i].rect) {
             return i
         }
     }
@@ -182,14 +177,14 @@ copy_icon_linger_t :: #force_inline proc(
 
 //   Resolve the foreground color for one copy icon press transition.
 copy_icon_color :: #force_inline proc(press_t: f32) -> rl.Color {
-    color := render_raylib.color(UI_TEXT_COLOR)
+    color := UI_TEXT_COLOR
     if press_t <= 0 {
         return color
     }
     factor := 1.0 - 0.45 * press_t
-    return {u8(f32(BACKGROUND_COLOR.red) * factor),
-        u8(f32(BACKGROUND_COLOR.green) * factor),
-        u8(f32(BACKGROUND_COLOR.blue) * factor), BACKGROUND_COLOR.alpha}
+    return {u8(f32(BACKGROUND_COLOR.r) * factor),
+        u8(f32(BACKGROUND_COLOR.g) * factor),
+        u8(f32(BACKGROUND_COLOR.b) * factor), BACKGROUND_COLOR.a}
 }
 
 //   Draw a copy icon button using shared icon primitives with hover/press feedback.
@@ -207,7 +202,7 @@ draw_copy_icon_button :: proc(
     use_press_t := clamp(press_t, 0.0, 1.0)
 
     if use_press_t > 0 {
-        rl.DrawRectangleRec(slot_rect, render_raylib.color(UI_BORDER_COLOR))
+        rl.DrawRectangleRec(slot_rect, UI_BORDER_COLOR)
     }
 
     scale := 1.0 + COPY_ICON_HOVER_SCALE_ADD * use_hover_t -
@@ -253,7 +248,7 @@ copy_icon_draw_target :: proc(
 
     press_visual := max(press_t, copy_icon_linger_t(runtime, is_linger_target))
 
-    draw_copy_icon_button(render_raylib.rectangle(target.rect), hover_t, press_visual)
+    draw_copy_icon_button(target.rect, hover_t, press_visual)
 }
 
 //   Resolve copy hover, shared capture, clipboard publication, and transitions.

@@ -67,13 +67,13 @@ draw_list_item_prepared :: proc(
     if press_owner.active && press_owner.kind == .List_Item &&
         press_owner.id == params.id && input_frame_left_down(params.mouse) {
         rl.DrawRectangleRec(result.drawn_rect, rl.Color{
-            UI_BORDER_COLOR.red,
-            UI_BORDER_COLOR.green,
-            UI_BORDER_COLOR.blue,
+            UI_BORDER_COLOR.r,
+            UI_BORDER_COLOR.g,
+            UI_BORDER_COLOR.b,
             LIST_ITEM_ACTIVE_PRESS_ALPHA,
         })
     } else if params.selected {
-        rl.DrawRectangleRec(result.drawn_rect, ui_raylib_color(UI_BORDER_COLOR))
+        rl.DrawRectangleRec(result.drawn_rect, UI_BORDER_COLOR)
     }
 }
 

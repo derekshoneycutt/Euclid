@@ -1,8 +1,6 @@
 package view
 
-import colormodel "../color/model"
 import viewmodel "model"
-import rendershader "render/shader"
 
 import shapemodel "../shapes/model"
 
@@ -14,8 +12,6 @@ import shapemodel "../shapes/model"
 import "../files"
 import view_core "core"
 import "font"
-import render_raylib "render/raylib"
-import rendermetrics "../render/metrics"
 
 import "core:fmt"
 import "core:math"
@@ -293,55 +289,32 @@ trochoid_tool_defers_to_compass :: #force_inline proc(
 //   - none.
 init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
-    contract := rendershader.STROKE3D_CONTRACT
 
     paths: Tool_Brush_Shader_Paths
-    if !tool_brush_shader_paths(&contract, &paths) {
+    if !tool_brush_shader_paths(&paths) {
         s^.ready = false
         return
     }
 
-    shader := rl.LoadShader(paths.vertex, paths.fragment)
-    if shader.id == 0 {
+    s^.shader = rl.LoadShader(paths.vertex, paths.fragment)
+    if s^.shader.id == 0 {
         fmt.println("tool_brush shader failed to load; pen/compass 3D shading disabled")
         s^.ready = false
         return
     }
 
-    locations: [rendershader.STROKE3D_UNIFORM_COUNT]i32
-    validation := resolve_shader_uniform_locations(&contract, shader, locations[:])
-    if validation.failure != .None {
+    tool_brush_cache_uniform_locations(s)
+    if !tool_brush_uniforms_valid(s) {
         fmt.println(
             "tool_brush shader missing required uniforms; pen/compass 3D shading disabled")
-        if validation.requirement_index >= 0 {
-            fmt.println("tool_brush missing uniform ",
-                contract.uniforms[validation.requirement_index].name)
-        }
-        rl.UnloadShader(shader)
+        fmt.println("tool_brush uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
+            " radius=", s^.loc_radius, " viewportHeight=", s^.loc_viewport_height)
+        rl.UnloadShader(s^.shader)
         s^.ready = false
         return
     }
-    if !tool_brush_store_shader(state, shader) {
-        s^.ready = false
-        return
-    }
-    tool_brush_cache_uniform_locations(s, &contract, locations[:])
 
     s^.ready = true
-}
-
-// Transfer one validated tool shader into display-owned native storage.
-tool_brush_store_shader :: proc(
-    state: ^Euclid_General_State, shader: rl.Shader) -> bool {
-    handle, stored := render_raylib.resource_tables_store_shader(
-        &state^.render_resources, shader)
-    if !stored {
-        rl.UnloadShader(shader)
-        fmt.println("tool_brush shader resource table is full; shading disabled")
-        return false
-    }
-    state^.stroke_3d.shader = handle
-    return true
 }
 
 //   Resolve and validate the tool_brush shader asset paths.
@@ -351,13 +324,11 @@ tool_brush_store_shader :: proc(
 //
 // Returns:
 //   - ok: true when both paths resolve to existing files.
-tool_brush_shader_paths :: proc(
-    contract: ^rendershader.Shader_Program_Contract,
-    paths: ^Tool_Brush_Shader_Paths) -> bool {
+tool_brush_shader_paths :: proc(paths: ^Tool_Brush_Shader_Paths) -> bool {
     vertex_path :=
-        files.packaged_asset_path(contract^.vertex_asset, context.temp_allocator)
+        files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
     fragment_path :=
-        files.packaged_asset_path(contract^.fragment_asset, context.temp_allocator)
+        files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
     if len(vertex_path) == 0 || len(fragment_path) == 0 {
         fmt.println(
             "tool_brush shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
@@ -377,91 +348,69 @@ tool_brush_shader_paths :: proc(
     return true
 }
 
-// Resolve every descriptor uniform and validate required locations.
-resolve_shader_uniform_locations :: proc(
-    contract: ^rendershader.Shader_Program_Contract,
-    shader: rl.Shader, locations: []i32) -> rendershader.Validation_Result {
-    if len(locations) != len(contract^.uniforms) {
-        return {.Location_Count, -1}
-    }
-    for requirement, index in contract^.uniforms {
-        locations[index] = rl.GetShaderLocation(shader, requirement.name)
-    }
-    return rendershader.validate_uniform_locations(contract, locations)
-}
-
-// Cache validated descriptor locations in the typed stroke render record.
-tool_brush_cache_uniform_locations :: proc(
-    s: ^viewmodel.Tool_Render_State,
-    contract: ^rendershader.Shader_Program_Contract, locations: []i32) {
-    tool_brush_cache_material_locations(s, contract, locations)
-    tool_brush_cache_geometry_locations(s, contract, locations)
-    tool_brush_cache_occluder_locations(s, contract, locations)
-}
-
-// Cache frame and material descriptor locations in the typed stroke record.
-tool_brush_cache_material_locations :: proc(
-    s: ^viewmodel.Tool_Render_State,
-    contract: ^rendershader.Shader_Program_Contract, locations: []i32) {
-    s^.loc_light_dir = shader_location(contract, locations, .Light_Direction)
-    s^.loc_ambient = shader_location(contract, locations, .Ambient)
-    s^.loc_diffuse = shader_location(contract, locations, .Diffuse)
-    s^.loc_material_roughness = shader_location(contract, locations, .Material_Roughness)
-    s^.loc_material_fresnel_0 = shader_location(contract, locations, .Material_Fresnel0)
+//   Cache tool_brush uniform locations onto the stroke_3d render state.
+tool_brush_cache_uniform_locations :: proc(s: ^viewmodel.Tool_Render_State) {
+    s^.loc_light_dir = rl.GetShaderLocation(s^.shader, "uLightDirView")
+    s^.loc_ambient = rl.GetShaderLocation(s^.shader, "uAmbient")
+    s^.loc_diffuse = rl.GetShaderLocation(s^.shader, "uDiffuse")
+    s^.loc_material_roughness = rl.GetShaderLocation(s^.shader, "uMaterialRoughness")
+    s^.loc_material_fresnel_0 = rl.GetShaderLocation(s^.shader, "uMaterialFresnel0")
     s^.loc_material_specular_tint =
-        shader_location(contract, locations, .Material_Specular_Tint)
+        rl.GetShaderLocation(s^.shader, "uMaterialSpecularTint")
     s^.loc_material_shadow_limit =
-        shader_location(contract, locations, .Material_Shadow_Limit)
-}
-
-// Cache geometry descriptor locations in the typed stroke render record.
-tool_brush_cache_geometry_locations :: proc(
-    s: ^viewmodel.Tool_Render_State,
-    contract: ^rendershader.Shader_Program_Contract, locations: []i32) {
-    s^.loc_p0 = shader_location(contract, locations, .Segment_Start)
-    s^.loc_p1 = shader_location(contract, locations, .Segment_End)
-    s^.loc_radius = shader_location(contract, locations, .Segment_Radius)
-    s^.loc_viewport_height = shader_location(contract, locations, .Viewport)
-    s^.loc_stroke_mode = shader_location(contract, locations, .Stroke_Mode)
-    s^.loc_strip_alpha = shader_location(contract, locations, .Strip_Alpha)
-    s^.loc_strip_color = shader_location(contract, locations, .Strip_Color)
-    s^.loc_strip_side_extent = shader_location(contract, locations, .Strip_Side_Extent)
+        rl.GetShaderLocation(s^.shader, "uMaterialShadowLimit")
+    s^.loc_p0 = rl.GetShaderLocation(s^.shader, "uP0")
+    s^.loc_p1 = rl.GetShaderLocation(s^.shader, "uP1")
+    s^.loc_radius = rl.GetShaderLocation(s^.shader, "uRadius")
+    s^.loc_viewport_height = rl.GetShaderLocation(s^.shader, "uViewportHeight")
+    s^.loc_stroke_mode = rl.GetShaderLocation(s^.shader, "uStrokeMode")
+    s^.loc_strip_alpha = rl.GetShaderLocation(s^.shader, "uStripAlpha")
+    s^.loc_strip_color = rl.GetShaderLocation(s^.shader, "uStripColor")
+    s^.loc_strip_side_extent = rl.GetShaderLocation(s^.shader, "uStripSideExtent")
     s^.loc_arc_intersections_enabled =
-        shader_location(contract, locations, .Arc_Intersections_Enabled)
+        rl.GetShaderLocation(s^.shader, "uArcIntersectionsEnabled")
     s^.loc_intersection_depth_width =
-        shader_location(contract, locations, .Intersection_Depth_Width)
-    s^.loc_attachment_extent = shader_location(contract, locations, .Attachment_Extent)
-    s^.loc_occluder_count = shader_location(contract, locations, .Occluder_Count)
+        rl.GetShaderLocation(s^.shader, "uIntersectionDepthWidth")
+    s^.loc_attachment_extent = rl.GetShaderLocation(s^.shader, "uAttachmentExtent")
+    s^.loc_occluder_count = rl.GetShaderLocation(s^.shader, "uOccluderCount")
+    s^.loc_occluder_p0[0] = rl.GetShaderLocation(s^.shader, "uOccluderP0[0]")
+    s^.loc_occluder_p0[1] = rl.GetShaderLocation(s^.shader, "uOccluderP0[1]")
+    s^.loc_occluder_p1[0] = rl.GetShaderLocation(s^.shader, "uOccluderP1[0]")
+    s^.loc_occluder_p1[1] = rl.GetShaderLocation(s^.shader, "uOccluderP1[1]")
+    s^.loc_occluder_radius[0] = rl.GetShaderLocation(s^.shader, "uOccluderRadius[0]")
+    s^.loc_occluder_radius[1] = rl.GetShaderLocation(s^.shader, "uOccluderRadius[1]")
+    s^.loc_occluder_depth0[0] = rl.GetShaderLocation(s^.shader, "uOccluderDepth0[0]")
+    s^.loc_occluder_depth0[1] = rl.GetShaderLocation(s^.shader, "uOccluderDepth0[1]")
+    s^.loc_occluder_depth1[0] = rl.GetShaderLocation(s^.shader, "uOccluderDepth1[0]")
+    s^.loc_occluder_depth1[1] = rl.GetShaderLocation(s^.shader, "uOccluderDepth1[1]")
+    s^.loc_occluder_tangent[0] = rl.GetShaderLocation(s^.shader, "uOccluderTangent[0]")
+    s^.loc_occluder_tangent[1] = rl.GetShaderLocation(s^.shader, "uOccluderTangent[1]")
 }
 
-// Cache bounded occluder array locations in the typed stroke render record.
-tool_brush_cache_occluder_locations :: proc(
-    s: ^viewmodel.Tool_Render_State,
-    contract: ^rendershader.Shader_Program_Contract, locations: []i32) {
-    for i in 0..<viewmodel.MAX_TOOL_BRUSH_OCCLUDERS {
-        element := u8(i)
-        s^.loc_occluder_p0[i] =
-            shader_location(contract, locations, .Occluder_Start, element)
-        s^.loc_occluder_p1[i] =
-            shader_location(contract, locations, .Occluder_End, element)
-        s^.loc_occluder_radius[i] =
-            shader_location(contract, locations, .Occluder_Radius, element)
-        s^.loc_occluder_depth0[i] =
-            shader_location(contract, locations, .Occluder_Depth_Start, element)
-        s^.loc_occluder_depth1[i] =
-            shader_location(contract, locations, .Occluder_Depth_End, element)
-        s^.loc_occluder_tangent[i] =
-            shader_location(contract, locations, .Occluder_Tangent, element)
+//   Return true when the required tool_brush uniforms were all located.
+tool_brush_uniforms_valid :: proc(s: ^viewmodel.Tool_Render_State) -> bool {
+    scalar_uniforms_valid := s^.loc_light_dir >= 0 && s^.loc_ambient >= 0 &&
+        s^.loc_diffuse >= 0 && s^.loc_material_roughness >= 0 &&
+        s^.loc_material_fresnel_0 >= 0 && s^.loc_material_specular_tint >= 0 &&
+        s^.loc_material_shadow_limit >= 0 && s^.loc_p0 >= 0 && s^.loc_p1 >= 0 &&
+        s^.loc_radius >= 0 && s^.loc_viewport_height >= 0 &&
+        s^.loc_stroke_mode >= 0 && s^.loc_strip_alpha >= 0 &&
+        s^.loc_strip_color >= 0 && s^.loc_strip_side_extent >= 0 &&
+        s^.loc_arc_intersections_enabled >= 0 &&
+        s^.loc_intersection_depth_width >= 0 && s^.loc_attachment_extent >= 0 &&
+        s^.loc_occluder_count >= 0
+    if !scalar_uniforms_valid {
+        return false
     }
-}
 
-// Return one validated location by semantic identity and array element.
-shader_location :: #force_inline proc(
-    contract: ^rendershader.Shader_Program_Contract, locations: []i32,
-    semantic: rendershader.Uniform_Semantic, element: u8 = 0) -> i32 {
-    index, ok := rendershader.uniform_index(contract, semantic, element)
-    assert(ok)
-    return locations[index]
+    for i in 0..<viewmodel.MAX_TOOL_BRUSH_OCCLUDERS {
+        if s^.loc_occluder_p0[i] < 0 || s^.loc_occluder_p1[i] < 0 ||
+            s^.loc_occluder_radius[i] < 0 || s^.loc_occluder_depth0[i] < 0 ||
+            s^.loc_occluder_depth1[i] < 0 || s^.loc_occluder_tangent[i] < 0 {
+            return false
+        }
+    }
+    return true
 }
 
 //   Unload tool_brush shader resources and mark shader state as unavailable.
@@ -473,22 +422,13 @@ shader_location :: #force_inline proc(
 //   - none.
 shutdown_tool_brush_shader :: proc(state: ^Euclid_General_State) {
     s := &state^.stroke_3d
-    _ = render_raylib.resource_tables_release_shader(
-        &state^.render_resources, s^.shader)
-    s^.shader = {}
-    s^.ready = false
-}
 
-// Draw one projected surface interior and its distinct border triangles.
-draw_projected_surface :: proc(
-    state: ^Euclid_General_State,
-    projected: [8]Vector2, edge_color, surface_color: rl.Color) {
-    rl.DrawTriangle(projected[0], projected[1], projected[2], edge_color)
-    rl.DrawTriangle(projected[3], projected[2], projected[1], edge_color)
-    rl.DrawTriangle(projected[4], projected[5], projected[6], surface_color)
-    rl.DrawTriangle(projected[7], projected[6], projected[5], surface_color)
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions, 4)
-    rendermetrics.record(&state^.render_metrics, .Generated_Indices, 12)
+    if !s^.ready {
+        return
+    }
+
+    rl.UnloadShader(s^.shader)
+    s^.ready = false
 }
 
 //   Render the base isometric drawing plane and its border triangles.
@@ -530,8 +470,10 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
             out = projected[:],
         })
 
-    draw_projected_surface(state, projected,
-        render_raylib.color(room.edge_color), render_raylib.color(room.color))
+    rl.DrawTriangle(projected[0], projected[1], projected[2], room.edge_color)
+    rl.DrawTriangle(projected[3], projected[2], projected[1], room.edge_color)
+    rl.DrawTriangle(projected[4], projected[5], projected[6], room.color)
+    rl.DrawTriangle(projected[7], projected[6], projected[5], room.color)
 }
 
 //   Render cached low-layer geometry items (labels, primitives, and polygons).
@@ -989,7 +931,6 @@ draw_trochoid_tool_ring_shader :: proc(
         state, center, radius, coverage_radius, &samples) {return}
 
     rlgl.DrawRenderBatchActive()
-    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     shader := &state^.stroke_3d
     set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 1.0)
     set_tool_brush_uniform_float(
@@ -1006,7 +947,6 @@ draw_trochoid_tool_ring_shader :: proc(
     emit_trochoid_tool_ring_strip(&samples)
     rlgl.End()
     rlgl.DrawRenderBatchActive()
-    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     rlgl.EnableBackfaceCulling()
     set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 0.0)
 }
@@ -1030,13 +970,12 @@ draw_cached_trochoid_tool_full :: proc(
     tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
     begin_tool_brush_mode(state)
     draw_trochoid_tool_ring(state, tool^.fixed_center,
-        tool^.fixed_radius, tool^.brush_size, render_raylib.color(tool^.color))
+        tool^.fixed_radius, tool^.brush_size, tool^.color)
     draw_trochoid_tool_ring(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, render_raylib.color(tool^.color))
+        tool^.rolling_radius, tool^.brush_size, tool^.color)
     first := view_core.iso_to_cartesian(tool^.handle_start, state^.iso_scale^)
     second := view_core.iso_to_cartesian(tool^.handle_finish, state^.iso_scale^)
-    draw_tool_brush_segment(
-        state, first, second, tool^.brush_size, render_raylib.color(tool^.color))
+    draw_tool_brush_segment(state, first, second, tool^.brush_size, tool^.color)
     end_tool_brush_mode(state)
 }
 
@@ -1050,15 +989,15 @@ draw_cached_cycloid_tool_full :: proc(
     baseline_finish := view_core.iso_to_cartesian(
         tool^.baseline_finish, state^.iso_scale^)
     draw_tool_brush_segment(state, baseline_start, baseline_finish,
-        tool^.brush_size, render_raylib.color(tool^.color))
+        tool^.brush_size, tool^.color)
     draw_trochoid_tool_ring(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, render_raylib.color(tool^.color))
+        tool^.rolling_radius, tool^.brush_size, tool^.color)
     handle_start := view_core.iso_to_cartesian(
         tool^.handle_start, state^.iso_scale^)
     handle_finish := view_core.iso_to_cartesian(
         tool^.handle_finish, state^.iso_scale^)
     draw_tool_brush_segment(state, handle_start, handle_finish,
-        tool^.brush_size, render_raylib.color(tool^.color))
+        tool^.brush_size, tool^.color)
     end_tool_brush_mode(state)
 }
 
@@ -1073,11 +1012,8 @@ set_tool_brush_uniform_float :: #force_inline proc(
     if location < 0 {
         return
     }
-    shader, found := render_raylib.resource_tables_resolve_shader(
-        &state^.render_resources, state^.stroke_3d.shader)
-    if !found { return }
     local_value := value
-    rl.SetShaderValue(shader, location, &local_value, .FLOAT)
+    rl.SetShaderValue(state^.stroke_3d.shader, location, &local_value, .FLOAT)
 }
 
 
@@ -1087,11 +1023,8 @@ set_tool_brush_uniform_vec2 :: #force_inline proc(
     if location < 0 {
         return
     }
-    shader, found := render_raylib.resource_tables_resolve_shader(
-        &state^.render_resources, state^.stroke_3d.shader)
-    if !found { return }
     vec_data := [2]f32{value.x, value.y}
-    rl.SetShaderValue(shader, location, &vec_data[0], .VEC2)
+    rl.SetShaderValue(state^.stroke_3d.shader, location, &vec_data[0], .VEC2)
 }
 
 
@@ -1101,11 +1034,8 @@ set_tool_brush_uniform_vec3 :: #force_inline proc(
     if location < 0 {
         return
     }
-    shader, found := render_raylib.resource_tables_resolve_shader(
-        &state^.render_resources, state^.stroke_3d.shader)
-    if !found { return }
     vec_data := [3]f32{value.x, value.y, value.z}
-    rl.SetShaderValue(shader, location, &vec_data[0], .VEC3)
+    rl.SetShaderValue(state^.stroke_3d.shader, location, &vec_data[0], .VEC3)
 }
 
 
@@ -1154,7 +1084,6 @@ set_tool_brush_occluders :: proc(
     }
 
     rlgl.DrawRenderBatchActive()
-    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     scale := get_tool_brush_render_scale()
     avg_scale := (scale.x + scale.y) * 0.5
 
@@ -1185,7 +1114,6 @@ clear_tool_brush_occluder :: #force_inline proc(state: ^Euclid_General_State) {
     }
 
     rlgl.DrawRenderBatchActive()
-    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     set_tool_brush_uniform_float(state, s^.loc_occluder_count, 0.0)
 }
 
@@ -1214,7 +1142,6 @@ draw_tool_brush_capsule :: #force_inline proc(
         finish + offset,
     }
     rl.DrawTriangleStrip(&vertices[0], len(vertices), color)
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 
@@ -1224,13 +1151,11 @@ draw_tool_brush_segment :: #force_inline proc(
     s := &state^.stroke_3d
     if s^.ready {
         rlgl.DrawRenderBatchActive()
-        rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
         set_tool_brush_segment(state, p0, p1, thickness)
         draw_tool_brush_capsule(state, p0, p1, thickness, color)
         return
     }
     rl.DrawLineEx(p0, p1, thickness, color)
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 
@@ -1288,12 +1213,6 @@ begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     if !s^.ready {
         return
     }
-    shader, found := render_raylib.resource_tables_resolve_shader(
-        &state^.render_resources, s^.shader)
-    if !found {
-        s^.ready = false
-        return
-    }
 
     light := -state^.iso_scale^.main_light_dir
     light = linalg.normalize(light)
@@ -1301,7 +1220,7 @@ begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
 
     light_dir_data := [3]f32{light.x, light.y, light.z}
     if s^.loc_light_dir >= 0 {
-        rl.SetShaderValue(shader, s^.loc_light_dir, &light_dir_data[0], .VEC3)
+        rl.SetShaderValue(s^.shader, s^.loc_light_dir, &light_dir_data[0], .VEC3)
     }
 
     set_tool_brush_uniform_float(state, s^.loc_ambient, STROKE3D_AMBIENT)
@@ -1319,8 +1238,7 @@ begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
     set_tool_brush_uniform_float(state, s^.loc_arc_intersections_enabled, 0.0)
     set_tool_brush_uniform_float(state, s^.loc_occluder_count, 0.0)
 
-    rl.BeginShaderMode(shader)
-    rendermetrics.record(&state^.render_metrics, .Shader_Changes)
+    rl.BeginShaderMode(s^.shader)
 }
 
 
@@ -1333,10 +1251,7 @@ end_tool_brush_mode :: proc(state: ^Euclid_General_State) {
         return
     }
     rlgl.DrawRenderBatchActive()
-    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
-    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     rl.EndShaderMode()
-    rendermetrics.record(&state^.render_metrics, .Shader_Changes)
 }
 
 //   Compute positive angular sweep between start and end angles.
@@ -1366,8 +1281,7 @@ shadow_alpha_from_height :: proc(avg_height: f32) -> u8 {
 }
 
 //   Build a shadow color using computed alpha attenuation.
-make_shadow_color :: proc(
-    source: colormodel.Color_RGBA8, avg_height: f32) -> rl.Color {
+make_shadow_color :: proc(source: rl.Color, avg_height: f32) -> rl.Color {
     _ = source
     a := shadow_alpha_from_height(avg_height)
     return rl.Color{0, 0, 0, a}
@@ -1454,11 +1368,9 @@ z_split_clip_segment_halfspace :: #force_inline proc(
 }
 
 //   Apply 0.25x alpha attenuation for lower z-split fragments.
-z_split_lower_fragment_color :: #force_inline proc(
-    color: colormodel.Color_RGBA8) -> colormodel.Color_RGBA8 {
-    attenuated := u8(math.clamp(
-        int(f32(color.alpha) * Z_SPLIT_ALPHA_FACTOR + 0.5), 0, 255))
-    return {color.red, color.green, color.blue, attenuated}
+z_split_lower_fragment_color :: #force_inline proc(color: rl.Color) -> rl.Color {
+    attenuated := u8(math.clamp(int(f32(color.a) * Z_SPLIT_ALPHA_FACTOR + 0.5), 0, 255))
+    return rl.Color{color.r, color.g, color.b, attenuated}
 }
 
 //   Return true when one segment has enough length to render reliably.
@@ -1623,8 +1535,7 @@ draw_pen_segment_fragment :: #force_inline proc(
 
     c0 := view_core.iso_to_cartesian(point0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(point1, state^.iso_scale^)
-    draw_tool_brush_segment(
-        state, c0, c1, pen^.brush_size, render_raylib.color(pen^.color))
+    draw_tool_brush_segment(state, c0, c1, pen^.brush_size, pen^.color)
 }
 
 //   Build the z=0-clipped segment and oriented polygon plane for one crossing test.
@@ -2069,18 +1980,13 @@ project_iso_points_batch_with_components :: proc(
         params.zs[i] = p.z
     }
 
-    projected_count := view_core.iso_to_cartesian_components_batch_selected({
+    return view_core.iso_to_cartesian_components_batch_selected({
         params.xs[:count],
         params.ys[:count],
         params.zs[:count],
         params.out[:count],
         state^.iso_scale^,
     }, state^.ui_runtime.use_simd_batch_projection)
-    rendermetrics.record(
-        &state^.render_metrics, .Projected_Vertices, u64(projected_count))
-    rendermetrics.record(
-        &state^.render_metrics, .Generated_Vertices, u64(projected_count))
-    return projected_count
 }
 
 
@@ -2104,7 +2010,7 @@ draw_cached_label :: proc(
         key = .Regular,
         text = source,
         position = c,
-        color = render_raylib.color(p^.color),
+        color = p^.color,
         font = {font = regular_font, font_size = p.brush_size},
     })
 }
@@ -2120,7 +2026,6 @@ draw_cached_point_shadow :: proc(
     shadow := shadow_to_screen(p^.point1, state)
     shadow_color := make_shadow_color(p^.color, p^.point1.z)
     rl.DrawCircleV(shadow, p^.brush_size, shadow_color)
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 
@@ -2147,7 +2052,6 @@ draw_cached_line_shadow :: proc(
     shadow_color := make_shadow_color(l^.color, avg_height)
     thickness := math.max(l^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
     rl.DrawLineEx(s0, s1, thickness, shadow_color)
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
 }
 
 // Draw one elevated guide ring as ordinary segmented floor shadows.
@@ -2155,7 +2059,7 @@ draw_trochoid_tool_ring_shadow :: proc(
     state: ^Euclid_General_State,
     center: Vector3,
     radius, brush_size: f32,
-    color: colormodel.Color_RGBA8) {
+    color: rl.Color) {
     previous := trochoid_tool_ring_point(center, radius, 0)
     for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
         angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
@@ -2246,7 +2150,6 @@ draw_cached_circle_shadow :: proc(
         clipped_avg_height := average_shadow_height(clipped_points[:])
         clipped_shadow_color := make_shadow_color(c^.color, clipped_avg_height)
         rl.DrawLineEx(s0, s1, thickness, clipped_shadow_color)
-        rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
     }
 }
 
@@ -2272,9 +2175,6 @@ draw_cached_filledcircle_shadow :: proc(
     }
 
     rl.DrawTriangleFan(&points[0], len(points), shadow_color)
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
-    rendermetrics.record(
-        &state^.render_metrics, .Generated_Indices, u64(CIRCLE_ARC_SEGMENTS * 3))
 }
 
 
@@ -2282,8 +2182,7 @@ draw_cached_filledcircle_shadow :: proc(
 draw_cached_point :: proc(
     state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
-    rl.DrawCircleV(c, p^.brush_size, render_raylib.color(p^.color))
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
+    rl.DrawCircleV(c, p^.brush_size, p^.color)
 }
 
 
@@ -2304,8 +2203,7 @@ draw_cached_line :: proc(
 
     c0 := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
-    rl.DrawLineEx(c0, c1, l^.brush_size, render_raylib.color(color))
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
+    rl.DrawLineEx(c0, c1, l^.brush_size, color)
 }
 
 // Render every segment in one explicated curve using ordinary line styling.
@@ -2346,10 +2244,7 @@ draw_cached_circle :: proc(
         })
 
     for i in 1..=CIRCLE_ARC_SEGMENTS {
-            rl.DrawLineEx(
-                arc_screen[i - 1], arc_screen[i], c^.brush_size,
-                render_raylib.color(c^.color))
-            rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
+        rl.DrawLineEx(arc_screen[i - 1], arc_screen[i], c^.brush_size, c^.color)
     }
 }
 
@@ -2381,10 +2276,7 @@ draw_cached_filledcircle :: proc(
         points[i + 1] = arc_screen[i]
     }
 
-    rl.DrawTriangleFan(&points[0], len(points), render_raylib.color(c^.color))
-    rendermetrics.record(&state^.render_metrics, .Primitive_Submissions)
-    rendermetrics.record(
-        &state^.render_metrics, .Generated_Indices, u64(CIRCLE_ARC_SEGMENTS * 3))
+    rl.DrawTriangleFan(&points[0], len(points), c^.color)
 }
 
 
@@ -2414,7 +2306,6 @@ project_cached_polygon_vertices :: #force_inline proc(
 
 //   Draw all cached triangles for a polygon using projected vertex positions.
 draw_cached_polygon_triangles :: #force_inline proc(
-    metrics: ^rendermetrics.State,
     cache: ^shapemodel.Shapes_Draw_Cache,
     poly: ^shapemodel.Shapes_Polygon_Draw,
     projected: []Vector2,
@@ -2437,8 +2328,6 @@ draw_cached_polygon_triangles :: #force_inline proc(
         }
 
         rl.DrawTriangle(projected[i0], projected[i1], projected[i2], color)
-    rendermetrics.record(metrics, .Primitive_Submissions)
-    rendermetrics.record(metrics, .Generated_Indices, 3)
     }
 }
 
@@ -2463,8 +2352,7 @@ draw_cached_polygon_shadow :: proc(
     }
 
     shadow_color := make_shadow_color(poly^.color, average_shadow_height(vertices))
-    draw_cached_polygon_triangles(
-        &state^.render_metrics, cache, poly, projected[:], shadow_color)
+    draw_cached_polygon_triangles(cache, poly, projected[:], shadow_color)
 }
 
 //   Render one cached polygon draw item.
@@ -2480,9 +2368,7 @@ draw_cached_polygon :: proc(
     }
 
     cache := &state^.shape_world^.draw_cache
-    draw_cached_polygon_triangles(
-        &state^.render_metrics, cache, poly, projected[:],
-        render_raylib.color(poly^.color))
+    draw_cached_polygon_triangles(cache, poly, projected[:], poly^.color)
 }
 
 
@@ -2515,8 +2401,7 @@ draw_cached_pen :: proc(
     c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
     set_pen_compass_occluders(state, pen, compass_caster)
-    draw_tool_brush_segment(
-        state, c0, c1, pen^.brush_size, render_raylib.color(pen^.color))
+    draw_tool_brush_segment(state, c0, c1, pen^.brush_size, pen^.color)
     clear_tool_brush_occluder(state)
 }
 
@@ -2532,13 +2417,13 @@ draw_cached_pen_active_dot :: proc(
         if pen^.has_active_color {
             active = pen^.active_color
         }
-        rl.DrawCircleV(c0, pen^.brush_size, render_raylib.color(active))
+        rl.DrawCircleV(c0, pen^.brush_size, active)
     } else if pen^.active_child == 2 {
         active := pen^.color
         if pen^.has_active_color {
             active = pen^.active_color
         }
-        rl.DrawCircleV(c1, pen^.brush_size, render_raylib.color(active))
+        rl.DrawCircleV(c1, pen^.brush_size, active)
     }
 }
 
@@ -2733,7 +2618,6 @@ draw_outside_arc_compass_cached :: proc(
     }
 
     rlgl.DrawRenderBatchActive()
-    rendermetrics.record(&state^.render_metrics, .Rlgl_Batches)
     set_compass_arc_shader_uniforms(draw, basis, side_extent)
 
     _ = rlgl.CheckRenderBatchLimit(COMPASS_TOPCIRCLE_SEGMENTS * 6)
@@ -2772,7 +2656,7 @@ draw_cached_compass_leg :: proc(
     }
     set_tool_brush_occluders(ctx^.state, &occluders)
     draw_tool_brush_segment(ctx^.state, start, finish,
-        ctx^.comp^.brush_size, render_raylib.color(ctx^.comp^.color))
+        ctx^.comp^.brush_size, ctx^.comp^.color)
 }
 
 
@@ -2810,7 +2694,7 @@ draw_cached_compass :: proc(
     arc_occluders := make_compass_arc_occluders(ctx.leg1, ctx.leg2)
     set_tool_brush_occluders(state, &arc_occluders)
     draw_outside_arc_compass_cached(comp^.joint1, comp^.pivot, comp^.joint2,
-        Compass_Arc_Draw{state, comp^.brush_size, render_raylib.color(comp^.color)})
+        Compass_Arc_Draw{state, comp^.brush_size, comp^.color})
     clear_tool_brush_occluder(state)
 }
 
@@ -2826,13 +2710,13 @@ draw_cached_compass_active_dot :: proc(
         if comp^.has_active_color {
             active = comp^.active_color
         }
-        rl.DrawCircleV(c0, comp^.brush_size, render_raylib.color(active))
+        rl.DrawCircleV(c0, comp^.brush_size, active)
     } else if comp^.active_child == 3 {
         active := comp^.color
         if comp^.has_active_color {
             active = comp^.active_color
         }
-        rl.DrawCircleV(c2, comp^.brush_size, render_raylib.color(active))
+        rl.DrawCircleV(c2, comp^.brush_size, active)
     }
 }
 

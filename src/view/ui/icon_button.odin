@@ -195,10 +195,10 @@ draw_icon_button_prepared :: proc(
     result: Icon_Button_Result) {
 
     slot_rect := clamp_non_negative_rect(params.rect)
-    icon_color := ui_raylib_color(UI_TEXT_COLOR)
+    icon_color := UI_TEXT_COLOR
     if (params.toggle || result.pressed) {
-        rl.DrawRectangleRec(slot_rect, ui_raylib_color(UI_BORDER_COLOR))
-        icon_color = ui_raylib_color(BACKGROUND_COLOR)
+        rl.DrawRectangleRec(slot_rect, UI_BORDER_COLOR)
+        icon_color = BACKGROUND_COLOR
     }
     if result.pressed {
         icon_color = icon_button_darken(icon_color, 1)
@@ -230,10 +230,10 @@ draw_icon_button_with_visual_state :: proc(
     use_press_t :=  clamp(press_t, 0.0, 1.0)
     visual_pressed := use_press_t > 0
 
-    icon_color := ui_raylib_color(UI_TEXT_COLOR)
+    icon_color := UI_TEXT_COLOR
     if (params.toggle || visual_pressed) && draw_slot_fill {
-        rl.DrawRectangleRec(slot_rect, ui_raylib_color(UI_BORDER_COLOR))
-        icon_color = ui_raylib_color(BACKGROUND_COLOR)
+        rl.DrawRectangleRec(slot_rect, UI_BORDER_COLOR)
+        icon_color = BACKGROUND_COLOR
     }
 
     if use_press_t > 0 {

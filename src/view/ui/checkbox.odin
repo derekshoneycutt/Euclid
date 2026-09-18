@@ -37,7 +37,7 @@ Checkbox_Result :: struct {
 //   Resolve checkbox label color from enabled state.
 checkbox_label_color :: #force_inline proc(enabled: bool) -> rl.Color {
     if enabled {
-        return ui_raylib_color(UI_TEXT_COLOR)
+        return UI_TEXT_COLOR
     }
     return rl.Color{110, 110, 110, 255}
 }
@@ -118,7 +118,7 @@ checkbox_release_press :: proc(
 //   Resolve checkbox border and checkmark colors from enabled state.
 checkbox_mark_colors :: #force_inline proc(enabled: bool) -> (rl.Color, rl.Color) {
     if enabled {
-        return ui_raylib_color(UI_BORDER_COLOR), ui_raylib_color(UI_TEXT_COLOR)
+        return UI_BORDER_COLOR, UI_TEXT_COLOR
     }
     return rl.Color{78, 78, 78, 255}, rl.Color{110, 110, 110, 255}
 }

@@ -1,6 +1,5 @@
 package terminalview
 
-import colormodel "../../color/model"
 import viewterminalmodel "model"
 
 import "../../core/protocol"
@@ -188,10 +187,10 @@ Terminal_Draw_Layout :: struct {
 
 // Frame-local semantic colors supplied by the terminal container owner.
 Terminal_Draw_Theme :: struct {
-    default_foreground: colormodel.Color_RGBA8,
-    cursor_foreground: colormodel.Color_RGBA8,
-    selection_foreground: colormodel.Color_RGBA8,
-    selection_background: colormodel.Color_RGBA8,
+    default_foreground: rl.Color,
+    cursor_foreground: rl.Color,
+    selection_foreground: rl.Color,
+    selection_background: rl.Color,
 }
 
 // Complete frame-local request for terminal input and geometry update.
@@ -217,16 +216,6 @@ Terminal_Draw_Content_Context :: struct {
     bounds: rl.Rectangle,
     frame: input.Input_Frame,
     hyperlink_hover: Terminal_Link_Hit,
-}
-
-// Resolved single-row placement for reversible composition and committed suffix text.
-Terminal_Composition_Draw :: struct {
-    position: rl.Vector2,
-    preedit: string,
-    suffix: string,
-    preedit_width: f32,
-    suffix_width: f32,
-    valid: bool,
 }
 
 // Frame-local source and destination geometry for one raster placement.

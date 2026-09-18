@@ -6,8 +6,6 @@ import dynviewmodel "../dynview/model"
 import audiomodel "../audio/model"
 import fontmodel "../view/font/model"
 import viewmodel "../view/model"
-import render_raylib "../view/render/raylib"
-import rendermetrics "../render/metrics"
 import viewterminalmodel "../view/terminal/model"
 import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
@@ -107,8 +105,6 @@ Euclid_General_State :: struct {
     
     stroke_3d: viewmodel.Tool_Render_State,
     dust_render: viewmodel.Dust_Render_State,
-    render_resources: render_raylib.Resource_Tables,
-    render_metrics: rendermetrics.State,
     ui_runtime: viewmodel.Euclid_Ui_Runtime_State,
     gif_capture: viewmodel.Gif_Capture_Session,
     font_cache: fontmodel.Font_Cache,

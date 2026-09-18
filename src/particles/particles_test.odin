@@ -1,6 +1,5 @@
 package particles
 
-import colormodel "../color/model"
 import particlemodel "model"
 import shapemodel "../shapes/model"
 import curve "../shapes/curve"
@@ -8,6 +7,8 @@ import shapes "../shapes"
 
 import "core:math"
 import "core:testing"
+
+import rl "vendor:raylib"
 
 import test_helpers "../test_helpers"
 
@@ -45,7 +46,7 @@ circle_dust_emission_scales_with_arc_length :: proc(t: ^testing.T) {
     defer free(full)
     quarter.use_max_dust_particles = 1000
     full.use_max_dust_particles = 1000
-    color := colormodel.WHITE
+    color := rl.Color{255, 255, 255, 255}
 
     emit_circle_dust(quarter, {
         center = {}, radius = 0.2, sweep_theta = f32(math.PI/2), color = color})
@@ -66,7 +67,7 @@ filled_circle_dust_emission_samples_sector_interior :: proc(t: ^testing.T) {
     ps.use_max_dust_particles = 1000
 
     emit_filled_circle_dust(ps, {center = {}, radius = 0.2,
-        sweep_theta = f32(math.PI/3), color = colormodel.WHITE})
+        sweep_theta = f32(math.PI/3), color = rl.Color{255, 255, 255, 255}})
 
     interior_count: int
     for index in 0..<ps.use_max_dust_particles {
@@ -98,11 +99,11 @@ trochoid_dust_emission_scales_with_revealed_length :: proc(t: ^testing.T) {
     vertices: [curve.TROCHOID_MAX_VERTICES]Vector3
     partial_result := curve.trochoid_explicate({}, value, vertices[:])
     emit_curve_polyline_dust(partial, vertices[:partial_result.vertex_count],
-        colormodel.WHITE)
+        rl.Color{255, 255, 255, 255})
     value.draw_parameter = value.parameter_finish
     full_result := curve.trochoid_explicate({}, value, vertices[:])
     emit_curve_polyline_dust(full, vertices[:full_result.vertex_count],
-        colormodel.WHITE)
+        rl.Color{255, 255, 255, 255})
 
     partial_count := count_live_low_particles(partial)
     full_count := count_live_low_particles(full)
@@ -120,7 +121,7 @@ cycloid_tool_hide_is_silent :: proc(t: ^testing.T) {
     tool, status := shapes.world_create_cycloid_tool(world, {
         first = {0, 0, 0}, second = {1, 0, 0}, rolling_radius = 0.05,
         parameter_start = 0, parameter_finish = 2 * math.PI,
-        parameter = 0, style = {color = colormodel.WHITE, brush_size = 5},
+        parameter = 0, style = {color = rl.WHITE, brush_size = 5},
     })
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     style, found := shapemodel.shape_component_get_mut(
@@ -328,7 +329,7 @@ dust_kick_creates_airborne_particle :: proc(t: ^testing.T) {
     defer free(ps)
     ps^.use_max_dust_particles = 1
     ps^.low_particles[0] = {pos_x = 0.5, pos_y = 0.5, pos_z = DUST_FLOOR_Z,
-        life = 1, color = colormodel.WHITE, alive = true}
+        life = 1, color = rl.WHITE, alive = true}
 
     kick_existing_dust_index(ps, 0)
     integrate_dust_positions(ps)

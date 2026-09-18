@@ -3,14 +3,12 @@ package font
 
 import "../../taskpool"
 import fontmodel "model"
-import render_raylib "../render/raylib"
 
 import "core:mem"
 import "core:os"
 import "core:testing"
 import "core:thread"
 import vmem "core:mem/virtual"
-import rl "vendor:raylib"
 
 Codepoint_Resolver_Test_Result :: struct {
     ascii : Font_Glyph_Resolve_Status,
@@ -33,26 +31,6 @@ Math_Shaping_Task_Test_Result :: struct {
 Font_Cancel_Test_State :: struct {
     query_count: int,
     cancel_at: int,
-}
-
-// Store one synthetic native font for tests of cache borrowing policy.
-font_test_store_native :: proc(
-    cache: ^Font_Cache, tables: ^render_raylib.Resource_Tables,
-    key: Font_Key, base_size: i32) -> bool {
-    cache.render_resources = tables
-    native := rl.Font{
-        baseSize = base_size,
-        glyphCount = 1,
-        texture = {id = u32(base_size), width = 1, height = 1},
-    }
-    handle, stored := render_raylib.resource_tables_store_font(tables, native)
-    if !stored { return false }
-    cache.entries[int(key)].font = handle
-    cache.entries[int(key)].base_size = base_size
-    cache.entries[int(key)].resident = true
-    cache.entries[int(key)].generation = 1
-    cache.entries[int(key)].requested_generation = 1
-    return true
 }
 
 // Request cancellation at one deterministic preparation checkpoint.
@@ -243,8 +221,10 @@ view_test_math_required_source_policy :: proc(t: ^testing.T) {
 @(test)
 view_test_terminal_regular_font_key_is_shared :: proc(t: ^testing.T) {
     cache: Font_Cache
-    tables: render_raylib.Resource_Tables
-    testing.expect(t, font_test_store_native(&cache, &tables, .Regular, 32))
+    cache.entries[int(Font_Key.Regular)] = {
+        resident = true,
+        font = {baseSize = 32},
+    }
 
     resolved := cache_terminal_resolve(&cache, .Regular)
     testing.expect_value(t, resolved.baseSize, i32(32))
@@ -864,9 +844,9 @@ view_test_font_generation_glyph_demand_lifecycle :: proc(t: ^testing.T) {
 @(test)
 view_test_glyph_resolver_records_missing_demand :: proc(t: ^testing.T) {
     cache: Font_Cache
-    tables: render_raylib.Resource_Tables
-    testing.expect(t, font_test_store_native(&cache, &tables, .Regular, 32))
     entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
+    entry.state = .Ready
     entry.generation = 1
     entry.requested_generation = 1
     testing.expect(t, font_generation_glyphs_init(
@@ -1078,10 +1058,11 @@ view_test_codepoint_resolver_status :: proc(t: ^testing.T) {
     defer delete(source)
 
     cache: Font_Cache
-    tables: render_raylib.Resource_Tables
-    testing.expect(t, font_test_store_native(&cache, &tables, .Regular, 32))
     entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
     entry.state = .Ready
+    entry.generation = 1
+    entry.requested_generation = 1
     testing.expect(t, harfbuzz_shaper_init(
         source, JULIA_MONO_FONT_SIZE, &entry.shaping))
     testing.expect(t, font_generation_glyphs_init(
@@ -1257,7 +1238,7 @@ view_test_prepared_validation :: proc(t: ^testing.T) {
 view_test_cache_rejects_stale_publication :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        base_size = 55,
+        font = {baseSize = 55},
         generation = 5,
         requested_generation = 5,
         resident = true,
@@ -1269,7 +1250,7 @@ view_test_cache_rejects_stale_publication :: proc(t: ^testing.T) {
     }
 
     testing.expect(t, !cache_publish(&cache, &prepared))
-    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].base_size, i32(55))
+    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].font.baseSize, 55)
     testing.expect_value(t, cache.entries[int(Font_Key.Bold)].generation, u64(5))
     testing.expect_value(t, prepared.glyph_count, i32(1))
 }
@@ -1279,7 +1260,7 @@ view_test_cache_rejects_stale_publication :: proc(t: ^testing.T) {
 view_test_cache_reload_supersedes_active_generation :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        base_size = 55,
+        font = {baseSize = 55},
         generation = 5,
         requested_generation = 5,
         resident = true,
@@ -1294,7 +1275,7 @@ view_test_cache_reload_supersedes_active_generation :: proc(t: ^testing.T) {
     prepared := Prepared_Font{key = .Bold, generation = 6, glyph_count = 1}
     testing.expect(t, !cache_publish(&cache, &prepared))
     testing.expect_value(t, prepared.glyph_count, i32(1))
-    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].base_size, i32(55))
+    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].font.baseSize, 55)
     testing.expect_value(t, cache.entries[int(Font_Key.Bold)].generation, u64(5))
 }
 
@@ -1303,7 +1284,7 @@ view_test_cache_reload_supersedes_active_generation :: proc(t: ^testing.T) {
 view_test_cache_reload_failure_preserves_resident :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Regular)] = {
-        base_size = 64,
+        font = {baseSize = 64},
         generation = 3,
         requested_generation = 3,
         resident = true,
@@ -1316,7 +1297,7 @@ view_test_cache_reload_failure_preserves_resident :: proc(t: ^testing.T) {
     testing.expect_value(t, entry.state, Font_Load_State.Failed)
     testing.expect(t, entry.resident)
     testing.expect_value(t, entry.generation, u64(3))
-    testing.expect_value(t, entry.base_size, i32(64))
+    testing.expect_value(t, entry.font.baseSize, i32(64))
 }
 
 // Verify a failed required-math replacement preserves its resident generation.
@@ -1324,7 +1305,7 @@ view_test_cache_reload_failure_preserves_resident :: proc(t: ^testing.T) {
 view_test_math_reload_failure_preserves_resident :: proc(t: ^testing.T) {
     cache: Font_Cache
     cache.entries[int(Font_Key.Math_Regular)] = {
-        base_size = 32,
+        font = {baseSize = 32},
         generation = 4,
         requested_generation = 4,
         resident = true,
@@ -1337,7 +1318,7 @@ view_test_math_reload_failure_preserves_resident :: proc(t: ^testing.T) {
     testing.expect_value(t, entry.state, Font_Load_State.Failed)
     testing.expect(t, entry.resident)
     testing.expect_value(t, entry.generation, u64(4))
-    testing.expect_value(t, entry.base_size, i32(32))
+    testing.expect_value(t, entry.font.baseSize, i32(32))
 }
 
 // Verify cached drawing accepts only the exact resident math generation.
@@ -1360,7 +1341,7 @@ view_test_source_monitor_debounces_rapid_changes :: proc(t: ^testing.T) {
     cache: Font_Cache
     key := Font_Key.Bold
     cache.entries[int(key)] = {
-        base_size = 55,
+        font = {baseSize = 55},
         generation = 2,
         requested_generation = 2,
         resident = true,
@@ -1420,7 +1401,7 @@ view_test_cache_service_discards_stale_completion :: proc(t: ^testing.T) {
 
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        base_size = 55,
+        font = {baseSize = 55},
         generation = 4,
         requested_generation = 6,
         resident = true,
@@ -1441,7 +1422,7 @@ view_test_cache_service_discards_stale_completion :: proc(t: ^testing.T) {
     testing.expect_value(t, cache.preparation.stale_completion_count, u64(1))
     testing.expect_value(t, cache.preparation.publication_count, u64(0))
     testing.expect_value(t, cache.preparation.failure_count, u64(0))
-    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].base_size, i32(55))
+    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].font.baseSize, 55)
     testing.expect_value(t, cache.entries[int(Font_Key.Bold)].generation, u64(4))
 }
 
@@ -1561,7 +1542,7 @@ view_test_cache_retries_queue_full :: proc(t: ^testing.T) {
         &pool, test_task_succeed, nil)
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
-        base_size = 55, resident = true,
+        font = {baseSize = 55}, resident = true,
     }
     testing.expect(t, cache_request(&cache, .Bold))
     testing.expect(t, prepare_task_set_path(
@@ -1578,7 +1559,7 @@ view_test_cache_retries_queue_full :: proc(t: ^testing.T) {
         thread.yield()
     }
     testing.expect_value(t, cache.preparation.failure_count, u64(1))
-    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].base_size, i32(55))
+    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].font.baseSize, 55)
 }
 
 // Verify shutdown cleans both retry-only and accepted task ownership states.
@@ -1616,10 +1597,15 @@ view_test_cache_shutdown_task_states :: proc(t: ^testing.T) {
 @(test)
 view_test_cache_resolution :: proc(t: ^testing.T) {
     cache: Font_Cache
-    tables: render_raylib.Resource_Tables
-    testing.expect(t, font_test_store_native(&cache, &tables, .Regular, 11))
-    testing.expect(t, font_test_store_native(&cache, &tables, .Bold, 22))
-    cache.entries[int(Font_Key.Bold)].state = .Ready
+    cache.entries[int(Font_Key.Regular)] = {
+        font = {baseSize = 11},
+        resident = true,
+    }
+    cache.entries[int(Font_Key.Bold)] = {
+        font = {baseSize = 22},
+        resident = true,
+        state = .Ready,
+    }
 
     testing.expect_value(t, cache_resolve(&cache, .Bold).baseSize, 22)
     testing.expect_value(
@@ -1646,9 +1632,9 @@ view_test_cache_resolution :: proc(t: ^testing.T) {
 @(test)
 view_test_cache_serializes_demand :: proc(t: ^testing.T) {
     cache: Font_Cache
-    tables: render_raylib.Resource_Tables
-    testing.expect(t, font_test_store_native(&cache, &tables, .Regular, 11))
-    cache.entries[int(Font_Key.Regular)].state = .Ready
+    cache.entries[int(Font_Key.Regular)] = {
+        font = {baseSize = 11}, resident = true, state = .Ready,
+    }
 
     testing.expect_value(t, cache_resolve(&cache, .Bold).baseSize, 11)
     testing.expect_value(t, cache_resolve(&cache, .Black).baseSize, 11)

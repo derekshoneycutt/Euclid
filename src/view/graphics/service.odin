@@ -9,8 +9,6 @@ import termgraphicsprepare "../../terminal/graphics/prepare"
 import gfxprotocol "../../terminal/graphics/protocol"
 import gfxsemantics "../../terminal/graphics/semantics"
 import termmodel "../../terminal/model"
-import render_raylib "../render/raylib"
-import renderresource "../render/resource"
 
 import rl "vendor:raylib"
 
@@ -70,14 +68,13 @@ Prepare_Output :: struct {
 // One display-owned native texture correlated to an exact attachment generation.
 Texture_Entry :: struct {
     attachment_id: termattachment.Attachment_Id,
-    texture: renderresource.Texture_Handle,
+    texture: rl.Texture2D,
     resident: bool,
 }
 
 // Bounded display service joining CPU work before publishing native resources.
 Service :: struct {
     // Borrowed terminal owners and fixed operation/native-resource tables.
-    resources: ^render_raylib.Resource_Tables,
     parser: ^gfxprotocol.Graphics_Parser_State,
     store: ^termattachment.Store,
     trace_ring: ^trace.Ring,
@@ -173,16 +170,14 @@ service_draw_raster :: proc(
     }
     entry := &service.textures[request.attachment_id.slot]
     source := request.source
-    texture, found := render_raylib.resource_tables_resolve_texture(
-        service.resources, entry.texture)
-    if !entry.resident || entry.attachment_id != request.attachment_id || !found ||
-        !rl.IsTextureValid(texture) || source.x < 0 || source.y < 0 ||
-        source.x + source.width > int(texture.width) ||
-        source.y + source.height > int(texture.height) {
+    if !entry.resident || entry.attachment_id != request.attachment_id ||
+        !rl.IsTextureValid(entry.texture) || source.x < 0 || source.y < 0 ||
+        source.x + source.width > int(entry.texture.width) ||
+        source.y + source.height > int(entry.texture.height) {
         service.draw_rejection_count += 1
         return false
     }
-    rl.DrawTexturePro(texture,
+    rl.DrawTexturePro(entry.texture,
         {f32(source.x), f32(source.y), f32(source.width), f32(source.height)},
         {request.destination.x, request.destination.y,
             request.destination.width, request.destination.height},
@@ -477,12 +472,11 @@ texture_evict :: proc(user_data: rawptr, id: termattachment.Attachment_Id) -> bo
         return false
     }
     entry := &service.textures[id.slot]
-    if !entry.resident || entry.attachment_id != id {
+    if !entry.resident || entry.attachment_id != id ||
+        !rl.IsTextureValid(entry.texture) {
         return false
     }
-    result := render_raylib.resource_tables_release_texture(
-        service.resources, entry.texture)
-    if result != .Released { return false }
+    rl.UnloadTexture(entry.texture)
     entry^ = {}
     service.eviction_count += 1
     return true
@@ -558,20 +552,6 @@ texture_activate_playback :: proc(
     return true
 }
 
-// Create and transfer one validated attachment texture into native storage.
-texture_candidate_store :: proc(
-    service: ^Service, image: rl.Image) -> (renderresource.Texture_Handle, bool) {
-    candidate := rl.LoadTextureFromImage(image)
-    if !rl.IsTextureValid(candidate) { return {}, false }
-    handle, stored := render_raylib.resource_tables_store_texture(
-        service.resources, candidate)
-    if !stored {
-        rl.UnloadTexture(candidate)
-        return {}, false
-    }
-    return handle, true
-}
-
 //   Publish one immutable RGBA attachment as an exact display-owned texture.
 //
 // Returns:
@@ -591,20 +571,18 @@ texture_publish :: proc(
     admission := termattachment.residency_admit(
         service.store, id, len(payload.bytes), texture_evict, service)
     if admission.outcome != .Admitted { return false }
-    handle, stored := texture_candidate_store(service, image)
-    if !stored {
+    candidate := rl.LoadTextureFromImage(image)
+    if !rl.IsTextureValid(candidate) {
         termattachment.residency_remove(service.store, id)
         return false
     }
     entry := &service.textures[id.slot]
-    if entry.resident {
-        _ = render_raylib.resource_tables_release_texture(
-            service.resources, entry.texture)
+    if entry.resident && rl.IsTextureValid(entry.texture) {
+        rl.UnloadTexture(entry.texture)
     }
-    entry^ = {attachment_id = id, texture = handle, resident = true}
+    entry^ = {attachment_id = id, texture = candidate, resident = true}
     if !texture_activate_playback(service, id) {
-        _ = render_raylib.resource_tables_release_texture(
-            service.resources, entry.texture)
+        rl.UnloadTexture(entry.texture)
         entry^ = {}
         termattachment.residency_remove(service.store, id)
         return false
@@ -620,15 +598,13 @@ playback_upload_texture :: proc(
     if service == nil || id.slot < 0 || id.slot >= len(service.textures) {
         return false
     }
-    entry := &service.textures[id.slot]
-    texture, found := render_raylib.resource_tables_resolve_texture(
-        service.resources, entry.texture)
-    if !entry.resident || entry.attachment_id != id || !found ||
-        !rl.IsTextureValid(texture) || len(pixels) !=
-            int(texture.width) * int(texture.height) * 4 {
+    texture := &service.textures[id.slot]
+    if !texture.resident || texture.attachment_id != id ||
+        !rl.IsTextureValid(texture.texture) || len(pixels) !=
+            int(texture.texture.width) * int(texture.texture.height) * 4 {
         return false
     }
-    rl.UpdateTexture(texture, raw_data(pixels))
+    rl.UpdateTexture(texture.texture, raw_data(pixels))
     return true
 }
 

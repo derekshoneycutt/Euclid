@@ -1,13 +1,14 @@
 package shapes
 
 import shapemodel "model"
-import colormodel "../color/model"
 
 import "core:math"
 
+import rl "vendor:raylib"
+
 // Supply presentation values shared by canonical shape constructors.
 Shape_Style :: struct {
-    color: colormodel.Color_RGBA8,
+    color: rl.Color,
     brush_size: f32,
 }
 

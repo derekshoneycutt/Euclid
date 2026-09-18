@@ -2,8 +2,7 @@ package particlemodel
 
 import rand "core:math/rand"
 
-import colormodel "../../color/model"
-import geometrymodel "../../geometry/model"
+import rl "vendor:raylib"
 
 MAX_LOW_PARTICLES :: 65536
 MAX_PARTICLES :: 2048
@@ -82,11 +81,11 @@ Dust_Tool_Contact_Source :: enum u8 {
 
 // Describe one ordered point push or compound filled-compass sweep.
 Dust_Tool_Contact :: struct {
-    endpoint: geometrymodel.Vector3,
-    previous_segment_first: geometrymodel.Vector3,
-    previous_segment_second: geometrymodel.Vector3,
-    segment_first: geometrymodel.Vector3,
-    segment_second: geometrymodel.Vector3,
+    endpoint: rl.Vector3,
+    previous_segment_first: rl.Vector3,
+    previous_segment_second: rl.Vector3,
+    segment_first: rl.Vector3,
+    segment_second: rl.Vector3,
     max_spawn_sequence: u64,
     has_sweep: bool,
     source: Dust_Tool_Contact_Source,
@@ -107,7 +106,7 @@ Particle :: struct {
     ember_size_start: f32,
     ember_size_end: f32,
     ember_white_at_birth: f32,
-    color: colormodel.Color_RGBA8,
+    color: rl.Color,
     dust_sprite_index: u8,
     alive: bool,
     lit_frames: i16,
@@ -116,7 +115,7 @@ Particle :: struct {
 // Own the bounded three-layer particle simulation storage and deterministic random state.
 Particle_System :: struct {
     low_particles: #soa[MAX_LOW_PARTICLES]Particle,
-    low_particle_screens: [MAX_LOW_PARTICLES]geometrymodel.Vector2,
+    low_particle_screens: [MAX_LOW_PARTICLES]rl.Vector2,
     particles: #soa[MAX_PARTICLES]Particle,
     high_particles: #soa[MAX_PARTICLES]Particle,
 

@@ -3,7 +3,6 @@ package ui
 import viewmodel "../model"
 
 import "../input"
-import render_raylib "../render/raylib"
 
 import rl "vendor:raylib"
 
@@ -131,11 +130,10 @@ ui_publish_presentation_visibility :: proc(
 ui_presentation_target :: proc(
     mouse: rl.Vector2, regions: viewmodel.Ui_Regions,
     terminal_present: bool) -> viewmodel.Ui_Interaction_Target {
-    if terminal_present && rl.CheckCollisionPointRec(
-        mouse, render_raylib.rectangle(regions.terminal_rect)) {
+    if terminal_present && rl.CheckCollisionPointRec(mouse, regions.terminal_rect) {
         return ui_interaction_target(.Panel_Content, .Terminal)
     }
-    if rl.CheckCollisionPointRec(mouse, render_raylib.rectangle(regions.text_rect)) {
+    if rl.CheckCollisionPointRec(mouse, regions.text_rect) {
         return ui_interaction_target(.Panel_Content, .Presentation)
     }
     return {}
@@ -163,16 +161,15 @@ ui_hover_target :: proc(
         target := ui_presentation_target(mouse, regions, terminal_present)
         if target.kind != .None { return target }
     }
-    if rl.CheckCollisionPointRec(
-        mouse, render_raylib.rectangle(regions.accordion_rect)) {
+    if rl.CheckCollisionPointRec(mouse, regions.accordion_rect) {
         return ui_interaction_target(.Panel_Content, .Accordion)
     }
     control_id, over_control := animation_control_hit_test(
-        render_raylib.rectangle(regions.world_rect), runtime^.gif_capture_phase, mouse)
+        regions.world_rect, runtime^.gif_capture_phase, mouse)
     if over_control {
         return ui_interaction_target(.Control, id = control_id)
     }
-    if rl.CheckCollisionPointRec(mouse, render_raylib.rectangle(regions.world_rect)) {
+    if rl.CheckCollisionPointRec(mouse, regions.world_rect) {
         return ui_interaction_target(.World)
     }
     return {}

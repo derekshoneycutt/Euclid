@@ -9,7 +9,6 @@ import "core:mem"
 import "core:os"
 import "core:strings"
 import "core:testing"
-import rendermetrics "../../render/metrics"
 
 // Verify the serialized failure manifest contains the canonical result.
 artifact_test_expect_failure_manifest :: proc(t: ^testing.T, directory: string) {
@@ -76,24 +75,9 @@ artifact_test_expect_viewport_state :: proc(t: ^testing.T, directory: string) {
     testing.expect(t, strings.contains(text, "\"animation_policy_paused\":true"))
 }
 
-// Verify renderer metrics use the stable ordered vocabulary and aggregate values.
-artifact_test_expect_render_metrics :: proc(t: ^testing.T, directory: string) {
-    data, read_error := os.read_entire_file(
-        fmt.tprintf("%s/render_metrics.json", directory), context.allocator)
-    defer delete(data)
-    text := string(data)
-    testing.expect(t, read_error == nil)
-    testing.expect(t, strings.contains(text, "\"shape_items\""))
-    testing.expect(t, strings.contains(text, "\"completed_frame_count\":2"))
-    testing.expect(t, strings.contains(text, "\"cumulative\":[7,"))
-}
-
 // Build the canonical failed bundle payload used by the artifact integration test.
 artifact_test_failure_bundle_data :: proc(
     events: []trace.Event, arenas: allocation.Arena_Baselines) -> Bundle {
-    metrics: rendermetrics.State
-    metrics.cumulative.values[int(rendermetrics.Metric.Shape_Items)] = 7
-    metrics.completed_frame_count = 2
     return {
         manifest = {.Failed, .Wait_Timeout, 14, true, 2},
         events = events,
@@ -107,7 +91,6 @@ artifact_test_failure_bundle_data :: proc(
         },
         julia_host = {runtime_generation = 2},
         arena_baselines = arenas,
-        render_metrics = metrics,
     }
 }
 
@@ -137,7 +120,6 @@ artifact_test_failure_bundle :: proc(t: ^testing.T) {
     artifact_test_expect_standalone_trace(t, directory, events[:])
     artifact_test_expect_arena_allocations(t, directory)
     artifact_test_expect_viewport_state(t, directory)
-    artifact_test_expect_render_metrics(t, directory)
     testing.expect(t, !write_bundle("../outside", {}))
     testing.expect(t, !write_trace("../outside.bin", events[:]))
 }

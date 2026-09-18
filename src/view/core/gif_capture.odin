@@ -9,9 +9,6 @@ import viewmodel "../model"
 
 import "../../core"
 import "../../files"
-import capture "../capture"
-import capture_raylib "../capture/raylib"
-import render_raylib "../render/raylib"
 
 import "core:fmt"
 import "core:os"
@@ -19,7 +16,6 @@ import "core:path/filepath"
 import "core:time"
 
 import rl "vendor:raylib"
-import rendermetrics "../../render/metrics"
 
 GIF_CAPTURE_QUALITY :: 12
 
@@ -84,45 +80,44 @@ cancel_gif_capture_with_note :: proc(state: ^core.Euclid_General_State, note: st
     set_gif_status_note(ui_runtime, note)
 }
 
-//   Acquire the screen crop and normalize it to encoder dimensions.
+//   Load the screen capture and normalize it to encoder dimensions.
 //
 // Parameters:
 //   - state: Global app state providing capture config and encoder state.
+//   - downsample: Integer downsample factor, 1 meaning no downsample.
 //
 // Returns:
-//   - completion: Owned frame or classified acquisition failure.
+//   - image: Capture image owned by the caller; unload with rl.UnloadImage.
+//   - ok: true when a usable frame was captured.
 gif_capture_normalized_frame :: proc(
-    state: ^core.Euclid_General_State) -> capture.Completion {
+    state: ^core.Euclid_General_State, downsample: int) -> (rl.Image, bool) {
 
     capture_w := max(1, state^.gif_capture.source_width)
     capture_h := max(1, state^.gif_capture.source_height)
+
+    image := rl.LoadImageFromScreen()
+    if image.data == nil {
+        return rl.Image{}, false
+    }
+
+    crop_w := min(capture_w, int(image.width))
+    crop_h := min(capture_h, int(image.height))
+    rl.ImageCrop(&image, rl.Rectangle{0, 0, f32(crop_w), f32(crop_h)})
+
+    if downsample > 1 {
+        out_w := max(1, int(image.width) / downsample)
+        out_h := max(1, int(image.height) / downsample)
+        rl.ImageResizeNN(&image, i32(out_w), i32(out_h))
+    }
+
     expected_w := state^.gif_capture.encoder.width
     expected_h := state^.gif_capture.encoder.height
-    completion := capture_raylib.acquire({
-        target = .Gif_Frame,
-        identity = {fixed_step = state^.fixed_step},
-        region = {width = capture_w, height = capture_h},
-        output = {width = expected_w, height = expected_h},
-        format = .Rgba8,
-    })
-    if completion.readback_bytes > 0 {
-        rendermetrics.record(&state^.render_metrics, .Readback_Bytes,
-            completion.readback_bytes)
+    if int(image.width) != expected_w || int(image.height) != expected_h {
+        // Keep capture frames aligned with encoder dimensions so pitch-based reads stay valid.
+        rl.ImageResizeNN(&image, i32(expected_w), i32(expected_h))
     }
-    if completion.normalization_bytes > 0 {
-        rendermetrics.record(&state^.render_metrics, .Normalization_Bytes,
-            completion.normalization_bytes)
-    }
-    if completion.status == .Completed {
-        return completion
-    }
-    if completion.failure_reason == .Readback_Failed {
-        rendermetrics.record_failure(&state^.render_metrics, .Readback_Failures)
-    } else {
-        rendermetrics.record_failure(
-            &state^.render_metrics, .Normalization_Failures)
-    }
-    return completion
+
+    return image, true
 }
 
 //   Capture the current view, optionally downsample, and submit it to GIF encoder.
@@ -146,22 +141,20 @@ gif_capture_submit_frame :: proc(
         return true
     }
 
-    completion := gif_capture_normalized_frame(state)
-    if completion.status != .Completed {
+    downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
+    image, frame_ok := gif_capture_normalized_frame(state, downsample)
+    if !frame_ok {
         return false
     }
-    defer capture.frame_release(&completion.frame)
+    defer rl.UnloadImage(image)
 
+    pitch := int(image.width) * 4
     centiseconds := gif_capture_delay_centiseconds(frame_step)
-    if !files.gif_encode_frame(&state^.gif_capture.encoder,
-        raw_data(completion.frame.pixels), centiseconds,
-        GIF_CAPTURE_QUALITY, completion.frame.pitch) {
-        rendermetrics.record_failure(
-            &state^.render_metrics, .Encoding_Failures)
+    if !files.gif_encode_frame(&state^.gif_capture.encoder, image.data, centiseconds,
+        GIF_CAPTURE_QUALITY, pitch) {
         return false
     }
 
-    rendermetrics.record(&state^.render_metrics, .Encoded_Frames)
     ui_runtime.gif_captured_frames += 1
     return true
 }
@@ -384,7 +377,7 @@ gif_capture_begin_session :: proc(
     state: ^core.Euclid_General_State) -> bool {
     ui_runtime := &state.ui_runtime
     capture_w, capture_h := gif_capture_source_dimensions(
-        render_raylib.rectangle(ui_runtime.ui_regions.world_rect))
+        ui_runtime.ui_regions.world_rect)
     downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
     out_w := max(1, capture_w / downsample)
     out_h := max(1, capture_h / downsample)

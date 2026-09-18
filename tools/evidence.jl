@@ -8,11 +8,10 @@ const TRACE_MAGIC = UInt8['E', 'U', 'C', 'L']
 const TRACE_HEADER_BYTES = 8
 const TRACE_EVENT_BYTES = 64
 const TRACE_SCHEMA_VERSION = 1
-const ARTIFACT_SCHEMA_VERSION = 3
+const ARTIFACT_SCHEMA_VERSION = 2
 const DEFAULT_QUERY_LIMIT = 100
 const MAX_QUERY_LIMIT = 1_000
-const REQUIRED_ARTIFACTS = (
-    "evidence.bin", "state.json", "allocations.json", "render_metrics.json")
+const REQUIRED_ARTIFACTS = ("evidence.bin", "state.json", "allocations.json")
 const REQUIRED_STATE_FIELDS = (
     :runtime_generation, :animation_generation, :animation_tick_sequence,
     :animation_last_committed_sequence)
@@ -223,29 +222,10 @@ function read_manifest(directory::AbstractString)
         "manifest state artifact must be state.json")
     String(manifest.artifacts.allocations) == "allocations.json" || error(
         "manifest allocations artifact must be allocations.json")
-    String(manifest.artifacts.render_metrics) == "render_metrics.json" || error(
-        "manifest render metrics artifact must be render_metrics.json")
     for filename in REQUIRED_ARTIFACTS
         isfile(joinpath(directory, filename)) || error("missing artifact: $filename")
     end
     return manifest
-end
-
-"""Read and validate one versioned renderer metrics summary."""
-function read_render_metrics(path::AbstractString)
-    metrics = JSON.parse(read(path, String))
-    metrics.schema_version == 1 || error(
-        "unsupported render metrics schema: $(metrics.schema_version)")
-    names = metrics.metric_names
-    isempty(names) && error("render metrics vocabulary must not be empty")
-    for field in (:last_frame, :cumulative, :high_water)
-        length(getproperty(metrics, field)) == length(names) || error(
-            "render metrics snapshot length does not match vocabulary")
-    end
-    for field in (:completed_frame_count, :overflow_count, :failure_count)
-        haskey(metrics, field) || error("render metrics is missing required fields")
-    end
-    return metrics
 end
 
 """Read and validate one canonical trace header."""
@@ -312,14 +292,11 @@ function inspect_bundle(directory::AbstractString)
     trace_path = joinpath(directory, String(manifest.artifacts.trace))
     state_path = joinpath(directory, String(manifest.artifacts.state))
     allocations_path = joinpath(directory, String(manifest.artifacts.allocations))
-    render_metrics_path =
-        joinpath(directory, String(manifest.artifacts.render_metrics))
-    for path in (trace_path, state_path, allocations_path, render_metrics_path)
+    for path in (trace_path, state_path, allocations_path)
         isfile(path) || error("manifest references missing artifact: $(basename(path))")
     end
     state = JSON.parse(read(state_path, String))
     allocations = JSON.parse(read(allocations_path, String))
-    render_metrics = read_render_metrics(render_metrics_path)
     all(haskey(state, field) for field in REQUIRED_STATE_FIELDS) || error(
         "state artifact is missing required fields")
     all(haskey(allocations, field) for field in REQUIRED_ALLOCATION_FIELDS) || error(
@@ -340,7 +317,7 @@ function inspect_bundle(directory::AbstractString)
         "manifest last trace sequence does not match evidence.bin")
     manifest.result == "passed" && !manifest.trace_complete && error(
         "passing bundle has an incomplete trace")
-    return (; manifest, state, allocations, render_metrics, event_count)
+    return (; manifest, state, allocations, event_count)
 end
 
 """Resolve a validated bundle directory or bare canonical binary trace."""

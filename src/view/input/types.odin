@@ -143,33 +143,6 @@ Input_Event :: struct {
     correlation: Input_Event_Correlation,
 }
 
-// Stable destination classes that may own reversible text composition.
-Input_Text_Owner_Kind :: enum u8 {
-    None,
-    Terminal_Editor,
-}
-
-// Generational editor identity preventing preedit from crossing focus lifetimes.
-Input_Text_Owner :: struct {
-    kind: Input_Text_Owner_Kind,
-    id: u64,
-    generation: u64,
-}
-
-// Half-open UTF-8 byte range selected within one preedit snapshot.
-Input_Composition_Selection :: struct {
-    start: int,
-    end: int,
-}
-
-// Borrowed reversible text state routed with one input frame.
-Input_Composition :: struct {
-    owner: Input_Text_Owner,
-    preedit: string,
-    selection: Input_Composition_Selection,
-    active: bool,
-}
-
 // Device-independent screen-space mouse coordinates.
 Input_Position :: struct {
     x: f32,
@@ -224,9 +197,6 @@ Input_Terminal_Position :: struct {
 Input_Frame :: struct {
     // Ordered physical-key and text events retained by Input_Runtime until the next poll.
     events: []Input_Event,
-
-    // Reversible text owned by the focused editor. This never mutates destination text.
-    composition: Input_Composition,
 
     // Current window focus and whether it changed from the preceding known sample.
     window_focused: bool,

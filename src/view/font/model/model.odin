@@ -4,7 +4,6 @@ import "base:runtime"
 import vmem "core:mem/virtual"
 
 import "../../../taskpool"
-import renderresource "../../render/resource"
 
 import rl "vendor:raylib"
 
@@ -225,14 +224,13 @@ Font_Glyph_Record :: struct {
 }
 
 Font_Glyph_Page :: struct {
-    texture: renderresource.Texture_Handle,
+    texture: rl.Texture2D,
     generation: u64,
     glyph_count: i32,
 }
 
 Font_Cache_Entry :: struct {
-    font: renderresource.Font_Handle,
-    base_size: i32,
+    font: rl.Font,
     shaping: Font_Shaping_Resource,
     raster_ascent: f32,
     generation: u64,
@@ -362,7 +360,6 @@ Font_Source_Path :: struct {
 }
 
 Font_Cache :: struct {
-    render_resources: rawptr,
     entries: [FONT_KEY_COUNT]Font_Cache_Entry,
     source_paths: [FONT_KEY_COUNT]Font_Source_Path,
     preparation: Font_Prepare_Operation,

@@ -1,13 +1,12 @@
 package viewmodel
 
-import colormodel "../../color/model"
-import geometrymodel "../../geometry/model"
 import dynviewmodel "../../dynview/model"
 import gifmodel "../../files/gif_model"
 import particlemodel "../../particles/model"
-import renderresource "../render/resource"
 
 import "core:encoding/uuid"
+
+import rl "vendor:raylib"
 
 TOOL_LENGTH :: 0.35
 MAX_TOOL_BRUSH_OCCLUDERS :: 2
@@ -19,7 +18,7 @@ Iso_Scale :: struct {
     y_offset: f32,
     half_scale: f32,
     quarter_scale: f32,
-    main_light_dir: geometrymodel.Vector3,
+    main_light_dir: rl.Vector3,
     use_directional_shadow: bool,
     screenshake_trauma: f32,
     screenshake_elapsed: f32,
@@ -28,9 +27,9 @@ Iso_Scale :: struct {
     screenshake_phase: f32,
 }
 
-// Tool_Render_State owns tool shader policy and one typed display resource identity.
+// Tool_Render_State owns display-thread shader handles for the geometry tools.
 Tool_Render_State :: struct {
-    shader: renderresource.Shader_Handle,
+    shader: rl.Shader,
     ready: bool,
     loc_light_dir: i32,
     loc_ambient: i32,
@@ -66,17 +65,17 @@ Dust_Instance :: struct {
     sprite_index: f32,
 }
 
-// Dust_Render_State owns particle rendering policy, typed identities, and CPU staging.
+// Dust_Render_State owns display-thread particle rendering resources and staging.
 Dust_Render_State :: struct {
-    texture: renderresource.Texture_Handle,
+    texture: rl.Texture2D,
     ready: bool,
     instancing_attempted: bool,
     instancing_ready: bool,
-    shader: renderresource.Shader_Handle,
-    vertex_array: renderresource.Vertex_Array_Handle,
-    quad_positions_buffer: renderresource.Buffer_Handle,
-    quad_texcoords_buffer: renderresource.Buffer_Handle,
-    instance_buffer: renderresource.Buffer_Handle,
+    shader: rl.Shader,
+    vao_id: u32,
+    quad_positions_vbo_id: u32,
+    quad_texcoords_vbo_id: u32,
+    instance_vbo_id: u32,
     viewport_location: i32,
     texture_location: i32,
     instances: [particlemodel.MAX_LOW_PARTICLES]Dust_Instance,
@@ -140,10 +139,10 @@ Ui_Accordion_Section :: enum u8 {
 }
 
 Ui_Regions :: struct {
-    world_rect: geometrymodel.Rectangle,
-    accordion_rect: geometrymodel.Rectangle,
-    text_rect: geometrymodel.Rectangle,
-    terminal_rect: geometrymodel.Rectangle,
+    world_rect: rl.Rectangle,
+    accordion_rect: rl.Rectangle,
+    text_rect: rl.Rectangle,
+    terminal_rect: rl.Rectangle,
 }
 
 Ui_Press_Owner_Kind :: enum {
@@ -278,11 +277,11 @@ Euclid_Ui_Runtime_State :: struct {
 
 // Euclid_Drawing_Surface defines the display-owned world drawing plane.
 Euclid_Drawing_Surface :: struct {
-    zeros: geometrymodel.Vector3,
-    right_up: geometrymodel.Vector3,
-    left_down: geometrymodel.Vector3,
-    right_down: geometrymodel.Vector3,
-    color: colormodel.Color_RGBA8,
-    edge_color: colormodel.Color_RGBA8,
+    zeros: rl.Vector3,
+    right_up: rl.Vector3,
+    left_down: rl.Vector3,
+    right_down: rl.Vector3,
+    color: rl.Color,
+    edge_color: rl.Color,
     edge_size: f32,
 }

@@ -105,7 +105,7 @@ draw_gif_status_text :: proc(
         key = .Regular,
         text = text,
         position = {ctx.panel.x + SETTINGS_PANEL_INSET, row_y},
-        color = ui_raylib_color(UI_TEXT_COLOR),
+        color = UI_TEXT_COLOR,
         font = view_core.ui_text_font(ctx.font),
     })
 }

@@ -91,18 +91,18 @@ text_button_colors :: proc(
     hovered: bool,
     pressed: bool) -> Text_Button_Colors {
 
-    bg := ui_raylib_color(BACKGROUND_COLOR)
-    fg := ui_raylib_color(UI_TEXT_COLOR)
-    border := ui_raylib_color(UI_BORDER_COLOR)
+    bg := BACKGROUND_COLOR
+    fg := UI_TEXT_COLOR
+    border := UI_BORDER_COLOR
     if !params.enabled {
         bg = rl.Color{48, 48, 48, 255}
         fg = rl.Color{110, 110, 110, 255}
         border = rl.Color{78, 78, 78, 255}
     } else if pressed {
-        bg = ui_raylib_color(UI_BORDER_COLOR)
-        fg = ui_raylib_color(BACKGROUND_COLOR)
+        bg = UI_BORDER_COLOR
+        fg = BACKGROUND_COLOR
     } else if hovered && params.interaction_enabled {
-        bg = ui_raylib_color(UI_COMPONENT_BACKGROUND_COLOR)
+        bg = UI_COMPONENT_BACKGROUND_COLOR
     }
 
     if params.has_font_color_override {

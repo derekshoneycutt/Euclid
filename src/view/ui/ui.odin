@@ -1,7 +1,5 @@
 package ui
 
-import colormodel "../../color/model"
-import geometrymodel "../../geometry/model"
 import viewmodel "../model"
 
 // Shared UI constants and basic drawing helpers for panel modules.
@@ -9,7 +7,6 @@ import viewmodel "../model"
 import view_core "../core"
 import view_font "../font"
 import "../input"
-import render_raylib "../render/raylib"
 import "../../dynview"
 import dyncompile "../../dynview/compile"
 import dyncore "../../dynview/core"
@@ -141,17 +138,6 @@ Ui_Control_Preparation :: struct {
 // Post-layout interaction results prepared after Dynview compilation completes.
 Ui_Layout_Interaction_Preparation :: struct {
     presentation: Presentation_Preparation,
-}
-
-// ui_raylib_color converts application theme values at immediate draw boundaries.
-ui_raylib_color :: #force_inline proc(value: colormodel.Color_RGBA8) -> rl.Color {
-    return render_raylib.color(value)
-}
-
-// ui_raylib_rectangle converts application regions at immediate UI boundaries.
-ui_raylib_rectangle :: #force_inline proc(
-    value: geometrymodel.Rectangle) -> rl.Rectangle {
-    return render_raylib.rectangle(value)
 }
 
 // Convert one portable screen position for immediate use by Raylib UI APIs.
@@ -288,7 +274,7 @@ prepare_ui_geometry :: proc(
     view_core.fit_iso_scale_to_viewport(
         state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
-    text_panel := view_text_content_panel(render_raylib.rectangle(regions.text_rect))
+    text_panel := view_text_content_panel(regions.text_rect)
     dynview.track_panel(&state^.dynview, text_panel)
     dynview.track_font(
         &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
@@ -350,7 +336,7 @@ prepare_ui_controls :: proc(
     result.animation_controls = prepare_animation_controls(state, animation_frame)
     accordion_panel := state^.ui_runtime.ui_regions.accordion_rect
     result.accordion = prepare_accordion_view(
-        state, ui_raylib_rectangle(accordion_panel), routed_frame)
+        state, accordion_panel, routed_frame)
     content_panel := result.accordion.layout.content
     switch state^.ui_runtime.active_accordion_section {
     case .View:
@@ -387,8 +373,7 @@ prepare_ui_layout_interaction :: proc(
             .Wheel} : input.Input_Pointer_Fields{.Screen_Position})
     if !routed.wheel { presentation_frame.mouse_wheel_delta = 0 }
     return {presentation = prepare_presentation_interaction(state,
-        render_raylib.rectangle(state^.ui_runtime.ui_regions.text_rect),
-        presentation_frame,
+        state^.ui_runtime.ui_regions.text_rect, presentation_frame,
         routed.keyboard)}
 }
 
@@ -406,8 +391,8 @@ draw_landscape_panels :: proc(
         regions.world_rect.width,
         f32(state^.ui_runtime.window.height) - regions.world_rect.height,
     }
-    rl.DrawRectangleRec(bottom_bar, ui_raylib_color(UI_BACK_COLOR))
-    draw_view_text_panel(state, ui_raylib_rectangle(regions.text_rect), terminal_frame,
+    rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
+    draw_view_text_panel(state, regions.text_rect, terminal_frame,
         layout_interaction.presentation)
 
     right_bar := rl.Rectangle{
@@ -416,8 +401,8 @@ draw_landscape_panels :: proc(
         f32(state^.ui_runtime.window.width) - regions.world_rect.width,
         f32(state^.ui_runtime.window.height),
     }
-    rl.DrawRectangleRec(right_bar, ui_raylib_color(UI_BACK_COLOR))
-    draw_accordion_view(state, ui_raylib_rectangle(regions.accordion_rect), input_frame, {
+    rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
+    draw_accordion_view(state, regions.accordion_rect, input_frame, {
         controls, terminal_frame, layout_interaction.presentation})
 }
 
@@ -435,8 +420,8 @@ draw_portrait_panels :: proc(
         f32(state^.ui_runtime.window.width),
         f32(state^.ui_runtime.window.height) - regions.world_rect.height,
     }
-    rl.DrawRectangleRec(lower_bar, ui_raylib_color(UI_BACK_COLOR))
-    draw_accordion_view(state, ui_raylib_rectangle(regions.accordion_rect), input_frame, {
+    rl.DrawRectangleRec(lower_bar, UI_BACK_COLOR)
+    draw_accordion_view(state, regions.accordion_rect, input_frame, {
         controls, terminal_frame, layout_interaction.presentation})
 }
 

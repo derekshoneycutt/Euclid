@@ -6,7 +6,6 @@ import shapemodel "../shapes/model"
 
 import view_core "core"
 import viewmodel "model"
-import rendermetrics "../render/metrics"
 import "ui"
 import "../core"
 import "../dynview"
@@ -499,7 +498,6 @@ when core.SCENARIOS_ENABLED {
             julia_host = observe.julia_host(session.julia_service),
             allocations = observe.allocation(session.state.evidence_allocations),
             arena_baselines = session.state.evidence_arena_baselines,
-            render_metrics = session.state.render_metrics,
         })
     }
 }
@@ -518,7 +516,6 @@ write_session_evidence :: proc(session: ^evidence_session.Session) -> bool {
 finish_runtime_evidence :: proc(
     session: Euclid_Runtime_Session, scenario_runtime: ^Scenario_Runtime,
     artifact_output: string) -> (artifact_succeeded, evidence_exit_failed: bool) {
-    log_render_metrics(session.state)
     _ = evidence_session.session_record(
         &session.state^.evidence_session, &session.state^.evidence_ring, {
             lane = .Lifecycle,
@@ -540,21 +537,6 @@ finish_runtime_evidence :: proc(
     evidence_exit_failed = evidence_session.session_should_fail_process(
         &session.state^.evidence_session)
     return
-}
-
-// Emit one compact renderer summary after the final displayed frame is complete.
-log_render_metrics :: proc(state: ^Euclid_General_State) {
-    metrics := &state^.render_metrics
-    log.infof(
-        "render metrics frames=%d primitives=%d draws=%d batches=%d " +
-        "upload_bytes=%d readback_bytes=%d failures=%d overflows=%d",
-        metrics^.completed_frame_count,
-        rendermetrics.value(&metrics^.cumulative, .Primitive_Submissions),
-        rendermetrics.value(&metrics^.cumulative, .Draw_Calls),
-        rendermetrics.value(&metrics^.cumulative, .Rlgl_Batches),
-        rendermetrics.value(&metrics^.cumulative, .Upload_Bytes),
-        rendermetrics.value(&metrics^.cumulative, .Readback_Bytes),
-        metrics^.failure_count, metrics^.overflow_count)
 }
 
 //   Shut down one runtime session in reverse ownership order.

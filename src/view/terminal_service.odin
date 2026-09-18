@@ -1,7 +1,5 @@
 package view
 
-import render_raylib "render/raylib"
-
 import bridgemodel "../bridge/model"
 
 import "../core"
@@ -304,18 +302,13 @@ terminal_service_send_completion :: proc(
 // Add UI-owned effective focus to a frame copy routed to Terminal consumers.
 terminal_service_routed_frame :: proc(
     state: ^core.Euclid_General_State,
-    input_runtime: ^input.Input_Runtime,
     frame: input.Input_Frame) -> input.Input_Frame {
     result := frame
     interaction := state^.ui_runtime.interaction_frame
     result.terminal_focus_known = true
     result.terminal_focused = interaction.terminal_focused
     result.terminal_focus_changed = interaction.terminal_focus_changed
-    return input.input_runtime_route_text_owner(input_runtime, result, {
-        kind = .Terminal_Editor,
-        id = 1,
-        generation = state^.terminal.animation_generation,
-    }, result.terminal_focused)
+    return result
 }
 
 // Continue non-visual Terminal owners while its selected View is hidden.
@@ -329,10 +322,9 @@ terminal_service_update_hidden :: proc(
 terminal_service_update_visible :: proc(
     state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
     frame: input.Input_Frame) -> ui.Terminal_Prepared_Frame {
-    bounds := ui.terminal_content_panel(
-        render_raylib.rectangle(state^.ui_runtime.ui_regions.text_rect))
+    bounds := ui.terminal_content_panel(state^.ui_runtime.ui_regions.text_rect)
     terminal_font := font.cache_resolve(&state^.font_cache, .Regular)
-    terminal_frame := terminal_service_routed_frame(state, input_runtime, frame)
+    terminal_frame := terminal_service_routed_frame(state, frame)
     prepared := ui.terminal_prepare_frame(
         state, terminal_frame, terminal_font, bounds,
         input_runtime != nil && card(input_runtime^.mouse_captured) > 0)
@@ -358,7 +350,6 @@ terminal_service_update :: proc(
     state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
     frame: input.Input_Frame) -> ui.Terminal_Prepared_Frame {
     if !terminal_animation_selected(state) {
-        _ = input.input_runtime_set_text_owner(input_runtime, {})
         return {}
     }
     if !state^.terminal.initialized && !terminal_service_enter(state) {
@@ -366,12 +357,10 @@ terminal_service_update :: proc(
     }
     terminal_service_request_session(state)
     if !ui.ui_presentation_is_visible(&state^.ui_runtime) {
-        _ = input.input_runtime_set_text_owner(input_runtime, {})
         terminal_service_update_hidden(state)
         return {}
     }
     if !state^.terminal.julia_session_ready {
-        _ = input.input_runtime_set_text_owner(input_runtime, {})
         return {}
     }
     return terminal_service_update_visible(state, input_runtime, frame)

@@ -1,6 +1,5 @@
 package terminalview
 
-import colormodel "../../color/model"
 import viewterminalmodel "model"
 
 import termgrid "../../terminal/grid"
@@ -12,7 +11,6 @@ import termpalette "../../terminal/palette"
 import termshellintegration "../../terminal/shell_integration"
 import "../input"
 import "../font"
-import render_raylib "../render/raylib"
 
 import "core:fmt"
 import "core:math"
@@ -220,7 +218,7 @@ terminal_draw_output_cursor_glyph :: proc(
         position = position,
         column_width = terminal_column_width(regular),
         key = key,
-        color = render_raylib.color(theme.cursor_foreground),
+        color = theme.cursor_foreground,
     })
 }
 
@@ -255,12 +253,12 @@ terminal_draw_output_cursor :: proc(
         rl.DrawRectangleLinesEx(rl.Rectangle{
             position.x, position.y,
             f32(presentation.width) * column_width, TERMINAL_FONT_SIZE,
-        }, 1, render_raylib.color(cursor_color))
+        }, 1, cursor_color)
         return
     }
     rl.DrawRectangleV(position, rl.Vector2{
         f32(presentation.width) * column_width, TERMINAL_FONT_SIZE},
-        render_raylib.color(cursor_color))
+        cursor_color)
     terminal_draw_output_cursor_glyph(
         term, font_resolver, presentation, position, layout.theme)
 }
@@ -307,9 +305,9 @@ terminal_draw_output_rows :: proc(
 }
 
 // Resolve a command completion status to one restrained gutter-mark color.
-terminal_command_status_color :: proc(status: i32) -> colormodel.Color_RGBA8 {
-    return colormodel.Color_RGBA8{0x38, 0x98, 0x26, 0xFF} if status == 0 else
-        colormodel.Color_RGBA8{0xCB, 0x3C, 0x33, 0xFF}
+terminal_command_status_color :: proc(status: i32) -> rl.Color {
+    return rl.Color{0x38, 0x98, 0x26, 0xFF} if status == 0 else
+        rl.Color{0xCB, 0x3C, 0x33, 0xFF}
 }
 
 // Draw retained command completion outcomes without inserting terminal text.
@@ -328,7 +326,7 @@ terminal_draw_command_statuses :: proc(
         rl.DrawRectangleRec(rl.Rectangle{
             origin.x, origin.y + f32(position.line) * layout.line_height + 3,
             2, TERMINAL_FONT_SIZE - 6,
-        }, render_raylib.color(terminal_command_status_color(block.status)))
+        }, terminal_command_status_color(block.status))
     }
 }
 
@@ -344,11 +342,10 @@ terminal_draw_command_search :: proc(
     background := theme.cursor_foreground
     rl.DrawRectangleRec(rl.Rectangle{
         bounds.x, bounds.y + bounds.height - height, bounds.width, height,
-    }, render_raylib.color(background))
+    }, background)
     text := fmt.tprintf("find: %s", query)
     _ = terminal_draw_shaped_prompt_span(
-        resolver, .Regular, text, position,
-        render_raylib.color(theme.default_foreground))
+        resolver, .Regular, text, position, theme.default_foreground)
 }
 
 //   Find the combined presented line for one stable logical-row identity.
@@ -551,8 +548,7 @@ terminal_commit_scroll :: proc(
 // Draw terminal foreground overlays after output rows and rasters.
 terminal_draw_foreground :: proc(
     term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
-    layout: Terminal_Draw_Layout, origin: rl.Vector2,
-    composition: input.Input_Composition) {
+    layout: Terminal_Draw_Layout, origin: rl.Vector2) {
     terminal_draw_output_cursor(
         term, font_resolver,
         terminal_output_cursor_presentation(term, layout.terminal_focused),
@@ -562,11 +558,6 @@ terminal_draw_foreground :: proc(
             term, font_resolver, layout,
             rl.Vector2{origin.x,
                 origin.y + f32(layout.line_count) * layout.line_height})
-        terminal_draw_composition(
-            term, font_resolver, layout,
-            rl.Vector2{origin.x,
-                origin.y + f32(layout.line_count) * layout.line_height},
-            composition)
     }
     if term.view_selection_active {
         terminal_draw_virtual_selection_rows(
@@ -596,75 +587,7 @@ terminal_draw_content :: proc(
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, draw.origin, .In_Front_Of_Text)
     terminal_draw_foreground(
-        term, font_resolver, draw.layout, draw.origin, draw.frame.composition)
-}
-
-// Resolve reversible composition onto the physical prompt row containing the cursor.
-terminal_composition_draw :: proc(
-    term: ^viewterminalmodel.Terminal_State, font_face: rl.Font,
-    prompt_position: rl.Vector2, line_height: f32,
-    composition: input.Input_Composition) -> Terminal_Composition_Draw {
-    if !composition.active || len(composition.preedit) == 0 { return {} }
-    text := termhist.termhist_current_text(term.history)
-    cursor := termhist.termhist_cursor(term.history)
-    line, line_start := 0, 0
-    for byte, index in text[:cursor] {
-        if byte == '\n' { line, line_start = line + 1, index + 1 }
-    }
-    line_text := terminal_live_input_line_text(text, line)
-    local_cursor := cursor - line_start
-    suffix := line_text[local_cursor:]
-    prefix := TERMINAL_CONTINUATION_PROMPT
-    if line == 0 { prefix = terminal_primary_prompt_prefix(term) }
-    position := rl.Vector2{
-        prompt_position.x + terminal_text_column_width(font_face, prefix) +
-            terminal_position_x(font_face, line_text, local_cursor),
-        prompt_position.y + f32(line) * line_height,
-    }
-    preedit_width := terminal_text_column_width(font_face, composition.preedit)
-    suffix_width := terminal_text_column_width(font_face, suffix)
-    return {position, composition.preedit, suffix,
-        preedit_width, suffix_width, true}
-}
-
-// Draw the selected byte range within one already validated preedit snapshot.
-terminal_draw_composition_selection :: proc(
-    font_face: rl.Font, draw: Terminal_Composition_Draw,
-    selection: input.Input_Composition_Selection) {
-    selected_x := terminal_position_x(
-        font_face, draw.preedit, selection.start)
-    selected_width := terminal_position_x(
-        font_face, draw.preedit, selection.end) - selected_x
-    if selected_width <= 0 { return }
-    rl.DrawRectangleV({draw.position.x + selected_x, draw.position.y},
-        {selected_width, TERMINAL_FONT_SIZE},
-        render_raylib.color(TERMINAL_PREEDIT_SELECTION_COLOR))
-}
-
-// Draw reversible preedit at the live cursor without mutating committed editor text.
-terminal_draw_composition :: proc(
-    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
-    layout: Terminal_Draw_Layout, prompt_position: rl.Vector2,
-    composition: input.Input_Composition) {
-    font_face := terminal_font_resolve(resolver, .Regular)
-    draw := terminal_composition_draw(
-        term, font_face, prompt_position, layout.line_height, composition)
-    if !draw.valid { return }
-    rl.DrawRectangleV(draw.position,
-        {draw.preedit_width + draw.suffix_width, TERMINAL_FONT_SIZE},
-        render_raylib.color(layout.theme.cursor_foreground))
-    terminal_draw_composition_selection(font_face, draw, composition.selection)
-    _ = terminal_draw_shaped_prompt_span(
-        resolver, .Regular, draw.preedit, draw.position,
-        render_raylib.color(TERMINAL_PREEDIT_COLOR))
-    rl.DrawLineEx({draw.position.x, draw.position.y + TERMINAL_FONT_SIZE},
-        {draw.position.x + draw.preedit_width,
-            draw.position.y + TERMINAL_FONT_SIZE}, 1,
-        render_raylib.color(TERMINAL_PREEDIT_COLOR))
-    _ = terminal_draw_shaped_prompt_span(
-        resolver, .Regular, draw.suffix,
-        {draw.position.x + draw.preedit_width, draw.position.y},
-        render_raylib.color(layout.theme.default_foreground))
+        term, font_resolver, draw.layout, draw.origin)
 }
 
 // Draw terminal overlays after the owning UI container closes its scissor region.
@@ -899,8 +822,7 @@ terminal_draw_single_line_prompt :: proc(
         resolver = request.resolver,
         current_text = request.current_text,
         prompt_prefix = request.prompt_prefix,
-        prompt_color = render_raylib.color(
-            terminal_prompt_draw_color(request.term.input_mode)),
+        prompt_color = terminal_prompt_draw_color(request.term.input_mode),
         position = request.position,
         exclusions = terminal_prompt_shape_exclusions(
             request.current_text, request.prompt_prefix, cursor, selection),
@@ -1027,7 +949,7 @@ terminal_draw_prompt_lines :: proc(
             term = term,
             resolver = font_resolver,
             text = text,
-            prompt_color = render_raylib.color(prompt_color),
+            prompt_color = prompt_color,
             position = line_position,
             line = line,
             line_start = line_start,
@@ -1118,11 +1040,11 @@ terminal_draw_completion_preview :: proc(
     if end > start {
         rl.DrawRectangleV(
             preview_position, rl.Vector2{end_x - start_x, TERMINAL_FONT_SIZE},
-            render_raylib.color(theme.cursor_foreground))
+            theme.cursor_foreground)
     }
     _ = terminal_draw_shaped_prompt_span(
         resolver, .Regular, term.completion_preview_insertion,
-        preview_position, render_raylib.color(TERMINAL_COMPLETION_PREVIEW_COLOR))
+        preview_position, TERMINAL_COMPLETION_PREVIEW_COLOR)
 }
 
 //   Draw the live input line's base text: a bold prompt (green for `julia>`,
@@ -1151,7 +1073,7 @@ terminal_draw_prompt_base :: proc(request: Terminal_Prompt_Draw) {
         position = {
             request.position.x + prompt_width, request.position.y},
         exclusions = request.exclusions,
-        color = render_raylib.color(request.theme.default_foreground),
+        color = request.theme.default_foreground,
     })
 }
 
@@ -1257,9 +1179,9 @@ terminal_draw_output_cell :: proc(
         position = glyph_position,
         column_width = draw.column_width,
         key = key,
-        color = render_raylib.color(terminal_resolve_foreground(
+        color = terminal_resolve_foreground(
             draw.palette, cell.style.foreground,
-            draw.theme.default_foreground)),
+            draw.theme.default_foreground),
     })
     if !shaped && cell.grapheme_len == 1 && cell.grapheme[0] < 0x80 {
         terminal_draw_cell(draw, resolved_font, cell, glyph_position)
@@ -1278,7 +1200,7 @@ terminal_draw_output_underlines :: proc(draw: Terminal_Shaped_Output_Context) {
         end_x := start_x + f32(max(int(cell.width), 1))*draw.column_width
         rl.DrawLineEx(
             rl.Vector2{start_x, underline_y},
-            rl.Vector2{end_x, underline_y}, 1, render_raylib.color(color))
+            rl.Vector2{end_x, underline_y}, 1, color)
     }
 }
 
@@ -1300,7 +1222,7 @@ terminal_draw_output_shaped_chunk :: proc(
         position = ctx.position,
         column_width = ctx.column_width,
         key = key,
-        color = render_raylib.color(color),
+        color = color,
     })
     return chunk_end, drawn
 }
@@ -1379,7 +1301,7 @@ terminal_draw_link_hover :: proc(
             rl.Vector2{draw.position.x +
                 f32(min(column, limit)) * draw.column_width,
                 underline_y},
-            1, render_raylib.color(color))
+            1, color)
     }
 }
 
@@ -1410,7 +1332,7 @@ terminal_draw_output_backgrounds :: proc(
         }
         rl.DrawRectangleV(cell_position,
             rl.Vector2{width, TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING},
-            render_raylib.color(terminal_packed_color(background)))
+            terminal_packed_color(background))
     }
 }
 
@@ -1829,7 +1751,7 @@ terminal_draw_cell :: proc(
         draw.palette, cell.style.foreground,
         draw.theme.default_foreground)
     rl.DrawTextEx(font, cast(cstring)&text[0], position,
-        TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING, render_raylib.color(color))
+        TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING, color)
 }
 
 // Return whether one semantic cell is an ordinary spacing column with no ink.
@@ -1877,8 +1799,8 @@ terminal_font_key_for_cell :: proc(style: termgrid.Cell_Style) -> font.Font_Key 
 //
 // Returns:
 //   - Color with red in bits 31-24 through alpha in bits 7-0.
-terminal_packed_color :: proc(packed: u32) -> colormodel.Color_RGBA8 {
-    return colormodel.Color_RGBA8{
+terminal_packed_color :: proc(packed: u32) -> rl.Color {
+    return rl.Color{
         u8(packed >> 24 & 0xff),
         u8(packed >> 16 & 0xff),
         u8(packed >> 8 & 0xff),
@@ -1890,7 +1812,7 @@ terminal_packed_color :: proc(packed: u32) -> colormodel.Color_RGBA8 {
 terminal_resolve_foreground :: proc(
     palette: ^termpalette.Terminal_Palette_State,
     color: termmodel.Terminal_Color_Reference,
-    default_foreground: colormodel.Color_RGBA8) -> colormodel.Color_RGBA8 {
+    default_foreground: rl.Color) -> rl.Color {
     if termpalette.terminal_color_kind(color) == .Default {
         return default_foreground
     }
@@ -1966,11 +1888,11 @@ terminal_draw_inverted_span :: proc(
     }
 
     rl.DrawRectangleV(span_position, rl.Vector2{rect_width, rect_height},
-        render_raylib.color(draw.theme.selection_background))
+        draw.theme.selection_background)
     if text_start < text_end {
         _ = terminal_draw_shaped_prompt_span(
             draw.resolver, .Regular, span_text, span_position,
-            render_raylib.color(draw.theme.selection_foreground))
+            draw.theme.selection_foreground)
     }
 }
 
@@ -2010,21 +1932,19 @@ terminal_draw_cursor :: proc(
         rl.DrawRectangleLinesEx(rl.Rectangle{
             cursor_screen_position.x, cursor_screen_position.y,
             glyph_width, TERMINAL_FONT_SIZE,
-        }, 1, render_raylib.color(rect_color))
+        }, 1, rect_color)
         if !on_selection {
             _ = terminal_draw_shaped_prompt_span(
                 draw.resolver, .Regular, glyph_text,
-                cursor_screen_position,
-                render_raylib.color(draw.theme.default_foreground))
+                cursor_screen_position, draw.theme.default_foreground)
         }
         return
     }
 
     rl.DrawRectangleV(cursor_screen_position,
-        rl.Vector2{glyph_width, TERMINAL_FONT_SIZE}, render_raylib.color(rect_color))
+        rl.Vector2{glyph_width, TERMINAL_FONT_SIZE}, rect_color)
     _ = terminal_draw_shaped_prompt_span(
-        draw.resolver, .Regular, glyph_text, cursor_screen_position,
-        render_raylib.color(glyph_color))
+        draw.resolver, .Regular, glyph_text, cursor_screen_position, glyph_color)
 }
 
 //   Return the byte offset just past the UTF-8 codepoint at offset, if any.

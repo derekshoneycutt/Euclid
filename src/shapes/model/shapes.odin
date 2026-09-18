@@ -2,10 +2,9 @@ package shapemodel
 
 import "core:unicode/utf8"
 import "core:math"
-import colormodel "../../color/model"
-import geometrymodel "../../geometry/model"
+import rl "vendor:raylib"
 
-Vector3 :: geometrymodel.Vector3
+Vector3 :: rl.Vector3
 
 MAX_SHAPE_ENTITIES :: MAX_SHAPESPOINTS
 MAX_SHAPE_VERTEX_REFERENCES :: MAX_SHAPE_ENTITIES
@@ -154,8 +153,8 @@ Shape_Cycloid_Tool :: struct {
 
 // Hold canonical presentation state for one renderable entity.
 Shape_Render_Style :: struct {
-    color: colormodel.Color_RGBA8,
-    active_color: Maybe(colormodel.Color_RGBA8),
+    color: rl.Color,
+    active_color: Maybe(rl.Color),
     brush_size: f32,
     visible: bool,
 }
