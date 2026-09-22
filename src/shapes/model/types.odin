@@ -1,7 +1,5 @@
 package shapemodel
 
-import rl "vendor:raylib"
-
 MAX_SHAPESPOINTS :: 256
 MAX_SHAPESCONSTRAINTS :: 256
 MAX_DRAW_CACHE_POLYGON_VERTICES :: MAX_SHAPESPOINTS
@@ -112,8 +110,8 @@ Shapes_Draw_Base :: struct {
     kind: Shapes_Point_Type,
     source_index: int,
     brush_size: f32,
-    color: rl.Color,
-    active_color: rl.Color,
+    color: Color,
+    active_color: Color,
     has_active_color: bool,
     active_child: int,
 }

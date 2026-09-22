@@ -47,27 +47,27 @@ layout_clamp_split :: #force_inline proc(
 }
 
 //   Build the non-negative Terminal content rectangle inside the text panel.
-layout_terminal_rect :: proc(text_rect: rl.Rectangle) -> rl.Rectangle {
-    return clamp_non_negative_rect({
+layout_terminal_rect :: proc(text_rect: viewmodel.Rectangle) -> viewmodel.Rectangle {
+    return viewmodel.Rectangle(clamp_non_negative_rect({
         text_rect.x + 6,
         text_rect.y + 6,
         text_rect.width - 12,
         text_rect.height - 12,
-    })
+    }))
 }
 
 //   Fill landscape-specific world, accordion, and presentation rectangles.
 layout_landscape_regions :: proc(
     regions: ^viewmodel.Ui_Regions, width, height, split_x, split_y: f32) {
     regions^.world_rect = {0, 0, split_x, split_y}
-    regions^.accordion_rect = clamp_non_negative_rect({
+    regions^.accordion_rect = viewmodel.Rectangle(clamp_non_negative_rect({
         split_x + TREE_PANEL_PADDING, TREE_PANEL_PADDING,
         width - split_x - TREE_PANEL_PADDING * 2,
-        height - TREE_PANEL_PADDING * 2})
-    regions^.text_rect = clamp_non_negative_rect({
+        height - TREE_PANEL_PADDING * 2}))
+    regions^.text_rect = viewmodel.Rectangle(clamp_non_negative_rect({
         TREE_PANEL_PADDING, split_y + TREE_PANEL_PADDING,
         split_x - TREE_PANEL_PADDING * 2,
-        height - split_y - TREE_PANEL_PADDING * 2})
+        height - split_y - TREE_PANEL_PADDING * 2}))
     regions^.terminal_rect = layout_terminal_rect(regions^.text_rect)
 }
 
@@ -88,17 +88,17 @@ compute_ui_regions :: proc(
             WORLD_MIN_WIDTH, RIGHT_PANEL_MIN_WIDTH)
         layout_landscape_regions(&regions, width, height, split_x, split_y)
     case .Portrait:
-        regions.world_rect = rl.Rectangle{0, 0, width, split_y}
-        regions.accordion_rect = clamp_non_negative_rect({
+        regions.world_rect = viewmodel.Rectangle{0, 0, width, split_y}
+        regions.accordion_rect = viewmodel.Rectangle(clamp_non_negative_rect({
             TREE_PANEL_PADDING,
             split_y + TREE_PANEL_PADDING,
             width - TREE_PANEL_PADDING * 2,
             height - split_y - TREE_PANEL_PADDING * 2,
-        })
+        }))
         sections := accordion_portrait_sections("")
         view_layout := accordion_layout(
-            regions.accordion_rect, sections, .View)
-        regions.text_rect = view_layout.content
+            rl.Rectangle(regions.accordion_rect), sections, .View)
+        regions.text_rect = viewmodel.Rectangle(view_layout.content)
         regions.terminal_rect = layout_terminal_rect(regions.text_rect)
     }
 
@@ -107,13 +107,13 @@ compute_ui_regions :: proc(
 
 //   Validate region geometry before draw dispatch.
 //   Report whether one rectangle has non-negative dimensions.
-ui_rect_valid :: #force_inline proc(rect: rl.Rectangle) -> bool {
+ui_rect_valid :: #force_inline proc(rect: viewmodel.Rectangle) -> bool {
     return rect.width >= 0 && rect.height >= 0
 }
 
 //   Validate that every UI region has non-negative dimensions.
 validate_ui_regions :: proc(regions: viewmodel.Ui_Regions) -> bool {
-    rects := [?]rl.Rectangle{
+    rects := [?]viewmodel.Rectangle{
         regions.world_rect,
         regions.accordion_rect,
         regions.text_rect,

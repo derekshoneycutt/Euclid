@@ -2,6 +2,7 @@ package dynview_compile
 
 import dynviewmodel "../model"
 
+import geometry "../../core/geometry"
 import storage "../../core/storage"
 
 import dyncore "../core"
@@ -788,7 +789,7 @@ append_visible_copy_hit_target :: proc(
     panel_bottom := panel.y + panel.height
     visible_top := max(max(rows.top, panel_top), rows.last_hover_bottom)
     visible_bottom := min(rows.bottom, panel_bottom)
-    hover_rect := rl.Rectangle{
+    hover_rect := geometry.Rectangle{
         panel.x + layout.text_padding,
         visible_top,
         max(0.0, panel.width - layout.text_padding * 2),

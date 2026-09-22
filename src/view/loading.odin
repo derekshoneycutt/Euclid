@@ -1,5 +1,7 @@
 package view
 
+import native "native"
+
 import bridgemodel "../bridge/model"
 
 import "../files"
@@ -42,7 +44,7 @@ draw_startup_frame :: proc(
     startup_outline_advance(outline,
         min(max(rl.GetFrameTime(), f32(0)), f32(0.05)))
     rl.BeginDrawing()
-    rl.ClearBackground(BACKGROUND_COLOR)
+    rl.ClearBackground(native.to_raylib_color(BACKGROUND_COLOR))
     startup_outline_draw(outline, STARTUP_TRACK_COLOR, STARTUP_PROGRESS_COLOR)
     if show_julia_warning {
         regular_font := rl.GetFontDefault()
@@ -51,7 +53,7 @@ draw_startup_frame :: proc(
             regular_font, STARTUP_WARNING_TEXT, font_size, 0).x
         text_position := startup_warning_position(metrics, text_width, font_size)
         rl.DrawTextEx(regular_font, STARTUP_WARNING_TEXT, text_position, font_size, 0,
-            UI_TEXT_COLOR)
+            native.to_raylib_color(UI_TEXT_COLOR))
     }
     rl.EndDrawing()
 }

@@ -3,10 +3,9 @@ package view
 import viewmodel "model"
 
 import particlemodel "../particles/model"
+import color "../core/color"
 
 import "core:testing"
-
-import rl "vendor:raylib"
 
 // Verify the interleaved record matches the shader attribute stride and offsets.
 @(test)
@@ -30,19 +29,19 @@ setup_low_particle_staging_fixture :: proc(particles: ^particlemodel.Particle_Sy
     particles^.low_particles.age[0] = 1
     particles^.low_particles.life[0] = 4
     particles^.low_particles.size[0] = 0.25
-    particles^.low_particles.color[0] = rl.Color{255, 128, 0, 255}
+    particles^.low_particles.color[0] = color.Color_RGBA8{255, 128, 0, 255}
     particles^.low_particles.dust_sprite_index[0] = 2
     particles^.low_particles.alive[2] = true
     particles^.low_particles.age[2] = 3
     particles^.low_particles.life[2] = 2
     particles^.low_particles.size[2] = 0.1
-    particles^.low_particles.color[2] = rl.Color{0, 64, 255, 255}
+    particles^.low_particles.color[2] = color.Color_RGBA8{0, 64, 255, 255}
     particles^.low_particles.dust_sprite_index[2] = 5
     particles^.low_particles.alive[3] = true
     particles^.low_particles.age[3] = -1
     particles^.low_particles.life[3] = 10
     particles^.low_particles.size[3] = 2
-    particles^.low_particles.color[3] = rl.Color{17, 34, 51, 255}
+    particles^.low_particles.color[3] = color.Color_RGBA8{17, 34, 51, 255}
     particles^.low_particles.dust_sprite_index[3] = 8
 }
 

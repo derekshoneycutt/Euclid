@@ -3,6 +3,8 @@ package particles
 import shapemodel "../shapes/model"
 import curve "../shapes/curve"
 import particlemodel "model"
+import color "../core/color"
+import geometry "../core/geometry"
 
 // Simple particle system kinda took off away from me a bit here, but it has a few important
 // points to discuss:
@@ -27,10 +29,10 @@ import particlemodel "model"
 import "core:math"
 import rand "core:math/rand"
 
-import rl "vendor:raylib"
 
-Vector2 :: rl.Vector2
-Vector3 :: rl.Vector3
+Vector2 :: geometry.Vector2
+Vector3 :: geometry.Vector3
+Color :: color.Color_RGBA8
 Particle :: particlemodel.Particle
 Particle_System :: particlemodel.Particle_System
 MAX_PARTICLES :: particlemodel.MAX_PARTICLES
@@ -115,7 +117,7 @@ CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES :: 900
 
 Particle_Emission :: struct {
     origin: Vector3,
-    color: rl.Color,
+    color: Color,
 }
 
 Particle_Soa_Batch :: struct {
@@ -134,14 +136,14 @@ Circle_Dust_Emission :: struct {
     radius: f32,
     start_theta: f32,
     sweep_theta: f32,
-    color: rl.Color,
+    color: Color,
 }
 
 // Group one world-backed clear-burst operation and its render color.
 Shape_World_Burst_Context :: struct {
     particles: ^Particle_System,
     world: ^shapemodel.Shape_World,
-    color: rl.Color,
+    color: Color,
 }
 
 //   Emit high-layer flicker particles at a 2D origin.
@@ -192,7 +194,7 @@ emit_trail_particles :: proc(
         }
 
         for _ in 0..<FLICKERS_PER_TRAIL_SPAWN {
-            spawn_flicker_particle(ps, trail_pos, rl.WHITE)
+            spawn_flicker_particle(ps, trail_pos, color.WHITE)
         }
 
         for _ in 0..<BURNOUT_PER_TRAIL_SPAWN {
@@ -342,7 +344,7 @@ curve_segment_length :: #force_inline proc(first, second: Vector3) -> f32 {
 
 // Emit spatially uniform dust across one explicated ordered curve.
 emit_curve_polyline_dust :: proc(
-    ps: ^Particle_System, vertices: []Vector3, color: rl.Color) {
+    ps: ^Particle_System, vertices: []Vector3, color: Color) {
     total_length: f32
     for index in 1..<len(vertices) {
         total_length += curve_segment_length(vertices[index - 1], vertices[index])
@@ -569,14 +571,14 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
 
 
 //   Emit point burst dust for one position.
-emit_point_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
+emit_point_burst :: proc(ps: ^Particle_System, p: Vector3, col: Color) {
     for _ in 0..<CLEAR_BURST_POINT_COUNT {
         spawn_dust_particle(ps, p, col)
     }
 }
 
 //   Emit label burst dust for one position.
-emit_label_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
+emit_label_burst :: proc(ps: ^Particle_System, p: Vector3, col: Color) {
     for _ in 0..<CLEAR_BURST_LABEL_COUNT {
         spawn_dust_particle(ps, p, col)
     }
@@ -757,7 +759,7 @@ reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
 //   Spawn one ember particle near the provided tool-tip position.
 spawn_ember_particle :: proc(
     ps: ^Particle_System, tip_x, tip_y, tip_z: f32,
-    tip_color: rl.Color) -> (Vector3, bool) {
+    tip_color: Color) -> (Vector3, bool) {
 
     index, ok := reserve_dead_particle_slot(ps)
     if !ok {
@@ -795,7 +797,7 @@ spawn_ember_particle :: proc(
 }
 
 //   Spawn one high-layer flicker particle at an origin with random drift.
-spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.Color) {
+spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: Color) {
 
     index, ok := reserve_dead_high_particle_slot(ps)
     if !ok {
@@ -831,7 +833,7 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
 
 //   Spawn one burnout-style ember particle near the provided tool-tip position.
 spawn_burnout_ember_particle :: proc(
-    ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) {
+    ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: Color) {
 
     index, ok := reserve_dead_particle_slot(ps)
     if !ok {
@@ -885,14 +887,14 @@ clamp_xy_bounds_index :: proc(ps: ^Particle_System, i: int) {
 
 //   Spawn one low-layer dust particle around an origin with random kick values.
 spawn_dust_particle_index :: proc(
-    ps: ^Particle_System, i: int, origin: Vector3, col: rl.Color) {
+    ps: ^Particle_System, i: int, origin: Vector3, col: Color) {
     spawn_dust_particle_index_with_generator(
         ps, i, origin, col, particle_random_generator(ps))
 }
 
 // Initialize one low-layer dust slot using an explicitly owned random generator.
 spawn_dust_particle_index_with_generator :: proc(
-    ps: ^Particle_System, i: int, origin: Vector3, col: rl.Color,
+    ps: ^Particle_System, i: int, origin: Vector3, col: Color,
     generator: rand.Generator) {
     ps.low_particles[i].alive = true
     ps.low_particles[i].age = 0
@@ -955,7 +957,7 @@ emit_scenario_dust :: proc(
         slot, ok := reserve_dead_low_particle_slot(ps)
         if !ok {break}
         origin := scenario_dust_origin(request, index, generator)
-        spawn_dust_particle_index_with_generator(ps, slot, origin, rl.WHITE, generator)
+        spawn_dust_particle_index_with_generator(ps, slot, origin, color.WHITE, generator)
         ps^.dust_spawn_sequence += 1
         ps^.dust_slot_spawn_sequences[slot] = ps^.dust_spawn_sequence
         emitted += 1
@@ -964,7 +966,7 @@ emit_scenario_dust :: proc(
 }
 
 //   Reserve one low-layer slot and initialize a randomized dust particle.
-spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: rl.Color) {
+spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: Color) {
     index, ok := reserve_dead_low_particle_slot(ps)
     if !ok {
         return
@@ -977,7 +979,7 @@ spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: rl.Color
 }
 
 //   Emit dust samples along a line segment between two points.
-emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: rl.Color) {
+emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: Color) {
     sample_count := max(CLEAR_BURST_LINE_SAMPLES, 2)
     denom := f32(sample_count - 1)
     for s in 0..<sample_count {
@@ -1059,7 +1061,7 @@ emit_polygon_fill_dust :: proc(
     ps: ^Particle_System,
     vertices: ^[12]Vector3,
     vertex_count: int,
-    col: rl.Color) {
+    col: Color) {
     if vertex_count < 3 {
         return
     }

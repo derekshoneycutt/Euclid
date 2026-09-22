@@ -9,7 +9,6 @@ import dynmath "../math"
 
 import "core:math"
 
-import rl "vendor:raylib"
 
 //   Uniform handler shape for one inline-shape layout command.
 Layout_Inline_Shape_Handler :: #type proc(
@@ -1439,7 +1438,7 @@ layout_consume_visible_command :: proc(
 //   Resolve inline draw color using per-item brush override with style fallback.
 inline_draw_color :: #force_inline proc(
     style: dyncore.Dynview_Text_Style,
-    item: dynviewmodel.Dynview_Layout_Item) -> rl.Color {
+    item: dynviewmodel.Dynview_Layout_Item) -> dynviewmodel.Color {
 
     if item.has_brush_color {
         return item.brush_color

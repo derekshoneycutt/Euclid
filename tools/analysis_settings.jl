@@ -238,6 +238,33 @@ function euclid_rule_settings()
     ]
 end
 
+"""Construct one ignored Odin naming policy with exact drift bounds."""
+function euclid_odin_naming_policy(id, path, kind, name, reason)
+    return ReviewedNamingPolicy(
+        id, path, :odin, kind, name, reason; response=Ignore)
+end
+
+"""Return exact reviewed naming exceptions for intentional public type spellings."""
+function euclid_reviewed_naming_policies()
+    policy = euclid_odin_naming_policy
+    return ReviewedNamingPolicy[
+        policy("bridge-color-abi-name", "src/bridge/model/model.odin", :constant,
+            "Bridge_Color", "Stable public bridge ABI type alias."),
+        policy("rgba8-channel-width-name", "src/core/color/color.odin", :type,
+            "Color_RGBA8", "Type names RGBA channel order and eight-bit width."),
+        policy("dynview-color-type-alias", "src/dynview/model/model.odin", :constant,
+            "Color", "Public model alias avoids field-name shadowing."),
+        policy("particle-color-type-alias", "src/particles/particles.odin", :constant,
+            "Color", "Local API alias avoids parameter-name shadowing."),
+        policy("shape-color-type-alias", "src/shapes/model/shapes.odin", :constant,
+            "Color", "Public model alias avoids field-name shadowing."),
+        policy("view-color-type-alias", "src/view/model/model.odin", :constant,
+            "Color", "Model alias avoids field-name shadowing."),
+        policy("terminal-color-type-alias", "src/view/terminal/types.odin", :constant,
+            "Color", "Terminal package portable color type alias."),
+    ]
+end
+
 """Return naming settings that permit Julia constructors to match their type names."""
 function euclid_naming_settings()
     conventions = [
@@ -250,7 +277,7 @@ function euclid_naming_settings()
             convention
         for convention in default_naming_settings().conventions
     ]
-    return NamingSettings(conventions)
+    return NamingSettings(conventions, euclid_reviewed_naming_policies())
 end
 
 """Enforce application composition, coordinator, and substrate dependency direction."""
@@ -262,10 +289,13 @@ function euclid_architecture_settings()
                 "src/bridge/model",
                 "src/bridge/presentation",
                 "src/core/animation",
+                "src/core/color",
+                "src/core/geometry",
                 "src/core/protocol",
                 "src/core/storage",
                 "src/view/font/model",
                 "src/view/model",
+                "src/view/native",
                 "src/view/terminal/model",
             ]),
             ArchitectureLayer("composition", ["src/core"]),

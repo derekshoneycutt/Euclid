@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import viewmodel "../model"
 
 import "../../core"
@@ -51,8 +53,10 @@ view_text_draw_content :: proc(
     selection_view: ui_dynview.Dynview_Selection_View) {
     view_text_draw_selection(state, ui_runtime, selection_view)
 
-    ui_dynview.draw_presentation_styled_or_fallback(state, ui_runtime,
-        ui_dynview.Fallback_Text_Content{view_text, UI_TEXT_COLOR},
+    fallback := ui_dynview.Fallback_Text_Content{
+        view_text, native.to_raylib_color(UI_TEXT_COLOR),
+    }
+    ui_dynview.draw_presentation_styled_or_fallback(state, ui_runtime, fallback,
         ui_dynview.Presentation_Draw_Params{
             panel = text_panel,
             scroll_y = state^.ui_runtime.view_text_scroll_y,

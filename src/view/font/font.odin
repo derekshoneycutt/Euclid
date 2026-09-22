@@ -670,7 +670,7 @@ font_generation_resolve_glyph :: proc(
     }
     return {
         texture = texture,
-        source = glyph.rectangle,
+        source = rl.Rectangle(glyph.rectangle),
         offset_x = glyph.offset_x,
         offset_y = glyph.offset_y,
         advance_x = glyph.advance_x,

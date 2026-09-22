@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import viewmodel "../model"
 
 
@@ -532,8 +534,8 @@ scroll_container_draw_scrollbar :: #force_inline proc(
     if !scrollbar.has_scrollbar {
         return
     }
-    rl.DrawRectangleRec(scrollbar.track_rect, BACKGROUND_COLOR)
-    rl.DrawRectangleRec(scrollbar.thumb_rect, UI_BORDER_COLOR)
+    rl.DrawRectangleRec(scrollbar.track_rect, native.to_raylib_color(BACKGROUND_COLOR))
+    rl.DrawRectangleRec(scrollbar.thumb_rect, native.to_raylib_color(UI_BORDER_COLOR))
 }
 
 //   Apply an active thumb drag and rebuild the scrollbar at the new position.

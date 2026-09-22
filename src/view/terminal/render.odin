@@ -1,5 +1,7 @@
 package terminalview
 
+import native "../native"
+
 import viewterminalmodel "model"
 
 import termgrid "../../terminal/grid"
@@ -218,7 +220,7 @@ terminal_draw_output_cursor_glyph :: proc(
         position = position,
         column_width = terminal_column_width(regular),
         key = key,
-        color = theme.cursor_foreground,
+        color = native.to_raylib_color(theme.cursor_foreground),
     })
 }
 
@@ -342,10 +344,11 @@ terminal_draw_command_search :: proc(
     background := theme.cursor_foreground
     rl.DrawRectangleRec(rl.Rectangle{
         bounds.x, bounds.y + bounds.height - height, bounds.width, height,
-    }, background)
+    }, native.to_raylib_color(background))
     text := fmt.tprintf("find: %s", query)
     _ = terminal_draw_shaped_prompt_span(
-        resolver, .Regular, text, position, theme.default_foreground)
+        resolver, .Regular, text, position,
+        native.to_raylib_color(theme.default_foreground))
 }
 
 //   Find the combined presented line for one stable logical-row identity.
@@ -1040,7 +1043,7 @@ terminal_draw_completion_preview :: proc(
     if end > start {
         rl.DrawRectangleV(
             preview_position, rl.Vector2{end_x - start_x, TERMINAL_FONT_SIZE},
-            theme.cursor_foreground)
+            native.to_raylib_color(theme.cursor_foreground))
     }
     _ = terminal_draw_shaped_prompt_span(
         resolver, .Regular, term.completion_preview_insertion,
@@ -1073,7 +1076,7 @@ terminal_draw_prompt_base :: proc(request: Terminal_Prompt_Draw) {
         position = {
             request.position.x + prompt_width, request.position.y},
         exclusions = request.exclusions,
-        color = request.theme.default_foreground,
+        color = native.to_raylib_color(request.theme.default_foreground),
     })
 }
 
@@ -1181,7 +1184,7 @@ terminal_draw_output_cell :: proc(
         key = key,
         color = terminal_resolve_foreground(
             draw.palette, cell.style.foreground,
-            draw.theme.default_foreground),
+            native.to_raylib_color(draw.theme.default_foreground)),
     })
     if !shaped && cell.grapheme_len == 1 && cell.grapheme[0] < 0x80 {
         terminal_draw_cell(draw, resolved_font, cell, glyph_position)
@@ -1195,7 +1198,7 @@ terminal_draw_output_underlines :: proc(draw: Terminal_Shaped_Output_Context) {
         if cell.continuation || !cell.style.underline { continue }
         color := terminal_resolve_foreground(
             draw.palette, cell.style.foreground,
-            draw.theme.default_foreground)
+            native.to_raylib_color(draw.theme.default_foreground))
         start_x := draw.position.x + f32(column)*draw.column_width
         end_x := start_x + f32(max(int(cell.width), 1))*draw.column_width
         rl.DrawLineEx(
@@ -1213,7 +1216,8 @@ terminal_draw_output_shaped_chunk :: proc(
     chunk_end := terminal_shape_chunk_end(column, run_end)
     key := terminal_font_key_for_cell(cell.style)
     color := terminal_resolve_foreground(
-        ctx.palette, cell.style.foreground, ctx.theme.default_foreground)
+        ctx.palette, cell.style.foreground,
+        native.to_raylib_color(ctx.theme.default_foreground))
     if chunk_end - column <= 1 { return column, false }
     drawn := terminal_draw_shaped_output_run({
         resolver = ctx.resolver,
@@ -1283,7 +1287,7 @@ terminal_draw_link_hover :: proc(
         }
         color := terminal_resolve_foreground(
             draw.palette, cell.style.foreground,
-            draw.theme.default_foreground)
+            native.to_raylib_color(draw.theme.default_foreground))
         run_start := column
         column += max(int(cell.width), 1)
         for column < limit {
@@ -1291,7 +1295,7 @@ terminal_draw_link_hover :: proc(
             if next.continuation { column += 1; continue }
             next_color := terminal_resolve_foreground(
                 draw.palette, next.style.foreground,
-                draw.theme.default_foreground)
+                native.to_raylib_color(draw.theme.default_foreground))
             if next_color != color { break }
             column += max(int(next.width), 1)
         }
@@ -1749,7 +1753,7 @@ terminal_draw_cell :: proc(
     copy(text[:], cell.grapheme[:cell.grapheme_len])
     color := terminal_resolve_foreground(
         draw.palette, cell.style.foreground,
-        draw.theme.default_foreground)
+        native.to_raylib_color(draw.theme.default_foreground))
     rl.DrawTextEx(font, cast(cstring)&text[0], position,
         TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING, color)
 }
@@ -1888,11 +1892,11 @@ terminal_draw_inverted_span :: proc(
     }
 
     rl.DrawRectangleV(span_position, rl.Vector2{rect_width, rect_height},
-        draw.theme.selection_background)
+        native.to_raylib_color(draw.theme.selection_background))
     if text_start < text_end {
         _ = terminal_draw_shaped_prompt_span(
             draw.resolver, .Regular, span_text, span_position,
-            draw.theme.selection_foreground)
+            native.to_raylib_color(draw.theme.selection_foreground))
     }
 }
 
@@ -1932,19 +1936,21 @@ terminal_draw_cursor :: proc(
         rl.DrawRectangleLinesEx(rl.Rectangle{
             cursor_screen_position.x, cursor_screen_position.y,
             glyph_width, TERMINAL_FONT_SIZE,
-        }, 1, rect_color)
+        }, 1, native.to_raylib_color(rect_color))
         if !on_selection {
             _ = terminal_draw_shaped_prompt_span(
                 draw.resolver, .Regular, glyph_text,
-                cursor_screen_position, draw.theme.default_foreground)
+                cursor_screen_position,
+                native.to_raylib_color(draw.theme.default_foreground))
         }
         return
     }
 
     rl.DrawRectangleV(cursor_screen_position,
-        rl.Vector2{glyph_width, TERMINAL_FONT_SIZE}, rect_color)
+        rl.Vector2{glyph_width, TERMINAL_FONT_SIZE}, native.to_raylib_color(rect_color))
     _ = terminal_draw_shaped_prompt_span(
-        draw.resolver, .Regular, glyph_text, cursor_screen_position, glyph_color)
+        draw.resolver, .Regular, glyph_text, cursor_screen_position,
+        native.to_raylib_color(glyph_color))
 }
 
 //   Return the byte offset just past the UTF-8 codepoint at offset, if any.

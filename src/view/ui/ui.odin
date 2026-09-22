@@ -7,6 +7,7 @@ import viewmodel "../model"
 import view_core "../core"
 import view_font "../font"
 import "../input"
+import native "../native"
 import "../../dynview"
 import dyncompile "../../dynview/compile"
 import dyncore "../../dynview/core"
@@ -274,7 +275,7 @@ prepare_ui_geometry :: proc(
     view_core.fit_iso_scale_to_viewport(
         state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
-    text_panel := view_text_content_panel(regions.text_rect)
+    text_panel := view_text_content_panel(rl.Rectangle(regions.text_rect))
     dynview.track_panel(&state^.dynview, text_panel)
     dynview.track_font(
         &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
@@ -336,7 +337,7 @@ prepare_ui_controls :: proc(
     result.animation_controls = prepare_animation_controls(state, animation_frame)
     accordion_panel := state^.ui_runtime.ui_regions.accordion_rect
     result.accordion = prepare_accordion_view(
-        state, accordion_panel, routed_frame)
+        state, rl.Rectangle(accordion_panel), routed_frame)
     content_panel := result.accordion.layout.content
     switch state^.ui_runtime.active_accordion_section {
     case .View:
@@ -373,7 +374,7 @@ prepare_ui_layout_interaction :: proc(
             .Wheel} : input.Input_Pointer_Fields{.Screen_Position})
     if !routed.wheel { presentation_frame.mouse_wheel_delta = 0 }
     return {presentation = prepare_presentation_interaction(state,
-        state^.ui_runtime.ui_regions.text_rect, presentation_frame,
+        rl.Rectangle(state^.ui_runtime.ui_regions.text_rect), presentation_frame,
         routed.keyboard)}
 }
 
@@ -391,8 +392,8 @@ draw_landscape_panels :: proc(
         regions.world_rect.width,
         f32(state^.ui_runtime.window.height) - regions.world_rect.height,
     }
-    rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
-    draw_view_text_panel(state, regions.text_rect, terminal_frame,
+    rl.DrawRectangleRec(bottom_bar, native.to_raylib_color(UI_BACK_COLOR))
+    draw_view_text_panel(state, rl.Rectangle(regions.text_rect), terminal_frame,
         layout_interaction.presentation)
 
     right_bar := rl.Rectangle{
@@ -401,8 +402,8 @@ draw_landscape_panels :: proc(
         f32(state^.ui_runtime.window.width) - regions.world_rect.width,
         f32(state^.ui_runtime.window.height),
     }
-    rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
-    draw_accordion_view(state, regions.accordion_rect, input_frame, {
+    rl.DrawRectangleRec(right_bar, native.to_raylib_color(UI_BACK_COLOR))
+    draw_accordion_view(state, rl.Rectangle(regions.accordion_rect), input_frame, {
         controls, terminal_frame, layout_interaction.presentation})
 }
 
@@ -420,8 +421,8 @@ draw_portrait_panels :: proc(
         f32(state^.ui_runtime.window.width),
         f32(state^.ui_runtime.window.height) - regions.world_rect.height,
     }
-    rl.DrawRectangleRec(lower_bar, UI_BACK_COLOR)
-    draw_accordion_view(state, regions.accordion_rect, input_frame, {
+    rl.DrawRectangleRec(lower_bar, native.to_raylib_color(UI_BACK_COLOR))
+    draw_accordion_view(state, rl.Rectangle(regions.accordion_rect), input_frame, {
         controls, terminal_frame, layout_interaction.presentation})
 }
 

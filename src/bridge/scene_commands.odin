@@ -1,7 +1,5 @@
 package bridge
 
-import rl "vendor:raylib"
-
 import bridgemodel "model"
 import shapemodel "../shapes/model"
 
@@ -14,8 +12,8 @@ import "../particles"
 
 // Hold one resolved canonical Cycloid line.
 Command_Cycloid_Line :: struct {
-    first: rl.Vector3,
-    second: rl.Vector3,
+    first: Vector3,
+    second: Vector3,
 }
 
 // Scene commands isolate asynchronous Julia callbacks from canonical display state.
@@ -232,7 +230,7 @@ capture_flag_command :: proc "contextless" (
 //   Capture one particle emission with the position and color observed by Julia.
 capture_particle_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
-    position: rl.Vector3, color: Bridge_Color) -> bool {
+    position: Vector3, color: Bridge_Color) -> bool {
 
     command, captured := append_scene_command(state, kind)
     if command != nil {

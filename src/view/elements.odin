@@ -1,5 +1,7 @@
 package view
 
+import native "native"
+
 import viewmodel "model"
 
 import shapemodel "../shapes/model"
@@ -440,13 +442,12 @@ shutdown_tool_brush_shader :: proc(state: ^Euclid_General_State) {
 //   - none.
 draw_drawing_surface :: proc(state: ^Euclid_General_State) {
     room := state^.draw_surface
+    edge_size := room.edge_size
 
-    surface_zeros : Vector3 = room^.zeros + { room.edge_size, room.edge_size, 0 }
-    surface_right_up : Vector3 = room^.right_up + { -room.edge_size, room.edge_size, 0 }
-    surface_left_down : Vector3 =
-        room^.left_down + { room.edge_size, -room.edge_size, 0 }
-    surface_right_down : Vector3 =
-        room^.right_down + { -room.edge_size, -room.edge_size, 0 }
+    surface_zeros : Vector3 = room^.zeros + { edge_size, edge_size, 0 }
+    surface_right_up : Vector3 = room^.right_up + { -edge_size, edge_size, 0 }
+    surface_left_down : Vector3 = room^.left_down + { edge_size, -edge_size, 0 }
+    surface_right_down : Vector3 = room^.right_down + { -edge_size, -edge_size, 0 }
 
     world_points := [8]Vector3{
         room.zeros,
@@ -470,10 +471,14 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
             out = projected[:],
         })
 
-    rl.DrawTriangle(projected[0], projected[1], projected[2], room.edge_color)
-    rl.DrawTriangle(projected[3], projected[2], projected[1], room.edge_color)
-    rl.DrawTriangle(projected[4], projected[5], projected[6], room.color)
-    rl.DrawTriangle(projected[7], projected[6], projected[5], room.color)
+    rl.DrawTriangle(
+        projected[0], projected[1], projected[2], native.to_raylib_color(room.edge_color))
+    rl.DrawTriangle(
+        projected[3], projected[2], projected[1], native.to_raylib_color(room.edge_color))
+    rl.DrawTriangle(projected[4], projected[5], projected[6],
+        native.to_raylib_color(room.color))
+    rl.DrawTriangle(projected[7], projected[6], projected[5],
+        native.to_raylib_color(room.color))
 }
 
 //   Render cached low-layer geometry items (labels, primitives, and polygons).
@@ -970,12 +975,13 @@ draw_cached_trochoid_tool_full :: proc(
     tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
     begin_tool_brush_mode(state)
     draw_trochoid_tool_ring(state, tool^.fixed_center,
-        tool^.fixed_radius, tool^.brush_size, tool^.color)
+        tool^.fixed_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
     draw_trochoid_tool_ring(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, tool^.color)
+        tool^.rolling_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
     first := view_core.iso_to_cartesian(tool^.handle_start, state^.iso_scale^)
     second := view_core.iso_to_cartesian(tool^.handle_finish, state^.iso_scale^)
-    draw_tool_brush_segment(state, first, second, tool^.brush_size, tool^.color)
+    draw_tool_brush_segment(state, first, second, tool^.brush_size,
+        native.to_raylib_color(tool^.color))
     end_tool_brush_mode(state)
 }
 
@@ -989,15 +995,15 @@ draw_cached_cycloid_tool_full :: proc(
     baseline_finish := view_core.iso_to_cartesian(
         tool^.baseline_finish, state^.iso_scale^)
     draw_tool_brush_segment(state, baseline_start, baseline_finish,
-        tool^.brush_size, tool^.color)
+        tool^.brush_size, native.to_raylib_color(tool^.color))
     draw_trochoid_tool_ring(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, tool^.color)
+        tool^.rolling_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
     handle_start := view_core.iso_to_cartesian(
         tool^.handle_start, state^.iso_scale^)
     handle_finish := view_core.iso_to_cartesian(
         tool^.handle_finish, state^.iso_scale^)
     draw_tool_brush_segment(state, handle_start, handle_finish,
-        tool^.brush_size, tool^.color)
+        tool^.brush_size, native.to_raylib_color(tool^.color))
     end_tool_brush_mode(state)
 }
 
@@ -1535,7 +1541,8 @@ draw_pen_segment_fragment :: #force_inline proc(
 
     c0 := view_core.iso_to_cartesian(point0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(point1, state^.iso_scale^)
-    draw_tool_brush_segment(state, c0, c1, pen^.brush_size, pen^.color)
+    draw_tool_brush_segment(
+        state, c0, c1, pen^.brush_size, native.to_raylib_color(pen^.color))
 }
 
 //   Build the z=0-clipped segment and oriented polygon plane for one crossing test.
@@ -2010,7 +2017,7 @@ draw_cached_label :: proc(
         key = .Regular,
         text = source,
         position = c,
-        color = p^.color,
+        color = native.to_raylib_color(p^.color),
         font = {font = regular_font, font_size = p.brush_size},
     })
 }
@@ -2024,7 +2031,7 @@ draw_cached_point_shadow :: proc(
     }
 
     shadow := shadow_to_screen(p^.point1, state)
-    shadow_color := make_shadow_color(p^.color, p^.point1.z)
+    shadow_color := make_shadow_color(native.to_raylib_color(p^.color), p^.point1.z)
     rl.DrawCircleV(shadow, p^.brush_size, shadow_color)
 }
 
@@ -2049,7 +2056,7 @@ draw_cached_line_shadow :: proc(
     s1 := shadow_to_screen(clipped1, state)
     clipped_points := [2]Vector3{clipped0, clipped1}
     avg_height := average_shadow_height(clipped_points[:])
-    shadow_color := make_shadow_color(l^.color, avg_height)
+    shadow_color := make_shadow_color(native.to_raylib_color(l^.color), avg_height)
     thickness := math.max(l^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
     rl.DrawLineEx(s0, s1, thickness, shadow_color)
 }
@@ -2065,7 +2072,7 @@ draw_trochoid_tool_ring_shadow :: proc(
         angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
         current := trochoid_tool_ring_point(center, radius, angle)
         line := shapemodel.Shapes_Line_Draw{
-            base = {brush_size = brush_size, color = color},
+            base = {brush_size = brush_size, color = shapemodel.Color(color)},
             point1 = previous, point2 = current}
         draw_cached_line_shadow(state, &line)
         previous = current
@@ -2081,9 +2088,9 @@ draw_cached_trochoid_tool_shadow :: proc(
         return
     }
     draw_trochoid_tool_ring_shadow(state, tool^.fixed_center,
-        tool^.fixed_radius, tool^.brush_size, tool^.color)
+        tool^.fixed_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
     draw_trochoid_tool_ring_shadow(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, tool^.color)
+        tool^.rolling_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
     handle := shapemodel.Shapes_Line_Draw{tool^.base,
         tool^.handle_start, tool^.handle_finish}
     draw_cached_line_shadow(state, &handle)
@@ -2097,7 +2104,7 @@ draw_cached_cycloid_tool_shadow :: proc(
         tool^.baseline_start, tool^.baseline_finish}
     draw_cached_line_shadow(state, &baseline)
     draw_trochoid_tool_ring_shadow(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, tool^.color)
+        tool^.rolling_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
     handle := shapemodel.Shapes_Line_Draw{tool^.base,
         tool^.handle_start, tool^.handle_finish}
     draw_cached_line_shadow(state, &handle)
@@ -2148,7 +2155,8 @@ draw_cached_circle_shadow :: proc(
         s1 := shadow_to_screen(clipped1, state)
         clipped_points := [2]Vector3{clipped0, clipped1}
         clipped_avg_height := average_shadow_height(clipped_points[:])
-        clipped_shadow_color := make_shadow_color(c^.color, clipped_avg_height)
+        clipped_shadow_color := make_shadow_color(
+            native.to_raylib_color(c^.color), clipped_avg_height)
         rl.DrawLineEx(s0, s1, thickness, clipped_shadow_color)
     }
 }
@@ -2163,7 +2171,7 @@ draw_cached_filledcircle_shadow :: proc(
 
     geom := circle_arc_geometry(
         c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
-    shadow_color := make_shadow_color(c^.color, c^.center.z)
+    shadow_color := make_shadow_color(native.to_raylib_color(c^.color), c^.center.z)
 
     arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
     circle_arc_sample_world(&geom, arc_world[:])
@@ -2182,7 +2190,7 @@ draw_cached_filledcircle_shadow :: proc(
 draw_cached_point :: proc(
     state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
     c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
-    rl.DrawCircleV(c, p^.brush_size, p^.color)
+    rl.DrawCircleV(c, p^.brush_size, native.to_raylib_color(p^.color))
 }
 
 
@@ -2198,12 +2206,13 @@ draw_cached_line :: proc(
 
     color := l^.color
     if !keep_above && (z_split_sign(clipped0.z) < 0 || z_split_sign(clipped1.z) < 0) {
-        color = z_split_lower_fragment_color(color)
+        native_color := z_split_lower_fragment_color(native.to_raylib_color(color))
+        color = shapemodel.Color(native_color)
     }
 
     c0 := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
-    rl.DrawLineEx(c0, c1, l^.brush_size, color)
+    rl.DrawLineEx(c0, c1, l^.brush_size, native.to_raylib_color(color))
 }
 
 // Render every segment in one explicated curve using ordinary line styling.
@@ -2244,7 +2253,8 @@ draw_cached_circle :: proc(
         })
 
     for i in 1..=CIRCLE_ARC_SEGMENTS {
-        rl.DrawLineEx(arc_screen[i - 1], arc_screen[i], c^.brush_size, c^.color)
+        rl.DrawLineEx(arc_screen[i - 1], arc_screen[i], c^.brush_size,
+            native.to_raylib_color(c^.color))
     }
 }
 
@@ -2276,7 +2286,7 @@ draw_cached_filledcircle :: proc(
         points[i + 1] = arc_screen[i]
     }
 
-    rl.DrawTriangleFan(&points[0], len(points), c^.color)
+    rl.DrawTriangleFan(&points[0], len(points), native.to_raylib_color(c^.color))
 }
 
 
@@ -2351,7 +2361,8 @@ draw_cached_polygon_shadow :: proc(
         projected[i] = shadow_to_screen(vertices[i], state)
     }
 
-    shadow_color := make_shadow_color(poly^.color, average_shadow_height(vertices))
+    shadow_color := make_shadow_color(
+        native.to_raylib_color(poly^.color), average_shadow_height(vertices))
     draw_cached_polygon_triangles(cache, poly, projected[:], shadow_color)
 }
 
@@ -2368,7 +2379,8 @@ draw_cached_polygon :: proc(
     }
 
     cache := &state^.shape_world^.draw_cache
-    draw_cached_polygon_triangles(cache, poly, projected[:], poly^.color)
+    draw_cached_polygon_triangles(
+        cache, poly, projected[:], native.to_raylib_color(poly^.color))
 }
 
 
@@ -2401,7 +2413,8 @@ draw_cached_pen :: proc(
     c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
 
     set_pen_compass_occluders(state, pen, compass_caster)
-    draw_tool_brush_segment(state, c0, c1, pen^.brush_size, pen^.color)
+    draw_tool_brush_segment(
+        state, c0, c1, pen^.brush_size, native.to_raylib_color(pen^.color))
     clear_tool_brush_occluder(state)
 }
 
@@ -2417,13 +2430,13 @@ draw_cached_pen_active_dot :: proc(
         if pen^.has_active_color {
             active = pen^.active_color
         }
-        rl.DrawCircleV(c0, pen^.brush_size, active)
+        rl.DrawCircleV(c0, pen^.brush_size, native.to_raylib_color(active))
     } else if pen^.active_child == 2 {
         active := pen^.color
         if pen^.has_active_color {
             active = pen^.active_color
         }
-        rl.DrawCircleV(c1, pen^.brush_size, active)
+        rl.DrawCircleV(c1, pen^.brush_size, native.to_raylib_color(active))
     }
 }
 
@@ -2656,7 +2669,7 @@ draw_cached_compass_leg :: proc(
     }
     set_tool_brush_occluders(ctx^.state, &occluders)
     draw_tool_brush_segment(ctx^.state, start, finish,
-        ctx^.comp^.brush_size, ctx^.comp^.color)
+        ctx^.comp^.brush_size, native.to_raylib_color(ctx^.comp^.color))
 }
 
 
@@ -2694,7 +2707,7 @@ draw_cached_compass :: proc(
     arc_occluders := make_compass_arc_occluders(ctx.leg1, ctx.leg2)
     set_tool_brush_occluders(state, &arc_occluders)
     draw_outside_arc_compass_cached(comp^.joint1, comp^.pivot, comp^.joint2,
-        Compass_Arc_Draw{state, comp^.brush_size, comp^.color})
+        Compass_Arc_Draw{state, comp^.brush_size, native.to_raylib_color(comp^.color)})
     clear_tool_brush_occluder(state)
 }
 
@@ -2710,13 +2723,13 @@ draw_cached_compass_active_dot :: proc(
         if comp^.has_active_color {
             active = comp^.active_color
         }
-        rl.DrawCircleV(c0, comp^.brush_size, active)
+        rl.DrawCircleV(c0, comp^.brush_size, native.to_raylib_color(active))
     } else if comp^.active_child == 3 {
         active := comp^.color
         if comp^.has_active_color {
             active = comp^.active_color
         }
-        rl.DrawCircleV(c2, comp^.brush_size, active)
+        rl.DrawCircleV(c2, comp^.brush_size, native.to_raylib_color(active))
     }
 }
 
@@ -2728,7 +2741,7 @@ draw_cached_pen_shadow :: proc(
     s1 := shadow_to_screen(pen^.joint2, state)
 
     avg_height := (pen^.joint1.z + pen^.joint2.z) * 0.5
-    shadow_color := make_shadow_color(pen^.color, avg_height)
+    shadow_color := make_shadow_color(native.to_raylib_color(pen^.color), avg_height)
     thickness := math.max(pen^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
 
     rl.DrawLineEx(s0, s1, thickness, shadow_color)
@@ -2772,7 +2785,7 @@ draw_cached_compass_shadow :: proc(
     s2 := shadow_to_screen(comp^.joint2, state)
 
     avg_height := (comp^.joint1.z + comp^.pivot.z + comp^.joint2.z) / 3.0
-    shadow_color := make_shadow_color(comp^.color, avg_height)
+    shadow_color := make_shadow_color(native.to_raylib_color(comp^.color), avg_height)
     thickness := math.max(comp^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
 
     draw_joint1_last := compass_draw_joint1_leg_last(comp, s0, s1, s2)

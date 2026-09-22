@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import viewmodel "../model"
 
 import "../../core"
@@ -105,7 +107,7 @@ draw_gif_status_text :: proc(
         key = .Regular,
         text = text,
         position = {ctx.panel.x + SETTINGS_PANEL_INSET, row_y},
-        color = UI_TEXT_COLOR,
+        color = native.to_raylib_color(UI_TEXT_COLOR),
         font = view_core.ui_text_font(ctx.font),
     })
 }

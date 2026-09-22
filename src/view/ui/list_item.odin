@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import viewmodel "../model"
 
 
@@ -73,7 +75,7 @@ draw_list_item_prepared :: proc(
             LIST_ITEM_ACTIVE_PRESS_ALPHA,
         })
     } else if params.selected {
-        rl.DrawRectangleRec(result.drawn_rect, UI_BORDER_COLOR)
+        rl.DrawRectangleRec(result.drawn_rect, native.to_raylib_color(UI_BORDER_COLOR))
     }
 }
 

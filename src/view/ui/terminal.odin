@@ -71,10 +71,10 @@ terminal_line_text :: proc(term: ^viewterminalmodel.Terminal_State, line: int) -
 // Return the fixed semantic colors used by Terminal presentation.
 terminal_draw_theme :: proc() -> terminalview.Terminal_Draw_Theme {
     return {
-        default_foreground = UI_TEXT_COLOR,
-        cursor_foreground = terminalview.TERMINAL_CURSOR_TEXT_COLOR,
-        selection_foreground = rl.WHITE,
-        selection_background = rl.Color{82, 96, 112, 255},
+        default_foreground = terminalview.Color(UI_TEXT_COLOR),
+        cursor_foreground = terminalview.Color(terminalview.TERMINAL_CURSOR_TEXT_COLOR),
+        selection_foreground = terminalview.Color(rl.WHITE),
+        selection_background = terminalview.Color{82, 96, 112, 255},
     }
 }
 

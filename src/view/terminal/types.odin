@@ -2,6 +2,7 @@ package terminalview
 
 import viewterminalmodel "model"
 
+import color "../../core/color"
 import "../../core/protocol"
 import termattachment "../../terminal/attachment"
 import termgrid "../../terminal/grid"
@@ -12,6 +13,8 @@ import "../font"
 import "../input"
 
 import rl "vendor:raylib"
+
+Color :: color.Color_RGBA8
 
 // Caller-visible evaluation submission produced by one keyboard update.
 Terminal_Submission :: struct {
@@ -187,10 +190,10 @@ Terminal_Draw_Layout :: struct {
 
 // Frame-local semantic colors supplied by the terminal container owner.
 Terminal_Draw_Theme :: struct {
-    default_foreground: rl.Color,
-    cursor_foreground: rl.Color,
-    selection_foreground: rl.Color,
-    selection_background: rl.Color,
+    default_foreground: color.Color_RGBA8,
+    cursor_foreground: color.Color_RGBA8,
+    selection_foreground: color.Color_RGBA8,
+    selection_background: color.Color_RGBA8,
 }
 
 // Complete frame-local request for terminal input and geometry update.

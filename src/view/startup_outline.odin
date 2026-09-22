@@ -76,13 +76,13 @@ startup_outline_create :: proc(
         layout, f32(metrics.width), f32(metrics.height), vertical, horizontal)
     sections := ui.accordion_sections_for_layout(layout, "Animation")
     accordion := ui.accordion_layout(
-        regions.accordion_rect, sections,
+        rl.Rectangle(regions.accordion_rect), sections,
         layout == .Portrait ? .View : .Library)
-    controls := ui.animation_control_layout_slots(regions.world_rect)
+    controls := ui.animation_control_layout_slots(rl.Rectangle(regions.world_rect))
 
-    startup_outline_append_rect(&outline, regions.world_rect)
-    startup_outline_append_rect(&outline, regions.text_rect)
-    startup_outline_append_rect(&outline, regions.accordion_rect)
+    startup_outline_append_rect(&outline, rl.Rectangle(regions.world_rect))
+    startup_outline_append_rect(&outline, rl.Rectangle(regions.text_rect))
+    startup_outline_append_rect(&outline, rl.Rectangle(regions.accordion_rect))
     for index in 0..<sections.count {
         startup_outline_append_rect(&outline, accordion.headers[index])
     }

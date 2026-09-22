@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import viewmodel "../model"
 
 import view_core "../core"
@@ -210,7 +212,7 @@ slider_knob_draw_style :: proc(
         ICON_BUTTON_PRESS_SCALE_SUB * knob_press_t
     knob_draw := scale_rect_about_center(knob, knob_scale)
 
-    knob_color := UI_TEXT_COLOR
+    knob_color := native.to_raylib_color(UI_TEXT_COLOR)
     if knob_press_t > 0 {
         knob_color = icon_button_darken(knob_color, knob_press_t)
     }
@@ -261,7 +263,7 @@ slider_draw_text :: proc(
         key = .Regular,
         text = text,
         position = {x, params.row_y},
-        color = UI_TEXT_COLOR,
+        color = native.to_raylib_color(UI_TEXT_COLOR),
         font = view_core.ui_text_font(params.font),
     })
 }
@@ -293,7 +295,7 @@ draw_settings_integer_slider_prepared :: proc(
     panel := params.panel
     slider_draw_text(params, params.label, panel.x + SETTINGS_PANEL_INSET)
 
-    rl.DrawRectangleRec(result.track, BACKGROUND_COLOR)
+    rl.DrawRectangleRec(result.track, native.to_raylib_color(BACKGROUND_COLOR))
     rl.DrawRectangleRec(
         rl.Rectangle{
             result.track.x,
@@ -301,7 +303,7 @@ draw_settings_integer_slider_prepared :: proc(
             max(0.0, result.knob_center_x - result.track.x),
             result.track.height,
         },
-        UI_BORDER_COLOR)
+        native.to_raylib_color(UI_BORDER_COLOR))
     rl.DrawRectangleRec(result.knob, result.knob_color)
 
     slider_draw_text(params, fmt.tprintf("%d", result.value),

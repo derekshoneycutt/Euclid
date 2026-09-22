@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import rl "vendor:raylib"
 
 Container_Fill_Variant :: enum {
@@ -17,12 +19,12 @@ container_fill_color :: #force_inline proc(
     fill_variant: Container_Fill_Variant) -> rl.Color {
     switch fill_variant {
     case .Dark_Red:
-        return BACKGROUND_COLOR
+        return native.to_raylib_color(BACKGROUND_COLOR)
     case .Grey:
-        return UI_COMPONENT_BACKGROUND_COLOR
+        return native.to_raylib_color(UI_COMPONENT_BACKGROUND_COLOR)
     }
 
-    return BACKGROUND_COLOR
+    return native.to_raylib_color(BACKGROUND_COLOR)
 }
 
 //   Return clamped outer and inner geometry without drawing the container.
@@ -56,7 +58,8 @@ draw_container_with_border :: proc(
 
     rl.DrawRectangleRec(drawn_rect, container_fill_color(fill_variant))
     if border > 0 {
-        rl.DrawRectangleLinesEx(drawn_rect, border, UI_BORDER_COLOR)
+        rl.DrawRectangleLinesEx(
+            drawn_rect, border, native.to_raylib_color(UI_BORDER_COLOR))
     }
 
     return geometry

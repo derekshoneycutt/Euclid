@@ -3,6 +3,8 @@ package viewmodel
 import dynviewmodel "../../dynview/model"
 import gifmodel "../../files/gif_model"
 import particlemodel "../../particles/model"
+import color "../../core/color"
+import geometry "../../core/geometry"
 
 import "core:encoding/uuid"
 
@@ -10,6 +12,9 @@ import rl "vendor:raylib"
 
 TOOL_LENGTH :: 0.35
 MAX_TOOL_BRUSH_OCCLUDERS :: 2
+Color :: color.Color_RGBA8
+Rectangle :: geometry.Rectangle
+Vector3 :: geometry.Vector3
 
 // Iso_Scale owns display projection and screen-shake state.
 Iso_Scale :: struct {
@@ -18,7 +23,7 @@ Iso_Scale :: struct {
     y_offset: f32,
     half_scale: f32,
     quarter_scale: f32,
-    main_light_dir: rl.Vector3,
+    main_light_dir: Vector3,
     use_directional_shadow: bool,
     screenshake_trauma: f32,
     screenshake_elapsed: f32,
@@ -139,10 +144,10 @@ Ui_Accordion_Section :: enum u8 {
 }
 
 Ui_Regions :: struct {
-    world_rect: rl.Rectangle,
-    accordion_rect: rl.Rectangle,
-    text_rect: rl.Rectangle,
-    terminal_rect: rl.Rectangle,
+    world_rect: Rectangle,
+    accordion_rect: Rectangle,
+    text_rect: Rectangle,
+    terminal_rect: Rectangle,
 }
 
 Ui_Press_Owner_Kind :: enum {
@@ -277,11 +282,11 @@ Euclid_Ui_Runtime_State :: struct {
 
 // Euclid_Drawing_Surface defines the display-owned world drawing plane.
 Euclid_Drawing_Surface :: struct {
-    zeros: rl.Vector3,
-    right_up: rl.Vector3,
-    left_down: rl.Vector3,
-    right_down: rl.Vector3,
-    color: rl.Color,
-    edge_color: rl.Color,
+    zeros: Vector3,
+    right_up: Vector3,
+    left_down: Vector3,
+    right_down: Vector3,
+    color: Color,
+    edge_color: Color,
     edge_size: f32,
 }

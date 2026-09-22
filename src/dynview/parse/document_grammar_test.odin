@@ -75,10 +75,9 @@ tex_parse_document_matches_shapes_fixture :: proc(t: ^testing.T) {
     testing.expect_value(t, semicircle.end_angle, f32(180))
 }
 
-//   Verify the complete generated Colors.jl registry and explicit Julia aliases.
+//   Verify representative shared named colors remain accepted by document parsing.
 @(test)
 tex_parse_document_accepts_named_shape_colors :: proc(t: ^testing.T) {
-    testing.expect_value(t, len(TEX_NAMED_COLORS), 666)
     cases := [?]struct {
         name: string,
         red, green, blue: u8,

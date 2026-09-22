@@ -1,5 +1,7 @@
 package view_core
 
+import native "../native"
+
 import viewmodel "../model"
 
 import dynviewmodel "../../dynview/model"
@@ -38,13 +40,13 @@ draw_copy_hover_backgrounds :: proc(
     hover_bg := rl.Color{UI_BORDER_COLOR.r, UI_BORDER_COLOR.g, UI_BORDER_COLOR.b, 28}
     for i in 0..<cache^.copy_hit_target_count {
         target := cache^.copy_hit_targets[i]
-        hovered_block := rl.CheckCollisionPointRec(mouse, target.hover_rect)
-        hovered_icon := rl.CheckCollisionPointRec(mouse, target.rect)
+        hovered_block := rl.CheckCollisionPointRec(mouse, rl.Rectangle(target.hover_rect))
+        hovered_icon := rl.CheckCollisionPointRec(mouse, rl.Rectangle(target.rect))
         if !hovered_block && !hovered_icon {
             continue
         }
 
-        rl.DrawRectangleRec(target.hover_rect, hover_bg)
+        rl.DrawRectangleRec(rl.Rectangle(target.hover_rect), hover_bg)
     }
 }
 
@@ -64,7 +66,8 @@ copy_icon_find_hovered_index :: proc(
     mouse: rl.Vector2) -> int {
 
     for i in 0..<cache^.copy_hit_target_count {
-        if rl.CheckCollisionPointRec(mouse, cache^.copy_hit_targets[i].rect) {
+        if rl.CheckCollisionPointRec(
+            mouse, rl.Rectangle(cache^.copy_hit_targets[i].rect)) {
             return i
         }
     }
@@ -177,7 +180,7 @@ copy_icon_linger_t :: #force_inline proc(
 
 //   Resolve the foreground color for one copy icon press transition.
 copy_icon_color :: #force_inline proc(press_t: f32) -> rl.Color {
-    color := UI_TEXT_COLOR
+    color := native.to_raylib_color(UI_TEXT_COLOR)
     if press_t <= 0 {
         return color
     }
@@ -202,7 +205,7 @@ draw_copy_icon_button :: proc(
     use_press_t := clamp(press_t, 0.0, 1.0)
 
     if use_press_t > 0 {
-        rl.DrawRectangleRec(slot_rect, UI_BORDER_COLOR)
+        rl.DrawRectangleRec(slot_rect, native.to_raylib_color(UI_BORDER_COLOR))
     }
 
     scale := 1.0 + COPY_ICON_HOVER_SCALE_ADD * use_hover_t -
@@ -248,7 +251,7 @@ copy_icon_draw_target :: proc(
 
     press_visual := max(press_t, copy_icon_linger_t(runtime, is_linger_target))
 
-    draw_copy_icon_button(target.rect, hover_t, press_visual)
+    draw_copy_icon_button(rl.Rectangle(target.rect), hover_t, press_visual)
 }
 
 //   Resolve copy hover, shared capture, clipboard publication, and transitions.

@@ -1,8 +1,7 @@
 package bridge
 
-import rl "vendor:raylib"
-
 import bridgemodel "model"
+import geometry "../core/geometry"
 import shapemodel "../shapes/model"
 
 // Julia module provides the Odin-Julia Bridge to coordinate all actions between the 2
@@ -61,6 +60,7 @@ BRIDGE_STATUS_INVALID_UTF8 :: 10
 BRIDGE_STATUS_UNSUPPORTED_MIME :: 11
 
 Bridge_Color :: bridgemodel.Bridge_Color
+Vector3 :: geometry.Vector3
 
 // Carry presentation values shared by shape construction exports.
 Bridge_Shape_Style :: struct {
@@ -70,7 +70,7 @@ Bridge_Shape_Style :: struct {
 
 // Carry one positioned shape's construction values within the ABI parameter budget.
 Bridge_Positioned_Shape_Input :: struct {
-    position: rl.Vector3,
+    position: geometry.Vector3,
     style: Bridge_Shape_Style,
 }
 
@@ -153,8 +153,8 @@ Bridge_Shape_Cycloid_Result :: struct {
 Bridge_Shape_Cycloid_Query_Result :: struct {
     status: i32,
     shape: u64,
-    first: rl.Vector3,
-    second: rl.Vector3,
+    first: geometry.Vector3,
+    second: geometry.Vector3,
     geometry: shapemodel.Bridge_Cycloid_Geometry,
 }
 
@@ -190,7 +190,7 @@ Bridge_Shape_View :: struct {
     has_transform: u8,
     has_style: u8,
     has_active_feature: u8,
-    position: rl.Vector3,
+    position: geometry.Vector3,
     color: Bridge_Color,
     active_color: Bridge_Color,
     has_active_color: u8,

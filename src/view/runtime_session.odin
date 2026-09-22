@@ -8,6 +8,7 @@ import view_core "core"
 import viewmodel "model"
 import "ui"
 import "../core"
+import color "../core/color"
 import "../dynview"
 import evidence_allocation "../evidence/allocation"
 import evidence_artifact "../evidence/artifact"
@@ -231,8 +232,8 @@ make_drawing_surface :: proc() -> ^Euclid_Drawing_Surface {
     drawing_surface^.right_up = Vector3{1 + edge, 0 - edge, 0}
     drawing_surface^.left_down = Vector3{0 - edge, 1 + edge, 0}
     drawing_surface^.right_down = Vector3{1 + edge, 1 + edge, 0}
-    drawing_surface^.color = view_core.SURFACE_COLOR
-    drawing_surface^.edge_color = view_core.SURFACE_EDGE_COLOR
+    drawing_surface^.color = viewmodel.Color(view_core.SURFACE_COLOR)
+    drawing_surface^.edge_color = viewmodel.Color(view_core.SURFACE_EDGE_COLOR)
     drawing_surface^.edge_size = view_core.SURFACE_EDGE_SIZE
     return drawing_surface
 }
@@ -242,19 +243,19 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
     world := new(shapemodel.Shape_World, context.allocator)
     world_trochoid_tool, trochoid_tool_status := shapes.world_create_trochoid_tool(
         world, {mode = .External, fixed_radius = 0.2, rolling_radius = 0.1,
-            style = {color = view_core.TOOL_COLOR, brush_size = 5}})
+            style = {color = color.Color_RGBA8(view_core.TOOL_COLOR), brush_size = 5}})
     world_cycloid_tool, cycloid_tool_status := shapes.world_create_cycloid_tool(
         world, {first = {0.04, 0.38, 0}, second = {0.96, 0.38, 0},
             rolling_radius = 0.06, parameter_start = 0,
             parameter_finish = 4 * math.PI,
-            style = {color = view_core.TOOL_COLOR, brush_size = 5}})
+            style = {color = color.Color_RGBA8(view_core.TOOL_COLOR), brush_size = 5}})
     world_compass, compass_status := shapes.world_create_compass(world, {
         joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
         joint2 = {0.02, 0.02, 0}, limb_length = TOOL_LENGTH,
-        style = {color = view_core.TOOL_COLOR, brush_size = 5}})
+        style = {color = color.Color_RGBA8(view_core.TOOL_COLOR), brush_size = 5}})
     world_pen, pen_status := shapes.world_create_pen(world, {
         joint1 = {0, 0, 0}, joint2 = {0, 0, 0}, length = TOOL_LENGTH,
-        style = {color = view_core.TOOL_COLOR, brush_size = 5}})
+        style = {color = color.Color_RGBA8(view_core.TOOL_COLOR), brush_size = 5}})
     if trochoid_tool_status != .Ok || cycloid_tool_status != .Ok ||
         compass_status != .Ok || pen_status != .Ok ||
         shapemodel.shape_world_freeze_baseline(world) != .Ok {

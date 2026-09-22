@@ -1,6 +1,8 @@
 package bridgemodel
 
 import animationmodel "../../core/animation"
+import color "../../core/color"
+import geometry "../../core/geometry"
 import storage "../../core/storage"
 import dynviewmodel "../../dynview/model"
 import evidence_trace "../../evidence/trace"
@@ -13,8 +15,6 @@ import "core:encoding/uuid"
 import "core:mem"
 import vmem "core:mem/virtual"
 
-import rl "vendor:raylib"
-
 // SCENE_COMMAND_BATCH_CAPACITY bounds one transactional animation command batch.
 SCENE_COMMAND_BATCH_CAPACITY :: animationmodel.ANIMATION_VALUE_PENDING_WRITE_CAPACITY
 
@@ -23,13 +23,12 @@ VIEW_SNAPSHOT_SLOT_COUNT :: 2
 VIEW_SNAPSHOT_TEXT_CAPACITY :: dynviewmodel.DYNVIEW_MAX_TEXT_BYTES
 VIEW_SNAPSHOT_ARENA_RESERVATION :: uint(2 * mem.Megabyte)
 
-// Bridge_Color is the fixed-width color representation used by scene commands.
-Bridge_Color :: struct {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-}
+// Bridge_Color preserves the fixed-width RGBA bridge contract.
+Bridge_Color :: color.Color_RGBA8
+
+#assert(size_of(Bridge_Color) == 4)
+#assert(align_of(Bridge_Color) == align_of(u8))
+#assert(size_of(geometry.Vector3) == 3 * size_of(f32))
 
 // Scene_Command_Kind identifies one display-owned scene mutation request.
 Scene_Command_Kind :: enum u8 {
@@ -62,8 +61,8 @@ Scene_Command_Kind :: enum u8 {
 Scene_Command :: struct {
     kind: Scene_Command_Kind,
     entity: u64,
-    position: rl.Vector3,
-    second_position: rl.Vector3,
+    position: geometry.Vector3,
+    second_position: geometry.Vector3,
     arc: shapemodel.Shape_Arc,
     trochoid: shapemodel.Shape_Trochoid,
     trochoid_tool: shapemodel.Shape_Trochoid_Tool,

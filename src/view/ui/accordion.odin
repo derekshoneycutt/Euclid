@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import viewmodel "../model"
 
 import view_core "../core"
@@ -173,7 +175,7 @@ draw_accordion_header :: proc(
     colors := text_button_colors(params, result.hovered, result.pressed)
     expanded := descriptor.section == ctx.active
     if expanded {
-        colors.background = UI_COMPONENT_BACKGROUND_COLOR
+        colors.background = native.to_raylib_color(UI_COMPONENT_BACKGROUND_COLOR)
     }
     rl.DrawRectangleRec(result.button_drawn_rect, colors.background)
     rl.DrawRectangleLinesEx(result.button_drawn_rect, 1, colors.border)

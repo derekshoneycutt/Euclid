@@ -3,6 +3,7 @@ package fontmodel
 import "base:runtime"
 import vmem "core:mem/virtual"
 
+import geometry "../../../core/geometry"
 import "../../../taskpool"
 
 import rl "vendor:raylib"
@@ -215,7 +216,7 @@ Font_Glyph_State :: enum u8 {
 }
 
 Font_Glyph_Record :: struct {
-    rectangle: rl.Rectangle,
+    rectangle: geometry.Rectangle,
     offset_x: i32,
     offset_y: i32,
     advance_x: i32,

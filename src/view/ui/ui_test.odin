@@ -105,8 +105,10 @@ ui_regions_portrait_is_full_width_and_compact_safe :: proc(t: ^testing.T) {
     testing.expect_value(t, regions.accordion_rect.x, f32(TREE_PANEL_PADDING))
     testing.expect_value(t, regions.accordion_rect.width, f32(620))
     view_layout := accordion_layout(
-        regions.accordion_rect, accordion_portrait_sections("Animation"), .View)
-    testing.expect_value(t, regions.text_rect, view_layout.content)
+        rl.Rectangle(regions.accordion_rect),
+        accordion_portrait_sections("Animation"), .View)
+    testing.expect_value(
+        t, regions.text_rect, viewmodel.Rectangle(view_layout.content))
     testing.expect(t, regions.terminal_rect.width >= 0)
     testing.expect(t, validate_ui_regions(regions))
 
@@ -245,7 +247,8 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
     testing.expect(t, !routed.presentation.pointer)
     testing.expect(t, !routed.accordion.wheel)
 
-    controls := animation_control_layout_slots(runtime.ui_regions.world_rect)
+    controls := animation_control_layout_slots(
+        rl.Rectangle(runtime.ui_regions.world_rect))
     animation := ui_route_interaction_frame(&runtime, {
         frame = {mouse_position = {
             controls.pause.x + 1, controls.pause.y + 1}},
@@ -393,10 +396,12 @@ split_width_change_invalidates_dynview_panel_layout :: proc(t: ^testing.T) {
     resized := compute_ui_regions(.Landscape, WINDOW_WIDTH, WINDOW_HEIGHT,
         VIEW_WIDTH - 100, VIEW_HEIGHT)
 
-    app_dynview.track_panel(runtime, view_text_content_panel(baseline.text_rect))
+    app_dynview.track_panel(
+        runtime, view_text_content_panel(rl.Rectangle(baseline.text_rect)))
     runtime^.pending_invalidation_mask = 0
     runtime^.compile_cache.is_valid = true
-    app_dynview.track_panel(runtime, view_text_content_panel(resized.text_rect))
+    app_dynview.track_panel(
+        runtime, view_text_content_panel(rl.Rectangle(resized.text_rect)))
 
     testing.expect(t, runtime^.pending_invalidation_mask &
         app_dynview.DYNVIEW_INVALIDATE_PANEL != 0)
@@ -733,12 +738,12 @@ scenario_presentation_scroll_follows_ui_policy :: proc(t: ^testing.T) {
 validate_ui_regions_rejects_negative_dimensions :: proc(t: ^testing.T) {
     // Ensures region validation fails when any panel rectangle has negative width or height.
     regions := viewmodel.Ui_Regions{}
-    regions.world_rect = rl.Rectangle{0, 0, -1, 10}
+    regions.world_rect = viewmodel.Rectangle{0, 0, -1, 10}
 
     testing.expect(t, !validate_ui_regions(regions))
 
-    regions.world_rect = rl.Rectangle{0, 0, 1, 10}
-    regions.accordion_rect = rl.Rectangle{0, 0, 10, -1}
+    regions.world_rect = viewmodel.Rectangle{0, 0, 1, 10}
+    regions.accordion_rect = viewmodel.Rectangle{0, 0, 10, -1}
     testing.expect(t, !validate_ui_regions(regions))
 }
 

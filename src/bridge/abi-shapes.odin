@@ -7,7 +7,6 @@ import "../particles"
 import "../shapes"
 import view_core "../view/core"
 
-import rl "vendor:raylib"
 
 // Group immutable component sources selected for one bridge query.
 Bridge_Shape_Query_Source :: struct {
@@ -26,8 +25,8 @@ Bridge_Shape_Query_Source :: struct {
 
 // Hold one resolved literal Cycloid line.
 Bridge_Cycloid_Line :: struct {
-    first: rl.Vector3,
-    second: rl.Vector3,
+    first: Vector3,
+    second: Vector3,
 }
 
 // Map canonical world outcomes to stable bridge status values.
@@ -88,8 +87,7 @@ bridge_shape_query_source :: proc(
 
 // Convert ABI presentation values into canonical world construction style.
 bridge_shape_style :: proc(style: Bridge_Shape_Style) -> shapes.Shape_Style {
-    return {color = rl.Color{style.color.r, style.color.g,
-        style.color.b, style.color.a}, brush_size = style.brush_size}
+    return {color = style.color, brush_size = style.brush_size}
 }
 
 // Pack one standalone entity constructor result for ABI return.
@@ -133,7 +131,7 @@ shape_create_label :: proc "c" (
 @(export)
 shape_create_line :: proc "c" (
     state: ^core.Euclid_General_State,
-    first, second: rl.Vector3,
+    first, second: Vector3,
     style: Bridge_Shape_Style) -> Bridge_Shape_Line_Result {
     context = state.saved_context
     handle, status := shapes.world_create_line(
@@ -150,7 +148,7 @@ shape_create_line :: proc "c" (
 @(export)
 shape_create_arc :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: rl.Vector3,
+    center: Vector3,
     arc: shapemodel.Bridge_Arc_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Arc_Result {
     context = state.saved_context
@@ -167,7 +165,7 @@ shape_create_arc :: proc "c" (
 @(export)
 shape_create_filled_arc :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: rl.Vector3,
+    center: Vector3,
     arc: shapemodel.Bridge_Arc_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Arc_Result {
     context = state.saved_context
@@ -184,7 +182,7 @@ shape_create_filled_arc :: proc "c" (
 @(export)
 shape_create_circle_region :: proc "c" (
     state: ^core.Euclid_General_State,
-    first_center, second_center: rl.Vector3,
+    first_center, second_center: Vector3,
     geometry: shapemodel.Bridge_Circle_Region_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Circle_Region_Result {
     context = state.saved_context
@@ -251,7 +249,7 @@ bridge_cycloid_endpoints :: proc(source: ^Bridge_Shape_Query_Source,
 @(export)
 shape_create_trochoid :: proc "c" (
     state: ^core.Euclid_General_State,
-    center: rl.Vector3,
+    center: Vector3,
     geometry: shapemodel.Bridge_Trochoid_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Trochoid_Result {
     context = state.saved_context
@@ -270,7 +268,7 @@ shape_create_trochoid :: proc "c" (
 @(export)
 shape_create_cycloid :: proc "c" (
     state: ^core.Euclid_General_State,
-    first, second: rl.Vector3,
+    first, second: Vector3,
     geometry: shapemodel.Bridge_Cycloid_Geometry,
     style: Bridge_Shape_Style) -> Bridge_Shape_Cycloid_Result {
     context = state.saved_context
@@ -291,7 +289,7 @@ shape_create_cycloid :: proc "c" (
 @(export)
 shape_create_triangle :: proc "c" (
     state: ^core.Euclid_General_State,
-    vertices: [3]rl.Vector3,
+    vertices: [3]Vector3,
     style: Bridge_Shape_Style) -> Bridge_Shape_Triangle_Result {
     context = state.saved_context
     handle, status := shapes.world_create_triangle(
@@ -496,7 +494,7 @@ shape_copy_label_source :: proc "c" (
 shape_set_position :: proc "c" (
     state: ^core.Euclid_General_State,
     packed: u64,
-    position: rl.Vector3) -> i32 {
+    position: Vector3) -> i32 {
     context = state.saved_context
     command, captured := capture_shape_command(state, .Set_Shape_Position, packed)
     if command != nil {
@@ -744,7 +742,7 @@ shape_set_active_color :: proc "c" (
     style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style {return BRIDGE_STATUS_NOT_FOUND}
-    style.active_color = rl.Color{color.r, color.g, color.b, color.a}
+    style.active_color = color
     return BRIDGE_STATUS_OK
 }
 

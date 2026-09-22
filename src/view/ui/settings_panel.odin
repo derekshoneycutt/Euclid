@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import "../../core"
 import particlemodel "../../particles/model"
 import view_core "../core"
@@ -119,7 +121,7 @@ draw_settings_particle_stats :: proc(
                 ctx.panel.x + SETTINGS_PANEL_INSET,
                 stats_y + f32(row)*SETTINGS_STATS_ROW_GAP,
             },
-            color = UI_TEXT_COLOR,
+            color = native.to_raylib_color(UI_TEXT_COLOR),
             font = view_core.ui_text_font(ctx.font),
         })
     }

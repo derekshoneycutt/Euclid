@@ -146,7 +146,8 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
-  - [ ] Initial comprehensive shape drawing suite
+  - [ ] Initial comprehensive terminal shape drawing suite
+- [ ] Comprehensive mouse/keyboard focus system (In progress)
 - [ ] IME/Accesibility/etc. Features
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
@@ -180,6 +181,7 @@ Final tasks:
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
   - [X] Shader-based particle drawing
+  - [X] PIC dust particle physics
 - [X] Generated Code Wiki
 - [ ] Semantic trace and deterministic animation test harness (default off)
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
@@ -202,6 +204,7 @@ Final tasks:
   - [ ] Freeze and document supported Julia APIs
   - [ ] Remove dead APIs, debug paths, compatibility code, and unused assets
 - [ ] Final editing and review (2-3 weeks)
+  - [ ] Final Terminal user-command interface review
   - [ ] Animation and content editing
   - [ ] Principal code review against documented architecture and standards
   - [ ] Resolve review findings

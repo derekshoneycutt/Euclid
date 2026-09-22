@@ -1,5 +1,7 @@
 package ui
 
+import native "../native"
+
 import viewmodel "../model"
 
 import bridgemodel "../../bridge/model"
@@ -424,7 +426,7 @@ update_tree_node_expander_hit :: proc(
         interaction_enabled =
             ctx.allow_clicks && !ctx.ui_runtime.tree_scroll_dragging,
         toggle_triggered = toggle_triggered,
-        color = UI_TEXT_COLOR,
+        color = native.to_raylib_color(UI_TEXT_COLOR),
     })
     if expander_result.clicked {
         hit.toggled_node = node
@@ -443,7 +445,7 @@ draw_tree_node_label :: proc(
         key = .Regular,
         text = node.name,
         position = {x, y},
-        color = UI_TEXT_COLOR,
+        color = native.to_raylib_color(UI_TEXT_COLOR),
         font = view_core.ui_text_font(ctx.font),
     })
 }
@@ -580,7 +582,7 @@ draw_tree_node_row :: proc(
         expander_params := Tree_Expander_Params{rect = icon_rect,
             expanded = node.is_expanded, mouse = ctx.mouse_input,
             interaction_space_rect = ctx.interaction_space_rect,
-            color = UI_TEXT_COLOR}
+            color = native.to_raylib_color(UI_TEXT_COLOR)}
         hovered := ctx.hovered_expander_node == node
         draw_tree_expander_prepared(expander_params, {hovered = hovered,
             pressed = hovered && input_frame_left_down(ctx.mouse_input)})

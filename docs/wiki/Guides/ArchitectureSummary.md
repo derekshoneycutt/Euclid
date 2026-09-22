@@ -163,6 +163,15 @@ The Julia owner is a dedicated long-lived thread, not part of the CPU pool. The 
 may help execute native pool work while waiting on a fence, but only the Julia owner
 may enter Julia and only the display may publish visible state.
 
+### Portable Runtime Values
+
+`src/core/color` owns semantic RGBA8 values and deterministic source-name resolution.
+`src/core/geometry` owns application vectors and rectangles. Canonical shapes,
+particles, Dynview commands and layout records, Terminal themes, UI regions, and
+prepared glyph placement use these portable values. Bridge and protocol payloads keep
+their explicit wire representations, while display packages convert portable values to
+Raylib types only when constructing native draw, hit-test, shader, or font data.
+
 ## Julia Actor Architecture
 
 One `EuclidActorRuntime.ActorRuntime` organizes cooperative Julia-side concurrency on

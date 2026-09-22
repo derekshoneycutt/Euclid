@@ -262,7 +262,7 @@ dynview_selection_hits_copy_icon :: proc(
     runtime: ^dynviewmodel.Dynview_System, point: rl.Vector2) -> bool {
     if runtime == nil {return false}
     for target in runtime^.compile_cache.copy_hit_targets {
-        if rl.CheckCollisionPointRec(point, target.rect) {return true}
+        if rl.CheckCollisionPointRec(point, rl.Rectangle(target.rect)) {return true}
     }
     return false
 }

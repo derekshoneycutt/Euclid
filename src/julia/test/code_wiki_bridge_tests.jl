@@ -67,6 +67,10 @@ end
         parameter_type="AnimationDescriptorABIMetadata")
     @test length(CodeWiki.pair_bridge_records(
         [metadata_export], [metadata_call])) == 1
+    vector_export = bridge_test_export(parameter_type="Vector3")
+    vector_call = bridge_test_call(parameter_type="NTuple{3,Cfloat}")
+    @test length(CodeWiki.pair_bridge_records(
+        [vector_export], [vector_call])) == 1
     @test isempty(CodeWiki.pair_bridge_records([exported], BridgeJuliaCall[], ["ping"]))
     @test_throws ErrorException CodeWiki.pair_bridge_records(
         [exported], BridgeJuliaCall[], ["unknown"])

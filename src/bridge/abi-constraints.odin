@@ -1,7 +1,5 @@
 package bridge
 
-import rl "vendor:raylib"
-
 import shapemodel "../shapes/model"
 
 import "../core"
@@ -55,7 +53,7 @@ create_snap_to_floor_constraint :: proc "c" (
 @(export)
 create_snap_point_constraint :: proc "c" (
     state: ^core.Euclid_General_State, point: u64,
-    position: rl.Vector3, enabled: u8) -> i32 {
+    position: Vector3, enabled: u8) -> i32 {
     context = state^.saved_context
     entity, found := constraint_target(state, point)
     if !found {return BRIDGE_STATUS_NOT_FOUND}

@@ -2,9 +2,9 @@ package dynviewmodel
 
 import fontmodel "../../view/font/model"
 import presentation_model "../../bridge/presentation"
+import color "../../core/color"
+import geometry "../../core/geometry"
 import storage "../../core/storage"
-
-import rl "vendor:raylib"
 
 DYNVIEW_MAX_COMMANDS :: 1024
 DYNVIEW_MAX_TEXT_BYTES :: presentation_model.PRESENTATION_MAX_SOURCE_BYTES
@@ -41,6 +41,7 @@ DYNVIEW_MAX_DOCUMENT_LAYOUT_COPY_TARGETS ::
 
 Font_Weight :: fontmodel.Font_Weight
 Font_Variant_Flags :: fontmodel.Font_Variant_Flags
+Color :: color.Color_RGBA8
 
 Dynview_Text_Alignment :: enum {
     Left,
@@ -48,7 +49,7 @@ Dynview_Text_Alignment :: enum {
 }
 
 Dynview_Text_Style :: struct {
-    color: rl.Color,
+    color: Color,
     alignment: Dynview_Text_Alignment,
     bold: bool,
     italic: bool,
@@ -197,19 +198,19 @@ Dynview_Command :: struct {
     inline_atom_stroke: f32,
     inline_box_height: f32,
     has_brush_color: bool,
-    brush_color: rl.Color,
+    brush_color: Color,
     inline_outline_stroke: f32,
     pie_start_angle_degrees: f32,
     pie_end_angle_degrees: f32,
     pie_is_filled: bool,
     has_outline_color: bool,
-    outline_color: rl.Color,
+    outline_color: Color,
     shape_is_filled: bool,
-    shape_edge_color_1: rl.Color,
-    shape_edge_color_2: rl.Color,
-    shape_edge_color_3: rl.Color,
-    shape_edge_color_4: rl.Color,
-    shape_edge_color_5: rl.Color,
+    shape_edge_color_1: Color,
+    shape_edge_color_2: Color,
+    shape_edge_color_3: Color,
+    shape_edge_color_4: Color,
+    shape_edge_color_5: Color,
 }
 
 Dynview_Copy_Block :: struct {
@@ -225,8 +226,8 @@ Dynview_Copy_Hit_Target :: struct {
     block_id: i32,
     payload_offset: int,
     payload_len: int,
-    rect: rl.Rectangle,
-    hover_rect: rl.Rectangle,
+    rect: geometry.Rectangle,
+    hover_rect: geometry.Rectangle,
 }
 
 Dynview_Layout_Item_Kind :: enum {
@@ -355,19 +356,19 @@ Dynview_Layout_Item :: struct {
     inline_atom_stroke: f32,
     inline_box_height: f32,
     has_brush_color: bool,
-    brush_color: rl.Color,
+    brush_color: Color,
     inline_outline_stroke: f32,
     pie_start_angle_degrees: f32,
     pie_end_angle_degrees: f32,
     pie_is_filled: bool,
     has_outline_color: bool,
-    outline_color: rl.Color,
+    outline_color: Color,
     shape_is_filled: bool,
-    shape_edge_color_1: rl.Color,
-    shape_edge_color_2: rl.Color,
-    shape_edge_color_3: rl.Color,
-    shape_edge_color_4: rl.Color,
-    shape_edge_color_5: rl.Color,
+    shape_edge_color_1: Color,
+    shape_edge_color_2: Color,
+    shape_edge_color_3: Color,
+    shape_edge_color_4: Color,
+    shape_edge_color_5: Color,
     content_offset_x: f32,
     content_offset_y: f32,
     overflows_horizontally: bool,
@@ -557,7 +558,7 @@ Dynview_Document_Shape_Kind :: enum u8 {
 // Retain one optional semantic color without parser-owned storage.
 Dynview_Document_Color :: struct {
     present: bool,
-    value: rl.Color,
+    value: Color,
 }
 
 // Retain one font-independent inline Euclid shape payload.

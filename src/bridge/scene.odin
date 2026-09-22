@@ -1,14 +1,12 @@
 package bridge
 
-import rl "vendor:raylib"
-
 import "../core"
 import "../particles"
 
 import "core:math"
 
 // Report whether one tool endpoint participates in floor dust contact.
-tool_dust_contact_on_floor :: #force_inline proc(position: rl.Vector3) -> bool {
+tool_dust_contact_on_floor :: #force_inline proc(position: Vector3) -> bool {
     return f32(math.abs(f64(position.z))) <= FLOOR_CONTACT_Z_EPSILON
 }
 
@@ -21,7 +19,7 @@ to_u8 :: #force_inline proc(value: bool) -> u8 {
 // Queue one tool endpoint at the floor boundary.
 queue_tool_dust_contact :: proc(
     state: ^core.Euclid_General_State,
-    endpoint: rl.Vector3) {
+    endpoint: Vector3) {
     if !tool_dust_contact_on_floor(endpoint) {
         return
     }
@@ -33,7 +31,7 @@ queue_tool_dust_contact :: proc(
 // Queue one compound filled-compass sweep when both legs lie on the floor.
 queue_compass_filled_dust_contact :: proc(
     state: ^core.Euclid_General_State,
-    previous_first, previous_second, current_first, current_second: rl.Vector3) {
+    previous_first, previous_second, current_first, current_second: Vector3) {
     if !tool_dust_contact_on_floor(previous_first) ||
         !tool_dust_contact_on_floor(previous_second) ||
         !tool_dust_contact_on_floor(current_first) ||

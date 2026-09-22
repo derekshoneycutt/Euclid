@@ -1,5 +1,7 @@
 package ui_dynview
 
+import native "../../native"
+
 import dynviewmodel "../../../dynview/model"
 
 import fontmodel "../../font/model"
@@ -172,17 +174,18 @@ command_draw_color :: #force_inline proc(
     style: dyncore.Dynview_Text_Style) -> rl.Color {
 
     if cmd.has_brush_color {
-        return cmd.brush_color
+        return native.to_raylib_color(cmd.brush_color)
     }
-    return style.color
+    return native.to_raylib_color(style.color)
 }
 
 //   Return edge_color unless it is fully transparent zero, else the fallback.
-shape_edge_color_or :: #force_inline proc(edge_color, fallback: rl.Color) -> rl.Color {
+shape_edge_color_or :: #force_inline proc(
+    edge_color: dynviewmodel.Color, fallback: rl.Color) -> rl.Color {
     if edge_color.r == 0 && edge_color.g == 0 && edge_color.b == 0 && edge_color.a == 0 {
         return fallback
     }
-    return edge_color
+    return native.to_raylib_color(edge_color)
 }
 
 //   Normalize one degree angle into the [0, 360) range.
@@ -503,12 +506,13 @@ flow_draw_text_line_content :: proc(
             key = style_font_key(style),
             text = line_text,
             position = {line_x, row_y},
-            color = style.color,
+            color = native.to_raylib_color(style.color),
             font = text_font,
         })
     } else {
         view_core.ui_text(
-            line_text, int(line_x), int(row_y), style.color, text_font)
+            line_text, int(line_x), int(row_y),
+            native.to_raylib_color(style.color), text_font)
     }
 }
 
@@ -545,7 +549,7 @@ flow_draw_text_line :: proc(
             rl.Vector2{line_x, underline_y},
             rl.Vector2{line_x + f32(line_len)*advance, underline_y},
             1,
-            style.color)
+            native.to_raylib_color(style.color))
     }
 }
 
@@ -754,7 +758,8 @@ flow_consume_inline_filled_box :: proc(
         rl.DrawRectangleRec(rect, command_draw_color(cmd, style))
         if cmd.inline_outline_stroke > 0 {
             rl.DrawRectangleLinesEx(
-                rect, max(1.0, cmd.inline_outline_stroke), style.color)
+                rect, max(1.0, cmd.inline_outline_stroke),
+                native.to_raylib_color(style.color))
         }
     }
 
@@ -776,10 +781,11 @@ draw_flow_inline_filled_circle :: #force_inline proc(
     rl.DrawCircleV(center, radius, command_draw_color(cmd, style))
 
     if cmd.inline_outline_stroke > 0 {
-        rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
+        rl.DrawCircleLines(
+            i32(center.x), i32(center.y), radius, native.to_raylib_color(style.color))
         if max(1.0, cmd.inline_outline_stroke) > 1 {
             rl.DrawCircleLines(i32(center.x), i32(center.y),
-                max(1.0, radius - 1), style.color)
+                max(1.0, radius - 1), native.to_raylib_color(style.color))
         }
     }
 }
@@ -841,7 +847,7 @@ draw_flow_inline_pie_section :: #force_inline proc(
             radius,
             cmd.pie_start_angle_degrees,
             cmd.pie_end_angle_degrees,
-            Pie_Section_Style{stroke, outline_color})
+            Pie_Section_Style{stroke, native.to_raylib_color(outline_color)})
     }
 }
 
@@ -878,7 +884,8 @@ flow_consume_inline_perpendicular :: proc(
         Flow_Shape_Span{0.34, 0.74})
     if frame.visible {
         draw_perpendicular_shape(frame.rect, max(1.0, cmd.inline_atom_stroke),
-            Perpendicular_Colors{command_draw_color(cmd, style), cmd.shape_edge_color_1})
+            Perpendicular_Colors{command_draw_color(cmd, style),
+                native.to_raylib_color(cmd.shape_edge_color_1)})
     }
 
     flow^.had_visible = true
