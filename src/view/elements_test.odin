@@ -7,8 +7,85 @@ import "core:math"
 import "core:math/linalg"
 import "core:testing"
 
+import rl "vendor:raylib"
+
 
 TOOL_BRUSH_TEST_EPSILON :: f32(1e-4)
+
+// Tool_Brush_Shader_Test_State controls location failure and records release calls.
+Tool_Brush_Shader_Test_State :: struct {
+    missing_name: string,
+    unload_count: int,
+    unloaded_id: u32,
+}
+
+// Return a valid location except for the configured missing uniform.
+tool_brush_test_get_location :: proc(
+    user_data: rawptr, _: rl.Shader, name: cstring) -> i32 {
+    state := (^Tool_Brush_Shader_Test_State)(user_data)
+    if string(name) == state^.missing_name {
+        return -1
+    }
+    return 1
+}
+
+// Record one shader release without entering Raylib.
+tool_brush_test_unload :: proc(user_data: rawptr, shader: rl.Shader) {
+    state := (^Tool_Brush_Shader_Test_State)(user_data)
+    state^.unload_count += 1
+    state^.unloaded_id = shader.id
+}
+
+// Build deterministic operations for tool shader admission tests.
+tool_brush_test_operations :: proc(
+    state: ^Tool_Brush_Shader_Test_State) -> Tool_Brush_Shader_Operations {
+    return {
+        user_data = rawptr(state),
+        get_location = tool_brush_test_get_location,
+        unload = tool_brush_test_unload,
+    }
+}
+
+// Verify a complete location contract publishes the loaded tool shader.
+@(test)
+tool_brush_admission_publishes_complete_shader :: proc(t: ^testing.T) {
+    test_state: Tool_Brush_Shader_Test_State
+    render_state := viewmodel.Tool_Render_State{shader = {id = 41}}
+
+    testing.expect(t,
+        tool_brush_admit_shader(&render_state, tool_brush_test_operations(&test_state)))
+    testing.expect(t, render_state.ready)
+    testing.expect_value(t, test_state.unload_count, 0)
+}
+
+// Verify an absent shader handle is rejected without location lookup or release.
+@(test)
+tool_brush_admission_rejects_absent_shader :: proc(t: ^testing.T) {
+    test_state: Tool_Brush_Shader_Test_State
+    render_state: viewmodel.Tool_Render_State
+
+    testing.expect(t,
+        !tool_brush_admit_shader(&render_state, tool_brush_test_operations(&test_state)))
+    testing.expect(t, !render_state.ready)
+    testing.expect_value(t, test_state.unload_count, 0)
+}
+
+// Verify a missing required location releases partial state exactly once.
+@(test)
+tool_brush_admission_releases_missing_uniform :: proc(t: ^testing.T) {
+    test_state := Tool_Brush_Shader_Test_State{missing_name = "uAttachmentExtent"}
+    render_state := viewmodel.Tool_Render_State{shader = {id = 73}}
+    operations := tool_brush_test_operations(&test_state)
+
+    testing.expect(t, !tool_brush_admit_shader(&render_state, operations))
+    testing.expect(t, !render_state.ready)
+    testing.expect_value(t, render_state.shader.id, u32(0))
+    testing.expect_value(t, test_state.unload_count, 1)
+    testing.expect_value(t, test_state.unloaded_id, u32(73))
+
+    tool_brush_release_shader(&render_state, operations)
+    testing.expect_value(t, test_state.unload_count, 1)
+}
 
 // Verify guide ring sampling closes exactly at one full turn.
 @(test)

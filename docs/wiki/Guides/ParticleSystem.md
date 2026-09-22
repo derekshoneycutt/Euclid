@@ -207,6 +207,27 @@ record per visible sprite. The preferred path uploads that stream to one VBO and
 GPU instances from the dust atlas. The immediate-mode fallback draws the same live
 particles as quads when instancing is unavailable or disabled.
 
+The instanced path requires the OpenGL 3.3 rlgl path and treats shader, VAO, and VBO
+creation as one display-thread transaction. `uViewport` and `texture0` are required
+uniforms. Static quad position and texture-coordinate inputs occupy locations 0 and 1.
+The 32-byte `Dust_Instance` stream occupies locations 2 through 4:
+
+| Location | Components | Byte offset | Meaning |
+| --- | --- | --- | --- |
+| 2 | 3 | 0 | Screen center and diameter |
+| 3 | 4 | 12 | Straight-alpha RGBA tint |
+| 4 | 1 | 28 | Atlas sprite index |
+
+Initialization stops at the first failed resource and never configures an attribute
+for a zero buffer. Once a VAO is enabled for setup, every exit restores the prior
+binding state. Failure releases instance VBO, static VBOs, VAO, and shader in reverse
+ownership order, then retains the immediate renderer for the session. Shutdown uses
+the same idempotent handle-based cleanup.
+
+Dust atlas publication is a separate small transaction shared by both draw paths. The
+display thread always releases the generated CPU image, publishes only a valid native
+texture, and releases a partial texture upload before returning failure.
+
 The field is never rendered as aggregate material. There is no aggregate texture,
 coverage plane, sprite suppression, or alternate dense-pile rendering authority.
 Particle identity, position, color, lifetime, size, sprite variant, and Z motion remain

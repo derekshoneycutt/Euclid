@@ -63,7 +63,8 @@ Tool_Render_State :: struct {
     loc_occluder_tangent: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
 }
 
-// Dust_Instance stores one tightly packed low-dust GPU instance.
+// Dust_Instance is the 32-byte stream consumed at dust attributes 2, 3, and 4.
+// Geometry begins at byte 0, color at byte 12, and sprite index at byte 28.
 Dust_Instance :: struct {
     screen_x, screen_y, diameter: f32,
     red, green, blue, alpha: f32,

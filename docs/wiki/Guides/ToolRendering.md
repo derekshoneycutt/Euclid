@@ -50,6 +50,26 @@ straight rods fall back to `DrawLineEx` and the hinge falls back to segmented
 `DrawLineEx` rendering. This fallback remains draw-order based and does not
 provide depth-aware crossings or welded attachment shading.
 
+## Shader Resource Contract
+
+`src/view/elements.odin` owns the complete `stroke3d` admission transaction. It
+resolves both packaged stages, requires a nonzero Raylib shader handle, caches every
+application uniform used by tool drawing, and publishes `Tool_Render_State.ready`
+only after every required location is nonnegative. The vertex stage uses Raylib's
+conventional `vertexPosition`, `vertexTexCoord`, `vertexColor`, and `mvp` bindings.
+Those names remain part of the checked-in shader contract even though the current
+Odin Raylib binding does not expose attribute-location queries.
+
+Every failed admission leaves the shader unpublished and releases any loaded handle.
+Shutdown also releases by handle rather than by publication state, so partial state is
+safe. Release is idempotent. Shader handles and uniform locations are valid only for
+the active display-thread graphics context; workers never load, query, use, or release
+them.
+
+The fallback is an intentional availability policy, not partial shader operation. One
+missing required uniform disables the entire shader path for that session while
+preserving ordinary line rendering.
+
 ## Lighting Contract
 
 World light is transformed into the orthonormal isometric view basis before
@@ -84,7 +104,8 @@ stroke surface without claiming full world-space ray accuracy.
 
 `src/view/elements_test.odin` covers expanded bounds, fixed context capacity,
 cache-order depth gating, world-to-view basis projection, canonical view-depth
-ordering, arc parameter endpoints, attachment scaling, and stable leg slots.
+ordering, arc parameter endpoints, attachment scaling, stable leg slots, complete
+uniform admission, missing-uniform rejection, and idempotent partial cleanup.
 Runtime shader compilation is validated through the CMake `run` target. The
 complete repository gate is the CMake `check` target.
 

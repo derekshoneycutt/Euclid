@@ -104,6 +104,13 @@ Tool_Brush_Shader_Paths :: struct {
     fragment: cstring,
 }
 
+// Tool_Brush_Shader_Operations supplies the native calls used during shader admission.
+Tool_Brush_Shader_Operations :: struct {
+    user_data: rawptr,
+    get_location: proc(user_data: rawptr, shader: rl.Shader, name: cstring) -> i32,
+    unload: proc(user_data: rawptr, shader: rl.Shader),
+}
+
 //   Plane-clipping context for one pen segment against one polygon plane.
 Pen_Polygon_Clip_Context :: struct {
     stage0_start:  Vector3,
@@ -305,18 +312,48 @@ init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
         return
     }
 
-    tool_brush_cache_uniform_locations(s)
+    _ = tool_brush_admit_shader(s, tool_brush_native_operations())
+}
+
+// Admit one loaded tool shader only after its complete uniform contract resolves.
+tool_brush_admit_shader :: proc(
+    s: ^viewmodel.Tool_Render_State,
+    operations: Tool_Brush_Shader_Operations) -> bool {
+    s^.ready = false
+    if s^.shader.id == 0 {
+        return false
+    }
+    tool_brush_cache_uniform_locations(s, operations)
     if !tool_brush_uniforms_valid(s) {
         fmt.println(
             "tool_brush shader missing required uniforms; pen/compass 3D shading disabled")
         fmt.println("tool_brush uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
             " radius=", s^.loc_radius, " viewportHeight=", s^.loc_viewport_height)
-        rl.UnloadShader(s^.shader)
-        s^.ready = false
-        return
+        tool_brush_release_shader(s, operations)
+        return false
     }
 
     s^.ready = true
+    return true
+}
+
+// Call Raylib's uniform-location lookup through the tool shader operation contract.
+tool_brush_native_get_location :: proc(
+    _: rawptr, shader: rl.Shader, name: cstring) -> i32 {
+    return rl.GetShaderLocation(shader, name)
+}
+
+// Release one Raylib shader through the tool shader operation contract.
+tool_brush_native_unload :: proc(_: rawptr, shader: rl.Shader) {
+    rl.UnloadShader(shader)
+}
+
+// Return the production Raylib operations used by tool shader admission and cleanup.
+tool_brush_native_operations :: proc() -> Tool_Brush_Shader_Operations {
+    return {
+        get_location = tool_brush_native_get_location,
+        unload = tool_brush_native_unload,
+    }
 }
 
 //   Resolve and validate the tool_brush shader asset paths.
@@ -351,42 +388,59 @@ tool_brush_shader_paths :: proc(paths: ^Tool_Brush_Shader_Paths) -> bool {
 }
 
 //   Cache tool_brush uniform locations onto the stroke_3d render state.
-tool_brush_cache_uniform_locations :: proc(s: ^viewmodel.Tool_Render_State) {
-    s^.loc_light_dir = rl.GetShaderLocation(s^.shader, "uLightDirView")
-    s^.loc_ambient = rl.GetShaderLocation(s^.shader, "uAmbient")
-    s^.loc_diffuse = rl.GetShaderLocation(s^.shader, "uDiffuse")
-    s^.loc_material_roughness = rl.GetShaderLocation(s^.shader, "uMaterialRoughness")
-    s^.loc_material_fresnel_0 = rl.GetShaderLocation(s^.shader, "uMaterialFresnel0")
+tool_brush_cache_uniform_locations :: proc(
+    s: ^viewmodel.Tool_Render_State, operations: Tool_Brush_Shader_Operations) {
+    tool_brush_cache_scalar_uniform_locations(s, operations)
+    tool_brush_cache_occluder_uniform_locations(s, operations)
+}
+
+// Cache scalar and vector uniforms shared by every tool brush draw mode.
+tool_brush_cache_scalar_uniform_locations :: proc(
+    s: ^viewmodel.Tool_Render_State, operations: Tool_Brush_Shader_Operations) {
+    get := operations.get_location
+    data := operations.user_data
+    s^.loc_light_dir = get(data, s^.shader, "uLightDirView")
+    s^.loc_ambient = get(data, s^.shader, "uAmbient")
+    s^.loc_diffuse = get(data, s^.shader, "uDiffuse")
+    s^.loc_material_roughness = get(data, s^.shader, "uMaterialRoughness")
+    s^.loc_material_fresnel_0 = get(data, s^.shader, "uMaterialFresnel0")
     s^.loc_material_specular_tint =
-        rl.GetShaderLocation(s^.shader, "uMaterialSpecularTint")
+        get(data, s^.shader, "uMaterialSpecularTint")
     s^.loc_material_shadow_limit =
-        rl.GetShaderLocation(s^.shader, "uMaterialShadowLimit")
-    s^.loc_p0 = rl.GetShaderLocation(s^.shader, "uP0")
-    s^.loc_p1 = rl.GetShaderLocation(s^.shader, "uP1")
-    s^.loc_radius = rl.GetShaderLocation(s^.shader, "uRadius")
-    s^.loc_viewport_height = rl.GetShaderLocation(s^.shader, "uViewportHeight")
-    s^.loc_stroke_mode = rl.GetShaderLocation(s^.shader, "uStrokeMode")
-    s^.loc_strip_alpha = rl.GetShaderLocation(s^.shader, "uStripAlpha")
-    s^.loc_strip_color = rl.GetShaderLocation(s^.shader, "uStripColor")
-    s^.loc_strip_side_extent = rl.GetShaderLocation(s^.shader, "uStripSideExtent")
+        get(data, s^.shader, "uMaterialShadowLimit")
+    s^.loc_p0 = get(data, s^.shader, "uP0")
+    s^.loc_p1 = get(data, s^.shader, "uP1")
+    s^.loc_radius = get(data, s^.shader, "uRadius")
+    s^.loc_viewport_height = get(data, s^.shader, "uViewportHeight")
+    s^.loc_stroke_mode = get(data, s^.shader, "uStrokeMode")
+    s^.loc_strip_alpha = get(data, s^.shader, "uStripAlpha")
+    s^.loc_strip_color = get(data, s^.shader, "uStripColor")
+    s^.loc_strip_side_extent = get(data, s^.shader, "uStripSideExtent")
     s^.loc_arc_intersections_enabled =
-        rl.GetShaderLocation(s^.shader, "uArcIntersectionsEnabled")
+        get(data, s^.shader, "uArcIntersectionsEnabled")
     s^.loc_intersection_depth_width =
-        rl.GetShaderLocation(s^.shader, "uIntersectionDepthWidth")
-    s^.loc_attachment_extent = rl.GetShaderLocation(s^.shader, "uAttachmentExtent")
-    s^.loc_occluder_count = rl.GetShaderLocation(s^.shader, "uOccluderCount")
-    s^.loc_occluder_p0[0] = rl.GetShaderLocation(s^.shader, "uOccluderP0[0]")
-    s^.loc_occluder_p0[1] = rl.GetShaderLocation(s^.shader, "uOccluderP0[1]")
-    s^.loc_occluder_p1[0] = rl.GetShaderLocation(s^.shader, "uOccluderP1[0]")
-    s^.loc_occluder_p1[1] = rl.GetShaderLocation(s^.shader, "uOccluderP1[1]")
-    s^.loc_occluder_radius[0] = rl.GetShaderLocation(s^.shader, "uOccluderRadius[0]")
-    s^.loc_occluder_radius[1] = rl.GetShaderLocation(s^.shader, "uOccluderRadius[1]")
-    s^.loc_occluder_depth0[0] = rl.GetShaderLocation(s^.shader, "uOccluderDepth0[0]")
-    s^.loc_occluder_depth0[1] = rl.GetShaderLocation(s^.shader, "uOccluderDepth0[1]")
-    s^.loc_occluder_depth1[0] = rl.GetShaderLocation(s^.shader, "uOccluderDepth1[0]")
-    s^.loc_occluder_depth1[1] = rl.GetShaderLocation(s^.shader, "uOccluderDepth1[1]")
-    s^.loc_occluder_tangent[0] = rl.GetShaderLocation(s^.shader, "uOccluderTangent[0]")
-    s^.loc_occluder_tangent[1] = rl.GetShaderLocation(s^.shader, "uOccluderTangent[1]")
+        get(data, s^.shader, "uIntersectionDepthWidth")
+    s^.loc_attachment_extent = get(data, s^.shader, "uAttachmentExtent")
+    s^.loc_occluder_count = get(data, s^.shader, "uOccluderCount")
+}
+
+// Cache the fixed two-slot occluder uniform arrays used by tool interactions.
+tool_brush_cache_occluder_uniform_locations :: proc(
+    s: ^viewmodel.Tool_Render_State, operations: Tool_Brush_Shader_Operations) {
+    get := operations.get_location
+    data := operations.user_data
+    s^.loc_occluder_p0[0] = get(data, s^.shader, "uOccluderP0[0]")
+    s^.loc_occluder_p0[1] = get(data, s^.shader, "uOccluderP0[1]")
+    s^.loc_occluder_p1[0] = get(data, s^.shader, "uOccluderP1[0]")
+    s^.loc_occluder_p1[1] = get(data, s^.shader, "uOccluderP1[1]")
+    s^.loc_occluder_radius[0] = get(data, s^.shader, "uOccluderRadius[0]")
+    s^.loc_occluder_radius[1] = get(data, s^.shader, "uOccluderRadius[1]")
+    s^.loc_occluder_depth0[0] = get(data, s^.shader, "uOccluderDepth0[0]")
+    s^.loc_occluder_depth0[1] = get(data, s^.shader, "uOccluderDepth0[1]")
+    s^.loc_occluder_depth1[0] = get(data, s^.shader, "uOccluderDepth1[0]")
+    s^.loc_occluder_depth1[1] = get(data, s^.shader, "uOccluderDepth1[1]")
+    s^.loc_occluder_tangent[0] = get(data, s^.shader, "uOccluderTangent[0]")
+    s^.loc_occluder_tangent[1] = get(data, s^.shader, "uOccluderTangent[1]")
 }
 
 //   Return true when the required tool_brush uniforms were all located.
@@ -423,13 +477,17 @@ tool_brush_uniforms_valid :: proc(s: ^viewmodel.Tool_Render_State) -> bool {
 // Returns:
 //   - none.
 shutdown_tool_brush_shader :: proc(state: ^Euclid_General_State) {
-    s := &state^.stroke_3d
+    tool_brush_release_shader(&state^.stroke_3d, tool_brush_native_operations())
+}
 
-    if !s^.ready {
-        return
+// Release any loaded tool shader and reset its publication state.
+tool_brush_release_shader :: proc(
+    s: ^viewmodel.Tool_Render_State,
+    operations: Tool_Brush_Shader_Operations) {
+    if s^.shader.id != 0 {
+        operations.unload(operations.user_data, s^.shader)
+        s^.shader = {}
     }
-
-    rl.UnloadShader(s^.shader)
     s^.ready = false
 }
 
