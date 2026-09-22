@@ -497,6 +497,23 @@ pointer-free observations after the worker joins.
 
 The windowed wrapper adds GIF policy without changing this semantic boundary.
 
+### Synchronous Framebuffer Capture
+
+Presented-pixel acquisition is a display-thread operation owned by `src/view/core`.
+One synchronous Raylib capture object validates tightly packed RGBA8 pixels, retains
+the native image only for its immediate crop, nearest-neighbor resize, or PNG export,
+and releases that image before the post-presentation service returns. It never enters
+canonical state, worker storage, or the files package.
+
+Scenario evidence owns bounded screenshot requests, safe relative paths, and completion
+correlation. The display owner fulfills those requests after presentation by acquiring,
+exporting, and releasing one capture. GIF policy uses the same acquisition lifecycle,
+then supplies validated pixel rows and pitch to the files-owned encoder. The encoder
+arena, GIF byte production, and persisted output remain files responsibilities.
+
+This boundary models only Raylib's current synchronous behavior. It has no pending
+state, transfer queue, fence, shared-frame cache, or multi-frame pixel lifetime.
+
 ### Per-Frame Preparation
 
 UI and cache preparation use explicit ordered stages around the fixed-step update:

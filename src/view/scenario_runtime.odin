@@ -16,6 +16,7 @@ import capture "../evidence/capture"
 import scenario "../evidence/scenario"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
+import view_core "./core"
 import input "./input"
 import ui "./ui"
 
@@ -23,8 +24,6 @@ import "core:unicode/utf8"
 import "core:log"
 import "core:os"
 import "core:strings"
-
-import rl "vendor:raylib"
 
 // Deferred display mutation applied before the next frame's UI geometry is prepared.
 Scenario_Ui_Mutation_Kind :: enum u8 {
@@ -734,7 +733,14 @@ scenario_runtime_capture_screenshot :: proc(
     if path == nil {
         return false
     }
-    rl.TakeScreenshot(path)
+    frame, frame_ok := view_core.framebuffer_acquire()
+    if !frame_ok {
+        return false
+    }
+    defer view_core.framebuffer_release(&frame)
+    if !view_core.framebuffer_export(&frame, path) {
+        return false
+    }
     return os.exists(capture.checkpoint_path_text(&runtime.capture))
 }
 

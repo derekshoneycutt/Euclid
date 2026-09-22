@@ -890,6 +890,12 @@ records the existing required GIF failure evidence, publishes Error with
 `Window resized; GIF capture cancelled.`, and accepts the new UI geometry in that same
 frame boundary.
 
+Each submitted GIF frame uses the view's synchronous framebuffer capture lifecycle.
+The display thread acquires and validates tightly packed RGBA8 pixels, applies the
+session's frozen top-left crop and nearest-neighbor sizing, passes borrowed rows and
+pitch to the files-owned encoder, and releases the native image before returning. This
+does not create pending GPU work or extend framebuffer ownership across frames.
+
 ## Allocation And Lifetime
 
 The UI runtime itself is embedded in the display-owned application state and does not

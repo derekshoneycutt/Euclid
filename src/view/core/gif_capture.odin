@@ -80,44 +80,66 @@ cancel_gif_capture_with_note :: proc(state: ^core.Euclid_General_State, note: st
     set_gif_status_note(ui_runtime, note)
 }
 
-//   Load the screen capture and normalize it to encoder dimensions.
+//   Load the framebuffer and normalize it through the supplied native operations.
 //
 // Parameters:
 //   - state: Global app state providing capture config and encoder state.
 //   - downsample: Integer downsample factor, 1 meaning no downsample.
 //
 // Returns:
-//   - image: Capture image owned by the caller; unload with rl.UnloadImage.
+//   - frame: Capture pixels owned by the caller; release with framebuffer_release.
 //   - ok: true when a usable frame was captured.
-gif_capture_normalized_frame :: proc(
-    state: ^core.Euclid_General_State, downsample: int) -> (rl.Image, bool) {
+gif_capture_normalized_frame_with_operations :: proc(
+    state: ^core.Euclid_General_State,
+    downsample: int,
+    operations: Framebuffer_Capture_Operations) -> (Framebuffer_Pixels, bool) {
 
     capture_w := max(1, state^.gif_capture.source_width)
     capture_h := max(1, state^.gif_capture.source_height)
 
-    image := rl.LoadImageFromScreen()
-    if image.data == nil {
-        return rl.Image{}, false
+    frame, frame_ok := framebuffer_acquire_with_operations(operations)
+    if !frame_ok {
+        return {}, false
     }
 
-    crop_w := min(capture_w, int(image.width))
-    crop_h := min(capture_h, int(image.height))
-    rl.ImageCrop(&image, rl.Rectangle{0, 0, f32(crop_w), f32(crop_h)})
+    crop_w := min(capture_w, frame.width)
+    crop_h := min(capture_h, frame.height)
+    if !framebuffer_crop_with_operations(
+        &frame, crop_w, crop_h, operations) {
+        framebuffer_release_with_operations(&frame, operations)
+        return {}, false
+    }
 
     if downsample > 1 {
-        out_w := max(1, int(image.width) / downsample)
-        out_h := max(1, int(image.height) / downsample)
-        rl.ImageResizeNN(&image, i32(out_w), i32(out_h))
+        out_w := max(1, frame.width / downsample)
+        out_h := max(1, frame.height / downsample)
+        if !framebuffer_resize_with_operations(
+            &frame, out_w, out_h, operations) {
+            framebuffer_release_with_operations(&frame, operations)
+            return {}, false
+        }
     }
 
     expected_w := state^.gif_capture.encoder.width
     expected_h := state^.gif_capture.encoder.height
-    if int(image.width) != expected_w || int(image.height) != expected_h {
+    if frame.width != expected_w || frame.height != expected_h {
         // Keep capture frames aligned with encoder dimensions so pitch-based reads stay valid.
-        rl.ImageResizeNN(&image, i32(expected_w), i32(expected_h))
+        if !framebuffer_resize_with_operations(
+            &frame, expected_w, expected_h, operations) {
+            framebuffer_release_with_operations(&frame, operations)
+            return {}, false
+        }
     }
 
-    return image, true
+    return frame, true
+}
+
+//   Load the framebuffer and normalize it to encoder dimensions.
+gif_capture_normalized_frame :: proc(
+    state: ^core.Euclid_General_State,
+    downsample: int) -> (Framebuffer_Pixels, bool) {
+    return gif_capture_normalized_frame_with_operations(
+        state, downsample, FRAMEBUFFER_CAPTURE_OPERATIONS)
 }
 
 //   Capture the current view, optionally downsample, and submit it to GIF encoder.
@@ -142,16 +164,15 @@ gif_capture_submit_frame :: proc(
     }
 
     downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
-    image, frame_ok := gif_capture_normalized_frame(state, downsample)
+    frame, frame_ok := gif_capture_normalized_frame(state, downsample)
     if !frame_ok {
         return false
     }
-    defer rl.UnloadImage(image)
+    defer framebuffer_release(&frame)
 
-    pitch := int(image.width) * 4
     centiseconds := gif_capture_delay_centiseconds(frame_step)
-    if !files.gif_encode_frame(&state^.gif_capture.encoder, image.data, centiseconds,
-        GIF_CAPTURE_QUALITY, pitch) {
+    if !files.gif_encode_frame(&state^.gif_capture.encoder, frame.pixels, centiseconds,
+        GIF_CAPTURE_QUALITY, frame.pitch_bytes) {
         return false
     }
 
