@@ -16,6 +16,7 @@ Commands:
     sysimage [--debug] [--strict]
                                  Force rebuilding the Julia sysimage, application, and assets.
     harness                      Build and run the deterministic headless harness.
+    probe-sdl3                   Build and run the Linux SDL3/Vulkan capability probe.
     unit [julia|odin] [OPTS]     Run all application tests or one language suite.
     vet [OPTS]                   Build and analyze the repository.
     test [OPTS]                  Run the complete verification gate.
@@ -54,7 +55,7 @@ show_help() = HELP_TEXT
 
 const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage",
-    "harness",
+    "harness", "probe-sdl3",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
     "analyzer-test", "wiki", "check-wiki", "clean"])
 
@@ -76,6 +77,8 @@ using UUIDs
 include(joinpath(@__DIR__, "build_config.jl"))
 using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs,
     native_runtime_environment, raylib_shared_library_path, resolve_msvc_tool_path
+include(joinpath(@__DIR__, "sdl3_probe.jl"))
+using .EuclidSDL3Probe: run_probe
 
 struct BuildCommand
     action::Symbol
@@ -1163,6 +1166,7 @@ function clean_build_files()
         joinpath(SCRIPT_DIR, ".build", "debug"),
         joinpath(SCRIPT_DIR, ".build", "reports"),
         joinpath(SCRIPT_DIR, ".build", "scenarios"),
+        joinpath(SCRIPT_DIR, ".build", "sdl3-probe"),
         SYSIMAGE_CACHE_ROOT,
         joinpath(SCRIPT_DIR, "__pycache__"),
     ]
@@ -1478,6 +1482,10 @@ function execute_driver_action(invocation::DriverInvocation)
         invocation.action, invocation.arguments)
     invocation.action == :evidence && return run_evidence_command(invocation.arguments)
     invocation.action == :scenario && return run_scenario_command(invocation.arguments)
+    if invocation.action == :probe_sdl3
+        require_no_arguments(invocation)
+        return run_probe(SCRIPT_DIR)
+    end
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
     if invocation.action in (:wiki, :check_wiki)
