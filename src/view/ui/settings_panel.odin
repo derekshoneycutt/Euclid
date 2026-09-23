@@ -3,7 +3,9 @@ package ui
 import native "../native"
 
 import "../../core"
+import audiomodel "../../audio/model"
 import particlemodel "../../particles/model"
+import geometry "../../core/geometry"
 import view_core "../core"
 import view_font "../font"
 
@@ -57,6 +59,68 @@ Settings_Control_Update :: struct {
     prepared: Settings_View_Preparation,
     simd_available: bool,
     gpu_available: bool,
+}
+
+// draw_encoded_checkbox_geometry encodes one checkbox without its deferred label.
+draw_encoded_checkbox_geometry :: proc(
+    encoder: ^native.Draw_Encoder, rectangle: rl.Rectangle, checked: bool) {
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, geometry.Rectangle(rectangle), 1, UI_BORDER_COLOR)
+    if !checked {return}
+    first := geometry.Vector2{rectangle.x + 3,
+        rectangle.y + rectangle.height * 0.55}
+    second := geometry.Vector2{rectangle.x + 6,
+        rectangle.y + rectangle.height - 3}
+    third := geometry.Vector2{rectangle.x + rectangle.width - 3, rectangle.y + 3}
+    _ = native.draw_encoder_line(encoder, first, second, 1.6, UI_TEXT_COLOR)
+    _ = native.draw_encoder_line(encoder, second, third, 1.6, UI_TEXT_COLOR)
+}
+
+// draw_encoded_slider_geometry encodes one slider track, fill, and knob.
+draw_encoded_slider_geometry :: proc(
+    encoder: ^native.Draw_Encoder, panel: rl.Rectangle, row_y: f32,
+    value, min_value, max_value: int) {
+    track := slider_track_rect(panel, row_y)
+    denominator := max(1, max_value - min_value)
+    ratio := f32(clamp(value, min_value, max_value) - min_value) /
+        f32(denominator)
+    knob_center_x, knob := build_slider_knob(track, ratio)
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(track), BACKGROUND_COLOR)
+    fill := rl.Rectangle{track.x, track.y,
+        max(0, knob_center_x - track.x), track.height}
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(fill), UI_BORDER_COLOR)
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(knob), UI_TEXT_COLOR)
+}
+
+// draw_encoded_settings_geometry encodes settings controls without text.
+draw_encoded_settings_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: rl.Rectangle) {
+    if state == nil || state^.particle_system == nil {return}
+    stack_rect := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+        panel.y + SETTINGS_HEADER_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        panel.height - SETTINGS_HEADER_TOP_OFFSET}
+    rows := settings_view_layout_rows(stack_rect)
+    draw_encoded_slider_geometry(encoder, panel, rows.slider_label_y,
+        state^.particle_system^.use_max_dust_particles,
+        0, particlemodel.MAX_LOW_PARTICLES)
+    checks := [4]struct{rectangle: rl.Rectangle, checked: bool}{
+        {{panel.x + SETTINGS_PANEL_INSET, rows.fps_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE}, state^.ui_runtime.display_fps},
+        {{panel.x + SETTINGS_PANEL_INSET, rows.limit_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE}, state^.ui_runtime.limit_fps},
+        {{panel.x + SETTINGS_PANEL_INSET, rows.simd_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE}, state^.ui_runtime.use_simd_batch_projection},
+        {{panel.x + SETTINGS_PANEL_INSET, rows.gpu_dust_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE}, state^.ui_runtime.use_gpu_dust_instancing},
+    }
+    for check in checks {
+        draw_encoded_checkbox_geometry(encoder, check.rectangle, check.checked)
+    }
 }
 
 //   Build one settings checkbox parameter record from shared row context.
@@ -159,8 +223,11 @@ settings_view_layout_rows :: proc(stack_rect: rl.Rectangle) -> Settings_View_Row
         stats_row.cursor_out)
     limit_row := settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
         fps_row.cursor_out)
-    sound_row := settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
-        limit_row.cursor_out)
+    sound_row := limit_row
+    when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
+        sound_row = settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
+            limit_row.cursor_out)
+    }
     simd_row := settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
         sound_row.cursor_out)
     gpu_dust_row := settings_stack_row(stack_rect, 0, simd_row.cursor_out)
@@ -189,9 +256,11 @@ update_settings_controls :: proc(
     result.limit = update_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
         4002, "Limit FPS", ctx.state.ui_runtime.limit_fps, true}),
         &ctx.state.ui_runtime.ui_press_owner)
-    result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
-        4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled, true}),
-        &ctx.state.ui_runtime.ui_press_owner)
+    when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
+        result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
+            4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled, true}),
+            &ctx.state.ui_runtime.ui_press_owner)
+    }
     simd_available := view_core.simd_batch_projection_available()
     simd_label := "Use SIMD Projection"
     if !simd_available { simd_label = "Use SIMD Projection (Unavailable)" }
@@ -239,13 +308,25 @@ apply_settings_preparation :: proc(
         if prepared.limit.checked_out { rl.SetTargetFPS(LIMIT_FPS) }
         else { rl.SetTargetFPS(0) }
     }
-    if prepared.sound.toggled {
-        state.user_drawing_sound_enabled = prepared.sound.checked_out
+    when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
+        if prepared.sound.toggled {
+            state.user_drawing_sound_enabled = prepared.sound.checked_out
+        }
     }
     state.ui_runtime.use_simd_batch_projection =
         simd_available && prepared.simd.checked_out
     state.ui_runtime.use_gpu_dust_instancing =
         gpu_available && prepared.gpu_dust.checked_out
+}
+
+//   Draw the retained experimental audio toggle when that build is enabled.
+draw_experimental_audio_control :: proc(
+    ctx: Settings_View_Context, prepared: Settings_View_Preparation) {
+    when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
+        draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.sound_y,
+            4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled,
+            true}), prepared.sound)
+    }
 }
 
 //   Draw all settings controls against the laid-out rows.
@@ -272,9 +353,7 @@ draw_settings_controls :: proc(
         4001, "Display FPS", ui_runtime.display_fps, true}), prepared.fps)
     draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.limit_y,
         4002, "Limit FPS", ui_runtime.limit_fps, true}), prepared.limit)
-    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.sound_y,
-        4004, "Enable Drawing Sound", state.user_drawing_sound_enabled, true}),
-        prepared.sound)
+    draw_experimental_audio_control(ctx, prepared)
     simd_available := view_core.simd_batch_projection_available()
     simd_label := "Use SIMD Projection"
     if !simd_available { simd_label = "Use SIMD Projection (Unavailable)" }

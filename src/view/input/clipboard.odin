@@ -2,19 +2,20 @@ package input
 
 import "core:strings"
 
-import rl "vendor:raylib"
+import sdl "vendor:sdl3"
 
-// Write plain text to the system clipboard.
-input_set_clipboard_text :: proc(text: string) {
+// Write plain UTF-8 text to the SDL-owned system clipboard boundary.
+input_set_clipboard_text :: proc(text: string) -> bool {
     clipboard_text := strings.clone_to_cstring(text, context.temp_allocator)
-    rl.SetClipboardText(clipboard_text)
+    return sdl.SetClipboardText(clipboard_text)
 }
 
-// Borrow plain text from the system clipboard, or empty when unavailable.
+// Copy plain text from SDL ownership into temporary frame storage.
 input_get_clipboard_text :: proc() -> string {
-    text := rl.GetClipboardText()
+    text := sdl.GetClipboardText()
     if text == nil {
         return ""
     }
-    return string(text)
+    defer sdl.free(text)
+    return strings.clone(string(cstring(text)), context.temp_allocator)
 }

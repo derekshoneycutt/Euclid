@@ -2,6 +2,9 @@ package ui
 
 import viewmodel "../model"
 
+import native "../native"
+import color "../../core/color"
+import geometry "../../core/geometry"
 
 import rl "vendor:raylib"
 
@@ -11,6 +14,7 @@ SPLITTER_FADE_SECONDS :: 0.15
 SPLITTER_VERTICAL_PRESS_ID :: 6201
 SPLITTER_HORIZONTAL_PRESS_ID :: 6202
 SPLITTER_COLOR :: rl.Color{70, 130, 180, 255}
+SPLITTER_ACTIVE_COLOR :: color.Color_RGBA8{70, 130, 180, 255}
 
 Splitter_Axis :: enum {
     Vertical,
@@ -55,11 +59,14 @@ splitter_hovered_axis :: proc(
 
     horizontal := splitter_geometry(.Horizontal, mode, split_x, split_y, window)
     if mode == .Portrait {
-        return .Horizontal, rl.CheckCollisionPointRec(mouse, horizontal.hit_rect)
+        return .Horizontal, geometry.rectangle_contains(
+            geometry.Rectangle(horizontal.hit_rect), geometry.Vector2(mouse))
     }
     vertical := splitter_geometry(.Vertical, mode, split_x, split_y, window)
-    over_vertical := rl.CheckCollisionPointRec(mouse, vertical.hit_rect)
-    over_horizontal := rl.CheckCollisionPointRec(mouse, horizontal.hit_rect)
+    over_vertical := geometry.rectangle_contains(
+        geometry.Rectangle(vertical.hit_rect), geometry.Vector2(mouse))
+    over_horizontal := geometry.rectangle_contains(
+        geometry.Rectangle(horizontal.hit_rect), geometry.Vector2(mouse))
     if over_vertical && over_horizontal {
         if abs(mouse.y - split_y) < abs(mouse.x - split_x) {
             return .Horizontal, true
@@ -211,6 +218,14 @@ splitter_apply_drag :: proc(
     splitter_store_ratios(ui_runtime)
 }
 
+// Resolve one portable cursor from current splitter hover and capture targets.
+splitter_cursor :: proc(
+    vertical_target, horizontal_target: f32) -> viewmodel.Ui_Cursor_Kind {
+    if vertical_target > 0 {return .Resize_Ew}
+    if horizontal_target > 0 {return .Resize_Ns}
+    return .Default
+}
+
 //   Update splitter capture, positions, and hover fades before layout is prepared.
 update_splitters :: proc(
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
@@ -242,34 +257,24 @@ update_splitters :: proc(
         ui_runtime.ui_press_owner, SPLITTER_HORIZONTAL_PRESS_ID)) {
         horizontal_target = 1
     }
+    ui_runtime^.cursor = splitter_cursor(vertical_target, horizontal_target)
     ui_runtime.vertical_split_hover = splitter_update_fade(
         ui_runtime.vertical_split_hover, vertical_target, dt)
     ui_runtime.horizontal_split_hover = splitter_update_fade(
         ui_runtime.horizontal_split_hover, horizontal_target, dt)
 }
 
-//   Draw splitter feedback and apply the active resize cursor.
+//   Draw splitter feedback for the active layout.
 draw_splitters :: proc(
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse_position: rl.Vector2) {
 
-    axis, hovered := splitter_hovered_axis(mouse_position,
+    _, hovered := splitter_hovered_axis(mouse_position,
         ui_runtime^.current_layout_mode,
         ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
         ui_runtime^.window)
-    vertical_owned := splitter_owns_press(
-        ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID)
-    horizontal_owned := splitter_owns_press(
-        ui_runtime.ui_press_owner, SPLITTER_HORIZONTAL_PRESS_ID)
     if splitters_locked_for_gif(ui_runtime.gif_capture_phase) {
         hovered = false
-    }
-    if vertical_owned || (hovered && axis == .Vertical) {
-        rl.SetMouseCursor(.RESIZE_EW)
-    } else if horizontal_owned || (hovered && axis == .Horizontal) {
-        rl.SetMouseCursor(.RESIZE_NS)
-    } else {
-        rl.SetMouseCursor(.DEFAULT)
     }
 
     vertical := splitter_geometry(.Vertical, ui_runtime^.current_layout_mode,
@@ -286,5 +291,35 @@ draw_splitters :: proc(
     if ui_runtime.horizontal_split_hover > 0 {
         rl.DrawRectangleRec(horizontal.visible_rect,
             rl.Fade(SPLITTER_COLOR, ui_runtime.horizontal_split_hover))
+    }
+}
+
+// draw_encoded_splitters encodes current splitter feedback without changing policy.
+draw_encoded_splitters :: proc(
+    encoder: ^native.Draw_Encoder,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    mouse_position: rl.Vector2) {
+    _, hovered := splitter_hovered_axis(mouse_position,
+        ui_runtime^.current_layout_mode, ui_runtime.vertical_split_x,
+        ui_runtime.horizontal_split_y, ui_runtime^.window)
+    if splitters_locked_for_gif(ui_runtime.gif_capture_phase) {hovered = false}
+    vertical := splitter_geometry(.Vertical, ui_runtime^.current_layout_mode,
+        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
+        ui_runtime^.window)
+    horizontal := splitter_geometry(.Horizontal, ui_runtime^.current_layout_mode,
+        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
+        ui_runtime^.window)
+    if ui_runtime^.current_layout_mode == .Landscape &&
+        ui_runtime.vertical_split_hover > 0 {
+        draw_color := SPLITTER_ACTIVE_COLOR
+        draw_color.a = u8(255 * clamp(ui_runtime.vertical_split_hover, f32(0), f32(1)))
+        _ = native.draw_encoder_rectangle(
+            encoder, geometry.Rectangle(vertical.visible_rect), draw_color)
+    }
+    if ui_runtime.horizontal_split_hover > 0 {
+        draw_color := SPLITTER_ACTIVE_COLOR
+        draw_color.a = u8(255 * clamp(ui_runtime.horizontal_split_hover, f32(0), f32(1)))
+        _ = native.draw_encoder_rectangle(
+            encoder, geometry.Rectangle(horizontal.visible_rect), draw_color)
     }
 }

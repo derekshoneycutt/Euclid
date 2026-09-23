@@ -6,6 +6,7 @@ import viewmodel "../model"
 
 import bridgemodel "../../bridge/model"
 import "../../core"
+import geometry "../../core/geometry"
 import view_core "../core"
 import view_font "../font"
 
@@ -65,6 +66,66 @@ Accordion_Draw_Preparation :: struct {
     controls: Ui_Control_Preparation,
     terminal: Terminal_Prepared_Frame,
     presentation: Presentation_Preparation,
+}
+
+// draw_encoded_tree_node encodes one visible tree branch without its labels.
+draw_encoded_tree_node :: proc(
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    encoder: ^native.Draw_Encoder, panel: rl.Rectangle, scroll_y: f32,
+    depth: int, content_y: ^f32, remaining: int) {
+    if ji == nil || node == nil || remaining <= 0 {return}
+    row_y := panel.y + content_y^ - scroll_y
+    content_y^ += TREE_ROW_HEIGHT
+    row := rl.Rectangle{panel.x, row_y, panel.width, TREE_ROW_HEIGHT}
+    if row.y + row.height >= panel.y && row.y <= panel.y + panel.height {
+        if node^.is_selected {
+            _ = native.draw_encoder_rectangle(
+                encoder, geometry.Rectangle(row), UI_BORDER_COLOR)
+        }
+        if node^.first_child != nil {
+            icon := rl.Rectangle{row.x + f32(depth) * TREE_INDENT +
+                TREE_ROW_ICON_OFFSET_X, row.y + TREE_ROW_ICON_OFFSET_Y,
+                TREE_ROW_ICON_SIZE, TREE_ROW_ICON_SIZE}
+            draw_encoded_disclosure(encoder, icon, node^.is_expanded)
+        }
+    }
+    if !node^.is_expanded {return}
+    for child, steps := node^.first_child, 0;
+        child != nil && steps < ji^.animation_count;
+        child, steps = child^.next_sibling, steps + 1 {
+        draw_encoded_tree_node(ji, child, encoder, panel, scroll_y,
+            depth + 1, content_y, remaining - 1)
+    }
+}
+
+// draw_encoded_tree_geometry encodes visible catalogue chrome without text.
+draw_encoded_tree_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: rl.Rectangle) {
+    if state == nil || state^.julia_interface == nil {return}
+    ji := state^.julia_interface
+    content_height := f32(count_visible_tree_rows_all_roots(ji)) * TREE_ROW_HEIGHT
+    max_scroll := max(content_height - panel.height, 0)
+    scroll_y := clamp(state^.ui_runtime.tree_scroll_y, 0, max_scroll)
+    scrollbar := build_vertical_scrollbar(
+        {panel, content_height, scroll_y, max_scroll},
+        SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
+    _ = native.draw_encoder_push_scissor(encoder, geometry.Rectangle(panel))
+    content_y: f32
+    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
+        if node^.parent == nil {
+            draw_encoded_tree_node(ji, node, encoder, panel, scroll_y,
+                0, &content_y, ji^.animation_count)
+        }
+    }
+    _ = native.draw_encoder_pop_scissor(encoder)
+    if scrollbar.has_scrollbar {
+        _ = native.draw_encoder_rectangle(
+            encoder, geometry.Rectangle(scrollbar.track_rect), BACKGROUND_COLOR)
+        _ = native.draw_encoder_rectangle(
+            encoder, geometry.Rectangle(scrollbar.thumb_rect), UI_BORDER_COLOR)
+    }
 }
 
 // Borrow the selected catalogue title for the current frame.

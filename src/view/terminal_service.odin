@@ -9,6 +9,7 @@ import julia "../bridge"
 import termsession "../terminal/session"
 import "font"
 import "input"
+import native "native"
 import terminalview "terminal"
 import "ui"
 
@@ -254,14 +255,12 @@ terminal_service_dispatch_egress :: proc(
 
 // Open one terminal hyperlink after its URI passed terminal validation.
 terminal_service_open_uri :: proc(_: rawptr, uri: cstring) -> bool {
-    rl.OpenURL(uri)
-    return true
+    return native.sdl_platform_open_url(uri)
 }
 
 // Publish one validated OSC clipboard value through the display-owned OS boundary.
 terminal_service_write_clipboard :: proc(_: rawptr, text: string) -> bool {
-    input.input_set_clipboard_text(text)
-    return true
+    return input.input_set_clipboard_text(text)
 }
 
 // Update the selected fixed-panel Terminal before simulation preparation.

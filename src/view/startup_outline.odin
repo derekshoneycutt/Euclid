@@ -3,6 +3,10 @@ package view
 import viewmodel "model"
 
 import "ui"
+import native "native"
+
+import color "../core/color"
+import geometry "../core/geometry"
 
 import "core:math"
 
@@ -15,8 +19,8 @@ STARTUP_OUTLINE_TIP_RADIUS :: f32(3.5)
 
 // One ordered line segment in the startup UI silhouette.
 Startup_Outline_Segment :: struct {
-    first: rl.Vector2,
-    second: rl.Vector2,
+    first: geometry.Vector2,
+    second: geometry.Vector2,
     length: f32,
 }
 
@@ -34,7 +38,7 @@ Startup_Outline :: struct {
 
 // Append one nonempty segment to bounded startup outline storage.
 startup_outline_append_segment :: proc(
-    outline: ^Startup_Outline, first, second: rl.Vector2) {
+    outline: ^Startup_Outline, first, second: geometry.Vector2) {
     assert(outline^.segment_count < STARTUP_OUTLINE_SEGMENT_CAP)
     delta := second - first
     length := f32(math.sqrt(f64(delta.x * delta.x + delta.y * delta.y)))
@@ -46,11 +50,11 @@ startup_outline_append_segment :: proc(
 
 // Append one clockwise rectangular path to the startup silhouette.
 startup_outline_append_rect :: proc(
-    outline: ^Startup_Outline, rect: rl.Rectangle) {
-    top_left := rl.Vector2{rect.x, rect.y}
-    top_right := rl.Vector2{rect.x + rect.width, rect.y}
-    bottom_right := rl.Vector2{rect.x + rect.width, rect.y + rect.height}
-    bottom_left := rl.Vector2{rect.x, rect.y + rect.height}
+    outline: ^Startup_Outline, rect: geometry.Rectangle) {
+    top_left := geometry.Vector2{rect.x, rect.y}
+    top_right := geometry.Vector2{rect.x + rect.width, rect.y}
+    bottom_right := geometry.Vector2{rect.x + rect.width, rect.y + rect.height}
+    bottom_left := geometry.Vector2{rect.x, rect.y + rect.height}
     startup_outline_append_segment(outline, top_left, top_right)
     startup_outline_append_segment(outline, top_right, bottom_right)
     startup_outline_append_segment(outline, bottom_right, bottom_left)
@@ -80,14 +84,15 @@ startup_outline_create :: proc(
         layout == .Portrait ? .View : .Library)
     controls := ui.animation_control_layout_slots(rl.Rectangle(regions.world_rect))
 
-    startup_outline_append_rect(&outline, rl.Rectangle(regions.world_rect))
-    startup_outline_append_rect(&outline, rl.Rectangle(regions.text_rect))
-    startup_outline_append_rect(&outline, rl.Rectangle(regions.accordion_rect))
+    startup_outline_append_rect(&outline, geometry.Rectangle(regions.world_rect))
+    startup_outline_append_rect(&outline, geometry.Rectangle(regions.text_rect))
+    startup_outline_append_rect(&outline, geometry.Rectangle(regions.accordion_rect))
     for index in 0..<sections.count {
-        startup_outline_append_rect(&outline, accordion.headers[index])
+        startup_outline_append_rect(
+            &outline, geometry.Rectangle(accordion.headers[index]))
     }
-    startup_outline_append_rect(&outline, controls.refresh)
-    startup_outline_append_rect(&outline, controls.pause)
+    startup_outline_append_rect(&outline, geometry.Rectangle(controls.refresh))
+    startup_outline_append_rect(&outline, geometry.Rectangle(controls.pause))
     return outline
 }
 
@@ -120,7 +125,7 @@ startup_outline_reconcile :: proc(
 // Center one startup warning extent within the live logical window.
 startup_warning_position :: proc(
     metrics: viewmodel.Ui_Window_Metrics,
-    text_width, text_height: f32) -> rl.Vector2 {
+    text_width, text_height: f32) -> geometry.Vector2 {
     return {
         f32(metrics.width) / 2 - text_width / 2,
         f32(metrics.height) / 2 - text_height / 2,
@@ -139,22 +144,26 @@ startup_outline_advance :: proc(outline: ^Startup_Outline, dt: f32) {
         outline^.reveal_distance + distance, outline^.target_distance)
 }
 
-// Draw the revealed prefix and a brighter moving endpoint.
+// Encode the revealed prefix and a brighter moving endpoint.
 startup_outline_draw :: proc(
-    outline: ^Startup_Outline, line_color, tip_color: rl.Color) {
+    outline: ^Startup_Outline, encoder: ^native.Draw_Encoder,
+    line_color, tip_color: color.Color_RGBA8) -> bool {
     remaining := outline^.reveal_distance
+    accepted := true
     for index in 0..<outline^.segment_count {
         segment := outline^.segments[index]
         if remaining <= 0 {break}
         visible_length := min(remaining, segment.length)
         ratio := visible_length / segment.length
         endpoint := segment.first + (segment.second - segment.first) * ratio
-        rl.DrawLineEx(segment.first, endpoint, STARTUP_OUTLINE_STROKE_WIDTH,
-            line_color)
+        accepted = native.draw_encoder_line(encoder, segment.first, endpoint,
+            STARTUP_OUTLINE_STROKE_WIDTH, line_color) && accepted
         remaining -= segment.length
         if visible_length < segment.length {
-            rl.DrawCircleV(endpoint, STARTUP_OUTLINE_TIP_RADIUS, tip_color)
+            accepted = native.draw_encoder_circle(
+                encoder, endpoint, STARTUP_OUTLINE_TIP_RADIUS, tip_color) && accepted
             break
         }
     }
+    return accepted
 }

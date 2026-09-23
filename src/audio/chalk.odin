@@ -7,6 +7,16 @@ import "core:strings"
 
 import rl "vendor:raylib"
 
+Chalk_Audio_Runtime :: audiomodel.Chalk_Audio_Runtime
+EXPERIMENTAL_AUDIO_ENABLED :: audiomodel.EXPERIMENTAL_AUDIO_ENABLED
+
+EXPERIMENTAL_RANDOM_RANGE :: rand.int_range
+EXPERIMENTAL_CLONE_CSTRING :: strings.clone_to_cstring
+Experimental_Vector3 :: rl.Vector3
+
+// The retained Raylib implementation is excluded from supported builds. Re-enabling
+// it requires deliberate native-provider and asset-packaging work.
+when EXPERIMENTAL_AUDIO_ENABLED {
 CHALK_SAMPLE_RATE :: 44100
 CHALK_BUFFER_SIZE :: 512
 CHALK_MAX_BUFFERS_PER_FRAME :: 8
@@ -25,9 +35,6 @@ CHALK_UPPER_TURN_MAX_PERCENT :: 78
 CHALK_TURN_SEARCH_SAMPLES :: 512
 CHALK_HIT_DURATION_SAMPLES :: 6174
 
-Chalk_Audio_Runtime :: audiomodel.Chalk_Audio_Runtime
-Vector3 :: rl.Vector3
-
 //   Choose a quiet sample near a random point in one turnaround band.
 //
 // Notes:
@@ -37,7 +44,8 @@ choose_chalk_turnaround :: proc(
     runtime: ^Chalk_Audio_Runtime, minimum_percent, maximum_percent: int) -> int {
     minimum := runtime^.texture_sample_count * minimum_percent / 100
     maximum := runtime^.texture_sample_count * maximum_percent / 100
-    candidate := rand.int_range(minimum, maximum - CHALK_TURN_SEARCH_SAMPLES)
+    candidate := EXPERIMENTAL_RANDOM_RANGE(
+        minimum, maximum - CHALK_TURN_SEARCH_SAMPLES)
     best := candidate
     best_magnitude := runtime^.texture_samples[best]
     if best_magnitude < 0 {
@@ -68,7 +76,7 @@ init_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime, texture_path: string) 
         return
     }
 
-    texture_file := strings.clone_to_cstring(texture_path, context.temp_allocator)
+    texture_file := EXPERIMENTAL_CLONE_CSTRING(texture_path, context.temp_allocator)
     texture_wave := rl.LoadWave(texture_file)
     if texture_wave.data != nil {
         rl.WaveFormat(&texture_wave, CHALK_SAMPLE_RATE, 32, 1)
@@ -114,7 +122,10 @@ shutdown_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
 // Notes:
 //   - Contact gates a steady chalk texture; movement speed does not affect it.
 register_pen_tip_motion :: proc(
-    runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
+    runtime: ^Chalk_Audio_Runtime,
+    pos: Experimental_Vector3,
+    is_floor_contact: bool,
+    dt: f32) {
     _ = pos
     _ = dt
     register_tip_contact(runtime, is_floor_contact)
@@ -125,7 +136,10 @@ register_pen_tip_motion :: proc(
 // Notes:
 //   - Either compass tip can sustain the shared chalk texture.
 register_compass_tip1_motion :: proc(
-    runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
+    runtime: ^Chalk_Audio_Runtime,
+    pos: Experimental_Vector3,
+    is_floor_contact: bool,
+    dt: f32) {
     _ = pos
     _ = dt
     register_tip_contact(runtime, is_floor_contact)
@@ -136,7 +150,10 @@ register_compass_tip1_motion :: proc(
 // Notes:
 //   - Either compass tip can sustain the shared chalk texture.
 register_compass_tip2_motion :: proc(
-    runtime: ^Chalk_Audio_Runtime, pos: Vector3, is_floor_contact: bool, dt: f32) {
+    runtime: ^Chalk_Audio_Runtime,
+    pos: Experimental_Vector3,
+    is_floor_contact: bool,
+    dt: f32) {
     _ = pos
     _ = dt
     register_tip_contact(runtime, is_floor_contact)
@@ -257,4 +274,10 @@ update_chalk_runtime :: proc(runtime: ^Chalk_Audio_Runtime) {
     }
 
     runtime^.has_contact_this_frame = false
+}
+
+// Record bridge-driven drawing contact for the retained experimental mixer.
+register_drawing_contact :: proc "contextless" (runtime: ^Chalk_Audio_Runtime) {
+    runtime^.has_contact_this_frame = true
+}
 }

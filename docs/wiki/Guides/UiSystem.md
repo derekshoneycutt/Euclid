@@ -60,7 +60,8 @@ Related guides are:
 
 The UI is not a separate thread or an independent retained widget runtime. It is a set
 of Odin packages called by the display loop. The same display thread owns layout,
-interaction state, visible application state, Raylib resources, and draw submission.
+interaction state, visible application state, native resources, geometry encoding, and
+draw submission.
 
 ```mermaid
 flowchart LR
@@ -70,7 +71,8 @@ flowchart LR
     Services[Presentation and Terminal services]
     Prepare[Worker caches and layout interaction]
     Panels[Panel and widget code]
-    Draw[Raylib drawing]
+    Draw[Bounded geometry encoding]
+    Submit[SDL GPU submission]
 
     Input --> Layout
     State --> Layout
@@ -80,12 +82,14 @@ flowchart LR
     Input --> Panels
     Prepare --> Panels
     Panels --> Draw
+    Draw --> Submit
 ```
 
-The UI combines immediate geometry and drawing with persistent interaction fields in
+The UI combines immediate geometry preparation with persistent interaction fields in
 `Euclid_Ui_Runtime_State`. Update procedures compute widget rectangles, consume routed
-frame copies, and commit display-owned state before `BeginDrawing`. Draw procedures
-consume fixed frame-local preparation records and committed state.
+frame copies, and commit display-owned state before encoding. Active draw procedures
+append portable vertices, indices, clips, and batch state to fixed-capacity storage.
+Dormant Raylib consumers remain for visual capabilities that have not migrated.
 
 This is a hybrid model:
 
@@ -94,7 +98,7 @@ This is a hybrid model:
 | Widget geometry | Recomputed from panel rectangles each frame. |
 | Widget state | Stored in application, subsystem, or UI runtime state. |
 | Input | One borrowed raw snapshot filtered into per-surface value copies. |
-| Drawing | Immediate Raylib calls on the display thread. |
+| Drawing | Owner-local bounded geometry encoding and one SDL_GPU submission. |
 | Layout caches | Dynview, font, shape, and Terminal owners retain derived state. |
 | Cross-thread work | Workers prepare finite results; the display commits and draws. |
 
@@ -127,11 +131,12 @@ This is a hybrid model:
 ## Ownership Model
 
 The display thread is the sole writer of visible UI state and the only execution role
-allowed to call Raylib drawing and resource APIs.
+allowed to call SDL_GPU or dormant Raylib drawing and resource APIs.
 
 | Concern | Owner | Boundary |
 | --- | --- | --- |
-| Window and Raylib resources | Display thread | Initialized and destroyed by the view lifecycle. |
+| SDL window and GPU resources | Display thread | Initialized and destroyed by the active view lifecycle. |
+| Dormant Raylib resources | Display thread | Retained only by compatibility owners awaiting later migration. |
 | Panel geometry | `Euclid_Ui_Runtime_State` | Computed before drawing each frame. |
 | Widget press state | UI runtime or owning subsystem | Mutated only by display-thread UI calls. |
 | Device frame storage | `input.Input_Runtime` | Borrowed until the next input poll. |
@@ -148,52 +153,48 @@ display-owned request state; the normal frame and service paths perform the oper
 
 ## Frame Lifecycle
 
-`run_window_frame` defines the authoritative ordering:
+`run_sdl_geometry_frame` defines the active authoritative ordering. The dormant
+`run_window_frame` retains the fuller text, Terminal, tools, dust, and capture behavior
+until those visual capabilities receive SDL owners.
 
 ```mermaid
 sequenceDiagram
-    participant F as Font and Julia services
+    participant F as Julia services
     participant I as Input
     participant U as UI preparation
-    participant T as Terminal service
     participant S as Simulation and workers
-    participant D as Drawing
-    participant E as Evidence and capture
+    participant D as Geometry encoder
+    participant G as SDL GPU
+    participant E as Evidence
 
-    F->>F: Publish available font and presentation results
+    F->>F: Publish available presentation results
     I->>I: Poll one Input_Frame
     I->>U: Raw frame snapshot
     U->>U: Sample logical extent, release stale resize capture, prepare geometry
     U->>U: Resolve static focus, hover, pointer, and wheel targets
-    U->>U: Update animation controls, accordion headers, and active child
-    U->>T: Raw frame, router result, and prepared panel geometry
-    T->>T: Refine Terminal scrollbar routing and update sessions
-    T->>S: Continue fixed-step and frame preparation
-    S->>U: Joined Dynview layout and copy targets
-    U->>U: Update presentation scroll, copy, and selection
-    U->>D: Prepared interaction and draw-ready state
-    D->>D: Draw world, panels, splitters, overlays
-    D->>E: Present, scenario capture, GIF frame, evidence
+    U->>U: Update animation controls
+    U->>S: Continue fixed-step and frame preparation
+    S->>U: Joined shape and Dynview caches
+    U->>D: Committed state and draw-ready caches
+    D->>G: Vertex, index, batch, and scissor prefixes
+    G->>G: Upload, render, blit, submit
+    G->>E: Publish presented-frame evidence
     E->>E: Reset the temporary allocator
 ```
 
-The concrete high-level order is:
+The active high-level order is:
 
-1. service the font cache and synchronize math and prose shaping generations;
 1. publish available Julia presentation state;
 1. service presentation parsing and publication;
-1. poll one device-independent `Input_Frame`;
+1. poll SDL once and publish one device-independent `Input_Frame`;
 1. call `ui.prepare_ui_geometry`;
 1. call `ui.prepare_ui_static_interaction`;
-1. call `ui.prepare_ui_controls` for animation controls, accordion headers, and the
-    active Library, Save GIF, or Settings child;
-1. update the selected Terminal and active shell session;
+1. prepare animation-control interaction;
 1. advance fixed-step simulation;
 1. run and join frame preparation that depends on the new UI geometry;
-1. call `ui.prepare_ui_layout_interaction` for presentation interaction;
-1. update audio and pre-presentation scenarios;
-1. call `BeginDrawing`, draw the frame, and call `EndDrawing`;
-1. service post-presentation scenarios and GIF capture;
+1. encode ordinary world, UI, and non-glyph Dynview geometry;
+1. upload, render to the sampled scene target, blit, and submit once;
+1. service post-presentation scenarios;
 1. publish frame evidence and reset `context.temp_allocator`.
 
 Three ordering details are especially important:
@@ -211,7 +212,7 @@ The second detail is a current limitation discussed below.
 
 ## Startup Assembly
 
-The display thread opens the Raylib window before packaged assets, Julia content, and
+The display thread opens the SDL window before packaged assets, Julia content, and
 normal UI resources are ready. During that interval, `loading.odin` pumps window events
 and draws a dependency-free representation of the eventual interface. It does not enter
 the normal frame lifecycle or access application-owned widget state.
@@ -244,10 +245,8 @@ targets communicate phase progress rather than estimated remaining time. Once st
 is actually ready, a bounded 240-millisecond ease-out completes the remaining trace and
 the normal frame loop replaces it with the real UI.
 
-If a Julia startup request exceeds the unresponsive threshold, the default Raylib font
-draws `Julia is not responding` over the partial outline. This warning remains available
-before application fonts exist, is centered from the live logical extent, and is the
-only ordinary startup text.
+The startup path currently contains no glyph dependency; warning text remains a
+deferred text capability until font publication moves to the active backend.
 
 ## Window And Layout
 
@@ -255,13 +254,13 @@ only ordinary startup text.
 
 The default window remains fixed at `1280x720`. Startup policy may instead request a
 landscape or portrait-sized preset, bounded custom dimensions, and an opt-in resizable
-window. `open_window` applies the requested initial extent and enables Raylib's
-resizable flag only for `--window-mode=resizable`. Layout preference is stored
+window. `sdl_platform_create` applies the requested initial extent and enables SDL
+resizing only for `--window-mode=resizable`. Layout preference is stored
 independently as Auto, Landscape, or Portrait. Forced modes remain fixed. Auto enters
 portrait below aspect ratio `0.9`, enters landscape above `1.1`, and retains its current
 mode inside that hysteresis band.
 
-Each normal frame samples Raylib's logical screen width and height before UI routing.
+Each normal frame samples SDL's logical window extent before UI routing.
 Those dimensions become `Euclid_Ui_Runtime_State.window` and are authoritative for
 region calculation, splitter geometry, panel fills, hit testing, viewport fitting,
 Dynview tracking, and Terminal panel preparation. Framebuffer dimensions remain a
@@ -434,8 +433,8 @@ initializes landscape ratios from `VIEW_WIDTH` and `VIEW_HEIGHT`, initializes th
 portrait world ratio to one half, and sets the GIF downsample factor to two. The first
 portrait entry selects View. A later mode transition saves the source layout's active
 accordion section, releases stale capture, and restores the destination layout's ratios
-and section. The first normal frame reconciles the requested extent with Raylib's
-actual logical extent.
+and section. The first normal frame reconciles the requested extent with SDL's actual
+logical extent.
 
 The runtime stores interaction state that must survive frames, but it does not own
 Terminal grids, Dynview documents, fonts, animation catalogue nodes, shapes, or
@@ -443,11 +442,12 @@ particles. Those remain in their subsystem owners.
 
 ## Input Model
 
-`poll_window_frame_boundary` calls `input.input_poll_frame` exactly once per normal
-display frame. The input adapter drains Raylib and returns one device-independent
+The display coordinator calls `sdl_platform_poll_events` exactly once per frame. That
+adapter drains SDL, updates native window state, and returns one device-independent
 `Input_Frame`; downstream UI and Terminal consumers use routed value copies without
 repolling devices. Its event slice borrows fixed storage in `Input_Runtime` until the
-next frame begins.
+next frame begins. The active geometry frame routes pointer and control facts through
+the migrated UI owners; Terminal text input remains with its dormant visual consumer.
 
 The snapshot contains:
 
@@ -462,8 +462,8 @@ The snapshot contains:
 | Time | Monotonic sample time for UI transitions. |
 | Terminal coordinates | UI-resolved cell and pixel positions added to a frame copy. |
 
-UI modules receive the frame by value and commonly use helpers in `ui.odin` for the
-left-button aliases and Raylib-compatible pointer position.
+UI modules receive the frame by value and commonly use helpers in `ui.odin` for
+left-button aliases and portable pointer position.
 
 `input_frame_filter_pointer` creates routed value copies without copying the borrowed
 event storage. Its fixed mask independently controls screen position, motion, press and
@@ -481,8 +481,9 @@ The input package also owns concerns that are not UI focus:
 - terminal protocol mouse capture and release retry.
 
 These remain input-layer responsibilities even when UI code supplies hit-test facts.
-Raylib provides committed characters but no composition lifecycle, so the current frame
-contains no preedit, composition selection, commit, or cancellation state. Such state
+SDL text input is active only while the window is focused. It provides committed UTF-8
+characters, but this adapter does not publish a composition lifecycle, so the current
+frame contains no preedit, composition selection, or cancellation state. Such state
 must not be synthesized without a production source and separately validated feature
 semantics.
 

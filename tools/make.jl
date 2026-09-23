@@ -76,7 +76,9 @@ using UUIDs
 
 include(joinpath(@__DIR__, "build_config.jl"))
 using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs,
-    native_runtime_environment, raylib_shared_library_path, resolve_msvc_tool_path
+    native_runtime_environment, resolve_msvc_tool_path, sdl3_provider_identity
+include(joinpath(@__DIR__, "shaders.jl"))
+using .EuclidShaders: ShaderArtifacts, build_shaders
 include(joinpath(@__DIR__, "sdl3_probe.jl"))
 using .EuclidSDL3Probe: run_probe
 
@@ -666,19 +668,96 @@ and Julia package dependencies.
 """
 function write_runtime_sbom(
     binary_path::String, assets_path::String,
-    output_path::String, julia_project_dir::String)
+    output_path::String, julia_project_dir::String,
+    shader_manifest_path::Union{Nothing,String}=nothing)
 
     serial_uuid = runtime_sbom_serial_uuid()
     runtime_libs = collect_runtime_libs(binary_path)
     julia_packages = collect_julia_packages(julia_project_dir)
 
     bom = runtime_sbom_document(
-        serial_uuid, runtime_libs, julia_packages)
+        serial_uuid, runtime_libs, julia_packages,
+        binary_path, assets_path, shader_manifest_path)
 
     open(output_path, "w") do io
         write_json(io, bom)
         write(io, '\n')
     end
+end
+
+"""Return one CycloneDX SHA-256 hash record for a concrete file."""
+function component_hash(path::String)
+    return Dict{String,Any}(
+        "alg" => "SHA-256", "content" => sysimage_artifact_sha256(path))
+end
+
+"""Resolve the concrete Linux Vulkan loader used by SDL_GPU."""
+function vulkan_loader_path()
+    Sys.islinux() || return nothing
+    handle = Libdl.dlopen_e("libvulkan.so.1")
+    handle == C_NULL && error("Could not resolve the Vulkan loader.")
+    path = realpath(Libdl.dlpath(handle))
+    Libdl.dlclose(handle)
+    return path
+end
+
+"""Describe provisional native migration inputs in CycloneDX form."""
+function migration_runtime_components()
+    provider = sdl3_provider_identity()
+    loader = vulkan_loader_path()
+    return Dict{String,Any}[
+        Dict("type" => "library", "bom-ref" => "native:sdl3",
+            "name" => "SDL3", "version" => provider.version,
+            "scope" => "required", "hashes" => [component_hash(
+                provider.library_path)],
+            "properties" => [Dict("name" => "euclid:provider",
+                "value" => "provisional-system")]),
+        Dict("type" => "library", "bom-ref" => "native:vulkan-loader",
+            "name" => basename(loader), "version" => "system",
+            "scope" => "required", "hashes" => [component_hash(loader)]),
+    ]
+end
+
+"""Describe shader compilers as build-only CycloneDX components."""
+function shader_tool_components(manifest_path::Union{Nothing,String})
+    manifest_path === nothing && return Dict{String,Any}[]
+    manifest = TOML.parsefile(manifest_path)
+    components = Dict{String,Any}[]
+    for (name, prefix) in (("SDL_shadercross", "shadercross"),
+        ("SPIR-V Tools validator", "spirv_validator"))
+        path = manifest["$(prefix)_path"]
+        closure = join(manifest["$(prefix)_closure"], ";")
+        push!(components, Dict("type" => "application",
+            "bom-ref" => "build-tool:$prefix", "name" => name,
+            "version" => manifest["$(prefix)_identity"], "scope" => "excluded",
+            "hashes" => [Dict("alg" => "SHA-256",
+                "content" => manifest["$(prefix)_sha256"])],
+            "properties" => [
+                Dict("name" => "euclid:build-only", "value" => "true"),
+                Dict("name" => "euclid:path", "value" => path),
+                Dict("name" => "euclid:dynamic-closure", "value" => closure)]))
+    end
+    return components
+end
+
+"""Describe generated shader artifacts as required CycloneDX components."""
+function shader_artifact_components(manifest_path::Union{Nothing,String})
+    manifest_path === nothing && return Dict{String,Any}[]
+    manifest = TOML.parsefile(manifest_path)
+    components = Dict{String,Any}[]
+    for shader in manifest["shader"]
+        for (kind, field) in (("SPIR-V", "artifact"),
+            ("reflection", "reflection"))
+            name = shader[field]
+            push!(components, Dict("type" => "file",
+                "bom-ref" => "shader:$(shader["name"]):$kind",
+                "name" => "shaders/$name", "version" => "dev",
+                "scope" => "required", "hashes" => [Dict(
+                    "alg" => "SHA-256",
+                    "content" => shader["$(field)_sha256"])]))
+        end
+    end
+    return components
 end
 
 """Resolve a UUID for the SBOM serial number, preferring a Julia subprocess."""
@@ -694,22 +773,25 @@ function runtime_sbom_serial_uuid()
     return "00000000-0000-0000-0000-000000000000"
 end
 
-"""Build the CycloneDX component list from the binary, assets, libs, and packages."""
-function runtime_sbom_components(runtime_libs, julia_packages, binary_name::String)
-    components = Dict{String,Any}[
-        Dict{String,Any}(
-            "type" => "file",
-            "bom-ref" => "file:$binary_name",
-            "name" => binary_name,
-            "version" => "dev",
-            "scope" => "required"),
-        Dict{String,Any}(
-            "type" => "file",
-            "bom-ref" => "file:bin/assets.pkg",
-            "name" => "bin/assets.pkg",
-            "version" => "dev",
-            "scope" => "required"),
+"""Describe the application binary and asset archive as required files."""
+function runtime_file_components(
+    binary_name::String, binary_path::String, assets_path::String)
+    return Dict{String,Any}[
+        Dict("type" => "file", "bom-ref" => "file:$binary_name",
+            "name" => binary_name, "version" => "dev", "scope" => "required",
+            "hashes" => [component_hash(binary_path)]),
+        Dict("type" => "file", "bom-ref" => "file:bin/assets.pkg",
+            "name" => "bin/assets.pkg", "version" => "dev",
+            "scope" => "required", "hashes" => [component_hash(assets_path)]),
     ]
+end
+
+"""Build the CycloneDX component list from the binary, assets, libs, and packages."""
+function runtime_sbom_components(
+    runtime_libs, julia_packages, binary_name::String,
+    binary_path::String, assets_path::String,
+    shader_manifest_path::Union{Nothing,String}=nothing)
+    components = runtime_file_components(binary_name, binary_path, assets_path)
 
     for lib in runtime_libs
         push!(components, Dict{String,Any}(
@@ -728,18 +810,25 @@ function runtime_sbom_components(runtime_libs, julia_packages, binary_name::Stri
             "version" => package.version,
             "scope" => "required"))
     end
+    append!(components, migration_runtime_components(),
+        shader_tool_components(shader_manifest_path),
+        shader_artifact_components(shader_manifest_path))
     return components
 end
 
 """Assemble the CycloneDX BOM document from its components and dependency refs."""
-function runtime_sbom_document(serial_uuid::AbstractString, runtime_libs, julia_packages)
+function runtime_sbom_document(
+    serial_uuid::AbstractString, runtime_libs, julia_packages,
+    binary_path::String, assets_path::String,
+    shader_manifest_path::Union{Nothing,String}=nothing)
     timestamp = Dates.format(now(UTC), DateFormat("yyyy-mm-ddTHH:MM:SSZ"))
     binary_name = is_windows() ? "bin/euclid.exe" : "bin/euclid"
-    components = runtime_sbom_components(runtime_libs, julia_packages, binary_name)
+    components = runtime_sbom_components(
+        runtime_libs, julia_packages, binary_name,
+        binary_path, assets_path, shader_manifest_path)
 
-    depends_on = String["file:$binary_name", "file:bin/assets.pkg"]
-    append!(depends_on, ["runtime:$lib" for lib in runtime_libs])
-    append!(depends_on, ["pkg:julia/$(package.name)" for package in julia_packages])
+    depends_on = String[component["bom-ref"] for component in components
+        if component["scope"] == "required"]
 
     return Dict{String,Any}(
         "\$schema" => "http://cyclonedx.org/schema/bom-1.6.schema.json",
@@ -784,7 +873,7 @@ function build_odin(
         error("Build failed.")
     end
 
-    stage_shared_raylib(dirname(app_binary_path(debug)))
+    remove_staged_raylib(dirname(app_binary_path(debug)))
     debug && write_debug_environment(native_runtime_dirs())
 
     return nothing
@@ -803,13 +892,13 @@ function write_debug_environment(
     return nothing
 end
 
-"""Copy Odin's bundled shared Raylib beside one produced executable."""
-function stage_shared_raylib(
-    destination::String; source::String=raylib_shared_library_path())
-    mkpath(destination)
-    staged_path = joinpath(destination, basename(source))
-    (ispath(staged_path) || islink(staged_path)) && rm(staged_path; force=true)
-    cp(source, staged_path; follow_symlinks=true)
+"""Remove stale generated Raylib libraries from one executable directory."""
+function remove_staged_raylib(destination::String)
+    for filename in (
+        "libraylib.so.600", "libraylib.600.dylib", "raylib.dll")
+        path = joinpath(destination, filename)
+        (ispath(path) || islink(path)) && rm(path; force=true)
+    end
     return nothing
 end
 
@@ -818,7 +907,6 @@ function odin_build_command(
     julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
     out_flag = "-out:$(app_binary_path(debug))"
     cmd_parts = ["odin", "build", "main.odin", "-file", out_flag]
-    push!(cmd_parts, "-define:RAYLIB_SHARED=true")
     debug && append!(cmd_parts, [
         "-define:EUCLID_ENABLE_SCENARIOS=true", "-debug", "-o:none"])
     strict && append!(cmd_parts,
@@ -864,7 +952,7 @@ function build_harness(julia_linker_flags::String)
     print_captured_output("stdout:", build_result.stdout)
     print_captured_output("stderr:", build_result.stderr)
     build_result.exit_code == 0 || error("Harness build failed.")
-    stage_shared_raylib(dirname(HARNESS_BINARY_PATH))
+    remove_staged_raylib(dirname(HARNESS_BINARY_PATH))
 
     return nothing
 end
@@ -979,7 +1067,8 @@ function build_assets(
     println("Building assets package...")
     prepare_julia_packages()
     sysimage = ensure_julia_sysimage(; force=force_sysimage)
-    stage_assets_content(sysimage)
+    shaders = build_shaders(SCRIPT_DIR)
+    stage_assets_content(sysimage, shaders)
     finalize_assets_archive()
     if debug
         debug_archive = debug_assets_archive_path()
@@ -994,7 +1083,8 @@ function build_assets(
             app_binary_path(debug),
             ASSETS_ARCHIVE_PATH,
             runtime_sbom_path,
-            joinpath(SRC_DIR, "julia"))
+            joinpath(SRC_DIR, "julia"),
+            shaders.manifest_path)
         println("Wrote $runtime_sbom_path")
     end
 end
@@ -1014,8 +1104,34 @@ function prepare_julia_packages()
     end
 end
 
-"""Populate asset staging with source content and its mandatory Julia image."""
-function stage_assets_content(sysimage::JuliaSysimageArtifact)
+"""Write deterministic metadata for the staged asset archive."""
+function write_assets_manifest(
+    sysimage::JuliaSysimageArtifact, shaders::ShaderArtifacts,
+    sysimage_relative_path::String)
+    open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
+        write(io, """
+package=assets.pkg
+julia_root=julia
+content_root=content
+content_input_fingerprint=$(content_input_fingerprint())
+shader_root=shaders
+shader_manifest=shaders/manifest.toml
+shader_manifest_sha256=$(bytes2hex(open(sha256, shaders.manifest_path)))
+shader_schema_version=1
+schema_version=2
+sysimage_path=$(replace(sysimage_relative_path, '\\' => '/'))
+sysimage_input_fingerprint=$(sysimage.input_fingerprint)
+sysimage_artifact_sha256=$(sysimage.artifact_sha256)
+sysimage_platform=$(sysimage_platform_key())
+sysimage_toolchain=$(sysimage_toolchain_identity())
+format=tar.gz
+""")
+    end
+end
+
+"""Populate asset staging with content and validated generated artifacts."""
+function stage_assets_content(
+    sysimage::JuliaSysimageArtifact, shaders::ShaderArtifacts)
     if ispath(ASSETS_STAGING_DIR)
         rm(ASSETS_STAGING_DIR; force=true, recursive=true)
     end
@@ -1028,9 +1144,10 @@ function stage_assets_content(sysimage::JuliaSysimageArtifact)
         joinpath(ASSETS_STAGING_DIR, "julia"))
     copy_directory_contents(joinpath(SRC_DIR, "content"),
         joinpath(ASSETS_STAGING_DIR, "content"))
-    copy_directory_contents(joinpath(SRC_DIR, "view", "shaders"),
+    copy_directory_contents(shaders.directory,
         joinpath(ASSETS_STAGING_DIR, "shaders"))
     copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
+    rm(joinpath(ASSETS_STAGING_DIR, "Chalk On Blackboard.wav"); force=true)
     compile_staged_terminfo()
 
     sysimage_relative_path = joinpath(
@@ -1038,23 +1155,7 @@ function stage_assets_content(sysimage::JuliaSysimageArtifact)
     staged_sysimage = joinpath(ASSETS_STAGING_DIR, sysimage_relative_path)
     mkpath(dirname(staged_sysimage))
     cp(sysimage.path, staged_sysimage; force=true)
-
-    open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
-        write(io, """
-package=assets.pkg
-julia_root=julia
-content_root=content
-content_input_fingerprint=$(content_input_fingerprint())
-shader_root=shaders
-schema_version=2
-sysimage_path=$(replace(sysimage_relative_path, '\\' => '/'))
-sysimage_input_fingerprint=$(sysimage.input_fingerprint)
-sysimage_artifact_sha256=$(sysimage.artifact_sha256)
-sysimage_platform=$(sysimage_platform_key())
-sysimage_toolchain=$(sysimage_toolchain_identity())
-format=tar.gz
-""")
-    end
+    write_assets_manifest(sysimage, shaders, sysimage_relative_path)
 end
 
 """Create the assets archive from staging and clean up the staging directory."""
@@ -1302,7 +1403,7 @@ function run_plan_build(
         build_elapsed_ns = UInt64(time_ns() - build_started)
         println("Build exited $(build_result.exit_code)")
         build_result.exit_code == 0 &&
-            stage_shared_raylib(dirname(app_binary_path(command.debug)))
+            remove_staged_raylib(dirname(app_binary_path(command.debug)))
         return build_result, build_elapsed_ns
     end
     build_odin(julia_flags, command.debug, command.strict)

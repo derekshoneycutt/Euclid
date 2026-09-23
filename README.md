@@ -36,6 +36,14 @@ Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each too
 available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
 Julia project by default, so a separate HarfBuzz installation is not required.
 
+The experimental `dev-sdl3` branch additionally requires Linux SDL3 development files
+discoverable through `pkg-config` and SPIR-V Tools (`spirv-val` and `spirv-dis`). The
+SDL_shadercross source and its dependencies are recursive submodules under
+`tools/shadercross`; asset builds configure and incrementally build its CLI under
+`.build/shadercross` with one compiler job. `EUCLID_SHADERCROSS` remains available for
+an explicit developer override. These migration inputs require release-version
+hardening before a distributable release.
+
 Unix source and distribution builds may intentionally select system HarfBuzz with
 `EUCLID_HARFBUZZ_PROVIDER=system`. This mode also requires `pkg-config` and the
 HarfBuzz development package: install `harfbuzz-devel` on Fedora,
@@ -52,12 +60,15 @@ project-specific Julia driver.
 ### Configure and build
 
 ```bash
-git clone https://github.com/derekshoneycutt/Euclid.git
+git clone --recurse-submodules https://github.com/derekshoneycutt/Euclid.git
 cd Euclid
 cmake --preset default
 cmake --build --preset default
 cmake --build --preset default --target run
 ```
+
+For an existing checkout, initialize all nested dependencies with
+`git submodule update --init --recursive` before configuring.
 
 The same commands work from Unix shells and PowerShell. Presets keep CMake metadata
 isolated under `.build/cmake/` while preserving Euclid's existing outputs under

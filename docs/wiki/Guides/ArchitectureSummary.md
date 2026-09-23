@@ -6,7 +6,7 @@
 1. [Where To Start Reading](#where-to-start-reading)
 1. [Module Map (Odin + Julia)](#module-map-odin--julia)
 1. [Execution And Ownership Model](#execution-and-ownership-model)
-1. [Raylib Backend Boundary](#raylib-backend-boundary)
+1. [Dormant Raylib Backend Boundary](#dormant-raylib-backend-boundary)
 1. [Julia Actor Architecture](#julia-actor-architecture)
 1. [Terminal Architecture (Interactive Runtime Surface)](#terminal-architecture-interactive-runtime-surface)
 1. [Animation Architecture](#animation-architecture)
@@ -145,9 +145,9 @@ slots, and joined task-pool work; they do not share mutable ownership.
 
 | Execution role | Owns | Publishes through | Forbidden work |
 | --- | --- | --- | --- |
-| **Display thread** | Window, Raylib resources, input, UI, canonical scene and Terminal state, fixed-step ordering, final publication | Typed Julia ingress, task-pool submissions, display-owned commit boundaries | Julia C API calls or concurrent mutation of canonical state |
-| **Julia owner thread** | Julia lifetime, callback execution, one actor runtime, content generations, reload candidates, Julia-side policy | Typed egress, checked animation slots, canonical MIME envelopes | Raylib calls, rendering, or direct mutation of display-owned state |
-| **CPU task pool** | Finite operation-owned payloads and cache regions while a task is active | Joined results returned to display-readable ownership | Julia calls, thread-affine Raylib calls, or direct visible-state publication |
+| **Display thread** | SDL window and GPU shell, dormant Raylib resources, input, UI, canonical scene and Terminal state, fixed-step ordering, final publication | Typed Julia ingress, task-pool submissions, display-owned commit boundaries | Julia C API calls or concurrent mutation of canonical state |
+| **Julia owner thread** | Julia lifetime, callback execution, one actor runtime, content generations, reload candidates, Julia-side policy | Typed egress, checked animation slots, canonical MIME envelopes | Native GPU calls, rendering, or direct mutation of display-owned state |
+| **CPU task pool** | Finite operation-owned payloads and cache regions while a task is active | Joined results returned to display-readable ownership | Julia calls, thread-affine native GPU calls, or direct visible-state publication |
 
 ```mermaid
 flowchart LR
@@ -171,16 +171,16 @@ may enter Julia and only the display may publish visible state.
 `src/core/geometry` owns application vectors and rectangles. Canonical shapes,
 particles, Dynview commands and layout records, Terminal themes, UI regions, and
 prepared glyph placement use these portable values. Bridge and protocol payloads keep
-their explicit wire representations, while display packages convert portable values to
-Raylib types only when constructing native draw, hit-test, shader, or font data.
+their explicit wire representations. Native display packages convert portable values
+to SDL or dormant Raylib values only at the owner-specific backend boundary.
 
 ### Input Boundary
 
-The display thread calls `input.input_poll_frame` once through
-`poll_window_frame_boundary`. Raylib key, character, pointer, focus, and timing calls
-remain in `src/view/input/device.odin`; operating-system clipboard calls remain in
-`src/view/input/clipboard.odin`. Both adapters publish application-owned values rather
-than Raylib types.
+The display coordinator drains the SDL event queue exactly once per frame. It applies
+window lifecycle and extent facts to the native platform owner while translating
+keyboard, pointer, focus, wheel, and committed text events into application-owned
+`Input_Frame` values. SDL scancodes provide physical key identity, and queue order is
+preserved in fixed `Input_Runtime` event storage. Consumers never poll SDL or Raylib.
 
 `Input_Runtime` owns fixed display-lifetime storage, while each `Input_Frame` borrows
 its event prefix only until the next poll. UI and Terminal consumers receive frame
@@ -189,16 +189,50 @@ committed text from the shared event route. Bytes retained for a Julia evaluatio
 native Terminal session are gated by the complete `Input_Owner` identity, including
 its generation, so stale input cannot cross owner replacement.
 
-Raylib supplies committed text but no production composition lifecycle. Euclid
-therefore does not model synthetic composition start, preedit replacement or selection,
-commit, or cancellation state. Composition remains separate feature work requiring a
-real production source and independently validated consumer semantics.
+SDL text input follows effective window focus. The adapter publishes valid committed
+UTF-8 runes and rejects invalid payloads without partial publication. Composition and
+preedit remain separate feature work requiring an independently validated producer and
+consumer contract.
 
-## Raylib Backend Boundary
+Clipboard reads and writes, retained system cursors, and URL activation use SDL-owned
+platform services. UI code publishes portable cursor intent; only the display
+coordinator converts that intent to a native cursor. Clipboard reads copy SDL-owned
+text before releasing it through `SDL_free`.
 
-Raylib and rlgl are explicit native implementation dependencies, not canonical data
-substrates. Shapes, particles, Dynview, Terminal, UI, and frame rendering retain their
-existing prepared caches and direct draw consumers. Euclid does not route them through
+## Native Frame Execution
+
+The active Linux application creates one high-density SDL window, claims it for one
+Vulkan SDL_GPU device, and owns a physical-pixel RGBA8 scene target. Each eligible
+frame encodes bounded indexed geometry into fixed CPU storage, uploads the occupied
+vertex and index prefixes, renders adjacent compatible batches to that target, blits
+the target to the acquired swapchain texture, and submits one command buffer. The scene
+target has both color-target and sampler usage because the final blit samples it.
+
+Ordinary world shapes and shadows, panel chrome, splitters, controls, Library rows,
+settings, GIF controls, and non-glyph Dynview geometry use this active path. Logical
+coordinates remain authoritative through encoding; the SDL boundary applies physical
+viewports and outward-rounded scissors for high-density output. Capacity rejection is
+atomic. Submitted-frame diagnostics expose overflow totals and vertex, index, batch,
+and upload high-water marks.
+
+Nil swapchain textures are temporary unavailable frames and do not publish
+`Frame_Presented` evidence. Physical resize creates a candidate target before waiting
+for idle and retiring the old target. Glyph text and Terminal raster publication,
+tool and dust visuals, and screenshot or GIF GPU readback remain explicit deferred
+capabilities. Dormant Raylib source may remain, but it neither creates a window, polls
+active input, nor records active frame presentation.
+
+The repository-owned `EUCLID-SDL-BOUNDARY` rule permits SDL imports only in the exact
+native color, icon, GPU renderer, platform, platform-service, and timing owners, the
+clipboard adapter, and the display input coordinator. Its import counts fail closed on
+stale or expanded ownership.
+
+## Dormant Raylib Backend Boundary
+
+Raylib and rlgl remain transitional implementation dependencies, not active window or
+presentation owners and not canonical data substrates. Shapes, particles, Dynview,
+Terminal, UI, and frame rendering retain their existing prepared caches and dormant
+draw consumers. Euclid does not route them through
 a generic render command stream, backend-neutral shader interface, global resource
 registry, or shared native-handle abstraction.
 
@@ -207,8 +241,8 @@ current owner:
 
 | Category | Current owners and responsibility |
 | --- | --- |
-| Window/event shell | `src/view/view.odin`, startup/loading surfaces, and input device/clipboard adapters own the window, frame timing, presentation shell, and once-polled native events. |
-| Subsystem drawing | View core, UI, Dynview display, tool, dust, and Terminal drawing packages consume their existing prepared values and issue immediate Raylib/rlgl calls. |
+| Transitional compatibility | `src/view/view.odin` retains the dormant frame consumer needed by later rendering slices but does not own active presentation or device polling. |
+| Subsystem drawing | View core, UI, Dynview display, tool, dust, and Terminal packages retain dormant immediate Raylib/rlgl consumers alongside migrated owner-local geometry encoders. |
 | Audio | `src/audio` owns Raylib stream handles and chalk synthesis playback. |
 | Backend resource ownership | View model, font, Terminal graphics, and lifecycle owners retain display-thread shaders, textures, locations, publication, and cleanup. |
 | Capture acquisition | `src/view/core/framebuffer_capture.odin` and GIF capture policy synchronously acquire and release presented Raylib images. |
@@ -584,7 +618,9 @@ UI and cache preparation use explicit ordered stages around the fixed-step updat
 1. Submit shape draw-cache construction and any invalidated Dynview compilation.
 1. Join every submitted task.
 1. Resolve layout-dependent presentation scrolling, copy interaction, and selection.
-1. Begin Raylib drawing over committed state and fixed frame-local preparation records.
+1. Encode bounded world, UI, and non-glyph Dynview geometry from committed state and
+  fixed frame-local preparation records.
+1. Upload, render, blit, and submit one SDL_GPU command buffer.
 
 Shape preparation reads settled `Shape_World` components and writes only its derived
 shape draw cache. Lens and Lune state remains analytic as two centers, two radii, and
@@ -743,8 +779,13 @@ the owner responsible for release.
   provider; Windows may not.
 - Development JLL linkage is not a relocatable bundle. Releases must stage the native
   closure and use platform-relative loader metadata.
-- Builds package Julia scripts, shaders, assets, and `manifest.txt` into
-  `bin/assets.pkg`; debug builds publish a matching package beside the debug executable.
+- Builds compile canonical HLSL offline and package validated SPIR-V, reflection JSON,
+  shader ABI metadata, Julia scripts, and other assets into `bin/assets.pkg`; HLSL and
+  build-only shader tools are not runtime assets. Debug builds publish a matching
+  package beside the debug executable.
+- SDL_shadercross and its recursive dependencies are tracked under `tools/shadercross`.
+  Asset builds configure it under `.build/shadercross` and compile the CLI with one job;
+  `EUCLID_SHADERCROSS` is an explicit developer override.
 - Startup requires the package beside the executable and unpacks it to a writable
   cache. A stale unpacked cache never substitutes for a missing package.
 

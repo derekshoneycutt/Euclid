@@ -10,8 +10,8 @@ hiding geometric color or creating a separate glowing rim.
 
 - `src/view/elements.odin` owns tool geometry, draw order, light conversion,
   bounded occluder selection, material upload, and shader fallback behavior.
-- `src/view/shaders/stroke3d.vs` forwards batched vertex color data.
-- `src/view/shaders/stroke3d.fs` owns coverage, reconstructed normals, shadows,
+- `src/view/shaders/stroke3d.vert.hlsl` forwards batched vertex color data.
+- `src/view/shaders/stroke3d.frag.hlsl` owns coverage, reconstructed normals, shadows,
   linear-light shading, and the titanium response.
 - `src/view/model/model.odin` owns shader handles and cached uniform locations only.
 
@@ -52,13 +52,21 @@ provide depth-aware crossings or welded attachment shading.
 
 ## Shader Resource Contract
 
-`src/view/elements.odin` owns the complete `stroke3d` admission transaction. It
-resolves both packaged stages, requires a nonzero Raylib shader handle, caches every
-application uniform used by tool drawing, and publishes `Tool_Render_State.ready`
-only after every required location is nonnegative. The vertex stage uses Raylib's
-conventional `vertexPosition`, `vertexTexCoord`, `vertexColor`, and `mvp` bindings.
-Those names remain part of the checked-in shader contract even though the current
-Odin Raylib binding does not expose attribute-location queries.
+Canonical shader source is HLSL. `tools/shaders.jl` compiles both stages to SPIR-V
+offline with SDL_shadercross, validates the binaries with SPIR-V Tools, reflects their
+interfaces, and rejects descriptor-set, resource-count, vertex-layout, uniform-layout,
+or cross-stage mismatches. Only generated SPIR-V, reflection JSON, and their hashed ABI
+manifest enter `assets.pkg`; source HLSL and shader compilers are not runtime assets.
+SDL_shadercross is a recursive submodule at `tools/shadercross`; the asset build
+configures it under `.build/shadercross` and builds only the CLI target with one job.
+An explicit `EUCLID_SHADERCROSS` path overrides the bundled provider for development.
+
+The Phase 2 migration checkpoint intentionally leaves `src/view/elements.odin` on its
+Raylib admission path while the SDL pipeline owner is built. That legacy path cannot
+consume the generated SPIR-V and is not a supported runnable configuration. The SDL
+consumer must preserve the current all-or-fallback admission transaction when it
+replaces the legacy handles and individual uniform locations with pipeline resources
+and packed uniform records.
 
 Every failed admission leaves the shader unpublished and releases any loaded handle.
 Shutdown also releases by handle rather than by publication state, so partial state is
@@ -106,8 +114,10 @@ stroke surface without claiming full world-space ray accuracy.
 cache-order depth gating, world-to-view basis projection, canonical view-depth
 ordering, arc parameter endpoints, attachment scaling, stable leg slots, complete
 uniform admission, missing-uniform rejection, and idempotent partial cleanup.
-Runtime shader compilation is validated through the CMake `run` target. The
-complete repository gate is the CMake `check` target.
+`tools/test/shader_tests.jl` covers the offline shader commands, reflected interfaces,
+fixed CPU/GPU ABI, missing-tool behavior, and artifact provenance. The complete
+repository gate is the CMake `check` target once the SDL runtime checkpoint restores a
+coherent application build.
 
 ## Decision Record
 

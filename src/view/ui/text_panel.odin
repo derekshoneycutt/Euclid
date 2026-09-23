@@ -24,6 +24,26 @@ Presentation_Preparation :: struct {
     selection_view: ui_dynview.Dynview_Selection_View,
 }
 
+// draw_encoded_presentation_geometry encodes panel and cached non-glyph content.
+draw_encoded_presentation_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: rl.Rectangle) {
+    if state == nil || state^.julia_interface == nil {return}
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(panel), BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, geometry.Rectangle(panel), 1, UI_BORDER_COLOR)
+    text_panel := view_text_content_panel(panel)
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(text_panel), UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, geometry.Rectangle(text_panel), 1, UI_BORDER_COLOR)
+    if is_terminal_selected(state) {return}
+    ui_dynview.draw_encoded_geometry(&state^.dynview, encoder,
+        geometry.Rectangle(text_panel), state^.ui_runtime.view_text_scroll_y,
+        TEXT_PADDING)
+}
+
 //   Compute the bordered viewport used by text and Terminal presentations.
 view_text_content_panel :: proc(panel: rl.Rectangle) -> rl.Rectangle {
     panel_geometry := container_geometry(panel, 1)

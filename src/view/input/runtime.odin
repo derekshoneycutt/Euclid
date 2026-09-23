@@ -44,6 +44,7 @@ Input_Runtime :: struct {
     // Last device-pointer sample used to distinguish real movement from mere polling.
     mouse_position_known: bool,
     device_mouse_position: Input_Position,
+    device_mouse_down: Input_Mouse_Buttons,
 
     // Owner-bound circular terminal-byte storage, destination identity, and
     // cumulative queue, delivery, paste-admission, and stale-discard diagnostics.

@@ -12,7 +12,6 @@ using JSON
 function provider_result()
     isempty(ARGS) || error("This workspace-scoped provider accepts no arguments.")
     arguments = [
-        "-define:RAYLIB_SHARED=true",
         "-define:EUCLID_ENABLE_HARNESS=true",
         "-define:EUCLID_ENABLE_SCENARIOS=true",
         "-define:ODIN_TEST_THREADS=1",

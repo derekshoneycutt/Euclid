@@ -88,6 +88,8 @@ JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 
 // Display-lifetime services and optional scenario sinks used by each window frame.
 Window_Frame_Context :: struct {
+    platform: ^native.Sdl_Platform,
+    draw_runtime: ^native.Sdl_Draw_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
     scenario_runtime: ^Scenario_Runtime,
@@ -110,6 +112,63 @@ Frame_Draw_Preparation :: struct {
     layout_interaction: ui.Ui_Layout_Interaction_Preparation,
 }
 
+// Deferred_Visual_Capabilities names visuals outside the active geometry path.
+Deferred_Visual_Capabilities :: struct {
+    glyph_text:        bool,
+    terminal_rasters:  bool,
+    tool_visuals:      bool,
+    dust_visuals:      bool,
+    scenario_readback: bool,
+    gif_readback:      bool,
+}
+
+// deferred_visual_capabilities reports explicit later rendering boundaries.
+deferred_visual_capabilities :: proc(
+    state: ^Euclid_General_State) -> Deferred_Visual_Capabilities {
+    result := Deferred_Visual_Capabilities{
+        glyph_text = true,
+        terminal_rasters = true,
+        tool_visuals = true,
+        dust_visuals = true,
+        gif_readback = state^.ui_runtime.gif_capture_phase != .Idle,
+    }
+    when core.SCENARIOS_ENABLED {result.scenario_readback = true}
+    return result
+}
+
+// report_draw_frame_telemetry logs one representative submitted geometry frame.
+report_draw_frame_telemetry :: proc(
+    state: ^Euclid_General_State, runtime: ^native.Sdl_Draw_Runtime) {
+    if runtime^.telemetry_reported {return}
+    frame := runtime^.last_frame
+    deferred := deferred_visual_capabilities(state)
+    log.infof("sdl_geometry_frame vertices=%d indices=%d batches=%d " +
+        "pipeline_bindings=%d upload_operations=%d upload_bytes=%d " +
+        "primitive_overflows=%d scissor_overflows=%d " +
+        "deferred_glyph_text=%v deferred_terminal_rasters=%v " +
+        "deferred_tool_visuals=%v deferred_dust_visuals=%v " +
+        "deferred_scenario_readback=%v deferred_gif_readback=%v",
+        frame.vertices, frame.indices, frame.batches, frame.pipeline_bindings,
+        frame.upload_operations, frame.upload_bytes, frame.primitive_overflows,
+        frame.scissor_overflows, deferred.glyph_text, deferred.terminal_rasters,
+        deferred.tool_visuals, deferred.dust_visuals,
+        deferred.scenario_readback, deferred.gif_readback)
+    runtime^.telemetry_reported = true
+}
+
+// report_draw_runtime_summary logs cumulative work and capacity high waters.
+report_draw_runtime_summary :: proc(runtime: ^native.Sdl_Draw_Runtime) {
+    statistics := runtime^.statistics
+    log.infof("sdl_geometry_summary submitted_frames=%d vertices=%d indices=%d " +
+        "batches=%d upload_bytes=%d primitive_overflows=%d scissor_overflows=%d " +
+        "max_vertices=%d max_indices=%d max_batches=%d max_upload_bytes=%d",
+        statistics.submitted_frames, statistics.vertices, statistics.indices,
+        statistics.batches, statistics.upload_bytes,
+        statistics.primitive_overflows, statistics.scissor_overflows,
+        statistics.max_vertices, statistics.max_indices, statistics.max_batches,
+        statistics.max_upload_bytes)
+}
+
 // Poll one input frame and accept its live logical extent before UI geometry.
 poll_window_frame_boundary :: proc(
     state: ^Euclid_General_State,
@@ -123,6 +182,20 @@ poll_window_frame_boundary :: proc(
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
 // Notes:
+// Resolve packaged SPIR-V artifacts for the display-owned 2D renderer.
+sdl_draw_shader_paths :: proc() -> native.Sdl_Draw_Shader_Paths {
+    return {
+        colored_vertex = files.packaged_asset_path(
+            "shaders/draw2d_colored.vert.spv", context.temp_allocator),
+        colored_fragment = files.packaged_asset_path(
+            "shaders/draw2d_colored.frag.spv", context.temp_allocator),
+        textured_vertex = files.packaged_asset_path(
+            "shaders/draw2d_textured.vert.spv", context.temp_allocator),
+        textured_fragment = files.packaged_asset_path(
+            "shaders/draw2d_textured.frag.spv", context.temp_allocator),
+    }
+}
+
 //   - Owns state/window setup and teardown via deferred cleanup calls.
 //   - Resets temp allocator each frame after drawing.
 //
@@ -148,15 +221,18 @@ run_gif_capture_frame :: proc(state: ^Euclid_General_State) {
 
 //   Publish frame evidence, close profiling zones, and release temporary storage.
 finish_window_frame :: proc(
-    state: ^Euclid_General_State, display_profile: ^evidence_profile.State) {
-    _ = evidence_session.session_record(
-        &state^.evidence_session, &state^.evidence_ring, {
-            lane = .Presentation,
-            kind = .Frame_Presented,
-            correlation_kind = .Fixed_Step,
-            correlation = state^.fixed_step,
-            tick = state^.fixed_step,
-        })
+    state: ^Euclid_General_State, display_profile: ^evidence_profile.State,
+    presented := true) {
+    if presented {
+        _ = evidence_session.session_record(
+            &state^.evidence_session, &state^.evidence_ring, {
+                lane = .Presentation,
+                kind = .Frame_Presented,
+                correlation_kind = .Fixed_Step,
+                correlation = state^.fixed_step,
+                tick = state^.fixed_step,
+            })
+    }
     evidence_session.session_accept_ring(
         &state^.evidence_session, &state^.evidence_ring)
     evidence_profile.zone_end(display_profile)
@@ -230,6 +306,13 @@ service_scenario_after_present :: proc(ctx: Window_Frame_Context) {
     }
 }
 
+//   Service retained audio only in explicitly experimental builds.
+service_experimental_audio :: proc(state: ^Euclid_General_State) {
+    when audio.EXPERIMENTAL_AUDIO_ENABLED {
+        audio.update_chalk_runtime(&state^.chalk_audio)
+    }
+}
+
 //   Run one window frame: async results, simulation update, draw, and GIF capture.
 run_window_frame :: proc(
     state: ^Euclid_General_State,
@@ -246,18 +329,18 @@ run_window_frame :: proc(
     service_presentation_runtime(state, presentation)
     service_scenario_before_ui(ctx)
     input_frame := poll_window_frame_boundary(state, input_runtime)
-    ui_geometry := ui.prepare_ui_geometry(state, input_frame)
+    ui_geometry := ui.prepare_ui_geometry(state, input_frame, rl.GetFrameTime())
     ui.prepare_ui_static_interaction(
         state, input_frame, ui_geometry.pointer_capture)
     ui_controls := ui.prepare_ui_controls(state, input_frame)
     terminal_frame := terminal_service_update(state, input_runtime, input_frame)
-    alpha := accumulate_and_update_systems(state)
+    alpha := accumulate_and_update_systems(state, rl.GetFrameTime())
     run_parallel_frame_preparation_after_ui(
         state, alpha, ui_geometry.compile_dynview)
     ui_layout_interaction := ui.prepare_ui_layout_interaction(state, input_frame)
     draw_preparation := Frame_Draw_Preparation{input_frame, terminal_frame,
         ui_controls, ui_layout_interaction}
-    audio.update_chalk_runtime(&state^.chalk_audio)
+    service_experimental_audio(state)
     service_scenario_before_present(ctx)
 
     evidence_profile.zone_begin(display_profile, "frame_present")
@@ -269,6 +352,105 @@ run_window_frame :: proc(
     service_scenario_after_present(ctx)
     run_gif_capture_frame(state)
     finish_window_frame(state, display_profile)
+}
+
+// Apply one portable UI cursor request through the active SDL platform owner.
+apply_sdl_cursor :: proc(
+    state: ^Euclid_General_State, platform: ^native.Sdl_Platform) {
+    kind := native.Sdl_Cursor_Kind.Default
+    if state^.ui_runtime.cursor == .Resize_Ew {
+        kind = .Resize_Ew
+    } else if state^.ui_runtime.cursor == .Resize_Ns {
+        kind = .Resize_Ns
+    }
+    if !native.sdl_platform_set_cursor(platform, kind) {
+        log.warn("sdl_cursor_update_failed")
+    }
+}
+
+// prepare_sdl_geometry_frame advances UI, presentation, simulation, and caches.
+prepare_sdl_geometry_frame :: proc(
+    state: ^Euclid_General_State, ctx: Window_Frame_Context,
+    clock: ^native.Sdl_Frame_Clock) -> (
+    input.Input_Frame, ui.Animation_Control_Preparation) {
+    frame_dt := native.sdl_frame_clock_step(clock)
+    input_frame := input.input_poll_frame(ctx.input_runtime)
+    _ = apply_window_metrics(state, {
+        width = ctx.platform^.metrics.logical_width,
+        height = ctx.platform^.metrics.logical_height,
+    })
+    service_scenario_before_ui(ctx)
+    ui_geometry := ui.prepare_ui_geometry(state, input_frame, frame_dt)
+    ui.prepare_ui_static_interaction(
+        state, input_frame, ui_geometry.pointer_capture)
+    animation_frame := ui.ui_animation_control_input_frame(
+        input_frame, state^.ui_runtime.interaction_frame)
+    animation_controls := ui.prepare_animation_controls(state, animation_frame)
+    apply_sdl_cursor(state, ctx.platform)
+    service_presentation_runtime(state, ctx.presentation)
+    alpha := accumulate_and_update_systems(state, frame_dt)
+    run_parallel_frame_preparation_after_ui(
+        state, alpha, ui_geometry.compile_dynview)
+    service_scenario_before_present(ctx)
+    return input_frame, animation_controls
+}
+
+// encode_sdl_geometry_frame builds and submits one bounded geometry frame.
+encode_sdl_geometry_frame :: proc(
+    state: ^Euclid_General_State, ctx: Window_Frame_Context,
+    input_frame: input.Input_Frame,
+    animation_controls: ui.Animation_Control_Preparation) -> native.Sdl_Frame_Result {
+    encoder: native.Draw_Encoder
+    _ = native.draw_encoder_begin(&encoder, ctx.draw_runtime^.storage, {
+        f32(ctx.platform^.metrics.logical_width),
+        f32(ctx.platform^.metrics.logical_height),
+    }, {ctx.platform^.scene_width, ctx.platform^.scene_height})
+    _ = native.draw_encoder_push_scissor(
+        &encoder, state^.ui_runtime.ui_regions.world_rect)
+    draw_encoded_drawing_surface(state, &encoder)
+    draw_encoded_cached_basic_pass(state, &encoder, false)
+    draw_encoded_cached_shadow_pass(state, &encoder)
+    draw_encoded_cached_basic_pass(state, &encoder, true)
+    _ = native.draw_encoder_pop_scissor(&encoder)
+    ui.draw_encoded_panel_geometry(state, &encoder)
+    ui.draw_encoded_animation_controls(state, &encoder, animation_controls)
+    ui.draw_encoded_splitters(
+        &encoder, &state^.ui_runtime,
+        ui.input_frame_mouse_position(input_frame))
+    return native.sdl_platform_present_draw(
+        ctx.platform, ctx.draw_runtime, &encoder,
+        native.to_sdl_color(BACKGROUND_COLOR))
+}
+
+// Run one SDL geometry frame while later visual capabilities remain dormant.
+run_sdl_geometry_frame :: proc(
+    state: ^Euclid_General_State, ctx: Window_Frame_Context,
+    clock: ^native.Sdl_Frame_Clock) -> bool {
+    evidence_profile.zone_begin(ctx.display_profile, "display_frame")
+    frame_started_at := native.sdl_time_ticks()
+    _ = sdl_platform_poll_events(ctx.platform, ctx.input_runtime)
+    if ctx.platform^.close_requested {
+        finish_window_frame(state, ctx.display_profile, false)
+        return false
+    }
+    input_frame, animation_controls := prepare_sdl_geometry_frame(state, ctx, clock)
+    result := encode_sdl_geometry_frame(
+        state, ctx, input_frame, animation_controls)
+    if result == .Failed {
+        log.error("sdl_frame_present_failed")
+        finish_window_frame(state, ctx.display_profile, false)
+        return false
+    }
+    presented := result == .Presented
+    if presented {
+        report_draw_frame_telemetry(state, ctx.draw_runtime)
+        service_scenario_after_present(ctx)
+    }
+    finish_window_frame(state, ctx.display_profile, presented)
+    if state^.ui_runtime.limit_fps {
+        native.sdl_delay_until_rate(frame_started_at, u64(LIMIT_FPS))
+    }
+    return true
 }
 
 //   Build the screenshot sink routed through one active scenario runtime.
@@ -294,16 +476,19 @@ prepare_window_scenario :: proc(
 
 //   Bind display-lifetime services for one frame loop.
 window_frame_context :: proc(
+    platform: ^native.Sdl_Platform,
+    draw_runtime: ^native.Sdl_Draw_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
     display_profile: ^evidence_profile.State,
-    scenario_runtime: ^Scenario_Runtime = nil,
-    capture_sink: capture.Sink = {}) -> Window_Frame_Context {
+    scenario: Window_Scenario_Preparation = {}) -> Window_Frame_Context {
     return {
+        platform = platform,
+        draw_runtime = draw_runtime,
         input_runtime = input_runtime,
         presentation = presentation,
-        scenario_runtime = scenario_runtime,
-        capture_sink = capture_sink,
+        scenario_runtime = scenario.runtime,
+        capture_sink = scenario.capture_sink,
         display_profile = display_profile,
     }
 }
@@ -322,8 +507,12 @@ init_display_profile :: proc(
 //   Process display frames until the window or active scenario requests completion.
 run_window_frames :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context) {
-    for !rl.WindowShouldClose() {
-        run_window_frame(state, ctx)
+    clock: native.Sdl_Frame_Clock
+    native.sdl_frame_clock_reset(&clock)
+    for !ctx.platform^.close_requested {
+        if !run_sdl_geometry_frame(state, ctx, &clock) {
+            return
+        }
         when core.SCENARIOS_ENABLED {
             if scenario_runtime_finished(ctx.scenario_runtime) {
                 return
@@ -348,7 +537,9 @@ finish_window_session :: proc(
 run_initialized_window_session :: proc(
     settings: ^Euclid_Run_Settings, session: Euclid_Runtime_Session,
     input_runtime: ^input.Input_Runtime,
-    display_profile: ^evidence_profile.State) -> int {
+    display_profile: ^evidence_profile.State,
+    platform: ^native.Sdl_Platform,
+    draw_runtime: ^native.Sdl_Draw_Runtime) -> int {
     state := session.state
     log.info("display_runtime_ready")
 
@@ -363,8 +554,8 @@ run_initialized_window_session :: proc(
 
         free_all(context.temp_allocator)
         run_window_frames(state, window_frame_context(
-            input_runtime, session.presentation, display_profile,
-            scenario.runtime, scenario.capture_sink))
+            platform, draw_runtime, input_runtime, session.presentation, display_profile,
+            scenario))
         log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
             state^.fixed_step, scenario.runtime != nil)
         return finish_window_session(
@@ -372,7 +563,7 @@ run_initialized_window_session :: proc(
     } else {
         free_all(context.temp_allocator)
         run_window_frames(state, window_frame_context(
-            input_runtime, session.presentation, display_profile))
+            platform, draw_runtime, input_runtime, session.presentation, display_profile))
         log.infof("display_loop_stopped fixed_step=%d", state^.fixed_step)
         return shutdown_window_runtime(session)
     }
@@ -391,22 +582,42 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
     init_display_profile(&display_profile, settings^.profile_path)
     defer evidence_profile.destroy(&display_profile)
 
-    open_window(settings)
-    defer rl.CloseWindow()
+    platform: native.Sdl_Platform
+    if !native.sdl_platform_create(&platform, {
+        title = WINDOW_TITLE,
+        width = settings^.window.width,
+        height = settings^.window.height,
+        resizable = settings^.window.mode == .Resizable,
+        vsync = settings^.do_vsync,
+    }) {
+        log.error("sdl_platform_create_failed")
+        return 1
+    }
+    defer native.sdl_platform_destroy(&platform)
+
+    draw_runtime: native.Sdl_Draw_Runtime
+    if !native.sdl_draw_runtime_create(
+        &draw_runtime, platform.device, sdl_draw_shader_paths()) {
+        log.error("sdl_draw_runtime_create_failed")
+        return 1
+    }
+    defer native.sdl_draw_runtime_destroy(&draw_runtime, platform.device)
 
     input_runtime := input.input_runtime_create(context.allocator)
     if input_runtime == nil { return 1 }
     defer input.input_runtime_destroy(input_runtime, context.allocator)
 
     session, ok := initialize_window_runtime_with_loading(
-        settings, &display_profile)
+        settings, &display_profile, &platform, &draw_runtime)
     evidence_profile.zone_end(&display_profile)
     if !ok {
         log.error("display_runtime_start_failed")
         return 1
     }
-    return run_initialized_window_session(
-        settings, session, input_runtime, &display_profile)
+    result := run_initialized_window_session(
+        settings, session, input_runtime, &display_profile, &platform, &draw_runtime)
+    report_draw_runtime_summary(&draw_runtime)
+    return result
 }
 
 //   Release graphics-owned resources before destroying their backing runtime state.
@@ -414,7 +625,6 @@ shutdown_window_runtime :: proc(
     session: Euclid_Runtime_Session,
     scenario_runtime: ^Scenario_Runtime = nil,
     artifact_output: string = "") -> int {
-    shutdown_window_resources(session.state)
     return shutdown_runtime_session(session, scenario_runtime, artifact_output)
 }
 
@@ -551,13 +761,15 @@ initialize_window_icon :: proc() {
 initialize_window_resources :: proc(
     state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
 
-    rl.InitAudioDevice()
-    if !rl.IsAudioDeviceReady() {
-        fmt.eprintln("warning: failed to initialize audio device; chalk sound disabled")
-    } else {
-        chalk_path := files.packaged_asset_path(
-            "Chalk On Blackboard.wav", context.temp_allocator)
-        audio.init_chalk_runtime(&state^.chalk_audio, chalk_path)
+    when audio.EXPERIMENTAL_AUDIO_ENABLED {
+        rl.InitAudioDevice()
+        if !rl.IsAudioDeviceReady() {
+            fmt.eprintln("warning: failed to initialize audio device; chalk sound disabled")
+        } else {
+            chalk_path := files.packaged_asset_path(
+                "Chalk On Blackboard.wav", context.temp_allocator)
+            audio.init_chalk_runtime(&state^.chalk_audio, chalk_path)
+        }
     }
 
     state^.ui_runtime.use_gpu_dust_instancing =
@@ -599,9 +811,11 @@ shutdown_window_resources :: proc(state : ^Euclid_General_State) {
         &state^.font_cache, &state^.simulation_executor^.pool)
     font.math_shaping_destroy(&state^.dynview.math_shaping)
     font.cache_destroy(&state^.font_cache)
-    audio.shutdown_chalk_runtime(&state^.chalk_audio)
-    if rl.IsAudioDeviceReady() {
-        rl.CloseAudioDevice()
+    when audio.EXPERIMENTAL_AUDIO_ENABLED {
+        audio.shutdown_chalk_runtime(&state^.chalk_audio)
+        if rl.IsAudioDeviceReady() {
+            rl.CloseAudioDevice()
+        }
     }
     shutdown_particle_render_resources(state)
     shutdown_tool_brush_shader(state)
@@ -670,15 +884,16 @@ update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
 }
 
 //   Run fixed-step simulation updates and return interpolation alpha for rendering.
-accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
+accumulate_and_update_systems :: proc(
+    state: ^Euclid_General_State, frame_dt: f32) -> f32 {
     view_core.recompute_iso_scale_precompute(state^.iso_scale)
 
-    frame_dt := rl.GetFrameTime()
-    if frame_dt > MAX_FRAME_DT {
-        frame_dt = MAX_FRAME_DT
+    clamped_dt := frame_dt
+    if clamped_dt > MAX_FRAME_DT {
+        clamped_dt = MAX_FRAME_DT
     }
-    update_average_fps(state, frame_dt)
-    view_core.screenshake_update(state^.iso_scale, frame_dt)
+    update_average_fps(state, clamped_dt)
+    view_core.screenshake_update(state^.iso_scale, clamped_dt)
 
     if state^.ui_runtime.simulation_paused {
         julia.publish_available_animation_tick(state)
@@ -686,7 +901,7 @@ accumulate_and_update_systems :: proc(state : ^Euclid_General_State) -> f32 {
         return 0
     }
 
-    state^.accumulator += frame_dt
+    state^.accumulator += clamped_dt
 
     step_count := 0
     for state^.accumulator >= FIXED_DT {

@@ -473,7 +473,7 @@ run_parallel_frame_preparation_after_ui :: proc(
 run_parallel_frame_preparation :: proc(
     state: ^core.Euclid_General_State, alpha: f32,
     mouse_input: ui.Input_Frame) {
-    geometry := ui.prepare_ui_geometry(state, mouse_input)
+    geometry := ui.prepare_ui_geometry(state, mouse_input, 0)
     ui.prepare_ui_static_interaction(
         state, mouse_input, geometry.pointer_capture)
     run_parallel_frame_preparation_after_ui(

@@ -1,10 +1,14 @@
 package ui
 
 import viewmodel "../model"
+import native "../native"
 
 import "../../core"
+import color "../../core/color"
+import geometry "../../core/geometry"
 import view_core "../core"
 
+import "core:math"
 import rl "vendor:raylib"
 
 ANIMATION_REFRESH_BUTTON_ID :: 2101
@@ -66,10 +70,12 @@ animation_control_hit_test :: proc(
         return 0, false
     }
     slots := animation_control_layout_slots(world_rect)
-    if rl.CheckCollisionPointRec(point, slots.refresh) {
+    if geometry.rectangle_contains(
+        geometry.Rectangle(slots.refresh), geometry.Vector2(point)) {
         return ANIMATION_REFRESH_BUTTON_ID, true
     }
-    if rl.CheckCollisionPointRec(point, slots.pause) {
+    if geometry.rectangle_contains(
+        geometry.Rectangle(slots.pause), geometry.Vector2(point)) {
         return ANIMATION_PAUSE_BUTTON_ID, true
     }
     return 0, false
@@ -169,4 +175,76 @@ draw_animation_controls :: proc(
         ANIMATION_PAUSE_BUTTON_ID, prepared.slots.pause, pause_icon,
         ui_runtime^.simulation_paused, mouse_input),
         prepared.pause)
+}
+
+// draw_encoded_refresh_glyph encodes the two-arrow refresh symbol.
+draw_encoded_refresh_glyph :: proc(
+    encoder: ^native.Draw_Encoder, rectangle: rl.Rectangle,
+    draw_color: color.Color_RGBA8) {
+    center := geometry.Vector2{rectangle.x + rectangle.width * 0.5,
+        rectangle.y + rectangle.height * 0.5}
+    radius := min(rectangle.width, rectangle.height) * 0.34
+    starts := [2]f32{math.PI * (2.0 / 9.0), math.PI * (11.0 / 9.0)}
+    ends := [2]f32{math.PI * (10.0 / 9.0), math.PI * (19.0 / 9.0)}
+    for arc_index in 0..<2 {
+        previous := center + geometry.Vector2{radius * f32(math.cos(f64(starts[arc_index]))),
+            radius * f32(math.sin(f64(starts[arc_index])))}
+        for segment in 1..=10 {
+            angle := starts[arc_index] +
+                (ends[arc_index] - starts[arc_index]) * f32(segment) / 10
+            current := center + geometry.Vector2{radius * f32(math.cos(f64(angle))),
+                radius * f32(math.sin(f64(angle)))}
+            _ = native.draw_encoder_line(encoder, previous, current, 1.6, draw_color)
+            previous = current
+        }
+    }
+}
+
+// draw_encoded_control_glyph encodes one refresh, pause, or play symbol.
+draw_encoded_control_glyph :: proc(
+    encoder: ^native.Draw_Encoder, icon: Icon_Button_Id,
+    rectangle: rl.Rectangle, draw_color: color.Color_RGBA8) {
+    if icon == .Refresh {draw_encoded_refresh_glyph(encoder, rectangle, draw_color); return}
+    if icon == .Pause {
+        width := max(f32(2), rectangle.width * 0.18)
+        gap := max(f32(2), rectangle.width * 0.14)
+        left := rectangle.x + (rectangle.width - width * 2 - gap) * 0.5
+        top := rectangle.y + rectangle.height * 0.24
+        height := rectangle.height * 0.52
+        _ = native.draw_encoder_rectangle(encoder, {left, top, width, height}, draw_color)
+        _ = native.draw_encoder_rectangle(
+            encoder, {left + width + gap, top, width, height}, draw_color)
+        return
+    }
+    if icon == .Play {
+        _ = native.draw_encoder_triangle(encoder,
+            {rectangle.x + rectangle.width * 0.34, rectangle.y + rectangle.height * 0.24},
+            {rectangle.x + rectangle.width * 0.34, rectangle.y + rectangle.height * 0.76},
+            {rectangle.x + rectangle.width * 0.72, rectangle.y + rectangle.height * 0.5},
+            draw_color)
+    }
+}
+
+// draw_encoded_animation_controls encodes the prepared font-independent overlay.
+draw_encoded_animation_controls :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Animation_Control_Preparation) {
+    if !prepared.visible {return}
+    panel := geometry.Rectangle(prepared.slots.panel)
+    _ = native.draw_encoder_rectangle(encoder, panel, UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(encoder, panel, 1, UI_BORDER_COLOR)
+    results := [2]Icon_Button_Result{prepared.refresh, prepared.pause}
+    icons := [2]Icon_Button_Id{.Refresh,
+        state^.ui_runtime.simulation_paused ? .Play : .Pause}
+    slots := [2]rl.Rectangle{prepared.slots.refresh, prepared.slots.pause}
+    for index in 0..<2 {
+        draw_color := UI_TEXT_COLOR
+        if results[index].pressed || (index == 1 && state^.ui_runtime.simulation_paused) {
+            _ = native.draw_encoder_rectangle(
+                encoder, geometry.Rectangle(slots[index]), UI_BORDER_COLOR)
+            draw_color = BACKGROUND_COLOR
+        }
+        draw_encoded_control_glyph(
+            encoder, icons[index], results[index].icon_drawn_rect, draw_color)
+    }
 }

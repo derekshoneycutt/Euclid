@@ -3,6 +3,7 @@ package ui
 import native "../native"
 
 import viewmodel "../model"
+import geometry "../../core/geometry"
 
 import view_core "../core"
 
@@ -162,8 +163,10 @@ update_icon_button :: proc(
     local_mouse := icon_button_local_mouse(params.mouse, params.scroll_offset)
 
     hovered := params.interaction_enabled &&
-        rl.CheckCollisionPointRec(local_mouse, slot_rect) &&
-        rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
+        geometry.rectangle_contains(
+            geometry.Rectangle(slot_rect), geometry.Vector2(local_mouse)) &&
+        geometry.rectangle_contains(geometry.Rectangle(params.interaction_space_rect),
+            geometry.Vector2(local_mouse))
     owns_press := icon_button_owns_press(press_owner, params.id)
     icon_button_try_capture_press(press_owner, params, hovered, &owns_press)
     pressed := owns_press && input_frame_left_down(params.mouse)
@@ -224,8 +227,10 @@ draw_icon_button_with_visual_state :: proc(
     local_mouse := icon_button_local_mouse(params.mouse, params.scroll_offset)
 
     hovered := params.interaction_enabled &&
-        rl.CheckCollisionPointRec(local_mouse, slot_rect) &&
-        rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
+        geometry.rectangle_contains(
+            geometry.Rectangle(slot_rect), geometry.Vector2(local_mouse)) &&
+        geometry.rectangle_contains(geometry.Rectangle(params.interaction_space_rect),
+            geometry.Vector2(local_mouse))
     clicked := hovered && input_frame_left_pressed(params.mouse)
 
     use_hover_t :=  clamp(hover_t, 0.0, 1.0)

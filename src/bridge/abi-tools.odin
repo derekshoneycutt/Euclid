@@ -1,5 +1,7 @@
 package bridge
 
+import audio "../audio"
+
 import shapemodel "../shapes/model"
 
 import "../core"
@@ -426,7 +428,7 @@ simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f3
         return
     }
 
-    state^.chalk_audio.has_contact_this_frame = true
+    audio.register_drawing_contact(&state^.chalk_audio)
 }
 
 //   Move pen joint1 and enable its lock constraint at the same position.

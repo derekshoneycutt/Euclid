@@ -224,6 +224,13 @@ Ui_Interaction_Frame :: struct {
     terminal_focused: bool,
 }
 
+// Ui_Cursor_Kind is the portable pointer shape requested by UI interaction.
+Ui_Cursor_Kind :: enum u8 {
+    Default,
+    Resize_Ew,
+    Resize_Ns,
+}
+
 // Euclid_Ui_Runtime_State owns persistent display interaction and panel state.
 Euclid_Ui_Runtime_State :: struct {
     tree_scroll_y: f32,
@@ -248,6 +255,7 @@ Euclid_Ui_Runtime_State :: struct {
     vertical_split_hover: f32,
     horizontal_split_hover: f32,
     splitter_drag_offset: f32,
+    cursor: Ui_Cursor_Kind,
     limit_fps: bool,
     display_fps: bool,
     simulation_paused: bool,

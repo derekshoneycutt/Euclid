@@ -9,6 +9,7 @@ include(joinpath(@__DIR__, "..", "verify.jl"))
 include(joinpath(@__DIR__, "..", "make.jl"))
 include(joinpath(@__DIR__, "..", "julia_test_reporter.jl"))
 include(joinpath(@__DIR__, "..", "scenario_runner.jl"))
+include(joinpath(@__DIR__, "shader_tests.jl"))
 
 const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner
@@ -19,6 +20,33 @@ const ScenarioRunner = Main.EuclidScenarioRunner
 include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
 
 @testset "Euclid tooling" begin
+    @testset "provisional SDL3 provider" begin
+        @test BuildConfiguration.sdl3_library_path(
+            "/opt/sdl/lib";
+            kernel=:Linux,
+            is_file=path -> path == "/opt/sdl/lib/libSDL3.so.0",
+            real_path=identity) == "/opt/sdl/lib/libSDL3.so.0"
+        @test_throws ErrorException BuildConfiguration.sdl3_library_path(
+            "/opt/sdl/lib"; kernel=:Darwin)
+        @test_throws ErrorException BuildConfiguration.sdl3_library_path(
+            "/missing"; kernel=:Linux, is_file=_ -> false)
+
+        responses = Dict(
+            "--modversion" => (exit_code=0, output="3.4.16\n", error_output=""),
+            "--variable=libdir" =>
+                (exit_code=0, output="/opt/sdl/lib\n", error_output=""))
+        capture = command -> responses[command.exec[2]]
+        provider = BuildConfiguration.sdl3_provider_identity(:Linux;
+            capture,
+            is_file=path -> path == "/opt/sdl/lib/libSDL3.so.0",
+            real_path=identity)
+        @test provider.kind == :system
+        @test provider.version == "3.4.16"
+        @test provider.library_path == "/opt/sdl/lib/libSDL3.so.0"
+        @test_throws ErrorException BuildConfiguration.sdl3_provider_identity(
+            :NT; capture)
+    end
+
     @testset "native linker platform selection" begin
         @test BuildConfiguration.harfbuzz_provider("jll", :Linux) == :jll
         @test BuildConfiguration.harfbuzz_provider("SYSTEM", :Darwin) == :system
@@ -27,10 +55,6 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
             "invalid", :Linux)
         @test_throws ErrorException BuildConfiguration.harfbuzz_provider(
             "system", :NT)
-        if Sys.iswindows()
-            @test basename(BuildConfiguration.raylib_shared_library_path()) ==
-                "raylib.dll"
-        end
         @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Linux) ==
             ["--libs", "--static", "harfbuzz"]
         @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Darwin) ==
@@ -49,7 +73,7 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
         @test isfile(library_path)
         @test dirname(library_path) in runtime_dirs
         if !Sys.iswindows()
-            @test dirname(BuildConfiguration.raylib_shared_library_path()) in
+            @test dirname(BuildConfiguration.sdl3_provider_identity().library_path) in
                 BuildConfiguration.native_runtime_dirs(:system)
             @test BuildConfiguration.native_runtime_environment(:system) !== nothing
         end
@@ -147,7 +171,7 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
         @test isempty(build.arguments)
         command = odin_build_command("-ljulia", true, true)
         @test "-out:$(debug_app_binary_path())" in command
-        @test "-define:RAYLIB_SHARED=true" in command
+        @test !("-define:RAYLIB_SHARED=true" in command)
         @test "-define:EUCLID_ENABLE_SCENARIOS=true" in command
         @test !("-define:EUCLID_ENABLE_SCENARIOS=true" in
             odin_build_command("-ljulia", false, false))
@@ -169,9 +193,11 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
             withenv("PATH" => raw"C:\Existing Tools\bin") do
                 write_debug_environment(runtime_dirs; path=environment_path)
             end
-            expected = Sys.iswindows() ?
-                "PATH=\"C:/Julia Runtime/bin;C:/Artifacts/harfbuzz/bin;C:/Existing Tools/bin\"\n" :
-                "PATH=\"$(join(replace.(runtime_dirs, '\\' => "\\\\"), ':')):C:\\\\Existing Tools\\\\bin\"\n"
+            environment = BuildConfiguration.native_runtime_environment(runtime_dirs)
+            value = Sys.iswindows() ? replace(environment.second, '\\' => '/') :
+                environment.second
+            escaped = replace(value, '\\' => "\\\\", '"' => "\\\"")
+            expected = "$(environment.first)=\"$escaped\"\n"
             @test read(environment_path, String) == expected
         end
 
@@ -191,28 +217,58 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
             parse_driver_invocation(["run-only", "--strict"]))
     end
 
-    @testset "shared Raylib staging" begin
+    @testset "stale Raylib removal" begin
         mktempdir() do root
-            source_directory = joinpath(root, "odin", "vendor", "raylib", "macos")
             destination = joinpath(root, "build")
-            source = joinpath(source_directory, "libraylib.600.dylib")
-            staged = joinpath(destination, basename(source))
-            mkpath(source_directory)
             mkpath(destination)
-            if Sys.iswindows()
-                write(source, "raylib")
-                write(staged, "stale")
-            else
-                library = joinpath(root, "libraylib.6.0.0.dylib")
-                write(library, "raylib")
-                symlink(relpath(library, source_directory), source)
-                symlink("missing/libraylib.6.0.0.dylib", staged)
-            end
+            staged = joinpath(destination, "libraylib.so.600")
+            write(staged, "stale")
 
-            stage_shared_raylib(destination; source)
+            remove_staged_raylib(destination)
 
-            @test !islink(staged)
-            @test read(staged, String) == "raylib"
+            @test !ispath(staged)
+        end
+    end
+
+    @testset "SDL3 shader closure metadata" begin
+        mktempdir() do root
+            binary = joinpath(root, "euclid")
+            assets = joinpath(root, "assets.pkg")
+            manifest = joinpath(root, "manifest.toml")
+            write(binary, "application")
+            write(assets, "assets")
+            write(manifest, """
+shadercross_path = "/tools/shadercross"
+shadercross_identity = "sha256:tool"
+shadercross_sha256 = "tool"
+shadercross_closure = ["/lib/libcompiler.so"]
+spirv_validator_path = "/tools/spirv-val"
+spirv_validator_identity = "sha256:validator"
+spirv_validator_sha256 = "validator"
+spirv_validator_closure = ["/lib/libvalidator.so"]
+
+[[shader]]
+name = "stroke3d.vert"
+artifact = "stroke3d.vert.spv"
+artifact_sha256 = "artifact"
+reflection = "stroke3d.vert.json"
+reflection_sha256 = "reflection"
+""")
+            bom = runtime_sbom_document(
+                "00000000-0000-0000-0000-000000000000",
+                String[], JuliaPackageDep[], binary, assets, manifest)
+            components = Dict(component["bom-ref"] => component
+                for component in bom["components"])
+            @test haskey(components["file:bin/euclid"], "hashes")
+            @test haskey(components["file:bin/assets.pkg"], "hashes")
+            @test components["build-tool:shadercross"]["scope"] == "excluded"
+            @test components["shader:stroke3d.vert:SPIR-V"]["scope"] ==
+                "required"
+            dependencies = only(bom["dependencies"])["dependsOn"]
+            @test "native:sdl3" in dependencies
+            @test "native:vulkan-loader" in dependencies
+            @test "shader:stroke3d.vert:SPIR-V" in dependencies
+            @test !("build-tool:shadercross" in dependencies)
         end
     end
 
@@ -288,7 +344,7 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
         @test [suite.language for suite in suites] == ["Julia", "Odin"]
         command = TestRunner.odin_test_command("")
         @test "-define:ODIN_TEST_THREADS=1" in command
-        @test "-define:RAYLIB_SHARED=true" in command
+        @test !("-define:RAYLIB_SHARED=true" in command)
         @test "-out:$(TestRunner.ODIN_TEST_BINARY)" in command
         @test dirname(TestRunner.ODIN_TEST_BINARY) ==
             joinpath(TestRunner.REPOSITORY_ROOT, "bin")
@@ -297,12 +353,12 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
     @testset "structured test records" begin
         source_path = joinpath(TestRunner.ODIN_SOURCE_ROOT, "core", "animation")
         locations = TestRunner.discover_odin_locations(TestRunner.ODIN_SOURCE_ROOT)
-        name = "animation_model.animation_model_test_animation_value_store_overwrites_bound_key"
+        name = "animation.animation_model_test_animation_value_store_overwrites_bound_key"
         @test locations[name].file == "src/core/animation/value_store_test.odin"
         @test locations[name].line == 27
         package_names = TestRunner.odin_package_test_names(source_path, locations)
         @test name in package_names
-        @test all(startswith(test_name, "animation_model.") for test_name in package_names)
+        @test all(startswith(test_name, "animation.") for test_name in package_names)
         @test TestRunner.odin_source_path("../outside") === nothing
         @test TestRunner.odin_source_path("missing") === nothing
 

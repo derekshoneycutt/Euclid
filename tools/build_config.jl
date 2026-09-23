@@ -1,36 +1,67 @@
 module EuclidBuildConfiguration
 
 export native_linker_flags, native_runtime_dirs, native_runtime_environment,
-    native_test_linker_flags, raylib_shared_library_path, resolve_msvc_tool_path
+    native_test_linker_flags, resolve_msvc_tool_path, sdl3_library_path,
+    sdl3_linker_flags, sdl3_provider_identity
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const IMPORT_LIB_DIR = joinpath(REPOSITORY_ROOT, "bin", ".native_import_libs")
 const HARFBUZZ_PROVIDER_ENV = "EUCLID_HARFBUZZ_PROVIDER"
 
-"""Resolve the shared Raylib library bundled with the active Odin compiler."""
-function raylib_shared_library_path(kernel::Symbol=Sys.KERNEL)
-    odin_root = readchomp(`odin root`)
-    relative_path = if kernel == :Linux
-        joinpath("vendor", "raylib", "linux", "libraylib.so.600")
-    elseif kernel == :Darwin
-        joinpath("vendor", "raylib", "macos", "libraylib.600.dylib")
-    elseif kernel == :NT
-        joinpath("vendor", "raylib", "windows", "raylib.dll")
-    else
-        error("Shared Raylib is unsupported on $kernel.")
-    end
-    path = joinpath(odin_root, relative_path)
-    isfile(path) || error("Missing Odin shared Raylib library at $path")
-    return path
+struct SDL3ProviderIdentity
+    kind::Symbol
+    version::String
+    library_path::String
 end
 
-"""Return loader-relative search flags for the adjacent shared Raylib library."""
-function raylib_runtime_linker_flags(kernel::Symbol=Sys.KERNEL)
-    kernel == :Linux && return "-Wl,-rpath,\\\$ORIGIN"
-    kernel == :Darwin && return "-Wl,-rpath,@loader_path"
-    kernel == :NT && return ""
-    error("Shared Raylib is unsupported on $kernel.")
+"""Resolve the Linux SDL3 SONAME from one pkg-config library directory."""
+function sdl3_library_path(
+    library_directory::AbstractString;
+    kernel::Symbol=Sys.KERNEL,
+    is_file::Function=isfile,
+    real_path::Function=realpath)
+    kernel == :Linux || error(
+        "System SDL3 is supported only on Linux during the migration.")
+    candidate = joinpath(normpath(library_directory), "libSDL3.so.0")
+    is_file(candidate) || error("Missing system SDL3 runtime at $candidate")
+    return real_path(candidate)
+end
+
+"""Resolve the provisional Linux system SDL3 provider through pkg-config."""
+function sdl3_provider_identity(
+    kernel::Symbol=Sys.KERNEL;
+    capture::Function=capture_command,
+    is_file::Function=isfile,
+    real_path::Function=realpath)
+    kernel == :Linux || error(
+        "System SDL3 is supported only on Linux during the migration.")
+    version_result = capture(Cmd(["pkg-config", "--modversion", "sdl3"]))
+    version_result.exit_code == 0 || error(
+        "Could not resolve system SDL3 version through pkg-config.")
+    libdir_result = capture(Cmd([
+        "pkg-config", "--variable=libdir", "sdl3",
+    ]))
+    libdir_result.exit_code == 0 || error(
+        "Could not resolve system SDL3 library directory through pkg-config.")
+    version = strip(version_result.output)
+    isempty(version) && error("System SDL3 pkg-config version is empty.")
+    library_path = sdl3_library_path(strip(libdir_result.output);
+        kernel, is_file, real_path)
+    return SDL3ProviderIdentity(:system, version, library_path)
+end
+
+"""Resolve provisional SDL3 linker flags through Linux pkg-config metadata."""
+function sdl3_linker_flags(
+    kernel::Symbol=Sys.KERNEL; capture::Function=capture_command)
+    kernel == :Linux || error(
+        "System SDL3 is supported only on Linux during the migration.")
+    result = capture(Cmd(["pkg-config", "--libs", "sdl3"]))
+    result.exit_code == 0 || error(
+        "Could not resolve system SDL3 linker flags through pkg-config.")
+    flags = join(split(result.output), " ")
+    isempty(flags) && error("System SDL3 pkg-config linker flags are empty.")
+    return flags
 end
 
 """Validate one normalized HarfBuzz dependency provider."""
@@ -252,7 +283,8 @@ function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
         _, jll_paths = harfbuzz_jll_paths()
         Sys.iswindows() ? [Sys.BINDIR; jll_paths] : jll_paths
     end
-    return unique([paths; dirname(raylib_shared_library_path())])
+    sdl3_directory = dirname(sdl3_provider_identity().library_path)
+    return unique([paths; sdl3_directory])
 end
 
 """Build a host loader environment override from resolved runtime directories."""
@@ -274,10 +306,11 @@ end
 """Resolve complete mandatory native linker flags for the active provider."""
 function native_linker_flags(provider::Symbol=harfbuzz_provider())
     provider = validate_harfbuzz_provider(provider)
-    Sys.iswindows() && return windows_linker_flags()
+    (Sys.iswindows() || Sys.isapple()) && error(
+        "SDL3 application linkage is supported only on Linux during the migration.")
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
-    return "$harfbuzz_flags $(julia_linker_flags()) $(raylib_runtime_linker_flags())"
+    return "$harfbuzz_flags $(julia_linker_flags()) $(sdl3_linker_flags())"
 end
 
 """Append platform libraries and options required by Odin test executables."""

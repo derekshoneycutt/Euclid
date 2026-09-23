@@ -5,6 +5,8 @@ import native "native"
 import viewmodel "model"
 
 import shapemodel "../shapes/model"
+import color "../core/color"
+import geometry "../core/geometry"
 
 // We draw the basic surface and all the shapes and tools here
 
@@ -539,6 +541,33 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
         native.to_raylib_color(room.color))
 }
 
+// draw_encoded_drawing_surface encodes the projected plane and border triangles.
+draw_encoded_drawing_surface :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    room := state^.draw_surface
+    edge_size := room.edge_size
+    world_points := [8]Vector3{room.zeros, room.right_up, room.left_down,
+        room.right_down, room^.zeros + {edge_size, edge_size, 0},
+        room^.right_up + {-edge_size, edge_size, 0},
+        room^.left_down + {edge_size, -edge_size, 0},
+        room^.right_down + {-edge_size, -edge_size, 0}}
+    xs, ys, zs: [8]f32
+    projected: [8]Vector2
+    _ = project_iso_points_batch_with_components(state, {
+        world_points = world_points[:], xs = xs[:], ys = ys[:],
+        zs = zs[:], out = projected[:]})
+    edge_color := room.edge_color
+    surface_color := room.color
+    _ = native.draw_encoder_triangle(encoder, geometry.Vector2(projected[0]),
+        geometry.Vector2(projected[1]), geometry.Vector2(projected[2]), edge_color)
+    _ = native.draw_encoder_triangle(encoder, geometry.Vector2(projected[3]),
+        geometry.Vector2(projected[2]), geometry.Vector2(projected[1]), edge_color)
+    _ = native.draw_encoder_triangle(encoder, geometry.Vector2(projected[4]),
+        geometry.Vector2(projected[5]), geometry.Vector2(projected[6]), surface_color)
+    _ = native.draw_encoder_triangle(encoder, geometry.Vector2(projected[7]),
+        geometry.Vector2(projected[6]), geometry.Vector2(projected[5]), surface_color)
+}
+
 //   Render cached low-layer geometry items (labels, primitives, and polygons).
 //
 // Parameters:
@@ -549,6 +578,66 @@ draw_drawing_surface :: proc(state: ^Euclid_General_State) {
 draw_shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
     for i in 0..<state^.shape_world^.draw_cache.item_count {
         draw_cached_item_low(state, &state^.shape_world^.draw_cache.items[i])
+    }
+}
+
+// draw_encoded_cached_basic_pass encodes points and lines in one depth layer.
+draw_encoded_cached_basic_pass :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder, high: bool) {
+    cache := &state^.shape_world^.draw_cache
+    for index in 0..<cache^.item_count {
+        switch &item in &cache^.items[index] {
+        case shapemodel.Shapes_Point_Draw:
+            if draw_cached_point_is_elevated(&item) == high {
+                draw_encoded_cached_point(state, encoder, &item)
+            }
+        case shapemodel.Shapes_Line_Draw:
+            draw_encoded_cached_line(state, encoder, &item, high)
+        case shapemodel.Shapes_Circle_Draw:
+            if draw_cached_circle_is_elevated(&item) == high {
+                draw_encoded_cached_circle(state, encoder, &item)
+            }
+        case shapemodel.Shapes_Filled_Circle_Draw:
+            if draw_cached_filledcircle_is_elevated(&item) == high {
+                draw_encoded_cached_filled_circle(state, encoder, &item)
+            }
+        case shapemodel.Shapes_Curve_Draw:
+            if draw_cached_curve_is_elevated(state, &item) == high {
+                draw_encoded_cached_curve(state, encoder, &item, high)
+            }
+        case shapemodel.Shapes_Polygon_Draw:
+            if draw_cached_polygon_is_elevated(state, &item) == high {
+                draw_encoded_cached_polygon(state, encoder, &item)
+            }
+        case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Trochoid_Tool_Draw,
+            shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
+            shapemodel.Shapes_Compass_Draw:
+        }
+    }
+}
+
+// draw_encoded_cached_shadow_pass encodes ordinary floor shadows in cache order.
+draw_encoded_cached_shadow_pass :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    cache := &state^.shape_world^.draw_cache
+    for index in 0..<cache^.item_count {
+        switch &item in &cache^.items[index] {
+        case shapemodel.Shapes_Point_Draw:
+            draw_encoded_cached_point_shadow(state, encoder, &item)
+        case shapemodel.Shapes_Line_Draw:
+            draw_encoded_cached_line_shadow(state, encoder, &item)
+        case shapemodel.Shapes_Circle_Draw:
+            draw_encoded_cached_circle_shadow(state, encoder, &item)
+        case shapemodel.Shapes_Filled_Circle_Draw:
+            draw_encoded_cached_filled_circle_shadow(state, encoder, &item)
+        case shapemodel.Shapes_Curve_Draw:
+            draw_encoded_cached_curve_shadow(state, encoder, &item)
+        case shapemodel.Shapes_Polygon_Draw:
+            draw_encoded_cached_polygon_shadow(state, encoder, &item)
+        case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Trochoid_Tool_Draw,
+            shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
+            shapemodel.Shapes_Compass_Draw:
+        }
     }
 }
 
@@ -2251,6 +2340,15 @@ draw_cached_point :: proc(
     rl.DrawCircleV(c, p^.brush_size, native.to_raylib_color(p^.color))
 }
 
+// draw_encoded_cached_point encodes one projected cached point.
+draw_encoded_cached_point :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    point: ^shapemodel.Shapes_Point_Draw) {
+    screen := view_core.iso_to_cartesian(point^.point1, state^.iso_scale^)
+    _ = native.draw_encoder_circle(encoder, geometry.Vector2(screen),
+        point^.brush_size, color.Color_RGBA8(point^.color))
+}
+
 
 //   Render one cached line draw item.
 draw_cached_line :: proc(
@@ -2271,6 +2369,216 @@ draw_cached_line :: proc(
     c0 := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
     c1 := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
     rl.DrawLineEx(c0, c1, l^.brush_size, native.to_raylib_color(color))
+}
+
+// draw_encoded_cached_line encodes one visible z-clipped cached line fragment.
+draw_encoded_cached_line :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    line: ^shapemodel.Shapes_Line_Draw, keep_above: bool) {
+    clipped0, clipped1: Vector3
+    if !z_split_clip_segment_halfspace(
+        line^.point1, line^.point2, keep_above, &clipped0, &clipped1) {return}
+    draw_color := line^.color
+    if !keep_above &&
+        (z_split_sign(clipped0.z) < 0 || z_split_sign(clipped1.z) < 0) {
+        faded := z_split_lower_fragment_color(native.to_raylib_color(draw_color))
+        draw_color = shapemodel.Color(faded)
+    }
+    first := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
+    second := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
+    _ = native.draw_encoder_line(encoder, geometry.Vector2(first),
+        geometry.Vector2(second), line^.brush_size,
+        color.Color_RGBA8(draw_color))
+}
+
+// draw_encoded_cached_curve encodes every z-clipped explicated curve segment.
+draw_encoded_cached_curve :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    curve: ^shapemodel.Shapes_Curve_Draw, keep_above: bool) {
+    cache := &state^.shape_world^.draw_cache
+    vertices := cache^.curve_vertices[
+        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
+    for index in 1..<len(vertices) {
+        line := shapemodel.Shapes_Line_Draw{
+            curve^.base, vertices[index - 1], vertices[index]}
+        draw_encoded_cached_line(state, encoder, &line, keep_above)
+    }
+}
+
+// draw_encoded_cached_circle encodes one sampled projected circle or arc.
+draw_encoded_cached_circle :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    circle: ^shapemodel.Shapes_Circle_Draw) {
+    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
+    geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
+        circle^.start_theta, circle^.sweep_theta)
+    circle_arc_sample_world(&geometry_value, arc_world[:])
+    xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
+    projected: [CIRCLE_ARC_SEGMENTS + 1]Vector2
+    _ = project_iso_points_batch_with_components(state, {
+        world_points = arc_world[:], xs = xs[:], ys = ys[:],
+        zs = zs[:], out = projected[:]})
+    for index in 1..<len(projected) {
+        _ = native.draw_encoder_line(encoder,
+            geometry.Vector2(projected[index - 1]),
+            geometry.Vector2(projected[index]), circle^.brush_size,
+            color.Color_RGBA8(circle^.color))
+    }
+}
+
+// draw_encoded_cached_filled_circle encodes one projected filled sector.
+draw_encoded_cached_filled_circle :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    circle: ^shapemodel.Shapes_Filled_Circle_Draw) {
+    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
+    geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
+        circle^.start_theta, circle^.sweep_theta)
+    circle_arc_sample_world(&geometry_value, arc_world[:])
+    xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
+    projected: [CIRCLE_ARC_SEGMENTS + 1]Vector2
+    _ = project_iso_points_batch_with_components(state, {
+        world_points = arc_world[:], xs = xs[:], ys = ys[:],
+        zs = zs[:], out = projected[:]})
+    center := geometry.Vector2(
+        view_core.iso_to_cartesian(geometry_value.center, state^.iso_scale^))
+    for index in 1..<len(projected) {
+        _ = native.draw_encoder_triangle(encoder, center,
+            geometry.Vector2(projected[index - 1]),
+            geometry.Vector2(projected[index]), color.Color_RGBA8(circle^.color))
+    }
+}
+
+// draw_encoded_cached_polygon encodes authoritative cached polygon triangles.
+draw_encoded_cached_polygon :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    polygon: ^shapemodel.Shapes_Polygon_Draw) {
+    if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {return}
+    projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
+    if !project_cached_polygon_vertices(state, polygon, projected[:]) {return}
+    cache := &state^.shape_world^.draw_cache
+    triangles := cache^.polygon_triangles[polygon^.first_triangle:
+        polygon^.first_triangle + polygon^.triangle_count]
+    for triangle in triangles {
+        first := triangle.a - polygon^.first_vertex
+        second := triangle.b - polygon^.first_vertex
+        third := triangle.c - polygon^.first_vertex
+        if first < 0 || first >= polygon^.vertex_count || second < 0 ||
+            second >= polygon^.vertex_count || third < 0 ||
+            third >= polygon^.vertex_count {continue}
+        _ = native.draw_encoder_triangle(encoder,
+            geometry.Vector2(projected[first]), geometry.Vector2(projected[second]),
+            geometry.Vector2(projected[third]), color.Color_RGBA8(polygon^.color))
+    }
+}
+
+// draw_encoded_cached_point_shadow encodes one elevated point floor shadow.
+draw_encoded_cached_point_shadow :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    point: ^shapemodel.Shapes_Point_Draw) {
+    if !shadow_point_is_elevated(point^.point1) {return}
+    screen := shadow_to_screen(point^.point1, state)
+    draw_color := make_shadow_color(
+        native.to_raylib_color(point^.color), point^.point1.z)
+    _ = native.draw_encoder_circle(encoder, geometry.Vector2(screen),
+        point^.brush_size, color.Color_RGBA8(draw_color))
+}
+
+// draw_encoded_cached_line_shadow encodes one elevated line floor shadow.
+draw_encoded_cached_line_shadow :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    line: ^shapemodel.Shapes_Line_Draw) {
+    points := [2]Vector3{line^.point1, line^.point2}
+    if !has_any_elevated_shadow_point(points[:]) {return}
+    clipped0, clipped1: Vector3
+    if !z_split_clip_segment_halfspace(
+        line^.point1, line^.point2, true, &clipped0, &clipped1) {return}
+    clipped := [2]Vector3{clipped0, clipped1}
+    draw_color := make_shadow_color(native.to_raylib_color(line^.color),
+        average_shadow_height(clipped[:]))
+    _ = native.draw_encoder_line(encoder,
+        geometry.Vector2(shadow_to_screen(clipped0, state)),
+        geometry.Vector2(shadow_to_screen(clipped1, state)),
+        math.max(line^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        color.Color_RGBA8(draw_color))
+}
+
+// draw_encoded_cached_curve_shadow encodes every explicated curve shadow segment.
+draw_encoded_cached_curve_shadow :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    curve: ^shapemodel.Shapes_Curve_Draw) {
+    cache := &state^.shape_world^.draw_cache
+    vertices := cache^.curve_vertices[
+        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
+    for index in 1..<len(vertices) {
+        line := shapemodel.Shapes_Line_Draw{
+            curve^.base, vertices[index - 1], vertices[index]}
+        draw_encoded_cached_line_shadow(state, encoder, &line)
+    }
+}
+
+// draw_encoded_cached_circle_shadow encodes sampled elevated arc shadows.
+draw_encoded_cached_circle_shadow :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    circle: ^shapemodel.Shapes_Circle_Draw) {
+    if !shadow_point_is_elevated(circle^.center) {return}
+    geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
+        circle^.start_theta, circle^.sweep_theta)
+    points: [CIRCLE_ARC_SEGMENTS + 1]Vector3
+    circle_arc_sample_world(&geometry_value, points[:])
+    for index in 1..<len(points) {
+        line := shapemodel.Shapes_Line_Draw{
+            circle^.base, points[index - 1], points[index]}
+        draw_encoded_cached_line_shadow(state, encoder, &line)
+    }
+}
+
+// draw_encoded_cached_filled_circle_shadow encodes a projected filled shadow fan.
+draw_encoded_cached_filled_circle_shadow :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    circle: ^shapemodel.Shapes_Filled_Circle_Draw) {
+    if !shadow_point_is_elevated(circle^.center) {return}
+    geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
+        circle^.start_theta, circle^.sweep_theta)
+    points: [CIRCLE_ARC_SEGMENTS + 1]Vector3
+    circle_arc_sample_world(&geometry_value, points[:])
+    center := geometry.Vector2(shadow_to_screen(geometry_value.center, state))
+    draw_color := color.Color_RGBA8(make_shadow_color(
+        native.to_raylib_color(circle^.color), circle^.center.z))
+    for index in 1..<len(points) {
+        _ = native.draw_encoder_triangle(encoder, center,
+            geometry.Vector2(shadow_to_screen(points[index - 1], state)),
+            geometry.Vector2(shadow_to_screen(points[index], state)), draw_color)
+    }
+}
+
+// draw_encoded_cached_polygon_shadow encodes cached triangles at floor projection.
+draw_encoded_cached_polygon_shadow :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    polygon: ^shapemodel.Shapes_Polygon_Draw) {
+    if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {return}
+    cache := &state^.shape_world^.draw_cache
+    vertices := cache^.polygon_vertices[
+        polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
+    if !has_any_elevated_shadow_point(vertices) {return}
+    projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
+    for index in 0..<polygon^.vertex_count {
+        projected[index] = shadow_to_screen(vertices[index], state)
+    }
+    draw_color := color.Color_RGBA8(make_shadow_color(
+        native.to_raylib_color(polygon^.color), average_shadow_height(vertices)))
+    triangles := cache^.polygon_triangles[polygon^.first_triangle:
+        polygon^.first_triangle + polygon^.triangle_count]
+    for triangle in triangles {
+        first := triangle.a - polygon^.first_vertex
+        second := triangle.b - polygon^.first_vertex
+        third := triangle.c - polygon^.first_vertex
+        if first < 0 || first >= polygon^.vertex_count || second < 0 ||
+            second >= polygon^.vertex_count || third < 0 ||
+            third >= polygon^.vertex_count {continue}
+        _ = native.draw_encoder_triangle(encoder,
+            geometry.Vector2(projected[first]), geometry.Vector2(projected[second]),
+            geometry.Vector2(projected[third]), draw_color)
+    }
 }
 
 // Render every segment in one explicated curve using ordinary line styling.

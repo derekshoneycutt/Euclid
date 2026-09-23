@@ -5,6 +5,7 @@ import native "../native"
 import viewmodel "../model"
 
 import "../../core"
+import geometry "../../core/geometry"
 import view_core "../core"
 import view_font "../font"
 
@@ -40,6 +41,28 @@ Gif_View_Preparation :: struct {
     downsample: Integer_Slider_Result,
     frame_step: Integer_Slider_Result,
     save_button: Text_Button_Result,
+}
+
+// draw_encoded_gif_geometry encodes GIF controls while capture stays deferred.
+draw_encoded_gif_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: rl.Rectangle) {
+    if state == nil {return}
+    stack_rect := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+        panel.y + SETTINGS_HEADER_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        panel.height - SETTINGS_HEADER_TOP_OFFSET}
+    rows := gif_view_layout_rows(stack_rect)
+    draw_encoded_slider_geometry(encoder, panel, rows.sliders.downsample_y,
+        state^.ui_runtime.gif_downsample_factor, 1, 4)
+    draw_encoded_slider_geometry(encoder, panel, rows.sliders.frame_step_y,
+        state^.ui_runtime.gif_frame_step, 1, 4)
+    button := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET, rows.save_button_y,
+        panel.width - SETTINGS_PANEL_INSET * 2, SETTINGS_GIF_BUTTON_HEIGHT}
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(button), UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, geometry.Rectangle(button), 1, UI_BORDER_COLOR)
 }
 
 //   Build one GIF slider parameter record shared by update and draw.

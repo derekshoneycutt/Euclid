@@ -135,6 +135,12 @@ also fail analysis. Update implementation, classification, and architecture
 documentation together; do not add a directory-wide exemption to admit one native
 owner.
 
+SDL imports obey the same rule. The `EUCLID-SDL-BOUNDARY` extension currently admits
+only the exact display-owned native color, icon, platform, platform-service, and timing
+files, the clipboard adapter, and the display input coordinator. Tests and the
+checked-in capability probe are fixtures, not production owners. Add or move an SDL
+import only with a corresponding ownership and architecture update.
+
 ## Verification Gate
 
 Before work is complete, run the canonical CMake target:

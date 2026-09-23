@@ -2,6 +2,7 @@ using OdinJuliaAnalysis
 
 Base.include(@__MODULE__, joinpath(@__DIR__, "build_config.jl"))
 Base.include(@__MODULE__, joinpath(@__DIR__, "raylib_boundary_analysis.jl"))
+Base.include(@__MODULE__, joinpath(@__DIR__, "sdl_boundary_analysis.jl"))
 using .EuclidBuildConfiguration: native_linker_flags
 
 const RepositoryRoot = normpath(joinpath(@__DIR__, ".."))
@@ -23,10 +24,12 @@ end
 
 const DefaultExcludes = [
     "tools/analysis",
+    "tools/shadercross",
     "src/julialib",
 ]
 const AllExcludes = [
     "tools/analysis",
+    "tools/shadercross",
 ]
 
 const RuleResponses = Dict(
@@ -36,6 +39,7 @@ const RuleResponses = Dict(
     "CALL-ROOT-POLICY-DRIFT" => Fail,
     "IMPORT-POLICY-DRIFT" => Fail,
     "EUCLID-RAYLIB-BOUNDARY" => Fail,
+    "EUCLID-SDL-BOUNDARY" => Fail,
     "ARCHITECTURE-FORBIDDEN-DEPENDENCY" => Fail,
     "ARCHITECTURE-DEPENDENCY-CYCLE" => Fail,
     "ODIN-UNRESOLVED-INTERNAL-IMPORT" => Report,
@@ -240,6 +244,8 @@ function euclid_rule_settings()
     ]
     push!(settings, RuleSetting(
         RAYLIB_BOUNDARY_RULE, true, get(RuleResponses, RAYLIB_BOUNDARY_RULE, Report)))
+    push!(settings, RuleSetting(
+        SDL_BOUNDARY_RULE, true, get(RuleResponses, SDL_BOUNDARY_RULE, Report)))
     return settings
 end
 
@@ -417,7 +423,6 @@ AnalysisSettings(
                 "-strict-style",
                 "-disallow-do",
                 "-warnings-as-errors",
-                "-define:RAYLIB_SHARED=true",
                 "-extra-linker-flags:$(native_linker_flags())",
             ]),
     ]),
@@ -1874,7 +1879,7 @@ AnalysisSettings(
                 "HOST_SYMBOL_CACHE",
                 "Platform-dependent host symbol resolution is cached for the process lifetime in this unique bridge boundary."),
         ]),
-    AnalysisExtension[RaylibBoundaryExtension()],
+    AnalysisExtension[RaylibBoundaryExtension(), SdlBoundaryExtension()],
     default_duplicate_code_settings(),
     default_resource_lifetime_settings(),
     default_security_settings(),

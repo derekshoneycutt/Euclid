@@ -257,11 +257,12 @@ ui_current_window_metrics :: proc() -> viewmodel.Ui_Window_Metrics {
 // Prepare panel geometry while preserving capture identity from frame start.
 prepare_ui_geometry :: proc(
     state: ^core.Euclid_General_State,
-    mouse_input: Input_Frame) -> Ui_Geometry_Preparation {
+    mouse_input: Input_Frame,
+    frame_dt: f32) -> Ui_Geometry_Preparation {
     ui_runtime := &state^.ui_runtime
     capture_for_frame := ui_runtime^.ui_press_owner
-    frame_dt := min(f32(0.05), max(f32(0), rl.GetFrameTime()))
-    update_splitters(ui_runtime, mouse_input, frame_dt)
+    update_splitters(
+        ui_runtime, mouse_input, min(f32(0.05), max(f32(0), frame_dt)))
     regions := compute_ui_regions(ui_runtime.current_layout_mode,
         f32(ui_runtime^.window.width), f32(ui_runtime^.window.height),
         ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
@@ -282,6 +283,97 @@ prepare_ui_geometry :: proc(
         &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
     dynview.track_style(&state^.dynview, dyncore.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
     return {capture_for_frame, dyncompile.compile_is_needed(&state^.dynview)}
+}
+
+// draw_encoded_panel_geometry encodes visible composition backgrounds without text.
+draw_encoded_panel_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    regions := state^.ui_runtime.ui_regions
+    window := state^.ui_runtime.window
+    if state^.ui_runtime.current_layout_mode == .Portrait {
+        _ = native.draw_encoder_rectangle(encoder, {0, regions.world_rect.height,
+            f32(window.width), f32(window.height) - regions.world_rect.height},
+            UI_BACK_COLOR)
+        draw_encoded_accordion_geometry(state, encoder)
+        return
+    }
+    _ = native.draw_encoder_rectangle(encoder, {
+        regions.world_rect.x,
+        regions.world_rect.y + regions.world_rect.height,
+        regions.world_rect.width,
+        f32(window.height) - regions.world_rect.height,
+    }, UI_BACK_COLOR)
+    _ = native.draw_encoder_rectangle(encoder, {
+        regions.world_rect.x + regions.world_rect.width, 0,
+        f32(window.width) - regions.world_rect.width, f32(window.height),
+    }, UI_BACK_COLOR)
+    draw_encoded_presentation_geometry(
+        state, encoder, rl.Rectangle(regions.text_rect))
+    draw_encoded_accordion_geometry(state, encoder)
+}
+
+// draw_encoded_disclosure encodes one collapsed or expanded accordion chevron.
+draw_encoded_disclosure :: proc(
+    encoder: ^native.Draw_Encoder, rectangle: rl.Rectangle,
+    expanded: bool) {
+    center := geometry.Vector2{rectangle.x + rectangle.width * 0.5,
+        rectangle.y + rectangle.height * 0.5}
+    size := min(rectangle.width, rectangle.height)
+    first := geometry.Vector2{-0.25 * size, -0.25 * size}
+    middle := geometry.Vector2{0.125 * size, 0}
+    last := geometry.Vector2{-0.25 * size, 0.25 * size}
+    if expanded {
+        first = {-first.y, first.x}
+        middle = {-middle.y, middle.x}
+        last = {-last.y, last.x}
+    }
+    thickness := max(f32(1.2), 0.1 * size)
+    _ = native.draw_encoder_line(
+        encoder, center + first, center + middle, thickness, UI_TEXT_COLOR)
+    _ = native.draw_encoder_line(
+        encoder, center + middle, center + last, thickness, UI_TEXT_COLOR)
+}
+
+// draw_encoded_accordion_geometry encodes panel chrome while labels stay deferred.
+draw_encoded_accordion_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    runtime := &state^.ui_runtime
+    panel := rl.Rectangle(runtime^.ui_regions.accordion_rect)
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(panel), BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, geometry.Rectangle(panel), ACCORDION_PANEL_INSET, UI_BORDER_COLOR)
+    sections := accordion_sections_for_layout(
+        runtime^.current_layout_mode, "Animation")
+    layout := accordion_layout(panel, sections, runtime^.active_accordion_section)
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(layout.content), UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, geometry.Rectangle(layout.content), 1, UI_BORDER_COLOR)
+    switch runtime^.active_accordion_section {
+    case .View:
+        draw_encoded_presentation_geometry(state, encoder, layout.content)
+    case .Library:
+        draw_encoded_tree_geometry(state, encoder, layout.content)
+    case .Save_Gif:
+        draw_encoded_gif_geometry(state, encoder, layout.content)
+    case .Settings:
+        draw_encoded_settings_geometry(state, encoder, layout.content)
+    }
+    for index in 0..<sections.count {
+        header := layout.headers[index]
+        expanded := sections.items[index].section == runtime^.active_accordion_section
+        fill := UI_BACK_COLOR
+        if expanded {fill = UI_COMPONENT_BACKGROUND_COLOR}
+        _ = native.draw_encoder_rectangle(
+            encoder, geometry.Rectangle(header), fill)
+        _ = native.draw_encoder_rectangle_outline(
+            encoder, geometry.Rectangle(header), 1, UI_BORDER_COLOR)
+        icon_size := min(ACCORDION_DISCLOSURE_SIZE, header.height)
+        icon := rl.Rectangle{header.x + ACCORDION_HEADER_PADDING,
+            header.y + (header.height - icon_size) * 0.5, icon_size, icon_size}
+        draw_encoded_disclosure(encoder, icon, expanded)
+    }
 }
 
 // Resolve static UI targets after authoritative panel geometry is available.
