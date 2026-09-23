@@ -397,11 +397,13 @@ split_width_change_invalidates_dynview_panel_layout :: proc(t: ^testing.T) {
         VIEW_WIDTH - 100, VIEW_HEIGHT)
 
     app_dynview.track_panel(
-        runtime, view_text_content_panel(rl.Rectangle(baseline.text_rect)))
+        runtime, viewmodel.Rectangle(
+            view_text_content_panel(rl.Rectangle(baseline.text_rect))))
     runtime^.pending_invalidation_mask = 0
     runtime^.compile_cache.is_valid = true
     app_dynview.track_panel(
-        runtime, view_text_content_panel(rl.Rectangle(resized.text_rect)))
+        runtime, viewmodel.Rectangle(
+            view_text_content_panel(rl.Rectangle(resized.text_rect))))
 
     testing.expect(t, runtime^.pending_invalidation_mask &
         app_dynview.DYNVIEW_INVALIDATE_PANEL != 0)

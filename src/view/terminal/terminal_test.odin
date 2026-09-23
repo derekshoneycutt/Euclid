@@ -1236,6 +1236,26 @@ terminal_test_keyboard_requires_effective_focus :: proc(t: ^testing.T) {
     testing.expect_value(t, termhist.termhist_current_text(term.history), "x")
 }
 
+// Verify one focused frame inserts ordered Unicode committed text exactly once.
+@(test)
+terminal_test_keyboard_inserts_ordered_committed_text :: proc(t: ^testing.T) {
+    term: viewterminalmodel.Terminal_State
+    testing.expect(t, terminal_init(&term))
+    defer terminal_destroy(&term)
+    term.banner_ready = true
+    frame := input.Input_Frame{events = []input.Input_Event{
+        {kind = .Text, codepoint = 'A'},
+        {kind = .Text, codepoint = '界'},
+        {kind = .Text, codepoint = 'β'},
+    }}
+
+    update := terminal_update_keyboard(&term, frame)
+    testing.expect(t, update.cursor_moved)
+    testing.expect_value(
+        t, termhist.termhist_current_text(term.history), "A界β")
+    testing.expect_value(t, termhist.termhist_cursor(term.history), len("A界β"))
+}
+
 // Verify the prompt and keyboard input stay blocked until Julia's real
 // startup banner arrives, then unblock once it's displayed.
 @(test)

@@ -30,7 +30,7 @@ terminal_update_synchronized_output :: proc(
     }
 }
 
-//   Poll keyboard input for the active frame and apply it to the live input line.
+//   Consume keyboard input from the active frame and apply it to the live input line.
 //
 // Parameters:
 //   - term: The terminal state field owned by the caller.
@@ -593,7 +593,7 @@ terminal_can_exit_on_ctrl_d :: proc(term: ^viewterminalmodel.Terminal_State) -> 
            len(termhist.termhist_current_text(term.history)) == 0
 }
 
-//   Poll editing, navigation, completion, and submission keys for one frame.
+//   Consume editing, navigation, completion, and submission keys for one frame.
 //
 // Parameters:
 //   - term: The terminal state field owned by the caller.

@@ -1,6 +1,7 @@
 package files
 
 import "core:fmt"
+import "core:mem"
 import "core:os"
 import "core:path/filepath"
 import "core:testing"
@@ -24,6 +25,43 @@ prepare_sandbox_dir :: proc(dir_name: string) -> (string, bool) {
     }
 
     return path, true
+}
+
+//   Verify exact GIF persistence rejects empty input and preserves complete bytes.
+@(test)
+write_gif_bytes_requires_nonempty_complete_payload :: proc(t: ^testing.T) {
+    sandbox, ready := prepare_sandbox_dir("euclid-gif-persistence-test")
+    testing.expect(t, ready)
+    defer delete(sandbox)
+    defer os.remove_all(sandbox)
+    output_path, path_error := filepath.join(
+        []string{sandbox, "capture.gif"}, context.allocator)
+    testing.expect(t, path_error == nil)
+    defer delete(output_path)
+
+    testing.expect(t, !write_gif_bytes(output_path, nil))
+    payload := []u8{'G', 'I', 'F', '8', '9', 'a'}
+    testing.expect(t, write_gif_bytes(output_path, payload))
+    persisted, read_error := os.read_entire_file(output_path, context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(persisted)
+    testing.expect(t, mem.compare(persisted, payload) == 0)
+}
+
+//   Verify GIF persistence reports invalid destinations without creating output.
+@(test)
+write_gif_bytes_rejects_invalid_destination :: proc(t: ^testing.T) {
+    sandbox, ready := prepare_sandbox_dir("euclid-gif-invalid-output-test")
+    testing.expect(t, ready)
+    defer delete(sandbox)
+    defer os.remove_all(sandbox)
+    output_path, path_error := filepath.join(
+        []string{sandbox, "missing", "capture.gif"}, context.allocator)
+    testing.expect(t, path_error == nil)
+    defer delete(output_path)
+    payload := []u8{'G', 'I', 'F'}
+    testing.expect(t, !write_gif_bytes("", payload))
+    testing.expect(t, !write_gif_bytes(output_path, payload))
 }
 
 //   Write one required file entry (with parent dirs) under a test root.

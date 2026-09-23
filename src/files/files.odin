@@ -405,6 +405,52 @@ resolve_writable_pictures_dir :: proc(
     return "", false
 }
 
+//   Write one complete encoded GIF payload to an exact output path.
+//
+// Returns:
+//   - true only when nonempty bytes were written completely.
+write_gif_bytes :: proc(path: string, data: []u8) -> bool {
+    return len(path) > 0 && len(data) > 0 && os.write_entire_file(path, data) == nil
+}
+
+//   Generate the timestamped filename used for one GIF export.
+gif_output_filename :: proc() -> string {
+    now := time.now()
+    year := time.year(now)
+    month := int(time.month(now))
+    day := time.day(now)
+    hour, minute, second, nanos := time.precise_clock(now)
+    millis := nanos / 1_000_000
+    return fmt.tprintf("Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d.gif",
+        year, month, day, hour, minute, second, millis)
+}
+
+//   Persist encoded GIF bytes in the application output directory.
+//
+// Returns:
+//   - An allocator-owned output path and true after a complete write.
+//   - Empty and false after rejection or failure; no returned allocation remains owned.
+persist_gif_output :: proc(
+    data: []u8, allocator: mem.Allocator) -> (string, bool) {
+    if len(data) == 0 {
+        return "", false
+    }
+    output_dir, output_ok := resolve_writable_pictures_dir(context.temp_allocator)
+    if !output_ok {
+        return "", false
+    }
+    output_path, path_error := filepath.join(
+        []string{output_dir, gif_output_filename()}, allocator)
+    if path_error != nil || len(output_path) == 0 {
+        return "", false
+    }
+    if !write_gif_bytes(output_path, data) {
+        delete(output_path, allocator)
+        return "", false
+    }
+    return output_path, true
+}
+
 //   Ensure assets.pkg is unpacked for the current executable directory.
 //
 // Parameters:

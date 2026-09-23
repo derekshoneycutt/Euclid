@@ -2,9 +2,8 @@ package dynview
 
 import dynviewmodel "model"
 
+import geometry "../core/geometry"
 import fontmodel "../view/font/model"
-
-import rl "vendor:raylib"
 
 //   Toggle Dynview rendering and invalidate all cache inputs when it changes.
 set_enabled :: proc(runtime: ^dynviewmodel.Dynview_System, enabled: bool) {
@@ -31,7 +30,7 @@ invalidate :: proc(runtime: ^dynviewmodel.Dynview_System, mask: u32) {
 }
 
 //   Track panel dimensions and invalidate when layout bounds change.
-track_panel :: proc(runtime: ^dynviewmodel.Dynview_System, panel: rl.Rectangle) {
+track_panel :: proc(runtime: ^dynviewmodel.Dynview_System, panel: geometry.Rectangle) {
     if runtime == nil {
         return
     }

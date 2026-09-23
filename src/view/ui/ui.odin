@@ -12,6 +12,7 @@ import "../../dynview"
 import dyncompile "../../dynview/compile"
 import dyncore "../../dynview/core"
 import "../../core"
+import geometry "../../core/geometry"
 import "core:fmt"
 
 import rl "vendor:raylib"
@@ -276,7 +277,7 @@ prepare_ui_geometry :: proc(
         state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
     text_panel := view_text_content_panel(rl.Rectangle(regions.text_rect))
-    dynview.track_panel(&state^.dynview, text_panel)
+    dynview.track_panel(&state^.dynview, geometry.Rectangle(text_panel))
     dynview.track_font(
         &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
     dynview.track_style(&state^.dynview, dyncore.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)

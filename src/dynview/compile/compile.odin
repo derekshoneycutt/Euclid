@@ -10,7 +10,6 @@ import dynlayout "../layout"
 import dynmath "../math"
 
 import "core:os"
-import rl "vendor:raylib"
 
 Dynview_Compile_State :: struct {
     plain_text_builder: storage.Bounded_Byte_Builder,
@@ -72,7 +71,7 @@ Compiled_Optional_Group :: struct {
 }
 
 Copy_Hit_Target_Layout :: struct {
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     scroll_y, text_padding, icon_size, icon_x_pad: f32,
 }
 

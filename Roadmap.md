@@ -170,8 +170,8 @@ General features:
 - [X] Improved pen clipping through 3D polygons
 - [X] Resizable layout via Splitters
 - [X] Window sizing and portrait
-- [ ] Drawing Sounds (In Progress)
 - [ ] SDL3 Migration
+- [ ] Drawing Sounds (In Progress)
 
 Final tasks:
 

@@ -6,6 +6,7 @@
 1. [Where To Start Reading](#where-to-start-reading)
 1. [Module Map (Odin + Julia)](#module-map-odin--julia)
 1. [Execution And Ownership Model](#execution-and-ownership-model)
+1. [Raylib Backend Boundary](#raylib-backend-boundary)
 1. [Julia Actor Architecture](#julia-actor-architecture)
 1. [Terminal Architecture (Interactive Runtime Surface)](#terminal-architecture-interactive-runtime-surface)
 1. [Animation Architecture](#animation-architecture)
@@ -66,6 +67,7 @@ If you are new, read in this order:
 | **Odin** | Application Composition | Process-wide composition, run settings, and intrinsic task records. | `src/core/core.odin` |
 | **Odin** | Shared Foundations | Bounded storage, animation-generation memory, and native protocol contracts. | `src/core/storage/`, `src/core/animation/`, `src/core/protocol/` |
 | **Odin** | Coordinator Contracts | Bridge transport and presentation contracts plus display and Terminal runtime models. | `src/bridge/model/`, `src/bridge/presentation/`, `src/view/model/`, `src/view/terminal/model/` |
+| **Odin** | Input Boundary | Once-polled portable input frames, bounded event storage, hotkeys, and owner-bound Terminal encoding. | `src/view/input/`, `src/view/view.odin` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Font Cache | Required JuliaMono/NewCM residency, MATH-table admission, demand-paged glyphs, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
@@ -171,6 +173,61 @@ particles, Dynview commands and layout records, Terminal themes, UI regions, and
 prepared glyph placement use these portable values. Bridge and protocol payloads keep
 their explicit wire representations, while display packages convert portable values to
 Raylib types only when constructing native draw, hit-test, shader, or font data.
+
+### Input Boundary
+
+The display thread calls `input.input_poll_frame` once through
+`poll_window_frame_boundary`. Raylib key, character, pointer, focus, and timing calls
+remain in `src/view/input/device.odin`; operating-system clipboard calls remain in
+`src/view/input/clipboard.odin`. Both adapters publish application-owned values rather
+than Raylib types.
+
+`Input_Runtime` owns fixed display-lifetime storage, while each `Input_Frame` borrows
+its event prefix only until the next poll. UI and Terminal consumers receive frame
+value copies, resolve focus and pointer facts without repolling devices, and consume
+committed text from the shared event route. Bytes retained for a Julia evaluation or
+native Terminal session are gated by the complete `Input_Owner` identity, including
+its generation, so stale input cannot cross owner replacement.
+
+Raylib supplies committed text but no production composition lifecycle. Euclid
+therefore does not model synthetic composition start, preedit replacement or selection,
+commit, or cancellation state. Composition remains separate feature work requiring a
+real production source and independently validated consumer semantics.
+
+## Raylib Backend Boundary
+
+Raylib and rlgl are explicit native implementation dependencies, not canonical data
+substrates. Shapes, particles, Dynview, Terminal, UI, and frame rendering retain their
+existing prepared caches and direct draw consumers. Euclid does not route them through
+a generic render command stream, backend-neutral shader interface, global resource
+registry, or shared native-handle abstraction.
+
+The repository analyzer classifies every production Raylib or rlgl import under one
+current owner:
+
+| Category | Current owners and responsibility |
+| --- | --- |
+| Window/event shell | `src/view/view.odin`, startup/loading surfaces, and input device/clipboard adapters own the window, frame timing, presentation shell, and once-polled native events. |
+| Subsystem drawing | View core, UI, Dynview display, tool, dust, and Terminal drawing packages consume their existing prepared values and issue immediate Raylib/rlgl calls. |
+| Audio | `src/audio` owns Raylib stream handles and chalk synthesis playback. |
+| Backend resource ownership | View model, font, Terminal graphics, and lifecycle owners retain display-thread shaders, textures, locations, publication, and cleanup. |
+| Capture acquisition | `src/view/core/framebuffer_capture.odin` and GIF capture policy synchronously acquire and release presented Raylib images. |
+| Documented font/image compatibility requirement | `src/view/font/model` retains Raylib font and texture records because the display-owned cache publishes native resident generations while portable shaping and glyph placement remain separate. |
+
+Canonical Dynview compile, layout, and tracking packages use `core/geometry.Rectangle`;
+only display callers convert temporary Raylib rectangles at their call boundaries.
+Canonical shape and particle models, Terminal protocol/storage, and portable input
+types likewise cannot import Raylib or rlgl. The repository-owned
+`EUCLID-RAYLIB-BOUNDARY` rule rejects an unclassified production import and rejects
+drift in every exact owner allowance.
+
+Detailed contracts remain with their subsystem guides and owners. See
+[Tool Rendering](ToolRendering.md) for local shader locations and fallback cleanup,
+[Particle System](ParticleSystem.md) for dust atlas and instancing ownership, the
+[Terminal Architecture](TerminalArchitecture.md) for CPU payload and texture
+publication, [Synchronous Framebuffer Capture](#synchronous-framebuffer-capture) for
+readback lifetime, and [Resource And File Ownership](#resource-and-file-ownership) for
+native finalization and persisted output.
 
 ## Julia Actor Architecture
 
@@ -568,6 +625,30 @@ Source replacement is transactional. Failed candidates retain the prior generati
 and shutdown joins preparation before unloading GPU resources or destroying HarfBuzz
 and arena state. See [LaTeXSupport.md](LaTeXSupport.md) for typography and MATH behavior
 and [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for publication lifecycle.
+
+### Resource And File Ownership
+
+The files package owns packaged-asset and writable-output path mechanics, archive and
+manifest bytes, codecs, and persisted GIF output. Callers retain the policy that gives
+those operations meaning: GIF capture owns its phase machine, framebuffer timing,
+frozen dimensions, encoder sequence, and completion state, then asks `files` to persist
+the completed encoded bytes. Display code does not construct the output filename or
+write it directly.
+
+CPU preparation remains with each semantic subsystem. Font workers read and rasterize
+the source selected by the font cache; Terminal graphics workers decode into bounded
+attachment-store storage. Joined results do not become visible directly. The display
+owner revalidates the subsystem generation, admits the complete candidate, creates its
+Raylib resource, and releases partial native state on failure. File access used to
+select, monitor, or prepare a font remains font policy rather than a generic files
+facade.
+
+Native identities and cleanup remain local. Font generations own their fonts, pages,
+shapers, and glyph tables; Terminal graphics owns texture residency and playback; tool
+and dust renderers own their shaders, buffers, atlases, and fallbacks. Shutdown first
+stops admission and joins accepted CPU work, then releases native resources on the
+display thread while the graphics context is live. There is no global resource table,
+shared generation scheme, or generic cleanup registry.
 
 ### Lifecycle And Failure Rules
 

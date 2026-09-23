@@ -1,5 +1,6 @@
 package ui
 
+import geometry "../../core/geometry"
 import native "../native"
 
 import viewmodel "../model"
@@ -136,7 +137,7 @@ prepare_presentation_content_interaction :: proc(
     keyboard_enabled: bool) -> ui_dynview.Dynview_Selection_View {
     ui_runtime := &state^.ui_runtime
     dyncompile.refresh_presentation_copy_targets(&state.dynview, {
-        panel = scroll.view_rect, scroll_y = scroll.scroll_y_out,
+        panel = geometry.Rectangle(scroll.view_rect), scroll_y = scroll.scroll_y_out,
         text_padding = TEXT_PADDING, icon_size = DYNVIEW_COPY_ICON_SIZE,
         icon_x_pad = DYNVIEW_COPY_ICON_X_PAD})
     frame_dt := min(f32(0.05), max(f32(0), rl.GetFrameTime()))
@@ -175,7 +176,7 @@ prepare_presentation_interaction :: proc(
     text_panel := view_text_content_panel(panel)
     view_text := julia.current_view_snapshot_text(state)
     content_h := dynlayout.presentation_content_height_or_fallback(&state.dynview,
-        text_panel, {text_padding = TEXT_PADDING,
+        geometry.Rectangle(text_panel), {text_padding = TEXT_PADDING,
             wrap_advance = TEXT_WRAP_ADVANCE, row_height = TEXT_ROW_HEIGHT,
             text = view_text})
     state^.ui_runtime.view_text_scroll_max = max(0, content_h - text_panel.height)

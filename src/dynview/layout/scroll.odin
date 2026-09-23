@@ -2,9 +2,8 @@ package dynview_layout
 
 import dynviewmodel "../model"
 
+import geometry "../../core/geometry"
 import dyncore "../core"
-
-import rl "vendor:raylib"
 
 Presentation_Fallback_Layout :: struct {
     text_padding, wrap_advance, row_height: f32,
@@ -22,7 +21,7 @@ document_layout_is_authoritative :: #force_inline proc(
 
 //   Return fallback wrapped row count for plain-text rendering.
 fallback_row_count :: #force_inline proc(
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     wrap_advance: f32,
     fallback_text: string) -> int {
 
@@ -34,7 +33,7 @@ fallback_row_count :: #force_inline proc(
 //   Return total content height using cached line metrics, else fallback row math.
 presentation_content_height_or_fallback :: proc(
     runtime: ^dynviewmodel.Dynview_System,
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     fallback: Presentation_Fallback_Layout) -> f32 {
 
     fallback_rows := fallback_row_count(panel, fallback.wrap_advance, fallback.text)

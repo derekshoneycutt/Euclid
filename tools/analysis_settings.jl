@@ -1,6 +1,7 @@
 using OdinJuliaAnalysis
 
 Base.include(@__MODULE__, joinpath(@__DIR__, "build_config.jl"))
+Base.include(@__MODULE__, joinpath(@__DIR__, "raylib_boundary_analysis.jl"))
 using .EuclidBuildConfiguration: native_linker_flags
 
 const RepositoryRoot = normpath(joinpath(@__DIR__, ".."))
@@ -34,6 +35,7 @@ const RuleResponses = Dict(
     "NAMING-POLICY-DRIFT" => Fail,
     "CALL-ROOT-POLICY-DRIFT" => Fail,
     "IMPORT-POLICY-DRIFT" => Fail,
+    "EUCLID-RAYLIB-BOUNDARY" => Fail,
     "ARCHITECTURE-FORBIDDEN-DEPENDENCY" => Fail,
     "ARCHITECTURE-DEPENDENCY-CYCLE" => Fail,
     "ODIN-UNRESOLVED-INTERNAL-IMPORT" => Report,
@@ -229,13 +231,16 @@ const AnimationLoopFiles = [
 
 """Construct the rule settings to utilize for the analysis and report"""
 function euclid_rule_settings()
-    return [
+    settings = [
         RuleSetting(
             setting.rule_id,
             setting.enabled && setting.rule_id ∉ DisabledRules,
             get(RuleResponses, setting.rule_id, Report))
         for setting in BaseSettings.rules
     ]
+    push!(settings, RuleSetting(
+        RAYLIB_BOUNDARY_RULE, true, get(RuleResponses, RAYLIB_BOUNDARY_RULE, Report)))
+    return settings
 end
 
 """Construct one ignored Odin naming policy with exact drift bounds."""
@@ -1869,7 +1874,7 @@ AnalysisSettings(
                 "HOST_SYMBOL_CACHE",
                 "Platform-dependent host symbol resolution is cached for the process lifetime in this unique bridge boundary."),
         ]),
-    AnalysisExtension[],
+    AnalysisExtension[RaylibBoundaryExtension()],
     default_duplicate_code_settings(),
     default_resource_lifetime_settings(),
     default_security_settings(),

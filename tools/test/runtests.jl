@@ -621,4 +621,5 @@ const ScenarioRunner = Main.EuclidScenarioRunner
     end
 end
 
+include("raylib_boundary_analysis_tests.jl")
 include("evidence_tests.jl")

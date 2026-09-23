@@ -10,11 +10,6 @@ import viewmodel "../model"
 import "../../core"
 import "../../files"
 
-import "core:fmt"
-import "core:os"
-import "core:path/filepath"
-import "core:time"
-
 import rl "vendor:raylib"
 
 GIF_CAPTURE_QUALITY :: 12
@@ -306,36 +301,6 @@ set_last_gif_path :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, path: 
     ui_runtime.last_gif_path_len = n
 }
 
-//   Generate timestamped filename for GIF export output.
-gif_output_filename :: proc() -> string {
-    now := time.now()
-    year := time.year(now)
-    month := int(time.month(now))
-    day := time.day(now)
-    hour, minute, second, nanos := time.precise_clock(now)
-    millis := nanos / 1_000_000
-
-    return fmt.tprintf("Euclid_%04d-%02d-%02d_%02d-%02d-%02d-%03d.gif",
-        year, month, day, hour, minute, second, millis)
-}
-
-//   Resolve writable output path for the next GIF export file.
-gif_output_path :: proc() -> string {
-    output_dir, ok := files.resolve_writable_pictures_dir(context.temp_allocator)
-    if !ok {
-        return ""
-    }
-
-    output_name := gif_output_filename()
-    output_path, err := filepath.join(
-        []string{output_dir, output_name}, context.temp_allocator)
-    if err != nil {
-        return ""
-    }
-
-    return output_path
-}
-
 //   Convert frame-step interval into GIF delay centiseconds.
 gif_capture_delay_centiseconds :: #force_inline proc(frame_step: int) -> int {
     return max(1, int(f32(frame_step) * FIXED_DT * 100.0 + 0.5))
@@ -378,16 +343,6 @@ gif_capture_source_dimensions :: proc(world_rect: rl.Rectangle) -> (int, int) {
         render_width = max(1, int(rl.GetRenderWidth())),
         render_height = max(1, int(rl.GetRenderHeight())),
     })
-}
-
-//   Write encoded GIF bytes to disk at the provided path.
-gif_write_bytes_to_file :: proc(path: string, data: []u8) -> bool {
-    if len(data) == 0 {
-        return false
-    }
-
-    write_err := os.write_entire_file(path, data)
-    return write_err == nil
 }
 
 //   Initialize encoder and counters for a new GIF capture session.
@@ -433,8 +388,9 @@ gif_capture_finalize_session :: proc(
     }
     defer files.gif_encode_free(&result)
 
-    path := gif_output_path()
-    if !gif_write_bytes_to_file(path, result.data) {
+    path, persisted := files.persist_gif_output(
+        result.data, context.temp_allocator)
+    if !persisted {
         return false
     }
 

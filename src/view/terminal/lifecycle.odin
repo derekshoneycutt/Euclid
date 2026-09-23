@@ -867,7 +867,7 @@ terminal_apply_keyboard_update :: proc(
     return terminal_take_scheduled_completion(term, now)
 }
 
-//   Poll keyboard and mouse input for the active frame and apply it to the terminal.
+//   Consume keyboard and mouse input from the active frame and update the terminal.
 //
 // Parameters:
 //   - term: The terminal state field owned by the caller.

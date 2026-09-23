@@ -443,15 +443,17 @@ particles. Those remain in their subsystem owners.
 
 ## Input Model
 
-`input.input_poll_frame` drains Raylib input once and returns one device-independent
-`Input_Frame`. Its event slice borrows fixed storage in `Input_Runtime` until the next
-frame begins.
+`poll_window_frame_boundary` calls `input.input_poll_frame` exactly once per normal
+display frame. The input adapter drains Raylib and returns one device-independent
+`Input_Frame`; downstream UI and Terminal consumers use routed value copies without
+repolling devices. Its event slice borrows fixed storage in `Input_Runtime` until the
+next frame begins.
 
 The snapshot contains:
 
 | Input class | Representation |
 | --- | --- |
-| Keyboard and text | Ordered `Input_Event` slice with modifier and correlation data. |
+| Keyboard and text | Ordered physical-key and committed-text `Input_Event` values with modifier and correlation data. |
 | Window activation | Current focus and one-frame transition flag. |
 | Pointer position | Screen-space `x` and `y`, plus a real-movement flag. |
 | Pointer buttons | Pressed and released edges plus current down levels. |
@@ -479,6 +481,10 @@ The input package also owns concerns that are not UI focus:
 - terminal protocol mouse capture and release retry.
 
 These remain input-layer responsibilities even when UI code supplies hit-test facts.
+Raylib provides committed characters but no composition lifecycle, so the current frame
+contains no preedit, composition selection, commit, or cancellation state. Such state
+must not be synthesized without a production source and separately validated feature
+semantics.
 
 ## Press Ownership
 

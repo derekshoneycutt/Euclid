@@ -145,6 +145,12 @@ Kitty supports query, replace, set, clear, push, and pop for flags 1, 2, 4, 8, a
 its state is retained independently for primary and alternate screens. All negotiated
 input state resets at an evaluation or process stream boundary.
 
+The display input owner conservatively correlates an unambiguous physical key with its
+bounded committed-text events before xterm or Kitty encoding. Local editing and child
+encoding consume the same once-polled `Input_Frame`; neither path polls the device
+again. Raylib supplies no composition lifecycle, so reversible preedit state is neither
+modeled nor encoded as Terminal bytes.
+
 The display-owned UI runtime supplies effective Terminal focus separately from the raw
 window-focus sample. It combines logical Terminal focus, Terminal presentation, and OS
 activation. Local editing and child keyboard bytes require effective focus. DECSET 1004
@@ -521,13 +527,20 @@ flowchart LR
 
 A Terminal generation binds one parser and attachment store to the reusable display
 service. Replacement unbinds that generation and joins accepted preparation before
-resources are reused. Synchronized output can hold both grid and attachment changes
-until one display commit.
+unloading its display-owned textures, removing residency accounting, and clearing the
+borrowed parser and store pointers. CPU pixel buffers and animation timelines remain
+attachment-store owned; the display service only borrows an exact-generation payload
+while creating or updating its Raylib texture. Synchronized output can hold both grid
+and attachment changes until one display commit.
 
 Kitty mutations retain stream order even when a frame requires worker preparation: a
 later mutation cannot pass an earlier unfinished one. Protocol identities map to current
 internal attachment generations, so replacement and deletion cannot accidentally target
-reused storage. Replies return to the producer that issued the Kitty command.
+reused storage. Marking a retained mutation ready is therefore distinct from publishing
+a texture: mutation readiness preserves protocol order, while texture residency commits
+only after generation revalidation and successful upload. Failed playback upload leaves
+the prior frame and timeline state committed. Replies return to the producer that issued
+the Kitty command.
 
 ## Geometry And Container Policy
 

@@ -8,6 +8,7 @@ import "core:testing"
 import app_core "../core"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
+import app_files "../files"
 import app_view "./core"
 
 //   Verify clearing then setting a long GIF status note truncates with a terminator.
@@ -233,10 +234,10 @@ gif_capture_resize_ignores_stable_or_unprotected_state :: proc(t: ^testing.T) {
         viewmodel.Gif_Capture_Phase.Saved)
 }
 
-//   Verify gif_output_filename produces an Euclid-prefixed .gif name.
+//   Verify files-owned GIF output names retain the public prefix and extension.
 @(test)
 gif_output_filename_has_expected_shape :: proc(t: ^testing.T) {
-    name := app_view.gif_output_filename()
+    name := app_files.gif_output_filename()
 
     testing.expect(t, strings.has_prefix(name, "Euclid_"))
     testing.expect(t, strings.has_suffix(name, ".gif"))

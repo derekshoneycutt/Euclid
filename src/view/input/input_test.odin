@@ -514,6 +514,30 @@ input_test_runtime_event_overflow_is_explicit :: proc(t: ^testing.T) {
     testing.expect(t, !runtime.event_frame_overflowed)
 }
 
+// Verify injected committed text enters one frame in order without fake correlation.
+@(test)
+input_test_injected_committed_text_is_frame_bounded :: proc(t: ^testing.T) {
+    runtime: Input_Runtime
+    injected := []Input_Event{
+        {kind = .Text, codepoint = 'A'},
+        {kind = .Text, codepoint = '界'},
+    }
+
+    testing.expect(t, input_runtime_inject_events(&runtime, injected))
+    testing.expect(t, input_runtime_begin_frame(&runtime))
+    events := input_runtime_events(&runtime)
+    testing.expect_value(t, len(events), 2)
+    testing.expect_value(t, events[0].codepoint, rune('A'))
+    testing.expect_value(t, events[1].codepoint, rune('界'))
+    for event in events {
+        testing.expect_value(t, event.origin, Input_Event_Origin.Synthetic)
+        testing.expect(t, !event.correlation.valid)
+    }
+
+    testing.expect(t, input_runtime_begin_frame(&runtime))
+    testing.expect_value(t, len(input_runtime_events(&runtime)), 0)
+}
+
 // Verify one device physical event and one text event correlate reciprocally.
 @(test)
 input_test_runtime_correlates_unambiguous_device_events :: proc(t: ^testing.T) {

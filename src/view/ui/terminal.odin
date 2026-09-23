@@ -44,7 +44,7 @@ terminal_content_panel :: proc(panel: rl.Rectangle) -> rl.Rectangle {
     return view_text_content_panel(panel)
 }
 
-// Poll one terminal frame using the same bounds later supplied to drawing.
+// Update Terminal from one routed frame using the bounds later supplied to drawing.
 terminal_update :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     font_face: rl.Font, bounds: rl.Rectangle) -> Terminal_Frame_Update {

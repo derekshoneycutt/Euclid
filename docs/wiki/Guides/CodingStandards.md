@@ -121,6 +121,20 @@ owns a model directly; root-core forwarding aliases are forbidden.
 `tools/analysis_settings.jl` enforces these layers. Substrate-to-composition edges and
 cycles among architecture layers are blocking findings.
 
+Raylib and rlgl imports MUST remain outside canonical semantic, parser, shape,
+particle, Terminal protocol/storage, and portable input packages. Production imports
+are allowed only in exact files classified as window/event shell, subsystem drawing,
+audio, backend resource ownership, capture acquisition, or a documented font/image
+compatibility requirement. Tests may use Raylib fixtures without defining production
+dependency direction.
+
+The repository-owned `EUCLID-RAYLIB-BOUNDARY` analysis extension checks parser-backed
+Odin dependency records. An unclassified production import is blocking, and every
+classified owner has an exact expected import count so stale or expanded exceptions
+also fail analysis. Update implementation, classification, and architecture
+documentation together; do not add a directory-wide exemption to admit one native
+owner.
+
 ## Verification Gate
 
 Before work is complete, run the canonical CMake target:
