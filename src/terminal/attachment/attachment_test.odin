@@ -567,7 +567,7 @@ attachment_test_residency_defers_removal :: proc(t: ^testing.T) {
     testing.expect_value(t, attachment_remove(&store, attachment), Handle_Outcome.Found)
 }
 
-// Verify the renderer boundary transports no Raylib or mutable terminal state.
+// Verify the renderer boundary transports no native handles or mutable terminal state.
 @(test)
 attachment_test_renderer_capability :: proc(t: ^testing.T) {
     observed: Raster_Draw_Request

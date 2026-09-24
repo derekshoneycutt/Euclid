@@ -3,6 +3,7 @@ package ui_dynview
 import native "../../native"
 
 import dynviewmodel "../../../dynview/model"
+import geometry "../../../core/geometry"
 
 import fontmodel "../../font/model"
 
@@ -13,8 +14,6 @@ import view_core "../../core"
 import "../../font"
 
 import "core:math"
-
-import rl "vendor:raylib"
 
 //   Uniform handler shape for one flow command; the style is resolved by the caller.
 //   Handlers that do not need the command buffer receive nil for it.
@@ -65,7 +64,7 @@ Dynview_Draw_Context :: struct {
     encoder: ^native.Draw_Encoder,
     enabled : bool,
     state : ^core.Euclid_General_State,
-    panel : rl.Rectangle,
+    panel : geometry.Rectangle,
     scroll_y : f32,
     text_padding : f32,
     text_row_height : f32,
@@ -75,28 +74,28 @@ Dynview_Draw_Context :: struct {
 }
 
 Perpendicular_Colors :: struct {
-    top : rl.Color,
-    stem : rl.Color,
+    top : dynviewmodel.Color,
+    stem : dynviewmodel.Color,
 }
 
 Triangle_Colors :: struct {
-    fill : rl.Color,
-    edge1 : rl.Color,
-    edge2 : rl.Color,
-    edge3 : rl.Color,
+    fill : dynviewmodel.Color,
+    edge1 : dynviewmodel.Color,
+    edge2 : dynviewmodel.Color,
+    edge3 : dynviewmodel.Color,
 }
 
 Pentagon_Colors :: struct {
-    fill : rl.Color,
-    edge1 : rl.Color,
-    edge2 : rl.Color,
-    edge3 : rl.Color,
-    edge4 : rl.Color,
-    edge5 : rl.Color,
+    fill : dynviewmodel.Color,
+    edge1 : dynviewmodel.Color,
+    edge2 : dynviewmodel.Color,
+    edge3 : dynviewmodel.Color,
+    edge4 : dynviewmodel.Color,
+    edge5 : dynviewmodel.Color,
 }
 
 Inline_Shape_Frame :: struct {
-    rect : rl.Rectangle,
+    rect : geometry.Rectangle,
     cols : int,
     max_cols : int,
     visible : bool,
@@ -112,7 +111,7 @@ Pie_Section_Bounds :: struct {
 //   Style inputs for one pie-section draw (stroke and color).
 Pie_Section_Style :: struct {
     stroke : f32,
-    color : rl.Color,
+    color : dynviewmodel.Color,
 }
 
 //   Vertical span scales for one inline-shape frame within its row.
@@ -173,21 +172,21 @@ wrap_if_full :: #force_inline proc(flow: ^Dynview_Flow_State, max_cols: int) {
 //   Resolve draw color using command brush override with style fallback.
 command_draw_color :: #force_inline proc(
     cmd: dynviewmodel.Dynview_Command,
-    style: dyncore.Dynview_Text_Style) -> rl.Color {
+    style: dyncore.Dynview_Text_Style) -> dynviewmodel.Color {
 
     if cmd.has_brush_color {
-        return native.to_raylib_color(cmd.brush_color)
+        return cmd.brush_color
     }
-    return native.to_raylib_color(style.color)
+    return style.color
 }
 
 //   Return edge_color unless it is fully transparent zero, else the fallback.
 shape_edge_color_or :: #force_inline proc(
-    edge_color: dynviewmodel.Color, fallback: rl.Color) -> rl.Color {
+    edge_color: dynviewmodel.Color, fallback: dynviewmodel.Color) -> dynviewmodel.Color {
     if edge_color.r == 0 && edge_color.g == 0 && edge_color.b == 0 && edge_color.a == 0 {
         return fallback
     }
-    return native.to_raylib_color(edge_color)
+    return edge_color
 }
 
 //   Normalize one degree angle into the [0, 360) range.
@@ -215,9 +214,9 @@ positive_sweep_degrees :: #force_inline proc(start_degrees, end_degrees: f32) ->
 
 //   Compute one point on a circle from center/radius and degree angle.
 pie_point :: #force_inline proc(
-    center: rl.Vector2, radius, angle_degrees: f32) -> rl.Vector2 {
+    center: geometry.Vector2, radius, angle_degrees: f32) -> geometry.Vector2 {
     radians := angle_degrees * math.PI / 180.0
-    return rl.Vector2{
+    return geometry.Vector2{
         center.x + radius * f32(math.cos(f64(radians))),
         center.y - radius * f32(math.sin(f64(radians))),
     }
@@ -272,10 +271,11 @@ pie_section_bounds :: #force_inline proc(
 
 //   Draw a filled pie section using a deterministic triangle fan.
 draw_filled_pie_section :: proc(
-    center: rl.Vector2,
+    encoder: ^native.Draw_Encoder,
+    center: geometry.Vector2,
     radius: f32,
     start_degrees, end_degrees: f32,
-    color: rl.Color) {
+    color: dynviewmodel.Color) {
 
     sweep := positive_sweep_degrees(start_degrees, end_degrees)
     if sweep <= 0 {
@@ -290,13 +290,14 @@ draw_filled_pie_section :: proc(
         a1 := normalize_angle_degrees(start_degrees + sweep * t1)
         p0 := pie_point(center, radius, a0)
         p1 := pie_point(center, radius, a1)
-        rl.DrawTriangle(center, p0, p1, color)
+        _ = native.draw_encoder_triangle(encoder, center, p0, p1, color)
     }
 }
 
 //   Draw one pie-section outline with arc and radial edges.
 draw_pie_section_outline :: proc(
-    center: rl.Vector2,
+    encoder: ^native.Draw_Encoder,
+    center: geometry.Vector2,
     radius: f32,
     start_degrees, end_degrees: f32,
     style: Pie_Section_Style) {
@@ -314,55 +315,61 @@ draw_pie_section_outline :: proc(
         t := f32(i + 1) / f32(segments)
         angle := normalize_angle_degrees(start_degrees + sweep * t)
         next_point := pie_point(center, radius, angle)
-        rl.DrawLineEx(prev, next_point, stroke, color)
+        _ = native.draw_encoder_line(encoder, prev, next_point, stroke, color)
         prev = next_point
     }
 
     start_point := pie_point(center, radius, start_degrees)
     end_point := pie_point(center, radius, end_degrees)
-    rl.DrawLineEx(center, start_point, stroke, color)
-    rl.DrawLineEx(center, end_point, stroke, color)
+    _ = native.draw_encoder_line(encoder, center, start_point, stroke, color)
+    _ = native.draw_encoder_line(encoder, center, end_point, stroke, color)
 }
 
 //   Draw one perpendicular shape with the primary line on the bottom edge.
 draw_perpendicular_shape :: proc(
-    rect: rl.Rectangle,
+    encoder: ^native.Draw_Encoder,
+    rect: geometry.Rectangle,
     stroke: f32,
     colors: Perpendicular_Colors) {
 
     bottom_y := rect.y + rect.height
-    bottom_left := rl.Vector2{rect.x, bottom_y}
-    bottom_right := rl.Vector2{rect.x + rect.width, bottom_y}
+    bottom_left := geometry.Vector2{rect.x, bottom_y}
+    bottom_right := geometry.Vector2{rect.x + rect.width, bottom_y}
     stem_x := rect.x + rect.width * 0.5
-    rl.DrawLineEx(bottom_left, bottom_right, stroke, colors.top)
-    rl.DrawLineEx(rl.Vector2{stem_x, rect.y},
-        rl.Vector2{stem_x, bottom_y}, stroke, colors.stem)
+    _ = native.draw_encoder_line(
+        encoder, bottom_left, bottom_right, stroke, colors.top)
+    _ = native.draw_encoder_line(encoder, {stem_x, rect.y},
+        {stem_x, bottom_y}, stroke, colors.stem)
 }
 
 //   Draw one triangle shape with optional fill and per-edge colors.
 draw_triangle_shape :: proc(
-    rect: rl.Rectangle,
+    encoder: ^native.Draw_Encoder,
+    rect: geometry.Rectangle,
     filled: bool,
     colors: Triangle_Colors,
     stroke: f32) {
 
-    apex := rl.Vector2{rect.x + rect.width * 0.5, rect.y}
-    base_left := rl.Vector2{rect.x, rect.y + rect.height}
-    base_right := rl.Vector2{rect.x + rect.width, rect.y + rect.height}
+    apex := geometry.Vector2{rect.x + rect.width * 0.5, rect.y}
+    base_left := geometry.Vector2{rect.x, rect.y + rect.height}
+    base_right := geometry.Vector2{rect.x + rect.width, rect.y + rect.height}
     if filled {
-        rl.DrawTriangle(apex, base_left, base_right, colors.fill)
+        _ = native.draw_encoder_triangle(
+            encoder, apex, base_left, base_right, colors.fill)
     }
     if stroke <= 0 {
         return
     }
-    rl.DrawLineEx(apex, base_left, stroke, colors.edge1)
-    rl.DrawLineEx(base_left, base_right, stroke, colors.edge2)
-    rl.DrawLineEx(base_right, apex, stroke, colors.edge3)
+    _ = native.draw_encoder_line(encoder, apex, base_left, stroke, colors.edge1)
+    _ = native.draw_encoder_line(
+        encoder, base_left, base_right, stroke, colors.edge2)
+    _ = native.draw_encoder_line(encoder, base_right, apex, stroke, colors.edge3)
 }
 
 //   Draw one pentagon shape with optional fill and per-edge colors.
 draw_pentagon_shape :: proc(
-    rect: rl.Rectangle,
+    encoder: ^native.Draw_Encoder,
+    rect: geometry.Rectangle,
     filled: bool,
     colors: Pentagon_Colors,
     stroke: f32) {
@@ -373,11 +380,11 @@ draw_pentagon_shape :: proc(
     radius_y := max(1.0, rect.height * 0.5)
     start_angle: f32 = -90.0
 
-    points: [5]rl.Vector2
+    points: [5]geometry.Vector2
     for i in 0..<5 {
         angle := start_angle + f32(i) * 72.0
         radians := angle * f32(math.PI) / 180.0
-        points[i] = rl.Vector2{
+        points[i] = geometry.Vector2{
             center_x + radius_x * math.cos_f32(radians),
             center_y + radius_y * math.sin_f32(radians),
         }
@@ -385,7 +392,8 @@ draw_pentagon_shape :: proc(
 
     if filled {
         for i in 1..<4 {
-            rl.DrawTriangle(points[i], points[0], points[i + 1], colors.fill)
+            _ = native.draw_encoder_triangle(
+                encoder, points[i], points[0], points[i + 1], colors.fill)
         }
     }
 
@@ -393,11 +401,11 @@ draw_pentagon_shape :: proc(
         return
     }
 
-    rl.DrawLineEx(points[0], points[1], stroke, colors.edge1)
-    rl.DrawLineEx(points[1], points[2], stroke, colors.edge2)
-    rl.DrawLineEx(points[2], points[3], stroke, colors.edge3)
-    rl.DrawLineEx(points[3], points[4], stroke, colors.edge4)
-    rl.DrawLineEx(points[4], points[0], stroke, colors.edge5)
+    _ = native.draw_encoder_line(encoder, points[0], points[1], stroke, colors.edge1)
+    _ = native.draw_encoder_line(encoder, points[1], points[2], stroke, colors.edge2)
+    _ = native.draw_encoder_line(encoder, points[2], points[3], stroke, colors.edge3)
+    _ = native.draw_encoder_line(encoder, points[3], points[4], stroke, colors.edge4)
+    _ = native.draw_encoder_line(encoder, points[4], points[0], stroke, colors.edge5)
 }
 
 //   Prepare one inline-shape frame using the current flow cursor and row height.
@@ -434,7 +442,7 @@ flow_inline_shape_frame :: proc(
             atom_w := f32(cols) * effective_advance
             top_y := row_y + draw_ctx^.text_row_height * y_start_scale
             bottom_y := row_y + draw_ctx^.text_row_height * y_end_scale
-            return Inline_Shape_Frame{rl.Rectangle{
+            return Inline_Shape_Frame{geometry.Rectangle{
                 atom_x, top_y, atom_w, max(1.0, bottom_y - top_y)}, cols, max_cols, true}
         }
     }
@@ -509,7 +517,7 @@ flow_draw_text_line_content :: proc(
             key = style_font_key(style),
             text = line_text,
             position = {line_x, row_y},
-            color = native.to_raylib_color(style.color),
+            color = style.color,
             font = text_font,
         })
     }
@@ -544,11 +552,9 @@ flow_draw_text_line :: proc(
     flow_draw_text_line_content(line_text, line_x, row_y, style, draw_ctx)
     if style.underline {
         underline_y := row_y + draw_ctx^.font_size + 1
-        rl.DrawLineEx(
-            rl.Vector2{line_x, underline_y},
-            rl.Vector2{line_x + f32(line_len)*advance, underline_y},
-            1,
-            native.to_raylib_color(style.color))
+        _ = native.draw_encoder_line(draw_ctx^.encoder,
+            {line_x, underline_y},
+            {line_x + f32(line_len)*advance, underline_y}, 1, style.color)
     }
 }
 
@@ -613,9 +619,10 @@ flow_consume_inline_line :: proc(
         line_w := f32(cols) * effective_advance
         baseline_y := row_y + draw_ctx^.text_row_height * 0.62
         thickness := max(1.0, cmd.inline_atom_stroke)
-        start_pos := rl.Vector2{line_x, baseline_y}
-        end_pos := rl.Vector2{line_x + line_w, baseline_y}
-        rl.DrawLineEx(start_pos, end_pos, thickness, command_draw_color(cmd, style))
+        start_pos := geometry.Vector2{line_x, baseline_y}
+        end_pos := geometry.Vector2{line_x + line_w, baseline_y}
+        _ = native.draw_encoder_line(draw_ctx^.encoder,
+            start_pos, end_pos, thickness, command_draw_color(cmd, style))
     }
 
     flow^.had_visible = true
@@ -644,19 +651,23 @@ flow_consume_inline_box :: proc(
         box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
         box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
         stroke := max(1.0, cmd.inline_atom_stroke)
-        top_left := rl.Vector2{box_x, box_y}
-        top_right := rl.Vector2{box_x + box_w, box_y}
-        bottom_left := rl.Vector2{box_x, box_y + box_h}
-        bottom_right := rl.Vector2{box_x + box_w, box_y + box_h}
+        top_left := geometry.Vector2{box_x, box_y}
+        top_right := geometry.Vector2{box_x + box_w, box_y}
+        bottom_left := geometry.Vector2{box_x, box_y + box_h}
+        bottom_right := geometry.Vector2{box_x + box_w, box_y + box_h}
         base_color := command_draw_color(cmd, style)
         edge1 := shape_edge_color_or(cmd.shape_edge_color_1, base_color)
         edge2 := shape_edge_color_or(cmd.shape_edge_color_2, base_color)
         edge3 := shape_edge_color_or(cmd.shape_edge_color_3, base_color)
         edge4 := shape_edge_color_or(cmd.shape_edge_color_4, base_color)
-        rl.DrawLineEx(top_left, top_right, stroke, edge1)
-        rl.DrawLineEx(top_right, bottom_right, stroke, edge2)
-        rl.DrawLineEx(bottom_right, bottom_left, stroke, edge3)
-        rl.DrawLineEx(bottom_left, top_left, stroke, edge4)
+        _ = native.draw_encoder_line(
+            draw_ctx^.encoder, top_left, top_right, stroke, edge1)
+        _ = native.draw_encoder_line(
+            draw_ctx^.encoder, top_right, bottom_right, stroke, edge2)
+        _ = native.draw_encoder_line(
+            draw_ctx^.encoder, bottom_right, bottom_left, stroke, edge3)
+        _ = native.draw_encoder_line(
+            draw_ctx^.encoder, bottom_left, top_left, stroke, edge4)
     }
 
     flow^.had_visible = true
@@ -696,26 +707,24 @@ draw_flow_inline_circle :: #force_inline proc(
     frame: Flow_Atom_Frame) {
 
     radius := max(2.0, min(frame.atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
-    center := rl.Vector2{frame.atom_x + frame.atom_w * 0.5,
+    center := geometry.Vector2{frame.atom_x + frame.atom_w * 0.5,
         frame.row_y + draw_ctx^.text_row_height * 0.58}
     color := command_draw_color(cmd, style)
-    rl.DrawCircleLines(i32(center.x), i32(center.y), radius, color)
-    if max(1.0, cmd.inline_atom_stroke) > 1 {
-        rl.DrawCircleLines(i32(center.x), i32(center.y),
-            max(1.0, radius - 1), color)
-    }
+    stroke := max(1.0, cmd.inline_atom_stroke)
+    _ = native.draw_encoder_ring(
+        draw_ctx^.encoder, center, max(0, radius - stroke), radius, color)
 }
 
 //   Compute the inline box rect within an atom frame.
 flow_inline_box_rect :: #force_inline proc(
     cmd: dynviewmodel.Dynview_Command,
     draw_ctx: ^Dynview_Draw_Context,
-    frame: Flow_Atom_Frame) -> rl.Rectangle {
+    frame: Flow_Atom_Frame) -> geometry.Rectangle {
 
     raw_h := cmd.inline_box_height * frame.advance
     box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
     box_y := frame.row_y + (draw_ctx^.text_row_height - box_h) * 0.5
-    return rl.Rectangle{frame.atom_x, box_y, frame.atom_w, box_h}
+    return geometry.Rectangle{frame.atom_x, box_y, frame.atom_w, box_h}
 }
 
 //   Consume one inline-circle atom in flow layout, optionally drawing it.
@@ -754,11 +763,11 @@ flow_consume_inline_filled_box :: proc(
     frame := flow_inline_atom_frame(flow, style, draw_ctx, cols)
     if frame.visible {
         rect := flow_inline_box_rect(cmd, draw_ctx, frame)
-        rl.DrawRectangleRec(rect, command_draw_color(cmd, style))
+        _ = native.draw_encoder_rectangle(
+            draw_ctx^.encoder, rect, command_draw_color(cmd, style))
         if cmd.inline_outline_stroke > 0 {
-            rl.DrawRectangleLinesEx(
-                rect, max(1.0, cmd.inline_outline_stroke),
-                native.to_raylib_color(style.color))
+            _ = native.draw_encoder_rectangle_outline(draw_ctx^.encoder,
+                rect, max(1.0, cmd.inline_outline_stroke), style.color)
         }
     }
 
@@ -775,17 +784,15 @@ draw_flow_inline_filled_circle :: #force_inline proc(
     frame: Flow_Atom_Frame) {
 
     radius := max(2.0, min(frame.atom_w * 0.5, draw_ctx^.text_row_height * 0.45))
-    center := rl.Vector2{frame.atom_x + frame.atom_w * 0.5,
+    center := geometry.Vector2{frame.atom_x + frame.atom_w * 0.5,
         frame.row_y + draw_ctx^.text_row_height * 0.58}
-    rl.DrawCircleV(center, radius, command_draw_color(cmd, style))
+    _ = native.draw_encoder_circle(
+        draw_ctx^.encoder, center, radius, command_draw_color(cmd, style))
 
     if cmd.inline_outline_stroke > 0 {
-        rl.DrawCircleLines(
-            i32(center.x), i32(center.y), radius, native.to_raylib_color(style.color))
-        if max(1.0, cmd.inline_outline_stroke) > 1 {
-            rl.DrawCircleLines(i32(center.x), i32(center.y),
-                max(1.0, radius - 1), native.to_raylib_color(style.color))
-        }
+        stroke := max(1.0, cmd.inline_outline_stroke)
+        _ = native.draw_encoder_ring(draw_ctx^.encoder, center,
+            max(0, radius - stroke), radius, style.color)
     }
 }
 
@@ -824,7 +831,7 @@ draw_flow_inline_pie_section :: #force_inline proc(
         cmd.pie_start_angle_degrees,
         cmd.pie_end_angle_degrees)
     wedge_height := max(1.0, bounds.y_max - bounds.y_min)
-    center := rl.Vector2{
+    center := geometry.Vector2{
         frame.atom_x + (-bounds.x_min),
         frame.row_y + draw_ctx^.text_row_height * 0.58 -
             wedge_height * 0.5 + (-bounds.y_min),
@@ -834,6 +841,7 @@ draw_flow_inline_pie_section :: #force_inline proc(
     stroke := max(1.0, cmd.inline_outline_stroke)
     if cmd.pie_is_filled {
         draw_filled_pie_section(
+            draw_ctx^.encoder,
             center,
             radius,
             cmd.pie_start_angle_degrees,
@@ -842,11 +850,12 @@ draw_flow_inline_pie_section :: #force_inline proc(
     }
     if !cmd.pie_is_filled || cmd.inline_outline_stroke > 0 {
         draw_pie_section_outline(
+            draw_ctx^.encoder,
             center,
             radius,
             cmd.pie_start_angle_degrees,
             cmd.pie_end_angle_degrees,
-            Pie_Section_Style{stroke, native.to_raylib_color(outline_color)})
+            Pie_Section_Style{stroke, outline_color})
     }
 }
 
@@ -882,9 +891,10 @@ flow_consume_inline_perpendicular :: proc(
     frame := flow_inline_shape_frame(flow, cmd, style, draw_ctx,
         Flow_Shape_Span{0.34, 0.74})
     if frame.visible {
-        draw_perpendicular_shape(frame.rect, max(1.0, cmd.inline_atom_stroke),
+        draw_perpendicular_shape(draw_ctx^.encoder, frame.rect,
+            max(1.0, cmd.inline_atom_stroke),
             Perpendicular_Colors{command_draw_color(cmd, style),
-                native.to_raylib_color(cmd.shape_edge_color_1)})
+                cmd.shape_edge_color_1})
     }
 
     flow^.had_visible = true
@@ -903,7 +913,8 @@ flow_consume_inline_triangle :: proc(
         Flow_Shape_Span{0.30, 0.78})
     if frame.visible {
         base_color := command_draw_color(cmd, style)
-        draw_triangle_shape(frame.rect, cmd.shape_is_filled, Triangle_Colors{
+        draw_triangle_shape(draw_ctx^.encoder, frame.rect,
+            cmd.shape_is_filled, Triangle_Colors{
             base_color,
             shape_edge_color_or(cmd.shape_edge_color_1, base_color),
             shape_edge_color_or(cmd.shape_edge_color_2, base_color),
@@ -927,7 +938,8 @@ flow_consume_inline_pentagon :: proc(
         Flow_Shape_Span{0.30, 0.78})
     if frame.visible {
         base_color := command_draw_color(cmd, style)
-        draw_pentagon_shape(frame.rect, cmd.shape_is_filled, Pentagon_Colors{
+        draw_pentagon_shape(draw_ctx^.encoder, frame.rect,
+            cmd.shape_is_filled, Pentagon_Colors{
             base_color,
             shape_edge_color_or(cmd.shape_edge_color_1, base_color),
             shape_edge_color_or(cmd.shape_edge_color_2, base_color),

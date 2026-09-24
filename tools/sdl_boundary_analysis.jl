@@ -5,6 +5,7 @@ import OdinJuliaAnalysis: extension_phases, extension_rules
 
 const SDL_BOUNDARY_RULE = "EUCLID-SDL-BOUNDARY"
 const SDL_IMPORT_TARGETS = Set(("vendor:sdl3", "vendor:sdl3/image"))
+const FORBIDDEN_BACKEND_IMPORT_TARGETS = Set(("vendor:raylib", "vendor:raylib/rlgl"))
 
 struct SdlBoundaryExtension <: AnalysisExtension end
 
@@ -54,6 +55,9 @@ end
 """Run after parser-backed language dependency analysis is available."""
 extension_phases(_extension::SdlBoundaryExtension) = Set((AfterLanguageAnalysis,))
 
+"""Normalize one SDL dependency source path for platform-independent matching."""
+sdl_normalize_boundary_path(path::AbstractString) = replace(String(path), '\\' => '/')
+
 """Report whether one source is a fixture rather than production code."""
 function is_sdl_fixture(path::String)
     return endswith(path, "_test.odin") || startswith(path, "src/test_helpers/") ||
@@ -84,7 +88,7 @@ end
 function classify_sdl_dependency!(diagnostics, counts, categories, policies, dependency)
     dependency.language == "odin" || return
     dependency.target in SDL_IMPORT_TARGETS || return
-    path = normalize_boundary_path(dependency.source_path)
+    path = sdl_normalize_boundary_path(dependency.source_path)
     is_sdl_fixture(path) && return
     policy = get(policies, path, nothing)
     if policy === nothing
@@ -98,6 +102,18 @@ function classify_sdl_dependency!(diagnostics, counts, categories, policies, dep
     counts[path] += 1
     push!(get!(Vector{String}, categories, policy.category),
         "$(path):$(dependency.target)")
+end
+
+"""Reject one dependency on a removed rendering backend."""
+function reject_forbidden_backend_dependency!(diagnostics, dependency)
+    dependency.language == "odin" || return
+    dependency.target in FORBIDDEN_BACKEND_IMPORT_TARGETS || return
+    path = sdl_normalize_boundary_path(dependency.source_path)
+    push!(diagnostics, sdl_boundary_diagnostic(
+        path,
+        dependency.line,
+        dependency.column,
+        "Raylib/rlgl imports are forbidden; SDL3/SDL_GPU is the sole native backend."))
 end
 
 """Report exact-count drift for every classified SDL owner."""
@@ -123,6 +139,7 @@ function analyze_extension(
     categories = Dict{String, Vector{String}}()
     diagnostics = Diagnostic[]
     for dependency in context.dependencies
+        reject_forbidden_backend_dependency!(diagnostics, dependency)
         classify_sdl_dependency!(diagnostics, counts, categories, policies, dependency)
     end
     append_sdl_policy_drift!(diagnostics, counts)

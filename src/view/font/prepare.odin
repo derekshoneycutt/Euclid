@@ -164,7 +164,7 @@ prepare_populate :: proc(
     return true
 }
 
-//   Parse, rasterize, and pack one TrueType font without calling raylib.
+//   Parse, rasterize, and pack one TrueType font without native GPU calls.
 //
 // Parameters:
 //   - request: Valid borrowed source path, positive size, and nonempty codepoint policy.
@@ -176,7 +176,7 @@ prepare_populate :: proc(
 //   - True for a complete CPU font; false after rollback/clear where required.
 //
 // Notes:
-//   - This worker-safe path performs file I/O and stb rasterization but no raylib calls.
+//   - This worker-safe path performs file I/O and stb rasterization but no GPU calls.
 prepare :: proc(
     request: Font_Prepare_Request, prepared: ^Prepared_Font,
     allocator: mem.Allocator,
@@ -292,7 +292,7 @@ prepare_glyph_page_populate :: proc(
     return true
 }
 
-//   Parse, rasterize, and pack one bounded glyph-ID subset without raylib calls.
+//   Parse, rasterize, and pack one bounded glyph-ID subset without GPU calls.
 //
 // Returns:
 //   - True for a complete compact CPU page; false after owned-result rollback.
@@ -386,7 +386,7 @@ prepare_count_glyphs :: proc(
     return result
 }
 
-//   Reproduce raylib's stb metrics and synthesized space bitmap dimensions.
+//   Derive stb metrics and synthesized space bitmap dimensions.
 //
 // Returns:
 //   - True when every pre-counted real glyph receives one output record.
@@ -469,7 +469,7 @@ prepare_face_glyph_metric :: proc(
     return result
 }
 
-//   Calculate one glyph's raylib-compatible offsets, advance, and bitmap bounds.
+//   Calculate one glyph's cache-compatible offsets, advance, and bitmap bounds.
 //
 // Notes:
 //   - ASCII and ideographic spaces synthesize empty full-height rectangles using
@@ -534,7 +534,7 @@ prepare_initial_atlas_size :: proc(
     return atlas_width, atlas_height
 }
 
-//   Reproduce raylib's default row packing and atlas growth policy.
+//   Apply the cache's row-packing and atlas-growth policy.
 //
 // Parameters:
 //   - glyphs: Prepared metrics to place in order.

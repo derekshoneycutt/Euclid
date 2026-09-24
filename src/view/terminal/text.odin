@@ -2,14 +2,13 @@ package terminalview
 
 import viewterminalmodel "model"
 
+import geometry "../../core/geometry"
 import termgrid "../../terminal/grid"
 import termhist "../../terminal/history"
 import "../font"
 
 import "core:fmt"
 import "core:math"
-
-import rl "vendor:raylib"
 
 //   Return a line's selectable text by its combined scrollback/prompt line index.
 //
@@ -116,14 +115,14 @@ terminal_live_input_line_text :: proc(text: string, line: int) -> string {
 //     outside the terminal's padded bounds.
 terminal_hit_test :: proc(
     term: ^viewterminalmodel.Terminal_State,
-    font: font.Font_Face, bounds: rl.Rectangle,
-    mouse: rl.Vector2) -> (viewterminalmodel.Terminal_View_Position, bool) {
+    font: font.Font_Face, bounds: geometry.Rectangle,
+    mouse: geometry.Vector2) -> (viewterminalmodel.Terminal_View_Position, bool) {
     if term == nil || term.history == nil {
         return viewterminalmodel.Terminal_View_Position{}, false
     }
 
     padded_bounds := terminal_accepted_padded_bounds(term, bounds)
-    if !rl.CheckCollisionPointRec(mouse, padded_bounds) {
+    if !geometry.rectangle_contains(padded_bounds, mouse) {
         return viewterminalmodel.Terminal_View_Position{}, false
     }
 

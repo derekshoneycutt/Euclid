@@ -24,7 +24,7 @@ Font_Prepare_Operation :: fontmodel.Font_Prepare_Operation
 //   - `.Succeeded` when a complete arena-backed CPU font was produced; otherwise `.Failed`.
 //
 // Side effects:
-//   - Writes only `task.prepared`; does not call raylib or mutate the cache.
+//   - Writes only `task.prepared`; does not call native GPU APIs or mutate the cache.
 prepare_task_cancel_requested :: proc(user_data: rawptr) -> bool {
     token := cast(^taskpool.Task_Cancellation_Token)user_data
     return token != nil && taskpool.task_cancellation_requested(token^)

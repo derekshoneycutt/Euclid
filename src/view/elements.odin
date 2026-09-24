@@ -14,12 +14,9 @@ import geometry "../core/geometry"
 // drawn with an isometric projection
 
 import view_core "core"
-import "font"
 
 import "core:math"
 import "core:math/linalg"
-
-import rl "vendor:raylib"
 
 Tool_Brush_Material :: struct {
     roughness:     f32,
@@ -139,7 +136,6 @@ Compass_Top_Circle_Basis :: struct {
 Compass_Arc_Draw :: struct {
     state:      ^Euclid_General_State,
     brush_size: f32,
-    color:      rl.Color,
 }
 
 //   Fixed arc samples shared by strip geometry and intersection metadata.
@@ -281,46 +277,6 @@ trochoid_tool_defers_to_compass :: #force_inline proc(
 //
 // Returns:
 //   - none.
-draw_drawing_surface :: proc(state: ^Euclid_General_State) {
-    room := state^.draw_surface
-    edge_size := room.edge_size
-
-    surface_zeros : Vector3 = room^.zeros + { edge_size, edge_size, 0 }
-    surface_right_up : Vector3 = room^.right_up + { -edge_size, edge_size, 0 }
-    surface_left_down : Vector3 = room^.left_down + { edge_size, -edge_size, 0 }
-    surface_right_down : Vector3 = room^.right_down + { -edge_size, -edge_size, 0 }
-
-    world_points := [8]Vector3{
-        room.zeros,
-        room.right_up,
-        room.left_down,
-        room.right_down,
-        surface_zeros,
-        surface_right_up,
-        surface_left_down,
-        surface_right_down,
-    }
-    xs, ys, zs: [8]f32
-    projected: [8]Vector2
-    _ = project_iso_points_batch_with_components(
-        state,
-        Iso_Batch_Project_Params{
-            world_points = world_points[:],
-            xs = xs[:],
-            ys = ys[:],
-            zs = zs[:],
-            out = projected[:],
-        })
-
-    rl.DrawTriangle(
-        projected[0], projected[1], projected[2], native.to_raylib_color(room.edge_color))
-    rl.DrawTriangle(
-        projected[3], projected[2], projected[1], native.to_raylib_color(room.edge_color))
-    rl.DrawTriangle(projected[4], projected[5], projected[6],
-        native.to_raylib_color(room.color))
-    rl.DrawTriangle(projected[7], projected[6], projected[5],
-        native.to_raylib_color(room.color))
-}
 
 // draw_encoded_drawing_surface encodes the projected plane and border triangles.
 draw_encoded_drawing_surface :: proc(
@@ -356,11 +312,6 @@ draw_encoded_drawing_surface :: proc(
 //
 // Returns:
 //   - none.
-draw_shapes_points_low_cached :: proc(state: ^Euclid_General_State) {
-    for i in 0..<state^.shape_world^.draw_cache.item_count {
-        draw_cached_item_low(state, &state^.shape_world^.draw_cache.items[i])
-    }
-}
 
 // draw_encoded_cached_basic_pass encodes points and lines in one depth layer.
 draw_encoded_cached_basic_pass :: proc(
@@ -552,82 +503,16 @@ draw_encoded_cached_shadow_pass :: proc(
 //
 // Returns:
 //   - none.
-draw_shapes_points_shadows_cached :: proc(state: ^Euclid_General_State) {
-    if state^.shape_world^.draw_cache.draw_trochoid_tool {
-        draw_cached_trochoid_tool_shadow(
-            state, &state^.shape_world^.draw_cache.trochoid_tool)
-    }
-    if state^.shape_world^.draw_cache.draw_cycloid_tool {
-        draw_cached_cycloid_tool_shadow(
-            state, &state^.shape_world^.draw_cache.cycloid_tool)
-    }
-    if state^.shape_world^.draw_cache.draw_pen {
-        draw_cached_pen_shadow(state, &state^.shape_world^.draw_cache.pen)
-    }
-    if state^.shape_world^.draw_cache.draw_compass {
-        draw_cached_compass_shadow(state, &state^.shape_world^.draw_cache.compass)
-    }
-}
 
 //   Render floor shadows for cached low-layer geometry when any defining point is above the surface.
 //
 // Notes:
 //   - Flat and below-surface geometry draws no shadow.
 //   - Labels are intentionally excluded from the shape-shadow pass.
-draw_shapes_shapes_shadows_cached :: proc(state: ^Euclid_General_State) {
-    for i in 0..<state^.shape_world^.draw_cache.item_count {
-        draw_cached_item_shadow(state, &state^.shape_world^.draw_cache.items[i])
-    }
-}
 
 //   Draw one cached item only when it belongs to the lower geometry layer.
-draw_cached_item_low :: proc(state: ^Euclid_General_State,
-    item: ^shapemodel.Shapes_Draw_Cache_Item) {
-    switch &item_typed in item {
-    case shapemodel.Shapes_Label_Draw:
-        draw_cached_label(state, &item_typed)
-    case shapemodel.Shapes_Point_Draw:
-        draw_cached_point_low(state, &item_typed)
-    case shapemodel.Shapes_Line_Draw:
-        draw_cached_line_low(state, &item_typed)
-    case shapemodel.Shapes_Circle_Draw:
-        draw_cached_circle_low(state, &item_typed)
-    case shapemodel.Shapes_Filled_Circle_Draw:
-        draw_cached_filledcircle_low(state, &item_typed)
-    case shapemodel.Shapes_Curve_Draw:
-        draw_cached_curve_low(state, &item_typed)
-    case shapemodel.Shapes_Polygon_Draw:
-        draw_cached_polygon_low(state, &item_typed)
-    case shapemodel.Shapes_Trochoid_Tool_Draw,
-        shapemodel.Shapes_Cycloid_Tool_Draw:
-    case shapemodel.Shapes_Pen_Draw,
-        shapemodel.Shapes_Compass_Draw:
-    }
-}
 
 //   Draw one cached item's floor shadow when that item can cast one.
-draw_cached_item_shadow :: proc(state: ^Euclid_General_State,
-    item: ^shapemodel.Shapes_Draw_Cache_Item) {
-    switch &item_typed in item {
-    case shapemodel.Shapes_Label_Draw,
-        shapemodel.Shapes_Trochoid_Tool_Draw,
-        shapemodel.Shapes_Cycloid_Tool_Draw,
-        shapemodel.Shapes_Pen_Draw,
-        shapemodel.Shapes_Compass_Draw:
-    case shapemodel.Shapes_Point_Draw:
-        draw_cached_point_shadow(state, &item_typed)
-    case shapemodel.Shapes_Line_Draw:
-        draw_cached_line_shadow(state, &item_typed)
-    case shapemodel.Shapes_Circle_Draw:
-        draw_cached_circle_shadow(state, &item_typed)
-    case shapemodel.Shapes_Filled_Circle_Draw:
-        draw_cached_filledcircle_shadow(state, &item_typed)
-    case shapemodel.Shapes_Curve_Draw:
-        draw_cached_curve_shadow(state, &item_typed)
-    case shapemodel.Shapes_Polygon_Draw:
-        draw_cached_polygon_shadow(state, &item_typed)
-    }
-}
 
 //   Return true when a cached point draw item belongs to the elevated layer.
 draw_cached_point_is_elevated :: #force_inline proc(
@@ -669,96 +554,28 @@ draw_cached_polygon_is_elevated :: #force_inline proc(
 }
 
 //   Draw one cached point only when it belongs to the lower geometry layer.
-draw_cached_point_low :: #force_inline proc(
-    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
-    if !draw_cached_point_is_elevated(p) {
-        draw_cached_point(state, p)
-    }
-}
 
 //   Draw one cached point only when it belongs to the merged higher layer.
-draw_cached_point_high :: #force_inline proc(
-    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
-    if draw_cached_point_is_elevated(p) {
-        draw_cached_point(state, p)
-    }
-}
 
 //   Draw one cached line only when it belongs to the lower geometry layer.
-draw_cached_line_low :: #force_inline proc(
-    state: ^Euclid_General_State, l: ^shapemodel.Shapes_Line_Draw) {
-    draw_cached_line(state, l, false)
-}
 
 //   Draw one cached line only when it belongs to the merged higher layer.
-draw_cached_line_high :: #force_inline proc(
-    state: ^Euclid_General_State, l: ^shapemodel.Shapes_Line_Draw) {
-    draw_cached_line(state, l, true)
-}
 
 //   Draw one cached circle only when it belongs to the lower geometry layer.
-draw_cached_circle_low :: #force_inline proc(
-    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
-    if !draw_cached_circle_is_elevated(c) {
-        draw_cached_circle(state, c)
-    }
-}
 
 //   Draw one cached circle only when it belongs to the merged higher layer.
-draw_cached_circle_high :: #force_inline proc(
-    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
-    if draw_cached_circle_is_elevated(c) {
-        draw_cached_circle(state, c)
-    }
-}
 
 //   Draw one cached filled circle only when it belongs to the lower geometry layer.
-draw_cached_filledcircle_low :: #force_inline proc(
-    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
-    if !draw_cached_filledcircle_is_elevated(c) {
-        draw_cached_filledcircle(state, c)
-    }
-}
 
 //   Draw one cached filled circle only when it belongs to the merged higher layer.
-draw_cached_filledcircle_high :: #force_inline proc(
-    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
-    if draw_cached_filledcircle_is_elevated(c) {
-        draw_cached_filledcircle(state, c)
-    }
-}
 
 // Draw one cached curve only when all of it belongs to the lower geometry layer.
-draw_cached_curve_low :: #force_inline proc(
-    state: ^Euclid_General_State, curve: ^shapemodel.Shapes_Curve_Draw) {
-    if !draw_cached_curve_is_elevated(state, curve) {
-        draw_cached_curve(state, curve, false)
-    }
-}
 
 // Draw one cached curve in the higher layer when any vertex is elevated.
-draw_cached_curve_high :: #force_inline proc(
-    state: ^Euclid_General_State, curve: ^shapemodel.Shapes_Curve_Draw) {
-    if draw_cached_curve_is_elevated(state, curve) {
-        draw_cached_curve(state, curve, true)
-    }
-}
 
 //   Draw one cached polygon only when it belongs to the lower geometry layer.
-draw_cached_polygon_low :: #force_inline proc(
-    state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
-    if !draw_cached_polygon_is_elevated(state, poly) {
-        draw_cached_polygon(state, poly)
-    }
-}
 
 //   Draw one cached polygon only when it belongs to the merged higher layer.
-draw_cached_polygon_high :: #force_inline proc(
-    state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
-    if draw_cached_polygon_is_elevated(state, poly) {
-        draw_cached_polygon(state, poly)
-    }
-}
 
 // Return one planar world-space point on a guide ring.
 trochoid_tool_ring_point :: #force_inline proc(
@@ -866,13 +683,6 @@ shadow_alpha_from_height :: proc(avg_height: f32) -> u8 {
     return u8(atten)
 }
 
-//   Build a shadow color using computed alpha attenuation.
-make_shadow_color :: proc(source: rl.Color, avg_height: f32) -> rl.Color {
-    _ = source
-    a := shadow_alpha_from_height(avg_height)
-    return rl.Color{0, 0, 0, a}
-}
-
 //   Return true when one point should cast a floor shadow.
 shadow_point_is_elevated :: #force_inline proc(point: Vector3) -> bool {
     return point.z > 0
@@ -954,9 +764,11 @@ z_split_clip_segment_halfspace :: #force_inline proc(
 }
 
 //   Apply 0.25x alpha attenuation for lower z-split fragments.
-z_split_lower_fragment_color :: #force_inline proc(color: rl.Color) -> rl.Color {
-    attenuated := u8(math.clamp(int(f32(color.a) * Z_SPLIT_ALPHA_FACTOR + 0.5), 0, 255))
-    return rl.Color{color.r, color.g, color.b, attenuated}
+z_split_lower_fragment_color :: #force_inline proc(
+    draw_color: color.Color_RGBA8) -> color.Color_RGBA8 {
+    attenuated := u8(math.clamp(
+        int(f32(draw_color.a) * Z_SPLIT_ALPHA_FACTOR + 0.5), 0, 255))
+    return {draw_color.r, draw_color.g, draw_color.b, attenuated}
 }
 
 //   Return true when one segment has enough length to render reliably.
@@ -1539,198 +1351,29 @@ project_iso_points_batch_with_components :: proc(
 
 
 //   Render one cached label draw item.
-draw_cached_label :: proc(
-    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Label_Draw) {
-    label := shapemodel.Shape_Label{mime = p.mime, byte_offset = p.source_offset,
-        byte_count = p.source_count, revision = p.source_revision}
-    source, found :=
-        shapemodel.shape_label_source(&state.shape_world.label_store, label)
-    if !found {
-        return
-    }
-    c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
-    resolver := font.cache_terminal_resolver(&state^.font_cache)
-    regular_font := font.cache_borrow(&state.font_cache, .Regular)
-    view_core.ui_text_unshaped_paged({
-        resolver = resolver,
-        key = .Regular,
-        text = source,
-        position = c,
-        color = native.to_raylib_color(p^.color),
-        font = {font = regular_font, font_size = p.brush_size},
-    })
-}
 
 
 //   Render one cached point floor shadow.
-draw_cached_point_shadow :: proc(
-    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
-    if !shadow_point_is_elevated(p^.point1) {
-        return
-    }
-
-    shadow := shadow_to_screen(p^.point1, state)
-    shadow_color := make_shadow_color(native.to_raylib_color(p^.color), p^.point1.z)
-    rl.DrawCircleV(shadow, p^.brush_size, shadow_color)
-}
 
 
 //   Render one cached line floor shadow.
-draw_cached_line_shadow :: proc(
-    state: ^Euclid_General_State, l: ^shapemodel.Shapes_Line_Draw) {
-    line_points := [2]Vector3{l^.point1, l^.point2}
-    if !has_any_elevated_shadow_point(line_points[:]) {
-        return
-    }
-
-    // Shadow pass keeps only the visible-above-plane fragment for split lines.
-    clipped0 := Vector3{}
-    clipped1 := Vector3{}
-    if !z_split_clip_segment_halfspace(
-        l^.point1, l^.point2, true, &clipped0, &clipped1) {
-        return
-    }
-
-    s0 := shadow_to_screen(clipped0, state)
-    s1 := shadow_to_screen(clipped1, state)
-    clipped_points := [2]Vector3{clipped0, clipped1}
-    avg_height := average_shadow_height(clipped_points[:])
-    shadow_color := make_shadow_color(native.to_raylib_color(l^.color), avg_height)
-    thickness := math.max(l^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
-    rl.DrawLineEx(s0, s1, thickness, shadow_color)
-}
 
 // Draw one elevated guide ring as ordinary segmented floor shadows.
-draw_trochoid_tool_ring_shadow :: proc(
-    state: ^Euclid_General_State,
-    center: Vector3,
-    radius, brush_size: f32,
-    color: rl.Color) {
-    previous := trochoid_tool_ring_point(center, radius, 0)
-    for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
-        angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
-        current := trochoid_tool_ring_point(center, radius, angle)
-        line := shapemodel.Shapes_Line_Draw{
-            base = {brush_size = brush_size, color = shapemodel.Color(color)},
-            point1 = previous, point2 = current}
-        draw_cached_line_shadow(state, &line)
-        previous = current
-    }
-}
 
 // Render elevated floor shadows for both guide rings and the orientation handle.
-draw_cached_trochoid_tool_shadow :: proc(
-    state: ^Euclid_General_State,
-    tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
-    if !shadow_point_is_elevated(tool^.fixed_center) &&
-        !shadow_point_is_elevated(tool^.rolling_center) {
-        return
-    }
-    draw_trochoid_tool_ring_shadow(state, tool^.fixed_center,
-        tool^.fixed_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
-    draw_trochoid_tool_ring_shadow(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
-    handle := shapemodel.Shapes_Line_Draw{tool^.base,
-        tool^.handle_start, tool^.handle_finish}
-    draw_cached_line_shadow(state, &handle)
-}
 
 // Render floor shadows for the exact rail, rolling ring, and orientation handle.
-draw_cached_cycloid_tool_shadow :: proc(
-    state: ^Euclid_General_State,
-    tool: ^shapemodel.Shapes_Cycloid_Tool_Draw) {
-    baseline := shapemodel.Shapes_Line_Draw{tool^.base,
-        tool^.baseline_start, tool^.baseline_finish}
-    draw_cached_line_shadow(state, &baseline)
-    draw_trochoid_tool_ring_shadow(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
-    handle := shapemodel.Shapes_Line_Draw{tool^.base,
-        tool^.handle_start, tool^.handle_finish}
-    draw_cached_line_shadow(state, &handle)
-}
 
 // Render floor shadows for every segment in one explicated curve packet.
-draw_cached_curve_shadow :: proc(
-    state: ^Euclid_General_State, curve: ^shapemodel.Shapes_Curve_Draw) {
-    cache := &state^.shape_world^.draw_cache
-    vertices := cache^.curve_vertices[
-        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
-    for index in 1..<len(vertices) {
-        line := shapemodel.Shapes_Line_Draw{
-            curve^.base, vertices[index - 1], vertices[index]}
-        draw_cached_line_shadow(state, &line)
-    }
-}
 
 
 //   Render one cached circle/arc floor shadow.
-draw_cached_circle_shadow :: proc(
-    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
-    if !shadow_point_is_elevated(c^.center) {
-        return
-    }
-
-    geom := circle_arc_geometry(
-        c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
-    thickness := math.max(c^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
-
-    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    circle_arc_sample_world(&geom, arc_world[:])
-
-    for i in 1..=CIRCLE_ARC_SEGMENTS {
-        clipped0 := Vector3{}
-        clipped1 := Vector3{}
-        if !z_split_clip_segment_halfspace(
-            arc_world[i - 1],
-            arc_world[i],
-            true,
-            &clipped0,
-            &clipped1) {
-
-            continue
-        }
-
-        s0 := shadow_to_screen(clipped0, state)
-        s1 := shadow_to_screen(clipped1, state)
-        clipped_points := [2]Vector3{clipped0, clipped1}
-        clipped_avg_height := average_shadow_height(clipped_points[:])
-        clipped_shadow_color := make_shadow_color(
-            native.to_raylib_color(c^.color), clipped_avg_height)
-        rl.DrawLineEx(s0, s1, thickness, clipped_shadow_color)
-    }
-}
 
 
 //   Render one cached filled-circle floor shadow.
-draw_cached_filledcircle_shadow :: proc(
-    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
-    if !shadow_point_is_elevated(c^.center) {
-        return
-    }
-
-    geom := circle_arc_geometry(
-        c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
-    shadow_color := make_shadow_color(native.to_raylib_color(c^.color), c^.center.z)
-
-    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    circle_arc_sample_world(&geom, arc_world[:])
-
-    points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
-    points[0] = shadow_to_screen(geom.center, state)
-    for i in 0..<len(arc_world) {
-        points[i + 1] = shadow_to_screen(arc_world[i], state)
-    }
-
-    rl.DrawTriangleFan(&points[0], len(points), shadow_color)
-}
 
 
 //   Render one cached point draw item.
-draw_cached_point :: proc(
-    state: ^Euclid_General_State, p: ^shapemodel.Shapes_Point_Draw) {
-    c := view_core.iso_to_cartesian(p^.point1, state^.iso_scale^)
-    rl.DrawCircleV(c, p^.brush_size, native.to_raylib_color(p^.color))
-}
 
 // draw_encoded_cached_point encodes one projected cached point.
 draw_encoded_cached_point :: proc(
@@ -1743,25 +1386,6 @@ draw_encoded_cached_point :: proc(
 
 
 //   Render one cached line draw item.
-draw_cached_line :: proc(
-    state: ^Euclid_General_State, l: ^shapemodel.Shapes_Line_Draw, keep_above: bool) {
-    clipped0 := Vector3{}
-    clipped1 := Vector3{}
-    if !z_split_clip_segment_halfspace(
-        l^.point1, l^.point2, keep_above, &clipped0, &clipped1) {
-        return
-    }
-
-    color := l^.color
-    if !keep_above && (z_split_sign(clipped0.z) < 0 || z_split_sign(clipped1.z) < 0) {
-        native_color := z_split_lower_fragment_color(native.to_raylib_color(color))
-        color = shapemodel.Color(native_color)
-    }
-
-    c0 := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
-    c1 := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
-    rl.DrawLineEx(c0, c1, l^.brush_size, native.to_raylib_color(color))
-}
 
 // draw_encoded_cached_line encodes one visible z-clipped cached line fragment.
 draw_encoded_cached_line :: proc(
@@ -1773,7 +1397,7 @@ draw_encoded_cached_line :: proc(
     draw_color := line^.color
     if !keep_above &&
         (z_split_sign(clipped0.z) < 0 || z_split_sign(clipped1.z) < 0) {
-        faded := z_split_lower_fragment_color(native.to_raylib_color(draw_color))
+        faded := z_split_lower_fragment_color(color.Color_RGBA8(draw_color))
         draw_color = shapemodel.Color(faded)
     }
     first := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
@@ -1869,10 +1493,9 @@ draw_encoded_cached_point_shadow :: proc(
     point: ^shapemodel.Shapes_Point_Draw) {
     if !shadow_point_is_elevated(point^.point1) {return}
     screen := shadow_to_screen(point^.point1, state)
-    draw_color := make_shadow_color(
-        native.to_raylib_color(point^.color), point^.point1.z)
+    draw_color := encoded_shadow_color(point^.point1.z)
     _ = native.draw_encoder_circle(encoder, geometry.Vector2(screen),
-        point^.brush_size, color.Color_RGBA8(draw_color))
+        point^.brush_size, draw_color)
 }
 
 // draw_encoded_cached_line_shadow encodes one elevated line floor shadow.
@@ -1885,13 +1508,12 @@ draw_encoded_cached_line_shadow :: proc(
     if !z_split_clip_segment_halfspace(
         line^.point1, line^.point2, true, &clipped0, &clipped1) {return}
     clipped := [2]Vector3{clipped0, clipped1}
-    draw_color := make_shadow_color(native.to_raylib_color(line^.color),
-        average_shadow_height(clipped[:]))
+    draw_color := encoded_shadow_color(average_shadow_height(clipped[:]))
     _ = native.draw_encoder_line(encoder,
         geometry.Vector2(shadow_to_screen(clipped0, state)),
         geometry.Vector2(shadow_to_screen(clipped1, state)),
         math.max(line^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
-        color.Color_RGBA8(draw_color))
+        draw_color)
 }
 
 // draw_encoded_cached_curve_shadow encodes every explicated curve shadow segment.
@@ -1934,8 +1556,7 @@ draw_encoded_cached_filled_circle_shadow :: proc(
     points: [CIRCLE_ARC_SEGMENTS + 1]Vector3
     circle_arc_sample_world(&geometry_value, points[:])
     center := geometry.Vector2(shadow_to_screen(geometry_value.center, state))
-    draw_color := color.Color_RGBA8(make_shadow_color(
-        native.to_raylib_color(circle^.color), circle^.center.z))
+    draw_color := encoded_shadow_color(circle^.center.z)
     for index in 1..<len(points) {
         _ = native.draw_encoder_triangle(encoder, center,
             geometry.Vector2(shadow_to_screen(points[index - 1], state)),
@@ -1956,8 +1577,7 @@ draw_encoded_cached_polygon_shadow :: proc(
     for index in 0..<polygon^.vertex_count {
         projected[index] = shadow_to_screen(vertices[index], state)
     }
-    draw_color := color.Color_RGBA8(make_shadow_color(
-        native.to_raylib_color(polygon^.color), average_shadow_height(vertices)))
+    draw_color := encoded_shadow_color(average_shadow_height(vertices))
     triangles := cache^.polygon_triangles[polygon^.first_triangle:
         polygon^.first_triangle + polygon^.triangle_count]
     for triangle in triangles {
@@ -1974,78 +1594,11 @@ draw_encoded_cached_polygon_shadow :: proc(
 }
 
 // Render every segment in one explicated curve using ordinary line styling.
-draw_cached_curve :: proc(
-    state: ^Euclid_General_State,
-    curve: ^shapemodel.Shapes_Curve_Draw,
-    keep_above: bool) {
-    cache := &state^.shape_world^.draw_cache
-    vertices := cache^.curve_vertices[
-        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
-    for index in 1..<len(vertices) {
-        line := shapemodel.Shapes_Line_Draw{
-            curve^.base, vertices[index - 1], vertices[index]}
-        draw_cached_line(state, &line, keep_above)
-    }
-}
 
 
 //   Render one cached circle/arc draw item.
-draw_cached_circle :: proc(
-    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Circle_Draw) {
-    geom := circle_arc_geometry(
-        c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
-
-    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    circle_arc_sample_world(&geom, arc_world[:])
-
-    xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
-    arc_screen: [CIRCLE_ARC_SEGMENTS + 1]Vector2
-    _ = project_iso_points_batch_with_components(
-        state,
-        Iso_Batch_Project_Params{
-            world_points = arc_world[:],
-            xs = xs[:],
-            ys = ys[:],
-            zs = zs[:],
-            out = arc_screen[:],
-        })
-
-    for i in 1..=CIRCLE_ARC_SEGMENTS {
-        rl.DrawLineEx(arc_screen[i - 1], arc_screen[i], c^.brush_size,
-            native.to_raylib_color(c^.color))
-    }
-}
 
 //   Render one cached filled-circle draw item.
-draw_cached_filledcircle :: proc(
-    state: ^Euclid_General_State, c: ^shapemodel.Shapes_Filled_Circle_Draw) {
-    geom := circle_arc_geometry(
-        c^.center, c^.radius, c^.start_theta, c^.sweep_theta)
-    isocenter := view_core.iso_to_cartesian(geom.center, state^.iso_scale^)
-
-    arc_world: [CIRCLE_ARC_SEGMENTS + 1]Vector3
-    circle_arc_sample_world(&geom, arc_world[:])
-
-    xs, ys, zs: [CIRCLE_ARC_SEGMENTS + 1]f32
-    arc_screen: [CIRCLE_ARC_SEGMENTS + 1]Vector2
-    _ = project_iso_points_batch_with_components(
-        state,
-        Iso_Batch_Project_Params{
-            world_points = arc_world[:],
-            xs = xs[:],
-            ys = ys[:],
-            zs = zs[:],
-            out = arc_screen[:],
-        })
-
-    points: [CIRCLE_ARC_SEGMENTS + 2]rl.Vector2
-    points[0] = isocenter
-    for i in 0..<len(arc_screen) {
-        points[i + 1] = arc_screen[i]
-    }
-
-    rl.DrawTriangleFan(&points[0], len(points), native.to_raylib_color(c^.color))
-}
 
 
 //   Batch-project cached polygon vertices into screen space.
@@ -2073,95 +1626,14 @@ project_cached_polygon_vertices :: #force_inline proc(
 }
 
 //   Draw all cached triangles for a polygon using projected vertex positions.
-draw_cached_polygon_triangles :: #force_inline proc(
-    cache: ^shapemodel.Shapes_Draw_Cache,
-    poly: ^shapemodel.Shapes_Polygon_Draw,
-    projected: []Vector2,
-    color: rl.Color) {
-
-    triangles := cache^.polygon_triangles[
-        poly^.first_triangle:poly^.first_triangle + poly^.triangle_count]
-    for tri in triangles {
-        i0 := tri.a - poly^.first_vertex
-        i1 := tri.b - poly^.first_vertex
-        i2 := tri.c - poly^.first_vertex
-        if i0 < 0 || i0 >= poly^.vertex_count {
-            continue
-        }
-        if i1 < 0 || i1 >= poly^.vertex_count {
-            continue
-        }
-        if i2 < 0 || i2 >= poly^.vertex_count {
-            continue
-        }
-
-        rl.DrawTriangle(projected[i0], projected[i1], projected[i2], color)
-    }
-}
 
 
 //   Render one cached polygon floor shadow.
-draw_cached_polygon_shadow :: proc(
-    state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
-    if poly^.vertex_count < 3 || poly^.triangle_count <= 0 {
-        return
-    }
-
-    cache := &state^.shape_world^.draw_cache
-    vertices := cache^.polygon_vertices[
-        poly^.first_vertex:poly^.first_vertex + poly^.vertex_count]
-    if !has_any_elevated_shadow_point(vertices) {
-        return
-    }
-
-    projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
-    for i in 0..<poly^.vertex_count {
-        projected[i] = shadow_to_screen(vertices[i], state)
-    }
-
-    shadow_color := make_shadow_color(
-        native.to_raylib_color(poly^.color), average_shadow_height(vertices))
-    draw_cached_polygon_triangles(cache, poly, projected[:], shadow_color)
-}
 
 //   Render one cached polygon draw item.
-draw_cached_polygon :: proc(
-    state: ^Euclid_General_State, poly: ^shapemodel.Shapes_Polygon_Draw) {
-    if poly^.vertex_count < 3 || poly^.triangle_count <= 0 {
-        return
-    }
-
-    projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
-    if !project_cached_polygon_vertices(state, poly, projected[:]) {
-        return
-    }
-
-    cache := &state^.shape_world^.draw_cache
-    draw_cached_polygon_triangles(
-        cache, poly, projected[:], native.to_raylib_color(poly^.color))
-}
 
 
 //   Render active-end indicator for cached pen tool.
-draw_cached_pen_active_dot :: proc(
-    state: ^Euclid_General_State, pen: ^shapemodel.Shapes_Pen_Draw) {
-    c0 := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
-    c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
-
-    if pen^.active_child == 1 {
-        active := pen^.color
-        if pen^.has_active_color {
-            active = pen^.active_color
-        }
-        rl.DrawCircleV(c0, pen^.brush_size, native.to_raylib_color(active))
-    } else if pen^.active_child == 2 {
-        active := pen^.color
-        if pen^.has_active_color {
-            active = pen^.active_color
-        }
-        rl.DrawCircleV(c1, pen^.brush_size, native.to_raylib_color(active))
-    }
-}
 
 //   Compute the orthonormal arc basis, radius, and outside sweep for a compass.
 //
@@ -2254,90 +1726,12 @@ build_compass_arc_samples :: proc(
 }
 
 //   Render active-end indicator for cached compass tool.
-draw_cached_compass_active_dot :: proc(
-    state: ^Euclid_General_State, comp: ^shapemodel.Shapes_Compass_Draw) {
-    c0 := view_core.iso_to_cartesian(comp^.joint1, state^.iso_scale^)
-    c2 := view_core.iso_to_cartesian(comp^.joint2, state^.iso_scale^)
-
-    if comp^.active_child == 1 {
-        active := comp^.color
-        if comp^.has_active_color {
-            active = comp^.active_color
-        }
-        rl.DrawCircleV(c0, comp^.brush_size, native.to_raylib_color(active))
-    } else if comp^.active_child == 3 {
-        active := comp^.color
-        if comp^.has_active_color {
-            active = comp^.active_color
-        }
-        rl.DrawCircleV(c2, comp^.brush_size, native.to_raylib_color(active))
-    }
-}
 
 
 //   Render floor shadow for cached pen tool geometry.
-draw_cached_pen_shadow :: proc(
-    state: ^Euclid_General_State, pen: ^shapemodel.Shapes_Pen_Draw) {
-    s0 := shadow_to_screen(pen^.joint1, state)
-    s1 := shadow_to_screen(pen^.joint2, state)
-
-    avg_height := (pen^.joint1.z + pen^.joint2.z) * 0.5
-    shadow_color := make_shadow_color(native.to_raylib_color(pen^.color), avg_height)
-    thickness := math.max(pen^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
-
-    rl.DrawLineEx(s0, s1, thickness, shadow_color)
-}
 
 
 //   Render floor-shadow arc segment outside the compass swing angle.
-draw_outside_arc_compass_shadow_cached :: proc(
-    p0, p1, p2: Vector3, draw: Compass_Arc_Draw) {
-    if draw.brush_size <= 0 {
-        return
-    }
-
-    basis, ok := compass_top_circle_basis(p0, p1, p2)
-    if !ok {
-        return
-    }
-
-    state := draw.state
-    step := basis.theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
-    prev3d := p1 + basis.u * basis.radius
-    prev := shadow_to_screen(prev3d, state)
-
-    for i in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
-        t := step * f32(i)
-        dir := basis.u * math.cos(t) + basis.v * math.sin(t)
-        curr3d := p1 + dir * basis.radius
-        curr := shadow_to_screen(curr3d, state)
-
-        rl.DrawLineEx(prev, curr, draw.brush_size, draw.color)
-        prev = curr
-    }
-}
 
 
 //   Render floor shadow for cached compass tool geometry.
-draw_cached_compass_shadow :: proc(
-    state: ^Euclid_General_State, comp: ^shapemodel.Shapes_Compass_Draw) {
-    s0 := shadow_to_screen(comp^.joint1, state)
-    s1 := shadow_to_screen(comp^.pivot, state)
-    s2 := shadow_to_screen(comp^.joint2, state)
-
-    avg_height := (comp^.joint1.z + comp^.pivot.z + comp^.joint2.z) / 3.0
-    shadow_color := make_shadow_color(native.to_raylib_color(comp^.color), avg_height)
-    thickness := math.max(comp^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
-
-    draw_joint1_last := compass_draw_joint1_leg_last(comp, s0, s1, s2)
-    if draw_joint1_last {
-        rl.DrawLineEx(s1, s2, thickness, shadow_color)
-        rl.DrawLineEx(s0, s1, thickness, shadow_color)
-    } else {
-        rl.DrawLineEx(s0, s1, thickness, shadow_color)
-        rl.DrawLineEx(s1, s2, thickness, shadow_color)
-    }
-
-    draw_outside_arc_compass_shadow_cached(comp^.joint1, comp^.pivot, comp^.joint2,
-        Compass_Arc_Draw{state, thickness, shadow_color})
-}

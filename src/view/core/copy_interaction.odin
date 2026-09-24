@@ -5,10 +5,10 @@ import native "../native"
 import viewmodel "../model"
 
 import dynviewmodel "../../dynview/model"
+import color "../../core/color"
+import geometry "../../core/geometry"
 
 import "../input"
-
-import rl "vendor:raylib"
 
 COPY_ICON_HOVER_SCALE_ADD :: 0.08
 COPY_ICON_PRESS_SCALE_SUB :: 0.16
@@ -21,33 +21,6 @@ COPY_ICON_CLICK_LINGER_SECONDS :: 0.1
 copy_icon_approach :: #force_inline proc(current, target, speed, dt: f32) -> f32 {
     t := clamp(speed * dt, 0.0, 1.0)
     return current + (target - current) * t
-}
-
-//   Draw soft hover backgrounds for copy-enabled dynview blocks.
-draw_copy_hover_backgrounds :: proc(
-    runtime: ^dynviewmodel.Dynview_System,
-    mouse: rl.Vector2) {
-
-    if runtime == nil {
-        return
-    }
-
-    cache := &runtime^.compile_cache
-    if cache^.copy_hit_target_count <= 0 {
-        return
-    }
-
-    hover_bg := rl.Color{UI_BORDER_COLOR.r, UI_BORDER_COLOR.g, UI_BORDER_COLOR.b, 28}
-    for i in 0..<cache^.copy_hit_target_count {
-        target := cache^.copy_hit_targets[i]
-        hovered_block := rl.CheckCollisionPointRec(mouse, rl.Rectangle(target.hover_rect))
-        hovered_icon := rl.CheckCollisionPointRec(mouse, rl.Rectangle(target.rect))
-        if !hovered_block && !hovered_icon {
-            continue
-        }
-
-        rl.DrawRectangleRec(rl.Rectangle(target.hover_rect), hover_bg)
-    }
 }
 
 //   Reset all transient copy-icon animation state for frames without targets.
@@ -63,11 +36,11 @@ copy_icon_reset_animation_state :: proc(runtime: ^dynviewmodel.Dynview_System) {
 //   Return the first copy-icon target under the cursor, or -1 when none match.
 copy_icon_find_hovered_index :: proc(
     cache: ^dynviewmodel.Dynview_Compile_Cache,
-    mouse: rl.Vector2) -> int {
+    mouse: geometry.Vector2) -> int {
 
     for i in 0..<cache^.copy_hit_target_count {
-        if rl.CheckCollisionPointRec(
-            mouse, rl.Rectangle(cache^.copy_hit_targets[i].rect)) {
+        if geometry.rectangle_contains(
+            geometry.Rectangle(cache^.copy_hit_targets[i].rect), mouse) {
             return i
         }
     }
@@ -179,25 +152,24 @@ copy_icon_linger_t :: #force_inline proc(
 }
 
 //   Resolve the foreground color for one copy icon press transition.
-copy_icon_color :: #force_inline proc(press_t: f32) -> rl.Color {
-    color := native.to_raylib_color(UI_TEXT_COLOR)
+copy_icon_color :: #force_inline proc(press_t: f32) -> color.Color_RGBA8 {
+    result := UI_TEXT_COLOR
     if press_t <= 0 {
-        return color
+        return result
     }
     factor := 1.0 - 0.45 * press_t
-    return {u8(f32(BACKGROUND_COLOR.r) * factor),
+    return color.Color_RGBA8{u8(f32(BACKGROUND_COLOR.r) * factor),
         u8(f32(BACKGROUND_COLOR.g) * factor),
         u8(f32(BACKGROUND_COLOR.b) * factor), BACKGROUND_COLOR.a}
 }
 
-//   Draw a copy icon button using shared icon primitives with hover/press feedback.
-draw_copy_icon_button :: proc(
-    rect: rl.Rectangle,
-    hover_t: f32,
-    press_t: f32) {
+// Encode a copy icon button with hover and press feedback.
+encode_copy_icon_button :: proc(
+    encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
+    hover_t, press_t: f32) {
 
     slot_rect := rect
-    if slot_rect.width <= 0 || slot_rect.height <= 0 {
+    if encoder == nil || slot_rect.width <= 0 || slot_rect.height <= 0 {
         return
     }
 
@@ -205,7 +177,7 @@ draw_copy_icon_button :: proc(
     use_press_t := clamp(press_t, 0.0, 1.0)
 
     if use_press_t > 0 {
-        rl.DrawRectangleRec(slot_rect, native.to_raylib_color(UI_BORDER_COLOR))
+        _ = native.draw_encoder_rectangle(encoder, slot_rect, UI_BORDER_COLOR)
     }
 
     scale := 1.0 + COPY_ICON_HOVER_SCALE_ADD * use_hover_t -
@@ -214,19 +186,35 @@ draw_copy_icon_button :: proc(
     cy := slot_rect.y + slot_rect.height * 0.5
     icon_w := slot_rect.width * max(0.4, scale)
     icon_h := slot_rect.height * max(0.4, scale)
-    icon_rect := rl.Rectangle{cx - icon_w * 0.5, cy - icon_h * 0.5, icon_w, icon_h}
+    icon_rect := geometry.Rectangle{
+        cx - icon_w * 0.5, cy - icon_h * 0.5, icon_w, icon_h}
 
     if use_press_t > 0 {
         icon_rect.x += 0.5
         icon_rect.y += 0.5
     }
 
-    draw_copy_icon(icon_rect, copy_icon_color(use_press_t))
+    icon_color := copy_icon_color(use_press_t)
+    back := geometry.Rectangle{
+        icon_rect.x + icon_rect.width * 0.32,
+        icon_rect.y + icon_rect.height * 0.18,
+        icon_rect.width * 0.5,
+        icon_rect.height * 0.62,
+    }
+    front := geometry.Rectangle{
+        icon_rect.x + icon_rect.width * 0.16,
+        icon_rect.y + icon_rect.height * 0.3,
+        icon_rect.width * 0.5,
+        icon_rect.height * 0.62,
+    }
+    _ = native.draw_encoder_rectangle_outline(encoder, back, 1, icon_color)
+    _ = native.draw_encoder_rectangle_outline(encoder, front, 1, icon_color)
 }
 
-//   Draw one copy icon with prepared hover and click feedback.
-copy_icon_draw_target :: proc(
+// Encode one copy icon with prepared hover and click feedback.
+encode_copy_icon_target :: proc(
     runtime: ^dynviewmodel.Dynview_System,
+    encoder: ^native.Draw_Encoder,
     target: dynviewmodel.Dynview_Copy_Hit_Target) {
     is_hover_target := runtime^.copy_icon_hover_active &&
         runtime^.copy_icon_hover_block_id == target.block_id
@@ -251,7 +239,8 @@ copy_icon_draw_target :: proc(
 
     press_visual := max(press_t, copy_icon_linger_t(runtime, is_linger_target))
 
-    draw_copy_icon_button(rl.Rectangle(target.rect), hover_t, press_visual)
+    encode_copy_icon_button(
+        encoder, geometry.Rectangle(target.rect), hover_t, press_visual)
 }
 
 //   Resolve copy hover, shared capture, clipboard publication, and transitions.
@@ -268,7 +257,7 @@ prepare_copy_icons :: proc(
         return false
     }
 
-    mouse := rl.Vector2{
+    mouse := geometry.Vector2{
         mouse_input.mouse_position.x, mouse_input.mouse_position.y}
 
     hovered_index := copy_icon_find_hovered_index(cache, mouse)
@@ -316,22 +305,20 @@ copy_target_payload :: proc(
         target.payload_offset:target.payload_offset + target.payload_len])
 }
 
-//   Draw per-block copy icons and return whether one was clicked.
-draw_copy_icons :: proc(
+// Encode per-block copy affordances from prepared interaction state.
+draw_encoded_copy_icons :: proc(
     runtime: ^dynviewmodel.Dynview_System,
-    panel: rl.Rectangle) {
+    encoder: ^native.Draw_Encoder) {
 
-    if runtime == nil {
+    if runtime == nil || encoder == nil {
         return
     }
-
-    _ = panel
 
     cache := &runtime^.compile_cache
     if cache^.copy_hit_target_count <= 0 {
         return
     }
     for target in cache^.copy_hit_targets[:cache^.copy_hit_target_count] {
-        copy_icon_draw_target(runtime, target)
+        encode_copy_icon_target(runtime, encoder, target)
     }
 }

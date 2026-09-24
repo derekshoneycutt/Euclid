@@ -528,6 +528,17 @@ function collect_runtime_libs(binary_path::String)
     return String[]
 end
 
+"""Reject any measured runtime dependency whose library name identifies Raylib or rlgl."""
+function require_zero_raylib_runtime(runtime_libs, binary_path::String)
+    forbidden = filter(runtime_libs) do library
+        name = lowercase(basename(String(library)))
+        occursin("raylib", name) || occursin("rlgl", name)
+    end
+    isempty(forbidden) && return nothing
+    error("Raylib/rlgl runtime dependency detected for $(binary_path): " *
+        join(forbidden, ", "))
+end
+
 """Collect direct Julia package dependencies from a Julia project environment."""
 function collect_julia_packages(julia_project_dir::String)
     if Sys.which("julia") === nothing
@@ -676,6 +687,7 @@ function write_runtime_sbom(
 
     serial_uuid = runtime_sbom_serial_uuid()
     runtime_libs = collect_runtime_libs(binary_path)
+    require_zero_raylib_runtime(runtime_libs, binary_path)
     julia_packages = collect_julia_packages(julia_project_dir)
 
     bom = runtime_sbom_document(
@@ -876,7 +888,6 @@ function build_odin(
         error("Build failed.")
     end
 
-    remove_staged_raylib(dirname(app_binary_path(debug)))
     debug && write_debug_environment(native_runtime_dirs())
 
     return nothing
@@ -892,16 +903,6 @@ function write_debug_environment(
         environment.second
     escaped = replace(value, '\\' => "\\\\", '"' => "\\\"")
     write(path, "$(environment.first)=\"$escaped\"\n")
-    return nothing
-end
-
-"""Remove stale generated Raylib libraries from one executable directory."""
-function remove_staged_raylib(destination::String)
-    for filename in (
-        "libraylib.so.600", "libraylib.600.dylib", "raylib.dll")
-        path = joinpath(destination, filename)
-        (ispath(path) || islink(path)) && rm(path; force=true)
-    end
     return nothing
 end
 
@@ -955,7 +956,8 @@ function build_harness(julia_linker_flags::String)
     print_captured_output("stdout:", build_result.stdout)
     print_captured_output("stderr:", build_result.stderr)
     build_result.exit_code == 0 || error("Harness build failed.")
-    remove_staged_raylib(dirname(HARNESS_BINARY_PATH))
+    require_zero_raylib_runtime(
+        collect_runtime_libs(HARNESS_BINARY_PATH), HARNESS_BINARY_PATH)
 
     return nothing
 end
@@ -1405,8 +1407,6 @@ function run_plan_build(
             julia_flags, command.debug, command.strict)
         build_elapsed_ns = UInt64(time_ns() - build_started)
         println("Build exited $(build_result.exit_code)")
-        build_result.exit_code == 0 &&
-            remove_staged_raylib(dirname(app_binary_path(command.debug)))
         return build_result, build_elapsed_ns
     end
     build_odin(julia_flags, command.debug, command.strict)

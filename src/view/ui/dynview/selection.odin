@@ -5,18 +5,15 @@ import dynviewmodel "../../../dynview/model"
 
 import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
+import geometry "../../../core/geometry"
 import "../../input"
 
 import "core:math"
 import "core:strings"
 
-import rl "vendor:raylib"
-
-DYNVIEW_SELECTION_COLOR :: rl.Color{86, 105, 122, 150}
-
 // Group one presentation viewport and its fallback typography for selection.
 Dynview_Selection_View :: struct {
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     scroll_y: f32,
     text_padding: f32,
     row_height: f32,
@@ -150,7 +147,7 @@ dynview_selection_reconcile :: proc(
 // Return the screen-space rectangle for one semantic document selection target.
 dynview_document_target_rect :: #force_inline proc(
     target: dynviewmodel.Dynview_Document_Layout_Copy_Target,
-    view: Dynview_Selection_View) -> rl.Rectangle {
+    view: Dynview_Selection_View) -> geometry.Rectangle {
 
     return {
         view.panel.x+view.text_padding+target.x,
@@ -162,7 +159,7 @@ dynview_document_target_rect :: #force_inline proc(
 
 // Return squared distance from one point to the nearest point in a rectangle.
 dynview_selection_rect_distance_squared :: #force_inline proc(
-    point: rl.Vector2, rect: rl.Rectangle) -> f32 {
+    point: geometry.Vector2, rect: geometry.Rectangle) -> f32 {
 
     dx := max(rect.x-point.x, max(point.x-(rect.x+rect.width), 0))
     dy := max(rect.y-point.y, max(point.y-(rect.y+rect.height), 0))
@@ -173,7 +170,7 @@ dynview_selection_rect_distance_squared :: #force_inline proc(
 dynview_document_hit_boundary :: proc(
     targets: []dynviewmodel.Dynview_Document_Layout_Copy_Target,
     view: Dynview_Selection_View,
-    point: rl.Vector2) -> dynviewmodel.Dynview_Selection_Position {
+    point: geometry.Vector2) -> dynviewmodel.Dynview_Selection_Position {
 
     if len(targets) == 0 {return {}}
     nearest := 0
@@ -208,7 +205,7 @@ dynview_text_byte_boundary :: proc(text: string, unit_index: int) -> int {
 dynview_wrapped_hit_boundary :: proc(
     text: string,
     view: Dynview_Selection_View,
-    point: rl.Vector2) -> dynviewmodel.Dynview_Selection_Position {
+    point: geometry.Vector2) -> dynviewmodel.Dynview_Selection_Position {
 
     max_chars := dyncore.chars_per_text_row(
         view.panel.width-view.text_padding*2, view.wrap_advance)
@@ -239,7 +236,7 @@ dynview_selection_hit_boundary :: proc(
     runtime: ^dynviewmodel.Dynview_System,
     content: Dynview_Selection_Content,
     view: Dynview_Selection_View,
-    point: rl.Vector2) -> dynviewmodel.Dynview_Selection_Position {
+    point: geometry.Vector2) -> dynviewmodel.Dynview_Selection_Position {
 
     switch content.mode {
     case .Semantic_Document:
@@ -259,10 +256,11 @@ dynview_selection_hit_boundary :: proc(
 
 // Report whether a pointer press belongs to the existing exact-source icon.
 dynview_selection_hits_copy_icon :: proc(
-    runtime: ^dynviewmodel.Dynview_System, point: rl.Vector2) -> bool {
+    runtime: ^dynviewmodel.Dynview_System, point: geometry.Vector2) -> bool {
     if runtime == nil {return false}
     for target in runtime^.compile_cache.copy_hit_targets {
-        if rl.CheckCollisionPointRec(point, rl.Rectangle(target.rect)) {return true}
+        if geometry.rectangle_contains(
+            geometry.Rectangle(target.rect), point) {return true}
     }
     return false
 }
@@ -280,9 +278,9 @@ dynview_selection_update_mouse :: proc(
     runtime, selection := update.runtime, update.selection
     owner, content := update.press_owner, update.content
     view, frame := update.view, update.frame
-    point := rl.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    point := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
     if .Left in frame.mouse_pressed && !owner^.active && content.unit_count > 0 &&
-        rl.CheckCollisionPointRec(point, view.panel) &&
+        geometry.rectangle_contains(view.panel, point) &&
         !dynview_selection_hits_copy_icon(runtime, point) {
         position := dynview_selection_hit_boundary(runtime, content, view, point)
         selection^.anchor, selection^.head = position, position
@@ -346,7 +344,7 @@ dynview_selection_text :: proc(
 // Return the visible bounds occupied by the legacy standalone presentation layout.
 dynview_atomic_selection_rect :: proc(
     runtime: ^dynviewmodel.Dynview_System,
-    view: Dynview_Selection_View) -> (rl.Rectangle, bool) {
+    view: Dynview_Selection_View) -> (geometry.Rectangle, bool) {
 
     cache := &runtime^.compile_cache
     if cache^.layout_item_count <= 0 {return {}, false}
@@ -369,73 +367,4 @@ dynview_atomic_selection_rect :: proc(
             f32(item.row_span)*cache^.last_cell_height))
     }
     return {left, top, max(0, right-left), max(0, bottom-top)}, true
-}
-
-// Draw selected wrapped fallback codepoints one visible row at a time.
-dynview_selection_draw_wrapped :: proc(
-    selection: dynviewmodel.Dynview_Selection_State,
-    view: Dynview_Selection_View) {
-
-    start, end := dynview_selection_ordered(selection.anchor, selection.head)
-    start_byte := dynview_text_byte_boundary(view.fallback_text, start.unit_index)
-    end_byte := dynview_text_byte_boundary(view.fallback_text, end.unit_index)
-    max_chars := dyncore.chars_per_text_row(
-        view.panel.width-view.text_padding*2, view.wrap_advance)
-    row_start, row := 0, 0
-    for row_start < len(view.fallback_text) {
-        span := dyncore.next_wrapped_text_span(view.fallback_text, row_start, max_chars)
-        selected_start := max(start_byte, span.line_start)
-        selected_end := min(end_byte, span.line_end)
-        if selected_start < selected_end {
-            x_units := dyncore.text_codepoint_count_span(
-                view.fallback_text, span.line_start, selected_start)
-            width_units := dyncore.text_codepoint_count_span(
-                view.fallback_text, selected_start, selected_end)
-            rl.DrawRectangleRec({
-                view.panel.x+view.text_padding+f32(x_units)*view.wrap_advance,
-                view.panel.y+view.text_padding+f32(row)*view.row_height-view.scroll_y,
-                f32(width_units)*view.wrap_advance,
-                view.row_height,
-            }, DYNVIEW_SELECTION_COLOR)
-        }
-        if span.next_start <= row_start {break}
-        row_start, row = span.next_start, row+1
-    }
-}
-
-// Draw selected semantic targets as clipped screen-space background rectangles.
-dynview_selection_draw_document :: proc(
-    runtime: ^dynviewmodel.Dynview_System,
-    selection: dynviewmodel.Dynview_Selection_State,
-    view: Dynview_Selection_View) {
-
-    start, end := dynview_selection_ordered(selection.anchor, selection.head)
-    targets := runtime^.compile_cache.document_layout_copy_targets
-    if start.unit_index < 0 || end.unit_index > len(targets) {return}
-    for target in targets[start.unit_index:end.unit_index] {
-        rect := dynview_document_target_rect(target, view)
-        rl.DrawRectangleRec(rect, DYNVIEW_SELECTION_COLOR)
-    }
-}
-
-// Draw one active selection behind the presentation content.
-dynview_selection_draw :: proc(
-    runtime: ^dynviewmodel.Dynview_System,
-    selection: dynviewmodel.Dynview_Selection_State,
-    view: Dynview_Selection_View) {
-
-    if !selection.active && !selection.dragging {return}
-    switch selection.mode {
-    case .Semantic_Document:
-        dynview_selection_draw_document(runtime, selection, view)
-    case .Atomic_Source:
-        start, end := dynview_selection_ordered(selection.anchor, selection.head)
-        if start.unit_index == 0 && end.unit_index == 1 {
-            rect, ok := dynview_atomic_selection_rect(runtime, view)
-            if ok {rl.DrawRectangleRec(rect, DYNVIEW_SELECTION_COLOR)}
-        }
-    case .Wrapped_Text:
-        dynview_selection_draw_wrapped(selection, view)
-    case .None:
-    }
 }

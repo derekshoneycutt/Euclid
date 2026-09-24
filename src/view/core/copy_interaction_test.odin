@@ -4,13 +4,12 @@ import viewmodel "../model"
 
 import dynviewmodel "../../dynview/model"
 
+import geometry "../../core/geometry"
 import storage "../../core/storage"
 
 
 import "core:mem"
 import "core:testing"
-
-import rl "vendor:raylib"
 
 //   Verify hover and press ownership retain the selected arena-backed target identity.
 @(test)
@@ -35,7 +34,7 @@ copy_interaction_tracks_hovered_and_pressed_target :: proc(t: ^testing.T) {
         &cache^.copy_hit_target_builder)
     cache^.copy_hit_target_count = 1
 
-    hovered := copy_icon_find_hovered_index(cache, rl.Vector2{12, 22})
+    hovered := copy_icon_find_hovered_index(cache, geometry.Vector2{12, 22})
     copy_icon_update_hover_state(runtime, cache, hovered)
     owner: viewmodel.Ui_Press_Owner_State
     copy_icon_begin_press_if_hovered(runtime, cache, hovered, {

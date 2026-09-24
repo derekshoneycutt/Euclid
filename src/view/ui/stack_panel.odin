@@ -1,6 +1,6 @@
 package ui
 
-import rl "vendor:raylib"
+import geometry "../../core/geometry"
 
 Stack_Axis :: enum {
     X,
@@ -11,7 +11,7 @@ Stack_Panel_Cursor :: struct {
     offset: f32,
     segment_index: int,
     has_used_rect: bool,
-    used_rect: rl.Rectangle,
+    used_rect: geometry.Rectangle,
 }
 
 Stack_Panel_Params :: struct {
@@ -19,7 +19,7 @@ Stack_Panel_Params :: struct {
     origin_y: f32,
     axis: Stack_Axis,
     direction_sign: int,
-    rect: rl.Rectangle,
+    rect: geometry.Rectangle,
     can_expand: bool,
     segment_size_is_set: bool,
     segment_size: f32,
@@ -28,9 +28,9 @@ Stack_Panel_Params :: struct {
 }
 
 Stack_Panel_Result :: struct {
-    segment_rect: rl.Rectangle,
+    segment_rect: geometry.Rectangle,
     cursor_out: Stack_Panel_Cursor,
-    stack_used_rect: rl.Rectangle,
+    stack_used_rect: geometry.Rectangle,
 }
 
 //   Create a zeroed stack cursor for the first placement in a stack sequence.
@@ -47,17 +47,28 @@ stack_panel_direction_sign :: #force_inline proc(direction_sign: int) -> f32 {
 }
 
 //   Clamp rectangle on Y axis against bounds using intersection semantics.
-stack_panel_clamp_y :: #force_inline proc(rect, bounds: rl.Rectangle) -> rl.Rectangle {
+stack_panel_clamp_y :: #force_inline proc(
+    rect, bounds: geometry.Rectangle) -> geometry.Rectangle {
     top := max(rect.y, bounds.y)
     bottom := min(rect.y + rect.height, bounds.y + bounds.height)
-    return rl.Rectangle{rect.x, top, rect.width, max(0.0, bottom - top)}
+    return geometry.Rectangle{rect.x, top, rect.width, max(0.0, bottom - top)}
 }
 
 //   Clamp rectangle on X axis against bounds using intersection semantics.
-stack_panel_clamp_x :: #force_inline proc(rect, bounds: rl.Rectangle) -> rl.Rectangle {
+stack_panel_clamp_x :: #force_inline proc(
+    rect, bounds: geometry.Rectangle) -> geometry.Rectangle {
     left := max(rect.x, bounds.x)
     right := min(rect.x + rect.width, bounds.x + bounds.width)
-    return rl.Rectangle{left, rect.y, max(0.0, right - left), rect.height}
+    return geometry.Rectangle{left, rect.y, max(0.0, right - left), rect.height}
+}
+
+// Clamp negative extents without changing the stack origin.
+stack_panel_clamp_nonnegative :: #force_inline proc(
+    rect: geometry.Rectangle) -> geometry.Rectangle {
+    result := rect
+    result.width = max(result.width, 0)
+    result.height = max(result.height, 0)
+    return result
 }
 
 //   Resolve the segment size from optional fixed size or caller-provided extent.
@@ -72,7 +83,7 @@ stack_panel_segment_size :: #force_inline proc(params: Stack_Panel_Params) -> f3
 //   Expand used geometry to include the latest segment rectangle.
 stack_panel_accumulate_used_rect :: #force_inline proc(
     cursor_in: Stack_Panel_Cursor,
-    segment_rect: rl.Rectangle) -> (bool, rl.Rectangle) {
+    segment_rect: geometry.Rectangle) -> (bool, geometry.Rectangle) {
 
     if !cursor_in.has_used_rect {
         return true, segment_rect
@@ -83,17 +94,18 @@ stack_panel_accumulate_used_rect :: #force_inline proc(
     top := min(prev.y, segment_rect.y)
     right := max(prev.x + prev.width, segment_rect.x + segment_rect.width)
     bottom := max(prev.y + prev.height, segment_rect.y + segment_rect.height)
-    return true, rl.Rectangle{left, top, max(0.0, right - left), max(0.0, bottom - top)}
+    return true, geometry.Rectangle{
+        left, top, max(0.0, right - left), max(0.0, bottom - top)}
 }
 
 //   Compute the segment rect along the Y axis with clamping.
 stack_panel_segment_rect_y :: proc(
     params: Stack_Panel_Params,
-    bounds: rl.Rectangle,
+    bounds: geometry.Rectangle,
     direction: f32,
-    segment_size: f32) -> rl.Rectangle {
+    segment_size: f32) -> geometry.Rectangle {
 
-    segment_rect := rl.Rectangle{}
+    segment_rect := geometry.Rectangle{}
     segment_rect.x = params.origin_x
     segment_rect.width = bounds.width
     segment_rect.height = segment_size
@@ -113,11 +125,11 @@ stack_panel_segment_rect_y :: proc(
 //   Compute the segment rect along the X axis with clamping.
 stack_panel_segment_rect_x :: proc(
     params: Stack_Panel_Params,
-    bounds: rl.Rectangle,
+    bounds: geometry.Rectangle,
     direction: f32,
-    segment_size: f32) -> rl.Rectangle {
+    segment_size: f32) -> geometry.Rectangle {
 
-    segment_rect := rl.Rectangle{}
+    segment_rect := geometry.Rectangle{}
     segment_rect.y = params.origin_y
     segment_rect.height = bounds.height
     segment_rect.width = segment_size
@@ -136,11 +148,11 @@ stack_panel_segment_rect_x :: proc(
 
 //   Resolve one stack segment placement and advance cursor state.
 stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Result {
-    bounds := clamp_non_negative_rect(params.rect)
+    bounds := stack_panel_clamp_nonnegative(params.rect)
     direction := stack_panel_direction_sign(params.direction_sign)
     segment_size := stack_panel_segment_size(params)
 
-    segment_rect := rl.Rectangle{}
+    segment_rect := geometry.Rectangle{}
     switch params.axis {
     case .Y:
         segment_rect = stack_panel_segment_rect_y(params, bounds, direction,
@@ -150,7 +162,7 @@ stack_panel_place_segment :: proc(params: Stack_Panel_Params) -> Stack_Panel_Res
             segment_size)
     }
 
-    segment_rect = clamp_non_negative_rect(segment_rect)
+    segment_rect = stack_panel_clamp_nonnegative(segment_rect)
     has_used_rect, used_rect :=
         stack_panel_accumulate_used_rect(params.cursor_in, segment_rect)
 

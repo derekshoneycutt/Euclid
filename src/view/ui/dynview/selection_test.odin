@@ -2,12 +2,11 @@ package ui_dynview
 
 import viewmodel "../../model"
 import dynviewmodel "../../../dynview/model"
+import geometry "../../../core/geometry"
 
 import "core:testing"
 
 import input "../../input"
-
-import rl "vendor:raylib"
 
 // Verify selection boundaries normalize forward and reverse drags.
 @(test)
@@ -149,11 +148,11 @@ dynview_selection_test_hits_semantic_boundaries :: proc(t: ^testing.T) {
     }
 
     testing.expect_value(t, dynview_document_hit_boundary(
-        targets, view, rl.Vector2{106, 56}).unit_index, 0)
+        targets, view, geometry.Vector2{106, 56}).unit_index, 0)
     testing.expect_value(t, dynview_document_hit_boundary(
-        targets, view, rl.Vector2{112, 56}).unit_index, 1)
+        targets, view, geometry.Vector2{112, 56}).unit_index, 1)
     testing.expect_value(t, dynview_document_hit_boundary(
-        targets, view, rl.Vector2{129, 56}).unit_index, 2)
+        targets, view, geometry.Vector2{129, 56}).unit_index, 2)
 }
 
 // Verify content revision and mode changes retire stale logical boundaries.

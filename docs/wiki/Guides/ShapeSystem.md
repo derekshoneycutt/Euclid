@@ -44,7 +44,7 @@ This guide describes four contracts that must remain aligned:
 | Animation query snapshot | Julia tick slot | Immutable for one asynchronous callback |
 | Scene command batch | Julia tick slot | Appended by Julia callback, validated and committed by display |
 | Draw cache storage | `Shape_World` | Exclusively lent to the frame-preparation worker until join |
-| Raylib resources | Display thread | Drawing and shutdown only |
+| SDL_GPU resources | Display thread | Drawing and shutdown only |
 
 Canonical ownership does not imply that every computation runs on the display thread.
 The owner lends non-overlapping mutation capabilities to finite workers, then joins them
@@ -374,7 +374,7 @@ and deterministic ordering behavior.
 The frame-preparation worker is the only writer to the cache during its task window. The
 display thread waits for the complete preparation fence, then reads initialized packet
 prefixes for low geometry, merged high geometry, shape shadows, tool shadows, and
-pen-polygon crossing behavior. Raylib calls occur only on the display thread.
+pen-polygon crossing behavior. The display thread encodes and submits those packets.
 
 Animation rewind begins by zeroing all packet frontiers and tool flags. This prevents a
 draw item, especially a label descriptor, from naming canonical storage that is about to

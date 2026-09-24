@@ -15,8 +15,6 @@ import "../../core"
 import geometry "../../core/geometry"
 import "core:fmt"
 
-import rl "vendor:raylib"
-
 TREE_PANEL_PADDING :: 10
 WORLD_MIN_WIDTH :: 320
 WORLD_MIN_HEIGHT :: 240
@@ -142,8 +140,9 @@ Ui_Layout_Interaction_Preparation :: struct {
     presentation: Presentation_Preparation,
 }
 
-// Convert one portable screen position for immediate use by Raylib UI APIs.
-input_frame_mouse_position :: #force_inline proc(frame: Input_Frame) -> rl.Vector2 {
+// Convert one portable screen position for UI geometry operations.
+input_frame_mouse_position :: #force_inline proc(
+    frame: Input_Frame) -> geometry.Vector2 {
     return {frame.mouse_position.x, frame.mouse_position.y}
 }
 
@@ -163,7 +162,8 @@ input_frame_left_released :: #force_inline proc(frame: Input_Frame) -> bool {
 }
 
 //   Clamp a rectangle so width and height are never negative.
-clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
+clamp_non_negative_rect :: #force_inline proc(
+    rect: geometry.Rectangle) -> geometry.Rectangle {
     clamped := rect
     if clamped.width < 0 {
         clamped.width = 0
@@ -246,14 +246,6 @@ ui_apply_window_metrics :: proc(
     return changed || transitioned
 }
 
-// Read the current positive logical Raylib extent for frame geometry.
-ui_current_window_metrics :: proc() -> viewmodel.Ui_Window_Metrics {
-    return {
-        width = int(max(i32(1), rl.GetScreenWidth())),
-        height = int(max(i32(1), rl.GetScreenHeight())),
-    }
-}
-
 // Prepare panel geometry while preserving capture identity from frame start.
 prepare_ui_geometry :: proc(
     state: ^core.Euclid_General_State,
@@ -277,7 +269,7 @@ prepare_ui_geometry :: proc(
     view_core.fit_iso_scale_to_viewport(
         state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
-    text_panel := view_text_content_panel(rl.Rectangle(regions.text_rect))
+    text_panel := view_text_content_panel(regions.text_rect)
     dynview.track_panel(&state^.dynview, geometry.Rectangle(text_panel))
     dynview.track_font(
         &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
@@ -308,13 +300,13 @@ draw_encoded_panel_geometry :: proc(
         f32(window.width) - regions.world_rect.width, f32(window.height),
     }, UI_BACK_COLOR)
     draw_encoded_presentation_geometry(
-        state, encoder, rl.Rectangle(regions.text_rect))
+        state, encoder, regions.text_rect)
     draw_encoded_accordion_geometry(state, encoder)
 }
 
 // draw_encoded_disclosure encodes one collapsed or expanded accordion chevron.
 draw_encoded_disclosure :: proc(
-    encoder: ^native.Draw_Encoder, rectangle: rl.Rectangle,
+    encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle,
     expanded: bool) {
     center := geometry.Vector2{rectangle.x + rectangle.width * 0.5,
         rectangle.y + rectangle.height * 0.5}
@@ -338,27 +330,32 @@ draw_encoded_disclosure :: proc(
 draw_encoded_accordion_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
     runtime := &state^.ui_runtime
-    panel := rl.Rectangle(runtime^.ui_regions.accordion_rect)
+    panel := runtime^.ui_regions.accordion_rect
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(panel), BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
         encoder, geometry.Rectangle(panel), 1, UI_BORDER_COLOR)
     sections := accordion_sections_for_layout(
         runtime^.current_layout_mode, "Animation")
-    layout := accordion_layout(panel, sections, runtime^.active_accordion_section)
+    layout := accordion_layout(
+        geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(layout.content), UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
         encoder, geometry.Rectangle(layout.content), 1, UI_BORDER_COLOR)
     switch runtime^.active_accordion_section {
     case .View:
-        draw_encoded_presentation_geometry(state, encoder, layout.content)
+        draw_encoded_presentation_geometry(
+            state, encoder, geometry.Rectangle(layout.content))
     case .Library:
-        draw_encoded_tree_geometry(state, encoder, layout.content)
+        draw_encoded_tree_geometry(
+            state, encoder, geometry.Rectangle(layout.content))
     case .Save_Gif:
-        draw_encoded_gif_geometry(state, encoder, layout.content)
+        draw_encoded_gif_geometry(
+            state, encoder, geometry.Rectangle(layout.content))
     case .Settings:
-        draw_encoded_settings_geometry(state, encoder, layout.content)
+        draw_encoded_settings_geometry(
+            state, encoder, geometry.Rectangle(layout.content))
     }
     for index in 0..<sections.count {
         header := layout.headers[index]
@@ -370,9 +367,9 @@ draw_encoded_accordion_geometry :: proc(
         _ = native.draw_encoder_rectangle_outline(
             encoder, geometry.Rectangle(header), 1, UI_BORDER_COLOR)
         icon_size := min(ACCORDION_DISCLOSURE_SIZE, header.height)
-        icon := rl.Rectangle{header.x + ACCORDION_HEADER_PADDING,
+        icon := geometry.Rectangle{header.x + ACCORDION_HEADER_PADDING,
             header.y + (header.height - icon_size) * 0.5, icon_size, icon_size}
-        draw_encoded_disclosure(encoder, icon, expanded)
+        draw_encoded_disclosure(encoder, geometry.Rectangle(icon), expanded)
     }
 }
 
@@ -388,7 +385,7 @@ draw_encoded_label :: proc(
         key = .Regular,
         text = text,
         position = {x, y},
-        color = native.to_raylib_color(UI_TEXT_COLOR),
+        color = UI_TEXT_COLOR,
         font = view_core.ui_text_font(face),
     })
 }
@@ -397,10 +394,11 @@ draw_encoded_label :: proc(
 draw_encoded_panel_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
     runtime := &state^.ui_runtime
-    panel := rl.Rectangle(runtime^.ui_regions.accordion_rect)
+    panel := runtime^.ui_regions.accordion_rect
     sections := accordion_sections_for_layout(
         runtime^.current_layout_mode, selected_animation_title(state))
-    layout := accordion_layout(panel, sections, runtime^.active_accordion_section)
+    layout := accordion_layout(
+        geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
     for index in 0..<sections.count {
         header := layout.headers[index]
         draw_encoded_label(state, encoder, sections.items[index].label,
@@ -409,9 +407,13 @@ draw_encoded_panel_text :: proc(
             header.y + (header.height - TREE_FONT_SIZE) * 0.5)
     }
     switch runtime^.active_accordion_section {
-    case .Library: draw_encoded_tree_text(state, encoder, layout.content)
-    case .Save_Gif: draw_encoded_gif_text(state, encoder, layout.content)
-    case .Settings: draw_encoded_settings_text(state, encoder, layout.content)
+    case .Library:
+        draw_encoded_tree_text(state, encoder, geometry.Rectangle(layout.content))
+    case .Save_Gif:
+        draw_encoded_gif_text(state, encoder, geometry.Rectangle(layout.content))
+    case .Settings:
+        draw_encoded_settings_text(
+            state, encoder, geometry.Rectangle(layout.content))
     case .View:
     }
     if runtime^.display_fps {
@@ -474,7 +476,7 @@ prepare_ui_controls :: proc(
     result.animation_controls = prepare_animation_controls(state, animation_frame)
     accordion_panel := state^.ui_runtime.ui_regions.accordion_rect
     result.accordion = prepare_accordion_view(
-        state, rl.Rectangle(accordion_panel), routed_frame)
+        state, geometry.Rectangle(accordion_panel), routed_frame)
     content_panel := result.accordion.layout.content
     switch state^.ui_runtime.active_accordion_section {
     case .View:
@@ -482,16 +484,18 @@ prepare_ui_controls :: proc(
         result.tree = prepare_tree_list_panel({
             ji = state^.julia_interface,
             ui_runtime = &state^.ui_runtime,
-            list_panel = content_panel,
+            list_panel = geometry.Rectangle(content_panel),
             mouse_input = routed_frame,
             scroll_y = &state^.ui_runtime.tree_scroll_y,
             font = view_font.cache_borrow(&state^.font_cache, .Regular),
             font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
         })
     case .Save_Gif:
-        result.gif = prepare_gif_view(state, content_panel, routed_frame)
+        result.gif = prepare_gif_view(
+            state, geometry.Rectangle(content_panel), routed_frame)
     case .Settings:
-        result.settings = prepare_settings_view(state, content_panel, routed_frame)
+        result.settings = prepare_settings_view(
+            state, geometry.Rectangle(content_panel), routed_frame)
     }
     return result
 }
@@ -499,7 +503,8 @@ prepare_ui_controls :: proc(
 // Resolve layout-dependent presentation interaction before drawing begins.
 prepare_ui_layout_interaction :: proc(
     state: ^core.Euclid_General_State,
-    frame: Input_Frame) -> Ui_Layout_Interaction_Preparation {
+    frame: Input_Frame,
+    frame_dt: f32) -> Ui_Layout_Interaction_Preparation {
     if !ui_presentation_is_visible(&state^.ui_runtime) {
         state^.ui_runtime.view_text_scroll_max = 0
         return {}
@@ -511,72 +516,7 @@ prepare_ui_layout_interaction :: proc(
             .Wheel} : input.Input_Pointer_Fields{.Screen_Position})
     if !routed.wheel { presentation_frame.mouse_wheel_delta = 0 }
     return {presentation = prepare_presentation_interaction(state,
-        rl.Rectangle(state^.ui_runtime.ui_regions.text_rect), presentation_frame,
-        routed.keyboard)}
+        state^.ui_runtime.ui_regions.text_rect, presentation_frame,
+        routed.keyboard, frame_dt)}
 }
 
-// Draw the landscape Presentation and right-side accordion composition.
-draw_landscape_panels :: proc(
-    state: ^core.Euclid_General_State,
-    input_frame: Input_Frame,
-    terminal_frame: Terminal_Prepared_Frame,
-    controls: Ui_Control_Preparation,
-    layout_interaction: Ui_Layout_Interaction_Preparation) {
-    regions := state^.ui_runtime.ui_regions
-    bottom_bar := rl.Rectangle{
-        regions.world_rect.x,
-        regions.world_rect.y + regions.world_rect.height,
-        regions.world_rect.width,
-        f32(state^.ui_runtime.window.height) - regions.world_rect.height,
-    }
-    rl.DrawRectangleRec(bottom_bar, native.to_raylib_color(UI_BACK_COLOR))
-    draw_view_text_panel(state, rl.Rectangle(regions.text_rect), terminal_frame,
-        layout_interaction.presentation)
-
-    right_bar := rl.Rectangle{
-        regions.world_rect.x + regions.world_rect.width,
-        0,
-        f32(state^.ui_runtime.window.width) - regions.world_rect.width,
-        f32(state^.ui_runtime.window.height),
-    }
-    rl.DrawRectangleRec(right_bar, native.to_raylib_color(UI_BACK_COLOR))
-    draw_accordion_view(state, rl.Rectangle(regions.accordion_rect), input_frame, {
-        controls, terminal_frame, layout_interaction.presentation})
-}
-
-// Draw the portrait world-above-accordion composition.
-draw_portrait_panels :: proc(
-    state: ^core.Euclid_General_State,
-    input_frame: Input_Frame,
-    terminal_frame: Terminal_Prepared_Frame,
-    controls: Ui_Control_Preparation,
-    layout_interaction: Ui_Layout_Interaction_Preparation) {
-    regions := state^.ui_runtime.ui_regions
-    lower_bar := rl.Rectangle{
-        0,
-        regions.world_rect.height,
-        f32(state^.ui_runtime.window.width),
-        f32(state^.ui_runtime.window.height) - regions.world_rect.height,
-    }
-    rl.DrawRectangleRec(lower_bar, native.to_raylib_color(UI_BACK_COLOR))
-    draw_accordion_view(state, rl.Rectangle(regions.accordion_rect), input_frame, {
-        controls, terminal_frame, layout_interaction.presentation})
-}
-
-//   Render UI panels for the resolved landscape or portrait composition.
-draw_ui_panels :: proc(
-    state: ^core.Euclid_General_State,
-    input_frame: Input_Frame,
-    terminal_frame: Terminal_Prepared_Frame,
-    controls: Ui_Control_Preparation,
-    layout_interaction: Ui_Layout_Interaction_Preparation) {
-    draw_animation_controls(state, input_frame, controls.animation_controls)
-    if state^.ui_runtime.current_layout_mode == .Portrait {
-        draw_portrait_panels(
-            state, input_frame, terminal_frame, controls, layout_interaction)
-    } else {
-        draw_landscape_panels(
-            state, input_frame, terminal_frame, controls, layout_interaction)
-    }
-    draw_splitters(&state^.ui_runtime, input_frame_mouse_position(input_frame))
-}

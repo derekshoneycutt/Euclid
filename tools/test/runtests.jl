@@ -280,17 +280,15 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             parse_driver_invocation(["run-only", "--strict"]))
     end
 
-    @testset "stale Raylib removal" begin
-        mktempdir() do root
-            destination = joinpath(root, "build")
-            mkpath(destination)
-            staged = joinpath(destination, "libraylib.so.600")
-            write(staged, "stale")
-
-            remove_staged_raylib(destination)
-
-            @test !ispath(staged)
-        end
+    @testset "zero-Raylib runtime closure" begin
+        @test isnothing(require_zero_raylib_runtime(
+            ["libSDL3.so.0", "libSDL3_image.so.0"], "bin/euclid"))
+        @test_throws ErrorException require_zero_raylib_runtime(
+            ["libSDL3.so.0", "libraylib.so.600"], "bin/euclid")
+        @test_throws ErrorException require_zero_raylib_runtime(
+            ["RAYLIB.DLL"], "bin/euclid.exe")
+        @test_throws ErrorException require_zero_raylib_runtime(
+            ["/Frameworks/librlgl.1.dylib"], "bin/euclid")
     end
 
     @testset "SDL3 shader closure metadata" begin
@@ -743,5 +741,5 @@ reflection_sha256 = "reflection"
     end
 end
 
-include("raylib_boundary_analysis_tests.jl")
+include("sdl_boundary_analysis_tests.jl")
 include("evidence_tests.jl")

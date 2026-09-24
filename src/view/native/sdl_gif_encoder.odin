@@ -1,5 +1,6 @@
 package native
 
+import "core:log"
 import "core:math"
 
 import sdl "vendor:sdl3"
@@ -30,8 +31,16 @@ sdl_gif_encoder_begin :: proc(
     height > int(math.max(i32)) {
         return false
     }
-    handle := image.CreateAnimationEncoder(path)
-    if handle == nil {return false}
+    stream := sdl.IOFromFile(path, "wb")
+    if stream == nil {
+        log.errorf("sdl_gif_encoder_stream_failed error=%s", sdl.GetError())
+        return false
+    }
+    handle := image.CreateAnimationEncoder_IO(stream, true, "GIF")
+    if handle == nil {
+        log.errorf("sdl_gif_encoder_begin_failed error=%s", sdl.GetError())
+        return false
+    }
     encoder^ = {handle = handle, width = width, height = height}
     return true
 }
@@ -55,6 +64,7 @@ sdl_gif_encoder_add_frame :: proc(
     defer sdl.DestroySurface(surface)
     if !image.AddAnimationEncoderFrame(
         encoder.handle, surface, frame.duration_ms) {
+        log.errorf("sdl_gif_encoder_frame_failed error=%s", sdl.GetError())
         return false
     }
     encoder.frame_count += 1
@@ -68,6 +78,9 @@ sdl_gif_encoder_close :: proc(encoder: ^Sdl_Gif_Encoder) -> bool {
     has_frames := encoder.frame_count > 0
     encoder^ = {}
     closed := image.CloseAnimationEncoder(handle)
+    if !closed {
+        log.errorf("sdl_gif_encoder_close_failed error=%s", sdl.GetError())
+    }
     return has_frames && closed
 }
 

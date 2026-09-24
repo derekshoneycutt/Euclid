@@ -1,22 +1,19 @@
 package ui
 
-import native "../native"
-
 import viewmodel "../model"
 
 import view_core "../core"
 import view_font "../font"
-
-import rl "vendor:raylib"
+import geometry "../../core/geometry"
 
 Checkbox_Params :: struct {
     id: int,
-    rect: rl.Rectangle,
+    rect: geometry.Rectangle,
     checked: bool,
     enabled: bool,
     mouse: Input_Frame,
-    scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
+    scroll_offset: geometry.Vector2,
+    interaction_space_rect: geometry.Rectangle,
     interaction_enabled: bool,
     label: string,
     font: view_font.Font_Face,
@@ -27,38 +24,28 @@ Checkbox_Params :: struct {
 }
 
 Checkbox_Result :: struct {
-    box_drawn_rect: rl.Rectangle,
-    label_drawn_rect: rl.Rectangle,
     toggled: bool,
     checked_out: bool,
     hovered: bool,
     pressed: bool,
 }
 
-//   Resolve checkbox label color from enabled state.
-checkbox_label_color :: #force_inline proc(enabled: bool) -> rl.Color {
-    if enabled {
-        return native.to_raylib_color(UI_TEXT_COLOR)
-    }
-    return rl.Color{110, 110, 110, 255}
-}
-
 //   Measure and place the optional checkbox label, returning its rect and merged hit rect.
 checkbox_label_layout :: proc(
     params: Checkbox_Params,
-    box_rect: rl.Rectangle,
-    hit_rect: rl.Rectangle) -> (rl.Rectangle, rl.Rectangle) {
+    box_rect: geometry.Rectangle,
+    hit_rect: geometry.Rectangle) -> (geometry.Rectangle, geometry.Rectangle) {
 
     if len(params.label) <= 0 {
-        return rl.Rectangle{}, hit_rect
+        return geometry.Rectangle{}, hit_rect
     }
 
     label_x := box_rect.x + box_rect.width + params.label_offset_x
     label_y := box_rect.y + params.label_offset_y
     measured_width, _ := view_core.ui_text_measure_monospace(
         params.label, params.font, params.label_font_size, 0)
-    measured := rl.Vector2{measured_width, params.label_font_size}
-    label_rect := rl.Rectangle{label_x, label_y,
+    measured := geometry.Vector2{measured_width, params.label_font_size}
+    label_rect := geometry.Rectangle{label_x, label_y,
         max(0.0, measured.x), max(0.0, measured.y)}
     return label_rect, checkbox_union_rect(hit_rect, label_rect)
 }
@@ -117,17 +104,9 @@ checkbox_release_press :: proc(
     return toggled, checked_out
 }
 
-//   Resolve checkbox border and checkmark colors from enabled state.
-checkbox_mark_colors :: #force_inline proc(enabled: bool) -> (rl.Color, rl.Color) {
-    if enabled {
-        return native.to_raylib_color(UI_BORDER_COLOR),
-            native.to_raylib_color(UI_TEXT_COLOR)
-    }
-    return rl.Color{78, 78, 78, 255}, rl.Color{110, 110, 110, 255}
-}
-
 //   Return the smallest rectangle that contains both a and b.
-checkbox_union_rect :: #force_inline proc(a, b: rl.Rectangle) -> rl.Rectangle {
+checkbox_union_rect :: #force_inline proc(
+    a, b: geometry.Rectangle) -> geometry.Rectangle {
     ax2 := a.x + a.width
     ay2 := a.y + a.height
     bx2 := b.x + b.width
@@ -137,28 +116,32 @@ checkbox_union_rect :: #force_inline proc(a, b: rl.Rectangle) -> rl.Rectangle {
     min_y := min(a.y, b.y)
     max_x := max(ax2, bx2)
     max_y := max(ay2, by2)
-    return rl.Rectangle{min_x, min_y, max(0.0, max_x - min_x), max(0.0, max_y - min_y)}
+    return geometry.Rectangle{
+        min_x, min_y, max(0.0, max_x - min_x), max(0.0, max_y - min_y)}
 }
 
 //   Convert screen-space mouse position into local interaction space.
 checkbox_local_mouse :: #force_inline proc(
     mouse_input: Input_Frame,
-    scroll_offset: rl.Vector2) -> rl.Vector2 {
+    scroll_offset: geometry.Vector2) -> geometry.Vector2 {
 
-    return rl.Vector2{
+    return geometry.Vector2{
         mouse_input.mouse_position.x - scroll_offset.x,
         mouse_input.mouse_position.y - scroll_offset.y,
     }
 }
 
 //   Build square checkbox box centered inside caller-provided rect.
-checkbox_box_drawn_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    drawn_rect := clamp_non_negative_rect(rect)
+checkbox_box_drawn_rect :: #force_inline proc(
+    rect: geometry.Rectangle) -> geometry.Rectangle {
+    drawn_rect := rect
+    drawn_rect.width = max(f32(0), drawn_rect.width)
+    drawn_rect.height = max(f32(0), drawn_rect.height)
     side := min(drawn_rect.width, drawn_rect.height)
 
     center_x := drawn_rect.x + drawn_rect.width * 0.5
     center_y := drawn_rect.y + drawn_rect.height * 0.5
-    return rl.Rectangle{
+    return geometry.Rectangle{
         center_x - side * 0.5,
         center_y - side * 0.5,
         side,
@@ -166,34 +149,17 @@ checkbox_box_drawn_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangl
     }
 }
 
-//   Draw the check mark and pressed-state outline for the box.
-checkbox_draw_box_marks :: proc(
-    box_rect: rl.Rectangle, checked_out, pressed: bool, border, mark: rl.Color) {
-
-    rl.DrawRectangleLinesEx(box_rect, 1, border)
-    if checked_out {
-        p0 := rl.Vector2{box_rect.x + 3, box_rect.y + box_rect.height * 0.55}
-        p1 := rl.Vector2{box_rect.x + 6, box_rect.y + box_rect.height - 3}
-        p2 := rl.Vector2{box_rect.x + box_rect.width - 3, box_rect.y + 3}
-        rl.DrawLineEx(p0, p1, 1.6, mark)
-        rl.DrawLineEx(p1, p2, 1.6, mark)
-    }
-
-    if pressed {
-        rl.DrawRectangleLinesEx(box_rect, 2, border)
-    }
-}
-
 //   Resolve hover capture and release for one checkbox, writing toggle state.
 checkbox_resolve_interaction :: proc(
     params: Checkbox_Params,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
-    local_mouse: rl.Vector2,
-    hit_rect: rl.Rectangle,
+    local_mouse: geometry.Vector2,
+    hit_rect: geometry.Rectangle,
     out: ^Checkbox_Result) {
 
-    hovered_item := rl.CheckCollisionPointRec(local_mouse, hit_rect)
-    hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
+    hovered_item := geometry.rectangle_contains(hit_rect, local_mouse)
+    hovered_space := geometry.rectangle_contains(
+        params.interaction_space_rect, local_mouse)
     hovered := hovered_item && hovered_space
 
     owns_press := checkbox_owns_press(press_owner, params.id)
@@ -218,42 +184,17 @@ update_checkbox :: proc(
     params: Checkbox_Params,
     press_owner: ^viewmodel.Ui_Press_Owner_State) -> Checkbox_Result {
 
-    drawn_rect := clamp_non_negative_rect(params.rect)
+    drawn_rect := params.rect
+    drawn_rect.width = max(f32(0), drawn_rect.width)
+    drawn_rect.height = max(f32(0), drawn_rect.height)
     box_rect := checkbox_box_drawn_rect(drawn_rect)
     local_mouse := checkbox_local_mouse(params.mouse, params.scroll_offset)
 
     hit_rect := drawn_rect
-    label_rect := rl.Rectangle{}
+    label_rect := geometry.Rectangle{}
     label_rect, hit_rect = checkbox_label_layout(params, box_rect, hit_rect)
 
-    result := Checkbox_Result{
-        box_drawn_rect = box_rect,
-        label_drawn_rect = label_rect,
-    }
+    result := Checkbox_Result{}
     checkbox_resolve_interaction(params, press_owner, local_mouse, hit_rect, &result)
     return result
-}
-
-//   Draw one checkbox from a prepared interaction result.
-draw_checkbox_prepared :: proc(
-    params: Checkbox_Params,
-    result: Checkbox_Result) {
-
-    label_color := checkbox_label_color(params.enabled)
-
-    border, mark := checkbox_mark_colors(params.enabled)
-    checkbox_draw_box_marks(
-        result.box_drawn_rect, result.checked_out, result.pressed, border, mark)
-
-    if len(params.label) > 0 {
-        text_font := view_core.Ui_Text_Font{params.font, params.label_font_size}
-        view_core.ui_text_shaped({
-            resolver = params.font_resolver,
-            key = .Regular,
-            text = params.label,
-            position = {result.label_drawn_rect.x, result.label_drawn_rect.y},
-            color = label_color,
-            font = text_font,
-        })
-    }
 }

@@ -1,6 +1,6 @@
 package view
 
-import rl "vendor:raylib"
+import geometry "../core/geometry"
 
 import bridgemodel "../bridge/model"
 import dynviewmodel "../dynview/model"
@@ -336,7 +336,7 @@ view_snapshot_rejects_recycled_interface_pointer_from_old_generation :: proc(
 // Create one transform-and-style entity for scene command tests.
 scene_command_test_entity :: proc(
     world: ^shapemodel.Shape_World,
-    position: rl.Vector3) -> shapemodel.Shape_Entity {
+    position: geometry.Vector3) -> shapemodel.Shape_Entity {
     entity: shapemodel.Shape_Entity
     assert(shapemodel.shape_world_create_entity(world, &entity) == .Ok)
     assert(shapemodel.shape_component_insert(&world^.transforms, &world^.registry,
@@ -380,8 +380,8 @@ scene_command_batch_commits_shape_positions_in_order :: proc(t: ^testing.T) {
         &world^.transforms, &world^.registry, first)
     transform_1, ok_1 := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, second)
-    testing.expect(t, ok_0 && transform_0^.position == rl.Vector3{1, 2, 3})
-    testing.expect(t, ok_1 && transform_1^.position == rl.Vector3{4, 5, 6})
+    testing.expect(t, ok_0 && transform_0^.position == geometry.Vector3{1, 2, 3})
+    testing.expect(t, ok_1 && transform_1^.position == geometry.Vector3{4, 5, 6})
 }
 
 //   Verify an invalid tail command rejects the whole batch atomically.
@@ -411,7 +411,7 @@ scene_command_batch_rejects_invalid_tail_atomically :: proc(t: ^testing.T) {
     testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
     transform, found := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, entity)
-    testing.expect(t, found && transform^.position == rl.Vector3{9, 9, 9})
+    testing.expect(t, found && transform^.position == geometry.Vector3{9, 9, 9})
 }
 
 //   Verify overflow and stale-animation commands reject the batch atomically.
@@ -497,7 +497,7 @@ scene_command_batch_rejects_invalid_tool_lock_atomically :: proc(
     testing.expect(t, !app_bridge.commit_scene_command_batch(state, &batch))
     transform, found := shapemodel.shape_component_get(
         &world^.transforms, &world^.registry, entity)
-    testing.expect(t, found && transform^.position == rl.Vector3{9, 9, 9})
+    testing.expect(t, found && transform^.position == geometry.Vector3{9, 9, 9})
 }
 
 //   Verify the animation query snapshot is immutable while the worker ticks.
@@ -523,7 +523,7 @@ animation_query_snapshot_is_immutable_during_worker_tick :: proc(t: ^testing.T) 
     transform^.position = {4, 5, 6}
     state^.animation_query_snapshot_target = &snapshot
     testing.expect(
-        t, app_bridge.get_pen_joint1_position(state) == rl.Vector3{1, 2, 3})
+        t, app_bridge.get_pen_joint1_position(state) == geometry.Vector3{1, 2, 3})
     state^.animation_query_snapshot_target = nil
 }
 

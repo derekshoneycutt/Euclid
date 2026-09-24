@@ -3,6 +3,7 @@ package terminalview
 import viewterminalmodel "model"
 
 import "../../core/protocol"
+import geometry "../../core/geometry"
 import termgrid "../../terminal/grid"
 import termemulator "../../terminal/emulator"
 import termattachment "../../terminal/attachment"
@@ -12,8 +13,6 @@ import "../font"
 import "core:log"
 import "core:mem"
 import "core:unicode/utf8"
-
-import rl "vendor:raylib"
 
 //   Derive bounded terminal dimensions from usable pixels and cell metrics.
 //
@@ -492,7 +491,7 @@ terminal_resize_display_grids :: proc(
 //     generation, increment rejection diagnostics, and log failed resize attempts.
 terminal_update_geometry :: proc(
     term: ^viewterminalmodel.Terminal_State, font: font.Font_Face,
-    bounds: rl.Rectangle) -> Terminal_Geometry_Change {
+    bounds: geometry.Rectangle) -> Terminal_Geometry_Change {
     padded := terminal_padded_bounds(bounds)
     column_width := terminal_column_width(font)
     line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
@@ -519,7 +518,7 @@ terminal_update_geometry :: proc(
 //   - key: Semantic font variant requested by terminal content.
 //
 // Returns:
-//   - The resolved Raylib font borrowed for the current draw operation.
+//   - The resolved font face borrowed for the current draw operation.
 terminal_font_resolve :: proc(
     resolver: font.Font_Resolver, key: font.Font_Key) -> font.Font_Face {
 

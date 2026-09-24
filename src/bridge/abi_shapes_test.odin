@@ -1,8 +1,7 @@
 package bridge
 
 import bridgemodel "model"
-
-import rl "vendor:raylib"
+import geometry "../core/geometry"
 
 import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
@@ -24,7 +23,8 @@ bridge_shape_test_state :: proc(
 }
 
 // Return standard visible-test construction values.
-bridge_shape_test_input :: proc(position: rl.Vector3) -> Bridge_Positioned_Shape_Input {
+bridge_shape_test_input :: proc(
+    position: geometry.Vector3) -> Bridge_Positioned_Shape_Input {
     return {position = position,
         style = {color = {10, 20, 30, 255}, brush_size = 4}}
 }
@@ -189,7 +189,7 @@ bridge_shape_abi_rejects_stale_generation :: proc(t: ^testing.T) {
     testing.expect_value(t, shape_get_view(state, stale.entity).status,
         i32(BRIDGE_STATUS_NOT_FOUND))
     testing.expect_value(t, shape_get_view(state, current.entity).position,
-        rl.Vector3{2, 0, 0})
+        geometry.Vector3{2, 0, 0})
 }
 
 // Verify a deferred hide emits dust on display-thread commit before visibility clears.
@@ -276,7 +276,7 @@ bridge_shape_abi_reads_query_snapshot :: proc(t: ^testing.T) {
     _ = shape_set_position(state, created.entity, {8, 9, 10})
 
     view := shape_get_view(state, created.entity)
-    testing.expect_value(t, view.position, rl.Vector3{1, 2, 3})
+    testing.expect_value(t, view.position, geometry.Vector3{1, 2, 3})
     bytes: [8]u8
     copied := shape_copy_label_source(state, created.entity, &bytes[0], len(bytes))
     testing.expect_value(t, copied.status, i32(BRIDGE_STATUS_OK))
@@ -338,11 +338,11 @@ expect_compass_filled_sweep :: proc(t: ^testing.T,
     testing.expect_value(t, contact^.source,
         particlemodel.Dust_Tool_Contact_Source.Compass_Filled_Sweep)
     testing.expect_value(t, contact^.previous_segment_first,
-        rl.Vector3{0.15, 0.2, 0})
+        geometry.Vector3{0.15, 0.2, 0})
     testing.expect_value(t, contact^.previous_segment_second,
-        rl.Vector3{0.4, 0.2, 0})
-    testing.expect_value(t, contact^.segment_first, rl.Vector3{0.15, 0.2, 0})
-    testing.expect_value(t, contact^.segment_second, rl.Vector3{0.45, 0.2, 0})
+        geometry.Vector3{0.4, 0.2, 0})
+    testing.expect_value(t, contact^.segment_first, geometry.Vector3{0.15, 0.2, 0})
+    testing.expect_value(t, contact^.segment_second, geometry.Vector3{0.45, 0.2, 0})
 }
 
 // Verify committed compass moves retain ordered previous and current leg geometry.
@@ -367,13 +367,13 @@ bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
     first := &particle_system^.dust_tool_contacts[0]
     second := &particle_system^.dust_tool_contacts[1]
     third := &particle_system^.dust_tool_contacts[2]
-    testing.expect_value(t, first^.endpoint, rl.Vector3{0.15, 0.2, 0})
-    testing.expect_value(t, second^.endpoint, rl.Vector3{0.45, 0.2, 0})
+    testing.expect_value(t, first^.endpoint, geometry.Vector3{0.15, 0.2, 0})
+    testing.expect_value(t, second^.endpoint, geometry.Vector3{0.45, 0.2, 0})
     testing.expect(t, !first^.has_sweep)
     testing.expect_value(t, first^.source,
         particlemodel.Dust_Tool_Contact_Source.Point)
     expect_compass_filled_sweep(t, second)
-    testing.expect_value(t, third^.endpoint, rl.Vector3{0.5, 0.2, 0})
+    testing.expect_value(t, third^.endpoint, geometry.Vector3{0.5, 0.2, 0})
     testing.expect(t, !third^.has_sweep)
     testing.expect_value(t, third^.source,
         particlemodel.Dust_Tool_Contact_Source.Point)
@@ -416,7 +416,7 @@ bridge_tool_batch_rejects_full_contact_queue_transactionally :: proc(t: ^testing
     end_scene_command_batch(state)
     testing.expect(t, commit_scene_command_batch(state, &batch))
     testing.expect_value(t, get_pen_joint1_position(state),
-        rl.Vector3{0.8, 0.7, 0.1})
+        geometry.Vector3{0.8, 0.7, 0.1})
     testing.expect_value(t, particle_system^.dust_tool_contact_count,
         particlemodel.DUST_TOOL_CONTACT_CAP)
 }

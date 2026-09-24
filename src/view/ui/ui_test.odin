@@ -10,9 +10,8 @@ import "core:testing"
 
 import app_core "../../core"
 import app_dynview "../../dynview"
+import geometry "../../core/geometry"
 import "../input"
-
-import rl "vendor:raylib"
 
 //   Build one default-size landscape UI runtime for interaction tests.
 make_baseline_ui_runtime :: proc() -> viewmodel.Euclid_Ui_Runtime_State {
@@ -78,9 +77,9 @@ ui_regions_compact_extent_remains_non_negative :: proc(t: ^testing.T) {
 // Verify a full-capacity dust value remains inside the settings panel inset.
 @(test)
 settings_dust_value_is_right_aligned_inside_panel :: proc(t: ^testing.T) {
-    panel := rl.Rectangle{100, 0, 180, 240}
+    panel := geometry.Rectangle{100, 0, 180, 240}
     text_width: f32 = 40
-    x := settings_right_aligned_x(panel, text_width)
+    x := settings_right_aligned_x(geometry.Rectangle(panel), text_width)
 
     testing.expect_value(t, x, panel.x + panel.width - SETTINGS_PANEL_INSET - 40)
     testing.expect(t, x >= panel.x + SETTINGS_PANEL_INSET)
@@ -118,7 +117,7 @@ ui_regions_portrait_is_full_width_and_compact_safe :: proc(t: ^testing.T) {
     testing.expect_value(t, regions.accordion_rect.x, f32(TREE_PANEL_PADDING))
     testing.expect_value(t, regions.accordion_rect.width, f32(620))
     view_layout := accordion_layout(
-        rl.Rectangle(regions.accordion_rect),
+        geometry.Rectangle(regions.accordion_rect),
         accordion_portrait_sections("Animation"), .View)
     testing.expect_value(
         t, regions.text_rect, viewmodel.Rectangle(view_layout.content))
@@ -134,8 +133,8 @@ ui_regions_portrait_is_full_width_and_compact_safe :: proc(t: ^testing.T) {
 // Verify animation controls remain inset from the world's moving bottom-left edge.
 @(test)
 animation_controls_follow_world_splitters :: proc(t: ^testing.T) {
-    world := rl.Rectangle{0, 0, 640, 480}
-    slots := animation_control_layout_slots(world)
+    world := geometry.Rectangle{0, 0, 640, 480}
+    slots := animation_control_layout_slots(geometry.Rectangle(world))
     testing.expect_value(t, slots.panel.x, ANIMATION_CONTROL_EDGE_INSET)
     testing.expect_value(t, slots.panel.y + slots.panel.height,
         world.height - ANIMATION_CONTROL_EDGE_INSET)
@@ -261,7 +260,7 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
     testing.expect(t, !routed.accordion.wheel)
 
     controls := animation_control_layout_slots(
-        rl.Rectangle(runtime.ui_regions.world_rect))
+        geometry.Rectangle(runtime.ui_regions.world_rect))
     animation := ui_route_interaction_frame(&runtime, {
         frame = {mouse_position = {
             controls.pause.x + 1, controls.pause.y + 1}},
@@ -411,12 +410,12 @@ split_width_change_invalidates_dynview_panel_layout :: proc(t: ^testing.T) {
 
     app_dynview.track_panel(
         runtime, viewmodel.Rectangle(
-            view_text_content_panel(rl.Rectangle(baseline.text_rect))))
+            view_text_content_panel(geometry.Rectangle(baseline.text_rect))))
     runtime^.pending_invalidation_mask = 0
     runtime^.compile_cache.is_valid = true
     app_dynview.track_panel(
         runtime, viewmodel.Rectangle(
-            view_text_content_panel(rl.Rectangle(resized.text_rect))))
+            view_text_content_panel(geometry.Rectangle(resized.text_rect))))
 
     testing.expect(t, runtime^.pending_invalidation_mask &
         app_dynview.DYNVIEW_INVALIDATE_PANEL != 0)
@@ -775,9 +774,9 @@ scrollbar_thumb_math_clamps_and_positions_correctly :: proc(t: ^testing.T) {
     testing.expect_value(t, y_top, f32(50))
     testing.expect_value(t, y_bottom, f32(150) - thumb_h)
 
-    panel := rl.Rectangle{10, 20, 200, 120}
+    panel := geometry.Rectangle{10, 20, 200, 120}
     scrollbar := build_vertical_scrollbar(
-        Vertical_Scrollbar_Input{panel, 480, 60, 360}, 8, 24)
+        Vertical_Scrollbar_Input{geometry.Rectangle(panel), 480, 60, 360}, 8, 24)
     testing.expect(t, scrollbar.has_scrollbar)
     testing.expect_value(t, scrollbar.track_rect.x, panel.x + panel.width - 8)
     testing.expect_value(t, scrollbar.thumb_height, scrollbar.thumb_rect.height)
@@ -859,7 +858,7 @@ terminal_scroll_wheel_routes_to_one_owner :: proc(t: ^testing.T) {
 // Verify scrollbar routing blocks all uncaptured Terminal pointer input.
 @(test)
 terminal_scrollbar_filter_blocks_uncaptured_pointer :: proc(t: ^testing.T) {
-    bounds := rl.Rectangle{10, 20, 100, 80}
+    bounds := geometry.Rectangle{10, 20, 100, 80}
     filtered := terminal_filter_content_pointer({
         mouse_position = {106, 30},
         mouse_moved = true,
@@ -887,7 +886,7 @@ terminal_scrollbar_filter_blocks_uncaptured_pointer :: proc(t: ^testing.T) {
 // Verify local capture retains its real release point but cannot start another press.
 @(test)
 terminal_scrollbar_filter_preserves_local_release :: proc(t: ^testing.T) {
-    bounds := rl.Rectangle{10, 20, 100, 80}
+    bounds := geometry.Rectangle{10, 20, 100, 80}
     frame := Input_Frame{
         mouse_position = {106, 30},
         mouse_pressed = {.Left},
@@ -904,7 +903,7 @@ terminal_scrollbar_filter_preserves_local_release :: proc(t: ^testing.T) {
 // Verify child capture retains routed drag and release data outside content.
 @(test)
 terminal_scrollbar_filter_preserves_child_capture :: proc(t: ^testing.T) {
-    bounds := rl.Rectangle{10, 20, 100, 80}
+    bounds := geometry.Rectangle{10, 20, 100, 80}
     filtered := terminal_filter_content_pointer({
         mouse_position = {106, 30},
         mouse_moved = true,
@@ -1051,9 +1050,9 @@ pending_tree_reveal_applies_display_state :: proc(t: ^testing.T) {
 // Verify accordion headers retain order while the active child consumes free height.
 @(test)
 accordion_layout_places_active_content_after_selected_header :: proc(t: ^testing.T) {
-    panel := rl.Rectangle{10, 20, 300, 500}
+    panel := geometry.Rectangle{10, 20, 300, 500}
     sections := accordion_landscape_sections()
-    layout := accordion_layout(panel, sections, .Save_Gif)
+    layout := accordion_layout(geometry.Rectangle(panel), sections, .Save_Gif)
     testing.expect_value(t, layout.headers[0].y, f32(26))
     testing.expect_value(t, layout.headers[1].y,
         layout.headers[0].y + ACCORDION_HEADER_HEIGHT)
@@ -1098,9 +1097,9 @@ accordion_landscape_descriptors_remain_unchanged :: proc(t: ^testing.T) {
 // Verify portrait places View content after its first header and keeps four headers.
 @(test)
 accordion_portrait_layout_places_view_first :: proc(t: ^testing.T) {
-    panel := rl.Rectangle{10, 20, 300, 500}
+    panel := geometry.Rectangle{10, 20, 300, 500}
     sections := accordion_portrait_sections("Proposition I")
-    layout := accordion_layout(panel, sections, .View)
+    layout := accordion_layout(geometry.Rectangle(panel), sections, .View)
     testing.expect_value(t, layout.content.y,
         layout.headers[0].y + ACCORDION_HEADER_HEIGHT)
     testing.expect_value(t, layout.headers[1].y,
@@ -1132,12 +1131,13 @@ selected_animation_title_tracks_current_selection :: proc(t: ^testing.T) {
 accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
     active := viewmodel.Ui_Accordion_Section.Library
-    panel := rl.Rectangle{10, 20, 300, 500}
+    panel := geometry.Rectangle{10, 20, 300, 500}
     sections := accordion_landscape_sections()
     settings_index := accordion_section_index(sections, .Settings)
-    settings := accordion_layout(panel, sections, .Library).headers[settings_index]
+    settings := accordion_layout(
+        geometry.Rectangle(panel), sections, .Library).headers[settings_index]
     mouse_position := input.Input_Position{settings.x + 2, settings.y + 2}
-    pressed_context := Accordion_Context{panel = panel,
+    pressed_context := Accordion_Context{panel = geometry.Rectangle(panel),
         mouse_input = {mouse_position = mouse_position,
             mouse_pressed = {.Left}, mouse_down = {.Left}},
         press_owner = &owner, active = active}

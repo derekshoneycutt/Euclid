@@ -121,21 +121,11 @@ owns a model directly; root-core forwarding aliases are forbidden.
 `tools/analysis_settings.jl` enforces these layers. Substrate-to-composition edges and
 cycles among architecture layers are blocking findings.
 
-Raylib and rlgl imports MUST remain outside canonical semantic, parser, shape,
-particle, Terminal protocol/storage, and portable input packages. Production imports
-are allowed only in exact files classified as window/event shell, subsystem drawing,
-audio, backend resource ownership, capture acquisition, or a documented font/image
-compatibility requirement. Tests may use Raylib fixtures without defining production
-dependency direction.
+Raylib and rlgl imports are forbidden. The repository-owned `EUCLID-SDL-BOUNDARY`
+analysis extension checks parser-backed Odin dependency records and rejects either
+removed backend target.
 
-The repository-owned `EUCLID-RAYLIB-BOUNDARY` analysis extension checks parser-backed
-Odin dependency records. An unclassified production import is blocking, and every
-classified owner has an exact expected import count so stale or expanded exceptions
-also fail analysis. Update implementation, classification, and architecture
-documentation together; do not add a directory-wide exemption to admit one native
-owner.
-
-SDL imports obey the same rule. The `EUCLID-SDL-BOUNDARY` extension currently admits
+SDL imports are admitted only at exact native owners. The extension currently admits
 only the exact display-owned native color, icon, platform, platform-service, and timing
 files, the clipboard adapter, and the display input coordinator. Tests and the
 checked-in capability probe are fixtures, not production owners. Add or move an SDL
@@ -342,7 +332,7 @@ the call site superficially short.
 
 | Construct | Form | Example |
 | --- | --- | --- |
-| Import name | `snake_case`; prefer one word | `strings`, `raylib`, `font_core` |
+| Import name | `snake_case`; prefer one word | `strings`, `sdl`, `font_core` |
 | Type | `Ada_Case` | `Scene_Command_Batch` |
 | Enum value | `Ada_Case` | `Request_State.Ready` |
 | Procedure | `snake_case` | `publish_scene_batch` |

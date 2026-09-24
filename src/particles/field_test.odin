@@ -1,10 +1,9 @@
 package particles
 
 import particlemodel "model"
+import geometry "../core/geometry"
 
 import "core:testing"
-
-import rl "vendor:raylib"
 
 import test_helpers "../test_helpers"
 
@@ -38,7 +37,7 @@ dust_interior_weights_sum_to_one :: proc(t: ^testing.T) {
 // Verify board corners preserve one contribution and valid node indices.
 @(test)
 dust_corner_weights_and_indices_are_valid :: proc(t: ^testing.T) {
-    corners := [4]rl.Vector2{{0, 0}, {1, 0}, {0, 1}, {1, 1}}
+    corners := [4]geometry.Vector2{{0, 0}, {1, 0}, {0, 1}, {1, 1}}
     for corner in corners {
         stencil := dust_field_stencil(corner)
         test_helpers.expect_close(t, dust_test_weight_sum(stencil), 1,
@@ -185,8 +184,8 @@ dust_tool_point_respects_support_and_zero_density :: proc(t: ^testing.T) {
 dust_round_trip_preserves_single_velocity :: proc(t: ^testing.T) {
     field := new(Dust_Field_State, context.allocator)
     defer free(field)
-    position := rl.Vector2{0.347, 0.612}
-    expected := rl.Vector2{0.003, -0.002}
+    position := geometry.Vector2{0.347, 0.612}
+    expected := geometry.Vector2{0.003, -0.002}
     dust_field_deposit(field, position, expected)
 
     dust_field_normalize(field, field^.support_bounds)
@@ -209,7 +208,7 @@ dust_linear_vector_reconstructs :: proc(t: ^testing.T) {
         field^.solved_velocity_x[node] = 2 * x - y
         field^.solved_velocity_y[node] = x + 3 * y
     }
-    position := rl.Vector2{0.347, 0.612}
+    position := geometry.Vector2{0.347, 0.612}
 
     actual := dust_field_sample(field, position)
 
@@ -221,7 +220,7 @@ dust_linear_vector_reconstructs :: proc(t: ^testing.T) {
 
 // Seed every node with one uniform deposited density and momentum.
 dust_test_seed_uniform :: proc(field: ^Dust_Field_State,
-    density: f32, velocity: rl.Vector2) {
+    density: f32, velocity: geometry.Vector2) {
     for node in 0..<DUST_FIELD_NODE_COUNT {
         field^.density[node] = density
         field^.momentum_x[node] = density * velocity.x
@@ -259,9 +258,9 @@ dust_bounded_solve_matches_full_reference :: proc(t: ^testing.T) {
     defer free(actual)
     reference := new(Dust_Field_State, context.allocator)
     defer free(reference)
-    positions := [4]rl.Vector2{{0, 0}, {0.43, 0.61}, {0.44, 0.62}, {1, 1}}
+    positions := [4]geometry.Vector2{{0, 0}, {0.43, 0.61}, {0.44, 0.62}, {1, 1}}
     for position, index in positions {
-        velocity := rl.Vector2{f32(index - 2) * 0.001, f32(2 - index) * 0.002}
+        velocity := geometry.Vector2{f32(index - 2) * 0.001, f32(2 - index) * 0.002}
         dust_field_deposit(actual, position, velocity)
         dust_field_deposit(reference, position, velocity)
     }
@@ -340,7 +339,7 @@ dust_solve_overwrites_current_output :: proc(t: ^testing.T) {
         field^.solved_velocity_x[node] = 17
         field^.solved_velocity_y[node] = -23
     }
-    position := rl.Vector2{0.5, 0.5}
+    position := geometry.Vector2{0.5, 0.5}
     dust_field_deposit(field, position, {0.004, -0.003})
     bounds := dust_field_solve_bounds(field^.support_bounds)
 
@@ -360,7 +359,7 @@ dust_solve_overwrites_current_output :: proc(t: ^testing.T) {
 dust_prepare_clears_previous_solve_region :: proc(t: ^testing.T) {
     field := new(Dust_Field_State, context.allocator)
     defer free(field)
-    old_position := rl.Vector2{0.1, 0.1}
+    old_position := geometry.Vector2{0.1, 0.1}
     old_node := int(dust_field_stencil(old_position).indices[0])
     dust_field_deposit(field, old_position, {0.01, -0.02})
     dust_field_evolve(field, f32(1.0 / 60.0))

@@ -3,21 +3,20 @@ package view_core
 import dyncore "../../dynview/core"
 import view_font "../font"
 import native "../native"
+import color "../../core/color"
 import geometry "../../core/geometry"
-
-import rl "vendor:raylib"
 
 //   Draw environment for wrapped text content: the clipping panel, scroll
 //   offset, font, and typography metrics, grouped so the draw call passes one
 //   coherent value.
 Wrapped_Text_Content_Params :: struct {
     encoder: ^native.Draw_Encoder,
-    panel : rl.Rectangle,
+    panel : geometry.Rectangle,
     scroll_y : f32,
     font : view_font.Font_Face,
     text_padding : f32,
     text_row_height : f32,
-    text_color : rl.Color,
+    text_color : color.Color_RGBA8,
     wrap_advance : f32,
     font_size : f32,
     font_cache : ^view_font.Font_Cache,
@@ -37,8 +36,8 @@ Shaped_Text_Draw :: struct {
     resolver: view_font.Font_Resolver,
     key: view_font.Font_Key,
     text: string,
-    position: rl.Vector2,
-    color: rl.Color,
+    position: geometry.Vector2,
+    color: color.Color_RGBA8,
     font: Ui_Text_Font,
 }
 
@@ -48,8 +47,8 @@ Unshaped_Text_Draw :: struct {
     resolver: view_font.Font_Resolver,
     key: view_font.Font_Key,
     text: string,
-    position: rl.Vector2,
-    color: rl.Color,
+    position: geometry.Vector2,
+    color: color.Color_RGBA8,
     font: Ui_Text_Font,
 }
 
@@ -59,8 +58,8 @@ Cached_Shaped_Run_Draw :: struct {
     resolver: view_font.Font_Resolver,
     key: view_font.Font_Key,
     glyphs: []view_font.Shaped_Glyph,
-    position: rl.Vector2,
-    color: rl.Color,
+    position: geometry.Vector2,
+    color: color.Color_RGBA8,
     font_size: f32,
     base_pixel_size: f32,
 }
@@ -74,7 +73,7 @@ Cached_Monospace_Run_Draw :: struct {
 
 //   Pixel placement and next pen position for one cached shaped glyph.
 Cached_Glyph_Placement :: struct {
-    position: rl.Vector2,
+    position: geometry.Vector2,
     next_pen_x: f32,
 }
 
@@ -82,9 +81,9 @@ Cached_Glyph_Placement :: struct {
 Resolved_Glyph_Draw :: struct {
     encoder: ^native.Draw_Encoder,
     resolved: view_font.Resolved_Glyph,
-    position: rl.Vector2,
+    position: geometry.Vector2,
     font_size: f32,
-    color: rl.Color,
+    color: color.Color_RGBA8,
     x_offset: i32,
     y_offset: i32,
 }
@@ -95,9 +94,9 @@ Codepoint_Text_Draw :: struct {
     resolver: view_font.Font_Resolver,
     key: view_font.Font_Key,
     codepoint: rune,
-    position: rl.Vector2,
+    position: geometry.Vector2,
     font_size: f32,
-    color: rl.Color,
+    color: color.Color_RGBA8,
 }
 
 //   Resolved codepoint draw data plus original residency and drawability state.
@@ -209,7 +208,7 @@ ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
         resolved.source.height/texture_height,
     }
     _ = native.draw_encoder_texture_quad(draw.encoder, destination, uv,
-        native.from_raylib_color(draw.color), resolved.texture.handle)
+        draw.color, resolved.texture.handle)
 }
 
 //   Convert one cached 26.6 glyph position and advance to pixel coordinates.
@@ -230,7 +229,7 @@ ui_text_cached_glyph_placement :: #force_inline proc(
 //   Place one shaped JuliaMono glyph on its authoritative source-codepoint column.
 ui_text_cached_monospace_glyph_placement :: #force_inline proc(
     request: Cached_Monospace_Run_Draw,
-    glyph: view_font.Shaped_Glyph) -> (rl.Vector2, bool) {
+    glyph: view_font.Shaped_Glyph) -> (geometry.Vector2, bool) {
 
     shaped := request.shaped
     column, valid := ui_text_cluster_column(request.text, glyph.cluster)
@@ -422,7 +421,7 @@ ui_text_draw_shaped_run :: proc(
         ui_text_draw_resolved_glyph({
             encoder = request.encoder,
             resolved = resolved,
-            position = rl.Vector2{
+            position = geometry.Vector2{
                 request.position.x + f32(column)*column_advance,
                 request.position.y,
             },
@@ -461,7 +460,7 @@ ui_text_shaped_fallback :: proc(
     return false
 }
 
-//   Shape and draw one UTF-8 run, falling back atomically to ordinary raylib text.
+//   Shape and draw one UTF-8 run, falling back atomically to ordinary text encoding.
 ui_text_shaped_f32 :: proc(
     request: Shaped_Text_Draw) -> bool {
 
@@ -509,7 +508,7 @@ draw_wrapped_text_row :: proc(
     text: string, row_y: f32, params: Wrapped_Text_Content_Params) {
 
     text_font := Ui_Text_Font{params.font, params.font_size}
-    position := rl.Vector2{params.panel.x + params.text_padding, row_y}
+    position := geometry.Vector2{params.panel.x + params.text_padding, row_y}
     if params.font_cache == nil {
         return
     }

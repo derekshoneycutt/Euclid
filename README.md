@@ -11,7 +11,7 @@ langauge for animations and a REPL-like Terminal. Featuring the
 
 The code and documentation of this project is under The Unlicense, being public domain.
 
-The core application is coded in Odin, with Raylib used for rendering.
+The core application is coded in Odin, with SDL3 and SDL_GPU used for rendering.
 
 1. [Building from Source](#building-from-source)
 1. [Questions?](#questions)

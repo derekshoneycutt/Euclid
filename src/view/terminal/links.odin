@@ -1,14 +1,13 @@
 package terminalview
 
 import viewterminalmodel "model"
+import geometry "../../core/geometry"
 
 import termgrid "../../terminal/grid"
 import termemulator "../../terminal/emulator"
 import termhyperlink "../../terminal/hyperlink"
 import termmodel "../../terminal/model"
 import "../input"
-
-import rl "vendor:raylib"
 
 // Return the hyperlink leader at one visible output row and zero-based column.
 terminal_output_hyperlink_at :: proc(
@@ -190,14 +189,14 @@ terminal_hyperlink_release_matches :: proc(
 
 // Resolve one screen-space point to an actionable link in committed presentation state.
 terminal_hit_test_link :: proc(
-    term: ^viewterminalmodel.Terminal_State, bounds: rl.Rectangle,
-    mouse: rl.Vector2) -> Terminal_Link_Hit {
+    term: ^viewterminalmodel.Terminal_State, bounds: geometry.Rectangle,
+    mouse: geometry.Vector2) -> Terminal_Link_Hit {
     if term == nil || term.geometry.column_width <= 0 ||
         term.geometry.line_height <= 0 {
         return {}
     }
     padded := terminal_accepted_padded_bounds(term, bounds)
-    if !rl.CheckCollisionPointRec(mouse, padded) {
+    if !geometry.rectangle_contains(padded, mouse) {
         return {}
     }
     origin_y := padded.y - term.scroll_offset_y
@@ -227,12 +226,12 @@ terminal_hit_test_link :: proc(
 // Track one press/release pair and request activation only on the same link.
 terminal_update_hyperlink_click :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
-    bounds: rl.Rectangle) -> Terminal_Hyperlink_Activation {
+    bounds: geometry.Rectangle) -> Terminal_Hyperlink_Activation {
     if !terminal_hyperlink_interaction_allowed(term, frame.mouse_modifiers) {
         terminal_clear_hyperlink_press(term)
         return {}
     }
-    mouse := rl.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    mouse := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
     if .Left in frame.mouse_pressed {
         terminal_store_hyperlink_press(
             term, terminal_hit_test_link(term, bounds, mouse))
@@ -266,18 +265,18 @@ terminal_hyperlink_interaction_allowed :: proc(
 // Resolve the actionable link under one pointer when local interaction has precedence.
 terminal_hyperlink_hover_hit :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
-    bounds: rl.Rectangle) -> Terminal_Link_Hit {
+    bounds: geometry.Rectangle) -> Terminal_Link_Hit {
     if !terminal_hyperlink_interaction_allowed(term, frame.mouse_modifiers) {
         return {}
     }
-    mouse := rl.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    mouse := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
     return terminal_hit_test_link(term, bounds, mouse)
 }
 
 // Report whether the current eligible pointer position covers an actionable link.
 terminal_hyperlink_hovered :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
-    bounds: rl.Rectangle) -> bool {
+    bounds: geometry.Rectangle) -> bool {
     return terminal_hyperlink_hover_hit(term, frame, bounds).kind != .None
 }
 

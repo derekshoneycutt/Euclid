@@ -52,7 +52,7 @@ flowchart LR
     Emulator[VT interpreter and grids]
     Native[PTY or ConPTY service]
     Graphics[Terminal graphics service]
-    Draw[Raylib rendering]
+    Draw[Bounded draw encoding]
 
     User --> View
     View -->|evaluation, completion, lifecycle| Ingress
@@ -148,8 +148,8 @@ input state resets at an evaluation or process stream boundary.
 The display input owner conservatively correlates an unambiguous physical key with its
 bounded committed-text events before xterm or Kitty encoding. Local editing and child
 encoding consume the same once-polled `Input_Frame`; neither path polls the device
-again. Raylib supplies no composition lifecycle, so reversible preedit state is neither
-modeled nor encoded as Terminal bytes.
+again. SDL committed-text events do not supply a reversible composition lifecycle, so
+preedit state is neither modeled nor encoded as Terminal bytes.
 
 The display-owned UI runtime supplies effective Terminal focus separately from the raw
 window-focus sample. It combines logical Terminal focus, Terminal presentation, and OS
@@ -244,7 +244,7 @@ a link, but parser code does not call the operating system directly.
 | Resource | Owner | Notes |
 | --- | --- | --- |
 | Visible terminal state | Display thread | Cells, prompt, cursor, selection, scroll, modes, and active generation |
-| Raylib fonts, textures, and draw calls | Display thread | Never used from Julia or preparation workers |
+| Font atlases, SDL_GPU textures, and draw calls | Display thread | Never used from Julia or preparation workers |
 | Julia runtime and session actors | Julia host thread | Only this thread enters libjulia |
 | Evaluation scope | One `HostSessionRuntime` | Fresh module and runtime for each Terminal generation |
 | PTY/ConPTY handles | Odin terminal-session service | Hidden behind typed process/session operations |
@@ -521,7 +521,7 @@ flowchart LR
 | Framing | VT interpreter and `graphics/protocol` | Retain bounded headers, payload transfers, producer identity, and completed frames. |
 | Semantics | `graphics/semantics` | Apply protocol commands, reserve identities and placements, and queue finite decode requests. |
 | Durable model | `terminal/attachment` | Own attachment generations, placements, screens, and animation timelines. |
-| Preparation | Shared task pool and `graphics/prepare` | Inspect and decode into caller-owned CPU storage without Raylib. |
+| Preparation | Shared task pool and `graphics/prepare` | Inspect and decode into caller-owned CPU storage without native GPU calls. |
 | Publication | Display graphics service | Revalidate generation, create textures, commit mutations, and advance playback. |
 | Composition | Terminal view | Draw placements at their sealed z-order relative to text. |
 
@@ -549,7 +549,7 @@ service. Replacement unbinds that generation and joins accepted preparation befo
 unloading its display-owned textures, removing residency accounting, and clearing the
 borrowed parser and store pointers. CPU pixel buffers and animation timelines remain
 attachment-store owned; the display service only borrows an exact-generation payload
-while creating or updating its Raylib texture. Synchronized output can hold both grid
+while creating or updating its SDL_GPU texture. Synchronized output can hold both grid
 and attachment changes until one display commit.
 
 Kitty mutations retain stream order even when a frame requires worker preparation: a
@@ -663,8 +663,8 @@ generation cannot start before that point.
 
 Application shutdown follows the same ordering at larger scope: reject new work, stop
 session services, drain actor output and pending requests, close native sessions, join
-terminal graphics preparation, release display resources while Raylib is live, and only
-then shut down Julia and shared services.
+terminal graphics preparation, release display resources while the GPU device is live, and
+only then shut down Julia and shared services.
 
 ## Verification
 
@@ -727,7 +727,7 @@ interactive-input leases, and current-request checks on the display side.
 
 Put escape semantics in `src/terminal/emulator/`, durable cell behavior in
 `src/terminal/grid/`, and presentation interaction in `src/view/terminal/`. Native OS
-operations and Raylib calls stay behind display-owned callbacks or services.
+operations and GPU calls stay behind display-owned callbacks or services.
 
 ### Add A Julia Terminal Helper
 

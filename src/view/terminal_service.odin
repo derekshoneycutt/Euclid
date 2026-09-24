@@ -13,8 +13,6 @@ import native "native"
 import terminalview "terminal"
 import "ui"
 
-import rl "vendor:raylib"
-
 // Return whether the special Terminal animation owns the committed animation generation.
 terminal_animation_selected :: proc(state: ^core.Euclid_General_State) -> bool {
     if state == nil || state^.julia_interface == nil {
@@ -322,7 +320,7 @@ terminal_service_update_visible :: proc(
     state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
     frame: input.Input_Frame) -> ui.Terminal_Prepared_Frame {
     bounds := ui.terminal_content_panel(
-        rl.Rectangle(state^.ui_runtime.ui_regions.text_rect))
+        state^.ui_runtime.ui_regions.text_rect)
     terminal_font := font.cache_resolve(&state^.font_cache, .Regular)
     terminal_frame := terminal_service_routed_frame(state, frame)
     prepared := ui.terminal_prepare_frame(

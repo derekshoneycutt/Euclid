@@ -3,8 +3,6 @@ package ui
 import geometry "../../core/geometry"
 import native "../native"
 
-import viewmodel "../model"
-
 import "../../core"
 import dyncompile "../../dynview/compile"
 import dynlayout "../../dynview/layout"
@@ -13,12 +11,10 @@ import view_core "../core"
 import "../font"
 import ui_dynview "./dynview"
 
-import rl "vendor:raylib"
-
 //   Prepared post-layout interaction state for one non-Terminal presentation.
 Presentation_Preparation :: struct {
     active: bool,
-    text_panel: rl.Rectangle,
+    text_panel: geometry.Rectangle,
     view_text: string,
     scroll: Scroll_Container_Update_Result,
     selection_view: ui_dynview.Dynview_Selection_View,
@@ -27,73 +23,34 @@ Presentation_Preparation :: struct {
 // draw_encoded_presentation_geometry encodes panel and cached non-glyph content.
 draw_encoded_presentation_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: rl.Rectangle) {
+    panel: geometry.Rectangle) {
     if state == nil || state^.julia_interface == nil {return}
     _ = native.draw_encoder_rectangle(
-        encoder, geometry.Rectangle(panel), BACKGROUND_COLOR)
+        encoder, panel, BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(panel), 1, UI_BORDER_COLOR)
+        encoder, panel, 1, UI_BORDER_COLOR)
     text_panel := view_text_content_panel(panel)
     _ = native.draw_encoder_rectangle(
-        encoder, geometry.Rectangle(text_panel), UI_COMPONENT_BACKGROUND_COLOR)
+        encoder, text_panel, UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(text_panel), 1, UI_BORDER_COLOR)
+        encoder, text_panel, 1, UI_BORDER_COLOR)
     if is_terminal_selected(state) {return}
     ui_dynview.draw_encoded_geometry(&state^.dynview, encoder,
-        geometry.Rectangle(text_panel), state^.ui_runtime.view_text_scroll_y,
+        text_panel, state^.ui_runtime.view_text_scroll_y,
         TEXT_PADDING)
 }
 
 //   Compute the bordered viewport used by text and Terminal presentations.
-view_text_content_panel :: proc(panel: rl.Rectangle) -> rl.Rectangle {
+view_text_content_panel :: proc(
+    panel: geometry.Rectangle) -> geometry.Rectangle {
     panel_geometry := container_geometry(panel, 1)
-    text_panel := rl.Rectangle{
+    text_panel := geometry.Rectangle{
         panel_geometry.inner_rect.x + 5,
         panel_geometry.inner_rect.y + 5,
         panel_geometry.inner_rect.width - 10,
         panel_geometry.inner_rect.height - 10,
     }
     return container_geometry(text_panel, 1).drawn_rect
-}
-
-//   Draw selection behind one non-Terminal presentation.
-view_text_draw_selection :: proc(
-    state: ^core.Euclid_General_State,
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    selection_view: ui_dynview.Dynview_Selection_View) {
-    ui_dynview.dynview_selection_draw(
-        &state^.dynview, ui_runtime^.dynview_selection, selection_view)
-}
-
-//   Draw the view-text transcript content and copy affordances.
-view_text_draw_content :: proc(
-    state: ^core.Euclid_General_State,
-    encoder: ^native.Draw_Encoder,
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    text_panel: rl.Rectangle,
-    view_text: string,
-    selection_view: ui_dynview.Dynview_Selection_View) {
-    view_text_draw_selection(state, ui_runtime, selection_view)
-
-    fallback := ui_dynview.Fallback_Text_Content{
-        view_text, native.to_raylib_color(UI_TEXT_COLOR),
-    }
-    ui_dynview.draw_presentation_styled_or_fallback(state, ui_runtime, fallback,
-        ui_dynview.Presentation_Draw_Params{
-            encoder = encoder,
-            panel = text_panel,
-            scroll_y = state^.ui_runtime.view_text_scroll_y,
-            font = font.cache_borrow(&state.font_cache, .Regular),
-            font_cache = &state.font_cache,
-            metrics = ui_dynview.Wrapped_Text_Metrics{
-                padding = TEXT_PADDING,
-                row_height = TEXT_ROW_HEIGHT,
-                wrap_advance = TEXT_WRAP_ADVANCE,
-                font_size = TREE_FONT_SIZE,
-            },
-        })
-
-    view_core.draw_copy_icons(&state^.dynview, text_panel)
 }
 
 // draw_encoded_presentation_text emits visible Dynview or fallback glyphs only.
@@ -104,11 +61,11 @@ draw_encoded_presentation_text :: proc(
     _ = native.draw_encoder_push_scissor(
         encoder, geometry.Rectangle(presentation.scroll.view_rect))
     fallback := ui_dynview.Fallback_Text_Content{
-        presentation.view_text, native.to_raylib_color(UI_TEXT_COLOR)}
+        presentation.view_text, UI_TEXT_COLOR}
     ui_dynview.draw_presentation_styled_or_fallback(
         state, &state^.ui_runtime, fallback, {
             encoder = encoder,
-            panel = presentation.text_panel,
+            panel = geometry.Rectangle(presentation.text_panel),
             scroll_y = state^.ui_runtime.view_text_scroll_y,
             font = font.cache_borrow(&state^.font_cache, .Regular),
             font_cache = &state^.font_cache,
@@ -119,6 +76,7 @@ draw_encoded_presentation_text :: proc(
                 font_size = TREE_FONT_SIZE,
             },
         })
+    view_core.draw_encoded_copy_icons(&state^.dynview, encoder)
     _ = native.draw_encoder_pop_scissor(encoder)
 }
 
@@ -157,7 +115,7 @@ set_presentation_scroll_position :: proc(
 //   Update and commit the presentation scroll container.
 prepare_presentation_scroll :: proc(
     state: ^core.Euclid_General_State,
-    text_panel: rl.Rectangle,
+    text_panel: geometry.Rectangle,
     content_height: f32,
     scroll_step: f32,
     mouse_input: Input_Frame) -> Scroll_Container_Update_Result {
@@ -182,16 +140,18 @@ prepare_presentation_content_interaction :: proc(
     scroll: Scroll_Container_Update_Result,
     view_text: string,
     mouse_input: Input_Frame,
-    keyboard_enabled: bool) -> ui_dynview.Dynview_Selection_View {
+    keyboard_enabled: bool,
+    frame_dt: f32) -> ui_dynview.Dynview_Selection_View {
     ui_runtime := &state^.ui_runtime
     dyncompile.refresh_presentation_copy_targets(&state.dynview, {
         panel = geometry.Rectangle(scroll.view_rect), scroll_y = scroll.scroll_y_out,
         text_padding = TEXT_PADDING, icon_size = DYNVIEW_COPY_ICON_SIZE,
         icon_x_pad = DYNVIEW_COPY_ICON_X_PAD})
-    frame_dt := min(f32(0.05), max(f32(0), rl.GetFrameTime()))
-    _ = view_core.prepare_copy_icons(&state^.dynview, mouse_input, frame_dt,
+    copy_dt := min(f32(0.05), max(f32(0), frame_dt))
+    _ = view_core.prepare_copy_icons(&state^.dynview, mouse_input, copy_dt,
         &ui_runtime^.ui_press_owner)
-    selection_view := ui_dynview.Dynview_Selection_View{panel = scroll.view_rect,
+    selection_view := ui_dynview.Dynview_Selection_View{
+        panel = geometry.Rectangle(scroll.view_rect),
         scroll_y = scroll.scroll_y_out, text_padding = TEXT_PADDING,
         row_height = TEXT_ROW_HEIGHT, wrap_advance = TEXT_WRAP_ADVANCE,
         fallback_text = view_text}
@@ -211,9 +171,10 @@ prepare_presentation_content_interaction :: proc(
 //   Resolve post-layout presentation interaction before rendering.
 prepare_presentation_interaction :: proc(
     state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     mouse_input: Input_Frame,
-    keyboard_enabled: bool) -> Presentation_Preparation {
+    keyboard_enabled: bool,
+    frame_dt: f32) -> Presentation_Preparation {
     if state != nil {
         state^.ui_runtime.view_text_scroll_max = 0
     }
@@ -233,34 +194,7 @@ prepare_presentation_interaction :: proc(
     scroll := prepare_presentation_scroll(
         state, text_panel, content_h, scroll_step, mouse_input)
     selection_view := prepare_presentation_content_interaction(
-        state, scroll, view_text, mouse_input, keyboard_enabled)
+        state, scroll, view_text, mouse_input, keyboard_enabled, frame_dt)
     return {true, scroll.view_rect, view_text, scroll, selection_view}
 }
 
-//   Render wrapped animation view text with scroll handling.
-draw_view_text_panel :: proc(
-    state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
-    terminal_frame: Terminal_Prepared_Frame,
-    presentation: Presentation_Preparation) {
-    if state == nil || state.julia_interface == nil {
-        return
-    }
-    if !ui_presentation_is_visible(&state^.ui_runtime) { return }
-
-    ui_runtime := &state.ui_runtime
-    _ = draw_container(panel, .Dark_Red)
-    text_panel := view_text_content_panel(panel)
-    text_panel = draw_container(text_panel, .Grey).drawn_rect
-
-    if is_terminal_selected(state) {
-        terminal_draw(state, terminal_frame)
-        return
-    }
-
-    if !presentation.active { return }
-    scroll_container_draw_begin(presentation.scroll)
-    view_text_draw_content(state, nil, ui_runtime, presentation.text_panel,
-        presentation.view_text, presentation.selection_view)
-    scroll_container_draw_end(presentation.scroll)
-}

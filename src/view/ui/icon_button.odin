@@ -1,13 +1,7 @@
 package ui
 
-import native "../native"
-
 import viewmodel "../model"
 import geometry "../../core/geometry"
-
-import view_core "../core"
-
-import rl "vendor:raylib"
 
 ICON_BUTTON_DEFAULT_INSET_SCALE :: 0.86
 ICON_BUTTON_HOVER_SCALE_ADD :: 0.08
@@ -27,18 +21,18 @@ Icon_Button_Id :: enum {
 
 Icon_Button_Params :: struct {
     id: int,
-    rect: rl.Rectangle,
+    rect: geometry.Rectangle,
     icon_id: Icon_Button_Id,
     toggle: bool,
     mouse: Input_Frame,
-    scroll_offset: rl.Vector2,
-    interaction_space_rect: rl.Rectangle,
+    scroll_offset: geometry.Vector2,
+    interaction_space_rect: geometry.Rectangle,
     interaction_enabled: bool,
     inset_scale: f32,
 }
 
 Icon_Button_Result :: struct {
-    icon_drawn_rect: rl.Rectangle,
+    icon_drawn_rect: geometry.Rectangle,
     hovered: bool,
     pressed: bool,
     clicked: bool,
@@ -88,33 +82,23 @@ icon_button_release_press :: proc(
     owns_press^ = false
 }
 
-//   Darken one color toward the background by a normalized press amount.
-icon_button_darken :: #force_inline proc(color: rl.Color, amount: f32) -> rl.Color {
-    t :=  clamp(amount, 0.0, 1.0)
-    factor := 1.0 - (ICON_BUTTON_PRESS_DARKEN * t)
-    return rl.Color{
-        u8(f32(color.r) * factor),
-        u8(f32(color.g) * factor),
-        u8(f32(color.b) * factor),
-        color.a,
-    }
-}
-
 //   Resolve local mouse position from screen-space plus scroll offset.
 icon_button_local_mouse :: #force_inline proc(
     mouse: Input_Frame,
-    scroll_offset: rl.Vector2) -> rl.Vector2 {
+    scroll_offset: geometry.Vector2) -> geometry.Vector2 {
 
-    return rl.Vector2{mouse.mouse_position.x - scroll_offset.x,
+    return geometry.Vector2{mouse.mouse_position.x - scroll_offset.x,
         mouse.mouse_position.y - scroll_offset.y}
 }
 
 //   Resolve icon draw rectangle centered in slot using min-dimension sizing.
 icon_button_icon_draw_rect :: #force_inline proc(
-    rect: rl.Rectangle,
-    inset_scale: f32) -> rl.Rectangle {
+    rect: geometry.Rectangle,
+    inset_scale: f32) -> geometry.Rectangle {
 
-    draw_rect := clamp_non_negative_rect(rect)
+    draw_rect := rect
+    draw_rect.width = max(f32(0), draw_rect.width)
+    draw_rect.height = max(f32(0), draw_rect.height)
     base_size := min(draw_rect.width, draw_rect.height)
     use_scale := max(inset_scale, 0.0)
     if use_scale <= 0 {
@@ -124,7 +108,7 @@ icon_button_icon_draw_rect :: #force_inline proc(
 
     center_x := draw_rect.x + draw_rect.width * 0.5
     center_y := draw_rect.y + draw_rect.height * 0.5
-    return rl.Rectangle{
+    return geometry.Rectangle{
         center_x - icon_size * 0.5,
         center_y - icon_size * 0.5,
         icon_size,
@@ -132,41 +116,18 @@ icon_button_icon_draw_rect :: #force_inline proc(
     }
 }
 
-//   Draw icon glyph for a known icon-button id.
-draw_icon_button_glyph :: proc(
-    icon_id: Icon_Button_Id, rect: rl.Rectangle, color: rl.Color) {
-    switch icon_id {
-    case .Refresh:
-        view_core.draw_refresh_icon(rect, color)
-    case .Pause:
-        view_core.draw_pause_icon(rect, color)
-    case .Play:
-        view_core.draw_play_icon(rect, color)
-    case .Gear:
-        view_core.draw_gear_icon(rect, color)
-    case .Gif:
-        view_core.draw_gif_icon(rect, color)
-    case .Books:
-        view_core.draw_books_icon(rect, color)
-    case .Copy:
-        view_core.draw_copy_icon(rect, color)
-    case .None:
-        // Intentional no-op for external/custom icon draw paths.
-    }
-}
-
 //   Resolve one icon button interaction without issuing drawing commands.
 update_icon_button :: proc(
     params: Icon_Button_Params,
     press_owner: ^viewmodel.Ui_Press_Owner_State) -> Icon_Button_Result {
-    slot_rect := clamp_non_negative_rect(params.rect)
+    slot_rect := params.rect
+    slot_rect.width = max(f32(0), slot_rect.width)
+    slot_rect.height = max(f32(0), slot_rect.height)
     local_mouse := icon_button_local_mouse(params.mouse, params.scroll_offset)
 
     hovered := params.interaction_enabled &&
-        geometry.rectangle_contains(
-            geometry.Rectangle(slot_rect), geometry.Vector2(local_mouse)) &&
-        geometry.rectangle_contains(geometry.Rectangle(params.interaction_space_rect),
-            geometry.Vector2(local_mouse))
+        geometry.rectangle_contains(slot_rect, local_mouse) &&
+        geometry.rectangle_contains(params.interaction_space_rect, local_mouse)
     owns_press := icon_button_owns_press(press_owner, params.id)
     icon_button_try_capture_press(press_owner, params, hovered, &owns_press)
     pressed := owns_press && input_frame_left_down(params.mouse)
@@ -192,75 +153,4 @@ update_icon_button :: proc(
     }
     icon_button_release_press(press_owner, &owns_press, params.mouse)
     return result
-}
-
-//   Draw one icon button from a prepared interaction result.
-draw_icon_button_prepared :: proc(
-    params: Icon_Button_Params,
-    result: Icon_Button_Result) {
-
-    slot_rect := clamp_non_negative_rect(params.rect)
-    icon_color := native.to_raylib_color(UI_TEXT_COLOR)
-    if (params.toggle || result.pressed) {
-        rl.DrawRectangleRec(slot_rect, native.to_raylib_color(UI_BORDER_COLOR))
-        icon_color = native.to_raylib_color(BACKGROUND_COLOR)
-    }
-    if result.pressed {
-        icon_color = icon_button_darken(icon_color, 1)
-    }
-    icon_rect := result.icon_drawn_rect
-    if result.pressed {
-        icon_rect.x += 0.5
-        icon_rect.y += 0.5
-    }
-    draw_icon_button_glyph(params.icon_id, icon_rect, icon_color)
-}
-
-//   Draw icon button using externally supplied visual hover/press intensities.
-draw_icon_button_with_visual_state :: proc(
-    params: Icon_Button_Params,
-    hover_t: f32,
-    press_t: f32,
-    draw_slot_fill: bool) -> Icon_Button_Result {
-
-    slot_rect := clamp_non_negative_rect(params.rect)
-    local_mouse := icon_button_local_mouse(params.mouse, params.scroll_offset)
-
-    hovered := params.interaction_enabled &&
-        geometry.rectangle_contains(
-            geometry.Rectangle(slot_rect), geometry.Vector2(local_mouse)) &&
-        geometry.rectangle_contains(geometry.Rectangle(params.interaction_space_rect),
-            geometry.Vector2(local_mouse))
-    clicked := hovered && input_frame_left_pressed(params.mouse)
-
-    use_hover_t :=  clamp(hover_t, 0.0, 1.0)
-    use_press_t :=  clamp(press_t, 0.0, 1.0)
-    visual_pressed := use_press_t > 0
-
-    icon_color := native.to_raylib_color(UI_TEXT_COLOR)
-    if (params.toggle || visual_pressed) && draw_slot_fill {
-        rl.DrawRectangleRec(slot_rect, native.to_raylib_color(UI_BORDER_COLOR))
-        icon_color = native.to_raylib_color(BACKGROUND_COLOR)
-    }
-
-    if use_press_t > 0 {
-        icon_color = icon_button_darken(icon_color, use_press_t)
-    }
-
-    scale := 1.0 + ICON_BUTTON_HOVER_SCALE_ADD * use_hover_t -
-        ICON_BUTTON_PRESS_SCALE_SUB * use_press_t
-    icon_drawn_rect := icon_button_icon_draw_rect(slot_rect, params.inset_scale * scale)
-    if visual_pressed {
-        icon_drawn_rect.x += 0.5
-        icon_drawn_rect.y += 0.5
-    }
-
-    draw_icon_button_glyph(params.icon_id, icon_drawn_rect, icon_color)
-
-    return Icon_Button_Result{
-        icon_drawn_rect = icon_drawn_rect,
-        hovered = hovered,
-        pressed = visual_pressed,
-        clicked = clicked,
-    }
 }

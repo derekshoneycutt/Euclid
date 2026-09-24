@@ -3,6 +3,8 @@ package ui_dynview
 import native "../../native"
 import viewmodel "../../model"
 import dynviewmodel "../../../dynview/model"
+import color "../../../core/color"
+import geometry "../../../core/geometry"
 
 import "../../../core"
 import dynmath "../../../dynview/math"
@@ -10,8 +12,6 @@ import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
 import view_core "../../core"
 import view_font "../../font"
-
-import rl "vendor:raylib"
 
 UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
 UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
@@ -28,13 +28,13 @@ Wrapped_Text_Metrics :: struct {
 //   Fallback plain-text payload for the styled-or-fallback draw path.
 Fallback_Text_Content :: struct {
     text : string,
-    color : rl.Color,
+    color : color.Color_RGBA8,
 }
 
 //   Panel, font, and metrics for one presentation draw pass.
 Presentation_Draw_Params :: struct {
     encoder: ^native.Draw_Encoder,
-    panel : rl.Rectangle,
+    panel : geometry.Rectangle,
     scroll_y : f32,
     font : view_font.Font_Face,
     font_cache : ^view_font.Font_Cache,

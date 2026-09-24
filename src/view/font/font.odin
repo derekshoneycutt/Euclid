@@ -83,7 +83,7 @@ Font_Codepoint_Range :: struct {
     last: rune,
 }
 
-// Fixed flat rune set passed to raylib/stb seed loading APIs.
+// Fixed flat rune set passed to the stb seed-loading path.
 Font_Seed_Codepoint_Set :: struct {
     values: [FONT_SEED_CODEPOINT_CAPACITY]rune,
     count: i32,
@@ -203,7 +203,7 @@ cache_source_path :: proc(cache: ^Font_Cache, key: Font_Key) -> string {
     return string(source.storage[:source.length])
 }
 
-//   Build the compatibility seed in raylib's required flat form.
+//   Build the compatibility seed in the rasterizer's required flat form.
 //
 // Returns:
 //   - Fixed storage containing every rune from `FONT_SEED_CODEPOINT_RANGES`.
@@ -224,30 +224,16 @@ seed_codepoint_set_from_ranges :: proc(
     return result
 }
 
-//   Build the JuliaMono compatibility seed in raylib's required flat form.
+//   Build the JuliaMono compatibility seed in the rasterizer's required flat form.
 seed_codepoint_set :: proc() -> Font_Seed_Codepoint_Set {
     ranges := FONT_SEED_CODEPOINT_RANGES
     return seed_codepoint_set_from_ranges(ranges[:])
 }
 
-//   Build the required NewCM math seed in raylib's required flat form.
+//   Build the required NewCM math seed in the rasterizer's required flat form.
 math_seed_codepoint_set :: proc() -> Font_Seed_Codepoint_Set {
     ranges := MATH_SEED_CODEPOINT_RANGES
     return seed_codepoint_set_from_ranges(ranges[:])
-}
-
-//   Suppress raylib's expected oversized-glyph and sparse-range messages during rasterization.
-//
-// Side effects:
-//   - Sets raylib's process-global trace threshold to errors.
-rasterization_begin :: proc() {
-}
-
-//   Restore normal raylib diagnostics immediately after font rasterization.
-//
-// Side effects:
-//   - Sets raylib's process-global trace threshold to informational messages.
-rasterization_end :: proc() {
 }
 
 //   Release one generation's shaping handles and native source copy.
@@ -485,7 +471,6 @@ cache_init :: proc(
     cache^ = {}
     cache.texture_operations = operations
     cache_source_paths_init(cache)
-    rasterization_begin()
     required_keys := [?]Font_Key{.Regular, .Math_Regular}
     ready := true
     for key in required_keys {
@@ -501,7 +486,6 @@ cache_init :: proc(
         }
         ready = ready && entry.resident
     }
-    rasterization_end()
     if !ready {
         cache_destroy(cache)
         return false

@@ -4,7 +4,7 @@ import "../../core/protocol"
 
 // Stable physical keys understood by input routing and terminal encoding.
 //
-// Values are independent of raylib and may cross device, scenario, and policy boundaries.
+// Values are rendering-backend independent and may cross device, scenario, and policy boundaries.
 Input_Key :: enum {
     Space,
     Apostrophe,

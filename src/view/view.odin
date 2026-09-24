@@ -19,7 +19,7 @@ import native "native"
 import terminalview "terminal"
 import "ui"
 import "../core"
-import "../audio"
+import geometry "../core/geometry"
 import "../dynview"
 import "../shapes"
 import julia "../bridge"
@@ -33,16 +33,12 @@ import "../files"
 import "base:runtime"
 import "core:fmt"
 import "core:log"
-import "core:strings"
 import "core:time"
-
-import rl "vendor:raylib"
-import rlgl "vendor:raylib/rlgl"
 
 TOOL_LENGTH :: viewmodel.TOOL_LENGTH
 
-Vector2 :: rl.Vector2
-Vector3 :: rl.Vector3
+Vector2 :: geometry.Vector2
+Vector3 :: geometry.Vector3
 Iso_Scale :: viewmodel.Iso_Scale
 Particle :: particlemodel.Particle
 Particle_System :: particlemodel.Particle_System
@@ -198,16 +194,6 @@ report_draw_runtime_summary :: proc(runtime: ^native.Sdl_Draw_Runtime) {
         statistics.max_upload_bytes)
 }
 
-// Poll one input frame and accept its live logical extent before UI geometry.
-poll_window_frame_boundary :: proc(
-    state: ^Euclid_General_State,
-    input_runtime: ^input.Input_Runtime) -> input.Input_Frame {
-    frame := input.input_poll_frame(input_runtime)
-    _ = apply_window_metrics(state, ui.ui_current_window_metrics())
-    return frame
-}
-
-
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
 // Notes:
@@ -251,6 +237,9 @@ initialize_and_run_sdl_session :: proc(
     input_runtime: ^input.Input_Runtime, profile: ^evidence_profile.State,
     platform: ^native.Sdl_Platform,
     draw_runtime: ^native.Sdl_Draw_Runtime) -> int {
+    session.state^.ui_runtime.gpu_dust_instancing_available = draw_runtime^.dust_ready
+    session.state^.ui_runtime.use_gpu_dust_instancing =
+        settings^.use_gpu_dust_instancing && draw_runtime^.dust_ready
     font_owner := Sdl_Font_Texture_Context{
         platform = platform, runtime = draw_runtime, submit_immediately = true}
     if !initialize_sdl_font_resources(session.state, &font_owner) {
@@ -404,54 +393,6 @@ service_scenario_after_present :: proc(ctx: Window_Frame_Context) {
     }
 }
 
-//   Service retained audio only in explicitly experimental builds.
-service_experimental_audio :: proc(state: ^Euclid_General_State) {
-    when audio.EXPERIMENTAL_AUDIO_ENABLED {
-        audio.update_chalk_runtime(&state^.chalk_audio)
-    }
-}
-
-//   Run one window frame: async results, simulation update, draw, and GIF capture.
-run_window_frame :: proc(
-    state: ^Euclid_General_State,
-    ctx: Window_Frame_Context) {
-    input_runtime := ctx.input_runtime
-    presentation := ctx.presentation
-    display_profile := ctx.display_profile
-    evidence_profile.zone_begin(display_profile, "display_frame")
-    font.cache_service(
-        &state^.font_cache, &state^.simulation_executor^.pool)
-    sync_window_math_shaping(state)
-    sync_window_prose_shaping(state)
-    julia.publish_available_view_snapshot(state, false)
-    service_presentation_runtime(state, presentation)
-    service_scenario_before_ui(ctx)
-    input_frame := poll_window_frame_boundary(state, input_runtime)
-    ui_geometry := ui.prepare_ui_geometry(state, input_frame, rl.GetFrameTime())
-    ui.prepare_ui_static_interaction(
-        state, input_frame, ui_geometry.pointer_capture)
-    ui_controls := ui.prepare_ui_controls(state, input_frame)
-    terminal_frame := terminal_service_update(state, input_runtime, input_frame)
-    alpha := accumulate_and_update_systems(state, rl.GetFrameTime())
-    run_parallel_frame_preparation_after_ui(
-        state, alpha, ui_geometry.compile_dynview)
-    ui_layout_interaction := ui.prepare_ui_layout_interaction(state, input_frame)
-    draw_preparation := Frame_Draw_Preparation{input_frame, terminal_frame,
-        ui_controls, ui_layout_interaction}
-    service_experimental_audio(state)
-    service_scenario_before_present(ctx)
-
-    evidence_profile.zone_begin(display_profile, "frame_present")
-    rl.BeginDrawing()
-        draw_frame(state, alpha, draw_preparation)
-    rl.EndDrawing()
-    evidence_profile.zone_end(display_profile)
-
-    service_scenario_after_present(ctx)
-    run_gif_capture_frame(state, ctx.framebuffer_operations)
-    finish_window_frame(state, display_profile)
-}
-
 // Apply one portable UI cursor request through the active SDL platform owner.
 apply_sdl_cursor :: proc(
     state: ^Euclid_General_State, platform: ^native.Sdl_Platform) {
@@ -489,10 +430,20 @@ prepare_sdl_frame :: proc(
     controls := ui.prepare_ui_controls(state, input_frame)
     terminal_frame := terminal_service_update(state, ctx.input_runtime, input_frame)
     apply_sdl_cursor(state, ctx.platform)
-    alpha := accumulate_and_update_systems(state, frame_dt)
+    world_rect := state^.ui_runtime.ui_regions.world_rect
+    gif_extents := view_core.Gif_Capture_Extents{
+        logical_width = max(1, int(world_rect.width)),
+        logical_height = max(1, int(world_rect.height)),
+        screen_width = ctx.platform^.metrics.logical_width,
+        screen_height = ctx.platform^.metrics.logical_height,
+        render_width = ctx.platform^.metrics.pixel_width,
+        render_height = ctx.platform^.metrics.pixel_height,
+    }
+    alpha := accumulate_and_update_systems(state, frame_dt, gif_extents)
     run_parallel_frame_preparation_after_ui(
         state, alpha, ui_geometry.compile_dynview)
-    layout_interaction := ui.prepare_ui_layout_interaction(state, input_frame)
+    layout_interaction := ui.prepare_ui_layout_interaction(
+        state, input_frame, frame_dt)
     service_scenario_before_present(ctx)
     return {input_frame, terminal_frame, controls, layout_interaction}
 }
@@ -563,6 +514,7 @@ run_sdl_geometry_frame :: proc(
     presented := result == .Presented
     if presented {
         report_draw_frame_telemetry(state, ctx.draw_runtime)
+        run_gif_capture_frame(state, ctx.framebuffer_operations)
         service_scenario_after_present(ctx)
     }
     finish_window_frame(state, ctx.display_profile, presented)
@@ -909,122 +861,6 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
     free(state)
 }
 
-//   Open the startup window without requiring packaged assets or application state.
-//
-// Notes:
-//   - Should be paired with rl.CloseWindow on shutdown.
-set_window_config_flags :: proc(settings: ^Euclid_Run_Settings) {
-    resizable := settings^.window.mode == .Resizable
-    if settings.do_antialiasing && settings.do_vsync {
-        if resizable {
-            rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_HIGHDPI,
-                .WINDOW_RESIZABLE})
-        } else {
-            rl.SetConfigFlags({.MSAA_4X_HINT, .VSYNC_HINT, .WINDOW_HIGHDPI})
-        }
-    } else if settings.do_antialiasing {
-        if resizable {
-            rl.SetConfigFlags({.MSAA_4X_HINT, .WINDOW_HIGHDPI, .WINDOW_RESIZABLE})
-        } else {
-            rl.SetConfigFlags({.MSAA_4X_HINT, .WINDOW_HIGHDPI})
-        }
-    } else if settings.do_vsync {
-        if resizable {
-            rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI, .WINDOW_RESIZABLE})
-        } else {
-            rl.SetConfigFlags({.VSYNC_HINT, .WINDOW_HIGHDPI})
-        }
-    } else if resizable {
-        rl.SetConfigFlags({.WINDOW_HIGHDPI, .WINDOW_RESIZABLE})
-    } else {
-        rl.SetConfigFlags({.WINDOW_HIGHDPI})
-    }
-}
-
-//   Open the startup window at the configured logical extent and resize policy.
-//
-// Notes:
-//   - Should be paired with rl.CloseWindow on shutdown.
-open_window :: proc(settings: ^Euclid_Run_Settings) {
-    set_window_config_flags(settings)
-
-    rl.InitWindow(
-        i32(settings^.window.width), i32(settings^.window.height), WINDOW_TITLE)
-    rl.SetTargetFPS(LIMIT_FPS)
-}
-
-//   Load the packaged application icon when the asset is available.
-initialize_window_icon :: proc() {
-    icon_file := strings.clone_to_cstring(
-        files.packaged_asset_path("compass_icon.png", context.temp_allocator),
-        context.temp_allocator)
-    if rl.FileExists(icon_file) {
-        icon_image := rl.LoadImage(icon_file)
-        rl.SetWindowIcon(icon_image)
-        rl.UnloadImage(icon_image)
-    }
-}
-
-//   Initialize audio, icon, shader, and font resources after application state exists.
-initialize_window_resources :: proc(
-    state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
-
-    when audio.EXPERIMENTAL_AUDIO_ENABLED {
-        rl.InitAudioDevice()
-        if !rl.IsAudioDeviceReady() {
-            fmt.eprintln("warning: failed to initialize audio device; chalk sound disabled")
-        } else {
-            chalk_path := files.packaged_asset_path(
-                "Chalk On Blackboard.wav", context.temp_allocator)
-            audio.init_chalk_runtime(&state^.chalk_audio, chalk_path)
-        }
-    }
-
-    state^.ui_runtime.use_gpu_dust_instancing =
-        settings^.use_gpu_dust_instancing && rlgl.GetVersion() >= .OPENGL_33
-
-    if state^.ui_runtime.limit_fps {
-        rl.SetTargetFPS(LIMIT_FPS)
-    } else {
-        rl.SetTargetFPS(0)
-    }
-
-    initialize_window_icon()
-
-    required_fonts_ready := font.cache_init(&state^.font_cache, {})
-    if !required_fonts_ready {
-        fmt.eprintln("error: failed to load required JuliaMono or NewCM font")
-    }
-    assert(required_fonts_ready)
-    math_shaping_ready := font.math_shaping_sync(
-        &state^.font_cache, &state^.dynview.math_shaping)
-    if !math_shaping_ready {
-        fmt.eprintln("error: failed to initialize Dynview NewCM shaping")
-    }
-    assert(math_shaping_ready)
-    log.infof("dynview_math_shaper_ready generation=%d",
-        state^.dynview.math_shaping.generation)
-    _ = font.cache_request(&state^.font_cache, .Bold)
-    _ = font.cache_request(&state^.font_cache, .Regular_Italic)
-}
-
-//   Shutdown state-dependent render and audio resources before closing the window.
-//
-// Notes:
-//   - Intended as the shutdown pair for initialize_window_resources.
-shutdown_window_resources :: proc(state : ^Euclid_General_State) {
-    font.cache_shutdown_service(
-        &state^.font_cache, &state^.simulation_executor^.pool)
-    font.math_shaping_destroy(&state^.dynview.math_shaping)
-    font.cache_destroy(&state^.font_cache)
-    when audio.EXPERIMENTAL_AUDIO_ENABLED {
-        audio.shutdown_chalk_runtime(&state^.chalk_audio)
-        if rl.IsAudioDeviceReady() {
-            rl.CloseAudioDevice()
-        }
-    }
-}
-
 //   Update rolling FPS statistics used for average-FPS overlay display.
 //   Advance the rolling FPS window by one full bucket when it completes.
 fps_advance_bucket_if_full :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
@@ -1089,7 +925,8 @@ update_average_fps :: proc(state: ^Euclid_General_State, frame_dt: f32) {
 
 //   Run fixed-step simulation updates and return interpolation alpha for rendering.
 accumulate_and_update_systems :: proc(
-    state: ^Euclid_General_State, frame_dt: f32) -> f32 {
+    state: ^Euclid_General_State, frame_dt: f32,
+    gif_extents: view_core.Gif_Capture_Extents) -> f32 {
     view_core.recompute_iso_scale_precompute(state^.iso_scale)
 
     clamped_dt := frame_dt
@@ -1111,7 +948,7 @@ accumulate_and_update_systems :: proc(
     for state^.accumulator >= FIXED_DT {
         // Never expose worker-commanded tool dimensions before constraints normalize them.
         shapes.shape_world_update_previous_values(state^.shape_world)
-        run_windowed_fixed_step(state, FIXED_DT)
+        run_windowed_fixed_step(state, FIXED_DT, gif_extents)
 
         state^.accumulator -= FIXED_DT
         step_count += 1
@@ -1160,13 +997,15 @@ run_deterministic_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> b
 //
 // Returns:
 //   - ok: true when the deterministic step completed.
-run_windowed_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> bool {
+run_windowed_fixed_step :: proc(
+    state: ^Euclid_General_State, dt: f32,
+    gif_extents: view_core.Gif_Capture_Extents) -> bool {
     if !run_deterministic_fixed_step(state, dt) {
         return false
     }
 
     previous_phase := state^.ui_runtime.gif_capture_phase
-    view_core.gif_capture_update_fixed_step(state)
+    view_core.gif_capture_update_fixed_step(state, gif_extents)
     record_gif_capture_transition(
         state, previous_phase, state^.ui_runtime.gif_capture_phase)
     return true
@@ -1340,42 +1179,3 @@ capture_evidence_checkpoint :: proc(
     return snapshot
 }
 
-//   Render the animation world clipped to its prepared UI region.
-draw_world :: proc(state: ^Euclid_General_State) {
-    world_rect := state^.ui_runtime.ui_regions.world_rect
-    rl.BeginScissorMode(i32(world_rect.x), i32(world_rect.y),
-        i32(world_rect.width), i32(world_rect.height))
-    defer rl.EndScissorMode()
-
-    base_x_offset := state^.iso_scale^.x_offset
-    base_y_offset := state^.iso_scale^.y_offset
-    apply_world_shake := state^.particle_system != nil &&
-        state^.ui_runtime.gif_capture_phase != .Recording
-    if apply_world_shake {
-        state^.iso_scale^.x_offset += state^.iso_scale^.screenshake_offset_x
-        state^.iso_scale^.y_offset += state^.iso_scale^.screenshake_offset_y
-    }
-
-    draw_drawing_surface(state)
-
-    draw_shapes_points_low_cached(state)
-    draw_shapes_shapes_shadows_cached(state)
-    draw_shapes_points_shadows_cached(state)
-
-    state^.iso_scale^.x_offset = base_x_offset
-    state^.iso_scale^.y_offset = base_y_offset
-}
-
-//   Render one full frame including world, particles, UI panels, and capture step.
-draw_frame :: proc(
-    state : ^Euclid_General_State, alpha: f32,
-    prepared: Frame_Draw_Preparation) {
-    rl.ClearBackground(native.to_raylib_color(BACKGROUND_COLOR))
-
-    draw_world(state)
-
-    ui.draw_ui_panels(
-        state, prepared.input_frame, prepared.terminal_frame,
-        prepared.controls, prepared.layout_interaction)
-
-}

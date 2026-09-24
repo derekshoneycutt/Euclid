@@ -89,7 +89,6 @@ The UI combines immediate geometry preparation with persistent interaction field
 `Euclid_Ui_Runtime_State`. Update procedures compute widget rectangles, consume routed
 frame copies, and commit display-owned state before encoding. Active draw procedures
 append portable vertices, indices, clips, and batch state to fixed-capacity storage.
-Dormant Raylib consumers remain for visual capabilities that have not migrated.
 
 This is a hybrid model:
 
@@ -131,12 +130,11 @@ This is a hybrid model:
 ## Ownership Model
 
 The display thread is the sole writer of visible UI state and the only execution role
-allowed to call SDL_GPU or dormant Raylib drawing and resource APIs.
+allowed to call SDL_GPU drawing and resource APIs.
 
 | Concern | Owner | Boundary |
 | --- | --- | --- |
 | SDL window and GPU resources | Display thread | Initialized and destroyed by the active view lifecycle. |
-| Dormant Raylib resources | Display thread | Retained only by compatibility owners awaiting later migration. |
 | Panel geometry | `Euclid_Ui_Runtime_State` | Computed before drawing each frame. |
 | Widget press state | UI runtime or owning subsystem | Mutated only by display-thread UI calls. |
 | Device frame storage | `input.Input_Runtime` | Borrowed until the next input poll. |
@@ -649,7 +647,7 @@ Thumb capture uses the shared press owner and persists while the button remains 
 The complete visible track is reserved above Terminal content. Track wheel input always
 scrolls locally. In content, negotiated SGR mouse mode receives wheel input unless Shift
 selects local scrollback. Thumb capture persists outside the track until release.
-Prepared draw helpers begin and end Raylib scissoring and draw the scrollbar without
+Prepared draw helpers append scissor and scrollbar commands without
 mutating scroll state.
 
 Debug/test scenarios may request non-Terminal presentation scrolling with
@@ -833,8 +831,8 @@ When Settings is active, its controls occupy the accordion content region. It co
 - optional SIMD projection;
 - optional GPU dust instancing.
 
-The UI changes display-owned settings directly. Where a setting has an external effect,
-such as target FPS, the control also calls the appropriate display-thread Raylib API.
+The UI changes display-owned settings directly. The display coordinator applies
+settings with external effects, such as frame pacing, through the owning native service.
 
 ### GIF Panel
 
@@ -849,12 +847,11 @@ requires stable state.
 ## Fonts And Text Drawing
 
 The UI uses the display-owned font cache rather than loading fonts per widget. Font CPU
-preparation may execute on workers, but the display thread publishes Raylib resources
+preparation may execute on workers, but the display thread publishes atlas resources
 and resolves the active face generation.
 
-Common UI text uses JuliaMono through either:
+Common UI text uses JuliaMono through:
 
-- a borrowed regular Raylib font;
 - a `Font_Resolver` for styled or fallback runs;
 - `view_core.ui_text_shaped` for shaped labels;
 - terminal-specific fixed-column shaping for grid content;
@@ -864,7 +861,7 @@ Common UI text uses JuliaMono through either:
 Dynview. Font generation changes invalidate derived presentation layout so worker
 preparation can rebuild it before drawing.
 
-UI code should resolve fonts through the cache and should not retain Raylib font or
+UI code should resolve fonts through the cache and should not retain font atlas or
 texture ownership in widget state.
 
 ## GIF Capture Coordination
@@ -1000,7 +997,7 @@ migration and the deliberately deferred keyboard traversal and modal-focus work.
 1. Decide whether it coexists with or replaces existing right/presentation content.
 1. For an accordion child, extend `Ui_Accordion_Section`, its label mapping, section
     count, child preparation, child drawing, and focused selection tests together.
-1. Keep service work before drawing and Raylib calls on the display thread.
+1. Keep service work before drawing and GPU calls on the display thread.
 1. Define clipping, scroll, font, and press-ID policy explicitly.
 1. Add region and minimum-size tests.
 
@@ -1031,7 +1028,7 @@ migration and the deliberately deferred keyboard traversal and modal-focus work.
 
 The current UI depends on these invariants:
 
-1. Only the display thread mutates visible UI state or calls Raylib drawing APIs.
+1. Only the display thread mutates visible UI state or calls GPU drawing APIs.
 1. Device input is polled once per frame and its event slice is borrowed only until the
    next poll.
 1. Splitter updates precede region computation, viewport fitting, and Dynview tracking.

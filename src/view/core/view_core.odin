@@ -4,9 +4,8 @@ import viewmodel "../model"
 
 import "../../core"
 import color "../../core/color"
+import geometry "../../core/geometry"
 import particlemodel "../../particles/model"
-
-import rl "vendor:raylib"
 
 ISO_SCALE_VALUE :: 800
 ISO_X_OFFSET :: 450
@@ -50,8 +49,8 @@ TREE_FONT_SIZE :: 16
 
 TOOL_LENGTH :: viewmodel.TOOL_LENGTH
 
-Vector2 :: rl.Vector2
-Vector3 :: rl.Vector3
+Vector2 :: geometry.Vector2
+Vector3 :: geometry.Vector3
 Iso_Scale :: viewmodel.Iso_Scale
 Particle :: particlemodel.Particle
 Particle_System :: particlemodel.Particle_System

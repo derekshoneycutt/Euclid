@@ -2,6 +2,7 @@ package terminalview
 
 import viewterminalmodel "model"
 
+import geometry "../../core/geometry"
 import "../../core/protocol"
 import termemulator "../../terminal/emulator"
 import termhist "../../terminal/history"
@@ -9,8 +10,6 @@ import "../font"
 import "../input"
 
 import "core:unicode/utf8"
-
-import rl "vendor:raylib"
 
 // Arm or expire the synchronized-output safety deadline on the display clock.
 terminal_update_synchronized_output :: proc(
@@ -656,7 +655,7 @@ terminal_update_navigation_keys :: proc(
 //   - Starts, extends, or releases the mouse-driven view selection.
 terminal_update_mouse_selection :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
-    font: font.Font_Face, bounds: rl.Rectangle) {
+    font: font.Font_Face, bounds: geometry.Rectangle) {
     mode := termemulator.interpreter_input_mode(&term.output_interpreter)
     if mode.mouse_tracking != .None && mode.mouse_sgr_encoding &&
         .Shift not_in frame.mouse_modifiers {
@@ -665,7 +664,7 @@ terminal_update_mouse_selection :: proc(
     if term.hyperlink_pressed != 0 {
         return
     }
-    mouse := rl.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    mouse := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
     if .Left in frame.mouse_pressed {
         if term.shell_integration != nil {
             term.shell_integration.search_match_generation = 0

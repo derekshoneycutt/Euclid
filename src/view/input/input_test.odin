@@ -43,19 +43,6 @@ input_test_encode_frame :: proc(
     return bytes, count
 }
 
-// Verify every portable physical key has a stable round-trip device mapping.
-@(test)
-input_test_device_key_mapping_is_complete :: proc(t: ^testing.T) {
-    for key_value in 0..<int(Input_Key.Count) {
-        key := Input_Key(key_value)
-        device_key, encoded := input_key_to_device(key)
-        testing.expect(t, encoded)
-        decoded_key, decoded := input_key_from_device(device_key)
-        testing.expect(t, decoded)
-        testing.expect_value(t, decoded_key, key)
-    }
-}
-
 // Verify event queries respect kind and modifier snapshots.
 @(test)
 input_test_event_queries_use_captured_modifiers :: proc(t: ^testing.T) {
@@ -67,15 +54,6 @@ input_test_event_queries_use_captured_modifiers :: proc(t: ^testing.T) {
     testing.expect(t, input_chord_pressed(frame, .C, {.Control, .Shift}))
     testing.expect(t, !input_chord_pressed(frame, .C, {.Alt}))
     testing.expect(t, input_key_released(frame, .D))
-}
-
-// Verify one released modifier side cannot hide the still-held opposite side.
-@(test)
-input_test_device_modifier_levels_merge_both_sides :: proc(t: ^testing.T) {
-    testing.expect(t, !input_device_modifier_down(false, false))
-    testing.expect(t, input_device_modifier_down(true, false))
-    testing.expect(t, input_device_modifier_down(false, true))
-    testing.expect(t, input_device_modifier_down(true, true))
 }
 
 // Verify pointer movement begins only after the first device sample.

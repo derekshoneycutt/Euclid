@@ -57,9 +57,9 @@ Euclid has three distinct execution roles:
 
 | Execution role | Owns | May call | Must not do |
 | --- | --- | --- | --- |
-| **Display thread** | Window events, raylib and GPU/audio resources, UI, canonical scene and Terminal state, fixed-step orchestration, final publication | Native simulation, rendering, bridge submission, result validation and commit | Call the Julia C API, render from another thread, or expose mutable canonical state to Julia |
-| **Julia owner thread** | Julia lifetime, C API calls, callback execution, one actor runtime, content registration, reload candidates, Julia-side policy | Pump actors, evaluate Julia, serialize presentation values, fill checked animation slots | Render, call thread-affine raylib APIs, or concurrently mutate canonical display state |
-| **CPU task pool** | Only the operation-owned payload or cache region assigned to each finite task | Particle and constraint work, shape-cache preparation, Dynview parse/compile/layout, CPU-only font preparation | Call Julia, call thread-affine raylib APIs, retain payloads after join, or publish visible state directly |
+| **Display thread** | Window events, GPU/audio resources, UI, canonical scene and Terminal state, fixed-step orchestration, final publication | Native simulation, rendering, bridge submission, result validation and commit | Call the Julia C API, render from another thread, or expose mutable canonical state to Julia |
+| **Julia owner thread** | Julia lifetime, C API calls, callback execution, one actor runtime, content registration, reload candidates, Julia-side policy | Pump actors, evaluate Julia, serialize presentation values, fill checked animation slots | Render, call thread-affine native APIs, or concurrently mutate canonical display state |
+| **CPU task pool** | Only the operation-owned payload or cache region assigned to each finite task | Particle and constraint work, shape-cache preparation, Dynview parse/compile/layout, CPU-only font preparation | Call Julia, call thread-affine native APIs, retain payloads after join, or publish visible state directly |
 
 The Julia owner thread is not part of the CPU worker pool. It is a dedicated,
 long-lived command processor with different ownership and shutdown rules.
@@ -1049,7 +1049,7 @@ owner would violate Julia lifetime ownership and could strand queued payloads.
 1. Slot state is recycled only by the responsible consumer.
 1. Selection, reset, and reload invalidate asynchronous old-generation work.
 1. Rendering performs no Julia call and consumes only joined host caches.
-1. Julia owner work never calls thread-affine raylib rendering APIs.
+1. Julia owner work never calls thread-affine rendering APIs.
 
 Crossing the ingress link alone does not make a callback safe. Its reads and writes must
 still use the path-specific actor, snapshot, command-batch, or lifecycle protocol.

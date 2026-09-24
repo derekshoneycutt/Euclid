@@ -1,9 +1,7 @@
 package ui
 
 import viewmodel "../model"
-
-
-import rl "vendor:raylib"
+import geometry "../../core/geometry"
 
 AUTO_PORTRAIT_ASPECT_THRESHOLD :: f32(0.9)
 AUTO_LANDSCAPE_ASPECT_THRESHOLD :: f32(1.1)
@@ -97,7 +95,7 @@ compute_ui_regions :: proc(
         }))
         sections := accordion_portrait_sections("")
         view_layout := accordion_layout(
-            rl.Rectangle(regions.accordion_rect), sections, .View)
+            geometry.Rectangle(regions.accordion_rect), sections, .View)
         regions.text_rect = viewmodel.Rectangle(view_layout.content)
         regions.terminal_rect = layout_terminal_rect(regions.text_rect)
     }

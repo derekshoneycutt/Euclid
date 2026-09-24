@@ -275,7 +275,7 @@ service_observe :: proc(service: ^Service, result: ^observe.Display) {
     result.graphics_visibility_resume_count = service.visibility_resume_count
 }
 
-//   Execute one finite CPU preparation without calling raylib or terminal owners.
+//   Execute one finite CPU preparation without GPU calls or terminal owners.
 //
 // Returns:
 //   - `.Succeeded` only after the exact reserved RGBA output is complete.
@@ -687,7 +687,7 @@ texture_activate_playback :: proc(
 //   - True after residency admission and atomic texture-table publication.
 //
 // Notes:
-//   - Must run on the display thread with a live raylib graphics context.
+//   - Must run on the display thread with a live SDL_GPU device.
 texture_publish :: proc(
     service: ^Service, id: termattachment.Attachment_Id) -> bool {
     if service == nil || id.slot < 0 || id.slot >= len(service.textures) {
@@ -1169,7 +1169,7 @@ texture_service_removals :: proc(service: ^Service) {
 //   Advance decode submission, joining, publication, eviction, and deletion once.
 //
 // Notes:
-//   - Must be called only by the display owner while the raylib context is live.
+//   - Must be called only by the display owner while the SDL_GPU device is live.
 service_update :: proc(
     service: ^Service, pool: ^taskpool.Task_Pool, monotonic_ns: u64) {
     if service == nil || service.store == nil || pool == nil { return }

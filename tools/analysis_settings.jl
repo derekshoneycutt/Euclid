@@ -1,7 +1,6 @@
 using OdinJuliaAnalysis
 
 Base.include(@__MODULE__, joinpath(@__DIR__, "build_config.jl"))
-Base.include(@__MODULE__, joinpath(@__DIR__, "raylib_boundary_analysis.jl"))
 Base.include(@__MODULE__, joinpath(@__DIR__, "sdl_boundary_analysis.jl"))
 using .EuclidBuildConfiguration: native_linker_flags
 
@@ -38,7 +37,6 @@ const RuleResponses = Dict(
     "NAMING-POLICY-DRIFT" => Fail,
     "CALL-ROOT-POLICY-DRIFT" => Fail,
     "IMPORT-POLICY-DRIFT" => Fail,
-    "EUCLID-RAYLIB-BOUNDARY" => Fail,
     "EUCLID-SDL-BOUNDARY" => Fail,
     "ARCHITECTURE-FORBIDDEN-DEPENDENCY" => Fail,
     "ARCHITECTURE-DEPENDENCY-CYCLE" => Fail,
@@ -242,8 +240,6 @@ function euclid_rule_settings()
             get(RuleResponses, setting.rule_id, Report))
         for setting in BaseSettings.rules
     ]
-    push!(settings, RuleSetting(
-        RAYLIB_BOUNDARY_RULE, true, get(RuleResponses, RAYLIB_BOUNDARY_RULE, Report)))
     push!(settings, RuleSetting(
         SDL_BOUNDARY_RULE, true, get(RuleResponses, SDL_BOUNDARY_RULE, Report)))
     return settings
@@ -1808,7 +1804,7 @@ AnalysisSettings(
                 "HOST_SYMBOL_CACHE",
                 "Platform-dependent host symbol resolution is cached for the process lifetime in this unique bridge boundary."),
         ]),
-    AnalysisExtension[RaylibBoundaryExtension(), SdlBoundaryExtension()],
+    AnalysisExtension[SdlBoundaryExtension()],
     default_duplicate_code_settings(),
     default_resource_lifetime_settings(),
     default_security_settings(),

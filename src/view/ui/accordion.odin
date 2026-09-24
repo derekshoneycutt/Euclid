@@ -1,13 +1,9 @@
 package ui
 
-import native "../native"
-
 import viewmodel "../model"
 
-import view_core "../core"
 import view_font "../font"
-
-import rl "vendor:raylib"
+import geometry "../../core/geometry"
 
 ACCORDION_MAX_SECTION_COUNT :: 4
 ACCORDION_HEADER_ID_BASE :: 2201
@@ -26,8 +22,8 @@ Accordion_Section_Set :: struct {
 
 // Geometry for all accordion headers and the one expanded content region.
 Accordion_Layout :: struct {
-    headers: [ACCORDION_MAX_SECTION_COUNT]rl.Rectangle,
-    content: rl.Rectangle,
+    headers: [ACCORDION_MAX_SECTION_COUNT]geometry.Rectangle,
+    content: geometry.Rectangle,
 }
 
 // Prepared header interactions paired with their final frame layout.
@@ -39,7 +35,7 @@ Accordion_Preparation :: struct {
 
 // Shared dependencies for preparing and drawing accordion headers.
 Accordion_Context :: struct {
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     mouse_input: Input_Frame,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
     active: viewmodel.Ui_Accordion_Section,
@@ -94,10 +90,14 @@ accordion_section_index :: proc(
 
 // Place ordered headers around one flexible active content rectangle.
 accordion_layout :: proc(
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     sections: Accordion_Section_Set,
     active: viewmodel.Ui_Accordion_Section) -> Accordion_Layout {
-    inner := container_geometry(panel, ACCORDION_PANEL_INSET).inner_rect
+    inner := panel
+    inner.x += ACCORDION_PANEL_INSET
+    inner.y += ACCORDION_PANEL_INSET
+    inner.width = max(f32(0), inner.width - ACCORDION_PANEL_INSET * 2)
+    inner.height = max(f32(0), inner.height - ACCORDION_PANEL_INSET * 2)
     content_height := max(
         inner.height - ACCORDION_HEADER_HEIGHT * f32(sections.count), 0)
     result := Accordion_Layout{}
@@ -119,7 +119,7 @@ accordion_layout :: proc(
 accordion_header_params :: proc(
     ctx: Accordion_Context,
     descriptor: Accordion_Section_Descriptor,
-    rect: rl.Rectangle) -> Text_Button_Params {
+    rect: geometry.Rectangle) -> Text_Button_Params {
     return {
         id = ACCORDION_HEADER_ID_BASE + int(descriptor.section),
         rect = rect,
@@ -142,7 +142,8 @@ prepare_accordion :: proc(
     active^ = sections.items[active_index].section
     result := Accordion_Preparation{
         sections = sections,
-        layout = accordion_layout(ctx.panel, sections, active^),
+        layout = accordion_layout(
+            ctx.panel, sections, active^),
     }
     selected := active^
     for section_index in 0..<sections.count {
@@ -157,56 +158,12 @@ prepare_accordion :: proc(
     }
     if selected != active^ {
         active^ = selected
-        result.layout = accordion_layout(ctx.panel, sections, selected)
+        result.layout = accordion_layout(
+            ctx.panel, sections, selected)
         for section_index in 0..<sections.count {
             result.headers[section_index].button_drawn_rect =
                 result.layout.headers[section_index]
         }
     }
     return result
-}
-
-// Draw one accordion header with disclosure and selected-state treatment.
-draw_accordion_header :: proc(
-    ctx: Accordion_Context,
-    descriptor: Accordion_Section_Descriptor,
-    result: Text_Button_Result) {
-    params := accordion_header_params(ctx, descriptor, result.button_drawn_rect)
-    colors := text_button_colors(params, result.hovered, result.pressed)
-    expanded := descriptor.section == ctx.active
-    if expanded {
-        colors.background = native.to_raylib_color(UI_COMPONENT_BACKGROUND_COLOR)
-    }
-    rl.DrawRectangleRec(result.button_drawn_rect, colors.background)
-    rl.DrawRectangleLinesEx(result.button_drawn_rect, 1, colors.border)
-    icon_size := min(ACCORDION_DISCLOSURE_SIZE, result.button_drawn_rect.height)
-    icon_rect := rl.Rectangle{
-        result.button_drawn_rect.x + ACCORDION_HEADER_PADDING,
-        result.button_drawn_rect.y + (result.button_drawn_rect.height - icon_size) * 0.5,
-        icon_size,
-        icon_size,
-    }
-    view_core.draw_tree_disclosure_icon(icon_rect, expanded, colors.foreground)
-    view_core.ui_text_shaped({
-        resolver = ctx.font_resolver,
-        key = .Regular,
-        text = descriptor.label,
-        position = {
-            icon_rect.x + icon_rect.width + ACCORDION_HEADER_LABEL_GAP,
-            result.button_drawn_rect.y + ACCORDION_HEADER_TEXT_OFFSET_Y,
-        },
-        color = colors.foreground,
-        font = view_core.ui_text_font(ctx.font),
-    })
-}
-
-// Draw all accordion headers around the active child panel.
-draw_accordion :: proc(
-    ctx: Accordion_Context,
-    prepared: Accordion_Preparation) {
-    for section_index in 0..<prepared.sections.count {
-        draw_accordion_header(
-            ctx, prepared.sections.items[section_index],
-            prepared.headers[section_index])
-    }
 }

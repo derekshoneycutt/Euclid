@@ -83,11 +83,19 @@
       "scope": "required"
     },
     {
-      "type": "framework",
-      "bom-ref": "runtime:raylib",
-      "name": "raylib",
-      "version": "unknown",
-      "description": "Rendering runtime used by the Odin host application.",
+      "type": "library",
+      "bom-ref": "runtime:sdl3",
+      "name": "SDL3",
+      "version": "3.4.x",
+      "description": "Window, input, platform-service, and SDL_GPU runtime used by the Odin host application.",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "runtime:sdl3-image",
+      "name": "SDL_image",
+      "version": ">=3.4.0",
+      "description": "Static and animated image codec plus streaming GIF encoder runtime.",
       "scope": "required"
     }
   ],
@@ -99,7 +107,8 @@
         "file:bin/assets.pkg",
         "runtime:julia",
         "runtime:libjulia",
-        "runtime:raylib",
+        "runtime:sdl3",
+        "runtime:sdl3-image",
         "pkg:julia/Colors",
         "pkg:julia/LinearAlgebra"
       ]

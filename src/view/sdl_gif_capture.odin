@@ -5,6 +5,7 @@ import native "native"
 
 import "../files"
 
+import "core:log"
 import "core:mem"
 import "core:strings"
 
@@ -30,12 +31,17 @@ sdl_gif_capture_begin :: proc(
     if owner == nil || owner.allocator.procedure == nil {return false}
     sdl_gif_capture_abort(user_data)
     transaction, reserved := files.reserve_gif_output_transaction(owner.allocator)
-    if !reserved {return false}
+    if !reserved {
+        log.error("sdl_gif_capture_reserve_failed")
+        return false
+    }
     owner.transaction = transaction
     temporary_path := strings.clone_to_cstring(
         owner.transaction.temporary_path, context.temp_allocator)
     if !native.sdl_gif_encoder_begin(
         &owner.encoder, temporary_path, width, height) {
+        log.errorf(
+            "sdl_gif_capture_open_failed width=%d height=%d", width, height)
         sdl_gif_capture_abort(user_data)
         return false
     }

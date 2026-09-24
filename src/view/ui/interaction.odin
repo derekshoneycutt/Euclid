@@ -5,8 +5,6 @@ import geometry "../../core/geometry"
 
 import "../input"
 
-import rl "vendor:raylib"
-
 UI_PRESENTATION_SCROLLBAR_ID :: 1001
 UI_TERMINAL_SCROLLBAR_ID :: 1002
 UI_TREE_SCROLLBAR_ID :: 1003
@@ -129,15 +127,15 @@ ui_publish_presentation_visibility :: proc(
 
 // Resolve a visible Presentation or Terminal target.
 ui_presentation_target :: proc(
-    mouse: rl.Vector2, regions: viewmodel.Ui_Regions,
+    mouse: geometry.Vector2, regions: viewmodel.Ui_Regions,
     terminal_present: bool) -> viewmodel.Ui_Interaction_Target {
     if terminal_present &&
         geometry.rectangle_contains(
-            geometry.Rectangle(regions.terminal_rect), geometry.Vector2(mouse)) {
+            geometry.Rectangle(regions.terminal_rect), mouse) {
         return ui_interaction_target(.Panel_Content, .Terminal)
     }
     if geometry.rectangle_contains(
-        geometry.Rectangle(regions.text_rect), geometry.Vector2(mouse)) {
+        geometry.Rectangle(regions.text_rect), mouse) {
         return ui_interaction_target(.Panel_Content, .Presentation)
     }
     return {}
@@ -162,7 +160,8 @@ ui_hover_target :: proc(
     }
     regions := runtime^.ui_regions
     if ui_presentation_is_visible(runtime) {
-        target := ui_presentation_target(mouse, regions, terminal_present)
+        target := ui_presentation_target(
+            geometry.Vector2(mouse), regions, terminal_present)
         if target.kind != .None { return target }
     }
     if geometry.rectangle_contains(
@@ -170,7 +169,8 @@ ui_hover_target :: proc(
         return ui_interaction_target(.Panel_Content, .Accordion)
     }
     control_id, over_control := animation_control_hit_test(
-        rl.Rectangle(regions.world_rect), runtime^.gif_capture_phase, mouse)
+        geometry.Rectangle(regions.world_rect), runtime^.gif_capture_phase,
+        geometry.Vector2(mouse))
     if over_control {
         return ui_interaction_target(.Control, id = control_id)
     }
@@ -316,7 +316,7 @@ ui_terminal_captured_pointer_fields :: proc(
 ui_route_terminal_content_frame :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: Input_Frame,
-    bounds: rl.Rectangle,
+    bounds: geometry.Rectangle,
     route: Ui_Terminal_Content_Route_Input) -> Input_Frame {
     if !runtime^.interaction_frame.terminal.pointer {
         fields := ui_terminal_captured_pointer_fields(

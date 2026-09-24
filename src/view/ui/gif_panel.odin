@@ -6,12 +6,9 @@ import viewmodel "../model"
 
 import "../../core"
 import geometry "../../core/geometry"
-import view_core "../core"
 import view_font "../font"
 
 import "core:fmt"
-
-import rl "vendor:raylib"
 
 //   Row y-positions for the GIF panel's two sliders.
 Gif_Slider_Rows :: struct {
@@ -21,7 +18,7 @@ Gif_Slider_Rows :: struct {
 
 //   Shared dependencies for controls in one GIF panel frame.
 Gif_Panel_Context :: struct {
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     mouse_input: Input_Frame,
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     font: view_font.Font_Face,
@@ -46,9 +43,9 @@ Gif_View_Preparation :: struct {
 // draw_encoded_gif_geometry encodes GIF controls while capture stays deferred.
 draw_encoded_gif_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: rl.Rectangle) {
+    panel: geometry.Rectangle) {
     if state == nil {return}
-    stack_rect := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+    stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
@@ -57,7 +54,7 @@ draw_encoded_gif_geometry :: proc(
         state^.ui_runtime.gif_downsample_factor, 1, 4)
     draw_encoded_slider_geometry(encoder, panel, rows.sliders.frame_step_y,
         state^.ui_runtime.gif_frame_step, 1, 4)
-    button := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET, rows.save_button_y,
+    button := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET, rows.save_button_y,
         panel.width - SETTINGS_PANEL_INSET * 2, SETTINGS_GIF_BUTTON_HEIGHT}
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(button), UI_COMPONENT_BACKGROUND_COLOR)
@@ -68,8 +65,8 @@ draw_encoded_gif_geometry :: proc(
 // draw_encoded_gif_text emits capture controls while readback remains deferred.
 draw_encoded_gif_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: rl.Rectangle) {
-    stack := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+    panel: geometry.Rectangle) {
+    stack := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
@@ -91,7 +88,8 @@ gif_slider_params :: proc(
     label: string,
     value: ^int) -> Integer_Slider_Params {
     return {
-        panel = ctx.panel, row_y = row_y, mouse_input = ctx.mouse_input,
+        panel = geometry.Rectangle(ctx.panel), row_y = row_y,
+        mouse_input = ctx.mouse_input,
         ui_runtime = ctx.ui_runtime, press_id = press_id, label = label,
         value = value, min_value = 1, max_value = 4, font = ctx.font,
         font_resolver = ctx.resolver,
@@ -113,7 +111,8 @@ gif_save_button_params :: proc(
             ctx.panel.width - SETTINGS_PANEL_INSET * 2,
             SETTINGS_GIF_BUTTON_HEIGHT},
         label = button_text, enabled = !disabled, mouse = ctx.mouse_input,
-        interaction_space_rect = ctx.panel, interaction_enabled = true,
+        interaction_space_rect = geometry.Rectangle(ctx.panel),
+        interaction_enabled = true,
         font = ctx.font, font_resolver = ctx.resolver,
     }
 }
@@ -140,40 +139,9 @@ gif_capture_status_label :: proc(
     return "Status: Idle"
 }
 
-//   Draw one status row using the GIF panel's shared typeface and resolver.
-draw_gif_status_text :: proc(
-    ctx: Gif_Panel_Context, text: string, row_y: f32) {
-    view_core.ui_text_shaped({
-        resolver = ctx.resolver,
-        key = .Regular,
-        text = text,
-        position = {ctx.panel.x + SETTINGS_PANEL_INSET, row_y},
-        color = native.to_raylib_color(UI_TEXT_COLOR),
-        font = view_core.ui_text_font(ctx.font),
-    })
-}
-
-//   Render GIF capture status and last output path when available.
-draw_settings_gif_status :: proc(ctx: Gif_Panel_Context, row_y: f32) {
-    ui_runtime := ctx.ui_runtime
-    draw_gif_status_text(ctx, gif_capture_status_label(ui_runtime), row_y)
-
-    if ui_runtime.gif_status_note_len > 0 {
-        note_text := string(ui_runtime.gif_status_note[:ui_runtime.gif_status_note_len])
-        draw_gif_status_text(ctx, note_text,
-            row_y + SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET)
-    }
-
-    if ui_runtime.gif_capture_phase == .Saved && ui_runtime.last_gif_path_len > 0 {
-        path_text := string(ui_runtime.last_gif_path[:ui_runtime.last_gif_path_len])
-        draw_gif_status_text(ctx, fmt.tprintf("Path: %s", path_text),
-            row_y + SETTINGS_GIF_STATUS_PATH_ROW_OFFSET)
-    }
-}
-
 //   Place one fixed-size GIF settings row and return it with the advanced cursor.
 gif_stack_row :: #force_inline proc(
-    rect: rl.Rectangle, segment_size: f32,
+    rect: geometry.Rectangle, segment_size: f32,
     cursor: Stack_Panel_Cursor) -> Stack_Panel_Result {
 
     return stack_panel_place_segment(Stack_Panel_Params{
@@ -181,7 +149,7 @@ gif_stack_row :: #force_inline proc(
         origin_y = rect.y,
         axis = .Y,
         direction_sign = 1,
-        rect = rect,
+        rect = geometry.Rectangle(rect),
         can_expand = false,
         segment_size_is_set = true,
         segment_size = segment_size,
@@ -190,7 +158,7 @@ gif_stack_row :: #force_inline proc(
 }
 
 //   Lay out all GIF panel rows from one inset stack rectangle.
-gif_view_layout_rows :: proc(stack_rect: rl.Rectangle) -> Gif_View_Rows {
+gif_view_layout_rows :: proc(stack_rect: geometry.Rectangle) -> Gif_View_Rows {
     stack_cursor := stack_panel_cursor_zero()
     stack_cursor.offset = SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE
     downsample_row := gif_stack_row(stack_rect,
@@ -210,13 +178,13 @@ gif_view_layout_rows :: proc(stack_rect: rl.Rectangle) -> Gif_View_Rows {
 //   Resolve GIF controls and commit their action before rendering.
 prepare_gif_view :: proc(
     state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     mouse_input: Input_Frame) -> Gif_View_Preparation {
     if state == nil || state.particle_system == nil { return {} }
     ctx := Gif_Panel_Context{panel, mouse_input, &state.ui_runtime,
         view_font.cache_borrow(&state.font_cache, .Regular),
         view_font.cache_terminal_resolver(&state.font_cache)}
-    stack_rect := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+    stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
@@ -233,32 +201,3 @@ prepare_gif_view :: proc(
     return result
 }
 
-//   Render dedicated GIF panel and wire GIF controls.
-draw_gif_view :: proc(
-    state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
-    mouse_input: Input_Frame,
-    prepared: Gif_View_Preparation) {
-
-    if state == nil || state.particle_system == nil {
-        return
-    }
-
-    ui_runtime := &state.ui_runtime
-    regular_font := view_font.cache_borrow(&state.font_cache, .Regular)
-    resolver := view_font.cache_terminal_resolver(&state.font_cache)
-    ctx := Gif_Panel_Context{
-        panel, mouse_input, ui_runtime, regular_font, resolver}
-
-    _ = draw_container(panel, .Grey)
-
-    draw_settings_integer_slider_prepared(gif_slider_params(ctx,
-        prepared.rows.sliders.downsample_y, 6201, "Downsample",
-        &ctx.ui_runtime.gif_downsample_factor), prepared.downsample)
-    draw_settings_integer_slider_prepared(gif_slider_params(ctx,
-        prepared.rows.sliders.frame_step_y, 6202, "Frame Step",
-        &ctx.ui_runtime.gif_frame_step), prepared.frame_step)
-    draw_text_button_prepared(gif_save_button_params(ctx,
-        prepared.rows.save_button_y), prepared.save_button)
-    draw_settings_gif_status(ctx, prepared.rows.status_y)
-}

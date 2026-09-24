@@ -9,16 +9,15 @@ import geometry "../../core/geometry"
 import view_core "../core"
 
 import "core:math"
-import rl "vendor:raylib"
 
 ANIMATION_REFRESH_BUTTON_ID :: 2101
 ANIMATION_PAUSE_BUTTON_ID :: 2102
 
 // Fixed board-relative geometry for the animation controls.
 Animation_Control_Slots :: struct {
-    panel: rl.Rectangle,
-    refresh: rl.Rectangle,
-    pause: rl.Rectangle,
+    panel: geometry.Rectangle,
+    refresh: geometry.Rectangle,
+    pause: geometry.Rectangle,
 }
 
 // Prepared interaction state for the world animation controls.
@@ -43,18 +42,18 @@ animation_controls_visible :: #force_inline proc(
 
 // Place animation controls against the bottom-left edge of the current world.
 animation_control_layout_slots :: proc(
-    world_rect: rl.Rectangle) -> Animation_Control_Slots {
+    world_rect: geometry.Rectangle) -> Animation_Control_Slots {
     panel_width := ANIMATION_CONTROL_PADDING * 2 +
         ANIMATION_CONTROL_BUTTON_SIZE * 2 + ANIMATION_CONTROL_BUTTON_GAP
     panel_height := ANIMATION_CONTROL_PADDING * 2 + ANIMATION_CONTROL_BUTTON_SIZE
-    panel := rl.Rectangle{
+    panel := geometry.Rectangle{
         world_rect.x + ANIMATION_CONTROL_EDGE_INSET,
         world_rect.y + world_rect.height - ANIMATION_CONTROL_EDGE_INSET - panel_height,
         panel_width,
         panel_height,
     }
     button_y := panel.y + ANIMATION_CONTROL_PADDING
-    refresh := rl.Rectangle{panel.x + ANIMATION_CONTROL_PADDING, button_y,
+    refresh := geometry.Rectangle{panel.x + ANIMATION_CONTROL_PADDING, button_y,
         ANIMATION_CONTROL_BUTTON_SIZE, ANIMATION_CONTROL_BUTTON_SIZE}
     pause := refresh
     pause.x += ANIMATION_CONTROL_BUTTON_SIZE + ANIMATION_CONTROL_BUTTON_GAP
@@ -63,19 +62,19 @@ animation_control_layout_slots :: proc(
 
 // Return the animation-control identity under one screen-space point.
 animation_control_hit_test :: proc(
-    world_rect: rl.Rectangle,
+    world_rect: geometry.Rectangle,
     phase: viewmodel.Gif_Capture_Phase,
-    point: rl.Vector2) -> (int, bool) {
+    point: geometry.Vector2) -> (int, bool) {
     if !animation_controls_visible(phase) {
         return 0, false
     }
     slots := animation_control_layout_slots(world_rect)
     if geometry.rectangle_contains(
-        geometry.Rectangle(slots.refresh), geometry.Vector2(point)) {
+        geometry.Rectangle(slots.refresh), point) {
         return ANIMATION_REFRESH_BUTTON_ID, true
     }
     if geometry.rectangle_contains(
-        geometry.Rectangle(slots.pause), geometry.Vector2(point)) {
+        geometry.Rectangle(slots.pause), point) {
         return ANIMATION_PAUSE_BUTTON_ID, true
     }
     return 0, false
@@ -89,7 +88,7 @@ animation_control_id :: #force_inline proc(id: int) -> bool {
 // Build shared icon-button parameters for one animation control.
 animation_control_button_params :: #force_inline proc(
     id: int,
-    rect: rl.Rectangle,
+    rect: geometry.Rectangle,
     icon_id: Icon_Button_Id,
     toggle: bool,
     mouse_input: Input_Frame) -> Icon_Button_Params {
@@ -114,7 +113,7 @@ prepare_animation_controls :: proc(
         return {}
     }
     slots := animation_control_layout_slots(
-        rl.Rectangle(ui_runtime^.ui_regions.world_rect))
+        geometry.Rectangle(ui_runtime^.ui_regions.world_rect))
     pause_icon := ui_runtime^.simulation_paused ? Icon_Button_Id.Play : .Pause
     refresh := update_icon_button(animation_control_button_params(
         ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
@@ -157,29 +156,9 @@ cancel_gif_capture_if_paused_mid_capture :: proc(
     }
 }
 
-// Draw prepared animation controls over the lower-left corner of the world.
-draw_animation_controls :: proc(
-    state: ^core.Euclid_General_State,
-    mouse_input: Input_Frame,
-    prepared: Animation_Control_Preparation) {
-    if !prepared.visible {
-        return
-    }
-    ui_runtime := &state^.ui_runtime
-    _ = draw_container(prepared.slots.panel, .Grey)
-    pause_icon := ui_runtime^.simulation_paused ? Icon_Button_Id.Play : .Pause
-    draw_icon_button_prepared(animation_control_button_params(
-        ANIMATION_REFRESH_BUTTON_ID, prepared.slots.refresh, .Refresh, false,
-        mouse_input), prepared.refresh)
-    draw_icon_button_prepared(animation_control_button_params(
-        ANIMATION_PAUSE_BUTTON_ID, prepared.slots.pause, pause_icon,
-        ui_runtime^.simulation_paused, mouse_input),
-        prepared.pause)
-}
-
 // draw_encoded_refresh_glyph encodes the two-arrow refresh symbol.
 draw_encoded_refresh_glyph :: proc(
-    encoder: ^native.Draw_Encoder, rectangle: rl.Rectangle,
+    encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle,
     draw_color: color.Color_RGBA8) {
     center := geometry.Vector2{rectangle.x + rectangle.width * 0.5,
         rectangle.y + rectangle.height * 0.5}
@@ -187,8 +166,11 @@ draw_encoded_refresh_glyph :: proc(
     starts := [2]f32{math.PI * (2.0 / 9.0), math.PI * (11.0 / 9.0)}
     ends := [2]f32{math.PI * (10.0 / 9.0), math.PI * (19.0 / 9.0)}
     for arc_index in 0..<2 {
-        previous := center + geometry.Vector2{radius * f32(math.cos(f64(starts[arc_index]))),
-            radius * f32(math.sin(f64(starts[arc_index])))}
+        previous := center +
+            geometry.Vector2{
+                radius * f32(math.cos(f64(starts[arc_index]))),
+                radius * f32(math.sin(f64(starts[arc_index])))
+            }
         for segment in 1..=10 {
             angle := starts[arc_index] +
                 (ends[arc_index] - starts[arc_index]) * f32(segment) / 10
@@ -203,8 +185,11 @@ draw_encoded_refresh_glyph :: proc(
 // draw_encoded_control_glyph encodes one refresh, pause, or play symbol.
 draw_encoded_control_glyph :: proc(
     encoder: ^native.Draw_Encoder, icon: Icon_Button_Id,
-    rectangle: rl.Rectangle, draw_color: color.Color_RGBA8) {
-    if icon == .Refresh {draw_encoded_refresh_glyph(encoder, rectangle, draw_color); return}
+    rectangle: geometry.Rectangle, draw_color: color.Color_RGBA8) {
+    if icon == .Refresh {
+        draw_encoded_refresh_glyph(encoder, rectangle, draw_color);
+        return
+    }
     if icon == .Pause {
         width := max(f32(2), rectangle.width * 0.18)
         gap := max(f32(2), rectangle.width * 0.14)
@@ -230,18 +215,18 @@ draw_encoded_animation_controls :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Animation_Control_Preparation) {
     if !prepared.visible {return}
-    panel := geometry.Rectangle(prepared.slots.panel)
+    panel := prepared.slots.panel
     _ = native.draw_encoder_rectangle(encoder, panel, UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(encoder, panel, 1, UI_BORDER_COLOR)
     results := [2]Icon_Button_Result{prepared.refresh, prepared.pause}
     icons := [2]Icon_Button_Id{.Refresh,
         state^.ui_runtime.simulation_paused ? .Play : .Pause}
-    slots := [2]rl.Rectangle{prepared.slots.refresh, prepared.slots.pause}
+    slots := [2]geometry.Rectangle{prepared.slots.refresh, prepared.slots.pause}
     for index in 0..<2 {
         draw_color := UI_TEXT_COLOR
         if results[index].pressed || (index == 1 && state^.ui_runtime.simulation_paused) {
             _ = native.draw_encoder_rectangle(
-                encoder, geometry.Rectangle(slots[index]), UI_BORDER_COLOR)
+                encoder, slots[index], UI_BORDER_COLOR)
             draw_color = BACKGROUND_COLOR
         }
         draw_encoded_control_glyph(

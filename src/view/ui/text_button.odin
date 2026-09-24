@@ -1,39 +1,31 @@
 package ui
 
-import native "../native"
-
 import viewmodel "../model"
 
-import view_core "../core"
 import view_font "../font"
-import rl "vendor:raylib"
+import color "../../core/color"
+import geometry "../../core/geometry"
 
 Text_Button_Params :: struct {
     id : int,
-    rect : rl.Rectangle,
+    rect : geometry.Rectangle,
     label : string,
     enabled : bool,
     mouse : Input_Frame,
-    scroll_offset : rl.Vector2,
-    interaction_space_rect : rl.Rectangle,
+    scroll_offset : geometry.Vector2,
+    interaction_space_rect : geometry.Rectangle,
     interaction_enabled : bool,
     font : view_font.Font_Face,
     has_font_color_override : bool,
-    font_color_override : rl.Color,
+    font_color_override : color.Color_RGBA8,
     font_resolver : view_font.Font_Resolver,
 }
 
 Text_Button_Result :: struct {
-    button_drawn_rect : rl.Rectangle,
+    button_drawn_rect : geometry.Rectangle,
     clicked : bool,
     hovered : bool,
     pressed : bool,
-}
-
-Text_Button_Colors :: struct {
-    background : rl.Color,
-    foreground : rl.Color,
-    border : rl.Color,
 }
 
 //   Resolve whether this text button currently owns the shared press state.
@@ -85,66 +77,15 @@ text_button_release_press :: proc(
     return clicked
 }
 
-//   Resolve text button background, foreground, and border colors from state.
-text_button_colors :: proc(
-    params: Text_Button_Params,
-    hovered: bool,
-    pressed: bool) -> Text_Button_Colors {
-
-    bg := native.to_raylib_color(BACKGROUND_COLOR)
-    fg := native.to_raylib_color(UI_TEXT_COLOR)
-    border := native.to_raylib_color(UI_BORDER_COLOR)
-    if !params.enabled {
-        bg = rl.Color{48, 48, 48, 255}
-        fg = rl.Color{110, 110, 110, 255}
-        border = rl.Color{78, 78, 78, 255}
-    } else if pressed {
-        bg = native.to_raylib_color(UI_BORDER_COLOR)
-        fg = native.to_raylib_color(BACKGROUND_COLOR)
-    } else if hovered && params.interaction_enabled {
-        bg = native.to_raylib_color(UI_COMPONENT_BACKGROUND_COLOR)
-    }
-
-    if params.has_font_color_override {
-        fg = params.font_color_override
-    }
-    return Text_Button_Colors{
-        background = bg,
-        foreground = fg,
-        border = border,
-    }
-}
-
 //   Convert screen-space mouse position into local interaction space.
 text_button_local_mouse :: #force_inline proc(
     mouse_input: Input_Frame,
-    scroll_offset: rl.Vector2) -> rl.Vector2 {
+    scroll_offset: geometry.Vector2) -> geometry.Vector2 {
 
-    return rl.Vector2{
+    return geometry.Vector2{
         mouse_input.mouse_position.x - scroll_offset.x,
         mouse_input.mouse_position.y - scroll_offset.y,
     }
-}
-
-//   Center and draw one button label using the configured shaping resolver.
-text_button_draw_label :: proc(
-    params: Text_Button_Params, rect: rl.Rectangle, color: rl.Color) {
-
-    measured_width, _ := view_core.ui_text_measure_monospace(
-        params.label, params.font, TREE_FONT_SIZE, 0)
-    measured := rl.Vector2{measured_width, TREE_FONT_SIZE}
-    position := rl.Vector2{
-        rect.x + (rect.width - measured.x)*0.5,
-        rect.y + (rect.height - measured.y)*0.5,
-    }
-    view_core.ui_text_shaped({
-        resolver = params.font_resolver,
-        key = .Regular,
-        text = params.label,
-        position = position,
-        color = color,
-        font = view_core.ui_text_font(params.font),
-    })
 }
 
 //   Resolve one text button interaction without issuing drawing commands.
@@ -152,11 +93,14 @@ update_text_button :: proc(
     params: Text_Button_Params,
     press_owner: ^viewmodel.Ui_Press_Owner_State) -> Text_Button_Result {
 
-    button_rect := clamp_non_negative_rect(params.rect)
+    button_rect := params.rect
+    button_rect.width = max(f32(0), button_rect.width)
+    button_rect.height = max(f32(0), button_rect.height)
     local_mouse := text_button_local_mouse(params.mouse, params.scroll_offset)
 
-    hovered_item := rl.CheckCollisionPointRec(local_mouse, button_rect)
-    hovered_space := rl.CheckCollisionPointRec(local_mouse, params.interaction_space_rect)
+    hovered_item := geometry.rectangle_contains(button_rect, local_mouse)
+    hovered_space := geometry.rectangle_contains(
+        params.interaction_space_rect, local_mouse)
     hovered := hovered_item && hovered_space
 
     owns_press := text_button_owns_press(press_owner, params.id)
@@ -176,15 +120,4 @@ update_text_button :: proc(
         hovered = hovered,
         pressed = owns_press && input_frame_left_down(params.mouse),
     }
-}
-
-//   Draw one text button from a prepared interaction result.
-draw_text_button_prepared :: proc(
-    params: Text_Button_Params,
-    result: Text_Button_Result) {
-
-    colors := text_button_colors(params, result.hovered, result.pressed)
-    rl.DrawRectangleRec(result.button_drawn_rect, colors.background)
-    rl.DrawRectangleLinesEx(result.button_drawn_rect, 1, colors.border)
-    text_button_draw_label(params, result.button_drawn_rect, colors.foreground)
 }

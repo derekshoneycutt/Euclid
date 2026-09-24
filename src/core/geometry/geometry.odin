@@ -18,7 +18,7 @@ Rectangle :: struct {
 #assert(size_of(Vector3) == 3 * size_of(f32))
 #assert(size_of(Rectangle) == 4 * size_of(f32))
 
-// rectangle_contains reports Raylib-compatible inclusive edge containment.
+// rectangle_contains reports inclusive edge containment.
 rectangle_contains :: #force_inline proc(rectangle: Rectangle, point: Vector2) -> bool {
     return point.x >= rectangle.x &&
         point.x <= rectangle.x + rectangle.width &&

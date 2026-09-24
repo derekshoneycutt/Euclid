@@ -1,74 +1,30 @@
 package ui
 
-import native "../native"
-
-import rl "vendor:raylib"
-
-Container_Fill_Variant :: enum {
-    Dark_Red,
-    Grey,
-}
+import geometry "../../core/geometry"
 
 Container_Draw_Result :: struct {
-    drawn_rect: rl.Rectangle,
-    inner_rect: rl.Rectangle,
-}
-
-//   Resolve container fill color from the selected visual family variant.
-container_fill_color :: #force_inline proc(
-    fill_variant: Container_Fill_Variant) -> rl.Color {
-    switch fill_variant {
-    case .Dark_Red:
-        return native.to_raylib_color(BACKGROUND_COLOR)
-    case .Grey:
-        return native.to_raylib_color(UI_COMPONENT_BACKGROUND_COLOR)
-    }
-
-    return native.to_raylib_color(BACKGROUND_COLOR)
+    drawn_rect: geometry.Rectangle,
+    inner_rect: geometry.Rectangle,
 }
 
 //   Return clamped outer and inner geometry without drawing the container.
 container_geometry :: proc(
-    rect: rl.Rectangle, border_thickness: f32) -> Container_Draw_Result {
-    drawn_rect := clamp_non_negative_rect(rect)
+    rect: geometry.Rectangle, border_thickness: f32) -> Container_Draw_Result {
+    drawn_rect := rect
+    drawn_rect.width = max(f32(0), drawn_rect.width)
+    drawn_rect.height = max(f32(0), drawn_rect.height)
     border := max(0.0, border_thickness)
 
-    inner_rect := rl.Rectangle{
+    inner_rect := geometry.Rectangle{
         drawn_rect.x + border,
         drawn_rect.y + border,
         drawn_rect.width - border * 2,
         drawn_rect.height - border * 2,
     }
-    inner_rect = clamp_non_negative_rect(inner_rect)
+    inner_rect.width = max(f32(0), inner_rect.width)
+    inner_rect.height = max(f32(0), inner_rect.height)
     return Container_Draw_Result{
         drawn_rect = drawn_rect,
         inner_rect = inner_rect,
     }
-}
-
-//   Draw a container fill+border and return clamped outer/inner geometry.
-draw_container_with_border :: proc(
-    rect: rl.Rectangle,
-    fill_variant: Container_Fill_Variant,
-    border_thickness: f32) -> Container_Draw_Result {
-
-    geometry := container_geometry(rect, border_thickness)
-    drawn_rect := geometry.drawn_rect
-    border := max(0.0, border_thickness)
-
-    rl.DrawRectangleRec(drawn_rect, container_fill_color(fill_variant))
-    if border > 0 {
-        rl.DrawRectangleLinesEx(
-            drawn_rect, border, native.to_raylib_color(UI_BORDER_COLOR))
-    }
-
-    return geometry
-}
-
-//   Draw a container using the standard 1px border thickness.
-draw_container :: proc(
-    rect: rl.Rectangle,
-    fill_variant: Container_Fill_Variant) -> Container_Draw_Result {
-
-    return draw_container_with_border(rect, fill_variant, 1)
 }

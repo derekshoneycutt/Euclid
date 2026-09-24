@@ -3,6 +3,7 @@
 package terminalview
 
 import animation_model "../../core/animation"
+import geometry "../../core/geometry"
 import viewterminalmodel "model"
 import "../../core"
 import "../../core/protocol"
@@ -19,8 +20,6 @@ import "../input"
 
 import "core:mem"
 import "core:testing"
-
-import rl "vendor:raylib"
 
 // Fake display adapter facts captured by hyperlink activation tests.
 Terminal_Test_Hyperlink_Activation :: struct {
@@ -81,7 +80,7 @@ terminal_test_record_shape_fallback :: proc(
 terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
     palette: termpalette.Terminal_Palette_State
     termpalette.terminal_palette_init(&palette)
-    themed_default := rl.Color{12, 34, 56, 255}
+    themed_default := Color{12, 34, 56, 255}
 
     testing.expect_value(t,
         terminal_resolve_foreground(&palette, {}, themed_default),
@@ -94,7 +93,7 @@ terminal_test_theme_preserves_explicit_ansi_foreground :: proc(t: ^testing.T) {
     direct := termpalette.terminal_color_direct(0xAABBCCFF)
     testing.expect_value(t,
         terminal_resolve_foreground(&palette, direct, themed_default),
-        rl.Color{0xAA, 0xBB, 0xCC, 0xFF})
+        Color{0xAA, 0xBB, 0xCC, 0xFF})
 }
 
 // Verify initialization never discards an already published terminal owner.
@@ -134,7 +133,7 @@ terminal_test_raster_fit_and_explicit_geometry :: proc(t: ^testing.T) {
         },
     }
     fit := terminal_raster_geometry(
-        placement, {width = 100, height = 50}, rl.Vector2{10, 20}, 20, 20)
+        placement, {width = 100, height = 50}, geometry.Vector2{10, 20}, 20, 20)
     testing.expect(t, fit.valid)
     testing.expect_value(t, fit.destination.x, f32(13))
     testing.expect_value(t, fit.destination.y, f32(25))
@@ -143,7 +142,7 @@ terminal_test_raster_fit_and_explicit_geometry :: proc(t: ^testing.T) {
 
     placement.geometry.sizing = .Explicit_Cells
     explicit := terminal_raster_geometry(
-        placement, {width = 100, height = 50}, rl.Vector2{10, 20}, 20, 20)
+        placement, {width = 100, height = 50}, geometry.Vector2{10, 20}, 20, 20)
     testing.expect_value(t, explicit.destination.width, f32(80))
     testing.expect_value(t, explicit.destination.height, f32(40))
 }
@@ -331,9 +330,9 @@ terminal_test_shell_command_search_input :: proc(t: ^testing.T) {
         &term, {kind = .Press, key = .Escape}))
     testing.expect(t, !shell.search_editing)
     testing.expect_value(t, terminal_command_status_color(0),
-        rl.Color{0x38, 0x98, 0x26, 0xFF})
+        Color{0x38, 0x98, 0x26, 0xFF})
     testing.expect_value(t, terminal_command_status_color(1),
-        rl.Color{0xCB, 0x3C, 0x33, 0xFF})
+        Color{0xCB, 0x3C, 0x33, 0xFF})
 }
 
 // Build one single-width test cell with inline UTF-8 storage.
@@ -454,7 +453,7 @@ terminal_test_resolve_mouse_frame_uses_live_grid :: proc(t: ^testing.T) {
         column_width = 8,
         line_height = 18,
     }}
-    bounds := rl.Rectangle{x = 5, y = 7, width = 1000, height = 800}
+    bounds := geometry.Rectangle{x = 5, y = 7, width = 1000, height = 800}
     inside := terminal_resolve_mouse_frame(&term, {
         mouse_position = {x = 5 + TERMINAL_PADDING + 17,
             y = 7 + TERMINAL_PADDING + 37},
@@ -1141,11 +1140,6 @@ terminal_test_shaped_whitespace_has_no_ink :: proc(t: ^testing.T) {
     testing.expect(t, !terminal_cell_is_ascii_space(&visible))
 }
 
-// Build metadata-only font state for shaped-run validation tests.
-font_test_atlas :: proc(glyph_count: i32) -> rl.Font {
-    return {glyphCount = glyph_count}
-}
-
 // Verify the prompt line composes the Julia prompt with the given text.
 @(test)
 terminal_test_prompt_line :: proc(t: ^testing.T) {
@@ -1550,7 +1544,7 @@ terminal_history_prev_test_helper :: proc(
 // Verify selection and negotiated mouse tracking suppress hyperlink clicks.
 terminal_test_expect_hyperlink_precedence :: proc(
     t: ^testing.T, term: ^viewterminalmodel.Terminal_State,
-    point: input.Input_Position, bounds: rl.Rectangle) {
+    point: input.Input_Position, bounds: geometry.Rectangle) {
     shifted := input.Input_Frame{
         mouse_position = point,
         mouse_pressed = {.Left},
@@ -1619,7 +1613,7 @@ terminal_test_hyperlink_click_activation :: proc(t: ^testing.T) {
         &term, "\e]8;;https://example.com/path\a界\e]8;;\a")
     term.geometry.column_width = 10
     term.geometry.line_height = 20
-    bounds := rl.Rectangle{0, 0, 100, 60}
+    bounds := geometry.Rectangle{0, 0, 100, 60}
     point := input.Input_Position{25, 15}
 
     terminal_update_hyperlink_click(&term, {
@@ -1693,7 +1687,7 @@ terminal_test_detected_link_boundaries_and_explicit_precedence :: proc(t: ^testi
     term.geometry.column_width = 10
     term.geometry.line_height = 20
     hit := terminal_hit_test_link(
-        &term, rl.Rectangle{0, 0, 400, 80}, rl.Vector2{25, 35})
+        &term, geometry.Rectangle{0, 0, 400, 80}, geometry.Vector2{25, 35})
     testing.expect_value(t, hit.kind, Terminal_Link_Kind.Osc8)
     testing.expect(t, hit.handle != 0)
 }
@@ -1707,7 +1701,7 @@ terminal_test_detected_link_click_activation :: proc(t: ^testing.T) {
     terminal_append_output_line(&term, "https://example.com/path")
     term.geometry.column_width = 10
     term.geometry.line_height = 20
-    bounds := rl.Rectangle{0, 0, 400, 60}
+    bounds := geometry.Rectangle{0, 0, 400, 60}
     point := input.Input_Position{25, 15}
 
     terminal_update_hyperlink_click(&term, {

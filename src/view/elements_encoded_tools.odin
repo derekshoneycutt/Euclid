@@ -197,8 +197,7 @@ draw_encoded_compass_arc :: proc(
     basis, ok := compass_top_circle_basis(
         compass^.joint1, compass^.pivot, compass^.joint2)
     if !ok {return}
-    draw := Compass_Arc_Draw{state, compass^.brush_size,
-        native.to_raylib_color(compass^.color)}
+    draw := Compass_Arc_Draw{state, compass^.brush_size}
     scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
     scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
     radius := compass^.brush_size * 0.5
@@ -237,8 +236,7 @@ encoded_compass_arc_submit :: proc(
     encoded_stroke_pack_occluders(&uniforms, encoder, occluders)
     if !native.draw_encoder_append_stroke(encoder, vertices[:],
         encoded_stroke_vertex_uniforms(encoder), uniforms) {
-        draw := Compass_Arc_Draw{state, compass^.brush_size,
-            native.to_raylib_color(compass^.color)}
+        draw := Compass_Arc_Draw{state, compass^.brush_size}
         encoded_compass_arc_fallback(
             encoder, compass^.pivot, basis, draw, compass^.color)
     }

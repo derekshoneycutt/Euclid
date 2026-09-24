@@ -11,13 +11,10 @@ import view_font "../font"
 
 import "core:fmt"
 
-import rl "vendor:raylib"
-import rlgl "vendor:raylib/rlgl"
-
 //   Shared dependencies for controls in one settings panel frame.
 Settings_View_Context :: struct {
     state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     mouse_input: Input_Frame,
     font: view_font.Font_Face,
     font_resolver: view_font.Font_Resolver,
@@ -63,7 +60,7 @@ Settings_Control_Update :: struct {
 
 // draw_encoded_checkbox_geometry encodes one checkbox without its deferred label.
 draw_encoded_checkbox_geometry :: proc(
-    encoder: ^native.Draw_Encoder, rectangle: rl.Rectangle, checked: bool) {
+    encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, checked: bool) {
     _ = native.draw_encoder_rectangle_outline(
         encoder, geometry.Rectangle(rectangle), 1, UI_BORDER_COLOR)
     if !checked {return}
@@ -78,29 +75,29 @@ draw_encoded_checkbox_geometry :: proc(
 
 // draw_encoded_slider_geometry encodes one slider track, fill, and knob.
 draw_encoded_slider_geometry :: proc(
-    encoder: ^native.Draw_Encoder, panel: rl.Rectangle, row_y: f32,
+    encoder: ^native.Draw_Encoder, panel: geometry.Rectangle, row_y: f32,
     value, min_value, max_value: int) {
-    track := slider_track_rect(panel, row_y)
+    track := slider_track_rect(geometry.Rectangle(panel), row_y)
     denominator := max(1, max_value - min_value)
     ratio := f32(clamp(value, min_value, max_value) - min_value) /
         f32(denominator)
     knob_center_x, knob := build_slider_knob(track, ratio)
     _ = native.draw_encoder_rectangle(
-        encoder, geometry.Rectangle(track), BACKGROUND_COLOR)
-    fill := rl.Rectangle{track.x, track.y,
+        encoder, track, BACKGROUND_COLOR)
+    fill := geometry.Rectangle{track.x, track.y,
         max(0, knob_center_x - track.x), track.height}
     _ = native.draw_encoder_rectangle(
-        encoder, geometry.Rectangle(fill), UI_BORDER_COLOR)
+        encoder, fill, UI_BORDER_COLOR)
     _ = native.draw_encoder_rectangle(
-        encoder, geometry.Rectangle(knob), UI_TEXT_COLOR)
+        encoder, knob, UI_TEXT_COLOR)
 }
 
 // draw_encoded_settings_geometry encodes settings controls without text.
 draw_encoded_settings_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: rl.Rectangle) {
+    panel: geometry.Rectangle) {
     if state == nil || state^.particle_system == nil {return}
-    stack_rect := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+    stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
@@ -108,15 +105,23 @@ draw_encoded_settings_geometry :: proc(
     draw_encoded_slider_geometry(encoder, panel, rows.slider_label_y,
         state^.particle_system^.use_max_dust_particles,
         0, particlemodel.MAX_LOW_PARTICLES)
-    checks := [4]struct{rectangle: rl.Rectangle, checked: bool}{
-        {{panel.x + SETTINGS_PANEL_INSET, rows.fps_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE}, state^.ui_runtime.display_fps},
-        {{panel.x + SETTINGS_PANEL_INSET, rows.limit_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE}, state^.ui_runtime.limit_fps},
-        {{panel.x + SETTINGS_PANEL_INSET, rows.simd_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE}, state^.ui_runtime.use_simd_batch_projection},
-        {{panel.x + SETTINGS_PANEL_INSET, rows.gpu_dust_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE}, state^.ui_runtime.use_gpu_dust_instancing},
+    checks := [4]struct{rectangle: geometry.Rectangle, checked: bool}{
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.fps_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE
+        }, state^.ui_runtime.display_fps},
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.limit_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE
+        }, state^.ui_runtime.limit_fps},
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.simd_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE
+        }, state^.ui_runtime.use_simd_batch_projection},
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.gpu_dust_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE
+        }, state^.ui_runtime.use_gpu_dust_instancing},
     }
     for check in checks {
         draw_encoded_checkbox_geometry(encoder, check.rectangle, check.checked)
@@ -126,8 +131,8 @@ draw_encoded_settings_geometry :: proc(
 // draw_encoded_settings_text emits current labels, values, and counters.
 draw_encoded_settings_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: rl.Rectangle) {
-    stack := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+    panel: geometry.Rectangle) {
+    stack := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
@@ -163,7 +168,7 @@ draw_encoded_settings_text :: proc(
 
 // settings_right_aligned_x keeps one measured value inside the panel inset.
 settings_right_aligned_x :: #force_inline proc(
-    panel: rl.Rectangle, text_width: f32) -> f32 {
+    panel: geometry.Rectangle, text_width: f32) -> f32 {
     return panel.x + panel.width - SETTINGS_PANEL_INSET - max(text_width, 0)
 }
 
@@ -173,12 +178,12 @@ settings_checkbox_params :: proc(
     descriptor: Settings_Checkbox_Descriptor) -> Checkbox_Params {
     return {
         id = descriptor.id,
-        rect = {ctx.panel.x + SETTINGS_PANEL_INSET, descriptor.row_y,
+        rect = geometry.Rectangle{ctx.panel.x + SETTINGS_PANEL_INSET, descriptor.row_y,
             SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE},
         checked = descriptor.checked,
         enabled = descriptor.enabled,
         mouse = ctx.mouse_input,
-        interaction_space_rect = ctx.panel,
+        interaction_space_rect = geometry.Rectangle(ctx.panel),
         interaction_enabled = true,
         label = descriptor.label,
         font = ctx.font,
@@ -194,7 +199,7 @@ settings_max_particles_params :: proc(
     ctx: Settings_View_Context,
     row_y: f32) -> Integer_Slider_Params {
     return {
-        panel = ctx.panel,
+        panel = geometry.Rectangle(ctx.panel),
         row_y = row_y,
         mouse_input = ctx.mouse_input,
         ui_runtime = &ctx.state.ui_runtime,
@@ -230,7 +235,7 @@ draw_settings_particle_stats :: proc(
                 ctx.panel.x + SETTINGS_PANEL_INSET,
                 stats_y + f32(row)*SETTINGS_STATS_ROW_GAP,
             },
-            color = native.to_raylib_color(UI_TEXT_COLOR),
+            color = UI_TEXT_COLOR,
             font = view_core.ui_text_font(ctx.font),
         })
     }
@@ -238,7 +243,7 @@ draw_settings_particle_stats :: proc(
 
 //   Place one fixed-size settings row and return it with the advanced cursor.
 settings_stack_row :: #force_inline proc(
-    rect: rl.Rectangle, segment_size: f32,
+    rect: geometry.Rectangle, segment_size: f32,
     cursor: Stack_Panel_Cursor) -> Stack_Panel_Result {
 
     return stack_panel_place_segment(Stack_Panel_Params{
@@ -246,7 +251,7 @@ settings_stack_row :: #force_inline proc(
         origin_y = rect.y,
         axis = .Y,
         direction_sign = 1,
-        rect = rect,
+        rect = geometry.Rectangle(rect),
         can_expand = false,
         segment_size_is_set = true,
         segment_size = segment_size,
@@ -255,7 +260,8 @@ settings_stack_row :: #force_inline proc(
 }
 
 //   Lay out the settings view rows and return their y-positions.
-settings_view_layout_rows :: proc(stack_rect: rl.Rectangle) -> Settings_View_Rows {
+settings_view_layout_rows :: proc(
+    stack_rect: geometry.Rectangle) -> Settings_View_Rows {
     stack_cursor := stack_panel_cursor_zero()
     stack_cursor.offset = SETTINGS_SLIDER_LABEL_TOP_OFFSET - SETTINGS_HEADER_TOP_OFFSET
 
@@ -312,7 +318,7 @@ update_settings_controls :: proc(
     result.simd = update_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, simd_label, ctx.state.ui_runtime.use_simd_batch_projection,
         simd_available}), &ctx.state.ui_runtime.ui_press_owner)
-    gpu_available := rlgl.GetVersion() >= .OPENGL_33
+    gpu_available := ctx.state.ui_runtime.gpu_dust_instancing_available
     gpu_label := "GPU Dust Instancing"
     if !gpu_available { gpu_label = "GPU Dust Instancing (Unavailable)" }
     result.gpu_dust = update_checkbox(settings_checkbox_params(ctx, {rows.gpu_dust_y,
@@ -324,10 +330,10 @@ update_settings_controls :: proc(
 //   Resolve settings controls and commit their values before rendering.
 prepare_settings_view :: proc(
     state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
+    panel: geometry.Rectangle,
     mouse_input: Input_Frame) -> Settings_View_Preparation {
     if state == nil || state.particle_system == nil { return {} }
-    stack_rect := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+    stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
@@ -350,8 +356,6 @@ apply_settings_preparation :: proc(
     if prepared.fps.toggled { state.ui_runtime.display_fps = prepared.fps.checked_out }
     if prepared.limit.toggled {
         state.ui_runtime.limit_fps = prepared.limit.checked_out
-        if prepared.limit.checked_out { rl.SetTargetFPS(LIMIT_FPS) }
-        else { rl.SetTargetFPS(0) }
     }
     when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
         if prepared.sound.toggled {
@@ -364,69 +368,4 @@ apply_settings_preparation :: proc(
         gpu_available && prepared.gpu_dust.checked_out
 }
 
-//   Draw the retained experimental audio toggle when that build is enabled.
-draw_experimental_audio_control :: proc(
-    ctx: Settings_View_Context, prepared: Settings_View_Preparation) {
-    when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
-        draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.sound_y,
-            4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled,
-            true}), prepared.sound)
-    }
-}
-
-//   Draw all settings controls against the laid-out rows.
-draw_settings_controls :: proc(
-    state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
-    mouse_input: Input_Frame,
-    prepared: Settings_View_Preparation) {
-
-    ui_runtime := &state.ui_runtime
-    regular_font := view_font.cache_borrow(&state.font_cache, .Regular)
-    resolver := view_font.cache_terminal_resolver(&state.font_cache)
-    ctx := Settings_View_Context{
-        state, panel, mouse_input, regular_font, resolver}
-
-    animation_entries_added := 0
-    if state.julia_interface != nil {
-        animation_entries_added = state.julia_interface.animation_count
-    }
-    draw_settings_integer_slider_prepared(settings_max_particles_params(
-        ctx, prepared.rows.slider_label_y), prepared.max_particles)
-    draw_settings_particle_stats(
-        ctx, prepared.rows.stats_y, nil, animation_entries_added)
-    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.fps_y,
-        4001, "Display FPS", ui_runtime.display_fps, true}), prepared.fps)
-    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.limit_y,
-        4002, "Limit FPS", ui_runtime.limit_fps, true}), prepared.limit)
-    draw_experimental_audio_control(ctx, prepared)
-    simd_available := view_core.simd_batch_projection_available()
-    simd_label := "Use SIMD Projection"
-    if !simd_available { simd_label = "Use SIMD Projection (Unavailable)" }
-    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.simd_y,
-        4003, simd_label, ui_runtime.use_simd_batch_projection,
-        simd_available}), prepared.simd)
-    gpu_available := rlgl.GetVersion() >= .OPENGL_33
-    gpu_label := "GPU Dust Instancing"
-    if !gpu_available { gpu_label = "GPU Dust Instancing (Unavailable)" }
-    draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.gpu_dust_y,
-        4005, gpu_label, ui_runtime.use_gpu_dust_instancing,
-        gpu_available}), prepared.gpu_dust)
-}
-
-//   Render full settings panel and wire all settings controls.
-draw_settings_view :: proc(
-    state: ^core.Euclid_General_State,
-    panel: rl.Rectangle,
-    mouse_input: Input_Frame,
-    prepared: Settings_View_Preparation) {
-
-    if state == nil || state.particle_system == nil {
-        return
-    }
-
-    _ = draw_container(panel, .Grey)
-
-    draw_settings_controls(state, panel, mouse_input, prepared)
-}
 

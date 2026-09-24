@@ -6,7 +6,7 @@
 1. [Where To Start Reading](#where-to-start-reading)
 1. [Module Map (Odin + Julia)](#module-map-odin--julia)
 1. [Execution And Ownership Model](#execution-and-ownership-model)
-1. [Dormant Raylib Backend Boundary](#dormant-raylib-backend-boundary)
+1. [Native Backend Boundary](#native-backend-boundary)
 1. [Julia Actor Architecture](#julia-actor-architecture)
 1. [Terminal Architecture (Interactive Runtime Surface)](#terminal-architecture-interactive-runtime-surface)
 1. [Animation Architecture](#animation-architecture)
@@ -146,7 +146,7 @@ slots, and joined task-pool work; they do not share mutable ownership.
 
 | Execution role | Owns | Publishes through | Forbidden work |
 | --- | --- | --- | --- |
-| **Display thread** | SDL window and GPU shell, dormant Raylib resources, input, UI, canonical scene and Terminal state, fixed-step ordering, final publication | Typed Julia ingress, task-pool submissions, display-owned commit boundaries | Julia C API calls or concurrent mutation of canonical state |
+| **Display thread** | SDL window and GPU resources, input, UI, canonical scene and Terminal state, fixed-step ordering, final publication | Typed Julia ingress, task-pool submissions, display-owned commit boundaries | Julia C API calls or concurrent mutation of canonical state |
 | **Julia owner thread** | Julia lifetime, callback execution, one actor runtime, content generations, reload candidates, Julia-side policy | Typed egress, checked animation slots, canonical MIME envelopes | Native GPU calls, rendering, or direct mutation of display-owned state |
 | **CPU task pool** | Finite operation-owned payloads and cache regions while a task is active | Joined results returned to display-readable ownership | Julia calls, thread-affine native GPU calls, or direct visible-state publication |
 
@@ -173,7 +173,7 @@ may enter Julia and only the display may publish visible state.
 particles, Dynview commands and layout records, Terminal themes, UI regions, and
 prepared glyph placement use these portable values. Bridge and protocol payloads keep
 their explicit wire representations. Native display packages convert portable values
-to SDL or dormant Raylib values only at the owner-specific backend boundary.
+to SDL values only at the owner-specific backend boundary.
 
 ### Input Boundary
 
@@ -181,7 +181,7 @@ The display coordinator drains the SDL event queue exactly once per frame. It ap
 window lifecycle and extent facts to the native platform owner while translating
 keyboard, pointer, focus, wheel, and committed text events into application-owned
 `Input_Frame` values. SDL scancodes provide physical key identity, and queue order is
-preserved in fixed `Input_Runtime` event storage. Consumers never poll SDL or Raylib.
+preserved in fixed `Input_Runtime` event storage. Consumers never poll SDL directly.
 
 `Input_Runtime` owns fixed display-lifetime storage, while each `Input_Frame` borrows
 its event prefix only until the next poll. UI and Terminal consumers receive frame
@@ -226,42 +226,34 @@ failed animation updates preserve the last resident frame, and borrowed upload b
 remain owned until completion. Glyphs, Dynview text, Terminal text, and Terminal
 rasters are textured quads in the active frame. Tool strokes and dust use bounded
 custom commands in that same ordered render pass. Screenshot and GIF acquisition read
-back the display-owned SDL scene target. Dormant Raylib source may remain, but it
-neither creates a window, polls active input, records active frame presentation, nor
-owns tool or particle GPU resources.
+back the display-owned SDL scene target.
 
 The repository-owned `EUCLID-SDL-BOUNDARY` rule permits SDL imports only in the exact
 native color, icon, GPU renderer, platform, platform-service, and timing owners, the
 clipboard adapter, and the display input coordinator. Its import counts fail closed on
-stale or expanded ownership.
+stale or expanded ownership, and the same rule rejects every Raylib or rlgl import.
 
-## Dormant Raylib Backend Boundary
+## Native Backend Boundary
 
-Raylib and rlgl remain transitional implementation dependencies, not active window or
-presentation owners and not canonical data substrates. Shapes, particles, Dynview,
-Terminal, UI, and frame rendering retain their existing prepared caches and dormant
-draw consumers. Euclid does not route them through
-a generic render command stream, backend-neutral shader interface, global resource
-registry, or shared native-handle abstraction.
+SDL3 owns the window, events, timing, platform services, image codecs, and GPU device.
+SDL_GPU owns presentation and display-thread native resources. Portable geometry,
+color, input, scene, Terminal, UI, and Dynview records do not expose backend values.
+Subsystems retain their local preparation caches and append bounded commands to the
+display-owned encoder rather than retaining an alternative immediate renderer.
 
-The repository analyzer classifies every production Raylib or rlgl import under one
-current owner:
+The repository analyzer classifies every production SDL import under one exact owner:
 
 | Category | Current owners and responsibility |
 | --- | --- |
-| Transitional compatibility | `src/view/view.odin` retains the dormant frame consumer needed by later rendering slices but does not own active presentation or device polling. |
-| Subsystem drawing | View core, UI, Dynview display, and Terminal packages retain dormant immediate Raylib consumers alongside migrated owner-local geometry encoders. Tool and particle rendering are native SDL_GPU paths. |
-| Audio | `src/audio` owns Raylib stream handles and chalk synthesis playback. |
-| Backend resource ownership | Native SDL owners hold GPU handles; font and Terminal graphics policy retain bounded generation, publication, playback, and cleanup state through portable records. |
-| Capture acquisition | `src/view/sdl_framebuffer.odin` reads the SDL scene target into the existing short-lived CPU image facade used by screenshot and GIF policy. |
-| Documented font/image compatibility requirement | Font rasterization and Terminal image decoding remain CPU-owned compatibility work; their resident texture records no longer contain Raylib resources. |
+| Platform shell | Native view owners create the SDL window, GPU device, scene target, timing state, cursors, clipboard, and input frames. |
+| Rendering | Native draw, stroke, and dust owners hold SDL_GPU pipelines and buffers; higher packages append portable bounded commands. |
+| Images and capture | SDL_image workers decode Terminal pixels, while framebuffer readback and the streaming GIF encoder operate on the SDL scene target. |
+| Publication | Font and Terminal graphics policy retain bounded generation, publication, playback, and cleanup state through portable records. |
 
-Canonical Dynview compile, layout, and tracking packages use `core/geometry.Rectangle`;
-only display callers convert temporary Raylib rectangles at their call boundaries.
-Canonical shape and particle models, Terminal protocol/storage, and portable input
-types likewise cannot import Raylib or rlgl. The repository-owned
-`EUCLID-RAYLIB-BOUNDARY` rule rejects an unclassified production import and rejects
-drift in every exact owner allowance.
+Canonical shapes and particles, Dynview compile/layout/tracking, Terminal
+protocol/storage, and portable input types cannot import SDL directly. The
+repository-owned `EUCLID-SDL-BOUNDARY` rule rejects unclassified SDL imports, exact
+owner drift, and every Raylib or rlgl import.
 
 Detailed contracts remain with their subsystem guides and owners. See
 [Tool Rendering](ToolRendering.md) for local shader locations and fallback cleanup,
@@ -697,7 +689,7 @@ CPU preparation remains with each semantic subsystem. Font workers read and rast
 the source selected by the font cache; Terminal graphics workers decode into bounded
 attachment-store storage. Joined results do not become visible directly. The display
 owner revalidates the subsystem generation, admits the complete candidate, creates its
-Raylib resource, and releases partial native state on failure. File access used to
+SDL_GPU resource, and releases partial native state on failure. File access used to
 select, monitor, or prepare a font remains font policy rather than a generic files
 facade.
 
@@ -774,7 +766,7 @@ the owner responsible for release.
   domain. Runtime state borrows that domain for synchronized scenario artifact samples;
   `main` restores the original allocator before final reporting and metadata teardown.
 - The process domain covers allocations routed through its context allocator. Julia GC,
-  Raylib/native allocations, temporary storage, and dedicated subsystem allocators remain
+  native allocations, temporary storage, and dedicated subsystem allocators remain
   outside its counters.
 - Julia interface slots own registry arenas cleared on staging, rollback, or retirement.
 - Snapshot slots retain presentation bytes and pointer-free semantics until the slot is

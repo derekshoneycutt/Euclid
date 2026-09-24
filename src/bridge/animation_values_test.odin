@@ -1,8 +1,7 @@
 package bridge
 
 import bridgemodel "model"
-
-import rl "vendor:raylib"
+import geometry "../core/geometry"
 
 import shapemodel "../shapes/model"
 
@@ -50,7 +49,7 @@ animation_value_test_state_destroy :: proc(state: ^core.Euclid_General_State) {
 // Create one canonical transform entity for mixed transaction tests.
 animation_value_test_entity :: proc(
     world: ^shapemodel.Shape_World,
-    position: rl.Vector3) -> shapemodel.Shape_Entity {
+    position: geometry.Vector3) -> shapemodel.Shape_Entity {
     entity: shapemodel.Shape_Entity
     assert(shapemodel.shape_world_create_entity(world, &entity) == .Ok)
     assert(shapemodel.shape_component_insert(&world^.transforms, &world^.registry,
@@ -197,7 +196,7 @@ animation_value_batch_commits_scene_and_typed_state :: proc(t: ^testing.T) {
     testing.expect(t, commit_scene_command_batch(state, &batch))
     transform, found := shapemodel.shape_component_get(
         &world.transforms, &world.registry, entity)
-    testing.expect(t, found && transform^.position == rl.Vector3{2, 3, 4})
+    testing.expect(t, found && transform^.position == geometry.Vector3{2, 3, 4})
     destination: [1]u8
     testing.expect_value(t, animation_model.animation_value_store_copy(
         &state^.animation_values, identity, destination[:]),
@@ -263,7 +262,7 @@ animation_value_batch_rejects_scene_with_invalid_typed_write :: proc(t: ^testing
     testing.expect(t, !commit_scene_command_batch(state, &batch))
     transform, found := shapemodel.shape_component_get(
         &world.transforms, &world.registry, entity)
-    testing.expect(t, found && transform^.position == rl.Vector3{9, 9, 9})
+    testing.expect(t, found && transform^.position == geometry.Vector3{9, 9, 9})
 }
 
 //   Verify runtime generation rejection prevents stale typed publication.

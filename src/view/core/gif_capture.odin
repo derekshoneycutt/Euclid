@@ -11,7 +11,6 @@ import "../../core"
 
 import "core:log"
 import "core:time"
-import rl "vendor:raylib"
 
 Gif_Capture_Session :: viewmodel.Gif_Capture_Session
 Gif_Capture_Frame :: viewmodel.Gif_Capture_Frame
@@ -203,7 +202,7 @@ gif_capture_submit_frame :: proc(
 // Returns:
 //   - none.
 gif_capture_update_fixed_step :: proc(
-    state: ^core.Euclid_General_State) {
+    state: ^core.Euclid_General_State, extents: Gif_Capture_Extents) {
     ui_runtime := &state.ui_runtime
 
     // A save request either cancels an Armed capture or arms a fresh one.
@@ -233,7 +232,7 @@ gif_capture_update_fixed_step :: proc(
     switch ui_runtime.gif_capture_phase {
     case .Idle, .Finalizing, .Saved, .Error:
     case .Armed:
-        gif_capture_advance_armed(state, ui_runtime)
+        gif_capture_advance_armed(state, ui_runtime, extents)
     case .Recording:
         gif_capture_advance_recording(state, ui_runtime)
     }
@@ -241,8 +240,9 @@ gif_capture_update_fixed_step :: proc(
 
 //   Advance the Armed phase: begin a capture session or record the failure.
 gif_capture_advance_armed :: proc(
-    state: ^core.Euclid_General_State, ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    if gif_capture_begin_session(state) {
+    state: ^core.Euclid_General_State, ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    extents: Gif_Capture_Extents) {
+    if gif_capture_begin_session(state, extents) {
         ui_runtime.gif_capture_phase = .Recording
         clear_gif_status_note(ui_runtime)
     } else {
@@ -362,27 +362,14 @@ gif_capture_source_dimensions_for_framebuffer :: proc(
     return capture_w, capture_h
 }
 
-//   Compute current world capture dimensions in framebuffer pixels.
-gif_capture_source_dimensions :: proc(world_rect: rl.Rectangle) -> (int, int) {
-    return gif_capture_source_dimensions_for_framebuffer({
-        logical_width = max(1, int(world_rect.width)),
-        logical_height = max(1, int(world_rect.height)),
-        screen_width = max(1, int(rl.GetScreenWidth())),
-        screen_height = max(1, int(rl.GetScreenHeight())),
-        render_width = max(1, int(rl.GetRenderWidth())),
-        render_height = max(1, int(rl.GetRenderHeight())),
-    })
-}
-
 //   Initialize encoder and counters for a new GIF capture session.
 //
 // Notes:
 //   - Initializes encoder output size from current downsample settings.
 gif_capture_begin_session :: proc(
-    state: ^core.Euclid_General_State) -> bool {
+    state: ^core.Euclid_General_State, extents: Gif_Capture_Extents) -> bool {
     ui_runtime := &state.ui_runtime
-    capture_w, capture_h := gif_capture_source_dimensions(
-        rl.Rectangle(ui_runtime.ui_regions.world_rect))
+    capture_w, capture_h := gif_capture_source_dimensions_for_framebuffer(extents)
     downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
     out_w := max(1, capture_w / downsample)
     out_h := max(1, capture_h / downsample)

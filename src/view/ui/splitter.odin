@@ -6,14 +6,11 @@ import native "../native"
 import color "../../core/color"
 import geometry "../../core/geometry"
 
-import rl "vendor:raylib"
-
 SPLITTER_VISIBLE_WIDTH :: 3.0
 SPLITTER_HIT_WIDTH :: 8.0
 SPLITTER_FADE_SECONDS :: 0.15
 SPLITTER_VERTICAL_PRESS_ID :: 6201
 SPLITTER_HORIZONTAL_PRESS_ID :: 6202
-SPLITTER_COLOR :: rl.Color{70, 130, 180, 255}
 SPLITTER_ACTIVE_COLOR :: color.Color_RGBA8{70, 130, 180, 255}
 
 Splitter_Axis :: enum {
@@ -23,8 +20,8 @@ Splitter_Axis :: enum {
 
 //   Visible and interactive rectangles for one pane splitter.
 Splitter_Geometry :: struct {
-    visible_rect: rl.Rectangle,
-    hit_rect: rl.Rectangle,
+    visible_rect: geometry.Rectangle,
+    hit_rect: geometry.Rectangle,
 }
 
 //   Build centered visible and hit rectangles for one splitter axis.
@@ -53,20 +50,17 @@ splitter_geometry :: proc(
 
 //   Select the nearest hovered splitter, preferring vertical on an exact tie.
 splitter_hovered_axis :: proc(
-    mouse: rl.Vector2, mode: viewmodel.Ui_Layout_Mode,
+    mouse: geometry.Vector2, mode: viewmodel.Ui_Layout_Mode,
     split_x, split_y: f32,
     window: viewmodel.Ui_Window_Metrics) -> (Splitter_Axis, bool) {
 
     horizontal := splitter_geometry(.Horizontal, mode, split_x, split_y, window)
     if mode == .Portrait {
-        return .Horizontal, geometry.rectangle_contains(
-            geometry.Rectangle(horizontal.hit_rect), geometry.Vector2(mouse))
+        return .Horizontal, geometry.rectangle_contains(horizontal.hit_rect, mouse)
     }
     vertical := splitter_geometry(.Vertical, mode, split_x, split_y, window)
-    over_vertical := geometry.rectangle_contains(
-        geometry.Rectangle(vertical.hit_rect), geometry.Vector2(mouse))
-    over_horizontal := geometry.rectangle_contains(
-        geometry.Rectangle(horizontal.hit_rect), geometry.Vector2(mouse))
+    over_vertical := geometry.rectangle_contains(vertical.hit_rect, mouse)
+    over_horizontal := geometry.rectangle_contains(horizontal.hit_rect, mouse)
     if over_vertical && over_horizontal {
         if abs(mouse.y - split_y) < abs(mouse.x - split_x) {
             return .Horizontal, true
@@ -264,41 +258,11 @@ update_splitters :: proc(
         ui_runtime.horizontal_split_hover, horizontal_target, dt)
 }
 
-//   Draw splitter feedback for the active layout.
-draw_splitters :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    mouse_position: rl.Vector2) {
-
-    _, hovered := splitter_hovered_axis(mouse_position,
-        ui_runtime^.current_layout_mode,
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
-        ui_runtime^.window)
-    if splitters_locked_for_gif(ui_runtime.gif_capture_phase) {
-        hovered = false
-    }
-
-    vertical := splitter_geometry(.Vertical, ui_runtime^.current_layout_mode,
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
-        ui_runtime^.window)
-    horizontal := splitter_geometry(.Horizontal, ui_runtime^.current_layout_mode,
-        ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y,
-        ui_runtime^.window)
-    if ui_runtime^.current_layout_mode == .Landscape &&
-        ui_runtime.vertical_split_hover > 0 {
-        rl.DrawRectangleRec(vertical.visible_rect,
-            rl.Fade(SPLITTER_COLOR, ui_runtime.vertical_split_hover))
-    }
-    if ui_runtime.horizontal_split_hover > 0 {
-        rl.DrawRectangleRec(horizontal.visible_rect,
-            rl.Fade(SPLITTER_COLOR, ui_runtime.horizontal_split_hover))
-    }
-}
-
 // draw_encoded_splitters encodes current splitter feedback without changing policy.
 draw_encoded_splitters :: proc(
     encoder: ^native.Draw_Encoder,
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    mouse_position: rl.Vector2) {
+    mouse_position: geometry.Vector2) {
     _, hovered := splitter_hovered_axis(mouse_position,
         ui_runtime^.current_layout_mode, ui_runtime.vertical_split_x,
         ui_runtime.horizontal_split_y, ui_runtime^.window)
@@ -314,12 +278,12 @@ draw_encoded_splitters :: proc(
         draw_color := SPLITTER_ACTIVE_COLOR
         draw_color.a = u8(255 * clamp(ui_runtime.vertical_split_hover, f32(0), f32(1)))
         _ = native.draw_encoder_rectangle(
-            encoder, geometry.Rectangle(vertical.visible_rect), draw_color)
+            encoder, vertical.visible_rect, draw_color)
     }
     if ui_runtime.horizontal_split_hover > 0 {
         draw_color := SPLITTER_ACTIVE_COLOR
         draw_color.a = u8(255 * clamp(ui_runtime.horizontal_split_hover, f32(0), f32(1)))
         _ = native.draw_encoder_rectangle(
-            encoder, geometry.Rectangle(horizontal.visible_rect), draw_color)
+            encoder, horizontal.visible_rect, draw_color)
     }
 }

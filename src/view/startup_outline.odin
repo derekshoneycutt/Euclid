@@ -10,8 +10,6 @@ import geometry "../core/geometry"
 
 import "core:math"
 
-import rl "vendor:raylib"
-
 STARTUP_OUTLINE_SEGMENT_CAP :: 36
 STARTUP_OUTLINE_SECONDS :: f32(5.0)
 STARTUP_OUTLINE_STROKE_WIDTH :: f32(2.0)
@@ -80,9 +78,10 @@ startup_outline_create :: proc(
         layout, f32(metrics.width), f32(metrics.height), vertical, horizontal)
     sections := ui.accordion_sections_for_layout(layout, "Animation")
     accordion := ui.accordion_layout(
-        rl.Rectangle(regions.accordion_rect), sections,
+        geometry.Rectangle(regions.accordion_rect), sections,
         layout == .Portrait ? .View : .Library)
-    controls := ui.animation_control_layout_slots(rl.Rectangle(regions.world_rect))
+    controls := ui.animation_control_layout_slots(
+        geometry.Rectangle(regions.world_rect))
 
     startup_outline_append_rect(&outline, geometry.Rectangle(regions.world_rect))
     startup_outline_append_rect(&outline, geometry.Rectangle(regions.text_rect))
