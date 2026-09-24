@@ -7,61 +7,64 @@ using LinearAlgebra
 
 export get_view_content, initialize, clean, loop, animation_entry
 
-const StartRotation = π / 4f0
-const CircleRadius = 0.25f0
-const Anchor = [0.5f0, 0.5f0, 0f0]
-const StartRotationPos = Anchor +
-    [ CircleRadius * cos(StartRotation), CircleRadius * sin(StartRotation), 0]
-const PenRotation = π / 4f0
-const Color1 = :steelblue
-const Color2 = :khaki3
-const Color3 = :palevioletred1
-const CompassDrawColor = Color1
-const PenDrawColor1 = Color2
-const PenDrawColor2 = Color3
+const PointA = Float32[0.40f0, 0.60f0, 0f0]
+const PointB = Float32[0.60f0, 0.40f0, 0f0]
+const Radius = norm(PointB - PointA)
+const PointC = PointA + Radius * Float32[cos(π / 12f0), sin(π / 12f0), 0f0]
+const MidpointAB = (PointA + PointB) / 2f0
+const CircleSweep = 2f0 * π
 
-"""Complete immutable state for one null animation generation."""
+const SideStarts = (PointA, PointB, PointC)
+const SideEnds = (PointB, PointC, PointA)
+const SideColors = (:grey60, :palevioletred1, :khaki3)
+const CircleColors = (:steelblue, :palevioletred1)
+const ReflectionStart = (PointA, PointB, PointB, PointC, PointC, PointA)
+const ReflectionMirrored = (PointB, PointA, PointA, PointC, PointC, PointB)
+
+const PenTopZ = 1.4f0
+const CompassTopZ = 1.4f0
+const Brush = 5f0
+const ToolDuration = 1.8f0
+const CircleDrawDuration = 4.4f0
+const CompassMoveDuration = 1.6f0
+const LineDrawDuration = 2.2f0
+const ReflectionDuration = 2.4f0
+const HoldDuration = 1.2f0
+
+const PhaseCompassDescend = 0f0
+const PhaseDrawCircleA = 1f0
+const PhaseMoveCompass = 2f0
+const PhaseDrawCircleB = 3f0
+const PhaseCompassRise = 4f0
+const PhasePenDescend = 5f0
+const PhaseDrawAB = 6f0
+const PhaseDrawBC = 7f0
+const PhaseDrawCA = 8f0
+const PhasePenRise = 9f0
+const PhaseReflectFirst = 10f0
+const PhaseReflectSecond = 11f0
+const PhaseHold = 12f0
+
+"""Stable native handles for one line owned by the null animation."""
+struct LineIds
+    host::Int64
+    joint1::Int64
+    joint2::Int64
+end
+
+"""Complete immutable state for one null-animation cycle."""
 struct AnimationState
-    line1_host::Int64
-    line1_point1::Int64
-    line1_point2::Int64
-    line2_host::Int64
-    line2_point1::Int64
-    line2_point2::Int64
-    circle_host::Int64
-    curr_rotation::Float32
-    pen_direction::Float32
-    pen_rotation::Float32
-    draw_line_flag::Float32
-    draw_circle_flag::Float32
+    lines::NTuple{3,LineIds}
+    circles::NTuple{2,Int64}
+    phase::Float32
+    timer::Float32
 end
 
 const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
 
-"""Return state with updated pen motion and unchanged compass state."""
-function with_line_motion(
-    state::AnimationState, pen_direction::Float32,
-    pen_rotation::Float32, draw_line_flag::Float32)
-
-    return AnimationState(
-        state.line1_host, state.line1_point1, state.line1_point2,
-        state.line2_host, state.line2_point1, state.line2_point2,
-        state.circle_host,
-        state.curr_rotation, pen_direction, pen_rotation,
-        draw_line_flag, state.draw_circle_flag)
-end
-
-"""Return state with updated compass motion and unchanged pen state."""
-function with_circle_motion(
-    state::AnimationState, curr_rotation::Float32,
-    draw_circle_flag::Float32)
-
-    return AnimationState(
-        state.line1_host, state.line1_point1, state.line1_point2,
-        state.line2_host, state.line2_point1, state.line2_point2,
-        state.circle_host,
-        curr_rotation, state.pen_direction, state.pen_rotation,
-        state.draw_line_flag, draw_circle_flag)
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(state.lines, state.circles, phase, timer)
 end
 
 """Return the placeholder root view content for the null animation."""
@@ -69,175 +72,209 @@ function get_view_content(_state_ptr::Ptr{Cvoid})
     return "Welcome to Euclid"
 end
 
-"""Initialize the null animation's pen, compass, and canonical state."""
+"""Set all triangle endpoints to one exact reflection pose."""
+function set_triangle_pose!(state_ptr::Ptr{Cvoid}, state::AnimationState,
+    pose::NTuple{6,Vector{Float32}})
+
+    for i in 1:3
+        OdinJuliaBridge.set_point_position(
+            state_ptr, state.lines[i].joint1, pose[2i - 1])
+        OdinJuliaBridge.set_point_position(
+            state_ptr, state.lines[i].joint2, pose[2i])
+    end
+end
+
+"""Rotate every triangle endpoint halfway around its reflection axis."""
+function animate_reflection!(state_ptr::Ptr{Cvoid}, state::AnimationState,
+    starts::NTuple{6,Vector{Float32}}, timer::Float32)
+
+    for i in 1:3
+        EuclidAnimations.transform_rotate_point(
+            state_ptr, state.lines[i].joint1, starts[2i - 1],
+            PointC, MidpointAB, π, timer, ReflectionDuration)
+        EuclidAnimations.transform_rotate_point(
+            state_ptr, state.lines[i].joint2, starts[2i],
+            PointC, MidpointAB, π, timer, ReflectionDuration)
+    end
+end
+
+"""Reset hidden geometry and elevated instruments for a fresh cycle."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseCompassDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+
+    OdinJuliaBridge.hide_point_batch(state_ptr,
+        [state.lines[1].host, state.lines[2].host, state.lines[3].host,
+         state.circles[1], state.circles[2]])
+    set_triangle_pose!(state_ptr, state, ReflectionStart)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, state.circles[1], Radius, 7f0 * π / 4f0, 0f0)
+    OdinJuliaBridge.set_arc_geometry(
+        state_ptr, state.circles[2], Radius, 3f0 * π / 4f0, 0f0)
+    reset_tools(state_ptr)
+
+    OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
+end
+
+"""Hide and elevate both drawing instruments for reset."""
+function reset_tools(state_ptr::Ptr{Cvoid})
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.lock_pen_joint1(state_ptr, PointA[1], PointA[2], PenTopZ)
+    OdinJuliaBridge.move_pen_joint2(
+        state_ptr, PointA[1], PointA[2], PenTopZ + 0.14f0)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, PointA[1], PointA[2], CompassTopZ, sweep=false)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, PointB[1], PointB[2], CompassTopZ, sweep=false)
+end
+
+"""Initialize the null animation's construction geometry and cycle state."""
 function initialize(state_ptr::Ptr{Cvoid})
     OdinJuliaBridge.set_drawing_sound_enabled(state_ptr, false)
-
-    use_rotation = π - PenRotation
-
-    OdinJuliaBridge.show_pen(state_ptr)
-    OdinJuliaBridge.set_pen_active(state_ptr, 1, PenDrawColor1)
-    OdinJuliaBridge.lock_pen_joint1(state_ptr, 0.9f0, 0.9f0, 0f0)
-    OdinJuliaBridge.move_pen_joint2(
-        state_ptr, 0.9f0, 0.9f0 + cos(use_rotation), sin(use_rotation))
-
-    OdinJuliaBridge.show_compass(state_ptr)
-    OdinJuliaBridge.set_compass_active(state_ptr, 3, CompassDrawColor)
-    OdinJuliaBridge.lock_compass_joint1(state_ptr, 0.5f0, 0.5f0, 0f0, sweep = false)
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, StartRotationPos, sweep = false)
-
-    line1 = OdinJuliaBridge.create_new_line(state_ptr,
-        [0f0, 0f0, 0f0], [0f0, 0f0, 0f0], PenDrawColor1, 5f0)
-    line2 = OdinJuliaBridge.create_new_line(state_ptr,
-        [0f0, 0f0, 0f0], [0f0, 0f0, 0f0], PenDrawColor2, 5f0)
-    circle = OdinJuliaBridge.create_new_circle(state_ptr,
-        [0.5f0, 0.5f0, 0f0], CircleRadius, StartRotation, 0f0,
-        CompassDrawColor, 5f0)
-
+    lines = ntuple(3) do i
+        line = OdinJuliaBridge.create_new_line(
+            state_ptr, SideStarts[i], SideStarts[i], SideColors[i], 0f0)
+        LineIds(line.host_id, line.joint1_id, line.joint2_id)
+    end
+    circle_a = OdinJuliaBridge.create_new_circle(
+        state_ptr, PointA, Radius, 7f0 * π / 4f0, 0f0, CircleColors[1], 0f0)
+    circle_b = OdinJuliaBridge.create_new_circle(
+        state_ptr, PointB, Radius, 3f0 * π / 4f0, 0f0, CircleColors[2], 0f0)
     state = AnimationState(
-        line1.host_id, line1.joint1_id, line1.joint2_id,
-        line2.host_id, line2.joint1_id, line2.joint2_id,
-        circle.host_id,
-        StartRotation, -1f0, Float32(use_rotation), 0f0, 0f0)
-    OdinJuliaBridge.set_animation_value!(state_ptr, StateKey, state)
+        lines, (circle_a.host_id, circle_b.host_id), PhaseCompassDescend, 0f0)
+    reset_cycle_state(state_ptr, state)
 end
 
 """Clean up the null animation; Odin clears its data automatically."""
-function clean(state_ptr::Ptr{Cvoid})
-    # nothing special on the julia side; our data is auto-cleared in Odin side
+function clean(_state_ptr::Ptr{Cvoid})
 end
 
-"""Animate the null animation's oscillating pen line for one frame step."""
-function draw_line(state_ptr::Ptr{Cvoid}, dt::Float32)
-    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
-    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
-    draw_line_flag = state.draw_line_flag
-    line1_host = state.line1_host
-    line1_point1 = state.line1_point1
-    line1_point2 = state.line1_point2
-    line2_host = state.line2_host
-    line2_point1 = state.line2_point1
-    line2_point2 = state.line2_point2
+"""Return the duration of one compass construction phase."""
+function compass_phase_duration(phase::Float32)
+    if phase == PhaseCompassDescend || phase == PhaseCompassRise
+        return ToolDuration
+    elseif phase == PhaseMoveCompass
+        return CompassMoveDuration
+    end
+    return CircleDrawDuration
+end
 
-    line1_host_desc = OdinJuliaBridge.get_point(state_ptr, line1_host)
-    line2_host_desc = OdinJuliaBridge.get_point(state_ptr, line2_host)
+"""Apply the visible work for one compass construction phase."""
+function animate_compass_phase(state_ptr::Ptr{Cvoid}, state::AnimationState,
+    phase::Float32, timer::Float32)
 
-    pen_direction = state.pen_direction
-    pen_rotation_curr = state.pen_rotation
-    (penx1, peny1, penz1) = OdinJuliaBridge.get_pen_joint1_position(state_ptr)
-    (penx2, peny2, penz2) = OdinJuliaBridge.get_pen_joint2_position(state_ptr)
-    vec = [penx2, peny2, penz2] - [penx1, peny1, penz1]
-    len = norm(vec)
-    if pen_direction < 1
-        pen_draw_color = PenDrawColor1
-        peny1 = peny1 - (dt * 0.4f0)
-        peny2 = peny2 - (dt * 0.4f0)
-
-        OdinJuliaBridge.hide_point(state_ptr, line2_host)
-        OdinJuliaBridge.set_point_position(
-            state_ptr, line2_point1, 0.9f0, 0.1f0, 0f0)
-        OdinJuliaBridge.set_point_position(
-            state_ptr, line2_point2, 0.9f0, 0.1f0, 0f0)
-        if draw_line_flag > 0
-            OdinJuliaBridge.set_point_position(
-                state_ptr, line1_point1, 0.9f0, 0.9f0, 0f0)
-            OdinJuliaBridge.set_point_position(
-                state_ptr, line1_point2, penx1, peny1, 0f0)
-            OdinJuliaBridge.set_point_brush(state_ptr, line1_host, 5f0)
-            OdinJuliaBridge.show_point(state_ptr, line1_host)
-        end
-
-        if peny1 <= 0.1
-            peny1 = 0.1f0
-            pen_rotation_curr = pen_rotation_curr - (dt * 3f0π/4f0)
-            if pen_rotation_curr <= PenRotation
-                pen_rotation_curr = PenRotation
-                pen_direction = 1f0
-                draw_line_flag = Float32((Integer(draw_line_flag) + 1) % 2)
-            end
-            peny2 = 0.1f0 + cos(pen_rotation_curr) * len
-            penz2 = sin(pen_rotation_curr) * len
-        end
+    if phase == PhaseCompassDescend
+        EuclidAnimations.animate_compass_descend(state_ptr, timer, ToolDuration,
+            CompassTopZ, PointA[1], PointA[2], PointB[1], PointB[2])
+    elseif phase == PhaseDrawCircleA
+        EuclidAnimations.animate_draw_circle(state_ptr, timer, CircleDrawDuration,
+            PointA, PointB, CircleSweep, Radius;
+            brush=Brush, color=CircleColors[1], marker_host_id=state.circles[1])
+    elseif phase == PhaseMoveCompass
+        EuclidAnimations.animate_compass_arcmove(state_ptr, timer,
+            CompassMoveDuration, PointA, PointB, PointB, PointA)
+    elseif phase == PhaseDrawCircleB
+        EuclidAnimations.animate_draw_circle(state_ptr, timer, CircleDrawDuration,
+            PointB, PointA, CircleSweep, Radius;
+            brush=Brush, color=CircleColors[2], marker_host_id=state.circles[2])
     else
-        pen_draw_color = PenDrawColor2
-        peny1 = peny1 + (dt * 0.4f0)
-        peny2 = peny2 + (dt * 0.4f0)
-
-        OdinJuliaBridge.hide_point(state_ptr, line1_host)
-        OdinJuliaBridge.set_point_position(
-            state_ptr, line1_point1, 0.9f0, 0.1f0, 0f0)
-        OdinJuliaBridge.set_point_position(
-            state_ptr, line1_point2, 0.9f0, 0.1f0, 0f0)
-        if draw_line_flag > 0
-            OdinJuliaBridge.set_point_position(
-                state_ptr, line2_point1, 0.9f0, 0.1f0, 0f0)
-            OdinJuliaBridge.set_point_position(
-                state_ptr, line2_point2, penx1, peny1, 0f0)
-            OdinJuliaBridge.set_point_brush(state_ptr, line2_host, 5f0)
-            OdinJuliaBridge.show_point(state_ptr, line2_host)
-        end
-
-        if peny1 >= 0.9
-            peny1 = 0.9f0
-            pen_rotation_curr = pen_rotation_curr + (dt * 3f0π/4f0)
-            if  pen_rotation_curr >= π - PenRotation
-                pen_rotation_curr = 1f0π - PenRotation
-                pen_direction = -1f0
-            end
-            peny2 = 0.9f0 + cos(pen_rotation_curr) * len
-            penz2 = sin(pen_rotation_curr) * len
-        end
+        EuclidAnimations.animate_compass_rise(state_ptr, timer, ToolDuration,
+            CompassTopZ, PointB[1], PointB[2], PointA[1], PointA[2])
     end
-    OdinJuliaBridge.lock_pen_joint1(state_ptr, penx1, peny1, penz1)
-    OdinJuliaBridge.move_pen_joint2(state_ptr, penx2, peny2, penz2)
-    OdinJuliaBridge.set_pen_active(state_ptr, 1, pen_draw_color)
-    OdinJuliaBridge.emit_trailing_particle(state_ptr, penx1, peny1, penz1, pen_draw_color)
-    OdinJuliaBridge.set_animation_value!(state_ptr, StateKey,
-        with_line_motion(state, pen_direction, pen_rotation_curr, draw_line_flag))
 end
 
-"""Animate the null animation's rotating compass circle for one frame step."""
-function draw_circle(state_ptr::Ptr{Cvoid}, dt::Float32)
-    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
-    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
-    curr_rotation = state.curr_rotation
-    curr_rotation = curr_rotation - (dt * π/2)
-    if curr_rotation < 0
-        curr_rotation = Float32(curr_rotation + 2π)
+"""Advance the circle-construction phases by one fixed frame step."""
+function advance_compass_phase(state_ptr::Ptr{Cvoid}, state::AnimationState,
+    phase::Float32, timer::Float32, dt::Float32)
+
+    animate_compass_phase(state_ptr, state, phase, timer)
+    timer += dt
+    if timer >= compass_phase_duration(phase)
+        return phase + 1f0, 0f0
     end
-    
-    out_pos = Anchor +
-        [ CircleRadius * cos(curr_rotation), CircleRadius * sin(curr_rotation), 0]
-
-    draw_circle_flag = state.draw_circle_flag
-    circle_host = state.circle_host
-
-    if abs(curr_rotation - StartRotation) < dt * π/2 && curr_rotation <= StartRotation
-        draw_circle_flag = Float32((Integer(draw_circle_flag) + 1) % 2)
-    end
-
-    if draw_circle_flag > 0
-        sweep_theta = Float32(mod(StartRotation - curr_rotation, 2π))
-        OdinJuliaBridge.set_arc_geometry(
-            state_ptr, circle_host, CircleRadius, curr_rotation, sweep_theta)
-        OdinJuliaBridge.set_point_brush(state_ptr, circle_host, 5f0)
-        OdinJuliaBridge.show_point(state_ptr, circle_host)
-    else
-        OdinJuliaBridge.hide_point(state_ptr, circle_host)
-        OdinJuliaBridge.set_arc_geometry(
-            state_ptr, circle_host, CircleRadius, StartRotation, 0f0)
-    end
-
-    OdinJuliaBridge.lock_compass_joint2(state_ptr, out_pos, sweep = false)
-    OdinJuliaBridge.emit_trailing_particle(state_ptr, out_pos, CompassDrawColor)
-    OdinJuliaBridge.set_animation_value!(state_ptr, StateKey,
-        with_circle_motion(state, curr_rotation, draw_circle_flag))
+    return phase, timer
 end
 
-"""Advance the null animation by one frame, updating pen and compass."""
+"""Apply one pen drawing phase and return its duration."""
+function animate_pen_phase(state_ptr::Ptr{Cvoid}, state::AnimationState,
+    phase::Float32, timer::Float32)
+
+    if phase == PhasePenDescend
+        EuclidAnimations.animate_pen_descend(
+            state_ptr, timer, ToolDuration, PenTopZ, PointA[1], PointA[2])
+        return ToolDuration
+    elseif phase == PhasePenRise
+        EuclidAnimations.animate_pen_rise(
+            state_ptr, timer, ToolDuration, PenTopZ, PointA[1], PointA[2])
+        return ToolDuration
+    end
+
+    side_index = Int(phase - PhaseDrawAB) + 1
+    EuclidAnimations.animate_draw_line(state_ptr, timer, LineDrawDuration,
+        SideStarts[side_index], SideEnds[side_index];
+        penbrush=Brush, pencolor=SideColors[side_index],
+        line_host_id=state.lines[side_index].host,
+        line_joint1_id=state.lines[side_index].joint1,
+        line_joint2_id=state.lines[side_index].joint2)
+    return LineDrawDuration
+end
+
+"""Advance the pen construction phases by one fixed frame step."""
+function advance_pen_phase(state_ptr::Ptr{Cvoid}, state::AnimationState,
+    phase::Float32, timer::Float32, dt::Float32)
+
+    duration = animate_pen_phase(state_ptr, state, phase, timer)
+    timer += dt
+    if timer >= duration
+        return phase + 1f0, 0f0
+    end
+    return phase, timer
+end
+
+"""Advance one of the two exact half-turn reflection phases."""
+function advance_reflection_phase(state_ptr::Ptr{Cvoid}, state::AnimationState,
+    phase::Float32, timer::Float32, dt::Float32)
+
+    starts = phase == PhaseReflectFirst ? ReflectionStart : ReflectionMirrored
+    animate_reflection!(state_ptr, state, starts, timer)
+    timer += dt
+    if timer < ReflectionDuration
+        return phase, timer
+    end
+
+    final_pose = phase == PhaseReflectFirst ? ReflectionMirrored : ReflectionStart
+    set_triangle_pose!(state_ptr, state, final_pose)
+    return phase + 1f0, 0f0
+end
+
+"""Advance the null animation by one fixed frame step."""
 function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
-    draw_line(state_ptr, dt)
-    draw_circle(state_ptr, dt)
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    phase = state.phase
+    timer = state.timer
+
+    if phase <= PhaseCompassRise
+        phase, timer = advance_compass_phase(state_ptr, state, phase, timer, dt)
+        phase == PhasePenDescend && OdinJuliaBridge.hide_compass(state_ptr)
+    elseif phase <= PhasePenRise
+        phase, timer = advance_pen_phase(state_ptr, state, phase, timer, dt)
+        phase == PhaseReflectFirst && OdinJuliaBridge.hide_pen(state_ptr)
+    elseif phase == PhaseReflectFirst || phase == PhaseReflectSecond
+        phase, timer = advance_reflection_phase(state_ptr, state, phase, timer, dt)
+    else
+        timer += dt
+        if timer >= HoldDuration
+            reset_cycle_state(state_ptr, state)
+            return
+        end
+    end
+
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
 end
 
 """Dispatch one bridge-stable lifecycle operation for the null animation."""
@@ -257,4 +294,3 @@ function animation_entry(
 end
 
 end
-
