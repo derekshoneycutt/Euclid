@@ -40,6 +40,8 @@ Settings_View_Preparation :: struct {
     sound: Checkbox_Result,
     simd: Checkbox_Result,
     gpu_dust: Checkbox_Result,
+    simd_available: bool,
+    gpu_available: bool,
 }
 
 //   Values unique to one checkbox row in the settings panel.
@@ -138,7 +140,7 @@ draw_encoded_settings_geometry :: proc(
 // draw_encoded_settings_text emits current labels, values, and counters.
 draw_encoded_settings_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle) {
+    panel: geometry.Rectangle, prepared: Settings_View_Preparation) {
     stack := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
@@ -163,14 +165,26 @@ draw_encoded_settings_text :: proc(
         rows.stats_y, encoder, animation_entries_added)
     labels := [4]struct{label: string, y: f32}{
         {"Display FPS", rows.fps_y}, {"Limit FPS", rows.limit_y},
-        {"Use SIMD Projection", rows.simd_y},
-        {"GPU Dust Instancing", rows.gpu_dust_y},
+        {settings_simd_label(prepared.simd_available), rows.simd_y},
+        {settings_gpu_dust_label(prepared.gpu_available), rows.gpu_dust_y},
     }
     for item in labels {
         draw_encoded_label(state, encoder, item.label,
             x + SETTINGS_CHECKBOX_SIZE + SETTINGS_CHECKBOX_LABEL_GAP,
             item.y - SETTINGS_CHECKBOX_TEXT_OFFSET_Y)
     }
+}
+
+// settings_simd_label describes whether SIMD projection can be selected.
+settings_simd_label :: proc(available: bool) -> string {
+    if available {return "Use SIMD Projection"}
+    return "Use SIMD Projection (Unavailable)"
+}
+
+// settings_gpu_dust_label describes whether GPU dust can be selected.
+settings_gpu_dust_label :: proc(available: bool) -> string {
+    if available {return "GPU Dust Instancing"}
+    return "GPU Dust Instancing (Unavailable)"
 }
 
 // settings_right_aligned_x keeps one measured value inside the panel inset.
@@ -320,17 +334,17 @@ update_settings_controls :: proc(
             &ctx.state.ui_runtime.ui_press_owner)
     }
     simd_available := view_core.simd_batch_projection_available()
-    simd_label := "Use SIMD Projection"
-    if !simd_available { simd_label = "Use SIMD Projection (Unavailable)" }
+    simd_label := settings_simd_label(simd_available)
     result.simd = update_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, simd_label, ctx.state.ui_runtime.use_simd_batch_projection,
         simd_available}), &ctx.state.ui_runtime.ui_press_owner)
     gpu_available := ctx.state.ui_runtime.gpu_dust_instancing_available
-    gpu_label := "GPU Dust Instancing"
-    if !gpu_available { gpu_label = "GPU Dust Instancing (Unavailable)" }
+    gpu_label := settings_gpu_dust_label(gpu_available)
     result.gpu_dust = update_checkbox(settings_checkbox_params(ctx, {rows.gpu_dust_y,
         4005, gpu_label, ctx.state.ui_runtime.use_gpu_dust_instancing,
         gpu_available}), &ctx.state.ui_runtime.ui_press_owner)
+    result.simd_available = simd_available
+    result.gpu_available = gpu_available
     return {result, simd_available, gpu_available}
 }
 

@@ -6,6 +6,7 @@ import viewmodel "../model"
 
 import "../../core"
 import geometry "../../core/geometry"
+import view_core "../core"
 import view_font "../font"
 
 import "core:fmt"
@@ -38,6 +39,12 @@ Gif_View_Preparation :: struct {
     downsample: Integer_Slider_Result,
     frame_step: Integer_Slider_Result,
     save_button: Text_Button_Result,
+    phase: viewmodel.Gif_Capture_Phase,
+    captured_frames: int,
+    status_note: [260]u8,
+    status_note_len: int,
+    last_path: [260]u8,
+    last_path_len: int,
 }
 
 // draw_encoded_gif_geometry encodes GIF controls while capture stays deferred.
@@ -65,7 +72,7 @@ draw_encoded_gif_geometry :: proc(
 // draw_encoded_gif_text emits capture controls while readback remains deferred.
 draw_encoded_gif_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle) {
+    panel: geometry.Rectangle, prepared: Gif_View_Preparation) {
     stack := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
@@ -73,11 +80,48 @@ draw_encoded_gif_text :: proc(
     rows := gif_view_layout_rows(stack)
     x := panel.x + SETTINGS_PANEL_INSET
     draw_encoded_label(state, encoder, "Downsample", x, rows.sliders.downsample_y)
+    draw_encoded_gif_value(
+        state, encoder, panel, prepared.downsample.value, rows.sliders.downsample_y)
     draw_encoded_label(state, encoder, "Frame step", x, rows.sliders.frame_step_y)
-    button := "Save Gif"
-    if state^.ui_runtime.gif_capture_phase == .Armed {button = "Cancel Gif"}
-    draw_encoded_label(state, encoder, button,
+    draw_encoded_gif_value(
+        state, encoder, panel, prepared.frame_step.value, rows.sliders.frame_step_y)
+    draw_encoded_label(state, encoder, gif_capture_button_label(prepared.phase),
         x + SETTINGS_PANEL_INSET, rows.save_button_y + SETTINGS_PANEL_INSET)
+    draw_encoded_gif_status(state, encoder, prepared, x, rows.status_y)
+}
+
+// draw_encoded_gif_status emits prepared phase, note, and published-path rows.
+draw_encoded_gif_status :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Gif_View_Preparation, x, row_y: f32) {
+    draw_encoded_label(state, encoder,
+        gif_capture_status_label(prepared.phase, prepared.captured_frames),
+        x, row_y)
+    if prepared.status_note_len > 0 {
+        status_note := prepared.status_note
+        note := string(status_note[:prepared.status_note_len])
+        draw_encoded_label(state, encoder, note,
+            x, row_y + SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET)
+    }
+    if prepared.phase == .Saved && prepared.last_path_len > 0 {
+        last_path := prepared.last_path
+        path := string(last_path[:prepared.last_path_len])
+        draw_encoded_label(state, encoder, fmt.tprintf("Path: %s", path),
+            x, row_y + SETTINGS_GIF_STATUS_PATH_ROW_OFFSET)
+    }
+}
+
+// draw_encoded_gif_value right-aligns one prepared slider value in the panel.
+draw_encoded_gif_value :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: geometry.Rectangle, value: int, row_y: f32) {
+    text := fmt.tprintf("%d", value)
+    face := view_font.cache_borrow(&state^.font_cache, .Regular)
+    width, measured := view_core.ui_text_measure_monospace(
+        text, face, TREE_FONT_SIZE, 0)
+    if !measured {width = 20}
+    draw_encoded_label(state, encoder, text,
+        settings_right_aligned_x(panel, width), row_y)
 }
 
 //   Build one GIF slider parameter record shared by update and draw.
@@ -100,34 +144,52 @@ gif_slider_params :: proc(
 gif_save_button_params :: proc(
     ctx: Gif_Panel_Context,
     row_y: f32) -> Text_Button_Params {
-    is_armed := ctx.ui_runtime.gif_capture_phase == .Armed
-    disabled := ctx.ui_runtime.gif_capture_phase == .Recording ||
-        ctx.ui_runtime.gif_capture_phase == .Finalizing
-    button_text := "Save Gif"
-    if is_armed { button_text = "Cancel Gif" }
+    phase := ctx.ui_runtime.gif_capture_phase
     return {
         id = 3001,
         rect = {ctx.panel.x + SETTINGS_PANEL_INSET, row_y,
             ctx.panel.width - SETTINGS_PANEL_INSET * 2,
             SETTINGS_GIF_BUTTON_HEIGHT},
-        label = button_text, enabled = !disabled, mouse = ctx.mouse_input,
+        label = gif_capture_button_label(phase),
+        enabled = gif_capture_button_enabled(phase), mouse = ctx.mouse_input,
         interaction_space_rect = geometry.Rectangle(ctx.panel),
         interaction_enabled = true,
         font = ctx.font, font_resolver = ctx.resolver,
     }
 }
 
-//   Return human-readable status text for GIF capture phase.
+// gif_capture_button_label describes the action or active work for one phase.
+gif_capture_button_label :: proc(phase: viewmodel.Gif_Capture_Phase) -> string {
+    switch phase {
+    case .Armed:
+        return "Cancel GIF"
+    case .Recording:
+        return "Recording..."
+    case .Finalizing:
+        return "Saving..."
+    case .Idle, .Saved, .Error:
+        return "Save GIF"
+    }
+    return "Save GIF"
+}
+
+// gif_capture_button_enabled reports whether one phase accepts button input.
+gif_capture_button_enabled :: #force_inline proc(
+    phase: viewmodel.Gif_Capture_Phase) -> bool {
+    return phase != .Recording && phase != .Finalizing
+}
+
+//   Return human-readable status text for one prepared GIF capture phase.
 gif_capture_status_label :: proc(
-    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> string {
-    switch ui_runtime.gif_capture_phase {
+    phase: viewmodel.Gif_Capture_Phase, captured_frames: int) -> string {
+    switch phase {
     case .Idle:
         return "Status: Idle"
     case .Armed:
         return "Status: Armed"
     case .Recording:
         return fmt.tprintf("Status: Recording (%d frames)",
-            ui_runtime.gif_captured_frames)
+            captured_frames)
     case .Finalizing:
         return "Status: Saving"
     case .Saved:
@@ -198,6 +260,12 @@ prepare_gif_view :: proc(
     result.save_button = update_text_button(gif_save_button_params(
         ctx, result.rows.save_button_y), &ctx.ui_runtime.ui_press_owner)
     if result.save_button.clicked { ctx.ui_runtime.save_gif_requested = true }
+    result.phase = ctx.ui_runtime.gif_capture_phase
+    result.captured_frames = ctx.ui_runtime.gif_captured_frames
+    result.status_note = ctx.ui_runtime.gif_status_note
+    result.status_note_len = ctx.ui_runtime.gif_status_note_len
+    result.last_path = ctx.ui_runtime.last_gif_path
+    result.last_path_len = ctx.ui_runtime.last_gif_path_len
     return result
 }
 

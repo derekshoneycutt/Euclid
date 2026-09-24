@@ -408,7 +408,8 @@ draw_encoded_label :: proc(
 
 // draw_encoded_panel_text emits non-presentation labels for the active UI layout.
 draw_encoded_panel_text :: proc(
-    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    controls: Ui_Control_Preparation) {
     runtime := &state^.ui_runtime
     panel := runtime^.ui_regions.accordion_rect
     sections := accordion_sections_for_layout(
@@ -426,10 +427,11 @@ draw_encoded_panel_text :: proc(
     case .Library:
         draw_encoded_tree_text(state, encoder, geometry.Rectangle(layout.content))
     case .Save_Gif:
-        draw_encoded_gif_text(state, encoder, geometry.Rectangle(layout.content))
+        draw_encoded_gif_text(state, encoder,
+            geometry.Rectangle(layout.content), controls.gif)
     case .Settings:
         draw_encoded_settings_text(
-            state, encoder, geometry.Rectangle(layout.content))
+            state, encoder, geometry.Rectangle(layout.content), controls.settings)
     case .View:
     }
     if runtime^.display_fps {

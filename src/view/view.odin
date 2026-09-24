@@ -503,7 +503,7 @@ encode_sdl_ui_geometry :: proc(
     ui.draw_encoded_splitters(
         encoder, &state^.ui_runtime,
         ui.input_frame_mouse_position(prepared.input_frame))
-    ui.draw_encoded_panel_text(state, encoder)
+    ui.draw_encoded_panel_text(state, encoder, prepared.controls)
     if ui.is_terminal_selected(state) {
         terminal_graphics_set_draw_encoder(state, encoder)
         ui.terminal_draw_encoded(state, encoder, prepared.terminal_frame)

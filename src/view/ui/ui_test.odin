@@ -87,6 +87,44 @@ settings_dust_value_is_right_aligned_inside_panel :: proc(t: ^testing.T) {
         panel.x + panel.width - SETTINGS_PANEL_INSET)
 }
 
+// Verify GIF button labels and enabled states describe every capture phase.
+@(test)
+gif_button_presentation_matches_capture_phase :: proc(t: ^testing.T) {
+    phases := [6]viewmodel.Gif_Capture_Phase{
+        .Idle, .Armed, .Recording, .Finalizing, .Saved, .Error}
+    labels := [6]string{
+        "Save GIF", "Cancel GIF", "Recording...", "Saving...", "Save GIF", "Save GIF"}
+    enabled := [6]bool{true, true, false, false, true, true}
+    for phase, index in phases {
+        testing.expect_value(t, gif_capture_button_label(phase), labels[index])
+        testing.expect_value(t, gif_capture_button_enabled(phase), enabled[index])
+    }
+}
+
+// Verify GIF status labels include phase state and prepared recording progress.
+@(test)
+gif_status_labels_cover_capture_phases :: proc(t: ^testing.T) {
+    testing.expect_value(t, gif_capture_status_label(.Idle, 0), "Status: Idle")
+    testing.expect_value(t, gif_capture_status_label(.Armed, 0), "Status: Armed")
+    testing.expect_value(t, gif_capture_status_label(.Recording, 12),
+        "Status: Recording (12 frames)")
+    testing.expect_value(t, gif_capture_status_label(.Finalizing, 12),
+        "Status: Saving")
+    testing.expect_value(t, gif_capture_status_label(.Saved, 12), "Status: Saved")
+    testing.expect_value(t, gif_capture_status_label(.Error, 0), "Status: Error")
+}
+
+// Verify optional settings labels expose unavailable controls without audio changes.
+@(test)
+settings_capability_labels_match_prepared_availability :: proc(t: ^testing.T) {
+    testing.expect_value(t, settings_simd_label(true), "Use SIMD Projection")
+    testing.expect_value(t, settings_simd_label(false),
+        "Use SIMD Projection (Unavailable)")
+    testing.expect_value(t, settings_gpu_dust_label(true), "GPU Dust Instancing")
+    testing.expect_value(t, settings_gpu_dust_label(false),
+        "GPU Dust Instancing (Unavailable)")
+}
+
 //   Verify forced modes and automatic hysteresis resolve deterministically.
 @(test)
 layout_mode_resolution_honors_preference_and_hysteresis :: proc(t: ^testing.T) {
