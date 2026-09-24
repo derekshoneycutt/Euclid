@@ -47,7 +47,8 @@ end
     @test reflection.exec[3:6] == ["--source", "SPIRV", "--dest", "JSON"]
     configure = Shaders.shadercross_configure_command(
         "cmake", "/source/tools/shadercross", "/source/.build/shadercross")
-    @test configure.exec[6:7] == ["-G", "Ninja"]
+    @test configure.exec[2] == "--fresh"
+    @test configure.exec[7:8] == ["-G", "Ninja"]
     @test "-DSDLSHADERCROSS_VENDORED=ON" in configure.exec
     @test "-DSDLSHADERCROSS_INSTALL=OFF" in configure.exec
     @test "-DSPIRV_WERROR=OFF" in configure.exec
@@ -55,7 +56,11 @@ end
         @test Shaders.shadercross_needs_configure(build)
         write(joinpath(build, "CMakeCache.txt"), "SPIRV_WERROR:BOOL=ON\n")
         @test Shaders.shadercross_needs_configure(build)
-        write(joinpath(build, "CMakeCache.txt"), "SPIRV_WERROR:BOOL=OFF\n")
+        write(joinpath(build, "CMakeCache.txt"),
+            "CMAKE_GENERATOR:INTERNAL=Unix Makefiles\nSPIRV_WERROR:BOOL=OFF\n")
+        @test Shaders.shadercross_needs_configure(build)
+        write(joinpath(build, "CMakeCache.txt"),
+            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n")
         @test !Shaders.shadercross_needs_configure(build)
     end
     @test Shaders.shadercross_build_command(

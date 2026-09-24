@@ -177,15 +177,19 @@ end
 """Construct the canonical configure command for the vendored shader compiler."""
 function shadercross_configure_command(
     cmake::String, source::String, build::String)
-    return Cmd([cmake, "-S", source, "-B", build, "-G", "Ninja",
+    return Cmd([cmake, "--fresh", "-S", source, "-B", build, "-G", "Ninja",
         "-DCMAKE_BUILD_TYPE=Release", "-DSDLSHADERCROSS_VENDORED=ON",
         "-DSDLSHADERCROSS_CLI=ON", "-DSDLSHADERCROSS_INSTALL=OFF",
         "-DSDLSHADERCROSS_TESTS=OFF", "-DSPIRV_WERROR=OFF"])
 end
 
+"""Report whether the bundled shader compiler cache needs fresh configuration."""
 function shadercross_needs_configure(build::String)
     cache = joinpath(build, "CMakeCache.txt")
-    return !isfile(cache) || !any(==("SPIRV_WERROR:BOOL=OFF"), eachline(cache))
+    isfile(cache) || return true
+    entries = Set(eachline(cache))
+    return !("CMAKE_GENERATOR:INTERNAL=Ninja" in entries &&
+        "SPIRV_WERROR:BOOL=OFF" in entries)
 end
 
 """Construct the parallel build command for the vendored shader compiler."""
