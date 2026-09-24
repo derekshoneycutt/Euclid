@@ -43,7 +43,7 @@ Accordion_Context :: struct {
     mouse_input: Input_Frame,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
     active: viewmodel.Ui_Accordion_Section,
-    font: rl.Font,
+    font: view_font.Font_Face,
     font_resolver: view_font.Font_Resolver,
 }
 

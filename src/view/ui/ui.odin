@@ -376,6 +376,50 @@ draw_encoded_accordion_geometry :: proc(
     }
 }
 
+// draw_encoded_label emits one regular UI label through the portable font cache.
+draw_encoded_label :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    text: string, x, y: f32) {
+    if len(text) == 0 {return}
+    face := view_font.cache_borrow(&state^.font_cache, .Regular)
+    _ = view_core.ui_text_shaped({
+        encoder = encoder,
+        resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+        key = .Regular,
+        text = text,
+        position = {x, y},
+        color = native.to_raylib_color(UI_TEXT_COLOR),
+        font = view_core.ui_text_font(face),
+    })
+}
+
+// draw_encoded_panel_text emits non-presentation labels for the active UI layout.
+draw_encoded_panel_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    runtime := &state^.ui_runtime
+    panel := rl.Rectangle(runtime^.ui_regions.accordion_rect)
+    sections := accordion_sections_for_layout(
+        runtime^.current_layout_mode, selected_animation_title(state))
+    layout := accordion_layout(panel, sections, runtime^.active_accordion_section)
+    for index in 0..<sections.count {
+        header := layout.headers[index]
+        draw_encoded_label(state, encoder, sections.items[index].label,
+            header.x + ACCORDION_HEADER_PADDING + ACCORDION_DISCLOSURE_SIZE +
+                ACCORDION_HEADER_PADDING,
+            header.y + (header.height - TREE_FONT_SIZE) * 0.5)
+    }
+    switch runtime^.active_accordion_section {
+    case .Library: draw_encoded_tree_text(state, encoder, layout.content)
+    case .Save_Gif: draw_encoded_gif_text(state, encoder, layout.content)
+    case .Settings: draw_encoded_settings_text(state, encoder, layout.content)
+    case .View:
+    }
+    if runtime^.display_fps {
+        draw_encoded_label(state, encoder,
+            fmt.tprintf("FPS %.1f", runtime^.fps_avg_live), 8, 8)
+    }
+}
+
 // Resolve static UI targets after authoritative panel geometry is available.
 prepare_ui_static_interaction :: proc(
     state: ^core.Euclid_General_State,

@@ -491,7 +491,7 @@ terminal_resize_display_grids :: proc(
 //   - May transactionally resize display resources, update accepted metrics, advance
 //     generation, increment rejection diagnostics, and log failed resize attempts.
 terminal_update_geometry :: proc(
-    term: ^viewterminalmodel.Terminal_State, font: rl.Font,
+    term: ^viewterminalmodel.Terminal_State, font: font.Font_Face,
     bounds: rl.Rectangle) -> Terminal_Geometry_Change {
     padded := terminal_padded_bounds(bounds)
     column_width := terminal_column_width(font)
@@ -521,7 +521,7 @@ terminal_update_geometry :: proc(
 // Returns:
 //   - The resolved Raylib font borrowed for the current draw operation.
 terminal_font_resolve :: proc(
-    resolver: font.Font_Resolver, key: font.Font_Key) -> rl.Font {
+    resolver: font.Font_Resolver, key: font.Font_Key) -> font.Font_Face {
 
     assert(resolver.resolve != nil)
     return resolver.resolve(resolver.user_data, key)

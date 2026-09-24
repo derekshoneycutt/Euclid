@@ -19,7 +19,7 @@ Settings_View_Context :: struct {
     state: ^core.Euclid_General_State,
     panel: rl.Rectangle,
     mouse_input: Input_Frame,
-    font: rl.Font,
+    font: view_font.Font_Face,
     font_resolver: view_font.Font_Resolver,
 }
 
@@ -120,6 +120,32 @@ draw_encoded_settings_geometry :: proc(
     }
     for check in checks {
         draw_encoded_checkbox_geometry(encoder, check.rectangle, check.checked)
+    }
+}
+
+// draw_encoded_settings_text emits current labels, values, and counters.
+draw_encoded_settings_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: rl.Rectangle) {
+    stack := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+        panel.y + SETTINGS_HEADER_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        panel.height - SETTINGS_HEADER_TOP_OFFSET}
+    rows := settings_view_layout_rows(stack)
+    x := panel.x + SETTINGS_PANEL_INSET
+    draw_encoded_label(state, encoder, "Maximum Dust particles", x, rows.slider_label_y)
+    draw_encoded_label(state, encoder,
+        fmt.tprintf("%d", state^.particle_system^.use_max_dust_particles),
+        panel.x + panel.width - SETTINGS_PANEL_INSET * 2, rows.slider_label_y)
+    labels := [4]struct{label: string, y: f32}{
+        {"Display FPS", rows.fps_y}, {"Limit FPS", rows.limit_y},
+        {"Use SIMD Projection", rows.simd_y},
+        {"GPU Dust Instancing", rows.gpu_dust_y},
+    }
+    for item in labels {
+        draw_encoded_label(state, encoder, item.label,
+            x + SETTINGS_CHECKBOX_SIZE + SETTINGS_CHECKBOX_LABEL_GAP,
+            item.y - SETTINGS_CHECKBOX_TEXT_OFFSET_Y)
     }
 }
 

@@ -2,8 +2,8 @@ package view_core
 
 import dyncore "../../dynview/core"
 import view_font "../font"
-
-import "core:strings"
+import native "../native"
+import geometry "../../core/geometry"
 
 import rl "vendor:raylib"
 
@@ -11,9 +11,10 @@ import rl "vendor:raylib"
 //   offset, font, and typography metrics, grouped so the draw call passes one
 //   coherent value.
 Wrapped_Text_Content_Params :: struct {
+    encoder: ^native.Draw_Encoder,
     panel : rl.Rectangle,
     scroll_y : f32,
-    font : rl.Font,
+    font : view_font.Font_Face,
     text_padding : f32,
     text_row_height : f32,
     text_color : rl.Color,
@@ -26,12 +27,13 @@ Wrapped_Text_Content_Params :: struct {
 
 //   Font and size pair for UI text draw calls.
 Ui_Text_Font :: struct {
-    font : rl.Font,
+    font : view_font.Font_Face,
     font_size : f32,
 }
 
 //   Complete inputs for one atomic shaped-or-unshaped text draw.
 Shaped_Text_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: view_font.Font_Resolver,
     key: view_font.Font_Key,
     text: string,
@@ -42,6 +44,7 @@ Shaped_Text_Draw :: struct {
 
 //   Complete inputs for one page-aware unshaped text draw.
 Unshaped_Text_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: view_font.Font_Resolver,
     key: view_font.Font_Key,
     text: string,
@@ -52,6 +55,7 @@ Unshaped_Text_Draw :: struct {
 
 //   One immutable cached shaped run ready for proportional glyph drawing.
 Cached_Shaped_Run_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: view_font.Font_Resolver,
     key: view_font.Font_Key,
     glyphs: []view_font.Shaped_Glyph,
@@ -76,6 +80,7 @@ Cached_Glyph_Placement :: struct {
 
 //   Complete inputs for one normalized resolved-glyph draw.
 Resolved_Glyph_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolved: view_font.Resolved_Glyph,
     position: rl.Vector2,
     font_size: f32,
@@ -86,6 +91,7 @@ Resolved_Glyph_Draw :: struct {
 
 //   Complete inputs for one page-aware unshaped codepoint draw.
 Codepoint_Text_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: view_font.Font_Resolver,
     key: view_font.Font_Key,
     codepoint: rune,
@@ -102,24 +108,8 @@ Codepoint_Resolution :: struct {
 }
 
 //   Wrap a font with the default UI text size.
-ui_text_font :: #force_inline proc(font: rl.Font) -> Ui_Text_Font {
+ui_text_font :: #force_inline proc(font: view_font.Font_Face) -> Ui_Text_Font {
     return Ui_Text_Font{font = font, font_size = TREE_FONT_SIZE}
-}
-
-//   Draw UTF-8 UI text using temp C-string conversion.
-ui_text :: #force_inline proc(
-    text: string, x, y: int, color: rl.Color, font: Ui_Text_Font) {
-    cloned := strings.clone_to_cstring(text, context.temp_allocator)
-    position := rl.Vector2{f32(x), f32(y)}
-    rl.DrawTextEx(font.font, cloned, position, font.font_size, 0, color)
-}
-
-//   Draw UTF-8 UI text using float coordinates to avoid pixel snap artifacts.
-ui_text_f32 :: #force_inline proc(
-    text: string, x, y: f32, color: rl.Color, font: Ui_Text_Font) {
-    cloned := strings.clone_to_cstring(text, context.temp_allocator)
-    position := rl.Vector2{x, y}
-    rl.DrawTextEx(font.font, cloned, position, font.font_size, 0, color)
 }
 
 //   Record one shaped-text fallback without retaining source content.
@@ -150,14 +140,24 @@ ui_text_cluster_column :: proc(text: string, cluster: u32) -> (int, bool) {
 }
 
 //   Resolve Euclid's stb-scaled monospace column width from the finalized atlas.
-ui_text_column_advance :: proc(atlas: rl.Font, font_size: f32) -> (f32, bool) {
-    space_index := int(rl.GetGlyphIndex(atlas, ' '))
-    if space_index < 0 || space_index >= int(atlas.glyphCount) ||
-        atlas.glyphs[space_index].advanceX <= 0 || atlas.baseSize <= 0 {
+ui_text_column_advance :: proc(
+    atlas: view_font.Font_Face, font_size: f32) -> (f32, bool) {
+    if atlas.spaceAdvance <= 0 || atlas.baseSize <= 0 {
         return 0, false
     }
-    return f32(atlas.glyphs[space_index].advanceX)*
+    return f32(atlas.spaceAdvance)*
         font_size/f32(atlas.baseSize), true
+}
+
+// ui_text_measure_monospace returns one UTF-8 run width under fixed spacing.
+ui_text_measure_monospace :: proc(
+    text: string, atlas: view_font.Font_Face,
+    font_size, spacing: f32) -> (f32, bool) {
+    advance, valid := ui_text_column_advance(atlas, font_size)
+    count := dyncore.text_codepoint_count_span(text, 0, len(text))
+    if !valid || count < 0 {return 0, false}
+    if count == 0 {return 0, true}
+    return f32(count)*advance + f32(count - 1)*spacing, true
 }
 
 //   Validate a complete horizontal monospace shape result before drawing.
@@ -185,11 +185,14 @@ ui_text_shape_is_valid :: proc(
 
 //   Draw one normalized resident glyph with optional HarfBuzz offsets.
 ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
-
     resolved := draw.resolved
+    if draw.encoder == nil || resolved.texture.handle == nil ||
+        resolved.texture.width == 0 || resolved.texture.height == 0 {
+        return
+    }
     scale := draw.font_size/f32(resolved.base_size)
     offset_scale := scale/64
-    destination := rl.Rectangle{
+    destination := geometry.Rectangle{
         x = draw.position.x + f32(resolved.offset_x)*scale +
             f32(draw.x_offset)*offset_scale,
         y = draw.position.y + f32(resolved.offset_y)*scale +
@@ -197,8 +200,16 @@ ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
         width = resolved.source.width*scale,
         height = resolved.source.height*scale,
     }
-    rl.DrawTexturePro(
-        resolved.texture, resolved.source, destination, {}, 0, draw.color)
+    texture_width := f32(resolved.texture.width)
+    texture_height := f32(resolved.texture.height)
+    uv := geometry.Rectangle{
+        resolved.source.x/texture_width,
+        resolved.source.y/texture_height,
+        resolved.source.width/texture_width,
+        resolved.source.height/texture_height,
+    }
+    _ = native.draw_encoder_texture_quad(draw.encoder, destination, uv,
+        native.from_raylib_color(draw.color), resolved.texture.handle)
 }
 
 //   Convert one cached 26.6 glyph position and advance to pixel coordinates.
@@ -266,6 +277,7 @@ ui_text_cached_shaped_run :: proc(request: Cached_Shaped_Run_Draw) -> bool {
             glyph, pen_x, request.position.y,
             request.font_size, request.base_pixel_size)
         ui_text_draw_resolved_glyph({
+            encoder = request.encoder,
             resolved = resolved,
             position = placement.position,
             font_size = request.font_size,
@@ -297,6 +309,7 @@ ui_text_cached_monospace_run :: proc(request: Cached_Monospace_Run_Draw) -> bool
             request, glyph)
         assert(valid)
         ui_text_draw_resolved_glyph({
+            encoder = shaped.encoder,
             resolved = resolved,
             position = position,
             font_size = shaped.font_size,
@@ -337,6 +350,7 @@ ui_text_codepoint_paged :: proc(draw: Codepoint_Text_Draw) -> bool {
         return false
     }
     ui_text_draw_resolved_glyph({
+        encoder = draw.encoder,
         resolved = resolution.glyph,
         position = draw.position,
         font_size = draw.font_size,
@@ -357,6 +371,7 @@ ui_text_unshaped_paged :: proc(request: Unshaped_Text_Draw) -> bool {
         }
         all_resident = all_resident && resolution.status == .Resident
         ui_text_draw_resolved_glyph({
+            encoder = request.encoder,
             resolved = resolution.glyph,
             position = {draw_x, request.position.y},
             font_size = request.font.font_size,
@@ -368,10 +383,17 @@ ui_text_unshaped_paged :: proc(request: Unshaped_Text_Draw) -> bool {
     return all_resident
 }
 
-//   Draw one shaped request through the ordinary raylib text path.
+//   Draw one shaped request through page-aware unshaped glyph resolution.
 ui_text_draw_unshaped :: #force_inline proc(request: Shaped_Text_Draw) {
-    ui_text_f32(request.text, request.position.x, request.position.y,
-        request.color, request.font)
+    _ = ui_text_unshaped_paged({
+        encoder = request.encoder,
+        resolver = request.resolver,
+        key = request.key,
+        text = request.text,
+        position = request.position,
+        color = request.color,
+        font = request.font,
+    })
 }
 
 //   Validate every output cluster before any shaped glyph reaches the screen.
@@ -398,6 +420,7 @@ ui_text_draw_shaped_run :: proc(
             request.resolver.user_data, request.key, glyph.glyph_id)
         assert(resident)
         ui_text_draw_resolved_glyph({
+            encoder = request.encoder,
             resolved = resolved,
             position = rl.Vector2{
                 request.position.x + f32(column)*column_advance,
@@ -488,11 +511,11 @@ draw_wrapped_text_row :: proc(
     text_font := Ui_Text_Font{params.font, params.font_size}
     position := rl.Vector2{params.panel.x + params.text_padding, row_y}
     if params.font_cache == nil {
-        ui_text_f32(text, position.x, position.y, params.text_color, text_font)
         return
     }
     resolver := view_font.cache_terminal_resolver(params.font_cache)
     ui_text_shaped({
+        encoder = params.encoder,
         resolver = resolver,
         key = params.font_key,
         text = text,
@@ -516,11 +539,7 @@ draw_wrapped_text_content :: proc(
     start := 0
     row := 0
 
-    if len(text) == 0 {
-        ui_text("", int(panel.x + text_padding), int(panel.y + text_padding),
-            params.text_color, Ui_Text_Font{params.font, params.font_size})
-        return
-    }
+    if len(text) == 0 {return}
 
     for start < len(text) {
         span := dyncore.next_wrapped_text_span(text, start, max_chars)

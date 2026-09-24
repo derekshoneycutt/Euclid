@@ -11,6 +11,7 @@ import termmodel "../../terminal/model"
 import termpalette "../../terminal/palette"
 import "../font"
 import "../input"
+import native "../native"
 
 import rl "vendor:raylib"
 
@@ -177,13 +178,14 @@ Terminal_Superseded_Display :: struct {
 
 // Frame-local terminal geometry and selection used by the draw pipeline.
 Terminal_Draw_Layout :: struct {
+    encoder: ^native.Draw_Encoder,
     padded_bounds: rl.Rectangle,
     line_height: f32,
     line_count: int,
     prompt_visible: bool,
     content_height: f32,
     selection: Terminal_Selection_Bounds,
-    regular: rl.Font,
+    regular: font.Font_Face,
     theme: Terminal_Draw_Theme,
     terminal_focused: bool,
 }
@@ -200,7 +202,7 @@ Terminal_Draw_Theme :: struct {
 Terminal_Update_Request :: struct {
     frame: input.Input_Frame,
     now: f64,
-    font: rl.Font,
+    font: font.Font_Face,
     bounds: rl.Rectangle,
     update_geometry: bool,
 }
@@ -214,6 +216,7 @@ Terminal_Draw_Request :: struct {
 
 // Frame-local presentation inputs supplied by the UI-owned scroll container.
 Terminal_Draw_Content_Context :: struct {
+    encoder: ^native.Draw_Encoder,
     layout: Terminal_Draw_Layout,
     origin: rl.Vector2,
     bounds: rl.Rectangle,
@@ -261,6 +264,7 @@ Terminal_Prompt_Shape_Exclusions :: struct {
 
 // Complete state for drawing one prompt row and its shaped text fragments.
 Terminal_Prompt_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: font.Font_Resolver,
     current_text: string,
     prompt_prefix: string,
@@ -276,13 +280,14 @@ Terminal_Single_Line_Prompt_Draw :: struct {
     resolver: font.Font_Resolver,
     layout: Terminal_Draw_Layout,
     position: rl.Vector2,
-    regular: rl.Font,
+    regular: font.Font_Face,
     current_text: string,
     prompt_prefix: string,
 }
 
 // Complete state for drawing one physical row of a multiline prompt.
 Terminal_Multiline_Prompt_Row_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     term: ^viewterminalmodel.Terminal_State,
     resolver: font.Font_Resolver,
     text: string,
@@ -296,6 +301,7 @@ Terminal_Multiline_Prompt_Row_Draw :: struct {
 
 // Complete state for drawing one eligible shaped cell run.
 Terminal_Shaped_Run_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: font.Font_Resolver,
     cells: []termgrid.Cell,
     start_column: int,
@@ -307,6 +313,7 @@ Terminal_Shaped_Run_Draw :: struct {
 
 // Shared immutable inputs for one attempted shaped output chunk.
 Terminal_Shaped_Output_Context :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: font.Font_Resolver,
     cells: []termgrid.Cell,
     position: rl.Vector2,
@@ -317,8 +324,9 @@ Terminal_Shaped_Output_Context :: struct {
 
 // Complete state for drawing shaped and fallback prompt text fragments.
 Terminal_Prompt_Text_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: font.Font_Resolver,
-    regular: rl.Font,
+    regular: font.Font_Face,
     current_text: string,
     position: rl.Vector2,
     exclusions: Terminal_Prompt_Shape_Exclusions,
@@ -327,8 +335,9 @@ Terminal_Prompt_Text_Draw :: struct {
 
 // Shared text, placement, font, and theme for cursor and selection overlays.
 Terminal_Text_Overlay_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     resolver: font.Font_Resolver,
-    font: rl.Font,
+    font: font.Font_Face,
     text: string,
     position: rl.Vector2,
     theme: Terminal_Draw_Theme,

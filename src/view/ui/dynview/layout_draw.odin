@@ -14,6 +14,7 @@ import view_core "../../core"
 import "../../font"
 
 import "core:math"
+import "core:fmt"
 
 import rl "vendor:raylib"
 
@@ -41,6 +42,7 @@ Matrix_Draw_Geometry :: struct {
 
 //   Control points and style for one normalized cubic Bezier segment.
 Cubic_Segment_Params :: struct {
+    encoder: ^native.Draw_Encoder,
     p0, p1, p2, p3 : rl.Vector2,
     color : rl.Color,
     thickness : f32,
@@ -49,6 +51,7 @@ Cubic_Segment_Params :: struct {
 
 //   Vertical stem run endpoints and stroke for one stretched brace.
 Brace_Stem :: struct {
+    encoder: ^native.Draw_Encoder,
     y0 : f32,
     y1 : f32,
     thickness : f32,
@@ -82,7 +85,7 @@ Stretch_Glyph_Side :: struct {
 //   Measured limit/glyph metrics for one large operator item.
 Large_Op_Metrics :: struct {
     script_style : dyncore.Dynview_Text_Style,
-    script_font : rl.Font,
+    script_font : font.Font_Face,
     glyph_font_size : f32,
     glyph_ascent : f32,
     glyph_descent : f32,
@@ -122,7 +125,7 @@ Brace_Control_Geometry :: struct {
 //   Resolved text payload and font for one cached text item.
 Cached_Item_Text :: struct {
     text : string,
-    resolved_font : rl.Font,
+    resolved_font : font.Font_Face,
     draw_x : f32,
 }
 
@@ -148,7 +151,7 @@ Matrix_Cell_Resolve :: struct {
 
 //   Resolved script font and offsets for one script-attach item.
 Script_Attach_Style :: struct {
-    font : rl.Font,
+    font : font.Font_Face,
     style : dyncore.Dynview_Text_Style,
     ascent : f32,
     font_size : f32,
@@ -200,7 +203,7 @@ Math_Item_Draw :: struct {
     ctx : Layout_Draw_Context,
     style : dyncore.Dynview_Text_Style,
     item : dynviewmodel.Dynview_Layout_Item,
-    resolved_font : rl.Font,
+    resolved_font : font.Font_Face,
     text : string,
     draw_x : f32,
     item_y : f32,
@@ -209,15 +212,17 @@ Math_Item_Draw :: struct {
 //   Shared draw environment passed to cached layout item renderers so the
 //   state/runtime/panel/font tuple travels as one coherent value.
 Layout_Draw_Context :: struct {
+    encoder: ^native.Draw_Encoder,
     state : ^core.Euclid_General_State,
     runtime : ^dynviewmodel.Dynview_System,
     panel : rl.Rectangle,
-    font : rl.Font,
+    font : font.Font_Face,
     font_size : f32,
 }
 
 //   Inputs for one unshaped math run resolved through demand-loaded glyph pages.
 Math_Text_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
     state: ^core.Euclid_General_State,
     style: dyncore.Dynview_Text_Style,
     text: string,
@@ -238,9 +243,10 @@ Cached_Math_Site_Draw :: struct {
 //   Complete draw context for one stretched delimiter glyph invocation.
 //   Groups layout metrics, style/font state, and delimiter identity into one argument.
 Stretch_Delimiter_Glyph_Params :: struct {
+    encoder: ^native.Draw_Encoder,
     state : ^core.Euclid_General_State,
     style : dyncore.Dynview_Text_Style,
-    fallback_font : rl.Font,
+    fallback_font : font.Font_Face,
     wrap_advance : f32,
     font_size : f32,
     content_height : f32,
@@ -267,6 +273,7 @@ Stretch_Delimiter_Glyph_Geometry :: struct {
 
 //   Uniform handler shape for line-only delimiter family renderers.
 Delimiter_Line_Handler :: #type proc(
+    encoder: ^native.Draw_Encoder,
     style : dyncore.Dynview_Text_Style,
     geom : Stretch_Delimiter_Glyph_Geometry,
     family: dynmath.Dynview_Delimiter_Family)
@@ -289,13 +296,14 @@ DELIMITER_LINE_HANDLERS ::
 //   Draw inputs for one text-run item: the runtime, style, resolved font,
 //   colors, and draw position, grouped so the renderer passes one coherent value.
 Text_Run_Draw_Params :: struct {
+    encoder: ^native.Draw_Encoder,
     state : ^core.Euclid_General_State,
     runtime : ^dynviewmodel.Dynview_System,
     font_size : f32,
     style : dyncore.Dynview_Text_Style,
     item : dynviewmodel.Dynview_Layout_Item,
     text : string,
-    resolved_font : rl.Font,
+    resolved_font : font.Font_Face,
     text_color : rl.Color,
     draw_x : f32,
     item_y : f32,
@@ -325,13 +333,11 @@ DOCUMENT_SHAPE_DRAW_KINDS ::
 //   Draw math text without shaping while allowing any cmap-supported glyph.
 draw_math_text :: proc(draw: Math_Text_Draw) {
     if draw.state == nil {
-        view_core.ui_text_f32(
-            draw.text, draw.position.x, draw.position.y,
-            native.to_raylib_color(draw.style.color), draw.font)
         return
     }
     resolver := font.cache_terminal_resolver(&draw.state^.font_cache)
     view_core.ui_text_unshaped_paged({
+        encoder = draw.encoder,
         resolver = resolver,
         key = style_font_key(draw.style),
         text = draw.text,
@@ -400,6 +406,7 @@ draw_cached_math_site :: proc(draw: Cached_Math_Site_Draw) -> bool {
         draw.font_size, run^.base_pixel_size)
     resolver := font.cache_terminal_resolver(&draw.ctx.state^.font_cache)
     return view_core.ui_text_cached_shaped_run({
+        encoder = draw.ctx.encoder,
         resolver = resolver,
         key = .Math_Regular,
         glyphs = glyphs,
@@ -460,6 +467,7 @@ draw_glyph_accent_construction :: proc(
         part := construction.parts[index]
         glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = part.glyph_id}}
         if !view_core.ui_text_cached_shaped_run({
+            encoder = ctx.encoder,
             resolver = resolver, key = .Math_Regular, glyphs = glyphs[:],
             position = {
                 draw_x+item.accent_glyph_x+
@@ -534,17 +542,20 @@ radical_bar_geometry :: proc(layout: Radical_Layout) -> Radical_Bar_Geometry {
 }
 
 //   Draw the radical hook stroke (flag, low, rise, high, into the bar).
-draw_radical_hook :: proc(g: Radical_Bar_Geometry, color: rl.Color) {
-    rl.DrawLineEx(rl.Vector2{g.hook_flag_x, g.hook_start_y},
-        rl.Vector2{g.hook_start_x, g.hook_start_y}, g.hook_stroke, color)
-    rl.DrawLineEx(rl.Vector2{g.hook_start_x, g.hook_start_y},
-        rl.Vector2{g.root_low_x, g.root_low_y}, g.hook_stroke, color)
-    rl.DrawLineEx(rl.Vector2{g.root_low_x, g.root_low_y},
-        rl.Vector2{g.root_rise_x, g.root_rise_y}, g.hook_stroke, color)
-    rl.DrawLineEx(rl.Vector2{g.root_rise_x, g.root_rise_y},
-        rl.Vector2{g.root_high_x, g.root_high_y}, g.hook_stroke, color)
-    rl.DrawLineEx(rl.Vector2{g.root_high_x, g.root_high_y},
-        rl.Vector2{g.bar_start_x, g.bar_y}, g.hook_stroke, color)
+draw_radical_hook :: proc(
+    encoder: ^native.Draw_Encoder,
+    g: Radical_Bar_Geometry,
+    color: dynviewmodel.Color) {
+    _ = native.draw_encoder_line(encoder, {g.hook_flag_x, g.hook_start_y},
+        {g.hook_start_x, g.hook_start_y}, g.hook_stroke, color)
+    _ = native.draw_encoder_line(encoder, {g.hook_start_x, g.hook_start_y},
+        {g.root_low_x, g.root_low_y}, g.hook_stroke, color)
+    _ = native.draw_encoder_line(encoder, {g.root_low_x, g.root_low_y},
+        {g.root_rise_x, g.root_rise_y}, g.hook_stroke, color)
+    _ = native.draw_encoder_line(encoder, {g.root_rise_x, g.root_rise_y},
+        {g.root_high_x, g.root_high_y}, g.hook_stroke, color)
+    _ = native.draw_encoder_line(encoder, {g.root_high_x, g.root_high_y},
+        {g.bar_start_x, g.bar_y}, g.hook_stroke, color)
 }
 
 //   Measure and position one optional radical index against the hook.
@@ -579,7 +590,7 @@ draw_radical_index_text :: proc(
     layout: Radical_Layout,
     index_text: string,
     script_style: dyncore.Dynview_Text_Style,
-    script_font: rl.Font) {
+    script_font: font.Font_Face) {
 
     if len(index_text) == 0 {
         return
@@ -597,6 +608,7 @@ draw_radical_index_text :: proc(
         return
     }
     draw_math_text({
+        encoder = ctx.encoder,
         state = ctx.state,
         style = script_style,
         text = index_text,
@@ -708,12 +720,12 @@ draw_sealed_radical :: proc(
     }, native.to_raylib_color(radical_style.color)) {
         return false
     }
-    rl.DrawLineEx(
+    _ = native.draw_encoder_line(layout.ctx.encoder,
         {layout.draw_x+item.radical_rule_left,
             layout.baseline_y+item.radical_rule_center},
         {layout.draw_x+item.radical_rule_right,
             layout.baseline_y+item.radical_rule_center},
-        item.radical_rule_thickness, native.to_raylib_color(radical_style.color))
+        item.radical_rule_thickness, radical_style.color)
     _ = draw_radical_degree(layout, true)
     return true
 }
@@ -724,11 +736,11 @@ draw_fallback_radical_strokes :: proc(
     style: dyncore.Dynview_Text_Style) {
 
     geometry := radical_bar_geometry(layout)
-    rl.DrawLineEx(
+    _ = native.draw_encoder_line(layout.ctx.encoder,
         {geometry.bar_start_x, geometry.bar_y},
         {geometry.bar_end_x, geometry.bar_y},
-        geometry.bar_thickness, native.to_raylib_color(style.color))
-    draw_radical_hook(geometry, native.to_raylib_color(style.color))
+        geometry.bar_thickness, style.color)
+    draw_radical_hook(layout.ctx.encoder, geometry, style.color)
 }
 
 //   Draw one recursive radical wrapper by drawing the child math program first, then index and radical stroke.
@@ -766,7 +778,7 @@ draw_recursive_radical_item :: proc(
 resolve_font_for_style :: #force_inline proc(
     state: ^core.Euclid_General_State,
     style: dyncore.Dynview_Text_Style,
-    fallback_font: rl.Font) -> rl.Font {
+    fallback_font: font.Font_Face) -> font.Font_Face {
 
     resolved := fallback_font
     if state == nil {
@@ -831,6 +843,7 @@ draw_script_limit :: proc(
         position = {draw.script_x, top}, font_size = draw.script.font_size,
         color = native.to_raylib_color(draw.script.style.color)}) {
         draw_optional_math_text({
+            encoder = draw.ctx.encoder,
             state = draw.ctx.state, style = draw.script.style, text = text,
             position = {draw.script_x, top}, font = draw.font})
     }
@@ -939,26 +952,27 @@ fraction_resolve_programs :: proc(
 //   Resolve the fraction divider color, honoring an accent-style override.
 fraction_divider_color :: #force_inline proc(
     item: dynviewmodel.Dynview_Layout_Item,
-    style: dyncore.Dynview_Text_Style) -> rl.Color {
+    style: dyncore.Dynview_Text_Style) -> dynviewmodel.Color {
 
     if item.accent_style_id > 0 {
-        return native.to_raylib_color(dyncore.style_by_id(item.accent_style_id).color)
+        return dyncore.style_by_id(item.accent_style_id).color
     }
-    return native.to_raylib_color(style.color)
+    return style.color
 }
 
 //   Draw the centered divider rule for one recursive fraction.
 draw_fraction_divider :: proc(
+    encoder: ^native.Draw_Encoder,
     style: dyncore.Dynview_Text_Style,
     item: dynviewmodel.Dynview_Layout_Item,
     draw_x, baseline_y: f32) {
 
-    rl.DrawLineEx(
+    _ = native.draw_encoder_line(encoder,
         {draw_x + item.fraction_rule_left,
             baseline_y + item.fraction_rule_center},
         {draw_x + item.fraction_rule_right,
             baseline_y + item.fraction_rule_center},
-        item.fraction_rule_thickness,
+        max(1, item.fraction_rule_thickness),
         fraction_divider_color(item, style))
 }
 
@@ -995,7 +1009,7 @@ draw_recursive_fraction_item :: #force_inline proc(
         Program_Draw_Position{draw_x + item.fraction_denominator_x,
             baseline_y + item.fraction_denominator_baseline,
             denominator_size, denominator_style, 0})
-    draw_fraction_divider(style, item, draw_x, baseline_y)
+    draw_fraction_divider(ctx.encoder, style, item, draw_x, baseline_y)
 }
 
 //   Draw one normalized cubic Bezier segment as line samples in pixel space.
@@ -1029,7 +1043,9 @@ draw_normalized_cubic_segment :: #force_inline proc(
 
         current := rl.Vector2{geom.draw_x + geom.width * x_norm,
             geom.top_y + geom.height * y_norm}
-        rl.DrawLineEx(prev, current, seg.thickness, seg.color)
+        _ = native.draw_encoder_line(seg.encoder, {prev.x, prev.y},
+            {current.x, current.y}, seg.thickness,
+            native.from_raylib_color(seg.color))
         prev = current
     }
 }
@@ -1058,18 +1074,20 @@ build_stretch_delimiter_geometry :: #force_inline proc(
 
 //   Render a single vertical bar centered in the glyph frame.
 draw_delimiter_vert :: #force_inline proc(
+    encoder: ^native.Draw_Encoder,
     style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
     family: dynmath.Dynview_Delimiter_Family) {
 
     _ = family
     x := geom.draw_x + geom.width * 0.5
-    rl.DrawLineEx(rl.Vector2{x, geom.top_y},
-        rl.Vector2{x, geom.bottom_y}, geom.thickness, native.to_raylib_color(style.color))
+    _ = native.draw_encoder_line(encoder, {x, geom.top_y},
+        {x, geom.bottom_y}, geom.thickness, style.color)
 }
 
 //   Render a double vertical bar as two lanes centered in the glyph frame.
 draw_delimiter_double_vert :: #force_inline proc(
+    encoder: ^native.Draw_Encoder,
     style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
     family: dynmath.Dynview_Delimiter_Family) {
@@ -1078,16 +1096,16 @@ draw_delimiter_double_vert :: #force_inline proc(
     lane_gap := max(1.0, geom.width * 0.26)
     x1 := geom.draw_x + geom.width * 0.5 - lane_gap
     x2 := geom.draw_x + geom.width * 0.5 + lane_gap
-    color := native.to_raylib_color(style.color)
-    rl.DrawLineEx(rl.Vector2{x1, geom.top_y},
-        rl.Vector2{x1, geom.bottom_y}, geom.thickness, color)
-    rl.DrawLineEx(rl.Vector2{x2, geom.top_y},
-        rl.Vector2{x2, geom.bottom_y}, geom.thickness, color)
+    _ = native.draw_encoder_line(encoder, {x1, geom.top_y},
+        {x1, geom.bottom_y}, geom.thickness, style.color)
+    _ = native.draw_encoder_line(encoder, {x2, geom.top_y},
+        {x2, geom.bottom_y}, geom.thickness, style.color)
 }
 
 //   Render a bracket/ceil/floor as a vertical stem plus optional top/bottom hooks.
 //   Ceil omits the bottom hook; Floor omits the top hook.
 draw_delimiter_bracket :: #force_inline proc(
+    encoder: ^native.Draw_Encoder,
     style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
     family: dynmath.Dynview_Delimiter_Family) {
@@ -1098,23 +1116,21 @@ draw_delimiter_bracket :: #force_inline proc(
         stem_x = geom.draw_x + geom.width * 0.72
         hook_x = geom.draw_x + geom.width * 0.12
     }
-    rl.DrawLineEx(rl.Vector2{stem_x, geom.top_y},
-        rl.Vector2{stem_x, geom.bottom_y}, geom.thickness,
-        native.to_raylib_color(style.color))
+    _ = native.draw_encoder_line(encoder, {stem_x, geom.top_y},
+        {stem_x, geom.bottom_y}, geom.thickness, style.color)
     if family != .Floor {
-        rl.DrawLineEx(rl.Vector2{stem_x, geom.top_y},
-            rl.Vector2{hook_x, geom.top_y}, geom.thickness,
-            native.to_raylib_color(style.color))
+        _ = native.draw_encoder_line(encoder, {stem_x, geom.top_y},
+            {hook_x, geom.top_y}, geom.thickness, style.color)
     }
     if family != .Ceil {
-        rl.DrawLineEx(rl.Vector2{stem_x, geom.bottom_y},
-            rl.Vector2{hook_x, geom.bottom_y}, geom.thickness,
-            native.to_raylib_color(style.color))
+        _ = native.draw_encoder_line(encoder, {stem_x, geom.bottom_y},
+            {hook_x, geom.bottom_y}, geom.thickness, style.color)
     }
 }
 
 //   Render an angle bracket as two rails meeting at an apex on the glyph midline.
 draw_delimiter_angle :: #force_inline proc(
+    encoder: ^native.Draw_Encoder,
     style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
     family: dynmath.Dynview_Delimiter_Family) {
@@ -1126,18 +1142,17 @@ draw_delimiter_angle :: #force_inline proc(
         apex_x = geom.draw_x + geom.width * 0.86
         rail_x = geom.draw_x + geom.width * 0.14
     }
-    rl.DrawLineEx(rl.Vector2{rail_x, geom.top_y},
-        rl.Vector2{apex_x, geom.center_y}, geom.thickness,
-        native.to_raylib_color(style.color))
-    rl.DrawLineEx(rl.Vector2{apex_x, geom.center_y},
-        rl.Vector2{rail_x, geom.bottom_y}, geom.thickness,
-        native.to_raylib_color(style.color))
+    _ = native.draw_encoder_line(encoder, {rail_x, geom.top_y},
+        {apex_x, geom.center_y}, geom.thickness, style.color)
+    _ = native.draw_encoder_line(encoder, {apex_x, geom.center_y},
+        {rail_x, geom.bottom_y}, geom.thickness, style.color)
 }
 
 //   Render line-only delimiter families (no sampled curves or cubic segments).
 //   Returns true when this proc handled the family so callers can short-circuit
 //   curved renderers and fallback glyph paths.
 draw_stretch_delimiter_line_family :: #force_inline proc(
+    encoder: ^native.Draw_Encoder,
     style: dyncore.Dynview_Text_Style,
     family: dynmath.Dynview_Delimiter_Family,
     geom: Stretch_Delimiter_Glyph_Geometry) -> bool {
@@ -1148,7 +1163,7 @@ draw_stretch_delimiter_line_family :: #force_inline proc(
         return false
     }
 
-    handler(style, geom, family)
+    handler(encoder, style, geom, family)
     return true
 }
 
@@ -1156,6 +1171,7 @@ draw_stretch_delimiter_line_family :: #force_inline proc(
 //   The right side mirrors the same profile so both sides remain symmetric and
 //   visually consistent across changing content heights.
 draw_stretch_delimiter_paren :: #force_inline proc(
+    encoder: ^native.Draw_Encoder,
     style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry) {
 
@@ -1175,8 +1191,8 @@ draw_stretch_delimiter_paren :: #force_inline proc(
             x1 = geom.draw_x + geom.width * (0.22 + 0.46 * curve1)
         }
 
-        rl.DrawLineEx(rl.Vector2{x0, y0}, rl.Vector2{x1, y1}, geom.thickness,
-            native.to_raylib_color(style.color))
+        _ = native.draw_encoder_line(
+            encoder, {x0, y0}, {x1, y1}, geom.thickness, style.color)
     }
 }
 
@@ -1193,11 +1209,9 @@ draw_brace_stem :: #force_inline proc(
     if geom.right_side {
         x_stem = geom.draw_x + geom.width * (1.0 - stem_x)
     }
-    rl.DrawLineEx(
-        rl.Vector2{x_stem, stem.y0},
-        rl.Vector2{x_stem, stem.y1},
-        stem.thickness,
-        stem.color)
+    _ = native.draw_encoder_line(stem.encoder,
+        {x_stem, stem.y0}, {x_stem, stem.y1}, stem.thickness,
+        native.from_raylib_color(stem.color))
 }
 
 //   Draw the four quarter-turn cubic segments (two hooks, two cusps) of a brace.
@@ -1255,6 +1269,7 @@ draw_brace_curves :: proc(
 //   Corner radius is kept stable while extra height stretches only the stems,
 //   which prevents braces from becoming pointy or overly flat at large sizes.
 draw_stretch_delimiter_brace :: #force_inline proc(
+    encoder: ^native.Draw_Encoder,
     style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
     font_size: f32) {
@@ -1274,17 +1289,20 @@ draw_stretch_delimiter_brace :: #force_inline proc(
         bend = f32(0.55),
     }
     draw_brace_curves(geom, cg, Cubic_Segment_Params{
+        encoder = encoder,
         color = native.to_raylib_color(style.color),
         thickness = brace_thickness,
         segment_count = segment_count,
     })
 
     draw_brace_stem(geom, cg.stem_x, stem_len,
-        Brace_Stem{geom.top_y + radius_px, geom.center_y - radius_px,
-            brace_thickness, native.to_raylib_color(style.color)})
+        Brace_Stem{encoder = encoder, y0 = geom.top_y + radius_px,
+            y1 = geom.center_y - radius_px, thickness = brace_thickness,
+            color = native.to_raylib_color(style.color)})
     draw_brace_stem(geom, cg.stem_x, stem_len,
-        Brace_Stem{geom.center_y + radius_px, geom.bottom_y - radius_px,
-            brace_thickness, native.to_raylib_color(style.color)})
+        Brace_Stem{encoder = encoder, y0 = geom.center_y + radius_px,
+            y1 = geom.bottom_y - radius_px, thickness = brace_thickness,
+            color = native.to_raylib_color(style.color)})
 }
 
 //   Draw a font glyph fallback when no procedural family renderer is used.
@@ -1305,6 +1323,7 @@ draw_stretch_delimiter_text_fallback :: #force_inline proc(
     resolved_font :=
         resolve_font_for_style(params.state, params.style, params.fallback_font)
     draw_math_text({
+        encoder = params.encoder,
         state = params.state,
         style = params.style,
         text = delimiter,
@@ -1336,16 +1355,18 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     }
 
     geom := build_stretch_delimiter_geometry(params, width)
-    if draw_stretch_delimiter_line_family(params.style, family, geom) {
+    if draw_stretch_delimiter_line_family(
+        params.encoder, params.style, family, geom) {
         return width
     }
 
     switch family {
     case .Paren:
-        draw_stretch_delimiter_paren(params.style, geom)
+        draw_stretch_delimiter_paren(params.encoder, params.style, geom)
         return width
     case .Brace:
-        draw_stretch_delimiter_brace(params.style, geom, params.font_size)
+        draw_stretch_delimiter_brace(
+            params.encoder, params.style, geom, params.font_size)
         return width
     case .Vert, .Double_Vert, .Bracket, .Ceil, .Floor, .Angle, .None:
     }
@@ -1393,6 +1414,7 @@ draw_stretch_construction :: proc(
         part_baseline := position.baseline_y + position.vertical_origin -
             part.advance_offset*item.math_stretch_scale
         if !view_core.ui_text_cached_shaped_run({
+            encoder = ctx.encoder,
             resolver = resolver, key = .Math_Regular, glyphs = glyphs[:],
             position = {position.origin_x,
                 part_baseline-item.math_stretch_raster_ascent*raster_scale},
@@ -1443,6 +1465,7 @@ stretch_delimiter_glyph_params :: #force_inline proc(
     side: Stretch_Glyph_Side) -> Stretch_Delimiter_Glyph_Params {
 
     return Stretch_Delimiter_Glyph_Params{
+        encoder = ctx.encoder,
         state = ctx.state,
         style = style,
         fallback_font = ctx.font,
@@ -2148,6 +2171,7 @@ large_op_draw_limit :: #force_inline proc(
         return
     }
     draw_math_text({
+        encoder = d.ctx.encoder,
         state = d.ctx.state,
         style = m.script_style,
         text = text,
@@ -2168,6 +2192,7 @@ draw_large_op_variant :: proc(d: Math_Item_Draw) -> bool {
     glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = item.operator_glyph_id}}
     resolver := font.cache_terminal_resolver(&d.ctx.state^.font_cache)
     return view_core.ui_text_cached_shaped_run({
+        encoder = d.ctx.encoder,
         resolver = resolver,
         key = .Math_Regular,
         glyphs = glyphs[:],
@@ -2195,6 +2220,7 @@ draw_large_op_recursive_item :: #force_inline proc(d: Math_Item_Draw) {
         position = {glyph_x, glyph_top}, font_size = m.glyph_font_size,
         color = native.to_raylib_color(d.style.color)}) {
         draw_math_text({
+            encoder = d.ctx.encoder,
             state = d.ctx.state, style = d.style, text = d.text,
             position = {glyph_x, glyph_top},
             font = {d.resolved_font, m.glyph_font_size}})
@@ -2246,6 +2272,7 @@ text_run_draw_params :: #force_inline proc(
 
     text_color := item.has_brush_color ? item.brush_color : style.color
     return Text_Run_Draw_Params{
+        encoder = ctx.encoder,
         state = ctx.state,
         runtime = ctx.runtime,
         font_size = ctx.font_size,
@@ -2312,6 +2339,7 @@ draw_text_run_content :: proc(
     if params.item.kind == .Text_Run && params.state != nil {
         resolver := font.cache_terminal_resolver(&params.state^.font_cache)
         view_core.ui_text_shaped({
+            encoder = params.encoder,
             resolver = resolver,
             key = style_font_key(params.style),
             text = params.text,
@@ -2323,6 +2351,7 @@ draw_text_run_content :: proc(
     }
     if params.item.kind == .Math_Glyph_Run && draw_cached_math_site({
         ctx = {
+            encoder = params.encoder,
             state = params.state,
             runtime = params.runtime,
             font_size = params.font_size,
@@ -2336,6 +2365,7 @@ draw_text_run_content :: proc(
         return
     }
     draw_math_text({
+        encoder = params.encoder,
         state = params.state,
         style = params.style,
         text = params.text,
@@ -2628,6 +2658,12 @@ document_draw_color :: #force_inline proc(
     return color.value if color.present else dyncore.UI_TEXT_COLOR
 }
 
+// Preserve an optional semantic color as the transparent-zero shape sentinel.
+document_optional_draw_color :: #force_inline proc(
+    color: dynviewmodel.Dynview_Document_Color) -> dynviewmodel.Color {
+    return color.value if color.present else {}
+}
+
 // Convert one semantic shape into the established allocation-free draw payload.
 document_shape_draw_item :: proc(
     item: dynviewmodel.Dynview_Document_Layout_Item,
@@ -2655,11 +2691,11 @@ document_shape_draw_item :: proc(
         outline_color = document_draw_color(
             shape.arc_color if shape.arc_color.present else shape.color),
     }
-    result.shape_edge_color_1 = document_draw_color(shape.edge_colors[0])
-    result.shape_edge_color_2 = document_draw_color(shape.edge_colors[1])
-    result.shape_edge_color_3 = document_draw_color(shape.edge_colors[2])
-    result.shape_edge_color_4 = document_draw_color(shape.edge_colors[3])
-    result.shape_edge_color_5 = document_draw_color(shape.edge_colors[4])
+    result.shape_edge_color_1 = document_optional_draw_color(shape.edge_colors[0])
+    result.shape_edge_color_2 = document_optional_draw_color(shape.edge_colors[1])
+    result.shape_edge_color_3 = document_optional_draw_color(shape.edge_colors[2])
+    result.shape_edge_color_4 = document_optional_draw_color(shape.edge_colors[3])
+    result.shape_edge_color_5 = document_optional_draw_color(shape.edge_colors[4])
     draw_kind := document_shape_draw_kind(shape, result.inline_outline_stroke)
     if !draw_kind.ok {return {}, false}
     result.kind = draw_kind.kind
@@ -2724,16 +2760,16 @@ draw_document_prose_item :: proc(
     }
     text := string(ctx.runtime^.content.document_text[
         run.text_offset:run.text_offset+run.text_count])
-    atlas := font.cache_borrow(&ctx.state^.font_cache, run.effective_font_key)
     column_advance, advance_valid := view_core.ui_text_column_advance(
-        atlas, ctx.font_size)
+        font.cache_borrow(&ctx.state^.font_cache, run.effective_font_key),
+        ctx.font_size)
     if !advance_valid {
         return false
     }
-    resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
     return view_core.ui_text_cached_monospace_run({
         shaped = {
-            resolver = resolver, key = run.effective_font_key,
+            encoder = ctx.encoder, resolver = font.cache_terminal_resolver(&ctx.state^.font_cache),
+            key = run.effective_font_key,
             glyphs = cache^.document_shaped_glyphs[
                 run.glyph_start:run.glyph_start+run.glyph_count],
             position = {position.x, line_top},
@@ -2775,7 +2811,7 @@ draw_document_item :: proc(
         if ok {
             style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_DEFAULT)
             style.color = document_draw_color(semantic_inline.color)
-            draw_cached_inline_item(style, shape_item, position.x, position.y)
+            encode_inline_item(ctx.encoder, shape_item, position.x, position.y)
         }
     case .None:
     }
@@ -2788,26 +2824,20 @@ draw_document_display_number :: proc(
     origin: rl.Vector2) {
 
     if line.display_number <= 0 {return}
-    digits: [20]rune
-    digit_count := 0
-    remaining := line.display_number
-    for remaining > 0 && digit_count < len(digits) {
-        digits[digit_count] = rune('0'+remaining%10)
-        digit_count += 1
-        remaining /= 10
-    }
     style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_DEFAULT)
-    color := native.to_raylib_color(style.color)
     baseline := origin.y+line.baseline+line.display_number_baseline_offset
     position := rl.Vector2{origin.x+line.display_number_x,
         baseline-ctx.font_size*0.8}
-    rl.DrawTextCodepoint(ctx.font, '(', position, ctx.font_size, color)
-    position.x += ctx.runtime^.compile_cache.last_cell_width
-    for index := digit_count-1; index >= 0; index -= 1 {
-        rl.DrawTextCodepoint(ctx.font, digits[index], position, ctx.font_size, color)
-        position.x += ctx.runtime^.compile_cache.last_cell_width
-    }
-    rl.DrawTextCodepoint(ctx.font, ')', position, ctx.font_size, color)
+    resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
+    _ = view_core.ui_text_unshaped_paged({
+        encoder = ctx.encoder,
+        resolver = resolver,
+        key = .Regular,
+        text = fmt.tprintf("(%d)", line.display_number),
+        position = position,
+        color = native.to_raylib_color(style.color),
+        font = {ctx.font, ctx.font_size},
+    })
 }
 
 // Draw authoritative semantic document lines from sealed pixel geometry.

@@ -718,7 +718,7 @@ container request, or a native process request; do not bypass that owner's proto
 
 ## Correctness Invariants
 
-- Only the display thread mutates visible Terminal state or Raylib resources.
+- Only the display thread mutates visible Terminal state or native GPU resources.
 - Only the Julia host thread enters libjulia or mutates Julia session actors.
 - Every interactive operation carries Terminal generation and required request identity.
 - Stale results are released before any display-owned mutation.
@@ -727,7 +727,8 @@ container request, or a native process request; do not bypass that owner's proto
 - Julia and native process output pass through the same display-owned VT interpreter.
 - Native process policy never owns OS handles; native backends never enter Julia.
 - Grid semantics do not depend on rendering, and rendering does not reinterpret VT.
-- Graphics preparation is CPU-only; texture publication and drawing are display-only.
+- Graphics preparation is CPU-only; bounded SDL_GPU texture transactions, completion
+    publication, playback commits, and drawing are display-only.
 - Geometry replacement publishes grids, placements, selection, and checkpoints together.
 - EuclidRepl jobs and tick streams cannot survive their Terminal generation.
 - Scene and Dynview mutations still commit through their owning Odin boundaries.

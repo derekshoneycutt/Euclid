@@ -217,10 +217,16 @@ and upload high-water marks.
 
 Nil swapchain textures are temporary unavailable frames and do not publish
 `Frame_Presented` evidence. Physical resize creates a candidate target before waiting
-for idle and retiring the old target. Glyph text and Terminal raster publication,
-tool and dust visuals, and screenshot or GIF GPU readback remain explicit deferred
-capabilities. Dormant Raylib source may remain, but it neither creates a window, polls
-active input, nor records active frame presentation.
+for idle and retiring the old target. Font atlases and Terminal attachments use a
+bounded display-owned texture-operation queue. CPU workers only prepare bytes; the
+display thread creates candidates, records SDL_GPU copies, and publishes exact
+generations from successful submission callbacks. Failed creates discard candidates,
+failed animation updates preserve the last resident frame, and borrowed upload bytes
+remain owned until completion. Glyphs, Dynview text, Terminal text, and Terminal
+rasters are textured quads in the active frame. Tool and dust visuals plus screenshot
+or GIF GPU readback remain explicit deferred capabilities. Dormant Raylib source may
+remain, but it neither creates a window, polls active input, nor records active frame
+presentation.
 
 The repository-owned `EUCLID-SDL-BOUNDARY` rule permits SDL imports only in the exact
 native color, icon, GPU renderer, platform, platform-service, and timing owners, the
@@ -244,9 +250,9 @@ current owner:
 | Transitional compatibility | `src/view/view.odin` retains the dormant frame consumer needed by later rendering slices but does not own active presentation or device polling. |
 | Subsystem drawing | View core, UI, Dynview display, tool, dust, and Terminal packages retain dormant immediate Raylib/rlgl consumers alongside migrated owner-local geometry encoders. |
 | Audio | `src/audio` owns Raylib stream handles and chalk synthesis playback. |
-| Backend resource ownership | View model, font, Terminal graphics, and lifecycle owners retain display-thread shaders, textures, locations, publication, and cleanup. |
+| Backend resource ownership | Native SDL owners hold GPU handles; font and Terminal graphics policy retain bounded generation, publication, playback, and cleanup state through portable records. |
 | Capture acquisition | `src/view/core/framebuffer_capture.odin` and GIF capture policy synchronously acquire and release presented Raylib images. |
-| Documented font/image compatibility requirement | `src/view/font/model` retains Raylib font and texture records because the display-owned cache publishes native resident generations while portable shaping and glyph placement remain separate. |
+| Documented font/image compatibility requirement | Font rasterization and Terminal image decoding remain CPU-owned compatibility work; their resident texture records no longer contain Raylib resources. |
 
 Canonical Dynview compile, layout, and tracking packages use `core/geometry.Rectangle`;
 only display callers convert temporary Raylib rectangles at their call boundaries.

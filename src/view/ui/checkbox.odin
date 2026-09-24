@@ -6,7 +6,6 @@ import viewmodel "../model"
 
 import view_core "../core"
 import view_font "../font"
-import "core:strings"
 
 import rl "vendor:raylib"
 
@@ -20,7 +19,7 @@ Checkbox_Params :: struct {
     interaction_space_rect: rl.Rectangle,
     interaction_enabled: bool,
     label: string,
-    font: rl.Font,
+    font: view_font.Font_Face,
     label_font_size: f32,
     label_offset_x: f32,
     label_offset_y: f32,
@@ -56,8 +55,9 @@ checkbox_label_layout :: proc(
 
     label_x := box_rect.x + box_rect.width + params.label_offset_x
     label_y := box_rect.y + params.label_offset_y
-    label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
-    measured := rl.MeasureTextEx(params.font, label_cstr, params.label_font_size, 0)
+    measured_width, _ := view_core.ui_text_measure_monospace(
+        params.label, params.font, params.label_font_size, 0)
+    measured := rl.Vector2{measured_width, params.label_font_size}
     label_rect := rl.Rectangle{label_x, label_y,
         max(0.0, measured.x), max(0.0, measured.y)}
     return label_rect, checkbox_union_rect(hit_rect, label_rect)

@@ -259,6 +259,15 @@ tex_document_shape_colors :: proc(
     shape: ^Tex_Document_Shape,
     options: ^Tex_Document_Shape_Options) -> bool {
     color_ok := true
+    if shape.kind == .Perpendicular {
+        shape.fill_color, color_ok =
+            tex_document_option_color(options, "line1_color", shape.color)
+        if color_ok {
+            shape.edge_colors[0], color_ok =
+                tex_document_option_color(options, "line2_color", shape.color)
+        }
+        return color_ok
+    }
     if shape.kind == .Angle || shape.kind == .Semicircle ||
         shape.kind == .Triangle || shape.kind == .Pentagon {
         shape.fill_color, color_ok =

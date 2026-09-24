@@ -68,6 +68,7 @@ view_text_draw_selection :: proc(
 //   Draw the view-text transcript content and copy affordances.
 view_text_draw_content :: proc(
     state: ^core.Euclid_General_State,
+    encoder: ^native.Draw_Encoder,
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     text_panel: rl.Rectangle,
     view_text: string,
@@ -79,6 +80,7 @@ view_text_draw_content :: proc(
     }
     ui_dynview.draw_presentation_styled_or_fallback(state, ui_runtime, fallback,
         ui_dynview.Presentation_Draw_Params{
+            encoder = encoder,
             panel = text_panel,
             scroll_y = state^.ui_runtime.view_text_scroll_y,
             font = font.cache_borrow(&state.font_cache, .Regular),
@@ -92,6 +94,32 @@ view_text_draw_content :: proc(
         })
 
     view_core.draw_copy_icons(&state^.dynview, text_panel)
+}
+
+// draw_encoded_presentation_text emits visible Dynview or fallback glyphs only.
+draw_encoded_presentation_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    presentation: Presentation_Preparation) {
+    if state == nil || encoder == nil || !presentation.active {return}
+    _ = native.draw_encoder_push_scissor(
+        encoder, geometry.Rectangle(presentation.scroll.view_rect))
+    fallback := ui_dynview.Fallback_Text_Content{
+        presentation.view_text, native.to_raylib_color(UI_TEXT_COLOR)}
+    ui_dynview.draw_presentation_styled_or_fallback(
+        state, &state^.ui_runtime, fallback, {
+            encoder = encoder,
+            panel = presentation.text_panel,
+            scroll_y = state^.ui_runtime.view_text_scroll_y,
+            font = font.cache_borrow(&state^.font_cache, .Regular),
+            font_cache = &state^.font_cache,
+            metrics = {
+                padding = TEXT_PADDING,
+                row_height = TEXT_ROW_HEIGHT,
+                wrap_advance = TEXT_WRAP_ADVANCE,
+                font_size = TREE_FONT_SIZE,
+            },
+        })
+    _ = native.draw_encoder_pop_scissor(encoder)
 }
 
 //   Return whether the selected catalog node owns the Terminal surface.
@@ -232,7 +260,7 @@ draw_view_text_panel :: proc(
 
     if !presentation.active { return }
     scroll_container_draw_begin(presentation.scroll)
-    view_text_draw_content(state, ui_runtime, presentation.text_panel,
+    view_text_draw_content(state, nil, ui_runtime, presentation.text_panel,
         presentation.view_text, presentation.selection_view)
     scroll_container_draw_end(presentation.scroll)
 }

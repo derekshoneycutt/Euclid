@@ -62,6 +62,7 @@ Dynview_Flow_State :: struct {
 }
 
 Dynview_Draw_Context :: struct {
+    encoder: ^native.Draw_Encoder,
     enabled : bool,
     state : ^core.Euclid_General_State,
     panel : rl.Rectangle,
@@ -70,7 +71,7 @@ Dynview_Draw_Context :: struct {
     text_row_height : f32,
     wrap_advance : f32,
     font_size : f32,
-    fallback_font : rl.Font,
+    fallback_font : font.Font_Face,
 }
 
 Perpendicular_Colors :: struct {
@@ -147,7 +148,8 @@ style_font_key :: #force_inline proc(style: dyncore.Dynview_Text_Style) -> font.
 
 //   Resolve the style-specific font for a draw context, falling back when state is nil.
 style_font :: #force_inline proc(
-    draw_ctx: ^Dynview_Draw_Context, style: dyncore.Dynview_Text_Style) -> rl.Font {
+    draw_ctx: ^Dynview_Draw_Context,
+    style: dyncore.Dynview_Text_Style) -> font.Font_Face {
     if draw_ctx == nil || draw_ctx^.state == nil {
         return draw_ctx^.fallback_font
     }
@@ -502,6 +504,7 @@ flow_draw_text_line_content :: proc(
     if draw_ctx^.state != nil {
         resolver := font.cache_terminal_resolver(&draw_ctx^.state^.font_cache)
         view_core.ui_text_shaped({
+            encoder = draw_ctx.encoder,
             resolver = resolver,
             key = style_font_key(style),
             text = line_text,
@@ -509,10 +512,6 @@ flow_draw_text_line_content :: proc(
             color = native.to_raylib_color(style.color),
             font = text_font,
         })
-    } else {
-        view_core.ui_text(
-            line_text, int(line_x), int(row_y),
-            native.to_raylib_color(style.color), text_font)
     }
 }
 

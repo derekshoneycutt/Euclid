@@ -6,8 +6,6 @@ import viewmodel "../model"
 
 import view_core "../core"
 import view_font "../font"
-import "core:strings"
-
 import rl "vendor:raylib"
 
 Text_Button_Params :: struct {
@@ -19,7 +17,7 @@ Text_Button_Params :: struct {
     scroll_offset : rl.Vector2,
     interaction_space_rect : rl.Rectangle,
     interaction_enabled : bool,
-    font : rl.Font,
+    font : view_font.Font_Face,
     has_font_color_override : bool,
     font_color_override : rl.Color,
     font_resolver : view_font.Font_Resolver,
@@ -132,8 +130,9 @@ text_button_local_mouse :: #force_inline proc(
 text_button_draw_label :: proc(
     params: Text_Button_Params, rect: rl.Rectangle, color: rl.Color) {
 
-    label_cstr := strings.clone_to_cstring(params.label, context.temp_allocator)
-    measured := rl.MeasureTextEx(params.font, label_cstr, TREE_FONT_SIZE, 0)
+    measured_width, _ := view_core.ui_text_measure_monospace(
+        params.label, params.font, TREE_FONT_SIZE, 0)
+    measured := rl.Vector2{measured_width, TREE_FONT_SIZE}
     position := rl.Vector2{
         rect.x + (rect.width - measured.x)*0.5,
         rect.y + (rect.height - measured.y)*0.5,

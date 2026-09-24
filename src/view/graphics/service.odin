@@ -9,8 +9,11 @@ import termgraphicsprepare "../../terminal/graphics/prepare"
 import gfxprotocol "../../terminal/graphics/protocol"
 import gfxsemantics "../../terminal/graphics/semantics"
 import termmodel "../../terminal/model"
+import native "../native"
+import geometry "../../core/geometry"
+import color "../../core/color"
 
-import rl "vendor:raylib"
+import "core:log"
 
 GRAPHICS_OPERATION_CAPACITY :: gfxprotocol.GRAPHICS_DECODE_REQUEST_CAPACITY
 GRAPHICS_TEXTURE_CAPACITY :: termattachment.DEFAULT_ATTACHMENT_CAPACITY
@@ -68,8 +71,20 @@ Prepare_Output :: struct {
 // One display-owned native texture correlated to an exact attachment generation.
 Texture_Entry :: struct {
     attachment_id: termattachment.Attachment_Id,
-    texture: rl.Texture2D,
+    texture: native.Sampled_Texture,
+    candidate_id: termattachment.Attachment_Id,
+    candidate: native.Sampled_Texture,
     resident: bool,
+    publishing: bool,
+    updating: bool,
+    pending_playback: Playback_Plan,
+}
+
+// Texture_Payload_Info describes one validated CPU upload surface.
+Texture_Payload_Info :: struct {
+    width: u32,
+    height: u32,
+    format: native.Texture_Pixel_Format,
 }
 
 // Bounded display service joining CPU work before publishing native resources.
@@ -86,6 +101,9 @@ Service :: struct {
     visibility_epoch: u64,
     unbinding: bool,
     stopped: bool,
+    platform: ^native.Sdl_Platform,
+    draw_runtime: ^native.Sdl_Draw_Runtime,
+    encoder: ^native.Draw_Encoder,
 
     // Content-free lifecycle telemetry.
     queue_full_count: u64,
@@ -171,17 +189,23 @@ service_draw_raster :: proc(
     entry := &service.textures[request.attachment_id.slot]
     source := request.source
     if !entry.resident || entry.attachment_id != request.attachment_id ||
-        !rl.IsTextureValid(entry.texture) || source.x < 0 || source.y < 0 ||
+        entry.texture.handle == nil || source.x < 0 || source.y < 0 ||
         source.x + source.width > int(entry.texture.width) ||
         source.y + source.height > int(entry.texture.height) {
         service.draw_rejection_count += 1
         return false
     }
-    rl.DrawTexturePro(entry.texture,
-        {f32(source.x), f32(source.y), f32(source.width), f32(source.height)},
-        {request.destination.x, request.destination.y,
-            request.destination.width, request.destination.height},
-        {}, 0, rl.WHITE)
+    if service.encoder == nil {return false}
+    uv := geometry.Rectangle{
+        f32(source.x)/f32(entry.texture.width),
+        f32(source.y)/f32(entry.texture.height),
+        f32(source.width)/f32(entry.texture.width),
+        f32(source.height)/f32(entry.texture.height),
+    }
+    destination := geometry.Rectangle{request.destination.x, request.destination.y,
+        request.destination.width, request.destination.height}
+    if !native.draw_encoder_texture_quad(service.encoder, destination, uv,
+        color.WHITE, entry.texture.handle, .Linear) {return false}
     termattachment.residency_touch(service.store, request.attachment_id)
     playback_visibility_record(service, request.attachment_id)
     service.draw_count += 1
@@ -192,6 +216,22 @@ service_draw_raster :: proc(
 service_renderer :: proc(service: ^Service) -> termattachment.Raster_Renderer {
     if service == nil || service.store == nil { return {} }
     return {user_data = service, draw = service_draw_raster}
+}
+
+// service_bind_native borrows live display resources for texture publication.
+service_bind_native :: proc(
+    service: ^Service, platform: ^native.Sdl_Platform,
+    runtime: ^native.Sdl_Draw_Runtime) -> bool {
+    if service == nil || platform == nil || runtime == nil {return false}
+    service.platform = platform
+    service.draw_runtime = runtime
+    return true
+}
+
+// service_set_draw_encoder binds the encoder used only during one frame build.
+service_set_draw_encoder :: proc(
+    service: ^Service, encoder: ^native.Draw_Encoder) {
+    if service != nil {service.encoder = encoder}
 }
 
 //   Copy content-free graphics lifecycle counters into a display observation.
@@ -473,36 +513,99 @@ texture_evict :: proc(user_data: rawptr, id: termattachment.Attachment_Id) -> bo
     }
     entry := &service.textures[id.slot]
     if !entry.resident || entry.attachment_id != id ||
-        !rl.IsTextureValid(entry.texture) {
+        entry.texture.handle == nil {
         return false
     }
-    rl.UnloadTexture(entry.texture)
+    native.sdl_sampled_texture_release(service.platform, &entry.texture)
     entry^ = {}
     service.eviction_count += 1
     return true
 }
 
-// Build a borrowed Raylib image over one supported attachment payload.
-texture_image :: proc(
-    payload: termattachment.Payload_View) -> (rl.Image, bool) {
+// texture_payload_info resolves exact dimensions and native upload format.
+texture_payload_info :: proc(
+    payload: termattachment.Payload_View) -> (Texture_Payload_Info, bool) {
     bytes_per_pixel: int
-    pixel_format: rl.PixelFormat
+    format: native.Texture_Pixel_Format
     switch payload.format {
     case .Rgb8:
-        bytes_per_pixel, pixel_format = 3, .UNCOMPRESSED_R8G8B8
+        bytes_per_pixel, format = 3, .Rgb8
     case .Rgba8:
-        bytes_per_pixel, pixel_format = 4, .UNCOMPRESSED_R8G8B8A8
+        bytes_per_pixel, format = 4, .Rgba8
     case .Indexed8: return {}, false
     }
     width := payload.stride / bytes_per_pixel
     if width <= 0 || len(payload.bytes) % payload.stride != 0 {
         return {}, false
     }
-    return {
-        data = raw_data(payload.bytes), width = i32(width),
-        height = i32(len(payload.bytes) / payload.stride),
-        mipmaps = 1, format = pixel_format,
-    }, true
+    return {u32(width), u32(len(payload.bytes) / payload.stride), format}, true
+}
+
+// texture_upload_completed publishes one exact candidate after GPU submission.
+texture_upload_completed :: proc(
+    user_data: rawptr, identity, generation: u64, succeeded: bool) {
+    service := cast(^Service)user_data
+    if service == nil || identity == 0 || identity > u64(len(service.textures)) {
+        return
+    }
+    slot := int(identity - 1)
+    entry := &service.textures[slot]
+    id := entry.candidate_id
+    if !entry.publishing || id.slot != slot || id.generation != generation {
+        log.warnf("terminal_texture_completion_stale slot=%d generation=%d", slot,
+            generation)
+        return
+    }
+    candidate := entry.candidate
+    entry.candidate = {}
+    entry.candidate_id = {}
+    entry.publishing = false
+    if !succeeded {
+        log.warnf("terminal_texture_upload_failed slot=%d generation=%d", slot,
+            generation)
+        termattachment.residency_remove(service.store, id)
+        gfxprotocol.graphics_discard_attachment(service.parser, id)
+        service.failure_count += 1
+        return
+    }
+    previous := entry.texture
+    entry.texture = candidate
+    entry.attachment_id = id
+    entry.resident = true
+    if previous.handle != nil {
+        native.sdl_sampled_texture_release(service.platform, &previous)
+    }
+    if !texture_activate_playback(service, id) {
+        texture_evict(service, id)
+        termattachment.residency_remove(service.store, id)
+        gfxprotocol.graphics_discard_attachment(service.parser, id)
+        service.failure_count += 1
+        return
+    }
+    service.publication_count += 1
+    service_record_publication(service, id)
+    log.debugf("terminal_texture_published slot=%d generation=%d width=%d height=%d",
+        slot, generation, candidate.width, candidate.height)
+}
+
+// texture_update_completed commits one pending playback plan after submission.
+texture_update_completed :: proc(
+    user_data: rawptr, identity, generation: u64, succeeded: bool) {
+    service := cast(^Service)user_data
+    if service == nil || identity == 0 || identity > u64(len(service.textures)) {
+        return
+    }
+    slot := int(identity - 1)
+    texture := &service.textures[slot]
+    if !texture.updating || texture.attachment_id.generation != generation {return}
+    plan := texture.pending_playback
+    texture.updating = false
+    texture.pending_playback = {}
+    if !succeeded || !plan.valid {
+        service.playback_upload_failure_count += 1
+        return
+    }
+    playback_commit_plan(service, &service.playbacks[slot], plan)
 }
 
 // Select the committed current canvas of one exact animated attachment.
@@ -566,27 +669,28 @@ texture_publish :: proc(
     }
     payload, found := texture_payload(service, id)
     if !found { return false }
-    image, valid := texture_image(payload)
+    info, valid := texture_payload_info(payload)
     if !valid { return false }
+    entry := &service.textures[id.slot]
+    if entry.publishing {return entry.candidate_id == id}
     admission := termattachment.residency_admit(
         service.store, id, len(payload.bytes), texture_evict, service)
     if admission.outcome != .Admitted { return false }
-    candidate := rl.LoadTextureFromImage(image)
-    if !rl.IsTextureValid(candidate) {
+    candidate := native.sdl_sampled_texture_create(
+        service.platform, info.width, info.height)
+    if candidate.handle == nil || !native.texture_operation_enqueue_upload(
+        &service.draw_runtime^.texture_operations, .Create, candidate,
+        info.format, payload.bytes, u64(id.slot) + 1, id.generation,
+        {texture_upload_completed, service}) {
+        native.sdl_sampled_texture_release(service.platform, &candidate)
+        log.warnf("terminal_texture_enqueue_failed slot=%d generation=%d bytes=%d",
+            id.slot, id.generation, len(payload.bytes))
         termattachment.residency_remove(service.store, id)
         return false
     }
-    entry := &service.textures[id.slot]
-    if entry.resident && rl.IsTextureValid(entry.texture) {
-        rl.UnloadTexture(entry.texture)
-    }
-    entry^ = {attachment_id = id, texture = candidate, resident = true}
-    if !texture_activate_playback(service, id) {
-        rl.UnloadTexture(entry.texture)
-        entry^ = {}
-        termattachment.residency_remove(service.store, id)
-        return false
-    }
+    entry.candidate = candidate
+    entry.candidate_id = id
+    entry.publishing = true
     return true
 }
 
@@ -600,12 +704,16 @@ playback_upload_texture :: proc(
     }
     texture := &service.textures[id.slot]
     if !texture.resident || texture.attachment_id != id ||
-        !rl.IsTextureValid(texture.texture) || len(pixels) !=
+        texture.texture.handle == nil || texture.updating || len(pixels) !=
             int(texture.texture.width) * int(texture.texture.height) * 4 {
         return false
     }
-    rl.UpdateTexture(texture.texture, raw_data(pixels))
-    return true
+    queued := native.texture_operation_enqueue_upload(
+        &service.draw_runtime^.texture_operations, .Update, texture.texture,
+        .Rgba8, pixels, u64(id.slot) + 1, id.generation,
+        {texture_update_completed, service})
+    texture.updating = queued
+    return queued
 }
 
 // Upload one selected full canvas from an exact live animation generation.
@@ -696,8 +804,34 @@ playback_apply_commands :: proc(service: ^Service, now_ns: u64) {
         command, available := gfxprotocol.graphics_parser_take_animation_command(
             service.parser)
         if !available { return }
-        playback_apply_command(
-            service, command, now_ns, playback_upload_texture, service)
+        id := command.attachment_id
+        if id.slot < 0 || id.slot >= len(service.playbacks) {continue}
+        animation, found := termattachment.animation_view(service.store, id)
+        if !found {continue}
+        entry := &service.playbacks[id.slot]
+        if !entry.active || entry.attachment_id != id {
+            candidate, valid := playback_begin(id, animation, now_ns)
+            if !valid {continue}
+            candidate.stopped = true
+            entry^ = candidate
+        }
+        candidate, valid := playback_command_candidate(
+            entry^, command, animation, now_ns)
+        if !valid {continue}
+        plan := Playback_Plan{
+            candidate = candidate,
+            frame_changed = true,
+            valid = true,
+        }
+        frame := animation.frames[candidate.frame_index].pixels
+        if frame.offset < 0 || frame.count <= 0 ||
+            frame.offset > len(animation.pixels) - frame.count ||
+            !playback_upload_texture(service, id,
+                animation.pixels[frame.offset:frame.offset + frame.count]) {
+            service.playback_upload_failure_count += 1
+            continue
+        }
+        service.textures[id.slot].pending_playback = plan
     }
 }
 
@@ -748,8 +882,29 @@ playback_update_entry :: proc(
 // Advance every fixed playback slot with bounded per-entry transition work.
 playback_update_all :: proc(service: ^Service, now_ns: u64) {
     for &entry in service.playbacks {
-        playback_update_entry(
-            service, &entry, now_ns, playback_upload_texture, service)
+        if !entry.active {continue}
+        animation, found := termattachment.animation_view(
+            service.store, entry.attachment_id)
+        if !found {
+            service.playback_stale_count += 1
+            entry = {}
+            continue
+        }
+        plan := playback_plan(entry, animation, now_ns)
+        if !plan.valid {continue}
+        if !plan.frame_changed {
+            playback_commit_plan(service, &entry, plan)
+            continue
+        }
+        frame := animation.frames[plan.candidate.frame_index].pixels
+        if frame.offset < 0 || frame.count <= 0 ||
+            frame.offset > len(animation.pixels) - frame.count ||
+            !playback_upload_texture(service, entry.attachment_id,
+                animation.pixels[frame.offset:frame.offset + frame.count]) {
+            service.playback_upload_failure_count += 1
+            continue
+        }
+        service.textures[entry.attachment_id.slot].pending_playback = plan
     }
 }
 
@@ -765,10 +920,7 @@ texture_publish_prepared_all :: proc(service: ^Service) {
         if !prepared { continue }
         entry := &service.textures[slot]
         if entry.resident && entry.attachment_id == id { continue }
-        if texture_publish(service, id) {
-            service.publication_count += 1
-            service_record_publication(service, id)
-        } else {
+        if !texture_publish(service, id) {
             service.failure_count += 1
             gfxprotocol.graphics_discard_attachment(service.parser, id)
         }
@@ -814,8 +966,6 @@ operation_publish :: proc(
             termattachment.placements_remove_resident_position_origin_except(
                 service.store, geometry, .Sixel, decode.attachment_id)
         }
-        service.publication_count += 1
-        service_record_publication(service, decode.attachment_id)
     } else {
         service.failure_count += 1
         gfxprotocol.graphics_discard_pending_attachment(
@@ -1116,6 +1266,12 @@ service_unbind_session :: proc(service: ^Service, pool: ^taskpool.Task_Pool) {
     service_finish_operations(service, pool)
     gfxprotocol.graphics_parser_cancel_all_mutation_requests(service.parser)
     service_unload_textures(service)
+    log.debugf("terminal_graphics_summary decoded=%d published=%d failures=%d " +
+        "stale=%d cancellations=%d upload_failures=%d transitions=%d evictions=%d",
+        service.decode_count, service.publication_count, service.failure_count,
+        service.stale_completion_count, service.cancellation_count,
+        service.playback_upload_failure_count, service.playback_transition_count,
+        service.eviction_count)
     service.parser = nil
     service.store = nil
     service.trace_ring = nil

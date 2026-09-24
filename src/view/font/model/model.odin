@@ -6,8 +6,6 @@ import vmem "core:mem/virtual"
 import geometry "../../../core/geometry"
 import "../../../taskpool"
 
-import rl "vendor:raylib"
-
 // Number of indexed font variants through the final `Font_Key` value.
 FONT_KEY_COUNT :: int(Font_Key.Math_Regular) + 1
 
@@ -224,14 +222,50 @@ Font_Glyph_Record :: struct {
     state: Font_Glyph_State,
 }
 
+// Font_Texture is one opaque display-owned sampled atlas with portable dimensions.
+Font_Texture :: struct {
+    handle: rawptr,
+    width:  u32,
+    height: u32,
+}
+
+// Font_Face retains generation metrics independently of any native font facade.
+Font_Face :: struct {
+    baseSize:     i32,
+    glyphCount:   i32,
+    glyphPadding: i32,
+    spaceAdvance: i32,
+    texture:      Font_Texture,
+}
+
+// Font texture operations keep native creation and release display-owner injected.
+Font_Texture_Create_Handler :: #type proc(
+    user_data: rawptr, width, height: u32) -> Font_Texture
+Font_Texture_Completion_Handler :: #type proc(
+    user_data: rawptr, identity, generation: u64, succeeded: bool)
+Font_Texture_Upload_Handler :: #type proc(
+    user_data: rawptr, texture: Font_Texture, pixels: []u8,
+    identity, generation: u64, completion: Font_Texture_Completion_Handler,
+    completion_data: rawptr) -> bool
+Font_Texture_Release_Handler :: #type proc(
+    user_data: rawptr, texture: Font_Texture)
+
+// Font_Texture_Operations supplies the native atlas lifecycle to the font cache.
+Font_Texture_Operations :: struct {
+    user_data: rawptr,
+    create:    Font_Texture_Create_Handler,
+    upload:    Font_Texture_Upload_Handler,
+    release:   Font_Texture_Release_Handler,
+}
+
 Font_Glyph_Page :: struct {
-    texture: rl.Texture2D,
+    texture: Font_Texture,
     generation: u64,
     glyph_count: i32,
 }
 
 Font_Cache_Entry :: struct {
-    font: rl.Font,
+    font: Font_Face,
     shaping: Font_Shaping_Resource,
     raster_ascent: f32,
     generation: u64,
@@ -298,6 +332,7 @@ Font_Prepare_Operation_State :: enum {
     Idle,
     Retry,
     Queued,
+    Uploading,
 }
 
 Font_Prepare_Operation_Kind :: enum {
@@ -324,6 +359,7 @@ Font_Prepare_Task :: struct {
 Font_Prepare_Operation :: struct {
     state: Font_Prepare_Operation_State,
     task: Font_Prepare_Task,
+    pending_texture: Font_Texture,
     handle: taskpool.Task_Handle,
     queue_full_count: u64,
     pending_poll_count: u64,
@@ -370,4 +406,5 @@ Font_Cache :: struct {
     shutting_down: bool,
     shaping_telemetry: Font_Shaping_Telemetry,
     shaped_glyphs: [FONT_SHAPED_GLYPH_CAPACITY]Shaped_Glyph,
+    texture_operations: Font_Texture_Operations,
 }

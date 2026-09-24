@@ -56,6 +56,8 @@ Sdl_Draw_Runtime :: struct {
     vertex_buffer:     ^sdl.GPUBuffer,
     index_buffer:      ^sdl.GPUBuffer,
     upload_buffer:     ^sdl.GPUTransferBuffer,
+    texture_upload_buffer: ^sdl.GPUTransferBuffer,
+    texture_operations: Texture_Operation_Queue,
     arena:             vmem.Arena,
     arena_initialized: bool,
     storage:           Draw_Storage,
@@ -68,6 +70,9 @@ Sdl_Draw_Runtime :: struct {
 sdl_draw_runtime_release_gpu :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) {
     if device == nil {return}
+    if runtime^.texture_upload_buffer != nil {
+        sdl.ReleaseGPUTransferBuffer(device, runtime^.texture_upload_buffer)
+    }
     if runtime^.upload_buffer != nil {
         sdl.ReleaseGPUTransferBuffer(device, runtime^.upload_buffer)
     }
@@ -95,6 +100,7 @@ sdl_draw_runtime_release_gpu :: proc(
 sdl_draw_runtime_destroy :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) {
     if runtime == nil {return}
+    sdl_draw_discard_texture_operations(runtime, device)
     sdl_draw_runtime_release_gpu(runtime, device)
     if runtime^.arena_initialized {
         vmem.arena_destroy(&runtime^.arena)
@@ -236,13 +242,47 @@ sdl_draw_runtime_create :: proc(
         size_of(u32) * DRAW_INDEX_CAPACITY
     candidate.upload_buffer = sdl.CreateGPUTransferBuffer(device, {
         usage = .UPLOAD, size = u32(upload_size)})
+    candidate.texture_upload_buffer = sdl.CreateGPUTransferBuffer(device, {
+        usage = .UPLOAD, size = TEXTURE_UPLOAD_BYTE_CAPACITY})
     if candidate.colored_pipeline == nil || candidate.textured_pipeline == nil ||
         candidate.nearest_sampler == nil || candidate.linear_sampler == nil ||
         candidate.vertex_buffer == nil || candidate.index_buffer == nil ||
-        candidate.upload_buffer == nil {return false}
+        candidate.upload_buffer == nil || candidate.texture_upload_buffer == nil {
+        return false
+    }
     runtime^ = candidate
     candidate = {}
     return true
+}
+
+// sdl_sampled_texture_create creates one immutable-size RGBA8 sampled texture.
+sdl_sampled_texture_create :: proc(
+    platform: ^Sdl_Platform, width, height: u32) -> Sampled_Texture {
+    if platform == nil || platform^.device == nil || width == 0 || height == 0 {
+        return {}
+    }
+    handle := sdl.CreateGPUTexture(platform^.device, {
+        type = .D2,
+        format = .R8G8B8A8_UNORM,
+        usage = {.SAMPLER},
+        width = width,
+        height = height,
+        layer_count_or_depth = 1,
+        num_levels = 1,
+        sample_count = ._1,
+    })
+    return {handle = handle, width = width, height = height}
+}
+
+// sdl_sampled_texture_release immediately releases one owner-held texture.
+sdl_sampled_texture_release :: proc(
+    platform: ^Sdl_Platform, texture: ^Sampled_Texture) {
+    if platform == nil || platform^.device == nil || texture == nil {return}
+    if texture^.handle != nil {
+        sdl.ReleaseGPUTexture(
+            platform^.device, cast(^sdl.GPUTexture)texture^.handle)
+    }
+    texture^ = {}
 }
 
 // sdl_draw_encoder_batches_valid rejects incomplete textured batch state.
@@ -317,6 +357,102 @@ sdl_draw_upload :: proc(
     return true
 }
 
+// sdl_draw_upload_textures records normalized queued texture copies in order.
+sdl_draw_upload_textures :: proc(
+    runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
+    command_buffer: ^sdl.GPUCommandBuffer) -> bool {
+    queue := &runtime^.texture_operations
+    if queue^.byte_count == 0 {return true}
+    mapped := sdl.MapGPUTransferBuffer(device, runtime^.texture_upload_buffer, true)
+    if mapped == nil {return false}
+    mapped_bytes := (cast([^]u8)mapped)[:int(queue^.byte_count)]
+    normalized := true
+    for operation in queue^.operations[:queue^.count] {
+        if operation.kind == .Retire {continue}
+        first := int(operation.byte_offset)
+        last := first + int(operation.byte_count)
+        if last > len(mapped_bytes) || !texture_normalize_rgba8(
+            mapped_bytes[first:last], operation.source, operation.format) {
+            normalized = false
+            break
+        }
+    }
+    sdl.UnmapGPUTransferBuffer(device, runtime^.texture_upload_buffer)
+    if !normalized {return false}
+    copy_pass := sdl.BeginGPUCopyPass(command_buffer)
+    if copy_pass == nil {return false}
+    for operation in queue^.operations[:queue^.count] {
+        if operation.kind == .Retire {continue}
+        sdl.UploadToGPUTexture(copy_pass, {
+            transfer_buffer = runtime^.texture_upload_buffer,
+            offset = operation.byte_offset,
+            pixels_per_row = operation.width,
+            rows_per_layer = operation.height,
+        }, {
+            texture = cast(^sdl.GPUTexture)operation.texture,
+            w = operation.width,
+            h = operation.height,
+            d = 1,
+        }, operation.kind == .Update)
+    }
+    sdl.EndGPUCopyPass(copy_pass)
+    return true
+}
+
+// sdl_draw_finish_texture_operations reports outcomes and releases owned resources.
+sdl_draw_finish_texture_operations :: proc(
+    runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice, succeeded: bool) {
+    for operation in runtime^.texture_operations.operations[
+        :runtime^.texture_operations.count] {
+        if succeeded && operation.kind == .Retire ||
+            !succeeded && operation.kind == .Create {
+            sdl.ReleaseGPUTexture(device, cast(^sdl.GPUTexture)operation.texture)
+        }
+        if operation.completion != nil {
+            operation.completion(operation.user_data,
+                operation.identity, operation.generation, succeeded)
+        }
+    }
+    runtime^.texture_operations = {}
+}
+
+// sdl_draw_discard_texture_operations rolls back queued candidate ownership.
+sdl_draw_discard_texture_operations :: proc(
+    runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) {
+    if runtime == nil || device == nil || runtime^.texture_operations.count == 0 {
+        return
+    }
+    sdl_draw_finish_texture_operations(runtime, device, false)
+}
+
+// sdl_draw_commit_texture_operations retires queued resources after submission.
+sdl_draw_commit_texture_operations :: proc(
+    runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) {
+    sdl_draw_finish_texture_operations(runtime, device, true)
+}
+
+// sdl_draw_submit_texture_operations completes startup-only uploads synchronously.
+sdl_draw_submit_texture_operations :: proc(
+    platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime) -> bool {
+    if platform == nil || runtime == nil || runtime^.texture_operations.count == 0 {
+        return false
+    }
+    command_buffer := sdl.AcquireGPUCommandBuffer(platform^.device)
+    if command_buffer == nil {return false}
+    if !sdl_draw_upload_textures(runtime, platform^.device, command_buffer) {
+        _ = sdl.CancelGPUCommandBuffer(command_buffer)
+        sdl_draw_discard_texture_operations(runtime, platform^.device)
+        return false
+    }
+    if !sdl.SubmitGPUCommandBuffer(command_buffer) ||
+        !sdl.WaitForGPUIdle(platform^.device) {
+        sdl_draw_discard_texture_operations(runtime, platform^.device)
+        return false
+    }
+    sdl_draw_commit_texture_operations(runtime, platform^.device)
+    return true
+}
+
 // sdl_draw_record_batch binds one compatible state interval and draws it.
 sdl_draw_record_batch :: proc(
     runtime: ^Sdl_Draw_Runtime, pass: ^sdl.GPURenderPass,
@@ -385,10 +521,12 @@ sdl_draw_submit :: proc(
     encoder: ^Draw_Encoder, command_buffer: ^sdl.GPUCommandBuffer,
     image: Sdl_Swapchain_Image, clear_color: sdl.FColor) -> bool {
     if !sdl_draw_encoder_batches_valid(encoder) ||
+        !sdl_draw_upload_textures(runtime, platform^.device, command_buffer) ||
         !sdl_draw_upload(runtime, encoder, platform^.device, command_buffer) ||
         !sdl_draw_record_scene(
             platform, runtime, encoder, command_buffer, clear_color) {
         _ = sdl.CancelGPUCommandBuffer(command_buffer)
+        sdl_draw_discard_texture_operations(runtime, platform^.device)
         return false
     }
     sdl.BlitGPUTexture(command_buffer, {
@@ -398,7 +536,11 @@ sdl_draw_submit :: proc(
         load_op = .DONT_CARE,
         filter = .NEAREST,
     })
-    if !sdl.SubmitGPUCommandBuffer(command_buffer) {return false}
+    if !sdl.SubmitGPUCommandBuffer(command_buffer) {
+        sdl_draw_discard_texture_operations(runtime, platform^.device)
+        return false
+    }
+    sdl_draw_commit_texture_operations(runtime, platform^.device)
     pipeline_bindings: u32
     previous: Draw_Pipeline
     for batch, index in encoder^.batches[:encoder^.batch_count] {

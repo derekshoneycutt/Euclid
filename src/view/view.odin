@@ -122,12 +122,17 @@ Deferred_Visual_Capabilities :: struct {
     gif_readback:      bool,
 }
 
+// Sdl_Font_Texture_Context binds font policy to display-owned native resources.
+Sdl_Font_Texture_Context :: struct {
+    platform: ^native.Sdl_Platform,
+    runtime:  ^native.Sdl_Draw_Runtime,
+    submit_immediately: bool,
+}
+
 // deferred_visual_capabilities reports explicit later rendering boundaries.
 deferred_visual_capabilities :: proc(
     state: ^Euclid_General_State) -> Deferred_Visual_Capabilities {
     result := Deferred_Visual_Capabilities{
-        glyph_text = true,
-        terminal_rasters = true,
         tool_visuals = true,
         dust_visuals = true,
         gif_readback = state^.ui_runtime.gif_capture_phase != .Idle,
@@ -194,6 +199,29 @@ sdl_draw_shader_paths :: proc() -> native.Sdl_Draw_Shader_Paths {
         textured_fragment = files.packaged_asset_path(
             "shaders/draw2d_textured.frag.spv", context.temp_allocator),
     }
+}
+
+// initialize_and_run_sdl_session admits native fonts and Terminal textures.
+initialize_and_run_sdl_session :: proc(
+    settings: ^Euclid_Run_Settings, session: Euclid_Runtime_Session,
+    input_runtime: ^input.Input_Runtime, profile: ^evidence_profile.State,
+    platform: ^native.Sdl_Platform,
+    draw_runtime: ^native.Sdl_Draw_Runtime) -> int {
+    font_owner := Sdl_Font_Texture_Context{
+        platform = platform, runtime = draw_runtime, submit_immediately = true}
+    if !initialize_sdl_font_resources(session.state, &font_owner) {
+        log.error("display_font_start_failed")
+        _ = shutdown_window_runtime(session)
+        return 1
+    }
+    if !terminal_graphics_bind_native(session.state, platform, draw_runtime) {
+        log.error("terminal_graphics_native_bind_failed")
+        _ = shutdown_window_runtime(session)
+        return 1
+    }
+    font_owner.submit_immediately = false
+    return run_initialized_window_session(
+        settings, session, input_runtime, profile, platform, draw_runtime)
 }
 
 //   - Owns state/window setup and teardown via deferred cleanup calls.
@@ -368,13 +396,18 @@ apply_sdl_cursor :: proc(
     }
 }
 
-// prepare_sdl_geometry_frame advances UI, presentation, simulation, and caches.
-prepare_sdl_geometry_frame :: proc(
+// prepare_sdl_frame advances UI, presentation, simulation, and display caches.
+prepare_sdl_frame :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
-    clock: ^native.Sdl_Frame_Clock) -> (
-    input.Input_Frame, ui.Animation_Control_Preparation) {
+    clock: ^native.Sdl_Frame_Clock,
+    input_frame: input.Input_Frame) -> Frame_Draw_Preparation {
     frame_dt := native.sdl_frame_clock_step(clock)
-    input_frame := input.input_poll_frame(ctx.input_runtime)
+    font.cache_service(
+        &state^.font_cache, &state^.simulation_executor^.pool)
+    sync_window_math_shaping(state)
+    sync_window_prose_shaping(state)
+    julia.publish_available_view_snapshot(state, false)
+    service_presentation_runtime(state, ctx.presentation)
     _ = apply_window_metrics(state, {
         width = ctx.platform^.metrics.logical_width,
         height = ctx.platform^.metrics.logical_height,
@@ -383,23 +416,21 @@ prepare_sdl_geometry_frame :: proc(
     ui_geometry := ui.prepare_ui_geometry(state, input_frame, frame_dt)
     ui.prepare_ui_static_interaction(
         state, input_frame, ui_geometry.pointer_capture)
-    animation_frame := ui.ui_animation_control_input_frame(
-        input_frame, state^.ui_runtime.interaction_frame)
-    animation_controls := ui.prepare_animation_controls(state, animation_frame)
+    controls := ui.prepare_ui_controls(state, input_frame)
+    terminal_frame := terminal_service_update(state, ctx.input_runtime, input_frame)
     apply_sdl_cursor(state, ctx.platform)
-    service_presentation_runtime(state, ctx.presentation)
     alpha := accumulate_and_update_systems(state, frame_dt)
     run_parallel_frame_preparation_after_ui(
         state, alpha, ui_geometry.compile_dynview)
+    layout_interaction := ui.prepare_ui_layout_interaction(state, input_frame)
     service_scenario_before_present(ctx)
-    return input_frame, animation_controls
+    return {input_frame, terminal_frame, controls, layout_interaction}
 }
 
 // encode_sdl_geometry_frame builds and submits one bounded geometry frame.
 encode_sdl_geometry_frame :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
-    input_frame: input.Input_Frame,
-    animation_controls: ui.Animation_Control_Preparation) -> native.Sdl_Frame_Result {
+    prepared: Frame_Draw_Preparation) -> native.Sdl_Frame_Result {
     encoder: native.Draw_Encoder
     _ = native.draw_encoder_begin(&encoder, ctx.draw_runtime^.storage, {
         f32(ctx.platform^.metrics.logical_width),
@@ -413,10 +444,20 @@ encode_sdl_geometry_frame :: proc(
     draw_encoded_cached_basic_pass(state, &encoder, true)
     _ = native.draw_encoder_pop_scissor(&encoder)
     ui.draw_encoded_panel_geometry(state, &encoder)
-    ui.draw_encoded_animation_controls(state, &encoder, animation_controls)
+    ui.draw_encoded_animation_controls(
+        state, &encoder, prepared.controls.animation_controls)
     ui.draw_encoded_splitters(
         &encoder, &state^.ui_runtime,
-        ui.input_frame_mouse_position(input_frame))
+        ui.input_frame_mouse_position(prepared.input_frame))
+    ui.draw_encoded_panel_text(state, &encoder)
+    if ui.is_terminal_selected(state) {
+        terminal_graphics_set_draw_encoder(state, &encoder)
+        ui.terminal_draw_encoded(state, &encoder, prepared.terminal_frame)
+        terminal_graphics_set_draw_encoder(state, nil)
+    } else {
+        ui.draw_encoded_presentation_text(
+            state, &encoder, prepared.layout_interaction.presentation)
+    }
     return native.sdl_platform_present_draw(
         ctx.platform, ctx.draw_runtime, &encoder,
         native.to_sdl_color(BACKGROUND_COLOR))
@@ -428,14 +469,13 @@ run_sdl_geometry_frame :: proc(
     clock: ^native.Sdl_Frame_Clock) -> bool {
     evidence_profile.zone_begin(ctx.display_profile, "display_frame")
     frame_started_at := native.sdl_time_ticks()
-    _ = sdl_platform_poll_events(ctx.platform, ctx.input_runtime)
+    input_frame := sdl_platform_poll_events(ctx.platform, ctx.input_runtime)
     if ctx.platform^.close_requested {
         finish_window_frame(state, ctx.display_profile, false)
         return false
     }
-    input_frame, animation_controls := prepare_sdl_geometry_frame(state, ctx, clock)
-    result := encode_sdl_geometry_frame(
-        state, ctx, input_frame, animation_controls)
+    prepared := prepare_sdl_frame(state, ctx, clock, input_frame)
+    result := encode_sdl_geometry_frame(state, ctx, prepared)
     if result == .Failed {
         log.error("sdl_frame_present_failed")
         finish_window_frame(state, ctx.display_profile, false)
@@ -556,6 +596,7 @@ run_initialized_window_session :: proc(
         run_window_frames(state, window_frame_context(
             platform, draw_runtime, input_runtime, session.presentation, display_profile,
             scenario))
+        _ = native.sdl_draw_submit_texture_operations(platform, draw_runtime)
         log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
             state^.fixed_step, scenario.runtime != nil)
         return finish_window_session(
@@ -564,6 +605,7 @@ run_initialized_window_session :: proc(
         free_all(context.temp_allocator)
         run_window_frames(state, window_frame_context(
             platform, draw_runtime, input_runtime, session.presentation, display_profile))
+        _ = native.sdl_draw_submit_texture_operations(platform, draw_runtime)
         log.infof("display_loop_stopped fixed_step=%d", state^.fixed_step)
         return shutdown_window_runtime(session)
     }
@@ -614,10 +656,57 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
         log.error("display_runtime_start_failed")
         return 1
     }
-    result := run_initialized_window_session(
+    result := initialize_and_run_sdl_session(
         settings, session, input_runtime, &display_profile, &platform, &draw_runtime)
     report_draw_runtime_summary(&draw_runtime)
     return result
+}
+
+// sdl_font_texture_create creates one display-owned atlas candidate.
+sdl_font_texture_create :: proc(
+    user_data: rawptr, width, height: u32) -> font.Font_Texture {
+    owner := cast(^Sdl_Font_Texture_Context)user_data
+    if owner == nil {return {}}
+    texture := native.sdl_sampled_texture_create(owner.platform, width, height)
+    return {texture.handle, texture.width, texture.height}
+}
+
+// sdl_font_texture_upload queues one gray-alpha atlas upload.
+sdl_font_texture_upload :: proc(
+    user_data: rawptr, texture: font.Font_Texture, pixels: []u8,
+    identity, generation: u64,
+    completion: font.Font_Texture_Completion_Handler,
+    completion_data: rawptr) -> bool {
+    owner := cast(^Sdl_Font_Texture_Context)user_data
+    if owner == nil || owner.runtime == nil {return false}
+    sampled := native.Sampled_Texture{texture.handle, texture.width, texture.height}
+    queued := native.texture_operation_enqueue_upload(
+        &owner.runtime^.texture_operations, .Create, sampled,
+        .Gray_Alpha8, pixels, identity, generation,
+        {native.Texture_Operation_Completion(completion), completion_data})
+    if !queued || !owner.submit_immediately {return queued}
+    return native.sdl_draw_submit_texture_operations(
+        owner.platform, owner.runtime)
+}
+
+// sdl_font_texture_release releases one resident display-owned atlas.
+sdl_font_texture_release :: proc(
+    user_data: rawptr, texture: font.Font_Texture) {
+    owner := cast(^Sdl_Font_Texture_Context)user_data
+    if owner == nil {return}
+    sampled := native.Sampled_Texture{texture.handle, texture.width, texture.height}
+    native.sdl_sampled_texture_release(owner.platform, &sampled)
+}
+
+// sdl_font_texture_operations exposes the native atlas lifecycle to font policy.
+sdl_font_texture_operations :: proc(
+    owner: ^Sdl_Font_Texture_Context) -> font.Font_Texture_Operations {
+    return {
+        user_data = owner,
+        create = sdl_font_texture_create,
+        upload = sdl_font_texture_upload,
+        release = sdl_font_texture_release,
+    }
 }
 
 //   Release graphics-owned resources before destroying their backing runtime state.
@@ -625,7 +714,32 @@ shutdown_window_runtime :: proc(
     session: Euclid_Runtime_Session,
     scenario_runtime: ^Scenario_Runtime = nil,
     artifact_output: string = "") -> int {
+    if session.state != nil {
+        font.cache_shutdown_service(
+            &session.state^.font_cache,
+            &session.state^.simulation_executor^.pool)
+        font.math_shaping_destroy(&session.state^.dynview.math_shaping)
+        font.cache_destroy(&session.state^.font_cache)
+    }
     return shutdown_runtime_session(session, scenario_runtime, artifact_output)
+}
+
+// initialize_sdl_font_resources admits required atlases and shaping state.
+initialize_sdl_font_resources :: proc(
+    state: ^Euclid_General_State, owner: ^Sdl_Font_Texture_Context) -> bool {
+    if state == nil || owner == nil {return false}
+    if !font.cache_init(
+        &state^.font_cache, sdl_font_texture_operations(owner)) {
+        return false
+    }
+    if !font.math_shaping_sync(
+        &state^.font_cache, &state^.dynview.math_shaping) {
+        font.cache_destroy(&state^.font_cache)
+        return false
+    }
+    _ = font.cache_request(&state^.font_cache, .Bold)
+    _ = font.cache_request(&state^.font_cache, .Regular_Italic)
+    return true
 }
 
 //   Allocate and initialize persistent runtime state for simulation and rendering.
@@ -785,7 +899,7 @@ initialize_window_resources :: proc(
 
     init_tool_brush_shader(state)
 
-    required_fonts_ready := font.cache_init(&state^.font_cache)
+    required_fonts_ready := font.cache_init(&state^.font_cache, {})
     if !required_fonts_ready {
         fmt.eprintln("error: failed to load required JuliaMono or NewCM font")
     }
@@ -1178,19 +1292,4 @@ draw_frame :: proc(
         state, prepared.input_frame, prepared.terminal_frame,
         prepared.controls, prepared.layout_interaction)
 
-    if state^.ui_runtime.display_fps {
-        fps_flags := fontmodel.Font_Variant_Flags.Medium
-        mono_font := font.cache_resolve(
-            &state^.font_cache, font.font_key_from_flags(fps_flags))
-
-        fps_text := fmt.tprintf("FPS: %d", rl.GetFPS())
-        fps_text_c := strings.clone_to_cstring(fps_text, context.temp_allocator)
-        rl.DrawTextEx(mono_font, fps_text_c, rl.Vector2{10, 10}, 18, 0,
-            native.to_raylib_color(UI_TEXT_COLOR))
-
-        avg_text := fmt.tprintf("Avg FPS (60s): %.1f", state^.ui_runtime.fps_avg_live)
-        avg_text_c := strings.clone_to_cstring(avg_text, context.temp_allocator)
-        rl.DrawTextEx(mono_font, avg_text_c, rl.Vector2{10, 30}, 18, 0,
-            native.to_raylib_color(UI_TEXT_COLOR))
-    }
 }

@@ -1,5 +1,6 @@
 package ui_dynview
 
+import native "../../native"
 import viewmodel "../../model"
 import dynviewmodel "../../../dynview/model"
 
@@ -32,9 +33,10 @@ Fallback_Text_Content :: struct {
 
 //   Panel, font, and metrics for one presentation draw pass.
 Presentation_Draw_Params :: struct {
+    encoder: ^native.Draw_Encoder,
     panel : rl.Rectangle,
     scroll_y : f32,
-    font : rl.Font,
+    font : view_font.Font_Face,
     font_cache : ^view_font.Font_Cache,
     metrics : Wrapped_Text_Metrics,
 }
@@ -55,6 +57,7 @@ draw_presentation_fallback_text :: proc(
 
     view_core.draw_wrapped_text_content(fallback.text,
         view_core.Wrapped_Text_Content_Params{
+            encoder = params.encoder,
             panel = params.panel,
             scroll_y = params.scroll_y,
             font = params.font,
@@ -97,6 +100,7 @@ draw_presentation_dynview :: proc(
         return false
     }
     ctx := Layout_Draw_Context{
+        encoder = params.encoder,
         state = state, runtime = runtime, panel = params.panel,
         font = params.font, font_size = params.metrics.font_size,
     }

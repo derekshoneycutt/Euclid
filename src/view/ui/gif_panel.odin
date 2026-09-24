@@ -24,7 +24,7 @@ Gif_Panel_Context :: struct {
     panel: rl.Rectangle,
     mouse_input: Input_Frame,
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    font: rl.Font,
+    font: view_font.Font_Face,
     resolver: view_font.Font_Resolver,
 }
 
@@ -63,6 +63,24 @@ draw_encoded_gif_geometry :: proc(
         encoder, geometry.Rectangle(button), UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
         encoder, geometry.Rectangle(button), 1, UI_BORDER_COLOR)
+}
+
+// draw_encoded_gif_text emits capture controls while readback remains deferred.
+draw_encoded_gif_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: rl.Rectangle) {
+    stack := rl.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+        panel.y + SETTINGS_HEADER_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        panel.height - SETTINGS_HEADER_TOP_OFFSET}
+    rows := gif_view_layout_rows(stack)
+    x := panel.x + SETTINGS_PANEL_INSET
+    draw_encoded_label(state, encoder, "Downsample", x, rows.sliders.downsample_y)
+    draw_encoded_label(state, encoder, "Frame step", x, rows.sliders.frame_step_y)
+    button := "Save Gif"
+    if state^.ui_runtime.gif_capture_phase == .Armed {button = "Cancel Gif"}
+    draw_encoded_label(state, encoder, button,
+        x + SETTINGS_PANEL_INSET, rows.save_button_y + SETTINGS_PANEL_INSET)
 }
 
 //   Build one GIF slider parameter record shared by update and draw.

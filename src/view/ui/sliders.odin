@@ -26,7 +26,7 @@ Integer_Slider_Params :: struct {
     value : ^int,
     min_value : int,
     max_value : int,
-    font : rl.Font,
+    font : view_font.Font_Face,
     font_resolver : view_font.Font_Resolver,
 }
 

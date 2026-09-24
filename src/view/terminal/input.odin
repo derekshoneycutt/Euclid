@@ -5,6 +5,7 @@ import viewterminalmodel "model"
 import "../../core/protocol"
 import termemulator "../../terminal/emulator"
 import termhist "../../terminal/history"
+import "../font"
 import "../input"
 
 import "core:unicode/utf8"
@@ -655,7 +656,7 @@ terminal_update_navigation_keys :: proc(
 //   - Starts, extends, or releases the mouse-driven view selection.
 terminal_update_mouse_selection :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
-    font: rl.Font, bounds: rl.Rectangle) {
+    font: font.Font_Face, bounds: rl.Rectangle) {
     mode := termemulator.interpreter_input_mode(&term.output_interpreter)
     if mode.mouse_tracking != .None && mode.mouse_sgr_encoding &&
         .Shift not_in frame.mouse_modifiers {

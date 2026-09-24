@@ -11,8 +11,10 @@ import termhist "../../terminal/history"
 import termmodel "../../terminal/model"
 import termpalette "../../terminal/palette"
 import termshellintegration "../../terminal/shell_integration"
+import geometry "../../core/geometry"
 import "../input"
 import "../font"
+import view_core "../core"
 
 import "core:fmt"
 import "core:math"
@@ -252,15 +254,16 @@ terminal_draw_output_cursor :: proc(
         termpalette.terminal_palette_cursor_rgba(
             &term.output_interpreter.title_state.palette))
     if presentation.style == .Outline {
-        rl.DrawRectangleLinesEx(rl.Rectangle{
+        _ = native.draw_encoder_rectangle_outline(layout.encoder, {
             position.x, position.y,
             f32(presentation.width) * column_width, TERMINAL_FONT_SIZE,
-        }, 1, cursor_color)
+        }, 1, native.from_raylib_color(cursor_color))
         return
     }
-    rl.DrawRectangleV(position, rl.Vector2{
+    _ = native.draw_encoder_rectangle(layout.encoder, {
+        position.x, position.y,
         f32(presentation.width) * column_width, TERMINAL_FONT_SIZE},
-        cursor_color)
+        native.from_raylib_color(cursor_color))
     terminal_draw_output_cursor_glyph(
         term, font_resolver, presentation, position, layout.theme)
 }
@@ -277,6 +280,7 @@ terminal_draw_output_cursor :: proc(
 //   - Issues row glyph and active-selection draw commands in display order.
 terminal_draw_output_rows :: proc(
     term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
+    encoder: ^native.Draw_Encoder,
     layout: Terminal_Draw_Layout, origin: rl.Vector2,
     hover: Terminal_Link_Hit) {
 
@@ -293,9 +297,14 @@ terminal_draw_output_rows :: proc(
                 shaping_allowed = !span.has_selection
             }
             row := Terminal_Shaped_Output_Context{
-                font_resolver, cells, line_position,
-                &term.output_interpreter.title_state.palette,
-                terminal_column_width(layout.regular), layout.theme}
+                encoder = encoder,
+                resolver = font_resolver,
+                cells = cells,
+                position = line_position,
+                palette = &term.output_interpreter.title_state.palette,
+                column_width = terminal_column_width(layout.regular),
+                theme = layout.theme,
+            }
             terminal_draw_output_row(row, shaping_allowed)
             if hover.kind != .None && hover.line == index {
                 terminal_draw_link_hover(row, hover)
@@ -325,16 +334,18 @@ terminal_draw_command_statuses :: proc(
         }
         position, found := terminal_semantic_view_position(term, block.finished)
         if !found { continue }
-        rl.DrawRectangleRec(rl.Rectangle{
+        _ = native.draw_encoder_rectangle(layout.encoder, {
             origin.x, origin.y + f32(position.line) * layout.line_height + 3,
             2, TERMINAL_FONT_SIZE - 6,
-        }, terminal_command_status_color(block.status))
+        }, native.from_raylib_color(terminal_command_status_color(block.status)))
     }
 }
 
 // Draw the active local command-search query as a compact bottom status strip.
 terminal_draw_command_search :: proc(
-    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver, font: rl.Font,
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
+    encoder: ^native.Draw_Encoder,
+    font: font.Font_Face,
     bounds: rl.Rectangle, theme: Terminal_Draw_Theme) {
     shell := term.shell_integration
     if shell == nil || !shell.search_editing { return }
@@ -342,12 +353,12 @@ terminal_draw_command_search :: proc(
     height := TERMINAL_FONT_SIZE + 6
     position := rl.Vector2{bounds.x + 4, bounds.y + bounds.height - height + 3}
     background := theme.cursor_foreground
-    rl.DrawRectangleRec(rl.Rectangle{
+    _ = native.draw_encoder_rectangle(encoder, {
         bounds.x, bounds.y + bounds.height - height, bounds.width, height,
-    }, native.to_raylib_color(background))
+    }, background)
     text := fmt.tprintf("find: %s", query)
     _ = terminal_draw_shaped_prompt_span(
-        resolver, .Regular, text, position,
+        encoder, resolver, .Regular, text, position,
         native.to_raylib_color(theme.default_foreground))
 }
 
@@ -585,7 +596,8 @@ terminal_draw_content :: proc(
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, draw.origin, .Behind_Text)
     terminal_draw_output_rows(
-        term, font_resolver, draw.layout, draw.origin, draw.hyperlink_hover)
+        term, font_resolver, draw.encoder, draw.layout,
+        draw.origin, draw.hyperlink_hover)
     terminal_draw_command_statuses(term, draw.layout, draw.origin)
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, draw.origin, .In_Front_Of_Text)
@@ -598,7 +610,8 @@ terminal_draw_overlays :: proc(
     term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
     layout: Terminal_Draw_Layout) {
     terminal_draw_command_search(
-        term, resolver, layout.regular, layout.padded_bounds, layout.theme)
+        term, resolver, layout.encoder, layout.regular,
+        layout.padded_bounds, layout.theme)
 }
 
 //   Return wheel input reserved for local scrolling under current mouse modes.
@@ -822,6 +835,7 @@ terminal_draw_single_line_prompt :: proc(
     cursor := termhist.termhist_cursor(request.term.history) +
         len(request.prompt_prefix)
     terminal_draw_prompt_base({
+        encoder = request.layout.encoder,
         resolver = request.resolver,
         current_text = request.current_text,
         prompt_prefix = request.prompt_prefix,
@@ -832,9 +846,10 @@ terminal_draw_single_line_prompt :: proc(
         theme = request.layout.theme,
     })
     terminal_draw_completion_preview(
-        request.term, request.resolver, request.regular,
+        request.term, request.resolver, request.layout.encoder, request.regular,
         request.position, request.layout.theme)
     terminal_draw_prompt_overlay({
+        encoder = request.layout.encoder,
         resolver = request.resolver,
         font = request.regular,
         text = prompt_text,
@@ -864,7 +879,7 @@ terminal_draw_prompt :: proc(
 
     if strings.index_byte(current_text, '\n') >= 0 {
         terminal_draw_prompt_lines(
-            term, font_resolver, prompt_position, layout.theme)
+            term, font_resolver, layout.encoder, prompt_position, layout.theme)
         terminal_draw_multiline_prompt_cursor(
             term, font_resolver, regular, prompt_position, layout)
         return
@@ -910,6 +925,7 @@ terminal_draw_prompt_line :: proc(
         selection_end = len(line_text)
     }
     terminal_draw_prompt_base({
+        encoder = request.encoder,
         resolver = request.resolver,
         current_text = line_text,
         prompt_prefix = prefix,
@@ -940,7 +956,8 @@ terminal_draw_prompt_line :: proc(
 //     prefixes on subsequent rows without mutating terminal state.
 terminal_draw_prompt_lines :: proc(
     term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
-    position: rl.Vector2, theme: Terminal_Draw_Theme) {
+    encoder: ^native.Draw_Encoder, position: rl.Vector2,
+    theme: Terminal_Draw_Theme) {
     text := termhist.termhist_current_text(term.history)
     prompt_color := terminal_prompt_draw_color(term.input_mode)
     line_height := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
@@ -949,6 +966,7 @@ terminal_draw_prompt_lines :: proc(
     for line := 0; line < terminal_live_input_line_count(term); line += 1 {
         line_position := rl.Vector2{position.x, position.y + f32(line) * line_height}
         line_start = terminal_draw_prompt_line({
+            encoder = encoder,
             term = term,
             resolver = font_resolver,
             text = text,
@@ -976,7 +994,7 @@ terminal_draw_prompt_lines :: proc(
 //   - Issues Raylib commands for the block cursor and inverted cursor glyph.
 terminal_draw_multiline_prompt_cursor :: proc(
     term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
-    font: rl.Font, position: rl.Vector2,
+    font: font.Font_Face, position: rl.Vector2,
     layout: Terminal_Draw_Layout) {
     text := termhist.termhist_current_text(term.history)
     cursor := termhist.termhist_cursor(term.history)
@@ -999,6 +1017,7 @@ terminal_draw_multiline_prompt_cursor :: proc(
     cursor_position_y := position
     cursor_position_y.y += f32(line) * line_height
     terminal_draw_cursor({
+        encoder = layout.encoder,
         resolver = resolver,
         font = font,
         text = prompt_text,
@@ -1023,7 +1042,9 @@ terminal_draw_multiline_prompt_cursor :: proc(
 // Side effects:
 //   - Issues Raylib replacement-mask and muted preview-text draw commands when current.
 terminal_draw_completion_preview :: proc(
-    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver, font: rl.Font,
+    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
+    encoder: ^native.Draw_Encoder,
+    font: font.Font_Face,
     position: rl.Vector2, theme: Terminal_Draw_Theme) {
     current_text := termhist.termhist_current_text(term.history)
     prompt_prefix := terminal_prompt_prefix(term)
@@ -1041,12 +1062,12 @@ terminal_draw_completion_preview :: proc(
     preview_position := rl.Vector2{start_x, position.y}
 
     if end > start {
-        rl.DrawRectangleV(
-            preview_position, rl.Vector2{end_x - start_x, TERMINAL_FONT_SIZE},
-            native.to_raylib_color(theme.cursor_foreground))
+        _ = native.draw_encoder_rectangle(encoder, {
+            preview_position.x, preview_position.y,
+            end_x - start_x, TERMINAL_FONT_SIZE}, theme.cursor_foreground)
     }
     _ = terminal_draw_shaped_prompt_span(
-        resolver, .Regular, term.completion_preview_insertion,
+        encoder, resolver, .Regular, term.completion_preview_insertion,
         preview_position, TERMINAL_COMPLETION_PREVIEW_COLOR)
 }
 
@@ -1064,12 +1085,13 @@ terminal_draw_prompt_base :: proc(request: Terminal_Prompt_Draw) {
     regular := terminal_font_resolve(request.resolver, .Regular)
     if terminal_text_has_visible_bytes(request.prompt_prefix) {
         _ = terminal_draw_shaped_prompt_span(
-            request.resolver, .Bold, request.prompt_prefix,
+            request.encoder, request.resolver, .Bold, request.prompt_prefix,
             request.position, request.prompt_color)
     }
 
     prompt_width := terminal_text_column_width(bold, request.prompt_prefix)
     terminal_draw_prompt_text({
+        encoder = request.encoder,
         resolver = request.resolver,
         current_text = request.current_text,
         regular = regular,
@@ -1147,12 +1169,18 @@ terminal_draw_prompt_text :: proc(request: Terminal_Prompt_Text_Draw) {
             request.position.y,
         }
         shaped := terminal_draw_shaped_prompt_span(
-            request.resolver, .Regular, segment, segment_position,
+            request.encoder, request.resolver, .Regular, segment, segment_position,
             request.color)
         if !shaped && terminal_text_is_ascii(segment) {
-            rl.DrawTextEx(
-                request.regular, fmt.ctprintf("%s", segment), segment_position,
-                TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING, request.color)
+            _ = view_core.ui_text_unshaped_paged({
+                encoder = request.encoder,
+                resolver = request.resolver,
+                key = .Regular,
+                text = segment,
+                position = segment_position,
+                color = request.color,
+                font = {request.regular, TERMINAL_FONT_SIZE},
+            })
         }
         segment_start = segment_end
     }
@@ -1176,6 +1204,7 @@ terminal_draw_output_cell :: proc(
     resolved_font := terminal_font_resolve(draw.resolver, key)
     cells := [1]termgrid.Cell{cell^}
     shaped := terminal_draw_shaped_output_run({
+        encoder = draw.encoder,
         resolver = draw.resolver,
         cells = cells[:],
         start_column = 0,
@@ -1201,9 +1230,9 @@ terminal_draw_output_underlines :: proc(draw: Terminal_Shaped_Output_Context) {
             native.to_raylib_color(draw.theme.default_foreground))
         start_x := draw.position.x + f32(column)*draw.column_width
         end_x := start_x + f32(max(int(cell.width), 1))*draw.column_width
-        rl.DrawLineEx(
-            rl.Vector2{start_x, underline_y},
-            rl.Vector2{end_x, underline_y}, 1, color)
+        _ = native.draw_encoder_line(draw.encoder,
+            {start_x, underline_y}, {end_x, underline_y}, 1,
+            native.from_raylib_color(color))
     }
 }
 
@@ -1220,6 +1249,7 @@ terminal_draw_output_shaped_chunk :: proc(
         native.to_raylib_color(ctx.theme.default_foreground))
     if chunk_end - column <= 1 { return column, false }
     drawn := terminal_draw_shaped_output_run({
+        encoder = ctx.encoder,
         resolver = ctx.resolver,
         cells = ctx.cells[column:chunk_end],
         start_column = column,
@@ -1248,7 +1278,7 @@ terminal_draw_output_row :: proc(
     draw: Terminal_Shaped_Output_Context,
     shaping_allowed := true) {
     terminal_draw_output_backgrounds(
-        draw.cells, draw.position, draw.column_width, draw.palette)
+        draw.encoder, draw.cells, draw.position, draw.column_width, draw.palette)
     column := 0
     for column < len(draw.cells) {
         cell := &draw.cells[column]
@@ -1299,13 +1329,13 @@ terminal_draw_link_hover :: proc(
             if next_color != color { break }
             column += max(int(next.width), 1)
         }
-        rl.DrawLineEx(
-            rl.Vector2{draw.position.x +
+        _ = native.draw_encoder_line(draw.encoder,
+            {draw.position.x +
                 f32(run_start) * draw.column_width, underline_y},
-            rl.Vector2{draw.position.x +
+            {draw.position.x +
                 f32(min(column, limit)) * draw.column_width,
                 underline_y},
-            1, color)
+            1, native.from_raylib_color(color))
     }
 }
 
@@ -1320,6 +1350,7 @@ terminal_draw_link_hover :: proc(
 // Side effects:
 //   - Issues Raylib rectangle commands for leading cells with explicit backgrounds.
 terminal_draw_output_backgrounds :: proc(
+    encoder: ^native.Draw_Encoder,
     cells: []termgrid.Cell, position: rl.Vector2, column_width: f32,
     palette: ^termpalette.Terminal_Palette_State) {
     for &cell, column in cells {
@@ -1334,9 +1365,10 @@ terminal_draw_output_backgrounds :: proc(
             position.x + f32(column) * column_width,
             position.y,
         }
-        rl.DrawRectangleV(cell_position,
-            rl.Vector2{width, TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING},
-            terminal_packed_color(background))
+        _ = native.draw_encoder_rectangle(encoder, {
+            cell_position.x, cell_position.y, width,
+            TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING},
+            native.from_raylib_color(terminal_packed_color(background)))
     }
 }
 
@@ -1474,6 +1506,7 @@ terminal_shaped_run_is_valid :: proc(
 // Side effects:
 //   - Issues one Raylib textured-quad draw command.
 terminal_draw_shaped_glyph :: proc(
+    encoder: ^native.Draw_Encoder,
     resolved: font.Resolved_Glyph, glyph: font.Shaped_Glyph,
     cell_position: rl.Vector2, color: rl.Color) {
 
@@ -1482,7 +1515,7 @@ terminal_draw_shaped_glyph :: proc(
     }
     scale := TERMINAL_FONT_SIZE/f32(resolved.base_size)
     offset_scale := scale/64
-    destination := rl.Rectangle{
+    destination := geometry.Rectangle{
         x = cell_position.x + f32(resolved.offset_x)*scale +
             f32(glyph.x_offset)*offset_scale,
         y = cell_position.y + f32(resolved.offset_y)*scale +
@@ -1490,12 +1523,20 @@ terminal_draw_shaped_glyph :: proc(
         width = resolved.source.width*scale,
         height = resolved.source.height*scale,
     }
-    rl.DrawTexturePro(
-        resolved.texture, resolved.source, destination, {}, 0, color)
+    texture_width := f32(resolved.texture.width)
+    texture_height := f32(resolved.texture.height)
+    uv := geometry.Rectangle{
+        resolved.source.x/texture_width,
+        resolved.source.y/texture_height,
+        resolved.source.width/texture_width,
+        resolved.source.height/texture_height,
+    }
+    _ = native.draw_encoder_texture_quad(encoder, destination, uv,
+        native.from_raylib_color(color), resolved.texture.handle)
 }
 
 // Return whether one shaped glyph atlas rectangle contains drawable ink.
-terminal_shaped_source_has_ink :: proc(source: rl.Rectangle) -> bool {
+terminal_shaped_source_has_ink :: proc(source: geometry.Rectangle) -> bool {
     return source.width > 0 && source.height > 0
 }
 
@@ -1650,7 +1691,7 @@ terminal_draw_shaped_output_run :: proc(
             request.resolver.user_data, request.key, glyph.glyph_id)
         assert(resident)
         terminal_draw_shaped_glyph(
-            resolved, glyph, cell_position, request.color)
+            request.encoder, resolved, glyph, cell_position, request.color)
     }
     return true
 }
@@ -1713,6 +1754,7 @@ terminal_prompt_cells :: proc(
 
 // Shape one bounded UTF-8 prompt span through shared regular-font pages.
 terminal_draw_shaped_prompt_span :: proc(
+    encoder: ^native.Draw_Encoder,
     resolver: font.Font_Resolver, key: font.Font_Key, text: string,
     position: rl.Vector2, color: rl.Color) -> bool {
 
@@ -1721,6 +1763,7 @@ terminal_draw_shaped_prompt_span :: proc(
     if !built { return false }
     regular := terminal_font_resolve(resolver, .Regular)
     return terminal_draw_shaped_output_run({
+        encoder = encoder,
         resolver = resolver,
         cells = cells[:cell_count],
         position = position,
@@ -1743,19 +1786,25 @@ terminal_draw_shaped_prompt_span :: proc(
 //   - Draws the grapheme in captured foreground/style font and, when requested, an
 //     underline spanning at least one column or the cell's semantic width.
 terminal_draw_cell :: proc(
-    draw: Terminal_Shaped_Output_Context, font: rl.Font,
+    draw: Terminal_Shaped_Output_Context, font: font.Font_Face,
     cell: ^termgrid.Cell, position: rl.Vector2) {
 
     if terminal_cell_is_ascii_space(cell) {
         return
     }
-    text: [termgrid.CELL_GRAPHEME_CAPACITY + 1]u8
-    copy(text[:], cell.grapheme[:cell.grapheme_len])
+    text := string(cell.grapheme[:cell.grapheme_len])
     color := terminal_resolve_foreground(
         draw.palette, cell.style.foreground,
         native.to_raylib_color(draw.theme.default_foreground))
-    rl.DrawTextEx(font, cast(cstring)&text[0], position,
-        TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING, color)
+    _ = view_core.ui_text_unshaped_paged({
+        encoder = draw.encoder,
+        resolver = draw.resolver,
+        key = terminal_font_key_for_cell(cell.style),
+        text = text,
+        position = position,
+        color = color,
+        font = {font, TERMINAL_FONT_SIZE},
+    })
 }
 
 // Return whether one semantic cell is an ordinary spacing column with no ink.
@@ -1891,11 +1940,12 @@ terminal_draw_inverted_span :: proc(
         rect_height += TERMINAL_LINE_SPACING
     }
 
-    rl.DrawRectangleV(span_position, rl.Vector2{rect_width, rect_height},
-        native.to_raylib_color(draw.theme.selection_background))
+    _ = native.draw_encoder_rectangle(draw.encoder, {
+        span_position.x, span_position.y, rect_width, rect_height},
+        draw.theme.selection_background)
     if text_start < text_end {
         _ = terminal_draw_shaped_prompt_span(
-            draw.resolver, .Regular, span_text, span_position,
+            draw.encoder, draw.resolver, .Regular, span_text, span_position,
             native.to_raylib_color(draw.theme.selection_foreground))
     }
 }
@@ -1933,23 +1983,24 @@ terminal_draw_cursor :: proc(
         on_selection else draw.theme.cursor_foreground
 
     if !terminal_focused {
-        rl.DrawRectangleLinesEx(rl.Rectangle{
+        _ = native.draw_encoder_rectangle_outline(draw.encoder, {
             cursor_screen_position.x, cursor_screen_position.y,
             glyph_width, TERMINAL_FONT_SIZE,
-        }, 1, native.to_raylib_color(rect_color))
+        }, 1, rect_color)
         if !on_selection {
             _ = terminal_draw_shaped_prompt_span(
-                draw.resolver, .Regular, glyph_text,
+                draw.encoder, draw.resolver, .Regular, glyph_text,
                 cursor_screen_position,
                 native.to_raylib_color(draw.theme.default_foreground))
         }
         return
     }
 
-    rl.DrawRectangleV(cursor_screen_position,
-        rl.Vector2{glyph_width, TERMINAL_FONT_SIZE}, native.to_raylib_color(rect_color))
+    _ = native.draw_encoder_rectangle(draw.encoder, {
+        cursor_screen_position.x, cursor_screen_position.y,
+        glyph_width, TERMINAL_FONT_SIZE}, rect_color)
     _ = terminal_draw_shaped_prompt_span(
-        draw.resolver, .Regular, glyph_text, cursor_screen_position,
+        draw.encoder, draw.resolver, .Regular, glyph_text, cursor_screen_position,
         native.to_raylib_color(glyph_color))
 }
 
@@ -1985,13 +2036,14 @@ terminal_codepoint_end :: proc(text: string, offset: int) -> int {
 //
 // Returns:
 //   - The prefix's true rendered width in pixels.
-terminal_measure_prefix_width :: proc(font: rl.Font, prefix: string) -> f32 {
+terminal_measure_prefix_width :: proc(
+    font: font.Font_Face, prefix: string) -> f32 {
     if len(prefix) == 0 {
         return 0
     }
 
-    width := rl.MeasureTextEx(font, fmt.ctprintf("%s", prefix),
-        TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING).x
+    width, _ := view_core.ui_text_measure_monospace(
+        prefix, font, TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING)
     return width + TERMINAL_TEXT_SPACING
 }
 
@@ -2002,9 +2054,8 @@ terminal_measure_prefix_width :: proc(font: rl.Font, prefix: string) -> f32 {
 //
 // Returns:
 //   - The pixel width of one virtual blank column.
-terminal_column_width :: proc(font: rl.Font) -> f32 {
-    advance := rl.MeasureTextEx(font, fmt.ctprintf("%s", " "),
-        TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING).x
+terminal_column_width :: proc(font: font.Font_Face) -> f32 {
+    advance, _ := view_core.ui_text_column_advance(font, TERMINAL_FONT_SIZE)
     return advance + TERMINAL_TEXT_SPACING
 }
 
@@ -2019,7 +2070,8 @@ terminal_column_width :: proc(font: rl.Font) -> f32 {
 //
 // Returns:
 //   - The pixel x-offset from the line's left edge.
-terminal_position_x :: proc(font: rl.Font, line_text: string, offset: int) -> f32 {
+terminal_position_x :: proc(
+    font: font.Font_Face, line_text: string, offset: int) -> f32 {
     if offset <= len(line_text) {
         return terminal_text_column_width(
             font, line_text[:math.max(offset, 0)])
@@ -2050,6 +2102,6 @@ terminal_text_column_count :: proc(text: string) -> int {
 }
 
 // Measure one UTF-8 prefix using terminal Unicode column widths.
-terminal_text_column_width :: proc(font: rl.Font, text: string) -> f32 {
+terminal_text_column_width :: proc(font: font.Font_Face, text: string) -> f32 {
     return f32(terminal_text_column_count(text))*terminal_column_width(font)
 }

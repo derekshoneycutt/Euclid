@@ -4,6 +4,7 @@ import viewterminalmodel "model"
 
 import termgrid "../../terminal/grid"
 import termhist "../../terminal/history"
+import "../font"
 
 import "core:fmt"
 import "core:math"
@@ -114,7 +115,8 @@ terminal_live_input_line_text :: proc(text: string, line: int) -> string {
 //   - The hit position and true, or a zero value and false when the mouse sits
 //     outside the terminal's padded bounds.
 terminal_hit_test :: proc(
-    term: ^viewterminalmodel.Terminal_State, font: rl.Font, bounds: rl.Rectangle,
+    term: ^viewterminalmodel.Terminal_State,
+    font: font.Font_Face, bounds: rl.Rectangle,
     mouse: rl.Vector2) -> (viewterminalmodel.Terminal_View_Position, bool) {
     if term == nil || term.history == nil {
         return viewterminalmodel.Terminal_View_Position{}, false
@@ -168,7 +170,7 @@ terminal_hit_test :: proc(
 //   - A real byte offset when relative_x falls within the line's text, or
 //     len(line_text) plus a virtual column count when it falls past it.
 terminal_byte_offset_for_x :: proc(
-    font: rl.Font, line_text: string, relative_x: f32) -> int {
+    font: font.Font_Face, line_text: string, relative_x: f32) -> int {
     if relative_x <= 0 {
         return 0
     }

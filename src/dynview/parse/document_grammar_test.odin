@@ -75,6 +75,29 @@ tex_parse_document_matches_shapes_fixture :: proc(t: ^testing.T) {
     testing.expect_value(t, semicircle.end_angle, f32(180))
 }
 
+// Verify perpendicular line options map to the base and vertical stem colors.
+@(test)
+tex_parse_document_maps_perpendicular_line_colors :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\euclidperpendicular[thickness=2,line1_color=steelblue," +
+        "line2_color=palevioletred1,height=2,width=3]"
+    testing.expect_value(t, tex_parse_document(source, output), Tex_Parse_Status.Ok)
+    testing.expect_value(t, output.document_inline_count, 1)
+    shape := output.document_inlines[0].shape
+    testing.expect_value(t, shape.kind, Tex_Document_Shape_Kind.Perpendicular)
+    testing.expect(t, shape.fill_color.present)
+    testing.expect(t, shape.edge_colors[0].present)
+    testing.expect_value(t,
+        [4]u8{shape.fill_color.red, shape.fill_color.green,
+            shape.fill_color.blue, shape.fill_color.alpha},
+        [4]u8{70, 130, 180, 255})
+    testing.expect_value(t,
+        [4]u8{shape.edge_colors[0].red, shape.edge_colors[0].green,
+            shape.edge_colors[0].blue, shape.edge_colors[0].alpha},
+        [4]u8{255, 130, 171, 255})
+}
+
 //   Verify representative shared named colors remain accepted by document parsing.
 @(test)
 tex_parse_document_accepts_named_shape_colors :: proc(t: ^testing.T) {

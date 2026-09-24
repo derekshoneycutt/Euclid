@@ -3,9 +3,11 @@ package ui
 import viewterminalmodel "../terminal/model"
 
 import "../../core"
+import geometry "../../core/geometry"
 import termemulator "../../terminal/emulator"
 import "../font"
 import "../input"
+import "../native"
 import terminalview "../terminal"
 
 import rl "vendor:raylib"
@@ -47,7 +49,7 @@ terminal_content_panel :: proc(panel: rl.Rectangle) -> rl.Rectangle {
 // Update Terminal from one routed frame using the bounds later supplied to drawing.
 terminal_update :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
-    font_face: rl.Font, bounds: rl.Rectangle) -> Terminal_Frame_Update {
+    font_face: font.Font_Face, bounds: rl.Rectangle) -> Terminal_Frame_Update {
     resolved := terminalview.terminal_resolve_mouse_frame(term, frame, bounds)
     return terminalview.terminal_update(term, {
         frame = resolved,
@@ -159,7 +161,7 @@ terminal_prepare_scroll :: proc(
 // Prepare Terminal geometry, scroll ownership, and routed content input.
 terminal_prepare_frame :: proc(
     state: ^core.Euclid_General_State, frame: input.Input_Frame,
-    font_face: rl.Font, bounds: rl.Rectangle,
+    font_face: font.Font_Face, bounds: rl.Rectangle,
     child_pointer_capture: bool) -> Terminal_Prepared_Frame {
     term := &state^.terminal
     geometry_change := terminalview.terminal_update_geometry(term, font_face, bounds)
@@ -198,5 +200,34 @@ terminal_draw :: proc(
             hyperlink_hover = prepared.hyperlink_hover,
         })
     scroll_container_draw_end(scroll)
+    terminalview.terminal_draw_overlays(term, resolver, layout)
+}
+
+// terminal_draw_encoded emits one prepared Terminal surface into the SDL encoder.
+terminal_draw_encoded :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Terminal_Prepared_Frame) {
+    term := &state^.terminal
+    if encoder == nil || !term.initialized || !prepared.available {return}
+    resolver := font.cache_terminal_resolver(&state^.font_cache)
+    layout := prepared.layout
+    layout.encoder = encoder
+    scroll := prepared.scroll
+    origin := rl.Vector2{
+        scroll.view_rect.x,
+        scroll.view_rect.y - scroll.scroll_y_out,
+    }
+    _ = native.draw_encoder_push_scissor(
+        encoder, geometry.Rectangle(scroll.view_rect))
+    terminalview.terminal_draw_content(
+        term, resolver, term.raster_renderer, {
+            encoder = encoder,
+            layout = layout,
+            origin = origin,
+            bounds = prepared.bounds,
+            frame = prepared.content_frame,
+            hyperlink_hover = prepared.hyperlink_hover,
+        })
+    _ = native.draw_encoder_pop_scissor(encoder)
     terminalview.terminal_draw_overlays(term, resolver, layout)
 }

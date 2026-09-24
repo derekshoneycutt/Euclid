@@ -324,19 +324,66 @@ cache_request_preparation_cancellation :: proc(
     return outcome == .Requested || outcome == .Already_Requested
 }
 
-//   Publish one completed CPU product through its display-owned path.
-//
-// Returns:
-//   - True after seed or immutable page publication.
-cache_publish_preparation :: proc(cache: ^Font_Cache) -> bool {
+// cache_commit_uploaded_preparation publishes one successfully submitted atlas.
+cache_commit_uploaded_preparation :: proc(cache: ^Font_Cache) -> bool {
     task := &cache.preparation.task
+    texture := cache.preparation.pending_texture
     switch task.kind {
     case .Seed:
-        return cache_publish(cache, &task.prepared)
+        return cache_publish_texture(cache, &task.prepared, texture)
     case .Glyph_Page:
-        return cache_publish_glyph_page(cache, &task.prepared, task)
+        return cache_publish_glyph_page_texture(
+            cache, &task.prepared, task, texture)
     }
     return false
+}
+
+// cache_texture_upload_completed commits or rolls back one exact pending atlas.
+cache_texture_upload_completed :: proc(
+    user_data: rawptr, identity, generation: u64, succeeded: bool) {
+    cache := cast(^Font_Cache)user_data
+    if cache == nil || cache.preparation.state != .Uploading {return}
+    task := &cache.preparation.task
+    if identity != u64(task.key) + 1 || generation != task.generation {return}
+    texture := cache.preparation.pending_texture
+    published := succeeded && cache_preparation_is_current(cache) &&
+        cache_commit_uploaded_preparation(cache)
+    if published {
+        cache.preparation.publication_count += 1
+        if task.kind == .Seed {
+            log.infof("font_generation_published key=%d generation=%d",
+                int(task.key), task.generation)
+        }
+    } else {
+        if succeeded && texture.handle != nil {
+            cache.texture_operations.release(
+                cache.texture_operations.user_data, texture)
+        }
+        cache.preparation.failure_count += 1
+        cache_fail_preparation(cache)
+    }
+    cache.preparation.pending_texture = {}
+    cache_finish_preparation(cache)
+}
+
+// cache_begin_preparation_upload queues one atlas while retaining its CPU storage.
+cache_begin_preparation_upload :: proc(cache: ^Font_Cache) -> bool {
+    task := &cache.preparation.task
+    if task.kind == .Glyph_Page {
+        entry := &cache.entries[int(task.key)]
+        if !cache_glyph_page_matches_task(&task.prepared, task) ||
+            !cache_glyph_page_can_publish(entry, &task.prepared) {
+            return false
+        }
+    }
+    texture, queued := finalize_texture(
+        &task.prepared, cache.texture_operations,
+        u64(task.key) + 1, task.generation,
+        cache_texture_upload_completed, cache)
+    if !queued {return false}
+    cache.preparation.pending_texture = texture
+    cache.preparation.state = .Uploading
+    return true
 }
 
 //   Restore demanded and prefetched page IDs after failure or supersession.
@@ -418,12 +465,8 @@ cache_complete_preparation :: proc(
         cache_fail_preparation(cache)
     } else if joined == .Joined && result == .Succeeded &&
         cache_preparation_is_current(cache) &&
-        cache_publish_preparation(cache) {
-        cache.preparation.publication_count += 1
-        if task.kind == .Seed {
-            log.infof("font_generation_published key=%d generation=%d",
-                int(task.key), task.generation)
-        }
+        cache_begin_preparation_upload(cache) {
+        return
     } else if !cache_preparation_is_current(cache) {
         cache.preparation.stale_completion_count += 1
         cache_restore_page_demand(cache)
@@ -456,6 +499,7 @@ cache_service :: proc(cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
     if cache.preparation.state == .Idle {
         return
     }
+    if cache.preparation.state == .Uploading {return}
     if cache.preparation.state == .Retry {
         cache_submit_preparation(cache, pool)
         return

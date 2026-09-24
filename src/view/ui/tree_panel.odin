@@ -40,7 +40,7 @@ Tree_List_Params :: struct {
     list_panel : rl.Rectangle,
     mouse_input : Input_Frame,
     scroll_y : ^f32,
-    font : rl.Font,
+    font : view_font.Font_Face,
     font_resolver : view_font.Font_Resolver,
 }
 
@@ -55,7 +55,7 @@ Tree_Walk_Context :: struct {
     mouse_input : Input_Frame,
     scroll_offset : rl.Vector2,
     interaction_space_rect : rl.Rectangle,
-    font : rl.Font,
+    font : view_font.Font_Face,
     font_resolver : view_font.Font_Resolver,
     hovered_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     hovered_expander_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
@@ -126,6 +126,49 @@ draw_encoded_tree_geometry :: proc(
         _ = native.draw_encoder_rectangle(
             encoder, geometry.Rectangle(scrollbar.thumb_rect), UI_BORDER_COLOR)
     }
+}
+
+// draw_encoded_tree_node_text emits visible labels in one bounded tree walk.
+draw_encoded_tree_node_text :: proc(
+    state: ^core.Euclid_General_State,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    encoder: ^native.Draw_Encoder, panel: rl.Rectangle, scroll_y: f32,
+    depth: int, content_y: ^f32, remaining: int) {
+    if node == nil || remaining <= 0 {return}
+    row_y := panel.y + content_y^ - scroll_y
+    content_y^ += TREE_ROW_HEIGHT
+    if row_y + TREE_ROW_HEIGHT >= panel.y && row_y <= panel.y + panel.height {
+        draw_encoded_label(state, encoder, node^.name,
+            panel.x + f32(depth) * TREE_INDENT + TREE_ROW_LABEL_OFFSET_X,
+            row_y + TREE_ROW_LABEL_OFFSET_Y)
+    }
+    if !node^.is_expanded {return}
+    for child, steps := node^.first_child, 0;
+        child != nil && steps < state^.julia_interface^.animation_count;
+        child, steps = child^.next_sibling, steps + 1 {
+        draw_encoded_tree_node_text(state, child, encoder, panel, scroll_y,
+            depth + 1, content_y, remaining - 1)
+    }
+}
+
+// draw_encoded_tree_text emits the visible catalogue labels.
+draw_encoded_tree_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: rl.Rectangle) {
+    ji := state^.julia_interface
+    if ji == nil {return}
+    content_height := f32(count_visible_tree_rows_all_roots(ji)) * TREE_ROW_HEIGHT
+    scroll_y := clamp(state^.ui_runtime.tree_scroll_y,
+        0, max(content_height - panel.height, 0))
+    content_y: f32
+    _ = native.draw_encoder_push_scissor(encoder, geometry.Rectangle(panel))
+    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
+        if node^.parent == nil {
+            draw_encoded_tree_node_text(state, node, encoder, panel, scroll_y,
+                0, &content_y, ji^.animation_count)
+        }
+    }
+    _ = native.draw_encoder_pop_scissor(encoder)
 }
 
 // Borrow the selected catalogue title for the current frame.
