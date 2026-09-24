@@ -232,6 +232,23 @@ scenario inconclusive, so combined corpora must remain below that fixed bound ra
 than treating a partial trace as success. Run scenarios into fresh artifact directories
 and require both `result: "passed"` and `trace_complete: true`.
 
+Native codec qualification is separate from headed scenarios. Run
+`julia tools/make.jl probe-sdl3-image` to strict-build the headless probe and write
+`.build/sdl3-image-probe/result.json`. A passing result requires system SDL_image 3.4,
+memory-backed JPEG/PNG/GIF decode, two-frame streaming GIF encode and decode with exact
+40/80 ms delays, complete cleanup, the loaded library path, and SONAME evidence.
+
+Animated Terminal GIF decode uses SDL_image as its sole production pixel source. Odin
+tests verify exact baseline and transparency/disposal canvases, parser-owned encoded and
+normalized timing, finite/infinite loop metadata, malformed and quota admission,
+between-frame cancellation, exact caller-owned capacities, and concurrent worker-local
+decoders. Decoder-reported durations are intentionally ignored; Euclid's allocation-free
+GIF walk owns timing and preserves the conservative decode working-budget reservation.
+Terminal graphics service tests additionally require Sixel replacement to retain the
+old resident until successful candidate upload publication. The checked-in Kitty
+animation scenarios verify raster publication, frame transitions, stop/delete behavior,
+capture where enabled, complete traces, orderly shutdown, and zero bad frees.
+
 Focused capability scenarios cover GIF recording and armed cancellation, simulation
 pause and resume, constrained-figure checkpoint storage, and rapid animation selection
 supersession. The GIF completion flow records required `gif_started` and `gif_completed`

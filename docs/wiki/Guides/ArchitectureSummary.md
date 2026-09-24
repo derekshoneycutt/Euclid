@@ -76,7 +76,8 @@ If you are new, read in this order:
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
-| **Odin** | Assets and IO | Asset package extraction/path resolution and GIF output internals. | `src/files/files.odin`, `src/files/gif_encode.odin` |
+| **Odin** | Assets and IO | Asset package extraction/path resolution, transactional GIF publication, and native static and animated image decode. | `src/files/files.odin`, `src/terminal/graphics/native/sdl_image.odin` |
+| **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle and synchronous RGBA frame submission. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
 | **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/particles.odin` |
 | **---** | **--- Julia Modules ---** | **---** | **---** |
 | **Julia** | Runtime Bootstrap | Script loading, animation registration, and global frame dispatch. | `src/julia/script.jl` |
@@ -338,6 +339,12 @@ ownership, communication, evaluation, rendering, and lifecycle model.
 - Bounded generation-tagged messages cross the boundary; stale generations are rejected
   before visible state changes.
 - Terminal publication is independent from Dynview publication.
+- Terminal workers admit PNG/JPEG/GIF dimensions through allocation-free native header
+  parsing. Worker-local SDL_image static surfaces and animated decoders copy into exact
+  caller-owned RGBA8 storage; each returned animation surface is destroyed immediately.
+  Euclid's GIF parser remains authoritative for encoded timing, loop policy, limits,
+  and destination sizing. SDL objects do not cross into Terminal policy or display
+  state.
 
 ```mermaid
 sequenceDiagram

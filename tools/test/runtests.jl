@@ -16,8 +16,10 @@ const TestRunner = Verification.EuclidTestRunner
 const BuildConfiguration = Main.EuclidBuildConfiguration
 const JuliaTestReporter = Main.EuclidJuliaTestReporter
 const ScenarioRunner = Main.EuclidScenarioRunner
+const SDL3ImageProbe = Main.EuclidSDL3ImageProbe
 
 include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
+include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
 
 @testset "Euclid tooling" begin
     @testset "provisional SDL3 provider" begin
@@ -45,6 +47,65 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
         @test provider.library_path == "/opt/sdl/lib/libSDL3.so.0"
         @test_throws ErrorException BuildConfiguration.sdl3_provider_identity(
             :NT; capture)
+    end
+
+    @testset "mandatory SDL_image provider" begin
+        @test BuildConfiguration.sdl3_image_library_path(
+            "/opt/sdl-image/lib";
+            kernel=:Linux,
+            is_file=path -> path == "/opt/sdl-image/lib/libSDL3_image.so.0",
+            real_path=identity) == "/opt/sdl-image/lib/libSDL3_image.so.0"
+        @test_throws ErrorException BuildConfiguration.sdl3_image_library_path(
+            ""; kernel=:Linux)
+        @test_throws ErrorException BuildConfiguration.sdl3_image_library_path(
+            "/opt/sdl-image/lib"; kernel=:Darwin)
+        @test_throws ErrorException BuildConfiguration.sdl3_image_library_path(
+            "/missing"; kernel=:Linux, is_file=_ -> false)
+
+        responses = Dict(
+            "--modversion" => (exit_code=0, output="3.4.0\n", error_output=""),
+            "--variable=libdir" =>
+                (exit_code=0, output="/opt/sdl-image/lib\n", error_output=""))
+        capture = command -> responses[command.exec[2]]
+        provider = BuildConfiguration.sdl3_image_provider_identity(:Linux;
+            capture,
+            is_file=path -> path == "/opt/sdl-image/lib/libSDL3_image.so.0",
+            real_path=identity)
+        @test provider.kind == :system
+        @test provider.version == "3.4.0"
+        @test provider.library_path == "/opt/sdl-image/lib/libSDL3_image.so.0"
+        @test_throws ErrorException BuildConfiguration.sdl3_image_provider_identity(
+            :NT; capture)
+
+        for invalid_version in ("", "invalid", "3.3.9")
+            invalid_responses = copy(responses)
+            invalid_responses["--modversion"] =
+                (exit_code=0, output=invalid_version, error_output="")
+            invalid_capture = command -> invalid_responses[command.exec[2]]
+            @test_throws ErrorException BuildConfiguration.sdl3_image_provider_identity(
+                :Linux;
+                capture=invalid_capture,
+                is_file=_ -> true,
+                real_path=identity)
+        end
+
+        flags_capture = _ ->
+            (exit_code=0, output=" -lSDL3_image   -lSDL3 \n", error_output="")
+        @test BuildConfiguration.sdl3_image_linker_flags(
+            :Linux; capture=flags_capture) == "-lSDL3_image -lSDL3"
+        @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
+            :Darwin; capture=flags_capture)
+        @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
+            :Linux; capture=_ ->
+                (exit_code=1, output="", error_output="missing"))
+        @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
+            :Linux; capture=_ ->
+                (exit_code=0, output=" \n", error_output=""))
+
+        @test BuildConfiguration.native_runtime_directories(
+            ["/julia/lib", "/opt/sdl/lib"],
+            ["/opt/sdl/lib/libSDL3.so.0", "/opt/sdl/lib/libSDL3_image.so.0"]) ==
+            ["/julia/lib", "/opt/sdl/lib"]
     end
 
     @testset "native linker platform selection" begin
@@ -112,6 +173,8 @@ include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
         @test parse_driver_invocation(String[]).action == :help
         @test parse_driver_invocation(["run-only"]).action == :run_only
         @test parse_driver_invocation(["probe-sdl3"]).action == :probe_sdl3
+        @test parse_driver_invocation(["probe-sdl3-image"]).action ==
+            :probe_sdl3_image
         @test parse_driver_invocation(["stats", "tools/make.jl"]).action == :stats
         @test parse_driver_invocation(["unit", "odin"]).action == :unit
         @test parse_driver_invocation(["check", "src"]).action == :check

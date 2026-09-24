@@ -35,6 +35,12 @@ Asset_Root_Config :: struct {
     asset_root_override: string,
 }
 
+// Gif_Output_Transaction owns one reserved sibling temporary path until publication.
+Gif_Output_Transaction :: struct {
+    final_path: string,
+    temporary_path: string,
+}
+
 
 Unpack_Targets :: struct {
     archive_path: string,
@@ -405,14 +411,6 @@ resolve_writable_pictures_dir :: proc(
     return "", false
 }
 
-//   Write one complete encoded GIF payload to an exact output path.
-//
-// Returns:
-//   - true only when nonempty bytes were written completely.
-write_gif_bytes :: proc(path: string, data: []u8) -> bool {
-    return len(path) > 0 && len(data) > 0 && os.write_entire_file(path, data) == nil
-}
-
 //   Generate the timestamped filename used for one GIF export.
 gif_output_filename :: proc() -> string {
     now := time.now()
@@ -425,30 +423,66 @@ gif_output_filename :: proc() -> string {
         year, month, day, hour, minute, second, millis)
 }
 
-//   Persist encoded GIF bytes in the application output directory.
-//
-// Returns:
-//   - An allocator-owned output path and true after a complete write.
-//   - Empty and false after rejection or failure; no returned allocation remains owned.
-persist_gif_output :: proc(
-    data: []u8, allocator: mem.Allocator) -> (string, bool) {
-    if len(data) == 0 {
-        return "", false
+//   Reserve an empty sibling temporary file for one exact GIF output filename.
+reserve_gif_output_transaction_in_directory :: proc(
+    output_dir, filename: string,
+    allocator: mem.Allocator) -> (Gif_Output_Transaction, bool) {
+    if len(output_dir) == 0 || len(filename) == 0 ||
+       filepath.base(filename) != filename || !strings.has_suffix(filename, ".gif") {
+        return {}, false
     }
+
+    final_path, final_error := filepath.join(
+        []string{output_dir, filename}, allocator)
+    if final_error != nil || len(final_path) == 0 || os.exists(final_path) {
+        delete(final_path, allocator)
+        return {}, false
+    }
+    temporary_path := fmt.aprintf(
+        "%s.partial.gif", final_path[:len(final_path) - len(".gif")], allocator)
+    temporary_file, open_error := os.open(
+        temporary_path, {.Write, .Create, .Excl})
+    if open_error != nil {
+        delete(temporary_path, allocator)
+        delete(final_path, allocator)
+        return {}, false
+    }
+    os.close(temporary_file)
+    return {final_path = final_path, temporary_path = temporary_path}, true
+}
+
+//   Reserve one generated GIF destination and its sibling temporary file.
+reserve_gif_output_transaction :: proc(
+    allocator: mem.Allocator) -> (Gif_Output_Transaction, bool) {
     output_dir, output_ok := resolve_writable_pictures_dir(context.temp_allocator)
     if !output_ok {
-        return "", false
+        return {}, false
     }
-    output_path, path_error := filepath.join(
-        []string{output_dir, gif_output_filename()}, allocator)
-    if path_error != nil || len(output_path) == 0 {
-        return "", false
+    return reserve_gif_output_transaction_in_directory(
+        output_dir, gif_output_filename(), allocator)
+}
+
+//   Atomically publish a completed temporary GIF at its reserved final path.
+publish_gif_output_transaction :: proc(transaction: ^Gif_Output_Transaction) -> bool {
+    if transaction == nil || len(transaction.final_path) == 0 ||
+       len(transaction.temporary_path) == 0 || os.exists(transaction.final_path) {
+        return false
     }
-    if !write_gif_bytes(output_path, data) {
-        delete(output_path, allocator)
-        return "", false
+    return os.rename(transaction.temporary_path, transaction.final_path) == nil
+}
+
+//   Remove an unpublished temporary GIF and release transaction path storage.
+destroy_gif_output_transaction :: proc(
+    transaction: ^Gif_Output_Transaction, allocator: mem.Allocator) {
+    if transaction == nil {
+        return
     }
-    return output_path, true
+    if len(transaction.temporary_path) > 0 && os.exists(transaction.temporary_path) {
+        _ = os.remove(transaction.temporary_path)
+    }
+    delete(transaction.temporary_path, allocator)
+    delete(transaction.final_path, allocator)
+    transaction^ = {}
 }
 
 //   Ensure assets.pkg is unpacked for the current executable directory.

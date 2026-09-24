@@ -17,6 +17,7 @@ Commands:
                                  Force rebuilding the Julia sysimage, application, and assets.
     harness                      Build and run the deterministic headless harness.
     probe-sdl3                   Build and run the Linux SDL3/Vulkan capability probe.
+    probe-sdl3-image             Build and run the Linux SDL_image capability probe.
     unit [julia|odin] [OPTS]     Run all application tests or one language suite.
     vet [OPTS]                   Build and analyze the repository.
     test [OPTS]                  Run the complete verification gate.
@@ -55,7 +56,7 @@ show_help() = HELP_TEXT
 
 const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage",
-    "harness", "probe-sdl3",
+    "harness", "probe-sdl3", "probe-sdl3-image",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
     "analyzer-test", "wiki", "check-wiki", "clean"])
 
@@ -81,6 +82,8 @@ include(joinpath(@__DIR__, "shaders.jl"))
 using .EuclidShaders: ShaderArtifacts, build_shaders
 include(joinpath(@__DIR__, "sdl3_probe.jl"))
 using .EuclidSDL3Probe: run_probe
+include(joinpath(@__DIR__, "sdl3_image_probe.jl"))
+using .EuclidSDL3ImageProbe: run_image_probe
 
 struct BuildCommand
     action::Symbol
@@ -1586,6 +1589,10 @@ function execute_driver_action(invocation::DriverInvocation)
     if invocation.action == :probe_sdl3
         require_no_arguments(invocation)
         return run_probe(SCRIPT_DIR)
+    end
+    if invocation.action == :probe_sdl3_image
+        require_no_arguments(invocation)
+        return run_image_probe(SCRIPT_DIR)
     end
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)

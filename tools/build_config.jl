@@ -2,7 +2,8 @@ module EuclidBuildConfiguration
 
 export native_linker_flags, native_runtime_dirs, native_runtime_environment,
     native_test_linker_flags, resolve_msvc_tool_path, sdl3_library_path,
-    sdl3_linker_flags, sdl3_provider_identity
+    sdl3_linker_flags, sdl3_provider_identity, sdl3_image_library_path,
+    sdl3_image_linker_flags, sdl3_image_provider_identity
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
@@ -14,6 +15,14 @@ struct SDL3ProviderIdentity
     version::String
     library_path::String
 end
+
+struct SDL3ImageProviderIdentity
+    kind::Symbol
+    version::String
+    library_path::String
+end
+
+const SDL3_IMAGE_MINIMUM_VERSION = v"3.4.0"
 
 """Resolve the Linux SDL3 SONAME from one pkg-config library directory."""
 function sdl3_library_path(
@@ -61,6 +70,67 @@ function sdl3_linker_flags(
         "Could not resolve system SDL3 linker flags through pkg-config.")
     flags = join(split(result.output), " ")
     isempty(flags) && error("System SDL3 pkg-config linker flags are empty.")
+    return flags
+end
+
+"""Resolve the Linux SDL_image SONAME from one pkg-config library directory."""
+function sdl3_image_library_path(
+    library_directory::AbstractString;
+    kernel::Symbol=Sys.KERNEL,
+    is_file::Function=isfile,
+    real_path::Function=realpath)
+    kernel == :Linux || error(
+        "System SDL_image is supported only on Linux during the migration.")
+    directory = strip(library_directory)
+    isempty(directory) && error(
+        "System SDL_image pkg-config library directory is empty.")
+    candidate = joinpath(normpath(directory), "libSDL3_image.so.0")
+    is_file(candidate) || error("Missing system SDL_image runtime at $candidate")
+    return real_path(candidate)
+end
+
+"""Resolve the mandatory Linux system SDL_image provider through pkg-config."""
+function sdl3_image_provider_identity(
+    kernel::Symbol=Sys.KERNEL;
+    capture::Function=capture_command,
+    is_file::Function=isfile,
+    real_path::Function=realpath)
+    kernel == :Linux || error(
+        "System SDL_image is supported only on Linux during the migration.")
+    version_result = capture(Cmd([
+        "pkg-config", "--modversion", "sdl3-image",
+    ]))
+    version_result.exit_code == 0 || error(
+        "Could not resolve system SDL_image version through pkg-config.")
+    libdir_result = capture(Cmd([
+        "pkg-config", "--variable=libdir", "sdl3-image",
+    ]))
+    libdir_result.exit_code == 0 || error(
+        "Could not resolve system SDL_image library directory through pkg-config.")
+    version = strip(version_result.output)
+    isempty(version) && error("System SDL_image pkg-config version is empty.")
+    parsed_version = tryparse(VersionNumber, version)
+    parsed_version === nothing && error(
+        "System SDL_image pkg-config version is invalid: $version")
+    parsed_version >= SDL3_IMAGE_MINIMUM_VERSION || error(
+        "System SDL_image $version is older than required version " *
+        "$(SDL3_IMAGE_MINIMUM_VERSION).")
+    library_path = sdl3_image_library_path(strip(libdir_result.output);
+        kernel, is_file, real_path)
+    return SDL3ImageProviderIdentity(:system, version, library_path)
+end
+
+"""Resolve mandatory SDL_image linker flags through Linux pkg-config metadata."""
+function sdl3_image_linker_flags(
+    kernel::Symbol=Sys.KERNEL; capture::Function=capture_command)
+    kernel == :Linux || error(
+        "System SDL_image is supported only on Linux during the migration.")
+    result = capture(Cmd(["pkg-config", "--libs", "sdl3-image"]))
+    result.exit_code == 0 || error(
+        "Could not resolve system SDL_image linker flags through pkg-config.")
+    flags = join(split(result.output), " ")
+    isempty(flags) && error(
+        "System SDL_image pkg-config linker flags are empty.")
     return flags
 end
 
@@ -274,6 +344,12 @@ function windows_linker_flags()
         "/DEFAULTLIB:julia.lib /DEFAULTLIB:openlibm.lib /DEFAULTLIB:harfbuzz.lib"
 end
 
+"""Merge native library parent directories without changing first-seen order."""
+function native_runtime_directories(
+    paths::Vector{String}, library_paths::Vector{String})
+    return unique([paths; dirname.(library_paths)])
+end
+
 """Resolve runtime library search directories for the active provider."""
 function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
     provider = validate_harfbuzz_provider(provider)
@@ -283,8 +359,11 @@ function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
         _, jll_paths = harfbuzz_jll_paths()
         Sys.iswindows() ? [Sys.BINDIR; jll_paths] : jll_paths
     end
-    sdl3_directory = dirname(sdl3_provider_identity().library_path)
-    return unique([paths; sdl3_directory])
+    native_libraries = [
+        sdl3_provider_identity().library_path,
+        sdl3_image_provider_identity().library_path,
+    ]
+    return native_runtime_directories(paths, native_libraries)
 end
 
 """Build a host loader environment override from resolved runtime directories."""
@@ -310,7 +389,8 @@ function native_linker_flags(provider::Symbol=harfbuzz_provider())
         "SDL3 application linkage is supported only on Linux during the migration.")
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
-    return "$harfbuzz_flags $(julia_linker_flags()) $(sdl3_linker_flags())"
+    return "$harfbuzz_flags $(julia_linker_flags()) $(sdl3_linker_flags()) " *
+        sdl3_image_linker_flags()
 end
 
 """Append platform libraries and options required by Odin test executables."""

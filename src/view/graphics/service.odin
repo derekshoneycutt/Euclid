@@ -74,6 +74,8 @@ Texture_Entry :: struct {
     texture: native.Sampled_Texture,
     candidate_id: termattachment.Attachment_Id,
     candidate: native.Sampled_Texture,
+    candidate_sixel_geometry: termattachment.Placement_Geometry,
+    candidate_replaces_sixel: bool,
     resident: bool,
     publishing: bool,
     updating: bool,
@@ -541,6 +543,46 @@ texture_payload_info :: proc(
     return {u32(width), u32(len(payload.bytes) / payload.stride), format}, true
 }
 
+// texture_candidate_take_sixel_replacement consumes pending replacement policy.
+texture_candidate_take_sixel_replacement :: proc(
+    entry: ^Texture_Entry) -> (termattachment.Placement_Geometry, bool) {
+    geometry := entry.candidate_sixel_geometry
+    replaces_sixel := entry.candidate_replaces_sixel
+    entry.candidate_sixel_geometry = {}
+    entry.candidate_replaces_sixel = false
+    return geometry, replaces_sixel
+}
+
+// texture_candidate_commit publishes one successful upload and replacement policy.
+texture_candidate_commit :: proc(
+    service: ^Service, entry: ^Texture_Entry,
+    id: termattachment.Attachment_Id, candidate: native.Sampled_Texture) {
+    previous := entry.texture
+    entry.texture = candidate
+    entry.attachment_id = id
+    entry.resident = true
+    if previous.handle != nil {
+        native.sdl_sampled_texture_release(service.platform, &previous)
+    }
+    if !texture_activate_playback(service, id) {
+        texture_evict(service, id)
+        termattachment.residency_remove(service.store, id)
+        gfxprotocol.graphics_discard_attachment(service.parser, id)
+        service.failure_count += 1
+        return
+    }
+    service.publication_count += 1
+    service_record_publication(service, id)
+    sixel_geometry, replaces_sixel :=
+        texture_candidate_take_sixel_replacement(entry)
+    if replaces_sixel {
+        termattachment.placements_remove_resident_position_origin_except(
+            service.store, sixel_geometry, .Sixel, id)
+    }
+    log.debugf("terminal_texture_published slot=%d generation=%d width=%d height=%d",
+        id.slot, id.generation, candidate.width, candidate.height)
+}
+
 // texture_upload_completed publishes one exact candidate after GPU submission.
 texture_upload_completed :: proc(
     user_data: rawptr, identity, generation: u64, succeeded: bool) {
@@ -561,6 +603,7 @@ texture_upload_completed :: proc(
     entry.candidate_id = {}
     entry.publishing = false
     if !succeeded {
+        texture_candidate_take_sixel_replacement(entry)
         log.warnf("terminal_texture_upload_failed slot=%d generation=%d", slot,
             generation)
         termattachment.residency_remove(service.store, id)
@@ -568,24 +611,7 @@ texture_upload_completed :: proc(
         service.failure_count += 1
         return
     }
-    previous := entry.texture
-    entry.texture = candidate
-    entry.attachment_id = id
-    entry.resident = true
-    if previous.handle != nil {
-        native.sdl_sampled_texture_release(service.platform, &previous)
-    }
-    if !texture_activate_playback(service, id) {
-        texture_evict(service, id)
-        termattachment.residency_remove(service.store, id)
-        gfxprotocol.graphics_discard_attachment(service.parser, id)
-        service.failure_count += 1
-        return
-    }
-    service.publication_count += 1
-    service_record_publication(service, id)
-    log.debugf("terminal_texture_published slot=%d generation=%d width=%d height=%d",
-        slot, generation, candidate.width, candidate.height)
+    texture_candidate_commit(service, entry, id, candidate)
 }
 
 // texture_update_completed commits one pending playback plan after submission.
@@ -962,9 +988,9 @@ operation_publish :: proc(
             service.parser, decode.attachment_id)
     } else if texture_publish(service, decode.attachment_id) {
         if decode.kind == .Sixel && decode.place {
-            geometry := decode.geometry
-            termattachment.placements_remove_resident_position_origin_except(
-                service.store, geometry, .Sixel, decode.attachment_id)
+            entry := &service.textures[decode.attachment_id.slot]
+            entry.candidate_sixel_geometry = decode.geometry
+            entry.candidate_replaces_sixel = true
         }
     } else {
         service.failure_count += 1

@@ -2,11 +2,9 @@ package termgraphicsprepare
 
 import "../../../taskpool"
 import termattachment "../../attachment"
+import termgraphicsnative "../native"
 
-import "core:c"
-import stbi "vendor:stb/image"
-
-// Explicit limits applied before stb may allocate a complete animated GIF.
+// Explicit limits applied before an animated GIF decoder may allocate.
 Gif_Animation_Limits :: struct {
     encoded_byte_limit: int,
     dimension_limit: int,
@@ -57,17 +55,18 @@ Gif_Walk_State :: struct {
     infinite: bool,
 }
 
-// Immutable policy and optional delay storage for one GIF marker transaction.
+// Immutable policy and optional frame storage for one GIF marker transaction.
 Gif_Walk_Marker_Request :: struct {
     limits: Gif_Animation_Limits,
-    delays_ms: []int,
-    expected_delays: [^]c.int,
+    frames: []termattachment.Animation_Frame,
+    attachment_limits: termattachment.Limits,
+    canvas_byte_count: int,
 }
 
 // Convert attachment policy into the complete bounded GIF decode policy.
 //
 // Returns:
-//   - Limits covering encoded input, retained canvases, temporary stb output,
+//   - Limits covering encoded input, retained canvases, conservative decode work,
 //     frame occupancy, dimensions, and one normalized cycle duration.
 gif_animation_limits :: proc(
     limits: termattachment.Limits) -> Gif_Animation_Limits {
@@ -194,9 +193,9 @@ gif_walk_image :: proc(bytes: []u8, state: ^Gif_Walk_State) -> bool {
 // Finalize loop metadata and validate bounded finite playback duration.
 gif_walk_finish :: proc(
     result: ^Gif_Animation_Inspection, state: Gif_Walk_State,
-    limits: Gif_Animation_Limits, delay_count: int) -> bool {
-    if result.frame_count == 0 || delay_count > 0 &&
-        delay_count != result.frame_count {
+    limits: Gif_Animation_Limits, expected_frame_count: int) -> bool {
+    if result.frame_count == 0 || expected_frame_count > 0 &&
+        expected_frame_count != result.frame_count {
         return false
     }
     result.repeat_count = state.repeat_count
@@ -215,23 +214,21 @@ gif_walk_finish :: proc(
 // Record and normalize one frame delay after its complete image block is valid.
 gif_walk_record_frame :: proc(
     result: ^Gif_Animation_Inspection, state: ^Gif_Walk_State,
-    limits: Gif_Animation_Limits, delays_ms: []int,
-    expected_delays: [^]c.int) -> bool {
-    if len(delays_ms) > 0 {
-        delays_ms[result.frame_count] = state.pending_delay_ms
-    }
-    if expected_delays != nil &&
-        int(expected_delays[result.frame_count]) != state.pending_delay_ms {
-        return false
-    }
+    request: Gif_Walk_Marker_Request) -> bool {
     duration_ns, duration_valid := termattachment.animation_duration_from_units(
-        u64(state.pending_delay_ms), 1000, {
-            animation_min_frame_duration_ns = limits.min_frame_duration_ns,
-            animation_max_frame_duration_ns = limits.max_frame_duration_ns,
-        })
+        u64(state.pending_delay_ms), 1000, request.attachment_limits)
     if !duration_valid ||
-        duration_ns > limits.duration_ns_limit - result.total_duration_ns {
+        duration_ns > request.limits.duration_ns_limit - result.total_duration_ns {
         return false
+    }
+    if len(request.frames) > 0 {
+        request.frames[result.frame_count] = {
+            pixels = {
+                offset = result.frame_count * request.canvas_byte_count,
+                count = request.canvas_byte_count,
+            },
+            duration_ns = duration_ns,
+        }
     }
     result.total_duration_ns += duration_ns
     result.frame_count += 1
@@ -261,25 +258,23 @@ gif_walk_marker :: proc(
     state.index += 1
     if marker == 0x3b {
         valid = state.index == len(bytes) && gif_walk_finish(
-            result, state^, request.limits, len(request.delays_ms))
+            result, state^, request.limits, len(request.frames))
         return true, valid
     }
     if marker == 0x21 {
         return false, gif_walk_extension(bytes, state)
     }
     if marker != 0x2c || result.frame_count >= request.limits.frame_limit ||
-        len(request.delays_ms) > 0 && result.frame_count >= len(request.delays_ms) ||
+        len(request.frames) > 0 && result.frame_count >= len(request.frames) ||
         !gif_walk_image(bytes, state) {
         return false, false
     }
-    return false, gif_walk_record_frame(
-        result, state, request.limits, request.delays_ms, request.expected_delays)
+    return false, gif_walk_record_frame(result, state, request)
 }
 
-// Walk a complete GIF stream and optionally copy one delay per image descriptor.
+// Walk a complete GIF stream and validate authoritative animation metadata.
 gif_walk :: proc(
     bytes: []u8, limits: Gif_Animation_Limits,
-    delays_ms: []int, expected_delays: [^]c.int = nil,
     token: taskpool.Task_Cancellation_Token = {}) -> Gif_Animation_Inspection {
     if !gif_walk_request_valid(bytes, limits, token) {
         return {}
@@ -295,8 +290,13 @@ gif_walk :: proc(
     result := Gif_Animation_Inspection{width = width, height = height}
     for state.index < len(bytes) {
         if taskpool.task_cancellation_requested(token) { return {} }
-        finished, valid := gif_walk_marker(
-            bytes, {limits, delays_ms, expected_delays}, &state, &result)
+        finished, valid := gif_walk_marker(bytes, {
+            limits = limits,
+            attachment_limits = {
+                animation_min_frame_duration_ns = limits.min_frame_duration_ns,
+                animation_max_frame_duration_ns = limits.max_frame_duration_ns,
+            },
+        }, &state, &result)
         if !valid { return {} }
         if finished { return result }
     }
@@ -307,15 +307,16 @@ gif_walk :: proc(
 inspect_gif_animation :: proc(
     bytes: []u8, limits: Gif_Animation_Limits,
     token: taskpool.Task_Cancellation_Token = {}) -> Gif_Animation_Inspection {
-    result := gif_walk(bytes, limits, nil, nil, token)
+    result := gif_walk(bytes, limits, token)
     if !result.valid || result.frame_count > limits.decoded_byte_limit / 4 /
         result.height / result.width {
         return {}
     }
     result.decoded_byte_count = result.width * result.height * 4 * result.frame_count
-    if result.frame_count > max(int) / int(size_of(c.int)) { return {} }
-    delay_bytes := result.frame_count * int(size_of(c.int))
+    if result.frame_count > max(int) / int(size_of(i32)) { return {} }
+    delay_bytes := result.frame_count * int(size_of(i32))
     if result.decoded_byte_count > max(int) - delay_bytes { return {} }
+    // Preserve the conservative decoder working-budget charge used by admission.
     result.temporary_decode_byte_count = result.decoded_byte_count + delay_bytes
     if len(bytes) > limits.peak_byte_limit ||
         result.decoded_byte_count > limits.peak_byte_limit - len(bytes) ||
@@ -344,7 +345,7 @@ gif_preflight_matches_decode :: proc(
     }
     decoded_byte_count := inspection.width * inspection.height * 4 *
         inspection.frame_count
-    delay_byte_count := inspection.frame_count * int(size_of(c.int))
+    delay_byte_count := inspection.frame_count * int(size_of(i32))
     temporary_byte_count := decoded_byte_count + delay_byte_count
     peak_byte_count := len(bytes) + decoded_byte_count + temporary_byte_count
     if inspection.decoded_byte_count != decoded_byte_count ||
@@ -363,7 +364,7 @@ gif_preflight_matches_decode :: proc(
     return true
 }
 
-// Compare metadata produced by the complete post-stb stream walk.
+// Compare metadata produced by the complete authoritative stream walk.
 gif_stream_metadata_matches :: proc(
     actual, preflight: Gif_Animation_Inspection) -> bool {
     return actual.valid && actual.width == preflight.width &&
@@ -375,40 +376,45 @@ gif_stream_metadata_matches :: proc(
         actual.infinite == preflight.infinite
 }
 
-// Decode one preflighted GIF into exact caller-owned pixels and frame descriptors.
-
-// Build exact caller-owned frame descriptors from stb's validated delay table.
-gif_stb_decode_matches :: proc(
-    inspection: Gif_Animation_Inspection, width, height, frame_count: c.int,
-    token: taskpool.Task_Cancellation_Token) -> bool {
-    return !taskpool.task_cancellation_requested(token) &&
-        int(width) == inspection.width && int(height) == inspection.height &&
-        int(frame_count) == inspection.frame_count
+// Walk one complete GIF and build authoritative caller-owned frame descriptors.
+gif_walk_frame_table :: proc(
+    bytes: []u8, request: Gif_Preflighted_Decode_Request,
+    token: taskpool.Task_Cancellation_Token) -> Gif_Animation_Inspection {
+    inspection := request.inspection
+    state := Gif_Walk_State{index = 13}
+    if !gif_walk_request_valid(bytes, request.limits, token) ||
+       !gif_skip_color_table(bytes, &state.index, bytes[10]) {
+        return {}
+    }
+    result := Gif_Animation_Inspection{
+        width = inspection.width,
+        height = inspection.height,
+    }
+    canvas_byte_count := inspection.width * inspection.height * 4
+    for state.index < len(bytes) {
+        if taskpool.task_cancellation_requested(token) {return {}}
+        finished, valid := gif_walk_marker(bytes, {
+            limits = request.limits,
+            frames = request.destination.frames,
+            attachment_limits = request.attachment_limits,
+            canvas_byte_count = canvas_byte_count,
+        }, &state, &result)
+        if !valid {return {}}
+        if finished {return result}
+    }
+    return {}
 }
 
-// Build exact caller-owned frame descriptors from stb's validated delay table.
-gif_build_frame_table :: proc(
-    inspection: Gif_Animation_Inspection, destination: Gif_Decode_Destination,
-    stb_delays: [^]c.int, attachment_limits: termattachment.Limits,
-    token: taskpool.Task_Cancellation_Token) -> bool {
-    canvas_byte_count := inspection.width * inspection.height * 4
-    for index in 0..<inspection.frame_count {
-        if taskpool.task_cancellation_requested(token) { return false }
-        duration_ns, valid := termattachment.animation_duration_from_units(
-            u64(stb_delays[index]), 1000, attachment_limits)
-        if !valid { return false }
-        destination.frames[index] = {
-            pixels = {offset = index * canvas_byte_count, count = canvas_byte_count},
-            duration_ns = duration_ns,
-        }
-    }
-    return true
+// Poll one task-pool cancellation token through the native decoder boundary.
+gif_decode_cancelled :: proc(user_data: rawptr) -> bool {
+    token := cast(^taskpool.Task_Cancellation_Token)user_data
+    return token != nil && taskpool.task_cancellation_requested(token^)
 }
 
 // Decode one preflighted GIF into exact caller-owned pixels and frame descriptors.
 //
 // Returns:
-//   - True only when scalar preflight, stb output, and the post-stb stream walk agree.
+//   - True only when preflight, encoded policy, and complete SDL_image output agree.
 decode_preflighted_gif_animation :: proc(
     bytes: []u8, request: Gif_Preflighted_Decode_Request,
     token: taskpool.Task_Cancellation_Token = {}) -> (Gif_Animation_Inspection, bool) {
@@ -416,35 +422,24 @@ decode_preflighted_gif_animation :: proc(
     inspection := request.inspection
     destination := request.destination
     if !gif_preflight_matches_decode(bytes, limits, inspection, destination) ||
-        len(bytes) > int(max(c.int)) || taskpool.task_cancellation_requested(token) {
+        taskpool.task_cancellation_requested(token) {
         return {}, false
     }
-    width, height, frame_count, channels: c.int
-    stb_delays: [^]c.int
-    if taskpool.task_cancellation_requested(token) { return {}, false }
-    pixels := stbi.load_gif_from_memory(
-        raw_data(bytes), c.int(len(bytes)), &stb_delays,
-        &width, &height, &frame_count, &channels, 4)
-    if pixels == nil {
-        if stb_delays != nil { stbi.image_free(stb_delays) }
-        return {}, false
-    }
-    defer stbi.image_free(pixels)
-    if stb_delays == nil { return {}, false }
-    defer stbi.image_free(stb_delays)
-    if !gif_stb_decode_matches(
-        inspection, width, height, frame_count, token) {
-        return {}, false
-    }
-    expected := gif_walk(bytes, limits, nil, stb_delays, token)
+    expected := gif_walk_frame_table(bytes, request, token)
     if !gif_stream_metadata_matches(expected, inspection) { return {}, false }
-    if !gif_build_frame_table(
-        inspection, destination, stb_delays, request.attachment_limits, token) {
-        return {}, false
-    }
-    if taskpool.task_cancellation_requested(token) { return {}, false }
-    copy(destination.frame_bytes, pixels[:len(destination.frame_bytes)])
-    return inspection, !taskpool.task_cancellation_requested(token)
+    token_copy := token
+    decoded := termgraphicsnative.Decode_Animated_Gif(&{
+        bytes = bytes,
+        frame_bytes = destination.frame_bytes,
+        width = inspection.width,
+        height = inspection.height,
+        frame_count = inspection.frame_count,
+        cancellation_user_data = &token_copy,
+        cancellation_requested = gif_decode_cancelled,
+    })
+    complete := decoded.complete && decoded.frame_count == inspection.frame_count &&
+        !taskpool.task_cancellation_requested(token)
+    return inspection if complete else {}, complete
 }
 
 // Inspect and decode a GIF for callers that do not already own preflight metadata.

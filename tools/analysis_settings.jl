@@ -1262,16 +1262,6 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
-            ReviewedAllocationPolicy(
-                "files-gif-session-growing-arena",
-                "src/files/gif_encode.odin",
-                "gif_encode_ensure_arena",
-                :arena,
-                "One capture-session arena is bulk-reset between recordings and destroyed with encoder state.";
-                operation="arena_init_growing",
-                target="state.arena",
-                certainty=:definite,
-                response=Ignore),
             # Bridge Animations Allocations ; these use a dedicated arena
             ReviewedAllocationPolicy(
                 "bridge-animation-lookup-arena",
@@ -1572,79 +1562,6 @@ AnalysisSettings(
                 allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore),
-            # GIF Encoding Allocations ; There is a dedicated arena and some minor heap allocation
-            ReviewedAllocationPolicy(
-                "files-gif-encode-lzwmem",
-                "src/files/gif_encode.odin",
-                "gif_encode_allocate_buffers",
-                :unknown,
-                "Allocate GIF buffers on the dedicated GIF capture arena.";
-                operation="make",
-                target="[]i16",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "files-gif-encode-tlb-used-mem",
-                "src/files/gif_encode.odin",
-                "gif_encode_allocate_buffers",
-                :unknown,
-                "Allocate GIF buffers on the dedicated GIF capture arena.";
-                operation="make",
-                target="[]u8",
-                certainty=:definite,
-                response=Ignore,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "files-gif-encode-pixels",
-                "src/files/gif_encode.odin",
-                "gif_encode_allocate_buffers",
-                :unknown,
-                "Allocate GIF buffers on the dedicated GIF capture arena.";
-                operation="make",
-                target="[]u32",
-                certainty=:definite,
-                response=Ignore,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "files-gif-encode-end-file-data",
-                "src/files/gif_encode.odin",
-                "gif_encode_end",
-                :implicit,
-                "One time allocation with a known destruction.";
-                operation="make",
-                target="[]u8",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "files-gif-encode-new-buffer",
-                "src/files/gif_encode.odin",
-                "gif_encode_new_buffer",
-                :unknown,
-                "Allocates on a dedicated and well managed arena for GIF capture.";
-                operation="new",
-                target="Gif_Encode_Buffer",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "files-gif-encode-new-buffer-data",
-                "src/files/gif_encode.odin",
-                "gif_encode_new_buffer",
-                :unknown,
-                "Allocates on a dedicated and well managed arena for GIF capture.";
-                operation="make",
-                target="[]u8",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "files-gif-encode-begin-lzw-stream",
-                "src/files/gif_encode.odin",
-                "gif_encode_begin_lzw_bitstream",
-                :unknown,
-                "Allocates on a dedicated and well managed arena for GIF capture.";
-                operation="make",
-                target="[]u8",
-                certainty=:definite,
-                response=Ignore),
             # Primary Runtime Allocations -- These are all single allocations made once
             ReviewedAllocationPolicy(
                 "view-runtime-session-iso-scale",
@@ -1869,17 +1786,6 @@ AnalysisSettings(
                 operation="make",
                 target="[]byte",
                 allocator_source="context.allocator",
-                certainty=:definite,
-                response=Ignore),
-            # Test Allocations -- every site is a test fixture destroyed by defer free
-            ReviewedAllocationPolicy(
-                "test-gif-encode-collect-gce-packed-bytes",
-                "src/files/gif_encode_test.odin",
-                "collect_gce_packed_bytes",
-                :temporary,
-                "Test helper buffer on the temporary allocator, freed by test teardown.";
-                operation="make",
-                target="[]u8",
                 certainty=:definite,
                 response=Ignore),
             ]),

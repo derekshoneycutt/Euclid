@@ -8,15 +8,14 @@ import viewmodel "../model"
 // out to a new GIF file.
 
 import "../../core"
-import "../../files"
 
 import "core:log"
 import "core:time"
 import rl "vendor:raylib"
 
-GIF_CAPTURE_QUALITY :: 12
-
 Gif_Capture_Session :: viewmodel.Gif_Capture_Session
+Gif_Capture_Frame :: viewmodel.Gif_Capture_Frame
+Gif_Capture_Operations :: viewmodel.Gif_Capture_Operations
 
 //   Logical, screen, and render extents used to resolve a framebuffer crop.
 Gif_Capture_Extents :: struct {
@@ -40,6 +39,20 @@ gif_capture_freeze_source_dimensions :: proc(
 gif_capture_clear_source_dimensions :: proc(session: ^Gif_Capture_Session) {
     session.source_width = 0
     session.source_height = 0
+    session.output_width = 0
+    session.output_height = 0
+}
+
+//   Bind display-owned streaming encoder operations to one portable session.
+gif_capture_bind_operations :: proc(
+    session: ^Gif_Capture_Session, operations: Gif_Capture_Operations) -> bool {
+    if session == nil || operations.begin == nil || operations.add_frame == nil ||
+       operations.close == nil || operations.abort == nil ||
+       operations.published_path == nil {
+        return false
+    }
+    session.operations = operations
+    return true
 }
 
 
@@ -117,8 +130,8 @@ gif_capture_normalized_frame_with_operations :: proc(
         }
     }
 
-    expected_w := state^.gif_capture.encoder.width
-    expected_h := state^.gif_capture.encoder.height
+    expected_w := state^.gif_capture.output_width
+    expected_h := state^.gif_capture.output_height
     if frame.width != expected_w || frame.height != expected_h {
         // Keep capture frames aligned with encoder dimensions so pitch-based reads stay valid.
         if !framebuffer_resize_with_operations(
@@ -165,10 +178,16 @@ gif_capture_submit_frame :: proc(
     }
     defer framebuffer_release_with_operations(&frame, operations)
 
-    centiseconds := gif_capture_delay_centiseconds(frame_step)
-    if !files.gif_encode_frame(&state^.gif_capture.encoder,
-        raw_data(frame.pixels), centiseconds, GIF_CAPTURE_QUALITY,
-        frame.pitch_bytes) {
+    duration_ms := u64(gif_capture_delay_centiseconds(frame_step) * 10)
+    encoder := state^.gif_capture.operations
+    if encoder.add_frame == nil || !encoder.add_frame(
+        encoder.user_data, {
+            pixels = frame.pixels,
+            width = frame.width,
+            height = frame.height,
+            pitch_bytes = frame.pitch_bytes,
+            duration_ms = duration_ms,
+        }) {
         return false
     }
 
@@ -254,9 +273,8 @@ gif_capture_advance_recording :: proc(
 //   - none.
 gif_capture_abort_session :: proc(session: ^Gif_Capture_Session) {
     if session.active {
-        result := files.gif_encode_end(&session.encoder)
-        if len(result.data) > 0 {
-            files.gif_encode_free(&result)
+        if session.operations.abort != nil {
+            session.operations.abort(session.operations.user_data)
         }
     }
     if session.active {
@@ -270,7 +288,7 @@ gif_capture_abort_session :: proc(session: ^Gif_Capture_Session) {
     gif_capture_clear_source_dimensions(session)
 }
 
-//   Destroy GIF capture session resources, including encoder arena state.
+//   Destroy GIF capture session resources and detach native operations.
 //
 // Parameters:
 //   - session: Capture session to teardown before app shutdown.
@@ -283,7 +301,10 @@ gif_capture_destroy_session :: proc(session: ^Gif_Capture_Session) {
     }
 
     gif_capture_abort_session(session)
-    files.gif_encode_destroy_state(&session.encoder)
+    if session.operations.abort != nil {
+        session.operations.abort(session.operations.user_data)
+    }
+    session.operations = {}
     session.active = false
 }
 
@@ -366,11 +387,14 @@ gif_capture_begin_session :: proc(
     out_w := max(1, capture_w / downsample)
     out_h := max(1, capture_h / downsample)
 
-    if !files.gif_encode_begin(&state^.gif_capture.encoder, out_w, out_h) {
+    encoder := state^.gif_capture.operations
+    if encoder.begin == nil || !encoder.begin(encoder.user_data, out_w, out_h) {
         return false
     }
 
     state^.gif_capture.active = true
+    state^.gif_capture.output_width = out_w
+    state^.gif_capture.output_height = out_h
     state^.gif_capture.started_at = time.tick_now()
     state^.gif_capture.frame_materialization_ms = 0
     state^.gif_capture.materialized_frames = 0
@@ -383,27 +407,25 @@ gif_capture_begin_session :: proc(
     return true
 }
 
-//   Finalize encoder output and persist GIF bytes to a file.
+//   Finalize and atomically publish streaming encoder output.
 //
 // Notes:
-//   - Ends encoder session and persists bytes to a generated output path.
+//   - The native owner publishes only after the encoder closes successfully.
 gif_capture_finalize_session :: proc(
     state: ^core.Euclid_General_State) -> bool {
     if !state^.gif_capture.active {
         return false
     }
 
-    result := files.gif_encode_end(&state^.gif_capture.encoder)
+    encoder := state^.gif_capture.operations
+    closed := encoder.close != nil && encoder.close(encoder.user_data)
     state^.gif_capture.active = false
     gif_capture_clear_source_dimensions(&state^.gif_capture)
-    if len(result.data) == 0 {
+    if !closed || encoder.published_path == nil {
         return false
     }
-    defer files.gif_encode_free(&result)
-
-    path, persisted := files.persist_gif_output(
-        result.data, context.temp_allocator)
-    if !persisted {
+    path := encoder.published_path(encoder.user_data)
+    if len(path) == 0 {
         return false
     }
 

@@ -525,6 +525,25 @@ flowchart LR
 | Publication | Display graphics service | Revalidate generation, create textures, commit mutations, and advance playback. |
 | Composition | Terminal view | Draw placements at their sealed z-order relative to text. |
 
+Static PNG, JPEG, and GIF pixels decode through a worker-local SDL_image surface.
+Animated GIF uses the SDL_image streaming decoder as its sole production pixel source.
+The allocation-free Euclid GIF walk remains authoritative for dimensions, frame count,
+encoded delays, normalized durations, loop metadata, admission limits, and exact output
+sizes; decoder-reported durations are ignored. Each composited surface is copied into
+its caller-owned RGBA8 frame and destroyed immediately, and every decoder closes within
+the worker call. Cancellation or failure leaves partial bytes unpublished because the
+display commits only a completely prepared result.
+
+The native animation decoder boundary is format-generic even though current bounded
+admission is GIF-specific. APNG, animated WebP, AVIF, or other formats can use that
+ownership model after gaining their own authoritative bounded preflight policy.
+
+Sixel redraw replacement is also transactional at texture publication. A prepared
+candidate retains its replacement position while the GPU upload is pending; only the
+successful upload callback retires the older resident Sixel at that position. Queue
+delay or upload failure therefore preserves the previously visible texture instead of
+presenting a blank replacement frame.
+
 A Terminal generation binds one parser and attachment store to the reusable display
 service. Replacement unbinds that generation and joins accepted preparation before
 unloading its display-owned textures, removing residency accounting, and clearing the

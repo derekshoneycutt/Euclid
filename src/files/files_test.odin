@@ -1,7 +1,6 @@
 package files
 
 import "core:fmt"
-import "core:mem"
 import "core:os"
 import "core:path/filepath"
 import "core:testing"
@@ -27,41 +26,46 @@ prepare_sandbox_dir :: proc(dir_name: string) -> (string, bool) {
     return path, true
 }
 
-//   Verify exact GIF persistence rejects empty input and preserves complete bytes.
+//   Verify GIF transactions hide partial output until atomic publication.
 @(test)
-write_gif_bytes_requires_nonempty_complete_payload :: proc(t: ^testing.T) {
-    sandbox, ready := prepare_sandbox_dir("euclid-gif-persistence-test")
+gif_output_transaction_publishes_only_complete_file :: proc(t: ^testing.T) {
+    sandbox, ready := prepare_sandbox_dir("euclid-gif-transaction-test")
     testing.expect(t, ready)
     defer delete(sandbox)
     defer os.remove_all(sandbox)
-    output_path, path_error := filepath.join(
-        []string{sandbox, "capture.gif"}, context.allocator)
-    testing.expect(t, path_error == nil)
-    defer delete(output_path)
+    transaction, reserved := reserve_gif_output_transaction_in_directory(
+        sandbox, "capture.gif", context.allocator)
+    testing.expect(t, reserved)
+    defer destroy_gif_output_transaction(&transaction, context.allocator)
+    testing.expect(t, os.exists(transaction.temporary_path))
+    testing.expect(t, !os.exists(transaction.final_path))
 
-    testing.expect(t, !write_gif_bytes(output_path, nil))
     payload := []u8{'G', 'I', 'F', '8', '9', 'a'}
-    testing.expect(t, write_gif_bytes(output_path, payload))
-    persisted, read_error := os.read_entire_file(output_path, context.allocator)
-    testing.expect(t, read_error == nil)
-    defer delete(persisted)
-    testing.expect(t, mem.compare(persisted, payload) == 0)
+    testing.expect(t, os.write_entire_file(transaction.temporary_path, payload) == nil)
+    testing.expect(t, publish_gif_output_transaction(&transaction))
+    testing.expect(t, !os.exists(transaction.temporary_path))
+    testing.expect(t, os.exists(transaction.final_path))
 }
 
-//   Verify GIF persistence reports invalid destinations without creating output.
+//   Verify abort cleanup removes a reserved partial GIF without publishing it.
 @(test)
-write_gif_bytes_rejects_invalid_destination :: proc(t: ^testing.T) {
-    sandbox, ready := prepare_sandbox_dir("euclid-gif-invalid-output-test")
+gif_output_transaction_abort_removes_partial_file :: proc(t: ^testing.T) {
+    sandbox, ready := prepare_sandbox_dir("euclid-gif-transaction-abort-test")
     testing.expect(t, ready)
     defer delete(sandbox)
     defer os.remove_all(sandbox)
-    output_path, path_error := filepath.join(
-        []string{sandbox, "missing", "capture.gif"}, context.allocator)
-    testing.expect(t, path_error == nil)
-    defer delete(output_path)
-    payload := []u8{'G', 'I', 'F'}
-    testing.expect(t, !write_gif_bytes("", payload))
-    testing.expect(t, !write_gif_bytes(output_path, payload))
+    transaction, reserved := reserve_gif_output_transaction_in_directory(
+        sandbox, "capture.gif", context.allocator)
+    testing.expect(t, reserved)
+    temporary_path := fmt.aprintf("%s", transaction.temporary_path, context.allocator)
+    final_path := fmt.aprintf("%s", transaction.final_path, context.allocator)
+    defer delete(temporary_path)
+    defer delete(final_path)
+
+    destroy_gif_output_transaction(&transaction, context.allocator)
+    testing.expect(t, !os.exists(temporary_path))
+    testing.expect(t, !os.exists(final_path))
+    testing.expect_value(t, transaction, Gif_Output_Transaction{})
 }
 
 //   Write one required file entry (with parent dirs) under a test root.

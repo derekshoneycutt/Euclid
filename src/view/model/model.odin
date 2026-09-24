@@ -1,7 +1,6 @@
 package viewmodel
 
 import dynviewmodel "../../dynview/model"
-import gifmodel "../../files/gif_model"
 import color "../../core/color"
 import geometry "../../core/geometry"
 
@@ -40,12 +39,32 @@ Gif_Capture_Phase :: enum {
     Error,
 }
 
-// Gif_Capture_Session combines display capture dimensions with encoder storage.
+// Gif_Capture_Operations supplies display-owned streaming encoder calls to policy.
+Gif_Capture_Frame :: struct {
+    pixels: []u8,
+    width: int,
+    height: int,
+    pitch_bytes: int,
+    duration_ms: u64,
+}
+
+Gif_Capture_Operations :: struct {
+    user_data: rawptr,
+    begin: proc(user_data: rawptr, width, height: int) -> bool,
+    add_frame: proc(user_data: rawptr, frame: Gif_Capture_Frame) -> bool,
+    close: proc(user_data: rawptr) -> bool,
+    abort: proc(user_data: rawptr),
+    published_path: proc(user_data: rawptr) -> string,
+}
+
+// Gif_Capture_Session combines portable capture policy and encoder operations.
 Gif_Capture_Session :: struct {
-    encoder: gifmodel.Gif_Encode_State,
+    operations: Gif_Capture_Operations,
     active: bool,
     source_width: int,
     source_height: int,
+    output_width: int,
+    output_height: int,
     started_at: time.Tick,
     frame_materialization_ms: f64,
     materialized_frames: u64,

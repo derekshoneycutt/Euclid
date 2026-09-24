@@ -4,7 +4,7 @@ import OdinJuliaAnalysis: analyze_extension, extension_api_version, extension_id
 import OdinJuliaAnalysis: extension_phases, extension_rules
 
 const SDL_BOUNDARY_RULE = "EUCLID-SDL-BOUNDARY"
-const SDL_IMPORT_TARGET = "vendor:sdl3"
+const SDL_IMPORT_TARGETS = Set(("vendor:sdl3", "vendor:sdl3/image"))
 
 struct SdlBoundaryExtension <: AnalysisExtension end
 
@@ -15,6 +15,10 @@ const SdlOwnerPolicy = @NamedTuple begin
 end
 
 const SDL_OWNER_POLICIES = SdlOwnerPolicy[
+    (path="src/terminal/graphics/native/sdl_image.odin",
+        category="Terminal static and animated image codec", count=2),
+    (path="src/view/native/sdl_gif_encoder.odin",
+        category="display GIF streaming encoder", count=2),
     (path="src/view/native/color.odin", category="native color conversion", count=1),
     (path="src/view/native/sdl_draw_runtime.odin", category="GPU 2D renderer", count=1),
     (path="src/view/native/sdl_dust_pipeline.odin", category="GPU dust renderer", count=1),
@@ -53,7 +57,8 @@ extension_phases(_extension::SdlBoundaryExtension) = Set((AfterLanguageAnalysis,
 """Report whether one source is a fixture rather than production code."""
 function is_sdl_fixture(path::String)
     return endswith(path, "_test.odin") || startswith(path, "src/test_helpers/") ||
-        startswith(path, "tools/sdl3_probe/")
+        startswith(path, "tools/sdl3_probe/") ||
+        startswith(path, "tools/sdl3_image_probe/")
 end
 
 """Construct one SDL boundary diagnostic."""
@@ -78,7 +83,7 @@ end
 """Classify one production SDL dependency or report its missing owner."""
 function classify_sdl_dependency!(diagnostics, counts, categories, policies, dependency)
     dependency.language == "odin" || return
-    dependency.target == SDL_IMPORT_TARGET || return
+    dependency.target in SDL_IMPORT_TARGETS || return
     path = normalize_boundary_path(dependency.source_path)
     is_sdl_fixture(path) && return
     policy = get(policies, path, nothing)

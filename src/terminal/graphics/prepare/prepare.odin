@@ -3,6 +3,7 @@ package termgraphicsprepare
 
 import "../../../taskpool"
 import termattachment "../../attachment"
+import termgraphicsnative "../native"
 
 import "core:c"
 import stbi "vendor:stb/image"
@@ -27,6 +28,13 @@ Prepare_Kind :: enum u8 {
 // Bounded scalar result of inspecting an encoded image header.
 Image_Inspection :: struct {
     format: Encoded_Image_Format,
+    width: int,
+    height: int,
+    valid: bool,
+}
+
+// Bounded dimensions extracted without allocating decoder state.
+Image_Dimensions :: struct {
     width: int,
     height: int,
     valid: bool,
@@ -60,6 +68,75 @@ Sixel_State :: struct {
     palette: [256]u32,
 }
 
+// Read one big-endian 16-bit value from a validated byte offset.
+read_u16_be :: proc(bytes: []u8, offset: int) -> int {
+    return int(bytes[offset]) << 8 | int(bytes[offset + 1])
+}
+
+// Read one big-endian 32-bit value from a validated byte offset.
+read_u32_be :: proc(bytes: []u8, offset: int) -> u32 {
+    return u32(bytes[offset]) << 24 | u32(bytes[offset + 1]) << 16 |
+        u32(bytes[offset + 2]) << 8 | u32(bytes[offset + 3])
+}
+
+// Return whether one JPEG marker carries frame dimensions.
+jpeg_is_start_of_frame :: proc(marker: u8) -> bool {
+    return marker >= 0xc0 && marker <= 0xcf &&
+        marker != 0xc4 && marker != 0xc8 && marker != 0xcc
+}
+
+// Read dimensions from one bounded JPEG marker stream before scan data begins.
+jpeg_dimensions :: proc(bytes: []u8) -> Image_Dimensions {
+    if len(bytes) < 4 || bytes[0] != 0xff || bytes[1] != 0xd8 { return {} }
+    index := 2
+    for index < len(bytes) {
+        for index < len(bytes) && bytes[index] == 0xff { index += 1 }
+        if index >= len(bytes) { return {} }
+        marker := bytes[index]
+        index += 1
+        if marker == 0x00 || marker == 0xd9 || marker == 0xda { return {} }
+        if marker == 0x01 || marker >= 0xd0 && marker <= 0xd7 { continue }
+        if index > len(bytes) - 2 { return {} }
+        segment_length := read_u16_be(bytes, index)
+        if segment_length < 2 || segment_length > len(bytes) - index { return {} }
+        if jpeg_is_start_of_frame(marker) {
+            if segment_length < 8 || bytes[index + 2] == 0 { return {} }
+            height := read_u16_be(bytes, index + 3)
+            width := read_u16_be(bytes, index + 5)
+            return {width, height, width > 0 && height > 0}
+        }
+        index += segment_length
+    }
+    return {}
+}
+
+// Read dimensions from one canonical PNG, JPEG, or GIF header.
+encoded_image_dimensions :: proc(
+    bytes: []u8, format: Encoded_Image_Format) -> Image_Dimensions {
+    switch format {
+    case .Png:
+        if len(bytes) < 24 || read_u32_be(bytes, 8) != 13 ||
+            string(bytes[12:16]) != "IHDR" { return {} }
+        width := read_u32_be(bytes, 16)
+        height := read_u32_be(bytes, 20)
+        if width == 0 || height == 0 ||
+            u64(width) > u64(max(int)) || u64(height) > u64(max(int)) {
+            return {}
+        }
+        return {int(width), int(height), true}
+    case .Jpeg:
+        return jpeg_dimensions(bytes)
+    case .Gif:
+        if len(bytes) < 10 { return {} }
+        width := int(bytes[6]) | int(bytes[7]) << 8
+        height := int(bytes[8]) | int(bytes[9]) << 8
+        return {width, height, width > 0 && height > 0}
+    case .Unknown:
+        return {}
+    }
+    return {}
+}
+
 //   Classify one supported encoded image from its canonical signature.
 //
 // Returns:
@@ -88,26 +165,25 @@ encoded_image_format :: proc(bytes: []u8) -> Encoded_Image_Format {
 //   - limits: Dimension, pixel, and decoded CPU-byte policy.
 //
 // Returns:
-//   - Valid format and dimensions only when stb recognizes the supported image and an
-//     exact RGBA result fits every configured limit.
+//   - Valid format and dimensions only when the complete supported header is bounded
+//     and an exact RGBA result fits every configured limit.
 inspect_image :: proc(
     bytes: []u8, limits: termattachment.Limits) -> Image_Inspection {
     format := encoded_image_format(bytes)
-    if format == .Unknown || len(bytes) > int(max(c.int)) { return {} }
-    width, height, channels: c.int
-    if stbi.info_from_memory(
-        raw_data(bytes), c.int(len(bytes)), &width, &height, &channels) == 0 ||
-        width <= 0 || height <= 0 || channels <= 0 {
+    if format == .Unknown { return {} }
+    dimensions := encoded_image_dimensions(bytes, format)
+    if !dimensions.valid || dimensions.width > limits.dimension_limit ||
+        dimensions.height > limits.dimension_limit ||
+        dimensions.width > limits.image_pixel_limit / dimensions.height ||
+        dimensions.width > limits.cpu_byte_limit / dimensions.height / 4 {
         return {}
     }
-    width_int := int(width)
-    height_int := int(height)
-    if width_int > limits.dimension_limit || height_int > limits.dimension_limit ||
-        width_int > limits.image_pixel_limit / height_int ||
-        width_int > limits.cpu_byte_limit / height_int / 4 {
-        return {}
+    return {
+        format = format,
+        width = dimensions.width,
+        height = dimensions.height,
+        valid = true,
     }
-    return {format = format, width = width_int, height = height_int, valid = true}
 }
 
 //   Decode one inspected PNG, JPEG, or GIF first frame into exact RGBA storage.
@@ -130,22 +206,22 @@ prepare_encoded_image :: proc(
         taskpool.task_cancellation_requested(token) {
         return false
     }
-    width, height, channels: c.int
-    pixels := stbi.load_from_memory(
-        raw_data(request.input), c.int(len(request.input)),
-        &width, &height, &channels, 4)
-    if pixels == nil { return false }
-    defer stbi.image_free(pixels)
-    if taskpool.task_cancellation_requested(token) { return false }
-    copy(request.output, pixels[:len(request.output)])
-    return !taskpool.task_cancellation_requested(token) &&
-        int(width) == request.width && int(height) == request.height
+    native_format: termgraphicsnative.Static_Image_Format
+    switch inspection.format {
+    case .Png: native_format = .Png
+    case .Jpeg: native_format = .Jpeg
+    case .Gif: native_format = .Gif
+    case .Unknown: return false
+    }
+    decoded := termgraphicsnative.Decode_Static_Image(
+        request.input, request.output, request.width, request.height, native_format)
+    return decoded && !taskpool.task_cancellation_requested(token)
 }
 
 // Decode one admitted animated GIF into reserved canvases and descriptors.
 //
 // Returns:
-//   - True only after preflight, stb metadata, pixels, delays, and normalized
+//   - True only after preflight, SDL_image pixels, encoded timing, and normalized
 //     frame descriptors agree with the exact reserved destinations.
 prepare_animated_gif :: proc(
     request: ^Prepare_Request,

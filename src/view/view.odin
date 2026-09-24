@@ -270,6 +270,13 @@ initialize_and_run_sdl_session :: proc(
         return 1
     }
     defer unbind_sdl_framebuffer_capture(&framebuffer_owner)
+    gif_capture_owner: Sdl_Gif_Capture_Context
+    if !bind_sdl_gif_capture(&gif_capture_owner, &session.state^.gif_capture) {
+        log.error("display_gif_capture_start_failed")
+        _ = shutdown_window_runtime(session)
+        return 1
+    }
+    defer unbind_sdl_gif_capture(&gif_capture_owner)
     if !terminal_graphics_bind_native(session.state, platform, draw_runtime) {
         log.error("terminal_graphics_native_bind_failed")
         _ = shutdown_window_runtime(session)

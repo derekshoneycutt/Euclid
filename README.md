@@ -36,8 +36,10 @@ Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each too
 available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
 Julia project by default, so a separate HarfBuzz installation is not required.
 
-The experimental `dev-sdl3` branch additionally requires Linux SDL3 development files
-discoverable through `pkg-config` and SPIR-V Tools (`spirv-val` and `spirv-dis`). The
+The experimental `dev-sdl3` branch additionally requires Linux SDL3 and SDL_image 3.4
+development files discoverable through `pkg-config`, plus SPIR-V Tools (`spirv-val`
+and `spirv-dis`). Run `julia tools/make.jl probe-sdl3-image` to verify required static
+PNG/JPEG/GIF decode and streaming GIF encode/decode capabilities. The
 SDL_shadercross source and its dependencies are recursive submodules under
 `tools/shadercross`; asset builds configure and incrementally build its CLI under
 `.build/shadercross` with one compiler job. `EUCLID_SHADERCROSS` remains available for

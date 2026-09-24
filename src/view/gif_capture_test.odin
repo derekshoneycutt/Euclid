@@ -150,11 +150,15 @@ gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
     session := viewmodel.Gif_Capture_Session{
         source_width = 900,
         source_height = 500,
+        output_width = 450,
+        output_height = 250,
     }
     app_view.gif_capture_abort_session(&session)
     testing.expect(t, !session.active)
     testing.expect_value(t, session.source_width, 0)
     testing.expect_value(t, session.source_height, 0)
+    testing.expect_value(t, session.output_width, 0)
+    testing.expect_value(t, session.output_height, 0)
 }
 
 //   Verify GIF lifecycle transitions retain required typed display evidence.

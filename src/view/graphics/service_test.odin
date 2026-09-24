@@ -345,6 +345,43 @@ service_test_records_raster_publication :: proc(t: ^testing.T) {
     testing.expect_value(t, event.payload.counts.second, u32(1))
 }
 
+// Verify Sixel replacement retains the old resident until candidate publication.
+@(test)
+service_test_sixel_replacement_commits_after_upload :: proc(t: ^testing.T) {
+    store: termattachment.Store
+    testing.expect(t, termattachment.store_init(
+        &store, service_test_limits(), context.allocator))
+    defer termattachment.store_destroy(&store)
+    old_id := service_test_publish_resident(t, &store)
+    new_id := service_test_publish_resident(t, &store)
+    geometry := termattachment.Placement_Geometry{
+        screen = .Primary, logical_row = 1, column = 2,
+    }
+    _, old_outcome := termattachment.placement_admit(&store, {
+        attachment_id = old_id, geometry = geometry,
+    })
+    _, new_outcome := termattachment.placement_admit(&store, {
+        attachment_id = new_id, geometry = geometry,
+    })
+    testing.expect_value(t, old_outcome, termattachment.Admission_Outcome.Admitted)
+    testing.expect_value(t, new_outcome, termattachment.Admission_Outcome.Admitted)
+    service := Service{store = &store}
+    entry := &service.textures[new_id.slot]
+    entry.candidate_id = new_id
+    entry.candidate = {handle = rawptr(uintptr(1)), width = 1, height = 1}
+    entry.candidate_sixel_geometry = geometry
+    entry.candidate_replaces_sixel = true
+    entry.publishing = true
+
+    testing.expect(t, !termattachment.attachment_removal_requested(&store, old_id))
+    texture_upload_completed(
+        &service, u64(new_id.slot) + 1, new_id.generation, true)
+
+    testing.expect(t, termattachment.attachment_removal_requested(&store, old_id))
+    testing.expect(t, entry.resident)
+    testing.expect_value(t, entry.attachment_id, new_id)
+}
+
 // Verify delete during task ownership rejects publication only after a successful join.
 @(test)
 service_test_stale_decode_completion :: proc(t: ^testing.T) {

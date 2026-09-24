@@ -169,8 +169,8 @@ gif_capture_normalization_uses_shared_framebuffer_operations :: proc(t: ^testing
     defer free(state, context.allocator)
     state.gif_capture.source_width = 10
     state.gif_capture.source_height = 6
-    state.gif_capture.encoder.width = 5
-    state.gif_capture.encoder.height = 3
+    state.gif_capture.output_width = 5
+    state.gif_capture.output_height = 3
     operations := framebuffer_test_operations(&operation_state)
 
     frame, ok := gif_capture_normalized_frame_with_operations(
@@ -191,8 +191,8 @@ gif_capture_normalization_releases_failed_crop :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     state.gif_capture.source_width = 2
     state.gif_capture.source_height = 2
-    state.gif_capture.encoder.width = 1
-    state.gif_capture.encoder.height = 1
+    state.gif_capture.output_width = 1
+    state.gif_capture.output_height = 1
 
     storage: [16]u8
     failure_arena: mem.Arena
