@@ -278,38 +278,37 @@ terminal_draw_output_cursor :: proc(
 //   - Issues row glyph and active-selection draw commands in display order.
 terminal_draw_output_rows :: proc(
     term: ^viewterminalmodel.Terminal_State, font_resolver: font.Font_Resolver,
-    encoder: ^native.Draw_Encoder,
-    layout: Terminal_Draw_Layout, origin: geometry.Vector2,
-    hover: Terminal_Link_Hit) {
+    draw: Terminal_Draw_Content_Context) {
 
-    for index in 0..<layout.line_count {
+    for index in 0..<draw.layout.line_count {
         line_position := geometry.Vector2{
-            origin.x, origin.y + f32(index) * layout.line_height}
+            draw.origin.x, draw.origin.y + f32(index) * draw.layout.line_height}
         if cells, ok := terminal_output_row(term, index); ok {
             shaping_allowed := true
             if term.view_selection_active {
                 line_text := terminal_line_text(term, index)
                 span := terminal_selection_span_for_line(
-                    layout.selection.start, layout.selection.end,
+                    draw.layout.selection.start, draw.layout.selection.end,
                     index, len(line_text))
                 shaping_allowed = !span.has_selection
             }
             row := Terminal_Shaped_Output_Context{
-                encoder = encoder,
+                encoder = draw.encoder,
                 resolver = font_resolver,
                 cells = cells,
                 position = line_position,
                 palette = &term.output_interpreter.title_state.palette,
-                column_width = terminal_column_width(layout.regular),
-                theme = layout.theme,
+                column_width = terminal_column_width(draw.layout.regular),
+                theme = draw.layout.theme,
             }
             terminal_draw_output_row(row, shaping_allowed)
-            if hover.kind != .None && hover.line == index {
-                terminal_draw_link_hover(row, hover)
+            if draw.hyperlink_hover.kind != .None &&
+                draw.hyperlink_hover.line == index {
+                terminal_draw_link_hover(row, draw.hyperlink_hover)
             }
         }
         terminal_draw_line_selection(
-            term, font_resolver, index, layout, line_position)
+            term, font_resolver, index, draw.layout, line_position)
     }
 }
 
@@ -343,7 +342,6 @@ terminal_draw_command_statuses :: proc(
 terminal_draw_command_search :: proc(
     term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
     encoder: ^native.Draw_Encoder,
-    font: font.Font_Face,
     bounds: geometry.Rectangle, theme: Terminal_Draw_Theme) {
     shell := term.shell_integration
     if shell == nil || !shell.search_editing { return }
@@ -355,9 +353,8 @@ terminal_draw_command_search :: proc(
         bounds.x, bounds.y + bounds.height - height, bounds.width, height,
     }, background)
     text := fmt.tprintf("find: %s", query)
-    _ = terminal_draw_shaped_prompt_span(
-        encoder, resolver, .Regular, text, position,
-        theme.default_foreground)
+    _ = terminal_draw_shaped_prompt_span({encoder, resolver, .Regular,
+        text, position, theme.default_foreground})
 }
 
 //   Find the combined presented line for one stable logical-row identity.
@@ -596,9 +593,7 @@ terminal_draw_content :: proc(
     origin := geometry.Vector2(draw.origin)
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, origin, .Behind_Text)
-    terminal_draw_output_rows(
-        term, font_resolver, draw.encoder, draw.layout,
-        origin, draw.hyperlink_hover)
+    terminal_draw_output_rows(term, font_resolver, draw)
     terminal_draw_command_statuses(term, draw.layout, origin)
     terminal_draw_rasters(
         term, raster_renderer, draw.layout, origin, .In_Front_Of_Text)
@@ -611,7 +606,7 @@ terminal_draw_overlays :: proc(
     term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
     layout: Terminal_Draw_Layout) {
     terminal_draw_command_search(
-        term, resolver, layout.encoder, layout.regular,
+        term, resolver, layout.encoder,
         geometry.Rectangle(layout.padded_bounds), layout.theme)
 }
 
@@ -848,9 +843,13 @@ terminal_draw_single_line_prompt :: proc(
             request.current_text, request.prompt_prefix, cursor, selection),
         theme = request.layout.theme,
     })
-    terminal_draw_completion_preview(
-        request.term, request.resolver, request.layout.encoder, request.regular,
-        request.position, request.layout.theme)
+    terminal_draw_completion_preview(request.term, {
+        encoder = request.layout.encoder,
+        resolver = request.resolver,
+        font = request.regular,
+        position = request.position,
+        theme = request.layout.theme,
+    })
     terminal_draw_prompt_overlay({
         encoder = request.layout.encoder,
         resolver = request.resolver,
@@ -1046,10 +1045,8 @@ terminal_draw_multiline_prompt_cursor :: proc(
 // Side effects:
 //   - Encodes replacement-mask and muted preview-text commands when current.
 terminal_draw_completion_preview :: proc(
-    term: ^viewterminalmodel.Terminal_State, resolver: font.Font_Resolver,
-    encoder: ^native.Draw_Encoder,
-    font: font.Font_Face,
-    position: geometry.Vector2, theme: Terminal_Draw_Theme) {
+    term: ^viewterminalmodel.Terminal_State,
+    draw: Terminal_Text_Overlay_Draw) {
     current_text := termhist.termhist_current_text(term.history)
     prompt_prefix := terminal_prompt_prefix(term)
     if len(term.completion_preview_insertion) == 0 ||
@@ -1060,20 +1057,21 @@ terminal_draw_completion_preview :: proc(
 
     start := math.clamp(term.completion_preview_start, 0, len(current_text))
     end := math.clamp(term.completion_preview_end, start, len(current_text))
-    prefix_width := terminal_text_column_width(font, prompt_prefix)
-    start_x := position.x + prefix_width + terminal_position_x(font, current_text, start)
-    end_x := position.x + prefix_width + terminal_position_x(font, current_text, end)
-    preview_position := geometry.Vector2{start_x, position.y}
+    prefix_width := terminal_text_column_width(draw.font, prompt_prefix)
+    start_x := draw.position.x + prefix_width +
+        terminal_position_x(draw.font, current_text, start)
+    end_x := draw.position.x + prefix_width +
+        terminal_position_x(draw.font, current_text, end)
+    preview_position := geometry.Vector2{start_x, draw.position.y}
 
     if end > start {
-        _ = native.draw_encoder_rectangle(encoder, {
+        _ = native.draw_encoder_rectangle(draw.encoder, {
             preview_position.x, preview_position.y,
-            end_x - start_x, TERMINAL_FONT_SIZE}, theme.cursor_foreground)
+            end_x - start_x, TERMINAL_FONT_SIZE}, draw.theme.cursor_foreground)
     }
-    _ = terminal_draw_shaped_prompt_span(
-        encoder, resolver, .Regular, term.completion_preview_insertion,
-        preview_position,
-        TERMINAL_COMPLETION_PREVIEW_COLOR)
+    _ = terminal_draw_shaped_prompt_span({draw.encoder, draw.resolver, .Regular,
+        term.completion_preview_insertion, preview_position,
+        TERMINAL_COMPLETION_PREVIEW_COLOR})
 }
 
 //   Draw the live input line's base text: a bold prompt (green for `julia>`,
@@ -1089,9 +1087,8 @@ terminal_draw_prompt_base :: proc(request: Terminal_Prompt_Draw) {
     bold := terminal_font_resolve(request.resolver, .Bold)
     regular := terminal_font_resolve(request.resolver, .Regular)
     if terminal_text_has_visible_bytes(request.prompt_prefix) {
-        _ = terminal_draw_shaped_prompt_span(
-            request.encoder, request.resolver, .Bold, request.prompt_prefix,
-            request.position, request.prompt_color)
+        _ = terminal_draw_shaped_prompt_span({request.encoder, request.resolver,
+            .Bold, request.prompt_prefix, request.position, request.prompt_color})
     }
 
     prompt_width := terminal_text_column_width(bold, request.prompt_prefix)
@@ -1143,6 +1140,30 @@ terminal_prompt_byte_excluded :: proc(
     return cursor_excluded || selection_excluded
 }
 
+// terminal_draw_prompt_segment draws one overlay-safe prompt fragment.
+terminal_draw_prompt_segment :: proc(
+    request: Terminal_Prompt_Text_Draw, segment_start, segment_end: int) {
+    segment := request.current_text[segment_start:segment_end]
+    segment_position := geometry.Vector2{
+        request.position.x + terminal_text_column_width(
+            request.regular, request.current_text[:segment_start]),
+        request.position.y,
+    }
+    shaped := terminal_draw_shaped_prompt_span({request.encoder,
+        request.resolver, .Regular, segment, segment_position, request.color})
+    if !shaped && terminal_text_is_ascii(segment) {
+        _ = view_core.ui_text_unshaped_paged({
+            encoder = request.encoder,
+            resolver = request.resolver,
+            key = .Regular,
+            text = segment,
+            position = segment_position,
+            color = request.color,
+            font = {request.regular, TERMINAL_FONT_SIZE},
+        })
+    }
+}
+
 //   Draw prompt text in bounded UTF-8 fragments split at cursor and selection overlays.
 //
 // Parameters:
@@ -1167,26 +1188,7 @@ terminal_draw_prompt_text :: proc(request: Terminal_Prompt_Text_Draw) {
                 request.current_text, segment_end)
             cell_count += 1
         }
-        segment := request.current_text[segment_start:segment_end]
-        segment_position := geometry.Vector2{
-            request.position.x + terminal_text_column_width(
-                request.regular, request.current_text[:segment_start]),
-            request.position.y,
-        }
-        shaped := terminal_draw_shaped_prompt_span(
-            request.encoder, request.resolver, .Regular, segment, segment_position,
-            request.color)
-        if !shaped && terminal_text_is_ascii(segment) {
-            _ = view_core.ui_text_unshaped_paged({
-                encoder = request.encoder,
-                resolver = request.resolver,
-                key = .Regular,
-                text = segment,
-                position = segment_position,
-                color = request.color,
-                font = {request.regular, TERMINAL_FONT_SIZE},
-            })
-        }
+        terminal_draw_prompt_segment(request, segment_start, segment_end)
         segment_start = segment_end
     }
 }
@@ -1537,7 +1539,7 @@ terminal_draw_shaped_glyph :: proc(
         resolved.source.height/texture_height,
     }
     _ = native.draw_encoder_texture_quad(encoder, destination, uv,
-        color, resolved.texture.handle)
+        color, {texture = resolved.texture.handle})
 }
 
 // Return whether one shaped glyph atlas rectangle contains drawable ink.
@@ -1759,22 +1761,20 @@ terminal_prompt_cells :: proc(
 
 // Shape one bounded UTF-8 prompt span through shared regular-font pages.
 terminal_draw_shaped_prompt_span :: proc(
-    encoder: ^native.Draw_Encoder,
-    resolver: font.Font_Resolver, key: font.Font_Key, text: string,
-    position: geometry.Vector2, color: Color) -> bool {
+    draw: Terminal_Prompt_Span_Draw) -> bool {
 
     cells: [TERMINAL_SHAPING_RUN_COLUMNS]termgrid.Cell
-    cell_count, built := terminal_prompt_cells(text, cells[:])
+    cell_count, built := terminal_prompt_cells(draw.text, cells[:])
     if !built { return false }
-    regular := terminal_font_resolve(resolver, .Regular)
+    regular := terminal_font_resolve(draw.resolver, .Regular)
     return terminal_draw_shaped_output_run({
-        encoder = encoder,
-        resolver = resolver,
+        encoder = draw.encoder,
+        resolver = draw.resolver,
         cells = cells[:cell_count],
-        position = position,
+        position = draw.position,
         column_width = terminal_column_width(regular),
-        key = key,
-        color = color,
+        key = draw.key,
+        color = draw.color,
     })
 }
 
@@ -1949,9 +1949,8 @@ terminal_draw_inverted_span :: proc(
         span_position.x, span_position.y, rect_width, rect_height},
         draw.theme.selection_background)
     if text_start < text_end {
-        _ = terminal_draw_shaped_prompt_span(
-            draw.encoder, draw.resolver, .Regular, span_text, span_position,
-            draw.theme.selection_foreground)
+        _ = terminal_draw_shaped_prompt_span({draw.encoder, draw.resolver,
+            .Regular, span_text, span_position, draw.theme.selection_foreground})
     }
 }
 
@@ -1993,10 +1992,9 @@ terminal_draw_cursor :: proc(
             glyph_width, TERMINAL_FONT_SIZE,
         }, 1, rect_color)
         if !on_selection {
-            _ = terminal_draw_shaped_prompt_span(
-                draw.encoder, draw.resolver, .Regular, glyph_text,
-                cursor_screen_position,
-                draw.theme.default_foreground)
+            _ = terminal_draw_shaped_prompt_span({draw.encoder, draw.resolver,
+                .Regular, glyph_text, cursor_screen_position,
+                draw.theme.default_foreground})
         }
         return
     }
@@ -2004,9 +2002,8 @@ terminal_draw_cursor :: proc(
     _ = native.draw_encoder_rectangle(draw.encoder, {
         cursor_screen_position.x, cursor_screen_position.y,
         glyph_width, TERMINAL_FONT_SIZE}, rect_color)
-    _ = terminal_draw_shaped_prompt_span(
-        draw.encoder, draw.resolver, .Regular, glyph_text, cursor_screen_position,
-        glyph_color)
+    _ = terminal_draw_shaped_prompt_span({draw.encoder, draw.resolver, .Regular,
+        glyph_text, cursor_screen_position, glyph_color})
 }
 
 //   Return the byte offset just past the UTF-8 codepoint at offset, if any.

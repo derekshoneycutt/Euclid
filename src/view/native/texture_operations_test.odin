@@ -88,8 +88,11 @@ texture_operations_test_typed_upload_and_retire :: proc(t: ^testing.T) {
     texture := Sampled_Texture{rawptr(uintptr(1)), 2, 1}
     source := [6]u8{1, 2, 3, 4, 5, 6}
     testing.expect(t, texture_operation_enqueue_upload(
-        &queue, .Create, texture, .Rgb8, source[:], 7, 9,
-        {texture_completion_test, &completion}))
+        &queue, {
+            kind = .Create, texture = texture, format = .Rgb8,
+            source = source[:], identity = 7, generation = 9,
+            callback = {texture_completion_test, &completion},
+        }))
     testing.expect(t, texture_operation_enqueue_retire(&queue, texture, 7, 9))
     testing.expect_value(t, queue.count, 2)
     testing.expect_value(t, queue.byte_count, u32(8))

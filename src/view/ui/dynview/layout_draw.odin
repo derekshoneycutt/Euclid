@@ -315,6 +315,14 @@ Document_Shape_Draw_Kind_Result :: struct {
     ok: bool,
 }
 
+// Document_Prose_Content retains validated text and shaping metrics for drawing.
+Document_Prose_Content :: struct {
+    run: dynviewmodel.Dynview_Document_Shaped_Run,
+    text: string,
+    column_advance: f32,
+    ok: bool,
+}
+
 DOCUMENT_SHAPE_DRAW_KINDS ::
     [dynviewmodel.Dynview_Document_Shape_Kind]dynviewmodel.Dynview_Layout_Item_Kind {
     .None = {},
@@ -2335,24 +2343,26 @@ draw_cached_text_item :: proc(
     draw_cached_text_item_dispatch(ctx, style, item, resolved, item_y)
 }
 
-//   Draw the shaped or math content of one resolved text run.
-draw_text_run_content :: proc(
+// draw_regular_text_run draws one ordinary cached shaped text run.
+draw_regular_text_run :: proc(
     params: Text_Run_Draw_Params, text_font: view_core.Ui_Text_Font) {
+    resolver := font.cache_terminal_resolver(&params.state^.font_cache)
+    view_core.ui_text_shaped({
+        encoder = params.encoder,
+        resolver = resolver,
+        key = style_font_key(params.style),
+        text = params.text,
+        position = {params.draw_x, params.item_y},
+        color = params.text_color,
+        font = text_font,
+    })
+}
 
-    if params.item.kind == .Text_Run && params.state != nil {
-        resolver := font.cache_terminal_resolver(&params.state^.font_cache)
-        view_core.ui_text_shaped({
-            encoder = params.encoder,
-            resolver = resolver,
-            key = style_font_key(params.style),
-            text = params.text,
-            position = {params.draw_x, params.item_y},
-            color = params.text_color,
-            font = text_font,
-        })
-        return
-    }
-    if params.item.kind == .Math_Glyph_Run && draw_cached_math_site({
+// draw_cached_math_text_run attempts one resident math glyph run.
+draw_cached_math_text_run :: proc(
+    params: Text_Run_Draw_Params, text_font: view_core.Ui_Text_Font) -> bool {
+    if params.item.kind != .Math_Glyph_Run {return false}
+    return draw_cached_math_site({
         ctx = {
             encoder = params.encoder,
             state = params.state,
@@ -2364,9 +2374,17 @@ draw_text_run_content :: proc(
         position = {params.draw_x, params.item_y},
         font_size = text_font.font_size,
         color = params.text_color,
-    }) {
+    })
+}
+
+//   Draw the shaped or math content of one resolved text run.
+draw_text_run_content :: proc(
+    params: Text_Run_Draw_Params, text_font: view_core.Ui_Text_Font) {
+    if params.item.kind == .Text_Run && params.state != nil {
+        draw_regular_text_run(params, text_font)
         return
     }
+    if draw_cached_math_text_run(params, text_font) {return}
     draw_math_text({
         encoder = params.encoder,
         state = params.state,
@@ -2496,31 +2514,38 @@ document_prose_shaped_run :: proc(
     return run, true
 }
 
-// Draw one sealed semantic prose run through its exact resident font generation.
-draw_document_prose_item :: proc(
+// document_prose_content resolves one validated semantic prose payload.
+document_prose_content :: proc(
     ctx: Layout_Draw_Context,
-    item: dynviewmodel.Dynview_Document_Layout_Item,
-    semantic_inline: dynviewmodel.Dynview_Document_Inline,
-    position: geometry.Vector2) -> bool {
-
+    item: dynviewmodel.Dynview_Document_Layout_Item) -> Document_Prose_Content {
     run, run_valid := document_prose_shaped_run(ctx, item)
-    if !run_valid {return false}
-    cache := &ctx.runtime^.compile_cache
-    line_top := view_core.ui_text_cached_run_line_top(
-        position.y, run.ascent, run.raster_ascent,
-        ctx.font_size, run.base_pixel_size)
+    if !run_valid {return {}}
     if run.text_offset < 0 || run.text_count <= 0 ||
         run.text_count > len(ctx.runtime^.content.document_text)-run.text_offset {
-        return false
+        return {}
     }
     text := string(ctx.runtime^.content.document_text[
         run.text_offset:run.text_offset+run.text_count])
     column_advance, advance_valid := view_core.ui_text_column_advance(
         font.cache_borrow(&ctx.state^.font_cache, run.effective_font_key),
         ctx.font_size)
-    if !advance_valid {
-        return false
-    }
+    if !advance_valid {return {}}
+    return {run, text, column_advance, true}
+}
+
+// Draw one sealed semantic prose run through its exact resident font generation.
+draw_document_prose_item :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Document_Layout_Item,
+    semantic_inline: dynviewmodel.Dynview_Document_Inline,
+    position: geometry.Vector2) -> bool {
+    content := document_prose_content(ctx, item)
+    if !content.ok {return false}
+    cache := &ctx.runtime^.compile_cache
+    run := content.run
+    line_top := view_core.ui_text_cached_run_line_top(
+        position.y, run.ascent, run.raster_ascent,
+        ctx.font_size, run.base_pixel_size)
     return view_core.ui_text_cached_monospace_run({
         shaped = {
             encoder = ctx.encoder,
@@ -2532,8 +2557,8 @@ draw_document_prose_item :: proc(
             color = document_draw_color(semantic_inline.color),
             font_size = ctx.font_size, base_pixel_size = run.base_pixel_size,
         },
-        text = text,
-        column_advance = column_advance,
+        text = content.text,
+        column_advance = content.column_advance,
     })
 }
 
@@ -2607,7 +2632,7 @@ draw_document_layout :: proc(
     }
     origin := geometry.Vector2{
         ctx.panel.x+text_padding,
-        ctx.panel.y+text_padding-scroll_y
+        ctx.panel.y+text_padding-scroll_y,
     }
     panel_top := ctx.panel.y
     panel_bottom := ctx.panel.y+ctx.panel.height

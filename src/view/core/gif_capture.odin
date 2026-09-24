@@ -143,6 +143,25 @@ gif_capture_normalized_frame_with_operations :: proc(
     return frame, true
 }
 
+// gif_capture_encode_frame submits one normalized frame and records acceptance.
+gif_capture_encode_frame :: proc(
+    state: ^core.Euclid_General_State, frame: ^Framebuffer_Pixels,
+    duration_ms: u64) -> bool {
+    encoder := state^.gif_capture.operations
+    if encoder.add_frame == nil || !encoder.add_frame(
+        encoder.user_data, {
+            pixels = frame^.pixels,
+            width = frame^.width,
+            height = frame^.height,
+            pitch_bytes = frame^.pitch_bytes,
+            duration_ms = duration_ms,
+        }) {
+        return false
+    }
+    state^.ui_runtime.gif_captured_frames += 1
+    return true
+}
+
 //   Capture the current view, optionally downsample, and submit it to GIF encoder.
 //
 // Parameters:
@@ -178,20 +197,7 @@ gif_capture_submit_frame :: proc(
     defer framebuffer_release_with_operations(&frame, operations)
 
     duration_ms := u64(gif_capture_delay_centiseconds(frame_step) * 10)
-    encoder := state^.gif_capture.operations
-    if encoder.add_frame == nil || !encoder.add_frame(
-        encoder.user_data, {
-            pixels = frame.pixels,
-            width = frame.width,
-            height = frame.height,
-            pitch_bytes = frame.pitch_bytes,
-            duration_ms = duration_ms,
-        }) {
-        return false
-    }
-
-    ui_runtime.gif_captured_frames += 1
-    return true
+    return gif_capture_encode_frame(state, &frame, duration_ms)
 }
 
 //   Advance GIF capture state machine on fixed-step cycle boundaries.

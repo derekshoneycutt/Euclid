@@ -85,6 +85,15 @@ jpeg_is_start_of_frame :: proc(marker: u8) -> bool {
         marker != 0xc4 && marker != 0xc8 && marker != 0xcc
 }
 
+// Read dimensions from one validated JPEG start-of-frame segment.
+jpeg_frame_dimensions :: proc(
+    bytes: []u8, index, segment_length: int) -> Image_Dimensions {
+    if segment_length < 8 || bytes[index + 2] == 0 { return {} }
+    height := read_u16_be(bytes, index + 3)
+    width := read_u16_be(bytes, index + 5)
+    return {width, height, width > 0 && height > 0}
+}
+
 // Read dimensions from one bounded JPEG marker stream before scan data begins.
 jpeg_dimensions :: proc(bytes: []u8) -> Image_Dimensions {
     if len(bytes) < 4 || bytes[0] != 0xff || bytes[1] != 0xd8 { return {} }
@@ -100,10 +109,7 @@ jpeg_dimensions :: proc(bytes: []u8) -> Image_Dimensions {
         segment_length := read_u16_be(bytes, index)
         if segment_length < 2 || segment_length > len(bytes) - index { return {} }
         if jpeg_is_start_of_frame(marker) {
-            if segment_length < 8 || bytes[index + 2] == 0 { return {} }
-            height := read_u16_be(bytes, index + 3)
-            width := read_u16_be(bytes, index + 5)
-            return {width, height, width > 0 && height > 0}
+            return jpeg_frame_dimensions(bytes, index, segment_length)
         }
         index += segment_length
     }
@@ -213,7 +219,7 @@ prepare_encoded_image :: proc(
     case .Gif: native_format = .Gif
     case .Unknown: return false
     }
-    decoded := termgraphicsnative.Decode_Static_Image(
+    decoded := termgraphicsnative.decode_static_image(
         request.input, request.output, request.width, request.height, native_format)
     return decoded && !taskpool.task_cancellation_requested(token)
 }

@@ -207,7 +207,7 @@ service_draw_raster :: proc(
     destination := geometry.Rectangle{request.destination.x, request.destination.y,
         request.destination.width, request.destination.height}
     if !native.draw_encoder_texture_quad(service.encoder, destination, uv,
-        color.WHITE, entry.texture.handle, .Linear) {return false}
+        color.WHITE, {entry.texture.handle, .Linear}) {return false}
     termattachment.residency_touch(service.store, request.attachment_id)
     playback_visibility_record(service, request.attachment_id)
     service.draw_count += 1
@@ -705,9 +705,15 @@ texture_publish :: proc(
     candidate := native.sdl_sampled_texture_create(
         service.platform, info.width, info.height)
     if candidate.handle == nil || !native.texture_operation_enqueue_upload(
-        &service.draw_runtime^.texture_operations, .Create, candidate,
-        info.format, payload.bytes, u64(id.slot) + 1, id.generation,
-        {texture_upload_completed, service}) {
+        &service.draw_runtime^.texture_operations, {
+            kind = .Create,
+            texture = candidate,
+            format = info.format,
+            source = payload.bytes,
+            identity = u64(id.slot) + 1,
+            generation = id.generation,
+            callback = {texture_upload_completed, service},
+        }) {
         native.sdl_sampled_texture_release(service.platform, &candidate)
         log.warnf("terminal_texture_enqueue_failed slot=%d generation=%d bytes=%d",
             id.slot, id.generation, len(payload.bytes))
@@ -735,9 +741,15 @@ playback_upload_texture :: proc(
         return false
     }
     queued := native.texture_operation_enqueue_upload(
-        &service.draw_runtime^.texture_operations, .Update, texture.texture,
-        .Rgba8, pixels, u64(id.slot) + 1, id.generation,
-        {texture_update_completed, service})
+        &service.draw_runtime^.texture_operations, {
+            kind = .Update,
+            texture = texture.texture,
+            format = .Rgba8,
+            source = pixels,
+            identity = u64(id.slot) + 1,
+            generation = id.generation,
+            callback = {texture_update_completed, service},
+        })
     texture.updating = queued
     return queued
 }

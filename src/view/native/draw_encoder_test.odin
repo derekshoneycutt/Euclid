@@ -129,13 +129,34 @@ draw_encoder_test_textured_quad_records_state_and_uvs :: proc(t: ^testing.T) {
         {100, 100}, {100, 100}))
     testing.expect(t, draw_encoder_rectangle(&encoder, {0, 0, 5, 5}, color.WHITE))
     testing.expect(t, draw_encoder_texture_quad(&encoder, {10, 20, 30, 40},
-        {0.25, 0.5, 0.5, 0.25}, color.WHITE, texture, .Linear))
+        {0.25, 0.5, 0.5, 0.25}, color.WHITE, {texture, .Linear}))
     testing.expect_value(t, encoder.batch_count, 2)
     testing.expect_value(t, batches[1].pipeline, Draw_Pipeline.Textured)
     testing.expect_value(t, batches[1].texture, texture)
     testing.expect_value(t, batches[1].sampler, Draw_Sampler.Linear)
     testing.expect_value(t, vertices[4].texcoord, geometry.Vector2{0.25, 0.5})
     testing.expect_value(t, vertices[6].texcoord, geometry.Vector2{0.75, 0.75})
+}
+
+// sdl_draw_expect_accumulated_statistics checks totals and capacity high waters.
+sdl_draw_expect_accumulated_statistics :: proc(
+    t: ^testing.T, runtime: ^Sdl_Draw_Runtime) {
+    testing.expect_value(t, runtime^.statistics.submitted_frames, u64(2))
+    testing.expect_value(t, runtime^.statistics.vertices, u64(12))
+    testing.expect_value(t, runtime^.statistics.indices, u64(18))
+    testing.expect_value(t, runtime^.statistics.primitive_overflows, u64(4))
+    testing.expect_value(t, runtime^.statistics.scissor_overflows, u64(1))
+    testing.expect_value(t, runtime^.statistics.dust_instances, u64(3))
+    testing.expect_value(t, runtime^.statistics.dust_draws, u64(2))
+    testing.expect_value(t, runtime^.statistics.dust_expanded_vertices, u64(6))
+    testing.expect_value(t, runtime^.statistics.dust_upload_operations, u64(3))
+    testing.expect_value(t, runtime^.statistics.dust_upload_bytes, u64(336))
+    testing.expect_value(t, runtime^.statistics.dust_overflows, u64(2))
+    testing.expect_value(t, runtime^.statistics.max_vertices, u32(8))
+    testing.expect_value(t, runtime^.statistics.max_dust_instances, u32(3))
+    testing.expect_value(t, runtime^.statistics.max_dust_expanded_vertices, u32(6))
+    testing.expect_value(t, runtime^.statistics.max_dust_upload_bytes, u32(192))
+    testing.expect_value(t, runtime^.statistics.max_upload_bytes, u32(384))
 }
 
 // Verify successful frame observations accumulate totals and capacity high waters.
@@ -165,22 +186,7 @@ sdl_draw_test_statistics_accumulate_and_track_high_water :: proc(t: ^testing.T) 
     encoder.dust_expanded_draw_count = 1
     encoder.statistics.scissor_overflows = 1
     sdl_draw_record_statistics(&runtime, &encoder, 1, 192, 48)
-    testing.expect_value(t, runtime.statistics.submitted_frames, u64(2))
-    testing.expect_value(t, runtime.statistics.vertices, u64(12))
-    testing.expect_value(t, runtime.statistics.indices, u64(18))
-    testing.expect_value(t, runtime.statistics.primitive_overflows, u64(4))
-    testing.expect_value(t, runtime.statistics.scissor_overflows, u64(1))
-    testing.expect_value(t, runtime.statistics.dust_instances, u64(3))
-    testing.expect_value(t, runtime.statistics.dust_draws, u64(2))
-    testing.expect_value(t, runtime.statistics.dust_expanded_vertices, u64(6))
-    testing.expect_value(t, runtime.statistics.dust_upload_operations, u64(3))
-    testing.expect_value(t, runtime.statistics.dust_upload_bytes, u64(336))
-    testing.expect_value(t, runtime.statistics.dust_overflows, u64(2))
-    testing.expect_value(t, runtime.statistics.max_vertices, u32(8))
-    testing.expect_value(t, runtime.statistics.max_dust_instances, u32(3))
-    testing.expect_value(t, runtime.statistics.max_dust_expanded_vertices, u32(6))
-    testing.expect_value(t, runtime.statistics.max_dust_upload_bytes, u32(192))
-    testing.expect_value(t, runtime.statistics.max_upload_bytes, u32(384))
+    sdl_draw_expect_accumulated_statistics(t, &runtime)
 }
 
 // Verify custom markers split otherwise compatible 2D batches in authored order.

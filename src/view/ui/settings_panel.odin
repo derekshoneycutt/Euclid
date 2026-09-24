@@ -58,6 +58,13 @@ Settings_Control_Update :: struct {
     gpu_available: bool,
 }
 
+// Settings_Slider_Draw describes one encoded integer slider.
+Settings_Slider_Draw :: struct {
+    panel: geometry.Rectangle,
+    row_y: f32,
+    value, min_value, max_value: int,
+}
+
 // draw_encoded_checkbox_geometry encodes one checkbox without its deferred label.
 draw_encoded_checkbox_geometry :: proc(
     encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, checked: bool) {
@@ -75,11 +82,11 @@ draw_encoded_checkbox_geometry :: proc(
 
 // draw_encoded_slider_geometry encodes one slider track, fill, and knob.
 draw_encoded_slider_geometry :: proc(
-    encoder: ^native.Draw_Encoder, panel: geometry.Rectangle, row_y: f32,
-    value, min_value, max_value: int) {
-    track := slider_track_rect(geometry.Rectangle(panel), row_y)
-    denominator := max(1, max_value - min_value)
-    ratio := f32(clamp(value, min_value, max_value) - min_value) /
+    encoder: ^native.Draw_Encoder, draw: Settings_Slider_Draw) {
+    track := slider_track_rect(geometry.Rectangle(draw.panel), draw.row_y)
+    denominator := max(1, draw.max_value - draw.min_value)
+    ratio := f32(clamp(draw.value, draw.min_value, draw.max_value) -
+        draw.min_value) /
         f32(denominator)
     knob_center_x, knob := build_slider_knob(track, ratio)
     _ = native.draw_encoder_rectangle(
@@ -102,25 +109,25 @@ draw_encoded_settings_geometry :: proc(
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
     rows := settings_view_layout_rows(stack_rect)
-    draw_encoded_slider_geometry(encoder, panel, rows.slider_label_y,
+    draw_encoded_slider_geometry(encoder, {panel, rows.slider_label_y,
         state^.particle_system^.use_max_dust_particles,
-        0, particlemodel.MAX_LOW_PARTICLES)
+        0, particlemodel.MAX_LOW_PARTICLES})
     checks := [4]struct{rectangle: geometry.Rectangle, checked: bool}{
         {{
             panel.x + SETTINGS_PANEL_INSET, rows.fps_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
         }, state^.ui_runtime.display_fps},
         {{
             panel.x + SETTINGS_PANEL_INSET, rows.limit_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
         }, state^.ui_runtime.limit_fps},
         {{
             panel.x + SETTINGS_PANEL_INSET, rows.simd_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
         }, state^.ui_runtime.use_simd_batch_projection},
         {{
             panel.x + SETTINGS_PANEL_INSET, rows.gpu_dust_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
         }, state^.ui_runtime.use_gpu_dust_instancing},
     }
     for check in checks {

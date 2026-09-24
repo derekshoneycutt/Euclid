@@ -34,6 +34,17 @@ Texture_Operation_Callback :: struct {
     user_data: rawptr,
 }
 
+// Texture_Upload_Request describes one complete queued create or update copy.
+Texture_Upload_Request :: struct {
+    kind: Texture_Operation_Kind,
+    texture: Sampled_Texture,
+    format: Texture_Pixel_Format,
+    source: []u8,
+    identity: u64,
+    generation: u64,
+    callback: Texture_Operation_Callback,
+}
+
 // Texture_Operation is one bounded request retaining no source pixel ownership.
 Texture_Operation :: struct {
     kind:       Texture_Operation_Kind,
@@ -160,32 +171,30 @@ texture_operation_enqueue :: proc(
 
 // texture_operation_enqueue_upload validates and queues one create or update copy.
 texture_operation_enqueue_upload :: proc(
-    queue: ^Texture_Operation_Queue, kind: Texture_Operation_Kind,
-    texture: Sampled_Texture, format: Texture_Pixel_Format, source: []u8,
-    identity, generation: u64, callback: Texture_Operation_Callback = {}) -> bool {
-    if kind != .Create && kind != .Update || !sampled_texture_is_valid(texture) {
+    queue: ^Texture_Operation_Queue, request: Texture_Upload_Request) -> bool {
+    if request.kind != .Create && request.kind != .Update ||
+        !sampled_texture_is_valid(request.texture) {
         if queue != nil {queue^.overflow_count += 1}
         return false
     }
     return texture_operation_enqueue(queue, {
-        kind = kind,
-        texture = texture.handle,
-        width = texture.width,
-        height = texture.height,
-        format = format,
-        source = source,
-        identity = identity,
-        generation = generation,
-        completion = callback.handler,
-        user_data = callback.user_data,
+        kind = request.kind,
+        texture = request.texture.handle,
+        width = request.texture.width,
+        height = request.texture.height,
+        format = request.format,
+        source = request.source,
+        identity = request.identity,
+        generation = request.generation,
+        completion = request.callback.handler,
+        user_data = request.callback.user_data,
     })
 }
 
 // texture_operation_enqueue_retire queues release after successful submission.
 texture_operation_enqueue_retire :: proc(
     queue: ^Texture_Operation_Queue, texture: Sampled_Texture,
-    identity, generation: u64, completion: Texture_Operation_Completion = nil,
-    user_data: rawptr = nil) -> bool {
+    identity, generation: u64, callback: Texture_Operation_Callback = {}) -> bool {
     if !sampled_texture_is_valid(texture) {
         if queue != nil {queue^.overflow_count += 1}
         return false
@@ -195,7 +204,7 @@ texture_operation_enqueue_retire :: proc(
         texture = texture.handle,
         identity = identity,
         generation = generation,
-        completion = completion,
-        user_data = user_data,
+        completion = callback.handler,
+        user_data = callback.user_data,
     })
 }

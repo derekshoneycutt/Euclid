@@ -114,6 +114,14 @@ Pie_Section_Style :: struct {
     color : dynviewmodel.Color,
 }
 
+// Pie_Section_Geometry locates one radial sweep in panel coordinates.
+Pie_Section_Geometry :: struct {
+    center: geometry.Vector2,
+    radius: f32,
+    start_degrees: f32,
+    end_degrees: f32,
+}
+
 //   Vertical span scales for one inline-shape frame within its row.
 Flow_Shape_Span :: struct {
     y_start_scale : f32,
@@ -271,13 +279,10 @@ pie_section_bounds :: #force_inline proc(
 
 //   Draw a filled pie section using a deterministic triangle fan.
 draw_filled_pie_section :: proc(
-    encoder: ^native.Draw_Encoder,
-    center: geometry.Vector2,
-    radius: f32,
-    start_degrees, end_degrees: f32,
+    encoder: ^native.Draw_Encoder, shape: Pie_Section_Geometry,
     color: dynviewmodel.Color) {
 
-    sweep := positive_sweep_degrees(start_degrees, end_degrees)
+    sweep := positive_sweep_degrees(shape.start_degrees, shape.end_degrees)
     if sweep <= 0 {
         return
     }
@@ -286,43 +291,40 @@ draw_filled_pie_section :: proc(
     for i in 0..<segments {
         t0 := f32(i) / f32(segments)
         t1 := f32(i + 1) / f32(segments)
-        a0 := normalize_angle_degrees(start_degrees + sweep * t0)
-        a1 := normalize_angle_degrees(start_degrees + sweep * t1)
-        p0 := pie_point(center, radius, a0)
-        p1 := pie_point(center, radius, a1)
-        _ = native.draw_encoder_triangle(encoder, center, p0, p1, color)
+        a0 := normalize_angle_degrees(shape.start_degrees + sweep * t0)
+        a1 := normalize_angle_degrees(shape.start_degrees + sweep * t1)
+        p0 := pie_point(shape.center, shape.radius, a0)
+        p1 := pie_point(shape.center, shape.radius, a1)
+        _ = native.draw_encoder_triangle(encoder, shape.center, p0, p1, color)
     }
 }
 
 //   Draw one pie-section outline with arc and radial edges.
 draw_pie_section_outline :: proc(
-    encoder: ^native.Draw_Encoder,
-    center: geometry.Vector2,
-    radius: f32,
-    start_degrees, end_degrees: f32,
+    encoder: ^native.Draw_Encoder, shape: Pie_Section_Geometry,
     style: Pie_Section_Style) {
 
     stroke := style.stroke
     color := style.color
-    sweep := positive_sweep_degrees(start_degrees, end_degrees)
+    sweep := positive_sweep_degrees(shape.start_degrees, shape.end_degrees)
     if sweep <= 0 {
         return
     }
 
     segments := max(1, int(math.ceil(f64(sweep / 8.0))))
-    prev := pie_point(center, radius, start_degrees)
+    prev := pie_point(shape.center, shape.radius, shape.start_degrees)
     for i in 0..<segments {
         t := f32(i + 1) / f32(segments)
-        angle := normalize_angle_degrees(start_degrees + sweep * t)
-        next_point := pie_point(center, radius, angle)
+        angle := normalize_angle_degrees(shape.start_degrees + sweep * t)
+        next_point := pie_point(shape.center, shape.radius, angle)
         _ = native.draw_encoder_line(encoder, prev, next_point, stroke, color)
         prev = next_point
     }
 
-    start_point := pie_point(center, radius, start_degrees)
-    end_point := pie_point(center, radius, end_degrees)
-    _ = native.draw_encoder_line(encoder, center, start_point, stroke, color)
-    _ = native.draw_encoder_line(encoder, center, end_point, stroke, color)
+    start_point := pie_point(shape.center, shape.radius, shape.start_degrees)
+    end_point := pie_point(shape.center, shape.radius, shape.end_degrees)
+    _ = native.draw_encoder_line(encoder, shape.center, start_point, stroke, color)
+    _ = native.draw_encoder_line(encoder, shape.center, end_point, stroke, color)
 }
 
 //   Draw one perpendicular shape with the primary line on the bottom edge.
@@ -630,31 +632,21 @@ flow_consume_inline_line :: proc(
     wrap_if_full(flow, max_cols)
 }
 
-//   Consume one inline-box atom in flow layout, optionally drawing it.
-flow_consume_inline_box :: proc(
-    flow: ^Dynview_Flow_State,
+// flow_draw_inline_box draws one visible inline box frame.
+flow_draw_inline_box :: proc(
     cmd: dynviewmodel.Dynview_Command,
     style: dyncore.Dynview_Text_Style,
-    draw_ctx: ^Dynview_Draw_Context) {
-
-    max_cols := flow_max_cols(style, draw_ctx)
-    cols := dynlayout.inline_box_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
-    flow_wrap_for_cols(flow, cols, max_cols)
-
-    row_y, visible := flow_row_position(flow, draw_ctx)
-    if visible {
-        effective_advance := dyncore.effective_advance(style, draw_ctx^.wrap_advance)
-        box_x := draw_ctx^.panel.x + draw_ctx^.text_padding +
-            f32(flow^.col) * effective_advance
-        box_w := f32(cols) * effective_advance
-        raw_h := cmd.inline_box_height * effective_advance
+    draw_ctx: ^Dynview_Draw_Context, frame: Flow_Atom_Frame) {
+    if frame.visible {
+        raw_h := cmd.inline_box_height * frame.advance
         box_h := max(4.0, min(draw_ctx^.text_row_height - 3, raw_h))
-        box_y := row_y + (draw_ctx^.text_row_height - box_h) * 0.5
+        box_y := frame.row_y + (draw_ctx^.text_row_height - box_h) * 0.5
         stroke := max(1.0, cmd.inline_atom_stroke)
-        top_left := geometry.Vector2{box_x, box_y}
-        top_right := geometry.Vector2{box_x + box_w, box_y}
-        bottom_left := geometry.Vector2{box_x, box_y + box_h}
-        bottom_right := geometry.Vector2{box_x + box_w, box_y + box_h}
+        top_left := geometry.Vector2{frame.atom_x, box_y}
+        top_right := geometry.Vector2{frame.atom_x + frame.atom_w, box_y}
+        bottom_left := geometry.Vector2{frame.atom_x, box_y + box_h}
+        bottom_right := geometry.Vector2{
+            frame.atom_x + frame.atom_w, box_y + box_h}
         base_color := command_draw_color(cmd, style)
         edge1 := shape_edge_color_or(cmd.shape_edge_color_1, base_color)
         edge2 := shape_edge_color_or(cmd.shape_edge_color_2, base_color)
@@ -669,6 +661,19 @@ flow_consume_inline_box :: proc(
         _ = native.draw_encoder_line(
             draw_ctx^.encoder, bottom_left, top_left, stroke, edge4)
     }
+}
+
+//   Consume one inline-box atom in flow layout, optionally drawing it.
+flow_consume_inline_box :: proc(
+    flow: ^Dynview_Flow_State,
+    cmd: dynviewmodel.Dynview_Command,
+    style: dyncore.Dynview_Text_Style,
+    draw_ctx: ^Dynview_Draw_Context) {
+    max_cols := flow_max_cols(style, draw_ctx)
+    cols := dynlayout.inline_box_cols(cmd, style, draw_ctx^.wrap_advance, max_cols)
+    flow_wrap_for_cols(flow, cols, max_cols)
+    flow_draw_inline_box(
+        cmd, style, draw_ctx, flow_inline_atom_frame(flow, style, draw_ctx, cols))
 
     flow^.had_visible = true
     flow^.col += cols
@@ -839,22 +844,13 @@ draw_flow_inline_pie_section :: #force_inline proc(
     fill_color := command_draw_color(cmd, style)
     outline_color := cmd.has_outline_color ? cmd.outline_color : style.color
     stroke := max(1.0, cmd.inline_outline_stroke)
+    shape := Pie_Section_Geometry{center, radius,
+        cmd.pie_start_angle_degrees, cmd.pie_end_angle_degrees}
     if cmd.pie_is_filled {
-        draw_filled_pie_section(
-            draw_ctx^.encoder,
-            center,
-            radius,
-            cmd.pie_start_angle_degrees,
-            cmd.pie_end_angle_degrees,
-            fill_color)
+        draw_filled_pie_section(draw_ctx^.encoder, shape, fill_color)
     }
     if !cmd.pie_is_filled || cmd.inline_outline_stroke > 0 {
-        draw_pie_section_outline(
-            draw_ctx^.encoder,
-            center,
-            radius,
-            cmd.pie_start_angle_degrees,
-            cmd.pie_end_angle_degrees,
+        draw_pie_section_outline(draw_ctx^.encoder, shape,
             Pie_Section_Style{stroke, outline_color})
     }
 }

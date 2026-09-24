@@ -58,15 +58,15 @@ encoded_strip_color :: #force_inline proc(
 // encoded_ring_fallback draws one projected ring with ordinary native lines.
 encoded_ring_fallback :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
-    center: Vector3, radius, thickness: f32, draw_color: color.Color_RGBA8) {
-    previous := trochoid_tool_ring_point(center, radius, 0)
+    draw: Tool_Ring_Draw) {
+    previous := trochoid_tool_ring_point(draw.center, draw.radius, 0)
     for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
         angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
-        current := trochoid_tool_ring_point(center, radius, angle)
+        current := trochoid_tool_ring_point(draw.center, draw.radius, angle)
         first := view_core.iso_to_cartesian(previous, state^.iso_scale^)
         second := view_core.iso_to_cartesian(current, state^.iso_scale^)
         _ = native.draw_encoder_line(encoder, geometry.Vector2(first),
-            geometry.Vector2(second), thickness, draw_color)
+            geometry.Vector2(second), draw.thickness, draw.color)
         previous = current
     }
 }
@@ -93,28 +93,27 @@ encoded_ring_vertices :: proc(
 // draw_encoded_tool_ring emits one shader-lit closed strip or line fallback.
 draw_encoded_tool_ring :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
-    center: Vector3, radius, thickness: f32, draw_color: color.Color_RGBA8) {
+    draw: Tool_Ring_Draw) {
     scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
     scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
-    coverage_radius := thickness * 0.5 + 1 / min(scale_x, scale_y)
+    coverage_radius := draw.thickness * 0.5 + 1 / min(scale_x, scale_y)
     samples: Trochoid_Tool_Ring_Samples
     if !encoder^.strokes_enabled || !build_trochoid_tool_ring_samples(
-        state, center, radius, coverage_radius, &samples) {
-        encoded_ring_fallback(
-            state, encoder, center, radius, thickness, draw_color)
+        state, draw.center, draw.radius, coverage_radius, &samples) {
+        encoded_ring_fallback(state, encoder, draw)
         return
     }
     vertices: [TROCHOID_TOOL_RING_SEGMENTS * 6]native.Stroke_Vertex
     encoded_ring_vertices(&samples, vertices[:])
     uniforms := encoded_stroke_fragment_uniforms(
-        state, encoder, {}, {}, thickness)
+        state, encoder, {}, {}, draw.thickness)
     uniforms.stroke_mode = 1
-    uniforms.strip_side_extent = coverage_radius / max(thickness * 0.5, 0.0001)
-    encoded_strip_color(&uniforms, draw_color)
+    uniforms.strip_side_extent = coverage_radius /
+        max(draw.thickness * 0.5, 0.0001)
+    encoded_strip_color(&uniforms, draw.color)
     if !native.draw_encoder_append_stroke(encoder, vertices[:],
         encoded_stroke_vertex_uniforms(encoder), uniforms) {
-        encoded_ring_fallback(
-            state, encoder, center, radius, thickness, draw_color)
+        encoded_ring_fallback(state, encoder, draw)
     }
 }
 
@@ -122,14 +121,14 @@ draw_encoded_tool_ring :: proc(
 draw_encoded_trochoid_tool :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
-    draw_encoded_tool_ring(state, encoder, tool^.fixed_center,
-        tool^.fixed_radius, tool^.brush_size, tool^.color)
-    draw_encoded_tool_ring(state, encoder, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, tool^.color)
+    draw_encoded_tool_ring(state, encoder, {tool^.fixed_center,
+        tool^.fixed_radius, tool^.brush_size, tool^.color})
+    draw_encoded_tool_ring(state, encoder, {tool^.rolling_center,
+        tool^.rolling_radius, tool^.brush_size, tool^.color})
     first := view_core.iso_to_cartesian(tool^.handle_start, state^.iso_scale^)
     second := view_core.iso_to_cartesian(tool^.handle_finish, state^.iso_scale^)
-    draw_encoded_tool_segment(
-        state, encoder, first, second, tool^.brush_size, tool^.color)
+    draw_encoded_tool_segment(state, encoder, {first, second,
+        tool^.brush_size, tool^.color, nil})
 }
 
 // draw_encoded_cycloid_tool emits its rail, rolling ring, and orientation handle.
@@ -140,16 +139,16 @@ draw_encoded_cycloid_tool :: proc(
         tool^.baseline_start, state^.iso_scale^)
     baseline_finish := view_core.iso_to_cartesian(
         tool^.baseline_finish, state^.iso_scale^)
-    draw_encoded_tool_segment(state, encoder, baseline_start,
-        baseline_finish, tool^.brush_size, tool^.color)
-    draw_encoded_tool_ring(state, encoder, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, tool^.color)
+    draw_encoded_tool_segment(state, encoder, {baseline_start,
+        baseline_finish, tool^.brush_size, tool^.color, nil})
+    draw_encoded_tool_ring(state, encoder, {tool^.rolling_center,
+        tool^.rolling_radius, tool^.brush_size, tool^.color})
     handle_start := view_core.iso_to_cartesian(
         tool^.handle_start, state^.iso_scale^)
     handle_finish := view_core.iso_to_cartesian(
         tool^.handle_finish, state^.iso_scale^)
-    draw_encoded_tool_segment(state, encoder, handle_start,
-        handle_finish, tool^.brush_size, tool^.color)
+    draw_encoded_tool_segment(state, encoder, {handle_start,
+        handle_finish, tool^.brush_size, tool^.color, nil})
 }
 
 // encoded_compass_arc_fallback draws one sampled outside arc as native lines.
@@ -209,36 +208,38 @@ draw_encoded_compass_arc :: proc(
             encoder, compass^.pivot, basis, draw, compass^.color)
         return
     }
-    encoded_compass_arc_submit(
-        state, encoder, compass, basis, &samples, coverage_radius, occluders)
+    encoded_compass_arc_submit(state, encoder, {
+        compass = compass, basis = basis, samples = &samples,
+        coverage_radius = coverage_radius, occluders = occluders})
 }
 
 // encoded_compass_arc_submit records one complete arc or its atomic fallback.
 encoded_compass_arc_submit :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
-    compass: ^shapemodel.Shapes_Compass_Draw, basis: Compass_Top_Circle_Basis,
-    samples: ^Compass_Arc_Samples, coverage_radius: f32,
-    occluders: ^Tool_Brush_Occluder_Context) {
+    submission: Compass_Arc_Submission) {
+    compass := submission.compass
     vertices: [COMPASS_TOPCIRCLE_SEGMENTS * 6]native.Stroke_Vertex
-    encoded_compass_arc_vertices(samples, vertices[:])
+    encoded_compass_arc_vertices(submission.samples, vertices[:])
     uniforms := encoded_stroke_fragment_uniforms(
         state, encoder, {}, {}, compass^.brush_size)
     uniforms.stroke_mode = 1
-    uniforms.strip_side_extent = coverage_radius /
+    uniforms.strip_side_extent = submission.coverage_radius /
         max(compass^.brush_size * 0.5, 0.0001)
     uniforms.arc_intersections_enabled = 1
     uniforms.intersection_depth_width = compass^.brush_size /
         max(state^.iso_scale^.half_scale, 0.0001)
     uniforms.attachment_extent = compass_arc_attachment_extent(
-        compass^.brush_size, basis.radius, basis.theta_out,
+        compass^.brush_size, submission.basis.radius,
+        submission.basis.theta_out,
         state^.iso_scale^.half_scale)
     encoded_strip_color(&uniforms, compass^.color)
-    encoded_stroke_pack_occluders(&uniforms, encoder, occluders)
+    encoded_stroke_pack_occluders(
+        &uniforms, encoder, submission.occluders)
     if !native.draw_encoder_append_stroke(encoder, vertices[:],
         encoded_stroke_vertex_uniforms(encoder), uniforms) {
         draw := Compass_Arc_Draw{state, compass^.brush_size}
         encoded_compass_arc_fallback(
-            encoder, compass^.pivot, basis, draw, compass^.color)
+            encoder, compass^.pivot, submission.basis, draw, compass^.color)
     }
 }
 
@@ -274,8 +275,8 @@ encoded_compass_leg :: proc(
         append_tool_brush_occluder(
             &occluders, receiver, ctx^.pen_occluder)
     }
-    draw_encoded_tool_segment(ctx^.state, encoder, start, finish,
-        ctx^.comp^.brush_size, ctx^.comp^.color, &occluders)
+    draw_encoded_tool_segment(ctx^.state, encoder, {start, finish,
+        ctx^.comp^.brush_size, ctx^.comp^.color, &occluders})
 }
 
 // encoded_compass_context builds projected legs and the optional pen caster.
@@ -327,69 +328,46 @@ draw_encoded_pen_crossing :: proc(
     if crossing^.has_back {
         first := view_core.iso_to_cartesian(crossing^.back0, state^.iso_scale^)
         second := view_core.iso_to_cartesian(crossing^.back1, state^.iso_scale^)
-        draw_encoded_pen_fragment(
-            state, encoder, pen, first, second, compass_caster)
+        draw_encoded_pen_fragment(state, encoder, {
+            pen = pen, first = first, second = second,
+            compass = compass_caster})
     }
     draw_encoded_cached_polygon(state, encoder, &crossing^.polygon)
     if crossing^.has_front {
         first := view_core.iso_to_cartesian(crossing^.front0, state^.iso_scale^)
         second := view_core.iso_to_cartesian(crossing^.front1, state^.iso_scale^)
-        draw_encoded_pen_fragment(
-            state, encoder, pen, first, second, compass_caster)
+        draw_encoded_pen_fragment(state, encoder, {
+            pen = pen, first = first, second = second,
+            compass = compass_caster})
     }
 }
 
 // draw_encoded_pen_fragment emits one crossing fragment with compass casters.
 draw_encoded_pen_fragment :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
-    pen: ^shapemodel.Shapes_Pen_Draw, first, second: Vector2,
-    compass: ^shapemodel.Shapes_Compass_Draw) {
+    draw: Pen_Fragment_Draw) {
     occluders: Tool_Brush_Occluder_Context
-    if compass != nil {
+    if draw.compass != nil {
         receiver := make_tool_brush_occluder(
-            state, pen^.joint1, pen^.joint2, pen^.brush_size)
+            state, draw.pen^.joint1, draw.pen^.joint2, draw.pen^.brush_size)
         leg1 := make_tool_brush_occluder(
-            state, compass^.joint1, compass^.pivot, compass^.brush_size)
+            state, draw.compass^.joint1, draw.compass^.pivot,
+            draw.compass^.brush_size)
         leg2 := make_tool_brush_occluder(
-            state, compass^.pivot, compass^.joint2, compass^.brush_size)
+            state, draw.compass^.pivot, draw.compass^.joint2,
+            draw.compass^.brush_size)
         append_tool_brush_occluder(&occluders, receiver, leg1)
         append_tool_brush_occluder(&occluders, receiver, leg2)
     }
-    draw_encoded_tool_segment(state, encoder, first, second,
-        pen^.brush_size, pen^.color, &occluders)
+    draw_encoded_tool_segment(state, encoder, {draw.first, draw.second,
+        draw.pen^.brush_size, draw.pen^.color, &occluders})
 }
 
 // draw_encoded_high_regular emits one non-tool item in the elevated layer.
 draw_encoded_high_regular :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     item: ^shapemodel.Shapes_Draw_Cache_Item) {
-    switch &typed in item {
-    case shapemodel.Shapes_Point_Draw:
-        if draw_cached_point_is_elevated(&typed) {
-            draw_encoded_cached_point(state, encoder, &typed)
-        }
-    case shapemodel.Shapes_Line_Draw:
-        draw_encoded_cached_line(state, encoder, &typed, true)
-    case shapemodel.Shapes_Circle_Draw:
-        if draw_cached_circle_is_elevated(&typed) {
-            draw_encoded_cached_circle(state, encoder, &typed)
-        }
-    case shapemodel.Shapes_Filled_Circle_Draw:
-        if draw_cached_filledcircle_is_elevated(&typed) {
-            draw_encoded_cached_filled_circle(state, encoder, &typed)
-        }
-    case shapemodel.Shapes_Curve_Draw:
-        if draw_cached_curve_is_elevated(state, &typed) {
-            draw_encoded_cached_curve(state, encoder, &typed, true)
-        }
-    case shapemodel.Shapes_Polygon_Draw:
-        if draw_cached_polygon_is_elevated(state, &typed) {
-            draw_encoded_cached_polygon(state, encoder, &typed)
-        }
-    case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Trochoid_Tool_Draw,
-        shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
-        shapemodel.Shapes_Compass_Draw:
-    }
+    draw_encoded_cached_basic_item(state, encoder, item, true)
 }
 
 // draw_encoded_high_instrument emits one tool with resolved interaction casters.
@@ -476,12 +454,12 @@ encoded_shadow_color :: #force_inline proc(avg_height: f32) -> color.Color_RGBA8
 // draw_encoded_tool_shadow_line emits one projected floor-shadow segment.
 draw_encoded_tool_shadow_line :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
-    first, second: Vector3, thickness: f32, avg_height: f32) {
-    screen_first := shadow_to_screen(first, state)
-    screen_second := shadow_to_screen(second, state)
+    draw: Tool_Shadow_Line_Draw) {
+    screen_first := shadow_to_screen(draw.first, state)
+    screen_second := shadow_to_screen(draw.second, state)
     _ = native.draw_encoder_line(encoder, geometry.Vector2(screen_first),
-        geometry.Vector2(screen_second), thickness,
-        encoded_shadow_color(avg_height))
+        geometry.Vector2(screen_second), draw.thickness,
+        encoded_shadow_color(draw.average_height))
 }
 
 // draw_encoded_ring_shadow emits one segmented projected guide shadow.
@@ -492,8 +470,8 @@ draw_encoded_ring_shadow :: proc(
     for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
         angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
         current := trochoid_tool_ring_point(center, radius, angle)
-        draw_encoded_tool_shadow_line(
-            state, encoder, previous, current, thickness, center.z)
+        draw_encoded_tool_shadow_line(state, encoder,
+            {previous, current, thickness, center.z})
         previous = current
     }
 }
@@ -504,8 +482,8 @@ draw_encoded_pen_shadow :: proc(
     pen: ^shapemodel.Shapes_Pen_Draw) {
     height := (pen^.joint1.z + pen^.joint2.z) * 0.5
     thickness := max(pen^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
-    draw_encoded_tool_shadow_line(
-        state, encoder, pen^.joint1, pen^.joint2, thickness, height)
+    draw_encoded_tool_shadow_line(state, encoder,
+        {pen^.joint1, pen^.joint2, thickness, height})
 }
 
 // draw_encoded_compass_shadow_arc emits the sampled outside-arc shadow.
@@ -521,8 +499,8 @@ draw_encoded_compass_shadow_arc :: proc(
         angle := step * f32(index)
         direction := basis.u * math.cos(angle) + basis.v * math.sin(angle)
         current := compass^.pivot + direction * basis.radius
-        draw_encoded_tool_shadow_line(
-            state, encoder, previous, current, thickness, height)
+        draw_encoded_tool_shadow_line(state, encoder,
+            {previous, current, thickness, height})
         previous = current
     }
 }
@@ -538,14 +516,14 @@ draw_encoded_compass_shadow :: proc(
     thickness := max(compass^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
     if compass_draw_joint1_leg_last(compass, first, pivot, second) {
         draw_encoded_tool_shadow_line(state, encoder,
-            compass^.pivot, compass^.joint2, thickness, height)
+            {compass^.pivot, compass^.joint2, thickness, height})
         draw_encoded_tool_shadow_line(state, encoder,
-            compass^.joint1, compass^.pivot, thickness, height)
+            {compass^.joint1, compass^.pivot, thickness, height})
     } else {
         draw_encoded_tool_shadow_line(state, encoder,
-            compass^.joint1, compass^.pivot, thickness, height)
+            {compass^.joint1, compass^.pivot, thickness, height})
         draw_encoded_tool_shadow_line(state, encoder,
-            compass^.pivot, compass^.joint2, thickness, height)
+            {compass^.pivot, compass^.joint2, thickness, height})
     }
     draw_encoded_compass_shadow_arc(
         state, encoder, compass, thickness, height)
@@ -562,7 +540,7 @@ draw_encoded_trochoid_shadow :: proc(
         state, encoder, tool^.rolling_center, tool^.rolling_radius, thickness)
     height := (tool^.handle_start.z + tool^.handle_finish.z) * 0.5
     draw_encoded_tool_shadow_line(state, encoder,
-        tool^.handle_start, tool^.handle_finish, thickness, height)
+        {tool^.handle_start, tool^.handle_finish, thickness, height})
 }
 
 // draw_encoded_cycloid_shadow emits rail, ring, and handle shadows.
@@ -571,13 +549,13 @@ draw_encoded_cycloid_shadow :: proc(
     tool: ^shapemodel.Shapes_Cycloid_Tool_Draw) {
     thickness := max(tool^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
     rail_height := (tool^.baseline_start.z + tool^.baseline_finish.z) * 0.5
-    draw_encoded_tool_shadow_line(state, encoder, tool^.baseline_start,
-        tool^.baseline_finish, thickness, rail_height)
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.baseline_start,
+        tool^.baseline_finish, thickness, rail_height})
     draw_encoded_ring_shadow(
         state, encoder, tool^.rolling_center, tool^.rolling_radius, thickness)
     handle_height := (tool^.handle_start.z + tool^.handle_finish.z) * 0.5
-    draw_encoded_tool_shadow_line(state, encoder, tool^.handle_start,
-        tool^.handle_finish, thickness, handle_height)
+    draw_encoded_tool_shadow_line(state, encoder, {tool^.handle_start,
+        tool^.handle_finish, thickness, handle_height})
 }
 
 // draw_encoded_cached_tool_shadow_pass restores tool shadows in cache order.

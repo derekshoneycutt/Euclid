@@ -231,10 +231,10 @@ Font_Texture :: struct {
 
 // Font_Face retains generation metrics independently of any native font facade.
 Font_Face :: struct {
-    baseSize:     i32,
-    glyphCount:   i32,
-    glyphPadding: i32,
-    spaceAdvance: i32,
+    base_size:     i32,
+    glyph_count:   i32,
+    glyph_padding: i32,
+    space_advance: i32,
     texture:      Font_Texture,
 }
 
@@ -243,10 +243,19 @@ Font_Texture_Create_Handler :: #type proc(
     user_data: rawptr, width, height: u32) -> Font_Texture
 Font_Texture_Completion_Handler :: #type proc(
     user_data: rawptr, identity, generation: u64, succeeded: bool)
+
+// Font_Texture_Upload_Request describes one immutable atlas publication.
+Font_Texture_Upload_Request :: struct {
+    texture: Font_Texture,
+    pixels: []u8,
+    identity: u64,
+    generation: u64,
+    completion: Font_Texture_Completion_Handler,
+    completion_data: rawptr,
+}
+
 Font_Texture_Upload_Handler :: #type proc(
-    user_data: rawptr, texture: Font_Texture, pixels: []u8,
-    identity, generation: u64, completion: Font_Texture_Completion_Handler,
-    completion_data: rawptr) -> bool
+    user_data: rawptr, request: Font_Texture_Upload_Request) -> bool
 Font_Texture_Release_Handler :: #type proc(
     user_data: rawptr, texture: Font_Texture)
 

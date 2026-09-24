@@ -6,8 +6,8 @@ import "core:strings"
 import sdl "vendor:sdl3"
 import image "vendor:sdl3/image"
 
-Probe_Frame_Duration_First :: u64(40)
-Probe_Frame_Duration_Second :: u64(80)
+PROBE_FRAME_DURATION_FIRST :: u64(40)
+PROBE_FRAME_DURATION_SECOND :: u64(80)
 
 // probe_failure reports one bounded native failure and returns a process failure code.
 probe_failure :: proc(stage: string) -> int {
@@ -39,13 +39,13 @@ probe_encode_animation :: proc(path: cstring) -> bool {
     }
     defer sdl.DestroySurface(surface)
     if !image.AddAnimationEncoderFrame(
-        encoder, surface, Probe_Frame_Duration_First) {
+        encoder, surface, PROBE_FRAME_DURATION_FIRST) {
         image.CloseAnimationEncoder(encoder)
         return false
     }
     pixels = {0, 0, 255, 64, 255, 255, 255, 0}
     if !image.AddAnimationEncoderFrame(
-        encoder, surface, Probe_Frame_Duration_Second) {
+        encoder, surface, PROBE_FRAME_DURATION_SECOND) {
         image.CloseAnimationEncoder(encoder)
         return false
     }
@@ -60,7 +60,7 @@ probe_decode_animation :: proc(path: cstring) -> (frame_count: int, valid: bool)
     if decoder == nil { return 0, false }
     defer image.CloseAnimationDecoder(decoder)
     expected_durations := [2]u64{
-        Probe_Frame_Duration_First, Probe_Frame_Duration_Second}
+        PROBE_FRAME_DURATION_FIRST, PROBE_FRAME_DURATION_SECOND}
     for frame_count < len(expected_durations) {
         frame: ^sdl.Surface
         duration: u64
@@ -83,23 +83,9 @@ probe_decode_animation :: proc(path: cstring) -> (frame_count: int, valid: bool)
     return frame_count, image.GetAnimationDecoderStatus(decoder) == .COMPLETE
 }
 
-// main exercises required SDL_image static and streaming GIF capabilities headlessly.
-main :: proc() {
-    if len(os.args) != 5 {
-        fmt.eprintln("usage: probe JPEG PNG GIF OUTPUT")
-        os.exit(2)
-    }
-    fmt.printf("probe.binding_version=%d.%d.%d\n",
-        image.MAJOR_VERSION, image.MINOR_VERSION, image.PATCHLEVEL)
-    fmt.printf("probe.runtime_version=%d\n", image.Version())
-    jpeg_path := strings.clone_to_cstring(os.args[1], context.allocator)
-    png_path := strings.clone_to_cstring(os.args[2], context.allocator)
-    gif_path := strings.clone_to_cstring(os.args[3], context.allocator)
-    output_path := strings.clone_to_cstring(os.args[4], context.allocator)
-    defer delete(jpeg_path)
-    defer delete(png_path)
-    defer delete(gif_path)
-    defer delete(output_path)
+// probe_run exercises required SDL_image static and streaming GIF capabilities.
+probe_run :: proc(
+    jpeg_path, png_path, gif_path, output_path: cstring) {
     if !probe_static_load(jpeg_path, "JPG") {
         os.exit(probe_failure("jpeg_decode"))
     }
@@ -119,11 +105,31 @@ main :: proc() {
     frame_count, animation_valid := probe_decode_animation(output_path)
     fmt.printf("probe.animation_frames=%d\n", frame_count)
     fmt.printf("probe.animation_delays=%d,%d\n",
-        Probe_Frame_Duration_First, Probe_Frame_Duration_Second)
+        PROBE_FRAME_DURATION_FIRST, PROBE_FRAME_DURATION_SECOND)
     if !animation_valid {
         os.exit(probe_failure("gif_stream_decode"))
     }
     fmt.println("probe.gif_stream_decode=true")
     fmt.println("probe.cleanup_complete=true")
     fmt.println("probe.result=passed")
+}
+
+// main validates arguments and owns native path copies for the probe run.
+main :: proc() {
+    if len(os.args) != 5 {
+        fmt.eprintln("usage: probe JPEG PNG GIF OUTPUT")
+        os.exit(2)
+    }
+    fmt.printf("probe.binding_version=%d.%d.%d\n",
+        image.MAJOR_VERSION, image.MINOR_VERSION, image.PATCHLEVEL)
+    fmt.printf("probe.runtime_version=%d\n", image.Version())
+    jpeg_path := strings.clone_to_cstring(os.args[1], context.allocator)
+    png_path := strings.clone_to_cstring(os.args[2], context.allocator)
+    gif_path := strings.clone_to_cstring(os.args[3], context.allocator)
+    output_path := strings.clone_to_cstring(os.args[4], context.allocator)
+    defer delete(jpeg_path)
+    defer delete(png_path)
+    defer delete(gif_path)
+    defer delete(output_path)
+    probe_run(jpeg_path, png_path, gif_path, output_path)
 }

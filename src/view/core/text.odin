@@ -141,11 +141,11 @@ ui_text_cluster_column :: proc(text: string, cluster: u32) -> (int, bool) {
 //   Resolve Euclid's stb-scaled monospace column width from the finalized atlas.
 ui_text_column_advance :: proc(
     atlas: view_font.Font_Face, font_size: f32) -> (f32, bool) {
-    if atlas.spaceAdvance <= 0 || atlas.baseSize <= 0 {
+    if atlas.space_advance <= 0 || atlas.base_size <= 0 {
         return 0, false
     }
-    return f32(atlas.spaceAdvance)*
-        font_size/f32(atlas.baseSize), true
+    return f32(atlas.space_advance)*
+        font_size/f32(atlas.base_size), true
 }
 
 // ui_text_measure_monospace returns one UTF-8 run width under fixed spacing.
@@ -208,7 +208,7 @@ ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
         resolved.source.height/texture_height,
     }
     _ = native.draw_encoder_texture_quad(draw.encoder, destination, uv,
-        draw.color, resolved.texture.handle)
+        draw.color, {texture = resolved.texture.handle})
 }
 
 //   Convert one cached 26.6 glyph position and advance to pixel coordinates.

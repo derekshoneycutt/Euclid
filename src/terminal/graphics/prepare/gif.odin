@@ -428,7 +428,7 @@ decode_preflighted_gif_animation :: proc(
     expected := gif_walk_frame_table(bytes, request, token)
     if !gif_stream_metadata_matches(expected, inspection) { return {}, false }
     token_copy := token
-    decoded := termgraphicsnative.Decode_Animated_Gif(&{
+    decoded := termgraphicsnative.decode_animated_gif(&{
         bytes = bytes,
         frame_bytes = destination.frame_bytes,
         width = inspection.width,

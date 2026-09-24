@@ -20,6 +20,15 @@ Presentation_Preparation :: struct {
     selection_view: ui_dynview.Dynview_Selection_View,
 }
 
+// Presentation_Content_Interaction groups one prepared interaction request.
+Presentation_Content_Interaction :: struct {
+    scroll: Scroll_Container_Update_Result,
+    view_text: string,
+    mouse_input: Input_Frame,
+    keyboard_enabled: bool,
+    frame_dt: f32,
+}
+
 // draw_encoded_presentation_geometry encodes panel and cached non-glyph content.
 draw_encoded_presentation_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
@@ -137,33 +146,33 @@ prepare_presentation_scroll :: proc(
 //   Resolve copy and selection interaction against prepared presentation layout.
 prepare_presentation_content_interaction :: proc(
     state: ^core.Euclid_General_State,
-    scroll: Scroll_Container_Update_Result,
-    view_text: string,
-    mouse_input: Input_Frame,
-    keyboard_enabled: bool,
-    frame_dt: f32) -> ui_dynview.Dynview_Selection_View {
+    request: Presentation_Content_Interaction) -> ui_dynview.Dynview_Selection_View {
     ui_runtime := &state^.ui_runtime
     dyncompile.refresh_presentation_copy_targets(&state.dynview, {
-        panel = geometry.Rectangle(scroll.view_rect), scroll_y = scroll.scroll_y_out,
+        panel = geometry.Rectangle(request.scroll.view_rect),
+        scroll_y = request.scroll.scroll_y_out,
         text_padding = TEXT_PADDING, icon_size = DYNVIEW_COPY_ICON_SIZE,
         icon_x_pad = DYNVIEW_COPY_ICON_X_PAD})
-    copy_dt := min(f32(0.05), max(f32(0), frame_dt))
-    _ = view_core.prepare_copy_icons(&state^.dynview, mouse_input, copy_dt,
+    copy_dt := min(f32(0.05), max(f32(0), request.frame_dt))
+    _ = view_core.prepare_copy_icons(&state^.dynview,
+        request.mouse_input, copy_dt,
         &ui_runtime^.ui_press_owner)
     selection_view := ui_dynview.Dynview_Selection_View{
-        panel = geometry.Rectangle(scroll.view_rect),
-        scroll_y = scroll.scroll_y_out, text_padding = TEXT_PADDING,
+        panel = geometry.Rectangle(request.scroll.view_rect),
+        scroll_y = request.scroll.scroll_y_out, text_padding = TEXT_PADDING,
         row_height = TEXT_ROW_HEIGHT, wrap_advance = TEXT_WRAP_ADVANCE,
-        fallback_text = view_text}
-    content := ui_dynview.dynview_selection_content(&state^.dynview, view_text)
+        fallback_text = request.view_text}
+    content := ui_dynview.dynview_selection_content(
+        &state^.dynview, request.view_text)
     selection := &ui_runtime^.dynview_selection
     ui_dynview.dynview_selection_reconcile(selection, content)
     ui_dynview.dynview_selection_update_mouse({runtime = &state^.dynview,
         selection = selection, press_owner = &ui_runtime^.ui_press_owner,
-        content = content, view = selection_view, frame = mouse_input})
-    if keyboard_enabled {
+        content = content, view = selection_view, frame = request.mouse_input})
+    if request.keyboard_enabled {
         ui_dynview.dynview_selection_update_keyboard(
-            &state^.dynview, selection, content, view_text, mouse_input)
+            &state^.dynview, selection, content,
+            request.view_text, request.mouse_input)
     }
     return selection_view
 }
@@ -193,8 +202,8 @@ prepare_presentation_interaction :: proc(
         &state.dynview, TEXT_ROW_HEIGHT)
     scroll := prepare_presentation_scroll(
         state, text_panel, content_h, scroll_step, mouse_input)
-    selection_view := prepare_presentation_content_interaction(
-        state, scroll, view_text, mouse_input, keyboard_enabled, frame_dt)
+    selection_view := prepare_presentation_content_interaction(state,
+        {scroll, view_text, mouse_input, keyboard_enabled, frame_dt})
     return {true, scroll.view_rect, view_text, scroll, selection_view}
 }
 

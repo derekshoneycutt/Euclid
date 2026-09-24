@@ -31,8 +31,9 @@ encoded_tool_segment_emits_native_stroke :: proc(t: ^testing.T) {
     defer free(state, context.allocator)
     iso_scale := viewmodel.Iso_Scale{main_light_dir = {0, 0, -1}}
     state.iso_scale = &iso_scale
-    draw_encoded_tool_segment(state, &encoder, {10, 20}, {30, 20}, 4,
-        color.Color_RGBA8{255, 0, 0, 255})
+    draw_encoded_tool_segment(state, &encoder, {
+        first = {10, 20}, second = {30, 20}, thickness = 4,
+        color = color.Color_RGBA8{255, 0, 0, 255}})
     testing.expect_value(t, encoder.stroke_vertex_count, 6)
     testing.expect_value(t, encoder.stroke_draw_count, 1)
     testing.expect_value(t, commands[0], native.Draw_Command{.Tool, 0})

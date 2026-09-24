@@ -163,6 +163,24 @@ copy_icon_color :: #force_inline proc(press_t: f32) -> color.Color_RGBA8 {
         u8(f32(BACKGROUND_COLOR.b) * factor), BACKGROUND_COLOR.a}
 }
 
+// copy_icon_rectangles resolves the overlapping page outlines inside an icon slot.
+copy_icon_rectangles :: proc(
+    icon_rect: geometry.Rectangle) -> (geometry.Rectangle, geometry.Rectangle) {
+    back := geometry.Rectangle{
+        icon_rect.x + icon_rect.width * 0.32,
+        icon_rect.y + icon_rect.height * 0.18,
+        icon_rect.width * 0.5,
+        icon_rect.height * 0.62,
+    }
+    front := geometry.Rectangle{
+        icon_rect.x + icon_rect.width * 0.16,
+        icon_rect.y + icon_rect.height * 0.3,
+        icon_rect.width * 0.5,
+        icon_rect.height * 0.62,
+    }
+    return back, front
+}
+
 // Encode a copy icon button with hover and press feedback.
 encode_copy_icon_button :: proc(
     encoder: ^native.Draw_Encoder, rect: geometry.Rectangle,
@@ -195,18 +213,7 @@ encode_copy_icon_button :: proc(
     }
 
     icon_color := copy_icon_color(use_press_t)
-    back := geometry.Rectangle{
-        icon_rect.x + icon_rect.width * 0.32,
-        icon_rect.y + icon_rect.height * 0.18,
-        icon_rect.width * 0.5,
-        icon_rect.height * 0.62,
-    }
-    front := geometry.Rectangle{
-        icon_rect.x + icon_rect.width * 0.16,
-        icon_rect.y + icon_rect.height * 0.3,
-        icon_rect.width * 0.5,
-        icon_rect.height * 0.62,
-    }
+    back, front := copy_icon_rectangles(icon_rect)
     _ = native.draw_encoder_rectangle_outline(encoder, back, 1, icon_color)
     _ = native.draw_encoder_rectangle_outline(encoder, front, 1, icon_color)
 }

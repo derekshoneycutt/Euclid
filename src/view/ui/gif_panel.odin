@@ -50,10 +50,10 @@ draw_encoded_gif_geometry :: proc(
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
     rows := gif_view_layout_rows(stack_rect)
-    draw_encoded_slider_geometry(encoder, panel, rows.sliders.downsample_y,
-        state^.ui_runtime.gif_downsample_factor, 1, 4)
-    draw_encoded_slider_geometry(encoder, panel, rows.sliders.frame_step_y,
-        state^.ui_runtime.gif_frame_step, 1, 4)
+    draw_encoded_slider_geometry(encoder, {panel, rows.sliders.downsample_y,
+        state^.ui_runtime.gif_downsample_factor, 1, 4})
+    draw_encoded_slider_geometry(encoder, {panel, rows.sliders.frame_step_y,
+        state^.ui_runtime.gif_frame_step, 1, 4})
     button := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET, rows.save_button_y,
         panel.width - SETTINGS_PANEL_INSET * 2, SETTINGS_GIF_BUTTON_HEIGHT}
     _ = native.draw_encoder_rectangle(

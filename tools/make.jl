@@ -1574,6 +1574,28 @@ function require_no_arguments(invocation::DriverInvocation)
         "$(replace(string(invocation.action), '_' => '-')) does not accept arguments.")
 end
 
+"""Execute analyzer, documentation, cleanup, and build-plan actions."""
+function execute_project_action(invocation::DriverInvocation)
+    invocation.action == :analyzer_test &&
+        return run_analyzer_test_command(invocation.arguments)
+    if invocation.action in (:wiki, :check_wiki)
+        require_no_arguments(invocation)
+        ensure_required_commands(false, false, false, true)
+        run_wiki_action(invocation.action == :check_wiki)
+        return 0
+    end
+    if invocation.action == :clean
+        require_no_arguments(invocation)
+        clean_build_files()
+        return 0
+    end
+    command = parse_build_command(invocation)
+    plan = build_plan_for(command.action)
+    ensure_required_commands(
+        plan.do_build, plan.do_assets, command.action == :test, false)
+    return execute_build_plan(command, plan)
+end
+
 """Execute one parsed repository-driver command."""
 function execute_driver_action(invocation::DriverInvocation)
     if invocation.action == :help
@@ -1594,24 +1616,7 @@ function execute_driver_action(invocation::DriverInvocation)
         require_no_arguments(invocation)
         return run_image_probe(SCRIPT_DIR)
     end
-    invocation.action == :analyzer_test &&
-        return run_analyzer_test_command(invocation.arguments)
-    if invocation.action in (:wiki, :check_wiki)
-        require_no_arguments(invocation)
-        ensure_required_commands(false, false, false, true)
-        run_wiki_action(invocation.action == :check_wiki)
-        return 0
-    end
-    if invocation.action == :clean
-        require_no_arguments(invocation)
-        clean_build_files()
-        return 0
-    end
-    command = parse_build_command(invocation)
-    plan = build_plan_for(command.action)
-    ensure_required_commands(
-        plan.do_build, plan.do_assets, command.action == :test, false)
-    return execute_build_plan(command, plan)
+    return execute_project_action(invocation)
 end
 
 """Entrypoint for CLI execution. Returns process-style exit status."""

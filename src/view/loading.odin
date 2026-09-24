@@ -287,6 +287,16 @@ loading_runtime_session :: proc(
 // Notes:
 //   - Drives runtime startup through visible progress frames so window event processing never stalls.
 //   - Shares runtime-state ownership with the headless session path after startup completes.
+loading_set_window_icon :: proc(platform: ^native.Sdl_Platform) {
+    icon_path := strings.clone_to_cstring(
+        files.packaged_asset_path("compass_icon.png", context.temp_allocator),
+        context.temp_allocator)
+    if !native.sdl_platform_set_icon(platform, icon_path) {
+        log.warn("sdl_window_icon_failed")
+    }
+}
+
+// Initialize startup phases while the window stays responsive.
 initialize_window_runtime_with_loading :: proc(
     settings: ^Euclid_Run_Settings,
     timing_profile: ^evidence_profile.State,
@@ -298,12 +308,7 @@ initialize_window_runtime_with_loading :: proc(
     if !loading_prepare_assets_phase(timing_profile, &display) {
         return {}, false
     }
-    icon_path := strings.clone_to_cstring(
-        files.packaged_asset_path("compass_icon.png", context.temp_allocator),
-        context.temp_allocator)
-    if !native.sdl_platform_set_icon(platform, icon_path) {
-        log.warn("sdl_window_icon_failed")
-    }
+    loading_set_window_icon(platform)
 
     evidence_profile.zone_begin(timing_profile, "start Julia")
     started_at := begin_startup_phase(&display, "Starting Julia", 0.7)

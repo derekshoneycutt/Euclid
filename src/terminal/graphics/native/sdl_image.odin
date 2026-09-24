@@ -40,7 +40,7 @@ static_image_type :: proc(format: Static_Image_Format) -> cstring {
 }
 
 // Decode_Static_Image decodes one borrowed image into exact caller-owned RGBA8 storage.
-Decode_Static_Image :: proc(
+decode_static_image :: proc(
     bytes: []u8, output: []u8, width, height: int,
     format: Static_Image_Format) -> bool {
     if len(bytes) == 0 || width <= 0 || height <= 0 ||
@@ -101,7 +101,7 @@ animated_gif_decode_frame :: proc(
 }
 
 // Decode_Animated_Gif streams composited GIF frames into caller-owned RGBA32 storage.
-Decode_Animated_Gif :: proc(
+decode_animated_gif :: proc(
     request: ^Animated_Gif_Decode_Request) -> Animated_Gif_Decode_Result {
     if !animated_gif_decode_request_valid(request) ||
        animated_gif_decode_cancelled(request) {

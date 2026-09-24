@@ -10,6 +10,36 @@ Sdl_Dust_Shader_Paths :: struct {
     fragment: string,
 }
 
+// Sdl_Dust_Vertex_Input owns the fixed instanced dust stream description.
+Sdl_Dust_Vertex_Input :: struct {
+    descriptions: [2]sdl.GPUVertexBufferDescription,
+    attributes:   [5]sdl.GPUVertexAttribute,
+}
+
+// Sdl_Dust_Upload_Layout describes occupied bytes in the dust transfer buffer.
+Sdl_Dust_Upload_Layout :: struct {
+    quad_bytes: u32,
+    instance_bytes: u32,
+    expanded_bytes: u32,
+}
+
+// sdl_dust_vertex_input describes static-quad and per-instance streams.
+sdl_dust_vertex_input :: proc() -> Sdl_Dust_Vertex_Input {
+    return {
+        descriptions = {
+            {slot = 0, pitch = size_of(Dust_Quad_Vertex), input_rate = .VERTEX},
+            {slot = 1, pitch = size_of(Dust_Instance), input_rate = .INSTANCE},
+        },
+        attributes = {
+            {location = 0, buffer_slot = 0, format = .FLOAT2, offset = 0},
+            {location = 1, buffer_slot = 0, format = .FLOAT2, offset = 8},
+            {location = 2, buffer_slot = 1, format = .FLOAT3, offset = 0},
+            {location = 3, buffer_slot = 1, format = .FLOAT4, offset = 12},
+            {location = 4, buffer_slot = 1, format = .FLOAT, offset = 28},
+        },
+    }
+}
+
 // sdl_dust_pipeline_create binds static quad and per-instance vertex streams.
 sdl_dust_pipeline_create :: proc(
     device: ^sdl.GPUDevice,
@@ -21,26 +51,16 @@ sdl_dust_pipeline_create :: proc(
         device, paths.fragment, .FRAGMENT, 1, 0)
     if fragment_shader == nil {return nil}
     defer sdl.ReleaseGPUShader(device, fragment_shader)
-    descriptions := [2]sdl.GPUVertexBufferDescription{
-        {slot = 0, pitch = size_of(Dust_Quad_Vertex), input_rate = .VERTEX},
-        {slot = 1, pitch = size_of(Dust_Instance), input_rate = .INSTANCE},
-    }
-    attributes := [5]sdl.GPUVertexAttribute{
-        {location = 0, buffer_slot = 0, format = .FLOAT2, offset = 0},
-        {location = 1, buffer_slot = 0, format = .FLOAT2, offset = 8},
-        {location = 2, buffer_slot = 1, format = .FLOAT3, offset = 0},
-        {location = 3, buffer_slot = 1, format = .FLOAT4, offset = 12},
-        {location = 4, buffer_slot = 1, format = .FLOAT, offset = 28},
-    }
+    input := sdl_dust_vertex_input()
     targets := [1]sdl.GPUColorTargetDescription{sdl_stroke_target_description()}
     return sdl.CreateGPUGraphicsPipeline(device, {
         vertex_shader = vertex_shader,
         fragment_shader = fragment_shader,
         vertex_input_state = {
-            vertex_buffer_descriptions = raw_data(descriptions[:]),
-            num_vertex_buffers = len(descriptions),
-            vertex_attributes = raw_data(attributes[:]),
-            num_vertex_attributes = len(attributes),
+            vertex_buffer_descriptions = raw_data(input.descriptions[:]),
+            num_vertex_buffers = len(input.descriptions),
+            vertex_attributes = raw_data(input.attributes[:]),
+            num_vertex_attributes = len(input.attributes),
         },
         primitive_type = .TRIANGLELIST,
         rasterizer_state = {fill_mode = .FILL, cull_mode = .NONE,
@@ -112,15 +132,10 @@ sdl_dust_runtime_release :: proc(
     runtime^.dust_ready = false
 }
 
-// sdl_dust_upload records the occupied instanced or expanded stream upload.
-sdl_dust_upload :: proc(
+// sdl_dust_stage_upload writes one occupied dust stream into transfer storage.
+sdl_dust_stage_upload :: proc(
     runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
-    device: ^sdl.GPUDevice, command_buffer: ^sdl.GPUCommandBuffer) -> bool {
-    quad_bytes := u32(DUST_QUAD_VERTEX_COUNT * size_of(Dust_Quad_Vertex))
-    instance_bytes := u32(encoder^.dust_instance_count * size_of(Dust_Instance))
-    expanded_bytes := u32(encoder^.dust_expanded_vertex_count * size_of(Draw_Vertex))
-    if instance_bytes == 0 && expanded_bytes == 0 {return true}
-    if runtime^.dust_upload_buffer == nil {return false}
+    device: ^sdl.GPUDevice, layout: Sdl_Dust_Upload_Layout) -> bool {
     mapped := sdl.MapGPUTransferBuffer(device, runtime^.dust_upload_buffer, true)
     if mapped == nil {return false}
     quad := [DUST_QUAD_VERTEX_COUNT]Dust_Quad_Vertex{
@@ -129,30 +144,56 @@ sdl_dust_upload :: proc(
         {{0.5, 0.5}, {1, 1}}, {{0.5, -0.5}, {1, 0}},
     }
     offset: u32
-    if instance_bytes > 0 {
-        mem.copy(mapped, raw_data(quad[:]), int(quad_bytes))
-        offset = quad_bytes
+    if layout.instance_bytes > 0 {
+        mem.copy(mapped, raw_data(quad[:]), int(layout.quad_bytes))
+        offset = layout.quad_bytes
         mem.copy(cast(rawptr)(uintptr(mapped) + uintptr(offset)), raw_data(
-            encoder^.dust_instances[:encoder^.dust_instance_count]), int(instance_bytes))
+            encoder^.dust_instances[:encoder^.dust_instance_count]),
+            int(layout.instance_bytes))
     } else {
         mem.copy(mapped, raw_data(encoder^.dust_expanded_vertices[
-            :encoder^.dust_expanded_vertex_count]), int(expanded_bytes))
+            :encoder^.dust_expanded_vertex_count]), int(layout.expanded_bytes))
     }
     sdl.UnmapGPUTransferBuffer(device, runtime^.dust_upload_buffer)
+    return true
+}
+
+// sdl_dust_record_upload copies staged dust bytes into resident GPU buffers.
+sdl_dust_record_upload :: proc(
+    runtime: ^Sdl_Draw_Runtime, command_buffer: ^sdl.GPUCommandBuffer,
+    layout: Sdl_Dust_Upload_Layout) -> bool {
     copy_pass := sdl.BeginGPUCopyPass(command_buffer)
     if copy_pass == nil {return false}
-    if instance_bytes > 0 {
+    if layout.instance_bytes > 0 {
         sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = runtime^.dust_upload_buffer},
-            {buffer = runtime^.dust_quad_buffer, size = quad_bytes}, true)
+            {buffer = runtime^.dust_quad_buffer, size = layout.quad_bytes}, true)
         sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = runtime^.dust_upload_buffer,
-            offset = offset}, {buffer = runtime^.dust_instance_buffer,
-            size = instance_bytes}, true)
+            offset = layout.quad_bytes}, {buffer = runtime^.dust_instance_buffer,
+            size = layout.instance_bytes}, true)
     } else {
         sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = runtime^.dust_upload_buffer},
-            {buffer = runtime^.dust_expanded_buffer, size = expanded_bytes}, true)
+            {buffer = runtime^.dust_expanded_buffer,
+            size = layout.expanded_bytes}, true)
     }
     sdl.EndGPUCopyPass(copy_pass)
     return true
+}
+
+// sdl_dust_upload records the occupied instanced or expanded stream upload.
+sdl_dust_upload :: proc(
+    runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
+    device: ^sdl.GPUDevice, command_buffer: ^sdl.GPUCommandBuffer) -> bool {
+    layout := Sdl_Dust_Upload_Layout{
+        quad_bytes = u32(DUST_QUAD_VERTEX_COUNT * size_of(Dust_Quad_Vertex)),
+        instance_bytes = u32(
+            encoder^.dust_instance_count * size_of(Dust_Instance)),
+        expanded_bytes = u32(
+            encoder^.dust_expanded_vertex_count * size_of(Draw_Vertex)),
+    }
+    if layout.instance_bytes == 0 && layout.expanded_bytes == 0 {return true}
+    if runtime^.dust_upload_buffer == nil {return false}
+    return sdl_dust_stage_upload(runtime, encoder, device, layout) &&
+        sdl_dust_record_upload(runtime, command_buffer, layout)
 }
 
 // sdl_dust_record_instanced binds atlas state and draws one instance prefix.

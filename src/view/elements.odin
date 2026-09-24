@@ -25,6 +25,38 @@ Tool_Brush_Material :: struct {
     shadow_limit:  f32,
 }
 
+Tool_Segment_Draw :: struct {
+    first, second: Vector2,
+    thickness: f32,
+    color: color.Color_RGBA8,
+    occluders: ^Tool_Brush_Occluder_Context,
+}
+
+Tool_Ring_Draw :: struct {
+    center: Vector3,
+    radius, thickness: f32,
+    color: color.Color_RGBA8,
+}
+
+Tool_Shadow_Line_Draw :: struct {
+    first, second: Vector3,
+    thickness, average_height: f32,
+}
+
+Compass_Arc_Submission :: struct {
+    compass: ^shapemodel.Shapes_Compass_Draw,
+    basis: Compass_Top_Circle_Basis,
+    samples: ^Compass_Arc_Samples,
+    coverage_radius: f32,
+    occluders: ^Tool_Brush_Occluder_Context,
+}
+
+Pen_Fragment_Draw :: struct {
+    pen: ^shapemodel.Shapes_Pen_Draw,
+    first, second: Vector2,
+    compass: ^shapemodel.Shapes_Compass_Draw,
+}
+
 CIRCLE_ARC_SEGMENTS :: 96
 
 COMPASS_TOPCIRCLE_SEGMENTS :: 48
@@ -313,38 +345,80 @@ draw_encoded_drawing_surface :: proc(
 // Returns:
 //   - none.
 
+draw_encoded_basic_point :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    item: ^shapemodel.Shapes_Point_Draw, high: bool) {
+    if draw_cached_point_is_elevated(item) == high {
+        draw_encoded_cached_point(state, encoder, item)
+    }
+}
+
+// draw_encoded_basic_circle encodes one circle in its matching depth layer.
+draw_encoded_basic_circle :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    item: ^shapemodel.Shapes_Circle_Draw, high: bool) {
+    if draw_cached_circle_is_elevated(item) == high {
+        draw_encoded_cached_circle(state, encoder, item)
+    }
+}
+
+// draw_encoded_basic_filled_circle encodes one filled circle in its matching layer.
+draw_encoded_basic_filled_circle :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    item: ^shapemodel.Shapes_Filled_Circle_Draw, high: bool) {
+    if draw_cached_filledcircle_is_elevated(item) == high {
+        draw_encoded_cached_filled_circle(state, encoder, item)
+    }
+}
+
+// draw_encoded_basic_curve encodes one curve in its matching depth layer.
+draw_encoded_basic_curve :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    item: ^shapemodel.Shapes_Curve_Draw, high: bool) {
+    if draw_cached_curve_is_elevated(state, item) == high {
+        draw_encoded_cached_curve(state, encoder, item, high)
+    }
+}
+
+// draw_encoded_basic_polygon encodes one polygon in its matching depth layer.
+draw_encoded_basic_polygon :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    item: ^shapemodel.Shapes_Polygon_Draw, high: bool) {
+    if draw_cached_polygon_is_elevated(state, item) == high {
+        draw_encoded_cached_polygon(state, encoder, item)
+    }
+}
+
+// draw_encoded_cached_basic_item dispatches one item in a depth layer.
+draw_encoded_cached_basic_item :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    item: ^shapemodel.Shapes_Draw_Cache_Item, high: bool) {
+    switch &typed in item {
+    case shapemodel.Shapes_Point_Draw:
+        draw_encoded_basic_point(state, encoder, &typed, high)
+    case shapemodel.Shapes_Line_Draw:
+        draw_encoded_cached_line(state, encoder, &typed, high)
+    case shapemodel.Shapes_Circle_Draw:
+        draw_encoded_basic_circle(state, encoder, &typed, high)
+    case shapemodel.Shapes_Filled_Circle_Draw:
+        draw_encoded_basic_filled_circle(state, encoder, &typed, high)
+    case shapemodel.Shapes_Curve_Draw:
+        draw_encoded_basic_curve(state, encoder, &typed, high)
+    case shapemodel.Shapes_Polygon_Draw:
+        draw_encoded_basic_polygon(state, encoder, &typed, high)
+    case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Trochoid_Tool_Draw,
+        shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
+        shapemodel.Shapes_Compass_Draw:
+    }
+}
+
 // draw_encoded_cached_basic_pass encodes points and lines in one depth layer.
 draw_encoded_cached_basic_pass :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder, high: bool) {
     cache := &state^.shape_world^.draw_cache
     for index in 0..<cache^.item_count {
-        switch &item in &cache^.items[index] {
-        case shapemodel.Shapes_Point_Draw:
-            if draw_cached_point_is_elevated(&item) == high {
-                draw_encoded_cached_point(state, encoder, &item)
-            }
-        case shapemodel.Shapes_Line_Draw:
-            draw_encoded_cached_line(state, encoder, &item, high)
-        case shapemodel.Shapes_Circle_Draw:
-            if draw_cached_circle_is_elevated(&item) == high {
-                draw_encoded_cached_circle(state, encoder, &item)
-            }
-        case shapemodel.Shapes_Filled_Circle_Draw:
-            if draw_cached_filledcircle_is_elevated(&item) == high {
-                draw_encoded_cached_filled_circle(state, encoder, &item)
-            }
-        case shapemodel.Shapes_Curve_Draw:
-            if draw_cached_curve_is_elevated(state, &item) == high {
-                draw_encoded_cached_curve(state, encoder, &item, high)
-            }
-        case shapemodel.Shapes_Polygon_Draw:
-            if draw_cached_polygon_is_elevated(state, &item) == high {
-                draw_encoded_cached_polygon(state, encoder, &item)
-            }
-        case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Trochoid_Tool_Draw,
-            shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
-            shapemodel.Shapes_Compass_Draw:
-        }
+        draw_encoded_cached_basic_item(
+            state, encoder, &cache^.items[index], high)
     }
 }
 
@@ -398,11 +472,37 @@ encoded_stroke_vertex :: #force_inline proc(
     }
 }
 
+// encoded_tool_segment_vertices builds the coverage quad for one tool segment.
+encoded_tool_segment_vertices :: proc(
+    encoder: ^native.Draw_Encoder, draw: Tool_Segment_Draw) -> [6]native.Stroke_Vertex {
+    delta := draw.second - draw.first
+    segment_length := linalg.length(delta)
+    direction := delta / segment_length
+    perpendicular := Vector2{-direction.y, direction.x}
+    scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
+    scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
+    coverage_radius := draw.thickness * 0.5 + 1 / min(scale_x, scale_y)
+    start := draw.first - direction * coverage_radius
+    finish := draw.second + direction * coverage_radius
+    offset := perpendicular * coverage_radius
+    corners := [4]Vector2{start - offset, start + offset,
+        finish - offset, finish + offset}
+    return {
+        encoded_stroke_vertex(corners[0], draw.color),
+        encoded_stroke_vertex(corners[1], draw.color),
+        encoded_stroke_vertex(corners[2], draw.color),
+        encoded_stroke_vertex(corners[2], draw.color),
+        encoded_stroke_vertex(corners[1], draw.color),
+        encoded_stroke_vertex(corners[3], draw.color),
+    }
+}
+
 // draw_encoded_tool_segment emits one lit capsule or its native 2D fallback.
 draw_encoded_tool_segment :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
-    p0, p1: Vector2, thickness: f32, draw_color: color.Color_RGBA8,
-    occluders: ^Tool_Brush_Occluder_Context = nil) {
+    draw: Tool_Segment_Draw) {
+    p0, p1 := draw.first, draw.second
+    thickness, draw_color := draw.thickness, draw.color
     delta := p1 - p0
     segment_length := linalg.length(delta)
     if segment_length <= 0 || thickness <= 0 {return}
@@ -411,28 +511,11 @@ draw_encoded_tool_segment :: proc(
             geometry.Vector2(p1), thickness, draw_color)
         return
     }
-    direction := delta / segment_length
-    perpendicular := Vector2{-direction.y, direction.x}
-    scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
-    scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
-    coverage_radius := thickness * 0.5 + 1 / min(scale_x, scale_y)
-    start := p0 - direction * coverage_radius
-    finish := p1 + direction * coverage_radius
-    offset := perpendicular * coverage_radius
-    corners := [4]Vector2{start - offset, start + offset,
-        finish - offset, finish + offset}
-    vertices := [6]native.Stroke_Vertex{
-        encoded_stroke_vertex(corners[0], draw_color),
-        encoded_stroke_vertex(corners[1], draw_color),
-        encoded_stroke_vertex(corners[2], draw_color),
-        encoded_stroke_vertex(corners[2], draw_color),
-        encoded_stroke_vertex(corners[1], draw_color),
-        encoded_stroke_vertex(corners[3], draw_color),
-    }
+    vertices := encoded_tool_segment_vertices(encoder, draw)
     fragment_uniforms := encoded_stroke_fragment_uniforms(
         state, encoder, p0, p1, thickness)
     encoded_stroke_pack_occluders(
-        &fragment_uniforms, encoder, occluders)
+        &fragment_uniforms, encoder, draw.occluders)
     appended := native.draw_encoder_append_stroke(encoder, vertices[:],
         encoded_stroke_vertex_uniforms(encoder), fragment_uniforms)
     if !appended {
@@ -467,8 +550,9 @@ draw_encoded_cached_pen :: proc(
         append_tool_brush_occluder(&occluders, receiver, first_leg)
         append_tool_brush_occluder(&occluders, receiver, second_leg)
     }
-    draw_encoded_tool_segment(state, encoder, first, second,
-        pen^.brush_size, pen^.color, &occluders)
+    draw_encoded_tool_segment(state, encoder, {
+        first = first, second = second, thickness = pen^.brush_size,
+        color = pen^.color, occluders = &occluders})
 }
 
 // draw_encoded_cached_shadow_pass encodes ordinary floor shadows in cache order.

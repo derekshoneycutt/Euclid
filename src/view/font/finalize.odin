@@ -1,5 +1,13 @@
 package font
 
+// Font_Texture_Finalize_Request identifies one upload and optional completion owner.
+Font_Texture_Finalize_Request :: struct {
+    identity: u64,
+    generation: u64,
+    completion: Font_Texture_Completion_Handler,
+    completion_data: rawptr,
+}
+
 // prepared_is_valid checks one complete CPU atlas before native publication.
 prepared_is_valid :: proc(prepared: ^Prepared_Font) -> bool {
     if prepared == nil || prepared.base_size <= 0 || prepared.glyph_count <= 0 ||
@@ -24,20 +32,24 @@ prepared_is_valid :: proc(prepared: ^Prepared_Font) -> bool {
 // finalize_texture creates and uploads one immutable-size atlas transactionally.
 finalize_texture :: proc(
     prepared: ^Prepared_Font, operations: Font_Texture_Operations,
-    identity, generation: u64,
-    completion: Font_Texture_Completion_Handler = nil,
-    completion_data: rawptr = nil) -> (Font_Texture, bool) {
+    request: Font_Texture_Finalize_Request) -> (Font_Texture, bool) {
     if !prepared_is_valid(prepared) || operations.create == nil ||
-        operations.upload == nil || operations.release == nil || generation == 0 {
+        operations.upload == nil || operations.release == nil ||
+        request.generation == 0 {
         return {}, false
     }
     texture := operations.create(operations.user_data,
         u32(prepared.atlas_width), u32(prepared.atlas_height))
     if texture.handle == nil || texture.width != u32(prepared.atlas_width) ||
         texture.height != u32(prepared.atlas_height) ||
-        !operations.upload(operations.user_data, texture,
-            prepared.atlas_pixels, identity, generation,
-            completion, completion_data) {
+        !operations.upload(operations.user_data, {
+            texture = texture,
+            pixels = prepared.atlas_pixels,
+            identity = request.identity,
+            generation = request.generation,
+            completion = request.completion,
+            completion_data = request.completion_data,
+        }) {
         if texture.handle != nil {operations.release(operations.user_data, texture)}
         return {}, false
     }
@@ -59,10 +71,10 @@ prepared_face :: proc(
         return {}, false
     }
     return {
-        baseSize = prepared.base_size,
-        glyphCount = prepared.glyph_count,
-        glyphPadding = prepared.padding,
-        spaceAdvance = space_advance,
+        base_size = prepared.base_size,
+        glyph_count = prepared.glyph_count,
+        glyph_padding = prepared.padding,
+        space_advance = space_advance,
         texture = texture,
     }, true
 }
@@ -72,7 +84,7 @@ finalize_face :: proc(
     prepared: ^Prepared_Font, operations: Font_Texture_Operations,
     identity, generation: u64) -> (Font_Face, bool) {
     texture, uploaded := finalize_texture(
-        prepared, operations, identity, generation)
+        prepared, operations, {identity = identity, generation = generation})
     if !uploaded {return {}, false}
     face, valid := prepared_face(prepared, texture)
     if !valid {operations.release(operations.user_data, texture)}

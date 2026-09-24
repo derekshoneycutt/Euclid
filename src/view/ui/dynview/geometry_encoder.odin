@@ -17,6 +17,15 @@ Polygon_Encode_Style :: struct {
     stroke: f32,
 }
 
+// Rule_Encode_Geometry describes one horizontal rule relative to an item origin.
+Rule_Encode_Geometry :: struct {
+    origin: geometry.Vector2,
+    left: f32,
+    right: f32,
+    center: f32,
+    thickness: f32,
+}
+
 // encode_edge_color returns an explicit edge color or its inherited fallback.
 encode_edge_color :: #force_inline proc(
     edge_color, fallback: dynviewmodel.Color) -> dynviewmodel.Color {
@@ -26,19 +35,20 @@ encode_edge_color :: #force_inline proc(
 
 // encode_rule encodes one horizontal rule from sealed item-local geometry.
 encode_rule :: proc(
-    encoder: ^native.Draw_Encoder, item_x, baseline, left, right, center,
-    thickness: f32, draw_color: dynviewmodel.Color) {
+    encoder: ^native.Draw_Encoder, rule: Rule_Encode_Geometry,
+    draw_color: dynviewmodel.Color) {
     _ = native.draw_encoder_line(encoder,
-        {item_x + left, baseline + center},
-        {item_x + right, baseline + center},
-        max(1, thickness), draw_color)
+        {rule.origin.x + rule.left, rule.origin.y + rule.center},
+        {rule.origin.x + rule.right, rule.origin.y + rule.center},
+        max(1, rule.thickness), draw_color)
 }
 
 // encode_box encodes one outlined or filled Dynview box with independent edges.
 encode_box :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
-    item_x, item_y: f32, draw_color: dynviewmodel.Color, filled: bool) {
-    rectangle := geometry.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
+    origin: geometry.Vector2, draw_color: dynviewmodel.Color, filled: bool) {
+    rectangle := geometry.Rectangle{
+        origin.x, origin.y, item.draw_width, item.draw_height}
     if filled {
         _ = native.draw_encoder_rectangle(encoder, rectangle, draw_color)
     }
@@ -63,9 +73,9 @@ encode_box :: proc(
 // encode_circle encodes one outlined or filled Dynview circle.
 encode_circle :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
-    item_x, item_y: f32, draw_color: dynviewmodel.Color, filled: bool) {
-    center := geometry.Vector2{item_x + item.draw_width * 0.5,
-        item_y + item.draw_height * 0.5}
+    origin: geometry.Vector2, draw_color: dynviewmodel.Color, filled: bool) {
+    center := geometry.Vector2{origin.x + item.draw_width * 0.5,
+        origin.y + item.draw_height * 0.5}
     radius := max(0.5, min(item.draw_width, item.draw_height) * 0.5)
     if filled {
         _ = native.draw_encoder_circle(encoder, center, radius, draw_color)
@@ -190,47 +200,73 @@ encode_perpendicular :: proc(
         encoder, {stem_x, top}, {stem_x, bottom}, stroke, stem_color)
 }
 
+// encode_inline_shape encodes one cached geometric atom when its kind is supported.
+encode_inline_shape :: proc(
+    encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
+    origin: geometry.Vector2, draw_color: dynviewmodel.Color) -> bool {
+    center_y := origin.y + item.draw_height * 0.5
+    switch item.kind {
+    case .Inline_Line:
+        stroke := max(1, item.inline_atom_stroke)
+        _ = native.draw_encoder_line(encoder, {origin.x, center_y},
+            {origin.x + item.draw_width, center_y}, stroke, draw_color)
+    case .Inline_Box, .Inline_Filled_Box:
+        encode_box(encoder, item, origin, draw_color,
+            item.kind == .Inline_Filled_Box)
+    case .Inline_Circle, .Inline_Filled_Circle:
+        encode_circle(encoder, item, origin, draw_color,
+            item.kind == .Inline_Filled_Circle)
+    case .Inline_Perpendicular:
+        encode_perpendicular(encoder, item, origin.x, origin.y, draw_color)
+    case .Inline_Triangle, .Inline_Pentagon:
+        encode_inline_polygon(encoder, item, origin.x, origin.y, draw_color)
+    case .Inline_Pie_Section:
+        encode_pie_section(encoder, item, origin.x, origin.y, draw_color)
+    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
+         .Stretch_Delimiter, .Matrix, .Style_Override, .Stack, .Large_Op,
+         .Accent_Bar, .Radical_Bar:
+        return false
+    }
+    return true
+}
+
+// encode_inline_rule encodes one cached mathematical rule when supported.
+encode_inline_rule :: proc(
+    encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
+    origin: geometry.Vector2, draw_color: dynviewmodel.Color) {
+    rule := Rule_Encode_Geometry{origin = {origin.x, origin.y + item.ascent}}
+    switch item.kind {
+    case .Frac:
+        rule.left, rule.right = item.fraction_rule_left, item.fraction_rule_right
+        rule.center, rule.thickness =
+            item.fraction_rule_center, item.fraction_rule_thickness
+    case .Accent_Bar:
+        rule.left, rule.right = item.accent_rule_left, item.accent_rule_right
+        rule.center, rule.thickness =
+            item.accent_rule_center, item.accent_rule_thickness
+    case .Radical_Bar:
+        rule.left, rule.right = item.radical_rule_left, item.radical_rule_right
+        rule.center, rule.thickness =
+            item.radical_rule_center, item.radical_rule_thickness
+    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach,
+         .Stretch_Delimiter, .Matrix, .Style_Override, .Stack, .Large_Op,
+         .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box,
+         .Inline_Filled_Circle, .Inline_Pie_Section, .Inline_Perpendicular,
+         .Inline_Triangle, .Inline_Pentagon:
+        return
+    }
+    encode_rule(encoder, rule, draw_color)
+}
+
 // encode_inline_item encodes one font-independent cached Dynview item.
 encode_inline_item :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32) {
     style := dyncore.style_by_id(item.style_id)
     draw_color := dynlayout.inline_draw_color(style, item)
-    center_y := item_y + item.draw_height * 0.5
-    switch item.kind {
-    case .Inline_Line:
-        stroke := max(1, item.inline_atom_stroke)
-        _ = native.draw_encoder_line(encoder, {item_x, center_y},
-            {item_x + item.draw_width, center_y}, stroke, draw_color)
-    case .Inline_Box:
-        encode_box(encoder, item, item_x, item_y, draw_color, false)
-    case .Inline_Filled_Box:
-        encode_box(encoder, item, item_x, item_y, draw_color, true)
-    case .Inline_Circle:
-        encode_circle(encoder, item, item_x, item_y, draw_color, false)
-    case .Inline_Filled_Circle:
-        encode_circle(encoder, item, item_x, item_y, draw_color, true)
-    case .Inline_Perpendicular:
-        encode_perpendicular(encoder, item, item_x, item_y, draw_color)
-    case .Inline_Triangle, .Inline_Pentagon:
-        encode_inline_polygon(encoder, item, item_x, item_y, draw_color)
-    case .Inline_Pie_Section:
-        encode_pie_section(encoder, item, item_x, item_y, draw_color)
-    case .Frac:
-        encode_rule(encoder, item_x, item_y + item.ascent,
-            item.fraction_rule_left, item.fraction_rule_right,
-            item.fraction_rule_center, item.fraction_rule_thickness, style.color)
-    case .Accent_Bar:
-        encode_rule(encoder, item_x, item_y + item.ascent,
-            item.accent_rule_left, item.accent_rule_right,
-            item.accent_rule_center, item.accent_rule_thickness, style.color)
-    case .Radical_Bar:
-        encode_rule(encoder, item_x, item_y + item.ascent,
-            item.radical_rule_left, item.radical_rule_right,
-            item.radical_rule_center, item.radical_rule_thickness, style.color)
-    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach,
-        .Stretch_Delimiter, .Matrix, .Style_Override, .Stack, .Large_Op:
-    }
+    origin := geometry.Vector2{item_x, item_y}
+    if encode_inline_shape(encoder, item, origin, draw_color) {return}
+    encode_inline_rule(encoder, item, origin, style.color)
 }
 
 // draw_encoded_geometry encodes cached Dynview geometry inside the presentation clip.

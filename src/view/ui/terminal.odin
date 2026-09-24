@@ -121,6 +121,18 @@ terminal_commit_prepared_scroll :: proc(
 }
 
 // Resolve Terminal scrollbar and content wheel ownership for one frame.
+terminal_scroll_input :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    resolved: input.Input_Frame, over_track: bool) -> input.Input_Frame {
+    mode := termemulator.interpreter_input_mode(&term.output_interpreter)
+    child_owns_mouse := mode.mouse_tracking != .None && mode.mouse_sgr_encoding
+    result := resolved
+    result.mouse_wheel_delta = terminal_scroll_wheel_delta(
+        resolved, over_track, child_owns_mouse)
+    return result
+}
+
+// Resolve Terminal scrollbar and content wheel ownership for one frame.
 terminal_prepare_scroll :: proc(
     state: ^core.Euclid_General_State,
     resolved: input.Input_Frame,
@@ -138,11 +150,7 @@ terminal_prepare_scroll :: proc(
     mouse := input_frame_mouse_position(resolved)
     over_track := preview.has_scrollbar && geometry.rectangle_contains(
         preview.track_rect, mouse)
-    mode := termemulator.interpreter_input_mode(&term.output_interpreter)
-    child_owns_mouse := mode.mouse_tracking != .None && mode.mouse_sgr_encoding
-    scroll_frame := resolved
-    scroll_frame.mouse_wheel_delta = terminal_scroll_wheel_delta(
-        resolved, over_track, child_owns_mouse)
+    scroll_frame := terminal_scroll_input(term, resolved, over_track)
     scroll := scroll_container_update({
         id = 1002, rect = geometry.Rectangle(layout.padded_bounds),
         scroll_y_in = initial_scroll,

@@ -169,7 +169,7 @@ draw_encoded_refresh_glyph :: proc(
         previous := center +
             geometry.Vector2{
                 radius * f32(math.cos(f64(starts[arc_index]))),
-                radius * f32(math.sin(f64(starts[arc_index])))
+                radius * f32(math.sin(f64(starts[arc_index]))),
             }
         for segment in 1..=10 {
             angle := starts[arc_index] +
@@ -187,7 +187,7 @@ draw_encoded_control_glyph :: proc(
     encoder: ^native.Draw_Encoder, icon: Icon_Button_Id,
     rectangle: geometry.Rectangle, draw_color: color.Color_RGBA8) {
     if icon == .Refresh {
-        draw_encoded_refresh_glyph(encoder, rectangle, draw_color);
+        draw_encoded_refresh_glyph(encoder, rectangle, draw_color)
         return
     }
     if icon == .Pause {

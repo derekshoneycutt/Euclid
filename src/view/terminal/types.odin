@@ -332,6 +332,16 @@ Terminal_Prompt_Text_Draw :: struct {
     color: Color,
 }
 
+// Complete state for one bounded shaped prompt span.
+Terminal_Prompt_Span_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
+    resolver: font.Font_Resolver,
+    key: font.Font_Key,
+    text: string,
+    position: geometry.Vector2,
+    color: Color,
+}
+
 // Shared text, placement, font, and theme for cursor and selection overlays.
 Terminal_Text_Overlay_Draw :: struct {
     encoder: ^native.Draw_Encoder,

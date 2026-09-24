@@ -142,6 +142,23 @@ ui_presentation_target :: proc(
 }
 
 // Resolve the topmost static target under the current pointer sample.
+ui_world_hover_target :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    mouse: geometry.Vector2) -> viewmodel.Ui_Interaction_Target {
+    control_id, over_control := animation_control_hit_test(
+        geometry.Rectangle(runtime^.ui_regions.world_rect),
+        runtime^.gif_capture_phase, mouse)
+    if over_control {
+        return ui_interaction_target(.Control, id = control_id)
+    }
+    if geometry.rectangle_contains(
+        geometry.Rectangle(runtime^.ui_regions.world_rect), mouse) {
+        return ui_interaction_target(.World)
+    }
+    return {}
+}
+
+// Resolve the topmost static target under the current pointer sample.
 ui_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: Input_Frame,
@@ -168,17 +185,7 @@ ui_hover_target :: proc(
         geometry.Rectangle(regions.accordion_rect), geometry.Vector2(mouse)) {
         return ui_interaction_target(.Panel_Content, .Accordion)
     }
-    control_id, over_control := animation_control_hit_test(
-        geometry.Rectangle(regions.world_rect), runtime^.gif_capture_phase,
-        geometry.Vector2(mouse))
-    if over_control {
-        return ui_interaction_target(.Control, id = control_id)
-    }
-    if geometry.rectangle_contains(
-        geometry.Rectangle(regions.world_rect), geometry.Vector2(mouse)) {
-        return ui_interaction_target(.World)
-    }
-    return {}
+    return ui_world_hover_target(runtime, geometry.Vector2(mouse))
 }
 
 // Resolve persistent logical focus from presentation and routed press transitions.

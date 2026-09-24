@@ -113,6 +113,20 @@ terminal_live_input_line_text :: proc(text: string, line: int) -> string {
 // Returns:
 //   - The hit position and true, or a zero value and false when the mouse sits
 //     outside the terminal's padded bounds.
+terminal_output_hit_position :: proc(
+    cells: []termgrid.Cell, font: font.Font_Face,
+    padded_bounds: geometry.Rectangle, mouse: geometry.Vector2,
+    line: int) -> viewterminalmodel.Terminal_View_Position {
+    column_width := terminal_column_width(font)
+    column := 0
+    if column_width > 0 {
+        column = int((mouse.x - padded_bounds.x) / column_width + 0.5)
+    }
+    return {line = line,
+        byte_offset = terminal_output_row_byte_offset(cells, column)}
+}
+
+// Map a screen-space mouse position to a terminal line and byte offset.
 terminal_hit_test :: proc(
     term: ^viewterminalmodel.Terminal_State,
     font: font.Font_Face, bounds: geometry.Rectangle,
@@ -138,15 +152,8 @@ terminal_hit_test :: proc(
         if !ok {
             return viewterminalmodel.Terminal_View_Position{}, false
         }
-        column_width := terminal_column_width(font)
-        column := 0
-        if column_width > 0 {
-            column = int((mouse.x - padded_bounds.x) / column_width + 0.5)
-        }
-        return viewterminalmodel.Terminal_View_Position{
-            line = line,
-            byte_offset = terminal_output_row_byte_offset(cells, column),
-        }, true
+        return terminal_output_hit_position(
+            cells, font, padded_bounds, mouse, line), true
     }
     line_text := terminal_line_text(term, line)
     byte_offset := terminal_byte_offset_for_x(font, line_text, mouse.x - padded_bounds.x)

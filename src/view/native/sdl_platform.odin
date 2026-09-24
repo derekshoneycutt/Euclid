@@ -269,8 +269,8 @@ sdl_platform_present_draw :: proc(
         if !sdl.SubmitGPUCommandBuffer(command_buffer) {return .Failed}
         return .Unavailable
     }
-    if !sdl_draw_submit(
-        platform, runtime, encoder, command_buffer, image, clear_color) {
+    if !sdl_draw_submit(platform, runtime, encoder,
+        {command_buffer, image, clear_color}) {
         return .Failed
     }
     return .Presented
@@ -373,6 +373,25 @@ sdl_capture_complete :: proc(
     return copied
 }
 
+// sdl_capture_submit_scene records and submits one owned-target download.
+sdl_capture_submit_scene :: proc(
+    platform: ^Sdl_Platform, transfer: ^sdl.GPUTransferBuffer,
+    layout: Sdl_Capture_Transfer_Layout) -> ^sdl.GPUFence {
+    command_buffer := sdl.AcquireGPUCommandBuffer(platform^.device)
+    if command_buffer == nil {return nil}
+    copy_pass := sdl.BeginGPUCopyPass(command_buffer)
+    if copy_pass == nil {
+        _ = sdl.CancelGPUCommandBuffer(command_buffer)
+        return nil
+    }
+    sdl.DownloadFromGPUTexture(copy_pass, {texture = platform^.scene_target,
+        w = platform^.scene_width, h = platform^.scene_height, d = 1}, {
+        transfer_buffer = transfer, pixels_per_row = u32(layout.pitch_bytes / 4),
+        rows_per_layer = platform^.scene_height})
+    sdl.EndGPUCopyPass(copy_pass)
+    return sdl.SubmitGPUCommandBufferAndAcquireFence(command_buffer)
+}
+
 // sdl_platform_read_scene_rgba8 synchronously copies the owned scene target.
 sdl_platform_read_scene_rgba8 :: proc(
     platform: ^Sdl_Platform, destination: []u8,
@@ -389,19 +408,7 @@ sdl_platform_read_scene_rgba8 :: proc(
         usage = .DOWNLOAD, size = u32(layout.transfer_bytes)})
     if transfer == nil {return false}
     defer sdl.ReleaseGPUTransferBuffer(platform^.device, transfer)
-    command_buffer := sdl.AcquireGPUCommandBuffer(platform^.device)
-    if command_buffer == nil {return false}
-    copy_pass := sdl.BeginGPUCopyPass(command_buffer)
-    if copy_pass == nil {
-        _ = sdl.CancelGPUCommandBuffer(command_buffer)
-        return false
-    }
-    sdl.DownloadFromGPUTexture(copy_pass, {texture = platform^.scene_target,
-        w = platform^.scene_width, h = platform^.scene_height, d = 1}, {
-        transfer_buffer = transfer, pixels_per_row = u32(layout.pitch_bytes / 4),
-        rows_per_layer = platform^.scene_height})
-    sdl.EndGPUCopyPass(copy_pass)
-    fence := sdl.SubmitGPUCommandBufferAndAcquireFence(command_buffer)
+    fence := sdl_capture_submit_scene(platform, transfer, layout)
     if fence == nil {return false}
     return sdl_capture_complete({
         device = platform^.device,

@@ -10,6 +10,25 @@ Sdl_Stroke_Shader_Paths :: struct {
     fragment: string,
 }
 
+// Sdl_Stroke_Vertex_Input owns the fixed stroke stream description.
+Sdl_Stroke_Vertex_Input :: struct {
+    description: [1]sdl.GPUVertexBufferDescription,
+    attributes:  [3]sdl.GPUVertexAttribute,
+}
+
+// sdl_stroke_vertex_input describes the reflected stroke vertex ABI.
+sdl_stroke_vertex_input :: proc() -> Sdl_Stroke_Vertex_Input {
+    return {
+        description = {{slot = 0, pitch = size_of(Stroke_Vertex),
+            input_rate = .VERTEX}},
+        attributes = {
+            {location = 0, buffer_slot = 0, format = .FLOAT3, offset = 0},
+            {location = 1, buffer_slot = 0, format = .FLOAT2, offset = 12},
+            {location = 2, buffer_slot = 0, format = .FLOAT4, offset = 20},
+        },
+    }
+}
+
 // sdl_stroke_target_description returns straight-alpha scene target state.
 sdl_stroke_target_description :: proc() -> sdl.GPUColorTargetDescription {
     return {
@@ -37,23 +56,17 @@ sdl_stroke_pipeline_create :: proc(
         device, paths.fragment, .FRAGMENT, 0, 1)
     if fragment_shader == nil {return nil}
     defer sdl.ReleaseGPUShader(device, fragment_shader)
-    description := [1]sdl.GPUVertexBufferDescription{{
-        slot = 0, pitch = size_of(Stroke_Vertex), input_rate = .VERTEX}}
-    attributes := [3]sdl.GPUVertexAttribute{
-        {location = 0, buffer_slot = 0, format = .FLOAT3, offset = 0},
-        {location = 1, buffer_slot = 0, format = .FLOAT2, offset = 12},
-        {location = 2, buffer_slot = 0, format = .FLOAT4, offset = 20},
-    }
+    input := sdl_stroke_vertex_input()
     targets := [1]sdl.GPUColorTargetDescription{
         sdl_stroke_target_description()}
     return sdl.CreateGPUGraphicsPipeline(device, {
         vertex_shader = vertex_shader,
         fragment_shader = fragment_shader,
         vertex_input_state = {
-            vertex_buffer_descriptions = raw_data(description[:]),
+            vertex_buffer_descriptions = raw_data(input.description[:]),
             num_vertex_buffers = 1,
-            vertex_attributes = raw_data(attributes[:]),
-            num_vertex_attributes = len(attributes),
+            vertex_attributes = raw_data(input.attributes[:]),
+            num_vertex_attributes = len(input.attributes),
         },
         primitive_type = .TRIANGLELIST,
         rasterizer_state = {

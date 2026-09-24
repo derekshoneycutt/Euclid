@@ -68,7 +68,7 @@ graphics_test_gif_concurrent_task :: proc(
     raw_payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     payload := cast(^Gif_Concurrent_Payload)raw_payload
     bytes := GRAPHICS_TEST_ANIMATED_GIF
-    result := termgraphicsnative.Decode_Animated_Gif(&{
+    result := termgraphicsnative.decode_animated_gif(&{
         bytes = bytes[:],
         frame_bytes = payload.pixels[:],
         width = 2,
@@ -203,7 +203,7 @@ graphics_test_decode_animated_gif_cancels_between_frames :: proc(t: ^testing.T) 
     bytes := GRAPHICS_TEST_ANIMATED_GIF
     pixels: [16]u8
     cancellation := Gif_Decode_Cancellation{cancel_at = 3}
-    result := termgraphicsnative.Decode_Animated_Gif(&{
+    result := termgraphicsnative.decode_animated_gif(&{
         bytes = bytes[:], frame_bytes = pixels[:],
         width = 2, height = 1, frame_count = 2,
         cancellation_user_data = &cancellation,

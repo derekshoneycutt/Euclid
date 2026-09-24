@@ -94,6 +94,15 @@ Window_Frame_Context :: struct {
     display_profile: ^evidence_profile.State,
 }
 
+// Display_Loop_Context groups display-lifetime native and service owners.
+Display_Loop_Context :: struct {
+    platform: ^native.Sdl_Platform,
+    draw_runtime: ^native.Sdl_Draw_Runtime,
+    input_runtime: ^input.Input_Runtime,
+    presentation: ^Presentation_Runtime,
+    display_profile: ^evidence_profile.State,
+}
+
 // Optional scenario bindings and admission status for one window session.
 Window_Scenario_Preparation :: struct {
     runtime: ^Scenario_Runtime,
@@ -231,24 +240,35 @@ sdl_dust_shader_paths :: proc() -> native.Sdl_Dust_Shader_Paths {
     }
 }
 
-// initialize_and_run_sdl_session admits native fonts and Terminal textures.
-initialize_and_run_sdl_session :: proc(
-    settings: ^Euclid_Run_Settings, session: Euclid_Runtime_Session,
-    input_runtime: ^input.Input_Runtime, profile: ^evidence_profile.State,
-    platform: ^native.Sdl_Platform,
-    draw_runtime: ^native.Sdl_Draw_Runtime) -> int {
-    session.state^.ui_runtime.gpu_dust_instancing_available = draw_runtime^.dust_ready
-    session.state^.ui_runtime.use_gpu_dust_instancing =
+// initialize_sdl_render_resources publishes required font and dust GPU resources.
+initialize_sdl_render_resources :: proc(
+    settings: ^Euclid_Run_Settings, state: ^Euclid_General_State,
+    font_owner: ^Sdl_Font_Texture_Context,
+    platform: ^native.Sdl_Platform, draw_runtime: ^native.Sdl_Draw_Runtime) -> bool {
+    state^.ui_runtime.gpu_dust_instancing_available = draw_runtime^.dust_ready
+    state^.ui_runtime.use_gpu_dust_instancing =
         settings^.use_gpu_dust_instancing && draw_runtime^.dust_ready
-    font_owner := Sdl_Font_Texture_Context{
-        platform = platform, runtime = draw_runtime, submit_immediately = true}
-    if !initialize_sdl_font_resources(session.state, &font_owner) {
+    if !initialize_sdl_font_resources(state, font_owner) {
         log.error("display_font_start_failed")
-        _ = shutdown_window_runtime(session)
-        return 1
+        return false
     }
     if !initialize_native_dust_atlas(platform, draw_runtime) {
         log.error("display_dust_atlas_start_failed")
+        return false
+    }
+    return true
+}
+
+// initialize_and_run_sdl_session admits native fonts and Terminal textures.
+initialize_and_run_sdl_session :: proc(
+    settings: ^Euclid_Run_Settings, session: Euclid_Runtime_Session,
+    display: Display_Loop_Context) -> int {
+    platform := display.platform
+    draw_runtime := display.draw_runtime
+    font_owner := Sdl_Font_Texture_Context{
+        platform = platform, runtime = draw_runtime, submit_immediately = true}
+    if !initialize_sdl_render_resources(
+        settings, session.state, &font_owner, platform, draw_runtime) {
         _ = shutdown_window_runtime(session)
         return 1
     }
@@ -272,8 +292,7 @@ initialize_and_run_sdl_session :: proc(
         return 1
     }
     font_owner.submit_immediately = false
-    return run_initialized_window_session(
-        settings, session, input_runtime, profile, platform, draw_runtime,
+    return run_initialized_window_session(settings, session, display,
         sdl_framebuffer_operations(&framebuffer_owner))
 }
 
@@ -407,12 +426,10 @@ apply_sdl_cursor :: proc(
     }
 }
 
-// prepare_sdl_frame advances UI, presentation, simulation, and display caches.
-prepare_sdl_frame :: proc(
+// service_sdl_frame_runtime advances non-UI display services for one frame.
+service_sdl_frame_runtime :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
-    clock: ^native.Sdl_Frame_Clock,
-    input_frame: input.Input_Frame) -> Frame_Draw_Preparation {
-    frame_dt := native.sdl_frame_clock_step(clock)
+    frame_dt: f32) {
     font.cache_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
     sync_window_math_shaping(state)
@@ -424,6 +441,15 @@ prepare_sdl_frame :: proc(
         height = ctx.platform^.metrics.logical_height,
     })
     service_scenario_before_ui(ctx)
+}
+
+// prepare_sdl_frame advances UI, presentation, simulation, and display caches.
+prepare_sdl_frame :: proc(
+    state: ^Euclid_General_State, ctx: Window_Frame_Context,
+    clock: ^native.Sdl_Frame_Clock,
+    input_frame: input.Input_Frame) -> Frame_Draw_Preparation {
+    frame_dt := native.sdl_frame_clock_step(clock)
+    service_sdl_frame_runtime(state, ctx, frame_dt)
     ui_geometry := ui.prepare_ui_geometry(state, input_frame, frame_dt)
     ui.prepare_ui_static_interaction(
         state, input_frame, ui_geometry.pointer_capture)
@@ -448,6 +474,46 @@ prepare_sdl_frame :: proc(
     return {input_frame, terminal_frame, controls, layout_interaction}
 }
 
+// encode_sdl_world_geometry encodes the clipped world draw stream.
+encode_sdl_world_geometry :: proc(
+    state: ^Euclid_General_State, ctx: Window_Frame_Context,
+    encoder: ^native.Draw_Encoder) {
+    _ = native.draw_encoder_push_scissor(
+        encoder, state^.ui_runtime.ui_regions.world_rect)
+    draw_encoded_drawing_surface(state, encoder)
+    draw_encoded_cached_basic_pass(state, encoder, false)
+    encode_low_particles(state^.particle_system, state, encoder,
+        ctx.draw_runtime^.dust_atlas.handle)
+    draw_encoded_cached_shadow_pass(state, encoder)
+    draw_encoded_cached_tool_shadow_pass(state, encoder)
+    encode_mid_particles(state^.particle_system, state, encoder,
+        ctx.draw_runtime^.dust_atlas.handle)
+    draw_encoded_shapes_high_merged_cached(state, encoder)
+    encode_high_particles(state^.particle_system, state, encoder)
+    _ = native.draw_encoder_pop_scissor(encoder)
+}
+
+// encode_sdl_ui_geometry encodes panel geometry and deferred text.
+encode_sdl_ui_geometry :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    prepared: Frame_Draw_Preparation) {
+    ui.draw_encoded_panel_geometry(state, encoder)
+    ui.draw_encoded_animation_controls(
+        state, encoder, prepared.controls.animation_controls)
+    ui.draw_encoded_splitters(
+        encoder, &state^.ui_runtime,
+        ui.input_frame_mouse_position(prepared.input_frame))
+    ui.draw_encoded_panel_text(state, encoder)
+    if ui.is_terminal_selected(state) {
+        terminal_graphics_set_draw_encoder(state, encoder)
+        ui.terminal_draw_encoded(state, encoder, prepared.terminal_frame)
+        terminal_graphics_set_draw_encoder(state, nil)
+    } else {
+        ui.draw_encoded_presentation_text(
+            state, encoder, prepared.layout_interaction.presentation)
+    }
+}
+
 // encode_sdl_geometry_frame builds and submits one bounded geometry frame.
 encode_sdl_geometry_frame :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
@@ -460,34 +526,8 @@ encode_sdl_geometry_frame :: proc(
     native.draw_encoder_enable_strokes(&encoder, ctx.draw_runtime^.stroke_ready)
     native.draw_encoder_enable_dust_instancing(
         &encoder, ctx.draw_runtime^.dust_ready)
-    _ = native.draw_encoder_push_scissor(
-        &encoder, state^.ui_runtime.ui_regions.world_rect)
-    draw_encoded_drawing_surface(state, &encoder)
-    draw_encoded_cached_basic_pass(state, &encoder, false)
-    encode_low_particles(state^.particle_system, state, &encoder,
-        ctx.draw_runtime^.dust_atlas.handle)
-    draw_encoded_cached_shadow_pass(state, &encoder)
-    draw_encoded_cached_tool_shadow_pass(state, &encoder)
-    encode_mid_particles(state^.particle_system, state, &encoder,
-        ctx.draw_runtime^.dust_atlas.handle)
-    draw_encoded_shapes_high_merged_cached(state, &encoder)
-    encode_high_particles(state^.particle_system, state, &encoder)
-    _ = native.draw_encoder_pop_scissor(&encoder)
-    ui.draw_encoded_panel_geometry(state, &encoder)
-    ui.draw_encoded_animation_controls(
-        state, &encoder, prepared.controls.animation_controls)
-    ui.draw_encoded_splitters(
-        &encoder, &state^.ui_runtime,
-        ui.input_frame_mouse_position(prepared.input_frame))
-    ui.draw_encoded_panel_text(state, &encoder)
-    if ui.is_terminal_selected(state) {
-        terminal_graphics_set_draw_encoder(state, &encoder)
-        ui.terminal_draw_encoded(state, &encoder, prepared.terminal_frame)
-        terminal_graphics_set_draw_encoder(state, nil)
-    } else {
-        ui.draw_encoded_presentation_text(
-            state, &encoder, prepared.layout_interaction.presentation)
-    }
+    encode_sdl_world_geometry(state, ctx, &encoder)
+    encode_sdl_ui_geometry(state, &encoder, prepared)
     return native.sdl_platform_present_draw(
         ctx.platform, ctx.draw_runtime, &encoder,
         native.to_sdl_color(BACKGROUND_COLOR))
@@ -550,22 +590,18 @@ prepare_window_scenario :: proc(
 
 //   Bind display-lifetime services for one frame loop.
 window_frame_context :: proc(
-    platform: ^native.Sdl_Platform,
-    draw_runtime: ^native.Sdl_Draw_Runtime,
-    input_runtime: ^input.Input_Runtime,
-    presentation: ^Presentation_Runtime,
-    display_profile: ^evidence_profile.State,
+    display: Display_Loop_Context,
     framebuffer_operations: view_core.Framebuffer_Capture_Operations,
     scenario: Window_Scenario_Preparation = {}) -> Window_Frame_Context {
     return {
-        platform = platform,
-        draw_runtime = draw_runtime,
-        input_runtime = input_runtime,
-        presentation = presentation,
+        platform = display.platform,
+        draw_runtime = display.draw_runtime,
+        input_runtime = display.input_runtime,
+        presentation = display.presentation,
         scenario_runtime = scenario.runtime,
         capture_sink = scenario.capture_sink,
         framebuffer_operations = framebuffer_operations,
-        display_profile = display_profile,
+        display_profile = display.display_profile,
     }
 }
 
@@ -612,10 +648,7 @@ finish_window_session :: proc(
 //   Run frames and orderly shutdown for one initialized window session.
 run_initialized_window_session :: proc(
     settings: ^Euclid_Run_Settings, session: Euclid_Runtime_Session,
-    input_runtime: ^input.Input_Runtime,
-    display_profile: ^evidence_profile.State,
-    platform: ^native.Sdl_Platform,
-    draw_runtime: ^native.Sdl_Draw_Runtime,
+    display: Display_Loop_Context,
     framebuffer_operations: view_core.Framebuffer_Capture_Operations) -> int {
     state := session.state
     log.info("display_runtime_ready")
@@ -631,9 +664,9 @@ run_initialized_window_session :: proc(
 
         free_all(context.temp_allocator)
         run_window_frames(state, window_frame_context(
-            platform, draw_runtime, input_runtime, session.presentation, display_profile,
-            framebuffer_operations, scenario))
-        _ = native.sdl_draw_submit_texture_operations(platform, draw_runtime)
+            display, framebuffer_operations, scenario))
+        _ = native.sdl_draw_submit_texture_operations(
+            display.platform, display.draw_runtime)
         log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
             state^.fixed_step, scenario.runtime != nil)
         return finish_window_session(
@@ -641,12 +674,51 @@ run_initialized_window_session :: proc(
     } else {
         free_all(context.temp_allocator)
         run_window_frames(state, window_frame_context(
-            platform, draw_runtime, input_runtime, session.presentation, display_profile,
-            framebuffer_operations))
-        _ = native.sdl_draw_submit_texture_operations(platform, draw_runtime)
+            display, framebuffer_operations))
+        _ = native.sdl_draw_submit_texture_operations(
+            display.platform, display.draw_runtime)
         log.infof("display_loop_stopped fixed_step=%d", state^.fixed_step)
         return shutdown_window_runtime(session)
     }
+}
+
+// run_sdl_platform_session owns draw, input, and Euclid state on one platform.
+run_sdl_platform_session :: proc(
+    settings: ^Euclid_Run_Settings, display_profile: ^evidence_profile.State,
+    platform: ^native.Sdl_Platform) -> int {
+    draw_runtime: native.Sdl_Draw_Runtime
+    if !native.sdl_draw_runtime_create(
+        &draw_runtime, platform^.device, sdl_draw_shader_paths()) {
+        log.error("sdl_draw_runtime_create_failed")
+        return 1
+    }
+    defer native.sdl_draw_runtime_destroy(&draw_runtime, platform^.device)
+    if !native.sdl_stroke_runtime_admit(
+        &draw_runtime, platform^.device, sdl_stroke_shader_paths()) {
+        log.warn("sdl_stroke_runtime_unavailable")
+    }
+    if !native.sdl_dust_runtime_admit(
+        &draw_runtime, platform^.device, sdl_dust_shader_paths()) {
+        log.warn("sdl_dust_runtime_unavailable")
+    }
+
+    input_runtime := input.input_runtime_create(context.allocator)
+    if input_runtime == nil { return 1 }
+    defer input.input_runtime_destroy(input_runtime, context.allocator)
+
+    session, ok := initialize_window_runtime_with_loading(
+        settings, display_profile, platform, &draw_runtime)
+    evidence_profile.zone_end(display_profile)
+    if !ok {
+        log.error("display_runtime_start_failed")
+        return 1
+    }
+    display := Display_Loop_Context{
+        platform, &draw_runtime, input_runtime,
+        session.presentation, display_profile}
+    result := initialize_and_run_sdl_session(settings, session, display)
+    report_draw_runtime_summary(&draw_runtime)
+    return result
 }
 
 //   - Owns state/window setup and teardown via deferred cleanup calls.
@@ -661,7 +733,6 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
     display_profile: evidence_profile.State
     init_display_profile(&display_profile, settings^.profile_path)
     defer evidence_profile.destroy(&display_profile)
-
     platform: native.Sdl_Platform
     if !native.sdl_platform_create(&platform, {
         title = WINDOW_TITLE,
@@ -674,38 +745,7 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
         return 1
     }
     defer native.sdl_platform_destroy(&platform)
-
-    draw_runtime: native.Sdl_Draw_Runtime
-    if !native.sdl_draw_runtime_create(
-        &draw_runtime, platform.device, sdl_draw_shader_paths()) {
-        log.error("sdl_draw_runtime_create_failed")
-        return 1
-    }
-    defer native.sdl_draw_runtime_destroy(&draw_runtime, platform.device)
-    if !native.sdl_stroke_runtime_admit(
-        &draw_runtime, platform.device, sdl_stroke_shader_paths()) {
-        log.warn("sdl_stroke_runtime_unavailable")
-    }
-    if !native.sdl_dust_runtime_admit(
-        &draw_runtime, platform.device, sdl_dust_shader_paths()) {
-        log.warn("sdl_dust_runtime_unavailable")
-    }
-
-    input_runtime := input.input_runtime_create(context.allocator)
-    if input_runtime == nil { return 1 }
-    defer input.input_runtime_destroy(input_runtime, context.allocator)
-
-    session, ok := initialize_window_runtime_with_loading(
-        settings, &display_profile, &platform, &draw_runtime)
-    evidence_profile.zone_end(&display_profile)
-    if !ok {
-        log.error("display_runtime_start_failed")
-        return 1
-    }
-    result := initialize_and_run_sdl_session(
-        settings, session, input_runtime, &display_profile, &platform, &draw_runtime)
-    report_draw_runtime_summary(&draw_runtime)
-    return result
+    return run_sdl_platform_session(settings, &display_profile, &platform)
 }
 
 // sdl_font_texture_create creates one display-owned atlas candidate.
@@ -719,17 +759,23 @@ sdl_font_texture_create :: proc(
 
 // sdl_font_texture_upload queues one gray-alpha atlas upload.
 sdl_font_texture_upload :: proc(
-    user_data: rawptr, texture: font.Font_Texture, pixels: []u8,
-    identity, generation: u64,
-    completion: font.Font_Texture_Completion_Handler,
-    completion_data: rawptr) -> bool {
+    user_data: rawptr, request: font.Font_Texture_Upload_Request) -> bool {
     owner := cast(^Sdl_Font_Texture_Context)user_data
     if owner == nil || owner.runtime == nil {return false}
+    texture := request.texture
     sampled := native.Sampled_Texture{texture.handle, texture.width, texture.height}
     queued := native.texture_operation_enqueue_upload(
-        &owner.runtime^.texture_operations, .Create, sampled,
-        .Gray_Alpha8, pixels, identity, generation,
-        {native.Texture_Operation_Completion(completion), completion_data})
+        &owner.runtime^.texture_operations, {
+            kind = .Create,
+            texture = sampled,
+            format = .Gray_Alpha8,
+            source = request.pixels,
+            identity = request.identity,
+            generation = request.generation,
+            callback = {
+                native.Texture_Operation_Completion(request.completion),
+                request.completion_data},
+        })
     if !queued || !owner.submit_immediately {return queued}
     return native.sdl_draw_submit_texture_operations(
         owner.platform, owner.runtime)

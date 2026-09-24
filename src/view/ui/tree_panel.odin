@@ -65,34 +65,44 @@ Accordion_Draw_Preparation :: struct {
     presentation: Presentation_Preparation,
 }
 
+// Encoded_Tree_Walk_Context groups shared geometry for recursive tree drawing.
+Encoded_Tree_Walk_Context :: struct {
+    state: ^core.Euclid_General_State,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    encoder: ^native.Draw_Encoder,
+    panel: geometry.Rectangle,
+    scroll_y: f32,
+    content_y: ^f32,
+}
+
 // draw_encoded_tree_node encodes one visible tree branch without its labels.
 draw_encoded_tree_node :: proc(
-    ji: ^bridgemodel.Euclid_Julia_Interface,
+    ctx: Encoded_Tree_Walk_Context,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    encoder: ^native.Draw_Encoder, panel: geometry.Rectangle, scroll_y: f32,
-    depth: int, content_y: ^f32, remaining: int) {
-    if ji == nil || node == nil || remaining <= 0 {return}
-    row_y := panel.y + content_y^ - scroll_y
-    content_y^ += TREE_ROW_HEIGHT
-    row := geometry.Rectangle{panel.x, row_y, panel.width, TREE_ROW_HEIGHT}
-    if row.y + row.height >= panel.y && row.y <= panel.y + panel.height {
+    depth, remaining: int) {
+    if ctx.ji == nil || node == nil || remaining <= 0 {return}
+    row_y := ctx.panel.y + ctx.content_y^ - ctx.scroll_y
+    ctx.content_y^ += TREE_ROW_HEIGHT
+    row := geometry.Rectangle{
+        ctx.panel.x, row_y, ctx.panel.width, TREE_ROW_HEIGHT}
+    if row.y + row.height >= ctx.panel.y &&
+        row.y <= ctx.panel.y + ctx.panel.height {
         if node^.is_selected {
             _ = native.draw_encoder_rectangle(
-                encoder, geometry.Rectangle(row), UI_BORDER_COLOR)
+                ctx.encoder, geometry.Rectangle(row), UI_BORDER_COLOR)
         }
         if node^.first_child != nil {
             icon := geometry.Rectangle{row.x + f32(depth) * TREE_INDENT +
                 TREE_ROW_ICON_OFFSET_X, row.y + TREE_ROW_ICON_OFFSET_Y,
                 TREE_ROW_ICON_SIZE, TREE_ROW_ICON_SIZE}
-            draw_encoded_disclosure(encoder, icon, node^.is_expanded)
+            draw_encoded_disclosure(ctx.encoder, icon, node^.is_expanded)
         }
     }
     if !node^.is_expanded {return}
     for child, steps := node^.first_child, 0;
-        child != nil && steps < ji^.animation_count;
+        child != nil && steps < ctx.ji^.animation_count;
         child, steps = child^.next_sibling, steps + 1 {
-        draw_encoded_tree_node(ji, child, encoder, panel, scroll_y,
-            depth + 1, content_y, remaining - 1)
+        draw_encoded_tree_node(ctx, child, depth + 1, remaining - 1)
     }
 }
 
@@ -110,10 +120,12 @@ draw_encoded_tree_geometry :: proc(
         SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
     _ = native.draw_encoder_push_scissor(encoder, geometry.Rectangle(panel))
     content_y: f32
+    ctx := Encoded_Tree_Walk_Context{
+        ji = ji, encoder = encoder, panel = panel,
+        scroll_y = scroll_y, content_y = &content_y}
     for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
         if node^.parent == nil {
-            draw_encoded_tree_node(ji, node, encoder, panel, scroll_y,
-                0, &content_y, ji^.animation_count)
+            draw_encoded_tree_node(ctx, node, 0, ji^.animation_count)
         }
     }
     _ = native.draw_encoder_pop_scissor(encoder)
@@ -127,24 +139,23 @@ draw_encoded_tree_geometry :: proc(
 
 // draw_encoded_tree_node_text emits visible labels in one bounded tree walk.
 draw_encoded_tree_node_text :: proc(
-    state: ^core.Euclid_General_State,
+    ctx: Encoded_Tree_Walk_Context,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    encoder: ^native.Draw_Encoder, panel: geometry.Rectangle, scroll_y: f32,
-    depth: int, content_y: ^f32, remaining: int) {
+    depth, remaining: int) {
     if node == nil || remaining <= 0 {return}
-    row_y := panel.y + content_y^ - scroll_y
-    content_y^ += TREE_ROW_HEIGHT
-    if row_y + TREE_ROW_HEIGHT >= panel.y && row_y <= panel.y + panel.height {
-        draw_encoded_label(state, encoder, node^.name,
-            panel.x + f32(depth) * TREE_INDENT + TREE_ROW_LABEL_OFFSET_X,
+    row_y := ctx.panel.y + ctx.content_y^ - ctx.scroll_y
+    ctx.content_y^ += TREE_ROW_HEIGHT
+    if row_y + TREE_ROW_HEIGHT >= ctx.panel.y &&
+        row_y <= ctx.panel.y + ctx.panel.height {
+        draw_encoded_label(ctx.state, ctx.encoder, node^.name,
+            ctx.panel.x + f32(depth) * TREE_INDENT + TREE_ROW_LABEL_OFFSET_X,
             row_y + TREE_ROW_LABEL_OFFSET_Y)
     }
     if !node^.is_expanded {return}
     for child, steps := node^.first_child, 0;
-        child != nil && steps < state^.julia_interface^.animation_count;
+        child != nil && steps < ctx.ji^.animation_count;
         child, steps = child^.next_sibling, steps + 1 {
-        draw_encoded_tree_node_text(state, child, encoder, panel, scroll_y,
-            depth + 1, content_y, remaining - 1)
+        draw_encoded_tree_node_text(ctx, child, depth + 1, remaining - 1)
     }
 }
 
@@ -158,11 +169,12 @@ draw_encoded_tree_text :: proc(
     scroll_y := clamp(state^.ui_runtime.tree_scroll_y,
         0, max(content_height - panel.height, 0))
     content_y: f32
+    ctx := Encoded_Tree_Walk_Context{state, ji, encoder, panel,
+        scroll_y, &content_y}
     _ = native.draw_encoder_push_scissor(encoder, geometry.Rectangle(panel))
     for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
         if node^.parent == nil {
-            draw_encoded_tree_node_text(state, node, encoder, panel, scroll_y,
-                0, &content_y, ji^.animation_count)
+            draw_encoded_tree_node_text(ctx, node, 0, ji^.animation_count)
         }
     }
     _ = native.draw_encoder_pop_scissor(encoder)

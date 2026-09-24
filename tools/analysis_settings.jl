@@ -457,6 +457,16 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "view-sdl-draw-runtime-reservation",
+                "src/view/native/sdl_draw_runtime.odin",
+                "sdl_draw_runtime_allocate_storage",
+                :arena,
+                "Display-owned fixed renderer staging is released with the SDL draw runtime.";
+                operation="arena_init_static",
+                target="runtime^.arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
                 "test-core-arena-owner-partial-init",
                 "src/core/storage/arena_owner_test.odin",
                 "arena_owner_test_init_failure",

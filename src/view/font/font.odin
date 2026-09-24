@@ -58,6 +58,7 @@ Font_Glyph_Page :: fontmodel.Font_Glyph_Page
 Font_Texture :: fontmodel.Font_Texture
 Font_Face :: fontmodel.Font_Face
 Font_Texture_Operations :: fontmodel.Font_Texture_Operations
+Font_Texture_Upload_Request :: fontmodel.Font_Texture_Upload_Request
 Font_Texture_Completion_Handler :: fontmodel.Font_Texture_Completion_Handler
 
 // Borrowed display-thread glyph data normalized across seed and paged textures.
@@ -665,7 +666,7 @@ font_generation_resolve_glyph :: proc(
         offset_x = glyph.offset_x,
         offset_y = glyph.offset_y,
         advance_x = glyph.advance_x,
-        base_size = entry.font.baseSize,
+        base_size = entry.font.base_size,
     }, true
 }
 
@@ -816,8 +817,11 @@ cache_publish_glyph_page :: proc(
         !cache_glyph_page_can_publish(entry, prepared) {
         return false
     }
-    texture, finalized := finalize_texture(prepared, cache.texture_operations,
-        u64(prepared.key) + 1, prepared.generation)
+    texture, finalized := finalize_texture(
+        prepared, cache.texture_operations, {
+            identity = u64(prepared.key) + 1,
+            generation = prepared.generation,
+        })
     if !finalized {
         return false
     }
@@ -936,8 +940,11 @@ cache_publish :: proc(cache: ^Font_Cache, prepared: ^Prepared_Font) -> bool {
         return false
     }
 
-    texture, uploaded := finalize_texture(prepared, cache.texture_operations,
-        u64(prepared.key) + 1, prepared.generation)
+    texture, uploaded := finalize_texture(
+        prepared, cache.texture_operations, {
+            identity = u64(prepared.key) + 1,
+            generation = prepared.generation,
+        })
     if !uploaded {return false}
     if !cache_publish_texture(cache, prepared, texture) {
         cache.texture_operations.release(

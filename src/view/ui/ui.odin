@@ -326,19 +326,11 @@ draw_encoded_disclosure :: proc(
         encoder, center + middle, center + last, thickness, UI_TEXT_COLOR)
 }
 
-// draw_encoded_accordion_geometry encodes panel chrome while labels stay deferred.
-draw_encoded_accordion_geometry :: proc(
-    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+// draw_encoded_accordion_content encodes the active section's geometry.
+draw_encoded_accordion_content :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    layout: Accordion_Layout) {
     runtime := &state^.ui_runtime
-    panel := runtime^.ui_regions.accordion_rect
-    _ = native.draw_encoder_rectangle(
-        encoder, geometry.Rectangle(panel), BACKGROUND_COLOR)
-    _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(panel), 1, UI_BORDER_COLOR)
-    sections := accordion_sections_for_layout(
-        runtime^.current_layout_mode, "Animation")
-    layout := accordion_layout(
-        geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(layout.content), UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
@@ -357,9 +349,15 @@ draw_encoded_accordion_geometry :: proc(
         draw_encoded_settings_geometry(
             state, encoder, geometry.Rectangle(layout.content))
     }
+}
+
+// draw_encoded_accordion_headers encodes all section headers and disclosures.
+draw_encoded_accordion_headers :: proc(
+    encoder: ^native.Draw_Encoder, sections: Accordion_Section_Set,
+    layout: Accordion_Layout, active: viewmodel.Ui_Accordion_Section) {
     for index in 0..<sections.count {
         header := layout.headers[index]
-        expanded := sections.items[index].section == runtime^.active_accordion_section
+        expanded := sections.items[index].section == active
         fill := BACKGROUND_COLOR
         if expanded {fill = UI_COMPONENT_BACKGROUND_COLOR}
         _ = native.draw_encoder_rectangle(
@@ -371,6 +369,24 @@ draw_encoded_accordion_geometry :: proc(
             header.y + (header.height - icon_size) * 0.5, icon_size, icon_size}
         draw_encoded_disclosure(encoder, geometry.Rectangle(icon), expanded)
     }
+}
+
+// draw_encoded_accordion_geometry encodes panel chrome while labels stay deferred.
+draw_encoded_accordion_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    runtime := &state^.ui_runtime
+    panel := runtime^.ui_regions.accordion_rect
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(panel), BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, geometry.Rectangle(panel), 1, UI_BORDER_COLOR)
+    sections := accordion_sections_for_layout(
+        runtime^.current_layout_mode, "Animation")
+    layout := accordion_layout(
+        geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
+    draw_encoded_accordion_content(state, encoder, layout)
+    draw_encoded_accordion_headers(
+        encoder, sections, layout, runtime^.active_accordion_section)
 }
 
 // draw_encoded_label emits one regular UI label through the portable font cache.

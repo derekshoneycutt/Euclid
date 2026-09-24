@@ -377,9 +377,12 @@ cache_begin_preparation_upload :: proc(cache: ^Font_Cache) -> bool {
         }
     }
     texture, queued := finalize_texture(
-        &task.prepared, cache.texture_operations,
-        u64(task.key) + 1, task.generation,
-        cache_texture_upload_completed, cache)
+        &task.prepared, cache.texture_operations, {
+            identity = u64(task.key) + 1,
+            generation = task.generation,
+            completion = cache_texture_upload_completed,
+            completion_data = cache,
+        })
     if !queued {return false}
     cache.preparation.pending_texture = texture
     cache.preparation.state = .Uploading

@@ -20,6 +20,18 @@ Draw_Sampler :: enum u8 {
     Linear,
 }
 
+// Draw_Texture_Binding pairs one texture handle with its sampling policy.
+Draw_Texture_Binding :: struct {
+    texture: rawptr,
+    sampler: Draw_Sampler,
+}
+
+// Draw_Textured_Vertices holds parallel positions and texture coordinates.
+Draw_Textured_Vertices :: struct {
+    positions: []geometry.Vector2,
+    texcoords: []geometry.Vector2,
+}
+
 // Draw_Vertex is the fixed CPU/GPU record shared by both 2D pipelines.
 Draw_Vertex :: struct {
     position: geometry.Vector2,
@@ -446,6 +458,48 @@ draw_encoder_finish_dust :: proc(
     return true
 }
 
+// draw_encoder_commit_instanced_dust admits one instance-stream command.
+draw_encoder_commit_instanced_dust :: proc(
+    encoder: ^Draw_Encoder, count: int, texture: rawptr) -> bool {
+    if encoder^.dust_draw_count >= len(encoder^.dust_draws) {return false}
+    draw_index := encoder^.dust_draw_count
+    encoder^.dust_draws[draw_index] = {first = 0, count = u32(count),
+        texture = texture, scissor = draw_encoder_physical_scissor(encoder),
+        viewport_extent = {f32(encoder^.physical_extent.x),
+            f32(encoder^.physical_extent.y)}}
+    encoder^.commands[encoder^.command_count] = {
+        kind = .Dust_Instanced, index = u32(draw_index)}
+    encoder^.dust_instance_count = count
+    encoder^.dust_draw_count += 1
+    return true
+}
+
+// draw_encoder_commit_expanded_dust admits one CPU-expanded dust command.
+draw_encoder_commit_expanded_dust :: proc(
+    encoder: ^Draw_Encoder, count: int, texture: rawptr) -> bool {
+    vertex_count := count * DUST_EXPANDED_VERTICES_PER_INSTANCE
+    if vertex_count > len(encoder^.dust_expanded_vertices) ||
+        encoder^.dust_expanded_draw_count >= len(encoder^.dust_expanded_draws) {
+        encoder^.statistics.dust_overflows += 1
+        return false
+    }
+    for index in 0..<count {
+        first := index * DUST_EXPANDED_VERTICES_PER_INSTANCE
+        draw_encoder_expand_dust(encoder^.dust_expanded_vertices[
+            first:first + DUST_EXPANDED_VERTICES_PER_INSTANCE],
+            encoder^.dust_instances[index])
+    }
+    draw_index := encoder^.dust_expanded_draw_count
+    encoder^.dust_expanded_draws[draw_index] = {first = 0,
+        count = u32(vertex_count), texture = texture,
+        scissor = draw_encoder_physical_scissor(encoder)}
+    encoder^.commands[encoder^.command_count] = {
+        kind = .Dust_Expanded, index = u32(draw_index)}
+    encoder^.dust_expanded_vertex_count = vertex_count
+    encoder^.dust_expanded_draw_count += 1
+    return true
+}
+
 // draw_encoder_commit_dust atomically appends one full prepared dust prefix.
 draw_encoder_commit_dust :: proc(
     encoder: ^Draw_Encoder, count: int, texture: rawptr) -> bool {
@@ -455,39 +509,13 @@ draw_encoder_commit_dust :: proc(
         return false
     }
     if count == 0 {return true}
+    admitted := false
     if encoder^.dust_instancing_enabled {
-        if encoder^.dust_draw_count >= len(encoder^.dust_draws) {return false}
-        draw_index := encoder^.dust_draw_count
-        encoder^.dust_draws[draw_index] = {first = 0, count = u32(count),
-            texture = texture, scissor = draw_encoder_physical_scissor(encoder),
-            viewport_extent = {f32(encoder^.physical_extent.x),
-                f32(encoder^.physical_extent.y)}}
-        encoder^.commands[encoder^.command_count] = {
-            kind = .Dust_Instanced, index = u32(draw_index)}
-        encoder^.dust_instance_count = count
-        encoder^.dust_draw_count += 1
+        admitted = draw_encoder_commit_instanced_dust(encoder, count, texture)
     } else {
-        vertex_count := count * DUST_EXPANDED_VERTICES_PER_INSTANCE
-        if vertex_count > len(encoder^.dust_expanded_vertices) ||
-            encoder^.dust_expanded_draw_count >= len(encoder^.dust_expanded_draws) {
-            encoder^.statistics.dust_overflows += 1
-            return false
-        }
-        for index in 0..<count {
-            first := index * DUST_EXPANDED_VERTICES_PER_INSTANCE
-            draw_encoder_expand_dust(encoder^.dust_expanded_vertices[
-                first:first + DUST_EXPANDED_VERTICES_PER_INSTANCE],
-                encoder^.dust_instances[index])
-        }
-        draw_index := encoder^.dust_expanded_draw_count
-        encoder^.dust_expanded_draws[draw_index] = {first = 0,
-            count = u32(vertex_count), texture = texture,
-            scissor = draw_encoder_physical_scissor(encoder)}
-        encoder^.commands[encoder^.command_count] = {
-            kind = .Dust_Expanded, index = u32(draw_index)}
-        encoder^.dust_expanded_vertex_count = vertex_count
-        encoder^.dust_expanded_draw_count += 1
+        admitted = draw_encoder_commit_expanded_dust(encoder, count, texture)
     }
+    if !admitted {return false}
     return draw_encoder_finish_dust(encoder, count)
 }
 
@@ -517,22 +545,24 @@ draw_encoder_commit :: proc(
 
 // draw_encoder_commit_textured appends one textured topology with explicit UVs.
 draw_encoder_commit_textured :: proc(
-    encoder: ^Draw_Encoder, positions, texcoords: []geometry.Vector2,
+    encoder: ^Draw_Encoder, vertices: Draw_Textured_Vertices,
     relative_indices: []u32, draw_color: color.Color_RGBA8,
-    texture: rawptr, sampler: Draw_Sampler) -> bool {
-    if texture == nil || len(positions) != len(texcoords) {return false}
-    batch, ready := draw_encoder_prepare(encoder, len(positions),
-        len(relative_indices), {.Textured, texture, sampler})
+    binding: Draw_Texture_Binding) -> bool {
+    if binding.texture == nil ||
+        len(vertices.positions) != len(vertices.texcoords) {return false}
+    batch, ready := draw_encoder_prepare(encoder, len(vertices.positions),
+        len(relative_indices), {.Textured, binding.texture, binding.sampler})
     if !ready {return false}
     base_vertex := u32(encoder^.vertex_count)
-    for position, offset in positions {
+    for position, offset in vertices.positions {
         encoder^.vertices[encoder^.vertex_count + offset] = {
-            position = position, texcoord = texcoords[offset], color = draw_color}
+            position = position, texcoord = vertices.texcoords[offset],
+            color = draw_color}
     }
     for relative_index, offset in relative_indices {
         encoder^.indices[encoder^.index_count + offset] = base_vertex + relative_index
     }
-    encoder^.vertex_count += len(positions)
+    encoder^.vertex_count += len(vertices.positions)
     encoder^.index_count += len(relative_indices)
     batch^.index_count += u32(len(relative_indices))
     encoder^.statistics.vertices = u32(encoder^.vertex_count)
@@ -654,7 +684,7 @@ draw_encoder_ring :: proc(
 draw_encoder_texture_quad :: proc(
     encoder: ^Draw_Encoder, rectangle: geometry.Rectangle,
     uv_rectangle: geometry.Rectangle, tint: color.Color_RGBA8,
-    texture: rawptr, sampler: Draw_Sampler = .Nearest) -> bool {
+    binding: Draw_Texture_Binding) -> bool {
     if rectangle.width <= 0 || rectangle.height <= 0 {return false}
     positions := [4]geometry.Vector2{{rectangle.x, rectangle.y},
         {rectangle.x + rectangle.width, rectangle.y},
@@ -665,6 +695,6 @@ draw_encoder_texture_quad :: proc(
         {uv_rectangle.x + uv_rectangle.width, uv_rectangle.y + uv_rectangle.height},
         {uv_rectangle.x, uv_rectangle.y + uv_rectangle.height}}
     indices := [6]u32{0, 1, 2, 0, 2, 3}
-    return draw_encoder_commit_textured(encoder, positions[:], texcoords[:],
-        indices[:], tint, texture, sampler)
+    return draw_encoder_commit_textured(encoder, {positions[:], texcoords[:]},
+        indices[:], tint, binding)
 }

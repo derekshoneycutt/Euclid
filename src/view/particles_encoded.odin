@@ -109,8 +109,11 @@ initialize_native_dust_atlas :: proc(
     candidate := native.sdl_sampled_texture_create(
         platform, DUST_ATLAS_SIZE, DUST_ATLAS_SIZE)
     if !native.sampled_texture_is_valid(candidate) {return false}
-    if !native.texture_operation_enqueue_upload(&runtime^.texture_operations,
-        .Create, candidate, .Rgba8, pixels, 1, 1) ||
+    if !native.texture_operation_enqueue_upload(
+        &runtime^.texture_operations, {
+            kind = .Create, texture = candidate, format = .Rgba8,
+            source = pixels, identity = 1, generation = 1,
+        }) ||
         !native.sdl_draw_submit_texture_operations(platform, runtime) {
         native.sdl_sampled_texture_release(platform, &candidate)
         return false
@@ -173,7 +176,7 @@ encode_mid_particles :: proc(
         if native.draw_encoder_texture_quad(encoder,
             {screen.x - diameter * 0.5, screen.y - diameter * 0.5,
                 diameter, diameter}, {0, 0, 1.0 / DUST_ATLAS_COLUMNS,
-                1.0 / DUST_ATLAS_ROWS}, tint, texture, .Linear) {count += 1}
+                1.0 / DUST_ATLAS_ROWS}, tint, {texture, .Linear}) {count += 1}
     }
     ps.last_render_mid = count
 }
