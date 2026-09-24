@@ -7,6 +7,10 @@ import color "../core/color"
 import "core:math"
 
 DUST_ATLAS_PIXEL_BYTES :: DUST_ATLAS_SIZE * DUST_ATLAS_SIZE * 4
+DUST_PEAK_ALPHA :: 210
+DUST_HYPOCYCLOID_SUPERSAMPLE_GRID :: 4
+DUST_HYPOCYCLOID_SUPERSAMPLE_COUNT ::
+    DUST_HYPOCYCLOID_SUPERSAMPLE_GRID * DUST_HYPOCYCLOID_SUPERSAMPLE_GRID
 
 // dust_atlas_set_pixel writes one white RGBA8 coverage sample.
 dust_atlas_set_pixel :: #force_inline proc(
@@ -44,24 +48,54 @@ build_native_dust_hypocycloid :: proc(
     points: [DUST_HYPOCYCLOID_SAMPLE_COUNT]Vector2
     count := sample_dust_hypocycloid_points(points[:], k)
     if count == 0 {return}
-    subpixels := [4]Vector2{{0.25, 0.25}, {0.75, 0.25},
-        {0.25, 0.75}, {0.75, 0.75}}
     center := (f32(DUST_TEXTURE_SIZE) - 1) * 0.5
     origin_x, origin_y := tile_x * DUST_TEXTURE_SIZE, tile_y * DUST_TEXTURE_SIZE
     for y in 0..<DUST_TEXTURE_SIZE {
         for x in 0..<DUST_TEXTURE_SIZE {
-            coverage: u8
-            for sample in subpixels {
-                point := Vector2{(f32(x) + sample.x - center) / center,
-                    (f32(y) + sample.y - center) / center}
-                if point_in_polygon(point, points[:count]) {coverage += 1}
+            coverage := 0
+            for sample_y in 0..<DUST_HYPOCYCLOID_SUPERSAMPLE_GRID {
+                for sample_x in 0..<DUST_HYPOCYCLOID_SUPERSAMPLE_GRID {
+                    point := Vector2{
+                        (f32(x) + (f32(sample_x) + 0.5) /
+                            DUST_HYPOCYCLOID_SUPERSAMPLE_GRID - center) / center,
+                        (f32(y) + (f32(sample_y) + 0.5) /
+                            DUST_HYPOCYCLOID_SUPERSAMPLE_GRID - center) / center}
+                    if point_in_polygon(point, points[:count]) {coverage += 1}
+                }
             }
             if coverage > 0 {
                 dust_atlas_set_pixel(pixels, origin_x + x, origin_y + y,
-                    coverage * 255 / 4)
+                    u8(coverage * 255 / DUST_HYPOCYCLOID_SUPERSAMPLE_COUNT))
             }
         }
     }
+}
+
+// build_native_dust_atlas initializes and rasterizes the complete RGBA8 atlas.
+build_native_dust_atlas :: proc(pixels: []u8) -> bool {
+    if len(pixels) != DUST_ATLAS_PIXEL_BYTES {return false}
+    for pixel in 0..<DUST_ATLAS_SIZE * DUST_ATLAS_SIZE {
+        offset := pixel * 4
+        pixels[offset] = 255
+        pixels[offset + 1] = 255
+        pixels[offset + 2] = 255
+        pixels[offset + 3] = 0
+    }
+    build_native_dust_circle(pixels, 0, 0)
+    for variant in 1..<DUST_ATLAS_VARIANT_COUNT {
+        build_native_dust_hypocycloid(pixels,
+            variant % DUST_ATLAS_COLUMNS, variant / DUST_ATLAS_COLUMNS,
+            variant + 2)
+    }
+    return true
+}
+
+// low_dust_opacity combines lifetime fade, visual peak opacity, and authored alpha.
+low_dust_opacity :: #force_inline proc(
+    lifetime_progress: f32, authored_alpha: u8) -> f32 {
+    lifetime_opacity := math.clamp(1 - lifetime_progress, 0, 1)
+    return lifetime_opacity * f32(DUST_PEAK_ALPHA) / 255 *
+        f32(authored_alpha) / 255
 }
 
 // initialize_native_dust_atlas publishes the fixed RGBA8 atlas synchronously.
@@ -71,12 +105,7 @@ initialize_native_dust_atlas :: proc(
     pixels, allocation_error := make(
         []u8, DUST_ATLAS_PIXEL_BYTES, context.temp_allocator)
     if allocation_error != nil {return false}
-    build_native_dust_circle(pixels, 0, 0)
-    for variant in 1..<DUST_ATLAS_VARIANT_COUNT {
-        build_native_dust_hypocycloid(pixels,
-            variant % DUST_ATLAS_COLUMNS, variant / DUST_ATLAS_COLUMNS,
-            variant + 2)
-    }
+    if !build_native_dust_atlas(pixels) {return false}
     candidate := native.sdl_sampled_texture_create(
         platform, DUST_ATLAS_SIZE, DUST_ATLAS_SIZE)
     if !native.sampled_texture_is_valid(candidate) {return false}
@@ -111,7 +140,7 @@ encode_low_particles :: proc(
                 max(ps.low_particles.size[index] * 2, 1)},
             color = {f32(particle_color.r) / 255,
                 f32(particle_color.g) / 255, f32(particle_color.b) / 255,
-                math.clamp((1 - t) * 210 / 255, 0, 1)},
+                low_dust_opacity(t, particle_color.a)},
             sprite_index = f32(ps.low_particles.dust_sprite_index[index]),
         }
         count += 1

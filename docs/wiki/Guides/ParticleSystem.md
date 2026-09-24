@@ -229,6 +229,25 @@ pipeline admission retains the expanded fallback; failed fallback admission reje
 dust publication rather than exposing partial resources. Shutdown releases every
 admitted handle in reverse ownership order.
 
+Atlas texels are straight-alpha white masks: every texel has white RGB, uncovered
+texels have zero alpha, and covered texels carry the rasterized coverage. Hypocycloid
+edges use a deterministic 4 by 4 supersampling grid. Transparent-white edge texels keep
+linear filtering from introducing dark color fringes while preserving zero coverage.
+
+Low-dust tint RGB remains unpremultiplied. Its staged alpha is
+
+$$
+\alpha = \operatorname{clamp}(1-t,0,1)
+    \frac{\alpha_{\mathrm{peak}}}{255}
+    \frac{\alpha_{\mathrm{authored}}}{255},
+$$
+
+where $t$ is normalized lifetime progress. `DUST_PEAK_ALPHA` in
+`src/view/particles_encoded.odin` owns the display-level peak-opacity tuning and is
+currently 210. The fragment shader multiplies this tint by atlas coverage, and the
+pipeline applies straight-alpha blending. Authored alpha 255 therefore preserves the
+existing lifetime fade, while lower authored values attenuate it proportionally.
+
 Middle embers are native textured quads and high flickers are native rectangles. They
 use the same command stream and therefore preserve the particle layers' authored
 positions around shadows and tools.
