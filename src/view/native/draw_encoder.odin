@@ -465,8 +465,8 @@ draw_encoder_commit_instanced_dust :: proc(
     draw_index := encoder^.dust_draw_count
     encoder^.dust_draws[draw_index] = {first = 0, count = u32(count),
         texture = texture, scissor = draw_encoder_physical_scissor(encoder),
-        viewport_extent = {f32(encoder^.physical_extent.x),
-            f32(encoder^.physical_extent.y)}}
+        viewport_extent = {encoder^.logical_extent.x,
+            encoder^.logical_extent.y}}
     encoder^.commands[encoder^.command_count] = {
         kind = .Dust_Instanced, index = u32(draw_index)}
     encoder^.dust_instance_count = count

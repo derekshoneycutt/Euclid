@@ -180,13 +180,18 @@ function shadercross_configure_command(
     return Cmd([cmake, "-S", source, "-B", build, "-G", "Ninja",
         "-DCMAKE_BUILD_TYPE=Release", "-DSDLSHADERCROSS_VENDORED=ON",
         "-DSDLSHADERCROSS_CLI=ON", "-DSDLSHADERCROSS_INSTALL=OFF",
-        "-DSDLSHADERCROSS_TESTS=OFF"])
+        "-DSDLSHADERCROSS_TESTS=OFF", "-DSPIRV_WERROR=OFF"])
 end
 
-"""Construct the memory-bounded build command for the vendored shader compiler."""
+function shadercross_needs_configure(build::String)
+    cache = joinpath(build, "CMakeCache.txt")
+    return !isfile(cache) || !any(==("SPIRV_WERROR:BOOL=OFF"), eachline(cache))
+end
+
+"""Construct the parallel build command for the vendored shader compiler."""
 function shadercross_build_command(cmake::String, build::String)
     return Cmd([cmake, "--build", build, "--target", "shadercross",
-        "--parallel", "1"])
+        "--parallel"])
 end
 
 """Run one visible setup command and report its owning stage on failure."""
@@ -206,7 +211,7 @@ function build_bundled_shadercross(repository_root::String)
     end
     cmake = resolve_tool("cmake")
     build = joinpath(repository_root, ".build", "shadercross")
-    if !isfile(joinpath(build, "CMakeCache.txt"))
+    if shadercross_needs_configure(build)
         checked_setup_command(
             shadercross_configure_command(cmake, source, build),
             "SDL_shadercross configuration")

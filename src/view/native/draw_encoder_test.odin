@@ -305,6 +305,7 @@ draw_encoder_test_dust_capacity_is_one_instanced_draw :: proc(t: ^testing.T) {
     testing.expect_value(t, encoder.dust_instance_count, DUST_INSTANCE_CAPACITY)
     testing.expect_value(t, commands[0], Draw_Command{.Dust_Instanced, 0})
     testing.expect_value(t, draws[0].count, u32(DUST_INSTANCE_CAPACITY))
+    testing.expect_value(t, draws[0].viewport_extent, [2]f32{100, 100})
 }
 
 // Verify expanded dust has dedicated full-prefix geometry and atlas UVs.

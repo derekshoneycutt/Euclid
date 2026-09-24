@@ -50,8 +50,16 @@ end
     @test configure.exec[6:7] == ["-G", "Ninja"]
     @test "-DSDLSHADERCROSS_VENDORED=ON" in configure.exec
     @test "-DSDLSHADERCROSS_INSTALL=OFF" in configure.exec
+    @test "-DSPIRV_WERROR=OFF" in configure.exec
+    mktempdir() do build
+        @test Shaders.shadercross_needs_configure(build)
+        write(joinpath(build, "CMakeCache.txt"), "SPIRV_WERROR:BOOL=ON\n")
+        @test Shaders.shadercross_needs_configure(build)
+        write(joinpath(build, "CMakeCache.txt"), "SPIRV_WERROR:BOOL=OFF\n")
+        @test !Shaders.shadercross_needs_configure(build)
+    end
     @test Shaders.shadercross_build_command(
-        "cmake", "/source/.build/shadercross").exec[end-1:end] == ["--parallel", "1"]
+        "cmake", "/source/.build/shadercross").exec[end] == "--parallel"
 
     document = reflected_document(
         spec.uniform_buffers, spec.samplers, spec.inputs, spec.outputs)
