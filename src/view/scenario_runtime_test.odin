@@ -29,6 +29,12 @@ scenario_runtime_test_capture :: proc(
     return true
 }
 
+// Reject one injected post-presentation capture.
+scenario_runtime_test_capture_failure :: proc(
+    user_data: rawptr, checkpoint: capture.Checkpoint) -> bool {
+    return false
+}
+
 // Verify the expected passed and failed scenario records in one completed log.
 scenario_runtime_expect_outcome_logs :: proc(t: ^testing.T, path: string) {
     context.logger = log.nil_logger()
@@ -347,6 +353,38 @@ scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {
     testing.expect_value(t, captured.fixed_step, u64(11))
     testing.expect_value(t,
         scenario_runtime_update(&runtime, 2), scenario.Run_Status.Passed)
+}
+
+// Verify failed screenshot materialization terminates with required failure evidence.
+@(test)
+scenario_runtime_records_post_present_capture_failure :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    state^.evidence_session.enabled = true
+    state^.evidence_session.lanes = evidence_session.ALL_LANES
+    state^.evidence_session.required_evidence_complete = true
+    evidence_trace.ring_init(&state^.evidence_ring, .Display)
+    path, copied := scenario.text_copy(".build/test-artifacts/failed-frame.png")
+    testing.expect(t, copied)
+    program := scenario.Program{count = 1}
+    program.commands[0] = {kind = .Request_Screenshot, text = path}
+    runtime: Scenario_Runtime
+    scenario_runtime_init(&runtime, state, program)
+    testing.expect_value(t,
+        scenario_runtime_update(&runtime, 1), scenario.Run_Status.Running)
+
+    status := scenario_runtime_after_present(&runtime, {
+        capture = scenario_runtime_test_capture_failure,
+    })
+
+    testing.expect_value(t, status, capture.Checkpoint_Status.Failed)
+    testing.expect_value(t, runtime.runner.status, scenario.Run_Status.Failed)
+    testing.expect_value(t, runtime.runner.failure_count, 1)
+    testing.expect(t, state^.evidence_ring.count > 0)
+    event := state^.evidence_ring.events[state^.evidence_ring.count - 1]
+    testing.expect_value(t, event.kind, evidence_trace.Kind.Capture_Failed)
+    testing.expect(t, .Required in event.flags && .Failure in event.flags)
 }
 
 // Verify scenario selection uses the programmatic tree synchronization path.

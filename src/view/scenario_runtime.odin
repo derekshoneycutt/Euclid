@@ -24,6 +24,7 @@ import "core:unicode/utf8"
 import "core:log"
 import "core:os"
 import "core:strings"
+import "core:time"
 
 // Deferred display mutation applied before the next frame's UI geometry is prepared.
 Scenario_Ui_Mutation_Kind :: enum u8 {
@@ -44,6 +45,7 @@ Scenario_Runtime :: struct {
     capture: capture.Coordinator,
     state: ^Euclid_General_State,
     input_runtime: ^input.Input_Runtime,
+    framebuffer_operations: view_core.Framebuffer_Capture_Operations,
     next_action_id: u64,
     presented_frame: u64,
     shutdown_requested: bool,
@@ -733,15 +735,20 @@ scenario_runtime_capture_screenshot :: proc(
     if path == nil {
         return false
     }
-    frame, frame_ok := view_core.framebuffer_acquire()
+    started_at := time.tick_now()
+    operations := runtime^.framebuffer_operations
+    frame, frame_ok := view_core.framebuffer_acquire_with_operations(operations)
     if !frame_ok {
         return false
     }
-    defer view_core.framebuffer_release(&frame)
-    if !view_core.framebuffer_export(&frame, path) {
+    defer view_core.framebuffer_release_with_operations(&frame, operations)
+    if !view_core.framebuffer_export_with_operations(&frame, path, operations) {
         return false
     }
-    return os.exists(capture.checkpoint_path_text(&runtime.capture))
+    persisted := os.exists(capture.checkpoint_path_text(&runtime.capture))
+    log.infof("scenario_screenshot_capture persisted=%v elapsed_ms=%.3f",
+        persisted, time.duration_seconds(time.tick_since(started_at)) * 1000)
+    return persisted
 }
 
 //   Report whether the scenario reached any terminal outcome.

@@ -94,6 +94,7 @@ Window_Frame_Context :: struct {
     presentation: ^Presentation_Runtime,
     scenario_runtime: ^Scenario_Runtime,
     capture_sink: capture.Sink,
+    framebuffer_operations: view_core.Framebuffer_Capture_Operations,
     display_profile: ^evidence_profile.State,
 }
 
@@ -263,8 +264,12 @@ initialize_and_run_sdl_session :: proc(
         return 1
     }
     framebuffer_owner := Sdl_Framebuffer_Context{platform = platform}
-    bind_sdl_framebuffer_capture(&framebuffer_owner)
-    defer unbind_sdl_framebuffer_capture()
+    if !bind_sdl_framebuffer_capture(&framebuffer_owner) {
+        log.error("display_framebuffer_start_failed")
+        _ = shutdown_window_runtime(session)
+        return 1
+    }
+    defer unbind_sdl_framebuffer_capture(&framebuffer_owner)
     if !terminal_graphics_bind_native(session.state, platform, draw_runtime) {
         log.error("terminal_graphics_native_bind_failed")
         _ = shutdown_window_runtime(session)
@@ -272,7 +277,8 @@ initialize_and_run_sdl_session :: proc(
     }
     font_owner.submit_immediately = false
     return run_initialized_window_session(
-        settings, session, input_runtime, profile, platform, draw_runtime)
+        settings, session, input_runtime, profile, platform, draw_runtime,
+        sdl_framebuffer_operations(&framebuffer_owner))
 }
 
 //   - Owns state/window setup and teardown via deferred cleanup calls.
@@ -284,12 +290,18 @@ initialize_and_run_sdl_session :: proc(
 // Returns:
 //   - exit_code: non-zero when strict trace validation failed.
 //   Submit one GIF frame while recording, aborting and noting the error on failure.
-run_gif_capture_frame :: proc(state: ^Euclid_General_State) {
-    if state^.ui_runtime.simulation_paused ||
-        state^.ui_runtime.gif_capture_phase != .Recording {
+run_gif_capture_frame :: proc(
+    state: ^Euclid_General_State,
+    operations: view_core.Framebuffer_Capture_Operations) {
+    if state^.ui_runtime.gif_capture_phase != .Recording {
         return
     }
-    if view_core.gif_capture_submit_frame(state) {
+    state^.gif_capture.recording_presentations += 1
+    if state^.ui_runtime.simulation_paused {
+        state^.gif_capture.paused_presentations += 1
+        return
+    }
+    if view_core.gif_capture_submit_frame(state, operations) {
         return
     }
     view_core.gif_capture_abort_session(&state^.gif_capture)
@@ -429,7 +441,7 @@ run_window_frame :: proc(
     evidence_profile.zone_end(display_profile)
 
     service_scenario_after_present(ctx)
-    run_gif_capture_frame(state)
+    run_gif_capture_frame(state, ctx.framebuffer_operations)
     finish_window_frame(state, display_profile)
 }
 
@@ -564,13 +576,16 @@ scenario_capture_sink :: proc(runtime: ^Scenario_Runtime) -> capture.Sink {
 //   Load optional scenario state into caller-owned session storage.
 prepare_window_scenario :: proc(
     settings: ^Euclid_Run_Settings, state: ^Euclid_General_State,
-    runtime: ^Scenario_Runtime) -> Window_Scenario_Preparation {
+    runtime: ^Scenario_Runtime,
+    framebuffer_operations: view_core.Framebuffer_Capture_Operations) ->
+        Window_Scenario_Preparation {
     if len(settings^.scenario_input) == 0 {return {loaded = true}}
     if !scenario_runtime_load_file(runtime, state, settings^.scenario_input) {
         fmt.eprintln("Failed to load semantic scenario: ", settings^.scenario_input)
         log.error("scenario_load_failed")
         return {}
     }
+    runtime^.framebuffer_operations = framebuffer_operations
     return {runtime, scenario_capture_sink(runtime), true}
 }
 
@@ -581,6 +596,7 @@ window_frame_context :: proc(
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
     display_profile: ^evidence_profile.State,
+    framebuffer_operations: view_core.Framebuffer_Capture_Operations,
     scenario: Window_Scenario_Preparation = {}) -> Window_Frame_Context {
     return {
         platform = platform,
@@ -589,6 +605,7 @@ window_frame_context :: proc(
         presentation = presentation,
         scenario_runtime = scenario.runtime,
         capture_sink = scenario.capture_sink,
+        framebuffer_operations = framebuffer_operations,
         display_profile = display_profile,
     }
 }
@@ -639,14 +656,15 @@ run_initialized_window_session :: proc(
     input_runtime: ^input.Input_Runtime,
     display_profile: ^evidence_profile.State,
     platform: ^native.Sdl_Platform,
-    draw_runtime: ^native.Sdl_Draw_Runtime) -> int {
+    draw_runtime: ^native.Sdl_Draw_Runtime,
+    framebuffer_operations: view_core.Framebuffer_Capture_Operations) -> int {
     state := session.state
     log.info("display_runtime_ready")
 
     when core.SCENARIOS_ENABLED {
         scenario_runtime: Scenario_Runtime
         scenario := prepare_window_scenario(
-            settings, state, &scenario_runtime)
+            settings, state, &scenario_runtime, framebuffer_operations)
         if !scenario.loaded {
             _ = shutdown_window_runtime(session)
             return 1
@@ -655,7 +673,7 @@ run_initialized_window_session :: proc(
         free_all(context.temp_allocator)
         run_window_frames(state, window_frame_context(
             platform, draw_runtime, input_runtime, session.presentation, display_profile,
-            scenario))
+            framebuffer_operations, scenario))
         _ = native.sdl_draw_submit_texture_operations(platform, draw_runtime)
         log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
             state^.fixed_step, scenario.runtime != nil)
@@ -664,7 +682,8 @@ run_initialized_window_session :: proc(
     } else {
         free_all(context.temp_allocator)
         run_window_frames(state, window_frame_context(
-            platform, draw_runtime, input_runtime, session.presentation, display_profile))
+            platform, draw_runtime, input_runtime, session.presentation, display_profile,
+            framebuffer_operations))
         _ = native.sdl_draw_submit_texture_operations(platform, draw_runtime)
         log.infof("display_loop_stopped fixed_step=%d", state^.fixed_step)
         return shutdown_window_runtime(session)

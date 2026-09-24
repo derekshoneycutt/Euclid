@@ -599,17 +599,22 @@ The windowed wrapper adds GIF policy without changing this semantic boundary.
 
 Presented-pixel acquisition is a display-thread operation owned by the SDL platform
 and adapted through `src/view/sdl_framebuffer.odin`. The platform copies its owned scene
-target to a temporary `DOWNLOAD` transfer buffer, submits the copy, waits for GPU idle,
-maps tightly packed RGBA8 pixels, and releases the transfer buffer before returning.
-The adapter places those bytes in the existing short-lived CPU image facade for crop,
-nearest-neighbor resize, PNG export, and GIF input. Captured pixels never enter
-canonical state or worker storage.
+target to a temporary `DOWNLOAD` transfer buffer, submits the copy with a fence, waits
+for that submission, and maps the transfer storage. Mapped rows may be padded; the
+platform copies them into tightly packed, top-left RGBA8 storage before unmapping and
+releasing the fence and transfer buffer. The adapter owns that storage through a
+display-lifetime tracking allocator. Crop and nearest-neighbor resize replace buffers
+transactionally, and release is idempotent. Captured pixels never enter canonical
+state or worker storage.
 
 Scenario evidence owns bounded screenshot requests, safe relative paths, and completion
 correlation. The display owner fulfills those requests after presentation by acquiring,
-exporting, and releasing one capture. GIF policy uses the same acquisition lifecycle,
-then supplies validated pixel rows and pitch to the files-owned encoder. The encoder
-arena, GIF byte production, and persisted output remain files responsibilities.
+exporting, and releasing one capture. PNG export wraps the borrowed RGBA8 bytes in an
+SDL `.RGBA32` surface and calls SDL core `SavePNG`; the wrapper never owns the borrowed
+pixels. Screenshot completion is published only after export succeeds and the output
+path exists. GIF policy uses the same acquisition lifecycle, then supplies validated
+pixel rows and pitch to the files-owned encoder. The encoder arena, GIF byte production,
+and persisted output remain files responsibilities.
 
 This boundary is deliberately synchronous and has no pending state, shared-frame
 cache, or multi-frame mapped-pixel lifetime. The scene target remains SDL-owned; only

@@ -1,0 +1,5 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"screenshot":".build/screenshot-capture-acceptance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

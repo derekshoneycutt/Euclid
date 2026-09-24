@@ -178,7 +178,16 @@ while GIF capture is active or requested.
 
 Screenshot completion occurs after a frame is presented. Follow `screenshot` with an
 uncorrelated `capture_completed` wait when later steps depend on the file; screenshot
-aliases do not currently match capture-completion identity.
+aliases do not currently match capture-completion identity. Completion requires a
+successful SDL core PNG save and an existing output file. The focused
+`screenshot-capture-acceptance` scenario proves real scene-target readback, persisted
+completion, no bad frees, and orderly shutdown without unrelated animation evidence.
+
+Native capture tests use padded source rows and decode the persisted PNG back to RGBA8
+to verify dimensions, channel order, orientation, and representative pixels. Injected
+completion operations cover fence-wait failure, map failure, successful unmap, and
+exactly-once fence release. CPU capture tests separately cover crop, nearest-neighbor
+resize, allocation failure, and idempotent release.
 
 ### Judging A Scenario Result
 

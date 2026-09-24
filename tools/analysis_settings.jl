@@ -440,6 +440,7 @@ AnalysisSettings(
         [
             BaseSettings.allocations.source_patterns...;
             AllocatorSourcePattern("builder.allocator", :custom);
+            AllocatorSourcePattern("operations.allocator", :custom);
             AllocatorSourcePattern("store.allocator", :custom);
             AllocatorSourcePattern("store.payload_allocator", :custom);
             AllocatorSourcePattern("state.allocator", :custom)
@@ -470,6 +471,28 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             custom_test_allocation_reviews()...,
+            ReviewedAllocationPolicy(
+                "view-framebuffer-crop-replacement",
+                "src/view/core/framebuffer_capture.odin",
+                "framebuffer_crop_with_operations",
+                :custom,
+                "Bounded replacement pixels are released through the display-owned capture operations.";
+                operation="make",
+                target="[]u8",
+                allocator_source="operations.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-framebuffer-resize-replacement",
+                "src/view/core/framebuffer_capture.odin",
+                "framebuffer_resize_with_operations",
+                :custom,
+                "Bounded replacement pixels are released through the display-owned capture operations.";
+                operation="make",
+                target="[]u8",
+                allocator_source="operations.allocator",
+                certainty=:definite,
+                response=Ignore),
             # Shared bounded builders grow within an explicit bulk-lifetime owner.
             ReviewedAllocationPolicy(
                 "core-bounded-byte-builder-growth",

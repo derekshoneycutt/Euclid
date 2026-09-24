@@ -10,6 +10,8 @@ import viewmodel "../model"
 import "../../core"
 import "../../files"
 
+import "core:log"
+import "core:time"
 import rl "vendor:raylib"
 
 GIF_CAPTURE_QUALITY :: 12
@@ -129,14 +131,6 @@ gif_capture_normalized_frame_with_operations :: proc(
     return frame, true
 }
 
-//   Load the framebuffer and normalize it to encoder dimensions.
-gif_capture_normalized_frame :: proc(
-    state: ^core.Euclid_General_State,
-    downsample: int) -> (Framebuffer_Pixels, bool) {
-    return gif_capture_normalized_frame_with_operations(
-        state, downsample, FRAMEBUFFER_CAPTURE_OPERATIONS)
-}
-
 //   Capture the current view, optionally downsample, and submit it to GIF encoder.
 //
 // Parameters:
@@ -145,7 +139,8 @@ gif_capture_normalized_frame :: proc(
 // Returns:
 //   - ok: true when the frame is accepted or intentionally skipped by frame-step logic.
 gif_capture_submit_frame :: proc(
-    state: ^core.Euclid_General_State) -> bool {
+    state: ^core.Euclid_General_State,
+    operations: Framebuffer_Capture_Operations) -> bool {
     if !state^.gif_capture.active {
         return false
     }
@@ -159,15 +154,21 @@ gif_capture_submit_frame :: proc(
     }
 
     downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
-    frame, frame_ok := gif_capture_normalized_frame(state, downsample)
+    capture_started_at := time.tick_now()
+    frame, frame_ok := gif_capture_normalized_frame_with_operations(
+        state, downsample, operations)
+    state^.gif_capture.frame_materialization_ms +=
+        time.duration_seconds(time.tick_since(capture_started_at)) * 1000
+    state^.gif_capture.materialized_frames += 1
     if !frame_ok {
         return false
     }
-    defer framebuffer_release(&frame)
+    defer framebuffer_release_with_operations(&frame, operations)
 
     centiseconds := gif_capture_delay_centiseconds(frame_step)
-    if !files.gif_encode_frame(&state^.gif_capture.encoder, frame.pixels, centiseconds,
-        GIF_CAPTURE_QUALITY, frame.pitch_bytes) {
+    if !files.gif_encode_frame(&state^.gif_capture.encoder,
+        raw_data(frame.pixels), centiseconds, GIF_CAPTURE_QUALITY,
+        frame.pitch_bytes) {
         return false
     }
 
@@ -257,6 +258,13 @@ gif_capture_abort_session :: proc(session: ^Gif_Capture_Session) {
         if len(result.data) > 0 {
             files.gif_encode_free(&result)
         }
+    }
+    if session.active {
+        log.infof(
+            "gif_capture_summary outcome=aborted frames=%d presentations=%d " +
+            "paused=%d materialization_ms=%.3f",
+            session.materialized_frames, session.recording_presentations,
+            session.paused_presentations, session.frame_materialization_ms)
     }
     session.active = false
     gif_capture_clear_source_dimensions(session)
@@ -363,6 +371,11 @@ gif_capture_begin_session :: proc(
     }
 
     state^.gif_capture.active = true
+    state^.gif_capture.started_at = time.tick_now()
+    state^.gif_capture.frame_materialization_ms = 0
+    state^.gif_capture.materialized_frames = 0
+    state^.gif_capture.recording_presentations = 0
+    state^.gif_capture.paused_presentations = 0
     gif_capture_freeze_source_dimensions(
         &state^.gif_capture, capture_w, capture_h)
     ui_runtime.gif_capture_frame_counter = 0
@@ -395,6 +408,14 @@ gif_capture_finalize_session :: proc(
     }
 
     set_last_gif_path(&state.ui_runtime, path)
+    log.infof(
+        "gif_capture_summary outcome=saved frames=%d presentations=%d paused=%d " +
+        "materialization_ms=%.3f total_ms=%.3f",
+        state^.gif_capture.materialized_frames,
+        state^.gif_capture.recording_presentations,
+        state^.gif_capture.paused_presentations,
+        state^.gif_capture.frame_materialization_ms,
+        time.duration_seconds(time.tick_since(state^.gif_capture.started_at)) * 1000)
     return true
 }
 

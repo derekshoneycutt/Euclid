@@ -1,11 +1,12 @@
 package native
 
 import "core:log"
-import "core:mem"
+import "core:math"
 
 import sdl "vendor:sdl3"
 
 SDL_SCENE_FORMAT :: sdl.GPUTextureFormat.R8G8B8A8_UNORM
+SDL_CAPTURE_ROW_ALIGNMENT :: 256
 
 // Sdl_Frame_Result distinguishes presentation from temporary unavailability and failure.
 Sdl_Frame_Result :: enum u8 {
@@ -33,6 +34,51 @@ Sdl_Input_Diagnostics :: struct {
     wheel_events: u64,
     focus_events: u64,
     event_overflows: u64,
+}
+
+// Sdl_Capture_Timing reports synchronous GPU wait and CPU copy costs.
+Sdl_Capture_Timing :: struct {
+    fence_wait_ns: u64,
+    map_copy_ns: u64,
+}
+
+// Sdl_Capture_Transfer_Layout describes one padded GPU download allocation.
+Sdl_Capture_Transfer_Layout :: struct {
+    pitch_bytes: int,
+    transfer_bytes: int,
+    valid: bool,
+}
+
+// Sdl_Capture_Completion identifies one submitted download awaiting CPU copy.
+Sdl_Capture_Completion :: struct {
+    device: ^sdl.GPUDevice,
+    transfer: ^sdl.GPUTransferBuffer,
+    fence: ^sdl.GPUFence,
+    destination: []u8,
+    width: int,
+    height: int,
+    source_pitch: int,
+    timing: ^Sdl_Capture_Timing,
+}
+
+// Sdl_Capture_Completion_Operations supplies post-submission GPU capture calls.
+Sdl_Capture_Completion_Operations :: struct {
+    user_data: rawptr,
+    wait: proc(user_data: rawptr, device: ^sdl.GPUDevice,
+        fence: ^sdl.GPUFence) -> bool,
+    map_transfer: proc(user_data: rawptr, device: ^sdl.GPUDevice,
+        transfer: ^sdl.GPUTransferBuffer) -> rawptr,
+    unmap: proc(user_data: rawptr, device: ^sdl.GPUDevice,
+        transfer: ^sdl.GPUTransferBuffer),
+    release_fence: proc(user_data: rawptr, device: ^sdl.GPUDevice,
+        fence: ^sdl.GPUFence),
+}
+
+SDL_CAPTURE_COMPLETION_OPERATIONS :: Sdl_Capture_Completion_Operations{
+    wait = sdl_capture_wait,
+    map_transfer = sdl_capture_map,
+    unmap = sdl_capture_unmap,
+    release_fence = sdl_capture_release_fence,
 }
 
 // Sdl_Platform owns display-thread native state for one window session.
@@ -230,15 +276,117 @@ sdl_platform_present_draw :: proc(
     return .Presented
 }
 
-// sdl_platform_read_scene_rgba8 synchronously copies the owned scene target.
-sdl_platform_read_scene_rgba8 :: proc(
-    platform: ^Sdl_Platform, destination: []u8) -> bool {
-    if platform == nil || platform^.device == nil || platform^.scene_target == nil ||
-        len(destination) != int(platform^.scene_width * platform^.scene_height * 4) {
+// sdl_capture_transfer_layout resolves one backend-friendly RGBA8 download layout.
+sdl_capture_transfer_layout :: proc(
+    width, height: u32) -> Sdl_Capture_Transfer_Layout {
+    if width == 0 || height == 0 ||
+        u64(width) > u64(math.max(int)) / 4 {
+        return {}
+    }
+    row_bytes := int(width) * 4
+    if row_bytes > math.max(int) - (SDL_CAPTURE_ROW_ALIGNMENT - 1) {
+        return {}
+    }
+    pitch_bytes := (row_bytes + SDL_CAPTURE_ROW_ALIGNMENT - 1) /
+        SDL_CAPTURE_ROW_ALIGNMENT * SDL_CAPTURE_ROW_ALIGNMENT
+    if int(height) > math.max(int) / pitch_bytes {
+        return {}
+    }
+    transfer_bytes := pitch_bytes * int(height)
+    return {pitch_bytes, transfer_bytes, transfer_bytes <= int(math.max(u32))}
+}
+
+// sdl_capture_copy_rgba8 normalizes padded top-left rows into tight storage.
+sdl_capture_copy_rgba8 :: proc(
+    destination: []u8, source: rawptr,
+    width, height, source_pitch: int) -> bool {
+    if source == nil || width <= 0 || height <= 0 ||
+        width > math.max(int) / 4 {
         return false
     }
+    row_bytes := width * 4
+    if source_pitch < row_bytes || height > math.max(int) / source_pitch ||
+        len(destination) != row_bytes * height {
+        return false
+    }
+    source_bytes := (cast([^]u8)source)[:source_pitch * height]
+    for row in 0..<height {
+        copy(destination[row * row_bytes:][:row_bytes],
+            source_bytes[row * source_pitch:][:row_bytes])
+    }
+    return true
+}
+
+// sdl_capture_wait waits for one submitted capture fence through SDL.
+sdl_capture_wait :: proc(
+    _: rawptr, device: ^sdl.GPUDevice, fence: ^sdl.GPUFence) -> bool {
+    fences := [1]^sdl.GPUFence{fence}
+    return sdl.WaitForGPUFences(device, true, raw_data(fences[:]), len(fences))
+}
+
+// sdl_capture_map maps one completed download transfer through SDL.
+sdl_capture_map :: proc(
+    _: rawptr, device: ^sdl.GPUDevice,
+    transfer: ^sdl.GPUTransferBuffer) -> rawptr {
+    return sdl.MapGPUTransferBuffer(device, transfer, false)
+}
+
+// sdl_capture_unmap unmaps one completed download transfer through SDL.
+sdl_capture_unmap :: proc(
+    _: rawptr, device: ^sdl.GPUDevice, transfer: ^sdl.GPUTransferBuffer) {
+    sdl.UnmapGPUTransferBuffer(device, transfer)
+}
+
+// sdl_capture_release_fence releases one submitted capture fence through SDL.
+sdl_capture_release_fence :: proc(
+    _: rawptr, device: ^sdl.GPUDevice, fence: ^sdl.GPUFence) {
+    sdl.ReleaseGPUFence(device, fence)
+}
+
+// sdl_capture_complete normalizes one submitted download and releases completion state.
+sdl_capture_complete :: proc(
+    completion: Sdl_Capture_Completion,
+    operations: Sdl_Capture_Completion_Operations) -> bool {
+    if completion.fence == nil || operations.wait == nil ||
+        operations.map_transfer == nil ||
+        operations.unmap == nil || operations.release_fence == nil {
+        return false
+    }
+    defer operations.release_fence(
+        operations.user_data, completion.device, completion.fence)
+    wait_started_at := sdl_time_ticks()
+    if !operations.wait(
+        operations.user_data, completion.device, completion.fence) {return false}
+    wait_finished_at := sdl_time_ticks()
+    mapped := operations.map_transfer(
+        operations.user_data, completion.device, completion.transfer)
+    if mapped == nil {return false}
+    defer operations.unmap(
+        operations.user_data, completion.device, completion.transfer)
+    copied := sdl_capture_copy_rgba8(
+        completion.destination, mapped, completion.width,
+        completion.height, completion.source_pitch)
+    if completion.timing != nil {
+        completion.timing^.fence_wait_ns = wait_finished_at - wait_started_at
+        completion.timing^.map_copy_ns = sdl_time_ticks() - wait_finished_at
+    }
+    return copied
+}
+
+// sdl_platform_read_scene_rgba8 synchronously copies the owned scene target.
+sdl_platform_read_scene_rgba8 :: proc(
+    platform: ^Sdl_Platform, destination: []u8,
+    timing: ^Sdl_Capture_Timing = nil) -> bool {
+    if platform == nil || platform^.device == nil || platform^.scene_target == nil {
+        return false
+    }
+    layout := sdl_capture_transfer_layout(
+        platform^.scene_width, platform^.scene_height)
+    if !layout.valid {return false}
+    row_bytes := int(platform^.scene_width) * 4
+    if len(destination) != row_bytes * int(platform^.scene_height) {return false}
     transfer := sdl.CreateGPUTransferBuffer(platform^.device, {
-        usage = .DOWNLOAD, size = u32(len(destination))})
+        usage = .DOWNLOAD, size = u32(layout.transfer_bytes)})
     if transfer == nil {return false}
     defer sdl.ReleaseGPUTransferBuffer(platform^.device, transfer)
     command_buffer := sdl.AcquireGPUCommandBuffer(platform^.device)
@@ -250,15 +398,48 @@ sdl_platform_read_scene_rgba8 :: proc(
     }
     sdl.DownloadFromGPUTexture(copy_pass, {texture = platform^.scene_target,
         w = platform^.scene_width, h = platform^.scene_height, d = 1}, {
-        transfer_buffer = transfer, pixels_per_row = platform^.scene_width,
+        transfer_buffer = transfer, pixels_per_row = u32(layout.pitch_bytes / 4),
         rows_per_layer = platform^.scene_height})
     sdl.EndGPUCopyPass(copy_pass)
-    if !sdl.SubmitGPUCommandBuffer(command_buffer) ||
-        !sdl.WaitForGPUIdle(platform^.device) {return false}
-    mapped := sdl.MapGPUTransferBuffer(platform^.device, transfer, false)
-    if mapped == nil {return false}
-    mem.copy(raw_data(destination), mapped, len(destination))
-    sdl.UnmapGPUTransferBuffer(platform^.device, transfer)
+    fence := sdl.SubmitGPUCommandBufferAndAcquireFence(command_buffer)
+    if fence == nil {return false}
+    return sdl_capture_complete({
+        device = platform^.device,
+        transfer = transfer,
+        fence = fence,
+        destination = destination,
+        width = int(platform^.scene_width),
+        height = int(platform^.scene_height),
+        source_pitch = layout.pitch_bytes,
+        timing = timing,
+    }, SDL_CAPTURE_COMPLETION_OPERATIONS)
+}
+
+// sdl_platform_save_png persists borrowed top-left RGBA8 rows through SDL core.
+sdl_platform_save_png :: proc(
+    pixels: []u8, width, height, pitch_bytes: int, path: cstring) -> bool {
+    if len(pixels) == 0 || width <= 0 || height <= 0 || path == nil ||
+        width > int(math.max(i32)) || height > int(math.max(i32)) ||
+        width > math.max(int) / 4 || pitch_bytes < width * 4 ||
+        pitch_bytes > int(math.max(i32)) ||
+        height > math.max(int) / pitch_bytes ||
+        len(pixels) < pitch_bytes * height {
+        return false
+    }
+    surface := sdl.CreateSurfaceFrom(
+        i32(width), i32(height), .RGBA32, raw_data(pixels), i32(pitch_bytes))
+    if surface == nil {
+        log.errorf("sdl_capture_surface_failed error=%s", sdl.GetError())
+        return false
+    }
+    defer sdl.DestroySurface(surface)
+    started_at := sdl_time_ticks()
+    if !sdl.SavePNG(surface, path) {
+        log.errorf("sdl_capture_png_failed error=%s", sdl.GetError())
+        return false
+    }
+    log.infof("sdl_capture_png width=%d height=%d elapsed_ns=%d",
+        width, height, sdl_time_ticks() - started_at)
     return true
 }
 

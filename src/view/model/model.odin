@@ -6,6 +6,7 @@ import color "../../core/color"
 import geometry "../../core/geometry"
 
 import "core:encoding/uuid"
+import "core:time"
 
 TOOL_LENGTH :: 0.35
 MAX_TOOL_BRUSH_OCCLUDERS :: 2
@@ -45,6 +46,11 @@ Gif_Capture_Session :: struct {
     active: bool,
     source_width: int,
     source_height: int,
+    started_at: time.Tick,
+    frame_materialization_ms: f64,
+    materialized_frames: u64,
+    recording_presentations: u64,
+    paused_presentations: u64,
 }
 
 Layout_Preference :: enum u8 {
