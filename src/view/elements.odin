@@ -13,17 +13,13 @@ import geometry "../core/geometry"
 // Only the tools are drawn with shaders. Everything else is the ordinary 2D tools,
 // drawn with an isometric projection
 
-import "../files"
 import view_core "core"
 import "font"
 
-import "core:fmt"
 import "core:math"
 import "core:math/linalg"
-import "core:strings"
 
 import rl "vendor:raylib"
-import rlgl "vendor:raylib/rlgl"
 
 Tool_Brush_Material :: struct {
     roughness:     f32,
@@ -98,19 +94,6 @@ High_Merged_Draw_Context :: struct {
     compass_index: int,
     pen_receives_compass: bool,
     compass_receives_pen: bool,
-}
-
-//   Resolved tool_brush shader program paths.
-Tool_Brush_Shader_Paths :: struct {
-    vertex:   cstring,
-    fragment: cstring,
-}
-
-// Tool_Brush_Shader_Operations supplies the native calls used during shader admission.
-Tool_Brush_Shader_Operations :: struct {
-    user_data: rawptr,
-    get_location: proc(user_data: rawptr, shader: rl.Shader, name: cstring) -> i32,
-    unload: proc(user_data: rawptr, shader: rl.Shader),
 }
 
 //   Plane-clipping context for one pen segment against one polygon plane.
@@ -291,208 +274,6 @@ trochoid_tool_defers_to_compass :: #force_inline proc(
 }
 
 
-//   Initialize tool_brush shader handles and uniform locations from packaged assets.
-//
-// Parameters:
-//   - state: Global app state that stores shader handles and uniform locations.
-//
-// Returns:
-//   - none.
-init_tool_brush_shader :: proc(state: ^Euclid_General_State) {
-    s := &state^.stroke_3d
-
-    paths: Tool_Brush_Shader_Paths
-    if !tool_brush_shader_paths(&paths) {
-        s^.ready = false
-        return
-    }
-
-    s^.shader = rl.LoadShader(paths.vertex, paths.fragment)
-    if s^.shader.id == 0 {
-        fmt.println("tool_brush shader failed to load; pen/compass 3D shading disabled")
-        s^.ready = false
-        return
-    }
-
-    _ = tool_brush_admit_shader(s, tool_brush_native_operations())
-}
-
-// Admit one loaded tool shader only after its complete uniform contract resolves.
-tool_brush_admit_shader :: proc(
-    s: ^viewmodel.Tool_Render_State,
-    operations: Tool_Brush_Shader_Operations) -> bool {
-    s^.ready = false
-    if s^.shader.id == 0 {
-        return false
-    }
-    tool_brush_cache_uniform_locations(s, operations)
-    if !tool_brush_uniforms_valid(s) {
-        fmt.println(
-            "tool_brush shader missing required uniforms; pen/compass 3D shading disabled")
-        fmt.println("tool_brush uniform locations p0=", s^.loc_p0, " p1=", s^.loc_p1,
-            " radius=", s^.loc_radius, " viewportHeight=", s^.loc_viewport_height)
-        tool_brush_release_shader(s, operations)
-        return false
-    }
-
-    s^.ready = true
-    return true
-}
-
-// Call Raylib's uniform-location lookup through the tool shader operation contract.
-tool_brush_native_get_location :: proc(
-    _: rawptr, shader: rl.Shader, name: cstring) -> i32 {
-    return rl.GetShaderLocation(shader, name)
-}
-
-// Release one Raylib shader through the tool shader operation contract.
-tool_brush_native_unload :: proc(_: rawptr, shader: rl.Shader) {
-    rl.UnloadShader(shader)
-}
-
-// Return the production Raylib operations used by tool shader admission and cleanup.
-tool_brush_native_operations :: proc() -> Tool_Brush_Shader_Operations {
-    return {
-        get_location = tool_brush_native_get_location,
-        unload = tool_brush_native_unload,
-    }
-}
-
-//   Resolve and validate the tool_brush shader asset paths.
-//
-// Parameters:
-//   - paths: Destination for the resolved vertex/fragment C-strings when true.
-//
-// Returns:
-//   - ok: true when both paths resolve to existing files.
-tool_brush_shader_paths :: proc(paths: ^Tool_Brush_Shader_Paths) -> bool {
-    vertex_path :=
-        files.packaged_asset_path("shaders/stroke3d.vs", context.temp_allocator)
-    fragment_path :=
-        files.packaged_asset_path("shaders/stroke3d.fs", context.temp_allocator)
-    if len(vertex_path) == 0 || len(fragment_path) == 0 {
-        fmt.println(
-            "tool_brush shader paths could not be resolved from assets.pkg; pen/compass 3D shading disabled")
-        return false
-    }
-
-    paths^.vertex = strings.clone_to_cstring(vertex_path, context.temp_allocator)
-    paths^.fragment = strings.clone_to_cstring(fragment_path, context.temp_allocator)
-    if !rl.FileExists(paths^.vertex) || !rl.FileExists(paths^.fragment) {
-        fmt.println(
-            "tool_brush shader files not found; pen/compass 3D shading disabled")
-        fmt.println(
-            "tool_brush expected paths: vs=", vertex_path, " fs=", fragment_path)
-        return false
-    }
-
-    return true
-}
-
-//   Cache tool_brush uniform locations onto the stroke_3d render state.
-tool_brush_cache_uniform_locations :: proc(
-    s: ^viewmodel.Tool_Render_State, operations: Tool_Brush_Shader_Operations) {
-    tool_brush_cache_scalar_uniform_locations(s, operations)
-    tool_brush_cache_occluder_uniform_locations(s, operations)
-}
-
-// Cache scalar and vector uniforms shared by every tool brush draw mode.
-tool_brush_cache_scalar_uniform_locations :: proc(
-    s: ^viewmodel.Tool_Render_State, operations: Tool_Brush_Shader_Operations) {
-    get := operations.get_location
-    data := operations.user_data
-    s^.loc_light_dir = get(data, s^.shader, "uLightDirView")
-    s^.loc_ambient = get(data, s^.shader, "uAmbient")
-    s^.loc_diffuse = get(data, s^.shader, "uDiffuse")
-    s^.loc_material_roughness = get(data, s^.shader, "uMaterialRoughness")
-    s^.loc_material_fresnel_0 = get(data, s^.shader, "uMaterialFresnel0")
-    s^.loc_material_specular_tint =
-        get(data, s^.shader, "uMaterialSpecularTint")
-    s^.loc_material_shadow_limit =
-        get(data, s^.shader, "uMaterialShadowLimit")
-    s^.loc_p0 = get(data, s^.shader, "uP0")
-    s^.loc_p1 = get(data, s^.shader, "uP1")
-    s^.loc_radius = get(data, s^.shader, "uRadius")
-    s^.loc_viewport_height = get(data, s^.shader, "uViewportHeight")
-    s^.loc_stroke_mode = get(data, s^.shader, "uStrokeMode")
-    s^.loc_strip_alpha = get(data, s^.shader, "uStripAlpha")
-    s^.loc_strip_color = get(data, s^.shader, "uStripColor")
-    s^.loc_strip_side_extent = get(data, s^.shader, "uStripSideExtent")
-    s^.loc_arc_intersections_enabled =
-        get(data, s^.shader, "uArcIntersectionsEnabled")
-    s^.loc_intersection_depth_width =
-        get(data, s^.shader, "uIntersectionDepthWidth")
-    s^.loc_attachment_extent = get(data, s^.shader, "uAttachmentExtent")
-    s^.loc_occluder_count = get(data, s^.shader, "uOccluderCount")
-}
-
-// Cache the fixed two-slot occluder uniform arrays used by tool interactions.
-tool_brush_cache_occluder_uniform_locations :: proc(
-    s: ^viewmodel.Tool_Render_State, operations: Tool_Brush_Shader_Operations) {
-    get := operations.get_location
-    data := operations.user_data
-    s^.loc_occluder_p0[0] = get(data, s^.shader, "uOccluderP0[0]")
-    s^.loc_occluder_p0[1] = get(data, s^.shader, "uOccluderP0[1]")
-    s^.loc_occluder_p1[0] = get(data, s^.shader, "uOccluderP1[0]")
-    s^.loc_occluder_p1[1] = get(data, s^.shader, "uOccluderP1[1]")
-    s^.loc_occluder_radius[0] = get(data, s^.shader, "uOccluderRadius[0]")
-    s^.loc_occluder_radius[1] = get(data, s^.shader, "uOccluderRadius[1]")
-    s^.loc_occluder_depth0[0] = get(data, s^.shader, "uOccluderDepth0[0]")
-    s^.loc_occluder_depth0[1] = get(data, s^.shader, "uOccluderDepth0[1]")
-    s^.loc_occluder_depth1[0] = get(data, s^.shader, "uOccluderDepth1[0]")
-    s^.loc_occluder_depth1[1] = get(data, s^.shader, "uOccluderDepth1[1]")
-    s^.loc_occluder_tangent[0] = get(data, s^.shader, "uOccluderTangent[0]")
-    s^.loc_occluder_tangent[1] = get(data, s^.shader, "uOccluderTangent[1]")
-}
-
-//   Return true when the required tool_brush uniforms were all located.
-tool_brush_uniforms_valid :: proc(s: ^viewmodel.Tool_Render_State) -> bool {
-    scalar_uniforms_valid := s^.loc_light_dir >= 0 && s^.loc_ambient >= 0 &&
-        s^.loc_diffuse >= 0 && s^.loc_material_roughness >= 0 &&
-        s^.loc_material_fresnel_0 >= 0 && s^.loc_material_specular_tint >= 0 &&
-        s^.loc_material_shadow_limit >= 0 && s^.loc_p0 >= 0 && s^.loc_p1 >= 0 &&
-        s^.loc_radius >= 0 && s^.loc_viewport_height >= 0 &&
-        s^.loc_stroke_mode >= 0 && s^.loc_strip_alpha >= 0 &&
-        s^.loc_strip_color >= 0 && s^.loc_strip_side_extent >= 0 &&
-        s^.loc_arc_intersections_enabled >= 0 &&
-        s^.loc_intersection_depth_width >= 0 && s^.loc_attachment_extent >= 0 &&
-        s^.loc_occluder_count >= 0
-    if !scalar_uniforms_valid {
-        return false
-    }
-
-    for i in 0..<viewmodel.MAX_TOOL_BRUSH_OCCLUDERS {
-        if s^.loc_occluder_p0[i] < 0 || s^.loc_occluder_p1[i] < 0 ||
-            s^.loc_occluder_radius[i] < 0 || s^.loc_occluder_depth0[i] < 0 ||
-            s^.loc_occluder_depth1[i] < 0 || s^.loc_occluder_tangent[i] < 0 {
-            return false
-        }
-    }
-    return true
-}
-
-//   Unload tool_brush shader resources and mark shader state as unavailable.
-//
-// Parameters:
-//   - state: Global app state containing tool_brush shader state.
-//
-// Returns:
-//   - none.
-shutdown_tool_brush_shader :: proc(state: ^Euclid_General_State) {
-    tool_brush_release_shader(&state^.stroke_3d, tool_brush_native_operations())
-}
-
-// Release any loaded tool shader and reset its publication state.
-tool_brush_release_shader :: proc(
-    s: ^viewmodel.Tool_Render_State,
-    operations: Tool_Brush_Shader_Operations) {
-    if s^.shader.id != 0 {
-        operations.unload(operations.user_data, s^.shader)
-        s^.shader = {}
-    }
-    s^.ready = false
-}
-
 //   Render the base isometric drawing plane and its border triangles.
 //
 // Parameters:
@@ -616,6 +397,129 @@ draw_encoded_cached_basic_pass :: proc(
     }
 }
 
+// encoded_stroke_vertex_uniforms builds the logical-pixel clip transform.
+encoded_stroke_vertex_uniforms :: proc(
+    encoder: ^native.Draw_Encoder) -> native.Stroke_Vertex_Uniforms {
+    uniforms: native.Stroke_Vertex_Uniforms
+    uniforms.clip_from_model[0] = 2 / encoder^.logical_extent.x
+    uniforms.clip_from_model[5] = -2 / encoder^.logical_extent.y
+    uniforms.clip_from_model[10] = 1
+    uniforms.clip_from_model[12] = -1
+    uniforms.clip_from_model[13] = 1
+    uniforms.clip_from_model[15] = 1
+    return uniforms
+}
+
+// encoded_stroke_fragment_uniforms builds one lit capsule's physical parameters.
+encoded_stroke_fragment_uniforms :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    p0, p1: Vector2, thickness: f32) -> native.Stroke_Fragment_Uniforms {
+    scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
+    scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
+    average_scale := (scale_x + scale_y) * 0.5
+    light := linalg.normalize(-state^.iso_scale^.main_light_dir)
+    light = tool_brush_light_to_view(light)
+    material := STROKE3D_TITANIUM_MATERIAL
+    return {
+        light_direction_view = {light.x, light.y, light.z},
+        ambient = STROKE3D_AMBIENT,
+        diffuse = STROKE3D_DIFFUSE,
+        material_roughness = material.roughness,
+        material_fresnel_0 = material.fresnel_0,
+        material_specular_tint = material.specular_tint,
+        material_shadow_limit = material.shadow_limit,
+        radius = thickness * 0.5 * average_scale,
+        segment_p0 = {p0.x * scale_x, p0.y * scale_y},
+        segment_p1 = {p1.x * scale_x, p1.y * scale_y},
+    }
+}
+
+// encoded_stroke_vertex packs one capsule coverage vertex for stroke3d.vert.
+encoded_stroke_vertex :: #force_inline proc(
+    position: Vector2, draw_color: color.Color_RGBA8) -> native.Stroke_Vertex {
+    inverse_byte := f32(1.0 / 255.0)
+    return {
+        position = {position.x, position.y, 0},
+        color = {f32(draw_color.r) * inverse_byte,
+            f32(draw_color.g) * inverse_byte,
+            f32(draw_color.b) * inverse_byte,
+            f32(draw_color.a) * inverse_byte},
+    }
+}
+
+// draw_encoded_tool_segment emits one lit capsule or its native 2D fallback.
+draw_encoded_tool_segment :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    p0, p1: Vector2, thickness: f32, draw_color: color.Color_RGBA8,
+    occluders: ^Tool_Brush_Occluder_Context = nil) {
+    delta := p1 - p0
+    segment_length := linalg.length(delta)
+    if segment_length <= 0 || thickness <= 0 {return}
+    if !encoder^.strokes_enabled {
+        _ = native.draw_encoder_line(encoder, geometry.Vector2(p0),
+            geometry.Vector2(p1), thickness, draw_color)
+        return
+    }
+    direction := delta / segment_length
+    perpendicular := Vector2{-direction.y, direction.x}
+    scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
+    scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
+    coverage_radius := thickness * 0.5 + 1 / min(scale_x, scale_y)
+    start := p0 - direction * coverage_radius
+    finish := p1 + direction * coverage_radius
+    offset := perpendicular * coverage_radius
+    corners := [4]Vector2{start - offset, start + offset,
+        finish - offset, finish + offset}
+    vertices := [6]native.Stroke_Vertex{
+        encoded_stroke_vertex(corners[0], draw_color),
+        encoded_stroke_vertex(corners[1], draw_color),
+        encoded_stroke_vertex(corners[2], draw_color),
+        encoded_stroke_vertex(corners[2], draw_color),
+        encoded_stroke_vertex(corners[1], draw_color),
+        encoded_stroke_vertex(corners[3], draw_color),
+    }
+    fragment_uniforms := encoded_stroke_fragment_uniforms(
+        state, encoder, p0, p1, thickness)
+    encoded_stroke_pack_occluders(
+        &fragment_uniforms, encoder, occluders)
+    appended := native.draw_encoder_append_stroke(encoder, vertices[:],
+        encoded_stroke_vertex_uniforms(encoder), fragment_uniforms)
+    if !appended {
+        _ = native.draw_encoder_line(encoder, geometry.Vector2(p0),
+            geometry.Vector2(p1), thickness, draw_color)
+    }
+}
+
+// draw_encoded_cached_pen restores one cached pen and its active-end indicator.
+draw_encoded_cached_pen :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    pen: ^shapemodel.Shapes_Pen_Draw,
+    compass_caster: ^shapemodel.Shapes_Compass_Draw = nil) {
+    first := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
+    second := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
+    if pen^.active_child == 1 || pen^.active_child == 2 {
+        active := pen^.color
+        if pen^.has_active_color {active = pen^.active_color}
+        center := first
+        if pen^.active_child == 2 {center = second}
+        _ = native.draw_encoder_circle(
+            encoder, geometry.Vector2(center), pen^.brush_size, active)
+    }
+    occluders := Tool_Brush_Occluder_Context{}
+    if compass_caster != nil {
+        receiver := make_tool_brush_occluder(
+            state, pen^.joint1, pen^.joint2, pen^.brush_size)
+        first_leg := make_tool_brush_occluder(state, compass_caster^.joint1,
+            compass_caster^.pivot, compass_caster^.brush_size)
+        second_leg := make_tool_brush_occluder(state, compass_caster^.pivot,
+            compass_caster^.joint2, compass_caster^.brush_size)
+        append_tool_brush_occluder(&occluders, receiver, first_leg)
+        append_tool_brush_occluder(&occluders, receiver, second_leg)
+    }
+    draw_encoded_tool_segment(state, encoder, first, second,
+        pen^.brush_size, pen^.color, &occluders)
+}
+
 // draw_encoded_cached_shadow_pass encodes ordinary floor shadows in cache order.
 draw_encoded_cached_shadow_pass :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder) {
@@ -638,55 +542,6 @@ draw_encoded_cached_shadow_pass :: proc(
             shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
             shapemodel.Shapes_Compass_Draw:
         }
-    }
-}
-
-// Draw one cache position according to resolved merged-layer ordering.
-draw_shapes_high_merged_item :: proc(
-    state: ^Euclid_General_State,
-    cache: ^shapemodel.Shapes_Draw_Cache,
-    index: int,
-    ctx: ^High_Merged_Draw_Context) {
-    if ctx^.defer_guide && index == ctx^.guide_index {return}
-    if ctx^.defer_guide && index == ctx^.compass_index {
-        draw_cached_trochoid_tool_full(state, &cache^.trochoid_tool)
-    }
-    if ctx^.has_crossing && index == ctx^.crossing.polygon_index {
-        compass_caster: ^shapemodel.Shapes_Compass_Draw = nil
-        if ctx^.pen_receives_compass {compass_caster = &cache^.compass}
-        draw_pen_polygon_crossing(state, &ctx^.crossing, compass_caster)
-        return
-    }
-    if ctx^.has_crossing && index == ctx^.crossing.pen_index {return}
-    draw_cached_item_high_merged(state, &cache^.items[index],
-        ctx^.pen_receives_compass, ctx^.compass_receives_pen)
-}
-
-//   Render cached higher-layer items after shadows and particles.
-//
-// Parameters:
-//   - state: Global app state containing the draw cache to render.
-//
-// Returns:
-//   - none.
-draw_shapes_points_high_merged_cached :: proc(state: ^Euclid_General_State) {
-    ctx := High_Merged_Draw_Context{}
-    ctx.crossing.pen_index = -1
-    ctx.crossing.polygon_index = -1
-    ctx.has_crossing = find_pen_polygon_crossing(state, &ctx.crossing)
-    cache := &state^.shape_world^.draw_cache
-    _, pen_index := find_cached_pen_item(cache)
-    _, compass_index := find_cached_compass_item(cache)
-    _, guide_index := find_cached_trochoid_tool_item(cache)
-    pen_draw_index := pen_index
-    if ctx.has_crossing {pen_draw_index = ctx.crossing.polygon_index}
-    ctx.pen_receives_compass, ctx.compass_receives_pen =
-        tool_brush_interaction_receivers(pen_draw_index, compass_index)
-    ctx.defer_guide = trochoid_tool_defers_to_compass(guide_index, compass_index)
-    ctx.guide_index = guide_index
-    ctx.compass_index = compass_index
-    for i in 0..<cache^.item_count {
-        draw_shapes_high_merged_item(state, cache, i, &ctx)
     }
 }
 
@@ -746,75 +601,6 @@ draw_cached_item_low :: proc(state: ^Euclid_General_State,
     case shapemodel.Shapes_Trochoid_Tool_Draw,
         shapemodel.Shapes_Cycloid_Tool_Draw:
     case shapemodel.Shapes_Pen_Draw,
-        shapemodel.Shapes_Compass_Draw:
-    }
-}
-
-//   Draw the cached pen with the compass caster selected by merged-layer ordering.
-draw_cached_pen_high_merged :: #force_inline proc(
-    state: ^Euclid_General_State,
-    pen: ^shapemodel.Shapes_Pen_Draw,
-    receives_compass: bool) {
-
-    compass_caster: ^shapemodel.Shapes_Compass_Draw = nil
-    if receives_compass {
-        compass_caster = &state^.shape_world^.draw_cache.compass
-    }
-    draw_cached_pen_full(state, pen, compass_caster)
-}
-
-//   Draw the cached compass with the pen caster selected by merged-layer ordering.
-draw_cached_compass_high_merged :: #force_inline proc(
-    state: ^Euclid_General_State,
-    compass: ^shapemodel.Shapes_Compass_Draw,
-    receives_pen: bool) {
-
-    pen_caster: ^shapemodel.Shapes_Pen_Draw = nil
-    if receives_pen {
-        pen_caster = &state^.shape_world^.draw_cache.pen
-    }
-    draw_cached_compass_full(state, compass, pen_caster)
-}
-
-// Draw one cached instrument in the merged higher layer when applicable.
-draw_cached_instrument_high_merged :: proc(state: ^Euclid_General_State,
-    item: ^shapemodel.Shapes_Draw_Cache_Item,
-    pen_receives_compass, compass_receives_pen: bool) -> bool {
-    switch &item_typed in item {
-    case shapemodel.Shapes_Trochoid_Tool_Draw:
-        draw_cached_trochoid_tool_full(state, &item_typed)
-    case shapemodel.Shapes_Cycloid_Tool_Draw:
-        draw_cached_cycloid_tool_full(state, &item_typed)
-    case shapemodel.Shapes_Pen_Draw:
-        draw_cached_pen_high_merged(state, &item_typed, pen_receives_compass)
-    case shapemodel.Shapes_Compass_Draw:
-        draw_cached_compass_high_merged(state, &item_typed, compass_receives_pen)
-    case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Point_Draw,
-        shapemodel.Shapes_Line_Draw, shapemodel.Shapes_Circle_Draw,
-        shapemodel.Shapes_Filled_Circle_Draw, shapemodel.Shapes_Curve_Draw,
-        shapemodel.Shapes_Polygon_Draw:
-        return false
-    }
-    return true
-}
-
-//   Draw one cached item only when it belongs to the merged higher layer.
-draw_cached_item_high_merged :: proc(state: ^Euclid_General_State,
-    item: ^shapemodel.Shapes_Draw_Cache_Item,
-    pen_receives_compass, compass_receives_pen: bool) {
-    if draw_cached_instrument_high_merged(
-        state, item, pen_receives_compass, compass_receives_pen) {return}
-    switch &item_typed in item {
-    case shapemodel.Shapes_Label_Draw:
-    case shapemodel.Shapes_Point_Draw: draw_cached_point_high(state, &item_typed)
-    case shapemodel.Shapes_Line_Draw: draw_cached_line_high(state, &item_typed)
-    case shapemodel.Shapes_Circle_Draw: draw_cached_circle_high(state, &item_typed)
-    case shapemodel.Shapes_Filled_Circle_Draw:
-        draw_cached_filledcircle_high(state, &item_typed)
-    case shapemodel.Shapes_Curve_Draw: draw_cached_curve_high(state, &item_typed)
-    case shapemodel.Shapes_Polygon_Draw: draw_cached_polygon_high(state, &item_typed)
-    case shapemodel.Shapes_Trochoid_Tool_Draw,
-        shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
         shapemodel.Shapes_Compass_Draw:
     }
 }
@@ -974,28 +760,6 @@ draw_cached_polygon_high :: #force_inline proc(
     }
 }
 
-//   Render one full cached pen item for the merged higher layer.
-draw_cached_pen_full :: proc(
-    state: ^Euclid_General_State,
-    pen: ^shapemodel.Shapes_Pen_Draw,
-    compass_caster: ^shapemodel.Shapes_Compass_Draw) {
-    draw_cached_pen_active_dot(state, pen)
-    begin_tool_brush_mode(state)
-    draw_cached_pen(state, pen, compass_caster)
-    end_tool_brush_mode(state)
-}
-
-//   Render one full cached compass item for the merged higher layer.
-draw_cached_compass_full :: proc(
-    state: ^Euclid_General_State,
-    comp: ^shapemodel.Shapes_Compass_Draw,
-    pen_caster: ^shapemodel.Shapes_Pen_Draw) {
-    draw_cached_compass_active_dot(state, comp)
-    begin_tool_brush_mode(state)
-    draw_cached_compass(state, comp, pen_caster)
-    end_tool_brush_mode(state)
-}
-
 // Return one planar world-space point on a guide ring.
 trochoid_tool_ring_point :: #force_inline proc(
     center: Vector3, radius, angle: f32) -> Vector3 {
@@ -1031,286 +795,6 @@ build_trochoid_tool_ring_samples :: proc(
     }
     return true
 }
-
-// Emit one closed guide ring's connected strip triangles.
-emit_trochoid_tool_ring_strip :: proc(samples: ^Trochoid_Tool_Ring_Samples) {
-    for index in 0..<TROCHOID_TOOL_RING_SEGMENTS {
-        emit_tool_brush_strip_vertex(samples^.left[index],
-            samples^.auxiliary[index], samples^.tangents_view[index], 0)
-        emit_tool_brush_strip_vertex(samples^.right[index],
-            samples^.auxiliary[index], samples^.tangents_view[index], 255)
-        emit_tool_brush_strip_vertex(samples^.left[index + 1],
-            samples^.auxiliary[index + 1], samples^.tangents_view[index + 1], 0)
-        emit_tool_brush_strip_vertex(samples^.right[index],
-            samples^.auxiliary[index], samples^.tangents_view[index], 255)
-        emit_tool_brush_strip_vertex(samples^.right[index + 1],
-            samples^.auxiliary[index + 1], samples^.tangents_view[index + 1], 255)
-        emit_tool_brush_strip_vertex(samples^.left[index + 1],
-            samples^.auxiliary[index + 1], samples^.tangents_view[index + 1], 0)
-    }
-}
-
-// Draw one guide ring through the unshaded line fallback.
-draw_trochoid_tool_ring_fallback :: proc(
-    state: ^Euclid_General_State,
-    center: Vector3,
-    radius, brush_size: f32,
-    color: rl.Color) {
-    previous := trochoid_tool_ring_point(center, radius, 0)
-    for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
-        angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
-        current := trochoid_tool_ring_point(center, radius, angle)
-        first := view_core.iso_to_cartesian(previous, state^.iso_scale^)
-        second := view_core.iso_to_cartesian(current, state^.iso_scale^)
-        rl.DrawLineEx(first, second, brush_size, color)
-        previous = current
-    }
-}
-
-// Draw one closed guide ring as one continuous shader-lit strip.
-draw_trochoid_tool_ring_shader :: proc(
-    state: ^Euclid_General_State,
-    center: Vector3,
-    radius, brush_size: f32,
-    color: rl.Color) {
-    scale := get_tool_brush_render_scale()
-    min_scale := math.max(math.min(scale.x, scale.y), 0.0001)
-    brush_radius := brush_size * 0.5
-    coverage_radius := brush_radius + 1.0 / min_scale
-    side_extent := coverage_radius / math.max(brush_radius, 0.0001)
-    samples := Trochoid_Tool_Ring_Samples{}
-    if !build_trochoid_tool_ring_samples(
-        state, center, radius, coverage_radius, &samples) {return}
-
-    rlgl.DrawRenderBatchActive()
-    shader := &state^.stroke_3d
-    set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 1.0)
-    set_tool_brush_uniform_float(
-        state, shader^.loc_strip_alpha, f32(color.a) / 255.0)
-    set_tool_brush_uniform_vec3(state, shader^.loc_strip_color, Vector3{
-        f32(color.r) / 255.0, f32(color.g) / 255.0, f32(color.b) / 255.0})
-    set_tool_brush_uniform_float(state, shader^.loc_strip_side_extent, side_extent)
-    set_tool_brush_uniform_float(state, shader^.loc_arc_intersections_enabled, 0.0)
-
-    _ = rlgl.CheckRenderBatchLimit(TROCHOID_TOOL_RING_SEGMENTS * 6)
-    rlgl.SetTexture(rlgl.GetTextureIdDefault())
-    rlgl.DisableBackfaceCulling()
-    rlgl.Begin(rlgl.TRIANGLES)
-    emit_trochoid_tool_ring_strip(&samples)
-    rlgl.End()
-    rlgl.DrawRenderBatchActive()
-    rlgl.EnableBackfaceCulling()
-    set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 0.0)
-}
-
-// Select the available renderer for one closed guide ring.
-draw_trochoid_tool_ring :: proc(
-    state: ^Euclid_General_State,
-    center: Vector3,
-    radius, brush_size: f32,
-    color: rl.Color) {
-    if !state^.stroke_3d.ready {
-        draw_trochoid_tool_ring_fallback(state, center, radius, brush_size, color)
-        return
-    }
-    draw_trochoid_tool_ring_shader(state, center, radius, brush_size, color)
-}
-
-// Render the two-ring guide and its inward orientation handle in one shader binding.
-draw_cached_trochoid_tool_full :: proc(
-    state: ^Euclid_General_State,
-    tool: ^shapemodel.Shapes_Trochoid_Tool_Draw) {
-    begin_tool_brush_mode(state)
-    draw_trochoid_tool_ring(state, tool^.fixed_center,
-        tool^.fixed_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
-    draw_trochoid_tool_ring(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
-    first := view_core.iso_to_cartesian(tool^.handle_start, state^.iso_scale^)
-    second := view_core.iso_to_cartesian(tool^.handle_finish, state^.iso_scale^)
-    draw_tool_brush_segment(state, first, second, tool^.brush_size,
-        native.to_raylib_color(tool^.color))
-    end_tool_brush_mode(state)
-}
-
-// Render the exact endpoint rail, rolling ring, and orientation handle together.
-draw_cached_cycloid_tool_full :: proc(
-    state: ^Euclid_General_State,
-    tool: ^shapemodel.Shapes_Cycloid_Tool_Draw) {
-    begin_tool_brush_mode(state)
-    baseline_start := view_core.iso_to_cartesian(
-        tool^.baseline_start, state^.iso_scale^)
-    baseline_finish := view_core.iso_to_cartesian(
-        tool^.baseline_finish, state^.iso_scale^)
-    draw_tool_brush_segment(state, baseline_start, baseline_finish,
-        tool^.brush_size, native.to_raylib_color(tool^.color))
-    draw_trochoid_tool_ring(state, tool^.rolling_center,
-        tool^.rolling_radius, tool^.brush_size, native.to_raylib_color(tool^.color))
-    handle_start := view_core.iso_to_cartesian(
-        tool^.handle_start, state^.iso_scale^)
-    handle_finish := view_core.iso_to_cartesian(
-        tool^.handle_finish, state^.iso_scale^)
-    draw_tool_brush_segment(state, handle_start, handle_finish,
-        tool^.brush_size, native.to_raylib_color(tool^.color))
-    end_tool_brush_mode(state)
-}
-
-
-
-
-
-
-//   Set a float uniform on the tool_brush shader when location is valid.
-set_tool_brush_uniform_float :: #force_inline proc(
-    state: ^Euclid_General_State, location: i32, value: f32) {
-    if location < 0 {
-        return
-    }
-    local_value := value
-    rl.SetShaderValue(state^.stroke_3d.shader, location, &local_value, .FLOAT)
-}
-
-
-//   Set a vec2 uniform on the tool_brush shader when location is valid.
-set_tool_brush_uniform_vec2 :: #force_inline proc(
-    state: ^Euclid_General_State, location: i32, value: Vector2) {
-    if location < 0 {
-        return
-    }
-    vec_data := [2]f32{value.x, value.y}
-    rl.SetShaderValue(state^.stroke_3d.shader, location, &vec_data[0], .VEC2)
-}
-
-
-//   Set one vec3 tool_brush shader uniform when its location is valid.
-set_tool_brush_uniform_vec3 :: #force_inline proc(
-    state: ^Euclid_General_State, location: i32, value: Vector3) {
-    if location < 0 {
-        return
-    }
-    vec_data := [3]f32{value.x, value.y, value.z}
-    rl.SetShaderValue(state^.stroke_3d.shader, location, &vec_data[0], .VEC3)
-}
-
-
-//   Compute render-to-screen scale factors for shader-space thickness correction.
-get_tool_brush_render_scale :: #force_inline proc() -> Vector2 {
-    screen_w := f32(rl.GetScreenWidth())
-    screen_h := f32(rl.GetScreenHeight())
-    render_w := f32(rl.GetRenderWidth())
-    render_h := f32(rl.GetRenderHeight())
-
-    sx := f32(1.0)
-    sy := f32(1.0)
-
-    if screen_w > 0 && render_w > 0 {
-        sx = render_w / screen_w
-    }
-    if screen_h > 0 && render_h > 0 {
-        sy = render_h / screen_h
-    }
-
-    return Vector2{sx, sy}
-}
-
-
-//   Update tool_brush segment uniforms for endpoints and stroke radius.
-set_tool_brush_segment :: #force_inline proc(
-    state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32) {
-    s := &state^.stroke_3d
-    scale := get_tool_brush_render_scale()
-    p0_scaled := Vector2{p0.x * scale.x, p0.y * scale.y}
-    p1_scaled := Vector2{p1.x * scale.x, p1.y * scale.y}
-    avg_scale := (scale.x + scale.y) * 0.5
-
-    set_tool_brush_uniform_vec2(state, s^.loc_p0, p0_scaled)
-    set_tool_brush_uniform_vec2(state, s^.loc_p1, p1_scaled)
-    set_tool_brush_uniform_float(state, s^.loc_radius, thickness * 0.5 * avg_scale)
-}
-
-
-//   Upload bounded screen-space capsule occluders for one receiving segment.
-set_tool_brush_occluders :: proc(
-    state: ^Euclid_General_State, occluders: ^Tool_Brush_Occluder_Context) {
-    s := &state^.stroke_3d
-    if !s^.ready {
-        return
-    }
-
-    rlgl.DrawRenderBatchActive()
-    scale := get_tool_brush_render_scale()
-    avg_scale := (scale.x + scale.y) * 0.5
-
-    for i in 0..<occluders^.count {
-        occluder := &occluders^.occluders[i]
-        p0_scaled := Vector2{occluder^.p0.x * scale.x, occluder^.p0.y * scale.y}
-        p1_scaled := Vector2{occluder^.p1.x * scale.x, occluder^.p1.y * scale.y}
-        set_tool_brush_uniform_vec2(state, s^.loc_occluder_p0[i], p0_scaled)
-        set_tool_brush_uniform_vec2(state, s^.loc_occluder_p1[i], p1_scaled)
-        set_tool_brush_uniform_float(state, s^.loc_occluder_radius[i],
-            occluder^.thickness * 0.5 * avg_scale)
-        set_tool_brush_uniform_float(
-            state, s^.loc_occluder_depth0[i], occluder^.depth0)
-        set_tool_brush_uniform_float(
-            state, s^.loc_occluder_depth1[i], occluder^.depth1)
-        set_tool_brush_uniform_vec3(
-            state, s^.loc_occluder_tangent[i], occluder^.tangent)
-    }
-    set_tool_brush_uniform_float(state, s^.loc_occluder_count, f32(occluders^.count))
-}
-
-
-//   Disable tool-stroke occlusion after its receiver has been submitted.
-clear_tool_brush_occluder :: #force_inline proc(state: ^Euclid_General_State) {
-    s := &state^.stroke_3d
-    if !s^.ready {
-        return
-    }
-
-    rlgl.DrawRenderBatchActive()
-    set_tool_brush_uniform_float(state, s^.loc_occluder_count, 0.0)
-}
-
-
-//   Draw conservative capsule coverage for one shader-lit tool segment.
-draw_tool_brush_capsule :: #force_inline proc(
-    state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32, color: rl.Color) {
-    delta := p1 - p0
-    length := linalg.length(delta)
-    if length <= 0 || thickness <= 0 {
-        return
-    }
-
-    direction := delta / length
-    perpendicular := Vector2{-direction.y, direction.x}
-    scale := get_tool_brush_render_scale()
-    min_scale := math.max(math.min(scale.x, scale.y), 0.0001)
-    coverage_radius := thickness * 0.5 + 1.0 / min_scale
-    start := p0 - direction * coverage_radius
-    finish := p1 + direction * coverage_radius
-    offset := perpendicular * coverage_radius
-    vertices := [4]Vector2{
-        start - offset,
-        start + offset,
-        finish - offset,
-        finish + offset,
-    }
-    rl.DrawTriangleStrip(&vertices[0], len(vertices), color)
-}
-
-
-//   Draw one segment with tool_brush lighting when available, else standard line draw.
-draw_tool_brush_segment :: #force_inline proc(
-    state: ^Euclid_General_State, p0, p1: Vector2, thickness: f32, color: rl.Color) {
-    s := &state^.stroke_3d
-    if s^.ready {
-        rlgl.DrawRenderBatchActive()
-        set_tool_brush_segment(state, p0, p1, thickness)
-        draw_tool_brush_capsule(state, p0, p1, thickness, color)
-        return
-    }
-    rl.DrawLineEx(p0, p1, thickness, color)
-}
-
 
 //   Decide if joint1->pivot should be drawn last to preserve hinge-side layering.
 //
@@ -1355,57 +839,6 @@ tool_brush_light_to_view :: #force_inline proc(light: Vector3) -> Vector3 {
     }
 }
 
-
-//   Bind tool_brush shader and upload per-frame lighting/render uniforms.
-//
-// Notes:
-//   - Must be paired with end_tool_brush_mode in the same draw pass.
-begin_tool_brush_mode :: proc(state: ^Euclid_General_State) {
-    s := &state^.stroke_3d
-
-    if !s^.ready {
-        return
-    }
-
-    light := -state^.iso_scale^.main_light_dir
-    light = linalg.normalize(light)
-    light = tool_brush_light_to_view(light)
-
-    light_dir_data := [3]f32{light.x, light.y, light.z}
-    if s^.loc_light_dir >= 0 {
-        rl.SetShaderValue(s^.shader, s^.loc_light_dir, &light_dir_data[0], .VEC3)
-    }
-
-    set_tool_brush_uniform_float(state, s^.loc_ambient, STROKE3D_AMBIENT)
-    set_tool_brush_uniform_float(state, s^.loc_diffuse, STROKE3D_DIFFUSE)
-    material := STROKE3D_TITANIUM_MATERIAL
-    set_tool_brush_uniform_float(state, s^.loc_material_roughness, material.roughness)
-    set_tool_brush_uniform_float(state, s^.loc_material_fresnel_0, material.fresnel_0)
-    set_tool_brush_uniform_float(
-        state, s^.loc_material_specular_tint, material.specular_tint)
-    set_tool_brush_uniform_float(
-        state, s^.loc_material_shadow_limit, material.shadow_limit)
-    set_tool_brush_uniform_float(state,
-        s^.loc_viewport_height, f32(rl.GetRenderHeight()))
-    set_tool_brush_uniform_float(state, s^.loc_stroke_mode, 0.0)
-    set_tool_brush_uniform_float(state, s^.loc_arc_intersections_enabled, 0.0)
-    set_tool_brush_uniform_float(state, s^.loc_occluder_count, 0.0)
-
-    rl.BeginShaderMode(s^.shader)
-}
-
-
-//   Flush pending batch and unbind tool_brush shader mode.
-//
-// Notes:
-//   - Completes the begin_tool_brush_mode/end_tool_brush_mode pair.
-end_tool_brush_mode :: proc(state: ^Euclid_General_State) {
-    if !state^.stroke_3d.ready {
-        return
-    }
-    rlgl.DrawRenderBatchActive()
-    rl.EndShaderMode()
-}
 
 //   Compute positive angular sweep between start and end angles.
 compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
@@ -1678,18 +1111,6 @@ point_inside_polygon :: proc(
     }
 
     return false
-}
-
-//   Draw one world-space pen segment fragment with standard cached pen styling.
-draw_pen_segment_fragment :: #force_inline proc(
-    state: ^Euclid_General_State,
-    pen: ^shapemodel.Shapes_Pen_Draw,
-    point0, point1: Vector3) {
-
-    c0 := view_core.iso_to_cartesian(point0, state^.iso_scale^)
-    c1 := view_core.iso_to_cartesian(point1, state^.iso_scale^)
-    draw_tool_brush_segment(
-        state, c0, c1, pen^.brush_size, native.to_raylib_color(pen^.color))
 }
 
 //   Build the z=0-clipped segment and oriented polygon plane for one crossing test.
@@ -2009,35 +1430,6 @@ find_pen_polygon_crossing :: proc(
     }
 
     return find_pen_crossing_polygon(state, &pen, pen_index, out_crossing)
-}
-
-//   Draw interleaving for one crossing pen/polygon pair.
-draw_pen_polygon_crossing :: proc(
-    state: ^Euclid_General_State,
-    crossing: ^Pen_Polygon_Crossing,
-    compass_caster: ^shapemodel.Shapes_Compass_Draw) {
-
-    draw_cached_pen_active_dot(state, &crossing^.pen)
-
-    begin_tool_brush_mode(state)
-    if crossing^.has_back {
-        set_pen_compass_occluders(state, &crossing^.pen, compass_caster)
-        draw_pen_segment_fragment(
-            state, &crossing^.pen, crossing^.back0, crossing^.back1)
-        clear_tool_brush_occluder(state)
-    }
-    end_tool_brush_mode(state)
-
-    draw_cached_polygon(state, &crossing^.polygon)
-
-    begin_tool_brush_mode(state)
-    if crossing^.has_front {
-        set_pen_compass_occluders(state, &crossing^.pen, compass_caster)
-        draw_pen_segment_fragment(state, &crossing^.pen,
-            crossing^.front0, crossing^.front1)
-        clear_tool_brush_occluder(state)
-    }
-    end_tool_brush_mode(state)
 }
 
 //   Compute average height across one point slice for shadow alpha attenuation.
@@ -2750,41 +2142,6 @@ draw_cached_polygon :: proc(
 }
 
 
-//   Upload relevant compass legs as casters for one pen receiver.
-set_pen_compass_occluders :: proc(
-    state: ^Euclid_General_State,
-    pen: ^shapemodel.Shapes_Pen_Draw,
-    compass: ^shapemodel.Shapes_Compass_Draw) {
-    ctx := Tool_Brush_Occluder_Context{}
-    if compass != nil {
-        receiver := make_tool_brush_occluder(
-            state, pen^.joint1, pen^.joint2, pen^.brush_size)
-        leg1 := make_tool_brush_occluder(
-            state, compass^.joint1, compass^.pivot, compass^.brush_size)
-        leg2 := make_tool_brush_occluder(
-            state, compass^.pivot, compass^.joint2, compass^.brush_size)
-        append_tool_brush_occluder(&ctx, receiver, leg1)
-        append_tool_brush_occluder(&ctx, receiver, leg2)
-    }
-    set_tool_brush_occluders(state, &ctx)
-}
-
-
-//   Render one cached pen tool draw item.
-draw_cached_pen :: proc(
-    state: ^Euclid_General_State,
-    pen: ^shapemodel.Shapes_Pen_Draw,
-    compass_caster: ^shapemodel.Shapes_Compass_Draw) {
-    c0 := view_core.iso_to_cartesian(pen^.joint1, state^.iso_scale^)
-    c1 := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
-
-    set_pen_compass_occluders(state, pen, compass_caster)
-    draw_tool_brush_segment(
-        state, c0, c1, pen^.brush_size, native.to_raylib_color(pen^.color))
-    clear_tool_brush_occluder(state)
-}
-
-
 //   Render active-end indicator for cached pen tool.
 draw_cached_pen_active_dot :: proc(
     state: ^Euclid_General_State, pen: ^shapemodel.Shapes_Pen_Draw) {
@@ -2895,188 +2252,6 @@ build_compass_arc_samples :: proc(
     }
     return true
 }
-
-//   Emit one encoded strip vertex carrying tangent, side, depth, and parameter.
-emit_tool_brush_strip_vertex :: #force_inline proc(
-    position, auxiliary: Vector2, tangent_view: Vector3, side: u8) {
-    red := u8(math.clamp((tangent_view.x * 0.5 + 0.5) * 255.0, 0.0, 255.0))
-    green := u8(math.clamp((tangent_view.y * 0.5 + 0.5) * 255.0, 0.0, 255.0))
-    blue := u8(math.clamp((tangent_view.z * 0.5 + 0.5) * 255.0, 0.0, 255.0))
-    rlgl.TexCoord2f(auxiliary.x, auxiliary.y)
-    rlgl.Color4ub(red, green, blue, side)
-    rlgl.Vertex2f(position.x, position.y)
-}
-
-//   Upload shader parameters for one lit compass outside-arc strip.
-set_compass_arc_shader_uniforms :: proc(
-    draw: Compass_Arc_Draw,
-    basis: Compass_Top_Circle_Basis,
-    side_extent: f32) {
-
-    state := draw.state
-    shader := &state^.stroke_3d
-    set_tool_brush_uniform_float(state, shader^.loc_stroke_mode, 1.0)
-    set_tool_brush_uniform_float(
-        state, shader^.loc_strip_alpha, f32(draw.color.a) / 255.0)
-    set_tool_brush_uniform_vec3(state, shader^.loc_strip_color, Vector3{
-        f32(draw.color.r) / 255.0,
-        f32(draw.color.g) / 255.0,
-        f32(draw.color.b) / 255.0,
-    })
-    set_tool_brush_uniform_float(state, shader^.loc_strip_side_extent, side_extent)
-    depth_width := draw.brush_size /
-        math.max(state^.iso_scale^.half_scale, 0.0001)
-    attachment_extent := compass_arc_attachment_extent(
-        draw.brush_size, basis.radius, basis.theta_out,
-        state^.iso_scale^.half_scale)
-    set_tool_brush_uniform_float(
-        state, shader^.loc_intersection_depth_width, depth_width)
-    set_tool_brush_uniform_float(
-        state, shader^.loc_attachment_extent, attachment_extent)
-    set_tool_brush_uniform_float(state, shader^.loc_arc_intersections_enabled, 1.0)
-}
-
-//   Emit the triangles for one sampled compass outside-arc strip.
-emit_compass_arc_strip :: proc(samples: ^Compass_Arc_Samples) {
-    for i in 0..<COMPASS_TOPCIRCLE_SEGMENTS {
-        emit_tool_brush_strip_vertex(
-            samples^.left[i], samples^.auxiliary[i], samples^.tangents_view[i], 0)
-        emit_tool_brush_strip_vertex(
-            samples^.right[i], samples^.auxiliary[i], samples^.tangents_view[i], 255)
-        emit_tool_brush_strip_vertex(samples^.left[i + 1], samples^.auxiliary[i + 1],
-            samples^.tangents_view[i + 1], 0)
-        emit_tool_brush_strip_vertex(
-            samples^.right[i], samples^.auxiliary[i], samples^.tangents_view[i], 255)
-        emit_tool_brush_strip_vertex(samples^.right[i + 1], samples^.auxiliary[i + 1],
-            samples^.tangents_view[i + 1], 255)
-        emit_tool_brush_strip_vertex(samples^.left[i + 1], samples^.auxiliary[i + 1],
-            samples^.tangents_view[i + 1], 0)
-    }
-}
-
-
-//   Draw the compass outside arc without the tool shader.
-draw_outside_arc_compass_fallback :: proc(
-    center: Vector3, basis: Compass_Top_Circle_Basis, draw: Compass_Arc_Draw) {
-    step := basis.theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
-    prev3d := center + basis.u * basis.radius
-    prev := view_core.iso_to_cartesian(prev3d, draw.state^.iso_scale^)
-    for i in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
-        t := step * f32(i)
-        dir := basis.u * math.cos(t) + basis.v * math.sin(t)
-        curr3d := center + dir * basis.radius
-        curr := view_core.iso_to_cartesian(curr3d, draw.state^.iso_scale^)
-        rl.DrawLineEx(prev, curr, draw.brush_size, draw.color)
-        prev = curr
-    }
-}
-
-
-//   Emit one continuous shader-lit strip for the compass arc outside the swing angle.
-draw_outside_arc_compass_cached :: proc(
-    p0, p1, p2: Vector3, draw: Compass_Arc_Draw) {
-    basis, ok := compass_top_circle_basis(p0, p1, p2)
-    if !ok {
-        return
-    }
-
-    state := draw.state
-    if !state^.stroke_3d.ready {
-        draw_outside_arc_compass_fallback(p1, basis, draw)
-        return
-    }
-
-    scale := get_tool_brush_render_scale()
-    min_scale := math.max(math.min(scale.x, scale.y), 0.0001)
-    radius := draw.brush_size * 0.5
-    coverage_radius := radius + 1.0 / min_scale
-    side_extent := coverage_radius / math.max(radius, 0.0001)
-    samples := Compass_Arc_Samples{}
-    if !build_compass_arc_samples(p1, basis, draw, coverage_radius, &samples) {
-        return
-    }
-
-    rlgl.DrawRenderBatchActive()
-    set_compass_arc_shader_uniforms(draw, basis, side_extent)
-
-    _ = rlgl.CheckRenderBatchLimit(COMPASS_TOPCIRCLE_SEGMENTS * 6)
-    rlgl.SetTexture(rlgl.GetTextureIdDefault())
-    rlgl.DisableBackfaceCulling()
-    rlgl.Begin(rlgl.TRIANGLES)
-    emit_compass_arc_strip(&samples)
-    rlgl.End()
-
-    rlgl.DrawRenderBatchActive()
-    rlgl.EnableBackfaceCulling()
-    set_tool_brush_uniform_float(
-        state, state^.stroke_3d.loc_arc_intersections_enabled, 0.0)
-    set_tool_brush_uniform_float(state, state^.stroke_3d.loc_stroke_mode, 0.0)
-}
-
-//   Draw one compass leg with its sibling and optional pen occluders.
-draw_cached_compass_leg :: proc(
-    ctx: ^Compass_Leg_Draw_Context,
-    joint1_leg: bool,
-    sibling_occludes: bool) {
-
-    start, finish := ctx^.c1, ctx^.c2
-    receiver, sibling := ctx^.leg2, ctx^.leg1
-    if joint1_leg {
-        start, finish = ctx^.c0, ctx^.c1
-        receiver, sibling = ctx^.leg1, ctx^.leg2
-    }
-
-    occluders := Tool_Brush_Occluder_Context{}
-    if sibling_occludes {
-        append_tool_brush_occluder(&occluders, receiver, sibling)
-    }
-    if ctx^.has_pen_occluder {
-        append_tool_brush_occluder(&occluders, receiver, ctx^.pen_occluder)
-    }
-    set_tool_brush_occluders(ctx^.state, &occluders)
-    draw_tool_brush_segment(ctx^.state, start, finish,
-        ctx^.comp^.brush_size, native.to_raylib_color(ctx^.comp^.color))
-}
-
-
-//   Render one cached compass tool draw item.
-draw_cached_compass :: proc(
-    state: ^Euclid_General_State,
-    comp: ^shapemodel.Shapes_Compass_Draw,
-    pen_caster: ^shapemodel.Shapes_Pen_Draw) {
-    ctx := Compass_Leg_Draw_Context{
-        state = state,
-        comp = comp,
-        c0 = view_core.iso_to_cartesian(comp^.joint1, state^.iso_scale^),
-        c1 = view_core.iso_to_cartesian(comp^.pivot, state^.iso_scale^),
-        c2 = view_core.iso_to_cartesian(comp^.joint2, state^.iso_scale^),
-        leg1 = make_tool_brush_occluder(
-            state, comp^.joint1, comp^.pivot, comp^.brush_size),
-        leg2 = make_tool_brush_occluder(
-            state, comp^.pivot, comp^.joint2, comp^.brush_size),
-        has_pen_occluder = pen_caster != nil,
-    }
-    if ctx.has_pen_occluder {
-        ctx.pen_occluder = make_tool_brush_occluder(
-            state, pen_caster^.joint1, pen_caster^.joint2, pen_caster^.brush_size)
-    }
-
-    draw_joint1_last := compass_draw_joint1_leg_last(comp, ctx.c0, ctx.c1, ctx.c2)
-    if draw_joint1_last {
-        draw_cached_compass_leg(&ctx, false, true)
-        draw_cached_compass_leg(&ctx, true, false)
-    } else {
-        draw_cached_compass_leg(&ctx, true, true)
-        draw_cached_compass_leg(&ctx, false, false)
-    }
-
-    arc_occluders := make_compass_arc_occluders(ctx.leg1, ctx.leg2)
-    set_tool_brush_occluders(state, &arc_occluders)
-    draw_outside_arc_compass_cached(comp^.joint1, comp^.pivot, comp^.joint2,
-        Compass_Arc_Draw{state, comp^.brush_size, native.to_raylib_color(comp^.color)})
-    clear_tool_brush_occluder(state)
-}
-
 
 //   Render active-end indicator for cached compass tool.
 draw_cached_compass_active_dot :: proc(

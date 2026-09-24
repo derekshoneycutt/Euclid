@@ -2,13 +2,10 @@ package viewmodel
 
 import dynviewmodel "../../dynview/model"
 import gifmodel "../../files/gif_model"
-import particlemodel "../../particles/model"
 import color "../../core/color"
 import geometry "../../core/geometry"
 
 import "core:encoding/uuid"
-
-import rl "vendor:raylib"
 
 TOOL_LENGTH :: 0.35
 MAX_TOOL_BRUSH_OCCLUDERS :: 2
@@ -30,61 +27,6 @@ Iso_Scale :: struct {
     screenshake_offset_x: f32,
     screenshake_offset_y: f32,
     screenshake_phase: f32,
-}
-
-// Tool_Render_State owns display-thread shader handles for the geometry tools.
-Tool_Render_State :: struct {
-    shader: rl.Shader,
-    ready: bool,
-    loc_light_dir: i32,
-    loc_ambient: i32,
-    loc_diffuse: i32,
-    loc_material_roughness: i32,
-    loc_material_fresnel_0: i32,
-    loc_material_specular_tint: i32,
-    loc_material_shadow_limit: i32,
-    loc_p0: i32,
-    loc_p1: i32,
-    loc_radius: i32,
-    loc_viewport_height: i32,
-    loc_stroke_mode: i32,
-    loc_strip_alpha: i32,
-    loc_strip_color: i32,
-    loc_strip_side_extent: i32,
-    loc_arc_intersections_enabled: i32,
-    loc_intersection_depth_width: i32,
-    loc_attachment_extent: i32,
-    loc_occluder_count: i32,
-    loc_occluder_p0: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
-    loc_occluder_p1: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
-    loc_occluder_radius: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
-    loc_occluder_depth0: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
-    loc_occluder_depth1: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
-    loc_occluder_tangent: [MAX_TOOL_BRUSH_OCCLUDERS]i32,
-}
-
-// Dust_Instance is the 32-byte stream consumed at dust attributes 2, 3, and 4.
-// Geometry begins at byte 0, color at byte 12, and sprite index at byte 28.
-Dust_Instance :: struct {
-    screen_x, screen_y, diameter: f32,
-    red, green, blue, alpha: f32,
-    sprite_index: f32,
-}
-
-// Dust_Render_State owns display-thread particle rendering resources and staging.
-Dust_Render_State :: struct {
-    texture: rl.Texture2D,
-    ready: bool,
-    instancing_attempted: bool,
-    instancing_ready: bool,
-    shader: rl.Shader,
-    vao_id: u32,
-    quad_positions_vbo_id: u32,
-    quad_texcoords_vbo_id: u32,
-    instance_vbo_id: u32,
-    viewport_location: i32,
-    texture_location: i32,
-    instances: [particlemodel.MAX_LOW_PARTICLES]Dust_Instance,
 }
 
 // Gif_Capture_Phase tracks display-owned GIF capture policy.

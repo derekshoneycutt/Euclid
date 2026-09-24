@@ -7,7 +7,7 @@ fixed-step particle motion, grounded-dust field physics, and particle diagnostic
 Julia animation policy may request emissions and tool actions, but it does not mutate
 particle storage. The particle worker is the sole simulation writer during a fixed
 step. The display thread reads only after the simulation fence joins and exclusively
-owns projection, Raylib resources, GPU uploads, and drawing.
+owns projection, SDL_GPU resources, GPU uploads, and drawing.
 
 The shipped grounded-dust design is particle-in-cell (PIC): particles remain the
 visible material while one fixed vector field is the sole authority for grounded XY
@@ -21,7 +21,7 @@ flowchart LR
     Worker -->|mutates fixed storage| System[Particle_System]
     Worker --> Fence[Simulation fence]
     Fence -->|joined state| Display
-    Display -->|stage and draw| GPU[Raylib and GPU resources]
+    Display -->|stage and draw| GPU[SDL_GPU resources]
 ```
 
 ## Particle Layers
@@ -203,14 +203,14 @@ contact cost can be explained without per-node trace events.
 ## Rendering
 
 The renderer projects every live low particle and stores one interleaved `Dust_Instance`
-record per visible sprite. The preferred path uploads that stream to one VBO and draws
-GPU instances from the dust atlas. The immediate-mode fallback draws the same live
-particles as quads when instancing is unavailable or disabled.
+record per visible sprite. The preferred SDL_GPU path uploads as many as 65,536 records
+and emits one ordered `Dust_Instanced` command. When instancing is unavailable or
+disabled, the encoder expands the same particles into a dedicated bounded stream of
+393,216 textured vertices and emits `Dust_Expanded`; this fallback does not consume
+ordinary shape capacity.
 
-The instanced path requires the OpenGL 3.3 rlgl path and treats shader, VAO, and VBO
-creation as one display-thread transaction. `uViewport` and `texture0` are required
-uniforms. Static quad position and texture-coordinate inputs occupy locations 0 and 1.
-The 32-byte `Dust_Instance` stream occupies locations 2 through 4:
+The static six-vertex quad occupies vertex-buffer slot 0. The 32-byte
+`Dust_Instance` stream occupies per-instance slot 1 with these attributes:
 
 | Location | Components | Byte offset | Meaning |
 | --- | --- | --- | --- |
@@ -218,15 +218,20 @@ The 32-byte `Dust_Instance` stream occupies locations 2 through 4:
 | 3 | 4 | 12 | Straight-alpha RGBA tint |
 | 4 | 1 | 28 | Atlas sprite index |
 
-Initialization stops at the first failed resource and never configures an attribute
-for a zero buffer. Once a VAO is enabled for setup, every exit restores the prior
-binding state. Failure releases instance VBO, static VBOs, VAO, and shader in reverse
-ownership order, then retains the immediate renderer for the session. Shutdown uses
-the same idempotent handle-based cleanup.
+Dust commands share the frame's bounded ordered command stream with 2D batches and
+tool strokes. Painter order is surface, low shapes, low dust, ordinary shadows, tool
+shadows, middle particles, merged high shapes and tools, then high particles. Custom
+commands split otherwise mergeable 2D batches so this order remains exact.
 
-Dust atlas publication is a separate small transaction shared by both draw paths. The
-display thread always releases the generated CPU image, publishes only a valid native
-texture, and releases a partial texture upload before returning failure.
+Dust atlas publication is a separate display-thread transaction shared by both paths.
+The native 192 by 192 RGBA8 texture contains a 3 by 3 grid of authored variants. Failed
+pipeline admission retains the expanded fallback; failed fallback admission rejects
+dust publication rather than exposing partial resources. Shutdown releases every
+admitted handle in reverse ownership order.
+
+Middle embers are native textured quads and high flickers are native rectangles. They
+use the same command stream and therefore preserve the particle layers' authored
+positions around shadows and tools.
 
 The field is never rendered as aggregate material. There is no aggregate texture,
 coverage plane, sprite suppression, or alternate dense-pile rendering authority.

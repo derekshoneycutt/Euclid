@@ -50,9 +50,11 @@ layout_draw_test_document_shape_uses_native_encoder :: proc(t: ^testing.T) {
     vertices: [4]native.Draw_Vertex
     indices: [6]u32
     batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
     testing.expect(t, native.draw_encoder_begin(&encoder,
-        {vertices[:], indices[:], batches[:]}, {100, 100}, {100, 100}))
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
 
     draw_document_item({encoder = &encoder, runtime = runtime}, {
         box_kind = .Shape, inline_index = 0,
@@ -80,9 +82,11 @@ layout_draw_test_document_box_encodes_independent_edge_colors :: proc(t: ^testin
     vertices: [16]native.Draw_Vertex
     indices: [24]u32
     batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
     testing.expect(t, native.draw_encoder_begin(&encoder,
-        {vertices[:], indices[:], batches[:]}, {100, 100}, {100, 100}))
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
 
     encode_inline_item(&encoder, item, 10, 20)
 
@@ -102,9 +106,11 @@ layout_draw_test_triangle_encodes_independent_edge_colors :: proc(t: ^testing.T)
     vertices: [12]native.Draw_Vertex
     indices: [18]u32
     batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
     testing.expect(t, native.draw_encoder_begin(&encoder,
-        {vertices[:], indices[:], batches[:]}, {100, 100}, {100, 100}))
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
     item := dynviewmodel.Dynview_Layout_Item{
         kind = .Inline_Triangle, draw_width = 20, draw_height = 20,
         inline_atom_stroke = 2, shape_edge_color_1 = edge_1,
@@ -135,9 +141,11 @@ layout_draw_test_document_perpendicular_encodes_centered_colored_stem :: proc(
     vertices: [8]native.Draw_Vertex
     indices: [12]u32
     batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
     testing.expect(t, native.draw_encoder_begin(&encoder,
-        {vertices[:], indices[:], batches[:]}, {100, 100}, {100, 100}))
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
 
     encode_inline_item(&encoder, item, 10, 20)
 
@@ -156,9 +164,11 @@ layout_draw_test_document_arcs_encode_outline_and_fill :: proc(t: ^testing.T) {
     vertices: [128]native.Draw_Vertex
     indices: [256]u32
     batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
     encoder: native.Draw_Encoder
     testing.expect(t, native.draw_encoder_begin(&encoder,
-        {vertices[:], indices[:], batches[:]}, {100, 100}, {100, 100}))
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
     item := dynviewmodel.Dynview_Layout_Item{
         kind = .Inline_Pie_Section, draw_width = 24, draw_height = 24,
         inline_atom_stroke = 2, inline_outline_stroke = 2,

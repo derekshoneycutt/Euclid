@@ -8,12 +8,14 @@ hiding geometric color or creating a separate glowing rim.
 
 ## Ownership
 
-- `src/view/elements.odin` owns tool geometry, draw order, light conversion,
-  bounded occluder selection, material upload, and shader fallback behavior.
+- `src/view/elements.odin` owns shared tool geometry, draw order, light conversion,
+  and bounded occluder selection.
+- `src/view/elements_encoded_tools.odin` emits ordered frame-local tool records.
+- `src/view/native/sdl_stroke_pipeline.odin` owns SDL_GPU pipeline admission, packed
+  uniform upload, draw recording, and resource release.
 - `src/view/shaders/stroke3d.vert.hlsl` forwards batched vertex color data.
 - `src/view/shaders/stroke3d.frag.hlsl` owns coverage, reconstructed normals, shadows,
   linear-light shading, and the titanium response.
-- `src/view/model/model.odin` owns shader handles and cached uniform locations only.
 
 Scene geometry remains frame-local. The render state does not retain tool
 occluders or allocate per frame.
@@ -45,10 +47,9 @@ blends the two tube normals into a welded union without false seam darkening.
 Semantic active-end circles remain a separate unshaded layer. They are not
 physical caps.
 
-If the tool shader cannot load or its complete uniform contract is unavailable,
-straight rods fall back to `DrawLineEx` and the hinge falls back to segmented
-`DrawLineEx` rendering. This fallback remains draw-order based and does not
-provide depth-aware crossings or welded attachment shading.
+If the stroke pipeline is unavailable, the encoder emits equivalent bounded 2D
+geometry through the native draw pipeline. The fallback remains draw-order based and
+does not provide depth-aware crossings or welded attachment shading.
 
 ## Shader Resource Contract
 
@@ -61,22 +62,15 @@ SDL_shadercross is a recursive submodule at `tools/shadercross`; the asset build
 configures it under `.build/shadercross` and builds only the CLI target with one job.
 An explicit `EUCLID_SHADERCROSS` path overrides the bundled provider for development.
 
-The Phase 2 migration checkpoint intentionally leaves `src/view/elements.odin` on its
-Raylib admission path while the SDL pipeline owner is built. That legacy path cannot
-consume the generated SPIR-V and is not a supported runnable configuration. The SDL
-consumer must preserve the current all-or-fallback admission transaction when it
-replaces the legacy handles and individual uniform locations with pipeline resources
-and packed uniform records.
+The display-thread SDL runtime admits the stroke pipeline and fixed buffers as one
+transaction. Every failed admission leaves the pipeline unpublished and releases any
+loaded handle. Shutdown releases by handle rather than publication state, so partial
+state is safe and cleanup is idempotent. Workers never load, use, or release GPU
+resources.
 
-Every failed admission leaves the shader unpublished and releases any loaded handle.
-Shutdown also releases by handle rather than by publication state, so partial state is
-safe. Release is idempotent. Shader handles and uniform locations are valid only for
-the active display-thread graphics context; workers never load, query, use, or release
-them.
-
-The fallback is an intentional availability policy, not partial shader operation. One
-missing required uniform disables the entire shader path for that session while
-preserving ordinary line rendering.
+The fallback is an intentional availability policy, not partial shader operation. A
+failed pipeline admission disables the entire lit path for that session while
+preserving ordered native geometry.
 
 ## Lighting Contract
 
@@ -112,12 +106,12 @@ stroke surface without claiming full world-space ray accuracy.
 
 `src/view/elements_test.odin` covers expanded bounds, fixed context capacity,
 cache-order depth gating, world-to-view basis projection, canonical view-depth
-ordering, arc parameter endpoints, attachment scaling, stable leg slots, complete
-uniform admission, missing-uniform rejection, and idempotent partial cleanup.
+ordering, arc parameter endpoints, attachment scaling, and stable leg slots.
+`src/view/native/draw_encoder_test.odin` covers ordered custom commands and fixed
+stroke ABI behavior.
 `tools/test/shader_tests.jl` covers the offline shader commands, reflected interfaces,
 fixed CPU/GPU ABI, missing-tool behavior, and artifact provenance. The complete
-repository gate is the CMake `check` target once the SDL runtime checkpoint restores a
-coherent application build.
+repository gate is the CMake `check` target.
 
 ## Decision Record
 

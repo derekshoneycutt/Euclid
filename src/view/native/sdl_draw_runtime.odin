@@ -9,8 +9,15 @@ import sdl "vendor:sdl3"
 DRAW_VERTEX_CAPACITY :: 65_536
 DRAW_INDEX_CAPACITY :: 98_304
 DRAW_BATCH_CAPACITY :: 4_096
-DRAW_ARENA_RESERVE_SIZE :: 4 * mem.Megabyte
-DRAW_ARENA_INITIAL_COMMIT_SIZE :: 4 * mem.Megabyte
+DRAW_COMMAND_CAPACITY :: 8_192
+STROKE_VERTEX_CAPACITY :: 32_768
+STROKE_DRAW_CAPACITY :: 1_024
+DUST_INSTANCE_CAPACITY :: 65_536
+DUST_DRAW_CAPACITY :: 4
+DUST_EXPANDED_VERTEX_CAPACITY ::
+    DUST_INSTANCE_CAPACITY * DUST_EXPANDED_VERTICES_PER_INSTANCE
+DRAW_ARENA_RESERVE_SIZE :: 32 * mem.Megabyte
+DRAW_ARENA_INITIAL_COMMIT_SIZE :: 8 * mem.Megabyte
 
 // Sdl_Draw_Shader_Paths names the four packaged 2D shader artifacts.
 Sdl_Draw_Shader_Paths :: struct {
@@ -25,11 +32,22 @@ Sdl_Draw_Frame_Statistics :: struct {
     vertices:          u32,
     indices:           u32,
     batches:           u32,
+    commands:          u32,
+    stroke_vertices:   u32,
+    stroke_draws:      u32,
+    dust_instances:    u32,
+    dust_draws:        u32,
+    dust_expanded_vertices: u32,
     pipeline_bindings: u32,
     upload_operations: u32,
     upload_bytes:      u32,
+    dust_upload_operations: u32,
+    dust_upload_bytes: u32,
     primitive_overflows: u32,
     scissor_overflows: u32,
+    command_overflows: u32,
+    stroke_overflows:  u32,
+    dust_overflows:    u32,
 }
 
 // Sdl_Draw_Runtime_Statistics records cumulative work and capacity high waters.
@@ -38,12 +56,30 @@ Sdl_Draw_Runtime_Statistics :: struct {
     vertices:         u64,
     indices:          u64,
     batches:          u64,
+    commands:         u64,
+    stroke_vertices:  u64,
+    stroke_draws:     u64,
+    dust_instances:   u64,
+    dust_draws:       u64,
+    dust_expanded_vertices: u64,
     upload_bytes:     u64,
+    dust_upload_operations: u64,
+    dust_upload_bytes: u64,
     primitive_overflows: u64,
     scissor_overflows: u64,
+    command_overflows: u64,
+    stroke_overflows:  u64,
+    dust_overflows:    u64,
     max_vertices:     u32,
     max_indices:      u32,
     max_batches:      u32,
+    max_commands:     u32,
+    max_stroke_vertices: u32,
+    max_stroke_draws: u32,
+    max_dust_instances: u32,
+    max_dust_draws: u32,
+    max_dust_expanded_vertices: u32,
+    max_dust_upload_bytes: u32,
     max_upload_bytes: u32,
 }
 
@@ -57,10 +93,22 @@ Sdl_Draw_Runtime :: struct {
     index_buffer:      ^sdl.GPUBuffer,
     upload_buffer:     ^sdl.GPUTransferBuffer,
     texture_upload_buffer: ^sdl.GPUTransferBuffer,
+    stroke_pipeline:       ^sdl.GPUGraphicsPipeline,
+    stroke_vertex_buffer:  ^sdl.GPUBuffer,
+    stroke_upload_buffer:  ^sdl.GPUTransferBuffer,
+    stroke_ready:          bool,
+    dust_pipeline:         ^sdl.GPUGraphicsPipeline,
+    dust_quad_buffer:      ^sdl.GPUBuffer,
+    dust_instance_buffer:  ^sdl.GPUBuffer,
+    dust_expanded_buffer:  ^sdl.GPUBuffer,
+    dust_upload_buffer:    ^sdl.GPUTransferBuffer,
+    dust_ready:            bool,
+    dust_atlas:            Sampled_Texture,
     texture_operations: Texture_Operation_Queue,
     arena:             vmem.Arena,
     arena_initialized: bool,
     storage:           Draw_Storage,
+    custom_storage:    Draw_Custom_Storage,
     last_frame:        Sdl_Draw_Frame_Statistics,
     statistics:        Sdl_Draw_Runtime_Statistics,
     telemetry_reported: bool,
@@ -70,6 +118,13 @@ Sdl_Draw_Runtime :: struct {
 sdl_draw_runtime_release_gpu :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) {
     if device == nil {return}
+    if runtime^.dust_atlas.handle != nil {
+        sdl.ReleaseGPUTexture(
+            device, cast(^sdl.GPUTexture)runtime^.dust_atlas.handle)
+        runtime^.dust_atlas = {}
+    }
+    sdl_dust_runtime_release(runtime, device)
+    sdl_stroke_runtime_release(runtime, device)
     if runtime^.texture_upload_buffer != nil {
         sdl.ReleaseGPUTransferBuffer(device, runtime^.texture_upload_buffer)
     }
@@ -213,8 +268,35 @@ sdl_draw_runtime_allocate_storage :: proc(runtime: ^Sdl_Draw_Runtime) -> bool {
     vertices, vertex_error := make([]Draw_Vertex, DRAW_VERTEX_CAPACITY, allocator)
     indices, index_error := make([]u32, DRAW_INDEX_CAPACITY, allocator)
     batches, batch_error := make([]Draw_Batch, DRAW_BATCH_CAPACITY, allocator)
-    if vertex_error != nil || index_error != nil || batch_error != nil {return false}
-    runtime^.storage = {vertices, indices, batches}
+    commands, command_error := make(
+        []Draw_Command, DRAW_COMMAND_CAPACITY, allocator)
+    stroke_vertices, stroke_vertex_error := make(
+        []Stroke_Vertex, STROKE_VERTEX_CAPACITY, allocator)
+    stroke_draws, stroke_draw_error := make(
+        []Stroke_Draw, STROKE_DRAW_CAPACITY, allocator)
+    dust_instances, dust_instance_error := make(
+        []Dust_Instance, DUST_INSTANCE_CAPACITY, allocator)
+    dust_draws, dust_draw_error := make(
+        []Dust_Draw, DUST_DRAW_CAPACITY, allocator)
+    dust_expanded_vertices, dust_expanded_vertex_error := make(
+        []Draw_Vertex, DUST_EXPANDED_VERTEX_CAPACITY, allocator)
+    dust_expanded_draws, dust_expanded_draw_error := make(
+        []Dust_Draw, DUST_DRAW_CAPACITY, allocator)
+    if vertex_error != nil || index_error != nil || batch_error != nil ||
+        command_error != nil || stroke_vertex_error != nil ||
+        stroke_draw_error != nil || dust_instance_error != nil ||
+        dust_draw_error != nil || dust_expanded_vertex_error != nil ||
+        dust_expanded_draw_error != nil {return false}
+    runtime^.custom_storage = {
+        stroke_vertices = stroke_vertices,
+        stroke_draws = stroke_draws,
+        dust_instances = dust_instances,
+        dust_draws = dust_draws,
+        dust_expanded_vertices = dust_expanded_vertices,
+        dust_expanded_draws = dust_expanded_draws,
+    }
+    runtime^.storage = {
+        vertices, indices, batches, commands, &runtime^.custom_storage}
     return true
 }
 
@@ -251,6 +333,7 @@ sdl_draw_runtime_create :: proc(
         return false
     }
     runtime^ = candidate
+    runtime^.storage.custom = &runtime^.custom_storage
     candidate = {}
     return true
 }
@@ -285,41 +368,126 @@ sdl_sampled_texture_release :: proc(
     texture^ = {}
 }
 
-// sdl_draw_encoder_batches_valid rejects incomplete textured batch state.
-sdl_draw_encoder_batches_valid :: proc(encoder: ^Draw_Encoder) -> bool {
-    for batch in encoder^.batches[:encoder^.batch_count] {
-        if batch.pipeline == .Textured && batch.texture == nil {return false}
+// sdl_draw_encoder_commands_valid rejects incomplete or unsupported command state.
+sdl_draw_encoder_commands_valid :: proc(encoder: ^Draw_Encoder) -> bool {
+    for command in encoder^.commands[:encoder^.command_count] {
+        switch command.kind {
+        case .Batch:
+            if command.index >= u32(encoder^.batch_count) {return false}
+            batch := encoder^.batches[command.index]
+            if batch.pipeline == .Textured && batch.texture == nil {return false}
+        case .Tool:
+            if command.index >= u32(encoder^.stroke_draw_count) {return false}
+            draw := encoder^.stroke_draws[command.index]
+            if draw.vertex_count == 0 ||
+                draw.first_vertex + draw.vertex_count >
+                    u32(encoder^.stroke_vertex_count) {return false}
+        case .Dust_Instanced:
+            if !encoder^.dust_instancing_enabled ||
+                command.index >= u32(encoder^.dust_draw_count) {return false}
+            draw := encoder^.dust_draws[command.index]
+            if draw.texture == nil || draw.count == 0 ||
+                draw.first + draw.count > u32(encoder^.dust_instance_count) {
+                return false
+            }
+        case .Dust_Expanded:
+            if command.index >= u32(encoder^.dust_expanded_draw_count) {
+                return false
+            }
+            draw := encoder^.dust_expanded_draws[command.index]
+            if draw.texture == nil || draw.count == 0 ||
+                draw.first + draw.count >
+                    u32(encoder^.dust_expanded_vertex_count) {return false}
+        }
     }
     return true
+}
+
+// sdl_draw_accumulate_statistics adds one frame and updates capacity high waters.
+sdl_draw_accumulate_statistics :: proc(
+    statistics: ^Sdl_Draw_Runtime_Statistics,
+    frame: Sdl_Draw_Frame_Statistics) {
+    statistics^.submitted_frames += 1
+    statistics^.vertices += u64(frame.vertices)
+    statistics^.indices += u64(frame.indices)
+    statistics^.batches += u64(frame.batches)
+    statistics^.commands += u64(frame.commands)
+    statistics^.stroke_vertices += u64(frame.stroke_vertices)
+    statistics^.stroke_draws += u64(frame.stroke_draws)
+    statistics^.dust_instances += u64(frame.dust_instances)
+    statistics^.dust_draws += u64(frame.dust_draws)
+    statistics^.dust_expanded_vertices += u64(frame.dust_expanded_vertices)
+    statistics^.upload_bytes += u64(frame.upload_bytes)
+    statistics^.dust_upload_operations += u64(frame.dust_upload_operations)
+    statistics^.dust_upload_bytes += u64(frame.dust_upload_bytes)
+    statistics^.primitive_overflows += u64(frame.primitive_overflows)
+    statistics^.scissor_overflows += u64(frame.scissor_overflows)
+    statistics^.command_overflows += u64(frame.command_overflows)
+    statistics^.stroke_overflows += u64(frame.stroke_overflows)
+    statistics^.dust_overflows += u64(frame.dust_overflows)
+    statistics^.max_vertices = max(statistics^.max_vertices, frame.vertices)
+    statistics^.max_indices = max(statistics^.max_indices, frame.indices)
+    statistics^.max_batches = max(statistics^.max_batches, frame.batches)
+    statistics^.max_commands = max(statistics^.max_commands, frame.commands)
+    statistics^.max_stroke_vertices = max(
+        statistics^.max_stroke_vertices, frame.stroke_vertices)
+    statistics^.max_stroke_draws = max(
+        statistics^.max_stroke_draws, frame.stroke_draws)
+    statistics^.max_dust_instances = max(
+        statistics^.max_dust_instances, frame.dust_instances)
+    statistics^.max_dust_draws = max(
+        statistics^.max_dust_draws, frame.dust_draws)
+    statistics^.max_dust_expanded_vertices = max(
+        statistics^.max_dust_expanded_vertices, frame.dust_expanded_vertices)
+    statistics^.max_dust_upload_bytes = max(
+        statistics^.max_dust_upload_bytes, frame.dust_upload_bytes)
+    statistics^.max_upload_bytes = max(statistics^.max_upload_bytes, frame.upload_bytes)
 }
 
 // sdl_draw_record_statistics publishes one successful submission observation.
 sdl_draw_record_statistics :: proc(
     runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
     pipeline_bindings, vertex_bytes, index_bytes: u32) {
+    stroke_bytes := u32(encoder^.stroke_vertex_count * size_of(Stroke_Vertex))
+    dust_instance_bytes := u32(
+        encoder^.dust_instance_count * size_of(Dust_Instance))
+    dust_expanded_bytes := u32(
+        encoder^.dust_expanded_vertex_count * size_of(Draw_Vertex))
+    dust_upload_operations: u32
+    dust_upload_bytes := dust_expanded_bytes
+    if dust_instance_bytes > 0 {
+        dust_upload_operations = 2
+        dust_upload_bytes += u32(DUST_QUAD_VERTEX_COUNT * size_of(Dust_Quad_Vertex)) +
+            dust_instance_bytes
+    } else if dust_expanded_bytes > 0 {
+        dust_upload_operations = 1
+    }
     frame := Sdl_Draw_Frame_Statistics{
         vertices = u32(encoder^.vertex_count),
         indices = u32(encoder^.index_count),
         batches = u32(encoder^.batch_count),
+        commands = u32(encoder^.command_count),
+        stroke_vertices = u32(encoder^.stroke_vertex_count),
+        stroke_draws = u32(encoder^.stroke_draw_count),
+        dust_instances = u32(encoder^.dust_instance_count),
+        dust_draws = u32(
+            encoder^.dust_draw_count + encoder^.dust_expanded_draw_count),
+        dust_expanded_vertices = u32(encoder^.dust_expanded_vertex_count),
         pipeline_bindings = pipeline_bindings,
-        upload_operations = (vertex_bytes > 0 ? 1 : 0) + (index_bytes > 0 ? 1 : 0),
-        upload_bytes = vertex_bytes + index_bytes,
+        upload_operations = (vertex_bytes > 0 ? 1 : 0) +
+            (index_bytes > 0 ? 1 : 0) + (stroke_bytes > 0 ? 1 : 0) +
+            dust_upload_operations,
+        upload_bytes = vertex_bytes + index_bytes + stroke_bytes + dust_upload_bytes,
+        dust_upload_operations = dust_upload_operations,
+        dust_upload_bytes = dust_upload_bytes,
         primitive_overflows = encoder^.statistics.primitive_overflows,
         scissor_overflows = encoder^.statistics.scissor_overflows,
+        command_overflows = encoder^.statistics.command_overflows,
+        stroke_overflows = encoder^.statistics.stroke_overflows,
+        dust_overflows = encoder^.statistics.dust_overflows,
     }
     runtime^.last_frame = frame
-    statistics := &runtime^.statistics
-    statistics^.submitted_frames += 1
-    statistics^.vertices += u64(frame.vertices)
-    statistics^.indices += u64(frame.indices)
-    statistics^.batches += u64(frame.batches)
-    statistics^.upload_bytes += u64(frame.upload_bytes)
-    statistics^.primitive_overflows += u64(frame.primitive_overflows)
-    statistics^.scissor_overflows += u64(frame.scissor_overflows)
-    statistics^.max_vertices = max(statistics^.max_vertices, frame.vertices)
-    statistics^.max_indices = max(statistics^.max_indices, frame.indices)
-    statistics^.max_batches = max(statistics^.max_batches, frame.batches)
-    statistics^.max_upload_bytes = max(statistics^.max_upload_bytes, frame.upload_bytes)
+    sdl_draw_accumulate_statistics(&runtime^.statistics, frame)
 }
 
 // sdl_draw_upload records cycled vertex and index uploads for one frame.
@@ -473,44 +641,85 @@ sdl_draw_record_batch :: proc(
         pass, batch.index_count, 1, batch.first_index, 0, 0)
 }
 
-// sdl_draw_record_scene clears and records all ordered batches to the scene target.
-sdl_draw_record_scene :: proc(
-    platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime,
-    encoder: ^Draw_Encoder, command_buffer: ^sdl.GPUCommandBuffer,
-    clear_color: sdl.FColor) -> bool {
+// sdl_draw_push_2d_uniform restores the viewport cbuffer after a custom draw.
+sdl_draw_push_2d_uniform :: proc(
+    command_buffer: ^sdl.GPUCommandBuffer, encoder: ^Draw_Encoder) {
     viewport_uniform := [4]f32{
         encoder^.logical_extent.x, encoder^.logical_extent.y, 0, 0}
     sdl.PushGPUVertexUniformData(
         command_buffer, 0, raw_data(viewport_uniform[:]), size_of(viewport_uniform))
-    target := [1]sdl.GPUColorTargetInfo{{
-        texture = platform^.scene_target,
-        clear_color = clear_color,
-        load_op = .CLEAR,
-        store_op = .STORE,
-    }}
-    pass := sdl.BeginGPURenderPass(
-        command_buffer, raw_data(target[:]), len(target), nil)
-    if pass == nil {return false}
+}
+
+// sdl_draw_bind_2d_buffers restores the core vertex and index bindings.
+sdl_draw_bind_2d_buffers :: proc(
+    runtime: ^Sdl_Draw_Runtime, pass: ^sdl.GPURenderPass) {
     vertex_binding := [1]sdl.GPUBufferBinding{{buffer = runtime^.vertex_buffer}}
     index_binding := sdl.GPUBufferBinding{buffer = runtime^.index_buffer}
     sdl.BindGPUVertexBuffers(pass, 0, raw_data(vertex_binding[:]), 1)
     sdl.BindGPUIndexBuffer(pass, index_binding, ._32BIT)
+}
+
+// sdl_draw_record_commands records every ordered operation inside one pass.
+sdl_draw_record_commands :: proc(
+    runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
+    command_buffer: ^sdl.GPUCommandBuffer, pass: ^sdl.GPURenderPass) {
+    active_pipeline: Draw_Pipeline
+    active_kind := Draw_Command_Kind.Batch
+    pipeline_bound := false
+    for command in encoder^.commands[:encoder^.command_count] {
+        switch command.kind {
+        case .Batch:
+            batch := encoder^.batches[command.index]
+            if !pipeline_bound || active_kind != .Batch {
+                sdl_draw_push_2d_uniform(command_buffer, encoder)
+                sdl_draw_bind_2d_buffers(runtime, pass)
+            }
+            if !pipeline_bound || active_kind != .Batch ||
+                batch.pipeline != active_pipeline {
+                pipeline := runtime^.colored_pipeline
+                if batch.pipeline == .Textured {pipeline = runtime^.textured_pipeline}
+                sdl.BindGPUGraphicsPipeline(pass, pipeline)
+                active_pipeline = batch.pipeline
+            }
+            sdl_draw_record_batch(runtime, pass, batch)
+        case .Tool:
+            if !pipeline_bound || active_kind != .Tool {
+                sdl_stroke_bind(runtime, pass)
+            }
+            sdl_stroke_record_draw(command_buffer, pass,
+                &encoder^.stroke_draws[command.index])
+        case .Dust_Instanced:
+            sdl_dust_record_instanced(runtime, command_buffer, pass,
+                &encoder^.dust_draws[command.index])
+        case .Dust_Expanded:
+            if !pipeline_bound || active_kind != .Dust_Expanded {
+                sdl_draw_push_2d_uniform(command_buffer, encoder)
+            }
+            sdl_dust_record_expanded(runtime, pass,
+                &encoder^.dust_expanded_draws[command.index])
+        }
+        active_kind = command.kind
+        pipeline_bound = true
+    }
+}
+
+// sdl_draw_record_scene clears and records the ordered native command stream.
+sdl_draw_record_scene :: proc(
+    platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime,
+    encoder: ^Draw_Encoder, command_buffer: ^sdl.GPUCommandBuffer,
+    clear_color: sdl.FColor) -> bool {
+    sdl_draw_push_2d_uniform(command_buffer, encoder)
+    target := [1]sdl.GPUColorTargetInfo{{
+        texture = platform^.scene_target, clear_color = clear_color,
+        load_op = .CLEAR, store_op = .STORE}}
+    pass := sdl.BeginGPURenderPass(
+        command_buffer, raw_data(target[:]), len(target), nil)
+    if pass == nil {return false}
+    sdl_draw_bind_2d_buffers(runtime, pass)
     sdl.SetGPUViewport(pass, {
         w = f32(platform^.scene_width), h = f32(platform^.scene_height),
-        min_depth = 0, max_depth = 1,
-    })
-    active_pipeline: Draw_Pipeline
-    pipeline_bound := false
-    for batch in encoder^.batches[:encoder^.batch_count] {
-        if !pipeline_bound || batch.pipeline != active_pipeline {
-            pipeline := runtime^.colored_pipeline
-            if batch.pipeline == .Textured {pipeline = runtime^.textured_pipeline}
-            sdl.BindGPUGraphicsPipeline(pass, pipeline)
-            active_pipeline = batch.pipeline
-            pipeline_bound = true
-        }
-        sdl_draw_record_batch(runtime, pass, batch)
-    }
+        min_depth = 0, max_depth = 1})
+    sdl_draw_record_commands(runtime, encoder, command_buffer, pass)
     sdl.EndGPURenderPass(pass)
     return true
 }
@@ -520,9 +729,11 @@ sdl_draw_submit :: proc(
     platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime,
     encoder: ^Draw_Encoder, command_buffer: ^sdl.GPUCommandBuffer,
     image: Sdl_Swapchain_Image, clear_color: sdl.FColor) -> bool {
-    if !sdl_draw_encoder_batches_valid(encoder) ||
+    if !sdl_draw_encoder_commands_valid(encoder) ||
         !sdl_draw_upload_textures(runtime, platform^.device, command_buffer) ||
         !sdl_draw_upload(runtime, encoder, platform^.device, command_buffer) ||
+        !sdl_stroke_upload(runtime, encoder, platform^.device, command_buffer) ||
+        !sdl_dust_upload(runtime, encoder, platform^.device, command_buffer) ||
         !sdl_draw_record_scene(
             platform, runtime, encoder, command_buffer, clear_color) {
         _ = sdl.CancelGPUCommandBuffer(command_buffer)
@@ -542,10 +753,17 @@ sdl_draw_submit :: proc(
     }
     sdl_draw_commit_texture_operations(runtime, platform^.device)
     pipeline_bindings: u32
-    previous: Draw_Pipeline
-    for batch, index in encoder^.batches[:encoder^.batch_count] {
-        if index == 0 || batch.pipeline != previous {pipeline_bindings += 1}
-        previous = batch.pipeline
+    previous_kind: Draw_Command_Kind
+    previous_pipeline: Draw_Pipeline
+    for command, index in encoder^.commands[:encoder^.command_count] {
+        changed := index == 0 || command.kind != previous_kind
+        if command.kind == .Batch {
+            batch := encoder^.batches[command.index]
+            changed = changed || batch.pipeline != previous_pipeline
+            previous_pipeline = batch.pipeline
+        }
+        if changed {pipeline_bindings += 1}
+        previous_kind = command.kind
     }
     vertex_bytes := u32(encoder^.vertex_count * size_of(Draw_Vertex))
     index_bytes := u32(encoder^.index_count * size_of(u32))

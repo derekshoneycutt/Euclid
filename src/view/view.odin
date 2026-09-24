@@ -133,8 +133,6 @@ Sdl_Font_Texture_Context :: struct {
 deferred_visual_capabilities :: proc(
     state: ^Euclid_General_State) -> Deferred_Visual_Capabilities {
     result := Deferred_Visual_Capabilities{
-        tool_visuals = true,
-        dust_visuals = true,
         gif_readback = state^.ui_runtime.gif_capture_phase != .Idle,
     }
     when core.SCENARIOS_ENABLED {result.scenario_readback = true}
@@ -147,15 +145,23 @@ report_draw_frame_telemetry :: proc(
     if runtime^.telemetry_reported {return}
     frame := runtime^.last_frame
     deferred := deferred_visual_capabilities(state)
-    log.infof("sdl_geometry_frame vertices=%d indices=%d batches=%d " +
+    log.infof("sdl_geometry_frame vertices=%d indices=%d batches=%d commands=%d " +
+        "stroke_vertices=%d stroke_draws=%d " +
+        "dust_instances=%d dust_draws=%d dust_expanded_vertices=%d " +
         "pipeline_bindings=%d upload_operations=%d upload_bytes=%d " +
-        "primitive_overflows=%d scissor_overflows=%d " +
+        "dust_upload_operations=%d dust_upload_bytes=%d " +
+        "primitive_overflows=%d scissor_overflows=%d command_overflows=%d " +
+        "stroke_overflows=%d dust_overflows=%d " +
         "deferred_glyph_text=%v deferred_terminal_rasters=%v " +
         "deferred_tool_visuals=%v deferred_dust_visuals=%v " +
         "deferred_scenario_readback=%v deferred_gif_readback=%v",
-        frame.vertices, frame.indices, frame.batches, frame.pipeline_bindings,
-        frame.upload_operations, frame.upload_bytes, frame.primitive_overflows,
-        frame.scissor_overflows, deferred.glyph_text, deferred.terminal_rasters,
+        frame.vertices, frame.indices, frame.batches, frame.commands,
+        frame.stroke_vertices, frame.stroke_draws, frame.dust_instances,
+        frame.dust_draws, frame.dust_expanded_vertices, frame.pipeline_bindings,
+        frame.upload_operations, frame.upload_bytes, frame.dust_upload_operations,
+        frame.dust_upload_bytes, frame.primitive_overflows, frame.scissor_overflows,
+        frame.command_overflows, frame.stroke_overflows, frame.dust_overflows,
+        deferred.glyph_text, deferred.terminal_rasters,
         deferred.tool_visuals, deferred.dust_visuals,
         deferred.scenario_readback, deferred.gif_readback)
     runtime^.telemetry_reported = true
@@ -165,12 +171,29 @@ report_draw_frame_telemetry :: proc(
 report_draw_runtime_summary :: proc(runtime: ^native.Sdl_Draw_Runtime) {
     statistics := runtime^.statistics
     log.infof("sdl_geometry_summary submitted_frames=%d vertices=%d indices=%d " +
-        "batches=%d upload_bytes=%d primitive_overflows=%d scissor_overflows=%d " +
-        "max_vertices=%d max_indices=%d max_batches=%d max_upload_bytes=%d",
+        "batches=%d commands=%d stroke_vertices=%d stroke_draws=%d " +
+        "dust_instances=%d dust_draws=%d dust_expanded_vertices=%d " +
+        "upload_bytes=%d dust_upload_operations=%d dust_upload_bytes=%d " +
+        "primitive_overflows=%d scissor_overflows=%d command_overflows=%d " +
+        "stroke_overflows=%d dust_overflows=%d max_vertices=%d " +
+        "max_indices=%d max_batches=%d max_commands=%d " +
+        "max_stroke_vertices=%d max_stroke_draws=%d " +
+        "max_dust_instances=%d max_dust_draws=%d " +
+        "max_dust_expanded_vertices=%d max_dust_upload_bytes=%d " +
+        "max_upload_bytes=%d",
         statistics.submitted_frames, statistics.vertices, statistics.indices,
-        statistics.batches, statistics.upload_bytes,
+        statistics.batches, statistics.commands, statistics.stroke_vertices,
+        statistics.stroke_draws, statistics.dust_instances, statistics.dust_draws,
+        statistics.dust_expanded_vertices, statistics.upload_bytes,
+        statistics.dust_upload_operations, statistics.dust_upload_bytes,
         statistics.primitive_overflows, statistics.scissor_overflows,
+        statistics.command_overflows, statistics.stroke_overflows,
+        statistics.dust_overflows,
         statistics.max_vertices, statistics.max_indices, statistics.max_batches,
+        statistics.max_commands, statistics.max_stroke_vertices,
+        statistics.max_stroke_draws, statistics.max_dust_instances,
+        statistics.max_dust_draws, statistics.max_dust_expanded_vertices,
+        statistics.max_dust_upload_bytes,
         statistics.max_upload_bytes)
 }
 
@@ -201,6 +224,26 @@ sdl_draw_shader_paths :: proc() -> native.Sdl_Draw_Shader_Paths {
     }
 }
 
+// Resolve packaged SPIR-V artifacts for the optional geometry-tool pipeline.
+sdl_stroke_shader_paths :: proc() -> native.Sdl_Stroke_Shader_Paths {
+    return {
+        vertex = files.packaged_asset_path(
+            "shaders/stroke3d.vert.spv", context.temp_allocator),
+        fragment = files.packaged_asset_path(
+            "shaders/stroke3d.frag.spv", context.temp_allocator),
+    }
+}
+
+// Resolve packaged SPIR-V artifacts for the optional instanced dust pipeline.
+sdl_dust_shader_paths :: proc() -> native.Sdl_Dust_Shader_Paths {
+    return {
+        vertex = files.packaged_asset_path(
+            "shaders/dust_instanced.vert.spv", context.temp_allocator),
+        fragment = files.packaged_asset_path(
+            "shaders/dust_instanced.frag.spv", context.temp_allocator),
+    }
+}
+
 // initialize_and_run_sdl_session admits native fonts and Terminal textures.
 initialize_and_run_sdl_session :: proc(
     settings: ^Euclid_Run_Settings, session: Euclid_Runtime_Session,
@@ -214,6 +257,14 @@ initialize_and_run_sdl_session :: proc(
         _ = shutdown_window_runtime(session)
         return 1
     }
+    if !initialize_native_dust_atlas(platform, draw_runtime) {
+        log.error("display_dust_atlas_start_failed")
+        _ = shutdown_window_runtime(session)
+        return 1
+    }
+    framebuffer_owner := Sdl_Framebuffer_Context{platform = platform}
+    bind_sdl_framebuffer_capture(&framebuffer_owner)
+    defer unbind_sdl_framebuffer_capture()
     if !terminal_graphics_bind_native(session.state, platform, draw_runtime) {
         log.error("terminal_graphics_native_bind_failed")
         _ = shutdown_window_runtime(session)
@@ -436,12 +487,21 @@ encode_sdl_geometry_frame :: proc(
         f32(ctx.platform^.metrics.logical_width),
         f32(ctx.platform^.metrics.logical_height),
     }, {ctx.platform^.scene_width, ctx.platform^.scene_height})
+    native.draw_encoder_enable_strokes(&encoder, ctx.draw_runtime^.stroke_ready)
+    native.draw_encoder_enable_dust_instancing(
+        &encoder, ctx.draw_runtime^.dust_ready)
     _ = native.draw_encoder_push_scissor(
         &encoder, state^.ui_runtime.ui_regions.world_rect)
     draw_encoded_drawing_surface(state, &encoder)
     draw_encoded_cached_basic_pass(state, &encoder, false)
+    encode_low_particles(state^.particle_system, state, &encoder,
+        ctx.draw_runtime^.dust_atlas.handle)
     draw_encoded_cached_shadow_pass(state, &encoder)
-    draw_encoded_cached_basic_pass(state, &encoder, true)
+    draw_encoded_cached_tool_shadow_pass(state, &encoder)
+    encode_mid_particles(state^.particle_system, state, &encoder,
+        ctx.draw_runtime^.dust_atlas.handle)
+    draw_encoded_shapes_high_merged_cached(state, &encoder)
+    encode_high_particles(state^.particle_system, state, &encoder)
     _ = native.draw_encoder_pop_scissor(&encoder)
     ui.draw_encoded_panel_geometry(state, &encoder)
     ui.draw_encoded_animation_controls(
@@ -644,6 +704,14 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
         return 1
     }
     defer native.sdl_draw_runtime_destroy(&draw_runtime, platform.device)
+    if !native.sdl_stroke_runtime_admit(
+        &draw_runtime, platform.device, sdl_stroke_shader_paths()) {
+        log.warn("sdl_stroke_runtime_unavailable")
+    }
+    if !native.sdl_dust_runtime_admit(
+        &draw_runtime, platform.device, sdl_dust_shader_paths()) {
+        log.warn("sdl_dust_runtime_unavailable")
+    }
 
     input_runtime := input.input_runtime_create(context.allocator)
     if input_runtime == nil { return 1 }
@@ -897,8 +965,6 @@ initialize_window_resources :: proc(
 
     initialize_window_icon()
 
-    init_tool_brush_shader(state)
-
     required_fonts_ready := font.cache_init(&state^.font_cache, {})
     if !required_fonts_ready {
         fmt.eprintln("error: failed to load required JuliaMono or NewCM font")
@@ -931,8 +997,6 @@ shutdown_window_resources :: proc(state : ^Euclid_General_State) {
             rl.CloseAudioDevice()
         }
     }
-    shutdown_particle_render_resources(state)
-    shutdown_tool_brush_shader(state)
 }
 
 //   Update rolling FPS statistics used for average-FPS overlay display.
@@ -1269,12 +1333,8 @@ draw_world :: proc(state: ^Euclid_General_State) {
     draw_drawing_surface(state)
 
     draw_shapes_points_low_cached(state)
-    render_low_particles(state^.particle_system, state)
     draw_shapes_shapes_shadows_cached(state)
     draw_shapes_points_shadows_cached(state)
-    render_particles(state^.particle_system, state)
-    draw_shapes_points_high_merged_cached(state)
-    render_high_particles(state^.particle_system, state)
 
     state^.iso_scale^.x_offset = base_x_offset
     state^.iso_scale^.y_offset = base_y_offset

@@ -223,10 +223,11 @@ display thread creates candidates, records SDL_GPU copies, and publishes exact
 generations from successful submission callbacks. Failed creates discard candidates,
 failed animation updates preserve the last resident frame, and borrowed upload bytes
 remain owned until completion. Glyphs, Dynview text, Terminal text, and Terminal
-rasters are textured quads in the active frame. Tool and dust visuals plus screenshot
-or GIF GPU readback remain explicit deferred capabilities. Dormant Raylib source may
-remain, but it neither creates a window, polls active input, nor records active frame
-presentation.
+rasters are textured quads in the active frame. Tool strokes and dust use bounded
+custom commands in that same ordered render pass. Screenshot and GIF acquisition read
+back the display-owned SDL scene target. Dormant Raylib source may remain, but it
+neither creates a window, polls active input, records active frame presentation, nor
+owns tool or particle GPU resources.
 
 The repository-owned `EUCLID-SDL-BOUNDARY` rule permits SDL imports only in the exact
 native color, icon, GPU renderer, platform, platform-service, and timing owners, the
@@ -248,10 +249,10 @@ current owner:
 | Category | Current owners and responsibility |
 | --- | --- |
 | Transitional compatibility | `src/view/view.odin` retains the dormant frame consumer needed by later rendering slices but does not own active presentation or device polling. |
-| Subsystem drawing | View core, UI, Dynview display, tool, dust, and Terminal packages retain dormant immediate Raylib/rlgl consumers alongside migrated owner-local geometry encoders. |
+| Subsystem drawing | View core, UI, Dynview display, and Terminal packages retain dormant immediate Raylib consumers alongside migrated owner-local geometry encoders. Tool and particle rendering are native SDL_GPU paths. |
 | Audio | `src/audio` owns Raylib stream handles and chalk synthesis playback. |
 | Backend resource ownership | Native SDL owners hold GPU handles; font and Terminal graphics policy retain bounded generation, publication, playback, and cleanup state through portable records. |
-| Capture acquisition | `src/view/core/framebuffer_capture.odin` and GIF capture policy synchronously acquire and release presented Raylib images. |
+| Capture acquisition | `src/view/sdl_framebuffer.odin` reads the SDL scene target into the existing short-lived CPU image facade used by screenshot and GIF policy. |
 | Documented font/image compatibility requirement | Font rasterization and Terminal image decoding remain CPU-owned compatibility work; their resident texture records no longer contain Raylib resources. |
 
 Canonical Dynview compile, layout, and tracking packages use `core/geometry.Rectangle`;
@@ -596,11 +597,13 @@ The windowed wrapper adds GIF policy without changing this semantic boundary.
 
 ### Synchronous Framebuffer Capture
 
-Presented-pixel acquisition is a display-thread operation owned by `src/view/core`.
-One synchronous Raylib capture object validates tightly packed RGBA8 pixels, retains
-the native image only for its immediate crop, nearest-neighbor resize, or PNG export,
-and releases that image before the post-presentation service returns. It never enters
-canonical state, worker storage, or the files package.
+Presented-pixel acquisition is a display-thread operation owned by the SDL platform
+and adapted through `src/view/sdl_framebuffer.odin`. The platform copies its owned scene
+target to a temporary `DOWNLOAD` transfer buffer, submits the copy, waits for GPU idle,
+maps tightly packed RGBA8 pixels, and releases the transfer buffer before returning.
+The adapter places those bytes in the existing short-lived CPU image facade for crop,
+nearest-neighbor resize, PNG export, and GIF input. Captured pixels never enter
+canonical state or worker storage.
 
 Scenario evidence owns bounded screenshot requests, safe relative paths, and completion
 correlation. The display owner fulfills those requests after presentation by acquiring,
@@ -608,8 +611,9 @@ exporting, and releasing one capture. GIF policy uses the same acquisition lifec
 then supplies validated pixel rows and pitch to the files-owned encoder. The encoder
 arena, GIF byte production, and persisted output remain files responsibilities.
 
-This boundary models only Raylib's current synchronous behavior. It has no pending
-state, transfer queue, fence, shared-frame cache, or multi-frame pixel lifetime.
+This boundary is deliberately synchronous and has no pending state, shared-frame
+cache, or multi-frame mapped-pixel lifetime. The scene target remains SDL-owned; only
+the temporary transfer buffer and CPU image cross the acquisition interval.
 
 ### Per-Frame Preparation
 

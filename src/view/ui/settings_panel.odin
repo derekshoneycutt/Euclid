@@ -133,10 +133,22 @@ draw_encoded_settings_text :: proc(
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
     rows := settings_view_layout_rows(stack)
     x := panel.x + SETTINGS_PANEL_INSET
+    value := fmt.tprintf("%d", state^.particle_system^.use_max_dust_particles)
+    face := view_font.cache_borrow(&state^.font_cache, .Regular)
+    value_width, measured := view_core.ui_text_measure_monospace(
+        value, face, TREE_FONT_SIZE, 0)
+    if !measured {value_width = 40}
     draw_encoded_label(state, encoder, "Maximum Dust particles", x, rows.slider_label_y)
-    draw_encoded_label(state, encoder,
-        fmt.tprintf("%d", state^.particle_system^.use_max_dust_particles),
-        panel.x + panel.width - SETTINGS_PANEL_INSET * 2, rows.slider_label_y)
+    draw_encoded_label(state, encoder, value,
+        settings_right_aligned_x(panel, value_width), rows.slider_label_y)
+    animation_entries_added := 0
+    if state^.julia_interface != nil {
+        animation_entries_added = state^.julia_interface^.animation_count
+    }
+    draw_settings_particle_stats(
+        {state = state, panel = panel, font = face,
+            font_resolver = view_font.cache_terminal_resolver(&state^.font_cache)},
+        rows.stats_y, encoder, animation_entries_added)
     labels := [4]struct{label: string, y: f32}{
         {"Display FPS", rows.fps_y}, {"Limit FPS", rows.limit_y},
         {"Use SIMD Projection", rows.simd_y},
@@ -147,6 +159,12 @@ draw_encoded_settings_text :: proc(
             x + SETTINGS_CHECKBOX_SIZE + SETTINGS_CHECKBOX_LABEL_GAP,
             item.y - SETTINGS_CHECKBOX_TEXT_OFFSET_Y)
     }
+}
+
+// settings_right_aligned_x keeps one measured value inside the panel inset.
+settings_right_aligned_x :: #force_inline proc(
+    panel: rl.Rectangle, text_width: f32) -> f32 {
+    return panel.x + panel.width - SETTINGS_PANEL_INSET - max(text_width, 0)
 }
 
 //   Build one settings checkbox parameter record from shared row context.
@@ -193,7 +211,7 @@ settings_max_particles_params :: proc(
 //   Render particle render-count statistics and Julia animation-entry counts in settings view.
 draw_settings_particle_stats :: proc(
     ctx: Settings_View_Context, stats_y: f32,
-    animation_entries_added: int) {
+    encoder: ^native.Draw_Encoder, animation_entries_added: int) {
 
     ps := ctx.state.particle_system
     labels := [4]string{
@@ -204,6 +222,7 @@ draw_settings_particle_stats :: proc(
     }
     for label, row in labels {
         view_core.ui_text_shaped({
+            encoder = encoder,
             resolver = ctx.font_resolver,
             key = .Regular,
             text = label,
@@ -374,7 +393,8 @@ draw_settings_controls :: proc(
     }
     draw_settings_integer_slider_prepared(settings_max_particles_params(
         ctx, prepared.rows.slider_label_y), prepared.max_particles)
-    draw_settings_particle_stats(ctx, prepared.rows.stats_y, animation_entries_added)
+    draw_settings_particle_stats(
+        ctx, prepared.rows.stats_y, nil, animation_entries_added)
     draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.fps_y,
         4001, "Display FPS", ui_runtime.display_fps, true}), prepared.fps)
     draw_checkbox_prepared(settings_checkbox_params(ctx, {prepared.rows.limit_y,

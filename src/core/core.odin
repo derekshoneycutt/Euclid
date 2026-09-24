@@ -103,8 +103,6 @@ Euclid_General_State :: struct {
     user_drawing_sound_enabled: bool,
     animation_drawing_sound_enabled: bool,
     
-    stroke_3d: viewmodel.Tool_Render_State,
-    dust_render: viewmodel.Dust_Render_State,
     ui_runtime: viewmodel.Euclid_Ui_Runtime_State,
     gif_capture: viewmodel.Gif_Capture_Session,
     font_cache: fontmodel.Font_Cache,

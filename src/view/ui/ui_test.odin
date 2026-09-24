@@ -75,6 +75,19 @@ ui_regions_compact_extent_remains_non_negative :: proc(t: ^testing.T) {
     testing.expect(t, regions.world_rect.height <= 240)
 }
 
+// Verify a full-capacity dust value remains inside the settings panel inset.
+@(test)
+settings_dust_value_is_right_aligned_inside_panel :: proc(t: ^testing.T) {
+    panel := rl.Rectangle{100, 0, 180, 240}
+    text_width: f32 = 40
+    x := settings_right_aligned_x(panel, text_width)
+
+    testing.expect_value(t, x, panel.x + panel.width - SETTINGS_PANEL_INSET - 40)
+    testing.expect(t, x >= panel.x + SETTINGS_PANEL_INSET)
+    testing.expect(t, x + text_width <=
+        panel.x + panel.width - SETTINGS_PANEL_INSET)
+}
+
 //   Verify forced modes and automatic hysteresis resolve deterministically.
 @(test)
 layout_mode_resolution_honors_preference_and_hysteresis :: proc(t: ^testing.T) {

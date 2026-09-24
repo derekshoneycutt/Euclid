@@ -1,6 +1,7 @@
 package native
 
 import "core:log"
+import "core:mem"
 
 import sdl "vendor:sdl3"
 
@@ -227,6 +228,38 @@ sdl_platform_present_draw :: proc(
         return .Failed
     }
     return .Presented
+}
+
+// sdl_platform_read_scene_rgba8 synchronously copies the owned scene target.
+sdl_platform_read_scene_rgba8 :: proc(
+    platform: ^Sdl_Platform, destination: []u8) -> bool {
+    if platform == nil || platform^.device == nil || platform^.scene_target == nil ||
+        len(destination) != int(platform^.scene_width * platform^.scene_height * 4) {
+        return false
+    }
+    transfer := sdl.CreateGPUTransferBuffer(platform^.device, {
+        usage = .DOWNLOAD, size = u32(len(destination))})
+    if transfer == nil {return false}
+    defer sdl.ReleaseGPUTransferBuffer(platform^.device, transfer)
+    command_buffer := sdl.AcquireGPUCommandBuffer(platform^.device)
+    if command_buffer == nil {return false}
+    copy_pass := sdl.BeginGPUCopyPass(command_buffer)
+    if copy_pass == nil {
+        _ = sdl.CancelGPUCommandBuffer(command_buffer)
+        return false
+    }
+    sdl.DownloadFromGPUTexture(copy_pass, {texture = platform^.scene_target,
+        w = platform^.scene_width, h = platform^.scene_height, d = 1}, {
+        transfer_buffer = transfer, pixels_per_row = platform^.scene_width,
+        rows_per_layer = platform^.scene_height})
+    sdl.EndGPUCopyPass(copy_pass)
+    if !sdl.SubmitGPUCommandBuffer(command_buffer) ||
+        !sdl.WaitForGPUIdle(platform^.device) {return false}
+    mapped := sdl.MapGPUTransferBuffer(platform^.device, transfer, false)
+    if mapped == nil {return false}
+    mem.copy(raw_data(destination), mapped, len(destination))
+    sdl.UnmapGPUTransferBuffer(platform^.device, transfer)
+    return true
 }
 
 // sdl_platform_destroy releases all admitted native resources in reverse order.

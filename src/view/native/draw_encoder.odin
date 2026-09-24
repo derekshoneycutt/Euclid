@@ -30,6 +30,70 @@ Draw_Vertex :: struct {
 
 #assert(size_of(Draw_Vertex) == 24)
 
+// Stroke_Vertex is the fixed vertex ABI consumed by stroke3d.vert.
+Stroke_Vertex :: struct {
+    position:  [3]f32,
+    auxiliary: [2]f32,
+    color:     [4]f32,
+}
+
+#assert(size_of(Stroke_Vertex) == 36)
+
+// Stroke_Vertex_Uniforms maps one logical frame into GPU clip coordinates.
+Stroke_Vertex_Uniforms :: struct {
+    clip_from_model: [16]f32,
+}
+
+#assert(size_of(Stroke_Vertex_Uniforms) == 64)
+
+// Stroke_Fragment_Uniforms matches the reflected stroke3d fragment cbuffer.
+Stroke_Fragment_Uniforms :: struct {
+    light_direction_view:       [3]f32,
+    ambient:                   f32,
+    diffuse:                   f32,
+    material_roughness:        f32,
+    material_fresnel_0:        f32,
+    material_specular_tint:    f32,
+    material_shadow_limit:     f32,
+    radius:                    f32,
+    stroke_mode:               f32,
+    strip_alpha:               f32,
+    segment_p0:                [2]f32,
+    segment_p1:                [2]f32,
+    strip_color:               [3]f32,
+    strip_side_extent:         f32,
+    arc_intersections_enabled: f32,
+    intersection_depth_width:  f32,
+    attachment_extent:         f32,
+    occluder_count:            u32,
+    occluder_p0_p1:            [2][4]f32,
+    occluder_radius_depths:     [2][4]f32,
+    occluder_tangent:          [2][4]f32,
+}
+
+#assert(size_of(Stroke_Fragment_Uniforms) == 192)
+
+// Dust_Quad_Vertex is the static per-vertex ABI consumed by dust_instanced.vert.
+Dust_Quad_Vertex :: struct {
+    position: [2]f32,
+    texcoord: [2]f32,
+}
+
+#assert(size_of(Dust_Quad_Vertex) == 16)
+
+// Dust_Instance is the fixed per-instance ABI consumed by dust_instanced.vert.
+Dust_Instance :: struct {
+    center_diameter: [3]f32,
+    color:           [4]f32,
+    sprite_index:    f32,
+}
+
+#assert(size_of(Dust_Instance) == 32)
+DUST_ATLAS_COLUMNS :: 3
+DUST_ATLAS_ROWS :: 3
+DUST_QUAD_VERTEX_COUNT :: 6
+DUST_EXPANDED_VERTICES_PER_INSTANCE :: 6
+
 // Draw_Scissor stores one physical-pixel top-left clipping rectangle.
 Draw_Scissor :: struct {
     x:      i32,
@@ -48,6 +112,38 @@ Draw_Batch :: struct {
     index_count: u32,
 }
 
+// Draw_Command_Kind identifies one ordered native submission operation.
+Draw_Command_Kind :: enum u8 {
+    Batch,
+    Tool,
+    Dust_Instanced,
+    Dust_Expanded,
+}
+
+// Draw_Command references one fixed record in an owner-specific command array.
+Draw_Command :: struct {
+    kind:  Draw_Command_Kind,
+    index: u32,
+}
+
+// Stroke_Draw identifies one contiguous triangle-list stroke and its uniforms.
+Stroke_Draw :: struct {
+    first_vertex:      u32,
+    vertex_count:      u32,
+    scissor:           Draw_Scissor,
+    vertex_uniforms:   Stroke_Vertex_Uniforms,
+    fragment_uniforms: Stroke_Fragment_Uniforms,
+}
+
+// Dust_Draw identifies one instanced or expanded atlas draw interval.
+Dust_Draw :: struct {
+    first:           u32,
+    count:           u32,
+    texture:         rawptr,
+    scissor:         Draw_Scissor,
+    viewport_extent: [2]f32,
+}
+
 // Draw_State groups native batch compatibility without exposing SDL handles.
 Draw_State :: struct {
     pipeline: Draw_Pipeline,
@@ -60,8 +156,27 @@ Draw_Encoder_Statistics :: struct {
     vertices:          u32,
     indices:           u32,
     batches:           u32,
+    commands:          u32,
+    stroke_vertices:   u32,
+    stroke_draws:      u32,
+    dust_instances:    u32,
+    dust_draws:        u32,
+    dust_expanded_vertices: u32,
     primitive_overflows: u32,
     scissor_overflows: u32,
+    command_overflows: u32,
+    stroke_overflows:  u32,
+    dust_overflows:    u32,
+}
+
+// Draw_Custom_Storage groups optional fixed custom-pipeline frame records.
+Draw_Custom_Storage :: struct {
+    stroke_vertices: []Stroke_Vertex,
+    stroke_draws:    []Stroke_Draw,
+    dust_instances:  []Dust_Instance,
+    dust_draws:      []Dust_Draw,
+    dust_expanded_vertices: []Draw_Vertex,
+    dust_expanded_draws: []Dust_Draw,
 }
 
 // Draw_Storage borrows fixed-capacity frame buffers from the display owner.
@@ -69,6 +184,8 @@ Draw_Storage :: struct {
     vertices: []Draw_Vertex,
     indices:  []u32,
     batches:  []Draw_Batch,
+    commands: []Draw_Command,
+    custom:   ^Draw_Custom_Storage,
 }
 
 // Draw_Encoder stores one frame in caller-owned fixed-capacity slices.
@@ -76,14 +193,35 @@ Draw_Encoder :: struct {
     vertices:        []Draw_Vertex,
     indices:         []u32,
     batches:         []Draw_Batch,
+    commands:        []Draw_Command,
+    stroke_vertices: []Stroke_Vertex,
+    stroke_draws:    []Stroke_Draw,
+    dust_instances:  []Dust_Instance,
+    dust_draws:      []Dust_Draw,
+    dust_expanded_vertices: []Draw_Vertex,
+    dust_expanded_draws: []Dust_Draw,
     vertex_count:    int,
     index_count:     int,
     batch_count:     int,
+    command_count:   int,
+    stroke_vertex_count: int,
+    stroke_draw_count: int,
+    dust_instance_count: int,
+    dust_draw_count: int,
+    dust_expanded_vertex_count: int,
+    dust_expanded_draw_count: int,
+    strokes_enabled:   bool,
+    dust_instancing_enabled: bool,
     logical_extent:  geometry.Vector2,
     physical_extent: [2]u32,
     scissors:        [DRAW_SCISSOR_STACK_CAPACITY]geometry.Rectangle,
     scissor_count:   int,
     statistics:      Draw_Encoder_Statistics,
+}
+
+// draw_encoder_enable_strokes records optional pipeline availability for fallbacks.
+draw_encoder_enable_strokes :: proc(encoder: ^Draw_Encoder, enabled: bool) {
+    if encoder != nil {encoder^.strokes_enabled = enabled}
 }
 
 // draw_encoder_begin resets one frame over caller-owned bounded storage.
@@ -100,12 +238,27 @@ draw_encoder_begin :: proc(
         vertices = storage.vertices,
         indices = storage.indices,
         batches = storage.batches,
+        commands = storage.commands,
         logical_extent = logical_extent,
         physical_extent = physical_extent,
         scissor_count = 1,
     }
+    if storage.custom != nil {
+        encoder^.stroke_vertices = storage.custom^.stroke_vertices
+        encoder^.stroke_draws = storage.custom^.stroke_draws
+        encoder^.dust_instances = storage.custom^.dust_instances
+        encoder^.dust_draws = storage.custom^.dust_draws
+        encoder^.dust_expanded_vertices = storage.custom^.dust_expanded_vertices
+        encoder^.dust_expanded_draws = storage.custom^.dust_expanded_draws
+    }
     encoder^.scissors[0] = {0, 0, logical_extent.x, logical_extent.y}
     return true
+}
+
+// draw_encoder_enable_dust_instancing records optional pipeline availability.
+draw_encoder_enable_dust_instancing :: proc(
+    encoder: ^Draw_Encoder, enabled: bool) {
+    if encoder != nil {encoder^.dust_instancing_enabled = enabled}
 }
 
 // draw_encoder_intersect returns the visible overlap of two logical clips.
@@ -170,12 +323,18 @@ draw_encoder_prepare :: proc(
     encoder: ^Draw_Encoder, vertex_count, index_count: int,
     state: Draw_State) -> (^Draw_Batch, bool) {
     scissor := draw_encoder_physical_scissor(encoder)
-    compatible := encoder^.batch_count > 0 && draw_encoder_batch_compatible(
-        encoder^.batches[encoder^.batch_count - 1], state, scissor)
+    last_is_latest_batch := encoder^.command_count > 0 &&
+        encoder^.commands[encoder^.command_count - 1].kind == .Batch &&
+        encoder^.commands[encoder^.command_count - 1].index ==
+            u32(encoder^.batch_count - 1)
+    compatible := encoder^.batch_count > 0 && last_is_latest_batch &&
+        draw_encoder_batch_compatible(
+            encoder^.batches[encoder^.batch_count - 1], state, scissor)
     needs_batch := !compatible
     if encoder^.vertex_count + vertex_count > len(encoder^.vertices) ||
         encoder^.index_count + index_count > len(encoder^.indices) ||
-        (needs_batch && encoder^.batch_count >= len(encoder^.batches)) {
+        (needs_batch && (encoder^.batch_count >= len(encoder^.batches) ||
+            encoder^.command_count >= len(encoder^.commands))) {
         encoder^.statistics.primitive_overflows += 1
         return nil, false
     }
@@ -184,10 +343,152 @@ draw_encoder_prepare :: proc(
         batch^ = {pipeline = state.pipeline, texture = state.texture,
             sampler = state.sampler,
             scissor = scissor, first_index = u32(encoder^.index_count)}
+        encoder^.commands[encoder^.command_count] = {
+            kind = .Batch, index = u32(encoder^.batch_count)}
         encoder^.batch_count += 1
+        encoder^.command_count += 1
         encoder^.statistics.batches = u32(encoder^.batch_count)
+        encoder^.statistics.commands = u32(encoder^.command_count)
     }
     return &encoder^.batches[encoder^.batch_count - 1], true
+}
+
+// draw_encoder_append_custom_command appends one owner-indexed custom draw marker.
+draw_encoder_append_custom_command :: proc(
+    encoder: ^Draw_Encoder, kind: Draw_Command_Kind, index: u32) -> bool {
+    if encoder == nil || kind == .Batch ||
+        encoder^.command_count >= len(encoder^.commands) {
+        if encoder != nil {
+            encoder^.statistics.command_overflows += 1
+        }
+        return false
+    }
+    encoder^.commands[encoder^.command_count] = {kind = kind, index = index}
+    encoder^.command_count += 1
+    encoder^.statistics.commands = u32(encoder^.command_count)
+    return true
+}
+
+// draw_encoder_append_stroke atomically appends one complete triangle-list draw.
+draw_encoder_append_stroke :: proc(
+    encoder: ^Draw_Encoder, vertices: []Stroke_Vertex,
+    vertex_uniforms: Stroke_Vertex_Uniforms,
+    fragment_uniforms: Stroke_Fragment_Uniforms) -> bool {
+    if encoder == nil || len(vertices) == 0 || len(vertices) % 3 != 0 ||
+        encoder^.stroke_vertex_count + len(vertices) > len(encoder^.stroke_vertices) ||
+        encoder^.stroke_draw_count >= len(encoder^.stroke_draws) ||
+        encoder^.command_count >= len(encoder^.commands) {
+        if encoder != nil {encoder^.statistics.stroke_overflows += 1}
+        return false
+    }
+    draw_index := encoder^.stroke_draw_count
+    copy(encoder^.stroke_vertices[encoder^.stroke_vertex_count:], vertices)
+    encoder^.stroke_draws[draw_index] = {
+        first_vertex = u32(encoder^.stroke_vertex_count),
+        vertex_count = u32(len(vertices)),
+        scissor = draw_encoder_physical_scissor(encoder),
+        vertex_uniforms = vertex_uniforms,
+        fragment_uniforms = fragment_uniforms,
+    }
+    encoder^.commands[encoder^.command_count] = {
+        kind = .Tool, index = u32(draw_index)}
+    encoder^.stroke_vertex_count += len(vertices)
+    encoder^.stroke_draw_count += 1
+    encoder^.command_count += 1
+    encoder^.statistics.stroke_vertices = u32(encoder^.stroke_vertex_count)
+    encoder^.statistics.stroke_draws = u32(encoder^.stroke_draw_count)
+    encoder^.statistics.commands = u32(encoder^.command_count)
+    return true
+}
+
+// draw_encoder_dust_color converts one normalized instance tint to RGBA8.
+draw_encoder_dust_color :: #force_inline proc(
+    instance: Dust_Instance) -> color.Color_RGBA8 {
+    return {
+        u8(clamp(instance.color[0] * 255, 0, 255)),
+        u8(clamp(instance.color[1] * 255, 0, 255)),
+        u8(clamp(instance.color[2] * 255, 0, 255)),
+        u8(clamp(instance.color[3] * 255, 0, 255)),
+    }
+}
+
+// draw_encoder_expand_dust writes one atlas-selected textured quad.
+draw_encoder_expand_dust :: proc(
+    destination: []Draw_Vertex, instance: Dust_Instance) {
+    center_x, center_y := instance.center_diameter[0], instance.center_diameter[1]
+    radius := instance.center_diameter[2] * 0.5
+    variant := clamp(int(instance.sprite_index), 0,
+        DUST_ATLAS_COLUMNS * DUST_ATLAS_ROWS - 1)
+    tile_x := variant % DUST_ATLAS_COLUMNS
+    tile_y := variant / DUST_ATLAS_COLUMNS
+    unit_u := 1 / f32(DUST_ATLAS_COLUMNS)
+    unit_v := 1 / f32(DUST_ATLAS_ROWS)
+    left, right := f32(tile_x) * unit_u, f32(tile_x + 1) * unit_u
+    top, bottom := f32(tile_y) * unit_v, f32(tile_y + 1) * unit_v
+    tint := draw_encoder_dust_color(instance)
+    destination[0] = {{center_x - radius, center_y - radius}, {left, top}, tint, {}}
+    destination[1] = {{center_x - radius, center_y + radius}, {left, bottom}, tint, {}}
+    destination[2] = {{center_x + radius, center_y + radius}, {right, bottom}, tint, {}}
+    destination[3] = destination[0]
+    destination[4] = destination[2]
+    destination[5] = {{center_x + radius, center_y - radius}, {right, top}, tint, {}}
+}
+
+// draw_encoder_finish_dust publishes shared command statistics after admission.
+draw_encoder_finish_dust :: proc(
+    encoder: ^Draw_Encoder, count: int) -> bool {
+    encoder^.command_count += 1
+    encoder^.statistics.commands = u32(encoder^.command_count)
+    encoder^.statistics.dust_instances = u32(count)
+    encoder^.statistics.dust_draws += 1
+    encoder^.statistics.dust_expanded_vertices =
+        u32(encoder^.dust_expanded_vertex_count)
+    return true
+}
+
+// draw_encoder_commit_dust atomically appends one full prepared dust prefix.
+draw_encoder_commit_dust :: proc(
+    encoder: ^Draw_Encoder, count: int, texture: rawptr) -> bool {
+    if encoder == nil || count < 0 || count > len(encoder^.dust_instances) ||
+        texture == nil || encoder^.command_count >= len(encoder^.commands) {
+        if encoder != nil {encoder^.statistics.dust_overflows += 1}
+        return false
+    }
+    if count == 0 {return true}
+    if encoder^.dust_instancing_enabled {
+        if encoder^.dust_draw_count >= len(encoder^.dust_draws) {return false}
+        draw_index := encoder^.dust_draw_count
+        encoder^.dust_draws[draw_index] = {first = 0, count = u32(count),
+            texture = texture, scissor = draw_encoder_physical_scissor(encoder),
+            viewport_extent = {f32(encoder^.physical_extent.x),
+                f32(encoder^.physical_extent.y)}}
+        encoder^.commands[encoder^.command_count] = {
+            kind = .Dust_Instanced, index = u32(draw_index)}
+        encoder^.dust_instance_count = count
+        encoder^.dust_draw_count += 1
+    } else {
+        vertex_count := count * DUST_EXPANDED_VERTICES_PER_INSTANCE
+        if vertex_count > len(encoder^.dust_expanded_vertices) ||
+            encoder^.dust_expanded_draw_count >= len(encoder^.dust_expanded_draws) {
+            encoder^.statistics.dust_overflows += 1
+            return false
+        }
+        for index in 0..<count {
+            first := index * DUST_EXPANDED_VERTICES_PER_INSTANCE
+            draw_encoder_expand_dust(encoder^.dust_expanded_vertices[
+                first:first + DUST_EXPANDED_VERTICES_PER_INSTANCE],
+                encoder^.dust_instances[index])
+        }
+        draw_index := encoder^.dust_expanded_draw_count
+        encoder^.dust_expanded_draws[draw_index] = {first = 0,
+            count = u32(vertex_count), texture = texture,
+            scissor = draw_encoder_physical_scissor(encoder)}
+        encoder^.commands[encoder^.command_count] = {
+            kind = .Dust_Expanded, index = u32(draw_index)}
+        encoder^.dust_expanded_vertex_count = vertex_count
+        encoder^.dust_expanded_draw_count += 1
+    }
+    return draw_encoder_finish_dust(encoder, count)
 }
 
 // draw_encoder_commit appends one complete topology or rejects it unchanged.

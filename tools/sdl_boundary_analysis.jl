@@ -17,6 +17,8 @@ end
 const SDL_OWNER_POLICIES = SdlOwnerPolicy[
     (path="src/view/native/color.odin", category="native color conversion", count=1),
     (path="src/view/native/sdl_draw_runtime.odin", category="GPU 2D renderer", count=1),
+    (path="src/view/native/sdl_dust_pipeline.odin", category="GPU dust renderer", count=1),
+    (path="src/view/native/sdl_stroke_pipeline.odin", category="GPU stroke renderer", count=1),
     (path="src/view/native/sdl_icon.odin", category="window icon", count=1),
     (path="src/view/native/sdl_platform.odin", category="window and GPU shell", count=1),
     (path="src/view/native/sdl_services.odin", category="platform services", count=1),

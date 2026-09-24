@@ -25,12 +25,28 @@ Framebuffer_Pixels :: struct {
     pitch_bytes: int,
 }
 
-FRAMEBUFFER_CAPTURE_OPERATIONS :: Framebuffer_Capture_Operations{
+FRAMEBUFFER_CAPTURE_OPERATIONS := Framebuffer_Capture_Operations{
     load = framebuffer_raylib_load,
     unload = framebuffer_raylib_unload,
     crop = framebuffer_raylib_crop,
     resize = framebuffer_raylib_resize,
     export = framebuffer_raylib_export,
+}
+
+// framebuffer_set_capture_operations replaces the display-owned capture adapter.
+framebuffer_set_capture_operations :: proc(operations: Framebuffer_Capture_Operations) {
+    FRAMEBUFFER_CAPTURE_OPERATIONS = operations
+}
+
+// framebuffer_reset_capture_operations restores the legacy Raylib adapter.
+framebuffer_reset_capture_operations :: proc() {
+    FRAMEBUFFER_CAPTURE_OPERATIONS = {
+        load = framebuffer_raylib_load,
+        unload = framebuffer_raylib_unload,
+        crop = framebuffer_raylib_crop,
+        resize = framebuffer_raylib_resize,
+        export = framebuffer_raylib_export,
+    }
 }
 
 // Return whether one native image satisfies the tightly packed RGBA8 capture contract.
