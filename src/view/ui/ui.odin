@@ -32,12 +32,12 @@ SCROLLBAR_WIDTH :: 8
 SCROLLBAR_THUMB_MIN_HEIGHT :: 24
 DYNVIEW_COPY_ICON_SIZE :: 14
 DYNVIEW_COPY_ICON_X_PAD :: 6
-ACCORDION_HEADER_HEIGHT :: f32(34)
+ACCORDION_HEADER_HEIGHT :: f32(32)
 ACCORDION_PANEL_INSET :: f32(6)
 ACCORDION_HEADER_PADDING :: f32(10)
 ACCORDION_DISCLOSURE_SIZE :: f32(14)
 ACCORDION_HEADER_LABEL_GAP :: f32(8)
-ACCORDION_HEADER_TEXT_OFFSET_Y :: f32(7)
+ACCORDION_HEADER_TEXT_OFFSET_Y :: f32(6)
 ANIMATION_CONTROL_BUTTON_SIZE :: f32(30)
 ANIMATION_CONTROL_BUTTON_GAP :: f32(4)
 ANIMATION_CONTROL_PADDING :: f32(6)
@@ -342,7 +342,7 @@ draw_encoded_accordion_geometry :: proc(
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(panel), BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(panel), ACCORDION_PANEL_INSET, UI_BORDER_COLOR)
+        encoder, geometry.Rectangle(panel), 1, UI_BORDER_COLOR)
     sections := accordion_sections_for_layout(
         runtime^.current_layout_mode, "Animation")
     layout := accordion_layout(panel, sections, runtime^.active_accordion_section)
@@ -363,7 +363,7 @@ draw_encoded_accordion_geometry :: proc(
     for index in 0..<sections.count {
         header := layout.headers[index]
         expanded := sections.items[index].section == runtime^.active_accordion_section
-        fill := UI_BACK_COLOR
+        fill := BACKGROUND_COLOR
         if expanded {fill = UI_COMPONENT_BACKGROUND_COLOR}
         _ = native.draw_encoder_rectangle(
             encoder, geometry.Rectangle(header), fill)
