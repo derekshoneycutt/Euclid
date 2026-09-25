@@ -105,7 +105,7 @@ end
         @test occursin("expected 1 import", result.diagnostics[1].message)
     end
 
-    @testset "fixtures and probes are outside exact owner policy" begin
+    @testset "fixtures are outside exact owner policy" begin
         dependencies = expected_sdl_dependencies()
         append!(dependencies, [
             DependencyEdge(
@@ -120,24 +120,6 @@ end
             DependencyEdge(
                 "src/test_helpers/native.odin",
                 "vendor:sdl3",
-                nothing,
-                "external",
-                "odin",
-                "import",
-                3,
-                1),
-            DependencyEdge(
-                "tools/sdl3_probe/main.odin",
-                "vendor:sdl3",
-                nothing,
-                "external",
-                "odin",
-                "import",
-                3,
-                1),
-            DependencyEdge(
-                "tools/sdl3_image_probe/main.odin",
-                "vendor:sdl3/image",
                 nothing,
                 "external",
                 "odin",

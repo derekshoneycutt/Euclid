@@ -74,12 +74,6 @@ end
     @test "-DSDLSHADERCROSS_VENDORED=ON" in configure.exec
     @test "-DSDLSHADERCROSS_INSTALL=OFF" in configure.exec
     @test "-DSPIRV_WERROR=OFF" in configure.exec
-    windows_configure = Shaders.shadercross_configure_command(
-        "cmake", "/source/tools/shadercross", "/source/.build/shadercross";
-        kernel=:NT)
-    @test "-DSDL3_DIR=$(joinpath(
-        Shaders.windows_sdl3_development_root(), "cmake"))" in
-        windows_configure.exec
     mktempdir() do build
         @test Shaders.shadercross_needs_configure(build)
         write(joinpath(build, "CMakeCache.txt"), "SPIRV_WERROR:BOOL=ON\n")
@@ -87,14 +81,8 @@ end
         write(joinpath(build, "CMakeCache.txt"),
             "CMAKE_GENERATOR:INTERNAL=Unix Makefiles\nSPIRV_WERROR:BOOL=OFF\n")
         @test Shaders.shadercross_needs_configure(build)
-        sdl3_cache = Sys.iswindows() ?
-            "SDL3_DIR:PATH=$(joinpath(
-                Shaders.windows_sdl3_development_root(), "cmake"))\n" *
-            "CMAKE_CXX_COMPILER:FILEPATH=$(
-                Shaders.EuclidBuildConfiguration.resolve_msvc_tool_path(
-                    "VC/Tools/MSVC/**/bin/Hostx64/x64/cl.exe", "missing cl"))\n" : ""
         write(joinpath(build, "CMakeCache.txt"),
-            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n$sdl3_cache")
+            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n")
         @test !Shaders.shadercross_needs_configure(build)
     end
     @test Shaders.shadercross_build_command(

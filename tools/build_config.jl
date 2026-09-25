@@ -45,6 +45,28 @@ function windows_sdl_library(manifest::AbstractDict, name::String)
     return libraries[index]
 end
 
+"""Validate one Windows SDL library's dependencies, license, and artifacts."""
+function validate_windows_sdl_library(
+    library::AbstractDict, library_names::Set{String}, root::AbstractString,
+    hash_file::Function)
+    name = String(get(library, "name", ""))
+    isempty(name) && error("Windows SDL manifest contains an unnamed library.")
+    all(dependency -> dependency in library_names,
+        String.(get(library, "dependencies", String[]))) || error(
+        "Windows SDL manifest has an unknown dependency for $name.")
+    license_path = joinpath(root, String(get(library, "license_file", "")))
+    isfile(license_path) || error("Missing Windows SDL license for $name.")
+    hash_file(license_path) == get(library, "license_sha256", "") || error(
+        "Windows SDL license hash mismatch for $name.")
+    for artifact in get(library, "artifact", Any[])
+        filename = String(get(artifact, "file", ""))
+        path = joinpath(root, filename)
+        isfile(path) || error("Missing Windows SDL artifact: $filename")
+        hash_file(path) == get(artifact, "sha256", "") || error(
+            "Windows SDL artifact hash mismatch: $filename")
+    end
+end
+
 """Validate and return the repository-owned Windows SDL payload manifest."""
 function windows_sdl_manifest(
     root::AbstractString=WINDOWS_SDL_DIR;
@@ -68,22 +90,7 @@ function windows_sdl_manifest(
     library_names = Set(String(get(library, "name", ""))
         for library in get(manifest, "library", Any[]))
     for library in get(manifest, "library", Any[])
-        name = String(get(library, "name", ""))
-        isempty(name) && error("Windows SDL manifest contains an unnamed library.")
-        all(dependency -> dependency in library_names,
-            String.(get(library, "dependencies", String[]))) || error(
-            "Windows SDL manifest has an unknown dependency for $name.")
-        license_path = joinpath(root, String(get(library, "license_file", "")))
-        isfile(license_path) || error("Missing Windows SDL license for $name.")
-        hash_file(license_path) == get(library, "license_sha256", "") || error(
-            "Windows SDL license hash mismatch for $name.")
-        for artifact in get(library, "artifact", Any[])
-            filename = String(get(artifact, "file", ""))
-            path = joinpath(root, filename)
-            isfile(path) || error("Missing Windows SDL artifact: $filename")
-            hash_file(path) == get(artifact, "sha256", "") || error(
-                "Windows SDL artifact hash mismatch: $filename")
-        end
+        validate_windows_sdl_library(library, library_names, root, hash_file)
     end
     windows_sdl_library(manifest, "SDL3")
     image = windows_sdl_library(manifest, "SDL3_image")
@@ -99,7 +106,7 @@ function sdl_runtime_filename(
     kernel == :Linux && return "lib$(stem).so.0"
     kernel == :Darwin && return "lib$(stem).0.dylib"
     kernel == :NT && return "$(stem).dll"
-    error("System $stem is unsupported on $kernel during the migration.")
+    error("System $stem is unsupported on $kernel.")
 end
 
 """Resolve the SDL3 runtime from one pkg-config library directory."""
@@ -117,7 +124,7 @@ function sdl3_library_path(
     return real_path(candidate)
 end
 
-"""Resolve the provisional system SDL3 provider through pkg-config."""
+"""Resolve the system SDL3 provider through pkg-config."""
 function sdl3_provider_identity(
     kernel::Symbol=Sys.KERNEL;
     capture::Function=capture_command,
@@ -148,7 +155,7 @@ function sdl3_provider_identity(
     return SDL3ProviderIdentity(:system, version, library_path)
 end
 
-"""Resolve provisional SDL3 linker flags through pkg-config metadata."""
+"""Resolve SDL3 linker flags through pkg-config metadata."""
 function sdl3_linker_flags(
     kernel::Symbol=Sys.KERNEL;
     capture::Function=capture_command,

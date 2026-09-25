@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:9d8f4fb9-5ee6-4bfd-a9cb-58d22126ed55",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-07-11T00:00:00Z",
+    "timestamp": "2026-09-25T00:00:00Z",
     "tools": {
       "components": [
         {
@@ -23,7 +23,7 @@
       "bom-ref": "app:euclid",
       "name": "EuclidApp",
       "version": "dev",
-      "description": "Baseline standardized description of EuclidApp cross-platform runtime-closure dependencies."
+      "description": "Final standardized description of EuclidApp cross-platform SDL3 runtime-closure dependencies."
     },
     "properties": [
       {
@@ -32,7 +32,7 @@
       },
       {
         "name": "euclid.runtime.closure.status",
-        "value": "baseline-manifest"
+        "value": "sdl3-cross-platform-final"
       }
     ]
   },
@@ -57,7 +57,7 @@
       "type": "framework",
       "bom-ref": "runtime:julia",
       "name": "Julia Runtime",
-      "version": "1.12.x",
+      "version": "1.13.x",
       "description": "Embedded Julia runtime required by libjulia linkage.",
       "scope": "required"
     },
@@ -65,7 +65,7 @@
       "type": "library",
       "bom-ref": "runtime:libjulia",
       "name": "libjulia",
-      "version": "1.12.x",
+      "version": "1.13.x",
       "scope": "required"
     },
     {
@@ -79,7 +79,7 @@
       "type": "library",
       "bom-ref": "pkg:julia/LinearAlgebra",
       "name": "LinearAlgebra",
-      "version": "1.12.0",
+      "version": "1.13.0",
       "scope": "required"
     },
     {
@@ -87,7 +87,7 @@
       "bom-ref": "runtime:sdl3",
       "name": "SDL3",
       "version": "3.4.x",
-      "description": "Window, input, platform-service, and SDL_GPU runtime used by the Odin host application. Windows x64 uses the repository payload declared by libs/bin/win64/sdl/manifest.toml.",
+      "description": "Window, input, audio, platform-service, and SDL_GPU runtime used by the Odin host application. Windows x64 uses the repository payload declared by libs/bin/win64/sdl/manifest.toml.",
       "scope": "required"
     },
     {

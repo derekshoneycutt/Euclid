@@ -16,8 +16,6 @@ Commands:
     sysimage [--debug] [--strict]
                                  Force rebuilding the Julia sysimage, application, and assets.
     harness                      Build and run the deterministic headless harness.
-    probe-sdl3                   Build and run the native SDL3 GPU capability probe.
-    probe-sdl3-image             Build and run the SDL_image capability probe.
     unit [julia|odin] [OPTS]     Run all application tests or one language suite.
     vet [OPTS]                   Build and analyze the repository.
     test [OPTS]                  Run the complete verification gate.
@@ -56,7 +54,7 @@ show_help() = HELP_TEXT
 
 const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage",
-    "harness", "probe-sdl3", "probe-sdl3-image",
+    "harness",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
     "analyzer-test", "wiki", "check-wiki", "clean"])
 
@@ -80,10 +78,6 @@ using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs,
     native_runtime_environment, resolve_msvc_tool_path, sdl3_provider_identity
 include(joinpath(@__DIR__, "shaders.jl"))
 using .EuclidShaders: ShaderArtifacts, build_shaders
-include(joinpath(@__DIR__, "sdl3_probe.jl"))
-using .EuclidSDL3Probe: run_probe
-include(joinpath(@__DIR__, "sdl3_image_probe.jl"))
-using .EuclidSDL3ImageProbe: run_image_probe
 
 struct BuildCommand
     action::Symbol
@@ -748,8 +742,8 @@ function graphics_runtime_component()
     error("SDL_GPU runtime metadata is unsupported on $(Sys.KERNEL).")
 end
 
-"""Describe provisional native migration inputs in CycloneDX form."""
-function migration_runtime_components()
+"""Describe native graphics runtime dependencies in CycloneDX form."""
+function native_graphics_runtime_components()
     provider = sdl3_provider_identity()
     components = Dict{String,Any}[
         Dict("type" => "library", "bom-ref" => "native:sdl3",
@@ -757,8 +751,7 @@ function migration_runtime_components()
             "scope" => "required", "hashes" => [component_hash(
                 provider.library_path)],
             "properties" => [Dict("name" => "euclid:provider",
-                "value" => provider.kind == :repository ?
-                    "repository" : "provisional-system")]),
+                "value" => string(provider.kind))]),
         graphics_runtime_component(),
     ]
     if Sys.iswindows()
@@ -874,7 +867,7 @@ function runtime_sbom_components(
             "version" => package.version,
             "scope" => "required"))
     end
-    append!(components, migration_runtime_components(),
+    append!(components, native_graphics_runtime_components(),
         shader_tool_components(shader_manifest_path),
         shader_artifact_components(shader_manifest_path))
     return components
@@ -1718,14 +1711,6 @@ function execute_driver_action(invocation::DriverInvocation)
         invocation.action, invocation.arguments)
     invocation.action == :evidence && return run_evidence_command(invocation.arguments)
     invocation.action == :scenario && return run_scenario_command(invocation.arguments)
-    if invocation.action == :probe_sdl3
-        require_no_arguments(invocation)
-        return run_probe(SCRIPT_DIR)
-    end
-    if invocation.action == :probe_sdl3_image
-        require_no_arguments(invocation)
-        return run_image_probe(SCRIPT_DIR)
-    end
     return execute_project_action(invocation)
 end
 

@@ -47,40 +47,6 @@ Sdl_Window_Metrics :: struct {
     content_scale:  f32,
 }
 
-// sdl_scale_or_one normalizes failed SDL scale queries.
-sdl_scale_or_one :: proc(scale: f32) -> f32 {
-    return scale if scale > 0 else 1
-}
-
-// sdl_content_scale separates platform content scaling from pixel density.
-sdl_content_scale :: proc(display_scale, pixel_density: f32) -> f32 {
-    if display_scale <= 0 || pixel_density <= 0 {return 1}
-    return display_scale / pixel_density
-}
-
-// sdl_application_extent converts physical pixels to readable content units.
-sdl_application_extent :: proc(pixel_extent: int, display_scale: f32) -> int {
-    return max(1, int(f32(pixel_extent) / sdl_scale_or_one(display_scale) + 0.5))
-}
-
-// sdl_application_coordinate converts native window coordinates to content units.
-sdl_application_coordinate :: proc(
-    coordinate, content_scale: f32) -> f32 {
-    return coordinate / sdl_scale_or_one(content_scale)
-}
-
-// sdl_startup_extent converts requested content units to native window units.
-sdl_startup_extent :: proc(extent: int, content_scale: f32) -> int {
-    return max(1, int(f32(extent) * sdl_scale_or_one(content_scale) + 0.5))
-}
-
-// sdl_primary_content_scale returns the startup display's readable-content scale.
-sdl_primary_content_scale :: proc() -> f32 {
-    display := sdl.GetPrimaryDisplay()
-    if display == 0 {return 1}
-    return sdl_scale_or_one(sdl.GetDisplayContentScale(display))
-}
-
 // Sdl_Input_Diagnostics records content-free lifetime input outcomes.
 Sdl_Input_Diagnostics :: struct {
     key_events: u64,
@@ -181,6 +147,40 @@ Sdl_Swapchain_Image :: struct {
 Sdl_Scene_Targets :: struct {
     scene: ^sdl.GPUTexture,
     multisample: ^sdl.GPUTexture,
+}
+
+// sdl_scale_or_one normalizes failed SDL scale queries.
+sdl_scale_or_one :: proc(scale: f32) -> f32 {
+    return scale if scale > 0 else 1
+}
+
+// sdl_content_scale separates platform content scaling from pixel density.
+sdl_content_scale :: proc(display_scale, pixel_density: f32) -> f32 {
+    if display_scale <= 0 || pixel_density <= 0 {return 1}
+    return display_scale / pixel_density
+}
+
+// sdl_application_extent converts physical pixels to readable content units.
+sdl_application_extent :: proc(pixel_extent: int, display_scale: f32) -> int {
+    return max(1, int(f32(pixel_extent) / sdl_scale_or_one(display_scale) + 0.5))
+}
+
+// sdl_application_coordinate converts native window coordinates to content units.
+sdl_application_coordinate :: proc(
+    coordinate, content_scale: f32) -> f32 {
+    return coordinate / sdl_scale_or_one(content_scale)
+}
+
+// sdl_startup_extent converts requested content units to native window units.
+sdl_startup_extent :: proc(extent: int, content_scale: f32) -> int {
+    return max(1, int(f32(extent) * sdl_scale_or_one(content_scale) + 0.5))
+}
+
+// sdl_primary_content_scale returns the startup display's readable-content scale.
+sdl_primary_content_scale :: proc() -> f32 {
+    display := sdl.GetPrimaryDisplay()
+    if display == 0 {return 1}
+    return sdl_scale_or_one(sdl.GetDisplayContentScale(display))
 }
 
 // sdl_platform_metrics reads positive logical and physical extents from one window.
@@ -672,6 +672,19 @@ sdl_platform_log_ready :: proc(
         platform^.metrics.display_scale, platform^.metrics.content_scale)
 }
 
+// sdl_platform_admit_window creates the native high-density application window.
+sdl_platform_admit_window :: proc(
+    platform: ^Sdl_Platform, options: Sdl_Platform_Options) -> bool {
+    content_scale := sdl_primary_content_scale()
+    window_width := sdl_startup_extent(options.width, content_scale)
+    window_height := sdl_startup_extent(options.height, content_scale)
+    flags: sdl.WindowFlags = {.HIGH_PIXEL_DENSITY}
+    if options.resizable {flags += {.RESIZABLE}}
+    platform^.window = sdl.CreateWindow(
+        options.title, i32(window_width), i32(window_height), flags)
+    return platform^.window != nil
+}
+
 // sdl_platform_create initializes one native GPU window and owned scene target.
 sdl_platform_create :: proc(
     platform: ^Sdl_Platform, options: Sdl_Platform_Options) -> bool {
@@ -679,16 +692,7 @@ sdl_platform_create :: proc(
        !sdl.Init({.VIDEO, .EVENTS}) {
         return false
     }
-    content_scale := sdl_primary_content_scale()
-    window_width := sdl_startup_extent(options.width, content_scale)
-    window_height := sdl_startup_extent(options.height, content_scale)
-    flags: sdl.WindowFlags = {.HIGH_PIXEL_DENSITY}
-    if options.resizable {
-        flags += {.RESIZABLE}
-    }
-    platform^.window = sdl.CreateWindow(
-        options.title, i32(window_width), i32(window_height), flags)
-    if platform^.window == nil {
+    if !sdl_platform_admit_window(platform, options) {
         sdl_platform_destroy(platform)
         return false
     }

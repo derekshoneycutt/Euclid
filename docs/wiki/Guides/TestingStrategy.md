@@ -232,23 +232,21 @@ scenario inconclusive, so combined corpora must remain below that fixed bound ra
 than treating a partial trace as success. Run scenarios into fresh artifact directories
 and require both `result: "passed"` and `trace_complete: true`.
 
-Native codec qualification is separate from headed scenarios. Run
-`julia tools/make.jl probe-sdl3-image` to strict-build the headless probe and write
-`.build/sdl3-image-probe/result.json`. A passing result requires SDL_image 3.4,
-memory-backed JPEG/PNG/GIF decode, two-frame streaming GIF encode and decode with exact
-40/80 ms delays, and complete cleanup. Linux and macOS record the loaded library path
-and SONAME or install name; Windows verifies the checked-in provider and PE imports with
-MSVC `dumpbin`.
 
-GPU qualification is also separate from `check`. Run
-`julia tools/make.jl probe-sdl3` to write `.build/sdl3-probe/result.json` and
-`diagnostics.log`. A passing result requires shader compilation, native device and
-swapchain creation, frame presentation, resize observation, and complete cleanup.
-Windows validates the checked-in shadercross and SPIR-V tools, then converts the probe
-shaders to DXIL using the provider under
-`libs/bin/win64/sdl_shadercross`, selects SDL's `direct3d12` driver, and verifies the
-executable's `SDL3.dll` PE import. The provider manifest pins the shadercross gitlink,
-recursive source commits, licenses, artifact sizes, and hashes.
+Native codec qualification belongs to the production Odin suites. Terminal preparation
+tests exercise memory-backed JPEG, PNG, and GIF decode into exact caller-owned storage.
+The SDL GIF encoder test streams two RGBA frames, decodes them through SDL_image with
+exact 40/80 ms delays, verifies completion, and exercises idempotent abort. Provider
+version, linker, manifest, license, and artifact hashes remain Julia tooling tests.
+
+GPU qualification combines the strict application build with headed scenarios.
+`sdl3-shell-lifecycle` requires runtime readiness, presented-frame evidence, simulation
+pause/resume, zero bad frees, and orderly shutdown. `sdl3-geometry-lifecycle` adds
+splitter and layout changes across presented frames. Native window resize,
+minimize/restore, and display-scale behavior remain per-platform acceptance checks
+because the scenario language does not synthesize window-manager events. Shader ABI,
+reflection, platform artifact format, checked-in Windows provider, and runtime-closure
+claims remain build and Julia tooling tests.
 
 Animated Terminal GIF decode uses SDL_image as its sole production pixel source. Odin
 tests verify exact baseline and transparency/disposal canvases, parser-owned encoded and

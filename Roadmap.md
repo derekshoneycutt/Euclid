@@ -170,8 +170,8 @@ General features:
 - [X] Improved pen clipping through 3D polygons
 - [X] Resizable layout via Splitters
 - [X] Window sizing and portrait
-- [ ] SDL3 Migration
-- [ ] Drawing Sounds (In Progress)
+- [X] SDL3 Migration
+- [X] Drawing Sounds
 
 Final tasks:
 
@@ -255,7 +255,6 @@ Core Features:
 - Transformations
   - Scaling
   - Shearing
-- Revisit sounds? Maybe
 
 ## Brainstorming
 

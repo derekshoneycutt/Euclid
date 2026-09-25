@@ -202,8 +202,9 @@ text before releasing it through `SDL_free`.
 
 ## Native Frame Execution
 
-The active Linux application creates one high-density SDL window, claims it for one
-Vulkan SDL_GPU device, and owns a physical-pixel RGBA8 scene target. Each eligible
+The application creates one high-density SDL window, claims it for one SDL_GPU device,
+and owns a physical-pixel RGBA8 scene target. Linux uses Vulkan, macOS uses Metal, and
+Windows uses Direct3D 12. Each eligible
 frame encodes bounded indexed geometry into fixed CPU storage, uploads the occupied
 vertex and index prefixes, renders adjacent compatible batches to that target, blits
 the target to the acquired swapchain texture, and submits one command buffer. The scene
@@ -235,7 +236,8 @@ stale or expanded ownership, and the same rule rejects every Raylib or rlgl impo
 
 ## Native Backend Boundary
 
-SDL3 owns the window, events, timing, platform services, image codecs, and GPU device.
+SDL3 owns the window, events, timing, platform services, audio stream, image codecs,
+and GPU device on Linux, macOS, and Windows.
 SDL_GPU owns presentation and display-thread native resources. Portable geometry,
 color, input, scene, Terminal, UI, and Dynview records do not expose backend values.
 Subsystems retain their local preparation caches and append bounded commands to the

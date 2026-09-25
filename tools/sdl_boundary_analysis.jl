@@ -61,9 +61,7 @@ sdl_normalize_boundary_path(path::AbstractString) = replace(String(path), '\\' =
 
 """Report whether one source is a fixture rather than production code."""
 function is_sdl_fixture(path::String)
-    return endswith(path, "_test.odin") || startswith(path, "src/test_helpers/") ||
-        startswith(path, "tools/sdl3_probe/") ||
-        startswith(path, "tools/sdl3_image_probe/")
+    return endswith(path, "_test.odin") || startswith(path, "src/test_helpers/")
 end
 
 """Construct one SDL boundary diagnostic."""

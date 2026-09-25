@@ -16,13 +16,9 @@ const TestRunner = Verification.EuclidTestRunner
 const BuildConfiguration = Main.EuclidBuildConfiguration
 const JuliaTestReporter = Main.EuclidJuliaTestReporter
 const ScenarioRunner = Main.EuclidScenarioRunner
-const SDL3ImageProbe = Main.EuclidSDL3ImageProbe
-
-include(joinpath(@__DIR__, "sdl3_probe_tests.jl"))
-include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
 
 @testset "Euclid tooling" begin
-    @testset "provisional SDL3 provider" begin
+    @testset "SDL3 providers" begin
         @test BuildConfiguration.sdl3_library_path(
             "/opt/sdl/lib";
             kernel=:Linux,
@@ -217,9 +213,8 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
         @test test.arguments == ["--verbosity=1"]
         @test parse_driver_invocation(String[]).action == :help
         @test parse_driver_invocation(["run-only"]).action == :run_only
-        @test parse_driver_invocation(["probe-sdl3"]).action == :probe_sdl3
-        @test parse_driver_invocation(["probe-sdl3-image"]).action ==
-            :probe_sdl3_image
+        @test_throws ErrorException parse_driver_invocation(["probe-sdl3"])
+        @test_throws ErrorException parse_driver_invocation(["probe-sdl3-image"])
         @test parse_driver_invocation(["stats", "tools/make.jl"]).action == :stats
         @test parse_driver_invocation(["unit", "odin"]).action == :unit
         @test parse_driver_invocation(["check", "src"]).action == :check

@@ -32,44 +32,6 @@ The core application is coded in Odin, with SDL3 and SDL_GPU used for rendering.
 
 ## Building from Source
 
-Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each tool
-available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
-Julia project by default, so a separate HarfBuzz installation is not required.
-
-On Linux and macOS, the experimental `dev-sdl3` branch additionally requires SDL3
-and SDL_image 3.4 development files discoverable through `pkg-config`, SPIR-V Tools
-(`spirv-val` and `spirv-dis`), and `glslc` from shaderc. On Apple Silicon macOS,
-install the Xcode command-line tools and the Homebrew packages `sdl3`, `sdl3_image`,
-`pkg-config`, `spirv-tools`, and `shaderc`. Intel and universal macOS builds are not
-yet supported.
-
-Run `julia tools/make.jl probe-sdl3` to verify the native GPU path (Vulkan/SPIR-V
-on Linux, Metal/MSL on macOS, or Direct3D 12/DXIL on Windows). Run
-`julia tools/make.jl probe-sdl3-image` to verify required static PNG/JPEG/GIF decode
-and streaming GIF encode/decode capabilities. The SDL_shadercross source and its
-dependencies are recursive submodules under `tools/shadercross`. Linux and macOS
-asset builds configure and incrementally build that source under `.build/shadercross`.
-Windows uses the checked-in x64 build-tool provider under
-`libs/bin/win64/sdl_shadercross`; its manifest pins the parent shadercross gitlink,
-recursive dependency commits, licenses, and artifact hashes. `EUCLID_SHADERCROSS`
-remains available for an explicit developer override. macOS support currently covers
-source builds and local runtime use; app bundling, signing, and notarization remain
-future work.
-
-Unix source and distribution builds may intentionally select system HarfBuzz with
-`EUCLID_HARFBUZZ_PROVIDER=system`. This mode also requires `pkg-config` and the
-HarfBuzz development package: install `harfbuzz-devel` on Fedora,
-`libharfbuzz-dev` on Debian/Ubuntu, or `harfbuzz` and `pkg-config` through Homebrew
-on macOS. Use the `system-harfbuzz` CMake preset to select and validate this mode.
-
-Windows source builds require Odin, Julia, `gendef`, and the Visual Studio C++ Build
-Tools. The x64 SDL3, SDL_image, and libpng runtime payload and MSVC import libraries
-are checked in under `libs/bin/win64/sdl`; `manifest.toml` records their versions,
-licenses, and hashes. The matching checked-in shadercross CLI, SPIR-V tools, and DLL
-closure are under `libs/bin/win64/sdl_shadercross`; ordinary Windows builds do not
-require an external SDL3 development package or a local shadercross source build.
-Windows supports only the default `HarfBuzz_jll` provider.
-
 Clone the repository, configure one preset, then build it. CMake verifies the
 toolchain and bootstraps the required Julia environments before invoking the
 project-specific Julia driver.
@@ -90,6 +52,40 @@ For an existing checkout, initialize all nested dependencies with
 The same commands work from Unix shells and PowerShell. Presets keep CMake metadata
 isolated under `.build/cmake/` while preserving Euclid's existing outputs under
 `bin/` and `.build/debug/`.
+
+Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each tool
+available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
+Julia project by default, so a separate HarfBuzz installation is not required.
+
+### Unix (Linux/macOS) requirements
+
+On Linux and macOS, builds require SDL3 and SDL_image 3.4 development files
+discoverable through `pkg-config`, SPIR-V Tools (`spirv-val` and `spirv-dis`), and
+`glslc` from shaderc.
+
+On Apple Silicon macOS, install the Xcode command-line tools and the Homebrew packages
+`sdl3`, `sdl3_image`, `pkg-config`, `spirv-tools`, and `shaderc`. Intel and universal
+macOS builds are not yet supported.
+
+Unix source and distribution builds may intentionally select system HarfBuzz with
+`EUCLID_HARFBUZZ_PROVIDER=system`. This mode also requires `pkg-config` and the
+HarfBuzz development package: install `harfbuzz-devel` on Fedora,
+`libharfbuzz-dev` on Debian/Ubuntu, or `harfbuzz` and `pkg-config` through Homebrew
+on macOS. Use the `system-harfbuzz` CMake preset to select and validate this mode.
+
+### Windows requirements
+
+- `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
+- `gendef` : used in the script to bridge the fact that Julia is not built with
+  the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
+  Strawberry Perl or MSYS2.
+
+The x64 SDL3, SDL_image, and libpng runtime payload and MSVC import libraries
+are checked in under `libs/bin/win64/sdl`; `manifest.toml` records their versions,
+licenses, and hashes. The matching checked-in shadercross CLI, SPIR-V tools, and DLL
+closure are under `libs/bin/win64/sdl_shadercross`; ordinary Windows builds do not
+require an external SDL3 development package or a local shadercross source build.
+Windows supports only the default `HarfBuzz_jll` provider.
 
 ### Presets
 
@@ -149,13 +145,6 @@ running something like this:
 ```sh
 sudo /usr/lib64/odin/vendor/stb/src/build_stb.sh
 ```
-
-### Windows requires a few more additions before this will work
-
-- `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
-- `gendef` : used in the script to bridge the fact that Julia is not built with
-  the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
-  Strawberry Perl or MSYS2.
 
 ## Questions?
 
@@ -256,49 +245,34 @@ metadata storage functions used by most static animations.
 
 ### Q: Wait, Save Gif?
 
-Yup, you can save an animation to a gif file! This is available via the camera icon in the
-top right of the window. This requires that an animation notify when it begins and ends,
-meaning the top animation for many sections will not be allowed to be saved. Most other
-animations can be saved to a gif file, directly from your viewpoint. Click the camera icon
-to enter the Gif Export view, and click Save Gif. The request will be logged, pending the
-start of the next animation. When the next animation starts, notifying the animation cycle
-boundary, the gif is initiated, and frames are saved into the gif buffer. When the
-animation ends, again notfying the animation cycle boundary, the gif buffer is then saved
-to a file.
+Yup, you can save an animation to a gif file! This requires that an animation notify when
+it begins and ends, meaning the top animation for many sections will not be allowed to be
+saved. Most other animations can be saved to a gif file, directly from your viewpoint.
+Click Save Gif on the bottom right and then the Save Gif button. The request will be
+logged, pending the start of the next animation. When the next animation starts, notifying
+the animation cycle boundary, the gif is initiated, and frames are saved into the gif
+buffer. When the animation ends, again notfying the animation cycle boundary, the gif
+buffer is then saved to a file.
 
 If animation is paused in the middle of a gif save, the paused time is not included in the
 animation. It is all skipped and the gif proceeds as if it was never paused. If the
 animation is reset, the gif is canceled.
 
-I have some thoughts about other potential export formats that could be done from the
-camera tab, but for today, it is just gifs. The current code was ported from several
-pieces of C code walking through saving a gif, and something like ffmpeg could probably
-significantly improve on even that, as well as adding other formats. Such are
-considerations for the future.
-
 ### Q: You support LaTeX?
 
 Yes. Somehow, I ended up writing a little mini-LaTeX math renderer in this project. It was
-kind of a pain in the ass for half a week, and it does not yet support everything one
-might hope to find in a more thorough LaTeX rendering engine. This is basically a work in
-progress. The code is kind of a mess, I know it. No shame... well, there's a little bit of
-shame about it, but we're just gonna sit in that and learn.
+kind of a pain in the ass for half a week, and I have been continuing to iterate on it,
+actually bringing in Harfbuzz for the MATH table and easy kerning. It works pretty well
+at this point.
 
 Check out [LaTeX Support](docs/wiki/Guides/LaTeXSupport.md) for exactly what we do support
 today.
-
-The fun thing is that the REPL will render LaTeX if the output is fully a LaTeX MIME type.
-For example, LaTeXStrings gives the `L"..."` syntax, which will render a LaTeX string as
-much as is supported. `LaTeXStrings` is automatically included in the REPL, so you can use
-this to play with what is supported.
-
-Currently, only math mode is supported. Maybe I'll add more? Hmm...
 
 ### Q: Any performance hacks for users?
 
 There are a few!
 
-At the top right of the screen, you can go into the Settings panel. Here, you can reduce
+You can go into the Settings panel. Here, you can reduce
 the maximum number of dust particles that are allowed on the drawing surface, which can
 improve performance. You can also turn the FPS display on/off, enable or disable drawing
 sound, and turn FPS limiting on/off. Turning the FPS limit on/off may have no real effect
