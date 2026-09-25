@@ -24,27 +24,36 @@ end
 
 const SDL3_IMAGE_MINIMUM_VERSION = v"3.4.0"
 
-"""Resolve the Linux SDL3 SONAME from one pkg-config library directory."""
+"""Return the platform runtime filename for one SDL library."""
+function sdl_runtime_filename(
+    stem::AbstractString, kernel::Symbol=Sys.KERNEL)
+    kernel == :Linux && return "lib$(stem).so.0"
+    kernel == :Darwin && return "lib$(stem).0.dylib"
+    error("System $stem is unsupported on $kernel during the migration.")
+end
+
+"""Resolve the SDL3 runtime from one pkg-config library directory."""
 function sdl3_library_path(
     library_directory::AbstractString;
     kernel::Symbol=Sys.KERNEL,
     is_file::Function=isfile,
     real_path::Function=realpath)
-    kernel == :Linux || error(
-        "System SDL3 is supported only on Linux during the migration.")
-    candidate = joinpath(normpath(library_directory), "libSDL3.so.0")
+    directory = strip(library_directory)
+    isempty(directory) && error(
+        "System SDL3 pkg-config library directory is empty.")
+    candidate = joinpath(
+        normpath(directory), sdl_runtime_filename("SDL3", kernel))
     is_file(candidate) || error("Missing system SDL3 runtime at $candidate")
     return real_path(candidate)
 end
 
-"""Resolve the provisional Linux system SDL3 provider through pkg-config."""
+"""Resolve the provisional system SDL3 provider through pkg-config."""
 function sdl3_provider_identity(
     kernel::Symbol=Sys.KERNEL;
     capture::Function=capture_command,
     is_file::Function=isfile,
     real_path::Function=realpath)
-    kernel == :Linux || error(
-        "System SDL3 is supported only on Linux during the migration.")
+    sdl_runtime_filename("SDL3", kernel)
     version_result = capture(Cmd(["pkg-config", "--modversion", "sdl3"]))
     version_result.exit_code == 0 || error(
         "Could not resolve system SDL3 version through pkg-config.")
@@ -60,11 +69,10 @@ function sdl3_provider_identity(
     return SDL3ProviderIdentity(:system, version, library_path)
 end
 
-"""Resolve provisional SDL3 linker flags through Linux pkg-config metadata."""
+"""Resolve provisional SDL3 linker flags through pkg-config metadata."""
 function sdl3_linker_flags(
     kernel::Symbol=Sys.KERNEL; capture::Function=capture_command)
-    kernel == :Linux || error(
-        "System SDL3 is supported only on Linux during the migration.")
+    sdl_runtime_filename("SDL3", kernel)
     result = capture(Cmd(["pkg-config", "--libs", "sdl3"]))
     result.exit_code == 0 || error(
         "Could not resolve system SDL3 linker flags through pkg-config.")
@@ -73,30 +81,28 @@ function sdl3_linker_flags(
     return flags
 end
 
-"""Resolve the Linux SDL_image SONAME from one pkg-config library directory."""
+"""Resolve the SDL_image runtime from one pkg-config library directory."""
 function sdl3_image_library_path(
     library_directory::AbstractString;
     kernel::Symbol=Sys.KERNEL,
     is_file::Function=isfile,
     real_path::Function=realpath)
-    kernel == :Linux || error(
-        "System SDL_image is supported only on Linux during the migration.")
     directory = strip(library_directory)
     isempty(directory) && error(
         "System SDL_image pkg-config library directory is empty.")
-    candidate = joinpath(normpath(directory), "libSDL3_image.so.0")
+    candidate = joinpath(
+        normpath(directory), sdl_runtime_filename("SDL3_image", kernel))
     is_file(candidate) || error("Missing system SDL_image runtime at $candidate")
     return real_path(candidate)
 end
 
-"""Resolve the mandatory Linux system SDL_image provider through pkg-config."""
+"""Resolve the mandatory system SDL_image provider through pkg-config."""
 function sdl3_image_provider_identity(
     kernel::Symbol=Sys.KERNEL;
     capture::Function=capture_command,
     is_file::Function=isfile,
     real_path::Function=realpath)
-    kernel == :Linux || error(
-        "System SDL_image is supported only on Linux during the migration.")
+    sdl_runtime_filename("SDL3_image", kernel)
     version_result = capture(Cmd([
         "pkg-config", "--modversion", "sdl3-image",
     ]))
@@ -120,11 +126,10 @@ function sdl3_image_provider_identity(
     return SDL3ImageProviderIdentity(:system, version, library_path)
 end
 
-"""Resolve mandatory SDL_image linker flags through Linux pkg-config metadata."""
+"""Resolve mandatory SDL_image linker flags through pkg-config metadata."""
 function sdl3_image_linker_flags(
     kernel::Symbol=Sys.KERNEL; capture::Function=capture_command)
-    kernel == :Linux || error(
-        "System SDL_image is supported only on Linux during the migration.")
+    sdl_runtime_filename("SDL3_image", kernel)
     result = capture(Cmd(["pkg-config", "--libs", "sdl3-image"]))
     result.exit_code == 0 || error(
         "Could not resolve system SDL_image linker flags through pkg-config.")
@@ -220,7 +225,7 @@ function julia_linker_flags()
     output = IOBuffer()
     process = run(pipeline(ignorestatus(command), stdout=output, stderr=devnull))
     process.exitcode == 0 || error("Failed to query Julia linker flags.")
-    flags = join(split(String(take!(output))), " ")
+    flags = join(Base.shell_split(String(take!(output))), " ")
     any(flag == "-ljulia" for flag in split(flags)) ||
         error("Julia linker flags do not contain -ljulia.")
     return flags
@@ -385,8 +390,8 @@ end
 """Resolve complete mandatory native linker flags for the active provider."""
 function native_linker_flags(provider::Symbol=harfbuzz_provider())
     provider = validate_harfbuzz_provider(provider)
-    (Sys.iswindows() || Sys.isapple()) && error(
-        "SDL3 application linkage is supported only on Linux during the migration.")
+    (Sys.islinux() || Sys.isapple()) || error(
+        "SDL3 application linkage is unsupported on $(Sys.KERNEL).")
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
     return "$harfbuzz_flags $(julia_linker_flags()) $(sdl3_linker_flags()) " *

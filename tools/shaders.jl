@@ -3,11 +3,13 @@ module EuclidShaders
 using SHA
 
 export ShaderAbi, ShaderArtifacts, ShaderSpec, build_shaders, compile_command,
-    reflection_command, shader_abis, shader_specs, shadercross_build_command,
-    shadercross_configure_command, validate_pipeline_contracts,
-    validate_reflection, validate_spirv_abi
+    msl_command, reflection_command, runtime_artifact_name,
+    runtime_shader_entrypoint, runtime_shader_format, shader_abis, shader_specs,
+    shadercross_build_command, shadercross_configure_command,
+    validate_pipeline_contracts, validate_reflection, validate_spirv_abi
 
 const SHADER_SCHEMA_VERSION = 1
+const MSL_VERSION = "2.0.0"
 const SHADERCROSS_ENV = "EUCLID_SHADERCROSS"
 const SHADERCROSS_DEPENDENCIES = [
     "DirectXShaderCompiler", "SPIRV-Cross", "SPIRV-Headers", "SPIRV-Tools"]
@@ -144,6 +146,36 @@ function compile_command(tool::String, spec::ShaderSpec, output::String)
         "--stage", spec.stage, "--entrypoint", "main", "--output", output])
 end
 
+"""Construct one canonical SPIR-V-to-MSL shadercross command."""
+function msl_command(
+    tool::String, spec::ShaderSpec, spirv::String, output::String)
+    return Cmd([tool, spirv, "--source", "SPIRV", "--dest", "MSL",
+        "--stage", spec.stage, "--entrypoint", "main",
+        "--msl-version", MSL_VERSION, "--output", output])
+end
+
+"""Return the packaged runtime shader format for one host kernel."""
+function runtime_shader_format(kernel::Symbol=Sys.KERNEL)
+    kernel == :Linux && return "SPIR-V"
+    kernel == :Darwin && return "MSL"
+    error("Runtime shader generation is unsupported on $kernel.")
+end
+
+"""Return the SDL GPU entrypoint for one host kernel."""
+function runtime_shader_entrypoint(kernel::Symbol=Sys.KERNEL)
+    kernel == :Linux && return "main"
+    kernel == :Darwin && return "main0"
+    error("Runtime shader generation is unsupported on $kernel.")
+end
+
+"""Return the packaged runtime artifact name for one shader."""
+function runtime_artifact_name(spec::ShaderSpec, kernel::Symbol=Sys.KERNEL)
+    extension = kernel == :Linux ? "spv" :
+        kernel == :Darwin ? "msl" :
+        error("Runtime shader generation is unsupported on $kernel.")
+    return "$(spec.name).$extension"
+end
+
 """Construct one canonical SPIR-V reflection command."""
 function reflection_command(
     tool::String, spec::ShaderSpec, spirv::String, output::String)
@@ -262,6 +294,21 @@ function verify_reproducible_artifact(
     return nothing
 end
 
+"""Compile a second MSL artifact and reject nondeterministic output."""
+function verify_reproducible_msl(
+    tool::String, spec::ShaderSpec, spirv::String, artifact::String)
+    comparison = artifact * ".repro"
+    try
+        checked_command(msl_command(tool, spec, spirv, comparison),
+            "$(spec.name) MSL reproduction")
+        file_sha256(comparison) == file_sha256(artifact) ||
+            error("$(spec.name) MSL artifact is not reproducible.")
+    finally
+        rm(comparison; force=true)
+    end
+    return nothing
+end
+
 """Extract one numeric field from shadercross's fixed reflection protocol."""
 function reflection_count(document::String, field::String)
     match_result = match(Regex("\\\"$field\\\"\\s*:\\s*(\\d+)"), document)
@@ -362,9 +409,11 @@ end
 
 """Write one validated shader artifact and ABI record."""
 function write_shader_record(
-    io::IO, directory::String, spec::ShaderSpec, abi::ShaderAbi)
+    io::IO, directory::String, spec::ShaderSpec, abi::ShaderAbi;
+    kernel::Symbol=Sys.KERNEL)
     source_name = basename(spec.source)
     artifact_name = "$(spec.name).spv"
+    runtime_name = runtime_artifact_name(spec, kernel)
     reflection_name = "$(spec.name).json"
     println(io)
     println(io, "[[shader]]")
@@ -383,6 +432,12 @@ function write_shader_record(
     println(io, "artifact = \"$artifact_name\"")
     println(io, "artifact_sha256 = \"$(file_sha256(
         joinpath(directory, artifact_name)))\"")
+    println(io, "runtime_format = \"$(runtime_shader_format(kernel))\"")
+    println(io,
+        "runtime_entrypoint = \"$(runtime_shader_entrypoint(kernel))\"")
+    println(io, "runtime_artifact = \"$runtime_name\"")
+    println(io, "runtime_artifact_sha256 = \"$(file_sha256(
+        joinpath(directory, runtime_name)))\"")
     println(io, "reflection = \"$reflection_name\"")
     println(io, "reflection_sha256 = \"$(file_sha256(
         joinpath(directory, reflection_name)))\"")
@@ -390,7 +445,8 @@ end
 
 """Write the deterministic packaged shader manifest."""
 function write_manifest(
-    path::String, specs::Vector{ShaderSpec}, tool::String, validator::String)
+    path::String, specs::Vector{ShaderSpec}, tool::String, validator::String;
+    kernel::Symbol=Sys.KERNEL)
     abis = shader_abis()
     open(path, "w") do io
         println(io, "schema_version = $SHADER_SCHEMA_VERSION")
@@ -404,7 +460,8 @@ function write_manifest(
         println(io, "spirv_validator_sha256 = \"$(file_sha256(validator))\"")
         write_string_array(io, "spirv_validator_closure", tool_closure(validator))
         for spec in specs
-            write_shader_record(io, dirname(path), spec, abis[spec.name])
+            write_shader_record(
+                io, dirname(path), spec, abis[spec.name]; kernel)
         end
     end
 end
@@ -436,6 +493,12 @@ function build_shaders(repository_root::String;
             reflection_command(shadercross_path, spec, spirv, reflection),
             "$(spec.name) reflection")
         validate_reflection(spec, read(reflection, String))
+        if Sys.isapple()
+            msl = joinpath(output_dir, runtime_artifact_name(spec))
+            checked_command(msl_command(shadercross_path, spec, spirv, msl),
+                "$(spec.name) MSL generation")
+            verify_reproducible_msl(shadercross_path, spec, spirv, msl)
+        end
     end
     manifest = joinpath(output_dir, "manifest.toml")
     write_manifest(manifest, specs, shadercross_path, validator)

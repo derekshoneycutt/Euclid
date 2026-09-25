@@ -211,7 +211,7 @@ sdl_draw_runtime_destroy :: proc(
     runtime^ = {}
 }
 
-// sdl_draw_shader_create loads one packaged SPIR-V shader for immediate admission.
+// sdl_draw_shader_create loads one packaged native shader for immediate admission.
 sdl_draw_shader_create :: proc(
     device: ^sdl.GPUDevice, path: string, stage: sdl.GPUShaderStage,
     sampler_count, uniform_count: u32) -> ^sdl.GPUShader {
@@ -220,8 +220,8 @@ sdl_draw_shader_create :: proc(
     return sdl.CreateGPUShader(device, {
         code_size = len(source),
         code = raw_data(source),
-        entrypoint = "main",
-        format = {.SPIRV},
+        entrypoint = SDL_GPU_SHADER_ENTRYPOINT,
+        format = SDL_GPU_SHADER_FORMAT,
         stage = stage,
         num_samplers = sampler_count,
         num_uniform_buffers = uniform_count,

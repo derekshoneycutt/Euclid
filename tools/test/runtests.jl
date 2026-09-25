@@ -28,8 +28,13 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             kernel=:Linux,
             is_file=path -> path == "/opt/sdl/lib/libSDL3.so.0",
             real_path=identity) == "/opt/sdl/lib/libSDL3.so.0"
+        @test BuildConfiguration.sdl3_library_path(
+            "/opt/sdl/lib";
+            kernel=:Darwin,
+            is_file=path -> path == "/opt/sdl/lib/libSDL3.0.dylib",
+            real_path=identity) == "/opt/sdl/lib/libSDL3.0.dylib"
         @test_throws ErrorException BuildConfiguration.sdl3_library_path(
-            "/opt/sdl/lib"; kernel=:Darwin)
+            ""; kernel=:Darwin)
         @test_throws ErrorException BuildConfiguration.sdl3_library_path(
             "/missing"; kernel=:Linux, is_file=_ -> false)
 
@@ -45,8 +50,20 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
         @test provider.kind == :system
         @test provider.version == "3.4.16"
         @test provider.library_path == "/opt/sdl/lib/libSDL3.so.0"
+        darwin_provider = BuildConfiguration.sdl3_provider_identity(:Darwin;
+            capture,
+            is_file=path -> path == "/opt/sdl/lib/libSDL3.0.dylib",
+            real_path=identity)
+        @test darwin_provider.library_path == "/opt/sdl/lib/libSDL3.0.dylib"
         @test_throws ErrorException BuildConfiguration.sdl3_provider_identity(
             :NT; capture)
+
+        flags_capture = _ ->
+            (exit_code=0, output=" -L/opt/sdl/lib  -lSDL3 \n", error_output="")
+        @test BuildConfiguration.sdl3_linker_flags(
+            :Linux; capture=flags_capture) == "-L/opt/sdl/lib -lSDL3"
+        @test BuildConfiguration.sdl3_linker_flags(
+            :Darwin; capture=flags_capture) == "-L/opt/sdl/lib -lSDL3"
     end
 
     @testset "mandatory SDL_image provider" begin
@@ -57,8 +74,13 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             real_path=identity) == "/opt/sdl-image/lib/libSDL3_image.so.0"
         @test_throws ErrorException BuildConfiguration.sdl3_image_library_path(
             ""; kernel=:Linux)
-        @test_throws ErrorException BuildConfiguration.sdl3_image_library_path(
-            "/opt/sdl-image/lib"; kernel=:Darwin)
+        @test BuildConfiguration.sdl3_image_library_path(
+            "/opt/sdl-image/lib";
+            kernel=:Darwin,
+            is_file=path ->
+                path == "/opt/sdl-image/lib/libSDL3_image.0.dylib",
+            real_path=identity) ==
+            "/opt/sdl-image/lib/libSDL3_image.0.dylib"
         @test_throws ErrorException BuildConfiguration.sdl3_image_library_path(
             "/missing"; kernel=:Linux, is_file=_ -> false)
 
@@ -74,6 +96,13 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
         @test provider.kind == :system
         @test provider.version == "3.4.0"
         @test provider.library_path == "/opt/sdl-image/lib/libSDL3_image.so.0"
+        darwin_provider = BuildConfiguration.sdl3_image_provider_identity(:Darwin;
+            capture,
+            is_file=path ->
+                path == "/opt/sdl-image/lib/libSDL3_image.0.dylib",
+            real_path=identity)
+        @test darwin_provider.library_path ==
+            "/opt/sdl-image/lib/libSDL3_image.0.dylib"
         @test_throws ErrorException BuildConfiguration.sdl3_image_provider_identity(
             :NT; capture)
 
@@ -93,8 +122,8 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             (exit_code=0, output=" -lSDL3_image   -lSDL3 \n", error_output="")
         @test BuildConfiguration.sdl3_image_linker_flags(
             :Linux; capture=flags_capture) == "-lSDL3_image -lSDL3"
-        @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
-            :Darwin; capture=flags_capture)
+        @test BuildConfiguration.sdl3_image_linker_flags(
+            :Darwin; capture=flags_capture) == "-lSDL3_image -lSDL3"
         @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
             :Linux; capture=_ ->
                 (exit_code=1, output="", error_output="missing"))
@@ -312,6 +341,10 @@ spirv_validator_closure = ["/lib/libvalidator.so"]
 name = "stroke3d.vert"
 artifact = "stroke3d.vert.spv"
 artifact_sha256 = "artifact"
+runtime_format = "MSL"
+runtime_entrypoint = "main0"
+runtime_artifact = "stroke3d.vert.msl"
+runtime_artifact_sha256 = "runtime-artifact"
 reflection = "stroke3d.vert.json"
 reflection_sha256 = "reflection"
 """)
@@ -323,12 +356,14 @@ reflection_sha256 = "reflection"
             @test haskey(components["file:bin/euclid"], "hashes")
             @test haskey(components["file:bin/assets.pkg"], "hashes")
             @test components["build-tool:shadercross"]["scope"] == "excluded"
-            @test components["shader:stroke3d.vert:SPIR-V"]["scope"] ==
+            @test components["shader:stroke3d.vert:MSL"]["scope"] ==
                 "required"
             dependencies = only(bom["dependencies"])["dependsOn"]
             @test "native:sdl3" in dependencies
-            @test "native:vulkan-loader" in dependencies
-            @test "shader:stroke3d.vert:SPIR-V" in dependencies
+            graphics_runtime = Sys.isapple() ? "native:metal-framework" :
+                "native:vulkan-loader"
+            @test graphics_runtime in dependencies
+            @test "shader:stroke3d.vert:MSL" in dependencies
             @test !("build-tool:shadercross" in dependencies)
         end
     end

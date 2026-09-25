@@ -36,15 +36,20 @@ Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each too
 available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
 Julia project by default, so a separate HarfBuzz installation is not required.
 
-The experimental `dev-sdl3` branch additionally requires Linux SDL3 and SDL_image 3.4
-development files discoverable through `pkg-config`, plus SPIR-V Tools (`spirv-val`
-and `spirv-dis`). Run `julia tools/make.jl probe-sdl3-image` to verify required static
-PNG/JPEG/GIF decode and streaming GIF encode/decode capabilities. The
-SDL_shadercross source and its dependencies are recursive submodules under
-`tools/shadercross`; asset builds configure and incrementally build its CLI under
-`.build/shadercross` with one compiler job. `EUCLID_SHADERCROSS` remains available for
-an explicit developer override. These migration inputs require release-version
-hardening before a distributable release.
+The experimental `dev-sdl3` branch additionally requires SDL3 and SDL_image 3.4
+development files discoverable through `pkg-config`, SPIR-V Tools (`spirv-val` and
+`spirv-dis`), and `glslc` from shaderc. On Apple Silicon macOS, install the Xcode
+command-line tools and the Homebrew packages `sdl3`, `sdl3_image`, `pkg-config`,
+`spirv-tools`, and `shaderc`. Intel and universal macOS builds are not yet supported.
+
+Run `julia tools/make.jl probe-sdl3` to verify the native GPU path (Vulkan/SPIR-V
+on Linux or Metal/MSL on macOS). Run `julia tools/make.jl probe-sdl3-image` to
+verify required static PNG/JPEG/GIF decode and streaming GIF encode/decode
+capabilities. The SDL_shadercross source and its dependencies are recursive
+submodules under `tools/shadercross`; asset builds configure and incrementally build
+its CLI under `.build/shadercross`. `EUCLID_SHADERCROSS` remains available for an
+explicit developer override. macOS support currently covers source builds and local
+runtime use; app bundling, signing, and notarization remain future work.
 
 Unix source and distribution builds may intentionally select system HarfBuzz with
 `EUCLID_HARFBUZZ_PROVIDER=system`. This mode also requires `pkg-config` and the

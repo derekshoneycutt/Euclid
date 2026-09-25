@@ -12,6 +12,18 @@ RESIZE_WIDTH :: 800
 RESIZE_HEIGHT :: 560
 FRAME_LIMIT :: 90
 
+when ODIN_OS == .Linux {
+    PROBE_GPU_DRIVER :: "vulkan"
+    PROBE_SHADER_FORMAT :: sdl.GPUShaderFormat{.SPIRV}
+    PROBE_SHADER_ENTRYPOINT :: "main"
+} else when ODIN_OS == .Darwin {
+    PROBE_GPU_DRIVER :: "metal"
+    PROBE_SHADER_FORMAT :: sdl.GPUShaderFormat{.MSL}
+    PROBE_SHADER_ENTRYPOINT :: "main0"
+} else {
+    #assert(false, "SDL3 probe is unsupported on this platform")
+}
+
 Probe_Vertex :: struct {
     position: [2]f32,
     color: [3]f32,
@@ -76,7 +88,7 @@ release_probe :: proc(state: ^Probe_State) -> bool {
     return idle
 }
 
-// load_shader creates one SPIR-V shader from an owned file buffer.
+// load_shader creates one native shader from an owned file buffer.
 load_shader :: proc(
     device: ^sdl.GPUDevice,
     path: string,
@@ -90,8 +102,8 @@ load_shader :: proc(
     create_info := sdl.GPUShaderCreateInfo{
         code_size = len(source),
         code = raw_data(source),
-        entrypoint = "main",
-        format = {.SPIRV},
+        entrypoint = PROBE_SHADER_ENTRYPOINT,
+        format = PROBE_SHADER_FORMAT,
         stage = stage,
     }
     return sdl.CreateGPUShader(device, create_info)
@@ -256,7 +268,7 @@ configure_swapchain :: proc(state: ^Probe_State) -> (sdl.GPUTextureFormat, bool)
     return format, true
 }
 
-// initialize_platform admits SDL, a window, and an explicit Vulkan GPU device.
+// initialize_platform admits SDL, a window, and an explicit native GPU device.
 initialize_platform :: proc(state: ^Probe_State) -> (sdl.GPUTextureFormat, bool) {
     if !sdl.Init({.VIDEO, .EVENTS}) {
         report_error("sdl_init")
@@ -272,11 +284,12 @@ initialize_platform :: proc(state: ^Probe_State) -> (sdl.GPUTextureFormat, bool)
     for index in 0..<sdl.GetNumGPUDrivers() {
         fmt.printf("probe.gpu_driver[%d]=%s\n", index, sdl.GetGPUDriver(index))
     }
-    if !sdl.GPUSupportsShaderFormats({.SPIRV}, "vulkan") {
-        report_error("vulkan_spirv_support")
+    if !sdl.GPUSupportsShaderFormats(PROBE_SHADER_FORMAT, PROBE_GPU_DRIVER) {
+        report_error("gpu_shader_support")
         return .INVALID, false
     }
-    state.device = sdl.CreateGPUDevice({.SPIRV}, true, "vulkan")
+    state.device = sdl.CreateGPUDevice(
+        PROBE_SHADER_FORMAT, true, PROBE_GPU_DRIVER)
     if state.device == nil {
         report_error("gpu_device_create")
         return .INVALID, false

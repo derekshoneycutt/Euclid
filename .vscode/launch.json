@@ -16,6 +16,9 @@
       "initCommands": [
         "process handle SIGSEGV --stop false --notify false --pass true"
       ],
+      "preRunCommands": [
+        "script [bp.SetEnabled(False) for bp in lldb.debugger.GetSelectedTarget().breakpoint_iter() if \"Exception breakpoint\" in str(bp)]"
+      ],
       "cwd": "${workspaceFolder}/bin",
       "preLaunchTask": "Euclid: Debug Build"
     },
@@ -35,6 +38,9 @@
       ],
       "initCommands": [
         "process handle SIGSEGV --stop false --notify false --pass true"
+      ],
+      "preRunCommands": [
+        "script [bp.SetEnabled(False) for bp in lldb.debugger.GetSelectedTarget().breakpoint_iter() if \"Exception breakpoint\" in str(bp)]"
       ],
       "cwd": "${workspaceFolder}/bin",
       "preLaunchTask": "Euclid: Debug Build"
