@@ -20,6 +20,10 @@ when ODIN_OS == .Linux {
     PROBE_GPU_DRIVER :: "metal"
     PROBE_SHADER_FORMAT :: sdl.GPUShaderFormat{.MSL}
     PROBE_SHADER_ENTRYPOINT :: "main0"
+} else when ODIN_OS == .Windows {
+    PROBE_GPU_DRIVER :: "direct3d12"
+    PROBE_SHADER_FORMAT :: sdl.GPUShaderFormat{.DXIL}
+    PROBE_SHADER_ENTRYPOINT :: "main"
 } else {
     #assert(false, "SDL3 probe is unsupported on this platform")
 }

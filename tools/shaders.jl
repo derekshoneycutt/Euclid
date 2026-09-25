@@ -1,18 +1,36 @@
 module EuclidShaders
 
 using SHA
+using TOML
+import Main.EuclidBuildConfiguration
 
 export ShaderAbi, ShaderArtifacts, ShaderSpec, build_shaders, compile_command,
-    msl_command, reflection_command, runtime_artifact_name,
+    dxil_command, msl_command, reflection_command, runtime_artifact_name,
     runtime_shader_entrypoint, runtime_shader_format, shader_abis, shader_specs,
     shadercross_build_command, shadercross_configure_command,
-    validate_pipeline_contracts, validate_reflection, validate_spirv_abi
+    validate_pipeline_contracts, validate_reflection, validate_spirv_abi,
+    windows_sdl3_development_root, windows_shadercross_runtime_dirs
 
 const SHADER_SCHEMA_VERSION = 1
 const MSL_VERSION = "2.0.0"
 const SHADERCROSS_ENV = "EUCLID_SHADERCROSS"
+const SDL3_DEV_ROOT_ENV = "EUCLID_SDL3_DEV_ROOT"
+const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
+const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "bin", "win64", "sdl")
 const SHADERCROSS_DEPENDENCIES = [
     "DirectXShaderCompiler", "SPIRV-Cross", "SPIRV-Headers", "SPIRV-Tools"]
+
+"""Return DLL directories required by the source-built Windows shadercross CLI."""
+function windows_shadercross_runtime_dirs(
+    repository_root::String=REPOSITORY_ROOT)
+    build = joinpath(repository_root, ".build", "shadercross")
+    return [
+        WINDOWS_SDL_DIR,
+        build,
+        joinpath(build, "external", "SPIRV-Cross"),
+        joinpath(build, "external", "DirectXShaderCompiler", "bin"),
+    ]
+end
 
 struct ShaderSpec
     name::String
@@ -154,10 +172,18 @@ function msl_command(
         "--msl-version", MSL_VERSION, "--output", output])
 end
 
+"""Construct one canonical SPIR-V-to-DXIL shadercross command."""
+function dxil_command(
+    tool::String, spec::ShaderSpec, spirv::String, output::String)
+    return Cmd([tool, spirv, "--source", "SPIRV", "--dest", "DXIL",
+        "--stage", spec.stage, "--entrypoint", "main", "--output", output])
+end
+
 """Return the packaged runtime shader format for one host kernel."""
 function runtime_shader_format(kernel::Symbol=Sys.KERNEL)
     kernel == :Linux && return "SPIR-V"
     kernel == :Darwin && return "MSL"
+    kernel == :NT && return "DXIL"
     error("Runtime shader generation is unsupported on $kernel.")
 end
 
@@ -165,6 +191,7 @@ end
 function runtime_shader_entrypoint(kernel::Symbol=Sys.KERNEL)
     kernel == :Linux && return "main"
     kernel == :Darwin && return "main0"
+    kernel == :NT && return "main"
     error("Runtime shader generation is unsupported on $kernel.")
 end
 
@@ -172,6 +199,7 @@ end
 function runtime_artifact_name(spec::ShaderSpec, kernel::Symbol=Sys.KERNEL)
     extension = kernel == :Linux ? "spv" :
         kernel == :Darwin ? "msl" :
+        kernel == :NT ? "dxil" :
         error("Runtime shader generation is unsupported on $kernel.")
     return "$(spec.name).$extension"
 end
@@ -185,12 +213,41 @@ end
 
 """Capture one subprocess without inheriting terminal output."""
 function capture_command(command::Cmd)
+    if Sys.iswindows()
+        runtime_path = join(windows_shadercross_runtime_dirs(), ';')
+        command = addenv(command, "PATH" => string(
+            runtime_path, ';', get(ENV, "PATH", "")))
+    end
     output = IOBuffer()
     error_output = IOBuffer()
     process = run(pipeline(
         ignorestatus(command), stdout=output, stderr=error_output))
     return ShaderCommandResult(
         process.exitcode, String(take!(output)), String(take!(error_output)))
+end
+
+"""Resolve and validate the SDL3 development package used by shadercross."""
+function windows_sdl3_development_root(
+    repository_root::String=REPOSITORY_ROOT;
+    environment::AbstractDict=ENV)
+    manifest = TOML.parsefile(joinpath(
+        repository_root, "libs", "bin", "win64", "sdl", "manifest.toml"))
+    libraries = manifest["library"]
+    index = findfirst(library -> library["name"] == "SDL3", libraries)
+    index === nothing && error("Windows SDL manifest is missing SDL3.")
+    version = libraries[index]["version"]
+    root = get(environment, SDL3_DEV_ROOT_ENV,
+        joinpath("C:\\libs", "SDL3-$version-vc"))
+    required = [
+        joinpath(root, "cmake", "SDL3Config.cmake"),
+        joinpath(root, "include", "SDL3", "SDL.h"),
+        joinpath(root, "lib", "x64", "SDL3.lib"),
+        joinpath(root, "lib", "x64", "SDL3.dll"),
+    ]
+    missing = findfirst(path -> !isfile(path), required)
+    missing === nothing || error(
+        "Incomplete SDL3 development package: $(required[missing])")
+    return normpath(root)
 end
 
 """Require one build-only executable from an override or PATH."""
@@ -208,30 +265,96 @@ end
 
 """Construct the canonical configure command for the vendored shader compiler."""
 function shadercross_configure_command(
-    cmake::String, source::String, build::String)
-    return Cmd([cmake, "--fresh", "-S", source, "-B", build, "-G", "Ninja",
+    cmake::String, source::String, build::String;
+    kernel::Symbol=Sys.KERNEL,
+    repository_root::String=REPOSITORY_ROOT)
+    arguments = [cmake, "--fresh", "-S", source, "-B", build, "-G", "Ninja",
         "-DCMAKE_BUILD_TYPE=Release", "-DSDLSHADERCROSS_VENDORED=ON",
         "-DSDLSHADERCROSS_CLI=ON", "-DSDLSHADERCROSS_INSTALL=OFF",
-        "-DSDLSHADERCROSS_TESTS=OFF", "-DSPIRV_WERROR=OFF"])
+        "-DSDLSHADERCROSS_TESTS=OFF", "-DSPIRV_WERROR=OFF"]
+    if kernel == :NT
+        root = windows_sdl3_development_root(repository_root)
+        push!(arguments, "-DSDL3_DIR=$(joinpath(root, "cmake"))")
+        compiler = EuclidBuildConfiguration.resolve_msvc_tool_path(
+            "VC/Tools/MSVC/**/bin/Hostx64/x64/cl.exe",
+            "Could not locate MSVC cl.exe. Install the C++ Build Tools workload.")
+        push!(arguments, "-DCMAKE_C_COMPILER=$compiler")
+        push!(arguments, "-DCMAKE_CXX_COMPILER=$compiler")
+    end
+    return Cmd(arguments)
 end
 
 """Report whether the bundled shader compiler cache needs fresh configuration."""
-function shadercross_needs_configure(build::String)
+function shadercross_needs_configure(build::String;
+    kernel::Symbol=Sys.KERNEL, repository_root::String=REPOSITORY_ROOT)
     cache = joinpath(build, "CMakeCache.txt")
     isfile(cache) || return true
     entries = Set(eachline(cache))
-    return !("CMAKE_GENERATOR:INTERNAL=Ninja" in entries &&
-        "SPIRV_WERROR:BOOL=OFF" in entries)
+    configured = "CMAKE_GENERATOR:INTERNAL=Ninja" in entries &&
+        "SPIRV_WERROR:BOOL=OFF" in entries
+    configured || return true
+    kernel == :NT || return false
+    expected = normpath(joinpath(
+        windows_sdl3_development_root(repository_root), "cmake"))
+    entry = nothing
+    for line in entries
+        if startswith(line, "SDL3_DIR:")
+            entry = line
+            break
+        end
+    end
+    entry === nothing && return true
+    separator = findfirst(==('='), entry)
+    separator === nothing && return true
+    normpath(entry[nextind(entry, separator):end]) == expected || return true
+    compiler = normpath(EuclidBuildConfiguration.resolve_msvc_tool_path(
+        "VC/Tools/MSVC/**/bin/Hostx64/x64/cl.exe",
+        "Could not locate MSVC cl.exe."))
+    compiler_entries = filter(line -> startswith(line, "CMAKE_CXX_COMPILER:"), entries)
+    length(compiler_entries) == 1 || return true
+    compiler_entry = only(compiler_entries)
+    compiler_separator = findfirst(==('='), compiler_entry)
+    compiler_separator === nothing && return true
+    return normpath(compiler_entry[nextind(compiler_entry, compiler_separator):end]) !=
+        compiler
 end
 
 """Construct the parallel build command for the vendored shader compiler."""
 function shadercross_build_command(cmake::String, build::String)
     return Cmd([cmake, "--build", build, "--target", "shadercross",
+        "spirv-val", "spirv-dis",
         "--parallel"])
+end
+
+"""Capture the Visual Studio x64 compiler and Windows SDK environment."""
+function msvc_build_environment()
+    vcvars = EuclidBuildConfiguration.resolve_msvc_tool_path(
+        "VC/Auxiliary/Build/vcvars64.bat",
+        "Could not locate vcvars64.bat. Install the C++ Build Tools workload.")
+    output = IOBuffer()
+    command = Cmd([
+        "cmd", "/d", "/c", "call", vcvars, ">nul", "&&", "set"])
+    process = run(pipeline(ignorestatus(command), stdout=output, stderr=devnull))
+    process.exitcode == 0 || error(
+        "Could not initialize the Visual Studio x64 build environment.")
+    environment = Dict{String,String}()
+    for line in split(String(take!(output)), '\n')
+        separator = findfirst(==('='), line)
+        (separator === nothing || separator == firstindex(line)) && continue
+        key = strip(line[firstindex(line):prevind(line, separator)])
+        value = strip(line[nextind(line, separator):end])
+        environment[key] = value
+    end
+    environment["PATH"] = string(
+        WINDOWS_SDL_DIR, ';', get(environment, "PATH", get(ENV, "PATH", "")))
+    return environment
 end
 
 """Run one visible setup command and report its owning stage on failure."""
 function checked_setup_command(command::Cmd, stage::String)
+    if Sys.iswindows()
+        command = addenv(command, collect(msvc_build_environment())...)
+    end
     process = run(ignorestatus(command))
     process.exitcode == 0 || error("$stage failed with exit $(process.exitcode).")
 end
@@ -247,7 +370,7 @@ function build_bundled_shadercross(repository_root::String)
     end
     cmake = resolve_tool("cmake")
     build = joinpath(repository_root, ".build", "shadercross")
-    if shadercross_needs_configure(build)
+    if shadercross_needs_configure(build; repository_root)
         checked_setup_command(
             shadercross_configure_command(cmake, source, build),
             "SDL_shadercross configuration")
@@ -269,6 +392,22 @@ function resolve_shadercross(repository_root::String)
     isempty(override) || return resolve_tool(
         "shadercross"; environment_name=SHADERCROSS_ENV)
     return build_bundled_shadercross(repository_root)
+end
+
+"""Resolve one SPIRV-Tools executable produced by the shadercross build."""
+function resolve_bundled_spirv_tool(repository_root::String, name::String)
+    executable = Sys.iswindows() ? "$name.exe" : name
+    build = joinpath(repository_root, ".build", "shadercross")
+    candidates = [
+        joinpath(build, "external", "SPIRV-Tools", "tools", "Release", executable),
+        joinpath(build, "external", "SPIRV-Tools", "tools", executable),
+        joinpath(build, "Release", executable),
+        joinpath(build, executable),
+    ]
+    index = findfirst(isfile, candidates)
+    index === nothing && error(
+        "$name was not produced by the bundled shadercross build.")
+    return realpath(candidates[index])
 end
 
 """Run one checked shader build command."""
@@ -303,6 +442,21 @@ function verify_reproducible_msl(
             "$(spec.name) MSL reproduction")
         file_sha256(comparison) == file_sha256(artifact) ||
             error("$(spec.name) MSL artifact is not reproducible.")
+    finally
+        rm(comparison; force=true)
+    end
+    return nothing
+end
+
+"""Compile a second DXIL artifact and reject nondeterministic output."""
+function verify_reproducible_dxil(
+    tool::String, spec::ShaderSpec, spirv::String, artifact::String)
+    comparison = artifact * ".repro"
+    try
+        checked_command(dxil_command(tool, spec, spirv, comparison),
+            "$(spec.name) DXIL reproduction")
+        file_sha256(comparison) == file_sha256(artifact) ||
+            error("$(spec.name) DXIL artifact is not reproducible.")
     finally
         rm(comparison; force=true)
     end
@@ -407,6 +561,10 @@ function write_integer_array(io::IO, field::String, values::Vector{Int})
     println(io, "$field = [$(join(values, ", "))]")
 end
 
+"""Escape one string for a TOML basic-string value."""
+toml_string(value::AbstractString) =
+    replace(String(value), '\\' => "\\\\", '"' => "\\\"")
+
 """Write one validated shader artifact and ABI record."""
 function write_shader_record(
     io::IO, directory::String, spec::ShaderSpec, abi::ShaderAbi;
@@ -450,11 +608,12 @@ function write_manifest(
     abis = shader_abis()
     open(path, "w") do io
         println(io, "schema_version = $SHADER_SCHEMA_VERSION")
-        println(io, "shadercross_path = \"$tool\"")
+        println(io, "shadercross_path = \"$(toml_string(tool))\"")
         println(io, "shadercross_identity = \"sha256:$(file_sha256(tool))\"")
         println(io, "shadercross_sha256 = \"$(file_sha256(tool))\"")
         write_string_array(io, "shadercross_closure", tool_closure(tool))
-        println(io, "spirv_validator_path = \"$validator\"")
+        println(io,
+            "spirv_validator_path = \"$(toml_string(validator))\"")
         println(io,
             "spirv_validator_identity = \"sha256:$(file_sha256(validator))\"")
         println(io, "spirv_validator_sha256 = \"$(file_sha256(validator))\"")
@@ -469,9 +628,18 @@ end
 """Generate, reflect, validate, and identify every production shader."""
 function build_shaders(repository_root::String;
     shadercross::Union{Nothing,String}=nothing,
-    validator::String=resolve_tool("spirv-val"))
+    validator::Union{Nothing,String}=nothing,
+    disassembler::Union{Nothing,String}=nothing)
     shadercross_path = shadercross === nothing ?
         resolve_shadercross(repository_root) : realpath(shadercross)
+    validator_path = validator === nothing ?
+        (Sys.iswindows() ? resolve_bundled_spirv_tool(
+            repository_root, "spirv-val") : resolve_tool("spirv-val")) :
+        realpath(validator)
+    disassembler_path = disassembler === nothing ?
+        (Sys.iswindows() ? resolve_bundled_spirv_tool(
+            repository_root, "spirv-dis") : resolve_tool("spirv-dis")) :
+        realpath(disassembler)
     source_root = joinpath(repository_root, "src")
     output_dir = joinpath(repository_root, ".build", "shaders")
     rm(output_dir; recursive=true, force=true)
@@ -479,14 +647,13 @@ function build_shaders(repository_root::String;
     specs = shader_specs(source_root)
     abis = shader_abis()
     validate_pipeline_contracts(specs, abis)
-    disassembler = resolve_tool("spirv-dis")
     for spec in specs
         spirv = joinpath(output_dir, "$(spec.name).spv")
         reflection = joinpath(output_dir, "$(spec.name).json")
         checked_command(compile_command(shadercross_path, spec, spirv), spec.name)
         verify_reproducible_artifact(shadercross_path, spec, spirv)
-        checked_command(Cmd([validator, spirv]), "$(spec.name) validation")
-        disassembly = capture_command(Cmd([disassembler, spirv]))
+        checked_command(Cmd([validator_path, spirv]), "$(spec.name) validation")
+        disassembly = capture_command(Cmd([disassembler_path, spirv]))
         disassembly.exit_code == 0 || error("$(spec.name) disassembly failed.")
         validate_spirv_abi(spec, abis[spec.name], disassembly.output)
         checked_command(
@@ -498,10 +665,15 @@ function build_shaders(repository_root::String;
             checked_command(msl_command(shadercross_path, spec, spirv, msl),
                 "$(spec.name) MSL generation")
             verify_reproducible_msl(shadercross_path, spec, spirv, msl)
+        elseif Sys.iswindows()
+            dxil = joinpath(output_dir, runtime_artifact_name(spec))
+            checked_command(dxil_command(shadercross_path, spec, spirv, dxil),
+                "$(spec.name) DXIL generation")
+            verify_reproducible_dxil(shadercross_path, spec, spirv, dxil)
         end
     end
     manifest = joinpath(output_dir, "manifest.toml")
-    write_manifest(manifest, specs, shadercross_path, validator)
+    write_manifest(manifest, specs, shadercross_path, validator_path)
     return ShaderArtifacts(output_dir, manifest)
 end
 

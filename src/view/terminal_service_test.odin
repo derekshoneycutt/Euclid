@@ -2,6 +2,10 @@ package view
 
 import viewterminalmodel "terminal/model"
 
+when ODIN_OS != .Linux {
+    _ :: viewterminalmodel
+}
+
 import bridgemodel "../bridge/model"
 
 import animation_model "../core/animation"

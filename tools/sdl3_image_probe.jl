@@ -30,7 +30,7 @@ end
 
 """Resolve the installed Odin SDL_image binding used by the native probe."""
 function image_binding_path(odin_root::AbstractString; kernel::Symbol=Sys.KERNEL)
-    kernel in (:Linux, :Darwin) || error(
+    kernel in (:Linux, :Darwin, :NT) || error(
         "The SDL_image capability probe is unsupported on $kernel.")
     path = joinpath(normpath(odin_root), "vendor", "sdl3", "image", "sdl_image.odin")
     isfile(path) || error("Missing Odin SDL_image binding file: $path")
@@ -58,7 +58,8 @@ function prepare_image_artifacts(root::String)
         joinpath(output_dir, "diagnostics.log"),
         joinpath(output_dir, "result.json"),
         joinpath(root, PROBE_RELATIVE_DIR),
-        joinpath(output_dir, "euclid-sdl3-image-probe"),
+        joinpath(output_dir, Sys.iswindows() ?
+            "euclid-sdl3-image-probe.exe" : "euclid-sdl3-image-probe"),
         joinpath(output_dir, "static.jpg"),
         joinpath(output_dir, "static.png"),
         joinpath(output_dir, "static.gif"),
@@ -115,15 +116,21 @@ end
 
 """Require every external command used by the image probe."""
 function require_image_probe_tools()
-    (Sys.islinux() || Sys.isapple()) || error(
+    (Sys.islinux() || Sys.isapple() || Sys.iswindows()) || error(
         "The SDL_image capability probe is unsupported on $(Sys.KERNEL).")
     EuclidSDL3Probe.require_tool("odin", "Install the Odin compiler.")
-    EuclidSDL3Probe.require_tool(
-        "pkg-config", "Install pkg-config and SDL_image development metadata.")
+    if Sys.iswindows()
+        EuclidBuildConfiguration.resolve_msvc_tool_path(
+            "VC/Tools/MSVC/**/bin/Hostx64/x64/dumpbin.exe",
+            "Could not locate MSVC dumpbin.exe. Install the C++ Build Tools workload.")
+    else
+        EuclidSDL3Probe.require_tool(
+            "pkg-config", "Install pkg-config and SDL_image development metadata.")
+    end
     if Sys.islinux()
         EuclidSDL3Probe.require_tool("readelf", "Install binutils.")
         EuclidSDL3Probe.require_tool("ldd", "Install the system ELF loader tools.")
-    else
+    elseif Sys.isapple()
         EuclidSDL3Probe.require_tool(
             "otool", "Install the Xcode command-line tools.")
     end
@@ -137,16 +144,18 @@ function collect_image_environment!(result, diagnostics::IO, root::String)
         diagnostics, "odin-version", Cmd(["odin", "version"]); cwd=root)
     binding = image_binding_path(odin_root)
     provider = EuclidBuildConfiguration.sdl3_image_provider_identity()
+    release_command = Sys.iswindows() ? Cmd(["cmd", "/c", "ver"]) :
+        Cmd(["uname", "-r"])
     result["host"] = Dict{String,Any}(
         "kernel" => string(Sys.KERNEL), "architecture" => string(Sys.ARCH),
         "kernel_release" => EuclidSDL3Probe.command_value!(diagnostics,
-            "kernel-release", Cmd(["uname", "-r"]); cwd=root))
+            "kernel-release", release_command; cwd=root))
     result["git"] = EuclidSDL3Probe.git_metadata!(diagnostics, root)
     result["odin"] = Dict{String,Any}("version" => odin_version, "root" => odin_root)
     result["binding"] = Dict{String,Any}(
         "path" => binding, "sha256" => EuclidSDL3Probe.file_sha256(binding))
     result["sdl_image_provider"] = Dict{String,Any}(
-        "kind" => "system", "pkg_config_version" => provider.version,
+        "kind" => string(provider.kind), "version" => provider.version,
         "library_path" => provider.library_path,
         "sha256" => EuclidSDL3Probe.file_sha256(provider.library_path))
     return provider.library_path
@@ -155,8 +164,13 @@ end
 """Strict-build the standalone image probe and record its binary identity."""
 function build_image_probe!(result, diagnostics::IO, root::String,
     paths::ImageProbeArtifacts)
-    flags = EuclidSDL3Probe.command_value!(diagnostics, "sdl-image-linker-flags",
-        Cmd(["pkg-config", "--libs", "sdl3-image"]); cwd=root)
+    flags = if Sys.iswindows()
+        "$(EuclidBuildConfiguration.sdl3_linker_flags()) " *
+            EuclidBuildConfiguration.sdl3_image_linker_flags()
+    else
+        EuclidSDL3Probe.command_value!(diagnostics, "sdl-image-linker-flags",
+            Cmd(["pkg-config", "--libs", "sdl3-image"]); cwd=root)
+    end
     command = image_probe_build_command(paths.source_dir, paths.binary, flags)
     EuclidSDL3Probe.checked_step!(diagnostics, "probe-build", command; cwd=root)
     result["executable"] = Dict{String,Any}(
@@ -169,6 +183,8 @@ function run_image_runtime!(result, diagnostics::IO, root::String,
     paths::ImageProbeArtifacts)
     command = Cmd([paths.binary, paths.jpeg_fixture,
         paths.png_fixture, paths.gif_fixture, paths.animation_output])
+    environment = EuclidBuildConfiguration.native_runtime_environment()
+    command = environment === nothing ? command : addenv(command, environment)
     println(diagnostics, "[probe-runtime] ", command)
     runtime = EuclidSDL3Probe.capture_command_timeout(command, 15; cwd=root)
     write(diagnostics, runtime.stdout)
@@ -192,10 +208,13 @@ end
 """Record the executable dependency closure and loaded SDL_image SONAME."""
 function inspect_image_binary!(result, diagnostics::IO, root::String,
     paths::ImageProbeArtifacts, library::String)
-    dependency_command = Sys.isapple() ? Cmd(["otool", "-L", paths.binary]) :
-        Cmd(["ldd", paths.binary])
-    identity_command = Sys.isapple() ? Cmd(["otool", "-D", library]) :
-        Cmd(["readelf", "-d", library])
+    dumpbin = Sys.iswindows() ? EuclidBuildConfiguration.resolve_msvc_tool_path(
+        "VC/Tools/MSVC/**/bin/Hostx64/x64/dumpbin.exe",
+        "Could not locate MSVC dumpbin.exe.") : ""
+    dependency_command = Sys.iswindows() ? Cmd([dumpbin, "/dependents", paths.binary]) :
+        Sys.isapple() ? Cmd(["otool", "-L", paths.binary]) : Cmd(["ldd", paths.binary])
+    identity_command = Sys.iswindows() ? Cmd([dumpbin, "/headers", library]) :
+        Sys.isapple() ? Cmd(["otool", "-D", library]) : Cmd(["readelf", "-d", library])
     dependency_result = EuclidSDL3Probe.checked_step!(
         diagnostics, "dynamic-dependencies", dependency_command; cwd=root)
     identity_result = EuclidSDL3Probe.checked_step!(
@@ -203,7 +222,13 @@ function inspect_image_binary!(result, diagnostics::IO, root::String,
     result["dynamic_dependencies"] = split(chomp(dependency_result.stdout), '\n';
         keepempty=false)
     provider = result["sdl_image_provider"]
-    if Sys.isapple()
+    if Sys.iswindows()
+        occursin(r"(?i)SDL3_image\.dll", dependency_result.stdout) || error(
+            "The probe executable does not depend on SDL3_image.dll.")
+        provider["loaded_path"] = library
+        provider["pe_headers"] =
+            split(chomp(identity_result.stdout), '\n'; keepempty=false)
+    elseif Sys.isapple()
         provider["loaded_path"] =
             loaded_sdl3_image_path_darwin(dependency_result.stdout)
         lines = split(chomp(identity_result.stdout), '\n'; keepempty=false)

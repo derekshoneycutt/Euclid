@@ -47,14 +47,23 @@ end
     @test msl.exec == ["shadercross", "input.spv", "--source", "SPIRV",
         "--dest", "MSL", "--stage", "vertex", "--entrypoint", "main",
         "--msl-version", "2.0.0", "--output", "output.msl"]
+    dxil = Shaders.dxil_command(
+        "shadercross", spec, "input.spv", "output.dxil")
+    @test dxil.exec == ["shadercross", "input.spv", "--source", "SPIRV",
+        "--dest", "DXIL", "--stage", "vertex", "--entrypoint", "main",
+        "--output", "output.dxil"]
     @test Shaders.runtime_shader_format(:Linux) == "SPIR-V"
     @test Shaders.runtime_shader_format(:Darwin) == "MSL"
+    @test Shaders.runtime_shader_format(:NT) == "DXIL"
     @test Shaders.runtime_shader_entrypoint(:Linux) == "main"
     @test Shaders.runtime_shader_entrypoint(:Darwin) == "main0"
+    @test Shaders.runtime_shader_entrypoint(:NT) == "main"
     @test Shaders.runtime_artifact_name(spec, :Linux) ==
         "draw2d_colored.vert.spv"
     @test Shaders.runtime_artifact_name(spec, :Darwin) ==
         "draw2d_colored.vert.msl"
+    @test Shaders.runtime_artifact_name(spec, :NT) ==
+        "draw2d_colored.vert.dxil"
     reflection = Shaders.reflection_command(
         "shadercross", spec, "output.spv", "output.json")
     @test reflection.exec[3:6] == ["--source", "SPIRV", "--dest", "JSON"]
@@ -65,6 +74,12 @@ end
     @test "-DSDLSHADERCROSS_VENDORED=ON" in configure.exec
     @test "-DSDLSHADERCROSS_INSTALL=OFF" in configure.exec
     @test "-DSPIRV_WERROR=OFF" in configure.exec
+    windows_configure = Shaders.shadercross_configure_command(
+        "cmake", "/source/tools/shadercross", "/source/.build/shadercross";
+        kernel=:NT)
+    @test "-DSDL3_DIR=$(joinpath(
+        Shaders.windows_sdl3_development_root(), "cmake"))" in
+        windows_configure.exec
     mktempdir() do build
         @test Shaders.shadercross_needs_configure(build)
         write(joinpath(build, "CMakeCache.txt"), "SPIRV_WERROR:BOOL=ON\n")
@@ -72,8 +87,14 @@ end
         write(joinpath(build, "CMakeCache.txt"),
             "CMAKE_GENERATOR:INTERNAL=Unix Makefiles\nSPIRV_WERROR:BOOL=OFF\n")
         @test Shaders.shadercross_needs_configure(build)
+        sdl3_cache = Sys.iswindows() ?
+            "SDL3_DIR:PATH=$(joinpath(
+                Shaders.windows_sdl3_development_root(), "cmake"))\n" *
+            "CMAKE_CXX_COMPILER:FILEPATH=$(
+                Shaders.EuclidBuildConfiguration.resolve_msvc_tool_path(
+                    "VC/Tools/MSVC/**/bin/Hostx64/x64/cl.exe", "missing cl"))\n" : ""
         write(joinpath(build, "CMakeCache.txt"),
-            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n")
+            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n$sdl3_cache")
         @test !Shaders.shadercross_needs_configure(build)
     end
     @test Shaders.shadercross_build_command(
@@ -113,7 +134,7 @@ OpMemberDecorate %type_StrokeVertexUniforms 0 Offset 0
         write(joinpath(root, "stroke3d.vert.spv"), "spirv")
         write(joinpath(root, "stroke3d.vert.json"), "reflection")
         manifest_path = joinpath(root, "manifest.toml")
-        tool = realpath(Sys.which("true"))
+        tool = realpath(Base.julia_cmd().exec[1])
         Shaders.write_manifest(manifest_path, [generated], tool, tool;
             kernel=:Linux)
         manifest = TOML.parsefile(manifest_path)

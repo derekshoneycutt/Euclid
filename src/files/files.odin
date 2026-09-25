@@ -569,7 +569,8 @@ reserve_gif_output_transaction_in_directory :: proc(
         return {}, false
     }
     temporary_path := fmt.aprintf(
-        "%s.partial.gif", final_path[:len(final_path) - len(".gif")], allocator)
+        "%s.partial.gif", final_path[:len(final_path) - len(".gif")],
+        allocator=allocator)
     temporary_file, open_error := os.open(
         temporary_path, {.Write, .Create, .Excl})
     if open_error != nil {

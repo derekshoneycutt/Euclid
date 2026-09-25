@@ -36,20 +36,22 @@ Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each too
 available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
 Julia project by default, so a separate HarfBuzz installation is not required.
 
-The experimental `dev-sdl3` branch additionally requires SDL3 and SDL_image 3.4
-development files discoverable through `pkg-config`, SPIR-V Tools (`spirv-val` and
-`spirv-dis`), and `glslc` from shaderc. On Apple Silicon macOS, install the Xcode
-command-line tools and the Homebrew packages `sdl3`, `sdl3_image`, `pkg-config`,
-`spirv-tools`, and `shaderc`. Intel and universal macOS builds are not yet supported.
+On Linux and macOS, the experimental `dev-sdl3` branch additionally requires SDL3
+and SDL_image 3.4 development files discoverable through `pkg-config`, SPIR-V Tools
+(`spirv-val` and `spirv-dis`), and `glslc` from shaderc. On Apple Silicon macOS,
+install the Xcode command-line tools and the Homebrew packages `sdl3`, `sdl3_image`,
+`pkg-config`, `spirv-tools`, and `shaderc`. Intel and universal macOS builds are not
+yet supported.
 
 Run `julia tools/make.jl probe-sdl3` to verify the native GPU path (Vulkan/SPIR-V
-on Linux or Metal/MSL on macOS). Run `julia tools/make.jl probe-sdl3-image` to
-verify required static PNG/JPEG/GIF decode and streaming GIF encode/decode
-capabilities. The SDL_shadercross source and its dependencies are recursive
-submodules under `tools/shadercross`; asset builds configure and incrementally build
-its CLI under `.build/shadercross`. `EUCLID_SHADERCROSS` remains available for an
-explicit developer override. macOS support currently covers source builds and local
-runtime use; app bundling, signing, and notarization remain future work.
+on Linux, Metal/MSL on macOS, or Direct3D 12/DXIL on Windows). Run
+`julia tools/make.jl probe-sdl3-image` to verify required static PNG/JPEG/GIF decode
+and streaming GIF encode/decode capabilities. The SDL_shadercross source and its
+dependencies are recursive submodules under `tools/shadercross`; asset builds
+configure and incrementally build its CLI under `.build/shadercross`.
+`EUCLID_SHADERCROSS` remains available for an explicit developer override. macOS
+support currently covers source builds and local runtime use; app bundling, signing,
+and notarization remain future work.
 
 Unix source and distribution builds may intentionally select system HarfBuzz with
 `EUCLID_HARFBUZZ_PROVIDER=system`. This mode also requires `pkg-config` and the
@@ -57,8 +59,13 @@ HarfBuzz development package: install `harfbuzz-devel` on Fedora,
 `libharfbuzz-dev` on Debian/Ubuntu, or `harfbuzz` and `pkg-config` through Homebrew
 on macOS. Use the `system-harfbuzz` CMake preset to select and validate this mode.
 
-Windows source builds require Odin, Julia, `gendef`, and the Visual Studio C++
-Build Tools. Windows supports only the default `HarfBuzz_jll` provider.
+Windows source builds require Odin, Julia, `gendef`, and the Visual Studio C++ Build
+Tools. The x64 SDL3, SDL_image, and libpng runtime payload and MSVC import libraries
+are checked in under `libs/bin/win64/sdl`; `manifest.toml` records their versions,
+licenses, and hashes. Building shadercross from source also requires the complete
+official SDL3 VC development package. It defaults to
+`C:\libs\SDL3-3.4.16-vc`; set `EUCLID_SDL3_DEV_ROOT` to another complete package
+root when needed. Windows supports only the default `HarfBuzz_jll` provider.
 
 Clone the repository, configure one preset, then build it. CMake verifies the
 toolchain and bootstraps the required Julia environments before invoking the

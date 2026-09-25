@@ -736,6 +736,14 @@ function graphics_runtime_component()
                 "name" => "euclid:install-name",
                 "value" =>
                     "/System/Library/Frameworks/Metal.framework/Versions/A/Metal")])
+    elseif Sys.iswindows()
+        library = joinpath(get(ENV, "SystemRoot", raw"C:\Windows"),
+            "System32", "d3d12.dll")
+        isfile(library) || error("Could not resolve the Direct3D 12 runtime.")
+        return Dict{String,Any}(
+            "type" => "library", "bom-ref" => "native:direct3d12",
+            "name" => "d3d12.dll", "version" => "system",
+            "scope" => "required", "hashes" => [component_hash(library)])
     end
     error("SDL_GPU runtime metadata is unsupported on $(Sys.KERNEL).")
 end
@@ -743,15 +751,35 @@ end
 """Describe provisional native migration inputs in CycloneDX form."""
 function migration_runtime_components()
     provider = sdl3_provider_identity()
-    return Dict{String,Any}[
+    components = Dict{String,Any}[
         Dict("type" => "library", "bom-ref" => "native:sdl3",
             "name" => "SDL3", "version" => provider.version,
             "scope" => "required", "hashes" => [component_hash(
                 provider.library_path)],
             "properties" => [Dict("name" => "euclid:provider",
-                "value" => "provisional-system")]),
+                "value" => provider.kind == :repository ?
+                    "repository" : "provisional-system")]),
         graphics_runtime_component(),
     ]
+    if Sys.iswindows()
+        image = EuclidBuildConfiguration.sdl3_image_provider_identity()
+        push!(components, Dict(
+            "type" => "library", "bom-ref" => "native:sdl3-image",
+            "name" => "SDL3_image", "version" => image.version,
+            "scope" => "required", "hashes" => [component_hash(
+                image.library_path)],
+            "properties" => [Dict(
+                "name" => "euclid:provider", "value" => "repository")]))
+        png = joinpath(dirname(image.library_path), "libpng16-16.dll")
+        isfile(png) || error("Missing repository libpng runtime at $png")
+        push!(components, Dict(
+            "type" => "library", "bom-ref" => "native:libpng",
+            "name" => "libpng16-16.dll", "version" => "unavailable",
+            "scope" => "required", "hashes" => [component_hash(png)],
+            "properties" => [Dict(
+                "name" => "euclid:provider", "value" => "repository")]))
+    end
+    return components
 end
 
 """Describe shader compilers as build-only CycloneDX components."""

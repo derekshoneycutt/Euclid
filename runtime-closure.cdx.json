@@ -87,7 +87,7 @@
       "bom-ref": "runtime:sdl3",
       "name": "SDL3",
       "version": "3.4.x",
-      "description": "Window, input, platform-service, and SDL_GPU runtime used by the Odin host application.",
+      "description": "Window, input, platform-service, and SDL_GPU runtime used by the Odin host application. Windows x64 uses the repository payload declared by libs/bin/win64/sdl/manifest.toml.",
       "scope": "required"
     },
     {
@@ -96,6 +96,22 @@
       "name": "SDL_image",
       "version": ">=3.4.0",
       "description": "Static and animated image codec plus streaming GIF encoder runtime.",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "runtime:libpng",
+      "name": "libpng",
+      "version": "libpng16-16 ABI",
+      "description": "PNG codec dependency included in the repository Windows x64 SDL_image payload.",
+      "scope": "required"
+    },
+    {
+      "type": "framework",
+      "bom-ref": "runtime:direct3d12",
+      "name": "Direct3D 12",
+      "version": "system",
+      "description": "Windows SDL_GPU backend used with packaged DXIL shaders.",
       "scope": "required"
     }
   ],
@@ -109,6 +125,8 @@
         "runtime:libjulia",
         "runtime:sdl3",
         "runtime:sdl3-image",
+        "runtime:libpng",
+        "runtime:direct3d12",
         "pkg:julia/Colors",
         "pkg:julia/LinearAlgebra"
       ]
@@ -133,6 +151,14 @@
     {
       "name": "euclid.runtime.manifest.ownership",
       "value": "repository"
+    },
+    {
+      "name": "euclid.runtime.windows.shader-format",
+      "value": "DXIL"
+    },
+    {
+      "name": "euclid.runtime.windows.sdl-manifest",
+      "value": "libs/bin/win64/sdl/manifest.toml"
     }
   ]
 }

@@ -234,9 +234,20 @@ and require both `result: "passed"` and `trace_complete: true`.
 
 Native codec qualification is separate from headed scenarios. Run
 `julia tools/make.jl probe-sdl3-image` to strict-build the headless probe and write
-`.build/sdl3-image-probe/result.json`. A passing result requires system SDL_image 3.4,
+`.build/sdl3-image-probe/result.json`. A passing result requires SDL_image 3.4,
 memory-backed JPEG/PNG/GIF decode, two-frame streaming GIF encode and decode with exact
-40/80 ms delays, complete cleanup, the loaded library path, and SONAME evidence.
+40/80 ms delays, and complete cleanup. Linux and macOS record the loaded library path
+and SONAME or install name; Windows verifies the checked-in provider and PE imports with
+MSVC `dumpbin`.
+
+GPU qualification is also separate from `check`. Run
+`julia tools/make.jl probe-sdl3` to write `.build/sdl3-probe/result.json` and
+`diagnostics.log`. A passing result requires shader compilation, native device and
+swapchain creation, frame presentation, resize observation, and complete cleanup.
+Windows builds the vendored shadercross and SPIR-V tools with MSVC, converts the probe
+shaders to DXIL, selects SDL's `direct3d12` driver, and verifies the executable's
+`SDL3.dll` PE import. Set `EUCLID_SDL3_DEV_ROOT` when the complete official SDL3 VC
+development package is not at the manifest-derived default under `C:\libs`.
 
 Animated Terminal GIF decode uses SDL_image as its sole production pixel source. Odin
 tests verify exact baseline and transparency/disposal canvases, parser-owned encoded and

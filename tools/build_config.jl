@@ -1,13 +1,18 @@
 module EuclidBuildConfiguration
 
+using SHA
+using TOML
+
 export native_linker_flags, native_runtime_dirs, native_runtime_environment,
     native_test_linker_flags, resolve_msvc_tool_path, sdl3_library_path,
     sdl3_linker_flags, sdl3_provider_identity, sdl3_image_library_path,
-    sdl3_image_linker_flags, sdl3_image_provider_identity
+    sdl3_image_linker_flags, sdl3_image_provider_identity,
+    windows_sdl_manifest
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const IMPORT_LIB_DIR = joinpath(REPOSITORY_ROOT, "bin", ".native_import_libs")
+const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "bin", "win64", "sdl")
 const HARFBUZZ_PROVIDER_ENV = "EUCLID_HARFBUZZ_PROVIDER"
 
 struct SDL3ProviderIdentity
@@ -24,11 +29,76 @@ end
 
 const SDL3_IMAGE_MINIMUM_VERSION = v"3.4.0"
 
+"""Join one provider directory and filename using target-platform separators."""
+function sdl_library_candidate(
+    directory::AbstractString, filename::AbstractString, kernel::Symbol)
+    kernel == :NT && return joinpath(normpath(directory), filename)
+    normalized = replace(normpath(directory), '\\' => '/')
+    return string(rstrip(normalized, '/'), '/', filename)
+end
+
+"""Return one named library record from a parsed SDL payload manifest."""
+function windows_sdl_library(manifest::AbstractDict, name::String)
+    libraries = get(manifest, "library", Any[])
+    index = findfirst(library -> get(library, "name", "") == name, libraries)
+    index === nothing && error("Windows SDL manifest is missing $name.")
+    return libraries[index]
+end
+
+"""Validate and return the repository-owned Windows SDL payload manifest."""
+function windows_sdl_manifest(
+    root::AbstractString=WINDOWS_SDL_DIR;
+    architecture::Symbol=Sys.ARCH,
+    parse_file::Function=TOML.parsefile,
+    hash_file::Function=path -> bytes2hex(open(sha256, path)))
+    manifest_path = joinpath(normpath(root), "manifest.toml")
+    isfile(manifest_path) || error(
+        "Missing Windows SDL manifest at $manifest_path")
+    manifest = parse_file(manifest_path)
+    get(manifest, "schema_version", 0) == 1 || error(
+        "Unsupported Windows SDL manifest schema.")
+    get(manifest, "platform", "") == "windows" || error(
+        "Windows SDL manifest has the wrong platform.")
+    expected_architecture = architecture == :x86_64 ? "x86_64" : string(architecture)
+    get(manifest, "architecture", "") == expected_architecture || error(
+        "Windows SDL manifest does not support $expected_architecture.")
+    get(manifest, "toolchain", "") == "msvc" || error(
+        "Windows SDL manifest must use the MSVC toolchain.")
+
+    library_names = Set(String(get(library, "name", ""))
+        for library in get(manifest, "library", Any[]))
+    for library in get(manifest, "library", Any[])
+        name = String(get(library, "name", ""))
+        isempty(name) && error("Windows SDL manifest contains an unnamed library.")
+        all(dependency -> dependency in library_names,
+            String.(get(library, "dependencies", String[]))) || error(
+            "Windows SDL manifest has an unknown dependency for $name.")
+        license_path = joinpath(root, String(get(library, "license_file", "")))
+        isfile(license_path) || error("Missing Windows SDL license for $name.")
+        hash_file(license_path) == get(library, "license_sha256", "") || error(
+            "Windows SDL license hash mismatch for $name.")
+        for artifact in get(library, "artifact", Any[])
+            filename = String(get(artifact, "file", ""))
+            path = joinpath(root, filename)
+            isfile(path) || error("Missing Windows SDL artifact: $filename")
+            hash_file(path) == get(artifact, "sha256", "") || error(
+                "Windows SDL artifact hash mismatch: $filename")
+        end
+    end
+    windows_sdl_library(manifest, "SDL3")
+    image = windows_sdl_library(manifest, "SDL3_image")
+    image_version = tryparse(VersionNumber, String(get(image, "version", "")))
+    image_version !== nothing && image_version >= SDL3_IMAGE_MINIMUM_VERSION || error(
+        "Repository SDL_image version is older than $(SDL3_IMAGE_MINIMUM_VERSION).")
+    return manifest
+end
+
 """Return the platform runtime filename for one SDL library."""
 function sdl_runtime_filename(
     stem::AbstractString, kernel::Symbol=Sys.KERNEL)
     kernel == :Linux && return "lib$(stem).so.0"
     kernel == :Darwin && return "lib$(stem).0.dylib"
+    kernel == :NT && return "$(stem).dll"
     error("System $stem is unsupported on $kernel during the migration.")
 end
 
@@ -41,8 +111,8 @@ function sdl3_library_path(
     directory = strip(library_directory)
     isempty(directory) && error(
         "System SDL3 pkg-config library directory is empty.")
-    candidate = joinpath(
-        normpath(directory), sdl_runtime_filename("SDL3", kernel))
+    candidate = sdl_library_candidate(
+        directory, sdl_runtime_filename("SDL3", kernel), kernel)
     is_file(candidate) || error("Missing system SDL3 runtime at $candidate")
     return real_path(candidate)
 end
@@ -52,7 +122,16 @@ function sdl3_provider_identity(
     kernel::Symbol=Sys.KERNEL;
     capture::Function=capture_command,
     is_file::Function=isfile,
-    real_path::Function=realpath)
+    real_path::Function=realpath,
+    root::AbstractString=WINDOWS_SDL_DIR,
+    architecture::Symbol=Sys.ARCH)
+    if kernel == :NT
+        manifest = windows_sdl_manifest(root; architecture)
+        library = windows_sdl_library(manifest, "SDL3")
+        return SDL3ProviderIdentity(
+            :repository, String(library["version"]),
+            real_path(joinpath(root, "SDL3.dll")))
+    end
     sdl_runtime_filename("SDL3", kernel)
     version_result = capture(Cmd(["pkg-config", "--modversion", "sdl3"]))
     version_result.exit_code == 0 || error(
@@ -71,7 +150,14 @@ end
 
 """Resolve provisional SDL3 linker flags through pkg-config metadata."""
 function sdl3_linker_flags(
-    kernel::Symbol=Sys.KERNEL; capture::Function=capture_command)
+    kernel::Symbol=Sys.KERNEL;
+    capture::Function=capture_command,
+    root::AbstractString=WINDOWS_SDL_DIR,
+    architecture::Symbol=Sys.ARCH)
+    if kernel == :NT
+        windows_sdl_manifest(root; architecture)
+        return "/LIBPATH:$(normpath(root)) /DEFAULTLIB:SDL3.lib"
+    end
     sdl_runtime_filename("SDL3", kernel)
     result = capture(Cmd(["pkg-config", "--libs", "sdl3"]))
     result.exit_code == 0 || error(
@@ -90,8 +176,8 @@ function sdl3_image_library_path(
     directory = strip(library_directory)
     isempty(directory) && error(
         "System SDL_image pkg-config library directory is empty.")
-    candidate = joinpath(
-        normpath(directory), sdl_runtime_filename("SDL3_image", kernel))
+    candidate = sdl_library_candidate(
+        directory, sdl_runtime_filename("SDL3_image", kernel), kernel)
     is_file(candidate) || error("Missing system SDL_image runtime at $candidate")
     return real_path(candidate)
 end
@@ -101,7 +187,16 @@ function sdl3_image_provider_identity(
     kernel::Symbol=Sys.KERNEL;
     capture::Function=capture_command,
     is_file::Function=isfile,
-    real_path::Function=realpath)
+    real_path::Function=realpath,
+    root::AbstractString=WINDOWS_SDL_DIR,
+    architecture::Symbol=Sys.ARCH)
+    if kernel == :NT
+        manifest = windows_sdl_manifest(root; architecture)
+        library = windows_sdl_library(manifest, "SDL3_image")
+        return SDL3ImageProviderIdentity(
+            :repository, String(library["version"]),
+            real_path(joinpath(root, "SDL3_image.dll")))
+    end
     sdl_runtime_filename("SDL3_image", kernel)
     version_result = capture(Cmd([
         "pkg-config", "--modversion", "sdl3-image",
@@ -128,7 +223,14 @@ end
 
 """Resolve mandatory SDL_image linker flags through pkg-config metadata."""
 function sdl3_image_linker_flags(
-    kernel::Symbol=Sys.KERNEL; capture::Function=capture_command)
+    kernel::Symbol=Sys.KERNEL;
+    capture::Function=capture_command,
+    root::AbstractString=WINDOWS_SDL_DIR,
+    architecture::Symbol=Sys.ARCH)
+    if kernel == :NT
+        windows_sdl_manifest(root; architecture)
+        return "/LIBPATH:$(normpath(root)) /DEFAULTLIB:SDL3_image.lib"
+    end
     sdl_runtime_filename("SDL3_image", kernel)
     result = capture(Cmd(["pkg-config", "--libs", "sdl3-image"]))
     result.exit_code == 0 || error(
@@ -390,6 +492,10 @@ end
 """Resolve complete mandatory native linker flags for the active provider."""
 function native_linker_flags(provider::Symbol=harfbuzz_provider())
     provider = validate_harfbuzz_provider(provider)
+    if Sys.iswindows()
+        return "$(windows_linker_flags()) $(sdl3_linker_flags()) " *
+            sdl3_image_linker_flags()
+    end
     (Sys.islinux() || Sys.isapple()) || error(
         "SDL3 application linkage is unsupported on $(Sys.KERNEL).")
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :

@@ -55,8 +55,10 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             is_file=path -> path == "/opt/sdl/lib/libSDL3.0.dylib",
             real_path=identity)
         @test darwin_provider.library_path == "/opt/sdl/lib/libSDL3.0.dylib"
-        @test_throws ErrorException BuildConfiguration.sdl3_provider_identity(
-            :NT; capture)
+        windows_provider = BuildConfiguration.sdl3_provider_identity(:NT)
+        @test windows_provider.kind == :repository
+        @test windows_provider.version == "3.4.16"
+        @test basename(windows_provider.library_path) == "SDL3.dll"
 
         flags_capture = _ ->
             (exit_code=0, output=" -L/opt/sdl/lib  -lSDL3 \n", error_output="")
@@ -64,6 +66,8 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             :Linux; capture=flags_capture) == "-L/opt/sdl/lib -lSDL3"
         @test BuildConfiguration.sdl3_linker_flags(
             :Darwin; capture=flags_capture) == "-L/opt/sdl/lib -lSDL3"
+        @test endswith(BuildConfiguration.sdl3_linker_flags(:NT),
+            "/DEFAULTLIB:SDL3.lib")
     end
 
     @testset "mandatory SDL_image provider" begin
@@ -103,8 +107,10 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             real_path=identity)
         @test darwin_provider.library_path ==
             "/opt/sdl-image/lib/libSDL3_image.0.dylib"
-        @test_throws ErrorException BuildConfiguration.sdl3_image_provider_identity(
-            :NT; capture)
+        windows_provider = BuildConfiguration.sdl3_image_provider_identity(:NT)
+        @test windows_provider.kind == :repository
+        @test windows_provider.version == "3.4.6"
+        @test basename(windows_provider.library_path) == "SDL3_image.dll"
 
         for invalid_version in ("", "invalid", "3.3.9")
             invalid_responses = copy(responses)
@@ -124,6 +130,8 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             :Linux; capture=flags_capture) == "-lSDL3_image -lSDL3"
         @test BuildConfiguration.sdl3_image_linker_flags(
             :Darwin; capture=flags_capture) == "-lSDL3_image -lSDL3"
+        @test endswith(BuildConfiguration.sdl3_image_linker_flags(:NT),
+            "/DEFAULTLIB:SDL3_image.lib")
         @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
             :Linux; capture=_ ->
                 (exit_code=1, output="", error_output="missing"))
@@ -135,6 +143,14 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             ["/julia/lib", "/opt/sdl/lib"],
             ["/opt/sdl/lib/libSDL3.so.0", "/opt/sdl/lib/libSDL3_image.so.0"]) ==
             ["/julia/lib", "/opt/sdl/lib"]
+
+        manifest = BuildConfiguration.windows_sdl_manifest()
+        @test manifest["platform"] == "windows"
+        @test manifest["architecture"] == "x86_64"
+        @test_throws ErrorException BuildConfiguration.windows_sdl_manifest(
+            ; architecture=:aarch64)
+        @test_throws ErrorException BuildConfiguration.windows_sdl_manifest(
+            ; hash_file=_ -> "invalid")
     end
 
     @testset "native linker platform selection" begin
@@ -286,13 +302,14 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
                 raw"C:\Artifacts\harfbuzz\bin"]
             withenv("PATH" => raw"C:\Existing Tools\bin") do
                 write_debug_environment(runtime_dirs; path=environment_path)
+                environment =
+                    BuildConfiguration.native_runtime_environment(runtime_dirs)
+                value = Sys.iswindows() ?
+                    replace(environment.second, '\\' => '/') : environment.second
+                escaped = replace(value, '\\' => "\\\\", '"' => "\\\"")
+                expected = "$(environment.first)=\"$escaped\"\n"
+                @test read(environment_path, String) == expected
             end
-            environment = BuildConfiguration.native_runtime_environment(runtime_dirs)
-            value = Sys.iswindows() ? replace(environment.second, '\\' => '/') :
-                environment.second
-            escaped = replace(value, '\\' => "\\\\", '"' => "\\\"")
-            expected = "$(environment.first)=\"$escaped\"\n"
-            @test read(environment_path, String) == expected
         end
 
         debug_arguments = debug_application_arguments(["--no-vsync"], true)
@@ -372,7 +389,9 @@ reflection_sha256 = "reflection"
                 String[], JuliaPackageDep[], binary, assets, manifest)
             components = Dict(component["bom-ref"] => component
                 for component in bom["components"])
-            @test haskey(components["file:bin/euclid"], "hashes")
+            binary_ref = Sys.iswindows() ?
+                "file:bin/euclid.exe" : "file:bin/euclid"
+            @test haskey(components[binary_ref], "hashes")
             @test haskey(components["file:bin/assets.pkg"], "hashes")
             @test components["build-tool:shadercross"]["scope"] == "excluded"
             @test components["shader:stroke3d.vert:MSL"]["scope"] ==
@@ -380,8 +399,12 @@ reflection_sha256 = "reflection"
             dependencies = only(bom["dependencies"])["dependsOn"]
             @test "native:sdl3" in dependencies
             graphics_runtime = Sys.isapple() ? "native:metal-framework" :
-                "native:vulkan-loader"
+                Sys.iswindows() ? "native:direct3d12" : "native:vulkan-loader"
             @test graphics_runtime in dependencies
+            if Sys.iswindows()
+                @test "native:sdl3-image" in dependencies
+                @test "native:libpng" in dependencies
+            end
             @test "shader:stroke3d.vert:MSL" in dependencies
             @test !("build-tool:shadercross" in dependencies)
         end

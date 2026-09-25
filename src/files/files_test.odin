@@ -90,8 +90,10 @@ gif_output_transaction_abort_removes_partial_file :: proc(t: ^testing.T) {
     transaction, reserved := reserve_gif_output_transaction_in_directory(
         sandbox, "capture.gif", context.allocator)
     testing.expect(t, reserved)
-    temporary_path := fmt.aprintf("%s", transaction.temporary_path, context.allocator)
-    final_path := fmt.aprintf("%s", transaction.final_path, context.allocator)
+    temporary_path := fmt.aprintf(
+        "%s", transaction.temporary_path, allocator=context.allocator)
+    final_path := fmt.aprintf(
+        "%s", transaction.final_path, allocator=context.allocator)
     defer delete(temporary_path)
     defer delete(final_path)
 

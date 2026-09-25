@@ -15,6 +15,11 @@ when ODIN_OS == .Linux {
     SDL_GPU_SHADER_FORMAT :: sdl.GPUShaderFormat{.MSL}
     SDL_GPU_SHADER_ENTRYPOINT :: "main0"
     SDL_GPU_SHADER_SUFFIX :: ".msl"
+} else when ODIN_OS == .Windows {
+    SDL_GPU_DRIVER :: "direct3d12"
+    SDL_GPU_SHADER_FORMAT :: sdl.GPUShaderFormat{.DXIL}
+    SDL_GPU_SHADER_ENTRYPOINT :: "main"
+    SDL_GPU_SHADER_SUFFIX :: ".dxil"
 } else {
     #assert(false, "SDL GPU backend is unsupported on this platform")
 }
