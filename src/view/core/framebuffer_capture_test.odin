@@ -12,21 +12,51 @@ Framebuffer_Capture_Test_State :: struct {
     height: int,
     pitch_bytes: int,
     allocator: mem.Allocator,
+    allocation_count: int,
+    fail_allocation_at: int,
+    capture_active: bool,
     unload_count: int,
+    reset_count: int,
     export_count: int,
     export_succeeds: bool,
 }
 
-// Copy the configured framebuffer pixels into storage owned by the caller.
-framebuffer_test_load :: proc(
-    user_data: rawptr, allocator: mem.Allocator) -> Framebuffer_Pixels {
+// Admit one non-overlapping test capture transaction.
+framebuffer_test_begin :: proc(user_data: rawptr) -> bool {
     state := cast(^Framebuffer_Capture_Test_State)user_data
-    pixels, allocation_error := make([]u8, len(state^.source), allocator)
+    if state.capture_active {return false}
+    state.capture_active = true
+    return true
+}
+
+// Allocate framebuffer pixels through the test operation owner.
+framebuffer_test_allocate :: proc(
+    user_data: rawptr, byte_count: int) -> ([]u8, mem.Allocator_Error) {
+    state := cast(^Framebuffer_Capture_Test_State)user_data
+    if !state.capture_active {return nil, .Invalid_Argument}
+    state.allocation_count += 1
+    if state.fail_allocation_at == state.allocation_count {
+        return nil, .Out_Of_Memory
+    }
+    return make([]u8, byte_count, state.allocator)
+}
+
+// Copy the configured framebuffer pixels into owner-controlled test storage.
+framebuffer_test_load :: proc(user_data: rawptr) -> Framebuffer_Pixels {
+    state := cast(^Framebuffer_Capture_Test_State)user_data
+    pixels, allocation_error := framebuffer_test_allocate(
+        user_data, len(state^.source))
     if allocation_error != nil {return {}}
-    state^.allocator = allocator
     copy(pixels, state^.source)
     return {pixels = pixels, width = state^.width, height = state^.height,
         pitch_bytes = state^.pitch_bytes}
+}
+
+// Complete one test capture domain; individual allocations are already released.
+framebuffer_test_reset :: proc(user_data: rawptr) {
+    state := cast(^Framebuffer_Capture_Test_State)user_data
+    state.capture_active = false
+    state.reset_count += 1
 }
 
 // Release one test framebuffer allocation and record the operation.
@@ -50,9 +80,11 @@ framebuffer_test_operations :: proc(
     state: ^Framebuffer_Capture_Test_State) -> Framebuffer_Capture_Operations {
     return {
         user_data = rawptr(state),
-        allocator = context.allocator,
+        begin = framebuffer_test_begin,
+        allocate = framebuffer_test_allocate,
         load = framebuffer_test_load,
         unload = framebuffer_test_unload,
+        reset = framebuffer_test_reset,
         export = framebuffer_test_export,
     }
 }
@@ -63,6 +95,7 @@ framebuffer_test_source :: proc(
     return {
         source = pixels, width = width, height = height,
         pitch_bytes = width * FRAMEBUFFER_PIXEL_BYTES,
+        allocator = context.allocator,
     }
 }
 
@@ -83,8 +116,28 @@ framebuffer_capture_admits_rgba8_and_releases_once :: proc(t: ^testing.T) {
     framebuffer_release_with_operations(&capture, operations)
     framebuffer_release_with_operations(&capture, operations)
     testing.expect_value(t, state.unload_count, 1)
+    testing.expect_value(t, state.reset_count, 1)
     testing.expect_value(t, len(capture.pixels), 0)
     testing.expect_value(t, capture.width, 0)
+}
+
+// Verify overlapping acquisition cannot reset or invalidate a live capture domain.
+@(test)
+framebuffer_capture_rejects_overlapping_acquisition :: proc(t: ^testing.T) {
+    source: [FRAMEBUFFER_PIXEL_BYTES]u8
+    state := framebuffer_test_source(source[:], 1, 1)
+    operations := framebuffer_test_operations(&state)
+    first, first_ok := framebuffer_acquire_with_operations(operations)
+
+    second, second_ok := framebuffer_acquire_with_operations(operations)
+    testing.expect(t, first_ok)
+    testing.expect(t, !second_ok)
+    testing.expect_value(t, len(first.pixels), FRAMEBUFFER_PIXEL_BYTES)
+    testing.expect_value(t, len(second.pixels), 0)
+    testing.expect_value(t, state.reset_count, 0)
+
+    framebuffer_release_with_operations(&first, operations)
+    testing.expect_value(t, state.reset_count, 1)
 }
 
 // Verify invalid image metadata is rejected and owned data is released.
@@ -194,11 +247,8 @@ gif_capture_normalization_releases_failed_crop :: proc(t: ^testing.T) {
     state.gif_capture.output_width = 1
     state.gif_capture.output_height = 1
 
-    storage: [16]u8
-    failure_arena: mem.Arena
-    mem.arena_init(&failure_arena, storage[:])
     operations := framebuffer_test_operations(&operation_state)
-    operations.allocator = mem.arena_allocator(&failure_arena)
+    operation_state.fail_allocation_at = 2
 
     frame, ok := gif_capture_normalized_frame_with_operations(
         state, 1, operations)

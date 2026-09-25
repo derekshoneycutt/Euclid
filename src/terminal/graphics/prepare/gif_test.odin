@@ -5,7 +5,6 @@ import "../../../taskpool"
 import termattachment "../../attachment"
 import termgraphicsnative "../native"
 
-import "core:c"
 import "core:sync"
 import "core:testing"
 

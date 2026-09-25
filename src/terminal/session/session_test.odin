@@ -429,3 +429,37 @@ termsession_test_cleanup_registry_reuses_completed_slot :: proc(t: ^testing.T) {
     testing.expect_value(t, second.status, Process_Cleanup_Status.Pending)
     testing.expect_value(t, registry.entry_count, 1)
 }
+
+// Verify registry polling completes transferred ownership and destroy releases it.
+@(test)
+termsession_test_cleanup_registry_polls_and_releases :: proc(t: ^testing.T) {
+    log_state: Terminal_Session_Test_Log_State
+    prior_logger := context.logger
+    context.logger = log.Logger{
+        procedure = terminal_session_test_log_proc,
+        data = &log_state,
+        lowest_level = .Debug,
+    }
+    defer context.logger = prior_logger
+    backend := Fake_Terminal_Backend{
+        terminate_fails = true,
+        force_terminate_fails = true,
+    }
+    manager := termsession_test_close_manager(t, &backend)
+    registry: Process_Cleanup_Registry
+    coordinator: Terminal_Process_Close_Coordinator
+    testing.expect(t, terminal_process_close_begin(
+        &coordinator, &manager, &registry,
+        {generation = 4, now_ns = 100, graceful_ns = 10, final_ns = 20}))
+
+    process_cleanup_registry_update(&registry)
+    testing.expect_value(t, backend.cleanup_poll_count, 1)
+    testing.expect_value(t, registry.entries[0].status, Process_Cleanup_Status.Pending)
+    backend.cleanup_ready = true
+    process_cleanup_registry_update(&registry)
+    testing.expect_value(t, registry.entries[0].status, Process_Cleanup_Status.Complete)
+
+    process_cleanup_registry_destroy(&registry)
+    testing.expect_value(t, backend.cleanup_release_count, 1)
+    testing.expect_value(t, registry.entry_count, 0)
+}

@@ -1,10 +1,3 @@
-"""Copied UTF-8 label source, MIME kind, and bridge status."""
-struct ShapeLabelSource
-    source::Union{Nothing, String}
-    mime::Int32
-    status::Int32
-end
-
 """Convert any supported color input to its bridge representation."""
 _shape_color(color::BridgeColor) = color
 _shape_color(color) = bridge_color(color)
@@ -485,20 +478,6 @@ function get_point(state_ptr::Ptr{Cvoid}, entity::Integer)
         UInt64(entity)::UInt64)::BridgePointView
 end
 
-"""Copy one packed label entity's immutable UTF-8 source and MIME."""
-function shape_label_source(state_ptr::Ptr{Cvoid}, entity::Integer)
-    bytes = Vector{UInt8}(undef, 256)
-    result = GC.@preserve bytes begin
-        @ccall shape_copy_label_source(state_ptr::Ptr{Cvoid},
-            UInt64(entity)::UInt64, pointer(bytes)::Ptr{UInt8},
-            length(bytes)::Int32)::BridgeLabelCopyResult
-    end
-    result.status == BRIDGE_STATUS_OK ||
-        return ShapeLabelSource(nothing, result.mime, result.status)
-    return ShapeLabelSource(
-        String(bytes[1:result.byte_count]), result.mime, result.status)
-end
-
 """Set one packed entity visible."""
 function show_point(state_ptr::Ptr{Cvoid}, entity::Integer)
     @ccall shape_set_visible(state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
@@ -572,10 +551,4 @@ function set_arc_geometry(state_ptr::Ptr{Cvoid}, entity::Integer,
         Cfloat(radius), Cfloat(start_theta), Cfloat(sweep_theta))
     @ccall shape_set_arc(state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
         arc::BridgeArcGeometry)::Int32
-end
-
-"""Select one packed entity's active geometry feature."""
-function set_point_active_child(state_ptr::Ptr{Cvoid}, entity::Integer, active::Integer)
-    @ccall shape_set_active_feature(state_ptr::Ptr{Cvoid}, UInt64(entity)::UInt64,
-        UInt16(active)::UInt16)::Int32
 end

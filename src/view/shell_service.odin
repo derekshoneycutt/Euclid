@@ -12,6 +12,7 @@ import terminalview "terminal"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
+import "core:time"
 
 // Resolve packaged terminfo, falling back to the source tree for development tests.
 shell_service_resolve_terminfo_directory :: proc(directory: string) -> string {
@@ -54,11 +55,15 @@ shell_service_runtime_init :: proc(state: ^core.Euclid_General_State) -> bool {
 // Rebind foreground operation identity to one Terminal animation generation.
 shell_service_begin_generation :: proc(
     state: ^core.Euclid_General_State, generation: u64) -> bool {
-    if state == nil || generation == 0 {
+    if state == nil || generation == 0 || state^.shell.phase != .Inactive {
         return false
     }
-    termsession.terminal_session_destroy(&state^.shell.session)
-    state^.shell.phase = .Inactive
+    close_phase := state^.shell.close.phase
+    if close_phase != .None && close_phase != .Complete &&
+       close_phase != .Transferred {
+        return false
+    }
+    state^.shell.close = {}
     return termsession.terminal_session_init(&state^.shell.session,
         {id = viewterminalmodel.SHELL_SESSION_OWNER_ID, generation = generation},
         termsession.native_terminal_backend_make(&state^.shell.backend))
@@ -86,9 +91,76 @@ shell_service_runtime_destroy :: proc(state: ^core.Euclid_General_State) {
     if state == nil {
         return
     }
-    termsession.terminal_session_destroy(&state^.shell.session)
+    shell_service_close_until_settled(state)
+    termsession.process_cleanup_registry_destroy(&state^.shell.cleanup)
     termsession.native_terminal_backend_destroy(&state^.shell.backend)
     state^.shell = {}
+}
+
+// Apply bounded shell output and completion from ordinary or closing service work.
+shell_service_apply_update :: proc(
+    state: ^core.Euclid_General_State, update: ^termsession.Terminal_Session_Update,
+    runtime: ^input.Input_Runtime = nil) {
+    if state == nil || update == nil {
+        return
+    }
+    if update.output_count > 0 && state^.terminal.initialized {
+        terminalview.terminal_append_ansi_output(
+            &state^.terminal, string(update.output[:update.output_count]), {
+                kind = .Terminal_Session,
+                id = u64(state^.shell.operation_id.slot),
+                generation = state^.shell.operation_id.generation,
+            })
+    }
+    if !update.completion_available {
+        return
+    }
+    if state^.terminal.initialized {
+        if update.completion.status != 0 {
+            terminalview.terminal_append_ansi_output(&state^.terminal, fmt.tprintf(
+                "\n[process exited with status %d]", update.completion.status))
+        }
+        terminalview.terminal_complete_eval(&state^.terminal)
+    }
+    state^.shell.phase = .Inactive
+    state^.shell.request_id = 0
+    state^.shell.operation_id = {}
+    if runtime != nil {
+        _ = input.input_runtime_set_owner(runtime, {})
+    }
+}
+
+// Advance transferred cleanup and one in-progress bounded close without blocking.
+shell_service_maintenance :: proc(state: ^core.Euclid_General_State) {
+    if state == nil {
+        return
+    }
+    termsession.process_cleanup_registry_update(&state^.shell.cleanup)
+    if state^.shell.phase != .Closing {
+        return
+    }
+    update := termsession.terminal_process_close_advance(
+        &state^.shell.close, &state^.shell.session, &state^.shell.cleanup,
+        u64(time.tick_since({})))
+    shell_service_apply_update(state, &update)
+    if viewterminalmodel.shell_runtime_close_finished(&state^.shell) {
+        state^.shell.phase = .Inactive
+    }
+}
+
+// Finish or transfer an active shell before releasing its application-lived owner.
+shell_service_close_until_settled :: proc(state: ^core.Euclid_General_State) {
+    if state == nil || !viewterminalmodel.shell_runtime_close_begin(
+        &state^.shell, u64(time.tick_since({}))) {
+        return
+    }
+    for !viewterminalmodel.shell_runtime_close_finished(&state^.shell) {
+        shell_service_maintenance(state)
+        if !viewterminalmodel.shell_runtime_close_finished(&state^.shell) {
+            time.sleep(time.Millisecond)
+        }
+    }
+    termsession.process_cleanup_registry_update(&state^.shell.cleanup)
 }
 
 // Append a shell failure and restore the editable prompt.
@@ -225,28 +297,10 @@ shell_service_update :: proc(
         return
     }
     update := termsession.terminal_session_update(&state^.shell.session)
-    if update.output_count > 0 {
-        terminalview.terminal_append_ansi_output(
-            &state^.terminal, string(update.output[:update.output_count]), {
-                kind = .Terminal_Session,
-                id = u64(state^.shell.operation_id.slot),
-                generation = state^.shell.operation_id.generation,
-            })
-    }
+    shell_service_apply_update(state, &update, runtime)
     if !update.completion_available {
         shell_service_resize(state, geometry_change)
         shell_service_input(state, runtime, frame)
         return
-    }
-    if update.completion.status != 0 {
-        terminalview.terminal_append_ansi_output(&state^.terminal, fmt.tprintf(
-            "\n[process exited with status %d]", update.completion.status))
-    }
-    terminalview.terminal_complete_eval(&state^.terminal)
-    state^.shell.phase = .Inactive
-    state^.shell.request_id = 0
-    state^.shell.operation_id = {}
-    if runtime != nil {
-        _ = input.input_runtime_set_owner(runtime, {})
     }
 }

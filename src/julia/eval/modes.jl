@@ -43,23 +43,6 @@ function classify_input(session::EvaluationSession, code::AbstractString)
     return ast, Evaluation_Complete
 end
 
-"""Evaluate normal Julia input in one persistent REPL session."""
-function evaluate_input(
-    session::EvaluationSession, code::AbstractString)::EvaluationResult
-    ast, status = classify_input(session, code)
-    status != Evaluation_Complete && return EvaluationResult(status, "")
-    return EvaluationResult(Evaluation_Complete, run_ast(session, _ -> ast, code))
-end
-
-"""Evaluate one help-mode query in the persistent REPL session."""
-function evaluate_help(
-    session::EvaluationSession, code::AbstractString)::EvaluationResult
-    output = run_ast(
-        session,
-        io -> REPL.helpmode(io, code, session.context_module), code)
-    return EvaluationResult(Evaluation_Complete, output)
-end
-
 """Run one Pkg REPL-mode command with output directed to the given stream."""
 function run_pkg_command(code::AbstractString, io::IO)
     previous_warning_state = Pkg.REPLMode.PRINTED_REPL_WARNING[]
@@ -71,23 +54,4 @@ function run_pkg_command(code::AbstractString, io::IO)
     finally
         Pkg.REPLMode.PRINTED_REPL_WARNING[] = previous_warning_state
     end
-end
-
-"""Evaluate one Pkg REPL-mode command and capture its output."""
-function evaluate_pkg(code::AbstractString)::EvaluationResult
-    output = mktemp() do _path, io
-        redirect_stdout(io) do
-            redirect_stderr(io) do
-                try
-                    run_pkg_command(code, io)
-                catch error
-                    showerror(io, error, catch_backtrace())
-                end
-            end
-        end
-        flush(io)
-        seekstart(io)
-        return read(io, String)
-    end
-    return EvaluationResult(Evaluation_Complete, output)
 end

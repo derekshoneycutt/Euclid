@@ -462,33 +462,6 @@ shape_get_cycloid :: proc "c" (
     return {BRIDGE_STATUS_OK, packed, line.first, line.second, geometry}
 }
 
-// Copy one label's immutable source bytes from the active query projection.
-@(export)
-shape_copy_label_source :: proc "c" (
-    state: ^core.Euclid_General_State,
-    packed: u64,
-    destination: ^u8,
-    capacity: i32) -> Bridge_Label_Copy_Result {
-    context = state.saved_context
-    if destination == nil || capacity < 0 {
-        return {status = BRIDGE_STATUS_INVALID_ARGUMENT}
-    }
-    source, available := bridge_shape_query_source(state)
-    entity := shapemodel.shape_entity_unpack(packed)
-    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
-        return {status = BRIDGE_STATUS_NOT_FOUND}
-    }
-    label, found := shapemodel.shape_component_get(source.labels, source.registry, entity)
-    if !found {return {status = BRIDGE_STATUS_NOT_FOUND}}
-    text, valid := shapemodel.shape_label_source(source.label_store, label^)
-    if !valid || len(text) > int(capacity) {
-        return {status = BRIDGE_STATUS_OUT_OF_CAPACITY}
-    }
-    destination_bytes := cast([^]u8)destination
-    copy(destination_bytes[:len(text)], transmute([]u8)text)
-    return {BRIDGE_STATUS_OK, i32(len(text)), i32(label.mime)}
-}
-
 // Set one live transform position by packed entity identity.
 @(export)
 shape_set_position :: proc "c" (
@@ -769,7 +742,6 @@ shape_set_brush_size :: proc "c" (
 }
 
 // Set one live optional active feature by packed entity identity.
-@(export)
 shape_set_active_feature :: proc "c" (
     state: ^core.Euclid_General_State,
     packed: u64,

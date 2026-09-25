@@ -2,6 +2,7 @@
 package viewgraphics
 
 import "../../taskpool"
+import "../../evidence/observe"
 import "../../evidence/trace"
 import termattachment "../../terminal/attachment"
 import termgraphicsprepare "../../terminal/graphics/prepare"
@@ -87,6 +88,37 @@ service_test_limits :: proc() -> termattachment.Limits {
         animation_max_frame_duration_ns = 100_000_000,
         animation_duration_ns_limit = 1_000_000_000,
     }
+}
+
+// Verify graphics service telemetry projects into pointer-free display evidence.
+@(test)
+service_test_observe_copies_lifecycle_counters :: proc(t: ^testing.T) {
+    parser := gfxprotocol.Graphics_Parser_State{
+        gif_preflight_acceptance_count = 3,
+    }
+    store := termattachment.Store{
+        cpu_byte_count = 1024,
+        gpu_byte_count = 2048,
+    }
+    store.diagnostics.transfer_admission_count = 5
+    service := Service{
+        parser = &parser,
+        store = &store,
+        decode_count = 7,
+        draw_count = 11,
+        visibility_resume_count = 13,
+    }
+    observed: observe.Display
+
+    service_observe(&service, &observed)
+
+    testing.expect_value(t, observed.graphics_transfer_admission_count, u64(5))
+    testing.expect_value(t, observed.graphics_decode_count, u64(7))
+    testing.expect_value(t, observed.graphics_draw_count, u64(11))
+    testing.expect_value(t, observed.graphics_cpu_byte_count, 1024)
+    testing.expect_value(t, observed.graphics_gpu_byte_count, 2048)
+    testing.expect_value(t, observed.graphics_gif_preflight_acceptance_count, u64(3))
+    testing.expect_value(t, observed.graphics_visibility_resume_count, u64(13))
 }
 
 // Verify one stale completion released all transfer and attachment ownership.

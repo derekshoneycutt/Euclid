@@ -5,7 +5,6 @@ package terminalview
 import animation_model "../../core/animation"
 import geometry "../../core/geometry"
 import viewterminalmodel "model"
-import "../../core"
 import "../../core/protocol"
 import termattachment "../../terminal/attachment"
 import termclipboard "../../terminal/clipboard"

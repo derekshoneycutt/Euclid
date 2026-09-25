@@ -199,12 +199,6 @@ Bridge_Shape_View :: struct {
 }
 
 // Return metadata from copying one immutable label source.
-Bridge_Label_Copy_Result :: struct {
-    status: i32,
-    byte_count: i32,
-    mime: i32,
-}
-
 Bridge_Solve_Result :: struct {
     status: i32,
     iterations: i32,

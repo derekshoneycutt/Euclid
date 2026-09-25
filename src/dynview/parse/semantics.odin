@@ -390,13 +390,3 @@ tex_semantic_text :: proc(
     }
     return string(output.text[span.offset:span.offset + span.length])
 }
-
-//   Return the operation at one checked semantic index.
-tex_semantic_op :: proc(
-    output: ^Tex_Semantic_Output,
-    index: int) -> ^Tex_Math_Op {
-    if output == nil || index < 0 || index >= output.op_count {
-        return nil
-    }
-    return &output.ops[index]
-}

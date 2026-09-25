@@ -2023,32 +2023,6 @@ terminal_codepoint_end :: proc(text: string, offset: int) -> int {
     return offset + width
 }
 
-//   Measure a line prefix's true rendered pixel width.
-//
-// Notes:
-//   - MeasureTextEx omits spacing after a string's final character, but a
-//     continuous multi-segment render effectively includes it before the
-//     next segment. Adding it back here keeps split-segment positioning
-//     (colored runs, the bold "> " prompt, selection/cursor overlays) aligned
-//     with plain single-call lines.
-//
-// Parameters:
-//   - font: The monospace font used for measuring.
-//   - prefix: The line's leading text before the position being computed.
-//
-// Returns:
-//   - The prefix's true rendered width in pixels.
-terminal_measure_prefix_width :: proc(
-    font: font.Font_Face, prefix: string) -> f32 {
-    if len(prefix) == 0 {
-        return 0
-    }
-
-    width, _ := view_core.ui_text_measure_monospace(
-        prefix, font, TERMINAL_FONT_SIZE, TERMINAL_TEXT_SPACING)
-    return width + TERMINAL_TEXT_SPACING
-}
-
 //   Measure one monospace character cell's pixel pitch, including spacing.
 //
 // Parameters:

@@ -68,6 +68,7 @@ Bundle :: struct {
     events : []trace.Event,
     state : observe.Display,
     julia_host : observe.Julia_Host,
+    simulation : observe.Simulation,
     allocations : allocation_evidence.Snapshot,
     arena_baselines : allocation_evidence.Arena_Baselines,
 }
@@ -155,11 +156,70 @@ artifact_dust_state_json :: proc(state: observe.Display) -> string {
         state.dust_rendered_count)
 }
 
-//   Serialize the synchronized display and Julia-host observation snapshot.
+// Serialize one synchronized producer-ring summary as an embeddable JSON object.
+artifact_trace_state_json :: proc(state: observe.Trace_State) -> string {
+    return fmt.tprintf(
+        "{{\"producer\":%d,\"evidence_complete\":%v," +
+        "\"event_count\":%d,\"pending_drops\":%d,\"next_sequence\":%d}}",
+        state.producer, state.evidence_complete, state.event_count,
+        state.pending_drops, state.next_sequence)
+}
+
+// Serialize the joined simulation worker observations as an embeddable object body.
+artifact_simulation_state_json :: proc(state: observe.Simulation) -> string {
+    return fmt.tprintf(
+        "\"simulation_workers\":{{\"particle\":%s,\"constraint\":%s," +
+        "\"shape_cache\":%s,\"dynview\":%s}}",
+        artifact_trace_state_json(state.particle),
+        artifact_trace_state_json(state.constraint),
+        artifact_trace_state_json(state.shape_cache),
+        artifact_trace_state_json(state.dynview))
+}
+
+    // Serialize terminal graphics counters as an embeddable JSON object body.
+    artifact_terminal_graphics_state_json :: proc(state: observe.Display) -> string {
+        return fmt.tprintf(
+        "\"terminal_graphics\":{{\"transfer_admission_count\":%d," +
+        "\"transfer_rejection_count\":%d,\"decode_count\":%d," +
+        "\"failure_count\":%d,\"cancellation_count\":%d," +
+        "\"publication_count\":%d,\"stale_completion_count\":%d," +
+        "\"eviction_count\":%d,\"draw_count\":%d," +
+        "\"draw_rejection_count\":%d,\"cpu_byte_count\":%d," +
+        "\"gpu_byte_count\":%d,\"animation_decode_byte_count\":%d," +
+        "\"animated_attachment_count\":%d," +
+        "\"animation_admission_count\":%d," +
+        "\"animation_rejection_count\":%d," +
+        "\"gif_preflight_acceptance_count\":%d," +
+        "\"gif_preflight_rejection_count\":%d,\"queue_full_count\":%d," +
+        "\"playback_transition_count\":%d," +
+        "\"playback_completion_count\":%d," +
+        "\"playback_upload_failure_count\":%d," +
+        "\"playback_stale_count\":%d,\"visibility_pause_count\":%d," +
+        "\"visibility_resume_count\":%d}}",
+        state.graphics_transfer_admission_count,
+        state.graphics_transfer_rejection_count, state.graphics_decode_count,
+        state.graphics_failure_count, state.graphics_cancellation_count,
+        state.graphics_publication_count, state.graphics_stale_completion_count,
+        state.graphics_eviction_count, state.graphics_draw_count,
+        state.graphics_draw_rejection_count, state.graphics_cpu_byte_count,
+        state.graphics_gpu_byte_count, state.graphics_animation_decode_byte_count,
+        state.graphics_animated_attachment_count,
+        state.graphics_animation_admission_count,
+        state.graphics_animation_rejection_count,
+        state.graphics_gif_preflight_acceptance_count,
+        state.graphics_gif_preflight_rejection_count,
+        state.graphics_queue_full_count, state.graphics_playback_transition_count,
+        state.graphics_playback_completion_count,
+        state.graphics_playback_upload_failure_count,
+        state.graphics_playback_stale_count,
+        state.graphics_visibility_pause_count, state.graphics_visibility_resume_count)
+    }
+
+//   Serialize the synchronized display, host, and simulation observation snapshot.
 artifact_state_json :: proc(
-    state: observe.Display, julia_host: observe.Julia_Host) -> string {
-    dust_json := artifact_dust_state_json(state)
-    result := fmt.tprintf(
+    state: observe.Display, julia_host: observe.Julia_Host,
+    simulation: observe.Simulation) -> string {
+    return fmt.tprintf(
         "{{\"fixed_step\":%d,\"simulation_time\":%g," +
         "\"simulation_paused\":%v,\"animation_policy_paused\":%v," +
         "\"runtime_lifecycle\":%d," +
@@ -175,22 +235,23 @@ artifact_state_json :: proc(
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
         "\"display_pending_drops\":%d,\"julia_lifecycle\":%d," +
         "\"julia_active_request_id\":%d,\"julia_failed_requests\":%d," +
-        "\"julia_event_count\":%d,\"julia_evidence_complete\":%v}}\n",
+        "\"julia_event_count\":%d,\"julia_evidence_complete\":%v,%s,%s}}\n",
         state.fixed_step, state.simulation_time, state.simulation_paused,
         state.animation_policy_paused, state.runtime_lifecycle,
-        state.runtime_generation,
-        state.active_runtime_request_id, state.failed_runtime_request_count,
-        state.animation_generation, state.animation_tick_sequence,
-        state.animation_last_committed_sequence, state.point_count,
-        state.constraint_count, state.particle_count, dust_json, state.dynview_enabled,
+        state.runtime_generation, state.active_runtime_request_id,
+        state.failed_runtime_request_count, state.animation_generation,
+        state.animation_tick_sequence, state.animation_last_committed_sequence,
+        state.point_count, state.constraint_count, state.particle_count,
+        artifact_dust_state_json(state), state.dynview_enabled,
         state.view_text_scroll_y, state.view_text_scroll_max,
         state.vertical_split_x, state.horizontal_split_y,
         state.gif_capture_active, state.gif_captured_frames,
         state.required_evidence_complete, state.trace.event_count,
         state.trace.pending_drops, julia_host.lifecycle,
         julia_host.active_request_id, julia_host.failed_request_count,
-        julia_host.trace.event_count, julia_host.trace.evidence_complete)
-    return result
+        julia_host.trace.event_count, julia_host.trace.evidence_complete,
+        artifact_terminal_graphics_state_json(state),
+        artifact_simulation_state_json(simulation))
 }
 
 //   Encode one unsigned 16-bit value in canonical little-endian order.
@@ -325,7 +386,8 @@ write_bundle :: proc(
         return false
     }
     manifest_json := artifact_manifest_json(bundle.manifest)
-    state_json := artifact_state_json(bundle.state, bundle.julia_host)
+    state_json := artifact_state_json(
+        bundle.state, bundle.julia_host, bundle.simulation)
     if !json.is_valid(transmute([]byte)manifest_json) ||
         !json.is_valid(transmute([]byte)state_json) {
         return false

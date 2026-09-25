@@ -41,11 +41,6 @@ Tex_Cursor :: struct {
     error_offset: int,
 }
 
-//   Return the production parser limits derived from the frozen corpus.
-tex_parse_default_limits :: proc() -> Tex_Parse_Limits {
-    return TEX_PARSE_DEFAULT_LIMITS
-}
-
 //   Initialize a cursor after validating source admission limits.
 tex_cursor_init :: proc(
     cursor: ^Tex_Cursor,

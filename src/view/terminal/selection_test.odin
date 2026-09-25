@@ -2,7 +2,6 @@
 package terminalview
 
 import viewterminalmodel "model"
-import "../../core"
 
 import "core:testing"
 

@@ -273,13 +273,6 @@ terminal_hyperlink_hover_hit :: proc(
     return terminal_hit_test_link(term, bounds, mouse)
 }
 
-// Report whether the current eligible pointer position covers an actionable link.
-terminal_hyperlink_hovered :: proc(
-    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
-    bounds: geometry.Rectangle) -> bool {
-    return terminal_hyperlink_hover_hit(term, frame, bounds).kind != .None
-}
-
 // Invoke one validated hyperlink through a caller-owned display-thread adapter.
 terminal_activate_hyperlink :: proc(
     term: ^viewterminalmodel.Terminal_State, activation: Terminal_Hyperlink_Activation,

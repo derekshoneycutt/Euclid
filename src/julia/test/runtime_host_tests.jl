@@ -41,6 +41,28 @@ end
     @test occursin('\e', banner)
 end
 
+@testset "terminal capabilities follow IO ownership" begin
+    conservative = Terminal.CONSERVATIVE_CAPABILITIES
+    values = [getfield(conservative, index)
+        for index in 1:fieldcount(typeof(conservative))]
+    values[3] = Terminal.Truecolor
+    attached = Terminal.Capabilities(values...)
+
+    @test Terminal.capabilities(IOBuffer()) == conservative
+    context = IOContext(
+        IOBuffer(), Terminal.CAPABILITIES_CONTEXT_KEY => attached)
+    @test Terminal.capabilities(context) == attached
+
+    terminal = EuclidReplEvaluation.InteractiveTerminal()
+    try
+        terminal.capabilities = attached
+        input = EuclidReplEvaluation.interactive_input(terminal)
+        @test Terminal.capabilities(input) == attached
+    finally
+        EuclidReplEvaluation.close_interactive_terminal!(terminal)
+    end
+end
+
 @testset "runtime host renders colorized Julia errors" begin
     error_stack = try
         Core.eval(Main, :(missing_terminal_repl_name))

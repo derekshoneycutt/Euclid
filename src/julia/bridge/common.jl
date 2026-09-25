@@ -195,13 +195,6 @@ struct BridgePointView
     active_child::UInt16
 end
 
-"""Metadata returned after copying one immutable label source."""
-struct BridgeLabelCopyResult
-    status::Int32
-    byte_count::Int32
-    mime::Int32
-end
-
 struct BridgeSolveResult
     status::Int32
     iterations::Int32
@@ -317,17 +310,6 @@ const BRIDGE_FEATURE_CIRCLE_REGIONS = Int32(1 << 9)
 
 const TROCHOID_EXTERNAL = Int32(0)
 const TROCHOID_INTERNAL = Int32(1)
-
-const ANIMATION_STABLE_ID_NAMESPACE = UUID("66f8da8f-bd5c-5f58-ae66-5cbaf6ea4d41")
-
-"""
-Derive a deterministic animation stable ID string from a semantic key.
-
-This helper uses UUID v5 with a fixed project namespace so the same key always
-produces the same identity across reloads.
-"""
-animation_stable_id_from_key(key::AbstractString) =
-    string(uuid5(ANIMATION_STABLE_ID_NAMESPACE, String(key)))
 
 """
 Construct a new BridgeColor from standard Julia color types

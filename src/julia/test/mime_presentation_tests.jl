@@ -16,9 +16,12 @@ end
 
 struct OversizedPresentationFixture end
 
-const ObservedPresentationState = Ref(Ptr{Cvoid}(0))
-const ObservedPresentation = Ref{Union{Nothing,PresentedText}}(nothing)
-const ObservedPresentationValue = Ref{Any}(nothing)
+mutable struct PresentationObservation
+    state::Ptr{Cvoid}
+    presentation::Union{Nothing,PresentedText}
+    value::Any
+end
+
 const ExpectedPresentationState = Ptr{Cvoid}(UInt(0x1234))
 
 """Render a deterministic bounded plain-text fixture."""
@@ -29,20 +32,20 @@ Base.show(io::IO, ::MIME"text/plain", value::PlainPresentationFixture) =
 Base.show(io::IO, ::MIME"text/plain", _value::OversizedPresentationFixture) =
     print(io, "x" ^ (PRESENTATION_MAX_SOURCE_BYTES + 1))
 
-"""Record one serialized presentation and report successful publication."""
-function record_presentation(state_ptr, presentation)
-    ObservedPresentationState[] = state_ptr
-    ObservedPresentation[] = presentation
-    return BRIDGE_STATUS_OK
-end
-
 """Return a deterministic failed publication status for error-path coverage."""
 failed_presentation(_state_ptr, _presentation) = BRIDGE_STATUS_ILLEGAL_STATE
 
-"""Record one producer value and report successful presentation."""
-function record_presentation_value(state_ptr, value)
-    ObservedPresentationState[] = state_ptr
-    ObservedPresentationValue[] = value
+"""Record one serialized presentation in local test observation state."""
+function record_presentation!(observation, state_ptr, presentation)
+    observation.state = state_ptr
+    observation.presentation = presentation
+    return BRIDGE_STATUS_OK
+end
+
+"""Record one producer value in local test observation state."""
+function record_presentation_value!(observation, state_ptr, value)
+    observation.state = state_ptr
+    observation.value = value
     return BRIDGE_STATUS_OK
 end
 
@@ -82,11 +85,16 @@ end
 end
 
 @testset "canonical publication helpers" begin
+    observation = PresentationObservation(Ptr{Cvoid}(0), nothing, nothing)
+    record_presentation = Base.Fix1(record_presentation!, observation)
+    record_presentation_value = Base.Fix1(
+        record_presentation_value!, observation)
+
     @test OdinJuliaBridge._present_with(
         ExpectedPresentationState, tex"x^2", record_presentation) ==
         BRIDGE_STATUS_OK
-    @test ObservedPresentationState[] == ExpectedPresentationState
-    @test ObservedPresentation[] == PresentedText(TextLatex, "x^2")
+    @test observation.state == ExpectedPresentationState
+    @test observation.presentation == PresentedText(TextLatex, "x^2")
 
     @test_throws ErrorException OdinJuliaBridge._present_with(
         ExpectedPresentationState, "plain", failed_presentation)
@@ -94,6 +102,6 @@ end
     @test OdinJuliaBridge._publish_view_content_with(
         ExpectedPresentationState, presentation_fixture,
         record_presentation_value) == BRIDGE_STATUS_OK
-    @test ObservedPresentationState[] == ExpectedPresentationState
-    @test ObservedPresentationValue[] == tex"y"
+    @test observation.state == ExpectedPresentationState
+    @test observation.value == tex"y"
 end

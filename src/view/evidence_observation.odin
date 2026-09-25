@@ -1,6 +1,7 @@
 package view
 
 import "../evidence/observe"
+import viewgraphics "graphics"
 
 // Copy display-owned composition into the evidence model at an owner boundary.
 observe_display_state :: proc(state: ^Euclid_General_State) -> observe.Display {
@@ -21,7 +22,10 @@ observe_display_state :: proc(state: ^Euclid_General_State) -> observe.Display {
             state.evidence_session.required_evidence_complete,
         evidence_ring = &state.evidence_ring,
     }
-    return observe.display(&source)
+    result := observe.display(&source)
+    viewgraphics.service_observe(
+        cast(^viewgraphics.Service)state.terminal_graphics_user_data, &result)
+    return result
 }
 
 // Copy joined simulation producer rings into the evidence model.

@@ -122,21 +122,3 @@ function poll_evaluation(runtime::EvaluationRuntime)::EvaluationPoll
     end
     return EvaluationPoll(Int32(0), "")
 end
-
-"""Evaluate one line through the streaming compatibility API."""
-function evaluate_line(code::AbstractString)::String
-    runtime = EvaluationRuntime()
-    status = begin_input_for_host(runtime, code)
-    status == Cint(Evaluation_Incomplete) && return ""
-
-    output = IOBuffer()
-    while true
-        poll = poll_evaluation(runtime)
-        if poll.status == Int32(1)
-            print(output, poll.chunk)
-        elseif poll.status == Int32(2)
-            break
-        end
-    end
-    return String(take!(output))
-end

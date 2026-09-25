@@ -504,19 +504,6 @@ world_create_polygon_into :: proc(
     return {shape = shape}, .Ok
 }
 
-// Create one variable-arity polygon with immutable ordered topology.
-world_create_polygon :: proc(
-    world: ^shapemodel.Shape_World,
-    positions: []Vector3,
-    style: Shape_Style) -> (
-        shapemodel.Shape_Polygon_Handle, shapemodel.Shape_World_Status) {
-    vertices: [shapemodel.MAX_SHAPE_VERTEX_REFERENCES]shapemodel.Shape_Entity
-    if len(positions) > len(vertices) {
-        return {}, .Out_Of_Capacity
-    }
-    return world_create_polygon_into(world, positions, style, vertices[:len(positions)])
-}
-
 // Create one triangle as a typed three-vertex polygon convenience.
 world_create_triangle :: proc(
     world: ^shapemodel.Shape_World,

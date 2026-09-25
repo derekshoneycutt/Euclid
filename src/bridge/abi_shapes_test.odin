@@ -277,10 +277,6 @@ bridge_shape_abi_reads_query_snapshot :: proc(t: ^testing.T) {
 
     view := shape_get_view(state, created.entity)
     testing.expect_value(t, view.position, geometry.Vector3{1, 2, 3})
-    bytes: [8]u8
-    copied := shape_copy_label_source(state, created.entity, &bytes[0], len(bytes))
-    testing.expect_value(t, copied.status, i32(BRIDGE_STATUS_OK))
-    testing.expect_value(t, string(bytes[:copied.byte_count]), "β")
 }
 
 // Verify the constraint ABI stores direct packed endpoint targets.

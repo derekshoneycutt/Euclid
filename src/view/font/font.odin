@@ -801,33 +801,6 @@ cache_commit_glyph_page :: proc(
     entry.queued_demand_count = 0
 }
 
-//   Publish one immutable page and resolve its queued glyph records atomically.
-//
-// Returns:
-//   - True after texture and lookup publication; false without glyph-state mutation.
-cache_publish_glyph_page :: proc(
-    cache: ^Font_Cache, prepared: ^Prepared_Font,
-    task: ^Font_Prepare_Task) -> bool {
-
-    if cache == nil || prepared == nil {
-        return false
-    }
-    entry := &cache.entries[int(prepared.key)]
-    if !cache_glyph_page_matches_task(prepared, task) ||
-        !cache_glyph_page_can_publish(entry, prepared) {
-        return false
-    }
-    texture, finalized := finalize_texture(
-        prepared, cache.texture_operations, {
-            identity = u64(prepared.key) + 1,
-            generation = prepared.generation,
-        })
-    if !finalized {
-        return false
-    }
-    return cache_publish_glyph_page_texture(cache, prepared, task, texture)
-}
-
 // cache_publish_glyph_page_texture commits one successfully uploaded page.
 cache_publish_glyph_page_texture :: proc(
     cache: ^Font_Cache, prepared: ^Prepared_Font,

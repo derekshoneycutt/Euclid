@@ -116,24 +116,6 @@ tex_semantic_append_document_display_row :: proc(
     return index
 }
 
-//   Append two semantic spans as one newly owned span.
-tex_semantic_join_text :: proc(
-    output: ^Tex_Semantic_Output,
-    left, right: Tex_Text_Span) -> (Tex_Text_Span, bool) {
-    left_text := tex_semantic_text(output, left)
-    right_text := tex_semantic_text(output, right)
-    total := len(left_text) + len(right_text)
-    if total > len(output.text)-output.text_count {
-        tex_semantic_fail(output, .Work_Limit, 0)
-        return {}, false
-    }
-    span := Tex_Text_Span{offset = output.text_count, length = total}
-    copy(output.text[span.offset:], transmute([]u8)left_text)
-    copy(output.text[span.offset + len(left_text):], transmute([]u8)right_text)
-    output.text_count += total
-    return span, true
-}
-
 //   Preserve the first terminal semantic construction failure.
 tex_semantic_fail :: proc(
     output: ^Tex_Semantic_Output,

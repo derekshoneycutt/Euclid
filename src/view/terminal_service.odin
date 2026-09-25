@@ -347,6 +347,7 @@ terminal_service_update_visible :: proc(
 terminal_service_update :: proc(
     state: ^core.Euclid_General_State, input_runtime: ^input.Input_Runtime,
     frame: input.Input_Frame) -> ui.Terminal_Prepared_Frame {
+    shell_service_maintenance(state)
     if !terminal_animation_selected(state) {
         return {}
     }

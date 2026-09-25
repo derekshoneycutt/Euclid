@@ -88,17 +88,6 @@ Resolved_Glyph_Draw :: struct {
     y_offset: i32,
 }
 
-//   Complete inputs for one page-aware unshaped codepoint draw.
-Codepoint_Text_Draw :: struct {
-    encoder: ^native.Draw_Encoder,
-    resolver: view_font.Font_Resolver,
-    key: view_font.Font_Key,
-    codepoint: rune,
-    position: geometry.Vector2,
-    font_size: f32,
-    color: color.Color_RGBA8,
-}
-
 //   Resolved codepoint draw data plus original residency and drawability state.
 Codepoint_Resolution :: struct {
     glyph: view_font.Resolved_Glyph,
@@ -338,24 +327,6 @@ ui_text_resolve_codepoint :: proc(
         status = status,
         drawable = replacement_status == .Resident,
     }
-}
-
-//   Draw one unshaped rune through cmap lookup and demand-loaded pages.
-ui_text_codepoint_paged :: proc(draw: Codepoint_Text_Draw) -> bool {
-
-    resolution := ui_text_resolve_codepoint(
-        draw.resolver, draw.key, draw.codepoint)
-    if !resolution.drawable {
-        return false
-    }
-    ui_text_draw_resolved_glyph({
-        encoder = draw.encoder,
-        resolved = resolution.glyph,
-        position = draw.position,
-        font_size = draw.font_size,
-        color = draw.color,
-    })
-    return resolution.status == .Resident
 }
 
 //   Draw UTF-8 without shaping while resolving every rune through glyph pages.

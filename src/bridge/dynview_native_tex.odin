@@ -477,19 +477,6 @@ dynview_native_span_valid :: #force_inline proc(
     return offset >= 0 && count >= 0 && count <= total && offset <= total-count
 }
 
-//   Translate document-store failures to stable bridge status and stream failure.
-dynview_native_store_failure :: proc(
-    runtime: ^dynviewmodel.Dynview_System,
-    status: dyncore.Dynview_Document_Status) -> i32 {
-    if status == .Out_Of_Capacity || status == .Allocation_Failed {
-        return dynview_fail(runtime, BRIDGE_STATUS_OUT_OF_CAPACITY)
-    }
-    if status == .Rejected || status == .Invalid_Argument {
-        return dynview_fail(runtime, BRIDGE_STATUS_INVALID_ARGUMENT)
-    }
-    return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
-}
-
 //   Capture mutable counters touched by one native math import transaction.
 dynview_math_import_checkpoint :: #force_inline proc(
     runtime: ^dynviewmodel.Dynview_System) -> Dynview_Math_Import_Checkpoint {

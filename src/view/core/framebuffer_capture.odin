@@ -1,6 +1,6 @@
 package view_core
 
-import "core:mem"
+import "base:runtime"
 import "core:math"
 
 FRAMEBUFFER_PIXEL_BYTES :: 4
@@ -8,9 +8,11 @@ FRAMEBUFFER_PIXEL_BYTES :: 4
 // Framebuffer_Capture_Operations supplies native calls used by synchronous capture.
 Framebuffer_Capture_Operations :: struct {
     user_data: rawptr,
-    allocator: mem.Allocator,
-    load: proc(user_data: rawptr, allocator: mem.Allocator) -> Framebuffer_Pixels,
+    begin: proc(user_data: rawptr) -> bool,
+    allocate: proc(user_data: rawptr, byte_count: int) -> ([]u8, runtime.Allocator_Error),
+    load: proc(user_data: rawptr) -> Framebuffer_Pixels,
     unload: proc(user_data: rawptr, capture: ^Framebuffer_Pixels),
+    reset: proc(user_data: rawptr),
     export: proc(
         user_data: rawptr, capture: ^Framebuffer_Pixels, path: cstring) -> bool,
 }
@@ -40,17 +42,19 @@ framebuffer_image_valid :: proc(capture: Framebuffer_Pixels) -> bool {
 // Acquire and validate one synchronous framebuffer image through injected operations.
 framebuffer_acquire_with_operations :: proc(
     operations: Framebuffer_Capture_Operations) -> (Framebuffer_Pixels, bool) {
-    if operations.load == nil || operations.unload == nil ||
-        operations.allocator.procedure == nil {
+    if operations.begin == nil || operations.load == nil ||
+        operations.unload == nil || operations.reset == nil ||
+        !operations.begin(operations.user_data) {
         return {}, false
     }
-    capture := operations.load(operations.user_data, operations.allocator)
+    capture := operations.load(operations.user_data)
     if framebuffer_image_valid(capture) {
         return capture, true
     }
     if len(capture.pixels) > 0 {
         operations.unload(operations.user_data, &capture)
     }
+    operations.reset(operations.user_data)
     return {}, false
 }
 
@@ -60,8 +64,13 @@ framebuffer_release_with_operations :: proc(
     if capture == nil {
         return
     }
-    if len(capture.pixels) > 0 && operations.unload != nil {
-        operations.unload(operations.user_data, capture)
+    if len(capture.pixels) > 0 {
+        if operations.unload != nil {
+            operations.unload(operations.user_data, capture)
+        }
+        if operations.reset != nil {
+            operations.reset(operations.user_data)
+        }
     }
     capture^ = {}
 }
@@ -71,13 +80,13 @@ framebuffer_crop_with_operations :: proc(
     capture: ^Framebuffer_Pixels, width, height: int,
     operations: Framebuffer_Capture_Operations) -> bool {
     if capture == nil || !framebuffer_image_valid(capture^) ||
-        operations.allocator.procedure == nil ||
+        operations.allocate == nil || operations.unload == nil ||
         width <= 0 || height <= 0 || width > capture.width || height > capture.height {
         return false
     }
     row_bytes := width * FRAMEBUFFER_PIXEL_BYTES
-    pixels, allocation_error := make(
-        []u8, row_bytes * height, operations.allocator)
+    pixels, allocation_error := operations.allocate(
+        operations.user_data, row_bytes * height)
     if allocation_error != nil {return false}
     for row in 0..<height {
         source := capture.pixels[row * capture.pitch_bytes:][:row_bytes]
@@ -94,14 +103,15 @@ framebuffer_resize_with_operations :: proc(
     capture: ^Framebuffer_Pixels, width, height: int,
     operations: Framebuffer_Capture_Operations) -> bool {
     if capture == nil || !framebuffer_image_valid(capture^) ||
-        operations.allocator.procedure == nil || width <= 0 || height <= 0 ||
+        operations.allocate == nil || operations.unload == nil ||
+        width <= 0 || height <= 0 ||
         width > math.max(int) / FRAMEBUFFER_PIXEL_BYTES ||
         height > math.max(int) / (width * FRAMEBUFFER_PIXEL_BYTES) {
         return false
     }
     row_bytes := width * FRAMEBUFFER_PIXEL_BYTES
-    pixels, allocation_error := make(
-        []u8, row_bytes * height, operations.allocator)
+    pixels, allocation_error := operations.allocate(
+        operations.user_data, row_bytes * height)
     if allocation_error != nil {return false}
     for y in 0..<height {
         source_y := y * capture.height / height

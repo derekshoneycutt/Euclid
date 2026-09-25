@@ -107,12 +107,15 @@ Terminal_Tick_Publisher :: struct {
 Shell_Launch_Phase :: enum u8 {
     Inactive,
     Running,
+    Closing,
 }
 
 // Shell_Runtime owns the native shell service and one bounded foreground transaction.
 Shell_Runtime :: struct {
     backend: termsession.Native_Terminal_Backend,
     session: termsession.Terminal_Session_Manager,
+    cleanup: termsession.Process_Cleanup_Registry,
+    close: termsession.Terminal_Process_Close_Coordinator,
     phase: Shell_Launch_Phase,
     request_id: protocol.Request_Id,
     operation_id: termsession.Terminal_Session_Operation_Id,
@@ -120,6 +123,42 @@ Shell_Runtime :: struct {
     working_directory_byte_count: int,
     terminfo_directory: [termsession.PROCESS_PLAN_WORKING_DIRECTORY_MAX_BYTES]u8,
     terminfo_directory_byte_count: int,
+}
+
+// Report whether one bounded shell close no longer owns an active backend operation.
+shell_runtime_close_finished :: proc(runtime: ^Shell_Runtime) -> bool {
+    if runtime == nil {
+        return true
+    }
+    return runtime.close.phase == .Complete || runtime.close.phase == .Transferred
+}
+
+// Begin bounded close for the current shell generation without blocking its owner.
+shell_runtime_close_begin :: proc(runtime: ^Shell_Runtime, now_ns: u64) -> bool {
+    if runtime == nil {
+        return false
+    }
+    if runtime.phase == .Closing || shell_runtime_close_finished(runtime) {
+        return true
+    }
+    generation := runtime.session.owner.generation
+    if generation == 0 {
+        runtime.close.phase = .Complete
+        runtime.phase = .Inactive
+        return true
+    }
+    begun := termsession.terminal_process_close_begin(
+        &runtime.close, &runtime.session, &runtime.cleanup, {
+            generation = generation,
+            now_ns = now_ns,
+            graceful_ns = termsession.TERMINAL_PROCESS_CLOSE_GRACE_NS,
+            final_ns = termsession.TERMINAL_PROCESS_CLOSE_FINAL_NS,
+        })
+    if !begun {
+        return false
+    }
+    runtime.phase = .Inactive if shell_runtime_close_finished(runtime) else .Closing
+    return true
 }
 
 // shell_working_directory returns the absolute cwd snapshot owned by the shell runtime.

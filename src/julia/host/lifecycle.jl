@@ -129,7 +129,7 @@ function pump_for_host(
     output_depth = count(
         command -> command isa TerminalOutputBatch, runtime.actors.outgoing)
     evaluator = runtime.evaluator_state
-    animation = animation_pump_status(runtime)
+    animation = animation_pump_status!(runtime)
     shutdown_ready = runtime.shutdown_phase === HostShutdownComplete && !ready &&
         isempty(runtime.actors.outgoing) &&
         EuclidActorRuntime.pending_request_count(runtime.actors) == 0
@@ -142,7 +142,7 @@ function pump_for_host(
 end
 
 """Collect animation supervisor health and bounded mailbox diagnostics."""
-function animation_pump_status(runtime::HostRuntime)
+function animation_pump_status!(runtime::HostRuntime)
     animation_queue_depth = EuclidActorRuntime.mailbox_depth(
         runtime.actors, runtime.animation_supervisor)
     runtime.animation_queue_high_water = max(

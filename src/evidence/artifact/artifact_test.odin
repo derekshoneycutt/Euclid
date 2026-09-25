@@ -1,7 +1,6 @@
 #+test
 package artifact
 
-import "../observe"
 import allocation "../allocation"
 import trace "../trace"
 import "core:fmt"
@@ -73,6 +72,12 @@ artifact_test_expect_viewport_state :: proc(t: ^testing.T, directory: string) {
     testing.expect(t, strings.contains(text, "\"vertical_split_x\":640"))
     testing.expect(t, strings.contains(text, "\"horizontal_split_y\":360"))
     testing.expect(t, strings.contains(text, "\"animation_policy_paused\":true"))
+    testing.expect(t, strings.contains(text, "\"terminal_graphics\""))
+    testing.expect(t, strings.contains(text, "\"decode_count\":11"))
+    testing.expect(t, strings.contains(text, "\"gpu_byte_count\":4096"))
+    testing.expect(t, strings.contains(text, "\"simulation_workers\""))
+    testing.expect(t, strings.contains(text, "\"particle\":{"))
+    testing.expect(t, strings.contains(text, "\"next_sequence\":7"))
 }
 
 // Build the canonical failed bundle payload used by the artifact integration test.
@@ -84,12 +89,15 @@ artifact_test_failure_bundle_data :: proc(
         state = {
             fixed_step = 9,
             animation_policy_paused = true,
+            graphics_decode_count = 11,
+            graphics_gpu_byte_count = 4096,
             view_text_scroll_y = 90.5,
             view_text_scroll_max = 120,
             vertical_split_x = 640,
             horizontal_split_y = 360,
         },
         julia_host = {runtime_generation = 2},
+        simulation = {particle = {next_sequence = 7}},
         arena_baselines = arenas,
     }
 }

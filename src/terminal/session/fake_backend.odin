@@ -17,6 +17,9 @@ Fake_Terminal_Backend :: struct {
     force_terminate_count: int,
     transfer_count: int,
     close_count: int,
+    cleanup_poll_count: int,
+    cleanup_release_count: int,
+    cleanup_ready: bool,
 
     // Cumulative bounded input capture.
     input: [1024]u8,
@@ -150,6 +153,21 @@ fake_terminal_backend_close :: proc(user_data: rawptr) {
     backend.output_drained = false
 }
 
+// Poll one transferred fake token and report its configured readiness.
+fake_terminal_backend_cleanup_poll :: proc(entry: ^Process_Cleanup_Entry) -> bool {
+    backend := cast(^Fake_Terminal_Backend)(uintptr(entry.token[0]))
+    backend.cleanup_poll_count += 1
+    return backend.cleanup_ready
+}
+
+// Record final release of one transferred fake token.
+fake_terminal_backend_cleanup_release :: proc(
+    entry: ^Process_Cleanup_Entry) -> bool {
+    backend := cast(^Fake_Terminal_Backend)(uintptr(entry.token[0]))
+    backend.cleanup_release_count += 1
+    return true
+}
+
 //   Transfer one fake operation into bounded application cleanup storage.
 fake_terminal_backend_transfer :: proc(
     user_data: rawptr, registry: ^Process_Cleanup_Registry,
@@ -159,6 +177,9 @@ fake_terminal_backend_transfer :: proc(
     if entry == nil {
         return false
     }
+    entry.token[0] = u64(uintptr(backend))
+    entry.poll = fake_terminal_backend_cleanup_poll
+    entry.release = fake_terminal_backend_cleanup_release
     backend.transfer_count += 1
     backend.process_exited = false
     backend.output_drained = false

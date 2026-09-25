@@ -141,9 +141,9 @@ const CONSERVATIVE_CAPABILITIES = Capabilities(
     false, false, false, false, false, false, false,
     false, false, false, false, false, false, false, false, false)
 
-"""Return conservative capabilities for IO not owned by Euclid Terminal."""
-function capabilities(_io::IO)::Capabilities
-    return CONSERVATIVE_CAPABILITIES
+"""Return capabilities inherited by IO, or conservative values outside Terminal."""
+function capabilities(io::IO)::Capabilities
+    return context_capabilities(io)
 end
 
 """Return capabilities associated with the current evaluation input."""

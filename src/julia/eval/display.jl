@@ -63,30 +63,3 @@ function append_repl_response!(
     end
     return nothing
 end
-
-"""Evaluate one AST and capture REPL-compatible output synchronously."""
-function run_ast(session::EvaluationSession, build_ast, code::AbstractString)::String
-    output = mktemp() do _path, io
-        ast = build_ast(io)
-        display = PlainTextDisplay(io, session.context_module)
-        response = nothing
-        pushdisplay(display)
-        try
-            response = redirect_stdout(io) do
-                redirect_stderr(io) do
-                    REPL.eval_user_input(
-                        ast, session.backend, session.context_module)
-                    take!(session.backend.response_channel)
-                end
-            end
-        finally
-            popdisplay(display)
-        end
-        append_repl_response!(io, response, code, session.context_module)
-        flush(io)
-        seekstart(io)
-        return read(io, String)
-    end
-    session.input_number += 1
-    return output
-end

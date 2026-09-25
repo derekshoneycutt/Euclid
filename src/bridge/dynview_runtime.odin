@@ -2,8 +2,6 @@ package bridge
 
 import dynviewmodel "../dynview/model"
 
-import "../core"
-
 //   Mark the current Dynview stream and compile cache invalid.
 dynview_fail :: #force_inline proc(
     runtime: ^dynviewmodel.Dynview_System, code: i32) -> i32 {
@@ -46,37 +44,5 @@ dynview_append_text_payload :: #force_inline proc(
     buffer^.text_bytes_len += text_len
     offset_out^ = start
     count_out^ = text_len
-    return BRIDGE_STATUS_OK
-}
-
-//   Return the active Dynview emission target for the current bridge state.
-dynview_require_runtime :: proc(
-    state: ^core.Euclid_General_State,
-    runtime_out: ^^dynviewmodel.Dynview_System) -> i32 {
-
-    if state == nil || runtime_out == nil {
-        return BRIDGE_STATUS_INVALID_ARGUMENT
-    }
-    context = state^.saved_context
-    runtime_out^ = &state^.dynview
-    return BRIDGE_STATUS_OK
-}
-
-//   Return the active command buffer and optionally require an open block.
-dynview_require_buffer :: proc(
-    runtime: ^dynviewmodel.Dynview_System,
-    buffer_out: ^^dynviewmodel.Dynview_Command_Buffer,
-    require_open_block: bool) -> i32 {
-
-    if runtime == nil || buffer_out == nil {
-        return BRIDGE_STATUS_INVALID_ARGUMENT
-    }
-    if !runtime^.enabled {
-        return BRIDGE_STATUS_OK
-    }
-    buffer_out^ = &runtime^.command_buffer
-    if require_open_block && !buffer_out^^.stream_open_block {
-        return dynview_fail(runtime, BRIDGE_STATUS_ILLEGAL_STATE)
-    }
     return BRIDGE_STATUS_OK
 }

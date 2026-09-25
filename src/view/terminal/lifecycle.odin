@@ -749,21 +749,6 @@ terminal_primary_prompt_prefix :: proc(
     return TERMINAL_PROMPT
 }
 
-//   Return the terminal's active prompt/evaluation mode.
-//
-// Parameters:
-//   - term: Terminal state to inspect; nil defaults to normal mode.
-//
-// Returns:
-//   - The active evaluation mode, or Normal for nil state.
-terminal_input_mode :: proc(
-    term: ^viewterminalmodel.Terminal_State) -> protocol.Evaluation_Mode {
-    if term == nil {
-        return .Normal
-    }
-    return term.input_mode
-}
-
 //   Return whether the terminal is currently in Julia's `?` help mode.
 //
 // Parameters:

@@ -349,54 +349,6 @@ sdl_swapchain_acquire :: proc(
     return image, true
 }
 
-// sdl_submit_clear_blit records and submits one owned-target presentation.
-sdl_submit_clear_blit :: proc(
-    platform: ^Sdl_Platform, command_buffer: ^sdl.GPUCommandBuffer,
-    image: Sdl_Swapchain_Image, clear_color: sdl.FColor) -> bool {
-    target := [1]sdl.GPUColorTargetInfo{
-        sdl_scene_color_target_info(platform, clear_color)}
-    render_pass := sdl.BeginGPURenderPass(
-        command_buffer, raw_data(target[:]), len(target), nil)
-    if render_pass == nil {
-        _ = sdl.CancelGPUCommandBuffer(command_buffer)
-        return false
-    }
-    sdl.EndGPURenderPass(render_pass)
-    sdl.BlitGPUTexture(command_buffer, {
-        source = {texture = platform^.scene_target,
-            w = platform^.scene_width, h = platform^.scene_height},
-        destination = {texture = image.texture, w = image.width, h = image.height},
-        load_op = .DONT_CARE,
-        filter = .NEAREST,
-    })
-    return sdl.SubmitGPUCommandBuffer(command_buffer)
-}
-
-// sdl_platform_present_clear submits one owned-target clear and swapchain blit.
-sdl_platform_present_clear :: proc(
-    platform: ^Sdl_Platform, clear_color: sdl.FColor) -> Sdl_Frame_Result {
-    if platform^.resize_pending && !sdl_platform_refresh_target(platform) {
-        platform^.unavailable_frames += 1
-        return .Unavailable
-    }
-    command_buffer: ^sdl.GPUCommandBuffer
-    image, acquired := sdl_swapchain_acquire(platform, &command_buffer)
-    if !acquired {
-        return .Failed
-    }
-    if image.texture == nil {
-        platform^.unavailable_frames += 1
-        if !sdl.SubmitGPUCommandBuffer(command_buffer) {
-            return .Failed
-        }
-        return .Unavailable
-    }
-    if !sdl_submit_clear_blit(platform, command_buffer, image, clear_color) {
-        return .Failed
-    }
-    return .Presented
-}
-
 // sdl_platform_present_draw submits one bounded encoded scene and swapchain blit.
 sdl_platform_present_draw :: proc(
     platform: ^Sdl_Platform, runtime: ^Sdl_Draw_Runtime,

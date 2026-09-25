@@ -478,27 +478,85 @@ AnalysisSettings(
                 response=Ignore),
             custom_test_allocation_reviews()...,
             ReviewedAllocationPolicy(
-                "view-framebuffer-crop-replacement",
-                "src/view/core/framebuffer_capture.odin",
-                "framebuffer_crop_with_operations",
+                "test-evidence-allocation-snapshot-pressure",
+                "src/evidence/allocation/allocation_test.odin",
+                "allocation_test_snapshot_records_pressure",
                 :custom,
-                "Bounded replacement pixels are released through the display-owned capture operations.";
+                "Tracked test bytes remain live only through the pressure snapshot and are explicitly deleted before domain destruction.";
                 operation="make",
-                target="[]u8",
-                allocator_source="operations.allocator",
+                target="[]byte",
+                allocator_source="allocator",
                 certainty=:definite,
-                response=Ignore),
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
-                "view-framebuffer-resize-replacement",
-                "src/view/core/framebuffer_capture.odin",
-                "framebuffer_resize_with_operations",
+                "test-framebuffer-operation-pixels",
+                "src/view/core/framebuffer_capture_test.odin",
+                "framebuffer_test_allocate",
                 :custom,
-                "Bounded replacement pixels are released through the display-owned capture operations.";
+                "Test capture pixels belong to the fixture allocator and are released by the injected unload operation.";
                 operation="make",
                 target="[]u8",
-                allocator_source="operations.allocator",
+                allocator_source="state.allocator",
                 certainty=:definite,
-                response=Ignore),
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            # Display capture pixels share one synchronous transaction arena and are
+            # invalidated together by the owner-controlled reset after final release.
+            ReviewedAllocationPolicy(
+                "view-sdl-framebuffer-capture-pixels",
+                "src/view/sdl_framebuffer.odin",
+                "sdl_framebuffer_allocate",
+                :custom,
+                "Capture pixels belong to the display-owned growing arena and are reclaimed by the final transaction reset or owner destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            # Renderer command streams are fixed-capacity allocations from one static
+            # display-owned arena destroyed with the native draw runtime.
+            ReviewedAllocationPolicy(
+                "view-sdl-draw-core-storage",
+                "src/view/native/sdl_draw_runtime.odin",
+                "sdl_draw_runtime_allocate_core_storage",
+                :custom,
+                "Four fixed-capacity core draw streams share the native runtime arena and are released when that arena is destroyed.";
+                operation="make",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=4,
+                maximum_matches=4),
+            ReviewedAllocationPolicy(
+                "view-sdl-draw-custom-storage",
+                "src/view/native/sdl_draw_runtime.odin",
+                "sdl_draw_runtime_allocate_custom_storage",
+                :custom,
+                "Six fixed-capacity stroke and dust streams share the native runtime arena and are released when that arena is destroyed.";
+                operation="make",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=6,
+                maximum_matches=6),
+            ReviewedAllocationPolicy(
+                "view-native-dust-atlas-staging",
+                "src/view/particles_encoded.odin",
+                "initialize_native_dust_atlas",
+                :temporary,
+                "Fixed atlas pixels are consumed by the synchronous texture upload and reclaimed at the temporary-allocator reset.";
+                operation="make",
+                target="[]u8",
+                allocator_source="context.temp_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             # Shared bounded builders grow within an explicit bulk-lifetime owner.
             ReviewedAllocationPolicy(
                 "core-bounded-byte-builder-growth",
@@ -1842,5 +1900,71 @@ AnalysisSettings(
             "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:global_euclid_loop", :julia, "global_euclid_loop",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function")],
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_start_session", :julia,
+            "terminal_host_start_session",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_startup_banner", :julia,
+            "terminal_host_startup_banner",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_close_session", :julia,
+            "terminal_host_close_session",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_evaluation", :julia,
+            "terminal_host_ingest_evaluation",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_pump", :julia, "terminal_host_pump",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_shutdown", :julia, "terminal_host_shutdown",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_take_evaluation", :julia,
+            "terminal_host_take_evaluation",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_completion_preview", :julia,
+            "terminal_host_ingest_completion_preview",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_completion_candidates", :julia,
+            "terminal_host_ingest_completion_candidates",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_take_completion", :julia,
+            "terminal_host_take_completion",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_take_session_lifecycle", :julia,
+            "terminal_host_take_session_lifecycle",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_tick_stream_configuration", :julia,
+            "terminal_host_ingest_tick_stream_configuration",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_tick_pulse", :julia,
+            "terminal_host_ingest_tick_pulse",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_take_tick_stream", :julia,
+            "terminal_host_take_tick_stream",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "analysis-extension:sdl-extension_api_version", :julia,
+            "extension_api_version", "tools/sdl_boundary_analysis.jl",
+            "The analyzer invokes this SDL boundary method through Base.invokelatest"),
+        CallRootEntryPoint(
+            "analysis-extension:sdl-extension_rules", :julia,
+            "extension_rules", "tools/sdl_boundary_analysis.jl",
+            "The analyzer invokes this SDL boundary method through Base.invokelatest"),
+        CallRootEntryPoint(
+            "analysis-extension:sdl-extension_phases", :julia,
+            "extension_phases", "tools/sdl_boundary_analysis.jl",
+            "The analyzer invokes this SDL boundary method through Base.invokelatest")],
         ReviewedImportPolicy[]))

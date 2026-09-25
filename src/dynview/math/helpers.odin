@@ -237,21 +237,6 @@ matrix_descriptor_from_command :: #force_inline proc(
         descriptor^.columns > 0 && descriptor^.columns <= 16
 }
 
-//   Map one l/c/r alignment character to its matrix column alignment.
-matrix_alignment_from_char :: #force_inline proc(
-    ch: u8) -> (Dynview_Matrix_Column_Alignment, bool) {
-
-    switch ch {
-    case 'l':
-        return .Left, true
-    case 'c':
-        return .Center, true
-    case 'r':
-        return .Right, true
-    }
-    return .Center, false
-}
-
 //   Resolve one cell x-position within a matrix column using l/c/r alignment rules.
 matrix_aligned_cell_x :: #force_inline proc(
     col_x, column_width, cell_width: f32,

@@ -11,15 +11,16 @@ import "../files"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../particles"
-import termsession "../terminal/session"
 import view_core "../view/core"
 import terminalview "../view/terminal"
+import viewterminalmodel "../view/terminal/model"
 
 import "core:c"
 import "core:encoding/uuid"
 import "core:fmt"
 import "core:log"
 import "core:strings"
+import "core:time"
 
 TERMINAL_ANIMATION_NAME :: "Terminal"
 ANIMATION_LOOKUP_INITIAL_RESERVE :: 512
@@ -622,8 +623,10 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
                 animation_generation = state^.terminal.animation_generation,
             })
     }
-    termsession.terminal_session_destroy(&state^.shell.session)
-    state^.shell.phase = .Inactive
+    if !viewterminalmodel.shell_runtime_close_begin(
+        &state^.shell, u64(time.tick_since({}))) {
+        return false
+    }
     if state^.terminal_graphics_release != nil &&
        state^.simulation_executor != nil {
         state^.terminal_graphics_release(

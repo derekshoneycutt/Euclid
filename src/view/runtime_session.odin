@@ -19,6 +19,7 @@ import evidence_trace "../evidence/trace"
 import "../files"
 import "../shapes"
 import julia "../bridge"
+import "../taskpool"
 
 import "core:fmt"
 import "core:log"
@@ -468,7 +469,7 @@ when core.SCENARIOS_ENABLED {
     //   Write the terminal scenario artifact when one was requested.
     write_scenario_artifact :: proc(
         session: Euclid_Runtime_Session, runtime: ^Scenario_Runtime,
-        output: string) -> bool {
+        simulation: observe.Simulation, output: string) -> bool {
         if runtime == nil || len(output) == 0 {
             return true
         }
@@ -496,6 +497,7 @@ when core.SCENARIOS_ENABLED {
             events = events,
             state = observe_display_state(session.state),
             julia_host = observe.julia_host(session.julia_service),
+            simulation = simulation,
             allocations = observe.allocation(session.state.evidence_allocations),
             arena_baselines = session.state.evidence_arena_baselines,
         })
@@ -515,7 +517,8 @@ write_session_evidence :: proc(session: ^evidence_session.Session) -> bool {
 //   Shut down one runtime session in reverse ownership order.
 finish_runtime_evidence :: proc(
     session: Euclid_Runtime_Session, scenario_runtime: ^Scenario_Runtime,
-    artifact_output: string) -> (artifact_succeeded, evidence_exit_failed: bool) {
+    simulation: observe.Simulation, artifact_output: string) -> (
+    artifact_succeeded, evidence_exit_failed: bool) {
     _ = evidence_session.session_record(
         &session.state^.evidence_session, &session.state^.evidence_ring, {
             lane = .Lifecycle,
@@ -526,7 +529,7 @@ finish_runtime_evidence :: proc(
         &session.state^.evidence_session, &session.state^.evidence_ring)
     when core.SCENARIOS_ENABLED {
         artifact_succeeded = write_scenario_artifact(
-            session, scenario_runtime, artifact_output)
+            session, scenario_runtime, simulation, artifact_output)
     } else {
         artifact_succeeded = true
     }
@@ -552,11 +555,13 @@ shutdown_runtime_session :: proc(
     julia_egress_router_detach(session.state, session.presentation)
     destroy_presentation_runtime(session.presentation)
     terminal_graphics_runtime_destroy(session.state)
+    taskpool.task_pool_shutdown(&session.state^.simulation_executor^.pool)
+    simulation := observe_simulation_executor(session.state^.simulation_executor)
     destroy_simulation_executor(session.state^.simulation_executor)
     session.state^.simulation_executor = nil
     shutdown_julia_runtime(session.state, session.julia_service)
     artifact_succeeded, evidence_exit_failed := finish_runtime_evidence(
-        session, scenario_runtime, artifact_output)
+        session, scenario_runtime, simulation, artifact_output)
     julia.release_published_view_snapshot(session.state, session.julia_service)
     julia.destroy_julia_runtime_service(session.julia_service)
     session.state^.julia_runtime_service = nil

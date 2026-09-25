@@ -354,7 +354,9 @@ sdl_draw_runtime_allocate_custom_storage :: proc(
 sdl_draw_runtime_allocate_storage :: proc(runtime: ^Sdl_Draw_Runtime) -> bool {
     arena_error := vmem.arena_init_static(&runtime^.arena,
         DRAW_ARENA_RESERVE_SIZE, DRAW_ARENA_INITIAL_COMMIT_SIZE)
-    if arena_error != nil {return false}
+    if arena_error != nil {
+        return false
+    }
     runtime^.arena_initialized = true
     allocator := vmem.arena_allocator(&runtime^.arena)
     if !sdl_draw_runtime_allocate_core_storage(runtime, allocator) ||
