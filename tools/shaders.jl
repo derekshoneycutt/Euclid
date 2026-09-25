@@ -9,7 +9,8 @@ export ShaderAbi, ShaderArtifacts, ShaderSpec, build_shaders, compile_command,
     runtime_shader_entrypoint, runtime_shader_format, shader_abis, shader_specs,
     shadercross_build_command, shadercross_configure_command,
     validate_pipeline_contracts, validate_reflection, validate_spirv_abi,
-    windows_sdl3_development_root, windows_shadercross_runtime_dirs
+    windows_sdl3_development_root, windows_shadercross_manifest,
+    windows_shadercross_runtime_dirs
 
 const SHADER_SCHEMA_VERSION = 1
 const MSL_VERSION = "2.0.0"
@@ -17,19 +18,146 @@ const SHADERCROSS_ENV = "EUCLID_SHADERCROSS"
 const SDL3_DEV_ROOT_ENV = "EUCLID_SDL3_DEV_ROOT"
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "bin", "win64", "sdl")
+const WINDOWS_SHADERCROSS_DIR = joinpath(
+    REPOSITORY_ROOT, "libs", "bin", "win64", "sdl_shadercross")
 const SHADERCROSS_DEPENDENCIES = [
     "DirectXShaderCompiler", "SPIRV-Cross", "SPIRV-Headers", "SPIRV-Tools"]
+const WINDOWS_SHADERCROSS_ARTIFACTS = Set([
+    "shadercross.exe", "SDL3_shadercross.dll", "spirv-cross-c-shared.dll",
+    "dxcompiler.dll", "dxil.dll", "spirv-val.exe", "spirv-dis.exe"])
+const WINDOWS_SHADERCROSS_COMPONENTS = Set([
+    "SDL_shadercross", "SPIRV-Cross", "DirectXShaderCompiler",
+    "SPIRV-Tools", "SPIRV-Headers"])
+const WINDOWS_SHADERCROSS_SOURCE_DEPENDENCIES = Set([
+    "DirectX-Headers", "DXC-SPIRV-Headers", "DXC-SPIRV-Tools"])
 
-"""Return DLL directories required by the source-built Windows shadercross CLI."""
+"""Return DLL directories required by the repository Windows shadercross CLI."""
 function windows_shadercross_runtime_dirs(
     repository_root::String=REPOSITORY_ROOT)
-    build = joinpath(repository_root, ".build", "shadercross")
     return [
-        WINDOWS_SDL_DIR,
-        build,
-        joinpath(build, "external", "SPIRV-Cross"),
-        joinpath(build, "external", "DirectXShaderCompiler", "bin"),
+        joinpath(repository_root, "libs", "bin", "win64", "sdl"),
+        joinpath(repository_root, "libs", "bin", "win64", "sdl_shadercross"),
     ]
+end
+
+"""Return the parent repository's pinned shadercross gitlink when available."""
+function repository_shadercross_commit(repository_root::String)
+    ispath(joinpath(repository_root, ".git")) || return nothing
+    git = Sys.which("git")
+    git === nothing && return nothing
+    output = IOBuffer()
+    command = Cmd([git, "-C", repository_root, "rev-parse",
+        "HEAD:tools/shadercross"])
+    process = run(pipeline(ignorestatus(command), stdout=output, stderr=devnull))
+    process.exitcode == 0 || return nothing
+    commit = String(strip(String(take!(output))))
+    return occursin(r"^[0-9a-f]{40}$", commit) ? commit : nothing
+end
+
+"""Validate and return the repository-owned Windows shadercross manifest."""
+function windows_shadercross_manifest(
+    root::AbstractString=WINDOWS_SHADERCROSS_DIR;
+    architecture::Symbol=Sys.ARCH,
+    expected_source_commit::Union{Nothing,String}=nothing,
+    parse_file::Function=TOML.parsefile,
+    hash_file::Function=path -> bytes2hex(open(sha256, path)),
+    file_size::Function=filesize)
+    manifest_path = joinpath(normpath(root), "manifest.toml")
+    isfile(manifest_path) || error(
+        "Missing Windows SDL_shadercross manifest at $manifest_path")
+    manifest = parse_file(manifest_path)
+    get(manifest, "schema_version", 0) == 1 || error(
+        "Unsupported Windows SDL_shadercross manifest schema.")
+    get(manifest, "platform", "") == "windows" || error(
+        "Windows SDL_shadercross manifest has the wrong platform.")
+    expected_architecture = architecture == :x86_64 ?
+        "x86_64" : string(architecture)
+    get(manifest, "architecture", "") == expected_architecture || error(
+        "Windows SDL_shadercross manifest does not support $expected_architecture.")
+    get(manifest, "toolchain", "") == "msvc" || error(
+        "Windows SDL_shadercross manifest must use the MSVC toolchain.")
+    get(manifest, "provider", "") == "euclid-built" || error(
+        "Windows SDL_shadercross manifest has an unknown provider.")
+    source_commit = String(get(manifest, "source_commit", ""))
+    occursin(r"^[0-9a-f]{40}$", source_commit) || error(
+        "Windows SDL_shadercross manifest has an invalid source commit.")
+    expected_source_commit === nothing ||
+        source_commit == expected_source_commit || error(
+            "Windows SDL_shadercross payload does not match the repository gitlink.")
+    sdl_manifest = normpath(joinpath(root,
+        String(get(manifest, "sdl_manifest", ""))))
+    isfile(sdl_manifest) || error(
+        "Windows SDL_shadercross manifest references a missing SDL provider.")
+
+    components = get(manifest, "component", Any[])
+    component_names = Set(String(get(component, "name", ""))
+        for component in components)
+    length(component_names) == length(components) || error(
+        "Windows SDL_shadercross manifest contains duplicate components.")
+    component_names == WINDOWS_SHADERCROSS_COMPONENTS || error(
+        "Windows SDL_shadercross manifest has an incomplete component inventory.")
+    source_dependencies = get(manifest, "source_dependency", Any[])
+    source_dependency_names = Set(String(get(dependency, "name", ""))
+        for dependency in source_dependencies)
+    source_dependency_names == WINDOWS_SHADERCROSS_SOURCE_DEPENDENCIES || error(
+        "Windows SDL_shadercross manifest has incomplete source dependencies.")
+    all(dependency -> occursin(r"^[0-9a-f]{40}$",
+        String(get(dependency, "source_commit", ""))),
+        source_dependencies) || error(
+        "Windows SDL_shadercross manifest has an invalid dependency commit.")
+    for dependency in source_dependencies
+        name = String(get(dependency, "name", ""))
+        license_path = joinpath(root,
+            String(get(dependency, "license_file", "")))
+        isfile(license_path) || error(
+            "Missing Windows SDL_shadercross dependency license for $name.")
+        hash_file(license_path) == get(dependency, "license_sha256", "") || error(
+            "Windows SDL_shadercross dependency license hash mismatch for $name.")
+    end
+    allowed_dependencies = union(
+        component_names, source_dependency_names, Set(["SDL3"]))
+    artifact_names = Set{String}()
+    for component in components
+        name = String(get(component, "name", ""))
+        isempty(name) && error(
+            "Windows SDL_shadercross manifest contains an unnamed component.")
+        occursin(r"^[0-9a-f]{40}$",
+            String(get(component, "source_commit", ""))) || error(
+            "Windows SDL_shadercross manifest has an invalid commit for $name.")
+        all(dependency -> dependency in allowed_dependencies,
+            String.(get(component, "dependencies", String[]))) || error(
+            "Windows SDL_shadercross manifest has an unknown dependency for $name.")
+        license_path = joinpath(root,
+            String(get(component, "license_file", "")))
+        isfile(license_path) || error(
+            "Missing Windows SDL_shadercross license for $name.")
+        hash_file(license_path) == get(component, "license_sha256", "") || error(
+            "Windows SDL_shadercross license hash mismatch for $name.")
+        for artifact in get(component, "artifact", Any[])
+            filename = String(get(artifact, "file", ""))
+            filename in artifact_names && error(
+                "Duplicate Windows SDL_shadercross artifact: $filename")
+            push!(artifact_names, filename)
+            path = joinpath(root, filename)
+            isfile(path) || error(
+                "Missing Windows SDL_shadercross artifact: $filename")
+            file_size(path) == get(artifact, "bytes", -1) || error(
+                "Windows SDL_shadercross artifact size mismatch: $filename")
+            hash_file(path) == get(artifact, "sha256", "") || error(
+                "Windows SDL_shadercross artifact hash mismatch: $filename")
+        end
+    end
+    artifact_names == WINDOWS_SHADERCROSS_ARTIFACTS || error(
+        "Windows SDL_shadercross manifest has an incomplete artifact inventory.")
+    return manifest
+end
+
+"""Validate and return one checked-in Windows shadercross artifact."""
+function windows_shadercross_artifact(repository_root::String, filename::String)
+    root = joinpath(repository_root, "libs", "bin", "win64", "sdl_shadercross")
+    windows_shadercross_manifest(root;
+        expected_source_commit=repository_shadercross_commit(repository_root))
+    return realpath(joinpath(root, filename))
 end
 
 struct ShaderSpec
@@ -391,12 +519,16 @@ function resolve_shadercross(repository_root::String)
     override = get(ENV, SHADERCROSS_ENV, "")
     isempty(override) || return resolve_tool(
         "shadercross"; environment_name=SHADERCROSS_ENV)
+    Sys.iswindows() && return windows_shadercross_artifact(
+        repository_root, "shadercross.exe")
     return build_bundled_shadercross(repository_root)
 end
 
 """Resolve one SPIRV-Tools executable produced by the shadercross build."""
 function resolve_bundled_spirv_tool(repository_root::String, name::String)
     executable = Sys.iswindows() ? "$name.exe" : name
+    Sys.iswindows() && return windows_shadercross_artifact(
+        repository_root, executable)
     build = joinpath(repository_root, ".build", "shadercross")
     candidates = [
         joinpath(build, "external", "SPIRV-Tools", "tools", "Release", executable),

@@ -1,0 +1,137 @@
+schema_version = 1
+platform = "windows"
+architecture = "x86_64"
+toolchain = "msvc"
+provider = "euclid-built"
+version = "3.0.0"
+source_url = "https://github.com/libsdl-org/SDL_shadercross"
+source_commit = "1ff05bec573988a98ef9e0260b4da44f512b8367"
+sdl_manifest = "../sdl/manifest.toml"
+build_type = "Release"
+generator = "Ninja"
+msvc_version = "14.51.36231"
+cmake_options = [
+    "SDLSHADERCROSS_CLI=ON",
+    "SDLSHADERCROSS_DXC=ON",
+    "SDLSHADERCROSS_INSTALL=OFF",
+    "SDLSHADERCROSS_SHARED=ON",
+    "SDLSHADERCROSS_SPIRVCROSS_SHARED=ON",
+    "SDLSHADERCROSS_STATIC=OFF",
+    "SDLSHADERCROSS_TESTS=OFF",
+    "SDLSHADERCROSS_VENDORED=ON",
+    "SDLSHADERCROSS_WERROR=OFF",
+    "SPIRV_WERROR=OFF",
+]
+
+[[component]]
+name = "SDL_shadercross"
+version = "3.0.0"
+source_url = "https://github.com/libsdl-org/SDL_shadercross"
+source_commit = "1ff05bec573988a98ef9e0260b4da44f512b8367"
+license = "Zlib"
+license_file = "licenses/SDL_shadercross.txt"
+license_sha256 = "0fca9a9680aa2f3fedf3157ac21fac7a4ab4f334f78656e8e1d34721cb82c549"
+dependencies = ["SDL3", "SPIRV-Cross", "DirectXShaderCompiler"]
+
+[[component.artifact]]
+file = "shadercross.exe"
+role = "cli"
+bytes = 21504
+sha256 = "2d563f823836da047831acb917ccad141225b194bac47f85d70721b474ab5abb"
+
+[[component.artifact]]
+file = "SDL3_shadercross.dll"
+role = "runtime"
+bytes = 32256
+sha256 = "4c7cbffea7bd1b5476cf2dcd233e95e6800f3c3a5bc4c9da12ba4d48200f1b49"
+
+[[component]]
+name = "SPIRV-Cross"
+version = "vulkan-sdk-1.4.350.0"
+source_url = "https://github.com/KhronosGroup/SPIRV-Cross"
+source_commit = "1a6169566c73d3da552748fc372fe2bbb856e46e"
+license = "Apache-2.0"
+license_file = "licenses/SPIRV-Cross.txt"
+license_sha256 = "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+dependencies = []
+
+[[component.artifact]]
+file = "spirv-cross-c-shared.dll"
+role = "runtime"
+bytes = 2176512
+sha256 = "4197119f426c15e5ff42c315ec3fa41f78df4321419753cdd3b968268b146416"
+
+[[component]]
+name = "DirectXShaderCompiler"
+version = "v1.9.2602-SDL"
+source_url = "https://github.com/microsoft/DirectXShaderCompiler"
+source_commit = "2c84a1c5ab7091608c97df6ba5ccf46e71c322eb"
+license = "NCSA"
+license_file = "licenses/DirectXShaderCompiler.txt"
+license_sha256 = "05f32c081b3c75cd2cc2a0655b571ba94ebcfc64e9ccca6e5a9e36d6cb67e540"
+dependencies = ["DirectX-Headers", "DXC-SPIRV-Headers", "DXC-SPIRV-Tools"]
+
+[[component.artifact]]
+file = "dxcompiler.dll"
+role = "runtime"
+bytes = 21336064
+sha256 = "dd5db9aab5d58ac273b6db2dede3127765c01a2c6a6c83eff79be8216a27a706"
+
+[[component.artifact]]
+file = "dxil.dll"
+role = "runtime"
+bytes = 1722880
+sha256 = "2ea43f18241dc04225045a67df03d8870470c97936d1d6f19f845b79c4f1fee0"
+
+[[component]]
+name = "SPIRV-Tools"
+version = "v2026.2"
+source_url = "https://github.com/KhronosGroup/SPIRV-Tools"
+source_commit = "0539c81f69a3daeb706fd3477dca61435b475156"
+license = "Apache-2.0"
+license_file = "licenses/SPIRV-Tools.txt"
+license_sha256 = "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+dependencies = ["SPIRV-Headers"]
+
+[[component.artifact]]
+file = "spirv-val.exe"
+role = "validator"
+bytes = 1616384
+sha256 = "168d57d4f620aefd33b6aeac23f2260b7b5441cacac8bee316110c179dab6f72"
+
+[[component.artifact]]
+file = "spirv-dis.exe"
+role = "disassembler"
+bytes = 441344
+sha256 = "4cb7e6c4a9d562653aac2567c88ce51d295601c6448000942d6727fe950e4904"
+
+[[component]]
+name = "SPIRV-Headers"
+version = "1.5.4.raytracing.fixed"
+source_url = "https://github.com/KhronosGroup/SPIRV-Headers"
+source_commit = "ad9184e76a66b1001c29db9b0a3e87f646c64de0"
+license = "MIT"
+license_file = "licenses/SPIRV-Headers.txt"
+license_sha256 = "841a6e68e16bfc98db8eca98d7002d4f2b508c56ce865fd6f1726be30ed489eb"
+dependencies = []
+
+[[source_dependency]]
+name = "DirectX-Headers"
+source_commit = "980971e835876dc0cde415e8f9bc646e64667bf7"
+license = "MIT"
+license_file = "licenses/DirectX-Headers.txt"
+license_sha256 = "903df5512f7d02609fed0c780a9b704f5a3eeb6e4d84ebe42a29845c81899a3c"
+
+[[source_dependency]]
+name = "DXC-SPIRV-Headers"
+source_commit = "04f10f650d514df88b76d25e83db360142c7b174"
+license = "MIT"
+license_file = "licenses/SPIRV-Headers.txt"
+license_sha256 = "841a6e68e16bfc98db8eca98d7002d4f2b508c56ce865fd6f1726be30ed489eb"
+
+[[source_dependency]]
+name = "DXC-SPIRV-Tools"
+source_commit = "fbe4f3ad913c44fe8700545f8ffe35d1382b7093"
+license = "Apache-2.0"
+license_file = "licenses/SPIRV-Tools.txt"
+license_sha256 = "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"

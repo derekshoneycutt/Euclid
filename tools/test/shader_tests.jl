@@ -100,6 +100,31 @@ end
     @test Shaders.shadercross_build_command(
         "cmake", "/source/.build/shadercross").exec[end] == "--parallel"
 
+    if Sys.iswindows()
+        manifest = Shaders.windows_shadercross_manifest(
+            Shaders.WINDOWS_SHADERCROSS_DIR;
+            expected_source_commit=Shaders.repository_shadercross_commit(
+                Shaders.REPOSITORY_ROOT))
+        @test manifest["source_commit"] ==
+            "1ff05bec573988a98ef9e0260b4da44f512b8367"
+        @test Set(artifact["file"] for component in manifest["component"]
+            for artifact in get(component, "artifact", Any[])) ==
+            Shaders.WINDOWS_SHADERCROSS_ARTIFACTS
+        @test Shaders.windows_shadercross_runtime_dirs() == [
+            Shaders.WINDOWS_SDL_DIR, Shaders.WINDOWS_SHADERCROSS_DIR]
+        withenv(Shaders.SHADERCROSS_ENV => nothing) do
+            @test Shaders.resolve_shadercross(Shaders.REPOSITORY_ROOT) ==
+                realpath(joinpath(
+                    Shaders.WINDOWS_SHADERCROSS_DIR, "shadercross.exe"))
+            @test Shaders.resolve_bundled_spirv_tool(
+                Shaders.REPOSITORY_ROOT, "spirv-val") == realpath(joinpath(
+                    Shaders.WINDOWS_SHADERCROSS_DIR, "spirv-val.exe"))
+        end
+        @test_throws ErrorException Shaders.windows_shadercross_manifest(
+            Shaders.WINDOWS_SHADERCROSS_DIR;
+            expected_source_commit=repeat("0", 40))
+    end
+
     document = reflected_document(
         spec.uniform_buffers, spec.samplers, spec.inputs, spec.outputs)
     @test Shaders.validate_reflection(spec, document)

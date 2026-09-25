@@ -51,16 +51,17 @@ function with_tick_admissions(operation, expected::Int)
     return result
 end
 
-"""Provide a no-op host callback for Julia-only REPL tests."""
-function test_hide_point(
+"""Provide a successful visibility callback for Julia-only REPL tests."""
+function test_shape_set_visible(
     _state::Ptr{Cvoid},
-    _visible::Cint)::Cvoid
-    return nothing
+    _entity::UInt64,
+    _visible::UInt8)::Int32
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
 end
 
 if Sys.iswindows()
-    OdinJuliaBridge.HOST_SYMBOL_CACHE[:hide_point] =
-        @cfunction(test_hide_point, Cvoid, (Ptr{Cvoid}, Cint))
+    OdinJuliaBridge.HOST_SYMBOL_CACHE[:shape_set_visible] =
+        @cfunction(test_shape_set_visible, Int32, (Ptr{Cvoid}, UInt64, UInt8))
 end
 
 @testset "EuclidRepl validation" begin

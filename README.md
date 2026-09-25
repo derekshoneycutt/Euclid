@@ -47,11 +47,14 @@ Run `julia tools/make.jl probe-sdl3` to verify the native GPU path (Vulkan/SPIR-
 on Linux, Metal/MSL on macOS, or Direct3D 12/DXIL on Windows). Run
 `julia tools/make.jl probe-sdl3-image` to verify required static PNG/JPEG/GIF decode
 and streaming GIF encode/decode capabilities. The SDL_shadercross source and its
-dependencies are recursive submodules under `tools/shadercross`; asset builds
-configure and incrementally build its CLI under `.build/shadercross`.
-`EUCLID_SHADERCROSS` remains available for an explicit developer override. macOS
-support currently covers source builds and local runtime use; app bundling, signing,
-and notarization remain future work.
+dependencies are recursive submodules under `tools/shadercross`. Linux and macOS
+asset builds configure and incrementally build that source under `.build/shadercross`.
+Windows uses the checked-in x64 build-tool provider under
+`libs/bin/win64/sdl_shadercross`; its manifest pins the parent shadercross gitlink,
+recursive dependency commits, licenses, and artifact hashes. `EUCLID_SHADERCROSS`
+remains available for an explicit developer override. macOS support currently covers
+source builds and local runtime use; app bundling, signing, and notarization remain
+future work.
 
 Unix source and distribution builds may intentionally select system HarfBuzz with
 `EUCLID_HARFBUZZ_PROVIDER=system`. This mode also requires `pkg-config` and the
@@ -62,10 +65,10 @@ on macOS. Use the `system-harfbuzz` CMake preset to select and validate this mod
 Windows source builds require Odin, Julia, `gendef`, and the Visual Studio C++ Build
 Tools. The x64 SDL3, SDL_image, and libpng runtime payload and MSVC import libraries
 are checked in under `libs/bin/win64/sdl`; `manifest.toml` records their versions,
-licenses, and hashes. Building shadercross from source also requires the complete
-official SDL3 VC development package. It defaults to
-`C:\libs\SDL3-3.4.16-vc`; set `EUCLID_SDL3_DEV_ROOT` to another complete package
-root when needed. Windows supports only the default `HarfBuzz_jll` provider.
+licenses, and hashes. The matching checked-in shadercross CLI, SPIR-V tools, and DLL
+closure are under `libs/bin/win64/sdl_shadercross`; ordinary Windows builds do not
+require an external SDL3 development package or a local shadercross source build.
+Windows supports only the default `HarfBuzz_jll` provider.
 
 Clone the repository, configure one preset, then build it. CMake verifies the
 toolchain and bootstraps the required Julia environments before invoking the

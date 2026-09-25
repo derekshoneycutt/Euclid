@@ -798,7 +798,9 @@ the owner responsible for release.
   build-only shader tools are not runtime assets. Debug builds publish a matching
   package and `assets.pkg.identity` commit sidecar beside the debug executable.
 - SDL_shadercross and its recursive dependencies are tracked under `tools/shadercross`.
-  Asset builds configure it under `.build/shadercross` and compile the CLI with one job;
+  Linux and macOS asset builds configure that source under `.build/shadercross`.
+  Windows uses the manifest-validated provider under `libs/bin/win64/sdl_shadercross`,
+  whose source commit must equal the parent repository gitlink;
   `EUCLID_SHADERCROSS` is an explicit developer override.
 - Startup requires the package and identity sidecar beside the executable. It selects
   an immutable `assets/v3/<package_identity>` cache generation, verifies archive bytes

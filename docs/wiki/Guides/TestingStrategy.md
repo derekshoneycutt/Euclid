@@ -244,10 +244,11 @@ GPU qualification is also separate from `check`. Run
 `julia tools/make.jl probe-sdl3` to write `.build/sdl3-probe/result.json` and
 `diagnostics.log`. A passing result requires shader compilation, native device and
 swapchain creation, frame presentation, resize observation, and complete cleanup.
-Windows builds the vendored shadercross and SPIR-V tools with MSVC, converts the probe
-shaders to DXIL, selects SDL's `direct3d12` driver, and verifies the executable's
-`SDL3.dll` PE import. Set `EUCLID_SDL3_DEV_ROOT` when the complete official SDL3 VC
-development package is not at the manifest-derived default under `C:\libs`.
+Windows validates the checked-in shadercross and SPIR-V tools, then converts the probe
+shaders to DXIL using the provider under
+`libs/bin/win64/sdl_shadercross`, selects SDL's `direct3d12` driver, and verifies the
+executable's `SDL3.dll` PE import. The provider manifest pins the shadercross gitlink,
+recursive source commits, licenses, artifact sizes, and hashes.
 
 Animated Terminal GIF decode uses SDL_image as its sole production pixel source. Odin
 tests verify exact baseline and transparency/disposal canvases, parser-owned encoded and

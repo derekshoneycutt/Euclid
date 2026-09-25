@@ -82,6 +82,10 @@ const SCENARIO_ACTIONS = [
     "checkpoint", "allocation_checkpoint",
     "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
 
+const SCENARIO_ACTION_PAYLOADS = (
+    set_view_scroll=(required=["y"],),
+    set_splitters=(required=["vertical", "horizontal"],))
+
 const SCENARIO_EVENTS = [
     "runtime_ready", "runtime_reload_committed", "runtime_reload_rolled_back",
     "animation_selected", "animation_tick_committed",
@@ -121,9 +125,7 @@ function capabilities()
         trace_schema_version=TRACE_SCHEMA_VERSION,
         trace_event_bytes=TRACE_EVENT_BYTES,
         actions=SCENARIO_ACTIONS,
-        action_payloads=(
-            set_view_scroll=(required=["y"],),
-            set_splitters=(required=["vertical", "horizontal"],)),
+        action_payloads=SCENARIO_ACTION_PAYLOADS,
         events=SCENARIO_EVENTS,
         states=SCENARIO_STATES,
         captures=["screenshot", "gif", "trace", "state", "allocations", "manifest"],
@@ -142,6 +144,7 @@ function scenario_schema()
         maximum_name_bytes=64,
         maximum_timeout_ms=60_000,
         actions=SCENARIO_ACTIONS,
+        action_payloads=SCENARIO_ACTION_PAYLOADS,
         events=SCENARIO_EVENTS,
         states=SCENARIO_STATES,
         optional_fields=["as", "correlation", "timeout_ms"])

@@ -317,8 +317,9 @@ function initial_result()
         "reason" => "probe did not complete")
 end
 
-"""Resolve the shadercross executable used for Darwin MSL generation."""
+"""Resolve the platform shadercross executable used by the GPU probe."""
 function probe_shadercross_path(root::String)
+    Sys.iswindows() && return EuclidShaders.resolve_shadercross(root)
     override = get(ENV, "EUCLID_SHADERCROSS", "")
     candidates = isempty(override) ? [
         joinpath(root, ".build", "shadercross",
