@@ -43,7 +43,8 @@ sdl_dust_vertex_input :: proc() -> Sdl_Dust_Vertex_Input {
 // sdl_dust_pipeline_create binds static quad and per-instance vertex streams.
 sdl_dust_pipeline_create :: proc(
     device: ^sdl.GPUDevice,
-    paths: Sdl_Dust_Shader_Paths) -> ^sdl.GPUGraphicsPipeline {
+    paths: Sdl_Dust_Shader_Paths,
+    sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
     vertex_shader := sdl_draw_shader_create(device, paths.vertex, .VERTEX, 0, 1)
     if vertex_shader == nil {return nil}
     defer sdl.ReleaseGPUShader(device, vertex_shader)
@@ -65,7 +66,7 @@ sdl_dust_pipeline_create :: proc(
         primitive_type = .TRIANGLELIST,
         rasterizer_state = {fill_mode = .FILL, cull_mode = .NONE,
             front_face = .COUNTER_CLOCKWISE},
-        multisample_state = {sample_count = ._1},
+        multisample_state = {sample_count = sample_count},
         target_info = {color_target_descriptions = raw_data(targets[:]),
             num_color_targets = 1},
     })
@@ -74,7 +75,8 @@ sdl_dust_pipeline_create :: proc(
 // sdl_dust_runtime_admit publishes dedicated fallback and optional instance resources.
 sdl_dust_runtime_admit :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
-    paths: Sdl_Dust_Shader_Paths) -> bool {
+    paths: Sdl_Dust_Shader_Paths,
+    sample_count: sdl.GPUSampleCount) -> bool {
     if runtime == nil || device == nil || runtime^.dust_expanded_buffer != nil {
         return false
     }
@@ -91,7 +93,8 @@ sdl_dust_runtime_admit :: proc(
         sdl_dust_runtime_release(runtime, device)
         return false
     }
-    runtime^.dust_pipeline = sdl_dust_pipeline_create(device, paths)
+    runtime^.dust_pipeline = sdl_dust_pipeline_create(
+        device, paths, sample_count)
     if runtime^.dust_pipeline == nil {return true}
     runtime^.dust_quad_buffer = sdl.CreateGPUBuffer(device, {
         usage = {.VERTEX},

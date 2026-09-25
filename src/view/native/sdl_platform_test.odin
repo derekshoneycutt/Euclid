@@ -19,6 +19,15 @@ Sdl_Capture_Completion_Test_State :: struct {
     release_count: int,
 }
 
+// Verify SDL sample-count enum ordinals are not exposed as physical counts.
+@(test)
+sdl_scene_sample_count_values_are_physical :: proc(t: ^testing.T) {
+    testing.expect_value(t, sdl_scene_sample_count_value(._1), 1)
+    testing.expect_value(t, sdl_scene_sample_count_value(._2), 2)
+    testing.expect_value(t, sdl_scene_sample_count_value(._4), 4)
+    testing.expect_value(t, sdl_scene_sample_count_value(._8), 8)
+}
+
 // sdl_capture_test_wait records one injected fence wait.
 sdl_capture_test_wait :: proc(
     user_data: rawptr, _: ^sdl.GPUDevice, _: ^sdl.GPUFence) -> bool {

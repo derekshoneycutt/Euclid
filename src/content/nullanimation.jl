@@ -108,6 +108,12 @@ function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
         [state.lines[1].host, state.lines[2].host, state.lines[3].host,
          state.circles[1], state.circles[2]])
     set_triangle_pose!(state_ptr, state, ReflectionStart)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, state.lines[1].joint2, ReflectionStart[1])
+    OdinJuliaBridge.set_point_position(
+        state_ptr, state.lines[2].joint2, ReflectionStart[3])
+    OdinJuliaBridge.set_point_position(
+        state_ptr, state.lines[3].joint2, ReflectionStart[5])
     OdinJuliaBridge.set_arc_geometry(
         state_ptr, state.circles[1], Radius, 7f0 * π / 4f0, 0f0)
     OdinJuliaBridge.set_arc_geometry(
@@ -133,15 +139,15 @@ end
 
 """Initialize the null animation's construction geometry and cycle state."""
 function initialize(state_ptr::Ptr{Cvoid})
+    circle_a = OdinJuliaBridge.create_new_circle(
+        state_ptr, PointA, Radius, 7f0 * π / 4f0, 0f0, CircleColors[1], 0f0)
+    circle_b = OdinJuliaBridge.create_new_circle(
+        state_ptr, PointB, Radius, 3f0 * π / 4f0, 0f0, CircleColors[2], 0f0)
     lines = ntuple(3) do i
         line = OdinJuliaBridge.create_new_line(
             state_ptr, SideStarts[i], SideStarts[i], SideColors[i], 0f0)
         LineIds(line.host_id, line.joint1_id, line.joint2_id)
     end
-    circle_a = OdinJuliaBridge.create_new_circle(
-        state_ptr, PointA, Radius, 7f0 * π / 4f0, 0f0, CircleColors[1], 0f0)
-    circle_b = OdinJuliaBridge.create_new_circle(
-        state_ptr, PointB, Radius, 3f0 * π / 4f0, 0f0, CircleColors[2], 0f0)
     state = AnimationState(
         lines, (circle_a.host_id, circle_b.host_id), PhaseCompassDescend, 0f0)
     reset_cycle_state(state_ptr, state)

@@ -231,7 +231,8 @@ sdl_draw_shader_create :: proc(
 // sdl_draw_pipeline_create creates one straight-alpha 2D graphics pipeline.
 sdl_draw_pipeline_create :: proc(
     device: ^sdl.GPUDevice, vertex_path, fragment_path: string,
-    textured: bool) -> ^sdl.GPUGraphicsPipeline {
+    textured: bool,
+    sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
     vertex_shader := sdl_draw_shader_create(device, vertex_path, .VERTEX, 0, 1)
     if vertex_shader == nil {return nil}
     defer sdl.ReleaseGPUShader(device, vertex_shader)
@@ -242,7 +243,7 @@ sdl_draw_pipeline_create :: proc(
     if fragment_shader == nil {return nil}
     defer sdl.ReleaseGPUShader(device, fragment_shader)
     return sdl_draw_pipeline_create_from_shaders(
-        device, vertex_shader, fragment_shader, textured)
+        device, vertex_shader, fragment_shader, textured, sample_count)
 }
 
 // sdl_draw_vertex_input describes the fixed Draw_Vertex ABI.
@@ -264,7 +265,8 @@ sdl_draw_vertex_input :: proc(textured: bool) -> Sdl_Draw_Vertex_Input {
 // sdl_draw_pipeline_create_from_shaders binds the fixed Draw_Vertex ABI.
 sdl_draw_pipeline_create_from_shaders :: proc(
     device: ^sdl.GPUDevice, vertex_shader, fragment_shader: ^sdl.GPUShader,
-    textured: bool) -> ^sdl.GPUGraphicsPipeline {
+    textured: bool,
+    sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
     input := sdl_draw_vertex_input(textured)
     targets := [1]sdl.GPUColorTargetDescription{
         sdl_stroke_target_description()}
@@ -282,7 +284,7 @@ sdl_draw_pipeline_create_from_shaders :: proc(
             fill_mode = .FILL, cull_mode = .NONE,
             front_face = .COUNTER_CLOCKWISE,
         },
-        multisample_state = {sample_count = ._1},
+        multisample_state = {sample_count = sample_count},
         target_info = {
             color_target_descriptions = raw_data(targets[:]),
             num_color_targets = 1,
@@ -363,7 +365,8 @@ sdl_draw_runtime_allocate_storage :: proc(runtime: ^Sdl_Draw_Runtime) -> bool {
 // sdl_draw_runtime_create admits a complete renderer candidate transactionally.
 sdl_draw_runtime_create :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
-    paths: Sdl_Draw_Shader_Paths) -> bool {
+    paths: Sdl_Draw_Shader_Paths,
+    sample_count: sdl.GPUSampleCount) -> bool {
     if runtime == nil || device == nil {return false}
     candidate: Sdl_Draw_Runtime
     defer if candidate.colored_pipeline != nil || candidate.arena_initialized {
@@ -371,9 +374,9 @@ sdl_draw_runtime_create :: proc(
     }
     if !sdl_draw_runtime_allocate_storage(&candidate) {return false}
     candidate.colored_pipeline = sdl_draw_pipeline_create(device,
-        paths.colored_vertex, paths.colored_fragment, false)
+        paths.colored_vertex, paths.colored_fragment, false, sample_count)
     candidate.textured_pipeline = sdl_draw_pipeline_create(device,
-        paths.textured_vertex, paths.textured_fragment, true)
+        paths.textured_vertex, paths.textured_fragment, true, sample_count)
     candidate.nearest_sampler = sdl_draw_sampler_create(device, .NEAREST)
     candidate.linear_sampler = sdl_draw_sampler_create(device, .LINEAR)
     candidate.vertex_buffer = sdl.CreateGPUBuffer(device, {
@@ -847,9 +850,8 @@ sdl_draw_record_scene :: proc(
     encoder: ^Draw_Encoder, command_buffer: ^sdl.GPUCommandBuffer,
     clear_color: sdl.FColor) -> bool {
     sdl_draw_push_2d_uniform(command_buffer, encoder)
-    target := [1]sdl.GPUColorTargetInfo{{
-        texture = platform^.scene_target, clear_color = clear_color,
-        load_op = .CLEAR, store_op = .STORE}}
+    target := [1]sdl.GPUColorTargetInfo{
+        sdl_scene_color_target_info(platform, clear_color)}
     pass := sdl.BeginGPURenderPass(
         command_buffer, raw_data(target[:]), len(target), nil)
     if pass == nil {return false}

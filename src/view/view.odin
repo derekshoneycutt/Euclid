@@ -732,17 +732,20 @@ run_sdl_platform_session :: proc(
     platform: ^native.Sdl_Platform) -> int {
     draw_runtime: native.Sdl_Draw_Runtime
     if !native.sdl_draw_runtime_create(
-        &draw_runtime, platform^.device, sdl_draw_shader_paths()) {
+        &draw_runtime, platform^.device, sdl_draw_shader_paths(),
+        platform^.sample_count) {
         log.error("sdl_draw_runtime_create_failed")
         return 1
     }
     defer native.sdl_draw_runtime_destroy(&draw_runtime, platform^.device)
     if !native.sdl_stroke_runtime_admit(
-        &draw_runtime, platform^.device, sdl_stroke_shader_paths()) {
+        &draw_runtime, platform^.device, sdl_stroke_shader_paths(),
+        platform^.sample_count) {
         log.warn("sdl_stroke_runtime_unavailable")
     }
     if !native.sdl_dust_runtime_admit(
-        &draw_runtime, platform^.device, sdl_dust_shader_paths()) {
+        &draw_runtime, platform^.device, sdl_dust_shader_paths(),
+        platform^.sample_count) {
         log.warn("sdl_dust_runtime_unavailable")
     }
 
@@ -783,6 +786,7 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
         height = settings^.window.height,
         resizable = settings^.window.mode == .Resizable,
         vsync = settings^.do_vsync,
+        antialiasing = settings^.do_antialiasing,
     }) {
         log.error("sdl_platform_create_failed")
         return 1

@@ -86,6 +86,7 @@ Sdl_Platform :: struct {
     window:              ^sdl.Window,
     device:              ^sdl.GPUDevice,
     scene_target:        ^sdl.GPUTexture,
+    multisample_target:  ^sdl.GPUTexture,
     default_cursor:      ^sdl.Cursor,
     resize_ew_cursor:    ^sdl.Cursor,
     resize_ns_cursor:    ^sdl.Cursor,
@@ -93,6 +94,7 @@ Sdl_Platform :: struct {
     metrics:             Sdl_Window_Metrics,
     scene_width:         u32,
     scene_height:        u32,
+    sample_count:        sdl.GPUSampleCount,
     window_claimed:      bool,
     close_requested:     bool,
     resize_pending:      bool,
@@ -108,6 +110,7 @@ Sdl_Platform_Options :: struct {
     height:    int,
     resizable: bool,
     vsync:     bool,
+    antialiasing: bool,
 }
 
 // Sdl_Swapchain_Image records one acquired presentation texture and extent.
@@ -115,6 +118,12 @@ Sdl_Swapchain_Image :: struct {
     texture: ^sdl.GPUTexture,
     width:   u32,
     height:  u32,
+}
+
+// Sdl_Scene_Targets owns one complete render and resolve target pair.
+Sdl_Scene_Targets :: struct {
+    scene: ^sdl.GPUTexture,
+    multisample: ^sdl.GPUTexture,
 }
 
 // sdl_platform_metrics reads positive logical and physical extents from one window.
@@ -134,22 +143,84 @@ sdl_platform_metrics :: proc(window: ^sdl.Window) -> (Sdl_Window_Metrics, bool) 
     }, true
 }
 
-// sdl_scene_target_create creates one single-sample physical-pixel color target.
+// sdl_scene_target_create creates one physical-pixel color target.
 sdl_scene_target_create :: proc(
-    device: ^sdl.GPUDevice, width, height: u32) -> ^sdl.GPUTexture {
+    device: ^sdl.GPUDevice, width, height: u32,
+    sample_count: sdl.GPUSampleCount) -> ^sdl.GPUTexture {
     if device == nil || width == 0 || height == 0 {
         return nil
     }
+    usage: sdl.GPUTextureUsageFlags = {.COLOR_TARGET}
+    if sample_count == ._1 {usage += {.SAMPLER}}
     return sdl.CreateGPUTexture(device, {
         type = .D2,
         format = SDL_SCENE_FORMAT,
-        usage = {.COLOR_TARGET, .SAMPLER},
+        usage = usage,
         width = width,
         height = height,
         layer_count_or_depth = 1,
         num_levels = 1,
-        sample_count = ._1,
+        sample_count = sample_count,
     })
+}
+
+// sdl_scene_sample_count selects the best requested scene sample count.
+sdl_scene_sample_count :: proc(
+    device: ^sdl.GPUDevice, antialiasing: bool) -> sdl.GPUSampleCount {
+    if !antialiasing {return ._1}
+    if sdl.GPUTextureSupportsSampleCount(device, SDL_SCENE_FORMAT, ._4) {
+        return ._4
+    }
+    if sdl.GPUTextureSupportsSampleCount(device, SDL_SCENE_FORMAT, ._2) {
+        return ._2
+    }
+    return ._1
+}
+
+// sdl_scene_sample_count_value returns the physical sample count for diagnostics.
+sdl_scene_sample_count_value :: proc(sample_count: sdl.GPUSampleCount) -> int {
+    switch sample_count {
+    case ._1: return 1
+    case ._2: return 2
+    case ._4: return 4
+    case ._8: return 8
+    }
+    return 1
+}
+
+// sdl_scene_multisample_target_create creates the optional resolve source.
+sdl_scene_multisample_target_create :: proc(
+    device: ^sdl.GPUDevice, width, height: u32,
+    sample_count: sdl.GPUSampleCount) -> ^sdl.GPUTexture {
+    if sample_count == ._1 {return nil}
+    return sdl_scene_target_create(device, width, height, sample_count)
+}
+
+// sdl_scene_targets_create admits a complete render and resolve target pair.
+sdl_scene_targets_create :: proc(
+    device: ^sdl.GPUDevice, width, height: u32,
+    sample_count: sdl.GPUSampleCount) -> Sdl_Scene_Targets {
+    targets := Sdl_Scene_Targets{
+        scene = sdl_scene_target_create(device, width, height, ._1),
+    }
+    if targets.scene == nil {return {}}
+    targets.multisample = sdl_scene_multisample_target_create(
+        device, width, height, sample_count)
+    if sample_count != ._1 && targets.multisample == nil {
+        sdl.ReleaseGPUTexture(device, targets.scene)
+        return {}
+    }
+    return targets
+}
+
+// sdl_scene_targets_release releases a render target before its resolve target.
+sdl_scene_targets_release :: proc(
+    device: ^sdl.GPUDevice, scene_target,
+    multisample_target: ^sdl.GPUTexture) {
+    if multisample_target != nil {
+        sdl.ReleaseGPUTexture(device, multisample_target)
+    }
+    if scene_target != nil {sdl.ReleaseGPUTexture(device, scene_target)}
 }
 
 // sdl_platform_refresh_target atomically replaces a mismatched scene target.
@@ -166,22 +237,36 @@ sdl_platform_refresh_target :: proc(platform: ^Sdl_Platform) -> bool {
         platform^.resize_pending = false
         return true
     }
-    candidate := sdl_scene_target_create(platform^.device, width, height)
-    if candidate == nil {
-        return false
-    }
+    candidate := sdl_scene_targets_create(
+        platform^.device, width, height, platform^.sample_count)
+    if candidate.scene == nil {return false}
     if platform^.scene_target != nil {
         if !sdl.WaitForGPUIdle(platform^.device) {
-            sdl.ReleaseGPUTexture(platform^.device, candidate)
+            sdl_scene_targets_release(
+                platform^.device, candidate.scene, candidate.multisample)
             return false
         }
-        sdl.ReleaseGPUTexture(platform^.device, platform^.scene_target)
+        sdl_scene_targets_release(platform^.device, platform^.scene_target,
+            platform^.multisample_target)
     }
-    platform^.scene_target = candidate
+    platform^.scene_target = candidate.scene
+    platform^.multisample_target = candidate.multisample
     platform^.scene_width = width
     platform^.scene_height = height
     platform^.resize_pending = false
     return true
+}
+
+// sdl_scene_color_target_info resolves optional MSAA into the capture target.
+sdl_scene_color_target_info :: proc(
+    platform: ^Sdl_Platform, clear_color: sdl.FColor) -> sdl.GPUColorTargetInfo {
+    if platform^.multisample_target == nil {
+        return {texture = platform^.scene_target, clear_color = clear_color,
+            load_op = .CLEAR, store_op = .STORE}
+    }
+    return {texture = platform^.multisample_target,
+        clear_color = clear_color, load_op = .CLEAR, store_op = .RESOLVE,
+        resolve_texture = platform^.scene_target}
 }
 
 // sdl_swapchain_acquire acquires one command buffer and its presentation image.
@@ -205,12 +290,8 @@ sdl_swapchain_acquire :: proc(
 sdl_submit_clear_blit :: proc(
     platform: ^Sdl_Platform, command_buffer: ^sdl.GPUCommandBuffer,
     image: Sdl_Swapchain_Image, clear_color: sdl.FColor) -> bool {
-    target := [1]sdl.GPUColorTargetInfo{{
-        texture = platform^.scene_target,
-        clear_color = clear_color,
-        load_op = .CLEAR,
-        store_op = .STORE,
-    }}
+    target := [1]sdl.GPUColorTargetInfo{
+        sdl_scene_color_target_info(platform, clear_color)}
     render_pass := sdl.BeginGPURenderPass(
         command_buffer, raw_data(target[:]), len(target), nil)
     if render_pass == nil {
@@ -470,9 +551,8 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
         if !sdl.WaitForGPUIdle(platform^.device) {
             log.errorf("sdl_gpu_idle_failed error=%s", sdl.GetError())
         }
-        if platform^.scene_target != nil {
-            sdl.ReleaseGPUTexture(platform^.device, platform^.scene_target)
-        }
+        sdl_scene_targets_release(platform^.device, platform^.scene_target,
+            platform^.multisample_target)
         if platform^.window_claimed {
             sdl.ReleaseWindowFromGPUDevice(platform^.device, platform^.window)
         }
@@ -513,12 +593,14 @@ sdl_platform_log_ready :: proc(
     platform: ^Sdl_Platform, present_mode: sdl.GPUPresentMode) {
     log.infof(
         "sdl_platform_ready version=%d video=%s gpu_driver=%s shader_formats=%v " +
-        "swapchain_format=%d present_mode=%d logical=%dx%d pixels=%dx%d scale=%f",
+        "swapchain_format=%d present_mode=%d samples=%d logical=%dx%d " +
+        "pixels=%dx%d scale=%f",
         sdl.GetVersion(), sdl.GetCurrentVideoDriver(),
         sdl.GetGPUDeviceDriver(platform^.device),
         sdl.GetGPUShaderFormats(platform^.device),
         sdl.GetGPUSwapchainTextureFormat(platform^.device, platform^.window),
-        present_mode, platform^.metrics.logical_width,
+        present_mode, sdl_scene_sample_count_value(platform^.sample_count),
+        platform^.metrics.logical_width,
         platform^.metrics.logical_height, platform^.metrics.pixel_width,
         platform^.metrics.pixel_height, platform^.metrics.display_scale)
 }
@@ -549,6 +631,8 @@ sdl_platform_create :: proc(
         sdl_platform_destroy(platform)
         return false
     }
+    platform^.sample_count = sdl_scene_sample_count(
+        platform^.device, options.antialiasing)
     platform^.resize_pending = true
     if !sdl_platform_refresh_target(platform) {
         sdl_platform_destroy(platform)

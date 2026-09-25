@@ -48,7 +48,8 @@ sdl_stroke_target_description :: proc() -> sdl.GPUColorTargetDescription {
 // sdl_stroke_pipeline_create binds the reflected 36-byte stroke vertex ABI.
 sdl_stroke_pipeline_create :: proc(
     device: ^sdl.GPUDevice,
-    paths: Sdl_Stroke_Shader_Paths) -> ^sdl.GPUGraphicsPipeline {
+    paths: Sdl_Stroke_Shader_Paths,
+    sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
     vertex_shader := sdl_draw_shader_create(device, paths.vertex, .VERTEX, 0, 1)
     if vertex_shader == nil {return nil}
     defer sdl.ReleaseGPUShader(device, vertex_shader)
@@ -73,7 +74,7 @@ sdl_stroke_pipeline_create :: proc(
             fill_mode = .FILL, cull_mode = .NONE,
             front_face = .COUNTER_CLOCKWISE,
         },
-        multisample_state = {sample_count = ._1},
+        multisample_state = {sample_count = sample_count},
         target_info = {
             color_target_descriptions = raw_data(targets[:]),
             num_color_targets = 1,
@@ -84,9 +85,10 @@ sdl_stroke_pipeline_create :: proc(
 // sdl_stroke_runtime_admit transactionally publishes optional stroke resources.
 sdl_stroke_runtime_admit :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
-    paths: Sdl_Stroke_Shader_Paths) -> bool {
+    paths: Sdl_Stroke_Shader_Paths,
+    sample_count: sdl.GPUSampleCount) -> bool {
     if runtime == nil || device == nil || runtime^.stroke_ready {return false}
-    pipeline := sdl_stroke_pipeline_create(device, paths)
+    pipeline := sdl_stroke_pipeline_create(device, paths, sample_count)
     if pipeline == nil {return false}
     vertex_buffer := sdl.CreateGPUBuffer(device, {
         usage = {.VERTEX},
