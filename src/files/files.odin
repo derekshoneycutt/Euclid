@@ -16,6 +16,8 @@ import "core:time"
 ASSET_PACKAGE_ROOT_DIR :: "EuclidApp"
 ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
+ASSET_PACKAGE_IDENTITY :: "assets.pkg.identity"
+ASSET_CACHE_SCHEMA_DIR :: "v3"
 GIF_OUTPUT_DIR_NAME :: "gifs"
 SYSIMAGE_CACHE_DIR_NAME :: "sysimages"
 ASSET_MANIFEST_MAX_BYTES :: 4096
@@ -45,6 +47,8 @@ Gif_Output_Transaction :: struct {
 Unpack_Targets :: struct {
     archive_path: string,
     unpack_dir:   string,
+    package_identity: string,
+    archive_sha256: string,
     ok:           bool,
 }
 
@@ -52,6 +56,19 @@ Packaged_Sysimage_Metadata :: struct {
     relative_path:     string,
     input_fingerprint: string,
     artifact_sha256:   string,
+    package_identity:  string,
+}
+
+Asset_Package_Sidecar :: struct {
+    package_identity: string,
+    archive_sha256:   string,
+}
+
+Asset_Sidecar_Parse_State :: struct {
+    sidecar: Asset_Package_Sidecar,
+    schema_seen: bool,
+    identity_seen: bool,
+    digest_seen: bool,
 }
 
 Manifest_Parse_State :: struct {
@@ -60,6 +77,7 @@ Manifest_Parse_State :: struct {
     path_seen:   bool,
     input_seen:  bool,
     digest_seen: bool,
+    identity_seen: bool,
     platform_ok: bool,
 }
 
@@ -72,7 +90,17 @@ destroy_packaged_sysimage_metadata :: proc(
     delete(metadata.relative_path, allocator)
     delete(metadata.input_fingerprint, allocator)
     delete(metadata.artifact_sha256, allocator)
+    delete(metadata.package_identity, allocator)
     metadata^ = {}
+}
+
+//   Release strings retained from one package identity sidecar.
+destroy_asset_package_sidecar :: proc(
+    sidecar: ^Asset_Package_Sidecar, allocator: mem.Allocator) {
+    if sidecar == nil {return}
+    delete(sidecar.package_identity, allocator)
+    delete(sidecar.archive_sha256, allocator)
+    sidecar^ = {}
 }
 
 //   Return whether text is one full lowercase SHA-256 digest.
@@ -89,26 +117,55 @@ is_lower_sha256 :: proc(value: string) -> bool {
     return true
 }
 
+//   Decode one canonical lowercase SHA-256 identity into fixed storage.
+parse_lower_sha256 :: proc(value: string) -> ([32]byte, bool) {
+    if !is_lower_sha256(value) {return {}, false}
+    result: [32]byte
+    for index in 0..<32 {
+        high := value[index * 2]
+        low := value[index * 2 + 1]
+        high_value := high <= '9' ? high - '0' : high - 'a' + 10
+        low_value := low <= '9' ? low - '0' : low - 'a' + 10
+        result[index] = byte(high_value << 4 | low_value)
+    }
+    return result, true
+}
+
+//   Clone one manifest value exactly once.
+assign_unique_manifest_string :: proc(
+    target: ^string, seen: ^bool, value: string,
+    allocator: mem.Allocator) -> bool {
+    if seen^ {
+        return false
+    }
+    target^ = strings.clone(value, allocator)
+    seen^ = true
+    return true
+}
+
 //   Capture one recognized manifest field while rejecting duplicates.
 assign_sysimage_manifest_field :: proc(
     state: ^Manifest_Parse_State, key, value: string,
     allocator: mem.Allocator) -> bool {
     switch key {
     case "schema_version":
-        if state.schema_seen || value != "2" { return false }
+        if state.schema_seen || value != "3" { return false }
         state.schema_seen = true
+    case "package_identity":
+        return assign_unique_manifest_string(
+            &state.metadata.package_identity, &state.identity_seen,
+            value, allocator)
     case "sysimage_path":
-        if state.path_seen { return false }
-        state.metadata.relative_path = strings.clone(value, allocator)
-        state.path_seen = true
+        return assign_unique_manifest_string(
+            &state.metadata.relative_path, &state.path_seen, value, allocator)
     case "sysimage_input_fingerprint":
-        if state.input_seen { return false }
-        state.metadata.input_fingerprint = strings.clone(value, allocator)
-        state.input_seen = true
+        return assign_unique_manifest_string(
+            &state.metadata.input_fingerprint, &state.input_seen,
+            value, allocator)
     case "sysimage_artifact_sha256":
-        if state.digest_seen { return false }
-        state.metadata.artifact_sha256 = strings.clone(value, allocator)
-        state.digest_seen = true
+        return assign_unique_manifest_string(
+            &state.metadata.artifact_sha256, &state.digest_seen,
+            value, allocator)
     case "sysimage_platform":
         state.platform_ok = value == PACKAGED_SYSIMAGE_PLATFORM
     }
@@ -139,17 +196,80 @@ parse_packaged_sysimage_manifest :: proc(
             return {}, false
         }
     }
-    valid := state.schema_seen && state.path_seen && state.input_seen &&
-        state.digest_seen && state.platform_ok &&
+    valid := state.schema_seen && state.identity_seen && state.path_seen &&
+        state.input_seen && state.digest_seen && state.platform_ok &&
         is_safe_asset_relative_path(state.metadata.relative_path) &&
         strings.has_prefix(state.metadata.relative_path, "sysimage/") &&
         strings.has_suffix(state.metadata.relative_path, PACKAGED_SYSIMAGE_FILENAME) &&
+        is_lower_sha256(state.metadata.package_identity) &&
         is_lower_sha256(state.metadata.input_fingerprint) &&
         is_lower_sha256(state.metadata.artifact_sha256)
     if !valid {
         destroy_packaged_sysimage_metadata(&state.metadata, allocator)
     }
     return state.metadata, valid
+}
+
+//   Assign one recognized sidecar field while rejecting duplicates.
+assign_asset_sidecar_field :: proc(
+    state: ^Asset_Sidecar_Parse_State, key, value: string,
+    allocator: mem.Allocator) -> bool {
+    switch key {
+    case "schema_version":
+        if state.schema_seen || value != "1" {return false}
+        state.schema_seen = true
+    case "package_identity":
+        if state.identity_seen {return false}
+        state.sidecar.package_identity = strings.clone(value, allocator)
+        state.identity_seen = true
+    case "archive_sha256":
+        if state.digest_seen {return false}
+        state.sidecar.archive_sha256 = strings.clone(value, allocator)
+        state.digest_seen = true
+    case:
+        return false
+    }
+    return true
+}
+
+//   Parse one bounded package identity sidecar.
+parse_asset_package_sidecar :: proc(
+    source: string, allocator: mem.Allocator) -> (Asset_Package_Sidecar, bool) {
+    if len(source) == 0 || len(source) > ASSET_MANIFEST_MAX_BYTES {
+        return {}, false
+    }
+    state: Asset_Sidecar_Parse_State
+    remaining := source
+    for len(remaining) > 0 {
+        newline := strings.index_byte(remaining, '\n')
+        line := remaining
+        if newline >= 0 {
+            line = remaining[:newline]
+            remaining = remaining[newline + 1:]
+        } else {remaining = ""}
+        separator := strings.index_byte(line, '=')
+        if separator <= 0 || !assign_asset_sidecar_field(
+            &state, line[:separator], line[separator + 1:], allocator) {
+            destroy_asset_package_sidecar(&state.sidecar, allocator)
+            return {}, false
+        }
+    }
+    valid := state.schema_seen && state.identity_seen && state.digest_seen &&
+        is_lower_sha256(state.sidecar.package_identity) &&
+        is_lower_sha256(state.sidecar.archive_sha256)
+    if !valid {destroy_asset_package_sidecar(&state.sidecar, allocator)}
+    return state.sidecar, valid
+}
+
+//   Read the committed identity paired with one adjacent assets package.
+read_asset_package_sidecar :: proc(
+    exe_dir: string, allocator: mem.Allocator) -> (Asset_Package_Sidecar, bool) {
+    path, path_err := filepath.join(
+        []string{exe_dir, ASSET_PACKAGE_IDENTITY}, context.temp_allocator)
+    if path_err != nil {return {}, false}
+    source, read_err := os.read_entire_file(path, context.temp_allocator)
+    if read_err != nil {return {}, false}
+    return parse_asset_package_sidecar(string(source), allocator)
 }
 
 //   Read validated sysimage metadata from one extracted asset tree.
@@ -216,7 +336,13 @@ file_matches_sha256 :: proc(path, expected: string) -> bool {
 //   Return the immutable cache root beside the mutable unpack directory.
 resolve_sysimage_cache_root :: proc(
     unpack_dir: string, allocator: mem.Allocator) -> (string, bool) {
-    package_root := filepath.dir(unpack_dir)
+    schema_root := filepath.dir(unpack_dir)
+    assets_root := filepath.dir(schema_root)
+    package_root := schema_root
+    if filepath.base(schema_root) == ASSET_CACHE_SCHEMA_DIR &&
+       filepath.base(assets_root) == ASSET_PACKAGE_DIR {
+        package_root = filepath.dir(assets_root)
+    }
     path, path_err := filepath.join(
         []string{package_root, SYSIMAGE_CACHE_DIR_NAME}, allocator)
     return path, path_err == nil && len(path) > 0
@@ -275,8 +401,9 @@ materialize_packaged_sysimage :: proc(
 
 //   Materialize the image declared by the currently extracted asset tree.
 materialize_current_packaged_sysimage :: proc(
-    allocator: mem.Allocator) -> (string, bool) {
-    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    exe_dir: string, allocator: mem.Allocator) -> (string, bool) {
+    unpack_dir, unpack_ok := resolve_current_asset_unpack_dir(
+        exe_dir, context.temp_allocator)
     if !unpack_ok {
         return "", false
     }
@@ -297,20 +424,23 @@ resolve_packaged_sysimage_path :: proc(
     if !exe_ok || !ensure_packaged_assets_unpacked_with_force(exe_dir, false) {
         return "", false
     }
-    path, ok := materialize_current_packaged_sysimage(allocator)
+    path, ok := materialize_current_packaged_sysimage(exe_dir, allocator)
     if ok {
         return path, true
     }
     if !ensure_packaged_assets_unpacked_with_force(exe_dir, true) {
         return "", false
     }
-    return materialize_current_packaged_sysimage(allocator)
+    return materialize_current_packaged_sysimage(exe_dir, allocator)
 }
 
 //   Return the active extracted package's validated sysimage input fingerprint.
 packaged_sysimage_input_fingerprint :: proc(
     allocator: mem.Allocator) -> (string, bool) {
-    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
+    if !exe_ok {return "", false}
+    unpack_dir, unpack_ok := resolve_current_asset_unpack_dir(
+        exe_dir, context.temp_allocator)
     if !unpack_ok {
         return "", false
     }
@@ -520,6 +650,12 @@ packaged_asset_archive_exists_root :: proc(
         fmt.eprintln("asset startup failed: archive not found at ", archive_path)
         return false
     }
+    _, sidecar_ok := read_asset_package_sidecar(
+        exe_dir, context.temp_allocator)
+    if !sidecar_ok {
+        fmt.eprintln("asset startup failed: package identity is missing or invalid")
+        return false
+    }
     return true
 }
 
@@ -552,7 +688,8 @@ reload_compatible_packaged_assets_root :: proc(
         return false
     }
     return replace_packaged_asset_tree(
-        targets.archive_path, targets.unpack_dir, expected_fingerprint)
+        targets.archive_path, targets.unpack_dir, targets.package_identity,
+        targets.archive_sha256, expected_fingerprint)
 }
 
 //   Force a fresh unpack of assets.pkg from an explicit root config.
@@ -561,32 +698,23 @@ reload_packaged_assets_root_with_config :: proc(
     return reload_packaged_assets_root(config)
 }
 
-//   Read the packaged archive modification time as unix nanoseconds.
+//   Read the committed semantic identity of the adjacent assets package.
 //
 // Parameters:
 //   - none.
 //
 // Returns:
-//   - mtime_unix_nano: Archive modification timestamp when available, otherwise 0.
-//   - ok: true when the timestamp was retrieved, otherwise false.
-packaged_asset_archive_modification_unix_nano :: proc() -> (i64, bool) {
+//   - identity: Fixed SHA-256 identity when the sidecar is valid.
+//   - ok: true when the committed identity was read and decoded.
+packaged_asset_package_identity :: proc() -> ([32]byte, bool) {
     exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
     if !exe_ok {
-        return 0, false
+        return {}, false
     }
-
-    archive_path, archive_ok := join_archive_path(exe_dir, context.temp_allocator)
-    if !archive_ok || !os.exists(archive_path) {
-        return 0, false
-    }
-
-    info, stat_err := os.stat(archive_path, context.temp_allocator)
-    if stat_err != nil {
-        return 0, false
-    }
-    defer os.file_info_delete(info, context.temp_allocator)
-
-    return time.time_to_unix_nano(info.modification_time), true
+    sidecar, sidecar_ok := read_asset_package_sidecar(
+        exe_dir, context.temp_allocator)
+    if !sidecar_ok {return {}, false}
+    return parse_lower_sha256(sidecar.package_identity)
 }
 
 //   Resolve an absolute path for a packaged asset relative path.
@@ -616,7 +744,8 @@ packaged_asset_path_with_config :: proc(
         return ""
     }
 
-    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    unpack_dir, unpack_ok := resolve_current_asset_unpack_dir(
+        exe_dir, context.temp_allocator)
     if !unpack_ok {
         return ""
     }
@@ -680,11 +809,14 @@ ensure_directory_exists :: proc(path: string) -> bool {
     return os.make_directory_all(path) == nil
 }
 
-//   Resolve the writable root directory where assets.pkg contents are unpacked.
+//   Resolve the writable cache generation for one semantic package identity.
 //
 // Notes:
 //   - Prefers user cache directory and falls back to temp directory.
-resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
+resolve_asset_unpack_dir :: proc(
+    package_identity: string,
+    allocator := context.temp_allocator) -> (string, bool) {
+    if !is_lower_sha256(package_identity) {return "", false}
     base_dir := ""
     cache_dir, _ := os.user_cache_dir(allocator)
     temp_dir, _ := os.temp_directory(allocator)
@@ -702,13 +834,24 @@ resolve_asset_unpack_dir :: proc(allocator := context.temp_allocator) -> (string
     }
 
     unpack_dir, unpack_err := filepath.join(
-        []string{base_dir, ASSET_PACKAGE_ROOT_DIR, ASSET_PACKAGE_DIR},
+        []string{base_dir, ASSET_PACKAGE_ROOT_DIR, ASSET_PACKAGE_DIR,
+            ASSET_CACHE_SCHEMA_DIR, package_identity},
         allocator)
     if unpack_err != nil || len(unpack_dir) == 0 {
         return "", false
     }
 
     return unpack_dir, true
+}
+
+//   Resolve the cache generation committed beside one executable directory.
+resolve_current_asset_unpack_dir :: proc(
+    exe_dir: string,
+    allocator := context.temp_allocator) -> (string, bool) {
+    sidecar, sidecar_ok := read_asset_package_sidecar(
+        exe_dir, context.temp_allocator)
+    if !sidecar_ok {return "", false}
+    return resolve_asset_unpack_dir(sidecar.package_identity, allocator)
 }
 
 //   Return whether all fixed baseline files exist in one extracted tree.
@@ -749,7 +892,8 @@ platform_terminfo_exists :: proc(unpack_dir: string) -> bool {
 }
 
 //   Check whether an unpack directory has baseline assets and a declared image.
-is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
+is_assets_unpack_ready :: proc(
+    unpack_dir, expected_package_identity: string) -> bool {
     if !os.is_directory(unpack_dir) || !baseline_asset_entries_exist(unpack_dir) {
         return false
     }
@@ -758,6 +902,7 @@ is_assets_unpack_ready :: proc(unpack_dir: string) -> bool {
     if !metadata_ok {
         return false
     }
+    if metadata.package_identity != expected_package_identity {return false}
     image_path, image_err := filepath.join(
         []string{unpack_dir, metadata.relative_path}, context.temp_allocator)
     if image_err != nil || !os.exists(image_path) {
@@ -776,16 +921,22 @@ resolve_unpack_targets :: proc(exe_dir: string) -> Unpack_Targets {
     archive_path, archive_ok := join_archive_path(exe_dir, context.temp_allocator)
     if !archive_ok {
         fmt.eprintln("asset unpack failed: could not build archive path")
-        return Unpack_Targets{"", "", false}
+        return {}
     }
-
-    unpack_dir, unpack_ok := resolve_asset_unpack_dir(context.temp_allocator)
+    sidecar, sidecar_ok := read_asset_package_sidecar(
+        exe_dir, context.temp_allocator)
+    if !sidecar_ok {
+        fmt.eprintln("asset unpack failed: package identity is missing or invalid")
+        return {}
+    }
+    unpack_dir, unpack_ok := resolve_asset_unpack_dir(
+        sidecar.package_identity, context.temp_allocator)
     if !unpack_ok {
         fmt.eprintln("asset unpack failed: could not resolve writable unpack directory")
-        return Unpack_Targets{"", "", false}
+        return {}
     }
-
-    return Unpack_Targets{archive_path, unpack_dir, true}
+    return Unpack_Targets{archive_path, unpack_dir,
+        sidecar.package_identity, sidecar.archive_sha256, true}
 }
 
 //   Decide whether unpack work is needed based on archive presence and force flag.
@@ -794,13 +945,14 @@ resolve_unpack_targets :: proc(exe_dir: string) -> Unpack_Targets {
 //   - continue_unpack: true when caller should proceed with unpack work.
 //   - result: return value the caller should use when unpack should not continue.
 should_continue_unpack :: proc(
-    archive_path, unpack_dir: string, force: bool) -> (bool, bool) {
+    archive_path, unpack_dir, package_identity: string,
+    force: bool) -> (bool, bool) {
     if !os.exists(archive_path) {
         fmt.eprintln("asset unpack failed: archive not found at ", archive_path)
         return false, os.is_directory(unpack_dir)
     }
 
-    if !force && is_assets_unpack_ready(unpack_dir) {
+    if !force && is_assets_unpack_ready(unpack_dir, package_identity) {
         return false, true
     }
 
@@ -860,15 +1012,19 @@ publish_candidate_unpack_directory :: proc(
 
 //   Extract and validate an archive into a sibling candidate directory.
 replace_packaged_asset_tree :: proc(
-    archive_path, unpack_dir: string,
+    archive_path, unpack_dir, package_identity, archive_sha256: string,
     expected_fingerprint: string = "") -> bool {
     candidate_dir := fmt.tprintf("%s.candidate", unpack_dir)
     backup_dir := fmt.tprintf("%s.previous", unpack_dir)
+    if !file_matches_sha256(archive_path, archive_sha256) {
+        fmt.eprintln("asset unpack failed: archive digest does not match identity")
+        return false
+    }
     if !prepare_unpack_directory(candidate_dir) {
         return false
     }
     if !decode_and_extract_archive_payload(archive_path, candidate_dir) ||
-       !is_assets_unpack_ready(candidate_dir) {
+       !is_assets_unpack_ready(candidate_dir, package_identity) {
         _ = os.remove_all(candidate_dir)
         fmt.eprintln("asset unpack failed: candidate asset tree is incomplete")
         return false
@@ -901,10 +1057,13 @@ ensure_packaged_assets_unpacked_with_force :: proc(
     }
 
     continue_unpack, early_result :=
-        should_continue_unpack(targets.archive_path, targets.unpack_dir, force)
+        should_continue_unpack(targets.archive_path, targets.unpack_dir,
+            targets.package_identity, force)
     if !continue_unpack {
         return early_result
     }
 
-    return replace_packaged_asset_tree(targets.archive_path, targets.unpack_dir)
+    return replace_packaged_asset_tree(
+        targets.archive_path, targets.unpack_dir, targets.package_identity,
+        targets.archive_sha256)
 }

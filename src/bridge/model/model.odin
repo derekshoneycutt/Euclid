@@ -198,7 +198,8 @@ Euclid_Julia_Interface :: struct {
     init_scripts: ^julialib.jl_value_t,
     ensure_animation_loaded: ^julialib.jl_value_t,
     global_loop: ^julialib.jl_value_t,
-    asset_archive_mod_time_unix_nano: i64,
+    asset_package_identity: [32]byte,
+    asset_package_identity_valid: bool,
 
     null_animation: Euclid_Julia_Animation_Interface,
 

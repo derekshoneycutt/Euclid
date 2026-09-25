@@ -669,11 +669,17 @@ julia_runtime_saturation_diagnostics_are_power_of_two_bounded :: proc(t: ^testin
 julia_reload_failure_records_package_revision :: proc(t: ^testing.T) {
     service := new(app_bridge.Julia_Runtime_Service, context.allocator)
     defer free(service)
+    identity: [32]byte
+    identity[0] = 1
+    identity[1] = 2
+    identity[2] = 3
+    identity[3] = 4
 
-    app_bridge.mark_julia_reload_failed(service, 1234)
+    app_bridge.mark_julia_reload_failed(service, identity)
 
     testing.expect(t, service^.reload_state == .Failed)
-    testing.expect_value(t, service^.reload_failed_mtime_unix_nano, i64(1234))
+    testing.expect(t, service^.reload_failed_package_identity_valid)
+    testing.expect_value(t, service^.reload_failed_package_identity, identity)
     testing.expect_value(t, service^.runtime_generation, u64(0))
 }
 

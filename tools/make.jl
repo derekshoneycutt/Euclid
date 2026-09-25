@@ -131,6 +131,7 @@ const EVIDENCE_SCRIPT = joinpath(SCRIPT_DIR, "tools", "evidence.jl")
 const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
 const ASSETS_STAGING_DIR = joinpath(BIN_DIR, ".assets_staging")
 const ASSETS_ARCHIVE_PATH = joinpath(BIN_DIR, "assets.pkg")
+const ASSETS_IDENTITY_PATH = ASSETS_ARCHIVE_PATH * ".identity"
 const SYSIMAGE_CACHE_ROOT = joinpath(SCRIPT_DIR, ".build", "sysimage-cache")
 const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
@@ -309,6 +310,9 @@ debug_app_binary_path() = joinpath(
 
 """Return the assets package path adjacent to the debug application."""
 debug_assets_archive_path() = joinpath(dirname(debug_app_binary_path()), "assets.pkg")
+
+"""Return the asset identity sidecar adjacent to the debug package."""
+debug_assets_identity_path() = debug_assets_archive_path() * ".identity"
 
 """Return the default synchronized diagnostics path for debug runs."""
 debug_diagnostics_path() = joinpath(SCRIPT_DIR, ".build", "debug", "euclid.log")
@@ -1060,9 +1064,9 @@ function compile_staged_terminfo()
 end
 
 """Create the compressed assets archive from staging content."""
-function create_assets_archive()
+function create_assets_archive(destination::String)
     result = run_command(
-        Cmd(["tar", "-czf", ASSETS_ARCHIVE_PATH, "-C", ASSETS_STAGING_DIR, "."]))
+        Cmd(["tar", "-czf", destination, "-C", ASSETS_STAGING_DIR, "."]))
     return result.exit_code == 0
 end
 
@@ -1073,13 +1077,16 @@ function build_assets(
     prepare_julia_packages()
     sysimage = ensure_julia_sysimage(; force=force_sysimage)
     shaders = build_shaders(SCRIPT_DIR)
-    stage_assets_content(sysimage, shaders)
-    finalize_assets_archive()
+    package_identity = stage_assets_content(sysimage, shaders)
+    finalize_assets_archive(package_identity)
     if debug
         debug_archive = debug_assets_archive_path()
+        debug_identity = debug_assets_identity_path()
         mkpath(dirname(debug_archive))
         cp(ASSETS_ARCHIVE_PATH, debug_archive; force=true)
+        cp(ASSETS_IDENTITY_PATH, debug_identity; force=true)
         println("Wrote $debug_archive")
+        println("Wrote $debug_identity")
     end
 
     if do_build
@@ -1112,18 +1119,19 @@ end
 """Write deterministic metadata for the staged asset archive."""
 function write_assets_manifest(
     sysimage::JuliaSysimageArtifact, shaders::ShaderArtifacts,
-    sysimage_relative_path::String)
+    sysimage_relative_path::String, package_identity::String)
     open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
         write(io, """
 package=assets.pkg
 julia_root=julia
 content_root=content
 content_input_fingerprint=$(content_input_fingerprint())
+package_identity=$package_identity
 shader_root=shaders
 shader_manifest=shaders/manifest.toml
 shader_manifest_sha256=$(bytes2hex(open(sha256, shaders.manifest_path)))
 shader_schema_version=1
-schema_version=2
+schema_version=3
 sysimage_path=$(replace(sysimage_relative_path, '\\' => '/'))
 sysimage_input_fingerprint=$(sysimage.input_fingerprint)
 sysimage_artifact_sha256=$(sysimage.artifact_sha256)
@@ -1132,6 +1140,17 @@ sysimage_toolchain=$(sysimage_toolchain_identity())
 format=tar.gz
 """)
     end
+end
+
+"""Return the semantic identity of all staged package payload bytes."""
+function staged_asset_package_identity()
+    paths = String[]
+    for (directory, _, names) in walkdir(ASSETS_STAGING_DIR), name in names
+        push!(paths, joinpath(directory, name))
+    end
+    sort!(paths; by=path -> replace(relpath(path, ASSETS_STAGING_DIR), '\\' => '/'))
+    return fingerprint_sysimage_inputs(
+        paths, ASSETS_STAGING_DIR; identity="euclid-assets-v1")
 end
 
 """Populate asset staging with content and validated generated artifacts."""
@@ -1160,13 +1179,58 @@ function stage_assets_content(
     staged_sysimage = joinpath(ASSETS_STAGING_DIR, sysimage_relative_path)
     mkpath(dirname(staged_sysimage))
     cp(sysimage.path, staged_sysimage; force=true)
-    write_assets_manifest(sysimage, shaders, sysimage_relative_path)
+    package_identity = staged_asset_package_identity()
+    write_assets_manifest(
+        sysimage, shaders, sysimage_relative_path, package_identity)
+    return package_identity
 end
 
-"""Create the assets archive from staging and clean up the staging directory."""
-function finalize_assets_archive()
+"""Read one committed package identity from its bounded sidecar."""
+function read_asset_package_identity(path::String)
+    isfile(path) || return nothing
+    fields = Dict{String,String}()
+    expected_fields = Set((
+        "schema_version", "package_identity", "archive_sha256"))
+    for line in eachline(path)
+        pair = split(line, '='; limit=2)
+        length(pair) == 2 || return nothing
+        pair[1] in expected_fields || return nothing
+        haskey(fields, pair[1]) && return nothing
+        fields[pair[1]] = pair[2]
+    end
+    length(fields) == length(expected_fields) || return nothing
+    get(fields, "schema_version", "") == "1" || return nothing
+    identity = get(fields, "package_identity", "")
+    archive_digest = get(fields, "archive_sha256", "")
+    occursin(r"^[0-9a-f]{64}$", identity) || return nothing
+    occursin(r"^[0-9a-f]{64}$", archive_digest) || return nothing
+    return (package_identity=identity, archive_sha256=archive_digest)
+end
+
+"""Publish one archive and its identity sidecar with the sidecar as commit record."""
+function publish_assets_archive(package_identity::String)
+    archive_candidate = ASSETS_ARCHIVE_PATH * ".candidate"
+    identity_candidate = ASSETS_IDENTITY_PATH * ".candidate"
+    rm(archive_candidate; force=true)
+    rm(identity_candidate; force=true)
+    create_assets_archive(archive_candidate) || return false
+    archive_digest = sysimage_artifact_sha256(archive_candidate)
+    write(identity_candidate,
+        "schema_version=1\npackage_identity=$package_identity\n" *
+        "archive_sha256=$archive_digest\n")
+    mv(archive_candidate, ASSETS_ARCHIVE_PATH; force=true)
+    mv(identity_candidate, ASSETS_IDENTITY_PATH; force=true)
+    return true
+end
+
+"""Create or reuse the assets archive and clean up the staging directory."""
+function finalize_assets_archive(package_identity::String)
     mkpath(BIN_DIR)
-    assets_exit_code = create_assets_archive() ? 0 : 1
+    committed = read_asset_package_identity(ASSETS_IDENTITY_PATH)
+    reusable = isfile(ASSETS_ARCHIVE_PATH) && committed !== nothing &&
+        committed.package_identity == package_identity &&
+        committed.archive_sha256 == sysimage_artifact_sha256(ASSETS_ARCHIVE_PATH)
+    assets_exit_code = reusable || publish_assets_archive(package_identity) ? 0 : 1
     println("Assets package build exited $assets_exit_code")
 
     if ispath(ASSETS_STAGING_DIR)
@@ -1177,7 +1241,8 @@ function finalize_assets_archive()
         error("Assets package build failed.")
     end
 
-    println("Wrote $ASSETS_ARCHIVE_PATH")
+    println(reusable ? "Reusing $ASSETS_ARCHIVE_PATH" :
+        "Wrote $ASSETS_ARCHIVE_PATH")
 end
 
 """Build or reuse the generated Julia image for the current stable inputs."""

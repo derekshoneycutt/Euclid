@@ -293,7 +293,8 @@ computers, to be honest, especially given LLVM may make this optimization in eit
 The single biggest performance tweak is the default-enabled GPU Dust Instancing, which
 will draw the dust particles with the GPU.
 
-Euclid requires Julia 1.13 and packages a compressed Julia sysimage inside `assets.pkg`.
+Euclid requires Julia 1.13 and packages a compressed Julia sysimage inside `assets.pkg`,
+committed by an adjacent `assets.pkg.identity` sidecar.
 Normal build and asset commands fingerprint the stable Julia runtime and reuse the image
 from `.build/sysimage-cache` while those inputs remain unchanged. A stable-runtime,
 dependency, Julia, platform, or compiler-setting change triggers one automatic rebuild;
@@ -450,8 +451,9 @@ a compilation, this will automatically replace the assets package there.
 julia tools/make.jl assets
 ```
 
-Euclid will automatically notice the updated package file, unpack it, and reload all
-the Julia code, restarting the current animation according to the new code. If the current
+Euclid will automatically notice a new committed package identity, select or unpack its
+immutable cache generation, and reload all the Julia code, restarting the current
+animation according to the new code. If the current
 animation cannot be found, will simply start the first animation in the tree. This can be
 helpful for simple animation updates.
 

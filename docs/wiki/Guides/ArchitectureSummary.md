@@ -796,12 +796,14 @@ the owner responsible for release.
 - Builds compile canonical HLSL offline and package validated SPIR-V, reflection JSON,
   shader ABI metadata, Julia scripts, and other assets into `bin/assets.pkg`; HLSL and
   build-only shader tools are not runtime assets. Debug builds publish a matching
-  package beside the debug executable.
+  package and `assets.pkg.identity` commit sidecar beside the debug executable.
 - SDL_shadercross and its recursive dependencies are tracked under `tools/shadercross`.
   Asset builds configure it under `.build/shadercross` and compile the CLI with one job;
   `EUCLID_SHADERCROSS` is an explicit developer override.
-- Startup requires the package beside the executable and unpacks it to a writable
-  cache. A stale unpacked cache never substitutes for a missing package.
+- Startup requires the package and identity sidecar beside the executable. It selects
+  an immutable `assets/v3/<package_identity>` cache generation, verifies archive bytes
+  before a cache miss is extracted, and validates the extracted manifest identity.
+  A stale unpacked cache never substitutes for a missing or invalid package commit.
 
 ---
 

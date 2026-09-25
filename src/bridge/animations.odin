@@ -35,7 +35,7 @@ Julia_Interface_Reload_Transaction :: struct {
     state: ^core.Euclid_General_State,
     host: ^Julia_Runtime_Host,
     request: bridgemodel.Animation_Lifecycle_Requested,
-    archive_mtime: i64,
+    package_identity: [32]byte,
     stable_id: uuid.Identifier,
     candidate: ^julialib.jl_value_t,
     service: ^Julia_Runtime_Service,
@@ -282,18 +282,20 @@ animation_reload_update_needed :: proc(state: ^core.Euclid_General_State) -> boo
     if service != nil && service^.reload_requested {
         return true
     }
-    archive_mtime, ok := files.packaged_asset_archive_modification_unix_nano()
+    package_identity, ok := files.packaged_asset_package_identity()
     if !ok {
         return false
     }
-    if state^.julia_interface^.asset_archive_mod_time_unix_nano == 0 {
-        state^.julia_interface^.asset_archive_mod_time_unix_nano = archive_mtime
+    if !state^.julia_interface^.asset_package_identity_valid {
+        state^.julia_interface^.asset_package_identity = package_identity
+        state^.julia_interface^.asset_package_identity_valid = true
         return false
     }
-    archive_changed :=
-        archive_mtime != state^.julia_interface^.asset_archive_mod_time_unix_nano
-    return archive_changed &&
-        (service == nil || archive_mtime != service^.reload_failed_mtime_unix_nano)
+    package_changed :=
+        package_identity != state^.julia_interface^.asset_package_identity
+    failed := service != nil && service^.reload_failed_package_identity_valid &&
+        package_identity == service^.reload_failed_package_identity
+    return package_changed && !failed
 }
 
 //   Complete one supervisor lifecycle status, including the native reset barrier.
@@ -860,7 +862,7 @@ reload_packaged_assets_if_updated :: proc(
     state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
     host: ^Julia_Runtime_Host, request: bridgemodel.Animation_Lifecycle_Requested,
     target: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
-    archive_mtime, ok := files.packaged_asset_archive_modification_unix_nano()
+    package_identity, ok := files.packaged_asset_package_identity()
     if !ok {
         return true
     }
@@ -869,11 +871,12 @@ reload_packaged_assets_if_updated :: proc(
     if service != nil {
         service^.reload_requested = false
     }
-    if !force_reload && asset_archive_mtime_current(state, archive_mtime) {
+    if !force_reload && asset_package_identity_current(state, package_identity) {
         return true
     }
     if !force_reload && service != nil &&
-        archive_mtime == service^.reload_failed_mtime_unix_nano {
+        service^.reload_failed_package_identity_valid &&
+        package_identity == service^.reload_failed_package_identity {
         return true
     }
     if service != nil {
@@ -881,12 +884,12 @@ reload_packaged_assets_if_updated :: proc(
     }
     record_runtime_reload_event(state, "runtime.reload_started")
 
-    if !refresh_packaged_assets(state, service, archive_mtime) {
+    if !refresh_packaged_assets(state, service, package_identity) {
         return false
     }
 
     reloaded := stage_julia_interface_reload(
-        state, host, request, archive_mtime, target^.stable_id)
+        state, host, request, package_identity, target^.stable_id)
     if !reloaded {
         record_runtime_reload_event(state, "runtime.reload_rolled_back")
         return false
@@ -896,18 +899,19 @@ reload_packaged_assets_if_updated :: proc(
     return true
 }
 
-//   Track the archive mtime and report whether it already matches the active state.
+//   Track package identity and report whether it already matches active state.
 //
 // Returns:
-//   - true when the archive mtime is unchanged (or just seeded), so no reload is needed.
-asset_archive_mtime_current :: proc(
-    state: ^core.Euclid_General_State, archive_mtime: i64) -> bool {
+//   - true when package identity is unchanged (or just seeded).
+asset_package_identity_current :: proc(
+    state: ^core.Euclid_General_State, package_identity: [32]byte) -> bool {
 
-    if state^.julia_interface^.asset_archive_mod_time_unix_nano == 0 {
-        state^.julia_interface^.asset_archive_mod_time_unix_nano = archive_mtime
+    if !state^.julia_interface^.asset_package_identity_valid {
+        state^.julia_interface^.asset_package_identity = package_identity
+        state^.julia_interface^.asset_package_identity_valid = true
         return true
     }
-    return archive_mtime == state^.julia_interface^.asset_archive_mod_time_unix_nano
+    return package_identity == state^.julia_interface^.asset_package_identity
 }
 
 //   Re-extract packaged assets, rolling back and reporting on failure.
@@ -916,14 +920,14 @@ asset_archive_mtime_current :: proc(
 //   - true when the candidate source tree was refreshed successfully.
 refresh_packaged_assets :: proc(
     state: ^core.Euclid_General_State,
-    service: ^Julia_Runtime_Service, archive_mtime: i64) -> bool {
+    service: ^Julia_Runtime_Service, package_identity: [32]byte) -> bool {
 
     fingerprint, fingerprint_ok := files.packaged_sysimage_input_fingerprint(
         context.temp_allocator)
     if !fingerprint_ok ||
        !files.reload_compatible_packaged_assets_root(fingerprint) {
         fmt.eprintln("Julia asset reload skipped: failed to re-extract assets package")
-        mark_julia_reload_failed(service, archive_mtime)
+        mark_julia_reload_failed(service, package_identity)
         record_runtime_reload_event(state, "runtime.reload_rolled_back")
         return false
     }
@@ -1028,11 +1032,11 @@ begin_julia_interface_reload :: proc(
 //   Construct one rooted reload candidate and publish construction failure.
 create_julia_interface_reload_candidate :: proc(
     service: ^Julia_Runtime_Service,
-    archive_mtime: i64) -> ^julialib.jl_value_t {
+    package_identity: [32]byte) -> ^julialib.jl_value_t {
     candidate := create_julia_runtime_generation()
     if candidate == nil {
         fmt.eprintln("Julia asset reload: candidate generation construction failed")
-        mark_julia_reload_failed(service, archive_mtime)
+        mark_julia_reload_failed(service, package_identity)
     }
     return candidate
 }
@@ -1040,7 +1044,8 @@ create_julia_interface_reload_candidate :: proc(
 //   Register and validate one fresh interface before retiring the active generation.
 stage_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State, host: ^Julia_Runtime_Host,
-    request: bridgemodel.Animation_Lifecycle_Requested, archive_mtime: i64,
+    request: bridgemodel.Animation_Lifecycle_Requested,
+    package_identity: [32]byte,
     stable_id: uuid.Identifier) -> bool {
 
     service, admitted := begin_julia_interface_reload(state)
@@ -1050,7 +1055,7 @@ stage_julia_interface_reload :: proc(
     gc_stack := julialib.jl_get_pgcstack()
     if gc_stack == nil {
         fmt.eprintln("Julia asset reload: owner thread has no GC stack")
-        mark_julia_reload_failed(service, archive_mtime)
+        mark_julia_reload_failed(service, package_identity)
         return false
     }
     candidate: ^julialib.jl_value_t
@@ -1061,20 +1066,19 @@ stage_julia_interface_reload :: proc(
     }
     gc_stack^ = (^julialib.jl_gcframe_t)(&candidate_frame)
     defer gc_stack^ = candidate_frame.previous
-    candidate = create_julia_interface_reload_candidate(service, archive_mtime)
+    candidate = create_julia_interface_reload_candidate(service, package_identity)
     if candidate == nil {
         return false
     }
-    transaction := Julia_Interface_Reload_Transaction{
+    return validate_julia_interface_reload(&Julia_Interface_Reload_Transaction{
         state = state,
         host = host,
         request = request,
-        archive_mtime = archive_mtime,
+        package_identity = package_identity,
         stable_id = stable_id,
         candidate = candidate,
         service = service,
-    }
-    return validate_julia_interface_reload(&transaction)
+    })
 }
 
 //   Register one candidate and select its requested target without entering it.
@@ -1106,7 +1110,7 @@ reject_julia_interface_reload :: proc(
     rollback_julia_interface_reload(
         transaction^.state, transaction^.previous_interface,
         transaction^.staged_interface, transaction^.service,
-        transaction^.archive_mtime)
+        transaction^.package_identity)
     return false
 }
 
@@ -1122,10 +1126,12 @@ prepare_julia_interface_reload_candidate :: proc(
     if !julia_interface_handles_valid(staged_interface) {
         fmt.eprintln("Julia asset reload: stable callback validation failed")
         clean_julia_interface_instance(staged_interface)
-        mark_julia_reload_failed(transaction^.service, transaction^.archive_mtime)
+        mark_julia_reload_failed(
+            transaction^.service, transaction^.package_identity)
         return false
     }
-    staged_interface^.asset_archive_mod_time_unix_nano = transaction^.archive_mtime
+    staged_interface^.asset_package_identity = transaction^.package_identity
+    staged_interface^.asset_package_identity_valid = true
     state^.julia_interface = staged_interface
     initialized, restored := initialize_and_restore_julia_candidate(
         state, transaction^.stable_id, transaction^.candidate)
@@ -1180,13 +1186,13 @@ validate_julia_interface_reload :: proc(
 rollback_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State,
     previous_interface, staged_interface: ^bridgemodel.Euclid_Julia_Interface,
-    service: ^Julia_Runtime_Service, archive_mtime: i64) {
+    service: ^Julia_Runtime_Service, package_identity: [32]byte) {
 
     clean_julia_interface_instance(staged_interface)
     state^.julia_interface = previous_interface
     service^.reload_failure_injection = .None
     julialib.jl_gc_collect(.JL_GC_FULL)
-    mark_julia_reload_failed(service, archive_mtime)
+    mark_julia_reload_failed(service, package_identity)
 }
 
 //   Publish one validated interface generation and retire its predecessor.
@@ -1205,17 +1211,20 @@ publish_julia_interface_reload :: proc(
     if service != nil {
         service^.reload_failure_injection = .None
         service^.runtime_generation += 1
-        service^.reload_failed_mtime_unix_nano = 0
+        service^.reload_failed_package_identity = {}
+        service^.reload_failed_package_identity_valid = false
         service^.reload_state = .Idle
     }
 }
 
 //   Preserve the active generation and suppress retries for one broken package revision.
-mark_julia_reload_failed :: proc(service: ^Julia_Runtime_Service, archive_mtime: i64) {
+mark_julia_reload_failed :: proc(
+    service: ^Julia_Runtime_Service, package_identity: [32]byte) {
     if service == nil {
         return
     }
-    service^.reload_failed_mtime_unix_nano = archive_mtime
+    service^.reload_failed_package_identity = package_identity
+    service^.reload_failed_package_identity_valid = true
     service^.reload_state = .Failed
 }
 

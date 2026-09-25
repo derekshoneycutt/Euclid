@@ -242,6 +242,8 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             odin_build_command("-ljulia", false, true))
         @test debug_assets_archive_path() ==
             joinpath(dirname(debug_app_binary_path()), "assets.pkg")
+        @test debug_assets_identity_path() ==
+            joinpath(dirname(debug_app_binary_path()), "assets.pkg.identity")
         @test "-debug" in command
         @test "-o:none" in command
         @test "-vet" in command
@@ -278,6 +280,23 @@ include(joinpath(@__DIR__, "sdl3_image_probe_tests.jl"))
             parse_driver_invocation(["build", "--", "--no-vsync"]))
         @test_throws ErrorException parse_build_command(
             parse_driver_invocation(["run-only", "--strict"]))
+    end
+
+    @testset "asset package identity sidecar" begin
+        mktempdir() do root
+            path = joinpath(root, "assets.pkg.identity")
+            identity = repeat("a", 64)
+            digest = repeat("b", 64)
+            write(path, "schema_version=1\npackage_identity=$identity\n" *
+                "archive_sha256=$digest\n")
+            parsed = read_asset_package_identity(path)
+            @test parsed !== nothing
+            @test parsed.package_identity == identity
+            @test parsed.archive_sha256 == digest
+
+            write(path, read(path, String) * "unknown=value\n")
+            @test isnothing(read_asset_package_identity(path))
+        end
     end
 
     @testset "zero-Raylib runtime closure" begin

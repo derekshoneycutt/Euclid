@@ -404,12 +404,14 @@ options and reuse a verified image under `.build/sysimage-cache`. The `sysimage`
 forces a clean stock-based rebuild; an existing Euclid image is never used as its base.
 
 `assets.pkg` carries sibling `julia/` and `content/` roots plus the image, input
-fingerprint, content fingerprint, and artifact SHA-256. The content fingerprint refreshes
-packaging independently without invalidating the stable image. Startup verifies and
-materializes the image at an immutable digest-addressed user-cache path before calling
-`jl_init_with_image_file`; corruption triggers one fresh extraction and then a hard
-failure, never stock-Julia fallback. Live asset reload compares the candidate fingerprint
-before publication. A changed image requires restart and cannot create a mixed runtime.
+fingerprint, semantic package identity, and artifact SHA-256. Its adjacent
+`assets.pkg.identity` sidecar commits that identity and the archive SHA-256 after archive
+publication. Startup selects an immutable identity-addressed extraction generation,
+verifies archive bytes before extraction, and materializes the image at an immutable
+digest-addressed user-cache path before calling `jl_init_with_image_file`; corruption
+triggers one fresh extraction and then a hard failure, never stock-Julia fallback. Live
+asset reload compares package identities before publication. A changed image requires
+restart and cannot create a mixed runtime.
 
 ## Normal Frame Integration
 
