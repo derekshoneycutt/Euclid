@@ -50,8 +50,6 @@ Scene_Command_Kind :: enum u8 {
     Set_Shape_Active_Feature,
     Set_Tool_Position,
     Set_Tool_Lock,
-    Set_Drawing_Sound_Enabled,
-    Simulate_Drawing_Sound,
     Emit_Trailing_Particle,
     Emit_Flicker_Particle,
     Notify_Animation_Cycle_Boundary,

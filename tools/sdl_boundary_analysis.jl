@@ -21,6 +21,7 @@ const SDL_OWNER_POLICIES = SdlOwnerPolicy[
     (path="src/view/native/sdl_gif_encoder.odin",
         category="display GIF streaming encoder", count=2),
     (path="src/view/native/color.odin", category="native color conversion", count=1),
+    (path="src/view/native/sdl_audio.odin", category="drawing audio playback", count=1),
     (path="src/view/native/sdl_draw_runtime.odin", category="GPU 2D renderer", count=1),
     (path="src/view/native/sdl_dust_pipeline.odin", category="GPU dust renderer", count=1),
     (path="src/view/native/sdl_stroke_pipeline.odin", category="GPU stroke renderer", count=1),

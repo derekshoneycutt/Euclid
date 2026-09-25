@@ -3,7 +3,6 @@ package ui
 import native "../native"
 
 import "../../core"
-import audiomodel "../../audio/model"
 import particlemodel "../../particles/model"
 import geometry "../../core/geometry"
 import view_core "../core"
@@ -101,6 +100,37 @@ draw_encoded_slider_geometry :: proc(
         encoder, knob, UI_TEXT_COLOR)
 }
 
+// Draw every checkbox in one prepared Settings layout.
+draw_encoded_settings_checkboxes :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: geometry.Rectangle, rows: Settings_View_Rows) {
+    checks := [5]struct{rectangle: geometry.Rectangle, checked: bool}{
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.fps_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
+        }, state^.ui_runtime.display_fps},
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.limit_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
+        }, state^.ui_runtime.limit_fps},
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.sound_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
+        }, state^.user_drawing_sound_enabled},
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.simd_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
+        }, state^.ui_runtime.use_simd_batch_projection},
+        {{
+            panel.x + SETTINGS_PANEL_INSET, rows.gpu_dust_y,
+            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
+        }, state^.ui_runtime.use_gpu_dust_instancing},
+    }
+    for check in checks {
+        draw_encoded_checkbox_geometry(encoder, check.rectangle, check.checked)
+    }
+}
+
 // draw_encoded_settings_geometry encodes settings controls without text.
 draw_encoded_settings_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
@@ -114,27 +144,7 @@ draw_encoded_settings_geometry :: proc(
     draw_encoded_slider_geometry(encoder, {panel, rows.slider_label_y,
         state^.particle_system^.use_max_dust_particles,
         0, particlemodel.MAX_LOW_PARTICLES})
-    checks := [4]struct{rectangle: geometry.Rectangle, checked: bool}{
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.fps_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.ui_runtime.display_fps},
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.limit_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.ui_runtime.limit_fps},
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.simd_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.ui_runtime.use_simd_batch_projection},
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.gpu_dust_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.ui_runtime.use_gpu_dust_instancing},
-    }
-    for check in checks {
-        draw_encoded_checkbox_geometry(encoder, check.rectangle, check.checked)
-    }
+    draw_encoded_settings_checkboxes(state, encoder, panel, rows)
 }
 
 // draw_encoded_settings_text emits current labels, values, and counters.
@@ -163,8 +173,9 @@ draw_encoded_settings_text :: proc(
         {state = state, panel = panel, font = face,
             font_resolver = view_font.cache_terminal_resolver(&state^.font_cache)},
         rows.stats_y, encoder, animation_entries_added)
-    labels := [4]struct{label: string, y: f32}{
+    labels := [5]struct{label: string, y: f32}{
         {"Display FPS", rows.fps_y}, {"Limit FPS", rows.limit_y},
+        {"Enable Drawing Sound", rows.sound_y},
         {settings_simd_label(prepared.simd_available), rows.simd_y},
         {settings_gpu_dust_label(prepared.gpu_available), rows.gpu_dust_y},
     }
@@ -295,11 +306,8 @@ settings_view_layout_rows :: proc(
         stats_row.cursor_out)
     limit_row := settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
         fps_row.cursor_out)
-    sound_row := limit_row
-    when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
-        sound_row = settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
-            limit_row.cursor_out)
-    }
+    sound_row := settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
+        limit_row.cursor_out)
     simd_row := settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
         sound_row.cursor_out)
     gpu_dust_row := settings_stack_row(stack_rect, 0, simd_row.cursor_out)
@@ -328,11 +336,9 @@ update_settings_controls :: proc(
     result.limit = update_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
         4002, "Limit FPS", ctx.state.ui_runtime.limit_fps, true}),
         &ctx.state.ui_runtime.ui_press_owner)
-    when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
-        result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
-            4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled, true}),
-            &ctx.state.ui_runtime.ui_press_owner)
-    }
+    result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
+        4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled, true}),
+        &ctx.state.ui_runtime.ui_press_owner)
     simd_available := view_core.simd_batch_projection_available()
     simd_label := settings_simd_label(simd_available)
     result.simd = update_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
@@ -378,10 +384,8 @@ apply_settings_preparation :: proc(
     if prepared.limit.toggled {
         state.ui_runtime.limit_fps = prepared.limit.checked_out
     }
-    when audiomodel.EXPERIMENTAL_AUDIO_ENABLED {
-        if prepared.sound.toggled {
-            state.user_drawing_sound_enabled = prepared.sound.checked_out
-        }
+    if prepared.sound.toggled {
+        state.user_drawing_sound_enabled = prepared.sound.checked_out
     }
     state.ui_runtime.use_simd_batch_projection =
         simd_available && prepared.simd.checked_out

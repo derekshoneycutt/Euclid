@@ -44,7 +44,6 @@ const PenConeSpinSpeed = 6f0
 const PenConeTipHeight =
     Float32(sqrt(PenLength * PenLength - PenConeRadius * PenConeRadius))
 const PenConeFloorAngle = Float32(atan(PenConeTipHeight, PenConeRadius))
-const PenConeSimulatedDrawSpeed = 3f0
 
 const TiltToConeDuration = 0.15f0
 const GroundTrailDuration = 0.7f0
@@ -1460,8 +1459,6 @@ function animate_draw_point(
         animate_pen_cone(
             state_ptr, timer - duration * TiltToConeDuration,
             penpos, PenConeFloorAngle, PenConeSpinSpeed)
-
-        OdinJuliaBridge.simulate_drawing_sound(state_ptr, PenConeSimulatedDrawSpeed)
 
         OdinJuliaBridge.set_point_color(state_ptr, pointid, pencolor)
         OdinJuliaBridge.set_point_position(state_ptr, pointid, penpos)

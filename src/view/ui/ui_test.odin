@@ -202,6 +202,22 @@ animation_controls_apply_existing_actions :: proc(t: ^testing.T) {
     testing.expect(t, state^.ui_runtime.simulation_paused)
 }
 
+// Verify drawing sound is a normal default-off Settings row and sole user gate.
+@(test)
+settings_drawing_sound_row_is_unconditional_and_user_owned :: proc(t: ^testing.T) {
+    rows := settings_view_layout_rows({0, 0, 320, 480})
+    testing.expect(t, rows.sound_y > rows.limit_y)
+    testing.expect(t, rows.simd_y > rows.sound_y)
+
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    testing.expect(t, !state^.user_drawing_sound_enabled)
+    apply_settings_preparation(state, {
+        sound = {toggled = true, checked_out = true},
+    }, false, false)
+    testing.expect(t, state^.user_drawing_sound_enabled)
+}
+
 // Verify Terminal entry focuses once while window activation only changes effective focus.
 @(test)
 ui_focus_terminal_entry_and_window_activation :: proc(t: ^testing.T) {

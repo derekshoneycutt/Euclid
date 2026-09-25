@@ -3,6 +3,7 @@ package bridge
 import bridgemodel "model"
 import shapemodel "../shapes/model"
 
+import audio "../audio"
 import "../julialib"
 import "../core"
 import protocol "../core/protocol"
@@ -611,6 +612,7 @@ record_animation_loaded :: proc(
 
 //   Retire animation-owned native state into the generation about to initiate.
 reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool {
+    audio.set_drawing_activity(&state^.chalk_audio, false)
     target_generation := current_animation_generation(state) + 1
     if state^.terminal.initialized && state^.julia_runtime_service != nil {
         _ = send_terminal_ingress(
@@ -642,7 +644,6 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
     }
     hide_pen(state)
     hide_compass(state)
-    state^.animation_drawing_sound_enabled = true
     return true
 }
 

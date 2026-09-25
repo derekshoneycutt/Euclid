@@ -101,7 +101,6 @@ Euclid_General_State :: struct {
 
     chalk_audio: audiomodel.Chalk_Audio_Runtime,
     user_drawing_sound_enabled: bool,
-    animation_drawing_sound_enabled: bool,
     
     ui_runtime: viewmodel.Euclid_Ui_Runtime_State,
     gif_capture: viewmodel.Gif_Capture_Session,

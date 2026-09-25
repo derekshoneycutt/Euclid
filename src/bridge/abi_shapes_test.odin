@@ -420,3 +420,37 @@ bridge_tool_batch_rejects_full_contact_queue_transactionally :: proc(t: ^testing
     testing.expect_value(t, particle_system^.dust_tool_contact_count,
         particlemodel.DUST_TOOL_CONTACT_CAP)
 }
+
+// Verify accepted batches replace drawing activity and rejected batches clear it.
+@(test)
+bridge_scene_batch_publishes_transactional_drawing_activity :: proc(t: ^testing.T) {
+    world: shapemodel.Shape_World
+    state := bridge_shape_test_state(&world)
+    defer free(state)
+    particle_system := new(particlemodel.Particle_System, context.allocator)
+    defer free(particle_system, context.allocator)
+    state^.particle_system = particle_system
+    state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
+    defer free(state^.julia_interface, context.allocator)
+    state^.julia_interface^.current_animation =
+        &state^.julia_interface^.null_animation
+    batch: Scene_Command_Batch
+
+    begin_scene_command_batch(state, &batch)
+    emit_trailing_particle(state, {0.25, 0.5, 0}, {10, 20, 30, 255})
+    end_scene_command_batch(state)
+    testing.expect(t, scene_command_batch_has_drawing_activity(&batch))
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    testing.expect(t, state^.chalk_audio.drawing_active)
+
+    begin_scene_command_batch(state, &batch)
+    end_scene_command_batch(state)
+    testing.expect(t, !scene_command_batch_has_drawing_activity(&batch))
+    testing.expect(t, commit_scene_command_batch(state, &batch))
+    testing.expect(t, !state^.chalk_audio.drawing_active)
+
+    state^.chalk_audio.drawing_active = true
+    batch.overflowed = true
+    testing.expect(t, !commit_scene_command_batch(state, &batch))
+    testing.expect(t, !state^.chalk_audio.drawing_active)
+}

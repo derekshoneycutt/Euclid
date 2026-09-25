@@ -1,7 +1,5 @@
 package bridge
 
-import audio "../audio"
-
 import shapemodel "../shapes/model"
 
 import "../core"
@@ -399,36 +397,6 @@ clear_pen_active :: proc "c" (
     context = state^.saved_context
     _ = shape_set_active_feature(
         state, shapemodel.shape_entity_pack(state^.world_pen.shape), max(u16))
-}
-
-//   Enable or disable drawing-sound accumulation.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - enabled: When true, drawing-sound updates are accepted.
-@(export)
-set_drawing_sound_enabled :: proc "c" (state: ^core.Euclid_General_State, enabled: bool) {
-    if capture_flag_command(state, .Set_Drawing_Sound_Enabled, enabled) {
-        return
-    }
-    state^.animation_drawing_sound_enabled = enabled
-}
-
-//   Activate the steady drawing-sound texture for the current frame.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - speed: Retained for ABI compatibility; texture level is contact-based.
-@(export)
-simulate_drawing_sound :: proc "c" (state: ^core.Euclid_General_State, speed: f32) {
-    if capture_scalar_command(state, .Simulate_Drawing_Sound, speed) {
-        return
-    }
-    if !state^.user_drawing_sound_enabled || !state^.animation_drawing_sound_enabled {
-        return
-    }
-
-    audio.register_drawing_contact(&state^.chalk_audio)
 }
 
 //   Move pen joint1 and enable its lock constraint at the same position.

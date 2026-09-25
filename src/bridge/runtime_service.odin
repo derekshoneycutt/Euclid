@@ -8,6 +8,7 @@ import presentation_model "presentation"
 import storage "../core/storage"
 
 import "base:runtime"
+import audio "../audio"
 import "../core"
 import protocol "../core/protocol"
 import dyncore "../dynview/core"
@@ -359,6 +360,7 @@ publish_available_animation_tick :: proc(state: ^core.Euclid_General_State) -> b
     committed := false
     reject_reason := ""
     if !matches_current {
+        audio.set_drawing_activity(&state^.chalk_audio, false)
         reject_reason = animation_tick_reject_reason(state, service, slot)
     } else if !commit_scene_command_batch(state, &slot^.scene_batch) {
         reject_reason = "invalid_command_batch"

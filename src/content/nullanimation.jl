@@ -133,7 +133,6 @@ end
 
 """Initialize the null animation's construction geometry and cycle state."""
 function initialize(state_ptr::Ptr{Cvoid})
-    OdinJuliaBridge.set_drawing_sound_enabled(state_ptr, false)
     lines = ntuple(3) do i
         line = OdinJuliaBridge.create_new_line(
             state_ptr, SideStarts[i], SideStarts[i], SideColors[i], 0f0)

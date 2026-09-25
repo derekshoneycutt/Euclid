@@ -18,6 +18,7 @@ import "input"
 import native "native"
 import terminalview "terminal"
 import "ui"
+import audio "../audio"
 import "../core"
 import geometry "../core/geometry"
 import "../dynview"
@@ -86,6 +87,7 @@ JULIA_SHUTDOWN_TIMEOUT_SECONDS :: 5.0
 Window_Frame_Context :: struct {
     platform: ^native.Sdl_Platform,
     draw_runtime: ^native.Sdl_Draw_Runtime,
+    chalk_audio: ^native.Sdl_Chalk_Audio_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
     scenario_runtime: ^Scenario_Runtime,
@@ -98,6 +100,7 @@ Window_Frame_Context :: struct {
 Display_Loop_Context :: struct {
     platform: ^native.Sdl_Platform,
     draw_runtime: ^native.Sdl_Draw_Runtime,
+    chalk_audio: ^native.Sdl_Chalk_Audio_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
     display_profile: ^evidence_profile.State,
@@ -259,19 +262,40 @@ initialize_sdl_render_resources :: proc(
     return true
 }
 
+// Bind one display-local drawing-audio owner to a copied display context.
+bind_sdl_chalk_audio :: proc(
+    display: Display_Loop_Context, runtime: ^native.Sdl_Chalk_Audio_Runtime) ->
+        Display_Loop_Context {
+    drawing_audio_path := files.packaged_asset_path(
+        "drawing-looped.wav", context.temp_allocator)
+    _ = native.sdl_chalk_audio_create(runtime, drawing_audio_path)
+    result := display
+    result.chalk_audio = runtime
+    return result
+}
+
+// Build the texture owner used while native render resources are admitted.
+sdl_font_texture_context :: proc(display: Display_Loop_Context) ->
+    Sdl_Font_Texture_Context {
+    return {platform = display.platform, runtime = display.draw_runtime,
+        submit_immediately = true}
+}
+
 // initialize_and_run_sdl_session admits native fonts and Terminal textures.
 initialize_and_run_sdl_session :: proc(
     settings: ^Euclid_Run_Settings, session: Euclid_Runtime_Session,
     display: Display_Loop_Context) -> int {
     platform := display.platform
     draw_runtime := display.draw_runtime
-    font_owner := Sdl_Font_Texture_Context{
-        platform = platform, runtime = draw_runtime, submit_immediately = true}
+    font_owner := sdl_font_texture_context(display)
     if !initialize_sdl_render_resources(
         settings, session.state, &font_owner, platform, draw_runtime) {
         _ = shutdown_window_runtime(session)
         return 1
     }
+    chalk_audio: native.Sdl_Chalk_Audio_Runtime
+    defer native.sdl_chalk_audio_destroy(&chalk_audio)
+    bound_display := bind_sdl_chalk_audio(display, &chalk_audio)
     framebuffer_owner := Sdl_Framebuffer_Context{platform = platform}
     if !bind_sdl_framebuffer_capture(&framebuffer_owner) {
         log.error("display_framebuffer_start_failed")
@@ -292,7 +316,7 @@ initialize_and_run_sdl_session :: proc(
         return 1
     }
     font_owner.submit_immediately = false
-    return run_initialized_window_session(settings, session, display,
+    return run_initialized_window_session(settings, session, bound_display,
         sdl_framebuffer_operations(&framebuffer_owner))
 }
 
@@ -466,6 +490,11 @@ prepare_sdl_frame :: proc(
         render_height = ctx.platform^.metrics.pixel_height,
     }
     alpha := accumulate_and_update_systems(state, frame_dt, gif_extents)
+    native.sdl_chalk_audio_update(ctx.chalk_audio, &state^.chalk_audio,
+        state^.user_drawing_sound_enabled,
+        state^.ui_runtime.simulation_paused ||
+            state^.ui_runtime.animation_policy_paused,
+        frame_dt)
     run_parallel_frame_preparation_after_ui(
         state, alpha, ui_geometry.compile_dynview)
     layout_interaction := ui.prepare_ui_layout_interaction(
@@ -596,6 +625,7 @@ window_frame_context :: proc(
     return {
         platform = display.platform,
         draw_runtime = display.draw_runtime,
+        chalk_audio = display.chalk_audio,
         input_runtime = display.input_runtime,
         presentation = display.presentation,
         scenario_runtime = scenario.runtime,
@@ -635,8 +665,10 @@ run_window_frames :: proc(
 
 //   Shut down a completed window session and convert scenario failure to process status.
 finish_window_session :: proc(
-    session: Euclid_Runtime_Session, scenario_runtime: ^Scenario_Runtime,
+    session: Euclid_Runtime_Session, display: Display_Loop_Context,
+    scenario_runtime: ^Scenario_Runtime,
     artifact_output: string) -> int {
+    native.sdl_chalk_audio_destroy(display.chalk_audio)
     exit_code := shutdown_window_runtime(
         session, scenario_runtime, artifact_output)
     if scenario_runtime != nil && !scenario_runtime_succeeded(scenario_runtime) {
@@ -658,6 +690,7 @@ run_initialized_window_session :: proc(
         scenario := prepare_window_scenario(
             settings, state, &scenario_runtime, framebuffer_operations)
         if !scenario.loaded {
+            native.sdl_chalk_audio_destroy(display.chalk_audio)
             _ = shutdown_window_runtime(session)
             return 1
         }
@@ -670,7 +703,7 @@ run_initialized_window_session :: proc(
         log.infof("display_loop_stopped fixed_step=%d scenario_active=%v",
             state^.fixed_step, scenario.runtime != nil)
         return finish_window_session(
-            session, scenario.runtime, settings^.scenario_artifact_output)
+            session, display, scenario.runtime, settings^.scenario_artifact_output)
     } else {
         free_all(context.temp_allocator)
         run_window_frames(state, window_frame_context(
@@ -678,8 +711,19 @@ run_initialized_window_session :: proc(
         _ = native.sdl_draw_submit_texture_operations(
             display.platform, display.draw_runtime)
         log.infof("display_loop_stopped fixed_step=%d", state^.fixed_step)
+        native.sdl_chalk_audio_destroy(display.chalk_audio)
         return shutdown_window_runtime(session)
     }
+}
+
+// Build one display-loop context from admitted session resources.
+display_loop_context :: proc(
+    platform: ^native.Sdl_Platform, draw_runtime: ^native.Sdl_Draw_Runtime,
+    input_runtime: ^input.Input_Runtime, presentation: ^Presentation_Runtime,
+    display_profile: ^evidence_profile.State) -> Display_Loop_Context {
+    return {platform = platform, draw_runtime = draw_runtime,
+        input_runtime = input_runtime, presentation = presentation,
+        display_profile = display_profile}
 }
 
 // run_sdl_platform_session owns draw, input, and Euclid state on one platform.
@@ -713,9 +757,8 @@ run_sdl_platform_session :: proc(
         log.error("display_runtime_start_failed")
         return 1
     }
-    display := Display_Loop_Context{
-        platform, &draw_runtime, input_runtime,
-        session.presentation, display_profile}
+    display := display_loop_context(platform, &draw_runtime, input_runtime,
+        session.presentation, display_profile)
     result := initialize_and_run_sdl_session(settings, session, display)
     report_draw_runtime_summary(&draw_runtime)
     return result
@@ -984,6 +1027,7 @@ accumulate_and_update_systems :: proc(
 
     if state^.ui_runtime.simulation_paused {
         julia.publish_available_animation_tick(state)
+        audio.set_drawing_activity(&state^.chalk_audio, false)
         state^.accumulator = 0
         return 0
     }
@@ -1023,6 +1067,9 @@ run_deterministic_fixed_step :: proc(state: ^Euclid_General_State, dt: f32) -> b
 
     state^.current_delta_time = dt
     julia.publish_available_animation_tick(state)
+    if state^.ui_runtime.animation_policy_paused {
+        audio.set_drawing_activity(&state^.chalk_audio, false)
+    }
     if !state^.ui_runtime.animation_policy_paused {
         julia.schedule_animation_tick(state, dt)
     }

@@ -331,7 +331,6 @@ init_runtime_fields :: proc(
     state^.julia_interface_active_slot = 0
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.user_drawing_sound_enabled = false
-    state^.animation_drawing_sound_enabled = true
     state^.fixed_step = 0
     state^.simulation_time = 0
     state^.current_delta_time = view_core.FIXED_DT

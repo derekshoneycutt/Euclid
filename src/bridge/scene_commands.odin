@@ -3,6 +3,7 @@ package bridge
 import bridgemodel "model"
 import shapemodel "../shapes/model"
 
+import audio "../audio"
 import animation_model "../core/animation"
 
 import "../core"
@@ -49,8 +50,6 @@ SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
     .Set_Shape_Active_Feature = validate_command_shape_active_feature,
     .Set_Tool_Position = validate_command_shape_transform,
     .Set_Tool_Lock = validate_command_tool_lock,
-    .Set_Drawing_Sound_Enabled = validate_command_noop,
-    .Simulate_Drawing_Sound = validate_command_noop,
     .Emit_Trailing_Particle = validate_command_noop,
     .Emit_Flicker_Particle = validate_command_noop,
     .Notify_Animation_Cycle_Boundary = validate_command_noop,
@@ -81,8 +80,6 @@ SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
     .Set_Shape_Active_Feature = apply_set_shape_active_feature,
     .Set_Tool_Position = apply_set_tool_position,
     .Set_Tool_Lock = apply_set_tool_lock,
-    .Set_Drawing_Sound_Enabled = apply_set_drawing_sound_enabled,
-    .Simulate_Drawing_Sound = apply_simulate_drawing_sound,
     .Emit_Trailing_Particle = apply_emit_trailing_particle,
     .Emit_Flicker_Particle = apply_emit_flicker_particle,
     .Notify_Animation_Cycle_Boundary = apply_notify_animation_cycle_boundary,
@@ -109,8 +106,6 @@ SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
     .Set_Tool_Lock = .Point_Position_Committed,
     .Emit_Trailing_Particle = .Particle_Emission_Committed,
     .Emit_Flicker_Particle = .Particle_Emission_Committed,
-    .Set_Drawing_Sound_Enabled = .Unknown,
-    .Simulate_Drawing_Sound = .Unknown,
     .Notify_Animation_Cycle_Boundary = .Unknown,
 }
 
@@ -203,28 +198,6 @@ capture_shape_command :: proc "contextless" (
         command^.entity = entity
     }
     return command, captured
-}
-
-//   Capture a scalar-only scene command such as simulated drawing-sound intensity.
-capture_scalar_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind, scalar: f32) -> bool {
-
-    command, captured := append_scene_command(state, kind)
-    if command != nil {
-        command^.scalar = scalar
-    }
-    return captured
-}
-
-//   Capture a boolean-only scene command such as drawing-sound enablement.
-capture_flag_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind, flag: bool) -> bool {
-
-    command, captured := append_scene_command(state, kind)
-    if command != nil {
-        command^.flag = flag
-    }
-    return captured
 }
 
 //   Capture one particle emission with the position and color observed by Julia.
@@ -626,18 +599,6 @@ validate_scene_command_batch :: proc(
         state^.particle_system, contact_count)
 }
 
-//   Apply one set-drawing-sound-enabled command.
-apply_set_drawing_sound_enabled :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_drawing_sound_enabled(state, command^.flag)
-}
-
-//   Apply one simulate-drawing-sound command.
-apply_simulate_drawing_sound :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    simulate_drawing_sound(state, command^.scalar)
-}
-
 //   Apply one emit-trailing-particle command and record its emission.
 apply_emit_trailing_particle :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
@@ -656,6 +617,19 @@ apply_notify_animation_cycle_boundary :: proc(
     notify_animation_cycle_boundary_local(state)
 }
 
+// Report whether one accepted batch represents grounded drawing activity.
+scene_command_batch_has_drawing_activity :: proc(batch: ^Scene_Command_Batch) -> bool {
+    if batch == nil {
+        return false
+    }
+    for command_index in 0..<batch^.command_count {
+        if batch^.commands[command_index].kind == .Emit_Trailing_Particle {
+            return true
+        }
+    }
+    return false
+}
+
 //   Validate and apply one completed batch in original callback order.
 // This procedure runs on the display thread at the fixed-step boundary; commands may
 // invoke canonical helpers that emit particles or update audio and tool state.
@@ -663,6 +637,7 @@ commit_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
     if !validate_scene_command_batch(state, batch) {
+        audio.set_drawing_activity(&state^.chalk_audio, false)
         record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
     }
@@ -670,6 +645,7 @@ commit_scene_command_batch :: proc(
         &state^.animation_values,
         state^.animation_values.generation,
         &batch^.animation_value_writes) != .Ok {
+        audio.set_drawing_activity(&state^.chalk_audio, false)
         record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
     }
@@ -690,6 +666,8 @@ commit_scene_command_batch :: proc(
         }
         record_scene_command_evidence(state, command)
     }
+    audio.set_drawing_activity(&state^.chalk_audio,
+        scene_command_batch_has_drawing_activity(batch))
     record_scene_batch_evidence(state, .Scene_Batch_Committed, false)
     return true
 }
