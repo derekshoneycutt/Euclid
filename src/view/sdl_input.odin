@@ -176,6 +176,10 @@ sdl_input_finish_frame :: proc(
     frame.mouse_modifiers = accumulation.modifiers
     mouse_x, mouse_y: f32
     levels := sdl_input_mouse_buttons(sdl.GetMouseState(&mouse_x, &mouse_y))
+    mouse_x = native.sdl_application_coordinate(
+        mouse_x, platform^.metrics.content_scale)
+    mouse_y = native.sdl_application_coordinate(
+        mouse_y, platform^.metrics.content_scale)
     released := accumulation.mouse_released
     if !accumulation.focused {
         released += runtime^.device_mouse_down

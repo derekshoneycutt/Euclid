@@ -19,6 +19,38 @@ Sdl_Capture_Completion_Test_State :: struct {
     release_count: int,
 }
 
+// Verify Windows content scaling preserves baseline application dimensions.
+@(test)
+sdl_hidpi_windows_content_coordinates_scale :: proc(t: ^testing.T) {
+    content_scale := sdl_content_scale(1.5, 1)
+    testing.expect_value(t, content_scale, f32(1.5))
+    testing.expect_value(t, sdl_startup_extent(1280, content_scale), 1920)
+    testing.expect_value(t, sdl_application_extent(1920, 1.5), 1280)
+    testing.expect_value(t,
+        sdl_application_coordinate(960, content_scale), f32(640))
+}
+
+// Verify Retina pixel density adds detail without changing content coordinates.
+@(test)
+sdl_hidpi_retina_density_preserves_content_coordinates :: proc(t: ^testing.T) {
+    content_scale := sdl_content_scale(2, 2)
+    testing.expect_value(t, content_scale, f32(1))
+    testing.expect_value(t, sdl_startup_extent(1280, content_scale), 1280)
+    testing.expect_value(t, sdl_application_extent(2560, 2), 1280)
+    testing.expect_value(t,
+        sdl_application_coordinate(640, content_scale), f32(640))
+}
+
+// Verify failed SDL scale queries retain usable one-to-one coordinates.
+@(test)
+sdl_hidpi_invalid_scales_fall_back_to_one :: proc(t: ^testing.T) {
+    testing.expect_value(t, sdl_content_scale(0, 0), f32(1))
+    testing.expect_value(t, sdl_content_scale(0, 2), f32(1))
+    testing.expect_value(t, sdl_content_scale(2, 0), f32(1))
+    testing.expect_value(t, sdl_application_extent(1280, 0), 1280)
+    testing.expect_value(t, sdl_application_coordinate(640, 0), f32(640))
+}
+
 // Verify SDL sample-count enum ordinals are not exposed as physical counts.
 @(test)
 sdl_scene_sample_count_values_are_physical :: proc(t: ^testing.T) {
