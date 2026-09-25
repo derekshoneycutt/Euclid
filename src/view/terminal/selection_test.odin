@@ -2,6 +2,7 @@
 package terminalview
 
 import viewterminalmodel "model"
+import native "../native"
 
 import "core:testing"
 
@@ -164,4 +165,35 @@ terminal_test_selection_span_for_line_last_line_no_gap :: proc(t: ^testing.T) {
     span := terminal_selection_span_for_line(start, end, 2, 6)
     testing.expect(t, span.has_selection)
     testing.expect(t, !span.covers_trailing_gap)
+}
+
+// Verify virtual-row selection forwards the live encoder into its highlight draw.
+@(test)
+terminal_test_virtual_selection_draw_uses_layout_encoder :: proc(t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    layout := Terminal_Draw_Layout{
+        encoder = &encoder,
+        line_height = 20,
+        line_count = 0,
+        selection = {
+            start = {line = 0, byte_offset = 0},
+            end = {line = 2, byte_offset = 0},
+            right_edge_x = 80,
+        },
+        theme = {selection_background = {10, 20, 30, 255}},
+    }
+
+    terminal_draw_virtual_selection_rows({}, layout, {5, 5})
+
+    testing.expect_value(t, encoder.vertex_count, 4)
+    testing.expect_value(t, encoder.index_count, 6)
+    testing.expect_value(t, vertices[0].position.x, f32(5))
+    testing.expect_value(t, vertices[2].position.x, f32(80))
 }

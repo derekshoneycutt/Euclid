@@ -718,12 +718,9 @@ terminal_draw_line_selection :: proc(
     span := terminal_selection_span_for_line(
         layout.selection.start, layout.selection.end, line, len(line_text))
     if span.has_selection {
-        terminal_draw_inverted_span({
-            resolver = resolver,
-            font = layout.regular,
-            text = line_text,
-            position = line_position,
-            theme = layout.theme,
+        terminal_draw_inverted_span(Terminal_Text_Overlay_Draw{
+            layout.encoder, resolver, layout.regular,
+            line_text, line_position, layout.theme,
         }, span, layout.selection.right_edge_x)
     }
 }
@@ -763,12 +760,9 @@ terminal_draw_virtual_selection_rows :: proc(
 
         row_position := geometry.Vector2{
             origin.x, origin.y + f32(line) * layout.line_height}
-        terminal_draw_inverted_span({
-            resolver = resolver,
-            font = layout.regular,
-            text = "",
-            position = row_position,
-            theme = layout.theme,
+        terminal_draw_inverted_span(Terminal_Text_Overlay_Draw{
+            layout.encoder, resolver, layout.regular,
+            "", row_position, layout.theme,
         }, span, layout.selection.right_edge_x)
     }
 }
