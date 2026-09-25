@@ -11,8 +11,8 @@
             mkpath(dirname(binding))
             write(binding, "package sdl3_image\n")
             @test SDL3ImageProbe.image_binding_path(root; kernel=:Linux) == binding
-            @test_throws ErrorException SDL3ImageProbe.image_binding_path(
-                root; kernel=:Darwin)
+            @test SDL3ImageProbe.image_binding_path(
+                root; kernel=:Darwin) == binding
         end
     end
 
@@ -57,4 +57,8 @@
     @test SDL3ImageProbe.loaded_sdl3_image_path(
         "libSDL3_image.so.0 => /usr/lib64/libSDL3_image.so.0 (0x01)\n") ==
         "/usr/lib64/libSDL3_image.so.0"
+    @test SDL3ImageProbe.loaded_sdl3_image_path_darwin("""
+probe:
+    /opt/homebrew/opt/sdl3_image/lib/libSDL3_image.0.dylib (compatibility version 1.0.0)
+""") == "/opt/homebrew/opt/sdl3_image/lib/libSDL3_image.0.dylib"
 end

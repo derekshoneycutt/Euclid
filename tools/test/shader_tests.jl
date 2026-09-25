@@ -42,6 +42,19 @@ end
     @test compile.exec == ["shadercross", spec.source, "--source", "HLSL",
         "--dest", "SPIRV", "--stage", "vertex", "--entrypoint", "main",
         "--output", "output.spv"]
+    msl = Shaders.msl_command(
+        "shadercross", spec, "input.spv", "output.msl")
+    @test msl.exec == ["shadercross", "input.spv", "--source", "SPIRV",
+        "--dest", "MSL", "--stage", "vertex", "--entrypoint", "main",
+        "--msl-version", "2.0.0", "--output", "output.msl"]
+    @test Shaders.runtime_shader_format(:Linux) == "SPIR-V"
+    @test Shaders.runtime_shader_format(:Darwin) == "MSL"
+    @test Shaders.runtime_shader_entrypoint(:Linux) == "main"
+    @test Shaders.runtime_shader_entrypoint(:Darwin) == "main0"
+    @test Shaders.runtime_artifact_name(spec, :Linux) ==
+        "draw2d_colored.vert.spv"
+    @test Shaders.runtime_artifact_name(spec, :Darwin) ==
+        "draw2d_colored.vert.msl"
     reflection = Shaders.reflection_command(
         "shadercross", spec, "output.spv", "output.json")
     @test reflection.exec[3:6] == ["--source", "SPIRV", "--dest", "JSON"]
@@ -101,12 +114,17 @@ OpMemberDecorate %type_StrokeVertexUniforms 0 Offset 0
         write(joinpath(root, "stroke3d.vert.json"), "reflection")
         manifest_path = joinpath(root, "manifest.toml")
         tool = realpath(Sys.which("true"))
-        Shaders.write_manifest(manifest_path, [generated], tool, tool)
+        Shaders.write_manifest(manifest_path, [generated], tool, tool;
+            kernel=:Linux)
         manifest = TOML.parsefile(manifest_path)
         @test manifest["shadercross_path"] == tool
         @test startswith(manifest["shadercross_identity"], "sha256:")
         @test manifest["shader"][1]["artifact_sha256"] ==
             bytes2hex(open(Shaders.sha256, joinpath(root, "stroke3d.vert.spv")))
+        @test manifest["shader"][1]["runtime_format"] == "SPIR-V"
+        @test manifest["shader"][1]["runtime_entrypoint"] == "main"
+        @test manifest["shader"][1]["runtime_artifact"] ==
+            "stroke3d.vert.spv"
         @test manifest["shader"][1]["uniform_size"] == 64
         @test manifest["shader"][1]["vertex_strides"] == [36, 36, 36]
     end

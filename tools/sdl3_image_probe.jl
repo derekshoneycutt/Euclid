@@ -4,6 +4,7 @@ using Base64
 using Dates
 using SHA
 import Main.EuclidSDL3Probe
+import Main.EuclidBuildConfiguration
 
 export image_binding_path, image_probe_build_command, image_runtime_evidence,
     run_image_probe
@@ -29,8 +30,8 @@ end
 
 """Resolve the installed Odin SDL_image binding used by the native probe."""
 function image_binding_path(odin_root::AbstractString; kernel::Symbol=Sys.KERNEL)
-    kernel == :Linux || error(
-        "The SDL_image capability probe currently supports Linux only.")
+    kernel in (:Linux, :Darwin) || error(
+        "The SDL_image capability probe is unsupported on $kernel.")
     path = joinpath(normpath(odin_root), "vendor", "sdl3", "image", "sdl_image.odin")
     isfile(path) || error("Missing Odin SDL_image binding file: $path")
     return path
@@ -84,6 +85,16 @@ function loaded_sdl3_image_path(ldd_output::String)
     return ""
 end
 
+"""Return the loaded SDL_image path reported by Mach-O inspection."""
+function loaded_sdl3_image_path_darwin(otool_output::String)
+    for line in split(otool_output, '\n')
+        match_result = match(
+            r"^\s+(\S*libSDL3_image(?:\.[^/]*)?\.dylib)\s+\(", line)
+        match_result === nothing || return match_result.captures[1]
+    end
+    return ""
+end
+
 """Normalize line-oriented image capability facts into the result schema."""
 function image_runtime_evidence(facts::Dict{String,String})
     return Dict{String,Any}(
@@ -102,16 +113,20 @@ function image_runtime_evidence(facts::Dict{String,String})
         "cleanup_complete" => get(facts, "cleanup_complete", "false") == "true")
 end
 
-"""Require every external command used by the headless Linux image probe."""
+"""Require every external command used by the image probe."""
 function require_image_probe_tools()
-    Sys.islinux() || error(
-        "The SDL_image capability probe currently supports Linux only.")
+    (Sys.islinux() || Sys.isapple()) || error(
+        "The SDL_image capability probe is unsupported on $(Sys.KERNEL).")
     EuclidSDL3Probe.require_tool("odin", "Install the Odin compiler.")
     EuclidSDL3Probe.require_tool(
         "pkg-config", "Install pkg-config and SDL_image development metadata.")
-    EuclidSDL3Probe.require_tool("readelf", "Install binutils.")
-    EuclidSDL3Probe.require_tool("ldd", "Install the system ELF loader tools.")
-    EuclidSDL3Probe.require_tool("timeout", "Install GNU coreutils.")
+    if Sys.islinux()
+        EuclidSDL3Probe.require_tool("readelf", "Install binutils.")
+        EuclidSDL3Probe.require_tool("ldd", "Install the system ELF loader tools.")
+    else
+        EuclidSDL3Probe.require_tool(
+            "otool", "Install the Xcode command-line tools.")
+    end
 end
 
 """Record host, binding, and mandatory system SDL_image provider identities."""
@@ -121,13 +136,7 @@ function collect_image_environment!(result, diagnostics::IO, root::String)
     odin_version = EuclidSDL3Probe.command_value!(
         diagnostics, "odin-version", Cmd(["odin", "version"]); cwd=root)
     binding = image_binding_path(odin_root)
-    version = EuclidSDL3Probe.command_value!(diagnostics, "sdl-image-version",
-        Cmd(["pkg-config", "--modversion", "sdl3-image"]); cwd=root)
-    libdir = EuclidSDL3Probe.command_value!(diagnostics, "sdl-image-libdir",
-        Cmd(["pkg-config", "--variable=libdir", "sdl3-image"]); cwd=root)
-    candidate = joinpath(libdir, "libSDL3_image.so.0")
-    isfile(candidate) || error("System SDL_image runtime is missing at $candidate")
-    library = realpath(candidate)
+    provider = EuclidBuildConfiguration.sdl3_image_provider_identity()
     result["host"] = Dict{String,Any}(
         "kernel" => string(Sys.KERNEL), "architecture" => string(Sys.ARCH),
         "kernel_release" => EuclidSDL3Probe.command_value!(diagnostics,
@@ -137,10 +146,10 @@ function collect_image_environment!(result, diagnostics::IO, root::String)
     result["binding"] = Dict{String,Any}(
         "path" => binding, "sha256" => EuclidSDL3Probe.file_sha256(binding))
     result["sdl_image_provider"] = Dict{String,Any}(
-        "kind" => "system", "pkg_config_version" => version,
-        "library_path" => library,
-        "sha256" => EuclidSDL3Probe.file_sha256(library))
-    return library
+        "kind" => "system", "pkg_config_version" => provider.version,
+        "library_path" => provider.library_path,
+        "sha256" => EuclidSDL3Probe.file_sha256(provider.library_path))
+    return provider.library_path
 end
 
 """Strict-build the standalone image probe and record its binary identity."""
@@ -158,10 +167,10 @@ end
 """Run the bounded native image probe and require every advertised capability."""
 function run_image_runtime!(result, diagnostics::IO, root::String,
     paths::ImageProbeArtifacts)
-    command = Cmd(["timeout", "15s", paths.binary, paths.jpeg_fixture,
+    command = Cmd([paths.binary, paths.jpeg_fixture,
         paths.png_fixture, paths.gif_fixture, paths.animation_output])
     println(diagnostics, "[probe-runtime] ", command)
-    runtime = EuclidSDL3Probe.capture_command(command; cwd=root)
+    runtime = EuclidSDL3Probe.capture_command_timeout(command, 15; cwd=root)
     write(diagnostics, runtime.stdout)
     write(diagnostics, runtime.stderr)
     facts = EuclidSDL3Probe.parse_probe_output(runtime.stdout * runtime.stderr)
@@ -183,16 +192,27 @@ end
 """Record the executable dependency closure and loaded SDL_image SONAME."""
 function inspect_image_binary!(result, diagnostics::IO, root::String,
     paths::ImageProbeArtifacts, library::String)
-    ldd_result = EuclidSDL3Probe.checked_step!(
-        diagnostics, "ldd", Cmd(["ldd", paths.binary]); cwd=root)
-    soname_result = EuclidSDL3Probe.checked_step!(diagnostics, "readelf-soname",
-        Cmd(["readelf", "-d", library]); cwd=root)
-    result["dynamic_dependencies"] = split(chomp(ldd_result.stdout), '\n';
+    dependency_command = Sys.isapple() ? Cmd(["otool", "-L", paths.binary]) :
+        Cmd(["ldd", paths.binary])
+    identity_command = Sys.isapple() ? Cmd(["otool", "-D", library]) :
+        Cmd(["readelf", "-d", library])
+    dependency_result = EuclidSDL3Probe.checked_step!(
+        diagnostics, "dynamic-dependencies", dependency_command; cwd=root)
+    identity_result = EuclidSDL3Probe.checked_step!(
+        diagnostics, "runtime-identity", identity_command; cwd=root)
+    result["dynamic_dependencies"] = split(chomp(dependency_result.stdout), '\n';
         keepempty=false)
     provider = result["sdl_image_provider"]
-    provider["loaded_path"] = loaded_sdl3_image_path(ldd_result.stdout)
-    soname = match(r"Library soname: \[([^]]+)\]", soname_result.stdout)
-    provider["soname"] = soname === nothing ? "" : soname.captures[1]
+    if Sys.isapple()
+        provider["loaded_path"] =
+            loaded_sdl3_image_path_darwin(dependency_result.stdout)
+        lines = split(chomp(identity_result.stdout), '\n'; keepempty=false)
+        provider["install_name"] = length(lines) < 2 ? "" : strip(lines[2])
+    else
+        provider["loaded_path"] = loaded_sdl3_image_path(dependency_result.stdout)
+        soname = match(r"Library soname: \[([^]]+)\]", identity_result.stdout)
+        provider["soname"] = soname === nothing ? "" : soname.captures[1]
+    end
 end
 
 """Execute each image probe stage and update the current failure marker."""
@@ -215,7 +235,7 @@ function execute_image_probe!(result, diagnostics::IO, root::String,
     result["reason"] = "SDL_image static and streaming GIF capability probe passed"
 end
 
-"""Build and run the explicit Linux SDL_image capability probe."""
+"""Build and run the explicit SDL_image capability probe."""
 function run_image_probe(root::String)
     paths = prepare_image_artifacts(root)
     result = EuclidSDL3Probe.initial_result()

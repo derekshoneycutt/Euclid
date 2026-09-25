@@ -2,6 +2,7 @@ module EuclidSDL3Probe
 
 using Dates
 using SHA
+import Main.EuclidBuildConfiguration
 
 export ProbeCommandResult, binding_paths, parse_probe_output, probe_build_command,
     probe_shader_command, run_probe
@@ -25,6 +26,8 @@ struct ProbeArtifacts
     fragment_source::String
     vertex_spv::String
     fragment_spv::String
+    vertex_runtime::String
+    fragment_runtime::String
     binary::String
 end
 
@@ -40,7 +43,8 @@ end
 
 """Resolve the binding files that define the SDL3 ABI used by the probe."""
 function binding_paths(odin_root::AbstractString; kernel::Symbol=Sys.KERNEL)
-    kernel == :Linux || error("The SDL3 capability probe currently supports Linux only.")
+    kernel in (:Linux, :Darwin) || error(
+        "The SDL3 capability probe is unsupported on $kernel.")
     root = normpath(odin_root)
     paths = [
         joinpath(root, "vendor", "sdl3", "sdl3__foreign.odin"),
@@ -50,6 +54,26 @@ function binding_paths(odin_root::AbstractString; kernel::Symbol=Sys.KERNEL)
     missing = filter(path -> !isfile(path), paths)
     isempty(missing) || error("Missing Odin SDL3 binding file: $(first(missing))")
     return paths
+end
+
+"""Run one bounded probe subprocess and capture both output streams."""
+function capture_command_timeout(
+    command::Cmd, timeout_seconds::Real; cwd::Union{Nothing,String}=nothing)
+    stdout = IOBuffer()
+    stderr = IOBuffer()
+    command = cwd === nothing ? command : Cmd(command; dir=cwd)
+    process = run(pipeline(
+        ignorestatus(command), stdout=stdout, stderr=stderr); wait=false)
+    wait_status = timedwait(() -> process_exited(process), timeout_seconds)
+    if wait_status == :timed_out
+        kill(process)
+        wait(process)
+        return ProbeCommandResult(
+            124, String(take!(stdout)), String(take!(stderr)))
+    end
+    wait(process)
+    return ProbeCommandResult(
+        process.exitcode, String(take!(stdout)), String(take!(stderr)))
 end
 
 """Return the strict Odin command used to build the isolated probe."""
@@ -64,6 +88,16 @@ end
 function probe_shader_command(source::String, output::String, stage::String)
     stage in ("vertex", "fragment") || error("Unsupported probe shader stage: $stage")
     return Cmd(["glslc", "-fshader-stage=$stage", source, "-o", output])
+end
+
+"""Return the deterministic SPIR-V-to-MSL command for one shader stage."""
+function probe_msl_command(
+    tool::String, source::String, output::String, stage::String)
+    stage in ("vertex", "fragment") || error(
+        "Unsupported probe shader stage: $stage")
+    return Cmd([tool, source, "--source", "SPIRV", "--dest", "MSL",
+        "--stage", stage, "--entrypoint", "main", "--msl-version", "2.0.0",
+        "--output", output])
 end
 
 """Parse the probe's line-oriented runtime facts without interpreting values."""
@@ -192,6 +226,15 @@ function loaded_sdl_path(ldd_output::String)
     return ""
 end
 
+"""Return the loaded SDL3 path reported by Mach-O dependency inspection."""
+function loaded_sdl_path_darwin(otool_output::String)
+    for line in split(otool_output, '\n')
+        match_result = match(r"^\s+(\S*libSDL3(?:\.[^/]*)?\.dylib)\s+\(", line)
+        match_result === nothing || return match_result.captures[1]
+    end
+    return ""
+end
+
 """Return an integer runtime version as dotted major, minor, and micro fields."""
 function dotted_runtime_version(value::String)
     version = tryparse(Int, value)
@@ -222,6 +265,9 @@ function prepare_artifacts(root::String)
     rm(output_dir; recursive=true, force=true)
     mkpath(output_dir)
     source_dir = joinpath(root, PROBE_RELATIVE_DIR)
+    vertex_spv = joinpath(output_dir, "triangle.vert.spv")
+    fragment_spv = joinpath(output_dir, "triangle.frag.spv")
+    runtime_extension = Sys.isapple() ? "msl" : "spv"
     return ProbeArtifacts(
         output_dir,
         joinpath(output_dir, "diagnostics.log"),
@@ -229,8 +275,12 @@ function prepare_artifacts(root::String)
         source_dir,
         joinpath(source_dir, "triangle.vert"),
         joinpath(source_dir, "triangle.frag"),
-        joinpath(output_dir, "triangle.vert.spv"),
-        joinpath(output_dir, "triangle.frag.spv"),
+        vertex_spv,
+        fragment_spv,
+        runtime_extension == "spv" ? vertex_spv :
+            joinpath(output_dir, "triangle.vert.msl"),
+        runtime_extension == "spv" ? fragment_spv :
+            joinpath(output_dir, "triangle.frag.msl"),
         joinpath(output_dir, "euclid-sdl3-probe"))
 end
 
@@ -244,16 +294,34 @@ function initial_result()
         "reason" => "probe did not complete")
 end
 
-"""Require every external command used by the Linux probe."""
-function require_probe_tools()
-    Sys.islinux() || error("The SDL3 capability probe currently supports Linux only.")
+"""Resolve the shadercross executable used for Darwin MSL generation."""
+function probe_shadercross_path(root::String)
+    override = get(ENV, "EUCLID_SHADERCROSS", "")
+    candidates = isempty(override) ? [
+        joinpath(root, ".build", "shadercross", "shadercross"),
+        something(Sys.which("shadercross"), ""),
+    ] : [override]
+    index = findfirst(isfile, candidates)
+    index === nothing && error(
+        "shadercross is required for the Darwin SDL3 probe. Build assets first.")
+    return realpath(candidates[index])
+end
+
+"""Require every external command used by the platform probe."""
+function require_probe_tools(root::String)
+    (Sys.islinux() || Sys.isapple()) || error(
+        "The SDL3 capability probe is unsupported on $(Sys.KERNEL).")
     require_tool("odin", "Install the Odin compiler.")
     require_tool("glslc", "Install shaderc/glslc.")
     require_tool("spirv-val", "Install SPIR-V Tools.")
     require_tool("pkg-config", "Install pkg-config and SDL3 development metadata.")
-    require_tool("readelf", "Install binutils.")
-    require_tool("ldd", "Install the system ELF loader tools.")
-    require_tool("timeout", "Install GNU coreutils.")
+    if Sys.islinux()
+        require_tool("readelf", "Install binutils.")
+        require_tool("ldd", "Install the system ELF loader tools.")
+    else
+        require_tool("otool", "Install the Xcode command-line tools.")
+        probe_shadercross_path(root)
+    end
 end
 
 """Record host, source-control, binding, and system SDL provider identities."""
@@ -262,13 +330,7 @@ function collect_environment!(result, diagnostics::IO, root::String)
     odin_version = command_value!(
         diagnostics, "odin-version", Cmd(["odin", "version"]); cwd=root)
     bindings = binding_paths(odin_root)
-    sdl_version = command_value!(diagnostics, "sdl-pkg-version",
-        Cmd(["pkg-config", "--modversion", "sdl3"]); cwd=root)
-    sdl_libdir = command_value!(diagnostics, "sdl-libdir",
-        Cmd(["pkg-config", "--variable=libdir", "sdl3"]); cwd=root)
-    candidate = joinpath(sdl_libdir, "libSDL3.so.0")
-    isfile(candidate) || error("System SDL3 runtime is missing at $candidate")
-    sdl_library = realpath(candidate)
+    provider = EuclidBuildConfiguration.sdl3_provider_identity()
     result["host"] = Dict{String,Any}(
         "kernel" => string(Sys.KERNEL), "architecture" => string(Sys.ARCH),
         "kernel_release" => command_value!(diagnostics, "kernel-release",
@@ -278,9 +340,10 @@ function collect_environment!(result, diagnostics::IO, root::String)
     result["bindings"] = [Dict{String,Any}(
         "path" => path, "sha256" => file_sha256(path)) for path in bindings]
     result["sdl_provider"] = Dict{String,Any}(
-        "kind" => "system", "pkg_config_version" => sdl_version,
-        "library_path" => sdl_library, "sha256" => file_sha256(sdl_library))
-    return sdl_library
+        "kind" => "system", "pkg_config_version" => provider.version,
+        "library_path" => provider.library_path,
+        "sha256" => file_sha256(provider.library_path))
+    return provider.library_path
 end
 
 """Compile and validate both checked-in shaders, then record their identities."""
@@ -301,6 +364,22 @@ function compile_shaders!(result, diagnostics::IO, root::String, paths::ProbeArt
         "fragment_source_sha256" => file_sha256(paths.fragment_source),
         "vertex_spirv_sha256" => file_sha256(paths.vertex_spv),
         "fragment_spirv_sha256" => file_sha256(paths.fragment_spv))
+    if Sys.isapple()
+        shadercross = probe_shadercross_path(root)
+        checked_step!(diagnostics, "vertex-msl",
+            probe_msl_command(shadercross, paths.vertex_spv,
+                paths.vertex_runtime, "vertex"); cwd=root)
+        checked_step!(diagnostics, "fragment-msl",
+            probe_msl_command(shadercross, paths.fragment_spv,
+                paths.fragment_runtime, "fragment"); cwd=root)
+        result["shaders"]["runtime_format"] = "MSL"
+        result["shaders"]["vertex_runtime_sha256"] =
+            file_sha256(paths.vertex_runtime)
+        result["shaders"]["fragment_runtime_sha256"] =
+            file_sha256(paths.fragment_runtime)
+    else
+        result["shaders"]["runtime_format"] = "SPIR-V"
+    end
 end
 
 """Strict-build the standalone Odin probe and record its binary identity."""
@@ -339,10 +418,9 @@ end
 
 """Run the bounded native probe and retain runtime facts even when it fails."""
 function run_runtime!(result, diagnostics::IO, root::String, paths::ProbeArtifacts)
-    command = Cmd(["timeout", "15s", paths.binary, paths.vertex_spv,
-        paths.fragment_spv])
+    command = Cmd([paths.binary, paths.vertex_runtime, paths.fragment_runtime])
     println(diagnostics, "[probe-runtime] ", command)
-    runtime = capture_command(command; cwd=root)
+    runtime = capture_command_timeout(command, 15; cwd=root)
     write(diagnostics, runtime.stdout)
     write(diagnostics, runtime.stderr)
     facts = parse_probe_output(runtime.stdout * runtime.stderr)
@@ -358,20 +436,36 @@ end
 """Record the executable dependency closure and loaded SDL SONAME."""
 function inspect_binary!(
     result, diagnostics::IO, root::String, paths::ProbeArtifacts, sdl_library::String)
-    ldd_result = checked_step!(diagnostics, "ldd", Cmd(["ldd", paths.binary]); cwd=root)
-    soname_result = checked_step!(diagnostics, "readelf-soname",
-        Cmd(["readelf", "-d", sdl_library]); cwd=root)
-    result["dynamic_dependencies"] = split(chomp(ldd_result.stdout), '\n';
+    dependency_command = Sys.isapple() ? Cmd(["otool", "-L", paths.binary]) :
+        Cmd(["ldd", paths.binary])
+    identity_command = Sys.isapple() ? Cmd(["otool", "-D", sdl_library]) :
+        Cmd(["readelf", "-d", sdl_library])
+    dependency_result = checked_step!(diagnostics, "dynamic-dependencies",
+        dependency_command; cwd=root)
+    identity_result = checked_step!(diagnostics, "runtime-identity",
+        identity_command; cwd=root)
+    result["dynamic_dependencies"] = split(chomp(dependency_result.stdout), '\n';
         keepempty=false)
-    result["sdl_provider"]["loaded_path"] = loaded_sdl_path(ldd_result.stdout)
-    soname = match(r"Library soname: \[([^]]+)\]", soname_result.stdout)
-    result["sdl_provider"]["soname"] = soname === nothing ? "" : soname.captures[1]
+    if Sys.isapple()
+        result["sdl_provider"]["loaded_path"] =
+            loaded_sdl_path_darwin(dependency_result.stdout)
+        lines = split(chomp(identity_result.stdout), '\n'; keepempty=false)
+        result["sdl_provider"]["install_name"] =
+            length(lines) < 2 ? "" : strip(lines[2])
+    else
+        result["sdl_provider"]["loaded_path"] =
+            loaded_sdl_path(dependency_result.stdout)
+        soname = match(
+            r"Library soname: \[([^]]+)\]", identity_result.stdout)
+        result["sdl_provider"]["soname"] =
+            soname === nothing ? "" : soname.captures[1]
+    end
 end
 
 """Execute each probe stage and update the current failure-stage marker."""
 function execute_probe!(result, diagnostics::IO, root::String, paths::ProbeArtifacts)
     result["failed_stage"] = "tool_discovery"
-    require_probe_tools()
+    require_probe_tools(root)
     result["failed_stage"] = "provider_discovery"
     sdl_library = collect_environment!(result, diagnostics, root)
     result["failed_stage"] = "shader_compile"
@@ -384,10 +478,10 @@ function execute_probe!(result, diagnostics::IO, root::String, paths::ProbeArtif
     inspect_binary!(result, diagnostics, root, paths, sdl_library)
     result["result"] = "passed"
     result["failed_stage"] = nothing
-    result["reason"] = "SDL3 Vulkan capability probe passed"
+    result["reason"] = "SDL3 GPU capability probe passed"
 end
 
-"""Build and run the explicit Linux SDL3 capability probe, preserving evidence."""
+"""Build and run the explicit SDL3 GPU capability probe, preserving evidence."""
 function run_probe(root::String)
     paths = prepare_artifacts(root)
     result = initial_result()

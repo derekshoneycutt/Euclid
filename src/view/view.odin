@@ -209,37 +209,45 @@ report_draw_runtime_summary :: proc(runtime: ^native.Sdl_Draw_Runtime) {
 //   Run full app lifecycle loop: init state/window, fixed updates, frame draw, cleanup.
 //
 // Notes:
-// Resolve packaged SPIR-V artifacts for the display-owned 2D renderer.
+// Resolve packaged native shader artifacts for the display-owned 2D renderer.
 sdl_draw_shader_paths :: proc() -> native.Sdl_Draw_Shader_Paths {
     return {
         colored_vertex = files.packaged_asset_path(
-            "shaders/draw2d_colored.vert.spv", context.temp_allocator),
+            "shaders/draw2d_colored.vert" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
         colored_fragment = files.packaged_asset_path(
-            "shaders/draw2d_colored.frag.spv", context.temp_allocator),
+            "shaders/draw2d_colored.frag" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
         textured_vertex = files.packaged_asset_path(
-            "shaders/draw2d_textured.vert.spv", context.temp_allocator),
+            "shaders/draw2d_textured.vert" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
         textured_fragment = files.packaged_asset_path(
-            "shaders/draw2d_textured.frag.spv", context.temp_allocator),
+            "shaders/draw2d_textured.frag" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
     }
 }
 
-// Resolve packaged SPIR-V artifacts for the optional geometry-tool pipeline.
+// Resolve packaged native shaders for the optional geometry-tool pipeline.
 sdl_stroke_shader_paths :: proc() -> native.Sdl_Stroke_Shader_Paths {
     return {
         vertex = files.packaged_asset_path(
-            "shaders/stroke3d.vert.spv", context.temp_allocator),
+            "shaders/stroke3d.vert" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
         fragment = files.packaged_asset_path(
-            "shaders/stroke3d.frag.spv", context.temp_allocator),
+            "shaders/stroke3d.frag" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
     }
 }
 
-// Resolve packaged SPIR-V artifacts for the optional instanced dust pipeline.
+// Resolve packaged native shaders for the optional instanced dust pipeline.
 sdl_dust_shader_paths :: proc() -> native.Sdl_Dust_Shader_Paths {
     return {
         vertex = files.packaged_asset_path(
-            "shaders/dust_instanced.vert.spv", context.temp_allocator),
+            "shaders/dust_instanced.vert" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
         fragment = files.packaged_asset_path(
-            "shaders/dust_instanced.frag.spv", context.temp_allocator),
+            "shaders/dust_instanced.frag" + native.SDL_GPU_SHADER_SUFFIX,
+            context.temp_allocator),
     }
 }
 

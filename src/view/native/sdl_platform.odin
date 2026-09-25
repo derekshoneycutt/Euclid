@@ -5,6 +5,20 @@ import "core:math"
 
 import sdl "vendor:sdl3"
 
+when ODIN_OS == .Linux {
+    SDL_GPU_DRIVER :: "vulkan"
+    SDL_GPU_SHADER_FORMAT :: sdl.GPUShaderFormat{.SPIRV}
+    SDL_GPU_SHADER_ENTRYPOINT :: "main"
+    SDL_GPU_SHADER_SUFFIX :: ".spv"
+} else when ODIN_OS == .Darwin {
+    SDL_GPU_DRIVER :: "metal"
+    SDL_GPU_SHADER_FORMAT :: sdl.GPUShaderFormat{.MSL}
+    SDL_GPU_SHADER_ENTRYPOINT :: "main0"
+    SDL_GPU_SHADER_SUFFIX :: ".msl"
+} else {
+    #assert(false, "SDL GPU backend is unsupported on this platform")
+}
+
 SDL_SCENE_FORMAT :: sdl.GPUTextureFormat.R8G8B8A8_UNORM
 SDL_CAPTURE_ROW_ALIGNMENT :: 256
 
@@ -566,13 +580,14 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
     platform^ = {}
 }
 
-// sdl_platform_admit_gpu creates, claims, and configures one Vulkan GPU device.
+// sdl_platform_admit_gpu creates, claims, and configures the native GPU device.
 sdl_platform_admit_gpu :: proc(
     platform: ^Sdl_Platform, vsync: bool) -> (sdl.GPUPresentMode, bool) {
-    if !sdl.GPUSupportsShaderFormats({.SPIRV}, "vulkan") {
+    if !sdl.GPUSupportsShaderFormats(SDL_GPU_SHADER_FORMAT, SDL_GPU_DRIVER) {
         return {}, false
     }
-    platform^.device = sdl.CreateGPUDevice({.SPIRV}, true, "vulkan")
+    platform^.device = sdl.CreateGPUDevice(
+        SDL_GPU_SHADER_FORMAT, true, SDL_GPU_DRIVER)
     if platform^.device == nil ||
        !sdl.ClaimWindowForGPUDevice(platform^.device, platform^.window) {
         return {}, false
@@ -605,7 +620,7 @@ sdl_platform_log_ready :: proc(
         platform^.metrics.pixel_height, platform^.metrics.display_scale)
 }
 
-// sdl_platform_create initializes one Linux Vulkan window and owned scene target.
+// sdl_platform_create initializes one native GPU window and owned scene target.
 sdl_platform_create :: proc(
     platform: ^Sdl_Platform, options: Sdl_Platform_Options) -> bool {
     if platform == nil || options.width <= 0 || options.height <= 0 ||

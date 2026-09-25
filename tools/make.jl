@@ -16,8 +16,8 @@ Commands:
     sysimage [--debug] [--strict]
                                  Force rebuilding the Julia sysimage, application, and assets.
     harness                      Build and run the deterministic headless harness.
-    probe-sdl3                   Build and run the Linux SDL3/Vulkan capability probe.
-    probe-sdl3-image             Build and run the Linux SDL_image capability probe.
+    probe-sdl3                   Build and run the native SDL3 GPU capability probe.
+    probe-sdl3-image             Build and run the SDL_image capability probe.
     unit [julia|odin] [OPTS]     Run all application tests or one language suite.
     vet [OPTS]                   Build and analyze the repository.
     test [OPTS]                  Run the complete verification gate.
@@ -720,10 +720,29 @@ function vulkan_loader_path()
     return path
 end
 
+"""Describe the platform graphics runtime used by SDL_GPU."""
+function graphics_runtime_component()
+    if Sys.islinux()
+        loader = vulkan_loader_path()
+        return Dict{String,Any}(
+            "type" => "library", "bom-ref" => "native:vulkan-loader",
+            "name" => basename(loader), "version" => "system",
+            "scope" => "required", "hashes" => [component_hash(loader)])
+    elseif Sys.isapple()
+        return Dict{String,Any}(
+            "type" => "framework", "bom-ref" => "native:metal-framework",
+            "name" => "Metal.framework", "version" => "system",
+            "scope" => "required", "properties" => [Dict(
+                "name" => "euclid:install-name",
+                "value" =>
+                    "/System/Library/Frameworks/Metal.framework/Versions/A/Metal")])
+    end
+    error("SDL_GPU runtime metadata is unsupported on $(Sys.KERNEL).")
+end
+
 """Describe provisional native migration inputs in CycloneDX form."""
 function migration_runtime_components()
     provider = sdl3_provider_identity()
-    loader = vulkan_loader_path()
     return Dict{String,Any}[
         Dict("type" => "library", "bom-ref" => "native:sdl3",
             "name" => "SDL3", "version" => provider.version,
@@ -731,9 +750,7 @@ function migration_runtime_components()
                 provider.library_path)],
             "properties" => [Dict("name" => "euclid:provider",
                 "value" => "provisional-system")]),
-        Dict("type" => "library", "bom-ref" => "native:vulkan-loader",
-            "name" => basename(loader), "version" => "system",
-            "scope" => "required", "hashes" => [component_hash(loader)]),
+        graphics_runtime_component(),
     ]
 end
 
@@ -765,7 +782,7 @@ function shader_artifact_components(manifest_path::Union{Nothing,String})
     manifest = TOML.parsefile(manifest_path)
     components = Dict{String,Any}[]
     for shader in manifest["shader"]
-        for (kind, field) in (("SPIR-V", "artifact"),
+        for (kind, field) in ((shader["runtime_format"], "runtime_artifact"),
             ("reflection", "reflection"))
             name = shader[field]
             push!(components, Dict("type" => "file",

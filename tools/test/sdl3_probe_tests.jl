@@ -19,6 +19,11 @@
         "triangle.vert.spv"]
     @test_throws ErrorException EuclidSDL3Probe.probe_shader_command(
         "triangle.geom", "triangle.geom.spv", "geometry")
+    msl = EuclidSDL3Probe.probe_msl_command(
+        "shadercross", "triangle.vert.spv", "triangle.vert.msl", "vertex")
+    @test msl.exec == ["shadercross", "triangle.vert.spv", "--source",
+        "SPIRV", "--dest", "MSL", "--stage", "vertex", "--entrypoint",
+        "main", "--msl-version", "2.0.0", "--output", "triangle.vert.msl"]
 
     facts = EuclidSDL3Probe.parse_probe_output("""
 noise
@@ -42,8 +47,13 @@ probe.result=passed
         paths = EuclidSDL3Probe.binding_paths(root; kernel=:Linux)
         @test basename.(paths) == [
             "sdl3__foreign.odin", "sdl3_gpu.odin", "sdl3_version.odin"]
+        @test length(EuclidSDL3Probe.binding_paths(root; kernel=:Darwin)) == 3
         rm(last(paths))
         @test_throws ErrorException EuclidSDL3Probe.binding_paths(root; kernel=:Linux)
-        @test_throws ErrorException EuclidSDL3Probe.binding_paths(root; kernel=:Darwin)
     end
+
+    @test EuclidSDL3Probe.loaded_sdl_path_darwin("""
+probe:
+    /opt/homebrew/opt/sdl3/lib/libSDL3.0.dylib (compatibility version 1.0.0)
+""") == "/opt/homebrew/opt/sdl3/lib/libSDL3.0.dylib"
 end
