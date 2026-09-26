@@ -5,6 +5,7 @@ import sdl "vendor:sdl3"
 // Sdl_Cursor_Kind identifies one retained platform cursor.
 Sdl_Cursor_Kind :: enum u8 {
     Default,
+    Text,
     Resize_Ew,
     Resize_Ns,
 }
@@ -20,9 +21,11 @@ sdl_platform_sync_text_input :: proc(platform: ^Sdl_Platform, focused: bool) {
 // sdl_platform_admit_cursors creates every cursor required by current UI policy.
 sdl_platform_admit_cursors :: proc(platform: ^Sdl_Platform) -> bool {
     platform^.default_cursor = sdl.CreateSystemCursor(.DEFAULT)
+    platform^.text_cursor = sdl.CreateSystemCursor(.TEXT)
     platform^.resize_ew_cursor = sdl.CreateSystemCursor(.EW_RESIZE)
     platform^.resize_ns_cursor = sdl.CreateSystemCursor(.NS_RESIZE)
-    if platform^.default_cursor == nil || platform^.resize_ew_cursor == nil ||
+        if platform^.default_cursor == nil || platform^.text_cursor == nil ||
+             platform^.resize_ew_cursor == nil ||
        platform^.resize_ns_cursor == nil {
         return false
     }
@@ -34,7 +37,9 @@ sdl_platform_admit_cursors :: proc(platform: ^Sdl_Platform) -> bool {
 sdl_platform_set_cursor :: proc(
     platform: ^Sdl_Platform, kind: Sdl_Cursor_Kind) -> bool {
     cursor := platform^.default_cursor
-    if kind == .Resize_Ew {
+    if kind == .Text {
+        cursor = platform^.text_cursor
+    } else if kind == .Resize_Ew {
         cursor = platform^.resize_ew_cursor
     } else if kind == .Resize_Ns {
         cursor = platform^.resize_ns_cursor
@@ -60,10 +65,14 @@ sdl_platform_destroy_cursors :: proc(platform: ^Sdl_Platform) {
     if platform^.resize_ew_cursor != nil {
         sdl.DestroyCursor(platform^.resize_ew_cursor)
     }
+    if platform^.text_cursor != nil {
+        sdl.DestroyCursor(platform^.text_cursor)
+    }
     if platform^.default_cursor != nil {
         sdl.DestroyCursor(platform^.default_cursor)
     }
     platform^.default_cursor = nil
+    platform^.text_cursor = nil
     platform^.resize_ew_cursor = nil
     platform^.resize_ns_cursor = nil
     platform^.active_cursor = nil

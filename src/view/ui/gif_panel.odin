@@ -11,6 +11,11 @@ import view_font "../font"
 
 import "core:fmt"
 
+GIF_PATH_INPUT_BOX_ID :: 6205
+GIF_PATH_LABEL_WIDTH :: f32(42)
+GIF_PATH_INPUT_HEIGHT :: f32(24)
+GIF_PATH_INPUT_TOP_OFFSET :: f32(30)
+
 //   Row y-positions for the GIF panel's two sliders.
 Gif_Slider_Rows :: struct {
     downsample_y: f32,
@@ -47,8 +52,37 @@ Gif_View_Preparation :: struct {
     captured_frames: int,
     status_note: [260]u8,
     status_note_len: int,
-    last_path: [260]u8,
-    last_path_len: int,
+    last_path: string,
+    path_input: Input_Box_Result,
+}
+
+// gif_path_input_rect_for_panel resolves the saved-path field from GIF row layout.
+gif_path_input_rect_for_panel :: proc(
+    panel: geometry.Rectangle) -> geometry.Rectangle {
+    stack := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
+        panel.y + SETTINGS_HEADER_TOP_OFFSET,
+        panel.width - SETTINGS_PANEL_INSET * 2,
+        panel.height - SETTINGS_HEADER_TOP_OFFSET}
+    rows := gif_view_layout_rows(stack)
+    return {stack.x + GIF_PATH_LABEL_WIDTH,
+        rows.status_y + GIF_PATH_INPUT_TOP_OFFSET,
+        max(f32(0), stack.width - GIF_PATH_LABEL_WIDTH), GIF_PATH_INPUT_HEIGHT}
+}
+
+// gif_path_input_visible reports whether the saved-path control exists this frame.
+gif_path_input_visible :: #force_inline proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
+    return runtime != nil && runtime^.active_accordion_section == .Save_Gif &&
+        runtime^.gif_capture_phase == .Saved && runtime^.last_gif_path_len > 0
+}
+
+// gif_path_input_rect resolves the visible field against active accordion geometry.
+gif_path_input_rect :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> geometry.Rectangle {
+    sections := accordion_sections_for_layout(runtime^.current_layout_mode, "")
+    layout := accordion_layout(geometry.Rectangle(runtime^.ui_regions.accordion_rect),
+        sections, runtime^.active_accordion_section)
+    return gif_path_input_rect_for_panel(geometry.Rectangle(layout.content))
 }
 
 // draw_encoded_gif_geometry encodes GIF controls while capture stays deferred.
@@ -121,12 +155,39 @@ draw_encoded_gif_status :: proc(
         draw_encoded_label(state, encoder, note,
             x, row_y + SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET)
     }
-    if prepared.phase == .Saved && prepared.last_path_len > 0 {
-        last_path := prepared.last_path
-        path := string(last_path[:prepared.last_path_len])
-        draw_encoded_label(state, encoder, fmt.tprintf("Path: %s", path),
-            x, row_y + SETTINGS_GIF_STATUS_PATH_ROW_OFFSET)
+    if prepared.phase == .Saved && len(prepared.last_path) > 0 {
+        sections := accordion_sections_for_layout(
+            state^.ui_runtime.current_layout_mode, "")
+        layout := accordion_layout(
+            geometry.Rectangle(state^.ui_runtime.ui_regions.accordion_rect), sections,
+            state^.ui_runtime.active_accordion_section)
+        field := gif_path_input_rect_for_panel(geometry.Rectangle(layout.content))
+        draw_encoded_label(state, encoder, "Path", x,
+            field.y + (field.height - TREE_FONT_SIZE) * 0.5)
+        params := gif_path_input_params(state, field, {}, prepared.last_path)
+        draw_encoded_input_box(encoder, params, prepared.path_input)
     }
+}
+
+// gif_path_input_params builds shared saved-path field parameters for update and draw.
+gif_path_input_params :: proc(
+    state: ^core.Euclid_General_State, rect: geometry.Rectangle,
+    frame: Input_Frame, text: string) -> Input_Box_Params {
+    runtime := &state^.ui_runtime
+    focus := runtime^.interaction_frame.effective_focus
+    target := runtime^.interaction_frame.pointer_target
+    advance, measured := view_core.ui_text_column_advance(
+        view_font.cache_borrow(&state^.font_cache, .Regular), TREE_FONT_SIZE)
+    if !measured {advance = TEXT_WRAP_ADVANCE}
+    return {id = GIF_PATH_INPUT_BOX_ID, rect = rect, text = text,
+        content_revision = runtime^.last_gif_path_revision,
+        state = &runtime^.gif_path_input, frame = frame,
+        focused = focus.kind == .Input_Box && focus.id == GIF_PATH_INPUT_BOX_ID,
+        pointer_routed = target.focus.kind == .Input_Box &&
+            target.id == GIF_PATH_INPUT_BOX_ID,
+        column_advance = advance,
+        font = view_font.cache_borrow(&state^.font_cache, .Regular),
+        resolver = view_font.cache_terminal_resolver(&state^.font_cache)}
 }
 
 // draw_encoded_gif_value right-aligns one prepared slider value in the panel.
@@ -328,6 +389,21 @@ prepare_gif_timing_controls :: proc(
     result^.timing_mode = ctx.ui_runtime.gif_timing_mode
 }
 
+// prepare_gif_path_input borrows published path text and resolves its interaction.
+prepare_gif_path_input :: proc(
+    state: ^core.Euclid_General_State, ctx: Gif_Panel_Context,
+    mouse_input: Input_Frame, result: ^Gif_View_Preparation) {
+    result^.last_path = string(ctx.ui_runtime.last_gif_path[
+        :ctx.ui_runtime.last_gif_path_len])
+    if !gif_path_input_visible(ctx.ui_runtime) {return}
+    params := gif_path_input_params(state,
+        gif_path_input_rect_for_panel(ctx.panel), mouse_input, result^.last_path)
+    result^.path_input = input_box_prepare(params, &ctx.ui_runtime.ui_press_owner)
+    if result^.path_input.hovered || ctx.ui_runtime.ui_press_owner.kind == .Input_Box {
+        ctx.ui_runtime.cursor = .Text
+    }
+}
+
 //   Resolve GIF controls and commit their action before rendering.
 prepare_gif_view :: proc(
     state: ^core.Euclid_General_State,
@@ -356,8 +432,7 @@ prepare_gif_view :: proc(
     result.captured_frames = ctx.ui_runtime.gif_captured_frames
     result.status_note = ctx.ui_runtime.gif_status_note
     result.status_note_len = ctx.ui_runtime.gif_status_note_len
-    result.last_path = ctx.ui_runtime.last_gif_path
-    result.last_path_len = ctx.ui_runtime.last_gif_path_len
+    prepare_gif_path_input(state, ctx, mouse_input, &result)
     return result
 }
 

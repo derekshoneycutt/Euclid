@@ -310,6 +310,31 @@ ui_focus_press_targets_and_terminal_exit :: proc(t: ^testing.T) {
     testing.expect(t, exited.terminal_focus_changed)
 }
 
+// Verify the visible GIF path takes exclusive keyboard focus from Terminal by ID.
+@(test)
+ui_focus_routes_visible_gif_path_input :: proc(t: ^testing.T) {
+    runtime := make_baseline_ui_runtime()
+    runtime.active_accordion_section = .Save_Gif
+    runtime.gif_capture_phase = .Saved
+    runtime.last_gif_path_len = 4
+    field := gif_path_input_rect(&runtime)
+    routed := ui_reconcile_focus(&runtime, {
+        window_focused = true,
+        mouse_position = {field.x + 1, field.y + 1},
+        mouse_pressed = {.Left},
+    }, true)
+    testing.expect_value(t, routed.logical_focus.kind,
+        viewmodel.Ui_Focus_Kind.Input_Box)
+    testing.expect_value(t, routed.logical_focus.id, GIF_PATH_INPUT_BOX_ID)
+    testing.expect(t, !routed.terminal_focused)
+    testing.expect(t, routed.accordion.pointer)
+
+    runtime.active_accordion_section = .Library
+    hidden := ui_reconcile_focus(&runtime, {window_focused = true}, true)
+    testing.expect_value(t, hidden.logical_focus.kind,
+        viewmodel.Ui_Focus_Kind.None)
+}
+
 // Verify static routing declares splitter and panel priority independently of drawing.
 @(test)
 ui_router_declares_static_target_priority :: proc(t: ^testing.T) {

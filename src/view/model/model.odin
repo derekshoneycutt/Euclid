@@ -9,6 +9,7 @@ import "core:time"
 
 TOOL_LENGTH :: 0.35
 MAX_TOOL_BRUSH_OCCLUDERS :: 2
+GIF_PATH_CAPACITY :: 4096
 Color :: color.Color_RGBA8
 Rectangle :: geometry.Rectangle
 Vector3 :: geometry.Vector3
@@ -136,6 +137,7 @@ Ui_Press_Owner_Kind :: enum {
     List_Item,
     Icon_Button,
     Text_Button,
+    Input_Box,
     Checkbox,
     Slider,
     Scrollbar,
@@ -207,8 +209,18 @@ Ui_Interaction_Frame :: struct {
 // Ui_Cursor_Kind is the portable pointer shape requested by UI interaction.
 Ui_Cursor_Kind :: enum u8 {
     Default,
+    Text,
     Resize_Ew,
     Resize_Ns,
+}
+
+// Ui_Input_Box_State retains bounded interaction state while borrowing model text.
+Ui_Input_Box_State :: struct {
+    cursor_byte: int,
+    anchor_byte: int,
+    scroll_x: f32,
+    content_revision: u64,
+    dragging: bool,
 }
 
 // Euclid_Ui_Runtime_State owns persistent display interaction and panel state.
@@ -265,8 +277,11 @@ Euclid_Ui_Runtime_State :: struct {
     gif_captured_frames: int,
     gif_status_note: [260]u8,
     gif_status_note_len: int,
-    last_gif_path: [260]u8,
+    last_gif_path: [GIF_PATH_CAPACITY]u8,
     last_gif_path_len: int,
+    last_gif_path_revision: u64,
+    last_gif_path_truncated: bool,
+    gif_path_input: Ui_Input_Box_State,
     window: Ui_Window_Metrics,
     layout_preference: Layout_Preference,
     landscape: Ui_Landscape_Layout_State,

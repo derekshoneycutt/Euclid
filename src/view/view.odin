@@ -471,7 +471,9 @@ service_scenario_after_present :: proc(ctx: Window_Frame_Context) {
 apply_sdl_cursor :: proc(
     state: ^Euclid_General_State, platform: ^native.Sdl_Platform) {
     kind := native.Sdl_Cursor_Kind.Default
-    if state^.ui_runtime.cursor == .Resize_Ew {
+    if state^.ui_runtime.cursor == .Text {
+        kind = .Text
+    } else if state^.ui_runtime.cursor == .Resize_Ew {
         kind = .Resize_Ew
     } else if state^.ui_runtime.cursor == .Resize_Ns {
         kind = .Resize_Ns

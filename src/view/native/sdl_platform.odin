@@ -111,6 +111,7 @@ Sdl_Platform :: struct {
     scene_target: ^sdl.GPUTexture,
     multisample_target: ^sdl.GPUTexture,
     default_cursor: ^sdl.Cursor,
+    text_cursor: ^sdl.Cursor,
     resize_ew_cursor: ^sdl.Cursor,
     resize_ns_cursor: ^sdl.Cursor,
     active_cursor: ^sdl.Cursor,

@@ -39,6 +39,7 @@ clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
     app_view.clear_last_gif_path(ui_runtime)
     testing.expect_value(t, ui_runtime^.last_gif_path_len, 0)
     testing.expect_value(t, ui_runtime^.last_gif_path[0], u8(0))
+    testing.expect_value(t, ui_runtime^.last_gif_path_revision, u64(1))
 
     long_path := strings.repeat(
         "a", len(ui_runtime^.last_gif_path) + 32, context.temp_allocator)
@@ -47,6 +48,21 @@ clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
     expected_len := len(ui_runtime^.last_gif_path) - 1
     testing.expect_value(t, ui_runtime^.last_gif_path_len, expected_len)
     testing.expect_value(t, ui_runtime^.last_gif_path[expected_len], u8(0))
+    testing.expect(t, ui_runtime^.last_gif_path_truncated)
+    testing.expect_value(t, ui_runtime^.last_gif_path_revision, u64(2))
+}
+
+// Verify GIF path truncation never retains a partial UTF-8 codepoint.
+@(test)
+set_last_gif_path_truncates_at_utf8_boundary :: proc(t: ^testing.T) {
+    ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
+    defer free(ui_runtime)
+    prefix := strings.repeat(
+        "a", len(ui_runtime^.last_gif_path) - 2, context.temp_allocator)
+    path := strings.concatenate({prefix, "é"}, context.temp_allocator)
+    app_view.set_last_gif_path(ui_runtime, path)
+    testing.expect_value(t, ui_runtime^.last_gif_path_len, len(prefix))
+    testing.expect(t, ui_runtime^.last_gif_path_truncated)
 }
 
 // Verify fixed-step GIF timing preserves authored progress with bounded delays.

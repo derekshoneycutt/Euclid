@@ -1,6 +1,7 @@
 package view_core
 
 import viewmodel "../model"
+import dyncore "../../dynview/core"
 
 // GIFs are captured only from the view area, excluding the UI. The current session for the
 // GIF is always stored on the general state for the application. We need to wait until a
@@ -391,17 +392,24 @@ gif_capture_destroy_session :: proc(session: ^Gif_Capture_Session) {
 clear_last_gif_path :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
     ui_runtime.last_gif_path_len = 0
     ui_runtime.last_gif_path[0] = 0
+    ui_runtime.last_gif_path_revision += 1
+    ui_runtime.last_gif_path_truncated = false
 }
 
 //   Store saved GIF output path into fixed UI buffer fields.
 set_last_gif_path :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, path: string) {
     max_len := len(ui_runtime.last_gif_path) - 1
     n := min(len(path), max_len)
+    for n > 0 && n < len(path) && dyncore.text_is_utf8_trailing_byte(path[n]) {
+        n -= 1
+    }
     for i in 0..<n {
         ui_runtime.last_gif_path[i] = path[i]
     }
     ui_runtime.last_gif_path[n] = 0
     ui_runtime.last_gif_path_len = n
+    ui_runtime.last_gif_path_revision += 1
+    ui_runtime.last_gif_path_truncated = n < len(path)
 }
 
 //   Map one logical axis extent into framebuffer pixels using screen/render sizes.

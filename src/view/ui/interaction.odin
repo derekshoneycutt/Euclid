@@ -28,7 +28,7 @@ ui_interaction_target :: #force_inline proc(
     kind: viewmodel.Ui_Interaction_Target_Kind,
     focus: viewmodel.Ui_Focus_Kind = .None,
     id: int = 0) -> viewmodel.Ui_Interaction_Target {
-    return {kind = kind, focus = {kind = focus}, id = id}
+    return {kind = kind, focus = {kind = focus, id = id}, id = id}
 }
 
 // Classify icon-button capture between the world overlay and tree controls.
@@ -40,6 +40,15 @@ ui_icon_button_capture_target :: proc(
     return ui_interaction_target(.Control, .Accordion, capture.id)
 }
 
+// ui_scrollbar_capture_target classifies one scrollbar by its owning surface.
+ui_scrollbar_capture_target :: proc(
+    capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
+    focus := viewmodel.Ui_Focus_Kind.Accordion
+    if capture.id == UI_PRESENTATION_SCROLLBAR_ID {focus = .Presentation}
+    if capture.id == UI_TERMINAL_SCROLLBAR_ID {focus = .Terminal}
+    return ui_interaction_target(.Scrollbar, focus, capture.id)
+}
+
 // Classify legacy singleton capture until widget call sites register with the router.
 ui_capture_target :: proc(
     capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
@@ -48,14 +57,13 @@ ui_capture_target :: proc(
     case .Splitter:
         return ui_interaction_target(.Splitter, id = capture.id)
     case .Scrollbar:
-        focus := viewmodel.Ui_Focus_Kind.Accordion
-        if capture.id == UI_PRESENTATION_SCROLLBAR_ID { focus = .Presentation }
-        if capture.id == UI_TERMINAL_SCROLLBAR_ID { focus = .Terminal }
-        return ui_interaction_target(.Scrollbar, focus, capture.id)
+        return ui_scrollbar_capture_target(capture)
     case .Dynview_Selection, .Copy_Icon:
         return ui_interaction_target(.Control, .Presentation, capture.id)
     case .Icon_Button:
         return ui_icon_button_capture_target(capture)
+    case .Input_Box:
+        return ui_interaction_target(.Control, .Input_Box, capture.id)
     case .None:
         return {}
     case .List_Item, .Text_Button, .Checkbox, .Slider:
@@ -181,6 +189,11 @@ ui_hover_target :: proc(
             geometry.Vector2(mouse), regions, terminal_present)
         if target.kind != .None { return target }
     }
+    if gif_path_input_visible(runtime) && geometry.rectangle_contains(
+        gif_path_input_rect(runtime), geometry.Vector2(mouse)) {
+        return ui_interaction_target(
+            .Control, .Input_Box, GIF_PATH_INPUT_BOX_ID)
+    }
     if geometry.rectangle_contains(
         geometry.Rectangle(regions.accordion_rect), geometry.Vector2(mouse)) {
         return ui_interaction_target(.Panel_Content, .Accordion)
@@ -194,6 +207,9 @@ ui_route_logical_focus :: proc(
     input: Ui_Interaction_Route_Input,
     pointer_target: viewmodel.Ui_Interaction_Target) -> viewmodel.Ui_Focus_Target {
     result := runtime^.interaction.logical_focus
+    if result.kind == .Input_Box && !gif_path_input_visible(runtime) {
+        result = {}
+    }
     terminal_present := input.terminal_present
     visible := ui_presentation_is_visible(runtime)
     if terminal_present && visible && !runtime^.interaction.terminal_was_present {
@@ -205,6 +221,17 @@ ui_route_logical_focus :: proc(
         result = pointer_target.focus
     }
     return result
+}
+
+// ui_valid_capture_owner releases input-box capture after its control disappears.
+ui_valid_capture_owner :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    owner: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Press_Owner_State {
+    if owner.kind != .Input_Box || gif_path_input_visible(runtime) {
+        return owner
+    }
+    runtime^.ui_press_owner = {}
+    return {}
 }
 
 // Return whether Terminal is the active and valid keyboard focus target.
@@ -221,7 +248,8 @@ ui_route_interaction_frame :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     input: Ui_Interaction_Route_Input) -> viewmodel.Ui_Interaction_Frame {
     hover := ui_hover_target(runtime, input.frame, input.terminal_present)
-    capture := ui_capture_target(input.capture)
+    capture_owner := ui_valid_capture_owner(runtime, input.capture)
+    capture := ui_capture_target(capture_owner)
     pointer_target := hover
     if capture.kind != .None { pointer_target = capture }
     logical_focus := ui_route_logical_focus(runtime, input, pointer_target)
@@ -279,7 +307,8 @@ ui_refresh_surface_interaction :: proc(frame: ^viewmodel.Ui_Interaction_Frame) {
     }
     frame^.accordion = {
         keyboard = frame^.effective_focus.kind == .Accordion,
-        pointer = frame^.pointer_target.focus.kind == .Accordion,
+        pointer = frame^.pointer_target.focus.kind == .Accordion ||
+            frame^.pointer_target.focus.kind == .Input_Box,
         wheel = frame^.wheel_target.focus.kind == .Accordion,
     }
 }

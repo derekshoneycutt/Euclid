@@ -172,6 +172,7 @@ General features:
 - [X] Window sizing and portrait
 - [X] SDL3 Migration
 - [X] Drawing Sounds
+- [ ] Full-text search
 
 Final tasks:
 
