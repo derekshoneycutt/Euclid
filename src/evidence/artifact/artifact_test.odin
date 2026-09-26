@@ -72,6 +72,11 @@ artifact_test_expect_viewport_state :: proc(t: ^testing.T, directory: string) {
     testing.expect(t, strings.contains(text, "\"vertical_split_x\":640"))
     testing.expect(t, strings.contains(text, "\"horizontal_split_y\":360"))
     testing.expect(t, strings.contains(text, "\"animation_policy_paused\":true"))
+    testing.expect(t, strings.contains(text, "\"colored_draw\""))
+    testing.expect(t, strings.contains(text, "\"curve_candidate_points\":100"))
+    testing.expect(t, strings.contains(text, "\"curve_retained_points\":25"))
+    testing.expect(t, strings.contains(text, "\"curve_retention_ratio\":0.25"))
+    testing.expect(t, strings.contains(text, "\"primitive_overflows\":0"))
     testing.expect(t, strings.contains(text, "\"terminal_graphics\""))
     testing.expect(t, strings.contains(text, "\"decode_count\":11"))
     testing.expect(t, strings.contains(text, "\"gpu_byte_count\":4096"))
@@ -95,6 +100,11 @@ artifact_test_failure_bundle_data :: proc(
             view_text_scroll_max = 120,
             vertical_split_x = 640,
             horizontal_split_y = 360,
+            colored_vertex_count = 400,
+            colored_index_count = 600,
+            curve_candidate_point_count = 100,
+            curve_retained_point_count = 25,
+            curve_retention_ratio = 0.25,
         },
         julia_host = {runtime_generation = 2},
         simulation = {particle = {next_sequence = 7}},

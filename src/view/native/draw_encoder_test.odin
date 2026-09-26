@@ -349,6 +349,8 @@ sdl_draw_expect_accumulated_statistics :: proc(
     testing.expect_value(t, runtime^.statistics.submitted_frames, u64(2))
     testing.expect_value(t, runtime^.statistics.vertices, u64(12))
     testing.expect_value(t, runtime^.statistics.indices, u64(18))
+    testing.expect_value(t, runtime^.statistics.curve_candidate_points, u64(20))
+    testing.expect_value(t, runtime^.statistics.curve_retained_points, u64(8))
     testing.expect_value(t, runtime^.statistics.primitive_overflows, u64(4))
     testing.expect_value(t, runtime^.statistics.scissor_overflows, u64(1))
     testing.expect_value(t, runtime^.statistics.dust_instances, u64(3))
@@ -358,6 +360,8 @@ sdl_draw_expect_accumulated_statistics :: proc(
     testing.expect_value(t, runtime^.statistics.dust_upload_bytes, u64(336))
     testing.expect_value(t, runtime^.statistics.dust_overflows, u64(2))
     testing.expect_value(t, runtime^.statistics.max_vertices, u32(8))
+    testing.expect_value(t, runtime^.statistics.max_curve_candidate_points, u32(10))
+    testing.expect_value(t, runtime^.statistics.max_curve_retained_points, u32(4))
     testing.expect_value(t, runtime^.statistics.max_dust_instances, u32(3))
     testing.expect_value(t, runtime^.statistics.max_dust_expanded_vertices, u32(6))
     testing.expect_value(t, runtime^.statistics.max_dust_upload_bytes, u32(192))
@@ -382,6 +386,7 @@ sdl_draw_test_statistics_accumulate_and_track_high_water :: proc(t: ^testing.T) 
     encoder.dust_draw_count = 1
     encoder.statistics.primitive_overflows = 2
     encoder.statistics.dust_overflows = 1
+    draw_encoder_record_curve_reduction(&encoder, 10, 4)
     sdl_draw_record_statistics(&runtime, &encoder, 1, 96, 24)
     testing.expect(t, draw_encoder_rectangle(
         &encoder, {5, 6, 7, 8}, color.WHITE))

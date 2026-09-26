@@ -156,6 +156,7 @@ report_draw_frame_telemetry :: proc(
     deferred := deferred_visual_capabilities(state)
     log.infof("sdl_geometry_frame vertices=%d indices=%d batches=%d commands=%d " +
         "stroke_vertices=%d stroke_draws=%d " +
+        "curve_candidate_points=%d curve_retained_points=%d " +
         "dust_instances=%d dust_draws=%d dust_expanded_vertices=%d " +
         "pipeline_bindings=%d upload_operations=%d upload_bytes=%d " +
         "dust_upload_operations=%d dust_upload_bytes=%d " +
@@ -165,7 +166,8 @@ report_draw_frame_telemetry :: proc(
         "deferred_tool_visuals=%v deferred_dust_visuals=%v " +
         "deferred_scenario_readback=%v deferred_gif_readback=%v",
         frame.vertices, frame.indices, frame.batches, frame.commands,
-        frame.stroke_vertices, frame.stroke_draws, frame.dust_instances,
+        frame.stroke_vertices, frame.stroke_draws, frame.curve_candidate_points,
+        frame.curve_retained_points, frame.dust_instances,
         frame.dust_draws, frame.dust_expanded_vertices, frame.pipeline_bindings,
         frame.upload_operations, frame.upload_bytes, frame.dust_upload_operations,
         frame.dust_upload_bytes, frame.primitive_overflows, frame.scissor_overflows,
@@ -176,23 +178,43 @@ report_draw_frame_telemetry :: proc(
     runtime^.telemetry_reported = true
 }
 
+// publish_draw_frame_observation stores bounded renderer metrics for evidence.
+publish_draw_frame_observation :: proc(
+    state: ^Euclid_General_State, runtime: ^native.Sdl_Draw_Runtime) {
+    frame := runtime^.last_frame
+    state^.ui_runtime.colored_vertex_count = frame.vertices
+    state^.ui_runtime.colored_index_count = frame.indices
+    state^.ui_runtime.curve_candidate_point_count = frame.curve_candidate_points
+    state^.ui_runtime.curve_retained_point_count = frame.curve_retained_points
+    state^.ui_runtime.curve_retention_ratio = 0
+    if frame.curve_candidate_points > 0 {
+        state^.ui_runtime.curve_retention_ratio =
+            f32(frame.curve_retained_points) / f32(frame.curve_candidate_points)
+    }
+    state^.ui_runtime.colored_primitive_overflow_count = frame.primitive_overflows
+}
+
 // report_draw_runtime_summary logs cumulative work and capacity high waters.
 report_draw_runtime_summary :: proc(runtime: ^native.Sdl_Draw_Runtime) {
     statistics := runtime^.statistics
     log.infof("sdl_geometry_summary submitted_frames=%d vertices=%d indices=%d " +
         "batches=%d commands=%d stroke_vertices=%d stroke_draws=%d " +
+        "curve_candidate_points=%d curve_retained_points=%d " +
         "dust_instances=%d dust_draws=%d dust_expanded_vertices=%d " +
         "upload_bytes=%d dust_upload_operations=%d dust_upload_bytes=%d " +
         "primitive_overflows=%d scissor_overflows=%d command_overflows=%d " +
         "stroke_overflows=%d dust_overflows=%d max_vertices=%d " +
         "max_indices=%d max_batches=%d max_commands=%d " +
         "max_stroke_vertices=%d max_stroke_draws=%d " +
+        "max_curve_candidate_points=%d max_curve_retained_points=%d " +
         "max_dust_instances=%d max_dust_draws=%d " +
         "max_dust_expanded_vertices=%d max_dust_upload_bytes=%d " +
         "max_upload_bytes=%d",
         statistics.submitted_frames, statistics.vertices, statistics.indices,
         statistics.batches, statistics.commands, statistics.stroke_vertices,
-        statistics.stroke_draws, statistics.dust_instances, statistics.dust_draws,
+        statistics.stroke_draws, statistics.curve_candidate_points,
+        statistics.curve_retained_points, statistics.dust_instances,
+        statistics.dust_draws,
         statistics.dust_expanded_vertices, statistics.upload_bytes,
         statistics.dust_upload_operations, statistics.dust_upload_bytes,
         statistics.primitive_overflows, statistics.scissor_overflows,
@@ -200,7 +222,8 @@ report_draw_runtime_summary :: proc(runtime: ^native.Sdl_Draw_Runtime) {
         statistics.dust_overflows,
         statistics.max_vertices, statistics.max_indices, statistics.max_batches,
         statistics.max_commands, statistics.max_stroke_vertices,
-        statistics.max_stroke_draws, statistics.max_dust_instances,
+        statistics.max_stroke_draws, statistics.max_curve_candidate_points,
+        statistics.max_curve_retained_points, statistics.max_dust_instances,
         statistics.max_dust_draws, statistics.max_dust_expanded_vertices,
         statistics.max_dust_upload_bytes,
         statistics.max_upload_bytes)
@@ -590,6 +613,7 @@ run_sdl_geometry_frame :: proc(
     }
     presented := result == .Presented
     if presented {
+        publish_draw_frame_observation(state, ctx.draw_runtime)
         report_draw_frame_telemetry(state, ctx.draw_runtime)
         run_gif_capture_frame(state, ctx.framebuffer_operations)
         service_scenario_after_present(ctx)

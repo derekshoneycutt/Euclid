@@ -115,6 +115,13 @@ Display :: struct {
     view_text_scroll_max : f32,
     vertical_split_x : f32,
     horizontal_split_y : f32,
+    // Last presented colored mesh and projected curve-reduction metrics.
+    colored_vertex_count : u32,
+    colored_index_count : u32,
+    curve_candidate_point_count : u32,
+    curve_retained_point_count : u32,
+    curve_retention_ratio : f32,
+    colored_primitive_overflow_count : u32,
 
     // GIF capture lifecycle and completed frame count.
     gif_capture_active : bool,
@@ -275,6 +282,14 @@ observe_display_ui :: proc(
         result.view_text_scroll_max = source.ui_runtime.view_text_scroll_max
         result.vertical_split_x = source.ui_runtime.vertical_split_x
         result.horizontal_split_y = source.ui_runtime.horizontal_split_y
+        result.colored_vertex_count = source.ui_runtime.colored_vertex_count
+        result.colored_index_count = source.ui_runtime.colored_index_count
+        result.curve_candidate_point_count =
+            source.ui_runtime.curve_candidate_point_count
+        result.curve_retained_point_count = source.ui_runtime.curve_retained_point_count
+        result.curve_retention_ratio = source.ui_runtime.curve_retention_ratio
+        result.colored_primitive_overflow_count =
+            source.ui_runtime.colored_primitive_overflow_count
         result.gif_capture_phase = source.ui_runtime.gif_capture_phase
         result.gif_captured_frames = source.ui_runtime.gif_captured_frames
     }

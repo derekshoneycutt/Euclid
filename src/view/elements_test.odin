@@ -101,6 +101,207 @@ curve_visible_runs_reject_insufficient_capacity :: proc(t: ^testing.T) {
     testing.expect_value(t, result.run_count, 0)
 }
 
+// Verify centerline error uses the finite chord rather than its supporting line.
+@(test)
+curve_reduction_distance_uses_finite_chord :: proc(t: ^testing.T) {
+    distance := curve_reduction_distance_to_chord({3, 0}, {0, 0}, {2, 0})
+    testing.expect(t, math.abs(distance - 1) < TOOL_BRUSH_TEST_EPSILON)
+}
+
+// Verify straight candidates collapse while semantic cusp anchors survive.
+@(test)
+curve_reduction_retains_cusps :: proc(t: ^testing.T) {
+    points := [5]Vector2{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}
+    kinds := [5]shapemodel.Curve_Point_Kind{
+        .Ordinary, .Ordinary, .Cusp, .Ordinary, .Ordinary}
+    runs := [1]Curve_Visible_Run{{0, 5, .Open}}
+    buffers := Curve_Visible_Run_Buffers{points[:], kinds[:], runs[:]}
+    result := reduce_projected_curve_visible_runs(
+        buffers, {5, 1, true}, 2, {0.1, 0.1, 4})
+
+    testing.expect(t, result.ok)
+    testing.expect_value(t, result.candidate_count, 5)
+    testing.expect_value(t, result.retained_count, 3)
+    testing.expect_value(t, kinds[1], shapemodel.Curve_Point_Kind.Cusp)
+    testing.expect_value(t, points[1], Vector2{2, 0})
+}
+
+// Verify stroke width can reject a join that centerline error alone admits.
+@(test)
+curve_reduction_thick_stroke_rejects_join :: proc(t: ^testing.T) {
+    previous := Vector2{0, 0}
+    current := Vector2{1, 0}
+    next := Vector2{2, 0.3}
+    budget := Curve_Reduction_Budget{1, 0.05, 4}
+    testing.expect(t, curve_reduction_join_passes(
+        previous, current, next, 1, budget))
+    testing.expect(t, !curve_reduction_join_passes(
+        previous, current, next, 20, budget))
+}
+
+// Verify near reversal cannot become bevel fallback through reduction.
+@(test)
+curve_reduction_rejects_unbounded_miter :: proc(t: ^testing.T) {
+    testing.expect(t, !curve_reduction_join_passes(
+        {0, 0}, {1, 0}, {0.01, 0.01}, 2, {10, 10, 4}))
+}
+
+// Verify extension changes only the prior frontier after a committed anchor.
+@(test)
+curve_reduction_reveal_prefix_is_stable :: proc(t: ^testing.T) {
+    prefix_points := [5]Vector2{{0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 1}}
+    prefix_kinds: [5]shapemodel.Curve_Point_Kind
+    prefix_runs := [1]Curve_Visible_Run{{0, 5, .Open}}
+    prefix_buffers := Curve_Visible_Run_Buffers{
+        prefix_points[:], prefix_kinds[:], prefix_runs[:]}
+    first := reduce_projected_curve_visible_runs(
+        prefix_buffers, {5, 1, true}, 2, {0.1, 1, 4})
+
+    extended_points := [6]Vector2{
+        {0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 1}, {5, 1}}
+    extended_kinds: [6]shapemodel.Curve_Point_Kind
+    extended_runs := [1]Curve_Visible_Run{{0, 6, .Open}}
+    extended_buffers := Curve_Visible_Run_Buffers{
+        extended_points[:], extended_kinds[:], extended_runs[:]}
+    second := reduce_projected_curve_visible_runs(
+        extended_buffers, {6, 1, true}, 2, {0.1, 1, 4})
+
+    testing.expect(t, first.ok && second.ok)
+    testing.expect(t, first.retained_count >= 3 && second.retained_count >= 3)
+    testing.expect_value(t, prefix_points[1], extended_points[1])
+}
+
+// Verify closed reduction retains one deterministic coincident anchor.
+@(test)
+curve_reduction_closed_anchor_is_stable :: proc(t: ^testing.T) {
+    points := [9]Vector2{{0, 0}, {1, 0}, {2, 0}, {2, 1}, {2, 2},
+        {1, 2}, {0, 2}, {0, 1}, {0, 0}}
+    kinds: [9]shapemodel.Curve_Point_Kind
+    runs := [1]Curve_Visible_Run{{0, 9, .Closed}}
+    buffers := Curve_Visible_Run_Buffers{points[:], kinds[:], runs[:]}
+    result := reduce_projected_curve_visible_runs(
+        buffers, {9, 1, true}, 1, {0.1, 1, 4})
+
+    testing.expect(t, result.ok)
+    testing.expect_value(t, points[0], Vector2{0, 0})
+    testing.expect_value(t, points[result.retained_count - 1], Vector2{0, 0})
+    testing.expect_value(t, runs[0].topology, shapemodel.Curve_Topology.Closed)
+}
+
+// Verify fixed tier boundaries do not vary within one scale interval.
+@(test)
+curve_reduction_budget_uses_stable_scale_tiers :: proc(t: ^testing.T) {
+    testing.expect_value(t,
+        curve_reduction_budget(239).center_error, f32(0.20))
+    testing.expect_value(t,
+        curve_reduction_budget(240).center_error, f32(0.30))
+    testing.expect_value(t,
+        curve_reduction_budget(479).center_error, f32(0.30))
+    testing.expect_value(t,
+        curve_reduction_budget(480).center_error, f32(0.40))
+}
+
+// Verify mandatory points provide exact equivalence when every point is retained.
+@(test)
+curve_reduction_all_mandatory_is_identity :: proc(t: ^testing.T) {
+    points := [4]Vector2{{0, 0}, {1, 0}, {2, 0}, {3, 0}}
+    kinds := [4]shapemodel.Curve_Point_Kind{
+        .Ordinary, .Cusp, .Cusp, .Ordinary}
+    runs := [1]Curve_Visible_Run{{0, 4, .Open}}
+    buffers := Curve_Visible_Run_Buffers{points[:], kinds[:], runs[:]}
+    result := reduce_projected_curve_visible_runs(
+        buffers, {4, 1, true}, 2, {1, 1, 4})
+
+    testing.expect(t, result.ok)
+    testing.expect_value(t, result.retained_count, 4)
+    testing.expect_value(t, points[2], Vector2{2, 0})
+}
+
+// Verify centerline admission includes the exact configured error boundary.
+@(test)
+curve_reduction_center_error_boundary_is_inclusive :: proc(t: ^testing.T) {
+    accepted_points := [3]Vector2{{0, 0}, {1, 1}, {2, 0}}
+    accepted_kinds: [3]shapemodel.Curve_Point_Kind
+    accepted_runs := [1]Curve_Visible_Run{{0, 3, .Open}}
+    accepted := reduce_projected_curve_visible_runs({accepted_points[:],
+        accepted_kinds[:], accepted_runs[:]}, {3, 1, true}, 1, {1, 1, 4})
+    testing.expect_value(t, accepted.retained_count, 2)
+
+    rejected_points := [3]Vector2{{0, 0}, {1, 1}, {2, 0}}
+    rejected_kinds: [3]shapemodel.Curve_Point_Kind
+    rejected_runs := [1]Curve_Visible_Run{{0, 3, .Open}}
+    rejected := reduce_projected_curve_visible_runs({rejected_points[:],
+        rejected_kinds[:], rejected_runs[:]}, {3, 1, true}, 1, {0.99, 1, 4})
+    testing.expect_value(t, rejected.retained_count, 3)
+}
+
+// Verify reversed traversal retains the same semantic cusp partition.
+@(test)
+curve_reduction_reverse_domain_retains_cusp :: proc(t: ^testing.T) {
+    points := [5]Vector2{{4, 0}, {3, 0}, {2, 0}, {1, 0}, {0, 0}}
+    kinds := [5]shapemodel.Curve_Point_Kind{
+        .Ordinary, .Ordinary, .Cusp, .Ordinary, .Ordinary}
+    runs := [1]Curve_Visible_Run{{0, 5, .Open}}
+    result := reduce_projected_curve_visible_runs(
+        {points[:], kinds[:], runs[:]}, {5, 1, true}, 2, {0.1, 0.1, 4})
+    testing.expect_value(t, result.retained_count, 3)
+    testing.expect_value(t, points[1], Vector2{2, 0})
+    testing.expect_value(t, kinds[1], shapemodel.Curve_Point_Kind.Cusp)
+}
+
+// Verify clipped re-entry runs reduce independently and retain run boundaries.
+@(test)
+curve_reduction_clipped_reentry_stays_partitioned :: proc(t: ^testing.T) {
+    scale := curve_visible_test_scale()
+    world := [5]Vector3{{0, 0, 1}, {1, 0, 1}, {2, 0, -1},
+        {3, 0, 1}, {4, 0, 1}}
+    source_kinds: [5]shapemodel.Curve_Point_Kind
+    points: [8]Vector2
+    kinds: [8]shapemodel.Curve_Point_Kind
+    runs: [3]Curve_Visible_Run
+    buffers := Curve_Visible_Run_Buffers{points[:], kinds[:], runs[:]}
+    visible := build_projected_curve_visible_runs({scale, world[:],
+        source_kinds[:], .Closed, true, false}, buffers)
+    result := reduce_projected_curve_visible_runs(
+        buffers, visible, 2, {1, 1, 4})
+
+    testing.expect(t, result.ok)
+    testing.expect_value(t, visible.run_count, 2)
+    testing.expect_value(t, runs[0].topology, shapemodel.Curve_Topology.Open)
+    testing.expect_value(t, runs[1].topology, shapemodel.Curve_Topology.Open)
+    testing.expect_value(t, runs[1].first_point, runs[0].point_count)
+}
+
+// Verify duplicate projected samples preserve the stronger cusp semantic.
+@(test)
+curve_reduction_duplicate_projected_cusp_survives :: proc(t: ^testing.T) {
+    points := [4]Vector2{{0, 0}, {1, 0}, {1, 0}, {2, 0}}
+    kinds := [4]shapemodel.Curve_Point_Kind{
+        .Ordinary, .Ordinary, .Cusp, .Ordinary}
+    runs := [1]Curve_Visible_Run{{0, 4, .Open}}
+    result := reduce_projected_curve_visible_runs(
+        {points[:], kinds[:], runs[:]}, {4, 1, true}, 2, {1, 1, 4})
+    testing.expect(t, result.ok)
+    cusp_retained := false
+    for kind in kinds[:result.retained_count] {
+        cusp_retained = cusp_retained || kind == .Cusp
+    }
+    testing.expect(t, cusp_retained)
+}
+
+// Verify malformed bounded input rejects atomically without touching storage.
+@(test)
+curve_reduction_invalid_capacity_is_atomic :: proc(t: ^testing.T) {
+    points := [2]Vector2{{3, 4}, {5, 6}}
+    kinds: [2]shapemodel.Curve_Point_Kind
+    runs := [1]Curve_Visible_Run{{0, 3, .Open}}
+    result := reduce_projected_curve_visible_runs(
+        {points[:], kinds[:], runs[:]}, {3, 1, true}, 2, {1, 1, 4})
+    testing.expect(t, !result.ok)
+    testing.expect_value(t, points[0], Vector2{3, 4})
+    testing.expect_value(t, points[1], Vector2{5, 6})
+}
+
 // Verify one enabled tool segment emits a complete ordered stroke command.
 @(test)
 encoded_tool_segment_emits_native_stroke :: proc(t: ^testing.T) {

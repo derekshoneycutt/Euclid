@@ -21,6 +21,11 @@ observe_test_seed_display_scalars :: proc(source: ^Display_Source) {
     source^.ui_runtime^.view_text_scroll_max = 120
     source^.ui_runtime^.vertical_split_x = 640
     source^.ui_runtime^.horizontal_split_y = 360
+    source^.ui_runtime^.colored_vertex_count = 400
+    source^.ui_runtime^.colored_index_count = 600
+    source^.ui_runtime^.curve_candidate_point_count = 100
+    source^.ui_runtime^.curve_retained_point_count = 25
+    source^.ui_runtime^.curve_retention_ratio = 0.25
     source^.required_evidence_complete = true
     source^.shape_world^.transforms.count = 4
     source^.shape_world^.constraints.count = 3
@@ -54,6 +59,11 @@ observe_test_expect_display_scalars :: proc(
     testing.expect_value(t, result.view_text_scroll_max, f32(120))
     testing.expect_value(t, result.vertical_split_x, f32(640))
     testing.expect_value(t, result.horizontal_split_y, f32(360))
+    testing.expect_value(t, result.colored_vertex_count, u32(400))
+    testing.expect_value(t, result.colored_index_count, u32(600))
+    testing.expect_value(t, result.curve_candidate_point_count, u32(100))
+    testing.expect_value(t, result.curve_retained_point_count, u32(25))
+    testing.expect_value(t, result.curve_retention_ratio, f32(0.25))
     testing.expect_value(t, result.point_count, 4)
     testing.expect_value(t, result.constraint_count, 3)
     testing.expect_value(t, result.particle_count, 12)

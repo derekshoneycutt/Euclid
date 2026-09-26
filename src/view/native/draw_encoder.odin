@@ -241,6 +241,8 @@ Draw_Encoder_Statistics :: struct {
     commands:          u32,
     stroke_vertices:   u32,
     stroke_draws:      u32,
+    curve_candidate_points: u32,
+    curve_retained_points: u32,
     dust_instances:    u32,
     dust_draws:        u32,
     dust_expanded_vertices: u32,
@@ -299,6 +301,14 @@ Draw_Encoder :: struct {
     scissors:        [DRAW_SCISSOR_STACK_CAPACITY]geometry.Rectangle,
     scissor_count:   int,
     statistics:      Draw_Encoder_Statistics,
+}
+
+// draw_encoder_record_curve_reduction accumulates bounded projected point counts.
+draw_encoder_record_curve_reduction :: #force_inline proc(
+    encoder: ^Draw_Encoder, candidate_count, retained_count: int) {
+    if encoder == nil || candidate_count < 0 || retained_count < 0 {return}
+    encoder^.statistics.curve_candidate_points += u32(candidate_count)
+    encoder^.statistics.curve_retained_points += u32(retained_count)
 }
 
 // draw_encoder_enable_strokes records optional pipeline availability for fallbacks.
