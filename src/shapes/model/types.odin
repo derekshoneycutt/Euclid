@@ -8,7 +8,7 @@ MAX_DRAW_CACHE_CURVE_VERTICES :: 2560
 
 // Group radius and arc angle bounds for one circle bridge operation.
 Bridge_Arc_Geometry :: struct {
-    radius:      f32,
+    radius: f32,
     start_theta: f32,
     sweep_theta: f32,
 }

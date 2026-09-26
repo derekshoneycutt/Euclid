@@ -13,7 +13,7 @@ Texture_Pixel_Format :: enum u8 {
 // Sampled_Texture is one display-owned native texture with portable dimensions.
 Sampled_Texture :: struct {
     handle: rawptr,
-    width:  u32,
+    width: u32,
     height: u32,
 }
 
@@ -47,24 +47,24 @@ Texture_Upload_Request :: struct {
 
 // Texture_Operation is one bounded request retaining no source pixel ownership.
 Texture_Operation :: struct {
-    kind:       Texture_Operation_Kind,
-    texture:    rawptr,
-    width:      u32,
-    height:     u32,
-    format:     Texture_Pixel_Format,
-    source:     []u8,
+    kind: Texture_Operation_Kind,
+    texture: rawptr,
+    width: u32,
+    height: u32,
+    format: Texture_Pixel_Format,
+    source: []u8,
     byte_offset: u32,
     byte_count: u32,
-    identity:   u64,
+    identity: u64,
     generation: u64,
     completion: Texture_Operation_Completion,
-    user_data:  rawptr,
+    user_data: rawptr,
 }
 
 // Texture_Operation_Queue stores ordered requests in caller-owned fixed storage.
 Texture_Operation_Queue :: struct {
     operations: [TEXTURE_OPERATION_CAPACITY]Texture_Operation,
-    count:      int,
+    count: int,
     byte_count: u32,
     overflow_count: u32,
 }

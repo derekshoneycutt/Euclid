@@ -123,18 +123,18 @@ Frame_Draw_Preparation :: struct {
 
 // Deferred_Visual_Capabilities names visuals outside the active geometry path.
 Deferred_Visual_Capabilities :: struct {
-    glyph_text:        bool,
-    terminal_rasters:  bool,
-    tool_visuals:      bool,
-    dust_visuals:      bool,
+    glyph_text: bool,
+    terminal_rasters: bool,
+    tool_visuals: bool,
+    dust_visuals: bool,
     scenario_readback: bool,
-    gif_readback:      bool,
+    gif_readback: bool,
 }
 
 // Sdl_Font_Texture_Context binds font policy to display-owned native resources.
 Sdl_Font_Texture_Context :: struct {
     platform: ^native.Sdl_Platform,
-    runtime:  ^native.Sdl_Draw_Runtime,
+    runtime: ^native.Sdl_Draw_Runtime,
     submit_immediately: bool,
 }
 

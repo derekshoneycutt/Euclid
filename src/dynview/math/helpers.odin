@@ -13,8 +13,8 @@ Dynview_Matrix_Column_Alignment :: dynviewmodel.Dynview_Matrix_Column_Alignment
 
 Script_Draw_Offsets :: struct {
     script_font_size: f32,
-    sup_raise_px:     f32,
-    sub_drop_px:      f32,
+    sup_raise_px: f32,
+    sub_drop_px: f32,
 }
 
 //   Resolve script draw offsets using one shared model for layout and rendering.

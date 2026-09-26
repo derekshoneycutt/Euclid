@@ -2,7 +2,7 @@ package dynview_core
 
 Wrapped_Text_Span :: struct {
     line_start: int,
-    line_end:   int,
+    line_end: int,
     next_start: int,
 }
 

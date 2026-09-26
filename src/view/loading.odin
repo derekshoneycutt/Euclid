@@ -18,16 +18,16 @@ JULIA_UNRESPONSIVE_SECONDS :: 10.0
 
 //   Created Julia runtime service plus its completed initialize request id.
 Loading_Julia_Service :: struct {
-    service:       ^bridgemodel.Julia_Runtime_Service,
+    service: ^bridgemodel.Julia_Runtime_Service,
     initialize_id: u64,
 }
 
 // Loading_Display owns startup-only reveal state and borrows display GPU owners.
 Loading_Display :: struct {
-    platform:     ^native.Sdl_Platform,
+    platform: ^native.Sdl_Platform,
     draw_runtime: ^native.Sdl_Draw_Runtime,
-    outline:      Startup_Outline,
-    clock:        native.Sdl_Frame_Clock,
+    outline: Startup_Outline,
+    clock: native.Sdl_Frame_Clock,
 }
 
 Packaged_Assets_Worker_Result :: struct {

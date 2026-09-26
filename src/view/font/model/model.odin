@@ -225,17 +225,17 @@ Font_Glyph_Record :: struct {
 // Font_Texture is one opaque display-owned sampled atlas with portable dimensions.
 Font_Texture :: struct {
     handle: rawptr,
-    width:  u32,
+    width: u32,
     height: u32,
 }
 
 // Font_Face retains generation metrics independently of any native font facade.
 Font_Face :: struct {
-    base_size:     i32,
-    glyph_count:   i32,
+    base_size: i32,
+    glyph_count: i32,
     glyph_padding: i32,
     space_advance: i32,
-    texture:      Font_Texture,
+    texture: Font_Texture,
 }
 
 // Font texture operations keep native creation and release display-owner injected.
@@ -262,9 +262,9 @@ Font_Texture_Release_Handler :: #type proc(
 // Font_Texture_Operations supplies the native atlas lifecycle to the font cache.
 Font_Texture_Operations :: struct {
     user_data: rawptr,
-    create:    Font_Texture_Create_Handler,
-    upload:    Font_Texture_Upload_Handler,
-    release:   Font_Texture_Release_Handler,
+    create: Font_Texture_Create_Handler,
+    upload: Font_Texture_Upload_Handler,
+    release: Font_Texture_Release_Handler,
 }
 
 Font_Glyph_Page :: struct {

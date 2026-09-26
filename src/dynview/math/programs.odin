@@ -35,11 +35,11 @@ MATH_PROGRAM_ITEM_HANDLERS ::
 
 //   Aggregated per-column and per-row cell metrics for one matrix layout.
 Matrix_Cell_Dims :: struct {
-    col_widths:  [16]f32,
+    col_widths: [16]f32,
     row_ascents: [16]f32,
     row_descents: [16]f32,
-    top_pad:     f32,
-    bottom_pad:  f32,
+    top_pad: f32,
+    bottom_pad: f32,
 }
 
 Script_Metrics :: struct {

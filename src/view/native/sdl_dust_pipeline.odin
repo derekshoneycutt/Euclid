@@ -6,14 +6,14 @@ import sdl "vendor:sdl3"
 
 // Sdl_Dust_Shader_Paths names the packaged instanced dust artifacts.
 Sdl_Dust_Shader_Paths :: struct {
-    vertex:   string,
+    vertex: string,
     fragment: string,
 }
 
 // Sdl_Dust_Vertex_Input owns the fixed instanced dust stream description.
 Sdl_Dust_Vertex_Input :: struct {
     descriptions: [2]sdl.GPUVertexBufferDescription,
-    attributes:   [5]sdl.GPUVertexAttribute,
+    attributes: [5]sdl.GPUVertexAttribute,
 }
 
 // Sdl_Dust_Upload_Layout describes occupied bytes in the dust transfer buffer.

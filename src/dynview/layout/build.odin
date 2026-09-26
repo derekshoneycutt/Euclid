@@ -46,8 +46,8 @@ LAYOUT_INLINE_SHAPE_HANDLERS ::
 }
 
 Layout_Item_Line_Span :: struct {
-    first_line:        int,
-    last_line:         int,
+    first_line: int,
+    last_line: int,
     has_visible_items: bool,
 }
 
@@ -101,10 +101,10 @@ Math_Block_Columns :: struct {
 //   span on the layout grid, and the line box vertical extents.
 Wrapped_Line_Metrics :: struct {
     byte_start: int,
-    byte_len:   int,
-    col_span:   int,
-    ascent:     f32,
-    descent:    f32,
+    byte_len: int,
+    col_span: int,
+    ascent: f32,
+    descent: f32,
 }
 
 Line_Base_Metrics :: struct {
@@ -123,15 +123,15 @@ Line_Grid_Extents :: struct {
 //   cache/state/accumulator targets with the source command, text, style, and
 //   typography metrics so the wrap helpers pass one coherent value.
 Text_Wrap_Context :: struct {
-    cache:    ^dynviewmodel.Dynview_Compile_Cache,
-    state:    ^Dynview_Layout_State,
-    acc:      ^Dynview_Layout_Line_Accumulator,
-    cmd:      dynviewmodel.Dynview_Command,
-    text:     string,
-    style:    dyncore.Dynview_Text_Style,
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    state: ^Dynview_Layout_State,
+    acc: ^Dynview_Layout_Line_Accumulator,
+    cmd: dynviewmodel.Dynview_Command,
+    text: string,
+    style: dyncore.Dynview_Text_Style,
     max_cols: int,
-    ascent:   f32,
-    descent:  f32,
+    ascent: f32,
+    descent: f32,
 }
 
 // Accumulate information based on a layout seed

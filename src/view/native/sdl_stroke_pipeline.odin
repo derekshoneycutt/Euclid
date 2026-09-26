@@ -6,14 +6,14 @@ import sdl "vendor:sdl3"
 
 // Sdl_Stroke_Shader_Paths names the packaged stroke pipeline artifacts.
 Sdl_Stroke_Shader_Paths :: struct {
-    vertex:   string,
+    vertex: string,
     fragment: string,
 }
 
 // Sdl_Stroke_Vertex_Input owns the fixed stroke stream description.
 Sdl_Stroke_Vertex_Input :: struct {
     description: [1]sdl.GPUVertexBufferDescription,
-    attributes:  [3]sdl.GPUVertexAttribute,
+    attributes: [3]sdl.GPUVertexAttribute,
 }
 
 // sdl_stroke_vertex_input describes the reflected stroke vertex ABI.

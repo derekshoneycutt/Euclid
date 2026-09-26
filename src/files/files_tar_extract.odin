@@ -6,22 +6,22 @@ import "core:path/filepath"
 import "core:strings"
 
 Tar_Header_Read_Result :: struct {
-    header:   []u8,
+    header: []u8,
     data_idx: int,
-    done:     bool,
-    ok:       bool,
+    done: bool,
+    ok: bool,
 }
 
 Tar_Entry_Metadata :: struct {
     entry_path: string,
-    file_size:  int,
-    ok:         bool,
+    file_size: int,
+    ok: bool,
 }
 
 Tar_Entry_Data_Slice :: struct {
     file_data: []u8,
-    next_idx:  int,
-    ok:        bool,
+    next_idx: int,
+    ok: bool,
 }
 
 //   Return true when every byte in the slice is zero.

@@ -29,7 +29,7 @@ Input_Terminal_Encoding_Mode :: struct {
 // Canonical Kitty number and final byte for one functional key.
 Input_Terminal_Kitty_Functional_Key :: struct {
     number: int,
-    final:  u8,
+    final: u8,
 }
 
 // Validated frame-local run of committed text associated with one physical key.
@@ -422,9 +422,12 @@ input_terminal_enqueue_key_event :: proc(
         return
     }
     #partial switch event.key {
-    case .Escape:   input_terminal_enqueue_string(runtime, "\e")
-    case .Enter:    input_terminal_enqueue_string(runtime, "\r")
-    case .Backspace: input_terminal_enqueue_string(runtime, "\x7f")
+    case .Escape:
+        input_terminal_enqueue_string(runtime, "\e")
+    case .Enter:
+        input_terminal_enqueue_string(runtime, "\r")
+    case .Backspace:
+        input_terminal_enqueue_string(runtime, "\x7f")
     case .Tab:
         if .Shift in event.modifiers {
             input_terminal_enqueue_string(runtime, "\e[Z")

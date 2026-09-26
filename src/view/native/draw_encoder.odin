@@ -39,17 +39,17 @@ Draw_Textured_Vertices :: struct {
 Draw_Vertex :: struct {
     position: geometry.Vector2,
     texcoord: geometry.Vector2,
-    color:    color.Color_RGBA8,
-    padding:  [4]u8,
+    color: color.Color_RGBA8,
+    padding: [4]u8,
 }
 
 #assert(size_of(Draw_Vertex) == 24)
 
 // Stroke_Vertex is the fixed vertex ABI consumed by stroke3d.vert.
 Stroke_Vertex :: struct {
-    position:  [3]f32,
+    position: [3]f32,
     auxiliary: [2]f32,
-    color:     [4]f32,
+    color: [4]f32,
 }
 
 #assert(size_of(Stroke_Vertex) == 36)
@@ -63,27 +63,27 @@ Stroke_Vertex_Uniforms :: struct {
 
 // Stroke_Fragment_Uniforms matches the reflected stroke3d fragment cbuffer.
 Stroke_Fragment_Uniforms :: struct {
-    light_direction_view:       [3]f32,
-    ambient:                   f32,
-    diffuse:                   f32,
-    material_roughness:        f32,
-    material_fresnel_0:        f32,
-    material_specular_tint:    f32,
-    material_shadow_limit:     f32,
-    radius:                    f32,
-    stroke_mode:               f32,
-    strip_alpha:               f32,
-    segment_p0:                [2]f32,
-    segment_p1:                [2]f32,
-    strip_color:               [3]f32,
-    strip_side_extent:         f32,
+    light_direction_view: [3]f32,
+    ambient: f32,
+    diffuse: f32,
+    material_roughness: f32,
+    material_fresnel_0: f32,
+    material_specular_tint: f32,
+    material_shadow_limit: f32,
+    radius: f32,
+    stroke_mode: f32,
+    strip_alpha: f32,
+    segment_p0: [2]f32,
+    segment_p1: [2]f32,
+    strip_color: [3]f32,
+    strip_side_extent: f32,
     arc_intersections_enabled: f32,
-    intersection_depth_width:  f32,
-    attachment_extent:         f32,
-    occluder_count:            u32,
-    occluder_p0_p1:            [2][4]f32,
-    occluder_radius_depths:     [2][4]f32,
-    occluder_tangent:          [2][4]f32,
+    intersection_depth_width: f32,
+    attachment_extent: f32,
+    occluder_count: u32,
+    occluder_p0_p1: [2][4]f32,
+    occluder_radius_depths: [2][4]f32,
+    occluder_tangent: [2][4]f32,
 }
 
 #assert(size_of(Stroke_Fragment_Uniforms) == 192)
@@ -99,8 +99,8 @@ Dust_Quad_Vertex :: struct {
 // Dust_Instance is the fixed per-instance ABI consumed by dust_instanced.vert.
 Dust_Instance :: struct {
     center_diameter: [3]f32,
-    color:           [4]f32,
-    sprite_index:    f32,
+    color: [4]f32,
+    sprite_index: f32,
 }
 
 #assert(size_of(Dust_Instance) == 32)
@@ -111,18 +111,18 @@ DUST_EXPANDED_VERTICES_PER_INSTANCE :: 6
 
 // Draw_Scissor stores one physical-pixel top-left clipping rectangle.
 Draw_Scissor :: struct {
-    x:      i32,
-    y:      i32,
-    width:  u32,
+    x: i32,
+    y: i32,
+    width: u32,
     height: u32,
 }
 
 // Draw_Batch identifies one contiguous compatible indexed draw interval.
 Draw_Batch :: struct {
-    pipeline:    Draw_Pipeline,
-    texture:     rawptr,
-    sampler:     Draw_Sampler,
-    scissor:     Draw_Scissor,
+    pipeline: Draw_Pipeline,
+    texture: rawptr,
+    sampler: Draw_Sampler,
+    scissor: Draw_Scissor,
     first_index: u32,
     index_count: u32,
 }
@@ -137,33 +137,33 @@ Draw_Command_Kind :: enum u8 {
 
 // Draw_Command references one fixed record in an owner-specific command array.
 Draw_Command :: struct {
-    kind:  Draw_Command_Kind,
+    kind: Draw_Command_Kind,
     index: u32,
 }
 
 // Stroke_Draw identifies one contiguous triangle-list stroke and its uniforms.
 Stroke_Draw :: struct {
-    first_vertex:      u32,
-    vertex_count:      u32,
-    scissor:           Draw_Scissor,
-    vertex_uniforms:   Stroke_Vertex_Uniforms,
+    first_vertex: u32,
+    vertex_count: u32,
+    scissor: Draw_Scissor,
+    vertex_uniforms: Stroke_Vertex_Uniforms,
     fragment_uniforms: Stroke_Fragment_Uniforms,
 }
 
 // Dust_Draw identifies one instanced or expanded atlas draw interval.
 Dust_Draw :: struct {
-    first:           u32,
-    count:           u32,
-    texture:         rawptr,
-    scissor:         Draw_Scissor,
+    first: u32,
+    count: u32,
+    texture: rawptr,
+    scissor: Draw_Scissor,
     viewport_extent: [2]f32,
 }
 
 // Draw_State groups native batch compatibility without exposing SDL handles.
 Draw_State :: struct {
     pipeline: Draw_Pipeline,
-    texture:  rawptr,
-    sampler:  Draw_Sampler,
+    texture: rawptr,
+    sampler: Draw_Sampler,
 }
 
 // Draw_Polyline_Point_Kind preserves semantic cusp intent through tessellation.
@@ -186,26 +186,26 @@ Draw_Polyline_Cap :: enum u8 {
 
 // Draw_Polyline_Style groups one colored stroke's topology and geometry policy.
 Draw_Polyline_Style :: struct {
-    width:       f32,
+    width: f32,
     miter_limit: f32,
-    color:       color.Color_RGBA8,
-    topology:    Draw_Polyline_Topology,
-    start_cap:   Draw_Polyline_Cap,
-    finish_cap:  Draw_Polyline_Cap,
+    color: color.Color_RGBA8,
+    topology: Draw_Polyline_Topology,
+    start_cap: Draw_Polyline_Cap,
+    finish_cap: Draw_Polyline_Cap,
 }
 
 Draw_Polyline_Group :: struct {
     point: geometry.Vector2,
-    kind:  Draw_Polyline_Point_Kind,
-    next:  int,
+    kind: Draw_Polyline_Point_Kind,
+    next: int,
 }
 
 Draw_Polyline_Summary :: struct {
     group_count: int,
-    raw_end:     int,
-    first_kind:  Draw_Polyline_Point_Kind,
-    vertices:    int,
-    indices:     int,
+    raw_end: int,
+    first_kind: Draw_Polyline_Point_Kind,
+    vertices: int,
+    indices: int,
 }
 
 Draw_Polyline_Join :: enum u8 {
@@ -215,7 +215,7 @@ Draw_Polyline_Join :: enum u8 {
 }
 
 Draw_Polyline_Pair :: struct {
-    left:  u32,
+    left: u32,
     right: u32,
 }
 
@@ -225,40 +225,40 @@ Draw_Polyline_Node :: struct {
 }
 
 Draw_Polyline_Builder :: struct {
-    encoder:      ^Draw_Encoder,
-    batch:        ^Draw_Batch,
-    base_vertex:  u32,
+    encoder: ^Draw_Encoder,
+    batch: ^Draw_Batch,
+    base_vertex: u32,
     vertex_count: int,
-    index_count:  int,
-    color:        color.Color_RGBA8,
+    index_count: int,
+    color: color.Color_RGBA8,
 }
 
 // Draw_Encoder_Statistics records bounded work and rejected primitives.
 Draw_Encoder_Statistics :: struct {
-    vertices:          u32,
-    indices:           u32,
-    batches:           u32,
-    commands:          u32,
-    stroke_vertices:   u32,
-    stroke_draws:      u32,
+    vertices: u32,
+    indices: u32,
+    batches: u32,
+    commands: u32,
+    stroke_vertices: u32,
+    stroke_draws: u32,
     curve_candidate_points: u32,
     curve_retained_points: u32,
-    dust_instances:    u32,
-    dust_draws:        u32,
+    dust_instances: u32,
+    dust_draws: u32,
     dust_expanded_vertices: u32,
     primitive_overflows: u32,
     scissor_overflows: u32,
     command_overflows: u32,
-    stroke_overflows:  u32,
-    dust_overflows:    u32,
+    stroke_overflows: u32,
+    dust_overflows: u32,
 }
 
 // Draw_Custom_Storage groups optional fixed custom-pipeline frame records.
 Draw_Custom_Storage :: struct {
     stroke_vertices: []Stroke_Vertex,
-    stroke_draws:    []Stroke_Draw,
-    dust_instances:  []Dust_Instance,
-    dust_draws:      []Dust_Draw,
+    stroke_draws: []Stroke_Draw,
+    dust_instances: []Dust_Instance,
+    dust_draws: []Dust_Draw,
     dust_expanded_vertices: []Draw_Vertex,
     dust_expanded_draws: []Dust_Draw,
 }
@@ -266,41 +266,41 @@ Draw_Custom_Storage :: struct {
 // Draw_Storage borrows fixed-capacity frame buffers from the display owner.
 Draw_Storage :: struct {
     vertices: []Draw_Vertex,
-    indices:  []u32,
-    batches:  []Draw_Batch,
+    indices: []u32,
+    batches: []Draw_Batch,
     commands: []Draw_Command,
-    custom:   ^Draw_Custom_Storage,
+    custom: ^Draw_Custom_Storage,
 }
 
 // Draw_Encoder stores one frame in caller-owned fixed-capacity slices.
 Draw_Encoder :: struct {
-    vertices:        []Draw_Vertex,
-    indices:         []u32,
-    batches:         []Draw_Batch,
-    commands:        []Draw_Command,
+    vertices: []Draw_Vertex,
+    indices: []u32,
+    batches: []Draw_Batch,
+    commands: []Draw_Command,
     stroke_vertices: []Stroke_Vertex,
-    stroke_draws:    []Stroke_Draw,
-    dust_instances:  []Dust_Instance,
-    dust_draws:      []Dust_Draw,
+    stroke_draws: []Stroke_Draw,
+    dust_instances: []Dust_Instance,
+    dust_draws: []Dust_Draw,
     dust_expanded_vertices: []Draw_Vertex,
     dust_expanded_draws: []Dust_Draw,
-    vertex_count:    int,
-    index_count:     int,
-    batch_count:     int,
-    command_count:   int,
+    vertex_count: int,
+    index_count: int,
+    batch_count: int,
+    command_count: int,
     stroke_vertex_count: int,
     stroke_draw_count: int,
     dust_instance_count: int,
     dust_draw_count: int,
     dust_expanded_vertex_count: int,
     dust_expanded_draw_count: int,
-    strokes_enabled:   bool,
+    strokes_enabled: bool,
     dust_instancing_enabled: bool,
-    logical_extent:  geometry.Vector2,
+    logical_extent: geometry.Vector2,
     physical_extent: [2]u32,
-    scissors:        [DRAW_SCISSOR_STACK_CAPACITY]geometry.Rectangle,
-    scissor_count:   int,
-    statistics:      Draw_Encoder_Statistics,
+    scissors: [DRAW_SCISSOR_STACK_CAPACITY]geometry.Rectangle,
+    scissor_count: int,
+    statistics: Draw_Encoder_Statistics,
 }
 
 // draw_encoder_record_curve_reduction accumulates bounded projected point counts.

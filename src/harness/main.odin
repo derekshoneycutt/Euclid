@@ -23,7 +23,7 @@ Harness_Options :: struct {
 //   One `--name=value` harness option mapped to its setter.
 Harness_Option :: struct {
     prefix: string,
-    set:    Harness_Option_Setter,
+    set: Harness_Option_Setter,
 }
 
 //   All recognized harness options, matched by prefix.

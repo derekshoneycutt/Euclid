@@ -35,25 +35,25 @@ Scroll_Container_Interaction_Input :: struct {
 }
 
 Vertical_Scrollbar_Geometry :: struct {
-    track_rect:    geometry.Rectangle,
-    thumb_rect:    geometry.Rectangle,
-    thumb_height:  f32,
+    track_rect: geometry.Rectangle,
+    thumb_rect: geometry.Rectangle,
+    thumb_height: f32,
     has_scrollbar: bool,
 }
 
 //   Pointer/drag inputs for one scrollbar thumb capture attempt.
 Scrollbar_Capture_Input :: struct {
-    mouse_input:   Input_Frame,
+    mouse_input: Input_Frame,
     hovered_thumb: bool,
-    local_mouse:   geometry.Vector2,
-    thumb_rect:    geometry.Rectangle,
+    local_mouse: geometry.Vector2,
+    thumb_rect: geometry.Rectangle,
 }
 
 //   Panel geometry and scroll range for one vertical scrollbar.
 Vertical_Scrollbar_Input :: struct {
-    panel:      geometry.Rectangle,
-    content_h:  f32,
-    scroll_y:   f32,
+    panel: geometry.Rectangle,
+    content_h: f32,
+    scroll_y: f32,
     max_scroll: f32,
 }
 

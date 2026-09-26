@@ -37,7 +37,7 @@ Dynview_Text_Style :: dynviewmodel.Dynview_Text_Style
 
 //   One fixed style entry: a style id and its resolved text style.
 Style_Entry :: struct {
-    id:    i32,
+    id: i32,
     style: Dynview_Text_Style,
 }
 

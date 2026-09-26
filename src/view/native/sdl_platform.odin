@@ -36,15 +36,15 @@ Sdl_Frame_Result :: enum u8 {
 
 // Sdl_Window_Metrics records one stable logical and physical window observation.
 Sdl_Window_Metrics :: struct {
-    window_width:   int,
-    window_height:  int,
-    logical_width:  int,
+    window_width: int,
+    window_height: int,
+    logical_width: int,
     logical_height: int,
-    pixel_width:    int,
-    pixel_height:   int,
-    pixel_density:  f32,
-    display_scale:  f32,
-    content_scale:  f32,
+    pixel_width: int,
+    pixel_height: int,
+    pixel_density: f32,
+    display_scale: f32,
+    content_scale: f32,
 }
 
 // Sdl_Input_Diagnostics records content-free lifetime input outcomes.
@@ -106,41 +106,41 @@ SDL_CAPTURE_COMPLETION_OPERATIONS :: Sdl_Capture_Completion_Operations{
 
 // Sdl_Platform owns display-thread native state for one window session.
 Sdl_Platform :: struct {
-    window:              ^sdl.Window,
-    device:              ^sdl.GPUDevice,
-    scene_target:        ^sdl.GPUTexture,
-    multisample_target:  ^sdl.GPUTexture,
-    default_cursor:      ^sdl.Cursor,
-    resize_ew_cursor:    ^sdl.Cursor,
-    resize_ns_cursor:    ^sdl.Cursor,
-    active_cursor:       ^sdl.Cursor,
-    metrics:             Sdl_Window_Metrics,
-    scene_width:         u32,
-    scene_height:        u32,
-    sample_count:        sdl.GPUSampleCount,
-    window_claimed:      bool,
-    close_requested:     bool,
-    resize_pending:      bool,
-    text_input_active:   bool,
+    window: ^sdl.Window,
+    device: ^sdl.GPUDevice,
+    scene_target: ^sdl.GPUTexture,
+    multisample_target: ^sdl.GPUTexture,
+    default_cursor: ^sdl.Cursor,
+    resize_ew_cursor: ^sdl.Cursor,
+    resize_ns_cursor: ^sdl.Cursor,
+    active_cursor: ^sdl.Cursor,
+    metrics: Sdl_Window_Metrics,
+    scene_width: u32,
+    scene_height: u32,
+    sample_count: sdl.GPUSampleCount,
+    window_claimed: bool,
+    close_requested: bool,
+    resize_pending: bool,
+    text_input_active: bool,
     unavailable_frames: u64,
-    input_diagnostics:   Sdl_Input_Diagnostics,
+    input_diagnostics: Sdl_Input_Diagnostics,
 }
 
 // Sdl_Platform_Options defines immutable creation policy for one window session.
 Sdl_Platform_Options :: struct {
-    title:     cstring,
-    width:     int,
-    height:    int,
+    title: cstring,
+    width: int,
+    height: int,
     resizable: bool,
-    vsync:     bool,
+    vsync: bool,
     antialiasing: bool,
 }
 
 // Sdl_Swapchain_Image records one acquired presentation texture and extent.
 Sdl_Swapchain_Image :: struct {
     texture: ^sdl.GPUTexture,
-    width:   u32,
-    height:  u32,
+    width: u32,
+    height: u32,
 }
 
 // Sdl_Scene_Targets owns one complete render and resolve target pair.

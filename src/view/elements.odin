@@ -19,10 +19,10 @@ import "core:math"
 import "core:math/linalg"
 
 Tool_Brush_Material :: struct {
-    roughness:     f32,
-    fresnel_0:     f32,
+    roughness: f32,
+    fresnel_0: f32,
     specular_tint: f32,
-    shadow_limit:  f32,
+    shadow_limit: f32,
 }
 
 Tool_Segment_Draw :: struct {
@@ -131,33 +131,33 @@ High_Merged_Draw_Context :: struct {
 
 //   Plane-clipping context for one pen segment against one polygon plane.
 Pen_Polygon_Clip_Context :: struct {
-    stage0_start:  Vector3,
-    stage0_end:    Vector3,
-    clip_start:    Vector3,
-    clip_end:      Vector3,
-    plane_point:   Vector3,
-    plane_normal:  Vector3,
+    stage0_start: Vector3,
+    stage0_end: Vector3,
+    clip_start: Vector3,
+    clip_end: Vector3,
+    plane_point: Vector3,
+    plane_normal: Vector3,
     raw_distance0: f32,
     raw_distance1: f32,
-    side0:         int,
-    side1:         int,
-    on_plane0:     bool,
-    on_plane1:     bool,
+    side0: int,
+    side1: int,
+    on_plane0: bool,
+    on_plane1: bool,
 }
 
 //   Circle/arc geometry shared by draw and shadow passes.
 Circle_Arc_Geometry :: struct {
-    center:       Vector3,
-    sweep_delta:  f32,
-    radius:       f32,
-    start_theta:  f32,
+    center: Vector3,
+    sweep_delta: f32,
+    radius: f32,
+    start_theta: f32,
 }
 
 //   Batch world points plus their SoA scratch and output slices.
 Iso_Batch_Project_Params :: struct {
     world_points: []Vector3,
-    xs, ys, zs:   []f32,
-    out:          []Vector2,
+    xs, ys, zs: []f32,
+    out: []Vector2,
 }
 
 // Locate one contiguous projected curve run in caller-owned bounded storage.
@@ -238,58 +238,58 @@ Curve_Visible_Run_Writer :: struct {
 
 //   Shared basis for the compass top-circle arc that lies outside the swing angle.
 Compass_Top_Circle_Basis :: struct {
-    u:         Vector3,
-    v:         Vector3,
-    radius:    f32,
+    u: Vector3,
+    v: Vector3,
+    radius: f32,
     theta_out: f32,
 }
 
 //   Draw inputs for one compass outside-arc segment.
 Compass_Arc_Draw :: struct {
-    state:      ^Euclid_General_State,
+    state: ^Euclid_General_State,
     brush_size: f32,
 }
 
 //   Fixed arc samples shared by strip geometry and intersection metadata.
 Compass_Arc_Samples :: struct {
     tangents_view: [COMPASS_TOPCIRCLE_VECTORS]Vector3,
-    left:          [COMPASS_TOPCIRCLE_VECTORS]Vector2,
-    right:         [COMPASS_TOPCIRCLE_VECTORS]Vector2,
-    auxiliary:     [COMPASS_TOPCIRCLE_VECTORS]Vector2,
+    left: [COMPASS_TOPCIRCLE_VECTORS]Vector2,
+    right: [COMPASS_TOPCIRCLE_VECTORS]Vector2,
+    auxiliary: [COMPASS_TOPCIRCLE_VECTORS]Vector2,
 }
 
 // Hold one closed guide ring's projected strip samples.
 Trochoid_Tool_Ring_Samples :: struct {
     tangents_view: [TROCHOID_TOOL_RING_VECTORS]Vector3,
-    left:          [TROCHOID_TOOL_RING_VECTORS]Vector2,
-    right:         [TROCHOID_TOOL_RING_VECTORS]Vector2,
-    auxiliary:     [TROCHOID_TOOL_RING_VECTORS]Vector2,
+    left: [TROCHOID_TOOL_RING_VECTORS]Vector2,
+    right: [TROCHOID_TOOL_RING_VECTORS]Vector2,
+    auxiliary: [TROCHOID_TOOL_RING_VECTORS]Vector2,
 }
 
 //   Cached geometry and optional pen occluder used to draw both compass legs.
 Compass_Leg_Draw_Context :: struct {
-    state:            ^Euclid_General_State,
-    comp:             ^shapemodel.Shapes_Compass_Draw,
-    c0, c1, c2:       Vector2,
-    leg1, leg2:       Tool_Brush_Occluder,
-    pen_occluder:     Tool_Brush_Occluder,
+    state: ^Euclid_General_State,
+    comp: ^shapemodel.Shapes_Compass_Draw,
+    c0, c1, c2: Vector2,
+    leg1, leg2: Tool_Brush_Occluder,
+    pen_occluder: Tool_Brush_Occluder,
     has_pen_occluder: bool,
 }
 
 //   One projected tool segment used as bounded shadow context.
 Tool_Brush_Occluder :: struct {
-    p0:        Vector2,
-    p1:        Vector2,
+    p0: Vector2,
+    p1: Vector2,
     thickness: f32,
-    depth0:    f32,
-    depth1:    f32,
-    tangent:   Vector3,
+    depth0: f32,
+    depth1: f32,
+    tangent: Vector3,
 }
 
 //   Allocation-free occluders uploaded for one receiving tool segment.
 Tool_Brush_Occluder_Context :: struct {
     occluders: [viewmodel.MAX_TOOL_BRUSH_OCCLUDERS]Tool_Brush_Occluder,
-    count:     int,
+    count: int,
 }
 
 //   Return canonical view depth, with larger values closer to the camera.

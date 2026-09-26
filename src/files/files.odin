@@ -46,22 +46,22 @@ Gif_Output_Transaction :: struct {
 
 Unpack_Targets :: struct {
     archive_path: string,
-    unpack_dir:   string,
+    unpack_dir: string,
     package_identity: string,
     archive_sha256: string,
-    ok:           bool,
+    ok: bool,
 }
 
 Packaged_Sysimage_Metadata :: struct {
-    relative_path:     string,
+    relative_path: string,
     input_fingerprint: string,
-    artifact_sha256:   string,
-    package_identity:  string,
+    artifact_sha256: string,
+    package_identity: string,
 }
 
 Asset_Package_Sidecar :: struct {
     package_identity: string,
-    archive_sha256:   string,
+    archive_sha256: string,
 }
 
 Asset_Sidecar_Parse_State :: struct {
@@ -72,10 +72,10 @@ Asset_Sidecar_Parse_State :: struct {
 }
 
 Manifest_Parse_State :: struct {
-    metadata:    Packaged_Sysimage_Metadata,
+    metadata: Packaged_Sysimage_Metadata,
     schema_seen: bool,
-    path_seen:   bool,
-    input_seen:  bool,
+    path_seen: bool,
+    input_seen: bool,
     digest_seen: bool,
     identity_seen: bool,
     platform_ok: bool,
