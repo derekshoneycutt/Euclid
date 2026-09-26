@@ -181,6 +181,27 @@ Curve_Visible_Run_Result :: struct {
     ok: bool,
 }
 
+// Define logical-pixel error limits for deterministic projected reduction.
+Curve_Reduction_Budget :: struct {
+    center_error: f32,
+    stroke_error: f32,
+    miter_limit: f32,
+}
+
+// Report bounded candidate and retained counts after projected reduction.
+Curve_Reduction_Result :: struct {
+    candidate_count: int,
+    retained_count: int,
+    ok: bool,
+}
+
+Curve_Reduction_Run_Summary :: struct {
+    retained_count: int,
+    second_index: int,
+    before_last_index: int,
+    last_index: int,
+}
+
 // Hold exact visible-run capacity requirements before output mutation.
 Curve_Visible_Run_Counts :: struct {
     point_count: int,
@@ -1046,6 +1067,187 @@ build_projected_curve_visible_runs :: proc(input: Curve_Visible_Run_Input,
     return {writer.point_count, writer.run_count, true}
 }
 
+// curve_reduction_budget selects one stable logical-pixel quality tier.
+curve_reduction_budget :: #force_inline proc(
+    half_scale: f32) -> Curve_Reduction_Budget {
+    if half_scale < 240 {return {0.20, 0.12, COLORED_STROKE_MITER_LIMIT}}
+    if half_scale < 480 {return {0.30, 0.18, COLORED_STROKE_MITER_LIMIT}}
+    return {0.40, 0.24, COLORED_STROKE_MITER_LIMIT}
+}
+
+// curve_reduction_distance_to_chord measures distance to one finite segment.
+curve_reduction_distance_to_chord :: proc(
+    point, first, last: Vector2) -> f32 {
+    chord := last - first
+    length_squared := linalg.dot(chord, chord)
+    if length_squared <= 0 {return linalg.length(point - first)}
+    parameter := math.clamp(linalg.dot(point - first, chord) / length_squared, 0, 1)
+    return linalg.length(point - (first + chord * parameter))
+}
+
+// curve_reduction_span_passes enforces finite-chord centerline error.
+curve_reduction_span_passes :: proc(
+    points: []Vector2, first, last: int, budget: Curve_Reduction_Budget) -> bool {
+    for index in first + 1..<last {
+        if curve_reduction_distance_to_chord(
+            points[index], points[first], points[last]) > budget.center_error {
+            return false
+        }
+    }
+    return true
+}
+
+// curve_reduction_join_passes bounds ordinary retained-join extrusion.
+curve_reduction_join_passes :: proc(
+    previous, current, next: Vector2, width: f32,
+    budget: Curve_Reduction_Budget) -> bool {
+    incoming := current - previous
+    outgoing := next - current
+    incoming_length := linalg.length(incoming)
+    outgoing_length := linalg.length(outgoing)
+    if incoming_length <= 0 || outgoing_length <= 0 {return false}
+    cosine := math.clamp(linalg.dot(
+        incoming / incoming_length, outgoing / outgoing_length), -1, 1)
+    denominator := math.sqrt(max((1 + cosine) * 0.5, 0))
+    if denominator <= native.DRAW_POLYLINE_MITER_EPSILON {return false}
+    ratio := 1 / denominator
+    return ratio <= budget.miter_limit &&
+        width * 0.5 * (ratio - 1) <= budget.stroke_error
+}
+
+// curve_reduction_mandatory reports semantic or existing sharp boundaries.
+curve_reduction_mandatory :: #force_inline proc(
+    points: []Vector2, kinds: []shapemodel.Curve_Point_Kind,
+    index: int, width: f32, budget: Curve_Reduction_Budget) -> bool {
+    if kinds[index] == .Cusp {return true}
+    return !curve_reduction_join_passes(
+        points[index - 1], points[index], points[index + 1], width, budget)
+}
+
+// curve_reduction_next_index finds the longest admissible deterministic span.
+curve_reduction_next_index :: proc(
+    points: []Vector2, kinds: []shapemodel.Curve_Point_Kind,
+    cursor: [2]int, width: f32,
+    budget: Curve_Reduction_Budget) -> int {
+    previous, anchor, last := cursor[0], cursor[1], len(points) - 1
+    best := anchor + 1
+    for candidate in anchor + 1..=last {
+        if candidate > anchor + 1 && curve_reduction_mandatory(
+            points, kinds, candidate - 1, width, budget) {break}
+        if !curve_reduction_span_passes(points, anchor, candidate, budget) {break}
+        if previous >= 0 && kinds[anchor] != .Cusp &&
+            !curve_reduction_join_passes(points[previous], points[anchor],
+                points[candidate], width, budget) {break}
+        best = candidate
+    }
+    return best
+}
+
+// curve_reduction_summarize_run computes retained anchors without mutation.
+curve_reduction_summarize_run :: proc(
+    points: []Vector2, kinds: []shapemodel.Curve_Point_Kind,
+    width: f32, budget: Curve_Reduction_Budget) -> Curve_Reduction_Run_Summary {
+    summary := Curve_Reduction_Run_Summary{retained_count = 1}
+    previous, anchor, last := -1, 0, len(points) - 1
+    for anchor < last {
+        next := curve_reduction_next_index(
+            points, kinds, {previous, anchor}, width, budget)
+        summary.retained_count += 1
+        if summary.retained_count == 2 {summary.second_index = next}
+        summary.before_last_index = summary.last_index
+        summary.last_index = next
+        previous, anchor = anchor, next
+    }
+    return summary
+}
+
+// curve_reduction_closed_passes validates joins across the canonical seam.
+curve_reduction_closed_passes :: proc(
+    points: []Vector2, kinds: []shapemodel.Curve_Point_Kind,
+    summary: Curve_Reduction_Run_Summary, width: f32,
+    budget: Curve_Reduction_Budget) -> bool {
+    if summary.retained_count < 4 || kinds[0] == .Cusp {return true}
+    seam_previous := summary.before_last_index
+    return curve_reduction_join_passes(points[seam_previous], points[0],
+        points[summary.second_index], width, budget)
+}
+
+// curve_reduction_write_run compacts one preflighted run into earlier storage.
+curve_reduction_write_run :: proc(
+    buffers: Curve_Visible_Run_Buffers, run: Curve_Visible_Run,
+    destination: int, width: f32, budget: Curve_Reduction_Budget) -> int {
+    points := buffers.points[run.first_point:run.first_point + run.point_count]
+    kinds := buffers.kinds[run.first_point:run.first_point + run.point_count]
+    previous, anchor, last := -1, 0, len(points) - 1
+    buffers.points[destination] = points[0]
+    buffers.kinds[destination] = kinds[0]
+    written := 1
+    for anchor < last {
+        next := curve_reduction_next_index(
+            points, kinds, {previous, anchor}, width, budget)
+        buffers.points[destination + written] = points[next]
+        buffers.kinds[destination + written] = kinds[next]
+        written += 1
+        previous, anchor = anchor, next
+    }
+    return written
+}
+
+// curve_reduction_input_valid preflights all bounded slices before mutation.
+curve_reduction_input_valid :: proc(
+    buffers: Curve_Visible_Run_Buffers, visible: Curve_Visible_Run_Result,
+    width: f32, budget: Curve_Reduction_Budget) -> bool {
+    if !visible.ok || width <= 0 || math.is_nan(width) || math.is_inf(width) ||
+        budget.center_error < 0 || budget.stroke_error < 0 ||
+        budget.miter_limit <= 1 || math.is_nan(budget.center_error) ||
+        math.is_nan(budget.stroke_error) || math.is_nan(budget.miter_limit) ||
+        math.is_inf(budget.center_error) || math.is_inf(budget.stroke_error) ||
+        math.is_inf(budget.miter_limit) {return false}
+    if visible.point_count > len(buffers.points) ||
+        visible.point_count > len(buffers.kinds) ||
+        visible.run_count > len(buffers.runs) {return false}
+    for run in buffers.runs[:visible.run_count] {
+        if run.first_point < 0 || run.point_count < 2 ||
+            run.first_point + run.point_count > visible.point_count {return false}
+    }
+    return true
+}
+
+// curve_reduction_apply_run preflights and compacts one validated run.
+curve_reduction_apply_run :: proc(
+    buffers: Curve_Visible_Run_Buffers, run: Curve_Visible_Run,
+    destination: int, width: f32, budget: Curve_Reduction_Budget) -> int {
+    points := buffers.points[run.first_point:run.first_point + run.point_count]
+    kinds := buffers.kinds[run.first_point:run.first_point + run.point_count]
+    summary := curve_reduction_summarize_run(points, kinds, width, budget)
+    if run.topology != .Open && !curve_reduction_closed_passes(
+        points, kinds, summary, width, budget) {summary.retained_count = run.point_count}
+    if summary.retained_count != run.point_count {
+        return curve_reduction_write_run(buffers, run, destination, width, budget)
+    }
+    copy(buffers.points[destination:], points)
+    copy(buffers.kinds[destination:], kinds)
+    return run.point_count
+}
+
+// reduce_projected_curve_visible_runs compacts every run without allocation.
+reduce_projected_curve_visible_runs :: proc(
+    buffers: Curve_Visible_Run_Buffers, visible: Curve_Visible_Run_Result,
+    width: f32, budget: Curve_Reduction_Budget) -> Curve_Reduction_Result {
+    if !curve_reduction_input_valid(buffers, visible, width, budget) {
+        return {visible.point_count, 0, false}
+    }
+    destination := 0
+    for run_index in 0..<visible.run_count {
+        run := buffers.runs[run_index]
+        first := destination
+        destination += curve_reduction_apply_run(
+            buffers, run, destination, width, budget)
+        buffers.runs[run_index] = {first, destination - first, run.topology}
+    }
+    return {visible.point_count, destination, true}
+}
+
 //   Apply 0.25x alpha attenuation for lower z-split fragments.
 z_split_lower_fragment_color :: #force_inline proc(
     draw_color: color.Color_RGBA8) -> color.Color_RGBA8 {
@@ -1728,6 +1930,12 @@ draw_encoded_cached_curve :: proc(
     result := build_projected_curve_visible_runs({state^.iso_scale^,
         vertices, kinds, curve^.topology, keep_above, false}, buffers)
     if !result.ok {return}
+    reduction := reduce_projected_curve_visible_runs(buffers, result,
+        curve^.brush_size, curve_reduction_budget(state^.iso_scale^.half_scale))
+    if !reduction.ok {return}
+    native.draw_encoder_record_curve_reduction(
+        encoder, reduction.candidate_count, reduction.retained_count)
+    result.point_count = reduction.retained_count
     draw_color := color.Color_RGBA8(curve^.color)
     if !keep_above {
         for point in vertices {
@@ -1866,6 +2074,12 @@ draw_encoded_cached_curve_shadow :: proc(
         vertices, kinds, curve^.topology, true, true}, buffers)
     if !result.ok {return}
     thickness := math.max(curve^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+    reduction := reduce_projected_curve_visible_runs(buffers, result, thickness,
+        curve_reduction_budget(state^.iso_scale^.half_scale))
+    if !reduction.ok {return}
+    native.draw_encoder_record_curve_reduction(
+        encoder, reduction.candidate_count, reduction.retained_count)
+    result.point_count = reduction.retained_count
     draw_encoded_curve_visible_runs(encoder, buffers, result, thickness,
         encoded_shadow_color(average_shadow_height(vertices)))
 }

@@ -215,6 +215,17 @@ artifact_simulation_state_json :: proc(state: observe.Simulation) -> string {
         state.graphics_visibility_pause_count, state.graphics_visibility_resume_count)
     }
 
+// artifact_colored_draw_state_json serializes bounded stroke-reduction evidence.
+artifact_colored_draw_state_json :: proc(state: observe.Display) -> string {
+    return fmt.tprintf(
+        "\"colored_draw\":{{\"vertices\":%d,\"indices\":%d," +
+        "\"curve_candidate_points\":%d,\"curve_retained_points\":%d," +
+        "\"curve_retention_ratio\":%g,\"primitive_overflows\":%d}}",
+        state.colored_vertex_count, state.colored_index_count,
+        state.curve_candidate_point_count, state.curve_retained_point_count,
+        state.curve_retention_ratio, state.colored_primitive_overflow_count)
+}
+
 //   Serialize the synchronized display, host, and simulation observation snapshot.
 artifact_state_json :: proc(
     state: observe.Display, julia_host: observe.Julia_Host,
@@ -235,21 +246,21 @@ artifact_state_json :: proc(
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
         "\"display_pending_drops\":%d,\"julia_lifecycle\":%d," +
         "\"julia_active_request_id\":%d,\"julia_failed_requests\":%d," +
-        "\"julia_event_count\":%d,\"julia_evidence_complete\":%v,%s,%s}}\n",
+        "\"julia_event_count\":%d,\"julia_evidence_complete\":%v,%s,%s,%s}}\n",
         state.fixed_step, state.simulation_time, state.simulation_paused,
-        state.animation_policy_paused, state.runtime_lifecycle,
-        state.runtime_generation, state.active_runtime_request_id,
-        state.failed_runtime_request_count, state.animation_generation,
-        state.animation_tick_sequence, state.animation_last_committed_sequence,
+        state.animation_policy_paused, state.runtime_lifecycle, state.runtime_generation,
+        state.active_runtime_request_id, state.failed_runtime_request_count,
+        state.animation_generation, state.animation_tick_sequence,
+        state.animation_last_committed_sequence,
         state.point_count, state.constraint_count, state.particle_count,
         artifact_dust_state_json(state), state.dynview_enabled,
-        state.view_text_scroll_y, state.view_text_scroll_max,
-        state.vertical_split_x, state.horizontal_split_y,
-        state.gif_capture_active, state.gif_captured_frames,
+        state.view_text_scroll_y, state.view_text_scroll_max, state.vertical_split_x,
+        state.horizontal_split_y, state.gif_capture_active, state.gif_captured_frames,
         state.required_evidence_complete, state.trace.event_count,
         state.trace.pending_drops, julia_host.lifecycle,
         julia_host.active_request_id, julia_host.failed_request_count,
         julia_host.trace.event_count, julia_host.trace.evidence_complete,
+        artifact_colored_draw_state_json(state),
         artifact_terminal_graphics_state_json(state),
         artifact_simulation_state_json(simulation))
 }

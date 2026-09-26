@@ -71,6 +71,8 @@ Sdl_Draw_Frame_Statistics :: struct {
     commands:          u32,
     stroke_vertices:   u32,
     stroke_draws:      u32,
+    curve_candidate_points: u32,
+    curve_retained_points: u32,
     dust_instances:    u32,
     dust_draws:        u32,
     dust_expanded_vertices: u32,
@@ -95,6 +97,8 @@ Sdl_Draw_Runtime_Statistics :: struct {
     commands:         u64,
     stroke_vertices:  u64,
     stroke_draws:     u64,
+    curve_candidate_points: u64,
+    curve_retained_points: u64,
     dust_instances:   u64,
     dust_draws:       u64,
     dust_expanded_vertices: u64,
@@ -112,6 +116,8 @@ Sdl_Draw_Runtime_Statistics :: struct {
     max_commands:     u32,
     max_stroke_vertices: u32,
     max_stroke_draws: u32,
+    max_curve_candidate_points: u32,
+    max_curve_retained_points: u32,
     max_dust_instances: u32,
     max_dust_draws: u32,
     max_dust_expanded_vertices: u32,
@@ -500,6 +506,8 @@ sdl_draw_accumulate_totals :: proc(
     statistics^.commands += u64(frame.commands)
     statistics^.stroke_vertices += u64(frame.stroke_vertices)
     statistics^.stroke_draws += u64(frame.stroke_draws)
+    statistics^.curve_candidate_points += u64(frame.curve_candidate_points)
+    statistics^.curve_retained_points += u64(frame.curve_retained_points)
     statistics^.dust_instances += u64(frame.dust_instances)
     statistics^.dust_draws += u64(frame.dust_draws)
     statistics^.dust_expanded_vertices += u64(frame.dust_expanded_vertices)
@@ -525,6 +533,10 @@ sdl_draw_accumulate_high_waters :: proc(
         statistics^.max_stroke_vertices, frame.stroke_vertices)
     statistics^.max_stroke_draws = max(
         statistics^.max_stroke_draws, frame.stroke_draws)
+    statistics^.max_curve_candidate_points = max(
+        statistics^.max_curve_candidate_points, frame.curve_candidate_points)
+    statistics^.max_curve_retained_points = max(
+        statistics^.max_curve_retained_points, frame.curve_retained_points)
     statistics^.max_dust_instances = max(
         statistics^.max_dust_instances, frame.dust_instances)
     statistics^.max_dust_draws = max(
@@ -577,6 +589,8 @@ sdl_draw_record_statistics :: proc(
         commands = u32(encoder^.command_count),
         stroke_vertices = u32(encoder^.stroke_vertex_count),
         stroke_draws = u32(encoder^.stroke_draw_count),
+        curve_candidate_points = encoder^.statistics.curve_candidate_points,
+        curve_retained_points = encoder^.statistics.curve_retained_points,
         dust_instances = u32(encoder^.dust_instance_count),
         dust_draws = u32(
             encoder^.dust_draw_count + encoder^.dust_expanded_draw_count),
