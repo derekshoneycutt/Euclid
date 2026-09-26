@@ -1,0 +1,2 @@
+libs/bin/win64/sdl/licenses/*.txt text eol=lf
+libs/bin/win64/sdl_shadercross/licenses/*.txt text eol=crlf
