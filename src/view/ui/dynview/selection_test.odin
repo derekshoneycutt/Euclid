@@ -1,7 +1,9 @@
 package ui_dynview
 
 import viewmodel "../../model"
+import native "../../native"
 import dynviewmodel "../../../dynview/model"
+import color "../../../core/color"
 import geometry "../../../core/geometry"
 
 import "core:testing"
@@ -242,4 +244,107 @@ dynview_selection_test_drag_finalizes_wrapped_range :: proc(t: ^testing.T) {
     testing.expect(t, selection.active && !selection.dragging)
     testing.expect(t, !owner.active)
     testing.expect_value(t, dynview_selection_text(nil, selection, "test"), "tes")
+}
+
+// Verify adjacent semantic targets merge into one full-line-height underlay.
+@(test)
+dynview_selection_test_draws_merged_document_line :: proc(t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {200, 100}, {200, 100}))
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
+    runtime^.compile_cache.document_layout_lines =
+        []dynviewmodel.Dynview_Document_Layout_Line{{top = 2, bottom = 20}}
+    runtime^.compile_cache.document_layout_copy_targets =
+        []dynviewmodel.Dynview_Document_Layout_Copy_Target{
+            {line_index = 0, x = 10, y = 7, width = 8, height = 9},
+            {line_index = 0, x = 22, y = 7, width = 12, height = 9},
+        }
+
+    dynview_draw_selection({
+        encoder = &encoder, runtime = runtime,
+        selection = {.Semantic_Document, 0, {0}, {2}, true, false},
+        view = {panel = {100, 40, 80, 50}, text_padding = 5, scroll_y = 3},
+        color = color.WHITE,
+    })
+
+    testing.expect_value(t, encoder.vertex_count, 4)
+    testing.expect_value(t, vertices[0].position, geometry.Vector2{115, 44})
+    testing.expect_value(t, vertices[2].position, geometry.Vector2{139, 62})
+}
+
+// Verify multi-line semantic selection extends only continuation edges.
+@(test)
+dynview_selection_test_draws_document_continuation_bands :: proc(t: ^testing.T) {
+    vertices: [12]native.Draw_Vertex
+    indices: [18]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {200, 100}, {200, 100}))
+    runtime := new(dynviewmodel.Dynview_System, context.allocator)
+    defer free(runtime, context.allocator)
+    runtime^.compile_cache.document_layout_lines =
+        []dynviewmodel.Dynview_Document_Layout_Line{
+            {top = 0, bottom = 10}, {top = 14, bottom = 24},
+            {top = 28, bottom = 38},
+        }
+    runtime^.compile_cache.document_layout_copy_targets =
+        []dynviewmodel.Dynview_Document_Layout_Copy_Target{
+            {line_index = 0, x = 20, width = 10},
+            {line_index = 1, x = 6, width = 8},
+            {line_index = 2, x = 12, width = 9},
+        }
+
+    dynview_draw_selection({
+        encoder = &encoder, runtime = runtime,
+        selection = {.Semantic_Document, 0, {0}, {3}, true, false},
+        view = {panel = {10, 20, 100, 60}, text_padding = 5},
+        color = color.WHITE,
+    })
+
+    testing.expect_value(t, encoder.vertex_count, 12)
+    testing.expect_value(t, vertices[0].position, geometry.Vector2{35, 25})
+    testing.expect_value(t, vertices[2].position, geometry.Vector2{105, 35})
+    testing.expect_value(t, vertices[4].position, geometry.Vector2{15, 39})
+    testing.expect_value(t, vertices[6].position, geometry.Vector2{105, 49})
+    testing.expect_value(t, vertices[8].position, geometry.Vector2{15, 53})
+    testing.expect_value(t, vertices[10].position, geometry.Vector2{36, 63})
+}
+
+// Verify wrapped selection uses full rows with partial outer fragments.
+@(test)
+dynview_selection_test_draws_wrapped_row_bands :: proc(t: ^testing.T) {
+    vertices: [8]native.Draw_Vertex
+    indices: [12]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+
+    dynview_draw_selection({
+        encoder = &encoder,
+        selection = {.Wrapped_Text, 0, {1}, {5}, true, false},
+        view = {
+            panel = {10, 20, 40, 60}, text_padding = 5, row_height = 20,
+            wrap_advance = 10, fallback_text = "abcdef",
+        },
+        color = color.WHITE,
+    })
+
+    testing.expect_value(t, encoder.vertex_count, 8)
+    testing.expect_value(t, vertices[0].position, geometry.Vector2{25, 25})
+    testing.expect_value(t, vertices[2].position, geometry.Vector2{45, 45})
+    testing.expect_value(t, vertices[4].position, geometry.Vector2{15, 45})
+    testing.expect_value(t, vertices[6].position, geometry.Vector2{35, 65})
 }

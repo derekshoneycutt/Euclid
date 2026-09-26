@@ -1,6 +1,7 @@
 package ui
 
 import geometry "../../core/geometry"
+import color "../../core/color"
 import native "../native"
 
 import "../../core"
@@ -69,6 +70,13 @@ draw_encoded_presentation_text :: proc(
     if state == nil || encoder == nil || !presentation.active {return}
     _ = native.draw_encoder_push_scissor(
         encoder, geometry.Rectangle(presentation.scroll.view_rect))
+    ui_dynview.dynview_draw_selection({
+        encoder = encoder,
+        runtime = &state^.dynview,
+        selection = state^.ui_runtime.dynview_selection,
+        view = presentation.selection_view,
+        color = color.Color_RGBA8{82, 96, 112, 112},
+    })
     fallback := ui_dynview.Fallback_Text_Content{
         presentation.view_text, UI_TEXT_COLOR}
     ui_dynview.draw_presentation_styled_or_fallback(
