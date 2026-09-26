@@ -235,9 +235,12 @@ and require both `result: "passed"` and `trace_complete: true`.
 
 Native codec qualification belongs to the production Odin suites. Terminal preparation
 tests exercise memory-backed JPEG, PNG, and GIF decode into exact caller-owned storage.
-The SDL GIF encoder test streams two RGBA frames, decodes them through SDL_image with
-exact 40/80 ms delays, verifies completion, and exercises idempotent abort. Provider
-version, linker, manifest, license, and artifact hashes remain Julia tooling tests.
+The SDL GIF encoder test stages two borrowed RGBA frames, commits them with exact 40/80
+ms delays, decodes them through SDL_image, verifies pitch-aware copying and completion,
+and exercises pending-close rejection and idempotent abort. Portable capture tests verify
+cadence skipping, fixed-step duration assignment to the preceding staged frame, and the
+final staged-frame flush. Provider version, linker, manifest, license, and artifact
+hashes remain Julia tooling tests.
 
 GPU qualification combines the strict application build with headed scenarios.
 `sdl3-shell-lifecycle` requires runtime readiness, presented-frame evidence, simulation

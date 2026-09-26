@@ -29,6 +29,7 @@ Gif_Panel_Context :: struct {
 //   Row positions for all controls in one GIF panel layout.
 Gif_View_Rows :: struct {
     sliders: Gif_Slider_Rows,
+    timing_y: f32,
     save_button_y: f32,
     status_y: f32,
 }
@@ -38,6 +39,9 @@ Gif_View_Preparation :: struct {
     rows: Gif_View_Rows,
     downsample: Integer_Slider_Result,
     frame_step: Integer_Slider_Result,
+    animation_timing: Text_Button_Result,
+    recorded_timing: Text_Button_Result,
+    timing_mode: viewmodel.Gif_Capture_Timing_Mode,
     save_button: Text_Button_Result,
     phase: viewmodel.Gif_Capture_Phase,
     captured_frames: int,
@@ -61,6 +65,14 @@ draw_encoded_gif_geometry :: proc(
         state^.ui_runtime.gif_downsample_factor, 1, 4})
     draw_encoded_slider_geometry(encoder, {panel, rows.sliders.frame_step_y,
         state^.ui_runtime.gif_frame_step, 1, 4})
+    animation, recorded := gif_timing_button_rects(panel, rows.timing_y)
+    if state^.ui_runtime.gif_timing_mode == .Animation {
+        _ = native.draw_encoder_rectangle(encoder, animation, UI_BORDER_COLOR)
+    } else {
+        _ = native.draw_encoder_rectangle(encoder, recorded, UI_BORDER_COLOR)
+    }
+    _ = native.draw_encoder_rectangle_outline(encoder, animation, 1, UI_BORDER_COLOR)
+    _ = native.draw_encoder_rectangle_outline(encoder, recorded, 1, UI_BORDER_COLOR)
     button := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET, rows.save_button_y,
         panel.width - SETTINGS_PANEL_INSET * 2, SETTINGS_GIF_BUTTON_HEIGHT}
     _ = native.draw_encoder_rectangle(
@@ -79,12 +91,18 @@ draw_encoded_gif_text :: proc(
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
     rows := gif_view_layout_rows(stack)
     x := panel.x + SETTINGS_PANEL_INSET
-    draw_encoded_label(state, encoder, "Downsample", x, rows.sliders.downsample_y)
+    draw_encoded_label(state, encoder, "Output scale", x, rows.sliders.downsample_y)
     draw_encoded_gif_value(
-        state, encoder, panel, prepared.downsample.value, rows.sliders.downsample_y)
-    draw_encoded_label(state, encoder, "Frame step", x, rows.sliders.frame_step_y)
+        state, encoder, panel, gif_output_scale_label(prepared.downsample.value),
+        rows.sliders.downsample_y)
+    draw_encoded_label(state, encoder, "Capture every", x, rows.sliders.frame_step_y)
     draw_encoded_gif_value(
-        state, encoder, panel, prepared.frame_step.value, rows.sliders.frame_step_y)
+        state, encoder, panel, gif_capture_cadence_label(prepared.frame_step.value),
+        rows.sliders.frame_step_y)
+    draw_encoded_label(state, encoder, "Playback timing", x, rows.timing_y)
+    animation, recorded := gif_timing_button_rects(panel, rows.timing_y)
+    draw_encoded_gif_button_text(state, encoder, "Animation", animation)
+    draw_encoded_gif_button_text(state, encoder, "Recorded", recorded)
     draw_encoded_label(state, encoder, gif_capture_button_label(prepared.phase),
         x + SETTINGS_PANEL_INSET, rows.save_button_y + SETTINGS_PANEL_INSET)
     draw_encoded_gif_status(state, encoder, prepared, x, rows.status_y)
@@ -114,14 +132,58 @@ draw_encoded_gif_status :: proc(
 // draw_encoded_gif_value right-aligns one prepared slider value in the panel.
 draw_encoded_gif_value :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle, value: int, row_y: f32) {
-    text := fmt.tprintf("%d", value)
+    panel: geometry.Rectangle, text: string, row_y: f32) {
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     width, measured := view_core.ui_text_measure_monospace(
         text, face, TREE_FONT_SIZE, 0)
     if !measured {width = 20}
     draw_encoded_label(state, encoder, text,
         settings_right_aligned_x(panel, width), row_y)
+}
+
+// gif_output_scale_label describes one integer downsample factor as output scale.
+gif_output_scale_label :: proc(factor: int) -> string {
+    switch clamp(factor, 1, 4) {
+    case 1: return "100%"
+    case 2: return "50%"
+    case 3: return "33%"
+    case 4: return "25%"
+    }
+    return "100%"
+}
+
+// gif_capture_cadence_label describes how often one presentation is sampled.
+gif_capture_cadence_label :: proc(frame_step: int) -> string {
+    clamped := clamp(frame_step, 1, 4)
+    if clamped == 1 {return "frame"}
+    return fmt.tprintf("%d frames", clamped)
+}
+
+// gif_timing_button_rects divides one row into two stable timing choices.
+gif_timing_button_rects :: proc(
+    panel: geometry.Rectangle, row_y: f32) -> (geometry.Rectangle, geometry.Rectangle) {
+    available := panel.width - SETTINGS_PANEL_INSET * 2 -
+        SETTINGS_GIF_TIMING_BUTTON_GAP
+    width := max(f32(0), available * 0.5)
+    y := row_y + SETTINGS_GIF_TIMING_BUTTON_TOP_OFFSET
+    animation := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET, y,
+        width, SETTINGS_GIF_BUTTON_HEIGHT}
+    recorded := geometry.Rectangle{animation.x + width +
+        SETTINGS_GIF_TIMING_BUTTON_GAP, y, width, SETTINGS_GIF_BUTTON_HEIGHT}
+    return animation, recorded
+}
+
+// draw_encoded_gif_button_text centers one timing choice in its segment.
+draw_encoded_gif_button_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    text: string, rectangle: geometry.Rectangle) {
+    face := view_font.cache_borrow(&state^.font_cache, .Regular)
+    width, measured := view_core.ui_text_measure_monospace(
+        text, face, TREE_FONT_SIZE, 0)
+    if !measured {width = 0}
+    draw_encoded_label(state, encoder, text,
+        rectangle.x + max(f32(0), (rectangle.width - width) * 0.5),
+        rectangle.y + (rectangle.height - TREE_FONT_SIZE) * 0.5)
 }
 
 //   Build one GIF slider parameter record shared by update and draw.
@@ -155,6 +217,18 @@ gif_save_button_params :: proc(
         interaction_space_rect = geometry.Rectangle(ctx.panel),
         interaction_enabled = true,
         font = ctx.font, font_resolver = ctx.resolver,
+    }
+}
+
+// gif_timing_button_params builds one choice in the timing selector.
+gif_timing_button_params :: proc(
+    ctx: Gif_Panel_Context, id: int, label: string,
+    rectangle: geometry.Rectangle) -> Text_Button_Params {
+    return {
+        id = id, rect = rectangle, label = label,
+        enabled = gif_capture_button_enabled(ctx.ui_runtime.gif_capture_phase),
+        mouse = ctx.mouse_input, interaction_space_rect = ctx.panel,
+        interaction_enabled = true, font = ctx.font, font_resolver = ctx.resolver,
     }
 }
 
@@ -226,15 +300,32 @@ gif_view_layout_rows :: proc(stack_rect: geometry.Rectangle) -> Gif_View_Rows {
     downsample_row := gif_stack_row(stack_rect,
         SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE, stack_cursor)
     frame_step_row := gif_stack_row(stack_rect,
-        SETTINGS_GIF_FRAME_TO_BUTTON_SEGMENT_SIZE, downsample_row.cursor_out)
+        SETTINGS_GIF_FRAME_TO_TIMING_SEGMENT_SIZE, downsample_row.cursor_out)
+    timing_row := gif_stack_row(stack_rect,
+        SETTINGS_GIF_TIMING_TO_BUTTON_SEGMENT_SIZE, frame_step_row.cursor_out)
     save_button_row := gif_stack_row(stack_rect,
-        SETTINGS_GIF_BUTTON_TO_STATUS_SEGMENT_SIZE, frame_step_row.cursor_out)
+        SETTINGS_GIF_BUTTON_TO_STATUS_SEGMENT_SIZE, timing_row.cursor_out)
     status_row := gif_stack_row(stack_rect, 0, save_button_row.cursor_out)
     return {
         sliders = {downsample_row.segment_rect.y, frame_step_row.segment_rect.y},
+        timing_y = timing_row.segment_rect.y,
         save_button_y = save_button_row.segment_rect.y,
         status_y = status_row.segment_rect.y,
     }
+}
+
+//   Resolve the GIF timing selector and publish the selected mode.
+prepare_gif_timing_controls :: proc(
+    ctx: Gif_Panel_Context, panel: geometry.Rectangle,
+    timing_y: f32, result: ^Gif_View_Preparation) {
+    animation_rect, recorded_rect := gif_timing_button_rects(panel, timing_y)
+    result^.animation_timing = update_text_button(gif_timing_button_params(
+        ctx, 6203, "Animation", animation_rect), &ctx.ui_runtime.ui_press_owner)
+    result^.recorded_timing = update_text_button(gif_timing_button_params(
+        ctx, 6204, "Recorded", recorded_rect), &ctx.ui_runtime.ui_press_owner)
+    if result^.animation_timing.clicked {ctx.ui_runtime.gif_timing_mode = .Animation}
+    if result^.recorded_timing.clicked {ctx.ui_runtime.gif_timing_mode = .Recorded}
+    result^.timing_mode = ctx.ui_runtime.gif_timing_mode
 }
 
 //   Resolve GIF controls and commit their action before rendering.
@@ -255,8 +346,9 @@ prepare_gif_view :: proc(
         ctx, result.rows.sliders.downsample_y, 6201, "Downsample",
         &ctx.ui_runtime.gif_downsample_factor))
     result.frame_step = update_settings_integer_slider(gif_slider_params(
-        ctx, result.rows.sliders.frame_step_y, 6202, "Frame Step",
+        ctx, result.rows.sliders.frame_step_y, 6202, "Capture every",
         &ctx.ui_runtime.gif_frame_step))
+    prepare_gif_timing_controls(ctx, panel, result.rows.timing_y, &result)
     result.save_button = update_text_button(gif_save_button_params(
         ctx, result.rows.save_button_y), &ctx.ui_runtime.ui_press_owner)
     if result.save_button.clicked { ctx.ui_runtime.save_gif_requested = true }

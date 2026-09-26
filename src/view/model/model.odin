@@ -39,19 +39,25 @@ Gif_Capture_Phase :: enum {
     Error,
 }
 
+// Gif_Capture_Timing_Mode selects authored or observed playback timing.
+Gif_Capture_Timing_Mode :: enum u8 {
+    Animation,
+    Recorded,
+}
+
 // Gif_Capture_Operations supplies display-owned streaming encoder calls to policy.
 Gif_Capture_Frame :: struct {
     pixels: []u8,
     width: int,
     height: int,
     pitch_bytes: int,
-    duration_ms: u64,
 }
 
 Gif_Capture_Operations :: struct {
     user_data: rawptr,
     begin: proc(user_data: rawptr, width, height: int) -> bool,
-    add_frame: proc(user_data: rawptr, frame: Gif_Capture_Frame) -> bool,
+    stage_frame: proc(user_data: rawptr, frame: Gif_Capture_Frame) -> bool,
+    commit_frame: proc(user_data: rawptr, duration_ms: u64) -> bool,
     close: proc(user_data: rawptr) -> bool,
     abort: proc(user_data: rawptr),
     published_path: proc(user_data: rawptr) -> string,
@@ -66,6 +72,13 @@ Gif_Capture_Session :: struct {
     output_width: int,
     output_height: int,
     started_at: time.Tick,
+    active_downsample_factor: int,
+    active_frame_step: int,
+    active_timing_mode: Gif_Capture_Timing_Mode,
+    staged: bool,
+    staged_fixed_step: u64,
+    staged_at: time.Tick,
+    last_duration_ms: u64,
     frame_materialization_ms: f64,
     materialized_frames: u64,
     recording_presentations: u64,
@@ -246,6 +259,7 @@ Euclid_Ui_Runtime_State :: struct {
     save_gif_requested: bool,
     gif_downsample_factor: int,
     gif_frame_step: int,
+    gif_timing_mode: Gif_Capture_Timing_Mode,
     gif_capture_phase: Gif_Capture_Phase,
     gif_capture_frame_counter: int,
     gif_captured_frames: int,

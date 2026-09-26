@@ -837,12 +837,16 @@ settings with external effects, such as frame pacing, through the owning native 
 ### GIF Panel
 
 When Save GIF is active, its controls occupy the accordion content region. The panel
-contains downsample and frame step sliders, a Save/Cancel button, current phase, status
-notes, and the final path after success.
+contains Output scale and Capture every sliders, an Animation/Recorded playback-timing
+selector, a Save/Cancel button, current phase, status notes, and the final path after
+success. Output scale presents the integer downsample factors as 100%, 50%, 33%, and
+25%. Capture every presents the sampling cadence as one through four frames.
 
 The button sets `save_gif_requested`; the owning GIF update path interprets that request
-and advances the phase. Controls are disabled where recording or finalization policy
-requires stable state.
+and advances the phase. Scale, cadence, and timing mode are snapshotted when recording
+begins, so later UI edits cannot alter an active stream. Animation timing follows fixed
+simulation progress and excludes capture stalls; Recorded timing follows monotonic wall
+time and reproduces stalls and pauses visible during capture.
 
 ## Fonts And Text Drawing
 
@@ -896,9 +900,12 @@ frame boundary.
 
 Each submitted GIF frame uses the view's synchronous framebuffer capture lifecycle.
 The display thread acquires and validates tightly packed RGBA8 pixels, applies the
-session's frozen top-left crop and nearest-neighbor sizing, passes borrowed rows and
-pitch to the files-owned encoder, and releases the native image before returning. This
-does not create pending GPU work or extend framebuffer ownership across frames.
+session's frozen top-left crop and nearest-neighbor sizing, copies borrowed rows into one
+exact-size encoder-owned staging buffer, and releases the framebuffer image before
+returning. The next accepted presentation commits the staged image with its resolved
+forward duration. Finalization flushes the last staged image before closing and
+publishing the stream. This does not create pending GPU work or extend framebuffer
+ownership across frames.
 
 ## Allocation And Lifetime
 

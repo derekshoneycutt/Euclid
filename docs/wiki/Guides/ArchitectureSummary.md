@@ -77,7 +77,7 @@ If you are new, read in this order:
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution, transactional GIF publication, and native static and animated image decode. | `src/files/files.odin`, `src/terminal/graphics/native/sdl_image.odin` |
-| **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle and synchronous RGBA frame submission. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
+| **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
 | **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/particles.odin` |
 | **---** | **--- Julia Modules ---** | **---** | **---** |
 | **Julia** | Runtime Bootstrap | Script loading, animation registration, and global frame dispatch. | `src/julia/script.jl` |
@@ -613,13 +613,17 @@ correlation. The display owner fulfills those requests after presentation by acq
 exporting, and releasing one capture. PNG export wraps the borrowed RGBA8 bytes in an
 SDL `.RGBA32` surface and calls SDL core `SavePNG`; the wrapper never owns the borrowed
 pixels. Screenshot completion is published only after export succeeds and the output
-path exists. GIF policy uses the same acquisition lifecycle, then supplies validated
-pixel rows and pitch to the files-owned encoder. The encoder arena, GIF byte production,
-and persisted output remain files responsibilities.
+path exists. GIF policy uses the same acquisition lifecycle, then copies validated pixel
+rows into one exact-size buffer owned by the display's SDL_image encoder. The next
+accepted presentation commits that staged frame with the interval for which it remained
+visible. Authored timing uses fixed-step progress; recorded timing uses monotonic elapsed
+time. Finalization flushes the last staged frame before encoder close and transactional
+publication.
 
-This boundary is deliberately synchronous and has no pending state, shared-frame
-cache, or multi-frame mapped-pixel lifetime. The scene target remains SDL-owned; only
-the temporary transfer buffer and CPU image cross the acquisition interval.
+This boundary is deliberately synchronous and has no pending GPU state, shared-frame
+cache, or mapped-pixel lifetime across frames. The scene target remains SDL-owned. One
+bounded CPU frame persists in encoder-owned storage so forward-associated GIF duration
+can be resolved without retaining framebuffer capture memory.
 
 ### Per-Frame Preparation
 

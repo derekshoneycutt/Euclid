@@ -114,6 +114,29 @@ gif_status_labels_cover_capture_phases :: proc(t: ^testing.T) {
     testing.expect_value(t, gif_capture_status_label(.Error, 0), "Status: Error")
 }
 
+// Verify GIF slider values use export-oriented labels instead of raw factors.
+@(test)
+gif_control_value_labels_are_human_readable :: proc(t: ^testing.T) {
+    testing.expect_value(t, gif_output_scale_label(1), "100%")
+    testing.expect_value(t, gif_output_scale_label(2), "50%")
+    testing.expect_value(t, gif_output_scale_label(3), "33%")
+    testing.expect_value(t, gif_output_scale_label(4), "25%")
+    testing.expect_value(t, gif_capture_cadence_label(1), "frame")
+    testing.expect_value(t, gif_capture_cadence_label(4), "4 frames")
+}
+
+// Verify GIF timing segments remain inside the minimum panel width.
+@(test)
+gif_timing_segments_fit_compact_panel :: proc(t: ^testing.T) {
+    panel := geometry.Rectangle{10, 20, 240, 300}
+    animation, recorded := gif_timing_button_rects(panel, 100)
+    testing.expect(t, animation.width > 0)
+    testing.expect_value(t, animation.width, recorded.width)
+    testing.expect(t, animation.x >= panel.x + SETTINGS_PANEL_INSET)
+    testing.expect(t, recorded.x + recorded.width <=
+        panel.x + panel.width - SETTINGS_PANEL_INSET)
+}
+
 // Verify optional settings labels expose unavailable controls without audio changes.
 @(test)
 settings_capability_labels_match_prepared_availability :: proc(t: ^testing.T) {

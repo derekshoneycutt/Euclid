@@ -21,6 +21,15 @@ Framebuffer_Capture_Test_State :: struct {
     export_succeeds: bool,
 }
 
+// Gif_Capture_Test_Encoder records staged and committed frames without native IO.
+Gif_Capture_Test_Encoder :: struct {
+    staged: bool,
+    stage_count: int,
+    commit_count: int,
+    close_count: int,
+    durations: [4]u64,
+}
+
 // Admit one non-overlapping test capture transaction.
 framebuffer_test_begin :: proc(user_data: rawptr) -> bool {
     state := cast(^Framebuffer_Capture_Test_State)user_data
@@ -96,6 +105,61 @@ framebuffer_test_source :: proc(
         source = pixels, width = width, height = height,
         pitch_bytes = width * FRAMEBUFFER_PIXEL_BYTES,
         allocator = context.allocator,
+    }
+}
+
+// Copy-free test staging records one accepted frame and rejects overlap.
+gif_capture_test_stage_frame :: proc(
+    user_data: rawptr, _: Gif_Capture_Frame) -> bool {
+    encoder := cast(^Gif_Capture_Test_Encoder)user_data
+    if encoder == nil || encoder.staged {return false}
+    encoder.staged = true
+    encoder.stage_count += 1
+    return true
+}
+
+// Record one duration for the currently staged test frame.
+gif_capture_test_commit_frame :: proc(user_data: rawptr, duration_ms: u64) -> bool {
+    encoder := cast(^Gif_Capture_Test_Encoder)user_data
+    if encoder == nil || !encoder.staged ||
+       encoder.commit_count >= len(encoder.durations) {
+        return false
+    }
+    encoder.durations[encoder.commit_count] = duration_ms
+    encoder.commit_count += 1
+    encoder.staged = false
+    return true
+}
+
+// Close one test stream only after its staged frame is committed.
+gif_capture_test_close :: proc(user_data: rawptr) -> bool {
+    encoder := cast(^Gif_Capture_Test_Encoder)user_data
+    if encoder == nil || encoder.staged {return false}
+    encoder.close_count += 1
+    return true
+}
+
+// Clear any staged test frame during capture abort.
+gif_capture_test_abort :: proc(user_data: rawptr) {
+    encoder := cast(^Gif_Capture_Test_Encoder)user_data
+    if encoder != nil {encoder.staged = false}
+}
+
+// Return a stable synthetic output path after test finalization.
+gif_capture_test_published_path :: proc(_: rawptr) -> string {
+    return "test.gif"
+}
+
+// Build staged encoder operations for portable GIF policy tests.
+gif_capture_test_encoder_operations :: proc(
+    encoder: ^Gif_Capture_Test_Encoder) -> Gif_Capture_Operations {
+    return {
+        user_data = rawptr(encoder),
+        stage_frame = gif_capture_test_stage_frame,
+        commit_frame = gif_capture_test_commit_frame,
+        close = gif_capture_test_close,
+        abort = gif_capture_test_abort,
+        published_path = gif_capture_test_published_path,
     }
 }
 
@@ -255,4 +319,42 @@ gif_capture_normalization_releases_failed_crop :: proc(t: ^testing.T) {
     testing.expect(t, !ok)
     testing.expect_value(t, len(frame.pixels), 0)
     testing.expect_value(t, operation_state.unload_count, 1)
+}
+
+// Verify capture stages first, honors cadence, and commits forward durations.
+@(test)
+gif_capture_stages_and_commits_fixed_step_intervals :: proc(t: ^testing.T) {
+    source: [8]u8
+    framebuffer := framebuffer_test_source(source[:], 2, 1)
+    encoder: Gif_Capture_Test_Encoder
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.gif_capture = {
+        operations = gif_capture_test_encoder_operations(&encoder),
+        active = true, source_width = 2, source_height = 1,
+        output_width = 2, output_height = 1, active_downsample_factor = 1,
+        active_frame_step = 2, active_timing_mode = .Animation,
+    }
+    operations := framebuffer_test_operations(&framebuffer)
+
+    state^.fixed_step = 10
+    testing.expect(t, gif_capture_submit_frame(state, operations))
+    testing.expect_value(t, encoder.stage_count, 1)
+    testing.expect_value(t, encoder.commit_count, 0)
+
+    state^.fixed_step = 13
+    testing.expect(t, gif_capture_submit_frame(state, operations))
+    testing.expect_value(t, encoder.stage_count, 1)
+    state^.fixed_step = 15
+    testing.expect(t, gif_capture_submit_frame(state, operations))
+    testing.expect_value(t, encoder.commit_count, 1)
+    testing.expect_value(t, encoder.durations[0], u64(83))
+    testing.expect_value(t, encoder.stage_count, 2)
+
+    state^.fixed_step = 18
+    testing.expect(t, gif_capture_finalize_session(state))
+    testing.expect_value(t, encoder.commit_count, 2)
+    testing.expect_value(t, encoder.durations[1], u64(50))
+    testing.expect_value(t, encoder.close_count, 1)
+    testing.expect_value(t, state^.ui_runtime.gif_captured_frames, 2)
 }

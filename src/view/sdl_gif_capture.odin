@@ -39,7 +39,7 @@ sdl_gif_capture_begin :: proc(
     temporary_path := strings.clone_to_cstring(
         owner.transaction.temporary_path, context.temp_allocator)
     if !native.sdl_gif_encoder_begin(
-        &owner.encoder, temporary_path, width, height) {
+        &owner.encoder, temporary_path, width, height, owner.allocator) {
         log.errorf(
             "sdl_gif_capture_open_failed width=%d height=%d", width, height)
         sdl_gif_capture_abort(user_data)
@@ -48,18 +48,24 @@ sdl_gif_capture_begin :: proc(
     return true
 }
 
-// sdl_gif_capture_add_frame submits one borrowed frame to the active stream.
-sdl_gif_capture_add_frame :: proc(
+// sdl_gif_capture_stage_frame copies one borrowed frame into native staging.
+sdl_gif_capture_stage_frame :: proc(
     user_data: rawptr, frame: view_core.Gif_Capture_Frame) -> bool {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
     if owner == nil {return false}
-    return native.sdl_gif_encoder_add_frame(&owner.encoder, {
+    return native.sdl_gif_encoder_stage_frame(&owner.encoder, {
         pixels = frame.pixels,
         width = frame.width,
         height = frame.height,
         pitch_bytes = frame.pitch_bytes,
-        duration_ms = frame.duration_ms,
     })
+}
+
+// sdl_gif_capture_commit_frame submits the staged frame with its resolved duration.
+sdl_gif_capture_commit_frame :: proc(user_data: rawptr, duration_ms: u64) -> bool {
+    owner := cast(^Sdl_Gif_Capture_Context)user_data
+    if owner == nil {return false}
+    return native.sdl_gif_encoder_commit_frame(&owner.encoder, duration_ms)
 }
 
 // sdl_gif_capture_close closes and atomically publishes one completed stream.
@@ -90,7 +96,8 @@ sdl_gif_capture_operations :: proc(
     return {
         user_data = rawptr(owner),
         begin = sdl_gif_capture_begin,
-        add_frame = sdl_gif_capture_add_frame,
+        stage_frame = sdl_gif_capture_stage_frame,
+        commit_frame = sdl_gif_capture_commit_frame,
         close = sdl_gif_capture_close,
         abort = sdl_gif_capture_abort,
         published_path = sdl_gif_capture_published_path,

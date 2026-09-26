@@ -287,6 +287,15 @@ init_ui_layout_pixels :: proc(
     runtime^.horizontal_split_y = f32(height) * runtime^.landscape.horizontal_ratio
 }
 
+//   Initialize display-owned GIF capture preferences and status.
+init_ui_gif_fields :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
+    runtime^.gif_downsample_factor = 2
+    runtime^.gif_frame_step = 2
+    runtime^.gif_timing_mode = .Animation
+    runtime^.gif_capture_phase = .Idle
+    view_core.clear_gif_status_note(runtime)
+}
+
 //   Initialize display-owned UI policy and layout memory from run settings.
 init_ui_runtime_fields :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State, settings: ^Euclid_Run_Settings) {
@@ -320,10 +329,7 @@ init_ui_runtime_fields :: proc(
         runtime^.current_layout_mode == .Landscape ||
         runtime^.active_accordion_section == .View
     init_ui_layout_pixels(runtime, settings^.window.width, settings^.window.height)
-    runtime^.gif_downsample_factor = 2
-    runtime^.gif_frame_step = 2
-    runtime^.gif_capture_phase = .Idle
-    view_core.clear_gif_status_note(runtime)
+    init_ui_gif_fields(runtime)
 }
 
 //   Populate the simulation/UI scalar fields on the general state.

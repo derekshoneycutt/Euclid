@@ -49,12 +49,25 @@ clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
     testing.expect_value(t, ui_runtime^.last_gif_path[expected_len], u8(0))
 }
 
-//   Verify gif_capture_delay_centiseconds maps frame steps to expected delays.
+// Verify fixed-step GIF timing preserves authored progress with bounded delays.
 @(test)
-gif_capture_delay_centiseconds_matches_expected_steps :: proc(t: ^testing.T) {
-    testing.expect_value(t, app_view.gif_capture_delay_centiseconds(1), 2)
-    testing.expect_value(t, app_view.gif_capture_delay_centiseconds(4), 7)
-    testing.expect_value(t, app_view.gif_capture_delay_centiseconds(0), 1)
+gif_capture_fixed_step_duration_is_bounded :: proc(t: ^testing.T) {
+    testing.expect_value(t, app_view.gif_capture_fixed_step_duration_ms(0), u64(0))
+    testing.expect_value(t, app_view.gif_capture_fixed_step_duration_ms(1), u64(17))
+    testing.expect_value(t, app_view.gif_capture_fixed_step_duration_ms(4), u64(67))
+    testing.expect_value(t, app_view.gif_capture_fixed_step_duration_ms(~u64(0)),
+        app_view.GIF_MAX_DELAY_MS)
+}
+
+// Verify recorded timing rounds milliseconds and applies GIF duration limits.
+@(test)
+gif_capture_elapsed_duration_is_bounded :: proc(t: ^testing.T) {
+    testing.expect_value(t, app_view.gif_capture_elapsed_duration_ms(0), u64(0))
+    testing.expect_value(t, app_view.gif_capture_elapsed_duration_ms(0.0167), u64(17))
+    testing.expect_value(t, app_view.gif_capture_elapsed_duration_ms(0.001),
+        app_view.GIF_MIN_DELAY_MS)
+    testing.expect_value(t, app_view.gif_capture_elapsed_duration_ms(1000),
+        app_view.GIF_MAX_DELAY_MS)
 }
 
 //   Verify gif_capture_scaled_extent matches the screen-to-render ratio with rounding.

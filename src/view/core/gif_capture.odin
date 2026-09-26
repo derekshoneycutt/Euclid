@@ -16,6 +16,9 @@ Gif_Capture_Session :: viewmodel.Gif_Capture_Session
 Gif_Capture_Frame :: viewmodel.Gif_Capture_Frame
 Gif_Capture_Operations :: viewmodel.Gif_Capture_Operations
 
+GIF_MIN_DELAY_MS :: u64(10)
+GIF_MAX_DELAY_MS :: u64(655_350)
+
 //   Logical, screen, and render extents used to resolve a framebuffer crop.
 Gif_Capture_Extents :: struct {
     logical_width: int,
@@ -40,12 +43,17 @@ gif_capture_clear_source_dimensions :: proc(session: ^Gif_Capture_Session) {
     session.source_height = 0
     session.output_width = 0
     session.output_height = 0
+    session.staged = false
+    session.staged_fixed_step = 0
+    session.staged_at = {}
+    session.last_duration_ms = 0
 }
 
 //   Bind display-owned streaming encoder operations to one portable session.
 gif_capture_bind_operations :: proc(
     session: ^Gif_Capture_Session, operations: Gif_Capture_Operations) -> bool {
-    if session == nil || operations.begin == nil || operations.add_frame == nil ||
+    if session == nil || operations.begin == nil ||
+       operations.stage_frame == nil || operations.commit_frame == nil ||
        operations.close == nil || operations.abort == nil ||
        operations.published_path == nil {
         return false
@@ -143,21 +151,76 @@ gif_capture_normalized_frame_with_operations :: proc(
     return frame, true
 }
 
-// gif_capture_encode_frame submits one normalized frame and records acceptance.
-gif_capture_encode_frame :: proc(
+// gif_capture_stage_frame copies one normalized frame into encoder-owned storage.
+gif_capture_stage_frame :: proc(
     state: ^core.Euclid_General_State, frame: ^Framebuffer_Pixels,
-    duration_ms: u64) -> bool {
+    fixed_step: u64, sampled_at: time.Tick) -> bool {
     encoder := state^.gif_capture.operations
-    if encoder.add_frame == nil || !encoder.add_frame(
+    if encoder.stage_frame == nil || !encoder.stage_frame(
         encoder.user_data, {
             pixels = frame^.pixels,
             width = frame^.width,
             height = frame^.height,
             pitch_bytes = frame^.pitch_bytes,
-            duration_ms = duration_ms,
         }) {
         return false
     }
+    state^.gif_capture.staged = true
+    state^.gif_capture.staged_fixed_step = fixed_step
+    state^.gif_capture.staged_at = sampled_at
+    return true
+}
+
+// gif_capture_fixed_step_duration_ms converts deterministic progress to GIF time.
+gif_capture_fixed_step_duration_ms :: #force_inline proc(fixed_steps: u64) -> u64 {
+    if fixed_steps == 0 {return 0}
+    saturation_steps := GIF_MAX_DELAY_MS * u64(LIMIT_FPS) / 1000
+    if fixed_steps >= saturation_steps {return GIF_MAX_DELAY_MS}
+    duration_ms := (fixed_steps * 1000 + u64(LIMIT_FPS / 2)) / u64(LIMIT_FPS)
+    return clamp(duration_ms, GIF_MIN_DELAY_MS, GIF_MAX_DELAY_MS)
+}
+
+// gif_capture_elapsed_duration_ms converts monotonic elapsed seconds to GIF time.
+gif_capture_elapsed_duration_ms :: #force_inline proc(seconds: f64) -> u64 {
+    if seconds <= 0 {return 0}
+    if seconds >= f64(GIF_MAX_DELAY_MS) / 1000 {return GIF_MAX_DELAY_MS}
+    return clamp(u64(seconds * 1000 + 0.5), GIF_MIN_DELAY_MS, GIF_MAX_DELAY_MS)
+}
+
+// gif_capture_nominal_duration_ms returns one frozen cadence interval.
+gif_capture_nominal_duration_ms :: #force_inline proc(frame_step: int) -> u64 {
+    return gif_capture_fixed_step_duration_ms(u64(max(1, frame_step)))
+}
+
+// gif_capture_commit_staged_frame resolves and commits the prior frame interval.
+gif_capture_commit_staged_frame :: proc(
+    state: ^core.Euclid_General_State, fixed_step: u64) -> bool {
+    session := &state^.gif_capture
+    if !session.staged {return true}
+    duration_ms: u64
+    switch session.active_timing_mode {
+    case .Animation:
+        if fixed_step >= session.staged_fixed_step {
+            duration_ms = gif_capture_fixed_step_duration_ms(
+                fixed_step - session.staged_fixed_step)
+        }
+    case .Recorded:
+        duration_ms = gif_capture_elapsed_duration_ms(
+            time.duration_seconds(time.tick_since(session.staged_at)))
+    }
+    if duration_ms == 0 {
+        duration_ms = session.last_duration_ms
+    }
+    if duration_ms == 0 {
+        duration_ms = gif_capture_nominal_duration_ms(session.active_frame_step)
+    }
+    encoder := session.operations
+    if encoder.commit_frame == nil ||
+       !encoder.commit_frame(encoder.user_data, duration_ms) {
+        return false
+    }
+    session.staged = false
+    session.last_duration_ms = duration_ms
     state^.ui_runtime.gif_captured_frames += 1
     return true
 }
@@ -177,14 +240,20 @@ gif_capture_submit_frame :: proc(
     }
 
     ui_runtime := &state.ui_runtime
-    frame_step := clamp(ui_runtime.gif_frame_step, 1, 4)
+    frame_step := state^.gif_capture.active_frame_step
 
     ui_runtime.gif_capture_frame_counter += 1
     if (ui_runtime.gif_capture_frame_counter - 1) % frame_step != 0 {
         return true
     }
 
-    downsample := clamp(ui_runtime.gif_downsample_factor, 1, 4)
+    sampled_fixed_step := state^.fixed_step
+    sampled_at := time.tick_now()
+    if !gif_capture_commit_staged_frame(state, sampled_fixed_step) {
+        return false
+    }
+
+    downsample := state^.gif_capture.active_downsample_factor
     capture_started_at := time.tick_now()
     frame, frame_ok := gif_capture_normalized_frame_with_operations(
         state, downsample, operations)
@@ -196,8 +265,7 @@ gif_capture_submit_frame :: proc(
     }
     defer framebuffer_release_with_operations(&frame, operations)
 
-    duration_ms := u64(gif_capture_delay_centiseconds(frame_step) * 10)
-    return gif_capture_encode_frame(state, &frame, duration_ms)
+    return gif_capture_stage_frame(state, &frame, sampled_fixed_step, sampled_at)
 }
 
 //   Advance GIF capture state machine on fixed-step cycle boundaries.
@@ -336,11 +404,6 @@ set_last_gif_path :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, path: 
     ui_runtime.last_gif_path_len = n
 }
 
-//   Convert frame-step interval into GIF delay centiseconds.
-gif_capture_delay_centiseconds :: #force_inline proc(frame_step: int) -> int {
-    return max(1, int(f32(frame_step) * FIXED_DT * 100.0 + 0.5))
-}
-
 //   Map one logical axis extent into framebuffer pixels using screen/render sizes.
 gif_capture_scaled_extent :: #force_inline proc(
     logical_extent, screen_extent, render_extent: int) -> int {
@@ -389,6 +452,13 @@ gif_capture_begin_session :: proc(
     state^.gif_capture.output_width = out_w
     state^.gif_capture.output_height = out_h
     state^.gif_capture.started_at = time.tick_now()
+    state^.gif_capture.active_downsample_factor = downsample
+    state^.gif_capture.active_frame_step = clamp(ui_runtime.gif_frame_step, 1, 4)
+    state^.gif_capture.active_timing_mode = ui_runtime.gif_timing_mode
+    state^.gif_capture.staged = false
+    state^.gif_capture.staged_fixed_step = 0
+    state^.gif_capture.staged_at = {}
+    state^.gif_capture.last_duration_ms = 0
     state^.gif_capture.frame_materialization_ms = 0
     state^.gif_capture.materialized_frames = 0
     state^.gif_capture.recording_presentations = 0
@@ -410,6 +480,10 @@ gif_capture_finalize_session :: proc(
         return false
     }
 
+    if !gif_capture_commit_staged_frame(state, state^.fixed_step) {
+        gif_capture_abort_session(&state^.gif_capture)
+        return false
+    }
     encoder := state^.gif_capture.operations
     closed := encoder.close != nil && encoder.close(encoder.user_data)
     state^.gif_capture.active = false
