@@ -330,10 +330,12 @@ draw_cache_next_item_slot_storage :: #force_inline proc(
     return slot, true
 }
 
-// Reserve one contiguous frame-local curve vertex span.
+// Reserve one contiguous aligned frame-local curve point and kind span.
 draw_cache_reserve_curve_vertices_storage :: #force_inline proc(
     cache: ^shapemodel.Shapes_Draw_Cache, count: int) -> (int, bool) {
-    if count <= 0 || cache.curve_vertex_count + count > len(cache.curve_vertices) {
+    next := cache.curve_vertex_count + count
+    if count <= 0 || next > len(cache.curve_vertices) ||
+        next > len(cache.curve_vertex_kinds) {
         return 0, false
     }
     first := cache.curve_vertex_count
@@ -341,7 +343,7 @@ draw_cache_reserve_curve_vertices_storage :: #force_inline proc(
     return first, true
 }
 
-// Commit only the initialized prefix of the most recent curve reservation.
+// Commit only the initialized aligned prefix of the most recent curve reservation.
 draw_cache_finalize_curve_vertices_storage :: #force_inline proc(
     cache: ^shapemodel.Shapes_Draw_Cache,
     first, reserved_count, initialized_count: int) {
@@ -350,7 +352,7 @@ draw_cache_finalize_curve_vertices_storage :: #force_inline proc(
     cache.curve_vertex_count = first + initialized_count
 }
 
-// Release the most recent initialized curve span after later packet failure.
+// Release the most recent initialized point and kind span after packet failure.
 draw_cache_rollback_curve_vertices_storage :: #force_inline proc(
     cache: ^shapemodel.Shapes_Draw_Cache, first, initialized_count: int) {
     assert(cache.curve_vertex_count == first + initialized_count)

@@ -32,8 +32,9 @@ bridge_shape_test_input :: proc(
 // Verify constructors return packed identities that resolve to direct world components.
 @(test)
 bridge_shape_abi_round_trips_packed_line_handles :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     result := shape_create_line(state, {1, 2, 3}, {4, 5, 6},
         bridge_shape_test_input({}).style)
@@ -53,8 +54,9 @@ bridge_shape_abi_round_trips_packed_line_handles :: proc(t: ^testing.T) {
 // Verify arc queries return complete geometry and remain isolated by snapshots.
 @(test)
 bridge_shape_abi_queries_arc_geometry_snapshot :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     created := shape_create_arc(state, {1, 2, 3}, {4, 0.5, -1.5},
         bridge_shape_test_input({}).style)
@@ -79,8 +81,9 @@ bridge_shape_abi_queries_arc_geometry_snapshot :: proc(t: ^testing.T) {
 // Verify the generic ABI preserves semantic operation and direct center identities.
 @(test)
 bridge_shape_abi_creates_circle_region :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     result := shape_create_circle_region(state, {0, 0, 0}, {1, 0, 0},
         {i32(shapemodel.Shape_Circle_Region_Operation.Difference), 1, 1},
@@ -103,14 +106,15 @@ bridge_shape_abi_creates_circle_region :: proc(t: ^testing.T) {
 // Verify stale packed arc identities cannot query a reused animation slot.
 @(test)
 bridge_shape_abi_rejects_stale_arc_generation :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
-        &world), shapemodel.Shape_World_Status.Ok)
+        world), shapemodel.Shape_World_Status.Ok)
     stale := shape_create_arc(state, {}, {1, 0, 1}, bridge_shape_test_input({}).style)
     testing.expect_value(t, shapemodel.shape_world_rewind_animation(
-        &world), shapemodel.Shape_World_Status.Ok)
+        world), shapemodel.Shape_World_Status.Ok)
     current := shape_create_arc(state, {}, {2, 0, 2}, bridge_shape_test_input({}).style)
 
     testing.expect(t, stale.shape != current.shape)
@@ -123,8 +127,9 @@ bridge_shape_abi_rejects_stale_arc_generation :: proc(t: ^testing.T) {
 // Verify a captured complete arc mutation becomes visible only at batch commit.
 @(test)
 bridge_shape_arc_mutation_is_atomic_at_scene_commit :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(state^.julia_interface, context.allocator)
@@ -149,8 +154,9 @@ bridge_shape_arc_mutation_is_atomic_at_scene_commit :: proc(t: ^testing.T) {
 // Verify null-terminated UTF-8 source is copied exactly and malformed bytes fail atomically.
 @(test)
 bridge_shape_abi_copies_cstring_unicode_labels :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     before := world.registry.entity_count
     result := shape_create_label(state, cstring("∠A′"),
@@ -173,14 +179,15 @@ bridge_shape_abi_copies_cstring_unicode_labels :: proc(t: ^testing.T) {
 // Verify stale packed handles cannot resolve or mutate a reused animation slot.
 @(test)
 bridge_shape_abi_rejects_stale_generation :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     testing.expect_value(t, shapemodel.shape_world_freeze_baseline(
-        &world), shapemodel.Shape_World_Status.Ok)
+        world), shapemodel.Shape_World_Status.Ok)
     stale := shape_create_point(state, bridge_shape_test_input({1, 0, 0}))
     testing.expect_value(t, shapemodel.shape_world_rewind_animation(
-        &world), shapemodel.Shape_World_Status.Ok)
+        world), shapemodel.Shape_World_Status.Ok)
     current := shape_create_point(state, bridge_shape_test_input({2, 0, 0}))
 
     testing.expect(t, stale.entity != current.entity)
@@ -195,8 +202,9 @@ bridge_shape_abi_rejects_stale_generation :: proc(t: ^testing.T) {
 // Verify a deferred hide emits dust on display-thread commit before visibility clears.
 @(test)
 bridge_shape_hide_emits_world_geometry_dust :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles, context.allocator)
@@ -228,8 +236,9 @@ bridge_shape_hide_emits_world_geometry_dust :: proc(t: ^testing.T) {
 // Verify one batch kick does not immediately age dust emitted by an earlier hide.
 @(test)
 bridge_shape_batch_coalesces_hide_dust_kick :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles, context.allocator)
@@ -263,8 +272,9 @@ bridge_shape_batch_coalesces_hide_dust_kick :: proc(t: ^testing.T) {
 // Verify worker queries remain isolated from later canonical component mutation.
 @(test)
 bridge_shape_abi_reads_query_snapshot :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     created := shape_create_label(state, cstring("β"),
         i32(shapemodel.Shape_Text_Mime.Text_Plain), bridge_shape_test_input({1, 2, 3}))
@@ -282,8 +292,9 @@ bridge_shape_abi_reads_query_snapshot :: proc(t: ^testing.T) {
 // Verify the constraint ABI stores direct packed endpoint targets.
 @(test)
 bridge_constraint_abi_creates_direct_distance_target :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     first := shape_create_point(state, bridge_shape_test_input({1, 0, 0}))
     second := shape_create_point(state, bridge_shape_test_input({3, 0, 0}))
@@ -305,14 +316,15 @@ bridge_constraint_abi_creates_direct_distance_target :: proc(t: ^testing.T) {
 // Verify a captured tool unlock mutates its direct constraint only at commit.
 @(test)
 bridge_tool_unlock_is_deferred_until_scene_commit :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(state^.julia_interface)
     animation := &state^.julia_interface^.null_animation
     state^.julia_interface^.current_animation = animation
-    state^.world_pen, _ = shapes.world_create_pen(&world, {
+    state^.world_pen, _ = shapes.world_create_pen(world, {
         joint1 = {1, 0, 0}, joint2 = {2, 0, 0}, length = 1})
     constraint := &world.constraints.values[state^.world_pen.joint1_lock_constraint]
     constraint^.enabled = true
@@ -344,13 +356,14 @@ expect_compass_filled_sweep :: proc(t: ^testing.T,
 // Verify committed compass moves retain ordered previous and current leg geometry.
 @(test)
 bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     particle_system := new(particlemodel.Particle_System, context.allocator)
     defer free(particle_system, context.allocator)
     state^.particle_system = particle_system
-    state^.world_compass, _ = shapes.world_create_compass(&world, {
+    state^.world_compass, _ = shapes.world_create_compass(world, {
         joint1 = {0.1, 0.2, 0}, pivot = {0.25, 0.3, 0.01},
         joint2 = {0.4, 0.2, 0}, limb_length = 0.2})
 
@@ -382,14 +395,15 @@ bridge_tool_moves_queue_ordered_compound_contacts :: proc(t: ^testing.T) {
 // Verify queue-capacity preflight rejects a complete scene batch before mutation.
 @(test)
 bridge_tool_batch_rejects_full_contact_queue_transactionally :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     particle_system := new(particlemodel.Particle_System, context.allocator)
     defer free(particle_system, context.allocator)
     state^.particle_system = particle_system
     particle_system^.dust_tool_contact_count = particlemodel.DUST_TOOL_CONTACT_CAP
-    state^.world_pen, _ = shapes.world_create_pen(&world, {
+    state^.world_pen, _ = shapes.world_create_pen(world, {
         joint1 = {0.1, 0.2, 0}, joint2 = {0.2, 0.2, 0}, length = 0.1})
     state^.julia_interface = new(bridgemodel.Euclid_Julia_Interface, context.allocator)
     defer free(state^.julia_interface, context.allocator)
@@ -420,8 +434,9 @@ bridge_tool_batch_rejects_full_contact_queue_transactionally :: proc(t: ^testing
 // Verify accepted batches replace drawing activity and rejected batches clear it.
 @(test)
 bridge_scene_batch_publishes_transactional_drawing_activity :: proc(t: ^testing.T) {
-    world: shapemodel.Shape_World
-    state := bridge_shape_test_state(&world)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
     defer free(state)
     particle_system := new(particlemodel.Particle_System, context.allocator)
     defer free(particle_system, context.allocator)

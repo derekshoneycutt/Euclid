@@ -175,12 +175,13 @@ animation_value_batch_commits_scene_and_typed_state :: proc(t: ^testing.T) {
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
     interface: bridgemodel.Euclid_Julia_Interface
-    world: shapemodel.Shape_World
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
-    state^.shape_world = &world
-    entity := animation_value_test_entity(&world, {})
+    state^.shape_world = world
+    entity := animation_value_test_entity(world, {})
     identity := animation_model.Animation_Value_Identity{1, 1, 1, 1}
     _ = animation_model.animation_value_store_set(
         &state^.animation_values, identity, []u8{1})
@@ -211,11 +212,12 @@ animation_value_batch_rejects_typed_write_with_invalid_scene :: proc(t: ^testing
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
     interface: bridgemodel.Euclid_Julia_Interface
-    world: shapemodel.Shape_World
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
-    state^.shape_world = &world
+    state^.shape_world = world
     identity := animation_model.Animation_Value_Identity{1, 1, 1, 1}
     _ = animation_model.animation_value_store_set(
         &state^.animation_values, identity, []u8{1})
@@ -242,12 +244,13 @@ animation_value_batch_rejects_scene_with_invalid_typed_write :: proc(t: ^testing
     testing.expect(t, state != nil)
     defer animation_value_test_state_destroy(state)
     interface: bridgemodel.Euclid_Julia_Interface
-    world: shapemodel.Shape_World
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
     animation := &interface.null_animation
     state^.julia_interface = &interface
     interface.current_animation = animation
-    state^.shape_world = &world
-    entity := animation_value_test_entity(&world, {9, 9, 9})
+    state^.shape_world = world
+    entity := animation_value_test_entity(world, {9, 9, 9})
     batch := bridgemodel.Scene_Command_Batch{animation = animation, command_count = 1}
     batch.commands[0] = {
         kind = .Set_Shape_Position,

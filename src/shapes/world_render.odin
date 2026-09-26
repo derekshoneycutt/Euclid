@@ -417,7 +417,10 @@ world_cache_push_trochoid :: proc(
     }
     vertices := world.draw_cache.curve_vertices[
         first:first + curve.TROCHOID_MAX_VERTICES]
-    result := curve.trochoid_explicate(lerped.center, lerped.value, vertices)
+    kinds := world.draw_cache.curve_vertex_kinds[
+        first:first + curve.TROCHOID_MAX_VERTICES]
+    result := curve.trochoid_explicate_marked(
+        lerped.center, lerped.value, vertices, kinds)
     draw_cache_finalize_curve_vertices_storage(&world.draw_cache,
         first, curve.TROCHOID_MAX_VERTICES, result.vertex_count)
     if result.status == .Invalid_Input || result.vertex_count < 2 {
@@ -431,8 +434,10 @@ world_cache_push_trochoid :: proc(
             &world.draw_cache, first, result.vertex_count)
         return
     }
-    slot^ = Shapes_Curve_Draw{world_make_draw_base(source, .Curve), first,
-        result.vertex_count, result.status == .Capacity_Limited}
+    slot^ = Shapes_Curve_Draw{base = world_make_draw_base(source, .Curve),
+        first_vertex = first, vertex_count = result.vertex_count,
+        capacity_limited = result.status == .Capacity_Limited,
+        topology = result.topology}
 }
 
 // Resolve and interpolate the permanent trochoid guide description.
@@ -529,8 +534,10 @@ world_cache_push_cycloid :: proc(world: ^shapemodel.Shape_World,
     }
     vertices := world.draw_cache.curve_vertices[
         first_vertex:first_vertex + curve.CYCLOID_MAX_VERTICES]
-    result := curve.cycloid_explicate(
-        lerped.first, lerped.second, lerped.value, vertices)
+    kinds := world.draw_cache.curve_vertex_kinds[
+        first_vertex:first_vertex + curve.CYCLOID_MAX_VERTICES]
+    result := curve.cycloid_explicate_marked(
+        lerped.first, lerped.second, lerped.value, vertices, kinds)
     draw_cache_finalize_curve_vertices_storage(&world.draw_cache,
         first_vertex, curve.CYCLOID_MAX_VERTICES, result.vertex_count)
     if result.status == .Invalid_Input || result.vertex_count < 2 {
@@ -544,8 +551,10 @@ world_cache_push_cycloid :: proc(world: ^shapemodel.Shape_World,
             &world.draw_cache, first_vertex, result.vertex_count)
         return
     }
-    slot^ = Shapes_Curve_Draw{world_make_draw_base(source, .Curve), first_vertex,
-        result.vertex_count, result.status == .Capacity_Limited}
+    slot^ = Shapes_Curve_Draw{base = world_make_draw_base(source, .Curve),
+        first_vertex = first_vertex, vertex_count = result.vertex_count,
+        capacity_limited = result.status == .Capacity_Limited,
+        topology = result.topology}
 }
 
 // Resolve and interpolate the permanent literal-line cycloid guide.

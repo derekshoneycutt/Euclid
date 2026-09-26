@@ -82,20 +82,21 @@ animation_retirement_emits_before_world_rewind :: proc(t: ^testing.T) {
     testing.expect(t, state != nil)
     if state == nil {return}
     defer animation_value_test_state_destroy(state)
-    world: shapemodel.Shape_World
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
     particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles, context.allocator)
     service := new(bridgemodel.Julia_Runtime_Service, context.allocator)
     defer free(service, context.allocator)
     service^.animation_generation = 1
-    state^.shape_world = &world
+    state^.shape_world = world
     state^.particle_system = particles
     state^.julia_runtime_service = service
     particles^.use_max_dust_particles = 4
     testing.expect_value(t,
-        shapemodel.shape_world_freeze_baseline(&world), shapemodel.Shape_World_Status.Ok)
+        shapemodel.shape_world_freeze_baseline(world), shapemodel.Shape_World_Status.Ok)
     line, status := shapes.world_create_line(
-        &world, {0, 0, 0}, {1, 0, 0}, {})
+        world, {0, 0, 0}, {1, 0, 0}, {})
     testing.expect_value(t, status, shapemodel.Shape_World_Status.Ok)
     style, found := shapemodel.shape_component_get_mut(
         &world.render_styles, &world.registry, line.shape)

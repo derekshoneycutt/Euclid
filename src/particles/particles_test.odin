@@ -679,10 +679,11 @@ emit_shape_world_clear_burst_spawns_dust_for_direct_line :: proc(t: ^testing.T) 
     particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles)
     particles.use_max_dust_particles = 4
-    world: shapemodel.Shape_World
-    seed_shape_world_particle_line(&world, true)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    seed_shape_world_particle_line(world, true)
 
-    emit_shape_world_clear_burst(particles, &world)
+    emit_shape_world_clear_burst(particles, world)
 
     testing.expect(t, particles.low_particles.alive[0])
     testing.expect(t, particles.low_particles.alive[1])
@@ -694,10 +695,11 @@ emit_shape_world_clear_burst_skips_hidden_geometry :: proc(t: ^testing.T) {
     particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles)
     particles.use_max_dust_particles = 4
-    world: shapemodel.Shape_World
-    seed_shape_world_particle_line(&world, false)
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    seed_shape_world_particle_line(world, false)
 
-    emit_shape_world_clear_burst(particles, &world)
+    emit_shape_world_clear_burst(particles, world)
 
     for alive in particles.low_particles.alive[:particles.use_max_dust_particles] {
         testing.expect(t, !alive)

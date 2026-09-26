@@ -1,6 +1,7 @@
 #+test
 package native
 
+import "core:math"
 import "core:testing"
 
 import color "../../core/color"
@@ -113,6 +114,210 @@ draw_encoder_test_line_circle_and_ring_topology :: proc(t: ^testing.T) {
     testing.expect_value(t, encoder.vertex_count, len(vertices))
     testing.expect_value(t, encoder.index_count, len(indices))
     testing.expect_value(t, encoder.batch_count, 1)
+}
+
+// draw_encoder_test_polyline_round_caps verifies one continuous capped body.
+@(test)
+draw_encoder_test_polyline_round_caps :: proc(t: ^testing.T) {
+    vertices: [32]Draw_Vertex
+    indices: [78]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    points := [2]geometry.Vector2{{10, 10}, {20, 10}}
+    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
+        color = color.WHITE, topology = .Open,
+        start_cap = .Round, finish_cap = .Round}
+
+    testing.expect(t, draw_encoder_polyline(&encoder, points[:], nil, style))
+    testing.expect_value(t, encoder.vertex_count, 32)
+    testing.expect_value(t, encoder.index_count, 78)
+    testing.expect_value(t, vertices[0].position, geometry.Vector2{10, 12})
+    testing.expect_value(t, vertices[1].position, geometry.Vector2{10, 8})
+}
+
+// draw_encoder_test_polyline_diagonal_round_caps verifies rotated cap geometry.
+@(test)
+draw_encoder_test_polyline_diagonal_round_caps :: proc(t: ^testing.T) {
+    vertices: [32]Draw_Vertex
+    indices: [78]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    points := [2]geometry.Vector2{{10, 10}, {20, 20}}
+    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
+        color = color.WHITE, topology = .Open,
+        start_cap = .Round, finish_cap = .Round}
+
+    testing.expect(t, draw_encoder_polyline(&encoder, points[:], nil, style))
+    testing.expect_value(t, encoder.vertex_count, 32)
+    testing.expect_value(t, encoder.index_count, 78)
+    for vertex in vertices {
+        testing.expect(t, draw_polyline_finite_point(vertex.position))
+    }
+}
+
+// draw_encoder_test_polyline_miter_shares_boundary verifies welded join topology.
+@(test)
+draw_encoder_test_polyline_miter_shares_boundary :: proc(t: ^testing.T) {
+    vertices: [6]Draw_Vertex
+    indices: [12]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    points := [3]geometry.Vector2{{10, 10}, {20, 10}, {20, 20}}
+    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
+        color = color.WHITE, topology = .Open}
+
+    testing.expect(t, draw_encoder_polyline(&encoder, points[:], nil, style))
+    testing.expect_value(t, encoder.vertex_count, 6)
+    testing.expect_value(t, encoder.index_count, 12)
+    testing.expect_value(t, vertices[2].position, geometry.Vector2{18, 12})
+    testing.expect_value(t, vertices[3].position, geometry.Vector2{22, 8})
+    testing.expect_value(t, indices,
+        [12]u32{0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4})
+}
+
+// draw_encoder_test_polyline_miter_limit verifies exact bounded classification.
+@(test)
+draw_encoder_test_polyline_miter_limit :: proc(t: ^testing.T) {
+    origin := geometry.Vector2{0, 0}
+    current := geometry.Vector2{1, 0}
+    below_angle := f64(119) * math.PI / 180
+    above_angle := f64(121) * math.PI / 180
+    below := geometry.Vector2{1 + f32(math.cos(below_angle)),
+        f32(math.sin(below_angle))}
+    above := geometry.Vector2{1 + f32(math.cos(above_angle)),
+        f32(math.sin(above_angle))}
+    testing.expect_value(t, draw_polyline_join(
+        origin, current, below, .Ordinary, 2), Draw_Polyline_Join.Miter)
+    testing.expect_value(t, draw_polyline_join(
+        origin, current, above, .Ordinary, 2), Draw_Polyline_Join.Bevel)
+    testing.expect_value(t, draw_polyline_join(origin, current,
+        {0.0001, 0}, .Ordinary, 4), Draw_Polyline_Join.Bevel)
+}
+
+// draw_encoder_test_polyline_bevel_is_finite verifies emitted reversal fallback.
+@(test)
+draw_encoder_test_polyline_bevel_is_finite :: proc(t: ^testing.T) {
+    vertices: [8]Draw_Vertex
+    indices: [15]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    points := [3]geometry.Vector2{{0, 0}, {10, 0}, {0.1, 0.1}}
+    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
+        color = color.WHITE, topology = .Open}
+
+    testing.expect(t, draw_encoder_polyline(&encoder, points[:], nil, style))
+    testing.expect_value(t, encoder.vertex_count, 8)
+    testing.expect_value(t, encoder.index_count, 15)
+    for vertex in vertices {
+        testing.expect(t, draw_polyline_finite_point(vertex.position))
+    }
+}
+
+// draw_encoder_test_polyline_cusp_emits_one_fan verifies semantic cusp topology.
+@(test)
+draw_encoder_test_polyline_cusp_emits_one_fan :: proc(t: ^testing.T) {
+    vertices: [22]Draw_Vertex
+    indices: [48]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    points := [3]geometry.Vector2{{10, 10}, {20, 10}, {10, 10.001}}
+    kinds := [3]Draw_Polyline_Point_Kind{.Ordinary, .Cusp, .Ordinary}
+    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
+        color = color.WHITE, topology = .Open}
+
+    testing.expect(t, draw_encoder_polyline(&encoder, points[:], kinds[:], style))
+    testing.expect_value(t, encoder.vertex_count, 22)
+    testing.expect_value(t, encoder.index_count, 48)
+}
+
+// draw_encoder_test_polyline_closure verifies wrapped joins and cusp deduplication.
+@(test)
+draw_encoder_test_polyline_closure :: proc(t: ^testing.T) {
+    smooth_vertices: [6]Draw_Vertex
+    smooth_indices: [18]u32
+    cusp_vertices: [22]Draw_Vertex
+    cusp_indices: [54]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    triangle := [4]geometry.Vector2{{10, 10}, {30, 10}, {20, 30}, {10, 10}}
+    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
+        color = color.WHITE, topology = .Closed}
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {smooth_vertices[:], smooth_indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    testing.expect(t, draw_encoder_polyline(&encoder, triangle[:], nil, style))
+    testing.expect_value(t, encoder.vertex_count, 6)
+    testing.expect_value(t, encoder.index_count, 18)
+
+    kinds := [4]Draw_Polyline_Point_Kind{.Ordinary, .Ordinary, .Ordinary, .Cusp}
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {cusp_vertices[:], cusp_indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    testing.expect(t, draw_encoder_polyline(&encoder, triangle[:], kinds[:], style))
+    testing.expect_value(t, encoder.vertex_count, 22)
+    testing.expect_value(t, encoder.index_count, 54)
+}
+
+// draw_encoder_test_polyline_compaction preserves a cusp on duplicate samples.
+@(test)
+draw_encoder_test_polyline_compaction :: proc(t: ^testing.T) {
+    points := [4]geometry.Vector2{{0, 0}, {10, 0}, {10, 0}, {0, 0.001}}
+    kinds := [4]Draw_Polyline_Point_Kind{.Ordinary, .Ordinary, .Cusp, .Ordinary}
+    style := Draw_Polyline_Style{width = 2, miter_limit = 4,
+        color = color.WHITE, topology = .Open}
+    summary, valid := draw_polyline_preflight(points[:], kinds[:], style)
+    testing.expect(t, valid)
+    testing.expect_value(t, summary.group_count, 3)
+    testing.expect_value(t, summary.vertices, 22)
+    testing.expect_value(t, summary.indices, 48)
+
+    degenerate := [3]geometry.Vector2{{1, 1}, {1, 1}, {1, 1}}
+    _, valid = draw_polyline_preflight(degenerate[:], nil, style)
+    testing.expect(t, !valid)
+}
+
+// draw_encoder_test_polyline_overflow_is_atomic verifies exact preflight rejection.
+@(test)
+draw_encoder_test_polyline_overflow_is_atomic :: proc(t: ^testing.T) {
+    vertices: [5]Draw_Vertex
+    indices: [12]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+    points := [3]geometry.Vector2{{10, 10}, {20, 10}, {20, 20}}
+    style := Draw_Polyline_Style{width = 4, miter_limit = 4,
+        color = color.WHITE, topology = .Open}
+
+    testing.expect(t, !draw_encoder_polyline(&encoder, points[:], nil, style))
+    testing.expect_value(t, encoder.vertex_count, 0)
+    testing.expect_value(t, encoder.index_count, 0)
+    testing.expect_value(t, encoder.batch_count, 0)
+    testing.expect_value(t, encoder.command_count, 0)
+    testing.expect_value(t, encoder.statistics.primitive_overflows, u32(1))
 }
 
 // Verify textured quads preserve UVs and split ordered pipeline batches.

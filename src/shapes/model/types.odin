@@ -152,12 +152,26 @@ Shapes_Filled_Circle_Draw :: struct {
     sweep_theta: f32,
 }
 
+// Identify whether one frame-local curve point is ordinary or an analytic cusp.
+Curve_Point_Kind :: enum u8 {
+    Ordinary,
+    Cusp,
+}
+
+// Describe whether one frame-local curve is open or closes at an ordinary or cusp point.
+Curve_Topology :: enum u8 {
+    Open,
+    Closed,
+    Cusp_Closed,
+}
+
 // Locate one explicated analytic curve in the frame-local vertex pool.
 Shapes_Curve_Draw :: struct {
     using base: Shapes_Draw_Base,
     first_vertex: int,
     vertex_count: int,
     capacity_limited: bool,
+    topology: Curve_Topology,
 }
 
 Shapes_Polygon_Ring_Node :: struct {
@@ -243,6 +257,7 @@ Shapes_Draw_Cache :: struct {
     polygon_ring_nodes: [MAX_DRAW_CACHE_POLYGON_VERTICES]Shapes_Polygon_Ring_Node,
 
     curve_vertices: [MAX_DRAW_CACHE_CURVE_VERTICES]Vector3,
+    curve_vertex_kinds: [MAX_DRAW_CACHE_CURVE_VERTICES]Curve_Point_Kind,
     curve_vertex_count: int,
 
     trochoid_tool: Shapes_Trochoid_Tool_Draw,

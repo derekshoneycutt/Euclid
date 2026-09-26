@@ -58,6 +58,9 @@ Pen_Fragment_Draw :: struct {
 }
 
 CIRCLE_ARC_SEGMENTS :: 96
+CIRCLE_CLOSED_SWEEP_EPSILON :: 0.0001
+MAX_CURVE_VISIBLE_POINTS :: (shapemodel.MAX_DRAW_CACHE_CURVE_VERTICES - 1) * 2
+MAX_CURVE_VISIBLE_RUNS :: shapemodel.MAX_DRAW_CACHE_CURVE_VERTICES
 
 COMPASS_TOPCIRCLE_SEGMENTS :: 48
 COMPASS_TOPCIRCLE_VECTORS :: COMPASS_TOPCIRCLE_SEGMENTS + 1
@@ -91,6 +94,7 @@ STROKE3D_TITANIUM_MATERIAL :: Tool_Brush_Material{
 STROKE3D_VIEW_RIGHT :: Vector3{0.70710678, -0.70710678, 0.0}
 STROKE3D_VIEW_UP :: Vector3{0.40824829, 0.40824829, 0.81649658}
 STROKE3D_VIEW_FORWARD :: Vector3{-0.57735027, -0.57735027, 0.57735027}
+COLORED_STROKE_MITER_LIMIT :: 4.0
 
 LABEL_DECORATION_STROKE_SCALE :: 0.14
 LABEL_DECORATION_WIDTH_SCALE :: 0.72
@@ -154,6 +158,61 @@ Iso_Batch_Project_Params :: struct {
     world_points: []Vector3,
     xs, ys, zs:   []f32,
     out:          []Vector2,
+}
+
+// Locate one contiguous projected curve run in caller-owned bounded storage.
+Curve_Visible_Run :: struct {
+    first_point: int,
+    point_count: int,
+    topology: shapemodel.Curve_Topology,
+}
+
+// Group caller-owned outputs used to build clipped projected curve runs.
+Curve_Visible_Run_Buffers :: struct {
+    points: []Vector2,
+    kinds: []shapemodel.Curve_Point_Kind,
+    runs: []Curve_Visible_Run,
+}
+
+// Report the initialized output prefixes from one visible-run build.
+Curve_Visible_Run_Result :: struct {
+    point_count: int,
+    run_count: int,
+    ok: bool,
+}
+
+// Hold exact visible-run capacity requirements before output mutation.
+Curve_Visible_Run_Counts :: struct {
+    point_count: int,
+    run_count: int,
+    unchanged: bool,
+}
+
+// Group source geometry and projection policy for one visible-run build.
+Curve_Visible_Run_Input :: struct {
+    scale: viewmodel.Iso_Scale,
+    points: []Vector3,
+    kinds: []shapemodel.Curve_Point_Kind,
+    topology: shapemodel.Curve_Topology,
+    keep_above: bool,
+    shadow: bool,
+}
+
+Curve_Visible_Edge_Kind :: enum u8 {
+    Hidden,
+    Inside,
+    Exit,
+    Entry,
+}
+
+// Hold bounded write state while contiguous visible runs are assembled.
+Curve_Visible_Run_Writer :: struct {
+    input: Curve_Visible_Run_Input,
+    buffers: Curve_Visible_Run_Buffers,
+    point_count: int,
+    run_count: int,
+    run_start: int,
+    active: bool,
 }
 
 //   Shared basis for the compass top-circle arc that lies outside the swing angle.
@@ -507,8 +566,11 @@ draw_encoded_tool_segment :: proc(
     segment_length := linalg.length(delta)
     if segment_length <= 0 || thickness <= 0 {return}
     if !encoder^.strokes_enabled {
-        _ = native.draw_encoder_line(encoder, geometry.Vector2(p0),
-            geometry.Vector2(p1), thickness, draw_color)
+        points := [2]geometry.Vector2{geometry.Vector2(p0), geometry.Vector2(p1)}
+        style := native.Draw_Polyline_Style{width = thickness,
+            miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
+            topology = .Open, start_cap = .Round, finish_cap = .Round}
+        _ = native.draw_encoder_polyline(encoder, points[:], nil, style)
         return
     }
     vertices := encoded_tool_segment_vertices(encoder, draw)
@@ -519,8 +581,11 @@ draw_encoded_tool_segment :: proc(
     appended := native.draw_encoder_append_stroke(encoder, vertices[:],
         encoded_stroke_vertex_uniforms(encoder), fragment_uniforms)
     if !appended {
-        _ = native.draw_encoder_line(encoder, geometry.Vector2(p0),
-            geometry.Vector2(p1), thickness, draw_color)
+        points := [2]geometry.Vector2{geometry.Vector2(p0), geometry.Vector2(p1)}
+        style := native.Draw_Polyline_Style{width = thickness,
+            miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
+            topology = .Open, start_cap = .Round, finish_cap = .Round}
+        _ = native.draw_encoder_polyline(encoder, points[:], nil, style)
     }
 }
 
@@ -845,6 +910,140 @@ z_split_clip_segment_halfspace :: #force_inline proc(
     }
 
     return true
+}
+
+// Classify one source edge by its selected halfspace transition.
+curve_visible_edge_kind :: #force_inline proc(
+    first_in, second_in: bool) -> Curve_Visible_Edge_Kind {
+    if first_in && second_in {return .Inside}
+    if first_in {return .Exit}
+    if second_in {return .Entry}
+    return .Hidden
+}
+
+// Add one classified edge's exact storage cost to preflight state.
+curve_visible_count_edge :: #force_inline proc(counts: ^Curve_Visible_Run_Counts,
+    edge: Curve_Visible_Edge_Kind, active: ^bool) {
+    switch edge {
+    case .Inside:
+        if active^ {
+            counts.point_count += 1
+        } else {
+            counts.run_count += 1
+            counts.point_count += 2
+            active^ = true
+        }
+    case .Exit:
+        counts.point_count += 1
+        if !active^ {
+            counts.run_count += 1
+            counts.point_count += 1
+        }
+        active^ = false
+    case .Entry:
+        counts.run_count += 1
+        counts.point_count += 2
+        active^ = true
+    case .Hidden:
+        active^ = false
+    }
+}
+
+// Count clipped curve points and contiguous runs without mutating output storage.
+curve_visible_run_counts :: proc(
+    points: []Vector3, keep_above: bool) -> Curve_Visible_Run_Counts {
+    counts := Curve_Visible_Run_Counts{unchanged = true}
+    active := false
+    for index in 1..<len(points) {
+        first_in := z_split_point_in_halfspace(points[index - 1], keep_above)
+        second_in := z_split_point_in_halfspace(points[index], keep_above)
+        counts.unchanged = counts.unchanged && first_in && second_in
+        edge := curve_visible_edge_kind(first_in, second_in)
+        curve_visible_count_edge(&counts, edge, &active)
+    }
+    return counts
+}
+
+// Append one projected point and its semantic kind to preflighted output storage.
+curve_visible_append_point :: #force_inline proc(input: Curve_Visible_Run_Input,
+    buffers: Curve_Visible_Run_Buffers, point: Vector3,
+    kind: shapemodel.Curve_Point_Kind, point_count: ^int) {
+    projected := point
+    if input.shadow {projected = project_to_floor_shadow(point, input.scale)}
+    buffers.points[point_count^] = view_core.iso_to_cartesian(projected, input.scale)
+    buffers.kinds[point_count^] = kind
+    point_count^ += 1
+}
+
+// Store one completed run with closure retained only for an untouched whole path.
+curve_visible_finish_run :: #force_inline proc(buffers: Curve_Visible_Run_Buffers,
+    first_point, point_count: int, topology: shapemodel.Curve_Topology,
+    run_count: ^int) {
+    buffers.runs[run_count^] = {first_point, point_count - first_point, topology}
+    run_count^ += 1
+}
+
+// Begin one visible run with its first projected point and semantic kind.
+curve_visible_begin_run :: #force_inline proc(writer: ^Curve_Visible_Run_Writer,
+    point: Vector3, kind: shapemodel.Curve_Point_Kind) {
+    writer.run_start = writer.point_count
+    curve_visible_append_point(
+        writer.input, writer.buffers, point, kind, &writer.point_count)
+    writer.active = true
+}
+
+// Emit one classified source edge into preflighted projected run storage.
+curve_visible_write_edge :: proc(
+    writer: ^Curve_Visible_Run_Writer, index: int, edge: Curve_Visible_Edge_Kind) {
+    first := writer.input.points[index - 1]
+    second := writer.input.points[index]
+    if edge == .Inside {
+        if !writer.active {
+            curve_visible_begin_run(writer, first, writer.input.kinds[index - 1])
+        }
+        curve_visible_append_point(writer.input, writer.buffers,
+            second, writer.input.kinds[index], &writer.point_count)
+    } else if edge == .Exit {
+        if !writer.active {
+            curve_visible_begin_run(writer, first, writer.input.kinds[index - 1])
+        }
+        intersection := z_split_intersection_with_plane(first, second)
+        curve_visible_append_point(writer.input, writer.buffers,
+            intersection, .Ordinary, &writer.point_count)
+        curve_visible_finish_run(writer.buffers, writer.run_start,
+            writer.point_count, .Open, &writer.run_count)
+        writer.active = false
+    } else if edge == .Entry {
+        intersection := z_split_intersection_with_plane(first, second)
+        curve_visible_begin_run(writer, intersection, .Ordinary)
+        curve_visible_append_point(writer.input, writer.buffers,
+            second, writer.input.kinds[index], &writer.point_count)
+    }
+}
+
+// Clip world-space curve edges and assemble contiguous projected visible runs.
+build_projected_curve_visible_runs :: proc(input: Curve_Visible_Run_Input,
+    buffers: Curve_Visible_Run_Buffers) -> Curve_Visible_Run_Result {
+    if len(input.points) < 2 || len(input.kinds) < len(input.points) {return {}}
+    counts := curve_visible_run_counts(input.points, input.keep_above)
+    if counts.point_count > len(buffers.points) ||
+        counts.point_count > len(buffers.kinds) || counts.run_count > len(buffers.runs) {
+        return {}
+    }
+    output_topology := shapemodel.Curve_Topology.Open
+    if counts.unchanged && counts.run_count == 1 {output_topology = input.topology}
+    writer := Curve_Visible_Run_Writer{input = input, buffers = buffers}
+    for index in 1..<len(input.points) {
+        first_in := z_split_point_in_halfspace(input.points[index - 1], input.keep_above)
+        second_in := z_split_point_in_halfspace(input.points[index], input.keep_above)
+        edge := curve_visible_edge_kind(first_in, second_in)
+        curve_visible_write_edge(&writer, index, edge)
+    }
+    if writer.active {
+        curve_visible_finish_run(buffers, writer.run_start,
+            writer.point_count, output_topology, &writer.run_count)
+    }
+    return {writer.point_count, writer.run_count, true}
 }
 
 //   Apply 0.25x alpha attenuation for lower z-split fragments.
@@ -1486,23 +1685,69 @@ draw_encoded_cached_line :: proc(
     }
     first := view_core.iso_to_cartesian(clipped0, state^.iso_scale^)
     second := view_core.iso_to_cartesian(clipped1, state^.iso_scale^)
-    _ = native.draw_encoder_line(encoder, geometry.Vector2(first),
-        geometry.Vector2(second), line^.brush_size,
-        color.Color_RGBA8(draw_color))
+    points := [2]geometry.Vector2{geometry.Vector2(first), geometry.Vector2(second)}
+    style := native.Draw_Polyline_Style{width = line^.brush_size,
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = color.Color_RGBA8(draw_color), topology = .Open,
+        start_cap = .Round, finish_cap = .Round}
+    _ = native.draw_encoder_polyline(encoder, points[:], nil, style)
 }
 
-// draw_encoded_cached_curve encodes every z-clipped explicated curve segment.
+// draw_encoded_curve_visible_runs submits topology-aware projected curve runs.
+draw_encoded_curve_visible_runs :: proc(
+    encoder: ^native.Draw_Encoder, buffers: Curve_Visible_Run_Buffers,
+    result: Curve_Visible_Run_Result, width: f32, draw_color: color.Color_RGBA8) {
+    #assert(size_of(shapemodel.Curve_Point_Kind) ==
+        size_of(native.Draw_Polyline_Point_Kind))
+    for run in buffers.runs[:result.run_count] {
+        points := buffers.points[run.first_point:run.first_point + run.point_count]
+        model_kinds := buffers.kinds[run.first_point:run.first_point + run.point_count]
+        kinds := transmute([]native.Draw_Polyline_Point_Kind)model_kinds
+        topology := native.Draw_Polyline_Topology.Open
+        if run.topology != .Open {topology = .Closed}
+        style := native.Draw_Polyline_Style{width = width,
+            miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
+            topology = topology, start_cap = .Round, finish_cap = .Round}
+        _ = native.draw_encoder_polyline(encoder, points, kinds, style)
+    }
+}
+
+// draw_encoded_cached_curve encodes every z-clipped explicated curve run.
 draw_encoded_cached_curve :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     curve: ^shapemodel.Shapes_Curve_Draw, keep_above: bool) {
     cache := &state^.shape_world^.draw_cache
     vertices := cache^.curve_vertices[
         curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
-    for index in 1..<len(vertices) {
-        line := shapemodel.Shapes_Line_Draw{
-            curve^.base, vertices[index - 1], vertices[index]}
-        draw_encoded_cached_line(state, encoder, &line, keep_above)
+    kinds := cache^.curve_vertex_kinds[
+        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
+    projected: [MAX_CURVE_VISIBLE_POINTS]Vector2
+    projected_kinds: [MAX_CURVE_VISIBLE_POINTS]shapemodel.Curve_Point_Kind
+    runs: [MAX_CURVE_VISIBLE_RUNS]Curve_Visible_Run
+    buffers := Curve_Visible_Run_Buffers{projected[:], projected_kinds[:], runs[:]}
+    result := build_projected_curve_visible_runs({state^.iso_scale^,
+        vertices, kinds, curve^.topology, keep_above, false}, buffers)
+    if !result.ok {return}
+    draw_color := color.Color_RGBA8(curve^.color)
+    if !keep_above {
+        for point in vertices {
+            if z_split_sign(point.z) < 0 {
+                draw_color = z_split_lower_fragment_color(draw_color)
+                break
+            }
+        }
     }
+    draw_encoded_curve_visible_runs(
+        encoder, buffers, result, curve^.brush_size, draw_color)
+}
+
+// circle_arc_polyline_topology closes only complete sampled circumferences.
+circle_arc_polyline_topology :: #force_inline proc(
+    sweep_theta: f32) -> native.Draw_Polyline_Topology {
+    if math.abs(math.abs(sweep_theta) - 2 * math.PI) <= CIRCLE_CLOSED_SWEEP_EPSILON {
+        return .Closed
+    }
+    return .Open
 }
 
 // draw_encoded_cached_circle encodes one sampled projected circle or arc.
@@ -1518,12 +1763,12 @@ draw_encoded_cached_circle :: proc(
     _ = project_iso_points_batch_with_components(state, {
         world_points = arc_world[:], xs = xs[:], ys = ys[:],
         zs = zs[:], out = projected[:]})
-    for index in 1..<len(projected) {
-        _ = native.draw_encoder_line(encoder,
-            geometry.Vector2(projected[index - 1]),
-            geometry.Vector2(projected[index]), circle^.brush_size,
-            color.Color_RGBA8(circle^.color))
-    }
+    topology := circle_arc_polyline_topology(circle^.sweep_theta)
+    style := native.Draw_Polyline_Style{width = circle^.brush_size,
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = color.Color_RGBA8(circle^.color), topology = topology,
+        start_cap = .Round, finish_cap = .Round}
+    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
 // draw_encoded_cached_filled_circle encodes one projected filled sector.
@@ -1593,25 +1838,36 @@ draw_encoded_cached_line_shadow :: proc(
         line^.point1, line^.point2, true, &clipped0, &clipped1) {return}
     clipped := [2]Vector3{clipped0, clipped1}
     draw_color := encoded_shadow_color(average_shadow_height(clipped[:]))
-    _ = native.draw_encoder_line(encoder,
+    projected := [2]geometry.Vector2{
         geometry.Vector2(shadow_to_screen(clipped0, state)),
-        geometry.Vector2(shadow_to_screen(clipped1, state)),
-        math.max(line^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
-        draw_color)
+        geometry.Vector2(shadow_to_screen(clipped1, state))}
+    style := native.Draw_Polyline_Style{
+        width = math.max(line^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
+        topology = .Open, start_cap = .Round, finish_cap = .Round}
+    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
-// draw_encoded_cached_curve_shadow encodes every explicated curve shadow segment.
+// draw_encoded_cached_curve_shadow encodes clipped curve shadows as visible runs.
 draw_encoded_cached_curve_shadow :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     curve: ^shapemodel.Shapes_Curve_Draw) {
     cache := &state^.shape_world^.draw_cache
     vertices := cache^.curve_vertices[
         curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
-    for index in 1..<len(vertices) {
-        line := shapemodel.Shapes_Line_Draw{
-            curve^.base, vertices[index - 1], vertices[index]}
-        draw_encoded_cached_line_shadow(state, encoder, &line)
-    }
+    if !has_any_elevated_shadow_point(vertices) {return}
+    kinds := cache^.curve_vertex_kinds[
+        curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
+    projected: [MAX_CURVE_VISIBLE_POINTS]Vector2
+    projected_kinds: [MAX_CURVE_VISIBLE_POINTS]shapemodel.Curve_Point_Kind
+    runs: [MAX_CURVE_VISIBLE_RUNS]Curve_Visible_Run
+    buffers := Curve_Visible_Run_Buffers{projected[:], projected_kinds[:], runs[:]}
+    result := build_projected_curve_visible_runs({state^.iso_scale^,
+        vertices, kinds, curve^.topology, true, true}, buffers)
+    if !result.ok {return}
+    thickness := math.max(curve^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
+    draw_encoded_curve_visible_runs(encoder, buffers, result, thickness,
+        encoded_shadow_color(average_shadow_height(vertices)))
 }
 
 // draw_encoded_cached_circle_shadow encodes sampled elevated arc shadows.
@@ -1623,11 +1879,17 @@ draw_encoded_cached_circle_shadow :: proc(
         circle^.start_theta, circle^.sweep_theta)
     points: [CIRCLE_ARC_SEGMENTS + 1]Vector3
     circle_arc_sample_world(&geometry_value, points[:])
-    for index in 1..<len(points) {
-        line := shapemodel.Shapes_Line_Draw{
-            circle^.base, points[index - 1], points[index]}
-        draw_encoded_cached_line_shadow(state, encoder, &line)
+    projected: [CIRCLE_ARC_SEGMENTS + 1]Vector2
+    for point, index in points {
+        projected[index] = shadow_to_screen(point, state)
     }
+    topology := circle_arc_polyline_topology(circle^.sweep_theta)
+    style := native.Draw_Polyline_Style{
+        width = math.max(circle^.brush_size * 0.8, SHADOW_MIN_THICKNESS),
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = encoded_shadow_color(circle^.center.z), topology = topology,
+        start_cap = .Round, finish_cap = .Round}
+    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
 // draw_encoded_cached_filled_circle_shadow encodes a projected filled shadow fan.

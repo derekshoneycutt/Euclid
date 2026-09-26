@@ -7,6 +7,9 @@ import geometry "../../core/geometry"
 
 DRAW_SCISSOR_STACK_CAPACITY :: 16
 DRAW_CIRCLE_SEGMENTS :: 32
+DRAW_POLYLINE_FAN_SEGMENTS :: 12
+DRAW_POLYLINE_POINT_EPSILON :: 0.001
+DRAW_POLYLINE_MITER_EPSILON :: 0.0001
 
 // Draw_Pipeline selects one immutable native 2D graphics pipeline.
 Draw_Pipeline :: enum u8 {
@@ -161,6 +164,73 @@ Draw_State :: struct {
     pipeline: Draw_Pipeline,
     texture:  rawptr,
     sampler:  Draw_Sampler,
+}
+
+// Draw_Polyline_Point_Kind preserves semantic cusp intent through tessellation.
+Draw_Polyline_Point_Kind :: enum u8 {
+    Ordinary,
+    Cusp,
+}
+
+// Draw_Polyline_Topology controls endpoint and closure treatment.
+Draw_Polyline_Topology :: enum u8 {
+    Open,
+    Closed,
+}
+
+// Draw_Polyline_Cap selects whether an open end receives a round fan.
+Draw_Polyline_Cap :: enum u8 {
+    Butt,
+    Round,
+}
+
+// Draw_Polyline_Style groups one colored stroke's topology and geometry policy.
+Draw_Polyline_Style :: struct {
+    width:       f32,
+    miter_limit: f32,
+    color:       color.Color_RGBA8,
+    topology:    Draw_Polyline_Topology,
+    start_cap:   Draw_Polyline_Cap,
+    finish_cap:  Draw_Polyline_Cap,
+}
+
+Draw_Polyline_Group :: struct {
+    point: geometry.Vector2,
+    kind:  Draw_Polyline_Point_Kind,
+    next:  int,
+}
+
+Draw_Polyline_Summary :: struct {
+    group_count: int,
+    raw_end:     int,
+    first_kind:  Draw_Polyline_Point_Kind,
+    vertices:    int,
+    indices:     int,
+}
+
+Draw_Polyline_Join :: enum u8 {
+    Miter,
+    Bevel,
+    Cusp,
+}
+
+Draw_Polyline_Pair :: struct {
+    left:  u32,
+    right: u32,
+}
+
+Draw_Polyline_Node :: struct {
+    incoming: Draw_Polyline_Pair,
+    outgoing: Draw_Polyline_Pair,
+}
+
+Draw_Polyline_Builder :: struct {
+    encoder:      ^Draw_Encoder,
+    batch:        ^Draw_Batch,
+    base_vertex:  u32,
+    vertex_count: int,
+    index_count:  int,
+    color:        color.Color_RGBA8,
 }
 
 // Draw_Encoder_Statistics records bounded work and rejected primitives.
@@ -461,7 +531,9 @@ draw_encoder_finish_dust :: proc(
 // draw_encoder_commit_instanced_dust admits one instance-stream command.
 draw_encoder_commit_instanced_dust :: proc(
     encoder: ^Draw_Encoder, count: int, texture: rawptr) -> bool {
-    if encoder^.dust_draw_count >= len(encoder^.dust_draws) {return false}
+    if encoder^.dust_draw_count >= len(encoder^.dust_draws) {
+        return false
+    }
     draw_index := encoder^.dust_draw_count
     encoder^.dust_draws[draw_index] = {first = 0, count = u32(count),
         texture = texture, scissor = draw_encoder_physical_scissor(encoder),
@@ -505,10 +577,14 @@ draw_encoder_commit_dust :: proc(
     encoder: ^Draw_Encoder, count: int, texture: rawptr) -> bool {
     if encoder == nil || count < 0 || count > len(encoder^.dust_instances) ||
         texture == nil || encoder^.command_count >= len(encoder^.commands) {
-        if encoder != nil {encoder^.statistics.dust_overflows += 1}
+        if encoder != nil {
+            encoder^.statistics.dust_overflows += 1
+        }
         return false
     }
-    if count == 0 {return true}
+    if count == 0 {
+        return true
+    }
     admitted := false
     if encoder^.dust_instancing_enabled {
         admitted = draw_encoder_commit_instanced_dust(encoder, count, texture)
@@ -526,7 +602,9 @@ draw_encoder_commit :: proc(
     state: Draw_State) -> bool {
     batch, ready := draw_encoder_prepare(
         encoder, len(positions), len(relative_indices), state)
-    if !ready {return false}
+    if !ready {
+        return false
+    }
     base_vertex := u32(encoder^.vertex_count)
     for position, offset in positions {
         encoder^.vertices[encoder^.vertex_count + offset] = {
@@ -548,11 +626,14 @@ draw_encoder_commit_textured :: proc(
     encoder: ^Draw_Encoder, vertices: Draw_Textured_Vertices,
     relative_indices: []u32, draw_color: color.Color_RGBA8,
     binding: Draw_Texture_Binding) -> bool {
-    if binding.texture == nil ||
-        len(vertices.positions) != len(vertices.texcoords) {return false}
+    if binding.texture == nil || len(vertices.positions) != len(vertices.texcoords) {
+        return false
+    }
     batch, ready := draw_encoder_prepare(encoder, len(vertices.positions),
         len(relative_indices), {.Textured, binding.texture, binding.sampler})
-    if !ready {return false}
+    if !ready {
+        return false
+    }
     base_vertex := u32(encoder^.vertex_count)
     for position, offset in vertices.positions {
         encoder^.vertices[encoder^.vertex_count + offset] = {
@@ -634,11 +715,448 @@ draw_encoder_line :: proc(
         draw_color, {pipeline = .Colored})
 }
 
+// draw_polyline_finite_point reports whether one projected point is usable.
+draw_polyline_finite_point :: #force_inline proc(point: geometry.Vector2) -> bool {
+    return !math.is_nan(point.x) && !math.is_inf(point.x) &&
+        !math.is_nan(point.y) && !math.is_inf(point.y)
+}
+
+// draw_polyline_distance_squared returns squared projected separation.
+draw_polyline_distance_squared :: #force_inline proc(
+    first, second: geometry.Vector2) -> f32 {
+    delta := second - first
+    return delta.x * delta.x + delta.y * delta.y
+}
+
+// draw_polyline_unit returns the direction of one validated edge.
+draw_polyline_unit :: #force_inline proc(
+    first, second: geometry.Vector2) -> geometry.Vector2 {
+    delta := second - first
+    length := f32(math.sqrt(f64(delta.x * delta.x + delta.y * delta.y)))
+    return delta / length
+}
+
+// draw_polyline_kind_at reads an optional parallel semantic-kind stream.
+draw_polyline_kind_at :: #force_inline proc(
+    kinds: []Draw_Polyline_Point_Kind, index: int) -> Draw_Polyline_Point_Kind {
+    if len(kinds) == 0 {
+        return .Ordinary
+    }
+    return kinds[index]
+}
+
+// draw_polyline_next_group compacts one consecutive projected-point cluster.
+draw_polyline_next_group :: proc(
+    points: []geometry.Vector2, kinds: []Draw_Polyline_Point_Kind,
+    raw_start, raw_end: int) -> (Draw_Polyline_Group, bool) {
+    if raw_start >= raw_end {
+        return {}, false
+    }
+    group := Draw_Polyline_Group{point = points[raw_start],
+        kind = draw_polyline_kind_at(kinds, raw_start), next = raw_start + 1}
+    epsilon_squared := f32(DRAW_POLYLINE_POINT_EPSILON * DRAW_POLYLINE_POINT_EPSILON)
+    for group.next < raw_end && draw_polyline_distance_squared(
+        group.point, points[group.next]) <= epsilon_squared {
+        if draw_polyline_kind_at(kinds, group.next) == .Cusp {
+            group.kind = .Cusp
+        }
+        group.next += 1
+    }
+    return group, true
+}
+
+// draw_polyline_join classifies one ordinary or semantic interior point.
+draw_polyline_join :: proc(
+    previous, current, next: geometry.Vector2,
+    kind: Draw_Polyline_Point_Kind, miter_limit: f32) -> Draw_Polyline_Join {
+    if kind == .Cusp {return .Cusp}
+    incoming := draw_polyline_unit(previous, current)
+    outgoing := draw_polyline_unit(current, next)
+    normal_sum := geometry.Vector2{-incoming.y - outgoing.y,
+        incoming.x + outgoing.x}
+    length_squared := draw_polyline_distance_squared({}, normal_sum)
+    if length_squared <= DRAW_POLYLINE_MITER_EPSILON *
+        DRAW_POLYLINE_MITER_EPSILON {return .Bevel}
+    bisector := normal_sum / f32(math.sqrt(f64(length_squared)))
+    outgoing_normal := geometry.Vector2{-outgoing.y, outgoing.x}
+    denominator := math.abs(bisector.x * outgoing_normal.x +
+        bisector.y * outgoing_normal.y)
+    if denominator <= DRAW_POLYLINE_MITER_EPSILON || 1 / denominator > miter_limit {
+        return .Bevel
+    }
+    return .Miter
+}
+
+// draw_polyline_join_cost returns exact local geometry counts.
+draw_polyline_join_cost :: #force_inline proc(
+    join: Draw_Polyline_Join) -> (vertices, indices: int) {
+    switch join {
+    case .Miter:
+        return 2, 0
+    case .Bevel:
+        return 4, 3
+    case .Cusp:
+        return DRAW_POLYLINE_FAN_SEGMENTS + 6, DRAW_POLYLINE_FAN_SEGMENTS * 3
+    }
+    return
+}
+
+// draw_polyline_endpoint_cost returns exact pair and optional fan counts.
+draw_polyline_endpoint_cost :: #force_inline proc(
+    cap: Draw_Polyline_Cap) -> (vertices, indices: int) {
+    if cap == .Round {
+        return DRAW_POLYLINE_FAN_SEGMENTS + 4, DRAW_POLYLINE_FAN_SEGMENTS * 3
+    }
+    return 2, 0
+}
+
+// draw_polyline_compact_summary validates and counts retained points.
+draw_polyline_compact_summary :: proc(
+    points: []geometry.Vector2,
+    kinds: []Draw_Polyline_Point_Kind,
+    topology: Draw_Polyline_Topology) -> (Draw_Polyline_Summary, bool) {
+
+    if len(points) < 2 || (len(kinds) != 0 && len(kinds) != len(points)) {
+        return {}, false
+    }
+    for point in points {
+        if !draw_polyline_finite_point(point) {
+            return {}, false
+        }
+    }
+    first, _ := draw_polyline_next_group(points, kinds, 0, len(points))
+    summary := Draw_Polyline_Summary{raw_end = len(points), first_kind = first.kind}
+    cursor, last_start := 0, 0
+    last := first
+    for cursor < len(points) {
+        last_start = cursor
+        last, _ = draw_polyline_next_group(points, kinds, cursor, len(points))
+        summary.group_count += 1
+        cursor = last.next
+    }
+    epsilon_squared := f32(DRAW_POLYLINE_POINT_EPSILON * DRAW_POLYLINE_POINT_EPSILON)
+    if topology == .Closed && summary.group_count > 1 &&
+        draw_polyline_distance_squared(first.point, last.point) <= epsilon_squared {
+        summary.raw_end = last_start
+        summary.group_count -= 1
+        if last.kind == .Cusp {summary.first_kind = .Cusp}
+    }
+    minimum := 2
+    if topology == .Closed {minimum = 3}
+    return summary, summary.group_count >= minimum
+}
+
+// draw_polyline_last_group returns the final compacted point in a range.
+draw_polyline_last_group :: proc(
+    points: []geometry.Vector2, kinds: []Draw_Polyline_Point_Kind,
+    raw_end: int) -> Draw_Polyline_Group {
+    cursor := 0
+    group: Draw_Polyline_Group
+    for cursor < raw_end {
+        group, _ = draw_polyline_next_group(points, kinds, cursor, raw_end)
+        cursor = group.next
+    }
+    return group
+}
+
+// draw_polyline_count_join adds one classified node to an exact summary.
+draw_polyline_count_join :: #force_inline proc(
+    summary: ^Draw_Polyline_Summary, previous, current, next: Draw_Polyline_Group,
+    miter_limit: f32) {
+    join := draw_polyline_join(previous.point, current.point,
+        next.point, current.kind, miter_limit)
+    vertices, indices := draw_polyline_join_cost(join)
+    summary^.vertices += vertices
+    summary^.indices += indices
+}
+
+// draw_polyline_valid_style rejects nonfinite or geometrically invalid policy.
+draw_polyline_valid_style :: #force_inline proc(style: Draw_Polyline_Style) -> bool {
+    return !math.is_nan(style.width) && !math.is_inf(style.width) &&
+        !math.is_nan(style.miter_limit) && !math.is_inf(style.miter_limit) &&
+        style.width > 0 && style.miter_limit > 1
+}
+
+// draw_polyline_preflight computes exact topology cost before encoder mutation.
+draw_polyline_preflight :: proc(
+    points: []geometry.Vector2, kinds: []Draw_Polyline_Point_Kind,
+    style: Draw_Polyline_Style) -> (Draw_Polyline_Summary, bool) {
+    summary, valid := draw_polyline_compact_summary(points, kinds, style.topology)
+    if !valid || !draw_polyline_valid_style(style) {
+        return {}, false
+    }
+    first, _ := draw_polyline_next_group(points, kinds, 0, summary.raw_end)
+    first.kind = summary.first_kind
+    second, _ := draw_polyline_next_group(points, kinds, first.next, summary.raw_end)
+    previous, current := first, second
+    cursor := second.next
+    for _ in 1..<summary.group_count - 1 {
+        next, _ := draw_polyline_next_group(points, kinds, cursor, summary.raw_end)
+        draw_polyline_count_join(&summary, previous, current, next, style.miter_limit)
+        previous, current = current, next
+        cursor = next.next
+    }
+    if style.topology == .Open {
+        start_vertices, start_indices := draw_polyline_endpoint_cost(style.start_cap)
+        finish_vertices, finish_indices := draw_polyline_endpoint_cost(style.finish_cap)
+        summary.vertices += start_vertices + finish_vertices
+        summary.indices += start_indices + finish_indices
+        summary.indices += (summary.group_count - 1) * 6
+    } else {
+        draw_polyline_count_join(&summary, previous, current, first, style.miter_limit)
+        draw_polyline_count_join(&summary, current, first, second, style.miter_limit)
+        summary.indices += summary.group_count * 6
+    }
+    return summary, true
+}
+
+// draw_polyline_emit_vertex appends one preflighted relative vertex.
+draw_polyline_emit_vertex :: #force_inline proc(
+    builder: ^Draw_Polyline_Builder, point: geometry.Vector2) -> u32 {
+    relative := u32(builder^.vertex_count)
+    destination := int(builder^.base_vertex) + builder^.vertex_count
+    builder^.encoder^.vertices[destination] = {position = point, color = builder^.color}
+    builder^.vertex_count += 1
+    return relative
+}
+
+// draw_polyline_emit_triangle appends one preflighted relative triangle.
+draw_polyline_emit_triangle :: #force_inline proc(
+    builder: ^Draw_Polyline_Builder, first, second, third: u32) {
+    destination := builder^.encoder^.index_count + builder^.index_count
+    builder^.encoder^.indices[destination] = builder^.base_vertex + first
+    builder^.encoder^.indices[destination + 1] = builder^.base_vertex + second
+    builder^.encoder^.indices[destination + 2] = builder^.base_vertex + third
+    builder^.index_count += 3
+}
+
+// draw_polyline_emit_pair appends one left/right stroke boundary pair.
+draw_polyline_emit_pair :: #force_inline proc(
+    builder: ^Draw_Polyline_Builder, point, normal: geometry.Vector2,
+    radius: f32) -> Draw_Polyline_Pair {
+    return {draw_polyline_emit_vertex(builder, point + normal * radius),
+        draw_polyline_emit_vertex(builder, point - normal * radius)}
+}
+
+// draw_polyline_emit_body joins two boundary pairs without overlap.
+draw_polyline_emit_body :: #force_inline proc(
+    builder: ^Draw_Polyline_Builder, first, second: Draw_Polyline_Pair) {
+    draw_polyline_emit_triangle(builder, first.left, first.right, second.right)
+    draw_polyline_emit_triangle(builder, first.left, second.right, second.left)
+}
+
+// draw_polyline_emit_fan appends one outward semicircle without body overlap.
+draw_polyline_emit_fan :: proc(
+    builder: ^Draw_Polyline_Builder, center, outward: geometry.Vector2, radius: f32) {
+    center_index := draw_polyline_emit_vertex(builder, center)
+    start_angle := math.atan2(f64(outward.y), f64(outward.x)) - math.PI * 0.5
+    previous := draw_polyline_emit_vertex(builder, center + geometry.Vector2{
+        radius * f32(math.cos(start_angle)), radius * f32(math.sin(start_angle))})
+    for step in 1..=DRAW_POLYLINE_FAN_SEGMENTS {
+        angle := start_angle + f64(step) * math.PI / DRAW_POLYLINE_FAN_SEGMENTS
+        current := draw_polyline_emit_vertex(builder, center + geometry.Vector2{
+            radius * f32(math.cos(angle)), radius * f32(math.sin(angle))})
+        draw_polyline_emit_triangle(builder, center_index, previous, current)
+        previous = current
+    }
+}
+
+// draw_polyline_emit_endpoint appends one butt pair and optional round fan.
+draw_polyline_emit_endpoint :: proc(
+    builder: ^Draw_Polyline_Builder, point, tangent: geometry.Vector2,
+    style: Draw_Polyline_Style, start: bool) -> Draw_Polyline_Node {
+    radius := style.width * 0.5
+    pair := draw_polyline_emit_pair(builder, point, {-tangent.y, tangent.x}, radius)
+    cap := style.finish_cap
+    if start {cap = style.start_cap}
+    if cap == .Round {
+        outward := tangent
+        if start {outward = -tangent}
+        draw_polyline_emit_fan(builder, point, outward, radius)
+    }
+    return {incoming = pair, outgoing = pair}
+}
+
+// draw_polyline_emit_miter appends one shared offset-line intersection pair.
+draw_polyline_emit_miter :: proc(
+    builder: ^Draw_Polyline_Builder, point, incoming, outgoing: geometry.Vector2,
+    radius: f32) -> Draw_Polyline_Node {
+    normal_sum := geometry.Vector2{-incoming.y - outgoing.y,
+        incoming.x + outgoing.x}
+    bisector := normal_sum /
+        f32(math.sqrt(f64(draw_polyline_distance_squared({}, normal_sum))))
+    outgoing_normal := geometry.Vector2{-outgoing.y, outgoing.x}
+    denominator := bisector.x * outgoing_normal.x + bisector.y * outgoing_normal.y
+    offset := bisector * (radius / denominator)
+    pair := Draw_Polyline_Pair{
+        draw_polyline_emit_vertex(builder, point + offset),
+        draw_polyline_emit_vertex(builder, point - offset),
+    }
+    return {incoming = pair, outgoing = pair}
+}
+
+// draw_polyline_emit_bevel appends separate outside corners and one filled wedge.
+draw_polyline_emit_bevel :: proc(
+    builder: ^Draw_Polyline_Builder, point, incoming, outgoing: geometry.Vector2,
+    radius: f32) -> Draw_Polyline_Node {
+    incoming_normal := geometry.Vector2{-incoming.y, incoming.x}
+    outgoing_normal := geometry.Vector2{-outgoing.y, outgoing.x}
+    normal_sum := incoming_normal + outgoing_normal
+    inside := point
+    length_squared := draw_polyline_distance_squared({}, normal_sum)
+    if length_squared > DRAW_POLYLINE_MITER_EPSILON * DRAW_POLYLINE_MITER_EPSILON {
+        bisector := normal_sum / f32(math.sqrt(f64(length_squared)))
+        denominator := bisector.x * outgoing_normal.x + bisector.y * outgoing_normal.y
+        if math.abs(denominator) > DRAW_POLYLINE_MITER_EPSILON {
+            inside = point + bisector * (radius / denominator)
+        }
+    }
+    turn := incoming.x * outgoing.y - incoming.y * outgoing.x
+    if turn >= 0 {
+        inside_index := draw_polyline_emit_vertex(builder, inside)
+        incoming_outer := draw_polyline_emit_vertex(
+            builder, point - incoming_normal * radius)
+        outgoing_inside := draw_polyline_emit_vertex(builder, inside)
+        outgoing_outer := draw_polyline_emit_vertex(
+            builder, point - outgoing_normal * radius)
+        draw_polyline_emit_triangle(builder, incoming_outer, inside_index, outgoing_outer)
+        return {{inside_index, incoming_outer}, {outgoing_inside, outgoing_outer}}
+    }
+    incoming_outer := draw_polyline_emit_vertex(builder, point + incoming_normal * radius)
+    inside_index := draw_polyline_emit_vertex(builder, point - (inside - point))
+    outgoing_outer := draw_polyline_emit_vertex(builder, point + outgoing_normal * radius)
+    outgoing_inside := draw_polyline_emit_vertex(builder, point - (inside - point))
+    draw_polyline_emit_triangle(builder, incoming_outer, inside_index, outgoing_outer)
+    return {{incoming_outer, inside_index}, {outgoing_outer, outgoing_inside}}
+}
+
+// draw_polyline_emit_cusp terminates both branches and adds one outward fan.
+draw_polyline_emit_cusp :: proc(
+    builder: ^Draw_Polyline_Builder, point, incoming, outgoing: geometry.Vector2,
+    radius: f32) -> Draw_Polyline_Node {
+    incoming_pair := draw_polyline_emit_pair(builder, point,
+        {-incoming.y, incoming.x}, radius)
+    outgoing_pair := draw_polyline_emit_pair(builder, point,
+        {-outgoing.y, outgoing.x}, radius)
+    outward := incoming - outgoing
+    length_squared := draw_polyline_distance_squared({}, outward)
+    if length_squared <= DRAW_POLYLINE_MITER_EPSILON * DRAW_POLYLINE_MITER_EPSILON {
+        outward = incoming
+    } else {
+        outward /= f32(math.sqrt(f64(length_squared)))
+    }
+    draw_polyline_emit_fan(builder, point, outward, radius)
+    return {incoming_pair, outgoing_pair}
+}
+
+// draw_polyline_emit_join appends one classified interior topology.
+draw_polyline_emit_join :: proc(
+    builder: ^Draw_Polyline_Builder, previous, current, next: Draw_Polyline_Group,
+    style: Draw_Polyline_Style) -> Draw_Polyline_Node {
+    incoming := draw_polyline_unit(previous.point, current.point)
+    outgoing := draw_polyline_unit(current.point, next.point)
+    switch draw_polyline_join(previous.point, current.point,
+        next.point, current.kind, style.miter_limit) {
+    case .Miter:
+        return draw_polyline_emit_miter(
+            builder, current.point, incoming, outgoing, style.width * 0.5)
+    case .Bevel:
+        return draw_polyline_emit_bevel(
+            builder, current.point, incoming, outgoing, style.width * 0.5)
+    case .Cusp:
+        return draw_polyline_emit_cusp(
+            builder, current.point, incoming, outgoing, style.width * 0.5)
+    }
+    return {}
+}
+
+// draw_polyline_finish publishes one fully written preflighted primitive.
+draw_polyline_finish :: proc(builder: ^Draw_Polyline_Builder) {
+    encoder := builder^.encoder
+    encoder^.vertex_count += builder^.vertex_count
+    encoder^.index_count += builder^.index_count
+    builder^.batch^.index_count += u32(builder^.index_count)
+    encoder^.statistics.vertices = u32(encoder^.vertex_count)
+    encoder^.statistics.indices = u32(encoder^.index_count)
+}
+
+// draw_polyline_emit_open writes one preflighted open stroke.
+draw_polyline_emit_open :: proc(
+    builder: ^Draw_Polyline_Builder, points: []geometry.Vector2,
+    kinds: []Draw_Polyline_Point_Kind, summary: Draw_Polyline_Summary,
+    style: Draw_Polyline_Style) {
+    first, _ := draw_polyline_next_group(points, kinds, 0, summary.raw_end)
+    current, _ := draw_polyline_next_group(points, kinds, first.next, summary.raw_end)
+    tangent := draw_polyline_unit(first.point, current.point)
+    previous_node := draw_polyline_emit_endpoint(builder, first.point,
+        tangent, style, true)
+    previous := first
+    for _ in 1..<summary.group_count - 1 {
+        next, _ := draw_polyline_next_group(points, kinds, current.next, summary.raw_end)
+        node := draw_polyline_emit_join(builder, previous, current, next, style)
+        draw_polyline_emit_body(builder, previous_node.outgoing, node.incoming)
+        previous_node = node
+        previous, current = current, next
+    }
+    tangent = draw_polyline_unit(previous.point, current.point)
+    finish := draw_polyline_emit_endpoint(builder, current.point,
+        tangent, style, false)
+    draw_polyline_emit_body(builder, previous_node.outgoing, finish.incoming)
+}
+
+// draw_polyline_emit_closed writes one preflighted wrapped stroke.
+draw_polyline_emit_closed :: proc(
+    builder: ^Draw_Polyline_Builder, points: []geometry.Vector2,
+    kinds: []Draw_Polyline_Point_Kind, summary: Draw_Polyline_Summary,
+    style: Draw_Polyline_Style) {
+    first, _ := draw_polyline_next_group(points, kinds, 0, summary.raw_end)
+    first.kind = summary.first_kind
+    second, _ := draw_polyline_next_group(points, kinds, first.next, summary.raw_end)
+    last := draw_polyline_last_group(points, kinds, summary.raw_end)
+    first_node := draw_polyline_emit_join(builder, last, first, second, style)
+    previous, current := first, second
+    previous_node := first_node
+    for _ in 1..<summary.group_count - 1 {
+        next, _ := draw_polyline_next_group(points, kinds, current.next, summary.raw_end)
+        node := draw_polyline_emit_join(builder, previous, current, next, style)
+        draw_polyline_emit_body(builder, previous_node.outgoing, node.incoming)
+        previous_node = node
+        previous, current = current, next
+    }
+    last_node := draw_polyline_emit_join(builder, previous, current, first, style)
+    draw_polyline_emit_body(builder, previous_node.outgoing, last_node.incoming)
+    draw_polyline_emit_body(builder, last_node.outgoing, first_node.incoming)
+}
+
+// draw_encoder_polyline appends one atomic topology-aware colored stroke.
+draw_encoder_polyline :: proc(
+    encoder: ^Draw_Encoder, points: []geometry.Vector2,
+    kinds: []Draw_Polyline_Point_Kind, style: Draw_Polyline_Style) -> bool {
+    if encoder == nil {return false}
+    summary, valid := draw_polyline_preflight(points, kinds, style)
+    if !valid {return false}
+    batch, ready := draw_encoder_prepare(encoder, summary.vertices,
+        summary.indices, {pipeline = .Colored})
+    if !ready {return false}
+    builder := Draw_Polyline_Builder{encoder = encoder, batch = batch,
+        base_vertex = u32(encoder^.vertex_count), color = style.color}
+    if style.topology == .Open {
+        draw_polyline_emit_open(&builder, points, kinds, summary, style)
+    } else {
+        draw_polyline_emit_closed(&builder, points, kinds, summary, style)
+    }
+    draw_polyline_finish(&builder)
+    return builder.vertex_count == summary.vertices &&
+        builder.index_count == summary.indices
+}
+
 // draw_encoder_circle appends one atomic filled circle.
 draw_encoder_circle :: proc(
     encoder: ^Draw_Encoder, center: geometry.Vector2, radius: f32,
     draw_color: color.Color_RGBA8) -> bool {
-    if radius <= 0 {return false}
+    if radius <= 0 {
+        return false
+    }
     positions: [DRAW_CIRCLE_SEGMENTS + 1]geometry.Vector2
     indices: [DRAW_CIRCLE_SEGMENTS * 3]u32
     positions[0] = center
@@ -659,7 +1177,9 @@ draw_encoder_circle :: proc(
 draw_encoder_ring :: proc(
     encoder: ^Draw_Encoder, center: geometry.Vector2,
     inner_radius, outer_radius: f32, draw_color: color.Color_RGBA8) -> bool {
-    if inner_radius < 0 || outer_radius <= inner_radius {return false}
+    if inner_radius < 0 || outer_radius <= inner_radius {
+        return false
+    }
     positions: [DRAW_CIRCLE_SEGMENTS * 2]geometry.Vector2
     indices: [DRAW_CIRCLE_SEGMENTS * 6]u32
     for index in 0..<DRAW_CIRCLE_SEGMENTS {
@@ -685,7 +1205,9 @@ draw_encoder_texture_quad :: proc(
     encoder: ^Draw_Encoder, rectangle: geometry.Rectangle,
     uv_rectangle: geometry.Rectangle, tint: color.Color_RGBA8,
     binding: Draw_Texture_Binding) -> bool {
-    if rectangle.width <= 0 || rectangle.height <= 0 {return false}
+    if rectangle.width <= 0 || rectangle.height <= 0 {
+        return false
+    }
     positions := [4]geometry.Vector2{{rectangle.x, rectangle.y},
         {rectangle.x + rectangle.width, rectangle.y},
         {rectangle.x + rectangle.width, rectangle.y + rectangle.height},

@@ -55,20 +55,21 @@ encoded_strip_color :: #force_inline proc(
     uniforms^.strip_alpha = f32(draw_color.a) * inverse_byte
 }
 
-// encoded_ring_fallback draws one projected ring with ordinary native lines.
+// encoded_ring_fallback draws one projected ring with a closed colored polyline.
 encoded_ring_fallback :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     draw: Tool_Ring_Draw) {
-    previous := trochoid_tool_ring_point(draw.center, draw.radius, 0)
-    for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
+    projected: [TROCHOID_TOOL_RING_VECTORS]geometry.Vector2
+    for index in 0..=TROCHOID_TOOL_RING_SEGMENTS {
         angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
-        current := trochoid_tool_ring_point(draw.center, draw.radius, angle)
-        first := view_core.iso_to_cartesian(previous, state^.iso_scale^)
-        second := view_core.iso_to_cartesian(current, state^.iso_scale^)
-        _ = native.draw_encoder_line(encoder, geometry.Vector2(first),
-            geometry.Vector2(second), draw.thickness, draw.color)
-        previous = current
+        world := trochoid_tool_ring_point(draw.center, draw.radius, angle)
+        projected[index] = geometry.Vector2(
+            view_core.iso_to_cartesian(world, state^.iso_scale^))
     }
+    style := native.Draw_Polyline_Style{width = draw.thickness,
+        miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw.color,
+        topology = .Closed, start_cap = .Butt, finish_cap = .Butt}
+    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
 // encoded_ring_vertices expands fixed projected samples into triangle vertices.
@@ -151,23 +152,24 @@ draw_encoded_cycloid_tool :: proc(
         handle_finish, tool^.brush_size, tool^.color, nil})
 }
 
-// encoded_compass_arc_fallback draws one sampled outside arc as native lines.
+// encoded_compass_arc_fallback draws one butt-ended sampled outside arc.
 encoded_compass_arc_fallback :: proc(
     encoder: ^native.Draw_Encoder, center: Vector3,
     basis: Compass_Top_Circle_Basis, draw: Compass_Arc_Draw,
     draw_color: color.Color_RGBA8) {
-    previous3d := center + basis.u * basis.radius
-    previous := view_core.iso_to_cartesian(previous3d, draw.state^.iso_scale^)
+    projected: [COMPASS_TOPCIRCLE_VECTORS]geometry.Vector2
     step := basis.theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
-    for index in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
+    for index in 0..=COMPASS_TOPCIRCLE_SEGMENTS {
         angle := step * f32(index)
         direction := basis.u * math.cos(angle) + basis.v * math.sin(angle)
         current := view_core.iso_to_cartesian(
             center + direction * basis.radius, draw.state^.iso_scale^)
-        _ = native.draw_encoder_line(encoder, geometry.Vector2(previous),
-            geometry.Vector2(current), draw.brush_size, draw_color)
-        previous = current
+        projected[index] = geometry.Vector2(current)
     }
+    style := native.Draw_Polyline_Style{width = draw.brush_size,
+        miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
+        topology = .Open, start_cap = .Butt, finish_cap = .Butt}
+    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
 // encoded_compass_arc_vertices expands fixed arc samples into strip triangles.
@@ -457,23 +459,30 @@ draw_encoded_tool_shadow_line :: proc(
     draw: Tool_Shadow_Line_Draw) {
     screen_first := shadow_to_screen(draw.first, state)
     screen_second := shadow_to_screen(draw.second, state)
-    _ = native.draw_encoder_line(encoder, geometry.Vector2(screen_first),
-        geometry.Vector2(screen_second), draw.thickness,
-        encoded_shadow_color(draw.average_height))
+    points := [2]geometry.Vector2{
+        geometry.Vector2(screen_first), geometry.Vector2(screen_second)}
+    style := native.Draw_Polyline_Style{width = draw.thickness,
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = encoded_shadow_color(draw.average_height), topology = .Open,
+        start_cap = .Round, finish_cap = .Round}
+    _ = native.draw_encoder_polyline(encoder, points[:], nil, style)
 }
 
 // draw_encoded_ring_shadow emits one segmented projected guide shadow.
 draw_encoded_ring_shadow :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     center: Vector3, radius, thickness: f32) {
-    previous := trochoid_tool_ring_point(center, radius, 0)
-    for index in 1..=TROCHOID_TOOL_RING_SEGMENTS {
+    projected: [TROCHOID_TOOL_RING_VECTORS]geometry.Vector2
+    for index in 0..=TROCHOID_TOOL_RING_SEGMENTS {
         angle := 2 * math.PI * f32(index) / f32(TROCHOID_TOOL_RING_SEGMENTS)
-        current := trochoid_tool_ring_point(center, radius, angle)
-        draw_encoded_tool_shadow_line(state, encoder,
-            {previous, current, thickness, center.z})
-        previous = current
+        world := trochoid_tool_ring_point(center, radius, angle)
+        projected[index] = geometry.Vector2(shadow_to_screen(world, state))
     }
+    style := native.Draw_Polyline_Style{width = thickness,
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = encoded_shadow_color(center.z), topology = .Closed,
+        start_cap = .Butt, finish_cap = .Butt}
+    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
 // draw_encoded_pen_shadow emits the pen's ordinary floor shadow.
@@ -493,16 +502,19 @@ draw_encoded_compass_shadow_arc :: proc(
     basis, ok := compass_top_circle_basis(
         compass^.joint1, compass^.pivot, compass^.joint2)
     if !ok {return}
-    previous := compass^.pivot + basis.u * basis.radius
+    projected: [COMPASS_TOPCIRCLE_VECTORS]geometry.Vector2
     step := basis.theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
-    for index in 1..=COMPASS_TOPCIRCLE_SEGMENTS {
+    for index in 0..=COMPASS_TOPCIRCLE_SEGMENTS {
         angle := step * f32(index)
         direction := basis.u * math.cos(angle) + basis.v * math.sin(angle)
-        current := compass^.pivot + direction * basis.radius
-        draw_encoded_tool_shadow_line(state, encoder,
-            {previous, current, thickness, height})
-        previous = current
+        world := compass^.pivot + direction * basis.radius
+        projected[index] = geometry.Vector2(shadow_to_screen(world, state))
     }
+    style := native.Draw_Polyline_Style{width = thickness,
+        miter_limit = COLORED_STROKE_MITER_LIMIT,
+        color = encoded_shadow_color(height), topology = .Open,
+        start_cap = .Butt, finish_cap = .Butt}
+    _ = native.draw_encoder_polyline(encoder, projected[:], nil, style)
 }
 
 // draw_encoded_compass_shadow preserves hinge ordering and outside-arc shadow.

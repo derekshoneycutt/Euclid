@@ -251,22 +251,23 @@ shape_test_create_rewind_entity :: proc(
 // Verify world-level freeze and repeated rewind restore every inline component frontier.
 @(test)
 core_test_shape_world_repeated_rewind_restores_frontiers :: proc(t: ^testing.T) {
-    world: Shape_World
+    world := new(Shape_World, context.allocator)
+    defer free(world, context.allocator)
     baseline: Shape_Entity
     testing.expect_value(t, shape_world_create_entity(
-        &world, &baseline), Shape_World_Status.Ok)
+        world, &baseline), Shape_World_Status.Ok)
     testing.expect_value(t, shape_component_insert(
         &world.transforms, &world.registry, baseline,
         Shape_Transform{position = {1, 2, 3}}), Shape_World_Status.Ok)
     testing.expect_value(t, shape_world_freeze_baseline(
-        &world), Shape_World_Status.Ok)
+        world), Shape_World_Status.Ok)
 
     for expected_generation in u32(1)..=u32(2) {
-        animation := shape_test_create_rewind_entity(t, &world)
+        animation := shape_test_create_rewind_entity(t, world)
         testing.expect_value(t, animation.generation, expected_generation)
 
         testing.expect_value(t, shape_world_rewind_animation(
-            &world), Shape_World_Status.Ok)
+            world), Shape_World_Status.Ok)
         testing.expect_value(t, world.registry.entity_count, u32(1))
         testing.expect_value(t, world.transforms.count, u16(1))
         empty_counts := [3]u16{world.arcs.count, world.render_styles.count,
@@ -334,14 +335,15 @@ core_test_shape_labels_enforce_source_limit :: proc(t: ^testing.T) {
 // Verify polygon publication rejects stale or transform-free entity references.
 @(test)
 core_test_shape_polygon_references_require_live_transforms :: proc(t: ^testing.T) {
-    world: Shape_World
+    world := new(Shape_World, context.allocator)
+    defer free(world, context.allocator)
     entities: [3]Shape_Entity
     for &entity in entities {
         testing.expect_value(t, shape_world_create_entity(
-            &world, &entity), Shape_World_Status.Ok)
+            world, &entity), Shape_World_Status.Ok)
     }
     geometry: Shape_Polygon_Geometry
     testing.expect_value(t, shape_vertex_references_append(
-        &world, entities[:], &geometry), Shape_World_Status.Not_Found)
+        world, entities[:], &geometry), Shape_World_Status.Not_Found)
     testing.expect_value(t, world.vertex_references.count, u16(0))
 }

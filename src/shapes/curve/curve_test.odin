@@ -6,6 +6,32 @@ import test_helpers "../../test_helpers"
 import "core:math"
 import "core:testing"
 
+// Count geometric cusp vertices, excluding a duplicated cusp-closed endpoint.
+curve_test_distinct_cusp_count :: proc(kinds: []Curve_Point_Kind,
+    result: Curve_Explication_Result) -> int {
+    count := 0
+    for kind in kinds[:result.vertex_count] {
+        if kind == .Cusp {count += 1}
+    }
+    if result.topology == .Cusp_Closed && kinds[result.vertex_count - 1] == .Cusp {
+        count -= 1
+    }
+    return count
+}
+
+// Return whether a marked output contains the exact point at one parameter.
+curve_test_has_marked_point :: proc(vertices: []Vector3,
+    kinds: []Curve_Point_Kind, count: int, expected: Vector3) -> bool {
+    for index in 0..<count {
+        delta := vertices[index] - expected
+        if kinds[index] == .Cusp &&
+            delta.x * delta.x + delta.y * delta.y < 1e-10 {
+            return true
+        }
+    }
+    return false
+}
+
 // Verify an external equal-circle trochoid starts at its contact-aligned cusp.
 @(test)
 trochoid_curve_external_cardioid_starts_at_fixed_contact :: proc(t: ^testing.T) {
@@ -124,6 +150,7 @@ trochoid_curve_eleven_half_hypocycloid_is_complete_and_closed :: proc(
     result := trochoid_explicate({}, value, vertices[:])
 
     testing.expect_value(t, result.status, Curve_Explication_Status.Complete)
+    testing.expect_value(t, result.topology, Curve_Topology.Cusp_Closed)
     testing.expect(t, result.vertex_count > TROCHOID_BASE_SEGMENTS)
     test_helpers.expect_vec3_close(t, vertices[0],
         vertices[result.vertex_count - 1],
@@ -145,6 +172,7 @@ trochoid_curve_five_point_hypotrochoid_is_complete_and_closed :: proc(
     result := trochoid_explicate({}, value, vertices[:])
 
     testing.expect_value(t, result.status, Curve_Explication_Status.Complete)
+    testing.expect_value(t, result.topology, Curve_Topology.Closed)
     testing.expect(t, result.vertex_count > TROCHOID_BASE_SEGMENTS)
     test_helpers.expect_vec3_close(t, vertices[0],
         vertices[result.vertex_count - 1],
@@ -217,4 +245,185 @@ cycloid_curve_explication_preserves_revealed_prefix :: proc(t: ^testing.T) {
     expected := cycloid_point(first, second, value, 1.7 * math.PI)
     test_helpers.expect_vec3_close(t, partial[partial_result.vertex_count - 1],
         expected, "partial cycloid should include its exact frontier")
+}
+
+// Verify canonical closed trochoids expose their distinct analytic cusp counts.
+@(test)
+trochoid_curve_marks_canonical_cusp_families :: proc(t: ^testing.T) {
+    values := [?]shapemodel.Shape_Trochoid{
+        {mode = .External, fixed_radius = 0.2, rolling_radius = 0.2,
+            tracer_distance = 0.2, parameter_finish = 2 * math.PI,
+            draw_parameter = 2 * math.PI},
+        {mode = .Internal, fixed_radius = 0.2, rolling_radius = 0.05,
+            tracer_distance = 0.05, parameter_finish = 2 * math.PI,
+            draw_parameter = 2 * math.PI},
+        {mode = .External, fixed_radius = 0.2, rolling_radius = 0.1,
+            tracer_distance = 0.1, parameter_finish = 2 * math.PI,
+            draw_parameter = 2 * math.PI},
+        {mode = .Internal, fixed_radius = 0.22, rolling_radius = 0.04,
+            tracer_distance = 0.04, parameter_finish = 4 * math.PI,
+            draw_parameter = 4 * math.PI},
+    }
+    expected := [?]int{1, 4, 2, 11}
+    for value, case_index in values {
+        vertices: [TROCHOID_MAX_VERTICES]Vector3
+        kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
+        result := trochoid_explicate_marked({}, value, vertices[:], kinds[:])
+        testing.expect_value(t, result.status, Curve_Explication_Status.Complete)
+        testing.expect_value(t, result.topology, Curve_Topology.Cusp_Closed)
+        testing.expect_value(t,
+            curve_test_distinct_cusp_count(kinds[:], result), expected[case_index])
+    }
+}
+
+// Verify curtate and prolate trochoids never acquire analytic cusp marks.
+@(test)
+trochoid_curve_rejects_noncontact_cusp_candidates :: proc(t: ^testing.T) {
+    distances := [?]f32{0.05, 0.15}
+    for distance in distances {
+        value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 0.2,
+            rolling_radius = 0.1, tracer_distance = distance,
+            parameter_finish = 2 * math.PI, draw_parameter = 2 * math.PI}
+        vertices: [TROCHOID_MAX_VERTICES]Vector3
+        kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
+        result := trochoid_explicate_marked({}, value, vertices[:], kinds[:])
+        testing.expect_value(t,
+            curve_test_distinct_cusp_count(kinds[:], result), 0)
+    }
+}
+
+// Verify reverse domains retain the same exact cusp family in reverse order.
+@(test)
+trochoid_curve_marks_reverse_domain_cusps :: proc(t: ^testing.T) {
+    value := shapemodel.Shape_Trochoid{mode = .Internal, fixed_radius = 0.2,
+        rolling_radius = 0.05, tracer_distance = 0.05,
+        parameter_start = 2 * math.PI, parameter_finish = 0, draw_parameter = 0}
+    vertices: [TROCHOID_MAX_VERTICES]Vector3
+    kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
+    result := trochoid_explicate_marked({}, value, vertices[:], kinds[:])
+
+    testing.expect_value(t, result.topology, Curve_Topology.Cusp_Closed)
+    testing.expect_value(t, curve_test_distinct_cusp_count(kinds[:], result), 4)
+    testing.expect(t, curve_test_has_marked_point(vertices[:], kinds[:],
+        result.vertex_count, trochoid_point({}, value, math.PI / 2)))
+}
+
+// Verify pathological cusp density reports a deterministic bounded result.
+@(test)
+trochoid_curve_cusp_capacity_is_bounded_and_deterministic :: proc(t: ^testing.T) {
+    value := shapemodel.Shape_Trochoid{mode = .External, fixed_radius = 0.1,
+        rolling_radius = 0.1, tracer_distance = 0.1,
+        parameter_finish = 1000 * math.TAU, draw_parameter = 1000 * math.TAU}
+    first_vertices, second_vertices: [TROCHOID_MAX_VERTICES]Vector3
+    first_kinds, second_kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
+    first := trochoid_explicate_marked(
+        {}, value, first_vertices[:], first_kinds[:])
+    second := trochoid_explicate_marked(
+        {}, value, second_vertices[:], second_kinds[:])
+
+    testing.expect_value(t, first.status, Curve_Explication_Status.Capacity_Limited)
+    testing.expect_value(t, first.vertex_count, TROCHOID_MAX_VERTICES)
+    testing.expect_value(t, first.topology, Curve_Topology.Open)
+    testing.expect_value(t, first_kinds[first.vertex_count - 1],
+        Curve_Point_Kind.Cusp)
+    test_helpers.expect_vec3_close(t, first_vertices[first.vertex_count - 1],
+        trochoid_point({}, value, 512 * math.TAU),
+        "cusp overflow should retain the directed mandatory prefix")
+    testing.expect_value(t, second.vertex_count, first.vertex_count)
+    testing.expect(t, first_vertices == second_vertices)
+    testing.expect(t, first_kinds == second_kinds)
+}
+
+// Verify phase-shifted cycloid cusps are inserted at their exact parameters.
+@(test)
+cycloid_curve_marks_phase_shifted_cusps :: proc(t: ^testing.T) {
+    first := Vector3{-2, 0, 0}
+    second := Vector3{2, 0, 0}
+    value := shapemodel.Shape_Cycloid{rolling_radius = 0.1,
+        tracer_distance = 0.1, tracer_phase = math.PI / 2,
+        parameter_finish = 4 * math.PI, draw_parameter = 4 * math.PI}
+    vertices: [CYCLOID_MAX_VERTICES]Vector3
+    kinds: [CYCLOID_MAX_VERTICES]Curve_Point_Kind
+    result := cycloid_explicate_marked(first, second, value, vertices[:], kinds[:])
+
+    testing.expect_value(t, curve_test_distinct_cusp_count(kinds[:], result), 2)
+    testing.expect(t, curve_test_has_marked_point(vertices[:], kinds[:],
+        result.vertex_count, cycloid_point(first, second, value, 1.5 * math.PI)))
+    testing.expect(t, curve_test_has_marked_point(vertices[:], kinds[:],
+        result.vertex_count, cycloid_point(first, second, value, 3.5 * math.PI)))
+}
+
+// Verify a reveal endpoint changes kind only when it reaches an analytic cusp.
+@(test)
+cycloid_curve_frontier_preserves_cusp_transition :: proc(t: ^testing.T) {
+    Frontier_Case :: struct {
+        parameter: f32,
+        cusps: int,
+    }
+    first := Vector3{-1, 0, 0}
+    second := Vector3{1, 0, 0}
+    value := shapemodel.Shape_Cycloid{rolling_radius = 0.1,
+        tracer_distance = 0.1, parameter_start = math.PI,
+        parameter_finish = 3 * math.PI, draw_parameter = 1.9 * math.PI}
+    cases := [?]Frontier_Case{
+        {1.9 * math.PI, 0}, {2 * math.PI, 1}, {2.1 * math.PI, 1}}
+    for test_case in cases {
+        value.draw_parameter = test_case.parameter
+        vertices: [CYCLOID_MAX_VERTICES]Vector3
+        kinds: [CYCLOID_MAX_VERTICES]Curve_Point_Kind
+        result := cycloid_explicate_marked(
+            first, second, value, vertices[:], kinds[:])
+        testing.expect_value(t,
+            curve_test_distinct_cusp_count(kinds[:], result), test_case.cusps)
+        testing.expect_value(t, result.topology, Curve_Topology.Open)
+    }
+}
+
+// Verify noncontact cycloids remain ordinary for both tracer-distance directions.
+@(test)
+cycloid_curve_rejects_curtate_and_prolate_cusps :: proc(t: ^testing.T) {
+    first := Vector3{-2, 0, 0}
+    second := Vector3{2, 0, 0}
+    distances := [?]f32{0.05, 0.15}
+    for distance in distances {
+        value := shapemodel.Shape_Cycloid{rolling_radius = 0.1,
+            tracer_distance = distance, parameter_finish = 4 * math.PI,
+            draw_parameter = 4 * math.PI}
+        vertices: [CYCLOID_MAX_VERTICES]Vector3
+        kinds: [CYCLOID_MAX_VERTICES]Curve_Point_Kind
+        result := cycloid_explicate_marked(
+            first, second, value, vertices[:], kinds[:])
+        testing.expect_value(t,
+            curve_test_distinct_cusp_count(kinds[:], result), 0)
+    }
+}
+
+// Verify marked explication rejects a kind stream that cannot remain aligned.
+@(test)
+cycloid_curve_marked_explication_rejects_short_kinds :: proc(t: ^testing.T) {
+    value := shapemodel.Shape_Cycloid{rolling_radius = 0.1,
+        tracer_distance = 0.1, parameter_finish = math.TAU,
+        draw_parameter = math.TAU}
+    vertices: [CYCLOID_MAX_VERTICES]Vector3
+    kinds: [2]Curve_Point_Kind
+    result := cycloid_explicate_marked(
+        {-1, 0, 0}, {1, 0, 0}, value, vertices[:], kinds[:])
+
+    testing.expect_value(t, result.status, Curve_Explication_Status.Invalid_Input)
+    testing.expect_value(t, result.vertex_count, 0)
+}
+
+// Verify optional refinement saturation remains bounded after mandatory cusp work.
+@(test)
+trochoid_curve_refinement_capacity_is_bounded :: proc(t: ^testing.T) {
+    value := shapemodel.Shape_Trochoid{mode = .Internal, fixed_radius = 0.25,
+        rolling_radius = 0.001, tracer_distance = 0.0005,
+        parameter_finish = math.TAU, draw_parameter = math.TAU}
+    vertices: [TROCHOID_MAX_VERTICES]Vector3
+    kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
+    result := trochoid_explicate_marked({}, value, vertices[:], kinds[:])
+
+    testing.expect_value(t, result.status, Curve_Explication_Status.Capacity_Limited)
+    testing.expect_value(t, result.vertex_count, TROCHOID_MAX_VERTICES)
+    testing.expect_value(t, curve_test_distinct_cusp_count(kinds[:], result), 0)
 }

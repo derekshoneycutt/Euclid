@@ -4,12 +4,102 @@ import viewmodel "model"
 import native "native"
 
 import color "../core/color"
+import shapemodel "../shapes/model"
 
 import "core:math"
 import "core:math/linalg"
 import "core:testing"
 
 TOOL_BRUSH_TEST_EPSILON :: f32(1e-4)
+
+// Return one deterministic projection scale for visible curve run tests.
+curve_visible_test_scale :: proc() -> viewmodel.Iso_Scale {
+    return {half_scale = 1, quarter_scale = 0.5}
+}
+
+// Verify one crossing creates an ordinary clipping endpoint and opens closure.
+@(test)
+curve_visible_runs_clip_one_crossing :: proc(t: ^testing.T) {
+    scale := curve_visible_test_scale()
+    points := [3]Vector3{{0, 0, 1}, {1, 0, 1}, {2, 0, -1}}
+    kinds := [3]shapemodel.Curve_Point_Kind{.Cusp, .Ordinary, .Cusp}
+    output_points: [4]Vector2
+    output_kinds: [4]shapemodel.Curve_Point_Kind
+    runs: [2]Curve_Visible_Run
+    input := Curve_Visible_Run_Input{
+        scale, points[:], kinds[:], .Cusp_Closed, true, false}
+    result := build_projected_curve_visible_runs(
+        input, {output_points[:], output_kinds[:], runs[:]})
+
+    testing.expect(t, result.ok)
+    testing.expect_value(t, result.point_count, 3)
+    testing.expect_value(t, result.run_count, 1)
+    testing.expect_value(t, runs[0].topology, shapemodel.Curve_Topology.Open)
+    testing.expect_value(t, output_kinds[0], shapemodel.Curve_Point_Kind.Cusp)
+    testing.expect_value(t, output_kinds[2], shapemodel.Curve_Point_Kind.Ordinary)
+}
+
+// Verify exit and re-entry produce independent open runs without a false cusp.
+@(test)
+curve_visible_runs_split_exit_and_reentry :: proc(t: ^testing.T) {
+    scale := curve_visible_test_scale()
+    points := [5]Vector3{{0, 0, 1}, {1, 0, 1}, {2, 0, -1},
+        {3, 0, 1}, {4, 0, 1}}
+    kinds := [5]shapemodel.Curve_Point_Kind{
+        .Ordinary, .Cusp, .Cusp, .Ordinary, .Ordinary}
+    output_points: [8]Vector2
+    output_kinds: [8]shapemodel.Curve_Point_Kind
+    runs: [3]Curve_Visible_Run
+    input := Curve_Visible_Run_Input{scale, points[:], kinds[:], .Closed, true, false}
+    result := build_projected_curve_visible_runs(
+        input, {output_points[:], output_kinds[:], runs[:]})
+
+    testing.expect(t, result.ok)
+    testing.expect_value(t, result.point_count, 6)
+    testing.expect_value(t, result.run_count, 2)
+    testing.expect_value(t, runs[0].point_count, 3)
+    testing.expect_value(t, runs[1].point_count, 3)
+    testing.expect_value(t, output_kinds[1], shapemodel.Curve_Point_Kind.Cusp)
+    testing.expect_value(t, output_kinds[2], shapemodel.Curve_Point_Kind.Ordinary)
+    testing.expect_value(t, output_kinds[3], shapemodel.Curve_Point_Kind.Ordinary)
+}
+
+// Verify an untouched complete curve retains its explicit closure topology.
+@(test)
+curve_visible_runs_preserve_unclipped_closure :: proc(t: ^testing.T) {
+    scale := curve_visible_test_scale()
+    points := [4]Vector3{{0, 0, 1}, {1, 0, 1}, {0, 1, 1}, {0, 0, 1}}
+    kinds := [4]shapemodel.Curve_Point_Kind{.Cusp, .Ordinary, .Ordinary, .Cusp}
+    output_points: [4]Vector2
+    output_kinds: [4]shapemodel.Curve_Point_Kind
+    runs: [1]Curve_Visible_Run
+    input := Curve_Visible_Run_Input{
+        scale, points[:], kinds[:], .Cusp_Closed, true, false}
+    result := build_projected_curve_visible_runs(
+        input, {output_points[:], output_kinds[:], runs[:]})
+
+    testing.expect(t, result.ok)
+    testing.expect_value(t, result.run_count, 1)
+    testing.expect_value(t, runs[0].topology, shapemodel.Curve_Topology.Cusp_Closed)
+}
+
+// Verify insufficient visible-run storage rejects the complete build atomically.
+@(test)
+curve_visible_runs_reject_insufficient_capacity :: proc(t: ^testing.T) {
+    scale := curve_visible_test_scale()
+    points := [3]Vector3{{0, 0, 1}, {1, 0, 1}, {2, 0, 1}}
+    kinds := [3]shapemodel.Curve_Point_Kind{}
+    output_points: [2]Vector2
+    output_kinds: [2]shapemodel.Curve_Point_Kind
+    runs: [1]Curve_Visible_Run
+    input := Curve_Visible_Run_Input{scale, points[:], kinds[:], .Open, true, false}
+    result := build_projected_curve_visible_runs(
+        input, {output_points[:], output_kinds[:], runs[:]})
+
+    testing.expect(t, !result.ok)
+    testing.expect_value(t, result.point_count, 0)
+    testing.expect_value(t, result.run_count, 0)
+}
 
 // Verify one enabled tool segment emits a complete ordered stroke command.
 @(test)
