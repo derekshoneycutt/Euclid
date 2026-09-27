@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_017_diameter_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
@@ -82,9 +84,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Diameter}
-
-A diameter \euclidline[color=steelblue,length=3,thickness=4] of the circle \euclidcircle[color=khaki3,size=1,thickness=2] is any straight line drawn through the center \euclidpoint[color=palevioletred1,size=1] and terminated in both directions by the circumference of the circle, and such a straight line also bisects the circle."""
+    return ElementsOneDefinitionDiameterContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

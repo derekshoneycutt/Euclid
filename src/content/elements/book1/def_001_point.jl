@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("def_001_point_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const Point = [0.5f0, 0.5f0, 0f0]
@@ -35,10 +37,6 @@ const PhaseDescend = 0f0
 const PhaseDraw = 1f0
 const PhaseRise = 2f0
 
-const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Point}
-
-A point \euclidpoint[color=steelblue,size=1] is that which has no part."""
-
 """Return state with updated cycle timing and the same native point handle."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.point_id, phase, timer)
@@ -46,7 +44,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return EuclidLatex.TeXDocument(DefinitionLatexDocument)
+    return ElementsOneDefinitionPointContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native point handle."""

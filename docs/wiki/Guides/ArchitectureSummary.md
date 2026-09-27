@@ -800,7 +800,8 @@ the owner responsible for release.
 - Development JLL linkage is not a relocatable bundle. Releases must stage the native
   closure and use platform-relative loader metadata.
 - Builds compile canonical HLSL offline and package validated SPIR-V, reflection JSON,
-  shader ABI metadata, Julia scripts, and other assets into `bin/assets.pkg`; HLSL and
+  shader ABI metadata, Julia scripts, the deterministic
+  `search/animations.sqlite3` index, and other assets into `bin/assets.pkg`; HLSL and
   build-only shader tools are not runtime assets. Debug builds publish a matching
   package and `assets.pkg.identity` commit sidecar beside the debug executable.
 - SDL_shadercross and its recursive dependencies are tracked under `tools/shadercross`.
@@ -812,6 +813,27 @@ the owner responsible for release.
   an immutable `assets/v3/<package_identity>` cache generation, verifies archive bytes
   before a cache miss is extracted, and validates the extracted manifest identity.
   A stale unpacked cache never substitutes for a missing or invalid package commit.
+
+### Library Search Ownership
+
+- Adjacent Julia content sidecars own canonical View content and authored semantic
+  search prose. The generated animation catalog remains authoritative for identity,
+  hierarchy, order, kind, display name, and implementation path.
+- Asset generation evaluates pure sidecars, emits a canonical corpus, and builds the
+  immutable SQLite FTS5 and spellfix index before package identity is calculated.
+- A dedicated Odin worker exclusively owns the read-only SQLite connection and prepared
+  statements. The display thread owns query editing, debounce, accepted results,
+  suggestion interaction, and filtered tree presentation; drawing never calls SQLite.
+- Worker messages contain bounded source-aware document keys, query generation, index
+  generation, result counts, and a verified correction. The display rejects stale
+  generations and resolves built-in UUIDs through the current animation registry.
+- Search-time expansion is derived from the accepted matches and their ancestors.
+  Stored tree expansion is never overwritten, so clearing search restores ordinary
+  browsing immediately.
+- Scenario search actions use the same display-owned state transitions as UI input.
+  `library_search_committed` evidence correlates the originating action and reports the
+  query generation, index generation, returned count, total count, truncation, and
+  suggestion availability.
 
 ---
 

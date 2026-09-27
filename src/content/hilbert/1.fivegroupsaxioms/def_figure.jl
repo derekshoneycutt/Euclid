@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_figure_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.31f0, 0.70f0, 0f0]
@@ -98,13 +100,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Figure}
-
-Any finite number of points is called a figure \euclidtriangle[color=steelblue,height=2,width=3,filled]. If all the points lie in a plane, the figure is called a plane figure.
-
-Two figures are said to be congruent if their points can be arranged in a one-to-one correspondence so that the corresponding segments and the corresponding angles of the two figures are in every case congruent to each other.
-
-Congruent figures have, as may be seen from \textit{theorems 9} and \textit{12}, the following properties. Three points of a figure lying in a straight line are likewise in a straight line in every figure congruent to it. In congruent figures, the arrangement of the points in corresponding planes with respect to corresponding lines is always the same. The same is true of the sequence of corresponding points situated on corresponding lines."""
+    return HilbertChapterOneDefinitionFigureContent.get_view_content()
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""

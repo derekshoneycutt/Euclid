@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_20_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PointB = [0.26f0, 0.32f0, 0f0]
@@ -230,9 +232,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 20}
-
-The sum of the angles of a triangle is two right angles."""
+    return HilbertChapterOneTheorem20Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

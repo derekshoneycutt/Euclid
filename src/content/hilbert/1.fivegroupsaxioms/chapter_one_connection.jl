@@ -9,18 +9,13 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("chapter_one_connection_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 """Emit the Book I connection-axioms view content."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§2 Group I: Axioms of Connection}
-
-The axioms of this group establish a connection between the concepts indicated above; namely, points, straight lines, and planes.
-
-...
-
-Axioms I, 1-2 contain statements concerning points and straight lines only; that is, concerning the elements of plane geometry. We will call them, therefore, the plane axioms of group I, in order to distinguish them from the axioms I, 3-7, which we will designate briefly as the space axioms of this group.
-Of the theorems which follow from the axioms I, 3-7, we shall mention only 2."""
+    return HilbertChapterOneConnectionContent.get_view_content()
 end
 
 """Initialize the null animation and publish the connection view."""

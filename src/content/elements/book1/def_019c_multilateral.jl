@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_019c_multilateral_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.50f0, 0.76f0, 0f0]
@@ -114,9 +116,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Multilateral}
-
-Rectilineal figures are those which are contained by straight lines, ... and multilateral \euclidpentagon[height=2,width=2,color=steelblue,filled] those contained by more than four straight lines."""
+    return ElementsOneDefinitionMultilateralContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

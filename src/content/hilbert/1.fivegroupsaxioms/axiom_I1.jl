@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("axiom_I1_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.25f0, 0.75f0, 0f0]
@@ -69,12 +71,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,1}
-
-\textbf{I, 1.} Two distinct points $A$ \euclidpoint[color=palevioletred1,size=1] and $B$ \euclidpoint[color=khaki3,size=1] always completely determine a straight line $a$ \euclidline[color=steelblue,length=3,thickness=4].\\
-We write $AB = a$ or $BA = a$.
-
-Instead of "determine," we may also employ other forms of expression; for example, we may say $A$ \euclidpoint[color=palevioletred1,size=1] "lies upon" $a$ \euclidline[color=steelblue,length=3,thickness=4], $A$ \euclidpoint[color=palevioletred1,size=1] "is a point of" $a$ \euclidline[color=steelblue,length=3,thickness=4], $a$ \euclidline[color=steelblue,length=3,thickness=4] "goes through" $A$ \euclidpoint[color=palevioletred1,size=1] "and through" $B$ \euclidpoint[color=khaki3,size=1], a "joins" $A$ \euclidpoint[color=palevioletred1,size=1] "and" or "with" $B$ \euclidpoint[color=khaki3,size=1], etc. If $A$ \euclidpoint[color=palevioletred1,size=1] lies upon $a$ \euclidline[color=steelblue,length=3,thickness=4] and at the same time upon another straight line $b$ \euclidline[color=grey60,length=3,thickness=2], we make use also of the expression: "The straight lines" $a$ \euclidline[color=steelblue,length=3,thickness=4] "and" $b$ \euclidline[color=grey60,length=3,thickness=2] "have the point $A$ \euclidpoint[color=palevioletred1,size=1] in common," etc."""
+    return HilbertChapterOneAxiomI1Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

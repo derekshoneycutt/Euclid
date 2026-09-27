@@ -10,6 +10,8 @@ using ..EuclidAnimations
 using ..EuclidLatex
 using ..EuclidGeometry
 
+include("z_2_closure_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = Float32[0.32f0, 0.34f0, 0f0]
@@ -63,20 +65,6 @@ const PhaseReflectThird = 9f0
 const PhaseReflectFourth = 10f0
 const PhasePauseAfterFourth = 11f0
 
-const ClosureLatexDocument = raw"""\textbf{Closure}
-
-Closure means that when you perform one allowed motion after another, that is composing the motions, the result of the two together represents one of the allowed motions in the group.
-
-In this example, composing reflections still produces one of the same allowed motions:
-
-\begin{enumerate}
-\item One reflection maps the figure to its mirror image, still in the same state space.
-\item Two reflections across the same axis return to the original state.
-\item Any allowed composition remains one of the 2 allowed motions: $e$ or $r$.
-\end{enumerate}
-
-So the geometry never leaves the symmetry you started with; the formal closure axiom just records that fact."""
-
 const RefVertexA = EuclidGeometry.reflect_about_axis_x_half(VertexA)
 const RefVertexB = EuclidGeometry.reflect_about_axis_x_half(VertexB)
 const RefVertexC = EuclidGeometry.reflect_about_axis_x_half(VertexC)
@@ -107,7 +95,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return EuclidLatex.TeXDocument(ClosureLatexDocument)
+    return EuclidAlgebraGroupsZ2ClosureContent.get_view_content()
 end
 
 """Apply a set of reflection poses to the tracked points."""

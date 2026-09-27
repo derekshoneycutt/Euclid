@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("axiom_I6_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PlaneEdgeLeft = [1f0, 0f0, 0f0]
@@ -77,9 +79,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,6}
-
-\textbf{I, 6.} If two planes $\alpha$, $\beta$ have a point $A$ \euclidpoint[color=steelblue,size=1] in common, then they have at least a second point $B$ \euclidpoint[color=palevioletred1,size=1] in common."""
+    return HilbertChapterOneAxiomI6Content.get_view_content()
 end
 
 """Set the plane's fill alpha from a normalized [0, 1] opacity."""

@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_006_surfextrem_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const Corner1 = [0f0, 0f0, 0f0]
@@ -64,9 +66,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Surface Extremities}
-
-The extremities of a surface are lines \euclidline[color=steelblue,length=3,thickness=4]."""
+    return ElementsOneDefinitionSurfaceExtremityContent.get_view_content()
 end
 
 """Hide a line's edge and collapse it onto a corner point."""

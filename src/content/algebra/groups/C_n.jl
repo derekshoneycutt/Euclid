@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("C_n_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
@@ -121,26 +123,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{The cyclic group of rotations}
-
-This represents equal rotations around a fixed center. We turn the marked figure by equal steps, and keep track of which step we have reached.
-
-Formally, $C_n$ is the cyclic group of rotations by multiples of $\frac{2\pi}{n}$ about a fixed center.
-
-Write $\rho$ for one-step rotation. Then $C_n = \{e,\rho,\rho^2,\dots,\rho^{n-1}\}$ with $\rho^{n}=e$.
-
-The point is that these rotations compose cleanly: turn by one step, then another, and you still have a rotation of the same kind.
-
-Brief proof it is a group:
-
-\begin{enumerate}
-\item \textbf{Closure}: $\rho^i\rho^j = \rho^{i+j \;\mathrm{mod}\; n}$, still in the set.
-\item \textbf{Associativity}: composition of rotations is associative.
-\item \textbf{Identity}: $\rho^0=e$.
-\item \textbf{Inverses}: $(\rho^k)^{-1}=\rho^{n-k}$.
-\end{enumerate}
-
-Also, $C_n$ is abelian because turning by one amount and then another gives the same result as doing those turns in the opposite order."""
+    return EuclidAlgebraGroupsCnContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

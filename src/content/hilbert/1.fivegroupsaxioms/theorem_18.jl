@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_18_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.18f0, 0.82f0, 0f0]
@@ -161,19 +163,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 18}
-
-If $(A, B, C, ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue]
-and $(A', B', C', ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue]
-are congruent figures and $P$ \euclidpoint[color=grey60,size=1] represents any arbitrary point, then there can always
-be found a point $P'$ \euclidpoint[color=grey60,size=1] so that the two figures
-$(A, B, C, ..., P)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=khaki3,edge2_color=khaki3,edge3_color=khaki3,edge4_color=grey60]
-and $(A', B', C', ..., P')$ \euclidbox[height=2,width=2,thickness=2,edge1_color=khaki3,edge2_color=khaki3,edge3_color=khaki3,edge4_color=grey60]
-shall likewise be congruent. If the figure
-$(A, B, C, ..., P)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=khaki3,edge2_color=khaki3,edge3_color=khaki3,edge4_color=grey60]
-contains at least four points not lying in the same plane, then the determination of $P'$ \euclidpoint[color=grey60,size=1] can be made in but one way.
-
-This theorem contains an important result; namely, that all the facts concerning space which have reference to congruence, that is to say, to displacements in space, are (by the addition of the axioms of \textit{groups I and II}) exclusively the consequences of the six linear and plane axioms mentioned above. Hence, it is not necessary to assume the axiom of parallels in order to establish these facts."""
+    return HilbertChapterOneTheorem18Content.get_view_content()
 end
 
 """Reset the state of the animation cycle back to the start of the animation."""

@@ -57,6 +57,7 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"frame_presented", .Frame_Presented},
     {"capture_completed", .Capture_Completed},
     {"gif_completed", .Gif_Completed},
+    {"library_search_committed", .Library_Search_Committed},
     {"checkpoint_stored", .Checkpoint_Stored},
     {"runtime_shutdown_complete", .Runtime_Shutdown_Complete},
 }
@@ -79,6 +80,9 @@ Command_Kind :: enum u8 {
     Set_View_Content,
     Set_View_Scroll,
     Set_Splitters,
+    Set_Library_Search,
+    Apply_Library_Search_Suggestion,
+    Clear_Library_Search,
     Request_Screenshot,
     Start_Gif,
     Stop_Gif,
@@ -286,6 +290,9 @@ Raw_Command :: struct {
     key : string,
     screenshot : string,
     start_gif : string,
+    set_library_search : string,
+    apply_library_search_suggestion : bool,
+    clear_library_search : bool,
     set_view_content : Raw_View_Content,
     emit_dust : Raw_Dust_Emission,
     contact_dust : Raw_Dust_Contact,
@@ -673,6 +680,8 @@ runner_update_command :: proc(
          .Pause_Animation, .Resume_Animation, .Emit_Dust,
          .Contact_Dust, .Kick_Dust,
          .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
+         .Set_Library_Search, .Apply_Library_Search_Suggestion,
+         .Clear_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
          .Allocation_Checkpoint, .Shutdown:
         return runner_issue_action(runner, command, frame.actions)
@@ -717,6 +726,9 @@ runner_update :: proc(
             command.kind == .Wait_State ||
             command.kind == .Wait_Terminal_Contains || command.kind == .Type_Text ||
             command.kind == .Key || command.kind == .Set_View_Content ||
+            command.kind == .Set_Library_Search ||
+            command.kind == .Apply_Library_Search_Suggestion ||
+            command.kind == .Clear_Library_Search ||
             command.kind == .Emit_Dust || command.kind == .Contact_Dust ||
             command.kind == .Kick_Dust ||
             command.kind == .Set_View_Scroll ||
@@ -757,6 +769,22 @@ raw_action_command_select :: proc(source: string, command: ^Command) -> int {
     return 2
 }
 
+// Select one populated library-search action while preserving exact-one semantics.
+raw_library_search_command_select :: proc(
+    raw: Raw_Command, command: ^Command) -> int {
+    selected := raw_text_command_select(
+        raw.set_library_search, .Set_Library_Search, command)
+    if raw.apply_library_search_suggestion {
+        command.kind = .Apply_Library_Search_Suggestion
+        selected += 1
+    }
+    if raw.clear_library_search {
+        command.kind = .Clear_Library_Search
+        selected += 1
+    }
+    return selected
+}
+
 //   Select every populated action field and return the number selected.
 raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected := 0
@@ -770,6 +798,7 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_text_command_select(
         raw.screenshot, .Request_Screenshot, command)
     selected += raw_text_command_select(raw.start_gif, .Start_Gif, command)
+    selected += raw_library_search_command_select(raw, command)
     selected += raw_text_command_select(raw.wait_event, .Wait_Event, command)
     selected += raw_text_command_select(raw.wait_state, .Wait_State, command)
     selected += raw_text_command_select(raw.wait_terminal_contains,
@@ -877,6 +906,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
     switch kind {
     case .Emit_Dust, .Contact_Dust, .Kick_Dust,
          .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
+            .Apply_Library_Search_Suggestion, .Clear_Library_Search,
          .Assert_No_Bad_Frees, .Shutdown:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
@@ -884,6 +914,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Type_Text, .Key,
          .Pause_Simulation, .Resume_Simulation,
          .Pause_Animation, .Resume_Animation,
+         .Set_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
          .Wait_State, .Wait_Terminal_Contains, .Assert_State,
          .Assert_Terminal_Contains,
@@ -1093,6 +1124,8 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "dynview_enabled": return display.dynview_enabled
     case "gif_active": return display.gif_capture_active
     case "gif_idle": return !display.gif_capture_active
+    case "library_search_idle": return display.library_search_idle
+    case "library_search_has_matches": return display.library_search_has_matches
     }
     return runtime_state_matches(name, display) ||
         dust_state_matches(name, display) || terminal_state_matches(name, display)

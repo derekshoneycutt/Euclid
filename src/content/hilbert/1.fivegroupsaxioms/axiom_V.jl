@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_V_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.10f0, 0.55f0, 0f0]
@@ -111,21 +113,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom V}
-
-Let $A_1$ \euclidpoint[color=grey60,size=1] be any point upon a straight line \euclidline[color=khaki3,length=3,thickness=4] between the arbitrarily chosen points
-$A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1]. Take the points
-$A_2$ \euclidpoint[color=grey60,size=1], $A_3$ \euclidpoint[color=grey60,size=1], $A_4$ \euclidpoint[color=grey60,size=1],
-... so that $A_1$ \euclidpoint[color=grey60,size=1] lies between $A$ \euclidpoint[color=steelblue,size=1] and
-$A_2$ \euclidpoint[color=grey60,size=1], $A_2$ \euclidpoint[color=grey60,size=1] between $A_1$ \euclidpoint[color=grey60,size=1]
-and $A_3$ \euclidpoint[color=grey60,size=1], $A_3$ \euclidpoint[color=grey60,size=1] between $A_2$ \euclidpoint[color=grey60,size=1]
-and $A_4$ \euclidpoint[color=grey60,size=1], etc. Moreover, let the segments
-
-    $AA_1$ \euclidline[color=khaki3,length=3,thickness=4], $A_1A_2$ \euclidline[color=khaki3,length=3,thickness=4], $A_2A_3$ \euclidline[color=khaki3,length=3,thickness=4], $A_3A_4$ \euclidline[color=khaki3,length=3,thickness=4], ...
-
-be equal to one another. Then, among this series of points, there always exists a certain point
-$A_n$ \euclidpoint[color=grey60,size=1] such that $B$ \euclidpoint[color=palevioletred1,size=1] lies between
-$A$ \euclidpoint[color=steelblue,size=1] and $A_n$ \euclidpoint[color=grey60,size=1]."""
+    return HilbertChapterOneAxiomVContent.get_view_content()
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""

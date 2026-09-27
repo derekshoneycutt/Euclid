@@ -6,15 +6,15 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("logic_overview_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("2905c158-007b-4412-be60-20a27decc0b2")
 
 """Return introductory content for the Logic animation collection."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Logic}
-
-Logical operations describe how conditions and sets combine. The diagrams here use bounded regions to make those relationships visible."""
+    return EuclidLogicOverviewContent.get_view_content()
 end
 
 """Initialize the null animation and publish the Logic overview."""

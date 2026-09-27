@@ -9,11 +9,13 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("book_1_overview_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 """Emit the Book I root view content."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"\textbf{Euclid Elements - Book I}"
+    return ElementsOneBookOneOverviewContent.get_view_content()
 end
 
 """Initialize the null animation and publish the Book I view."""

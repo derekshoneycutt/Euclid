@@ -12,6 +12,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("post_05_nonparallel_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint1 = [0.25f0, 0.1f0, 0f0]
@@ -118,11 +120,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Postulate}: \textit{Non-Parallel Lines}
-
-\textit{Let the following be postulated:}
-
-That, if a straight line \euclidline[color=grey60,length=3,thickness=4] falling on two straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] make the interior angles on the same side less than two right angles, the two straight lines, if produced indefinitely, meet on the side on which are the angles less than the two right angles."""
+    return ElementsOnePostulatesNonParallelLinesContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

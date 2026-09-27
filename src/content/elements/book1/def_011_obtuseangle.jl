@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_011_obtuseangle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const JointPoint = [0.375f0, 0.30f0, 0f0]
@@ -90,9 +92,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Obtuse Angle}
-
-An obtuse angle \euclidangle[color=khaki3,radius=2,end=120,filled] is an angle greater than a right angle."""
+    return ElementsOneDefinitionObtuseAngleContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

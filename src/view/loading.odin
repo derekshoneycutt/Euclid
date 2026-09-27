@@ -266,20 +266,20 @@ loading_prepare_assets_phase :: proc(
 loading_runtime_session :: proc(
     state: ^Euclid_General_State,
     service: ^bridgemodel.Julia_Runtime_Service) -> (Euclid_Runtime_Session, bool) {
-    presentation := create_presentation_runtime()
-    if presentation == nil {
-        _ = shutdown_runtime_session({
-            state = state,
-            julia_service = service,
-        })
-        return {}, false
-    }
-    julia_egress_router_attach(state, presentation)
-    return {
+    session := Euclid_Runtime_Session{
         state = state,
         julia_service = service,
-        presentation = presentation,
-    }, true
+        search_service = session_create_search_service(),
+    }
+    if session.search_service == nil {
+        _ = shutdown_runtime_session(session)
+        return {}, false
+    }
+    if !session_start_presentation(&session) {
+        _ = shutdown_runtime_session(session)
+        return {}, false
+    }
+    return session, true
 }
 
 //   Initialize startup phases while the window stays responsive.

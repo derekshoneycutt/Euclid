@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_012_acuteangle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const JointPoint = [0.375f0, 0.30f0, 0f0]
@@ -90,9 +92,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Acute Angle}
-
-An acute angle \euclidangle[color=khaki3,radius=2,end=60,filled] is an angle less than a right angle."""
+    return ElementsOneDefinitionAcuteAngleContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

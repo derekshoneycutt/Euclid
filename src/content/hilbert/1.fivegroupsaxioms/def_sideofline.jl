@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("def_sideofline_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.14f0, 0.50f0, 0f0]
@@ -95,13 +97,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Side of Line}
-
-Making use of the notation of \textit{theorem 5}, we say: The points $A$ \euclidpoint[color=steelblue,size=1],
-$A'$ \euclidpoint[color=khaki3,size=1] lie in the plane $\alpha$ upon one and the same side of the straight line
-$a$ \euclidline[color=grey60,length=3,thickness=4], and the points $A$ \euclidpoint[color=steelblue,size=1],
-$B$ \euclidpoint[color=palevioletred1,size=1] lie in the plane $\alpha$ upon different sides of the
-straight line $a$ \euclidline[color=grey60,length=3,thickness=4]."""
+    return HilbertChapterOneDefinitionSideOfLineContent.get_view_content()
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""

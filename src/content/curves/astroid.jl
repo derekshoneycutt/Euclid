@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("astroid_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("80aab994-2fc1-4c62-9adf-6e32cd54aca5")
@@ -13,9 +15,7 @@ const K = 4 // 1
 
 """Return explanatory content for the four-cusped hypocycloid."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Astroid}
-
-An astroid is the four-cusped hypocycloid with $k=R/r=4$. Its tracing point lies on a circle whose radius is one quarter of the fixed circle's radius."""
+    return EuclidCurvesAstroidContent.get_view_content()
 end
 
 """Create this leaf's four-cusped hypocycloid."""

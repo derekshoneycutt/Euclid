@@ -41,6 +41,34 @@ scenario_test_parse_json_lines :: proc(t: ^testing.T) {
     testing.expect_value(t, program.commands[1].timeout_ms, u32(10))
 }
 
+// Verify library-search actions, event vocabulary, and state predicates are bounded.
+@(test)
+scenario_test_library_search_commands :: proc(t: ^testing.T) {
+    program: Program
+    result := parse(
+        "{\"set_library_search\":\"-circle \\\"right angle\\\"\",\"as\":\"search\"}\n" +
+        "{\"apply_library_search_suggestion\":true,\"as\":\"correction\"}\n" +
+        "{\"clear_library_search\":true,\"as\":\"clear\"}\n",
+        &program)
+    testing.expect_value(t, result, Parse_Error.None)
+    testing.expect_value(t, program.count, 3)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Set_Library_Search)
+    testing.expect_value(t,
+        text_string(&program.commands[0].text), `-circle "right angle"`)
+    testing.expect_value(t, program.commands[1].kind,
+        Command_Kind.Apply_Library_Search_Suggestion)
+    testing.expect_value(t, program.commands[2].kind,
+        Command_Kind.Clear_Library_Search)
+
+    event, event_valid := event_kind("library_search_committed")
+    testing.expect(t, event_valid)
+    testing.expect_value(t, event, trace.Kind.Library_Search_Committed)
+    testing.expect(t, state_matches("library_search_idle",
+        observe.Display{library_search_idle = true}))
+    testing.expect(t, state_matches("library_search_has_matches",
+        observe.Display{library_search_has_matches = true}))
+}
+
 // Verify named viewport payloads retain explicit zero and both splitter coordinates.
 @(test)
 scenario_test_parse_viewport_actions :: proc(t: ^testing.T) {

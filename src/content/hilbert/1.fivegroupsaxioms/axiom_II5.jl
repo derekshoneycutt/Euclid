@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_II5_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.20f0, 0.32f0, 0f0]
@@ -99,9 +101,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,5}
-
-\textbf{II, 5.} Let $A$ \euclidpoint[color=steelblue,size=1], $B$ \euclidpoint[color=palevioletred1,size=1], $C$ \euclidpoint[color=khaki3,size=1] be three points not lying in the same straight line \euclidline[color=khaki3,length=3,thickness=4] and let $a$ \euclidline[color=steelblue,length=3,thickness=4] be a straight line lying in the plane $ABC$ and not passing through any of the points $A$ \euclidpoint[color=steelblue,size=1], $B$ \euclidpoint[color=palevioletred1,size=1], $C$ \euclidpoint[color=khaki3,size=1]. Then, if the straight line a passes through a point of the segment $AB$ \euclidline[color=khaki3,length=3,thickness=4], it will also pass through either a point of the segment $BC$ \euclidline[color=grey60,length=3,thickness=4] or a point of the segment $AC$ \euclidline[color=grey60,length=3,thickness=4]."""
+    return HilbertChapterOneAxiomII5Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

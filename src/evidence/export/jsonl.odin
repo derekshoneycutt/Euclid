@@ -83,6 +83,7 @@ EVENT_KIND_NAMES :: #sparse [trace.Kind]string{
     .Terminal_Raster_Published = "terminal.raster_published",
     .Animation_Frame_Presented = "terminal.animation_frame_presented",
     .Animation_Playback_Completed = "terminal.animation_playback_completed",
+    .Library_Search_Committed = "library_search.committed",
     .Checkpoint_Requested = "checkpoint.requested",
     .Checkpoint_Stored = "checkpoint.stored",
     .Checkpoint_Unavailable = "checkpoint.unavailable",

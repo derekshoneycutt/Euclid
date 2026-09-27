@@ -8,6 +8,7 @@ import input "../input"
 import native "../native"
 import view_core "../core"
 import view_font "../font"
+import "core:unicode/utf8"
 
 INPUT_BOX_TEXT_INSET :: f32(4)
 
@@ -24,6 +25,7 @@ Input_Box_Params :: struct {
     column_advance: f32,
     font: view_font.Font_Face,
     resolver: view_font.Font_Resolver,
+    edit_target: Input_Box_Edit_Target,
 }
 
 // Input_Box_Update reports the selected copy range produced by one update.
@@ -31,6 +33,17 @@ Input_Box_Update :: struct {
     copy_start: int,
     copy_end: int,
     copy_requested: bool,
+    changed: bool,
+    submit_requested: bool,
+    tab_requested: bool,
+    copied_length: int,
+    copied_bytes: [viewmodel.LIBRARY_SEARCH_QUERY_BYTE_CAPACITY]u8,
+}
+
+// Input_Box_Edit_Target supplies caller-owned bounded text storage.
+Input_Box_Edit_Target :: struct {
+    bytes: []u8,
+    length: ^int,
 }
 
 // Input_Box_Result carries prepared interaction and clipped draw geometry.
@@ -41,6 +54,9 @@ Input_Box_Result :: struct {
     text_x: f32,
     selection: geometry.Rectangle,
     caret: geometry.Rectangle,
+    changed: bool,
+    submit_requested: bool,
+    tab_requested: bool,
 }
 
 // input_box_clamp_boundary clamps one byte offset to a UTF-8 codepoint boundary.
@@ -151,6 +167,155 @@ input_box_apply_keyboard :: proc(
     return result
 }
 
+// input_box_replace_selection replaces the selected bytes without splitting UTF-8.
+input_box_replace_selection :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    replacement: string) -> bool {
+    if state == nil || target.length == nil {return false}
+    text_length := clamp(target.length^, 0, len(target.bytes))
+    text := string(target.bytes[:text_length])
+    first := min(input_box_clamp_boundary(text, state^.anchor_byte),
+        input_box_clamp_boundary(text, state^.cursor_byte))
+    last := max(input_box_clamp_boundary(text, state^.anchor_byte),
+        input_box_clamp_boundary(text, state^.cursor_byte))
+    available := len(target.bytes) - (text_length - (last - first))
+    inserted := min(len(replacement), max(0, available))
+    for inserted > 0 && inserted < len(replacement) &&
+        dyncore.text_is_utf8_trailing_byte(replacement[inserted]) {
+        inserted -= 1
+    }
+    if first == last && inserted == 0 {return false}
+    tail_length := text_length - last
+    copy(target.bytes[first + inserted:first + inserted + tail_length],
+        target.bytes[last:text_length])
+    copy(target.bytes[first:first + inserted], transmute([]u8)replacement[:inserted])
+    target.length^ = first + inserted + tail_length
+    state^.cursor_byte = first + inserted
+    state^.anchor_byte = state^.cursor_byte
+    return first != last || inserted > 0
+}
+
+// input_box_delete_selection removes a selection or one adjacent codepoint.
+input_box_delete_selection :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    backwards: bool) -> bool {
+    text := string(target.bytes[:clamp(target.length^, 0, len(target.bytes))])
+    first := min(state^.anchor_byte, state^.cursor_byte)
+    last := max(state^.anchor_byte, state^.cursor_byte)
+    if first == last {
+        if backwards {first = input_box_previous_boundary(text, first)}
+        else {last = input_box_next_boundary(text, last)}
+    }
+    state^.anchor_byte = first
+    state^.cursor_byte = last
+    return input_box_replace_selection(state, target, "")
+}
+
+// input_box_capture_selection copies the current selected bytes into an update.
+input_box_capture_selection :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    result: ^Input_Box_Update) {
+    result^.copy_start = min(state^.anchor_byte, state^.cursor_byte)
+    result^.copy_end = max(state^.anchor_byte, state^.cursor_byte)
+    result^.copy_requested = result^.copy_end > result^.copy_start
+    result^.copied_length = min(result^.copy_end - result^.copy_start,
+        len(result^.copied_bytes))
+    copy(result^.copied_bytes[:result^.copied_length],
+        target.bytes[result^.copy_start:result^.copy_start + result^.copied_length])
+}
+
+// input_box_apply_edit_control handles one supported control-key edit chord.
+input_box_apply_edit_control :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    event: input.Input_Event, clipboard_text: string,
+    result: ^Input_Box_Update) -> bool {
+    if event.key == .A {
+        state^.anchor_byte = 0
+        state^.cursor_byte = target.length^
+    } else if event.key == .C || event.key == .X {
+        input_box_capture_selection(state, target, result)
+        if event.key == .X && result^.copy_requested {
+            result^.changed = input_box_delete_selection(
+                state, target, false) || result^.changed
+        }
+    } else if event.key == .V {
+        result^.changed = input_box_replace_selection(
+            state, target, clipboard_text) || result^.changed
+    } else {
+        return false
+    }
+    return true
+}
+
+// input_box_apply_edit_event applies one text or keyboard event to bounded storage.
+input_box_apply_edit_event :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    event: input.Input_Event, clipboard_text: string,
+    result: ^Input_Box_Update) {
+    if event.kind == .Text {
+        encoded, count := utf8.encode_rune(event.codepoint)
+        result^.changed = input_box_replace_selection(
+            state, target, string(encoded[:count])) || result^.changed
+        return
+    }
+    if event.kind != .Press && event.kind != .Repeat {return}
+    control := .Control in event.modifiers
+    if control && input_box_apply_edit_control(
+        state, target, event, clipboard_text, result) {return}
+    if control {return}
+    if event.key == .Backspace || event.key == .Delete {
+        result^.changed = input_box_delete_selection(
+            state, target, event.key == .Backspace) || result^.changed
+    } else if event.key == .Enter {
+        result^.submit_requested = true
+    } else if event.key == .Tab {
+        result^.tab_requested = true
+    } else {
+        text := string(target.bytes[:target.length^])
+        input_box_move_cursor(
+            state, text, event.key, .Shift in event.modifiers)
+    }
+}
+
+// input_box_apply_edit_keyboard mutates caller-owned text from one ordered frame.
+input_box_apply_edit_keyboard :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
+    frame: input.Input_Frame, clipboard_text: string = "") -> Input_Box_Update {
+    result: Input_Box_Update
+    if state == nil || target.length == nil {return result}
+    for event in frame.events {
+        input_box_apply_edit_event(
+            state, target, event, clipboard_text, &result)
+    }
+    return result
+}
+
+// input_box_frame_requests_paste reports whether one frame contains Ctrl+V.
+input_box_frame_requests_paste :: proc(frame: input.Input_Frame) -> bool {
+    for event in frame.events {
+        if (event.kind == .Press || event.kind == .Repeat) &&
+            event.key == .V && .Control in event.modifiers {return true}
+    }
+    return false
+}
+
+// input_box_apply_focused_input resolves editable or read-only keyboard policy.
+input_box_apply_focused_input :: proc(
+    params: Input_Box_Params, resolved: ^Input_Box_Params) -> Input_Box_Update {
+    if params.edit_target.length == nil {
+        return input_box_apply_keyboard(params.state, params.text, params.frame)
+    }
+    clipboard_text := ""
+    if input_box_frame_requests_paste(params.frame) {
+        clipboard_text = input.input_get_clipboard_text()
+    }
+    update := input_box_apply_edit_keyboard(
+        params.state, params.edit_target, params.frame, clipboard_text)
+    resolved^.text = string(
+        params.edit_target.bytes[:params.edit_target.length^])
+    return update
+}
+
 // input_box_hit_boundary maps one screen x coordinate to a borrowed-text boundary.
 input_box_hit_boundary :: proc(params: Input_Box_Params, x: f32) -> int {
     if params.column_advance <= 0 {return 0}
@@ -208,19 +373,29 @@ input_box_reveal_cursor :: proc(
 input_box_prepare :: proc(
     params: Input_Box_Params,
     owner: ^viewmodel.Ui_Press_Owner_State) -> Input_Box_Result {
+    resolved := params
     changed := input_box_reconcile_content(
         params.state, params.text, params.content_revision)
     hovered := geometry.rectangle_contains(params.rect,
         {params.frame.mouse_position.x, params.frame.mouse_position.y})
     input_box_update_pointer(params, hovered, owner)
+    update: Input_Box_Update
     if params.focused {
-        copy := input_box_apply_keyboard(params.state, params.text, params.frame)
-        if copy.copy_requested {
-            input.input_set_clipboard_text(params.text[copy.copy_start:copy.copy_end])
+        update = input_box_apply_focused_input(params, &resolved)
+        if update.copy_requested {
+            copied := params.text[update.copy_start:update.copy_end]
+            if update.copied_length > 0 {
+                copied = string(update.copied_bytes[:update.copied_length])
+            }
+            input.input_set_clipboard_text(copied)
         }
     }
-    input_box_reveal_cursor(params, changed)
-    return input_box_draw_result(params, hovered)
+    input_box_reveal_cursor(resolved, changed)
+    result := input_box_draw_result(resolved, hovered)
+    result.changed = update.changed
+    result.submit_requested = update.submit_requested
+    result.tab_requested = update.tab_requested
+    return result
 }
 
 // input_box_draw_result derives clipped selection and caret rectangles.

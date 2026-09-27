@@ -75,7 +75,8 @@ using UUIDs
 
 include(joinpath(@__DIR__, "build_config.jl"))
 using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs,
-    native_runtime_environment, resolve_msvc_tool_path, sdl3_provider_identity
+    native_runtime_environment, resolve_msvc_tool_path, sdl3_provider_identity,
+    sqlite3_artifact, sqlite3_tool_linker_flags
 include(joinpath(@__DIR__, "shaders.jl"))
 using .EuclidShaders: ShaderArtifacts, build_shaders
 
@@ -110,6 +111,12 @@ struct JuliaSysimageArtifact
     path::String
 end
 
+"""Validated generated search database and the corpus identity it indexes."""
+struct SearchAsset
+    corpus_fingerprint::String
+    database_sha256::String
+end
+
 """Resolved build/vet/assets toggles derived from CLI arguments."""
 struct BuildPlanToggles
     do_build::Bool
@@ -134,6 +141,10 @@ const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
 const ANALYZER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "analyze.jl")
 const TEST_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "test_runner.jl")
 const SCENARIO_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "scenario_runner.jl")
+const SEARCH_BUILD_DIR = joinpath(SCRIPT_DIR, ".build", "search")
+const SEARCH_EXPORTER = joinpath(SCRIPT_DIR, "tools", "export_search_corpus.jl")
+const SEARCH_BUILDER_SOURCE = joinpath(
+    SCRIPT_DIR, "tools", "search_index_builder", "main.odin")
 
 
 """Return true when running on Windows."""
@@ -775,6 +786,22 @@ function native_graphics_runtime_components()
     return components
 end
 
+"""Describe the statically linked repository SQLite build in CycloneDX form."""
+function sqlite3_runtime_component()
+    artifact = sqlite3_artifact()
+    compiler = first(split(artifact.compiler_identity, '\n'))
+    return Dict{String,Any}(
+        "type" => "library", "bom-ref" => "native:sqlite3",
+        "name" => "SQLite", "version" => "3.53.4", "scope" => "required",
+        "hashes" => [component_hash(artifact.archive_path)],
+        "properties" => [
+            Dict("name" => "euclid:provider", "value" => "repository"),
+            Dict("name" => "euclid:features", "value" => "fts5,spellfix1"),
+            Dict("name" => "euclid:build-fingerprint",
+                "value" => artifact.fingerprint),
+            Dict("name" => "euclid:compiler", "value" => compiler)])
+end
+
 """Describe shader compilers as build-only CycloneDX components."""
 function shader_tool_components(manifest_path::Union{Nothing,String})
     manifest_path === nothing && return Dict{String,Any}[]
@@ -868,6 +895,7 @@ function runtime_sbom_components(
             "scope" => "required"))
     end
     append!(components, native_graphics_runtime_components(),
+        [sqlite3_runtime_component()],
         shader_tool_components(shader_manifest_path),
         shader_artifact_components(shader_manifest_path))
     return components
@@ -1101,6 +1129,73 @@ function compile_staged_terminfo()
     result.exit_code == 0 || error("Euclid terminfo compilation failed.")
 end
 
+"""Export the canonical sidecar corpus and return its SHA-256 fingerprint."""
+function export_search_corpus(corpus_path::String)
+    result = run_command(Cmd([
+        JULIA_EXE,
+        "--project=$JULIA_TEST_PROJECT",
+        SEARCH_EXPORTER,
+        corpus_path,
+    ]); cwd=SCRIPT_DIR, capture_output=true)
+    result.exit_code == 0 || error(
+        "Search corpus export failed: $(strip(result.stderr))")
+    fingerprint = String(strip(result.stdout))
+    occursin(r"^[0-9a-f]{64}$", fingerprint) || error(
+        "Search corpus exporter returned an invalid fingerprint.")
+    return fingerprint
+end
+
+"""Compile the standalone native search index builder."""
+function build_search_index_builder()
+    executable = joinpath(
+        SEARCH_BUILD_DIR, Sys.iswindows() ? "search_index_builder.exe" :
+            "search_index_builder")
+    result = run_command(Cmd([
+        "odin", "build", SEARCH_BUILDER_SOURCE, "-file", "-out:$executable",
+        "-vet", "-strict-style", "-disallow-do", "-warnings-as-errors",
+        "-extra-linker-flags:$(sqlite3_tool_linker_flags())",
+    ]); cwd=SCRIPT_DIR, capture_output=true)
+    result.exit_code == 0 || error(
+        "Search index builder compilation failed: " *
+        strip(result.stdout * result.stderr))
+    return executable
+end
+
+"""Build one candidate search database with the native builder."""
+function run_search_index_builder(
+    executable::String, corpus_path::String,
+    database_path::String, corpus_fingerprint::String)
+    result = run_command(Cmd([
+        executable, corpus_path, database_path, corpus_fingerprint,
+    ]); cwd=SCRIPT_DIR, capture_output=true)
+    result.exit_code == 0 || error(
+        "Search index build failed: $(strip(result.stdout * result.stderr))")
+    isfile(database_path) || error("Search index builder produced no database.")
+    return nothing
+end
+
+"""Generate, reproduce, and stage the immutable built-in search database."""
+function stage_search_asset()
+    mkpath(SEARCH_BUILD_DIR)
+    corpus_path = joinpath(SEARCH_BUILD_DIR, "animations.jsonl")
+    corpus_fingerprint = export_search_corpus(corpus_path)
+    builder = build_search_index_builder()
+    first_candidate = joinpath(SEARCH_BUILD_DIR, "animations.first.sqlite3")
+    second_candidate = joinpath(SEARCH_BUILD_DIR, "animations.second.sqlite3")
+    run_search_index_builder(
+        builder, corpus_path, first_candidate, corpus_fingerprint)
+    run_search_index_builder(
+        builder, corpus_path, second_candidate, corpus_fingerprint)
+    first_digest = sysimage_artifact_sha256(first_candidate)
+    first_digest == sysimage_artifact_sha256(second_candidate) || error(
+        "Search database generation is not byte deterministic.")
+    staged_path = joinpath(ASSETS_STAGING_DIR, "search", "animations.sqlite3")
+    mkpath(dirname(staged_path))
+    mv(first_candidate, staged_path; force=true)
+    rm(second_candidate; force=true)
+    return SearchAsset(corpus_fingerprint, first_digest)
+end
+
 """Create the compressed assets archive from staging content."""
 function create_assets_archive(destination::String)
     result = run_command(
@@ -1157,7 +1252,8 @@ end
 """Write deterministic metadata for the staged asset archive."""
 function write_assets_manifest(
     sysimage::JuliaSysimageArtifact, shaders::ShaderArtifacts,
-    sysimage_relative_path::String, package_identity::String)
+    search::SearchAsset, sysimage_relative_path::String,
+    package_identity::String)
     open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
         write(io, """
 package=assets.pkg
@@ -1165,6 +1261,10 @@ julia_root=julia
 content_root=content
 content_input_fingerprint=$(content_input_fingerprint())
 package_identity=$package_identity
+search_database=search/animations.sqlite3
+search_database_sha256=$(search.database_sha256)
+search_corpus_fingerprint=$(search.corpus_fingerprint)
+search_schema_version=1
 shader_root=shaders
 shader_manifest=shaders/manifest.toml
 shader_manifest_sha256=$(bytes2hex(open(sha256, shaders.manifest_path)))
@@ -1211,6 +1311,7 @@ function stage_assets_content(
     copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
     rm(joinpath(ASSETS_STAGING_DIR, "Chalk On Blackboard.wav"); force=true)
     compile_staged_terminfo()
+    search = stage_search_asset()
 
     sysimage_relative_path = joinpath(
         "sysimage", sysimage.input_fingerprint, julia_sysimage_filename())
@@ -1219,7 +1320,7 @@ function stage_assets_content(
     cp(sysimage.path, staged_sysimage; force=true)
     package_identity = staged_asset_package_identity()
     write_assets_manifest(
-        sysimage, shaders, sysimage_relative_path, package_identity)
+        sysimage, shaders, search, sysimage_relative_path, package_identity)
     return package_identity
 end
 

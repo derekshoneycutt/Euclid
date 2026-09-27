@@ -6,15 +6,15 @@ using ..EuclidLatex
 using ..NullAnimation
 using ..AnimationCatalog
 
+include("curves_overview_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6")
 
 """Return the introductory view content for analytic curves."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Curves}
-
-Here, we explore various kinds of curves in geometry."""
+    return EuclidCurvesOverviewContent.get_view_content()
 end
 
 """Initialize the null animation and publish the Curves overview."""

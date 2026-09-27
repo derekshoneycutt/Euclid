@@ -18,6 +18,7 @@ import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import view_core "./core"
 import input "./input"
+import viewmodel "./model"
 import ui "./ui"
 
 import "core:unicode/utf8"
@@ -428,6 +429,37 @@ scenario_issue_simulation_policy_action :: proc(
     return true, true
 }
 
+// Route one scenario search action through the display-owned search model.
+scenario_issue_library_search_action :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command,
+    identity: ^evidence_trace.Identity) -> (bool, bool) {
+    search := &runtime.state^.ui_runtime.library_search
+    #partial switch command.kind {
+    case .Set_Library_Search:
+        query := scenario.text_string(&command.text)
+        if len(query) == 0 || len(query) > len(search^.query) {return true, false}
+        copy(search^.query[:len(query)], query)
+        search^.query_length = len(query)
+        viewmodel.library_search_query_changed(search, 0, true)
+        search^.input.cursor_byte = search^.query_length
+        search^.input.anchor_byte = search^.query_length
+        search^.submit_requested = true
+    case .Apply_Library_Search_Suggestion:
+        if search^.suggestion_length == 0 {return true, false}
+        ui.library_search_apply_suggestion(search)
+    case .Clear_Library_Search:
+        ui.library_search_clear_query(search)
+    case:
+        return false, false
+    }
+    search^.scenario_correlation = identity^.id
+    search^.scenario_correlation_generation = identity^.generation
+    if command.kind == .Clear_Library_Search {
+        library_search_record_clear_commit(runtime.state)
+    }
+    return true, true
+}
+
 //   Route one screenshot or GIF command through display-owned capture state.
 scenario_issue_capture_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
@@ -461,6 +493,10 @@ scenario_issue_display_action :: proc(
         return handled, accepted
     }
     if handled, accepted := scenario_issue_capture_action(
+        runtime, command, identity); handled {
+        return handled, accepted
+    }
+    if handled, accepted := scenario_issue_library_search_action(
         runtime, command, identity); handled {
         return handled, accepted
     }

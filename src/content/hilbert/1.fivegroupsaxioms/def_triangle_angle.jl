@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("def_triangle_angle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.26f0, 0.44f0, 0f0]
@@ -113,19 +115,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Triangle Angle}
-
-Suppose we have given a triangle $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=steelblue,edge3_color=khaki3].
-Denote by $h$ \euclidline[color=steelblue,length=3,thickness=4], $k$ \euclidline[color=palevioletred1,length=3,thickness=4]
-the two half-rays emanating from $A$ \euclidpoint[color=plum1,size=0.5] and passing respectively through
-$B$ \euclidpoint[color=plum1,size=0.5] and $C$ \euclidpoint[color=plum1,size=0.5].
-The angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] is then said to be the angle included
-by the sides $AB$ \euclidline[color=steelblue,length=3,thickness=4] and $AC$ \euclidline[color=palevioletred1,length=3,thickness=4],
-or the one opposite to the side $BC$ \euclidline[color=khaki3,length=3,thickness=4] in the
-triangle $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=steelblue,edge3_color=khaki3].
-It contains all of the interior points of the triangle
-$ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=steelblue,edge3_color=khaki3]
-and is represented by the symbol $\angle BAC$ \euclidangle[color=khaki3,radius=2,end=60,filled], or by $\angle A$ \euclidangle[color=khaki3,radius=2,end=60,filled]."""
+    return HilbertChapterOneDefTriangleAngleContent.get_view_content()
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""

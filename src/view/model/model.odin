@@ -10,6 +10,9 @@ import "core:time"
 TOOL_LENGTH :: 0.35
 MAX_TOOL_BRUSH_OCCLUDERS :: 2
 GIF_PATH_CAPACITY :: 4096
+LIBRARY_SEARCH_QUERY_BYTE_CAPACITY :: 512
+LIBRARY_SEARCH_RESULT_CAPACITY :: 64
+LIBRARY_SEARCH_VISIBLE_ID_CAPACITY :: 256
 Color :: color.Color_RGBA8
 Rectangle :: geometry.Rectangle
 Vector3 :: geometry.Vector3
@@ -223,6 +226,31 @@ Ui_Input_Box_State :: struct {
     dragging: bool,
 }
 
+// Library_Search_State owns bounded display-side query and accepted-result state.
+Library_Search_State :: struct {
+    query: [LIBRARY_SEARCH_QUERY_BYTE_CAPACITY]u8,
+    query_length: int,
+    query_revision: u64,
+    input: Ui_Input_Box_State,
+    generation: u64,
+    committed_generation: u64,
+    index_generation: u64,
+    debounce_remaining_seconds: f32,
+    query_dirty: bool,
+    submit_requested: bool,
+    worker_available: bool,
+    invalid_query: bool,
+    active: bool,
+    visible_ids: [LIBRARY_SEARCH_VISIBLE_ID_CAPACITY]uuid.Identifier,
+    visible_id_count: int,
+    total_match_count: u32,
+    more_available: bool,
+    suggestion: [LIBRARY_SEARCH_QUERY_BYTE_CAPACITY]u8,
+    suggestion_length: int,
+    scenario_correlation: u64,
+    scenario_correlation_generation: u64,
+}
+
 // Euclid_Ui_Runtime_State owns persistent display interaction and panel state.
 Euclid_Ui_Runtime_State :: struct {
     tree_scroll_y: f32,
@@ -282,6 +310,7 @@ Euclid_Ui_Runtime_State :: struct {
     last_gif_path_revision: u64,
     last_gif_path_truncated: bool,
     gif_path_input: Ui_Input_Box_State,
+    library_search: Library_Search_State,
     window: Ui_Window_Metrics,
     layout_preference: Layout_Preference,
     landscape: Ui_Landscape_Layout_State,
@@ -301,4 +330,28 @@ Euclid_Drawing_Surface :: struct {
     color: Color,
     edge_color: Color,
     edge_size: f32,
+}
+
+// library_search_clear_results removes accepted topology and suggestion state.
+library_search_clear_results :: proc(search: ^Library_Search_State) {
+    search^.active = false
+    search^.invalid_query = false
+    search^.visible_id_count = 0
+    search^.total_match_count = 0
+    search^.more_available = false
+    search^.suggestion_length = 0
+}
+
+// library_search_query_changed invalidates results and starts the typeahead debounce.
+library_search_query_changed :: proc(
+    search: ^Library_Search_State, debounce_seconds: f32,
+    content_replaced: bool = false) {
+    search^.generation += 1
+    search^.scenario_correlation = 0
+    search^.scenario_correlation_generation = 0
+    if content_replaced {search^.query_revision += 1}
+    library_search_clear_results(search)
+    search^.query_dirty = search^.query_length > 0
+    search^.submit_requested = false
+    search^.debounce_remaining_seconds = max(debounce_seconds, f32(0))
 }

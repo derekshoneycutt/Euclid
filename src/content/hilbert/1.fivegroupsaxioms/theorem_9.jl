@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_9_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineYUnprimed = 0.68f0
@@ -152,15 +154,7 @@ const TotalPassCount = length(TraceLegs)
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 9}
-
-If the first of two congruent series of points $A, B, C, D, ..., K, L$ \euclidline[color=steelblue,length=3,thickness=4]
-and $A', B', C', D', ..., K', L'$ \euclidline[color=steelblue,length=3,thickness=4] is so arranged that
-$B$ \euclidpoint[color=khaki3,size=1] lies between $A$ \euclidpoint[color=palevioletred1,size=1] and $C, D, ..., K, L$, and $C$ \euclidpoint[color=palevioletred1,size=1] between
-$A, B$ and $D, ..., K, L$, etc., then the points $A', B', C', D', ..., K', L'$ of the second series are arranged
-in a similar way; that is to say, $B'$ \euclidpoint[color=khaki3,size=1]
-lies between $A'$ \euclidpoint[color=palevioletred1,size=1] and $C', D', ..., K', L'$,
-and $C'$ \euclidpoint[color=palevioletred1,size=1] lies between $A', B'$ and $D', ..., K', L'$, etc."""
+    return HilbertChapterOneTheorem9Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

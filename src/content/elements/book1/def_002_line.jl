@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_002_line_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
@@ -44,10 +46,6 @@ const PhaseDescend = 0f0
 const PhaseDrawLine = 1f0
 const PhaseEndLift = 2f0
 
-const DefinitionLatexDocument = raw"""\textbf{Euclid Elements - Book I - Definition}: \textit{Line}
-
-A line \euclidline[color=steelblue,length=3,thickness=4] is breadthless length."""
-
 """Return state with updated cycle timing and the same native line handles."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.line, phase, timer)
@@ -55,7 +53,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return EuclidLatex.TeXDocument(DefinitionLatexDocument)
+    return ElementsOneDefinitionLineContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native line handles."""

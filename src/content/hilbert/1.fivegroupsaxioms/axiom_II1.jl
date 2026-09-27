@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_II1_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.14f0, 0.56f0, 0f0]
@@ -82,9 +84,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,1}
-
-\textbf{II, 1.} If $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=steelblue,size=1], $C$ \euclidpoint[color=khaki3,size=1] are points of a straight line \euclidline[color=grey60,length=3,thickness=4] and $B$ \euclidpoint[color=steelblue,size=1] lies between $A$ \euclidpoint[color=palevioletred1,size=1] and $C$ \euclidpoint[color=khaki3,size=1], then $B$ \euclidpoint[color=steelblue,size=1] lies also between $C$ \euclidpoint[color=khaki3,size=1] and $A$ \euclidpoint[color=palevioletred1,size=1]."""
+    return HilbertChapterOneAxiomII1Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

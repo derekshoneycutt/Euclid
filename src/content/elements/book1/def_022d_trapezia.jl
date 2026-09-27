@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("def_022d_trapezia_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.14f0, 0.76f0, 0f0]
@@ -59,9 +61,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Trapezia}
-
-And let quadrilateral figures besides these be called trapezia \euclidbox[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=palevioletred1,edge3_color=khaki3,edge4_color=grey60]."""
+    return ElementsOneDefinitionTrapeziaContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

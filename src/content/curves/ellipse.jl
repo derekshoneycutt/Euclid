@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("ellipse_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("9836d89f-5b15-45b6-be0a-92c2e61c541c")
@@ -46,9 +48,7 @@ end
 
 """Return explanatory content for the rolling-circle ellipse construction."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Ellipse}
-
-An ellipse is a closed plane curve whose distances from two fixed points have a constant sum. Here it is traced by a point carried on a circle rolling inside a larger circle."""
+    return EuclidCurvesEllipseContent.get_view_content()
 end
 
 """Return rolling-center and tracer positions at one parameter and elevation."""

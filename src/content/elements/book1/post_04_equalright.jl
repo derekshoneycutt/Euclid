@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("post_04_equalright_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineLength = 0.3f0
@@ -129,11 +131,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Postulate}: \textit{Equal Right Angles}
-
-\textit{Let the following be postulated:}
-
-That all right angles \euclidangle[color=grey60,radius=2,thickness=2] are equal to one another."""
+    return ElementsOnePostulatesEqualRightAnglesContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

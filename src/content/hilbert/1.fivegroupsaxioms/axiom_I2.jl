@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("axiom_I2_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.25f0, 0.75f0, 0f0]
@@ -78,9 +80,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,2}
-
-\textbf{I, 2.} Any two distinct points of a straight line completely determine that line; that is, if $AB = a$ \euclidline[color=steelblue,length=3,thickness=4] and $AC = a$ \euclidline[color=steelblue,length=3,thickness=4], where $B$ \euclidpoint[color=khaki3,size=1] $\neq C$ \euclidpoint[color=grey60,size=1], then is also $BC = a$ \euclidline[color=steelblue,length=3,thickness=4]."""
+    return HilbertChapterOneAxiomI2Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

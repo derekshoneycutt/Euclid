@@ -9,13 +9,13 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("chapter_one_consequences_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 """Emit the Book I consequences view content."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§4 Consequences of the Axioms of Connection and Order}
-
-By the aid of the four linear axioms II, 1-4, we can easily deduce several theorems."""
+    return HilbertChapterOneConsequencesContent.get_view_content()
 end
 
 """Initialize the null animation and publish the consequences view."""

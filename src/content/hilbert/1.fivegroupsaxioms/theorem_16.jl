@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_16_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.20f0, 0.66f0, 0f0]
@@ -272,12 +274,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 16 (Third theorem of congruence for triangles)}
-
-If two triangles \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1]
-\euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1] have
-the three sides of one congruent respectively to the corresponding three sides of the other, the triangles are congruent
-\euclidtriangle[height=2,width=3,thickness=1,edge1_color=lightgreen,edge2_color=lightgreen,edge3_color=lightgreen]."""
+    return HilbertChapterOneTheorem16Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

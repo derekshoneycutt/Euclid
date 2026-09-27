@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_IV1_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineAStart = [0.14f0, 0.62f0, 0f0]
@@ -107,17 +109,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,1}
-
-\textbf{IV, I.} If $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1] are two points on a straight line $a$ \euclidline[color=steelblue,length=3,thickness=4], and if $A'$ \euclidpoint[color=palevioletred1,size=1] is a point upon the same or another straight line $a'$ \euclidline[color=khaki3,length=3,thickness=4], then, upon a given side of $A'$ \euclidpoint[color=palevioletred1,size=1] on the straight line $a'$ \euclidline[color=khaki3,length=3,thickness=4], we can always find one and only one point $B'$ \euclidpoint[color=steelblue,size=1] so that the segment $AB$ (or $BA$) \euclidline[color=steelblue,length=3,thickness=4] is congruent to the segment $A'B'$ \euclidline[color=khaki3,length=3,thickness=4]. We indicate this relation by writing
-
-    $AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A'B'$ \euclidline[color=khaki3,length=3,thickness=4].
-
-Every segment is congruent to itself; that is, we always have
-
-    $AB \equiv AB$ \euclidline[color=steelblue,length=3,thickness=4].
-
-We can state the above axiom briefly by saying that every segment can be laid off upon a given side of a given point of a given straight line in one and only one way."""
+    return HilbertChapterOneAxiomIV1Content.get_view_content()
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""

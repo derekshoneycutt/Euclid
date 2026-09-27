@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("def_halfrays_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.14f0, 0.52f0, 0f0]
@@ -89,11 +91,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Half-rays}
-
-If $A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=steelblue,size=1], $O$ \euclidpoint[color=khaki3,size=1], $B$ \euclidpoint[color=palevioletred1,size=1] are four points of a straight line $a$ \euclidline[color=grey60,length=3,thickness=4], where $O$ \euclidpoint[color=khaki3,size=1] lies between $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] but not between $A$ \euclidpoint[color=steelblue,size=1] and $A'$ \euclidpoint[color=steelblue,size=1], then points $A$ \euclidpoint[color=steelblue,size=1] and $A'$ \euclidpoint[color=steelblue,size=1] are on the same side of $O$ \euclidpoint[color=khaki3,size=1], and points $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] are on different sides of $O$ \euclidpoint[color=grey60,size=1].
-
-All points of a that lie on the same side of $O$ \euclidpoint[color=khaki3,size=1], taken together, are called a half-ray emanating from $O$ \euclidpoint[color=khaki3,size=1]."""
+    return HilbertChapterOneDefHalfRaysContent.get_view_content()
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""

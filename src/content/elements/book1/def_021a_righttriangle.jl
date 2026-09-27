@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_021a_righttriangle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.30f0, 0.22f0, 0f0]
@@ -81,9 +83,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Right-Angled Triangle}
-
-Further, of trilateral figures, a right-angled triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=khaki3] is that which has a right angle \euclidangle[color=steelblue,radius=2,thickness=2], ..."""
+    return ElementsOneDefinitionRightTriangleContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

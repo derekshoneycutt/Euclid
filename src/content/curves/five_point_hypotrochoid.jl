@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("five_point_hypotrochoid_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("b0c35f2e-6108-4510-ab0e-cfa3a7269869")
@@ -18,9 +20,7 @@ const DrawDuration = 10f0
 
 """Return explanatory content for the smooth five-point Hypotrochoid."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{5-Point Hypotrochoid}
-
-With $R:r:d=5:3:5$, the tracer extends beyond the internally rolling circle. The reduced ratio $R/r=5/3$ closes after three revolutions around the fixed center."""
+    return EuclidCurvesFivePointHypotrochoidContent.get_view_content()
 end
 
 """Create this leaf's smooth five-point Hypotrochoid."""

@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_020c_scalene_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.22f0, 0.75f0, 0f0]
@@ -56,9 +58,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Scalene Triangle}
-
-Of trilateral figures, ... and a scalene triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=palevioletred1,edge3_color=khaki3] that which has its three sides \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4] unequal."""
+    return ElementsOneDefinitionScaleneContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

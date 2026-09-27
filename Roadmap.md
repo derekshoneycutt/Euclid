@@ -20,8 +20,8 @@ Core Content (>163 animations; 100 complete):
     - [ ] 21-30
     - [ ] 31-40
     - [ ] 41-48
-- [ ] Commentaries and Alternatives (>10 animations; 2 complete)
-  - [ ] Proclus commentaries (>6 animations)
+- [ ] Commentaries and Alternatives (>42 animations; 2 complete)
+  - [ ] Proclus commentaries (>39 animations)
     - [X] Isosceles Triangle
     - [X] Scalene Triangle
     - [ ] Prop 2: C is on AB
@@ -58,8 +58,8 @@ Core Content (>163 animations; 100 complete):
   - [X] Section 6 (8 animations)
   - [X] Section 7 (17 animations)
   - [X] Section 8 (2 animations)
-- [ ] Tarski
-- [ ] Logic
+- [ ] Tarski (39+ animations)
+- [ ] Logic (9+; 2 complete)
   - [ ] Between-ness
   - [X] And
   - [ ] Or
@@ -89,7 +89,7 @@ Core Content (>163 animations; 100 complete):
      infinite rotation fixed about center of polygon)
     - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane --
      polygons translating/rotating/reflecting around another point)
-- [X] Curves
+- [X] Curves (16+ animations)
   - [X] Circle
   - [X] Ellipse
   - [X] Cycloid

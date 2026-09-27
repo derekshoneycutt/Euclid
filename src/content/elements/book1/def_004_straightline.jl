@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_004_straightline_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
@@ -66,9 +68,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Straight Line}
-
-A straight line \euclidline[color=steelblue,length=3,thickness=4] is a line which lies evenly with the points \euclidpoint[color=palevioletred1,size=1] on itself."""
+    return ElementsOneDefinitionStraightLineContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native geometry handles."""

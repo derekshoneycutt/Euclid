@@ -59,7 +59,11 @@ const EVENT_NAMES = Dict{UInt16,String}(
     364 => "capture_failed", 365 => "gif_started", 366 => "gif_completed",
     367 => "gif_failed", 368 => "shape_cache_prepared",
     369 => "dynview_compiled",
+    370 => "presentation_semantic_published",
     371 => "presentation_cleared", 372 => "presentation_superseded",
+    373 => "terminal_session_ready", 374 => "terminal_raster_published",
+    375 => "animation_frame_presented", 376 => "animation_playback_completed",
+    377 => "library_search_committed",
     420 => "checkpoint_requested",
     421 => "checkpoint_stored", 422 => "checkpoint_unavailable",
     423 => "checkpoint_evicted", 460 => "scenario_started",
@@ -78,6 +82,8 @@ const SCENARIO_ACTIONS = [
     "reset_animation", "select_animation", "reload_runtime",
     "inject_reload_failure", "pause_simulation",
     "resume_simulation", "set_view_scroll", "set_splitters", "screenshot",
+    "set_library_search", "apply_library_search_suggestion",
+    "clear_library_search",
     "start_gif", "stop_gif", "wait_event", "wait_state", "assert_state",
     "checkpoint", "allocation_checkpoint",
     "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
@@ -92,6 +98,7 @@ const SCENARIO_EVENTS = [
     "animation_cycle_boundary", "animation_loaded", "scene_batch_committed",
     "constraint_solve_completed", "presentation_cleared",
     "presentation_superseded", "dynview_published",
+    "library_search_committed",
     "frame_presented",
     "capture_completed", "gif_completed", "checkpoint_stored",
     "runtime_shutdown_complete"]
@@ -99,7 +106,8 @@ const SCENARIO_EVENTS = [
 const SCENARIO_STATES = [
     "runtime_ready", "runtime_idle", "animation_idle",
     "simulation_paused", "simulation_running", "dynview_enabled",
-    "gif_active", "gif_idle"]
+    "gif_active", "gif_idle", "library_search_idle",
+    "library_search_has_matches"]
 
 struct TraceEvent
     sequence::UInt64

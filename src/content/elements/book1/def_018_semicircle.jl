@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_018_semicircle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
@@ -83,9 +85,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Semicircle}
-
-A semicircle \euclidsemicircle[color=steelblue,radius=2,thickness=2] is the figure contained by the diameter and the circumference cut off by it. And the center \euclidpoint[color=palevioletred1,size=1] of the semicircle is the same as that of the circle."""
+    return ElementsOneDefinitionSemicircleContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

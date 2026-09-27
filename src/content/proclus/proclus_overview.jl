@@ -9,13 +9,13 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("proclus_overview_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 """Emit the Proclus's Commentary overview content."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Proclus's Commentary}
-    
-Proclus provided an ancient commentary on Book I of \textit{Euclid's Elements}, including additional constructions and analyses. Some will be included here."""
+    return ProclusOverviewContent.get_view_content()
 end
 
 """Initialize the null animation and publish the Proclus overview."""

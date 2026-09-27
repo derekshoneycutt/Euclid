@@ -10,6 +10,8 @@ using ..EuclidAnimations
 using ..EuclidLatex
 using ..EuclidGeometry
 
+include("z_2_inverse_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = Float32[0.32f0, 0.34f0, 0f0]
@@ -63,18 +65,6 @@ const PhasePauseBetweenReflections = 7f0
 const PhaseReflectSecond = 8f0
 const PhasePauseAfterSecondReflection = 9f0
 
-const InverseLatexDocument = raw"""\textbf{Inverse}
-
-An inverse is the motion that undoes a given motion. In $\mathbb{Z}_2$, every element is its own inverse. That means each motion undoes itself when applied again. This is common for reflections across a stable line.
-
-For an element $a$ in a group, an inverse $a^{-1}$ is an element such that
-$a \circ a^{-1} = a^{-1} \circ a = e$, where $e$ is the identity.
-
-\begin{enumerate}
-\item $e^{-1} = e$: doing nothing undoes itself.
-\item $r^{-1} = r$: one reflection undoes itself because reflecting twice gives back the original figure.
-\end{enumerate}"""
-
 const RefVertexA = EuclidGeometry.reflect_about_axis_x_half(VertexA)
 const RefVertexB = EuclidGeometry.reflect_about_axis_x_half(VertexB)
 const RefVertexC = EuclidGeometry.reflect_about_axis_x_half(VertexC)
@@ -105,7 +95,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return EuclidLatex.TeXDocument(InverseLatexDocument)
+    return EuclidAlgebraGroupsZ2InverseContent.get_view_content()
 end
 
 """Apply a set of reflection poses to the tracked points."""

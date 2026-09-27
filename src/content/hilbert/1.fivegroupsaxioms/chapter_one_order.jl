@@ -9,17 +9,13 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("chapter_one_order_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 """Emit the Book I order-axioms view content."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§3 Group II: Axioms of Order}
-
-The axioms of this group define the idea expressed by the word "between," and make possible, upon the basis of this idea, an order of sequence of the points upon a straight line, in a plane, and in space. The points of a straight line have a certain relation to one another which the word "between" serves to describe.
-
-...
-
-Axioms II, 1-4 contain statements concerning the points of a straight line only, and, hence, we will call them the linear axioms of group II. Axiom II, 5 relates to the elements of plane geometry and, consequently, shall be called the plane axiom of group II."""
+    return HilbertChapterOneOrderContent.get_view_content()
 end
 
 """Initialize the null animation and publish the order view."""

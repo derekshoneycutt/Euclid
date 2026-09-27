@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("three_dimple_epitrochoid_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("bf196800-9bc6-4612-bf22-00051d3152e6")
@@ -18,9 +20,7 @@ const DrawDuration = 5f0
 
 """Return explanatory content for the three-dimple Epitrochoid."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{3-Dimple Epitrochoid}
-
-With $R:r:d=3:1:1/2$, a point halfway from the rolling circle's center to its rim traces three smooth inward dimples."""
+    return EuclidCurvesThreeDimpleEpitrochoidContent.get_view_content()
 end
 
 """Create this leaf's three-dimple Epitrochoid."""

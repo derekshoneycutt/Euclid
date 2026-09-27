@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_II4_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.12f0, 0.56f0, 0f0]
@@ -99,20 +101,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,4}
-
-\textbf{II, 4.} Any four points $A$ \euclidpoint[color=palevioletred1,size=1],
-$B$ \euclidpoint[color=steelblue,size=1], $C$ \euclidpoint[color=khaki3,size=1],
-$D$ \euclidpoint[color=palevioletred1,size=1] of a straight line
-\euclidline[color=grey60,length=3,thickness=4] can always be so arranged that
-$B$ \euclidpoint[color=steelblue,size=1] shall lie between
-$A$ \euclidpoint[color=palevioletred1,size=1] and $C$ \euclidpoint[color=khaki3,size=1]
-and also between $A$ \euclidpoint[color=palevioletred1,size=1] and
-$D$ \euclidpoint[color=palevioletred1,size=1], and, furthermore, that
-$C$ \euclidpoint[color=khaki3,size=1] shall lie between
-$A$ \euclidpoint[color=palevioletred1,size=1] and
-$D$ \euclidpoint[color=palevioletred1,size=1] and also between
-$B$ \euclidpoint[color=steelblue,size=1] and $D$ \euclidpoint[color=palevioletred1,size=1]."""
+    return HilbertChapterOneAxiomII4Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

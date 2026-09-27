@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_010_perpendicular_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
@@ -86,11 +88,9 @@ function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(state.line, state.perpendicular, state.marker, phase, timer)
 end
 
-"""Get the view content for this animation"""
+"""Return canonical view content for the active animation."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Right Angles and Perpendicular}
-
-When a straight line set up on a straight line \euclidperpendicular[thickness=2,line1_color=steelblue,line2_color=palevioletred1,height=2,width=3] makes the adjacent angles \euclidangle[color=khaki3,radius=2,thickness=2] equal to one another, each of the equal angles is right, and the straight line standing on the other is called a perpendicular to that on which it stands."""
+    return ElementsOneDefinitionPerpendicularContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

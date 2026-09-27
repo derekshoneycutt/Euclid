@@ -6,15 +6,15 @@ using ..EuclidLatex
 using ..NullAnimation
 using ..AnimationCatalog
 
+include("algebra_overview_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("a8bd259b-0c7b-5b60-b21f-84095e2eb903")
 
 """Emit the welcome view content for Algebra."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Welcome to Euclid!}
-    
-Here we explore Algebra for ways that are helpful for understanding geometry and animation."""
+    return EuclidAlgebraOverviewContent.get_view_content()
 end
 
 """Initialize the null animation and publish the Algebra overview."""

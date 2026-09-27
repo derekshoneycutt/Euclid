@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_019b_quadrilateral_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.34f0, 0.66f0, 0f0]
@@ -95,9 +97,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rectilineal Figures - Quadrilateral}
-
-Rectilineal figures are those which are contained by straight lines, ... quadrilateral \euclidbox[height=2,width=2,color=steelblue,filled] those contained by four, ..."""
+    return ElementsOneDefinitionQuadrilateralContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

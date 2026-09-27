@@ -12,6 +12,8 @@ using ..EuclidGeometry
 
 using LinearAlgebra
 
+include("def_022a_square_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.24f0, 0.80f0, 0f0]
@@ -108,9 +110,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Square}
-
-Of quadrilateral figures, a square \euclidbox[height=2,width=2,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=palevioletred1,edge4_color=palevioletred1] is that which is both equilateral \euclidline[color=palevioletred1,length=3,thickness=4] and right-angled \euclidangle[color=steelblue,radius=2,thickness=2]; ..."""
+    return ElementsOneDefinitionSquareContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

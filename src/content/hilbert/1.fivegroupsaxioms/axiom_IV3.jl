@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_IV3_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineAStart = [0.14f0, 0.66f0, 0f0]
@@ -135,15 +137,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,3}
-
-\textbf{IV, 3.} Let $AB$ \euclidline[color=steelblue,length=3,thickness=4] and $BC$ \euclidline[color=steelblue,length=3,thickness=4] be two segments
-of a straight line $a$ \euclidline[color=steelblue,length=3,thickness=4] which have no points in common aside from the point $B$ \euclidpoint[color=khaki3,size=1],
-and, furthermore, let $A'B'$ \euclidline[color=khaki3,length=3,thickness=4] and $B'C'$ \euclidline[color=khaki3,length=3,thickness=4] be two segments of the same
-or of another straight line $a'$ \euclidline[color=khaki3,length=3,thickness=4] having, likewise, no point other than $B'$ \euclidpoint[color=steelblue,size=1] in common.
-Then, if $AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A'B'$ \euclidline[color=khaki3,length=3,thickness=4] and
-$BC$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv B'C'$ \euclidline[color=khaki3,length=3,thickness=4],
-we have $AC$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A'C'$ \euclidline[color=khaki3,length=3,thickness=4]."""
+    return HilbertChapterOneAxiomIV3Content.get_view_content()
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""

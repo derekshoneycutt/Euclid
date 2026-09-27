@@ -140,6 +140,17 @@ function parsed_odin_symbol(
         visibility=isempty(comment_lines) ? :all : :documented)
 end
 
+"""Collect one declaration and its compiler-emitted column-zero continuations."""
+function collect_odin_declaration_lines(lines::Vector{String}, start_index::Int)
+    declaration = String[lines[start_index][3:end]]
+    index = start_index + 1
+    while index <= length(lines) && !startswith(lines[index], '\t')
+        push!(declaration, lines[index])
+        index += 1
+    end
+    return join(declaration, "\n"), index
+end
+
 """Collect comment lines immediately following one declaration record."""
 function collect_odin_comment_lines(lines::Vector{String}, start_index::Int)
     comments = String[]
@@ -203,10 +214,11 @@ function parse_odin_doc_body!(package::DocumentationPackage, lines::Vector{Strin
             index += 1
         elseif startswith(line, "\t\t") && !startswith(line, "\t\t\t")
             isempty(current_file) && error("Odin declaration appeared before a file record.")
-            comments, next_index = collect_odin_comment_lines(lines, index + 1)
+            declaration, comment_index = collect_odin_declaration_lines(lines, index)
+            comments, next_index = collect_odin_comment_lines(lines, comment_index)
             push!(package.symbols, parsed_odin_symbol(
                 package.stable_id, package.display_name, package.source_root,
-                current_file, line[3:end], comments))
+                current_file, declaration, comments))
             index = next_index
         elseif line == "\tfullpath:"
             index += 2

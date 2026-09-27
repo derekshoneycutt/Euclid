@@ -17,6 +17,7 @@ import "font"
 import "input"
 import native "native"
 import terminalview "terminal"
+import viewsearch "search"
 import "ui"
 import audio "../audio"
 import "../core"
@@ -90,6 +91,7 @@ Window_Frame_Context :: struct {
     chalk_audio: ^native.Sdl_Chalk_Audio_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
+    search_service: ^viewsearch.Search_Service,
     scenario_runtime: ^Scenario_Runtime,
     capture_sink: capture.Sink,
     framebuffer_operations: view_core.Framebuffer_Capture_Operations,
@@ -103,6 +105,7 @@ Display_Loop_Context :: struct {
     chalk_audio: ^native.Sdl_Chalk_Audio_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
+    search_service: ^viewsearch.Search_Service,
     display_profile: ^evidence_profile.State,
 }
 
@@ -511,6 +514,7 @@ prepare_sdl_frame :: proc(
     ui.prepare_ui_static_interaction(
         state, input_frame, ui_geometry.pointer_capture)
     controls := ui.prepare_ui_controls(state, input_frame)
+    service_library_search(state, ctx.search_service, frame_dt)
     terminal_frame := terminal_service_update(state, ctx.input_runtime, input_frame)
     apply_sdl_cursor(state, ctx.platform)
     world_rect := state^.ui_runtime.ui_regions.world_rect
@@ -662,6 +666,7 @@ window_frame_context :: proc(
         chalk_audio = display.chalk_audio,
         input_runtime = display.input_runtime,
         presentation = display.presentation,
+        search_service = display.search_service,
         scenario_runtime = scenario.runtime,
         capture_sink = scenario.capture_sink,
         framebuffer_operations = framebuffer_operations,
@@ -754,10 +759,11 @@ run_initialized_window_session :: proc(
 display_loop_context :: proc(
     platform: ^native.Sdl_Platform, draw_runtime: ^native.Sdl_Draw_Runtime,
     input_runtime: ^input.Input_Runtime, presentation: ^Presentation_Runtime,
+    search_service: ^viewsearch.Search_Service,
     display_profile: ^evidence_profile.State) -> Display_Loop_Context {
     return {platform = platform, draw_runtime = draw_runtime,
         input_runtime = input_runtime, presentation = presentation,
-        display_profile = display_profile}
+        search_service = search_service, display_profile = display_profile}
 }
 
 // run_sdl_platform_session owns draw, input, and Euclid state on one platform.
@@ -795,7 +801,7 @@ run_sdl_platform_session :: proc(
         return 1
     }
     display := display_loop_context(platform, &draw_runtime, input_runtime,
-        session.presentation, display_profile)
+        session.presentation, session.search_service, display_profile)
     result := initialize_and_run_sdl_session(settings, session, display)
     report_draw_runtime_summary(&draw_runtime)
     return result

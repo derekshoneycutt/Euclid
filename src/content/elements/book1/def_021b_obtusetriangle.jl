@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_021b_obtusetriangle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.02f0, 0.22f0, 0f0]
@@ -85,9 +87,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Obtuse-Angled Triangle}
-
-Further, of trilateral figures, ... an obtuse-angled triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=khaki3] that which has an obtuse angle \euclidangle[color=steelblue,radius=2,end=120,filled], ..."""
+    return ElementsOneDefinitionObtuseTriangleContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

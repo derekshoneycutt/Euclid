@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("commonnotions_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineLength = 0.35f0
@@ -77,15 +79,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Common Notions}
-
-\begin{enumerate}
-\item Things which are equal to the same thing are also equal to one another.
-\item If equals be added to equals, the wholes are equal.
-\item If equals be subtracted from equals, the remainders are equal.
-\item Things which coincide with one another are equal to one another.
-\item The whole is greater than the part.
-\end{enumerate}"""
+    return ElementsOneCommonNotionsContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

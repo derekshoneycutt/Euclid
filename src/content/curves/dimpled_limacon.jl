@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("dimpled_limacon_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("93660ad7-cf39-42d6-bf3f-6cb6613617d3")
@@ -43,9 +45,7 @@ end
 
 """Return explanatory content for the dimpled limaçon construction."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Dimpled Limaçon}
-
-A dimpled limaçon is traced when the carried point lies inside the rolling circle, but far enough from its center to bend the curve inward without forming a cusp."""
+    return EuclidCurvesDimpledLimaconContent.get_view_content()
 end
 
 """Return rolling-center and tracer positions at one parameter and elevation."""

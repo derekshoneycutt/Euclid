@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_015_circle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
@@ -64,9 +66,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Circle and Center}
-
-A circle \euclidcircle[color=steelblue,size=1,thickness=2] is a plane figure contained by one line such that all the straight lines falling upon it from one point \euclidpoint[color=palevioletred1,size=1] among those lying within the figure equal one another; and the point \euclidpoint[color=palevioletred1,size=1] is called the center of the circle."""
+    return ElementsOneDefinitionCircleContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

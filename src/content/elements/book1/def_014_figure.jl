@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_014_figure_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.31f0, 0.70f0, 0f0]
@@ -98,9 +100,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Figure}
-
-A figure \euclidtriangle[color=steelblue,height=2,width=3,filled] is that which is contained by any boundary or boundaries \euclidline[color=steelblue,length=3,thickness=4]."""
+    return ElementsOneDefinitionFigureContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

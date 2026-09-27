@@ -10,6 +10,8 @@ using ..EuclidAnimations
 using ..EuclidLatex
 using ..EuclidGeometry
 
+include("z_2_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = Float32[0.32f0, 0.34f0, 0f0]
@@ -63,30 +65,6 @@ const PhaseReflectTwiceFirst = 8f0
 const PhaseReflectTwiceSecond = 9f0
 const PhasePauseAfterTwice = 10f0
 
-const Z2LatexDocument = raw"""\textbf{The two-element symmetry group}
-
-Start with the simplest nontrivial geometry: given an equilateral triangle \euclidtriangle[height=2,width=3,thickness=2,edge1_color=steelblue,edge2_color=palevioletred1,edge3_color=khaki3], either \textit{do nothing} to the triangle, or \textit{reflect} it across one fixed axis.
-
-The two motions composed result in an action inside the same collection, the do-nothing motion acts as identity, and each reflection motion undoes itself.
-
-$$\mathbb{Z}_2 = \{0,1\}$$
-
-This is the group under addition \textit{mod 2}. Let $r$ be reflection across the fixed axis and $e$ the identity motion.
-
-$$e \circ e = e, \; e \circ r = r, \; r \circ e = r, \; r \circ r = e$$
-
-
-Brief proof it is a group:
-
-\begin{enumerate}
-\item \textbf{Closure}: composing $e$ and $r$ always gives $e$ or $r$.
-\item \textbf{Associativity}: composition of reflections is associative.
-\item \textbf{Identity}: $e$ does nothing.
-\item \textbf{Inverses}: $e$ and $r$ are their own inverses.
-\end{enumerate}
-
-So this is the 2-element symmetry group of the triangle, and the two motions commute."""
-
 const RefVertexA = EuclidGeometry.reflect_about_axis_x_half(VertexA)
 const RefVertexB = EuclidGeometry.reflect_about_axis_x_half(VertexB)
 const RefVertexC = EuclidGeometry.reflect_about_axis_x_half(VertexC)
@@ -117,7 +95,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return EuclidLatex.TeXDocument(Z2LatexDocument)
+    return EuclidAlgebraGroupsZ2Content.get_view_content()
 end
 
 """Apply a set of reflection poses to the tracked points."""

@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("cardioid_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("bad550b7-54c6-40df-adf1-c19e2e88fe25")
@@ -41,9 +43,7 @@ end
 
 """Return explanatory content for the rolling-circle cardioid construction."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Cardioid}
-
-A cardioid (from Greek καρδιά (kardiá) 'heart') is a plane curve traced by a point on the perimeter of a circle that is rolling around a fixed circle of the same radius."""
+    return EuclidCurvesCardioidContent.get_view_content()
 end
 
 """Return rolling-center and tracer positions at one parameter and elevation."""

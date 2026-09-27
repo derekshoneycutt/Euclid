@@ -145,6 +145,7 @@ Kind :: enum u16 {
     Terminal_Raster_Published = 374,
     Animation_Frame_Presented = 375,
     Animation_Playback_Completed = 376,
+    Library_Search_Committed = 377,
 
     // Rich checkpoint storage (420-459).
     Checkpoint_Requested = 420,
@@ -181,6 +182,8 @@ Flag :: enum u16 {
     Stale,
     // Runtime policy selected a documented fallback instead of explicit input.
     Defaulted,
+    // Event reports that a verified alternate query is available.
+    Suggested,
 }
 
 // Compact set of independent properties attached to one event.

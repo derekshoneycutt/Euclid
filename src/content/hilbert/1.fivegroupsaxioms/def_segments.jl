@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("def_segments_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.12f0, 0.56f0, 0f0]
@@ -80,9 +82,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Segments}
-
-We will call the system of two points $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1], lying upon a straight line \euclidline[color=grey60,length=3,thickness=4], a segment and denote it by $AB$ \euclidline[color=grey60,length=3,thickness=4] or $BA$ \euclidline[color=grey60,length=3,thickness=4]. The points \euclidpoint[color=steelblue,size=1] lying between $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] are called the points of the segment $AB$ \euclidline[color=grey60,length=3,thickness=4] or the points lying within the segment $AB$ \euclidline[color=grey60,length=3,thickness=4]. All other points \euclidpoint[color=khaki3,size=1] of the straight line are referred to as the points lying outside the segment $AB$ \euclidline[color=grey60,length=3,thickness=4]. The points $A$ \euclidpoint[color=steelblue,size=1] and $B$ \euclidpoint[color=palevioletred1,size=1] are called the extremities of the segment $AB$ \euclidline[color=grey60,length=3,thickness=4]."""
+    return HilbertChapterOneDefSegmentsContent.get_view_content()
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""

@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_circle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
@@ -59,15 +61,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Circle}
-
-If $M$ \euclidpoint[color=palevioletred1,size=1] is an arbitrary point in the plane $\alpha$, the totality of all points
-$A$ \euclidpoint[color=steelblue,size=0.5], for which the segments $MA$ \euclidline[color=plum1,length=3,thickness=1] are congruent to one another, is called a circle
-\euclidcircle[color=steelblue,size=1,thickness=2]. $M$ \euclidpoint[color=palevioletred1,size=1] is called the centre of the circle.
-
-From this definition can be easily deduced, with the help of the axioms of \textit{groups III and IV},
-the known properties of the circle; in particular, the possibility of constructing a circle through any three points not
-lying in a straight line, as also the congruence of all angles inscribed in the same segment of a circle, and the theorem relating to the angles of an inscribed quadrilateral."""
+    return HilbertChapterOneDefinitionCircleContent.get_view_content()
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""

@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_005_surface_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint1 = [0.5f0, 0f0, 0f0]
@@ -42,17 +44,15 @@ const PhaseArcMove1To2 = 2f0
 const PhaseDrag2 = 3f0
 const PhaseEndLift = 4f0
 
-const SurfaceView = tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Surface}
-
-A surface is that which has length and breadth only."""
-
 """Return a surface animation state with updated cycle timing."""
 function with_timing(state::AnimationState, phase::Float32, timer::Float32)
     return AnimationState(phase, timer)
 end
 
 """Return the canonical presentation for this animation."""
-get_view_content(_state_ptr::Ptr{Cvoid}) = SurfaceView
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return ElementsOneDefinitionSurfaceContent.get_view_content()
+end
 
 """Reset the animation cycle timing to its initial phase."""
 function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)

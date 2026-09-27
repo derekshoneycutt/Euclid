@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("eleven_half_hypocycloid_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("d6fcda98-5195-457d-8154-939930ec00c5")
@@ -13,9 +15,7 @@ const K = 11 // 2
 
 """Return explanatory content for the eleven-cusped rational hypocycloid."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{11⁄2-Hypocycloid}
-
-For $k=R/r=11/2$, the hypocycloid has eleven cusps. The denominator requires two revolutions around the fixed center before the tracing point returns to its start."""
+    return EuclidCurvesElevenHalfHypocycloidContent.get_view_content()
 end
 
 """Create this leaf's eleven-cusped rational hypocycloid."""

@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("C_n_associative_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
@@ -121,22 +123,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Associativity}
-
-Associativity means the grouping of the operation does not matter:
-
-$$(a \circ b) \circ c = a \circ (b \circ c)\; \text{for all}\; a,b,c$$
-
-Here, compare the two ways of grouping the same three rotations.
-
-\begin{enumerate}
-\item Left grouping: $(\rho^1\rho^2)\rho^3 = \rho^6$.
-\item Right grouping: $\rho^1(\rho^2\rho^3) = \rho^6$.
-\item Both paths match because function composition is associative.
-\end{enumerate}
-
-The side-by-side circles make grouping visible while the endpoint confirms equality.
-Formally, the same final motion appears no matter how the three actions are grouped."""
+    return EuclidAlgebraGroupsCnAssociativeContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

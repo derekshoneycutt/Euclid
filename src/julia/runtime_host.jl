@@ -421,6 +421,7 @@ function create_euclid_runtime_generation(
     Core.eval(content, :(const EuclidAnimations = $EuclidAnimations))
     Core.eval(content, :(const EuclidGeometry = $EuclidGeometry))
     Core.eval(content, :(const EuclidLatex = $EuclidLatex))
+    Core.eval(content, :(const EuclidSearchContent = $EuclidSearchContent))
     Core.eval(content, :(const AnimationCatalog = $AnimationCatalog))
     Base.include(content, joinpath(root, "animation_catalog_generation.jl"))
     Base.include(content, joinpath(root, "nullanimation.jl"))

@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_11_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.20f0, 0.66f0, 0f0]
@@ -274,9 +276,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 11 (Second theorem of congruence for triangles)}
-
-If in any two triangles one side and the two adjacent angles are respectively congruent, the triangles are congruent."""
+    return HilbertChapterOneTheorem11Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

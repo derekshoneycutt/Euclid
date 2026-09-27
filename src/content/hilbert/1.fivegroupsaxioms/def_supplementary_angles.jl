@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_supplementary_angles_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
@@ -82,11 +84,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Supplementary Angles}
-
-Two angles \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2] having the same vertex and one side in common, while the sides not common form a straight line, are called supplementary angles.
-Two angles \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2] having a common vertex and whose sides form straight lines are called vertical angles.
-An angle which is congruent to its supplementary angle is called a right angle \euclidangle[color=khaki3,radius=2,thickness=2,start=90,end=180]\euclidangle[color=khaki3,radius=2,thickness=2]."""
+    return HilbertChapterOneDefSupplementaryAnglesContent.get_view_content()
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""

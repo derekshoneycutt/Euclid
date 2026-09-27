@@ -393,6 +393,9 @@ reflection_sha256 = "reflection"
                 "required"
             dependencies = only(bom["dependencies"])["dependsOn"]
             @test "native:sdl3" in dependencies
+            @test components["native:sqlite3"]["version"] == "3.53.4"
+            @test components["native:sqlite3"]["scope"] == "required"
+            @test "native:sqlite3" in dependencies
             graphics_runtime = Sys.isapple() ? "native:metal-framework" :
                 Sys.iswindows() ? "native:direct3d12" : "native:vulkan-loader"
             @test graphics_runtime in dependencies

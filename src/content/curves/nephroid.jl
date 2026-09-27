@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("nephroid_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("5cea3464-3e41-444d-a326-2fbd9b20de7e")
@@ -18,9 +20,7 @@ const DrawDuration = 5f0
 
 """Return explanatory content for the two-cusped Nephroid."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Nephroid}
-
-A Nephroid is the two-cusped epicycloid traced by a point on a circle rolling around a fixed circle twice its radius."""
+    return EuclidCurvesNephroidContent.get_view_content()
 end
 
 """Create this leaf's Nephroid."""

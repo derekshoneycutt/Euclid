@@ -7,13 +7,17 @@ export native_linker_flags, native_runtime_dirs, native_runtime_environment,
     native_test_linker_flags, resolve_msvc_tool_path, sdl3_library_path,
     sdl3_linker_flags, sdl3_provider_identity, sdl3_image_library_path,
     sdl3_image_linker_flags, sdl3_image_provider_identity,
-    windows_sdl_manifest
+    sqlite3_artifact, sqlite3_tool_linker_flags, windows_sdl_manifest
 
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const IMPORT_LIB_DIR = joinpath(REPOSITORY_ROOT, "bin", ".native_import_libs")
 const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "bin", "win64", "sdl")
 const HARFBUZZ_PROVIDER_ENV = "EUCLID_HARFBUZZ_PROVIDER"
+const SQLITE3_SOURCE_DIR = joinpath(REPOSITORY_ROOT, "libs", "src", "sqlite3")
+const SQLITE3_BUILD_DIR = joinpath(REPOSITORY_ROOT, ".build", "sqlite3")
+const SQLITE3_INPUTS = [
+    "sqlite3.c", "sqlite3.h", "sqlite3ext.h", "spellfix.c", "sqlite3_custom.c"]
 
 struct SDL3ProviderIdentity
     kind::Symbol
@@ -25,6 +29,12 @@ struct SDL3ImageProviderIdentity
     kind::Symbol
     version::String
     library_path::String
+end
+
+struct SQLite3Artifact
+    archive_path::String
+    fingerprint::String
+    compiler_identity::String
 end
 
 const SDL3_IMAGE_MINIMUM_VERSION = v"3.4.0"
@@ -367,6 +377,113 @@ function resolve_msvc_tool_path(find_glob::String, error_message::String)
     return path
 end
 
+"""Resolve the host C compiler and static archiver for SQLite."""
+function sqlite3_tool_paths(kernel::Symbol=Sys.KERNEL)
+    if kernel == :NT
+        compiler = resolve_msvc_tool_path(
+            "VC/Tools/MSVC/**/bin/Hostx64/x64/cl.exe",
+            "Could not locate MSVC cl.exe. Install the C++ Build Tools workload.")
+        archiver = resolve_msvc_tool_path(
+            "VC/Tools/MSVC/**/bin/Hostx64/x64/lib.exe",
+            "Could not locate MSVC lib.exe. Install the C++ Build Tools workload.")
+        return compiler, archiver
+    end
+    (kernel == :Linux || kernel == :Darwin) || error(
+        "SQLite archive builds are unsupported on $kernel.")
+    compiler = Sys.which(get(ENV, "CC", "cc"))
+    compiler === nothing && error("Could not locate the host C compiler.")
+    archiver = Sys.which(get(ENV, "AR", "ar"))
+    archiver === nothing && error("Could not locate the host static archiver.")
+    return compiler, archiver
+end
+
+"""Capture one native tool identity for the SQLite archive fingerprint."""
+function sqlite3_tool_identity(path::String, kernel::Symbol=Sys.KERNEL)
+    arguments = kernel == :NT ? [path] : [path, "--version"]
+    result = capture_command(Cmd(arguments))
+    identity = strip(string(result.output, result.error_output))
+    return isempty(identity) ? path : "$path\n$identity"
+end
+
+"""Return the platform compile arguments for the SQLite translation unit."""
+function sqlite3_compile_arguments(
+    compiler::String, object_path::String, kernel::Symbol=Sys.KERNEL)
+    source = joinpath(SQLITE3_SOURCE_DIR, "sqlite3_custom.c")
+    if kernel == :NT
+        return [compiler, "/nologo", "/c", "/O2", "/DNDEBUG",
+            "/Fo$object_path", source]
+    end
+    return [compiler, "-std=c17", "-O2", "-DNDEBUG", "-fPIC", "-c",
+        source, "-o", object_path]
+end
+
+"""Hash SQLite inputs, tools, target, and flags into one archive identity."""
+function sqlite3_fingerprint(
+    compiler::String, archiver::String, kernel::Symbol=Sys.KERNEL)
+    input_hashes = [bytes2hex(open(sha256, joinpath(SQLITE3_SOURCE_DIR, name)))
+        for name in SQLITE3_INPUTS]
+    object_name = kernel == :NT ? "sqlite3.obj" : "sqlite3.o"
+    compile_arguments = sqlite3_compile_arguments(compiler, object_name, kernel)
+    identity = [string(kernel), string(Sys.ARCH), compile_arguments...,
+        sqlite3_tool_identity(compiler, kernel),
+        sqlite3_tool_identity(archiver, kernel), input_hashes...]
+    return bytes2hex(sha256(join(identity, '\n')))
+end
+
+"""Compile and archive SQLite in one candidate directory."""
+function build_sqlite3_archive(
+    directory::String, compiler::String, archiver::String,
+    kernel::Symbol=Sys.KERNEL)
+    object_path = joinpath(directory, kernel == :NT ? "sqlite3.obj" : "sqlite3.o")
+    archive_path = joinpath(directory, kernel == :NT ? "sqlite3.lib" : "libsqlite3.a")
+    compile_result = capture_command(Cmd(
+        sqlite3_compile_arguments(compiler, object_path, kernel)))
+    compile_result.exit_code == 0 || error(
+        "SQLite compilation failed: $(strip(compile_result.error_output))")
+    archive_arguments = kernel == :NT ?
+        [archiver, "/nologo", "/OUT:$archive_path", object_path] :
+        [archiver, "rcs", archive_path, object_path]
+    archive_result = capture_command(Cmd(archive_arguments))
+    archive_result.exit_code == 0 || error(
+        "SQLite archive creation failed: $(strip(archive_result.error_output))")
+    return archive_path
+end
+
+"""Build or reuse the content-addressed repository SQLite archive."""
+function sqlite3_artifact(kernel::Symbol=Sys.KERNEL)
+    compiler, archiver = sqlite3_tool_paths(kernel)
+    fingerprint = sqlite3_fingerprint(compiler, archiver, kernel)
+    final_directory = joinpath(SQLITE3_BUILD_DIR, fingerprint)
+    archive_name = kernel == :NT ? "sqlite3.lib" : "libsqlite3.a"
+    archive_path = joinpath(final_directory, archive_name)
+    if !isfile(archive_path)
+        mkpath(SQLITE3_BUILD_DIR)
+        mktempdir(SQLITE3_BUILD_DIR) do candidate_directory
+            build_sqlite3_archive(candidate_directory, compiler, archiver, kernel)
+            ispath(final_directory) && rm(final_directory; force=true, recursive=true)
+            mv(candidate_directory, final_directory)
+        end
+    end
+    compiler_identity = sqlite3_tool_identity(compiler, kernel)
+    return SQLite3Artifact(archive_path, fingerprint, compiler_identity)
+end
+
+"""Return linker flags for the repository-owned SQLite archive."""
+function sqlite3_linker_flags(kernel::Symbol=Sys.KERNEL)
+    artifact = sqlite3_artifact(kernel)
+    directory = dirname(artifact.archive_path)
+    return kernel == :NT ? "/LIBPATH:$directory /DEFAULTLIB:sqlite3.lib" :
+        "-L$directory -lsqlite3"
+end
+
+"""Return the minimal platform linkage for a standalone SQLite build tool."""
+function sqlite3_tool_linker_flags(kernel::Symbol=Sys.KERNEL)
+    flags = sqlite3_linker_flags(kernel)
+    kernel == :Linux && return "$flags -lm -ldl -lpthread"
+    (kernel == :Darwin || kernel == :NT) && return flags
+    error("SQLite build-tool linkage is unsupported on $kernel.")
+end
+
 """Generate one MSVC import library from a Windows DLL."""
 function new_import_library(
     dll_path::String,
@@ -501,14 +618,14 @@ function native_linker_flags(provider::Symbol=harfbuzz_provider())
     provider = validate_harfbuzz_provider(provider)
     if Sys.iswindows()
         return "$(windows_linker_flags()) $(sdl3_linker_flags()) " *
-            sdl3_image_linker_flags()
+            "$(sdl3_image_linker_flags()) $(sqlite3_linker_flags())"
     end
     (Sys.islinux() || Sys.isapple()) || error(
         "SDL3 application linkage is unsupported on $(Sys.KERNEL).")
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
     return "$harfbuzz_flags $(julia_linker_flags()) $(sdl3_linker_flags()) " *
-        sdl3_image_linker_flags()
+        "$(sdl3_image_linker_flags()) $(sqlite3_linker_flags())"
 end
 
 """Append platform libraries and options required by Odin test executables."""

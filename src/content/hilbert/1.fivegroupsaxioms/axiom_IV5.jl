@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_IV5_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexO = [0.18f0, 0.68f0, 0f0]
@@ -192,16 +194,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,5}
-
-\textbf{IV, 5.} If the angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] is
-congruent to the angle $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] and to
-the angle $(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled], then the angle
-$(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] is congruent to the angle
-$(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled]; that is to say, if
-$\angle(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled]
-and $\angle(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled],
-then $\angle(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] $\equiv \angle(h'', k'')$ \euclidangle[color=khaki3,radius=2,end=60,filled]."""
+    return HilbertChapterOneAxiomIV5Content.get_view_content()
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""

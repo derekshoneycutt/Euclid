@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_17_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.10f0, 0.82f0, 0f0]
@@ -190,16 +192,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 17}
-
-If $(A, B, C, ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue] and
-$(A', B', C', ...)$ \euclidbox[height=2,width=2,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=palevioletred1,edge4_color=steelblue] are
-congruent plane figures and $P$ \euclidpoint[color=grey60,size=1] is a point in the plane of the first, then it is always possible to find a point
-$P'$ \euclidpoint[color=grey60,size=1] in the plane of the second figure so that
-$(A, B, C, ..., P)$ \euclidbox[height=2,width=3,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=khaki3,edge4_color=khaki3] and
-$(A', B', C', ..., P')$ \euclidbox[height=2,width=3,thickness=2,edge1_color=grey60,edge2_color=khaki3,edge3_color=khaki3,edge4_color=khaki3]
-shall likewise be congruent figures. If the two figures have at least three points not lying in a straight line, then the selection of
-$P'$ \euclidpoint[color=grey60,size=1] can be made in only one way."""
+    return HilbertChapterOneTheorem17Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

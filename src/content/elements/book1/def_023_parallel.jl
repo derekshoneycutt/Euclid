@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("def_023_parallel_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const Line1Start = [0.00f0, 0.70f0, 0f0]
@@ -59,9 +61,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Parallel Straight Lines}
-
-Parallel straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4] are straight lines which, being in the same plane and being produced indefinitely in both directions, do not meet one another in either direction."""
+    return ElementsOneDefinitionParallelContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

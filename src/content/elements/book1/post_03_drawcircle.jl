@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("post_03_drawcircle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
@@ -64,11 +66,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Postulates}: \textit{Draw a Circle}
-
-\textit{Let the following be postulated:}
-
-To describe a circle \euclidcircle[color=steelblue,size=1,thickness=2] with any center \euclidpoint[color=palevioletred1,size=1] and distance."""
+    return ElementsOnePostulatesDrawCircleContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

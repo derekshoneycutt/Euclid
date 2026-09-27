@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("deltoid_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("ff3a997a-c536-43fa-ba37-9c380c3426fa")
@@ -13,9 +15,7 @@ const K = 3 // 1
 
 """Return explanatory content for the three-cusped hypocycloid."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Deltoid}
-
-A deltoid is the three-cusped hypocycloid with $k=R/r=3$. A point on the rolling circle traces one closed curve while that circle rolls inside the fixed circle."""
+    return EuclidCurvesDeltoidContent.get_view_content()
 end
 
 """Create this leaf's three-cusped hypocycloid."""

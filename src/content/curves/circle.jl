@@ -5,6 +5,8 @@ using ..AnimationCatalog
 using ..OdinJuliaBridge
 using ..EuclidLatex
 
+include("circle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("5eae70a6-d48e-4b85-9fe3-db3b2e82cb3b")
@@ -41,9 +43,7 @@ end
 
 """Return explanatory content for the constant-radius circle construction."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Circle}
-
-A circle is the plane curve traced by a point kept at a constant distance from a fixed center."""
+    return EuclidCurvesCircleContent.get_view_content()
 end
 
 """Return the fixed pivot and rotating pencil positions at one elevation."""

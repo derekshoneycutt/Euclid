@@ -67,6 +67,45 @@ input_box_keyboard_rejects_mutation :: proc(t: ^testing.T) {
     testing.expect_value(t, state.anchor_byte, 1)
 }
 
+// Verify editable input replaces UTF-8 selections and applies bounded deletion.
+@(test)
+input_box_edit_keyboard_preserves_utf8_boundaries :: proc(t: ^testing.T) {
+    buffer: [8]u8
+    copy(buffer[:], "aéz")
+    text_length := len("aéz")
+    state := viewmodel.Ui_Input_Box_State{cursor_byte = len("aé"), anchor_byte = 1}
+    events := [2]input.Input_Event{
+        {kind = .Text, codepoint = 'β'},
+        {kind = .Press, key = .Backspace},
+    }
+    update := input_box_apply_edit_keyboard(&state,
+        {buffer[:], &text_length}, input_box_test_frame(events[:]))
+    testing.expect(t, update.changed)
+    testing.expect_value(t, string(buffer[:text_length]), "az")
+    testing.expect_value(t, state.cursor_byte, 1)
+}
+
+// Verify editable input cuts selections, bounds paste, and reports submission.
+@(test)
+input_box_edit_keyboard_reports_cut_paste_and_submit :: proc(t: ^testing.T) {
+    buffer: [6]u8
+    copy(buffer[:], "abcd")
+    text_length := 4
+    state := viewmodel.Ui_Input_Box_State{cursor_byte = 3, anchor_byte = 1}
+    events := [3]input.Input_Event{
+        {kind = .Press, key = .X, modifiers = {.Control}},
+        {kind = .Press, key = .V, modifiers = {.Control}},
+        {kind = .Press, key = .Enter},
+    }
+    update := input_box_apply_edit_keyboard(&state,
+        {buffer[:], &text_length}, input_box_test_frame(events[:]), "ééé")
+    testing.expect(t, update.copy_requested && update.changed)
+    testing.expect_value(t, update.copy_start, 1)
+    testing.expect_value(t, update.copy_end, 3)
+    testing.expect_value(t, string(buffer[:text_length]), "aééd")
+    testing.expect(t, update.submit_requested)
+}
+
 // Verify an ordinary arrow collapses a selection before further navigation.
 @(test)
 input_box_keyboard_collapses_selection :: proc(t: ^testing.T) {

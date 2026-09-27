@@ -194,6 +194,11 @@ ui_hover_target :: proc(
         return ui_interaction_target(
             .Control, .Input_Box, GIF_PATH_INPUT_BOX_ID)
     }
+    if library_search_visible(runtime) && geometry.rectangle_contains(
+        library_search_input_rect(runtime), geometry.Vector2(mouse)) {
+        return ui_interaction_target(
+            .Control, .Input_Box, LIBRARY_SEARCH_INPUT_ID)
+    }
     if geometry.rectangle_contains(
         geometry.Rectangle(regions.accordion_rect), geometry.Vector2(mouse)) {
         return ui_interaction_target(.Panel_Content, .Accordion)
@@ -207,7 +212,12 @@ ui_route_logical_focus :: proc(
     input: Ui_Interaction_Route_Input,
     pointer_target: viewmodel.Ui_Interaction_Target) -> viewmodel.Ui_Focus_Target {
     result := runtime^.interaction.logical_focus
-    if result.kind == .Input_Box && !gif_path_input_visible(runtime) {
+    if result.kind == .Input_Box && result.id == GIF_PATH_INPUT_BOX_ID &&
+        !gif_path_input_visible(runtime) {
+        result = {}
+    }
+    if result.kind == .Input_Box && result.id == LIBRARY_SEARCH_INPUT_ID &&
+        !library_search_visible(runtime) {
         result = {}
     }
     terminal_present := input.terminal_present
@@ -227,7 +237,9 @@ ui_route_logical_focus :: proc(
 ui_valid_capture_owner :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     owner: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Press_Owner_State {
-    if owner.kind != .Input_Box || gif_path_input_visible(runtime) {
+    if owner.kind != .Input_Box ||
+        owner.id == GIF_PATH_INPUT_BOX_ID && gif_path_input_visible(runtime) ||
+        owner.id == LIBRARY_SEARCH_INPUT_ID && library_search_visible(runtime) {
         return owner
     }
     runtime^.ui_press_owner = {}

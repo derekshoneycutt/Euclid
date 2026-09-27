@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("convex_limacon_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("d0a14cf5-f5be-4ba6-aeb3-8f673093b7f0")
@@ -43,9 +45,7 @@ end
 
 """Return explanatory content for the convex limaçon construction."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Convex Limaçon}
-
-A convex limaçon is traced when the carried point remains close enough to the rolling circle's center that the curve bends outward everywhere."""
+    return EuclidCurvesConvexLimaconContent.get_view_content()
 end
 
 """Return rolling-center and tracer positions at one parameter and elevation."""

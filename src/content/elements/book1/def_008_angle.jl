@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_008_angle_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const JointPoint = [0.30f0, 0.30f0, 0f0]
@@ -91,11 +93,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Angle}
-
-A plane angle \euclidangle[color=khaki3,radius=2,end=60,filled] is the inclination to one another of two lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] in a plane which meet one another and do not lie in a straight line.
-
-And when the lines containing the angle are straight, the angle is called rectilinear."""
+    return ElementsOneDefinitionPlaneAngleContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native geometry handles."""

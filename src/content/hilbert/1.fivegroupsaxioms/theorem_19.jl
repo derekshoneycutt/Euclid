@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_19_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LowerLineStart = [0.18f0, 0.35f0, 0f0]
@@ -162,11 +164,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 19}
-
-If two parallel lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=khaki3,length=3,thickness=4]
-are cut by a third straight line \euclidline[color=palevioletred1,length=3,thickness=4], the alternate-interior angles
-and also the exterior-interior angles are congruent. Conversely, if the alternate-interior or the exterior-interior angles are congruent, the given lines are parallel."""
+    return HilbertChapterOneTheorem19Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

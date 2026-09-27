@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("def_congruent_angles_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexO = [0.28f0, 0.66f0, 0f0]
@@ -145,14 +147,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Definition}: \textit{Congruent Angles}
-
-Let the angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] be congruent to the angle $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled].
-Since, according to \textit{axiom IV, 4}, the angle $(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled]
-is congruent to itself, it follows from \textit{axiom IV, 5} that the angle
-$(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] is congruent to the angle
-$(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled]. We say, then, that the angles
-$(h, k)$ \euclidangle[color=khaki3,radius=2,end=60,filled] and $(h', k')$ \euclidangle[color=khaki3,radius=2,end=60,filled] are congruent to one another."""
+    return HilbertChapterOneDefCongruentAnglesContent.get_view_content()
 end
 
 """Reset the animation objects and transactionally restart cycle timing."""

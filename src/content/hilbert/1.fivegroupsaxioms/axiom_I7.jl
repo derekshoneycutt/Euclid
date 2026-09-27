@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("axiom_I7_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.18f0, 0.58f0, 0f0]
@@ -77,9 +79,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,7}
-
-\textbf{I, 7.} Upon every straight line \euclidline[color=steelblue,length=3,thickness=4] there exists at least two points \euclidpoint[color=palevioletred1,size=1] \euclidpoint[color=khaki3,size=1], in every plane at least three points \euclidpoint[color=steelblue,size=1] not lying in the same straight line, and in space there exist at least four points \euclidpoint[color=grey60,size=1] not lying in a plane."""
+    return HilbertChapterOneAxiomI7Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

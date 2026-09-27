@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidGeometry
 using ..EuclidLatex
 
+include("limacon_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("c70ab98c-08e5-42bc-b198-78b0f54ecf55")
@@ -43,9 +45,7 @@ end
 
 """Return explanatory content for the inner-loop limacon construction."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Limaçon}
-
-A limaçon is traced by a point carried by a circle rolling around a circle of equal radius. Placing the tracer beyond the rolling rim produces an inner loop."""
+    return EuclidCurvesLimaconContent.get_view_content()
 end
 
 """Return rolling-center and tracer positions at one parameter and elevation."""

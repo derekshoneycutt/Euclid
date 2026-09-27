@@ -10,6 +10,8 @@ using ..EuclidAnimations
 using ..EuclidLatex
 using ..EuclidGeometry
 
+include("z_2_identity_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = Float32[0.32f0, 0.34f0, 0f0]
@@ -61,20 +63,6 @@ const PhaseReflectFirst = 6f0
 const PhaseReflectSecond = 7f0
 const PhasePauseAfterDoubleReflect = 8f0
 
-const IdentityLatexDocument = raw"""\textbf{Identity}
-
-Identity means there is a motion that changes nothing at all.
-
-In this model, that is the \textit{do-nothing} motion $e$.
-
-\begin{enumerate}
-\item $e \circ r = r$: doing nothing before reflection changes nothing.
-\item $r \circ e = r$: doing nothing after reflection changes nothing.
-\item The visual cue $r \circ r = e$ also reinforces that returning to start is a valid identity outcome.
-\end{enumerate}
-
-Formally, this means $e \circ a = a \circ e = a$ for every allowed motion $a$."""
-
 const RefVertexA = EuclidGeometry.reflect_about_axis_x_half(VertexA)
 const RefVertexB = EuclidGeometry.reflect_about_axis_x_half(VertexB)
 const RefVertexC = EuclidGeometry.reflect_about_axis_x_half(VertexC)
@@ -105,7 +93,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return EuclidLatex.TeXDocument(IdentityLatexDocument)
+    return EuclidAlgebraGroupsZ2IdentityContent.get_view_content()
 end
 
 """Apply a set of reflection poses to the tracked points."""

@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_10_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PointA = [0.20f0, 0.66f0, 0f0]
@@ -306,35 +308,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 10 (First theorem of congruence for triangles)}
-
-If, for the two triangles $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1]
-and $A'B'C'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1], the congruences
-
-    $AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A'B'$ \euclidline[color=steelblue,length=3,thickness=4], $AC$ \euclidline[color=khaki3,length=3,thickness=4] $\equiv A'C'$ \euclidline[color=khaki3,length=3,thickness=4], $\angle A$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle A'$ \euclidangle[color=lightgreen,radius=2,end=60,filled]
-
-hold, then the two triangles are congruent to each other.
-
-\textbf{Proof}: From \textit{axiom IV, 6}, it follows that the two congruences
-
-    $\angle B$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle B'$ \euclidangle[color=lightgreen,radius=2,end=60,filled] and $\angle C$ \euclidangle[color=lightgreen,radius=2,end=60,filled] $\equiv \angle C'$ \euclidangle[color=lightgreen,radius=2,end=60,filled]
-
-are fulfilled, and it is, therefore, sufficient to show that the two sides
-$BC$ \euclidline[color=palevioletred1,length=3,thickness=4] and $B'C'$ \euclidline[color=palevioletred1,length=3,thickness=4]
-are congruent. We will assume the contrary to be true, namely, that
-$BC$ \euclidline[color=palevioletred1,length=3,thickness=4] and $B'C'$ \euclidline[color=palevioletred1,length=3,thickness=4]
-are not congruent, and show that this leads to a contradiction. We take upon
-$B'C'$ \euclidline[color=palevioletred1,length=3,thickness=4] a point $D'$ \euclidpoint[color=plum1,size=0.5] such that
-$BC$ \euclidline[color=palevioletred1,length=3,thickness=4] $\equiv B'D'$ \euclidline[color=firebrick,length=3,thickness=4].
-The two triangles $ABC$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=khaki3,edge2_color=steelblue,edge3_color=palevioletred1] and
-$A'B'D'$ \euclidtriangle[height=2,width=3,thickness=2,edge1_color=firebrick,edge2_color=steelblue,edge3_color=palevioletred1]
-have, then, two sides and the included angle of the one agreeing, respectively, to two sides and the included angle of the other.
-It follows from \textit{axiom IV, 6} that the two angles
-$\angle BAC$ \euclidangle[color=lightgreen,radius=2,end=60,filled] and $\angle B'A'D'$ \euclidangle[color=firebrick,radius=2,end=60,filled]
-are also congruent to each other. Consequently, by aid of \textit{axiom IV, 5}, the two angles
-$\angle B'A'C'$ \euclidangle[color=lightgreen,radius=2,end=60,filled] and $\angle B'A'D'$ \euclidangle[color=firebrick,radius=2,end=60,filled] must be congruent.
-
-This, however, is impossible, since, by \textit{axiom IV, 4}, an angle can be laid off in one and only one way on a given side of a given half-ray of a plane. From this contradiction the theorem follows."""
+    return HilbertChapterOneTheorem10Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

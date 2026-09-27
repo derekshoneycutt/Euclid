@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("axiom_I4_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.25f0, 0.75f0, 0f0]
@@ -94,9 +96,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,4}
-
-\textbf{I, 4.} Any three points $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1], $C$ \euclidpoint[color=steelblue,size=1] of a plane $\alpha$, which do not lie in the same straight line \euclidline[color=steelblue,length=3,thickness=4], completely determine that plane."""
+    return HilbertChapterOneAxiomI4Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

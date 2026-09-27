@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("axiom_I5_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const APoint = [0.25f0, 0.75f0, 0f0]
@@ -79,11 +81,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom I,5}
-
-\textbf{I, 5.} If two points $A$ \euclidpoint[color=palevioletred1,size=1], $B$ \euclidpoint[color=khaki3,size=1] of a straight line $a$ \euclidline[color=steelblue,length=3,thickness=4] lie in a plane $\alpha$, then every point of $a$ \euclidline[color=steelblue,length=3,thickness=4] lies in $\alpha$.
-
-In this case we say: "The straight line $a$ \euclidline[color=steelblue,length=3,thickness=4] lies in the plane $\alpha$," etc."""
+    return HilbertChapterOneAxiomI5Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

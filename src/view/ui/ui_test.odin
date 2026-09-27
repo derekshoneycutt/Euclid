@@ -1071,6 +1071,86 @@ tree_row_count_respects_expansion_state :: proc(t: ^testing.T) {
     testing.expect_value(t, expanded_first_child(&nodes[0]), &nodes[1])
 }
 
+// Verify search topology retains ancestors and derives expansion without mutation.
+@(test)
+tree_search_policy_retains_ancestors_without_changing_expansion :: proc(t: ^testing.T) {
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    ji.animation_head = &nodes[0]
+    ji.animation_count = len(nodes)
+    nodes[0].next_in_registry = &nodes[1]
+    nodes[1].next_in_registry = &nodes[2]
+    nodes[0].stable_id[0] = 1
+    nodes[1].stable_id[0] = 2
+    nodes[2].stable_id[0] = 3
+    seed_tree_node(&nodes[0], nil, &nodes[1], nil, false)
+    seed_tree_node(&nodes[1], &nodes[0], nil, &nodes[2], false)
+    seed_tree_node(&nodes[2], &nodes[0], nil, nil, false)
+    search := viewmodel.Library_Search_State{active = true, visible_id_count = 2}
+    search.visible_ids[0] = nodes[0].stable_id
+    search.visible_ids[1] = nodes[2].stable_id
+    policy := Tree_Visibility_Policy{search = &search}
+
+    testing.expect_value(t, count_visible_tree_rows_all_roots(&ji, policy), 2)
+    testing.expect(t, tree_node_is_effectively_expanded(policy, &nodes[0]))
+    testing.expect(t, !nodes[0].is_expanded)
+    row, found := tree_visible_row(&ji, &nodes[2], policy)
+    testing.expect(t, found)
+    testing.expect_value(t, row, 1)
+}
+
+// Verify Library search layout reserves correction rows only when populated.
+@(test)
+library_search_layout_reserves_only_visible_rows :: proc(t: ^testing.T) {
+    plain := library_search_layout({10, 20, 240, 180}, false)
+    testing.expect_value(t, plain.input.height, LIBRARY_SEARCH_INPUT_HEIGHT)
+    testing.expect_value(t, plain.suggestion_prompt.height, f32(0))
+    testing.expect_value(t, plain.suggestion.height, f32(0))
+    testing.expect_value(t, plain.tree.y, plain.input.y + plain.input.height)
+    suggested := library_search_layout({10, 20, 240, 180}, true)
+    testing.expect_value(t, suggested.suggestion_prompt.height,
+        LIBRARY_SEARCH_PROMPT_HEIGHT)
+    testing.expect_value(t, suggested.suggestion.height,
+        LIBRARY_SEARCH_SUGGESTION_HEIGHT)
+    testing.expect(t, suggested.suggestion.x > suggested.suggestion_prompt.x)
+    testing.expect_value(t, suggested.tree.y,
+        suggested.suggestion.y + suggested.suggestion.height)
+    testing.expect(t, suggested.tree.height >= 0)
+}
+
+// Verify edits debounce, Enter bypasses debounce, and clear restores ordinary state.
+@(test)
+library_search_input_policy_handles_edit_submit_and_clear :: proc(t: ^testing.T) {
+    search := viewmodel.Library_Search_State{query_length = 4, active = true,
+        visible_id_count = 2, suggestion_length = 3}
+    library_search_apply_input(&search, {changed = true})
+    testing.expect_value(t, search.generation, u64(1))
+    testing.expect(t, search.query_dirty && !search.active)
+    testing.expect_value(t, search.debounce_remaining_seconds,
+        LIBRARY_SEARCH_DEBOUNCE_SECONDS)
+    library_search_apply_input(&search, {submit_requested = true})
+    testing.expect(t, search.submit_requested)
+    testing.expect_value(t, search.debounce_remaining_seconds, f32(0))
+    library_search_clear_query(&search)
+    testing.expect_value(t, search.query_length, 0)
+    testing.expect(t, !search.query_dirty && !search.active)
+    testing.expect_value(t, search.visible_id_count, 0)
+}
+
+// Verify keyboard suggestion activation replaces the full bounded query.
+@(test)
+library_search_suggestion_replaces_query_and_submits :: proc(t: ^testing.T) {
+    search := viewmodel.Library_Search_State{query_length = 3,
+        suggestion_length = len("perpendicular")}
+    copy(search.query[:], "bad")
+    copy(search.suggestion[:], "perpendicular")
+    library_search_apply_suggestion(&search)
+    testing.expect_value(t, string(search.query[:search.query_length]),
+        "perpendicular")
+    testing.expect(t, search.query_dirty && search.submit_requested)
+    testing.expect_value(t, search.input.cursor_byte, search.query_length)
+}
+
 //   Verify tree row lookup follows visible depth-first order across roots.
 @(test)
 tree_visible_row_follows_draw_order :: proc(t: ^testing.T) {

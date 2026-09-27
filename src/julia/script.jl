@@ -8,6 +8,7 @@ if !isdefined(Main, :EUCLID_SYSIMAGE_CORE_LOADED)
 
     include("./odin-julia-bridge.jl")
     include("./latex.jl")
+    include("./search/search_content.jl")
     include("./geometry.jl")
     include("./animations.jl")
     include("./animation_catalog.jl")

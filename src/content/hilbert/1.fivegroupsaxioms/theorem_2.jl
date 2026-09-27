@@ -12,6 +12,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("theorem_2_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineAStart = [0.20f0, 0.64f0, 0f0]
@@ -92,9 +94,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 2}
-
-Through a straight line \euclidline[color=steelblue,length=3,thickness=4] and a point \euclidpoint[color=palevioletred1,size=1] not lying in it, or through two distinct straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] having a common point \euclidpoint[color=grey60,size=1], one and only one plane may be made to pass."""
+    return HilbertChapterOneTheorem2Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

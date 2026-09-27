@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("post_02_finiteline_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint = [0.25f0, 0.75f0, 0f0]
@@ -67,11 +69,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Postulates}: \textit{Produce a Finite Line}
-
-\textit{Let the following be postulated:}
-
-To produce a finite straight line \euclidline[color=steelblue,length=3,thickness=4] continuously in a straight line."""
+    return ElementsOnePostulatesFiniteLineContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

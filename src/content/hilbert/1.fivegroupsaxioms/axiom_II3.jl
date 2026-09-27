@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_II3_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.14f0, 0.56f0, 0f0]
@@ -82,9 +84,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom II,3}
-
-\textbf{II, 3.} Of any three points \euclidpoint[color=palevioletred1,size=1] \euclidpoint[color=steelblue,size=1] \euclidpoint[color=khaki3,size=1] situated on a straight line \euclidline[color=grey60,length=3,thickness=4], there is always one and only one \euclidpoint[color=steelblue,size=1] which lies between the other two \euclidpoint[color=palevioletred1,size=1] \euclidpoint[color=khaki3,size=1]."""
+    return HilbertChapterOneAxiomII3Content.get_view_content()
 end
 
 """Reset cycle timing transactionally before restoring visible animation state."""

@@ -443,6 +443,77 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
     testing.expect_value(t, identity.generation, u64(8))
 }
 
+// Verify correlated set and suggestion actions mutate ordinary search state.
+scenario_expect_library_search_mutations :: proc(
+    t: ^testing.T, runtime: ^Scenario_Runtime) {
+    identity := evidence_trace.Identity{
+        kind = .Scenario_Action, id = 17, generation = 1}
+    query, copied := scenario.text_copy("perpendiculr")
+    testing.expect(t, copied)
+    set_command := scenario.Command{kind = .Set_Library_Search, text = query}
+
+    handled, accepted := scenario_issue_library_search_action(
+        runtime, &set_command, &identity)
+
+    search := &runtime^.state^.ui_runtime.library_search
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t,
+        string(search^.query[:search^.query_length]), "perpendiculr")
+    testing.expect(t, search^.query_dirty && search^.submit_requested)
+    testing.expect_value(t, search^.scenario_correlation, u64(17))
+
+    copy(search^.suggestion[:], "perpendicular")
+    search^.suggestion_length = len("perpendicular")
+    correction := evidence_trace.Identity{
+        kind = .Scenario_Action, id = 18, generation = 1}
+    suggestion_command := scenario.Command{
+        kind = .Apply_Library_Search_Suggestion}
+    handled, accepted = scenario_issue_library_search_action(
+        runtime, &suggestion_command, &correction)
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t,
+        string(search^.query[:search^.query_length]), "perpendicular")
+    testing.expect_value(t, search^.scenario_correlation, u64(18))
+}
+
+// Verify clear restores ordinary search state and publishes its exact correlation.
+scenario_expect_library_search_clear :: proc(
+    t: ^testing.T, runtime: ^Scenario_Runtime) {
+    search := &runtime^.state^.ui_runtime.library_search
+    clear := evidence_trace.Identity{
+        kind = .Scenario_Action, id = 19, generation = 1}
+    clear_command := scenario.Command{kind = .Clear_Library_Search}
+    handled, accepted := scenario_issue_library_search_action(
+        runtime, &clear_command, &clear)
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t, search^.query_length, 0)
+    testing.expect_value(t, search^.committed_generation, search^.generation)
+    event := runtime^.state^.evidence_ring.events[
+        runtime^.state^.evidence_ring.count - 1]
+    testing.expect_value(t, event.kind,
+        evidence_trace.Kind.Library_Search_Committed)
+    testing.expect_value(t, event.correlation, u64(19))
+    testing.expect_value(t, event.tick, search^.generation)
+    testing.expect_value(t, event.revision, search^.index_generation)
+    testing.expect_value(t, event.payload.counts.first, u32(0))
+    testing.expect_value(t, event.payload.counts.second, u32(0))
+}
+
+// Verify scenario search actions retain correlation through submit and clear commit.
+@(test)
+scenario_library_search_actions_are_correlated :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.evidence_session.enabled = true
+    state^.evidence_session.lanes = evidence_session.ALL_LANES
+    state^.evidence_session.required_evidence_complete = true
+    evidence_trace.ring_init(&state^.evidence_ring, .Display)
+    state^.ui_runtime.library_search.worker_available = true
+    runtime := Scenario_Runtime{state = state}
+    scenario_expect_library_search_mutations(t, &runtime)
+    scenario_expect_library_search_clear(t, &runtime)
+}
+
 // Verify a parent-qualified selector disambiguates duplicate leaf names.
 @(test)
 scenario_animation_selection_qualified_name :: proc(t: ^testing.T) {

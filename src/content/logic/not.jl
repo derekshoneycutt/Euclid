@@ -6,6 +6,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("not_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const AnimationId = UUID("9f6972f7-949b-4290-bfda-11dcbfcab409")
@@ -13,9 +15,7 @@ const RegionOperation = :difference
 
 """Return explanatory content for bounded negation as a Lune difference."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Not}
-
-Within $A$, the condition $A \land \neg B$ holds where $A$ holds and $B$ does not. This is the Lune $A \setminus B$: the part of circle $A$ cut away from their overlap."""
+    return EuclidLogicNotContent.get_view_content()
 end
 
 """Create this leaf's directional Lune region."""

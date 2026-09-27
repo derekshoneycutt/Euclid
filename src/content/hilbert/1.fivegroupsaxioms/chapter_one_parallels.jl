@@ -9,17 +9,13 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("chapter_one_parallels_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 """Emit the Book I parallels view content."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§5 Group III: Axiom of Parallels (Euclid's Axiom)}
-
-The introduction of this axiom simplifies greatly the fundamental principles of geometry and facilitates in no small degree its development.
-
-...
-
-The axiom of parallels is a plane axiom."""
+    return HilbertChapterOneParallelsContent.get_view_content()
 end
 
 """Initialize the null animation and publish the parallels view."""

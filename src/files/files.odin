@@ -57,6 +57,15 @@ Packaged_Sysimage_Metadata :: struct {
     input_fingerprint: string,
     artifact_sha256: string,
     package_identity: string,
+    search_relative_path: string,
+    search_database_sha256: string,
+    search_corpus_fingerprint: string,
+}
+
+// Resolved immutable search asset and the corpus identity it must contain.
+Packaged_Search_Asset :: struct {
+    database_path: string,
+    corpus_fingerprint: string,
 }
 
 Asset_Package_Sidecar :: struct {
@@ -79,6 +88,10 @@ Manifest_Parse_State :: struct {
     digest_seen: bool,
     identity_seen: bool,
     platform_ok: bool,
+    search_path_seen: bool,
+    search_digest_seen: bool,
+    search_corpus_seen: bool,
+    search_schema_ok: bool,
 }
 
 //   Release strings retained by packaged sysimage metadata.
@@ -91,6 +104,9 @@ destroy_packaged_sysimage_metadata :: proc(
     delete(metadata.input_fingerprint, allocator)
     delete(metadata.artifact_sha256, allocator)
     delete(metadata.package_identity, allocator)
+    delete(metadata.search_relative_path, allocator)
+    delete(metadata.search_database_sha256, allocator)
+    delete(metadata.search_corpus_fingerprint, allocator)
     metadata^ = {}
 }
 
@@ -143,10 +159,38 @@ assign_unique_manifest_string :: proc(
     return true
 }
 
+//   Capture one recognized search manifest field and report whether it matched.
+assign_search_manifest_field :: proc(
+    state: ^Manifest_Parse_State, key, value: string,
+    allocator: mem.Allocator) -> (bool, bool) {
+    switch key {
+    case "search_database":
+        return assign_unique_manifest_string(
+            &state.metadata.search_relative_path, &state.search_path_seen,
+            value, allocator), true
+    case "search_database_sha256":
+        return assign_unique_manifest_string(
+            &state.metadata.search_database_sha256, &state.search_digest_seen,
+            value, allocator), true
+    case "search_corpus_fingerprint":
+        return assign_unique_manifest_string(
+            &state.metadata.search_corpus_fingerprint, &state.search_corpus_seen,
+            value, allocator), true
+    case "search_schema_version":
+        if state.search_schema_ok || value != "1" {return false, true}
+        state.search_schema_ok = true
+        return true, true
+    }
+    return true, false
+}
+
 //   Capture one recognized manifest field while rejecting duplicates.
 assign_sysimage_manifest_field :: proc(
     state: ^Manifest_Parse_State, key, value: string,
     allocator: mem.Allocator) -> bool {
+    search_ok, search_matched := assign_search_manifest_field(
+        state, key, value, allocator)
+    if search_matched {return search_ok}
     switch key {
     case "schema_version":
         if state.schema_seen || value != "3" { return false }
@@ -170,6 +214,24 @@ assign_sysimage_manifest_field :: proc(
         state.platform_ok = value == PACKAGED_SYSIMAGE_PLATFORM
     }
     return true
+}
+
+//   Return whether all required manifest fields and values are canonical.
+packaged_sysimage_manifest_is_valid :: proc(state: ^Manifest_Parse_State) -> bool {
+    metadata := &state.metadata
+    return state.schema_seen && state.identity_seen && state.path_seen &&
+        state.input_seen && state.digest_seen && state.platform_ok &&
+        state.search_path_seen && state.search_digest_seen &&
+        state.search_corpus_seen && state.search_schema_ok &&
+        is_safe_asset_relative_path(metadata.relative_path) &&
+        strings.has_prefix(metadata.relative_path, "sysimage/") &&
+        strings.has_suffix(metadata.relative_path, PACKAGED_SYSIMAGE_FILENAME) &&
+        is_lower_sha256(metadata.package_identity) &&
+        is_lower_sha256(metadata.input_fingerprint) &&
+        is_lower_sha256(metadata.artifact_sha256) &&
+        metadata.search_relative_path == "search/animations.sqlite3" &&
+        is_lower_sha256(metadata.search_database_sha256) &&
+        is_lower_sha256(metadata.search_corpus_fingerprint)
 }
 
 //   Parse and validate bounded packaged sysimage metadata.
@@ -196,14 +258,7 @@ parse_packaged_sysimage_manifest :: proc(
             return {}, false
         }
     }
-    valid := state.schema_seen && state.identity_seen && state.path_seen &&
-        state.input_seen && state.digest_seen && state.platform_ok &&
-        is_safe_asset_relative_path(state.metadata.relative_path) &&
-        strings.has_prefix(state.metadata.relative_path, "sysimage/") &&
-        strings.has_suffix(state.metadata.relative_path, PACKAGED_SYSIMAGE_FILENAME) &&
-        is_lower_sha256(state.metadata.package_identity) &&
-        is_lower_sha256(state.metadata.input_fingerprint) &&
-        is_lower_sha256(state.metadata.artifact_sha256)
+    valid := packaged_sysimage_manifest_is_valid(&state)
     if !valid {
         destroy_packaged_sysimage_metadata(&state.metadata, allocator)
     }
@@ -731,6 +786,26 @@ packaged_asset_path :: proc(
     return packaged_asset_path_with_config(nil, relative_path, allocator)
 }
 
+//   Resolve the validated built-in search database and expected corpus identity.
+packaged_search_asset :: proc(
+    allocator: mem.Allocator) -> (Packaged_Search_Asset, bool) {
+    exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
+    if !exe_ok || !ensure_packaged_assets_unpacked_with_force(exe_dir, false) {
+        return {}, false
+    }
+    unpack_dir, unpack_ok := resolve_current_asset_unpack_dir(
+        exe_dir, context.temp_allocator)
+    if !unpack_ok {return {}, false}
+    metadata, metadata_ok := read_packaged_sysimage_metadata(
+        unpack_dir, context.temp_allocator)
+    if !metadata_ok {return {}, false}
+    path, path_error := filepath.join(
+        []string{unpack_dir, metadata.search_relative_path}, allocator)
+    if path_error != nil {return {}, false}
+    fingerprint := strings.clone(metadata.search_corpus_fingerprint, allocator)
+    return {database_path = path, corpus_fingerprint = fingerprint}, true
+}
+
 //   Resolve an absolute path for a packaged asset relative path under an optional root config.
 packaged_asset_path_with_config :: proc(
     config: ^Asset_Root_Config,
@@ -864,6 +939,7 @@ baseline_asset_entries_exist :: proc(unpack_dir: string) -> bool {
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
         "NewCMSansMath-Regular.otf",
+        "search/animations.sqlite3",
         "manifest.txt",
     }
 
@@ -907,6 +983,12 @@ is_assets_unpack_ready :: proc(
     image_path, image_err := filepath.join(
         []string{unpack_dir, metadata.relative_path}, context.temp_allocator)
     if image_err != nil || !os.exists(image_path) {
+        return false
+    }
+    search_path, search_error := filepath.join(
+        []string{unpack_dir, metadata.search_relative_path}, context.temp_allocator)
+    if search_error != nil ||
+       !file_matches_sha256(search_path, metadata.search_database_sha256) {
         return false
     }
     return platform_terminfo_exists(unpack_dir)

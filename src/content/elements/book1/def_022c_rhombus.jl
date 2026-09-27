@@ -12,6 +12,8 @@ using ..EuclidGeometry
 
 using LinearAlgebra
 
+include("def_022c_rhombus_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const VertexA = [0.16f0, 0.78f0, 0f0]
@@ -108,9 +110,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Rhombus}
-
-Of quadrilateral figures, ... a rhombus \euclidbox[height=2,width=2,thickness=2,edge1_color=palevioletred1,edge2_color=palevioletred1,edge3_color=palevioletred1,edge4_color=palevioletred1] that which is equilateral \euclidline[color=palevioletred1,length=3,thickness=4] but not right angled \euclidangle[color=steelblue,radius=2,end=60,filled] \euclidangle[color=khaki3,radius=2,end=120,filled]; ..."""
+    return ElementsOneDefinitionRhombusContent.get_view_content()
 end
 
 """Reset visible objects and transactionally publish initial cycle timing."""

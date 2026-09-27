@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("axiom_IV2_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineABStart = [0.14f0, 0.72f0, 0f0]
@@ -133,16 +135,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Axiom IV,2}
-
-\textbf{IV, 2.} If a segment $AB$ \euclidline[color=steelblue,length=3,thickness=4] is
-congruent to the segment $A'B'$ \euclidline[color=palevioletred1,length=3,thickness=4] and
-also to the segment $A''B''$ \euclidline[color=khaki3,length=3,thickness=4], then the
-segment $A'B'$ \euclidline[color=palevioletred1,length=3,thickness=4] is congruent to the
-segment $A''B''$ \euclidline[color=khaki3,length=3,thickness=4]; that is, if
-$AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A'B'$ \euclidline[color=palevioletred1,length=3,thickness=4]
-and $AB$ \euclidline[color=steelblue,length=3,thickness=4] $\equiv A''B''$ \euclidline[color=khaki3,length=3,thickness=4],
-then $A'B'$ \euclidline[color=palevioletred1,length=3,thickness=4] $\equiv A''B''$ \euclidline[color=khaki3,length=3,thickness=4]."""
+    return HilbertChapterOneAxiomIV2Content.get_view_content()
 end
 
 """Reset the animation cycle and transactionally publish its initial timing."""

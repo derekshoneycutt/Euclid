@@ -135,6 +135,7 @@ Ui_Control_Preparation :: struct {
     settings: Settings_View_Preparation,
     gif: Gif_View_Preparation,
     tree: Tree_List_Preparation,
+    library_search: Library_Search_Preparation,
 }
 
 // Post-layout interaction results prepared after Dynview compilation completes.
@@ -342,8 +343,9 @@ draw_encoded_accordion_content :: proc(
         draw_encoded_presentation_geometry(
             state, encoder, geometry.Rectangle(layout.content))
     case .Library:
-        draw_encoded_tree_geometry(
-            state, encoder, geometry.Rectangle(layout.content))
+        show_suggestion := runtime^.library_search.suggestion_length > 0
+        search_layout := library_search_layout(layout.content, show_suggestion)
+        draw_encoded_tree_geometry(state, encoder, search_layout.tree)
     case .Save_Gif:
         draw_encoded_gif_geometry(
             state, encoder, geometry.Rectangle(layout.content))
@@ -427,7 +429,10 @@ draw_encoded_panel_text :: proc(
     }
     switch runtime^.active_accordion_section {
     case .Library:
-        draw_encoded_tree_text(state, encoder, geometry.Rectangle(layout.content))
+        draw_encoded_library_search_geometry(
+            state, encoder, controls.library_search)
+        draw_encoded_library_search_text(state, encoder, controls.library_search)
+        draw_encoded_tree_text(state, encoder, controls.library_search.layout.tree)
     case .Save_Gif:
         draw_encoded_gif_text(state, encoder,
             geometry.Rectangle(layout.content), controls.gif)
@@ -501,14 +506,22 @@ prepare_ui_controls :: proc(
     switch state^.ui_runtime.active_accordion_section {
     case .View:
     case .Library:
+        if state^.ui_runtime.interaction_frame.effective_focus.kind == .Input_Box &&
+            state^.ui_runtime.interaction_frame.effective_focus.id ==
+                LIBRARY_SEARCH_INPUT_ID {
+            routed_frame.events = frame.events
+        }
+        result.library_search = prepare_library_search(
+            state, geometry.Rectangle(content_panel), routed_frame)
         result.tree = prepare_tree_list_panel({
             ji = state^.julia_interface,
             ui_runtime = &state^.ui_runtime,
-            list_panel = geometry.Rectangle(content_panel),
+            list_panel = result.library_search.layout.tree,
             mouse_input = routed_frame,
             scroll_y = &state^.ui_runtime.tree_scroll_y,
             font = view_font.cache_borrow(&state^.font_cache, .Regular),
             font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+            visibility = {search = &state^.ui_runtime.library_search},
         })
     case .Save_Gif:
         result.gif = prepare_gif_view(

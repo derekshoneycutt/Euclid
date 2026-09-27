@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("def_007_planesurface_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const StartPoint1 = [0.5f0, 0f0, 0f0]
@@ -49,9 +51,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Euclid Elements - Book I - Definition}: \textit{Plane Surface}
-
-A plane surface is a surface which lies evenly with the straight lines on itself."""
+    return ElementsOneDefinitionPlaneSurfaceContent.get_view_content()
 end
 
 """Reset the animation cycle timing to its initial phase."""

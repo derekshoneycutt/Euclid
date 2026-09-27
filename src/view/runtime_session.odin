@@ -6,6 +6,7 @@ import shapemodel "../shapes/model"
 
 import view_core "core"
 import viewmodel "model"
+import viewsearch "search"
 import "ui"
 import "../core"
 import color "../core/color"
@@ -36,6 +37,7 @@ Euclid_Runtime_Session :: struct {
     state : ^Euclid_General_State,
     julia_service : ^bridgemodel.Julia_Runtime_Service,
     presentation : ^Presentation_Runtime,
+    search_service: ^viewsearch.Search_Service,
 }
 
 //   Created Julia runtime service plus its completed initialize request id.
@@ -174,6 +176,26 @@ session_load_content :: proc(
     return true
 }
 
+//   Resolve and start the immutable built-in search index for one runtime session.
+session_create_search_service :: proc() -> ^viewsearch.Search_Service {
+    asset, asset_ok := files.packaged_search_asset(context.temp_allocator)
+    if asset_ok {
+        service := viewsearch.search_service_create(
+            asset.database_path, asset.corpus_fingerprint)
+        if service != nil {return service}
+    }
+    log.error("search_startup_failed")
+    return nil
+}
+
+//   Create and attach presentation resources to one initialized runtime session.
+session_start_presentation :: proc(session: ^Euclid_Runtime_Session) -> bool {
+    session.presentation = create_presentation_runtime()
+    if session.presentation == nil {return false}
+    julia_egress_router_attach(session.state, session.presentation)
+    return true
+}
+
 //   Prepare runtime-owned subsystems and state without initializing presentation resources.
 create_runtime_session :: proc(
     settings: ^Euclid_Run_Settings,
@@ -197,20 +219,21 @@ create_runtime_session :: proc(
     if !session_load_content(julia_service, settings, started.initialize_id, &state) {
         return {}, false
     }
-    presentation := create_presentation_runtime()
-    if presentation == nil {
-        _ = shutdown_runtime_session({
-            state = state,
-            julia_service = julia_service,
-        })
+    search_service := session_create_search_service()
+    if search_service == nil {
+        _ = shutdown_runtime_session({state = state, julia_service = julia_service})
         return {}, false
     }
-    julia_egress_router_attach(state, presentation)
-    return {
+    session := Euclid_Runtime_Session{
         state = state,
         julia_service = julia_service,
-        presentation = presentation,
-    }, true
+        search_service = search_service,
+    }
+    if !session_start_presentation(&session) {
+        _ = shutdown_runtime_session(session)
+        return {}, false
+    }
+    return session, true
 }
 
 //   Allocate and initialize the isometric projection scale.
@@ -558,6 +581,9 @@ shutdown_runtime_session :: proc(
     }
 
     quiesce_presentation_runtime(session.state, session.presentation)
+    if session.search_service != nil {
+        viewsearch.search_service_destroy_owned(session.search_service)
+    }
     julia_egress_router_detach(session.state, session.presentation)
     destroy_presentation_runtime(session.presentation)
     terminal_graphics_runtime_destroy(session.state)

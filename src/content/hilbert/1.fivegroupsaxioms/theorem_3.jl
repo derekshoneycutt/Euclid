@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_3_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.16f0, 0.52f0, 0f0]
@@ -66,9 +68,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 3}
-
-Between any two points \euclidpoint[color=steelblue,size=1] \euclidpoint[color=palevioletred1,size=1] of a straight line \euclidline[color=grey60,length=3,thickness=4], there always exists an unlimited number of points \euclidpoint[color=khaki3,size=1]."""
+    return HilbertChapterOneTheorem3Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

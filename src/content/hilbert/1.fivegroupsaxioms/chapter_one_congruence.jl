@@ -9,19 +9,13 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("chapter_one_congruence_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 """Emit the Book I congruence-axioms view content."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - 1. The Five Groups of Axioms} \textit{§5 Group IV: Axioms of Congruence}
-
-The axioms of this group define the idea of congruence or displacement.
-
-Segments stand in a certain relation to one another which is described by the word "congruent."
-
-...
-
-Axioms IV, 1-3 contain statements concerning the congruence of segments of a straight line only. They may, therefore, be called the linear axioms of group IV. Axioms IV, 4, 5 contain statements relating to the congruence of angles. Axiom IV, 6 gives the connection between the congruence of segments and the congruence of angles. Axioms IV, 4-6 contain statements regarding the elements of plane geometry and may be called the plane axioms of group IV."""
+    return HilbertChapterOneCongruenceContent.get_view_content()
 end
 
 """Initialize the null animation and publish the congruence view."""

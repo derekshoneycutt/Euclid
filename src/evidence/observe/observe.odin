@@ -128,6 +128,10 @@ Display :: struct {
     gif_capture_phase : viewmodel.Gif_Capture_Phase,
     gif_captured_frames : int,
 
+    // Library-search request completion and accepted-result state.
+    library_search_idle : bool,
+    library_search_has_matches : bool,
+
     // Aggregate required-evidence health and display producer state.
     required_evidence_complete : bool,
     trace : Trace_State,
@@ -292,6 +296,13 @@ observe_display_ui :: proc(
             source.ui_runtime.colored_primitive_overflow_count
         result.gif_capture_phase = source.ui_runtime.gif_capture_phase
         result.gif_captured_frames = source.ui_runtime.gif_captured_frames
+        search := &source.ui_runtime.library_search
+        result.library_search_idle = search.worker_available &&
+            !search.query_dirty && !search.submit_requested &&
+            (search.query_length == 0 ||
+                search.committed_generation == search.generation)
+        result.library_search_has_matches = search.active &&
+            search.total_match_count > 0
     }
     if source.gif_capture != nil {
         result.gif_capture_active = source.gif_capture.active

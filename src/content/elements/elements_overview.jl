@@ -9,14 +9,13 @@ using ..OdinJuliaBridge
 using ..EuclidLatex
 using ..NullAnimation
 
+include("elements_overview_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 """Emit the welcome view content for Euclid's Elements."""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Welcome to Euclid's Elements!}
-
-Euclid's Elements develops geometry from definitions, postulates, and common notions
-through propositions and constructions."""
+    return EuclidElementsOverviewContent.get_view_content()
 end
 
 """Initialize the null animation and publish the Elements overview."""

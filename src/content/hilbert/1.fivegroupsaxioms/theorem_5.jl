@@ -9,6 +9,8 @@ using ..OdinJuliaBridge
 using ..EuclidAnimations
 using ..EuclidLatex
 
+include("theorem_5_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const LineStart = [0.14f0, 0.50f0, 0f0]
@@ -94,9 +96,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 5}
-
-Every straight line $a$ \euclidline[color=grey60,length=3,thickness=4], which lies in a plane $\alpha$, divides the remaining points of this plane into two regions having the following properties: Every point $A$ \euclidpoint[color=steelblue,size=1] of the one region determines with each point $B$ \euclidpoint[color=palevioletred1,size=1] of the other region a segment $AB$ \euclidline[color=steelblue,length=3,thickness=4] containing a point of the straight line $a$ \euclidline[color=grey60,length=3,thickness=4]. On the other hand, any two points $A$ \euclidpoint[color=steelblue,size=1], $A'$ \euclidpoint[color=khaki3,size=1] of the same region determine a segment $AA'$ \euclidline[color=khaki3,length=3,thickness=4] containing no point of $a$ \euclidline[color=grey60,length=3,thickness=4]."""
+    return HilbertChapterOneTheorem5Content.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

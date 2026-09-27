@@ -11,6 +11,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("C_n_abelian_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const CenterPoint = [0.50f0, 0.50f0, 0f0]
@@ -121,20 +123,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{Abelian Groups / Commutativity}
-
-An abelian group is one where order does not matter: doing one allowed rotation and then another gives the same result as doing them in the reverse order.
-
-For cyclic rotations about one center, order never changes the outcome.
-
-\begin{enumerate}
-\item $\rho^2\rho^4 = \rho^6$.
-\item $\rho^4\rho^2 = \rho^6$.
-\end{enumerate}
-
-Order does not change the result, so this is a concrete visual proof that $C_n$ is abelian.
-
-Formally, this is the statement $\rho^2\rho^4 = \rho^4\rho^2$."""
+    return EuclidAlgebraGroupsCnAbelianContent.get_view_content()
 end
 
 """Reset the animation cycle while preserving its native handles."""

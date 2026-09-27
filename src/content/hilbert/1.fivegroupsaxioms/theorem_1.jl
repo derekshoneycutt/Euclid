@@ -12,6 +12,8 @@ using ..EuclidLatex
 
 using LinearAlgebra
 
+include("theorem_1_content.jl")
+
 export get_view_content, initialize, clean, loop, animation_entry
 
 const PlaneEdgeLeft = [0.18f0, 0.58f0, 0f0]
@@ -93,9 +95,7 @@ end
 
 """Get the view content for this animation"""
 function get_view_content(_state_ptr::Ptr{Cvoid})
-    return tex"""\textbf{David Hilbert - Foundations of Geometry - Theorem 1}
-
-Two straight lines \euclidline[color=steelblue,length=3,thickness=4] \euclidline[color=palevioletred1,length=3,thickness=4] of a plane have either one point \euclidpoint[color=khaki3,size=1] or no point in common; two planes have no point in common or a straight line in common; a plane and a straight line not lying in it have no point or one point in common."""
+    return HilbertChapterOneTheorem1Content.get_view_content()
 end
 
 """Set the plane's fill alpha from a normalized [0, 1] opacity."""

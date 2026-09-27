@@ -430,6 +430,47 @@ the structured stream instead of displaying a partial document.
 
 Do not manually parse LaTeX or approximate structured math with spaced text.
 
+## Search Content Authoring
+
+Every path-backed animation owns adjacent pure content with canonical View content and
+authored search content. Treat these as related but distinct editorial surfaces:
+
+```julia
+include("example_content.jl")
+
+function get_view_content(_state_ptr::Ptr{Cvoid})
+  return ExampleContent.get_view_content()
+end
+```
+
+The adjacent module exports deterministic zero-argument `get_view_content()` and
+`get_search_content()::SearchContent` functions. It may use the sysimage-owned LaTeX
+facade and search-content type, but it must not call `OdinJuliaBridge`, initialize
+animation state, or depend on mutable runtime state. Repeated calls must produce
+equivalent bounded values.
+
+- Preserve accurate canonical View content. Repair factual errors, omitted structure,
+  unsupported markup, or missing animation-specific context; do not rewrite it only to
+  impose a uniform voice.
+- Describe the specific concept, construction, theorem, or animated behavior in search
+  prose. A description is too generic when another animation title can replace its
+  subject without making the sentence false.
+- Use aliases for likely discovery terms, alternate or historical names, normalized
+  spellings, and spelled-out symbols. Do not repeat the display name merely to populate
+  the alias list.
+- Keep aliases concise and independently useful. Search prose should remain readable
+  natural language rather than a list of keywords.
+- Write useful docstrings that identify the authored content or discovery contract, not
+  merely that a function returns a value.
+- Keep semantic text nonempty, free of NUL bytes, and within the shared search-content
+  limits. Aliases must be nonempty after normalization and unique within the entry.
+
+Review sibling animations together. Closely related curves, definitions, axioms, and
+theorems must retain the distinctions a user would rely on when choosing a result. Test
+representative natural-language and alias queries against the packaged index, asserting
+that the intended document appears without freezing broad-query counts or complete rank
+order unless those are deliberate product contracts.
+
 ## Practical Review Check
 
 Before adding a new animation, ask:
@@ -444,3 +485,5 @@ Before adding a new animation, ask:
 1. Does literal-source failure preserve every claim represented by styles, math,
    or shapes?
 1. Have both structured Dynview output and literal failure been reviewed?
+1. Does search prose uniquely describe this animation rather than its broad category?
+1. Do aliases add terms a user may actually search for without duplicating the title?
