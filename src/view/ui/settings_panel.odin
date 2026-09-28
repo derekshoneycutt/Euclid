@@ -50,6 +50,7 @@ Settings_Checkbox_Descriptor :: struct {
     label: string,
     checked: bool,
     enabled: bool,
+    order: u16,
 }
 
 //   Prepared controls paired with platform feature availability.
@@ -223,6 +224,10 @@ settings_checkbox_params :: proc(
         label_font_size = TREE_FONT_SIZE,
         label_offset_x = SETTINGS_CHECKBOX_LABEL_GAP,
         label_offset_y = -SETTINGS_CHECKBOX_TEXT_OFFSET_Y,
+        semantic_focus = ctx.state.ui_runtime.semantic_focus,
+        semantic_domain = .Settings_Control,
+        semantic_order = descriptor.order,
+        semantic_clip = ctx.panel,
     }
 }
 
@@ -242,6 +247,8 @@ settings_max_particles_params :: proc(
         max_value = particlemodel.MAX_LOW_PARTICLES,
         font = ctx.font,
         font_resolver = ctx.font_resolver,
+        semantic_domain = .Settings_Control,
+        semantic_order = 0,
     }
 }
 
@@ -331,24 +338,24 @@ update_settings_controls :: proc(
     result.max_particles = update_settings_integer_slider(
         settings_max_particles_params(ctx, rows.slider_label_y))
     result.fps = update_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
-        4001, "Display FPS", ctx.state.ui_runtime.display_fps, true}),
+        4001, "Display FPS", ctx.state.ui_runtime.display_fps, true, 1}),
         &ctx.state.ui_runtime.ui_press_owner)
     result.limit = update_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
-        4002, "Limit FPS", ctx.state.ui_runtime.limit_fps, true}),
+        4002, "Limit FPS", ctx.state.ui_runtime.limit_fps, true, 2}),
         &ctx.state.ui_runtime.ui_press_owner)
     result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
-        4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled, true}),
+        4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled, true, 3}),
         &ctx.state.ui_runtime.ui_press_owner)
     simd_available := view_core.simd_batch_projection_available()
     simd_label := settings_simd_label(simd_available)
     result.simd = update_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, simd_label, ctx.state.ui_runtime.use_simd_batch_projection,
-        simd_available}), &ctx.state.ui_runtime.ui_press_owner)
+        simd_available, 4}), &ctx.state.ui_runtime.ui_press_owner)
     gpu_available := ctx.state.ui_runtime.gpu_dust_instancing_available
     gpu_label := settings_gpu_dust_label(gpu_available)
     result.gpu_dust = update_checkbox(settings_checkbox_params(ctx, {rows.gpu_dust_y,
         4005, gpu_label, ctx.state.ui_runtime.use_gpu_dust_instancing,
-        gpu_available}), &ctx.state.ui_runtime.ui_press_owner)
+        gpu_available, 5}), &ctx.state.ui_runtime.ui_press_owner)
     result.simd_available = simd_available
     result.gpu_available = gpu_available
     return {result, simd_available, gpu_available}

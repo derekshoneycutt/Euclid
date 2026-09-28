@@ -307,6 +307,42 @@ dynview_selection_update_mouse :: proc(
     }
 }
 
+// dynview_selection_navigation_target resolves one bounded keyboard boundary.
+dynview_selection_navigation_target :: proc(
+    selection: dynviewmodel.Dynview_Selection_State,
+    unit_count: int,
+    key: input.Input_Key) -> (int, bool) {
+    current := clamp(selection.head.unit_index, 0, unit_count)
+    if key == .Left || key == .Up {return max(current - 1, 0), true}
+    if key == .Right || key == .Down {return min(current + 1, unit_count), true}
+    if key == .Home {return 0, true}
+    if key == .End {return unit_count, true}
+    return current, false
+}
+
+// dynview_selection_apply_navigation moves or extends one logical selection.
+dynview_selection_apply_navigation :: proc(
+    selection: ^dynviewmodel.Dynview_Selection_State,
+    unit_count: int,
+    event: input.Input_Event) {
+    if event.kind != .Press && event.kind != .Repeat ||
+        .Control in event.modifiers || .Alt in event.modifiers ||
+        .Super in event.modifiers {return}
+    target, handled := dynview_selection_navigation_target(
+        selection^, unit_count, event.key)
+    if !handled {return}
+    if .Shift not_in event.modifiers {
+        if selection^.active && (event.key == .Left || event.key == .Up) {
+            target = min(selection^.anchor.unit_index, selection^.head.unit_index)
+        } else if selection^.active && (event.key == .Right || event.key == .Down) {
+            target = max(selection^.anchor.unit_index, selection^.head.unit_index)
+        }
+        selection^.anchor.unit_index = target
+    }
+    selection^.head.unit_index = target
+    selection^.active = selection^.anchor != selection^.head
+}
+
 // Select every logical unit or copy the active selection for keyboard chords.
 dynview_selection_update_keyboard :: proc(
     runtime: ^dynviewmodel.Dynview_System,
@@ -315,6 +351,9 @@ dynview_selection_update_keyboard :: proc(
     fallback_text: string,
     frame: input.Input_Frame) {
 
+    for event in frame.events {
+        dynview_selection_apply_navigation(selection, content.unit_count, event)
+    }
     if input.input_chord_pressed(frame, .A, {.Control}) && content.unit_count > 0 {
         selection^.anchor = {unit_index = 0}
         selection^.head = {unit_index = content.unit_count}

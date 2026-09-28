@@ -503,6 +503,20 @@ service_sdl_frame_runtime :: proc(
     service_scenario_before_ui(ctx)
 }
 
+// route_ui_keyboard_frame claims semantic keys and returns ordered remaining input.
+route_ui_keyboard_frame :: proc(
+    state: ^Euclid_General_State, frame: input.Input_Frame,
+    storage: []input.Input_Event) -> input.Input_Frame {
+    semantic := state^.ui_runtime.semantic_focus
+    event_claims := ui.semantic_route_keyboard(
+        semantic, frame, state^.ui_runtime.interaction_frame.terminal_focused)
+    if ui.semantic_focus_moved(semantic) {
+        ui.ui_apply_semantic_focus(&state^.ui_runtime, frame,
+            ui.is_terminal_selected(state))
+    }
+    return input.input_frame_copy_unclaimed_events(frame, &event_claims, storage)
+}
+
 // prepare_sdl_frame advances UI, presentation, simulation, and display caches.
 prepare_sdl_frame :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
@@ -513,9 +527,11 @@ prepare_sdl_frame :: proc(
     ui_geometry := ui.prepare_ui_geometry(state, input_frame, frame_dt)
     ui.prepare_ui_static_interaction(
         state, input_frame, ui_geometry.pointer_capture)
-    controls := ui.prepare_ui_controls(state, input_frame)
+    routed_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
+    routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
+    controls := ui.prepare_ui_controls(state, routed_frame)
     service_library_search(state, ctx.search_service, frame_dt)
-    terminal_frame := terminal_service_update(state, ctx.input_runtime, input_frame)
+    terminal_frame := terminal_service_update(state, ctx.input_runtime, routed_frame)
     apply_sdl_cursor(state, ctx.platform)
     world_rect := state^.ui_runtime.ui_regions.world_rect
     gif_extents := view_core.Gif_Capture_Extents{
@@ -534,8 +550,8 @@ prepare_sdl_frame :: proc(
         frame_dt)
     run_parallel_frame_preparation_after_ui(
         state, alpha, ui_geometry.compile_dynview)
-    layout_interaction := ui.prepare_ui_layout_interaction(
-        state, input_frame, frame_dt)
+    layout_interaction := ui.prepare_and_finish_ui_layout(
+        state, routed_frame, frame_dt)
     service_scenario_before_present(ctx)
     return {input_frame, terminal_frame, controls, layout_interaction}
 }
@@ -578,6 +594,7 @@ encode_sdl_ui_geometry :: proc(
         ui.draw_encoded_presentation_text(
             state, encoder, prepared.layout_interaction.presentation)
     }
+    ui.draw_encoded_focus_outline(&state^.ui_runtime, encoder)
 }
 
 // encode_sdl_geometry_frame builds and submits one bounded geometry frame.
@@ -755,15 +772,19 @@ run_initialized_window_session :: proc(
     }
 }
 
-// Build one display-loop context from admitted session resources.
+// Build one display-loop context from admitted native and session resources.
 display_loop_context :: proc(
     platform: ^native.Sdl_Platform, draw_runtime: ^native.Sdl_Draw_Runtime,
-    input_runtime: ^input.Input_Runtime, presentation: ^Presentation_Runtime,
-    search_service: ^viewsearch.Search_Service,
+    input_runtime: ^input.Input_Runtime, session: Euclid_Runtime_Session,
     display_profile: ^evidence_profile.State) -> Display_Loop_Context {
-    return {platform = platform, draw_runtime = draw_runtime,
-        input_runtime = input_runtime, presentation = presentation,
-        search_service = search_service, display_profile = display_profile}
+    return {
+        platform = platform,
+        draw_runtime = draw_runtime,
+        input_runtime = input_runtime,
+        presentation = session.presentation,
+        search_service = session.search_service,
+        display_profile = display_profile,
+    }
 }
 
 // run_sdl_platform_session owns draw, input, and Euclid state on one platform.
@@ -800,8 +821,8 @@ run_sdl_platform_session :: proc(
         log.error("display_runtime_start_failed")
         return 1
     }
-    display := display_loop_context(platform, &draw_runtime, input_runtime,
-        session.presentation, session.search_service, display_profile)
+    display := display_loop_context(
+        platform, &draw_runtime, input_runtime, session, display_profile)
     result := initialize_and_run_sdl_session(settings, session, display)
     report_draw_runtime_summary(&draw_runtime)
     return result
@@ -987,6 +1008,7 @@ free_animations_state :: proc(state : ^Euclid_General_State) {
         &state^.animation_values,
         &state^.dynview_documents)
     julia.destroy_julia_interface_resources(state)
+    free(state^.ui_runtime.semantic_focus, context.allocator)
     free(state^.particle_system)
     free(state^.shape_world)
     free(state^.draw_surface)

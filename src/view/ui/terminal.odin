@@ -1,6 +1,7 @@
 package ui
 
 import viewterminalmodel "../terminal/model"
+import viewmodel "../model"
 
 import "../../core"
 import geometry "../../core/geometry"
@@ -37,6 +38,33 @@ Terminal_Content_Route :: struct {
     layout: terminalview.Terminal_Draw_Layout,
     child_pointer_capture: bool,
     over_track: bool,
+}
+
+// terminal_semantic_id identifies one replaceable Terminal animation session.
+terminal_semantic_id :: #force_inline proc(
+    state: ^core.Euclid_General_State) -> viewmodel.Ui_Node_Id {
+    if state == nil {return {}}
+    return {domain = .Terminal, local_id = 1,
+        generation = state^.terminal.animation_generation}
+}
+
+// register_terminal_semantics publishes one application-level Terminal surface.
+register_terminal_semantics :: proc(
+    state: ^core.Euclid_General_State,
+    bounds: geometry.Rectangle) {
+    id := terminal_semantic_id(state)
+    _ = semantic_register_control(state^.ui_runtime.semantic_focus, {
+        id = id, role = .Terminal,
+        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+        actions = {.Focus}, region = .Presentation, traversal_order = 0,
+        bounds = viewmodel.Rectangle(bounds),
+        clip_bounds = viewmodel.Rectangle(bounds), label = "Terminal",
+    })
+    semantic := state^.ui_runtime.semantic_focus
+    if state^.ui_runtime.interaction.logical_focus.kind == .Terminal &&
+        semantic^.logical_focus.domain != .Terminal {
+        _ = semantic_request_pointer_focus(semantic, id)
+    }
 }
 
 // Return the fixed terminal content rectangle inside the former text panel.

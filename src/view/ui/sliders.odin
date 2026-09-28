@@ -5,6 +5,8 @@ import viewmodel "../model"
 import view_font "../font"
 import geometry "../../core/geometry"
 
+import "core:fmt"
+
 SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
 
 //   Inputs for one reusable integer slider control: placement, pointer input,
@@ -22,6 +24,8 @@ Integer_Slider_Params :: struct {
     max_value : int,
     font : view_font.Font_Face,
     font_resolver : view_font.Font_Resolver,
+    semantic_domain: viewmodel.Ui_Node_Domain,
+    semantic_order: u16,
 }
 
 //   Prepared interaction and geometry for one integer slider draw.
@@ -190,6 +194,36 @@ slider_resolve_value :: proc(
     return clamped, owns_press
 }
 
+// slider_apply_semantic_commands applies bounded keyboard adjustments.
+slider_apply_semantic_commands :: proc(
+    params: Integer_Slider_Params,
+    id: viewmodel.Ui_Node_Id,
+    value: int) -> int {
+    result := value
+    if semantic_command_requested(params.ui_runtime.semantic_focus, id, .Increment) {
+        result += 1
+    }
+    if semantic_command_requested(params.ui_runtime.semantic_focus, id, .Decrement) {
+        result -= 1
+    }
+    if semantic_command_requested(params.ui_runtime.semantic_focus, id, .Set_Minimum) {
+        result = params.min_value
+    }
+    if semantic_command_requested(params.ui_runtime.semantic_focus, id, .Set_Maximum) {
+        result = params.max_value
+    }
+    page_step := max(1, (params.max_value - params.min_value) / 10)
+    if semantic_command_requested(params.ui_runtime.semantic_focus, id, .Page_Step) {
+        for command in params.ui_runtime.semantic_focus.commands[
+            :params.ui_runtime.semantic_focus.command_count] {
+            if command.target == id && command.kind == .Page_Step {
+                result += page_step * int(command.amount)
+            }
+        }
+    }
+    return clamp(result, params.min_value, params.max_value)
+}
+
 //   Resolve one integer slider update without issuing drawing commands.
 update_settings_integer_slider :: proc(
     params: Integer_Slider_Params) -> Integer_Slider_Result {
@@ -197,6 +231,24 @@ update_settings_integer_slider :: proc(
     hit := slider_hit_rect(track)
 
     clamped, owns_press := slider_resolve_value(params, track, hit)
+    if params.semantic_domain != .None {
+        id := semantic_control_id(params.semantic_domain, params.press_id)
+        clamped = slider_apply_semantic_commands(params, id, clamped)
+        _ = semantic_register_control(params.ui_runtime.semantic_focus, {
+            id = id, role = .Slider,
+            states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+            actions = {.Focus, .Increment, .Decrement, .Set_To_Bound},
+            region = .Accordion_Content,
+            traversal_order = params.semantic_order,
+            bounds = viewmodel.Rectangle(hit),
+            clip_bounds = viewmodel.Rectangle(params.panel),
+            label = params.label,
+            value = fmt.tprintf("%d", clamped),
+        })
+        if owns_press {
+            _ = semantic_request_pointer_focus(params.ui_runtime.semantic_focus, id)
+        }
+    }
     params.value^ = clamped
 
     _ = owns_press

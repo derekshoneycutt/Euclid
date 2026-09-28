@@ -447,6 +447,23 @@ draw_encoded_panel_text :: proc(
     }
 }
 
+// draw_encoded_focus_outline emits the current keyboard-visible focus bounds.
+draw_encoded_focus_outline :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    encoder: ^native.Draw_Encoder) {
+    semantic := runtime^.semantic_focus
+    if semantic == nil || !semantic^.window_focused ||
+        semantic^.focus_origin != .Keyboard {return}
+    snapshot := semantic_snapshot(semantic)
+    index := semantic_node_index(snapshot, semantic^.logical_focus)
+    if index < 0 || .Focus_Visible not_in snapshot^.nodes[index].states {return}
+    node := snapshot^.nodes[index]
+    _ = native.draw_encoder_push_scissor(encoder, node.clip_bounds)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, node.bounds, 2, UI_TEXT_COLOR)
+    _ = native.draw_encoder_pop_scissor(encoder)
+}
+
 // Resolve static UI targets after authoritative panel geometry is available.
 prepare_ui_static_interaction :: proc(
     state: ^core.Euclid_General_State,
@@ -457,6 +474,9 @@ prepare_ui_static_interaction :: proc(
         terminal_present = is_terminal_selected(state),
         capture = capture,
     })
+    if input_frame_left_pressed(frame) && !capture.active {
+        semantic_clear_pointer_focus(state^.ui_runtime.semantic_focus)
+    }
 }
 
 // Return a frame copy containing only pointer fields routed to the accordion.
@@ -489,10 +509,53 @@ ui_animation_control_input_frame :: proc(
     return input.input_frame_filter_pointer(frame, {.Screen_Position})
 }
 
+// ui_input_box_keyboard_frame restores events only for the focused input owner.
+ui_input_box_keyboard_frame :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    filtered, complete: Input_Frame,
+    id: int) -> Input_Frame {
+    result := filtered
+    focus := runtime^.interaction_frame.effective_focus
+    if focus.kind == .Input_Box && focus.id == id {
+        result.events = complete.events
+    }
+    return result
+}
+
+// prepare_active_accordion_controls resolves controls for one selected section.
+prepare_active_accordion_controls :: proc(
+    state: ^core.Euclid_General_State, frame: Input_Frame,
+    routed: Input_Frame, content: geometry.Rectangle,
+    result: ^Ui_Control_Preparation) {
+    switch state^.ui_runtime.active_accordion_section {
+    case .View:
+    case .Library:
+        library_frame := ui_input_box_keyboard_frame(&state^.ui_runtime,
+            routed, frame, LIBRARY_SEARCH_INPUT_ID)
+        result^.library_search = prepare_library_search(
+            state, content, library_frame)
+        result^.tree = prepare_tree_list_panel({
+            ji = state^.julia_interface, ui_runtime = &state^.ui_runtime,
+            list_panel = result^.library_search.layout.tree,
+            mouse_input = library_frame, scroll_y = &state^.ui_runtime.tree_scroll_y,
+            font = view_font.cache_borrow(&state^.font_cache, .Regular),
+            font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+            visibility = {search = &state^.ui_runtime.library_search},
+        })
+    case .Save_Gif:
+        gif_frame := ui_input_box_keyboard_frame(&state^.ui_runtime,
+            routed, frame, GIF_PATH_INPUT_BOX_ID)
+        result^.gif = prepare_gif_view(state, content, gif_frame)
+    case .Settings:
+        result^.settings = prepare_settings_view(state, content, routed)
+    }
+}
+
 // Resolve geometry-known controls and commit their actions before services run.
 prepare_ui_controls :: proc(
     state: ^core.Euclid_General_State,
     frame: Input_Frame) -> Ui_Control_Preparation {
+    _ = semantic_begin(state^.ui_runtime.semantic_focus)
     animation_frame := ui_animation_control_input_frame(
         frame, state^.ui_runtime.interaction_frame)
     routed_frame := ui_accordion_input_frame(
@@ -502,34 +565,24 @@ prepare_ui_controls :: proc(
     accordion_panel := state^.ui_runtime.ui_regions.accordion_rect
     result.accordion = prepare_accordion_view(
         state, geometry.Rectangle(accordion_panel), routed_frame)
-    content_panel := result.accordion.layout.content
-    switch state^.ui_runtime.active_accordion_section {
-    case .View:
-    case .Library:
-        if state^.ui_runtime.interaction_frame.effective_focus.kind == .Input_Box &&
-            state^.ui_runtime.interaction_frame.effective_focus.id ==
-                LIBRARY_SEARCH_INPUT_ID {
-            routed_frame.events = frame.events
-        }
-        result.library_search = prepare_library_search(
-            state, geometry.Rectangle(content_panel), routed_frame)
-        result.tree = prepare_tree_list_panel({
-            ji = state^.julia_interface,
-            ui_runtime = &state^.ui_runtime,
-            list_panel = result.library_search.layout.tree,
-            mouse_input = routed_frame,
-            scroll_y = &state^.ui_runtime.tree_scroll_y,
-            font = view_font.cache_borrow(&state^.font_cache, .Regular),
-            font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
-            visibility = {search = &state^.ui_runtime.library_search},
-        })
-    case .Save_Gif:
-        result.gif = prepare_gif_view(
-            state, geometry.Rectangle(content_panel), routed_frame)
-    case .Settings:
-        result.settings = prepare_settings_view(
-            state, geometry.Rectangle(content_panel), routed_frame)
-    }
+    prepare_active_accordion_controls(state, frame, routed_frame,
+        geometry.Rectangle(result.accordion.layout.content), &result)
+    return result
+}
+
+// finish_ui_semantics atomically publishes all geometry and layout registrations.
+finish_ui_semantics :: proc(state: ^core.Euclid_General_State) {
+    if state == nil {return}
+    _ = semantic_publish(state^.ui_runtime.semantic_focus)
+}
+
+// prepare_and_finish_ui_layout resolves layout interaction and publishes semantics.
+prepare_and_finish_ui_layout :: proc(
+    state: ^core.Euclid_General_State,
+    frame: Input_Frame,
+    frame_dt: f32) -> Ui_Layout_Interaction_Preparation {
+    result := prepare_ui_layout_interaction(state, frame, frame_dt)
+    finish_ui_semantics(state)
     return result
 }
 
@@ -540,6 +593,11 @@ prepare_ui_layout_interaction :: proc(
     frame_dt: f32) -> Ui_Layout_Interaction_Preparation {
     if !ui_presentation_is_visible(&state^.ui_runtime) {
         state^.ui_runtime.view_text_scroll_max = 0
+        return {}
+    }
+    if is_terminal_selected(state) {
+        register_terminal_semantics(state,
+            terminal_content_panel(state^.ui_runtime.ui_regions.text_rect))
         return {}
     }
     routed := state^.ui_runtime.interaction_frame.presentation

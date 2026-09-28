@@ -64,9 +64,9 @@ Scenario_Arena_Sample :: struct {
 // Stable scenario spelling paired with one portable input key.
 Scenario_Key_Name :: struct {name: string, key: input.Input_Key}
 
-// Supported deterministic Terminal keys.
+// Supported deterministic portable keys.
 SCENARIO_KEY_NAMES :: [?]Scenario_Key_Name{
-    {"escape", .Escape}, {"enter", .Enter}, {"tab", .Tab},
+    {"escape", .Escape}, {"enter", .Enter}, {"space", .Space}, {"tab", .Tab},
     {"backspace", .Backspace}, {"delete", .Delete},
     {"left", .Left}, {"right", .Right}, {"up", .Up}, {"down", .Down},
     {"home", .Home}, {"end", .End}, {"page_up", .Page_Up},
@@ -230,15 +230,19 @@ scenario_issue_terminal_text :: proc(
 }
 
 // Inject one supported portable key into ordinary next-frame input.
-scenario_issue_terminal_key :: proc(
-    runtime: ^Scenario_Runtime, name: string) -> bool {
-    if runtime == nil || runtime.input_runtime == nil ||
-        !scenario_terminal_input_available(runtime.state) {
+scenario_issue_key :: proc(
+    runtime: ^Scenario_Runtime, command: ^scenario.Command) -> bool {
+    if runtime == nil || runtime.input_runtime == nil || command == nil {
         return false
     }
+    name := scenario.text_string(&command.text)
+    modifiers: input.Input_Modifiers
+    if command.key_shift {modifiers += {.Shift}}
+    if command.key_control {modifiers += {.Control}}
     for entry in SCENARIO_KEY_NAMES {
         if entry.name == name {
-            event := input.Input_Event{kind = .Press, key = entry.key}
+            event := input.Input_Event{
+                kind = .Press, key = entry.key, modifiers = modifiers}
             return input.input_runtime_inject_events(
                 runtime.input_runtime, []input.Input_Event{event})
         }
@@ -703,7 +707,10 @@ scenario_issue_generic_action :: proc(
     text := scenario.text_string(&command.text)
     #partial switch command.kind {
     case .Type_Text: return true, scenario_issue_terminal_text(runtime, text)
-    case .Key: return true, scenario_issue_terminal_key(runtime, text)
+    case .Key: return true, scenario_issue_key(runtime, command)
+    case .Assert_Focus:
+        return true, ui.semantic_focus_matches_name(
+            runtime.state^.ui_runtime.semantic_focus, text)
     case .Wait_Terminal_Contains, .Assert_Terminal_Contains:
         return true, scenario_terminal_contains(runtime.state, text)
     case:

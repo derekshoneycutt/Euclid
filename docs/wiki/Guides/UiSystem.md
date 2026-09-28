@@ -13,6 +13,8 @@
 1. [UI Runtime State](#ui-runtime-state)
 1. [Input Model](#input-model)
 1. [Press Ownership](#press-ownership)
+1. [Semantic Focus](#semantic-focus)
+1. [Interaction Routing](#interaction-routing)
 1. [Widgets](#widgets)
 1. [Scrolling](#scrolling)
 1. [Presentation Panel](#presentation-panel)
@@ -513,13 +515,41 @@ IDs. Tree rows derive a stable per-frame ID from the animation node pointer. The
 state serializes ordinary UI press transactions so overlapping widgets do not both
 capture the same press.
 
-Press ownership is distinct from logical focus. Logical focus persists after release
-and currently selects Terminal, Presentation, or Accordion as the ordinary keyboard
-target.
+Press ownership is distinct from semantic keyboard focus. Semantic focus persists
+after release, identifies one complete control or composite surface, and is qualified
+by domain, local identity, stable UUID, and generation where applicable.
 The interaction router classifies the legacy owner into a typed frame-local capture
 target. It snapshots that identity before interaction updates so release-frame routing
 cannot fall through to a newly hovered panel. Terminal child mouse capture remains an
 independent protocol mechanism.
+
+## Semantic Focus
+
+`Ui_Semantic_Focus_State` is display-owned and contains persistent logical focus,
+focus origin, bounded addressed commands, and two fixed semantic snapshots. UI
+preparation registers each current control into staging storage with identity, parent,
+role, state, actions, traversal region and order, final bounds, clip bounds, label, and
+value. Registration copies text into snapshot-owned fixed storage. Publication
+validates the complete snapshot, reconciles focus, and atomically swaps buffers;
+invalid or over-capacity staging never replaces the last complete snapshot.
+
+Keyboard routing uses the prior committed snapshot before current control preparation.
+Tab and Shift+Tab traverse enabled `.Tab_Stop` nodes in explicit region and order,
+wrap at the ends, and claim their input event before widget or Terminal routing.
+Addressed commands then reach only a current-frame owner with the same complete node
+identity. Pointer focus remains separate and sets pointer origin; keyboard traversal
+sets keyboard origin. Only effective keyboard-origin focus draws the final clipped
+focus outline, without changing layout.
+
+Composite policy keeps navigation bounded:
+
+- the Library tree is one global Tab stop with a UUID-backed active descendant;
+- arrow, Home, End, Enter, and Space operate the visible tree topology;
+- Presentation is one generation-scoped document with child copy affordances;
+- Terminal is one generation-scoped surface, retains plain Tab, and reserves Ctrl+Tab
+    or Ctrl+Shift+Tab for leaving global focus forward or backward;
+- hidden, disabled, filtered, or replaced targets repair deterministically against the
+    next complete snapshot.
 
 ## Interaction Routing
 

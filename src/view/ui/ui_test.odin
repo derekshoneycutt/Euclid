@@ -1151,6 +1151,46 @@ library_search_suggestion_replaces_query_and_submits :: proc(t: ^testing.T) {
     testing.expect_value(t, search.input.cursor_byte, search.query_length)
 }
 
+// Verify Search accepts Right only at a collapsed end caret and never uses Tab.
+@(test)
+library_search_suggestion_key_requires_collapsed_end_caret :: proc(t: ^testing.T) {
+    search := viewmodel.Library_Search_State{
+        query_length = 3, suggestion_length = 4,
+        input = {cursor_byte = 3, anchor_byte = 3},
+    }
+    right := [1]input.Input_Event{{kind = .Press, key = .Right}}
+    testing.expect(t, library_search_accept_suggestion_key(
+        &search, {events = right[:]}))
+    search.input.anchor_byte = 1
+    testing.expect(t, !library_search_accept_suggestion_key(
+        &search, {events = right[:]}))
+    search.input.anchor_byte = 3
+    tab := [1]input.Input_Event{{kind = .Press, key = .Tab}}
+    testing.expect(t, !library_search_accept_suggestion_key(
+        &search, {events = tab[:]}))
+}
+
+// Verify integer sliders apply addressed keyboard commands through normal clamping.
+@(test)
+integer_slider_applies_semantic_keyboard_step :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
+    value := 2
+    id := semantic_control_id(.Gif_Control, 6201)
+    testing.expect(t, semantic_begin(semantic))
+    testing.expect(t, semantic_append_command(semantic, {
+        target = id, kind = .Increment}))
+    result := update_settings_integer_slider({
+        panel = {0, 0, 200, 100}, row_y = 0,
+        ui_runtime = &runtime, press_id = 6201, label = "Output scale",
+        value = &value, min_value = 1, max_value = 4,
+        semantic_domain = .Gif_Control,
+    })
+    testing.expect_value(t, result.value, 3)
+    testing.expect_value(t, value, 3)
+}
+
 //   Verify tree row lookup follows visible depth-first order across roots.
 @(test)
 tree_visible_row_follows_draw_order :: proc(t: ^testing.T) {
@@ -1176,6 +1216,165 @@ tree_visible_row_follows_draw_order :: proc(t: ^testing.T) {
     nodes[0].is_expanded = false
     _, found = tree_visible_row(&ji, &nodes[2])
     testing.expect(t, !found)
+}
+
+// Verify the Library tree publishes one Tab stop with UUID-backed descendants.
+@(test)
+tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    nodes: [2]bridgemodel.Euclid_Julia_Animation_Interface
+    ji.animation_head = &nodes[0]
+    ji.animation_count = len(nodes)
+    ji.selected_animation = &nodes[0]
+    nodes[0].next_in_registry = &nodes[1]
+    nodes[0].stable_id[0] = 1
+    nodes[1].stable_id[0] = 2
+    nodes[0].name = "Book I"
+    nodes[1].name = "Proposition I"
+    seed_tree_node(&nodes[0], nil, &nodes[1], nil, true)
+    seed_tree_node(&nodes[1], &nodes[0], nil, nil, false)
+    scroll_y: f32
+
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_tree_list_panel({ji = &ji, ui_runtime = &runtime,
+        list_panel = {0, 0, 200, 100}, scroll_y = &scroll_y})
+    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    snapshot := semantic_snapshot(semantic)
+    testing.expect_value(t, snapshot^.node_count, 3)
+    tree_index := semantic_node_index(snapshot, tree_semantic_id())
+    testing.expect(t, tree_index >= 0)
+    tree := snapshot^.nodes[tree_index]
+    testing.expect(t, .Tab_Stop in tree.states)
+    testing.expect_value(t, tree.active_descendant, tree_item_semantic_id(&nodes[0]))
+    child_index := semantic_node_index(snapshot, tree_item_semantic_id(&nodes[1]))
+    testing.expect(t, child_index >= 0)
+    testing.expect_value(t, snapshot^.nodes[child_index].parent, tree_semantic_id())
+    testing.expect(t, .Tab_Stop not_in snapshot^.nodes[child_index].states)
+}
+
+// Verify routed tree commands move, reveal, and select through existing state.
+@(test)
+tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    ji.animation_head = &nodes[0]
+    ji.animation_count = len(nodes)
+    ji.selected_animation = &nodes[0]
+    for index in 0..<len(nodes) {
+        nodes[index].stable_id[0] = byte(index + 1)
+        if index + 1 < len(nodes) {nodes[index].next_in_registry = &nodes[index + 1]}
+    }
+    seed_tree_node(&nodes[0], nil, &nodes[1], nil, true)
+    seed_tree_node(&nodes[1], &nodes[0], nil, &nodes[2], false)
+    seed_tree_node(&nodes[2], &nodes[0], nil, nil, false)
+    scroll_y: f32
+    params := Tree_List_Params{ji = &ji, ui_runtime = &runtime,
+        list_panel = {0, 0, 200, TREE_ROW_HEIGHT}, scroll_y = &scroll_y}
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_tree_list_panel(params)
+    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    semantic^.logical_focus = tree_semantic_id()
+
+    _ = semantic_route_keyboard(semantic,
+        {events = {{kind = .Press, key = .End}}})
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_tree_list_panel(params)
+    testing.expect_value(t, semantic^.active_tree_item, nodes[2].stable_id)
+    testing.expect_value(t, scroll_y, TREE_ROW_HEIGHT * 2)
+    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+
+    _ = semantic_route_keyboard(semantic,
+        {events = {{kind = .Press, key = .Enter}}})
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_tree_list_panel(params)
+    testing.expect_value(t, ji.selected_animation, &nodes[2])
+    testing.expect(t, nodes[2].is_selected)
+}
+
+// Verify the roving tree descendant is identified only for keyboard-visible focus.
+@(test)
+tree_keyboard_active_descendant_is_visible :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
+    node := bridgemodel.Euclid_Julia_Animation_Interface{}
+    node.stable_id[0] = 1
+    semantic^.window_focused = true
+    semantic^.focus_origin = .Keyboard
+    semantic^.logical_focus = tree_semantic_id()
+    semantic^.active_tree_item = node.stable_id
+
+    testing.expect(t, tree_item_is_keyboard_active(&runtime, &node))
+    semantic^.focus_origin = .Pointer
+    testing.expect(t, !tree_item_is_keyboard_active(&runtime, &node))
+    semantic^.focus_origin = .Keyboard
+    semantic^.window_focused = false
+    testing.expect(t, !tree_item_is_keyboard_active(&runtime, &node))
+}
+
+// Verify document replacement preserves keyboard focus and scopes copy children.
+@(test)
+presentation_semantics_reconcile_compilation_generation :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    state^.ui_runtime.semantic_focus = semantic
+    state^.ui_runtime.interaction.logical_focus = {kind = .Presentation}
+    targets := [1]dynviewmodel.Dynview_Copy_Hit_Target{{
+        block_id = 7, payload_offset = 0, payload_len = 4,
+        rect = {10, 20, 14, 14}}}
+    state^.dynview.compile_cache.copy_hit_targets = targets[:]
+    state^.dynview.compile_cache.copy_hit_target_count = 1
+    state^.dynview.compile_cache.compiled_revision = 12
+
+    testing.expect(t, semantic_begin(semantic))
+    register_presentation_semantics(state, {0, 0, 200, 100})
+    parent := presentation_semantic_id(state)
+    register_presentation_copy_semantics(state, parent, {0, 0, 200, 100})
+    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    semantic^.logical_focus = parent
+    semantic^.focus_origin = .Keyboard
+    child := dynview_copy_semantic_id(state, 7)
+    child_index := semantic_node_index(semantic_snapshot(semantic), child)
+    testing.expect(t, child_index >= 0)
+    testing.expect_value(t,
+        semantic_snapshot(semantic)^.nodes[child_index].parent, parent)
+
+    state^.dynview.compile_cache.compiled_revision = 13
+    testing.expect(t, semantic_begin(semantic))
+    register_presentation_semantics(state, {0, 0, 200, 100})
+    register_presentation_copy_semantics(
+        state, presentation_semantic_id(state), {0, 0, 200, 100})
+    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, semantic^.logical_focus, presentation_semantic_id(state))
+    testing.expect_value(t, semantic^.focus_origin, viewmodel.Ui_Focus_Origin.Keyboard)
+}
+
+// Verify Terminal registration publishes one generation-scoped global stop.
+@(test)
+terminal_semantics_publish_single_surface :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    state^.ui_runtime.semantic_focus = semantic
+    state^.terminal.animation_generation = 9
+    testing.expect(t, semantic_begin(semantic))
+    register_terminal_semantics(state, {5, 6, 200, 120})
+    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    snapshot := semantic_snapshot(semantic)
+    index := semantic_node_index(snapshot, terminal_semantic_id(state))
+    testing.expect(t, index >= 0)
+    testing.expect_value(t, snapshot^.nodes[index].role,
+        viewmodel.Ui_Node_Role.Terminal)
+    testing.expect(t, .Tab_Stop in snapshot^.nodes[index].states)
 }
 
 //   Verify tree reveal scrolling moves only enough to expose the target row.
@@ -1312,6 +1511,8 @@ selected_animation_title_tracks_current_selection :: proc(t: ^testing.T) {
 @(test)
 accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
     owner: viewmodel.Ui_Press_Owner_State
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
     active := viewmodel.Ui_Accordion_Section.Library
     panel := geometry.Rectangle{10, 20, 300, 500}
     sections := accordion_landscape_sections()
@@ -1322,7 +1523,8 @@ accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
     pressed_context := Accordion_Context{panel = geometry.Rectangle(panel),
         mouse_input = {mouse_position = mouse_position,
             mouse_pressed = {.Left}, mouse_down = {.Left}},
-        press_owner = &owner, active = active}
+        press_owner = &owner, semantic_focus = semantic, active = active}
+    testing.expect(t, semantic_begin(semantic))
     _ = prepare_accordion(pressed_context, sections, &active)
     testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Library)
 
@@ -1334,6 +1536,32 @@ accordion_header_click_selects_one_section :: proc(t: ^testing.T) {
     testing.expect_value(t, prepared.layout.content.y,
         prepared.layout.headers[settings_index].y + ACCORDION_HEADER_HEIGHT)
     testing.expect(t, !owner.active)
+}
+
+// Verify a focused accordion header consumes the routed activation command.
+@(test)
+accordion_header_keyboard_activation_selects_section :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    owner: viewmodel.Ui_Press_Owner_State
+    active := viewmodel.Ui_Accordion_Section.Library
+    sections := accordion_landscape_sections()
+    ctx := Accordion_Context{
+        panel = {10, 20, 300, 500},
+        press_owner = &owner,
+        semantic_focus = semantic,
+        active = active,
+    }
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_accordion(ctx, sections, &active)
+    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    semantic^.logical_focus = accordion_semantic_id(.Settings)
+    _ = semantic_route_keyboard(semantic, {
+        events = {{kind = .Press, key = .Space}},
+    })
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_accordion(ctx, sections, &active)
+    testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Settings)
 }
 
 //   Verify the tree row-count guard stops recursive walks.

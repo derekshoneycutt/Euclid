@@ -320,8 +320,19 @@ init_ui_gif_fields :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
 }
 
 //   Initialize display-owned UI policy and layout memory from run settings.
+init_ui_semantic_focus :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
+    if runtime == nil {return false}
+    runtime^.semantic_focus = new(
+        viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    return runtime^.semantic_focus != nil
+}
+
+//   Initialize display-owned UI policy and layout memory from run settings.
 init_ui_runtime_fields :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State, settings: ^Euclid_Run_Settings) {
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    settings: ^Euclid_Run_Settings) -> bool {
+    if settings == nil || !init_ui_semantic_focus(runtime) {return false}
     runtime^.limit_fps = settings^.limit_fps
     runtime^.simulation_paused = false
     runtime^.use_simd_batch_projection =
@@ -353,11 +364,12 @@ init_ui_runtime_fields :: proc(
         runtime^.active_accordion_section == .View
     init_ui_layout_pixels(runtime, settings^.window.width, settings^.window.height)
     init_ui_gif_fields(runtime)
+    return true
 }
 
 //   Populate the simulation/UI scalar fields on the general state.
 init_runtime_fields :: proc(
-    state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) {
+    state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) -> bool {
     state^.julia_interface_active_slot = 0
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.user_drawing_sound_enabled = false
@@ -365,9 +377,10 @@ init_runtime_fields :: proc(
     state^.simulation_time = 0
     state^.current_delta_time = view_core.FIXED_DT
     state^.accumulator = 0
-    init_ui_runtime_fields(&state^.ui_runtime, settings)
+    if !init_ui_runtime_fields(&state^.ui_runtime, settings) {return false}
     dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
     view_core.screenshake_clear(state^.iso_scale)
+    return true
 }
 
 //   Initialize typed evidence policy, freeing the state and returning false on failure.
@@ -416,8 +429,7 @@ init_animations_state_resources :: proc(
     state^.world_cycloid_tool = shapes_state.world_cycloid_tool
     state^.world_compass = shapes_state.world_compass
     state^.world_pen = shapes_state.world_pen
-    init_runtime_fields(state, settings)
-    return true
+    return init_runtime_fields(state, settings)
 }
 
 //   Allocate runtime state shared by the windowed frontend and the headless harness.

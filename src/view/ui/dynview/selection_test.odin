@@ -192,6 +192,48 @@ dynview_selection_test_keyboard_selects_all :: proc(t: ^testing.T) {
     testing.expect_value(t, dynview_selection_text(nil, selection, "test"), "test")
 }
 
+// Verify arrows extend and collapse a bounded logical-unit selection.
+@(test)
+dynview_selection_test_keyboard_moves_and_extends :: proc(t: ^testing.T) {
+    selection := dynviewmodel.Dynview_Selection_State{
+        mode = .Wrapped_Text, revision = 2,
+        anchor = {unit_index = 1}, head = {unit_index = 1},
+    }
+    events := [1]input.Input_Event{{
+        kind = .Press, key = .Right, modifiers = {.Shift}}}
+    dynview_selection_update_keyboard(nil, &selection,
+        {.Wrapped_Text, 2, 4}, "test", {events = events[:]})
+    testing.expect(t, selection.active)
+    testing.expect_value(t, selection.anchor.unit_index, 1)
+    testing.expect_value(t, selection.head.unit_index, 2)
+
+    events[0] = {kind = .Press, key = .Right}
+    dynview_selection_update_keyboard(nil, &selection,
+        {.Wrapped_Text, 2, 4}, "test", {events = events[:]})
+    testing.expect(t, !selection.active)
+    testing.expect_value(t, selection.head.unit_index, 2)
+    testing.expect_value(t, selection.anchor.unit_index, 2)
+}
+
+// Verify Home and End remain clamped to the current logical content.
+@(test)
+dynview_selection_test_keyboard_home_end_are_bounded :: proc(t: ^testing.T) {
+    selection := dynviewmodel.Dynview_Selection_State{
+        mode = .Semantic_Document, revision = 3,
+        anchor = {unit_index = 2}, head = {unit_index = 2},
+    }
+    events := [1]input.Input_Event{{kind = .Repeat, key = .End}}
+    dynview_selection_update_keyboard(nil, &selection,
+        {.Semantic_Document, 3, 5}, "", {events = events[:]})
+    testing.expect_value(t, selection.head.unit_index, 5)
+    events[0] = {kind = .Press, key = .Home, modifiers = {.Shift}}
+    dynview_selection_update_keyboard(nil, &selection,
+        {.Semantic_Document, 3, 5}, "", {events = events[:]})
+    testing.expect(t, selection.active)
+    testing.expect_value(t, selection.anchor.unit_index, 5)
+    testing.expect_value(t, selection.head.unit_index, 0)
+}
+
 // Verify a copy-icon press cannot claim Dynview selection ownership.
 @(test)
 dynview_selection_test_copy_icon_has_pointer_priority :: proc(t: ^testing.T) {

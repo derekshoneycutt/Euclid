@@ -59,6 +59,17 @@ Core Content (>163 animations; 100 complete):
   - [X] Section 7 (17 animations)
   - [X] Section 8 (2 animations)
 - [ ] Tarski (39+ animations)
+  - [ ] Axiom 1-4
+  - [ ] Axiom 5,5_1
+  - [ ] Axiom 6
+  - [ ] Axiom 7,7_1-3
+  - [ ] Axiom 8 (1,2,n)
+  - [ ] Axiom 9 (0,1,n,2_1-2)
+  - [ ] Axiom 10, 10_1-3
+  - [ ] Axiom 11; As11
+  - [ ] Axiom 12-19
+  - [ ] Axiom 20, 20_1
+  - [ ] Axiom 21-24
 - [ ] Logic (9+; 2 complete)
   - [ ] Between-ness
   - [X] And
@@ -146,8 +157,8 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
-  - [ ] Initial comprehensive terminal shape drawing suite
-- [ ] Comprehensive mouse/keyboard focus system (In progress)
+  - [ ] Initial comprehensive terminal shape drawing suite (In progress)
+- [X] Comprehensive mouse/keyboard focus system
 - [ ] IME/Accesibility/etc. Features
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
@@ -172,7 +183,7 @@ General features:
 - [X] Window sizing and portrait
 - [X] SDL3 Migration
 - [X] Drawing Sounds
-- [ ] Full-text search
+- [X] Full-text search
 
 Final tasks:
 
@@ -225,6 +236,7 @@ Content (24+ animations):
     - 1-5
     - 6-10
     - 11-14
+- More curves
 - Group theory (8+ animations)
   - Klein 4 Group
   - Frieze groups
@@ -239,7 +251,12 @@ Content (24+ animations):
 
 Core Features:
 
-- More primitives (gnomons, strings--small connectors)
+- More primitives
+  - gnomons
+  - strings--small connectors
+  - curve candidates: parabolas and hyperbolas, strophoid, spiral, leminiscate,
+    tratrix and catenary, concoids, cissoids, pedals, negative pedals, glissettes,
+    evolutes and involutes, inversions, caustics
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support
@@ -256,6 +273,7 @@ Core Features:
 - Transformations
   - Scaling
   - Shearing
+  - Curve transformations (e.g. 3D rotations)
 
 ## Brainstorming
 
@@ -287,6 +305,7 @@ Core Features:
   - Propositions (16)
 - Intro rings
 - Scaled polynomial section drawing
+- Maybe a server with downloadable content?
 
 ### v5
 

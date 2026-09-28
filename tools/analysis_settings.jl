@@ -518,6 +518,21 @@ AnalysisSettings(
                 response=Ignore,
                 minimum_matches=1,
                 maximum_matches=1),
+            # One fixed RGBA staging buffer is reused for the active GIF stream and
+            # explicitly released on close, abort, failed begin, or display unbind.
+            ReviewedAllocationPolicy(
+                "view-sdl-gif-encoder-staging",
+                "src/view/native/sdl_gif_encoder.odin",
+                "sdl_gif_encoder_begin",
+                :custom,
+                "One capture-scoped RGBA staging buffer is reused for every encoded frame and explicitly released on every terminal path.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             # Renderer command streams are fixed-capacity allocations from one static
             # display-owned arena destroyed with the native draw runtime.
             ReviewedAllocationPolicy(
@@ -1679,6 +1694,19 @@ AnalysisSettings(
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
                 target="Euclid_General_State",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-runtime-session-semantic-focus",
+                "src/view/runtime_session.odin",
+                "init_ui_semantic_focus",
+                :context,
+                "Fixed-capacity semantic snapshots are allocated once per display session and explicitly freed during runtime teardown.";
+                operation="new",
+                target="viewmodel.Ui_Semantic_Focus_State",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,

@@ -1,0 +1,23 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Proposition I","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"key":"tab"}
+{"assert_focus":"animation_restart"}
+{"key":"tab"}
+{"assert_focus":"animation_pause"}
+{"key":"tab"}
+{"assert_focus":"accordion_library"}
+{"key":"tab"}
+{"assert_focus":"accordion_save_gif"}
+{"key":"tab"}
+{"assert_focus":"accordion_settings"}
+{"key":"tab"}
+{"assert_focus":"library_search"}
+{"key":"tab"}
+{"assert_focus":"library_tree"}
+{"key":"down"}
+{"assert_focus":"library_tree"}
+{"screenshot":".build/keyboard-tree-focus.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

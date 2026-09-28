@@ -90,6 +90,7 @@ Command_Kind :: enum u8 {
     Wait_State,
     Wait_Terminal_Contains,
     Assert_State,
+    Assert_Focus,
     Assert_Terminal_Contains,
     Checkpoint,
     Allocation_Checkpoint,
@@ -190,6 +191,8 @@ Command :: struct {
     dust_count : u32,
     dust_seed : u64,
     dust_distribution : Dust_Distribution,
+    key_shift : bool,
+    key_control : bool,
 }
 
 // Temporary decoded payload for one exact view-content action object.
@@ -287,7 +290,6 @@ Raw_Command :: struct {
     select_animation : string,
     inject_reload_failure : string,
     type_text : string `json:"type"`,
-    key : string,
     screenshot : string,
     start_gif : string,
     set_library_search : string,
@@ -302,6 +304,7 @@ Raw_Command :: struct {
     wait_state : string,
     wait_terminal_contains : string,
     assert_state : string,
+    assert_focus : string,
     assert_terminal_contains : string,
 
     // State checkpoint action.
@@ -670,7 +673,7 @@ runner_update_command :: proc(
         return runner_update_action_wait(runner, command, frame)
     case .Assert_State:
         return runner_assert_state(runner, command, frame.display)
-    case .Assert_Terminal_Contains, .Assert_Allocation_Baseline,
+    case .Assert_Focus, .Assert_Terminal_Contains, .Assert_Allocation_Baseline,
          .Assert_No_Bad_Frees:
         return runner_assert_action(runner, command, frame.actions)
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
@@ -794,7 +797,6 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_text_command_select(
         raw.inject_reload_failure, .Inject_Reload_Failure, command)
     selected += raw_text_command_select(raw.type_text, .Type_Text, command)
-    selected += raw_text_command_select(raw.key, .Key, command)
     selected += raw_text_command_select(
         raw.screenshot, .Request_Screenshot, command)
     selected += raw_text_command_select(raw.start_gif, .Start_Gif, command)
@@ -804,6 +806,7 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected += raw_text_command_select(raw.wait_terminal_contains,
         .Wait_Terminal_Contains, command)
     selected += raw_text_command_select(raw.assert_state, .Assert_State, command)
+    selected += raw_text_command_select(raw.assert_focus, .Assert_Focus, command)
     selected += raw_text_command_select(raw.assert_terminal_contains,
         .Assert_Terminal_Contains, command)
     selected += raw_text_command_select(raw.checkpoint, .Checkpoint, command)
@@ -820,6 +823,56 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
         selected += 1
     }
     return selected
+}
+
+// scenario_key_payload_fields_are_valid rejects unsupported structured key fields.
+scenario_key_payload_fields_are_valid :: proc(payload: json.Object) -> bool {
+    if len(payload) < 1 || len(payload) > 3 {return false}
+    for field in payload {
+        if field != "name" && field != "shift" && field != "ctrl" {return false}
+    }
+    return true
+}
+
+// scenario_key_optional_bool decodes one absent or Boolean structured key field.
+scenario_key_optional_bool :: proc(
+    payload: json.Object, field: string, result: ^bool) -> bool {
+    value, found := payload[field]
+    if !found {return true}
+    decoded, valid := value.(bool)
+    if !valid {return false}
+    result^ = decoded
+    return true
+}
+
+// scenario_key_payload applies one exact modifier-bearing key object.
+scenario_key_payload :: proc(payload: json.Object, command: ^Command) -> bool {
+    if !scenario_key_payload_fields_are_valid(payload) {return false}
+    name_value, name_present := payload["name"]
+    name, name_ok := name_value.(string)
+    if !name_present || !name_ok || len(name) == 0 {return false}
+    if !scenario_key_optional_bool(payload, "shift", &command^.key_shift) ||
+        !scenario_key_optional_bool(payload, "ctrl", &command^.key_control) {
+        return false
+    }
+    command^.kind = .Key
+    command^.text, _ = text_copy(name)
+    return true
+}
+
+// Decode one legacy string or exact modifier-bearing key action.
+scenario_key_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    value, present := root["key"]
+    if !present {return 0, true}
+    if name, name_ok := value.(string); name_ok {
+        command^.kind = .Key
+        command^.text, _ = text_copy(name)
+        return 1, len(name) > 0
+    }
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || !scenario_key_payload(payload, command) {return 0, false}
+    return 1, true
 }
 
 //   Copy bounded aliases and validate command-specific optional fields.
@@ -853,7 +906,10 @@ command_apply_options :: proc(raw: Raw_Command, command: ^Command) -> Parse_Erro
 scenario_structured_action_select :: proc(
     root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
     selected := 0
-    count, valid := scenario_view_content_action_select(root, raw, command)
+    count, valid := scenario_key_action_select(root, command)
+    if !valid {return 0, false}
+    selected += count
+    count, valid = scenario_view_content_action_select(root, raw, command)
     if !valid {return 0, false}
     selected += count
     count, valid = scenario_dust_emission_action_select(root, raw, command)
@@ -916,7 +972,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Pause_Animation, .Resume_Animation,
          .Set_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
-         .Wait_State, .Wait_Terminal_Contains, .Assert_State,
+         .Wait_State, .Wait_Terminal_Contains, .Assert_State, .Assert_Focus,
          .Assert_Terminal_Contains,
          .Checkpoint, .Allocation_Checkpoint,
          .Assert_Allocation_Baseline:

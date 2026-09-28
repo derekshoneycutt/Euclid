@@ -35,6 +35,18 @@ Library_Search_Preparation :: struct {
     suggestion: Text_Button_Result,
 }
 
+// Library_Control_Semantics groups one search-control registration.
+Library_Control_Semantics :: struct {
+    id: int,
+    role: viewmodel.Ui_Node_Role,
+    rect: geometry.Rectangle,
+    label: string,
+    value: string,
+    enabled: bool,
+    order: u16,
+    press_kind: viewmodel.Ui_Press_Owner_Kind,
+}
+
 // library_search_layout reserves correction rows only while a suggestion is visible.
 library_search_layout :: proc(
     panel: geometry.Rectangle, show_suggestion: bool) -> Library_Search_Layout {
@@ -139,6 +151,90 @@ library_search_apply_suggestion :: proc(search: ^viewmodel.Library_Search_State)
     search^.submit_requested = true
 }
 
+// library_search_accept_suggestion_key admits Right only at a collapsed end caret.
+library_search_accept_suggestion_key :: proc(
+    search: ^viewmodel.Library_Search_State, frame: Input_Frame) -> bool {
+    if search == nil || search^.suggestion_length <= 0 ||
+        search^.input.cursor_byte != search^.query_length ||
+        search^.input.anchor_byte != search^.query_length {return false}
+    for event in frame.events {
+        if (event.kind == .Press || event.kind == .Repeat) &&
+            event.key == .Right && event.modifiers == {} {return true}
+    }
+    return false
+}
+
+// register_library_control publishes one search control and pointer focus.
+register_library_control :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    control: Library_Control_Semantics,
+    clip: geometry.Rectangle) -> viewmodel.Ui_Node_Id {
+    semantic_id := semantic_control_id(.Library_Control, control.id)
+    states := viewmodel.Ui_Node_State{.Visible, .Focusable, .Tab_Stop}
+    if control.enabled {states += {.Enabled}}
+    actions := viewmodel.Ui_Node_Action_Set{.Focus}
+    if control.role == .Button {actions += {.Activate}}
+    _ = semantic_register_control(runtime^.semantic_focus, {
+        id = semantic_id, role = control.role, states = states, actions = actions,
+        region = .Accordion_Content, traversal_order = control.order,
+        bounds = viewmodel.Rectangle(control.rect),
+        clip_bounds = viewmodel.Rectangle(clip),
+        label = control.label, value = control.value,
+    })
+    _ = semantic_focus_for_press(runtime^.semantic_focus,
+        &runtime^.ui_press_owner, control.press_kind, control.id, semantic_id)
+    return semantic_id
+}
+
+// prepare_library_clear resolves, registers, and applies the Clear action.
+prepare_library_clear :: proc(
+    state: ^core.Euclid_General_State, panel: geometry.Rectangle,
+    frame: Input_Frame, layout: Library_Search_Layout) -> Icon_Button_Result {
+    search := &state^.ui_runtime.library_search
+    result := update_icon_button({id = LIBRARY_SEARCH_CLEAR_ID,
+        rect = layout.action, icon_id = .None, mouse = frame,
+        interaction_space_rect = panel,
+        interaction_enabled = search^.query_length > 0,
+        inset_scale = 0.55}, &state^.ui_runtime.ui_press_owner)
+    id := register_library_control(&state^.ui_runtime, {
+        id = LIBRARY_SEARCH_CLEAR_ID, role = .Button, rect = layout.action,
+        label = "Clear search", enabled = search^.query_length > 0,
+        order = 1, press_kind = .Icon_Button,
+    }, panel)
+    if result.clicked || semantic_command_requested(
+        state^.ui_runtime.semantic_focus, id, .Activate) {
+        library_search_clear_query(search)
+    }
+    return result
+}
+
+// prepare_library_suggestion resolves one visible correction action.
+prepare_library_suggestion :: proc(
+    state: ^core.Euclid_General_State, panel: geometry.Rectangle,
+    frame: Input_Frame, layout: Library_Search_Layout) -> Text_Button_Result {
+    search := &state^.ui_runtime.library_search
+    if search^.suggestion_length <= 0 {return {}}
+    suggestion := string(search^.suggestion[:search^.suggestion_length])
+    result := update_text_button({id = LIBRARY_SEARCH_SUGGESTION_ID,
+        rect = layout.suggestion, label = suggestion, enabled = true,
+        mouse = frame, interaction_space_rect = panel,
+        interaction_enabled = true,
+        font = view_font.cache_borrow(&state^.font_cache, .Regular),
+        font_resolver = view_font.cache_terminal_resolver(&state^.font_cache)},
+        &state^.ui_runtime.ui_press_owner)
+    id := register_library_control(&state^.ui_runtime, {
+        id = LIBRARY_SEARCH_SUGGESTION_ID, role = .Button,
+        rect = layout.suggestion, label = "Use suggested search",
+        value = suggestion, enabled = true, order = 2,
+        press_kind = .Text_Button,
+    }, panel)
+    if result.clicked || semantic_command_requested(
+        state^.ui_runtime.semantic_focus, id, .Activate) {
+        library_search_apply_suggestion(search)
+    }
+    return result
+}
+
 // prepare_library_search resolves input, clear, and suggestion interactions.
 prepare_library_search :: proc(
     state: ^core.Euclid_General_State, panel: geometry.Rectangle,
@@ -146,30 +242,23 @@ prepare_library_search :: proc(
     search := &state^.ui_runtime.library_search
     result := Library_Search_Preparation{layout = library_search_layout(
         panel, search^.suggestion_length > 0)}
+    accept_suggestion := library_search_accept_suggestion_key(search, frame)
     params := library_search_input_params(state, result.layout, frame)
     result.input = input_box_prepare(params, &state^.ui_runtime.ui_press_owner)
     library_search_apply_input(search, result.input)
-    if result.input.tab_requested && search^.suggestion_length > 0 {
+    if accept_suggestion {
         library_search_apply_suggestion(search)
     }
-    result.clear = update_icon_button({id = LIBRARY_SEARCH_CLEAR_ID,
-        rect = result.layout.action, icon_id = .None, mouse = frame,
-        interaction_space_rect = panel,
-        interaction_enabled = search^.query_length > 0,
-        inset_scale = 0.55}, &state^.ui_runtime.ui_press_owner)
-    if result.clear.clicked {library_search_clear_query(search)}
+    result.clear = prepare_library_clear(state, panel, frame, result.layout)
     result.layout = library_search_layout(panel, search^.suggestion_length > 0)
-    if search^.suggestion_length > 0 {
-        suggestion := string(search^.suggestion[:search^.suggestion_length])
-        result.suggestion = update_text_button({id = LIBRARY_SEARCH_SUGGESTION_ID,
-            rect = result.layout.suggestion, label = suggestion, enabled = true,
-            mouse = frame, interaction_space_rect = panel,
-            interaction_enabled = true,
-            font = view_font.cache_borrow(&state^.font_cache, .Regular),
-            font_resolver = view_font.cache_terminal_resolver(&state^.font_cache)},
-            &state^.ui_runtime.ui_press_owner)
-        if result.suggestion.clicked {library_search_apply_suggestion(search)}
-    }
+    result.suggestion = prepare_library_suggestion(
+        state, panel, frame, result.layout)
+    query := string(search^.query[:search^.query_length])
+    _ = register_library_control(&state^.ui_runtime, {
+        id = LIBRARY_SEARCH_INPUT_ID, role = .Input,
+        rect = result.layout.text_input, label = "Search animations",
+        value = query, enabled = true, order = 0, press_kind = .Input_Box,
+    }, panel)
     if result.input.hovered {state^.ui_runtime.cursor = .Text}
     return result
 }

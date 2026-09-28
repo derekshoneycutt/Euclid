@@ -33,12 +33,43 @@ scenario_test_parse_json_lines :: proc(t: ^testing.T) {
     result := parse(
         "{\"select_animation\":\"Euclid.Proposition1\",\"as\":\"selection\"}\n" +
         "{\"wait_state\":\"animation_idle\",\"timeout_ms\":10}\n" +
+        "{\"assert_focus\":\"accordion_settings\"}\n" +
         "{\"shutdown\":true}\n", &program)
     testing.expect_value(t, result, Parse_Error.None)
-    testing.expect_value(t, program.count, 3)
+    testing.expect_value(t, program.count, 4)
     testing.expect_value(t, program.commands[0].kind, Command_Kind.Select_Animation)
     testing.expect_value(t, name_string(&program.commands[0].alias), "selection")
     testing.expect_value(t, program.commands[1].timeout_ms, u32(10))
+    testing.expect_value(t, program.commands[2].kind, Command_Kind.Assert_Focus)
+    testing.expect_value(t,
+        text_string(&program.commands[2].text), "accordion_settings")
+}
+
+// Verify key actions preserve legacy spelling and exact modifier payloads.
+@(test)
+scenario_test_parse_key_modifiers :: proc(t: ^testing.T) {
+    program: Program
+    result := parse(
+        "{\"key\":\"tab\"}\n" +
+        "{\"key\":{\"name\":\"tab\",\"shift\":true}}\n" +
+        "{\"key\":{\"name\":\"tab\",\"ctrl\":true,\"shift\":true}}\n",
+        &program)
+    testing.expect_value(t, result, Parse_Error.None)
+    testing.expect_value(t, program.count, 3)
+    testing.expect_value(t, text_string(&program.commands[0].text), "tab")
+    testing.expect(t, !program.commands[0].key_shift)
+    testing.expect(t, program.commands[1].key_shift)
+    testing.expect(t, program.commands[2].key_shift)
+    testing.expect(t, program.commands[2].key_control)
+
+    invalid := [?]string{
+        "{\"key\":{\"shift\":true}}\n",
+        "{\"key\":{\"name\":\"tab\",\"alt\":true}}\n",
+        "{\"key\":{\"name\":\"tab\",\"ctrl\":1}}\n",
+    }
+    for source in invalid {
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
 }
 
 // Verify library-search actions, event vocabulary, and state predicates are bounded.

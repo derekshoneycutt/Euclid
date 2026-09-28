@@ -21,6 +21,10 @@ Checkbox_Params :: struct {
     label_offset_x: f32,
     label_offset_y: f32,
     font_resolver: view_font.Font_Resolver,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
+    semantic_domain: viewmodel.Ui_Node_Domain,
+    semantic_order: u16,
+    semantic_clip: geometry.Rectangle,
 }
 
 Checkbox_Result :: struct {
@@ -179,6 +183,33 @@ checkbox_resolve_interaction :: proc(
     out.pressed = owns_press && input_frame_left_down(params.mouse)
 }
 
+// checkbox_apply_semantics publishes state and consumes one addressed toggle.
+checkbox_apply_semantics :: proc(
+    params: Checkbox_Params,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
+    hit_rect: geometry.Rectangle,
+    result: ^Checkbox_Result) {
+    id := semantic_control_id(params.semantic_domain, params.id)
+    if params.enabled && !result^.toggled && semantic_command_requested(
+        params.semantic_focus, id, .Toggle) {
+        result^.toggled = true
+        result^.checked_out = !params.checked
+    }
+    states := viewmodel.Ui_Node_State{.Visible, .Focusable, .Tab_Stop}
+    if params.enabled {states += {.Enabled}}
+    if result^.checked_out {states += {.Checked}}
+    _ = semantic_register_control(params.semantic_focus, {
+        id = id, role = .Checkbox, states = states,
+        actions = {.Focus, .Toggle}, region = .Accordion_Content,
+        traversal_order = params.semantic_order,
+        bounds = viewmodel.Rectangle(hit_rect),
+        clip_bounds = viewmodel.Rectangle(params.semantic_clip),
+        label = params.label,
+    })
+    _ = semantic_focus_for_press(params.semantic_focus, press_owner,
+        .Checkbox, params.id, id)
+}
+
 //   Resolve one checkbox interaction without issuing drawing commands.
 update_checkbox :: proc(
     params: Checkbox_Params,
@@ -196,5 +227,8 @@ update_checkbox :: proc(
 
     result := Checkbox_Result{}
     checkbox_resolve_interaction(params, press_owner, local_mouse, hit_rect, &result)
+    if params.semantic_domain != .None {
+        checkbox_apply_semantics(params, press_owner, hit_rect, &result)
+    }
     return result
 }

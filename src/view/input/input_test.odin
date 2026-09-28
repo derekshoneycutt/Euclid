@@ -670,6 +670,52 @@ input_test_event_pair_claim_and_removal_are_bounded :: proc(t: ^testing.T) {
     testing.expect(t, !frame.events[0].correlation.valid)
 }
 
+// Verify filtered frame copies omit claims and preserve surviving correlation indexes.
+@(test)
+input_test_copy_unclaimed_events_preserves_order :: proc(t: ^testing.T) {
+    events := [4]Input_Event{
+        {kind = .Press, key = .Tab},
+        {kind = .Press, key = .F12},
+        {kind = .Press, key = .A,
+            correlation = {partner_index = 3, valid = true}},
+        {kind = .Text, codepoint = 'a',
+            correlation = {partner_index = 2, valid = true}},
+    }
+    frame := Input_Frame{
+        events = events[:], window_focused = true, mouse_wheel_delta = 2}
+    claims: Input_Event_Claim_State
+    testing.expect(t, input_event_claim(frame, 0, &claims))
+    storage: [INPUT_EVENT_CAPACITY]Input_Event
+
+    filtered := input_frame_copy_unclaimed_events(frame, &claims, storage[:])
+    testing.expect_value(t, len(filtered.events), 3)
+    testing.expect_value(t, filtered.events[0].key, Input_Key.F12)
+    testing.expect_value(t, filtered.events[1].correlation.partner_index, u16(2))
+    testing.expect_value(t, filtered.events[2].correlation.partner_index, u16(1))
+    testing.expect(t, filtered.window_focused)
+    testing.expect_value(t, filtered.mouse_wheel_delta, f32(2))
+}
+
+// Verify claiming either member removes its complete correlated event group.
+@(test)
+input_test_copy_unclaimed_events_removes_correlated_pair :: proc(t: ^testing.T) {
+    events := [3]Input_Event{
+        {kind = .Press, key = .A,
+            correlation = {partner_index = 1, valid = true}},
+        {kind = .Text, codepoint = 'a',
+            correlation = {partner_index = 0, valid = true}},
+        {kind = .Press, key = .Enter},
+    }
+    frame := Input_Frame{events = events[:]}
+    claims: Input_Event_Claim_State
+    testing.expect(t, input_event_claim(frame, 1, &claims))
+    storage: [INPUT_EVENT_CAPACITY]Input_Event
+
+    filtered := input_frame_copy_unclaimed_events(frame, &claims, storage[:])
+    testing.expect_value(t, len(filtered.events), 1)
+    testing.expect_value(t, filtered.events[0].key, Input_Key.Enter)
+}
+
 // Verify correlation metadata alone does not alter legacy terminal bytes.
 @(test)
 input_test_correlated_events_preserve_legacy_bytes :: proc(t: ^testing.T) {

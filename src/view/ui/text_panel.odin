@@ -3,6 +3,7 @@ package ui
 import geometry "../../core/geometry"
 import color "../../core/color"
 import native "../native"
+import viewmodel "../model"
 
 import "../../core"
 import dyncompile "../../dynview/compile"
@@ -10,6 +11,7 @@ import dynlayout "../../dynview/layout"
 import julia "../../bridge"
 import view_core "../core"
 import "../font"
+import "../input"
 import ui_dynview "./dynview"
 
 //   Prepared post-layout interaction state for one non-Terminal presentation.
@@ -28,6 +30,84 @@ Presentation_Content_Interaction :: struct {
     mouse_input: Input_Frame,
     keyboard_enabled: bool,
     frame_dt: f32,
+}
+
+// presentation_semantic_id identifies one compiled document generation.
+presentation_semantic_id :: #force_inline proc(
+    state: ^core.Euclid_General_State) -> viewmodel.Ui_Node_Id {
+    if state == nil {return {}}
+    return {domain = .Presentation,
+        generation = state^.dynview.compile_cache.compiled_revision}
+}
+
+// register_presentation_semantics publishes the focused document surface.
+register_presentation_semantics :: proc(
+    state: ^core.Euclid_General_State,
+    panel: geometry.Rectangle) {
+    id := presentation_semantic_id(state)
+    _ = semantic_register_control(state^.ui_runtime.semantic_focus, {
+        id = id, role = .Document,
+        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+        actions = {.Focus, .Select, .Copy, .Scroll}, region = .Presentation,
+        traversal_order = 0, bounds = viewmodel.Rectangle(panel),
+        clip_bounds = viewmodel.Rectangle(panel), label = "Presentation",
+    })
+    semantic := state^.ui_runtime.semantic_focus
+    current_domain := semantic^.logical_focus.domain
+    owns_presentation := current_domain == .Presentation ||
+        current_domain == .Dynview_Affordance
+    if !owns_presentation &&
+        state^.ui_runtime.interaction.logical_focus.kind == .Presentation {
+        _ = semantic_request_pointer_focus(semantic, id)
+    }
+}
+
+// apply_presentation_semantic_scroll updates the existing bounded scroll owner.
+apply_presentation_semantic_scroll :: proc(
+    state: ^core.Euclid_General_State,
+    viewport_height: f32) {
+    semantic := state^.ui_runtime.semantic_focus
+    id := presentation_semantic_id(state)
+    page := max(TEXT_ROW_HEIGHT, viewport_height - TEXT_ROW_HEIGHT)
+    for command in semantic^.commands[:semantic^.command_count] {
+        if command.target == id && command.kind == .Scroll_Page {
+            state^.ui_runtime.view_text_scroll_y += f32(command.amount) * page
+        }
+    }
+}
+
+// dynview_copy_semantic_id scopes one authored copy block to its compilation.
+dynview_copy_semantic_id :: #force_inline proc(
+    state: ^core.Euclid_General_State,
+    block_id: i32) -> viewmodel.Ui_Node_Id {
+    return {domain = .Dynview_Affordance, local_id = u64(u32(block_id)),
+        generation = state^.dynview.compile_cache.compiled_revision}
+}
+
+// register_presentation_copy_semantics publishes and operates visible copy actions.
+register_presentation_copy_semantics :: proc(
+    state: ^core.Euclid_General_State,
+    parent: viewmodel.Ui_Node_Id,
+    clip: geometry.Rectangle) {
+    cache := &state^.dynview.compile_cache
+    semantic := state^.ui_runtime.semantic_focus
+    for target, index in cache^.copy_hit_targets[:cache^.copy_hit_target_count] {
+        id := dynview_copy_semantic_id(state, target.block_id)
+        _ = semantic_register_control(semantic, {
+            id = id, parent = parent, role = .Button,
+            states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+            actions = {.Focus, .Activate, .Copy}, region = .Presentation,
+            traversal_order = u16(index + 1),
+            bounds = viewmodel.Rectangle(target.rect),
+            clip_bounds = viewmodel.Rectangle(clip), label = "Copy expression",
+        })
+        _ = semantic_focus_for_press(semantic, &state^.ui_runtime.ui_press_owner,
+            .Copy_Icon, int(target.block_id), id)
+        if semantic_command_requested(semantic, id, .Activate) {
+            payload := view_core.copy_target_payload(&state^.dynview, index)
+            if len(payload) > 0 {input.input_set_clipboard_text(payload)}
+        }
+    }
 }
 
 // draw_encoded_presentation_geometry encodes panel and cached non-glyph content.
@@ -208,10 +288,14 @@ prepare_presentation_interaction :: proc(
     state^.ui_runtime.view_text_scroll_max = max(0, content_h - text_panel.height)
     scroll_step := dynlayout.presentation_scroll_step_or_fallback(
         &state.dynview, TEXT_ROW_HEIGHT)
+    apply_presentation_semantic_scroll(state, text_panel.height)
     scroll := prepare_presentation_scroll(
         state, text_panel, content_h, scroll_step, mouse_input)
     selection_view := prepare_presentation_content_interaction(state,
         {scroll, view_text, mouse_input, keyboard_enabled, frame_dt})
+    register_presentation_semantics(state, scroll.view_rect)
+    register_presentation_copy_semantics(
+        state, presentation_semantic_id(state), scroll.view_rect)
     return {true, scroll.view_rect, view_text, scroll, selection_view}
 }
 

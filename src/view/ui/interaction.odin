@@ -166,23 +166,29 @@ ui_world_hover_target :: proc(
     return {}
 }
 
+// ui_splitter_hover_target resolves one unlocked splitter under the pointer.
+ui_splitter_hover_target :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    mouse: geometry.Vector2) -> viewmodel.Ui_Interaction_Target {
+    if splitters_locked_for_gif(runtime^.gif_capture_phase) {return {}}
+    axis, hovered := splitter_hovered_axis(mouse,
+        runtime^.current_layout_mode,
+        runtime^.vertical_split_x, runtime^.horizontal_split_y,
+        runtime^.window)
+    if !hovered {return {}}
+    id := SPLITTER_VERTICAL_PRESS_ID
+    if axis == .Horizontal {id = SPLITTER_HORIZONTAL_PRESS_ID}
+    return ui_interaction_target(.Splitter, id = id)
+}
+
 // Resolve the topmost static target under the current pointer sample.
 ui_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: Input_Frame,
     terminal_present: bool) -> viewmodel.Ui_Interaction_Target {
     mouse := input_frame_mouse_position(frame)
-    if !splitters_locked_for_gif(runtime^.gif_capture_phase) {
-        axis, hovered := splitter_hovered_axis(mouse,
-            runtime^.current_layout_mode,
-            runtime^.vertical_split_x, runtime^.horizontal_split_y,
-            runtime^.window)
-        if hovered {
-            id := SPLITTER_VERTICAL_PRESS_ID
-            if axis == .Horizontal { id = SPLITTER_HORIZONTAL_PRESS_ID }
-            return ui_interaction_target(.Splitter, id = id)
-        }
-    }
+    splitter := ui_splitter_hover_target(runtime, mouse)
+    if splitter.kind != .None {return splitter}
     regions := runtime^.ui_regions
     if ui_presentation_is_visible(runtime) {
         target := ui_presentation_target(
@@ -291,6 +297,27 @@ ui_route_interaction_frame :: proc(
     runtime^.interaction.terminal_effectively_focused = terminal_focused
     runtime^.interaction_frame = result
     return result
+}
+
+// ui_apply_semantic_focus updates transitional surface routing after key traversal.
+ui_apply_semantic_focus :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    frame: Input_Frame, terminal_present: bool) {
+    target, present := semantic_legacy_focus(runtime^.semantic_focus)
+    if !present {return}
+    routed := &runtime^.interaction_frame
+    prior_terminal := runtime^.interaction.terminal_effectively_focused
+    terminal_focused := ui_terminal_effectively_focused(
+        target, frame.window_focused, terminal_present,
+        ui_presentation_is_visible(runtime))
+    routed^.logical_focus = target
+    routed^.effective_focus = target if frame.window_focused else {}
+    routed^.terminal_focus_changed = routed^.terminal_focus_changed ||
+        terminal_focused != prior_terminal
+    routed^.terminal_focused = terminal_focused
+    runtime^.interaction.logical_focus = target
+    runtime^.interaction.terminal_effectively_focused = terminal_focused
+    ui_refresh_surface_interaction(routed)
 }
 
 // Route focus through the full interaction result for isolated callers and tests.

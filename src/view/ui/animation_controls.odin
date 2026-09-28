@@ -34,6 +34,14 @@ Animation_Control_Hit :: struct {
     toggle_pause_requested: bool,
 }
 
+// Animation_Control_Semantics groups one overlay control registration.
+Animation_Control_Semantics :: struct {
+    press_id: int,
+    rect: geometry.Rectangle,
+    label: string,
+    order: u16,
+}
+
 // Report whether animation controls should be presented and interactive.
 animation_controls_visible :: #force_inline proc(
     phase: viewmodel.Gif_Capture_Phase) -> bool {
@@ -104,6 +112,28 @@ animation_control_button_params :: #force_inline proc(
     }
 }
 
+// register_animation_control publishes one visible overlay button.
+register_animation_control :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    control: Animation_Control_Semantics,
+    clip: geometry.Rectangle) -> viewmodel.Ui_Node_Id {
+    id := semantic_control_id(.Animation_Control, control.press_id)
+    _ = semantic_register_control(runtime^.semantic_focus, {
+        id = id,
+        role = .Button,
+        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+        actions = {.Focus, .Activate},
+        region = .Animation_Overlay,
+        traversal_order = control.order,
+        bounds = viewmodel.Rectangle(control.rect),
+        clip_bounds = viewmodel.Rectangle(clip),
+        label = control.label,
+    })
+    _ = semantic_focus_for_press(runtime^.semantic_focus,
+        &runtime^.ui_press_owner, .Icon_Button, control.press_id, id)
+    return id
+}
+
 // Resolve animation-control interaction and commit its actions before simulation.
 prepare_animation_controls :: proc(
     state: ^core.Euclid_General_State,
@@ -122,7 +152,19 @@ prepare_animation_controls :: proc(
         ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
         ui_runtime^.simulation_paused, mouse_input),
         &ui_runtime^.ui_press_owner)
-    hit := Animation_Control_Hit{refresh.clicked, pause.clicked}
+    refresh_id := register_animation_control(ui_runtime, {
+        ANIMATION_REFRESH_BUTTON_ID, slots.refresh, "Restart animation", 0},
+        slots.panel)
+    pause_label := "Pause animation"
+    if ui_runtime^.simulation_paused {pause_label = "Resume animation"}
+    pause_id := register_animation_control(ui_runtime, {
+        ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_label, 1}, slots.panel)
+    hit := Animation_Control_Hit{
+        refresh.clicked || semantic_command_requested(
+            ui_runtime^.semantic_focus, refresh_id, .Activate),
+        pause.clicked || semantic_command_requested(
+            ui_runtime^.semantic_focus, pause_id, .Activate),
+    }
     apply_animation_control_hit(state, hit)
     return {visible = true, slots = slots, refresh = refresh, pause = pause}
 }

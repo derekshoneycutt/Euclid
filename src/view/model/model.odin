@@ -13,6 +13,11 @@ GIF_PATH_CAPACITY :: 4096
 LIBRARY_SEARCH_QUERY_BYTE_CAPACITY :: 512
 LIBRARY_SEARCH_RESULT_CAPACITY :: 64
 LIBRARY_SEARCH_VISIBLE_ID_CAPACITY :: 256
+// Capacity covers 256 filtered tree nodes, 1,024 Dynview copy targets, and 64
+// static, container, and responsive-layout nodes.
+UI_SEMANTIC_NODE_CAPACITY :: 1344
+UI_SEMANTIC_TEXT_CAPACITY :: 64 * 1024
+UI_FOCUS_COMMAND_CAPACITY :: 128
 Color :: color.Color_RGBA8
 Rectangle :: geometry.Rectangle
 Vector3 :: geometry.Vector3
@@ -209,6 +214,192 @@ Ui_Interaction_Frame :: struct {
     terminal_focused: bool,
 }
 
+// Ui_Node_Domain qualifies semantic identities across independently owned UI areas.
+Ui_Node_Domain :: enum u8 {
+    None,
+    Application,
+    Animation_Control,
+    Accordion,
+    Library_Control,
+    Animation_Tree,
+    Gif_Control,
+    Settings_Control,
+    Presentation,
+    Dynview_Affordance,
+    Terminal,
+}
+
+// Ui_Node_Id identifies one semantic node across stable and generated content.
+Ui_Node_Id :: struct {
+    domain: Ui_Node_Domain,
+    local_id: u64,
+    stable_id: uuid.Identifier,
+    generation: u64,
+}
+
+// Ui_Node_Role describes the application-level meaning of one semantic node.
+Ui_Node_Role :: enum u8 {
+    Surface,
+    Button,
+    Input,
+    Checkbox,
+    Slider,
+    Accordion_Header,
+    Tree,
+    Tree_Item,
+    Document,
+    Terminal,
+}
+
+Ui_Node_State_Flag :: enum u8 {
+    Visible,
+    Enabled,
+    Focusable,
+    Tab_Stop,
+    Selected,
+    Checked,
+    Expanded,
+    Read_Only,
+    Focus_Visible,
+}
+
+Ui_Node_State :: bit_set[Ui_Node_State_Flag; u16]
+
+Ui_Node_Action :: enum u8 {
+    Focus,
+    Activate,
+    Toggle,
+    Increment,
+    Decrement,
+    Set_To_Bound,
+    Select,
+    Expand,
+    Collapse,
+    Copy,
+    Scroll,
+}
+
+Ui_Node_Action_Set :: bit_set[Ui_Node_Action; u16]
+
+// Ui_Focus_Command_Kind identifies one action addressed to its current owner.
+Ui_Focus_Command_Kind :: enum u8 {
+    None,
+    Focus,
+    Activate,
+    Toggle,
+    Increment,
+    Decrement,
+    Set_Minimum,
+    Set_Maximum,
+    Page_Step,
+    Tree_Previous,
+    Tree_Next,
+    Tree_Parent,
+    Tree_Child,
+    Tree_First,
+    Tree_Last,
+    Select,
+    Copy,
+    Scroll_Page,
+}
+
+// Ui_Focus_Command carries one bounded event-derived action to a semantic owner.
+Ui_Focus_Command :: struct {
+    target: Ui_Node_Id,
+    kind: Ui_Focus_Command_Kind,
+    amount: i32,
+    event_index: u16,
+}
+
+// Ui_Focus_Region defines explicit global traversal groups.
+Ui_Focus_Region :: enum u8 {
+    None,
+    Animation_Overlay,
+    Accordion_Headers,
+    Accordion_Content,
+    Presentation,
+}
+
+// Ui_Semantic_Node owns offsets into its containing snapshot's UTF-8 storage.
+Ui_Semantic_Node :: struct {
+    id: Ui_Node_Id,
+    parent: Ui_Node_Id,
+    active_descendant: Ui_Node_Id,
+    role: Ui_Node_Role,
+    states: Ui_Node_State,
+    actions: Ui_Node_Action_Set,
+    region: Ui_Focus_Region,
+    traversal_order: u16,
+    bounds: Rectangle,
+    clip_bounds: Rectangle,
+    label_offset: u32,
+    label_length: u16,
+    value_offset: u32,
+    value_length: u16,
+}
+
+// Ui_Semantic_Node_Registration borrows text only for one atomic registration.
+Ui_Semantic_Node_Registration :: struct {
+    node: Ui_Semantic_Node,
+    label: string,
+    value: string,
+}
+
+// Ui_Semantic_Snapshot owns one complete immutable semantic tree publication.
+Ui_Semantic_Snapshot :: struct {
+    nodes: [UI_SEMANTIC_NODE_CAPACITY]Ui_Semantic_Node,
+    text: [UI_SEMANTIC_TEXT_CAPACITY]u8,
+    node_count: int,
+    text_count: int,
+    generation: u64,
+}
+
+Ui_Semantic_Status :: enum u8 {
+    Ok,
+    Invalid_Argument,
+    Invalid_Id,
+    Duplicate_Id,
+    Missing_Parent,
+    Node_Capacity,
+    Text_Capacity,
+    Invalid_Utf8,
+    Traversal_Collision,
+    Not_Staging,
+}
+
+Ui_Focus_Origin :: enum u8 {
+    None,
+    Pointer,
+    Keyboard,
+}
+
+// Ui_Semantic_Diagnostics records bounded-storage pressure and publication failures.
+Ui_Semantic_Diagnostics :: struct {
+    node_high_water: int,
+    text_high_water: int,
+    rejection_count: u64,
+    last_rejection: Ui_Semantic_Status,
+    offending_id: Ui_Node_Id,
+}
+
+// Ui_Semantic_Focus_State owns double-buffered snapshots and persistent logical focus.
+Ui_Semantic_Focus_State :: struct {
+    snapshots: [2]Ui_Semantic_Snapshot,
+    committed_index: u8,
+    staging_index: u8,
+    staging_active: bool,
+    staging_rejected: bool,
+    window_focused: bool,
+    logical_focus: Ui_Node_Id,
+    focus_origin: Ui_Focus_Origin,
+    last_region: Ui_Focus_Region,
+    last_traversal_order: u16,
+    active_tree_item: uuid.Identifier,
+    commands: [UI_FOCUS_COMMAND_CAPACITY]Ui_Focus_Command,
+    command_count: int,
+    diagnostics: Ui_Semantic_Diagnostics,
+}
+
 // Ui_Cursor_Kind is the portable pointer shape requested by UI interaction.
 Ui_Cursor_Kind :: enum u8 {
     Default,
@@ -319,6 +510,7 @@ Euclid_Ui_Runtime_State :: struct {
     ui_regions: Ui_Regions,
     interaction: Ui_Interaction_State,
     interaction_frame: Ui_Interaction_Frame,
+    semantic_focus: ^Ui_Semantic_Focus_State,
 }
 
 // Euclid_Drawing_Surface defines the display-owned world drawing plane.

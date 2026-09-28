@@ -14,6 +14,7 @@ import scenario "../evidence/scenario"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import particlemodel "../particles/model"
+import input "input"
 
 import "core:log"
 import "core:os"
@@ -63,6 +64,49 @@ scenario_runtime_terminal_input_tracks_foreground_owner :: proc(t: ^testing.T) {
 
     state^.shell.phase = .Running
     testing.expect(t, scenario_terminal_input_available(state))
+}
+
+// Verify focus assertions resolve stable names through committed UI semantics.
+@(test)
+scenario_runtime_focus_assertion_uses_committed_snapshot :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic)
+    state^.ui_runtime.semantic_focus = semantic
+    semantic^.logical_focus = {.Terminal, 0, {}, 4}
+    snapshot := &semantic^.snapshots[semantic^.committed_index]
+    snapshot^.nodes[0] = {id = semantic^.logical_focus, role = .Terminal}
+    snapshot^.node_count = 1
+    runtime := Scenario_Runtime{state = state}
+    identity: evidence_trace.Identity
+    command := scenario.Command{kind = .Assert_Focus}
+    command.text, _ = scenario.text_copy("terminal")
+
+    handled, accepted := scenario_issue_generic_action(
+        &runtime, &command, &identity)
+
+    testing.expect(t, handled && accepted)
+    command.text, _ = scenario.text_copy("presentation")
+    handled, accepted = scenario_issue_generic_action(&runtime, &command, &identity)
+    testing.expect(t, handled && !accepted)
+}
+
+// Verify ordinary control activation keys are available without Terminal readiness.
+@(test)
+scenario_runtime_key_injection_is_display_wide :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state)
+    input_runtime := new(input.Input_Runtime, context.allocator)
+    defer free(input_runtime)
+    runtime := Scenario_Runtime{state = state, input_runtime = input_runtime}
+    command := scenario.Command{kind = .Key}
+    command.text, _ = scenario.text_copy("space")
+
+    testing.expect(t, scenario_issue_key(&runtime, &command))
+    testing.expect_value(t, input_runtime^.injected_event_count, 1)
+    testing.expect_value(t,
+        input_runtime^.injected_events[0].key, input.Input_Key.Space)
 }
 
 // Verify ordinary state requests and orderly shutdown flow through the action sink.
@@ -316,7 +360,8 @@ runtime_fields_initialize_portrait_view :: proc(t: ^testing.T) {
         window = {width = 640, height = 720, layout = .Portrait},
     }
     runtime: viewmodel.Euclid_Ui_Runtime_State
-    init_ui_runtime_fields(&runtime, &settings)
+    testing.expect(t, init_ui_runtime_fields(&runtime, &settings))
+    defer free(runtime.semantic_focus, context.allocator)
     testing.expect_value(t, runtime.current_layout_mode,
         viewmodel.Ui_Layout_Mode.Portrait)
     testing.expect_value(t, runtime.active_accordion_section,

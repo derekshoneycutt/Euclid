@@ -38,9 +38,41 @@ Accordion_Context :: struct {
     panel: geometry.Rectangle,
     mouse_input: Input_Frame,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     active: viewmodel.Ui_Accordion_Section,
     font: view_font.Font_Face,
     font_resolver: view_font.Font_Resolver,
+}
+
+// accordion_semantic_id returns the stable identity for one section header.
+accordion_semantic_id :: #force_inline proc(
+    section: viewmodel.Ui_Accordion_Section) -> viewmodel.Ui_Node_Id {
+    return {domain = .Accordion, local_id = u64(section) + 1}
+}
+
+// register_accordion_header publishes one operable header in visual order.
+register_accordion_header :: proc(
+    ctx: Accordion_Context,
+    descriptor: Accordion_Section_Descriptor,
+    rect: geometry.Rectangle,
+    active: viewmodel.Ui_Accordion_Section,
+    order: int) -> viewmodel.Ui_Node_Id {
+    id := accordion_semantic_id(descriptor.section)
+    states := viewmodel.Ui_Node_State{
+        .Visible, .Enabled, .Focusable, .Tab_Stop}
+    if descriptor.section == active {states += {.Selected, .Expanded}}
+    _ = semantic_register_control(ctx.semantic_focus, {
+        id = id,
+        role = .Accordion_Header,
+        states = states,
+        actions = {.Focus, .Activate},
+        region = .Accordion_Headers,
+        traversal_order = u16(order),
+        bounds = viewmodel.Rectangle(rect),
+        clip_bounds = viewmodel.Rectangle(ctx.panel),
+        label = descriptor.label,
+    })
+    return id
 }
 
 // Return the three utility sections used by landscape composition.
@@ -133,6 +165,42 @@ accordion_header_params :: proc(
     }
 }
 
+// prepare_accordion_header_interactions resolves pointer and keyboard selection.
+prepare_accordion_header_interactions :: proc(
+    ctx: Accordion_Context, sections: Accordion_Section_Set,
+    result: ^Accordion_Preparation,
+    selected: viewmodel.Ui_Accordion_Section) -> viewmodel.Ui_Accordion_Section {
+    resolved := selected
+    for section_index in 0..<sections.count {
+        descriptor := sections.items[section_index]
+        result^.headers[section_index] = update_text_button(
+            accordion_header_params(
+                ctx, descriptor, result^.layout.headers[section_index]),
+            ctx.press_owner)
+        id := accordion_semantic_id(descriptor.section)
+        if result^.headers[section_index].clicked ||
+            semantic_command_requested(ctx.semantic_focus, id, .Activate) {
+            resolved = descriptor.section
+        }
+    }
+    return resolved
+}
+
+// register_accordion_headers publishes final geometry and pointer focus.
+register_accordion_headers :: proc(
+    ctx: Accordion_Context, sections: Accordion_Section_Set,
+    result: ^Accordion_Preparation,
+    selected: viewmodel.Ui_Accordion_Section) {
+    for section_index in 0..<sections.count {
+        descriptor := sections.items[section_index]
+        id := register_accordion_header(ctx, descriptor,
+            result^.layout.headers[section_index], selected, section_index)
+        press_id := ACCORDION_HEADER_ID_BASE + int(descriptor.section)
+        _ = semantic_focus_for_press(ctx.semantic_focus, ctx.press_owner,
+            .Text_Button, press_id, id)
+    }
+}
+
 // Resolve header interaction and publish exactly one expanded section.
 prepare_accordion :: proc(
     ctx: Accordion_Context,
@@ -145,17 +213,8 @@ prepare_accordion :: proc(
         layout = accordion_layout(
             ctx.panel, sections, active^),
     }
-    selected := active^
-    for section_index in 0..<sections.count {
-        descriptor := sections.items[section_index]
-        result.headers[section_index] = update_text_button(
-            accordion_header_params(
-                ctx, descriptor, result.layout.headers[section_index]),
-            ctx.press_owner)
-        if result.headers[section_index].clicked {
-            selected = descriptor.section
-        }
-    }
+    selected := prepare_accordion_header_interactions(
+        ctx, sections, &result, active^)
     if selected != active^ {
         active^ = selected
         result.layout = accordion_layout(
@@ -165,5 +224,6 @@ prepare_accordion :: proc(
                 result.layout.headers[section_index]
         }
     }
+    register_accordion_headers(ctx, sections, &result, selected)
     return result
 }

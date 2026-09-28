@@ -146,7 +146,7 @@ slots, and joined task-pool work; they do not share mutable ownership.
 
 | Execution role | Owns | Publishes through | Forbidden work |
 | --- | --- | --- | --- |
-| **Display thread** | SDL window and GPU resources, input, UI, canonical scene and Terminal state, fixed-step ordering, final publication | Typed Julia ingress, task-pool submissions, display-owned commit boundaries | Julia C API calls or concurrent mutation of canonical state |
+| **Display thread** | SDL window and GPU resources, input, semantic focus snapshots, UI, canonical scene and Terminal state, fixed-step ordering, final publication | Typed Julia ingress, task-pool submissions, display-owned commit boundaries | Julia C API calls or concurrent mutation of canonical state |
 | **Julia owner thread** | Julia lifetime, callback execution, one actor runtime, content generations, reload candidates, Julia-side policy | Typed egress, checked animation slots, canonical MIME envelopes | Native GPU calls, rendering, or direct mutation of display-owned state |
 | **CPU task pool** | Finite operation-owned payloads and cache regions while a task is active | Joined results returned to display-readable ownership | Julia calls, thread-affine native GPU calls, or direct visible-state publication |
 
@@ -189,6 +189,13 @@ value copies, resolve focus and pointer facts without repolling devices, and con
 committed text from the shared event route. Bytes retained for a Julia evaluation or
 native Terminal session are gated by the complete `Input_Owner` identity, including
 its generation, so stale input cannot cross owner replacement.
+
+Semantic keyboard routing uses the prior immutable UI snapshot and ordered event
+claims. Ordinary Tab and Shift+Tab traverse explicit enabled Tab stops; Terminal keeps
+plain Tab and uses Ctrl+Tab or Ctrl+Shift+Tab as the application escape. The router
+produces bounded commands addressed by complete semantic identity, while current UI
+owners remain responsible for applying activation, toggling, adjustment, selection,
+copy, and scrolling behavior.
 
 SDL text input follows effective window focus. The adapter publishes valid committed
 UTF-8 runes and rejects invalid payloads without partial publication. Composition and
@@ -632,12 +639,16 @@ UI and cache preparation use explicit ordered stages around the fixed-step updat
 1. Compute and publish the frame's UI regions and exact text-panel geometry.
 1. Track Dynview panel, font, and style inputs to determine whether its cache is
   invalidated.
-1. Resolve static focus, hover, pointer, wheel, and geometry-known controls.
+1. Route keyboard focus against the committed semantic snapshot.
+1. Resolve static focus, hover, pointer, wheel, and geometry-known controls while
+  registering current semantics.
 1. Update Terminal geometry, scrolling, links, and routed input.
 1. Complete fixed-step simulation.
 1. Submit shape draw-cache construction and any invalidated Dynview compilation.
 1. Join every submitted task.
-1. Resolve layout-dependent presentation scrolling, copy interaction, and selection.
+1. Resolve layout-dependent presentation scrolling, copy interaction, selection, and
+  composite semantic registration.
+1. Validate and atomically publish the complete semantic snapshot, reconciling focus.
 1. Encode bounded world, UI, and non-glyph Dynview geometry from committed state and
   fixed frame-local preparation records.
 1. Upload, render, blit, and submit one SDL_GPU command buffer.
@@ -653,10 +664,12 @@ caches. The tasks may run concurrently because their ownership does not overlap.
 Display-only layout-dependent interaction consumes the caches after the fence joins;
 drawing does not mutate interaction state or publish actions.
 
-Before Terminal service processing, UI preparation also reconciles display-owned
-logical focus against the resolved regions, active Terminal presentation, and OS window
-activation. The resulting effective Terminal focus gates local and child keyboard
-input, drives DECSET 1004 transitions, and selects prompt and output cursor style.
+Before Terminal service processing, UI preparation derives transitional surface
+eligibility from display-owned semantic focus and OS window activation. The resulting
+effective Terminal focus gates local and child keyboard input, drives DECSET 1004
+transitions, and selects prompt and output cursor style. Final layout registration then
+publishes a complete double-buffered semantic snapshot; drawing only observes its
+focus-visible geometry.
 
 Dynview publishes complete bounded cache slices. Failure clears partial derived state
 and preserves exact literal fallback; shutdown clears aliases and joins workers before
