@@ -15,9 +15,9 @@ const SHADER_SCHEMA_VERSION = 1
 const MSL_VERSION = "2.0.0"
 const SHADERCROSS_ENV = "EUCLID_SHADERCROSS"
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
-const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "bin", "win64", "sdl")
+const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "sdl", "bin", "win64")
 const WINDOWS_SHADERCROSS_DIR = joinpath(
-    REPOSITORY_ROOT, "libs", "bin", "win64", "sdl_shadercross")
+    REPOSITORY_ROOT, "libs", "sdl_shadercross", "bin", "win64")
 const SHADERCROSS_DEPENDENCIES = [
     "DirectXShaderCompiler", "SPIRV-Cross", "SPIRV-Headers", "SPIRV-Tools"]
 const WINDOWS_SHADERCROSS_ARTIFACTS = Set([
@@ -39,8 +39,8 @@ end
 function windows_shadercross_runtime_dirs(
     repository_root::String=REPOSITORY_ROOT)
     return [
-        joinpath(repository_root, "libs", "bin", "win64", "sdl"),
-        joinpath(repository_root, "libs", "bin", "win64", "sdl_shadercross"),
+        joinpath(repository_root, "libs", "sdl", "bin", "win64"),
+        joinpath(repository_root, "libs", "sdl_shadercross", "bin", "win64"),
     ]
 end
 
@@ -51,7 +51,7 @@ function repository_shadercross_commit(repository_root::String)
     git === nothing && return nothing
     output = IOBuffer()
     command = Cmd([git, "-C", repository_root, "rev-parse",
-        "HEAD:tools/shadercross"])
+        "HEAD:libs/sdl_shadercross/source"])
     process = run(pipeline(ignorestatus(command), stdout=output, stderr=devnull))
     process.exitcode == 0 || return nothing
     commit = String(strip(String(take!(output))))
@@ -188,7 +188,7 @@ end
 
 """Validate and return one checked-in Windows shadercross artifact."""
 function windows_shadercross_artifact(repository_root::String, filename::String)
-    root = joinpath(repository_root, "libs", "bin", "win64", "sdl_shadercross")
+    root = joinpath(repository_root, "libs", "sdl_shadercross", "bin", "win64")
     windows_shadercross_manifest(root;
         expected_source_commit=repository_shadercross_commit(repository_root))
     return realpath(joinpath(root, filename))
@@ -412,12 +412,16 @@ function shadercross_configure_command(
 end
 
 """Report whether the bundled shader compiler cache needs fresh configuration."""
-function shadercross_needs_configure(build::String)
+function shadercross_needs_configure(
+    build::String, source::Union{Nothing,String}=nothing)
     cache = joinpath(build, "CMakeCache.txt")
     isfile(cache) || return true
     entries = Set(eachline(cache))
     configured = "CMAKE_GENERATOR:INTERNAL=Ninja" in entries &&
         "SPIRV_WERROR:BOOL=OFF" in entries
+    if source !== nothing
+        configured &= "CMAKE_HOME_DIRECTORY:INTERNAL=$(normpath(source))" in entries
+    end
     return !configured
 end
 
@@ -463,7 +467,8 @@ end
 
 """Build and return the SDL_shadercross CLI from the repository submodule."""
 function build_bundled_shadercross(repository_root::String)
-    source = joinpath(repository_root, "tools", "shadercross")
+    source = joinpath(
+        repository_root, "libs", "sdl_shadercross", "source")
     isfile(joinpath(source, "CMakeLists.txt")) || error(
         "SDL_shadercross submodule is missing. Run git submodule update --init --recursive.")
     for dependency in SHADERCROSS_DEPENDENCIES
@@ -472,7 +477,7 @@ function build_bundled_shadercross(repository_root::String)
     end
     cmake = resolve_tool("cmake")
     build = joinpath(repository_root, ".build", "shadercross")
-    if shadercross_needs_configure(build)
+    if shadercross_needs_configure(build, source)
         checked_setup_command(
             shadercross_configure_command(cmake, source, build),
             "SDL_shadercross configuration")

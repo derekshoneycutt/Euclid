@@ -8,7 +8,7 @@ import dynviewmodel "../../dynview/model"
 import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
 import shapemodel "../../shapes/model"
-import "../../julialib"
+import julialib "../../../libs/julia/bindings"
 
 import "base:runtime"
 import "core:encoding/uuid"

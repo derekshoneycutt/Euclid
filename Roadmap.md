@@ -159,7 +159,8 @@ General features:
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
 - [X] Comprehensive mouse/keyboard focus system
-- [ ] IME/Accesibility/etc. Features
+- [ ] Accesibility Features
+- [ ] IME etc.
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation

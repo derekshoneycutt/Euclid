@@ -68,22 +68,28 @@ end
         "shadercross", spec, "output.spv", "output.json")
     @test reflection.exec[3:6] == ["--source", "SPIRV", "--dest", "JSON"]
     configure = Shaders.shadercross_configure_command(
-        "cmake", "/source/tools/shadercross", "/source/.build/shadercross")
+        "cmake", "/source/libs/sdl_shadercross/source", "/source/.build/shadercross")
     @test configure.exec[2] == "--fresh"
     @test configure.exec[7:8] == ["-G", "Ninja"]
     @test "-DSDLSHADERCROSS_VENDORED=ON" in configure.exec
     @test "-DSDLSHADERCROSS_INSTALL=OFF" in configure.exec
     @test "-DSPIRV_WERROR=OFF" in configure.exec
     mktempdir() do build
-        @test Shaders.shadercross_needs_configure(build)
+        source = "/source/libs/sdl_shadercross/source"
+        @test Shaders.shadercross_needs_configure(build, source)
         write(joinpath(build, "CMakeCache.txt"), "SPIRV_WERROR:BOOL=ON\n")
-        @test Shaders.shadercross_needs_configure(build)
+        @test Shaders.shadercross_needs_configure(build, source)
         write(joinpath(build, "CMakeCache.txt"),
             "CMAKE_GENERATOR:INTERNAL=Unix Makefiles\nSPIRV_WERROR:BOOL=OFF\n")
-        @test Shaders.shadercross_needs_configure(build)
+        @test Shaders.shadercross_needs_configure(build, source)
         write(joinpath(build, "CMakeCache.txt"),
-            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n")
-        @test !Shaders.shadercross_needs_configure(build)
+            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n" *
+            "CMAKE_HOME_DIRECTORY:INTERNAL=/source/tools/shadercross\n")
+        @test Shaders.shadercross_needs_configure(build, source)
+        write(joinpath(build, "CMakeCache.txt"),
+            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n" *
+            "CMAKE_HOME_DIRECTORY:INTERNAL=$source\n")
+        @test !Shaders.shadercross_needs_configure(build, source)
     end
     @test Shaders.shadercross_build_command(
         "cmake", "/source/.build/shadercross").exec[end] == "--parallel"

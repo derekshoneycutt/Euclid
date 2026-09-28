@@ -81,9 +81,9 @@ on macOS. Use the `system-harfbuzz` CMake preset to select and validate this mod
   Strawberry Perl or MSYS2.
 
 The x64 SDL3, SDL_image, and libpng runtime payload and MSVC import libraries
-are checked in under `libs/bin/win64/sdl`; `manifest.toml` records their versions,
+are checked in under `libs/sdl/bin/win64`; `manifest.toml` records their versions,
 licenses, and hashes. The matching checked-in shadercross CLI, SPIR-V tools, and DLL
-closure are under `libs/bin/win64/sdl_shadercross`; ordinary Windows builds do not
+closure are under `libs/sdl_shadercross/bin/win64`; ordinary Windows builds do not
 require an external SDL3 development package or a local shadercross source build.
 Windows supports only the default `HarfBuzz_jll` provider.
 

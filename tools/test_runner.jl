@@ -89,7 +89,6 @@ function odin_test_command(linker_flags::String; source_path::String=ODIN_SOURCE
         "-out:$ODIN_TEST_BINARY",
         "-define:EUCLID_ENABLE_HARNESS=true",
         "-define:EUCLID_ENABLE_SCENARIOS=true",
-        "-define:ODIN_TEST_THREADS=1",
     ]
     !isempty(report_path) && push!(odin_command,
         "-define:ODIN_TEST_JSON_REPORT=$report_path")

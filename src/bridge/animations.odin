@@ -4,7 +4,7 @@ import bridgemodel "model"
 import shapemodel "../shapes/model"
 
 import audio "../audio"
-import "../julialib"
+import julialib "../../libs/julia/bindings"
 import "../core"
 import protocol "../core/protocol"
 import "../files"
@@ -283,7 +283,9 @@ animation_reload_update_needed :: proc(state: ^core.Euclid_General_State) -> boo
     if service != nil && service^.reload_requested {
         return true
     }
-    package_identity, ok := files.packaged_asset_package_identity()
+    asset_config := julia_service_asset_config(service)
+    package_identity, ok := files.packaged_asset_package_identity_with_config(
+        &asset_config)
     if !ok {
         return false
     }
@@ -860,12 +862,28 @@ record_runtime_reload_event :: proc(
     })
 }
 
+//   Report whether automatic reload work is already current or known to have failed.
+asset_reload_can_skip :: proc(
+    state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
+    force_reload: bool, package_identity: [32]byte) -> bool {
+    if force_reload {
+        return false
+    }
+    if asset_package_identity_current(state, package_identity) {
+        return true
+    }
+    return service != nil && service^.reload_failed_package_identity_valid &&
+        package_identity == service^.reload_failed_package_identity
+}
+
 //   Detect packaged asset updates and hot-reload Julia script/interface state when changed.
 reload_packaged_assets_if_updated :: proc(
     state: ^core.Euclid_General_State, service: ^Julia_Runtime_Service,
     host: ^Julia_Runtime_Host, request: bridgemodel.Animation_Lifecycle_Requested,
     target: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
-    package_identity, ok := files.packaged_asset_package_identity()
+    asset_config := julia_service_asset_config(service)
+    package_identity, ok := files.packaged_asset_package_identity_with_config(
+        &asset_config)
     if !ok {
         return true
     }
@@ -874,12 +892,7 @@ reload_packaged_assets_if_updated :: proc(
     if service != nil {
         service^.reload_requested = false
     }
-    if !force_reload && asset_package_identity_current(state, package_identity) {
-        return true
-    }
-    if !force_reload && service != nil &&
-        service^.reload_failed_package_identity_valid &&
-        package_identity == service^.reload_failed_package_identity {
+    if asset_reload_can_skip(state, service, force_reload, package_identity) {
         return true
     }
     if service != nil {
@@ -925,10 +938,12 @@ refresh_packaged_assets :: proc(
     state: ^core.Euclid_General_State,
     service: ^Julia_Runtime_Service, package_identity: [32]byte) -> bool {
 
-    fingerprint, fingerprint_ok := files.packaged_sysimage_input_fingerprint(
-        context.temp_allocator)
+    asset_config := julia_service_asset_config(service)
+    fingerprint, fingerprint_ok :=
+        files.packaged_sysimage_input_fingerprint_with_config(
+            &asset_config, context.temp_allocator)
     if !fingerprint_ok ||
-       !files.reload_compatible_packaged_assets_root(fingerprint) {
+       !files.reload_compatible_packaged_assets_root(fingerprint, &asset_config) {
         fmt.eprintln("Julia asset reload skipped: failed to re-extract assets package")
         mark_julia_reload_failed(service, package_identity)
         record_runtime_reload_event(state, "runtime.reload_rolled_back")
@@ -938,7 +953,8 @@ refresh_packaged_assets :: proc(
 }
 
 //   Construct one generation into a caller-rooted Julia value slot.
-create_julia_runtime_generation :: proc() -> ^julialib.jl_value_t {
+create_julia_runtime_generation :: proc(
+    service: ^Julia_Runtime_Service) -> ^julialib.jl_value_t {
     main_module := resolve_main_module()
     if main_module == nil {
         return nil
@@ -948,7 +964,9 @@ create_julia_runtime_generation :: proc() -> ^julialib.jl_value_t {
     if constructor == nil {
         return nil
     }
-    content_path, content_ok := resolve_packaged_julia_content_path(false)
+    asset_config := julia_service_asset_config(service)
+    content_path, content_ok := resolve_packaged_julia_content_path(
+        false, &asset_config)
     if !content_ok {
         return nil
     }
@@ -1036,7 +1054,7 @@ begin_julia_interface_reload :: proc(
 create_julia_interface_reload_candidate :: proc(
     service: ^Julia_Runtime_Service,
     package_identity: [32]byte) -> ^julialib.jl_value_t {
-    candidate := create_julia_runtime_generation()
+    candidate := create_julia_runtime_generation(service)
     if candidate == nil {
         fmt.eprintln("Julia asset reload: candidate generation construction failed")
         mark_julia_reload_failed(service, package_identity)

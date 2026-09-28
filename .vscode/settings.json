@@ -31,11 +31,4 @@
     },
     "scope": "workspace"
   },
-  "odinTestExplorer.testSuites": [
-    {
-      "name": "Application",
-      "path": "src",
-      "arguments": ["-all-packages"]
-    }
-  ]
 }

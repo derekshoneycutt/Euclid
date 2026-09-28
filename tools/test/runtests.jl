@@ -359,7 +359,7 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             write(binary, "application")
             write(assets, "assets")
             write(manifest, """
-shadercross_path = "/tools/shadercross"
+shadercross_path = "/libs/sdl_shadercross/source"
 shadercross_identity = "sha256:tool"
 shadercross_sha256 = "tool"
 shadercross_closure = ["/lib/libcompiler.so"]
@@ -479,7 +479,7 @@ reflection_sha256 = "reflection"
         @test [suite.name for suite in suites] == ["julia", "odin"]
         @test [suite.language for suite in suites] == ["Julia", "Odin"]
         command = TestRunner.odin_test_command("")
-        @test "-define:ODIN_TEST_THREADS=1" in command
+        @test !("-define:ODIN_TEST_THREADS=1" in command)
         @test !("-define:RAYLIB_SHARED=true" in command)
         @test "-out:$(TestRunner.ODIN_TEST_BINARY)" in command
         @test dirname(TestRunner.ODIN_TEST_BINARY) ==

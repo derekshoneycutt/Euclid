@@ -12,9 +12,9 @@ export native_linker_flags, native_runtime_dirs, native_runtime_environment,
 const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const IMPORT_LIB_DIR = joinpath(REPOSITORY_ROOT, "bin", ".native_import_libs")
-const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "bin", "win64", "sdl")
+const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "sdl", "bin", "win64")
 const HARFBUZZ_PROVIDER_ENV = "EUCLID_HARFBUZZ_PROVIDER"
-const SQLITE3_SOURCE_DIR = joinpath(REPOSITORY_ROOT, "libs", "src", "sqlite3")
+const SQLITE3_SOURCE_DIR = joinpath(REPOSITORY_ROOT, "libs", "sqlite3", "source")
 const SQLITE3_BUILD_DIR = joinpath(REPOSITORY_ROOT, ".build", "sqlite3")
 const SQLITE3_INPUTS = [
     "sqlite3.c", "sqlite3.h", "sqlite3ext.h", "spellfix.c", "sqlite3_custom.c"]

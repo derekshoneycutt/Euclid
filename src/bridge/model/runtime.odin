@@ -5,7 +5,7 @@ import evidence_profile "../../evidence/profile"
 import evidence_session "../../evidence/session"
 import evidence_trace "../../evidence/trace"
 import presentationmodel "../presentation"
-import "../../julialib"
+import julialib "../../../libs/julia/bindings"
 
 import "core:encoding/uuid"
 import "core:mem"
@@ -283,6 +283,7 @@ Julia_Runtime_Service :: struct {
     evidence_ring: evidence_trace.Ring,
     evidence_session: ^evidence_session.Session,
     profile: evidence_profile.State,
+    asset_root_override: string,
     runtime_host: ^julialib.jl_value_t,
     worker: ^thread.Thread,
     request_link: Communication_Link(Julia_Host_Ingress),

@@ -83,8 +83,11 @@ wait_for_julia_request :: proc(
 // Returns:
 //   - ok: true when the service was created and initialized.
 session_start_julia_service :: proc(
-    out: ^Session_Julia_Service, profile_path: string = "") -> bool {
-    julia_service, service_err := julia.create_julia_runtime_service(profile_path)
+    out: ^Session_Julia_Service,
+    profile_path: string = "",
+    asset_config: ^files.Asset_Root_Config = nil) -> bool {
+    julia_service, service_err := julia.create_julia_runtime_service(
+        profile_path, asset_config)
     if service_err != .None || julia_service == nil {
         log.errorf("julia_startup_failed phase=service_create error=%d",
             int(service_err))
@@ -177,8 +180,10 @@ session_load_content :: proc(
 }
 
 //   Resolve and start the immutable built-in search index for one runtime session.
-session_create_search_service :: proc() -> ^viewsearch.Search_Service {
-    asset, asset_ok := files.packaged_search_asset(context.temp_allocator)
+session_create_search_service :: proc(
+    asset_config: ^files.Asset_Root_Config = nil) -> ^viewsearch.Search_Service {
+    asset, asset_ok := files.packaged_search_asset_with_config(
+        asset_config, context.temp_allocator)
     if asset_ok {
         service := viewsearch.search_service_create(
             asset.database_path, asset.corpus_fingerprint)
@@ -210,7 +215,7 @@ create_runtime_session :: proc(
     }
     started: Session_Julia_Service
     if !session_start_julia_service(
-        &started, julia_worker_profile_path(settings^.profile_path)) {
+        &started, julia_worker_profile_path(settings^.profile_path), asset_config) {
         return {}, false
     }
     julia_service := started.service
@@ -219,7 +224,7 @@ create_runtime_session :: proc(
     if !session_load_content(julia_service, settings, started.initialize_id, &state) {
         return {}, false
     }
-    search_service := session_create_search_service()
+    search_service := session_create_search_service(asset_config)
     if search_service == nil {
         _ = shutdown_runtime_session({state = state, julia_service = julia_service})
         return {}, false

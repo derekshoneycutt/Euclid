@@ -23,12 +23,12 @@ end
 
 const DefaultExcludes = [
     "tools/analysis",
-    "tools/shadercross",
-    "src/julialib",
+    "libs/sdl_shadercross/source",
+    "libs/julia/bindings",
 ]
 const AllExcludes = [
     "tools/analysis",
-    "tools/shadercross",
+    "libs/sdl_shadercross/source",
 ]
 
 const RuleResponses = Dict(

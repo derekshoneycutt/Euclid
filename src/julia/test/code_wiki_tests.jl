@@ -103,11 +103,11 @@ end
     repository_root = abspath(joinpath(@__DIR__, "..", "..", ".."))
     config = OdinWikiConfig(
         repository_root=repository_root,
-        excluded_roots=["src/julialib"])
+        excluded_roots=["libs/julia/bindings"])
     packages = discover_odin_packages(config)
 
     @test "src/core" in packages
-    @test !("src/julialib" in packages)
+    @test !("libs/julia/bindings" in packages)
 
     package = extract_odin_package(config, "src/view/font/model")
     symbol = only(filter(item -> item.name == "font_weight_rank", package.symbols))

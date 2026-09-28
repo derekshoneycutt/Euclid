@@ -1,9 +1,9 @@
-[submodule "src/julialib"]
-    path = src/julialib
+[submodule "libs/julia/bindings"]
+    path = libs/julia/bindings
     url = https://github.com/derekshoneycutt/julialib.odin
 [submodule "tools/analysis"]
     path = tools/analysis
     url = https://github.com/derekshoneycutt/OdinJuliaAnalysis.git
-[submodule "tools/shadercross"]
-    path = tools/shadercross
+[submodule "libs/sdl_shadercross/source"]
+    path = libs/sdl_shadercross/source
     url = https://github.com/libsdl-org/SDL_shadercross.git

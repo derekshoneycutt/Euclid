@@ -14,7 +14,6 @@ function provider_result()
     arguments = [
         "-define:EUCLID_ENABLE_HARNESS=true",
         "-define:EUCLID_ENABLE_SCENARIOS=true",
-        "-define:ODIN_TEST_THREADS=1",
         "-extra-linker-flags:$(native_test_linker_flags())",
     ]
     runtime_environment = native_runtime_environment()

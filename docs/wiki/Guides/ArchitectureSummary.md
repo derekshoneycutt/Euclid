@@ -75,7 +75,7 @@ If you are new, read in this order:
 | **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
-| **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `src/julialib/julialib.odin` (git submodule) |
+| **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `libs/julia/bindings/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution, transactional GIF publication, and native static and animated image decode. | `src/files/files.odin`, `src/terminal/graphics/native/sdl_image.odin` |
 | **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
 | **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/particles.odin` |
@@ -817,9 +817,10 @@ the owner responsible for release.
   `search/animations.sqlite3` index, and other assets into `bin/assets.pkg`; HLSL and
   build-only shader tools are not runtime assets. Debug builds publish a matching
   package and `assets.pkg.identity` commit sidecar beside the debug executable.
-- SDL_shadercross and its recursive dependencies are tracked under `tools/shadercross`.
+- SDL_shadercross and its recursive dependencies are tracked under
+  `libs/sdl_shadercross/source`.
   Linux and macOS asset builds configure that source under `.build/shadercross`.
-  Windows uses the manifest-validated provider under `libs/bin/win64/sdl_shadercross`,
+  Windows uses the manifest-validated provider under `libs/sdl_shadercross/bin/win64`,
   whose source commit must equal the parent repository gitlink;
   `EUCLID_SHADERCROSS` is an explicit developer override.
 - Startup requires the package and identity sidecar beside the executable. It selects

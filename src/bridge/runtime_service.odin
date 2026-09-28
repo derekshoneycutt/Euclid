@@ -12,7 +12,8 @@ import audio "../audio"
 import "../core"
 import protocol "../core/protocol"
 import dyncore "../dynview/core"
-import "../julialib"
+import julialib "../../libs/julia/bindings"
+import "../files"
 import evidence_profile "../evidence/profile"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
@@ -248,6 +249,15 @@ Julia_Runtime_Diagnostics :: struct {
     request_saturation_count: u64,
     reload_state: Julia_Reload_State,
     runtime_generation: u64,
+}
+
+//   Borrow the asset-root selection retained for the Julia service lifetime.
+julia_service_asset_config :: proc(
+    service: ^Julia_Runtime_Service) -> files.Asset_Root_Config {
+    if service == nil {
+        return {}
+    }
+    return {asset_root_override = service^.asset_root_override}
 }
 
 //   Preserve bounded elapsed time while one replaceable tick is in flight.
@@ -1645,10 +1655,15 @@ init_julia_runtime_channels :: proc(
 //   Initialize display-independent state before starting the Julia owner worker.
 initialize_julia_runtime_state :: proc(
     service: ^Julia_Runtime_Service,
-    profile_path: string) {
+    profile_path: string,
+    asset_config: ^files.Asset_Root_Config) {
     service^.next_request_id = 1
     service^.lifecycle = .Not_Started
     service^.published_view_snapshot_index = -1
+    if asset_config != nil && len(asset_config^.asset_root_override) > 0 {
+        service^.asset_root_override = strings.clone(
+            asset_config^.asset_root_override, context.allocator)
+    }
     if len(profile_path) > 0 &&
         !evidence_profile.init_spall(&service^.profile, profile_path) {
         fmt.eprintln("Failed to initialize Julia worker profile output.")
@@ -1659,7 +1674,9 @@ initialize_julia_runtime_state :: proc(
 //   Create the bounded channels, staging storage, and persistent Julia owner worker.
 // On partial failure, resources are released in reverse construction order. The caller owns
 // the returned service and must stop Julia before destroy_julia_runtime_service.
-create_julia_runtime_service :: proc(profile_path: string = "") -> (
+create_julia_runtime_service :: proc(
+    profile_path: string = "",
+    asset_config: ^files.Asset_Root_Config = nil) -> (
     ^Julia_Runtime_Service, runtime.Allocator_Error) {
     service := new(Julia_Runtime_Service)
     evidence_trace.ring_init(&service^.evidence_ring, .Julia_Host)
@@ -1675,7 +1692,7 @@ create_julia_runtime_service :: proc(profile_path: string = "") -> (
         return nil, .Out_Of_Memory
     }
 
-    initialize_julia_runtime_state(service, profile_path)
+    initialize_julia_runtime_state(service, profile_path, asset_config)
     service^.worker =
         thread.create_and_start_with_data(rawptr(service), julia_runtime_worker)
     if service^.worker == nil {
@@ -1683,6 +1700,7 @@ create_julia_runtime_service :: proc(profile_path: string = "") -> (
         view_snapshot_slots_destroy(service)
         communication_link_destroy(&service^.event_link)
         communication_link_destroy(&service^.request_link)
+        delete(service^.asset_root_override)
         free(service)
         return nil, .Out_Of_Memory
     }
@@ -2860,6 +2878,7 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
     }
     communication_link_destroy(&service^.event_link)
     communication_link_destroy(&service^.request_link)
+    delete(service^.asset_root_override)
     free(service)
 }
 
@@ -2887,7 +2906,8 @@ initialize_julia_state :: proc(state: ^core.Euclid_General_State) -> bool {
 // Returns:
 //   - The unrooted host value, which the caller must root before another Julia allocation.
 create_julia_runtime_host :: proc(
-    state: ^core.Euclid_General_State) -> ^julialib.jl_value_t {
+    state: ^core.Euclid_General_State,
+    asset_config: ^files.Asset_Root_Config = nil) -> ^julialib.jl_value_t {
 
     if state == nil {
         return nil
@@ -2897,7 +2917,8 @@ create_julia_runtime_host :: proc(
     if constructor == nil {
         return nil
     }
-    content_path, content_ok := resolve_packaged_julia_content_path(false)
+    content_path, content_ok := resolve_packaged_julia_content_path(
+        false, asset_config)
     if !content_ok {
         return nil
     }
@@ -2918,7 +2939,8 @@ initialize_julia_worker_host :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host,
     frame: ^Julia_Runtime_Gc_Frame) -> bool {
 
-    if !initiate_julia() {
+    asset_config := julia_service_asset_config(service)
+    if !initiate_julia(&asset_config) {
         return false
     }
     gc_stack := julialib.jl_get_pgcstack()
@@ -3045,7 +3067,8 @@ initialize_julia_runtime_host :: proc(
     if service == nil || host == nil || state == nil || host^.runtime != nil {
         return false
     }
-    host^.runtime = create_julia_runtime_host(state)
+    asset_config := julia_service_asset_config(service)
+    host^.runtime = create_julia_runtime_host(state, &asset_config)
     if host^.runtime == nil {
         print_julia_exception("create_euclid_runtime_host")
         fmt.eprintln("Julia startup: failed to create runtime host")

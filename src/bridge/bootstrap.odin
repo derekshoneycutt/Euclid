@@ -2,7 +2,7 @@ package bridge
 
 import bridgemodel "model"
 
-import "../julialib"
+import julialib "../../libs/julia/bindings"
 import "../core"
 import "../files"
 
@@ -20,8 +20,10 @@ Julia_Exception_Format :: struct {
 }
 
 //   Resolve the mandatory verified Julia sysimage from packaged assets.
-resolve_julia_sysimage_path :: proc() -> (string, bool) {
-    return files.resolve_packaged_sysimage_path(nil, context.temp_allocator)
+resolve_julia_sysimage_path :: proc(
+    asset_config: ^files.Asset_Root_Config = nil) -> (string, bool) {
+    return files.resolve_packaged_sysimage_path(
+        asset_config, context.temp_allocator)
 }
 
 //   Initialize the Julia runtime and load the packaged bridge script into Main.
@@ -29,15 +31,17 @@ resolve_julia_sysimage_path :: proc() -> (string, bool) {
 // Notes:
 //   - Intended to be called once during application startup before Julia bridge calls.
 //   - Exits immediately if packaged script include fails.
-initiate_julia :: proc() -> bool {
-    project_path, project_ok := resolve_packaged_julia_project_path(false)
+initiate_julia :: proc(
+    asset_config: ^files.Asset_Root_Config = nil) -> bool {
+    project_path, project_ok := resolve_packaged_julia_project_path(
+        false, asset_config)
     if !project_ok {
         return false
     }
     julialib.julia_options()^.project = strings.clone_to_cstring(
         project_path, context.temp_allocator)
 
-    image_path, has_image := resolve_julia_sysimage_path()
+    image_path, has_image := resolve_julia_sysimage_path(asset_config)
     if !has_image {
         fmt.eprintln("Julia startup failed: packaged sysimage is missing or invalid")
         return false
@@ -46,7 +50,7 @@ initiate_julia :: proc() -> bool {
     image_path_c := strings.clone_to_cstring(image_path, context.temp_allocator)
     julialib.jl_init_with_image_file(nil, image_path_c)
 
-    return include_packaged_script(false)
+    return include_packaged_script(false, asset_config)
 }
 
 //   Shut down the Julia runtime and flush Julia-side teardown hooks.
@@ -243,8 +247,11 @@ include_packaged_script_failure :: proc(exit_on_failure: bool) -> bool {
 }
 
 //   Resolve the packaged Julia project directory that owns Project.toml.
-resolve_packaged_julia_project_path :: proc(exit_on_failure: bool) -> (string, bool) {
-    project_path := files.packaged_asset_path("julia", context.temp_allocator)
+resolve_packaged_julia_project_path :: proc(
+    exit_on_failure: bool,
+    asset_config: ^files.Asset_Root_Config = nil) -> (string, bool) {
+    project_path := files.packaged_asset_path_with_config(
+        asset_config, "julia", context.temp_allocator)
     if len(project_path) == 0 {
         fmt.eprintln("Failed to resolve packaged Julia project path.")
         fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
@@ -255,8 +262,11 @@ resolve_packaged_julia_project_path :: proc(exit_on_failure: bool) -> (string, b
 }
 
 //   Resolve the packaged Julia content directory used by generation loading.
-resolve_packaged_julia_content_path :: proc(exit_on_failure: bool) -> (string, bool) {
-    content_path := files.packaged_asset_path("content", context.temp_allocator)
+resolve_packaged_julia_content_path :: proc(
+    exit_on_failure: bool,
+    asset_config: ^files.Asset_Root_Config = nil) -> (string, bool) {
+    content_path := files.packaged_asset_path_with_config(
+        asset_config, "content", context.temp_allocator)
     if len(content_path) == 0 {
         fmt.eprintln("Failed to resolve packaged Julia content path.")
         fmt.eprintln("Expected content directory in assets package next to executable.")
@@ -267,8 +277,11 @@ resolve_packaged_julia_content_path :: proc(exit_on_failure: bool) -> (string, b
 }
 
 //   Resolve the packaged Julia script path needed for Main.include.
-resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, bool) {
-    script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
+resolve_packaged_script_include_path :: proc(
+    exit_on_failure: bool,
+    asset_config: ^files.Asset_Root_Config = nil) -> (string, bool) {
+    script_path := files.packaged_asset_path_with_config(
+        asset_config, "julia/script.jl", context.temp_allocator)
     if len(script_path) == 0 {
         fmt.eprintln("Failed to resolve packaged Julia script path.")
         fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
@@ -320,8 +333,11 @@ call_include_packaged_script :: proc(
 //
 // Notes:
 //   - When exit_on_failure is true, unrecoverable include errors terminate the process.
-include_packaged_script :: proc(exit_on_failure: bool) -> bool {
-    script_path, path_ok := resolve_packaged_script_include_path(exit_on_failure)
+include_packaged_script :: proc(
+    exit_on_failure: bool,
+    asset_config: ^files.Asset_Root_Config = nil) -> bool {
+    script_path, path_ok := resolve_packaged_script_include_path(
+        exit_on_failure, asset_config)
     if !path_ok {
         return false
     }

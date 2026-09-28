@@ -41,8 +41,8 @@ x86/
 bld/
 [Bb]in/
 !libs/
-!libs/bin/
-!libs/bin/**
+!libs/*/bin/
+!libs/*/bin/**
 [Oo]bj/
 [Oo]ut/
 [Ll]og/

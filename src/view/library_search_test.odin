@@ -8,6 +8,8 @@ import viewmodel "model"
 import viewsearch "search"
 
 import "core:encoding/uuid"
+import "core:os"
+import "core:path/filepath"
 import "core:testing"
 import "core:time"
 
@@ -207,7 +209,16 @@ library_search_debounce_and_submit_timing :: proc(t: ^testing.T) {
 // Verify the packaged index reaches display-owned tree identity through the real worker.
 @(test)
 library_search_packaged_index_commits_visible_node :: proc(t: ^testing.T) {
-    asset, asset_ok := files.packaged_search_asset(context.allocator)
+    cwd, cwd_err := os.get_working_directory(context.temp_allocator)
+    testing.expect(t, cwd_err == nil)
+    bin_dir, bin_join_err := filepath.join(
+        []string{cwd, "bin"}, context.allocator)
+    testing.expect(t, bin_join_err == nil)
+    defer delete(bin_dir)
+    asset_config := files.make_asset_root_config(bin_dir, context.allocator)
+    defer files.destroy_asset_root_config(&asset_config)
+    asset, asset_ok := files.packaged_search_asset_with_config(
+        &asset_config, context.allocator)
     defer delete(asset.database_path, context.allocator)
     defer delete(asset.corpus_fingerprint, context.allocator)
     testing.expect(t, asset_ok)

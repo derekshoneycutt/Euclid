@@ -87,7 +87,7 @@
       "bom-ref": "runtime:sdl3",
       "name": "SDL3",
       "version": "3.4.x",
-      "description": "Window, input, audio, platform-service, and SDL_GPU runtime used by the Odin host application. Windows x64 uses the repository payload declared by libs/bin/win64/sdl/manifest.toml.",
+      "description": "Window, input, audio, platform-service, and SDL_GPU runtime used by the Odin host application. Windows x64 uses the repository payload declared by libs/sdl/bin/win64/manifest.toml.",
       "scope": "required"
     },
     {
@@ -158,7 +158,7 @@
     },
     {
       "name": "euclid.runtime.windows.sdl-manifest",
-      "value": "libs/bin/win64/sdl/manifest.toml"
+      "value": "libs/sdl/bin/win64/manifest.toml"
     }
   ]
 }

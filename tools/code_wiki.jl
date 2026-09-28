@@ -441,7 +441,7 @@ function generate_requested_odin_page(repository_root::String, arguments::Vector
         joinpath(repository_root, "docs", "wiki", "Code", "Odin", "core.md") :
         abspath(arguments[2])
     config = OdinWikiConfig(
-        repository_root=repository_root, excluded_roots=["src/julialib"])
+        repository_root=repository_root, excluded_roots=["libs/julia/bindings"])
     package = extract_odin_package(config, package_path)
     write_odin_package_page(package, output_path)
     println("Wrote ", relpath(output_path, repository_root))
@@ -451,7 +451,7 @@ end
 """Extract the configured code-reference packages without executing Julia modules."""
 function extract_default_wiki_packages(repository_root::String)
     odin_config = OdinWikiConfig(
-        repository_root=repository_root, excluded_roots=["src/julialib"])
+        repository_root=repository_root, excluded_roots=["libs/julia/bindings"])
     odin_paths = discover_odin_packages(odin_config)
     packages = map(path -> extract_odin_package(odin_config, path), odin_paths)
     julia_config = JuliaWikiConfig(repository_root=repository_root)

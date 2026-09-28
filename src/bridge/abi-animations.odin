@@ -3,7 +3,7 @@ package bridge
 import animation_model "../core/animation"
 import bridgemodel "model"
 
-import "../julialib"
+import julialib "../../libs/julia/bindings"
 import "../core"
 
 // Carry one animation key and deterministic schema identity across the C ABI.

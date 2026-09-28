@@ -489,10 +489,12 @@ resolve_packaged_sysimage_path :: proc(
     return materialize_current_packaged_sysimage(exe_dir, allocator)
 }
 
-//   Return the active extracted package's validated sysimage input fingerprint.
-packaged_sysimage_input_fingerprint :: proc(
+//   Return the selected package's validated sysimage input fingerprint.
+packaged_sysimage_input_fingerprint_with_config :: proc(
+    config: ^Asset_Root_Config,
     allocator: mem.Allocator) -> (string, bool) {
-    exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
+    exe_dir, exe_ok := resolve_executable_dir_with_config(
+        config, context.temp_allocator)
     if !exe_ok {return "", false}
     unpack_dir, unpack_ok := resolve_current_asset_unpack_dir(
         exe_dir, context.temp_allocator)
@@ -754,16 +756,11 @@ reload_packaged_assets_root_with_config :: proc(
     return reload_packaged_assets_root(config)
 }
 
-//   Read the committed semantic identity of the adjacent assets package.
-//
-// Parameters:
-//   - none.
-//
-// Returns:
-//   - identity: Fixed SHA-256 identity when the sidecar is valid.
-//   - ok: true when the committed identity was read and decoded.
-packaged_asset_package_identity :: proc() -> ([32]byte, bool) {
-    exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
+//   Read the committed semantic identity under an optional asset root.
+packaged_asset_package_identity_with_config :: proc(
+    config: ^Asset_Root_Config) -> ([32]byte, bool) {
+    exe_dir, exe_ok := resolve_executable_dir_with_config(
+        config, context.temp_allocator)
     if !exe_ok {
         return {}, false
     }
@@ -786,10 +783,12 @@ packaged_asset_path :: proc(
     return packaged_asset_path_with_config(nil, relative_path, allocator)
 }
 
-//   Resolve the validated built-in search database and expected corpus identity.
-packaged_search_asset :: proc(
+//   Resolve the validated built-in search database under an optional asset root.
+packaged_search_asset_with_config :: proc(
+    config: ^Asset_Root_Config,
     allocator: mem.Allocator) -> (Packaged_Search_Asset, bool) {
-    exe_dir, exe_ok := resolve_executable_dir(context.temp_allocator)
+    exe_dir, exe_ok := resolve_executable_dir_with_config(
+        config, context.temp_allocator)
     if !exe_ok || !ensure_packaged_assets_unpacked_with_force(exe_dir, false) {
         return {}, false
     }
@@ -832,11 +831,6 @@ packaged_asset_path_with_config :: proc(
     }
 
     return path
-}
-
-//   Resolve executable directory once with standard validity checks.
-resolve_executable_dir :: proc(allocator := context.temp_allocator) -> (string, bool) {
-    return resolve_executable_dir_with_config(nil, allocator)
 }
 
 //   Resolve the executable directory while honoring an explicit asset-root config.
