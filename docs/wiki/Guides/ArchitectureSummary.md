@@ -68,6 +68,7 @@ If you are new, read in this order:
 | **Odin** | Shared Foundations | Bounded storage, animation-generation memory, and native protocol contracts. | `src/core/storage/`, `src/core/animation/`, `src/core/protocol/` |
 | **Odin** | Coordinator Contracts | Bridge transport and presentation contracts plus display and Terminal runtime models. | `src/bridge/model/`, `src/bridge/presentation/`, `src/view/model/`, `src/view/terminal/model/` |
 | **Odin** | Input Boundary | Once-polled portable input frames, bounded event storage, hotkeys, and owner-bound Terminal encoding. | `src/view/input/`, `src/view/view.odin` |
+| **Odin** | Accessibility | Bounded native-ready publication, session-local identity and action storage, validation, and display-owned platform adapters. | `src/accessibility/`, `src/view/native/accessibility/` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
 | **Odin** | Font Cache | Required JuliaMono/NewCM residency, MATH-table admission, demand-paged glyphs, asynchronous CPU preparation, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
@@ -258,11 +259,20 @@ The repository analyzer classifies every production SDL import under one exact o
 | Rendering | Native draw, stroke, and dust owners hold SDL_GPU pipelines and buffers; higher packages append portable bounded commands. |
 | Images and capture | SDL_image workers decode Terminal pixels, while framebuffer readback and the streaming GIF encoder operate on the SDL scene target. |
 | Publication | Font and Terminal graphics policy retain bounded generation, publication, playback, and cleanup state through portable records. |
+| Accessibility | Portable storage owns validated native-ready facts, monotonic IDs, and bounded callback ingress; the display-owned platform adapter owns AccessKit handles and host focus/bounds forwarding. |
 
 Canonical shapes and particles, Dynview compile/layout/tracking, Terminal
 protocol/storage, and portable input types cannot import SDL directly. The
 repository-owned `EUCLID-SDL-BOUNDARY` rule rejects unclassified SDL imports, exact
 owner drift, and every Raylib or rlgl import.
+
+Accessibility callbacks can only copy protected publication state, admit bounded
+requests, update content-free diagnostics, and free transferred native requests. They
+cannot enter Julia or mutate display-owned UI state. Adapter teardown closes
+publication and action admission before freeing AccessKit and before destroying the SDL
+window. The Linux Phase 1 surface is intentionally limited to one synthetic root and
+one static noninteractive label; later controls require explicit semantic projection
+and action validation.
 
 Detailed contracts remain with their subsystem guides and owners. See
 [Tool Rendering](ToolRendering.md) for local shader locations and fallback cleanup,

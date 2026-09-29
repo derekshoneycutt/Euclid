@@ -14,6 +14,12 @@ Node :: struct {}
 // Tree_Update is opaque storage owned by AccessKit until freed or transferred.
 Tree_Update :: struct {}
 
+// Tree_Info is opaque storage owned by AccessKit until transferred or freed.
+Tree_Info :: struct {}
+
+// Unix_Adapter is opaque storage owned by the Linux window session.
+Unix_Adapter :: struct {}
+
 Action :: enum u8 {
     Click = 0,
     Focus = 1,
@@ -26,6 +32,7 @@ Role :: enum u8 {
     Check_Box = 15,
     Text_Input = 17,
     Button = 18,
+    Application = 49,
 }
 
 Node_Id :: distinct u64
@@ -127,6 +134,46 @@ foreign accesskit_library {
     accesskit_node_new :: proc(role: Role) -> ^Node ---
     accesskit_node_free :: proc(node: ^Node) ---
     accesskit_node_role :: proc(node: ^Node) -> Role ---
+    accesskit_node_set_children :: proc(
+        node: ^Node, length: uintptr, values: [^]Node_Id) ---
+    accesskit_node_set_label :: proc(node: ^Node, value: cstring) ---
+    accesskit_node_set_label_with_length :: proc(
+        node: ^Node, value: cstring, length: uintptr) ---
+    accesskit_node_set_value :: proc(node: ^Node, value: cstring) ---
+    accesskit_node_set_value_with_length :: proc(
+        node: ^Node, value: cstring, length: uintptr) ---
+    accesskit_node_set_bounds :: proc(node: ^Node, value: Rect) ---
+    accesskit_tree_update_with_capacity_and_focus :: proc(
+        capacity: uintptr, focus: Node_Id) -> ^Tree_Update ---
+    accesskit_tree_update_free :: proc(update: ^Tree_Update) ---
+    accesskit_tree_update_push_node :: proc(
+        update: ^Tree_Update, id: Node_Id, node: ^Node) ---
+    accesskit_tree_info_new :: proc(root: Node_Id) -> ^Tree_Info ---
+    accesskit_tree_info_free :: proc(tree: ^Tree_Info) ---
+    accesskit_tree_update_set_tree_info :: proc(
+        update: ^Tree_Update, tree: ^Tree_Info) ---
+    accesskit_tree_update_set_tree_id :: proc(
+        update: ^Tree_Update, tree_id: Tree_Id) ---
     accesskit_rect_new :: proc(x0, y0, x1, y1: f64) -> Rect ---
     accesskit_action_request_free :: proc(request: ^Action_Request) ---
+}
+
+when ODIN_OS == .Linux {
+    foreign accesskit_library {
+        accesskit_unix_adapter_new :: proc(
+            activation_handler: Activation_Handler,
+            activation_handler_userdata: rawptr,
+            action_handler: Action_Handler,
+            action_handler_userdata: rawptr,
+            deactivation_handler: Deactivation_Handler,
+            deactivation_handler_userdata: rawptr) -> ^Unix_Adapter ---
+        accesskit_unix_adapter_free :: proc(adapter: ^Unix_Adapter) ---
+        accesskit_unix_adapter_set_root_window_bounds :: proc(
+            adapter: ^Unix_Adapter, outer, inner: Rect) ---
+        accesskit_unix_adapter_update_if_active :: proc(
+            adapter: ^Unix_Adapter, update_factory: Tree_Update_Factory,
+            update_factory_userdata: rawptr) ---
+        accesskit_unix_adapter_update_window_focus_state :: proc(
+            adapter: ^Unix_Adapter, is_focused: bool) ---
+    }
 }

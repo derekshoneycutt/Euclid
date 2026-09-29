@@ -248,6 +248,7 @@ sdl_platform_poll_events :: proc(
             platform, runtime, &event, window_id, &accumulation)
     }
     sdl_platform_refresh_observed_metrics(platform)
+    native.sdl_platform_service_accessibility(platform, accumulation.focused)
     native.sdl_platform_sync_text_input(platform, accumulation.focused)
     if runtime == nil {return {}}
     return sdl_input_finish_frame(platform, runtime, accumulation)

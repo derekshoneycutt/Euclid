@@ -29,3 +29,28 @@ accesskit_substrate_calls_pinned_library :: proc(t: ^testing.T) {
     rect := accesskit.accesskit_rect_new(1, 2, 3, 4)
     testing.expect_value(t, rect, accesskit.Rect{1, 2, 3, 4})
 }
+
+// Verify a complete static root and child transfer ownership into one tree update.
+@(test)
+accesskit_substrate_builds_static_tree_update :: proc(t: ^testing.T) {
+    root_id := accesskit.Node_Id(1)
+    child_id := accesskit.Node_Id(2)
+    root := accesskit.accesskit_node_new(.Unknown)
+    child := accesskit.accesskit_node_new(.Label)
+    testing.expect(t, root != nil && child != nil)
+    if root == nil || child == nil {return}
+    accesskit.accesskit_node_set_children(root, 1, &child_id)
+    accesskit.accesskit_node_set_value_with_length(child, "Euclid", 6)
+    accesskit.accesskit_node_set_bounds(child, {0, 0, 100, 40})
+    update := accesskit.accesskit_tree_update_with_capacity_and_focus(2, root_id)
+    testing.expect(t, update != nil)
+    if update == nil {
+        accesskit.accesskit_node_free(root)
+        accesskit.accesskit_node_free(child)
+        return
+    }
+    accesskit.accesskit_tree_update_push_node(update, root_id, root)
+    accesskit.accesskit_tree_update_push_node(update, child_id, child)
+    accesskit.accesskit_tree_update_set_tree_id(update, {})
+    accesskit.accesskit_tree_update_free(update)
+}

@@ -27,6 +27,7 @@ Commands:
     scenario --all [--format=text|json]
                                  Build debug and run the scenario corpus.
     accesskit-abi                Validate the pinned AccessKit C host ABI.
+    accessibility-tree           Capture the Linux Phase 1 AT-SPI tree.
     analyzer-test                Run the analyzer's own test suite.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.
@@ -57,7 +58,8 @@ const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage",
     "harness",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
-    "accesskit-abi", "analyzer-test", "wiki", "check-wiki", "clean"])
+    "accesskit-abi", "accessibility-tree", "analyzer-test", "wiki",
+    "check-wiki", "clean"])
 
 """Parse one required repository-driver command and its scoped arguments."""
 function parse_driver_invocation(arguments::Vector{String})
@@ -1780,6 +1782,20 @@ function run_accesskit_abi_command(arguments::Vector{String})
     return run_command(Cmd([JULIA_EXE, script]); cwd=SCRIPT_DIR).exit_code
 end
 
+"""Capture and validate the static Linux accessibility tree on a fresh bus."""
+function run_accessibility_tree_command(arguments::Vector{String})
+    isempty(arguments) || error("accessibility-tree does not accept arguments.")
+    Sys.islinux() || error("accessibility-tree is supported only on Linux.")
+    dbus = Sys.which("dbus-run-session")
+    dbus === nothing && error("accessibility-tree requires dbus-run-session.")
+    python = Sys.which("python3")
+    python === nothing && error("accessibility-tree requires python3 and pyatspi.")
+    script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "accesskit_tree_probe.py")
+    command = Cmd([dbus, "--", python, script])
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
 """Execute the finalized build plan, verification gate, and optional run step."""
 function execute_build_plan(command::BuildCommand, plan::BuildPlanToggles)
     julia_flags, runtime_dirs = prepare_build_plan(command, plan)
@@ -1805,6 +1821,8 @@ end
 function execute_project_action(invocation::DriverInvocation)
     invocation.action == :accesskit_abi &&
         return run_accesskit_abi_command(invocation.arguments)
+    invocation.action == :accessibility_tree &&
+        return run_accessibility_tree_command(invocation.arguments)
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
     if invocation.action in (:wiki, :check_wiki)
