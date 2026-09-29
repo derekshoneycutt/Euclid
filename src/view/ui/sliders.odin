@@ -19,7 +19,7 @@ Integer_Slider_Params :: struct {
     ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
     press_id : int,
     label : string,
-    value : ^int,
+    value : int,
     min_value : int,
     max_value : int,
     font : view_font.Font_Face,
@@ -31,6 +31,15 @@ Integer_Slider_Params :: struct {
 //   Prepared interaction and geometry for one integer slider draw.
 Integer_Slider_Result :: struct {
     value: int,
+    minimum: int,
+    maximum: int,
+    step: int,
+    changed: bool,
+    sources: viewmodel.Ui_Control_Action_Source,
+    orientation: viewmodel.Ui_Range_Orientation,
+    control_geometry: viewmodel.Ui_Control_Geometry,
+    track: geometry.Rectangle,
+    knob: geometry.Rectangle,
 }
 
 //   Value range and drag inputs for one slider drag update.
@@ -40,6 +49,13 @@ Slider_Drag_Input :: struct {
     denom : int,
     mouse_input : Input_Frame,
     track : geometry.Rectangle,
+}
+
+// Slider_Value_Result carries resolved pointer value and capture state.
+Slider_Value_Result :: struct {
+    value: int,
+    owns_press: bool,
+    changed: bool,
 }
 
 // Build knob geometry from track bounds and normalized ratio.
@@ -173,9 +189,12 @@ slider_apply_drag_value :: proc(
 slider_resolve_value :: proc(
     params: Integer_Slider_Params,
     track: geometry.Rectangle,
-    hit: geometry.Rectangle) -> (int, bool) {
+    hit: geometry.Rectangle) -> Slider_Value_Result {
 
-    clamped := clamp(params.value^, params.min_value, params.max_value)
+    spec := range_integer_spec(params.min_value, params.max_value, 1,
+        max(1, (params.max_value - params.min_value) / 10))
+    clamped := range_integer_clamp(params.value, spec)
+    before_pointer := clamped
     denom := max(1, params.max_value - params.min_value)
 
     slider_apply_wheel_step(&clamped, params.min_value, params.max_value,
@@ -191,7 +210,7 @@ slider_resolve_value :: proc(
         Slider_Drag_Input{params.min_value, params.max_value, denom,
             params.mouse_input, track},
         owns_press)
-    return clamped, owns_press
+    return {clamped, owns_press, clamped != before_pointer}
 }
 
 // slider_apply_semantic_commands applies bounded keyboard adjustments.
@@ -224,33 +243,64 @@ slider_apply_semantic_commands :: proc(
     return clamp(result, params.min_value, params.max_value)
 }
 
+// Build authoritative slider hit, clip, track, and knob geometry.
+slider_result :: proc(
+    params: Integer_Slider_Params, track, hit: geometry.Rectangle,
+    value: int, sources: viewmodel.Ui_Control_Action_Source) ->
+    Integer_Slider_Result {
+    spec := range_integer_spec(params.min_value, params.max_value, 1,
+        max(1, (params.max_value - params.min_value) / 10))
+    ratio := range_integer_normalized(value, spec)
+    _, knob := build_slider_knob(track, ratio)
+    return {
+        value = value,
+        minimum = spec.minimum,
+        maximum = spec.maximum,
+        step = spec.step,
+        changed = value != params.value,
+        sources = sources,
+        orientation = .Horizontal,
+        control_geometry = {
+            bounds = viewmodel.Rectangle(hit),
+            clip_bounds = viewmodel.Rectangle(params.panel),
+        },
+        track = track,
+        knob = knob,
+    }
+}
+
 //   Resolve one integer slider update without issuing drawing commands.
 update_settings_integer_slider :: proc(
     params: Integer_Slider_Params) -> Integer_Slider_Result {
     track := slider_track_rect(params.panel, params.row_y)
     hit := slider_hit_rect(track)
 
-    clamped, owns_press := slider_resolve_value(params, track, hit)
+    pointer := slider_resolve_value(params, track, hit)
+    clamped := pointer.value
+    sources := range_action_source(pointer.changed, .Pointer)
     if params.semantic_domain != .None {
         id := semantic_control_id(params.semantic_domain, params.press_id)
+        before_semantic := clamped
         clamped = slider_apply_semantic_commands(params, id, clamped)
+        sources += range_action_source(clamped != before_semantic, .Semantic)
+        result := slider_result(params, track, hit, clamped, sources)
         _ = semantic_register_control(params.ui_runtime.semantic_focus, {
             id = id, role = .Slider,
             states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
             actions = {.Focus, .Increment, .Decrement, .Set_To_Bound},
             region = .Accordion_Content,
             traversal_order = params.semantic_order,
-            bounds = viewmodel.Rectangle(hit),
-            clip_bounds = viewmodel.Rectangle(params.panel),
+            bounds = result.control_geometry.bounds,
+            clip_bounds = result.control_geometry.clip_bounds,
+            numeric_range = {f64(result.minimum), f64(result.maximum),
+                f64(result.value), f64(result.step), result.orientation, true},
             label = params.label,
             value = fmt.tprintf("%d", clamped),
         })
-        if owns_press {
+        if pointer.owns_press {
             _ = semantic_request_pointer_focus(params.ui_runtime.semantic_focus, id)
         }
+        return result
     }
-    params.value^ = clamped
-
-    _ = owns_press
-    return {clamped}
+    return slider_result(params, track, hit, clamped, sources)
 }

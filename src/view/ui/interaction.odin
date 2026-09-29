@@ -58,7 +58,7 @@ ui_capture_target :: proc(
         return ui_interaction_target(.Splitter, id = capture.id)
     case .Scrollbar:
         return ui_scrollbar_capture_target(capture)
-    case .Dynview_Selection, .Copy_Icon:
+    case .Dynview_Selection:
         return ui_interaction_target(.Control, .Presentation, capture.id)
     case .Icon_Button:
         return ui_icon_button_capture_target(capture)
@@ -88,7 +88,7 @@ ui_presentation_is_visible :: #force_inline proc(
 // Return whether shared capture belongs to hidden Presentation or Terminal UI.
 ui_presentation_owns_capture :: proc(
     owner: viewmodel.Ui_Press_Owner_State) -> bool {
-    if owner.kind == .Dynview_Selection || owner.kind == .Copy_Icon {
+    if owner.kind == .Dynview_Selection {
         return true
     }
     return owner.kind == .Scrollbar &&

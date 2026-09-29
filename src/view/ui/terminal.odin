@@ -6,6 +6,7 @@ import viewmodel "../model"
 import "../../core"
 import geometry "../../core/geometry"
 import termemulator "../../terminal/emulator"
+import termhist "../../terminal/history"
 import "../font"
 import "../input"
 import "../native"
@@ -23,6 +24,8 @@ Terminal_Prepared_Frame :: struct {
     content_frame: input.Input_Frame,
     hyperlink_hover: terminalview.Terminal_Link_Hit,
     geometry_change: terminalview.Terminal_Geometry_Change,
+    editable_descriptor: viewmodel.Ui_Editable_Text_Descriptor,
+    editable_geometry: viewmodel.Ui_Editable_Text_Geometry,
 }
 
 // Scroll result and routed Terminal content input prepared together.
@@ -44,26 +47,88 @@ Terminal_Content_Route :: struct {
 terminal_semantic_id :: #force_inline proc(
     state: ^core.Euclid_General_State) -> viewmodel.Ui_Node_Id {
     if state == nil {return {}}
-    return {domain = .Terminal, local_id = 1,
+    return {domain = .Terminal, local_id = 0,
         generation = state^.terminal.animation_generation}
+}
+
+// terminal_editable_cursor_row resolves the cursor's physical row and row start.
+terminal_editable_cursor_row :: proc(text: string, cursor: int) -> (int, int) {
+    row := 0
+    line_start := 0
+    for byte, index in text[:cursor] {
+        if byte == '\n' {
+            row += 1
+            line_start = index + 1
+        }
+    }
+    return row, line_start
+}
+
+// terminal_editable_text_adapter exposes committed prompt input without preview text.
+terminal_editable_text_adapter :: proc(
+    state: ^core.Euclid_General_State,
+    layout: terminalview.Terminal_Draw_Layout,
+    scroll: Scroll_Container_Update_Result) ->
+    (viewmodel.Ui_Editable_Text_Descriptor, viewmodel.Ui_Editable_Text_Geometry) {
+    term := &state^.terminal
+    if term.history == nil {return {}, {}}
+    text := termhist.termhist_current_text(term.history)
+    cursor := input_box_clamp_boundary(text, termhist.termhist_cursor(term.history))
+    row, line_start := terminal_editable_cursor_row(text, cursor)
+    prefix := terminalview.TERMINAL_CONTINUATION_PROMPT
+    if row == 0 {prefix = terminalview.terminal_primary_prompt_prefix(term)}
+    column := input_box_byte_column(text[line_start:cursor], cursor - line_start)
+    prefix_columns := input_box_byte_column(prefix, len(prefix))
+    column_width := terminalview.terminal_column_width(layout.regular)
+    origin_y := scroll.view_rect.y - scroll.scroll_y_out
+    caret := viewmodel.Rectangle{
+        layout.padded_bounds.x + f32(prefix_columns + column) * column_width,
+        origin_y + f32(layout.line_count + row) * layout.line_height,
+        max(f32(1), column_width), layout.line_height,
+    }
+    control := scroll.control_geometry
+    descriptor := viewmodel.Ui_Editable_Text_Descriptor{
+        id = terminal_semantic_id(state), region = .Presentation,
+        label = "Terminal input", text = text, mode = .Editable,
+        cursor_byte = cursor, anchor_byte = cursor,
+        content_revision = termhist.termhist_content_revision(term.history),
+    }
+    return descriptor, {
+        control = control, caret = caret,
+        selection = {caret.x, caret.y, 0, caret.height},
+        cursor_column = input_box_byte_column(text, cursor),
+        anchor_column = input_box_byte_column(text, cursor),
+    }
 }
 
 // register_terminal_semantics publishes one application-level Terminal surface.
 register_terminal_semantics :: proc(
     state: ^core.Euclid_General_State,
-    bounds: geometry.Rectangle) {
+    bounds: geometry.Rectangle,
+    scroll: Scroll_Container_Update_Result) {
     id := terminal_semantic_id(state)
     _ = semantic_register_control(state^.ui_runtime.semantic_focus, {
         id = id, role = .Terminal,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-        actions = {.Focus}, region = .Presentation, traversal_order = 0,
+        actions = {.Focus, .Scroll}, region = .Presentation, traversal_order = 0,
         bounds = viewmodel.Rectangle(bounds),
-        clip_bounds = viewmodel.Rectangle(bounds), label = "Terminal",
+        clip_bounds = viewmodel.Rectangle(bounds),
+        numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
+            f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
+        label = "Terminal",
     })
     semantic := state^.ui_runtime.semantic_focus
-    if state^.ui_runtime.interaction.logical_focus.kind == .Terminal &&
+    needs_initial_focus := !state^.ui_runtime.terminal_semantic_focus_initialized ||
+        state^.ui_runtime.terminal_semantic_focus_generation !=
+            state^.terminal.animation_generation
+    if needs_initial_focus ||
+        state^.ui_runtime.interaction.logical_focus.kind == .Terminal &&
         semantic^.logical_focus.domain != .Terminal {
-        _ = semantic_request_pointer_focus(semantic, id)
+        if semantic_request_pointer_focus(semantic, id) {
+            state^.ui_runtime.terminal_semantic_focus_initialized = true
+            state^.ui_runtime.terminal_semantic_focus_generation =
+                state^.terminal.animation_generation
+        }
     }
 }
 
@@ -188,6 +253,8 @@ terminal_prepare_scroll :: proc(
         press_owner = &state^.ui_runtime.ui_press_owner,
         state_in = {state^.ui_runtime.terminal_scroll_dragging,
             state^.ui_runtime.terminal_scroll_drag_off},
+        semantic_focus = state^.ui_runtime.semantic_focus,
+        semantic_id = terminal_semantic_id(state),
     })
     route := Terminal_Content_Route{
         resolved, bounds, layout,
@@ -214,8 +281,11 @@ terminal_prepare_frame :: proc(
         state, resolved, layout, bounds, child_pointer_capture)
     hover := terminalview.terminal_hyperlink_hover_hit(
         term, prepared_scroll.content_frame, geometry.Rectangle(bounds))
+    descriptor, text_geometry := terminal_editable_text_adapter(
+        state, layout, prepared_scroll.scroll)
     return {true, bounds, layout, prepared_scroll.scroll,
-        prepared_scroll.content_frame, hover, geometry_change}
+        prepared_scroll.content_frame, hover, geometry_change,
+        descriptor, text_geometry}
 }
 
 // terminal_draw_encoded emits one prepared Terminal surface into the SDL encoder.

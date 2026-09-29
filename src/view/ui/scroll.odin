@@ -11,7 +11,14 @@ Scroll_Container_State :: struct {
 // Complete scroll state prepared before rendering for one container frame.
 Scroll_Container_Update_Result :: struct {
     view_rect: geometry.Rectangle,
+    control_geometry: viewmodel.Ui_Control_Geometry,
     scroll_y_out: f32,
+    minimum: f32,
+    maximum: f32,
+    step: f32,
+    changed: bool,
+    sources: viewmodel.Ui_Control_Action_Source,
+    orientation: viewmodel.Ui_Range_Orientation,
     state_out: Scroll_Container_State,
     scrollbar: Vertical_Scrollbar_Geometry,
     pointer_reserved: bool,
@@ -32,6 +39,17 @@ Scroll_Container_Interaction_Input :: struct {
     hovered_thumb: bool,
     max_scroll: f32,
     initial: Vertical_Scrollbar_Geometry,
+}
+
+// Scroll_Container_Result_Input groups converged values for result assembly.
+Scroll_Container_Result_Input :: struct {
+    view_rect: geometry.Rectangle,
+    scroll_y: f32,
+    interaction: Scroll_Container_Interaction_Result,
+    wheel_consumed: bool,
+    initial_scroll: f32,
+    max_scroll: f32,
+    sources: viewmodel.Ui_Control_Action_Source,
 }
 
 Vertical_Scrollbar_Geometry :: struct {
@@ -69,6 +87,39 @@ Scroll_Container_Update_Params :: struct {
     wheel_step: f32,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
     state_in: Scroll_Container_State,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
+    semantic_id: viewmodel.Ui_Node_Id,
+}
+
+// scroll_container_apply_semantic resolves page commands for its composite owner.
+scroll_container_apply_semantic :: proc(
+    params: Scroll_Container_Update_Params,
+    max_scroll: f32,
+    scroll_y: ^f32) -> bool {
+    if params.semantic_focus == nil || params.semantic_id.domain == .None {
+        return false
+    }
+    before := scroll_y^
+    page_step := max(params.wheel_step, params.rect.height - params.wheel_step)
+    for command in params.semantic_focus.commands[
+        :params.semantic_focus.command_count] {
+        if command.target == params.semantic_id && command.kind == .Scroll_Page {
+            scroll_y^ += f32(command.amount) * page_step
+        }
+    }
+    clamp_scroll_position(scroll_y, max_scroll)
+    return scroll_y^ != before
+}
+
+// scroll_container_refresh_semantic_geometry rebuilds a semantically moved thumb.
+scroll_container_refresh_semantic_geometry :: proc(
+    params: Scroll_Container_Update_Params, before_semantic, scroll_y: f32,
+    interaction: ^Scroll_Container_Interaction_Result) {
+    if scroll_y == before_semantic {return}
+    interaction^.scrollbar = build_vertical_scrollbar(
+        {params.rect, params.content_height, scroll_y,
+            max(0.0, params.content_height - params.rect.height)},
+        SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
 }
 
 // Apply one eligible wheel delta and report whether it was consumed.
@@ -124,6 +175,36 @@ scroll_container_update_interaction :: proc(
     return {state, scrollbar, owned_for_frame}
 }
 
+// Build one authoritative scroll-container result after interaction resolves.
+scroll_container_result :: proc(
+    params: Scroll_Container_Update_Params,
+    input: Scroll_Container_Result_Input) -> Scroll_Container_Update_Result {
+    scrollbar := input.interaction.scrollbar
+    local_mouse := scroll_container_local_mouse(
+        params.mouse_input, params.scroll_offset)
+    in_interaction := scroll_container_in_interaction_space(
+        local_mouse, params.interaction_space_rect)
+    pointer_reserved := scrollbar.has_scrollbar &&
+        (input.interaction.owned_for_frame || in_interaction &&
+            geometry.rectangle_contains(scrollbar.track_rect, local_mouse))
+    return {
+        view_rect = input.view_rect,
+        control_geometry = {viewmodel.Rectangle(input.view_rect),
+            viewmodel.Rectangle(params.interaction_space_rect)},
+        scroll_y_out = input.scroll_y,
+        minimum = 0,
+        maximum = input.max_scroll,
+        step = params.wheel_step,
+        changed = input.scroll_y != input.initial_scroll,
+        sources = input.sources,
+        orientation = .Vertical,
+        state_out = input.interaction.state,
+        scrollbar = scrollbar,
+        pointer_reserved = pointer_reserved,
+        wheel_consumed = input.wheel_consumed,
+    }
+}
+
 // Resolve one scrollbar's wheel, capture, drag, and release before drawing.
 scroll_container_update :: proc(
     params: Scroll_Container_Update_Params) -> Scroll_Container_Update_Result {
@@ -137,10 +218,12 @@ scroll_container_update :: proc(
     max_scroll := max(0.0, params.content_height - view_rect.height)
     scroll_y := max(0.0, params.scroll_y_in)
     clamp_scroll_position(&scroll_y, max_scroll)
+    initial_scroll := scroll_y
     hovered_view := in_interaction && geometry.rectangle_contains(
         view_rect, local_mouse)
     wheel_consumed := scroll_container_update_wheel(
         params, hovered_view, max_scroll, &scroll_y)
+    sources := range_action_source(scroll_y != initial_scroll, .Pointer)
     scrollbar := build_vertical_scrollbar(
         {view_rect, params.content_height, scroll_y, max_scroll},
         SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
@@ -148,12 +231,14 @@ scroll_container_update :: proc(
         geometry.rectangle_contains(scrollbar.thumb_rect, local_mouse)
     interaction := scroll_container_update_interaction(
         {params, local_mouse, hovered_thumb, max_scroll, scrollbar}, &scroll_y)
-    scrollbar = interaction.scrollbar
-    pointer_reserved := scrollbar.has_scrollbar &&
-        (interaction.owned_for_frame || in_interaction &&
-            geometry.rectangle_contains(scrollbar.track_rect, local_mouse))
-    return {view_rect, scroll_y, interaction.state, scrollbar,
-        pointer_reserved, wheel_consumed}
+    sources += range_action_source(scroll_y != initial_scroll, .Pointer)
+    before_semantic := scroll_y
+    _ = scroll_container_apply_semantic(params, max_scroll, &scroll_y)
+    sources += range_action_source(scroll_y != before_semantic, .Semantic)
+    scroll_container_refresh_semantic_geometry(
+        params, before_semantic, scroll_y, &interaction)
+    return scroll_container_result(params, {view_rect, scroll_y, interaction,
+        wheel_consumed, initial_scroll, max_scroll, sources})
 }
 
 //   Convert screen-space pointer position to local interaction space.

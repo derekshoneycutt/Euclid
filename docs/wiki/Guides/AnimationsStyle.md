@@ -410,9 +410,9 @@ failure before accepting an animation.
 Mouse selection has a distinct clipboard contract. Prose selects at shaped UTF-8
 cluster boundaries, while math and embedded shapes select as complete insets and copy
 their exact source spans. A mixed `Ctrl+C` result therefore combines readable prose with
-TeX for selected insets. `Ctrl+A` selects all rendered units. The copy icon continues to
-copy the complete canonical presentation source exactly; selection does not replace that
-authoring-oriented action. Math subexpression selection is intentionally unsupported.
+TeX for selected insets. `Ctrl+A` selects all rendered units, after which `Ctrl+C`
+copies the complete canonical presentation source. Math subexpression selection is
+intentionally unsupported.
 
 Document mode fails closed. Unsupported commands, malformed style groups,
 unclosed math delimiters, empty math fragments, or invalid shape options abort

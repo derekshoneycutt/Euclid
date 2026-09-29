@@ -60,13 +60,6 @@ Settings_Control_Update :: struct {
     gpu_available: bool,
 }
 
-// Settings_Slider_Draw describes one encoded integer slider.
-Settings_Slider_Draw :: struct {
-    panel: geometry.Rectangle,
-    row_y: f32,
-    value, min_value, max_value: int,
-}
-
 // draw_encoded_checkbox_geometry encodes one checkbox without its deferred label.
 draw_encoded_checkbox_geometry :: proc(
     encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, checked: bool) {
@@ -84,68 +77,36 @@ draw_encoded_checkbox_geometry :: proc(
 
 // draw_encoded_slider_geometry encodes one slider track, fill, and knob.
 draw_encoded_slider_geometry :: proc(
-    encoder: ^native.Draw_Encoder, draw: Settings_Slider_Draw) {
-    track := slider_track_rect(geometry.Rectangle(draw.panel), draw.row_y)
-    denominator := max(1, draw.max_value - draw.min_value)
-    ratio := f32(clamp(draw.value, draw.min_value, draw.max_value) -
-        draw.min_value) /
-        f32(denominator)
-    knob_center_x, knob := build_slider_knob(track, ratio)
+    encoder: ^native.Draw_Encoder, prepared: Integer_Slider_Result) {
+    knob_center_x := prepared.knob.x + prepared.knob.width * 0.5
     _ = native.draw_encoder_rectangle(
-        encoder, track, BACKGROUND_COLOR)
-    fill := geometry.Rectangle{track.x, track.y,
-        max(0, knob_center_x - track.x), track.height}
+        encoder, prepared.track, BACKGROUND_COLOR)
+    fill := geometry.Rectangle{prepared.track.x, prepared.track.y,
+        max(0, knob_center_x - prepared.track.x), prepared.track.height}
     _ = native.draw_encoder_rectangle(
         encoder, fill, UI_BORDER_COLOR)
     _ = native.draw_encoder_rectangle(
-        encoder, knob, UI_TEXT_COLOR)
+        encoder, prepared.knob, UI_TEXT_COLOR)
 }
 
 // Draw every checkbox in one prepared Settings layout.
 draw_encoded_settings_checkboxes :: proc(
-    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle, rows: Settings_View_Rows) {
-    checks := [5]struct{rectangle: geometry.Rectangle, checked: bool}{
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.fps_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.ui_runtime.display_fps},
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.limit_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.ui_runtime.limit_fps},
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.sound_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.user_drawing_sound_enabled},
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.simd_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.ui_runtime.use_simd_batch_projection},
-        {{
-            panel.x + SETTINGS_PANEL_INSET, rows.gpu_dust_y,
-            SETTINGS_CHECKBOX_SIZE, SETTINGS_CHECKBOX_SIZE,
-        }, state^.ui_runtime.use_gpu_dust_instancing},
+    encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
+    checks := [5]Checkbox_Result{
+        prepared.fps, prepared.limit, prepared.sound,
+        prepared.simd, prepared.gpu_dust,
     }
     for check in checks {
-        draw_encoded_checkbox_geometry(encoder, check.rectangle, check.checked)
+        draw_encoded_checkbox_geometry(
+            encoder, check.box_rect, check.checked_out)
     }
 }
 
 // draw_encoded_settings_geometry encodes settings controls without text.
 draw_encoded_settings_geometry :: proc(
-    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle) {
-    if state == nil || state^.particle_system == nil {return}
-    stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
-        panel.y + SETTINGS_HEADER_TOP_OFFSET,
-        panel.width - SETTINGS_PANEL_INSET * 2,
-        panel.height - SETTINGS_HEADER_TOP_OFFSET}
-    rows := settings_view_layout_rows(stack_rect)
-    draw_encoded_slider_geometry(encoder, {panel, rows.slider_label_y,
-        state^.particle_system^.use_max_dust_particles,
-        0, particlemodel.MAX_LOW_PARTICLES})
-    draw_encoded_settings_checkboxes(state, encoder, panel, rows)
+    encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
+    draw_encoded_slider_geometry(encoder, prepared.max_particles)
+    draw_encoded_settings_checkboxes(encoder, prepared)
 }
 
 // draw_encoded_settings_text emits current labels, values, and counters.
@@ -242,7 +203,7 @@ settings_max_particles_params :: proc(
         ui_runtime = &ctx.state.ui_runtime,
         press_id = SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
         label = "Maximum Dust particles",
-        value = &ctx.state.particle_system.use_max_dust_particles,
+        value = ctx.state.particle_system.use_max_dust_particles,
         min_value = 0,
         max_value = particlemodel.MAX_LOW_PARTICLES,
         font = ctx.font,
@@ -387,6 +348,9 @@ apply_settings_preparation :: proc(
     prepared: Settings_View_Preparation,
     simd_available: bool,
     gpu_available: bool) {
+    if prepared.max_particles.changed {
+        state.particle_system.use_max_dust_particles = prepared.max_particles.value
+    }
     if prepared.fps.toggled { state.ui_runtime.display_fps = prepared.fps.checked_out }
     if prepared.limit.toggled {
         state.ui_runtime.limit_fps = prepared.limit.checked_out

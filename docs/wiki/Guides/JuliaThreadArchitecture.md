@@ -854,24 +854,13 @@ requiring a distinct operating-system thread. Failed builds clear partial derive
 views, record a stable error, and retain exact literal source. Unchanged frames do not
 reset the arena; shutdown destroys it after the task pool has joined and stopped.
 
-Bounded builders compile plain text and copy payload bytes into this arena while
-preserving the existing logical text limit. Copy payload begins with the snapshot's
-canonical presentation bytes rather than a copy-only command. Both builders seal before
-either populated slice is published. Those slices are display-readable aliases whose
-lifetime ends at the next invalidated cache-arena reset; failure clears both aliases
-before returning to exact literal source. A bounded copy-block builder participates in
-the same transaction and seals before any compiled bytes or blocks publish, preserving
-source order and payload spans under the command-count limit.
+One bounded builder compiles plain text into this arena while preserving the existing
+logical text limit. It seals before its populated slice is published. The resulting
+display-readable alias remains valid until the next invalidated cache-arena reset;
+failure clears it before returning to exact literal source. Canonical Presentation
+copying instead reads the immutable semantic selection targets or snapshot source.
 
-#### Layout And Copy Interaction
-
-Copy hit targets are panel- and scroll-dependent display geometry. After the worker
-fence returns display ownership, the display thread clears and repopulates one reusable
-bounded target builder from the sealed copy blocks and fixed layout records. Repeated
-frames retain its allocated arena capacity rather than abandoning storage. Each
-successful refresh publishes only its populated prefix; failure publishes no targets.
-All copy-record aliases and reusable builder state are cleared before an invalidated
-arena reset.
+#### Layout And Selection
 
 Bounded line and item builders construct the layout while the invalidated Dynview task
 owns worker-mutable cache state. Item indexes, line indexes, grid placement, clipping,

@@ -265,17 +265,6 @@ dynview_selection_hit_boundary :: proc(
     return {}
 }
 
-// Report whether a pointer press belongs to the existing exact-source icon.
-dynview_selection_hits_copy_icon :: proc(
-    runtime: ^dynviewmodel.Dynview_System, point: geometry.Vector2) -> bool {
-    if runtime == nil {return false}
-    for target in runtime^.compile_cache.copy_hit_targets {
-        if geometry.rectangle_contains(
-            geometry.Rectangle(target.rect), point) {return true}
-    }
-    return false
-}
-
 // Return whether the shared press owner belongs to Dynview selection.
 dynview_selection_owns_press :: #force_inline proc(
     owner: ^viewmodel.Ui_Press_Owner_State) -> bool {
@@ -291,8 +280,7 @@ dynview_selection_update_mouse :: proc(
     view, frame := update.view, update.frame
     point := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
     if .Left in frame.mouse_pressed && !owner^.active && content.unit_count > 0 &&
-        geometry.rectangle_contains(view.panel, point) &&
-        !dynview_selection_hits_copy_icon(runtime, point) {
+        geometry.rectangle_contains(view.panel, point) {
         position := dynview_selection_hit_boundary(runtime, content, view, point)
         selection^.anchor, selection^.head = position, position
         selection^.active, selection^.dragging = false, true

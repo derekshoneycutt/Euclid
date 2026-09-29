@@ -19,10 +19,13 @@ Text_Button_Params :: struct {
     has_font_color_override : bool,
     font_color_override : color.Color_RGBA8,
     font_resolver : view_font.Font_Resolver,
+    semantics: Button_Semantics,
 }
 
 Text_Button_Result :: struct {
     button_drawn_rect : geometry.Rectangle,
+    control_geometry: viewmodel.Ui_Control_Geometry,
+    action: Button_Action_Result,
     clicked : bool,
     hovered : bool,
     pressed : bool,
@@ -114,8 +117,16 @@ update_text_button :: proc(
         hovered_item,
         &owns_press)
 
+    action := button_resolve_action({params.semantics,
+        viewmodel.Rectangle(button_rect), press_owner, .Text_Button,
+        params.id, clicked})
     return Text_Button_Result{
         button_drawn_rect = button_rect,
+        control_geometry = {
+            bounds = viewmodel.Rectangle(button_rect),
+            clip_bounds = params.semantics.clip_bounds,
+        },
+        action = action,
         clicked = clicked,
         hovered = hovered,
         pressed = owns_press && input_frame_left_down(params.mouse),

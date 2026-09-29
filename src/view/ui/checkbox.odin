@@ -32,6 +32,9 @@ Checkbox_Result :: struct {
     checked_out: bool,
     hovered: bool,
     pressed: bool,
+    control_geometry: viewmodel.Ui_Control_Geometry,
+    box_rect: geometry.Rectangle,
+    label_rect: geometry.Rectangle,
 }
 
 //   Measure and place the optional checkbox label, returning its rect and merged hit rect.
@@ -187,7 +190,6 @@ checkbox_resolve_interaction :: proc(
 checkbox_apply_semantics :: proc(
     params: Checkbox_Params,
     press_owner: ^viewmodel.Ui_Press_Owner_State,
-    hit_rect: geometry.Rectangle,
     result: ^Checkbox_Result) {
     id := semantic_control_id(params.semantic_domain, params.id)
     if params.enabled && !result^.toggled && semantic_command_requested(
@@ -202,8 +204,8 @@ checkbox_apply_semantics :: proc(
         id = id, role = .Checkbox, states = states,
         actions = {.Focus, .Toggle}, region = .Accordion_Content,
         traversal_order = params.semantic_order,
-        bounds = viewmodel.Rectangle(hit_rect),
-        clip_bounds = viewmodel.Rectangle(params.semantic_clip),
+        bounds = result^.control_geometry.bounds,
+        clip_bounds = result^.control_geometry.clip_bounds,
         label = params.label,
     })
     _ = semantic_focus_for_press(params.semantic_focus, press_owner,
@@ -225,10 +227,17 @@ update_checkbox :: proc(
     label_rect := geometry.Rectangle{}
     label_rect, hit_rect = checkbox_label_layout(params, box_rect, hit_rect)
 
-    result := Checkbox_Result{}
+    result := Checkbox_Result{
+        control_geometry = {
+            bounds = viewmodel.Rectangle(hit_rect),
+            clip_bounds = viewmodel.Rectangle(params.semantic_clip),
+        },
+        box_rect = box_rect,
+        label_rect = label_rect,
+    }
     checkbox_resolve_interaction(params, press_owner, local_mouse, hit_rect, &result)
     if params.semantic_domain != .None {
-        checkbox_apply_semantics(params, press_owner, hit_rect, &result)
+        checkbox_apply_semantics(params, press_owner, &result)
     }
     return result
 }

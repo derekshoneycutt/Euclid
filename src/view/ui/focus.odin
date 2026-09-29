@@ -42,6 +42,7 @@ Semantic_Control_Registration :: struct {
     traversal_order: u16,
     bounds: viewmodel.Rectangle,
     clip_bounds: viewmodel.Rectangle,
+    numeric_range: viewmodel.Ui_Numeric_Range,
     label: string,
     value: string,
 }
@@ -200,6 +201,7 @@ semantic_register_control :: proc(
             traversal_order = control.traversal_order,
             bounds = control.bounds,
             clip_bounds = control.clip_bounds,
+            numeric_range = control.numeric_range,
         },
         label = control.label,
         value = control.value,
@@ -520,8 +522,7 @@ semantic_legacy_focus :: proc(
     if node.role == .Terminal || node.id.domain == .Terminal {
         return {kind = .Terminal}, true
     }
-    if node.role == .Document || node.id.domain == .Presentation ||
-        node.id.domain == .Dynview_Affordance {
+    if node.role == .Document || node.id.domain == .Presentation {
         return {kind = .Presentation}, true
     }
     if node.role == .Input {

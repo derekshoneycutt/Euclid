@@ -151,7 +151,9 @@ accordion_layout :: proc(
 accordion_header_params :: proc(
     ctx: Accordion_Context,
     descriptor: Accordion_Section_Descriptor,
-    rect: geometry.Rectangle) -> Text_Button_Params {
+    rect: geometry.Rectangle,
+    order: u16) -> Text_Button_Params {
+    id := accordion_semantic_id(descriptor.section)
     return {
         id = ACCORDION_HEADER_ID_BASE + int(descriptor.section),
         rect = rect,
@@ -162,6 +164,16 @@ accordion_header_params :: proc(
         interaction_enabled = true,
         font = ctx.font,
         font_resolver = ctx.font_resolver,
+        semantics = {
+            focus = ctx.semantic_focus,
+            id = id,
+            role = .Accordion_Header,
+            states = button_semantic_states(true),
+            region = .Accordion_Headers,
+            traversal_order = order,
+            clip_bounds = viewmodel.Rectangle(ctx.panel),
+            label = descriptor.label,
+        },
     }
 }
 
@@ -175,11 +187,10 @@ prepare_accordion_header_interactions :: proc(
         descriptor := sections.items[section_index]
         result^.headers[section_index] = update_text_button(
             accordion_header_params(
-                ctx, descriptor, result^.layout.headers[section_index]),
+                ctx, descriptor, result^.layout.headers[section_index],
+                u16(section_index)),
             ctx.press_owner)
-        id := accordion_semantic_id(descriptor.section)
-        if result^.headers[section_index].clicked ||
-            semantic_command_requested(ctx.semantic_focus, id, .Activate) {
+        if result^.headers[section_index].action.activated {
             resolved = descriptor.section
         }
     }

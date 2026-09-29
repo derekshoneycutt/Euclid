@@ -1559,34 +1559,6 @@ rebuild_layout_cache :: proc(
     return layout_builders_seal(cache)
 }
 
-//   Return the first/last layout line indices that contain visible items for block_id.
-layout_item_line_span_for_block :: #force_inline proc(
-    cache: ^dynviewmodel.Dynview_Compile_Cache,
-    block_id: i32) -> Layout_Item_Line_Span {
-
-    first_line := -1
-    last_line := -1
-    for i in 0..<cache^.layout_item_count {
-        item := cache^.layout_items[i]
-        if item.block_id != block_id {
-            continue
-        }
-
-        if first_line < 0 || item.line_index < first_line {
-            first_line = item.line_index
-        }
-        if item.line_index > last_line {
-            last_line = item.line_index
-        }
-    }
-
-    if first_line < 0 || last_line < first_line {
-        return Layout_Item_Line_Span{0, 0, false}
-    }
-
-    return Layout_Item_Line_Span{first_line, last_line, true}
-}
-
 //   Build display-style large-operator plain-text fallback using canonical command name.
 large_op_visible_text :: #force_inline proc(
     buffer: ^dynviewmodel.Dynview_Command_Buffer,

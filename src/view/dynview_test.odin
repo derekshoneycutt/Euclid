@@ -41,12 +41,6 @@ View_Snapshot_Publication_Fixture :: struct {
     animation: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
-Copy_Hit_Target_Fixture :: struct {
-    items: [2]dynviewmodel.Dynview_Layout_Item,
-    lines: [6]dynviewmodel.Dynview_Layout_Line,
-    layout: app_dyncompile.Copy_Hit_Target_Layout,
-}
-
 //   Initialize caller-owned bounded layout storage for direct layout unit tests.
 dynview_test_layout_builders_init :: proc(
     t: ^testing.T,
@@ -1341,61 +1335,6 @@ dynview_document_scroll_metrics_override_legacy_rows :: proc(t: ^testing.T) {
 
     testing.expect_value(t, content_height, f32(83))
     testing.expect_value(t, scroll_step, f32(37.5))
-}
-
-//   Build canonical row spans and copy-hit geometry for one block fixture.
-copy_hit_target_fixture :: proc() -> Copy_Hit_Target_Fixture {
-    fixture := Copy_Hit_Target_Fixture{}
-    fixture.items = {
-        {block_id = 9, line_index = 2},
-        {block_id = 9, line_index = 5},
-    }
-    fixture.lines[2] = {row_start = 2, row_span = 3}
-    fixture.lines[5] = {row_start = 7, row_span = 2}
-    fixture.layout = {
-        panel = {x = 10, y = 100, width = 120, height = 250},
-        scroll_y = 22, text_padding = 4, icon_size = 12, icon_x_pad = 2,
-    }
-    return fixture
-}
-
-//   Bind fixture-backed row records to one compile cache.
-copy_hit_target_fixture_bind :: proc(
-    cache: ^dynviewmodel.Dynview_Compile_Cache,
-    fixture: ^Copy_Hit_Target_Fixture) {
-    cache^.last_cell_height = 22
-    cache^.layout_items = fixture^.items[:]
-    cache^.layout_lines = fixture^.lines[:]
-    cache^.layout_line_count = len(fixture^.lines)
-    cache^.layout_item_count = len(fixture^.items)
-}
-
-//   Verify copy hit geometry spans canonical rows after applying panel scroll.
-@(test)
-dynview_copy_hit_target_uses_grid_row_bounds :: proc(t: ^testing.T) {
-    arena: storage.Arena_Owner
-    testing.expect(t, storage.arena_owner_init(&arena))
-    defer storage.arena_owner_destroy(&arena)
-    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
-    defer free(cache)
-    testing.expect_value(t, storage.bounded_element_builder_init(
-        &cache^.copy_hit_target_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, &arena),
-        storage.Bounded_Builder_Status.Ok)
-    fixture := copy_hit_target_fixture()
-    copy_hit_target_fixture_bind(cache, &fixture)
-
-    hover_bottom, status := app_dyncompile.rebuild_one_copy_hit_target(
-        cache, {block_id = 9}, fixture.layout, fixture.layout.panel.y)
-
-    targets, view_status := storage.bounded_element_builder_view(
-        &cache^.copy_hit_target_builder)
-    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, view_status, storage.Bounded_Builder_Status.Ok)
-    testing.expect_value(t, len(targets), 1)
-    target := targets[0]
-    testing.expect_value(t, target.hover_rect.y, f32(126))
-    testing.expect_value(t, target.hover_rect.height, f32(154))
-    testing.expect_value(t, hover_bottom, f32(280))
 }
 
 //   Verify outer math reserves canonical columns and marks constrained overflow.

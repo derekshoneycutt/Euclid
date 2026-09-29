@@ -53,6 +53,7 @@ Termhist_State :: struct {
     history_index: int,
 
     cursor: int,
+    content_revision: u64,
 }
 
 //   Allocate every slice required by one history state.
@@ -167,6 +168,12 @@ termhist_cursor :: proc(state: ^Termhist_State) -> int {
     return state.cursor
 }
 
+// termhist_content_revision returns the live input's monotonic content generation.
+termhist_content_revision :: proc(state: ^Termhist_State) -> u64 {
+    if state == nil {return 0}
+    return state.content_revision
+}
+
 //   Clear the active line without modifying history.
 //
 // Parameters:
@@ -178,6 +185,7 @@ termhist_clear :: proc(state: ^Termhist_State) {
     state.text_len = 0
     state.cursor = 0
     state.history_index = state.history_len
+    state.content_revision += 1
 }
 
 //   Insert UTF-8 text at the cursor.
@@ -495,6 +503,7 @@ termhist_load_entry :: proc(state: ^Termhist_State, text: []u8) -> bool {
 
     state.text_len = len(text)
     state.cursor = state.text_len
+    state.content_revision += 1
     return true
 }
 
@@ -542,6 +551,7 @@ termhist_replace_range :: proc(
 
     state.text_len = new_len
     state.cursor = start + insert_len
+    state.content_revision += 1
     return true
 }
 

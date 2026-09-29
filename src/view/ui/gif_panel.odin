@@ -56,13 +56,13 @@ Gif_View_Preparation :: struct {
     path_input: Input_Box_Result,
 }
 
-// Gif_Button_Semantics groups one GIF action registration.
-Gif_Button_Semantics :: struct {
+// Gif_Timing_Button_Descriptor describes one playback timing choice.
+Gif_Timing_Button_Descriptor :: struct {
     id: int,
-    rectangle: geometry.Rectangle,
     label: string,
-    enabled: bool,
+    semantic_label: string,
     order: u16,
+    rectangle: geometry.Rectangle,
 }
 
 // gif_path_input_rect_for_panel resolves the saved-path field from GIF row layout.
@@ -96,28 +96,19 @@ gif_path_input_rect :: proc(
 
 // draw_encoded_gif_geometry encodes GIF controls while capture stays deferred.
 draw_encoded_gif_geometry :: proc(
-    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle) {
-    if state == nil {return}
-    stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
-        panel.y + SETTINGS_HEADER_TOP_OFFSET,
-        panel.width - SETTINGS_PANEL_INSET * 2,
-        panel.height - SETTINGS_HEADER_TOP_OFFSET}
-    rows := gif_view_layout_rows(stack_rect)
-    draw_encoded_slider_geometry(encoder, {panel, rows.sliders.downsample_y,
-        state^.ui_runtime.gif_downsample_factor, 1, 4})
-    draw_encoded_slider_geometry(encoder, {panel, rows.sliders.frame_step_y,
-        state^.ui_runtime.gif_frame_step, 1, 4})
-    animation, recorded := gif_timing_button_rects(panel, rows.timing_y)
-    if state^.ui_runtime.gif_timing_mode == .Animation {
+    encoder: ^native.Draw_Encoder, prepared: Gif_View_Preparation) {
+    draw_encoded_slider_geometry(encoder, prepared.downsample)
+    draw_encoded_slider_geometry(encoder, prepared.frame_step)
+    animation := prepared.animation_timing.control_geometry.bounds
+    recorded := prepared.recorded_timing.control_geometry.bounds
+    if prepared.timing_mode == .Animation {
         _ = native.draw_encoder_rectangle(encoder, animation, UI_BORDER_COLOR)
     } else {
         _ = native.draw_encoder_rectangle(encoder, recorded, UI_BORDER_COLOR)
     }
     _ = native.draw_encoder_rectangle_outline(encoder, animation, 1, UI_BORDER_COLOR)
     _ = native.draw_encoder_rectangle_outline(encoder, recorded, 1, UI_BORDER_COLOR)
-    button := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET, rows.save_button_y,
-        panel.width - SETTINGS_PANEL_INSET * 2, SETTINGS_GIF_BUTTON_HEIGHT}
+    button := prepared.save_button.control_geometry.bounds
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(button), UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
@@ -188,8 +179,16 @@ gif_path_input_params :: proc(
     advance, measured := view_core.ui_text_column_advance(
         view_font.cache_borrow(&state^.font_cache, .Regular), TREE_FONT_SIZE)
     if !measured {advance = TEXT_WRAP_ADVANCE}
-    return {id = GIF_PATH_INPUT_BOX_ID, rect = rect, text = text,
-        content_revision = runtime^.last_gif_path_revision,
+    return {rect = rect, clip_rect = runtime^.ui_regions.accordion_rect,
+        descriptor = {
+            id = semantic_control_id(.Gif_Control, GIF_PATH_INPUT_BOX_ID),
+            region = .Accordion_Content, traversal_order = 5,
+            label = "Saved GIF path", text = text, mode = .Read_Only,
+            cursor_byte = runtime^.gif_path_input.cursor_byte,
+            anchor_byte = runtime^.gif_path_input.anchor_byte,
+            content_revision = runtime^.last_gif_path_revision,
+        },
+        semantic_focus = runtime^.semantic_focus,
         state = &runtime^.gif_path_input, frame = frame,
         focused = focus.kind == .Input_Box && focus.id == GIF_PATH_INPUT_BOX_ID,
         pointer_routed = target.focus.kind == .Input_Box &&
@@ -262,7 +261,7 @@ gif_slider_params :: proc(
     row_y: f32,
     press_id: int,
     label: string,
-    value: ^int) -> Integer_Slider_Params {
+    value: int) -> Integer_Slider_Params {
     return {
         panel = geometry.Rectangle(ctx.panel), row_y = row_y,
         mouse_input = ctx.mouse_input,
@@ -272,25 +271,6 @@ gif_slider_params :: proc(
         semantic_domain = .Gif_Control,
         semantic_order = u16(press_id - 6201),
     }
-}
-
-// register_gif_button publishes one timing or capture action.
-register_gif_button :: proc(
-    ctx: Gif_Panel_Context,
-    button: Gif_Button_Semantics) -> viewmodel.Ui_Node_Id {
-    semantic_id := semantic_control_id(.Gif_Control, button.id)
-    states := viewmodel.Ui_Node_State{.Visible, .Focusable, .Tab_Stop}
-    if button.enabled {states += {.Enabled}}
-    _ = semantic_register_control(ctx.ui_runtime.semantic_focus, {
-        id = semantic_id, role = .Button, states = states,
-        actions = {.Focus, .Activate}, region = .Accordion_Content,
-        traversal_order = button.order,
-        bounds = viewmodel.Rectangle(button.rectangle),
-        clip_bounds = viewmodel.Rectangle(ctx.panel), label = button.label,
-    })
-    _ = semantic_focus_for_press(ctx.ui_runtime.semantic_focus,
-        &ctx.ui_runtime.ui_press_owner, .Text_Button, button.id, semantic_id)
-    return semantic_id
 }
 
 //   Build the GIF save/cancel button parameters shared by update and draw.
@@ -308,18 +288,42 @@ gif_save_button_params :: proc(
         interaction_space_rect = geometry.Rectangle(ctx.panel),
         interaction_enabled = true,
         font = ctx.font, font_resolver = ctx.resolver,
+        semantics = {
+            publish = true,
+            focus = ctx.ui_runtime.semantic_focus,
+            id = semantic_control_id(.Gif_Control, 3001),
+            role = .Button,
+            states = button_semantic_states(
+                gif_capture_button_enabled(phase)),
+            region = .Accordion_Content,
+            traversal_order = 4,
+            clip_bounds = viewmodel.Rectangle(ctx.panel),
+            label = gif_capture_button_label(phase),
+        },
     }
 }
 
 // gif_timing_button_params builds one choice in the timing selector.
 gif_timing_button_params :: proc(
-    ctx: Gif_Panel_Context, id: int, label: string,
-    rectangle: geometry.Rectangle) -> Text_Button_Params {
+    ctx: Gif_Panel_Context,
+    descriptor: Gif_Timing_Button_Descriptor) -> Text_Button_Params {
+    enabled := gif_capture_button_enabled(ctx.ui_runtime.gif_capture_phase)
     return {
-        id = id, rect = rectangle, label = label,
-        enabled = gif_capture_button_enabled(ctx.ui_runtime.gif_capture_phase),
+        id = descriptor.id, rect = descriptor.rectangle, label = descriptor.label,
+        enabled = enabled,
         mouse = ctx.mouse_input, interaction_space_rect = ctx.panel,
         interaction_enabled = true, font = ctx.font, font_resolver = ctx.resolver,
+        semantics = {
+            publish = true,
+            focus = ctx.ui_runtime.semantic_focus,
+            id = semantic_control_id(.Gif_Control, descriptor.id),
+            role = .Button,
+            states = button_semantic_states(enabled),
+            region = .Accordion_Content,
+            traversal_order = descriptor.order,
+            clip_bounds = viewmodel.Rectangle(ctx.panel),
+            label = descriptor.semantic_label,
+        },
     }
 }
 
@@ -411,20 +415,15 @@ prepare_gif_timing_controls :: proc(
     timing_y: f32, result: ^Gif_View_Preparation) {
     animation_rect, recorded_rect := gif_timing_button_rects(panel, timing_y)
     result^.animation_timing = update_text_button(gif_timing_button_params(
-        ctx, 6203, "Animation", animation_rect), &ctx.ui_runtime.ui_press_owner)
+        ctx, {6203, "Animation", "Use animation timing", 2, animation_rect}),
+        &ctx.ui_runtime.ui_press_owner)
     result^.recorded_timing = update_text_button(gif_timing_button_params(
-        ctx, 6204, "Recorded", recorded_rect), &ctx.ui_runtime.ui_press_owner)
-    enabled := gif_capture_button_enabled(ctx.ui_runtime.gif_capture_phase)
-    animation_id := register_gif_button(ctx, {
-        6203, animation_rect, "Use animation timing", enabled, 2})
-    recorded_id := register_gif_button(ctx, {
-        6204, recorded_rect, "Use recorded timing", enabled, 3})
-    if result^.animation_timing.clicked || semantic_command_requested(
-        ctx.ui_runtime.semantic_focus, animation_id, .Activate) {
+        ctx, {6204, "Recorded", "Use recorded timing", 3, recorded_rect}),
+        &ctx.ui_runtime.ui_press_owner)
+    if result^.animation_timing.action.activated {
         ctx.ui_runtime.gif_timing_mode = .Animation
     }
-    if result^.recorded_timing.clicked || semantic_command_requested(
-        ctx.ui_runtime.semantic_focus, recorded_id, .Activate) {
+    if result^.recorded_timing.action.activated {
         ctx.ui_runtime.gif_timing_mode = .Recorded
     }
     result^.timing_mode = ctx.ui_runtime.gif_timing_mode
@@ -440,17 +439,6 @@ prepare_gif_path_input :: proc(
     params := gif_path_input_params(state,
         gif_path_input_rect_for_panel(ctx.panel), mouse_input, result^.last_path)
     result^.path_input = input_box_prepare(params, &ctx.ui_runtime.ui_press_owner)
-    id := semantic_control_id(.Gif_Control, GIF_PATH_INPUT_BOX_ID)
-    _ = semantic_register_control(ctx.ui_runtime.semantic_focus, {
-        id = id, role = .Input,
-        states = {.Visible, .Enabled, .Focusable, .Tab_Stop, .Read_Only},
-        actions = {.Focus}, region = .Accordion_Content,
-        traversal_order = 5, bounds = viewmodel.Rectangle(params.rect),
-        clip_bounds = viewmodel.Rectangle(ctx.panel),
-        label = "Saved GIF path", value = result^.last_path,
-    })
-    _ = semantic_focus_for_press(ctx.ui_runtime.semantic_focus,
-        &ctx.ui_runtime.ui_press_owner, .Input_Box, GIF_PATH_INPUT_BOX_ID, id)
     if result^.path_input.hovered || ctx.ui_runtime.ui_press_owner.kind == .Input_Box {
         ctx.ui_runtime.cursor = .Text
     }
@@ -461,10 +449,16 @@ prepare_gif_sliders :: proc(
     ctx: Gif_Panel_Context, result: ^Gif_View_Preparation) {
     result^.downsample = update_settings_integer_slider(gif_slider_params(
         ctx, result^.rows.sliders.downsample_y, 6201, "Downsample",
-        &ctx.ui_runtime.gif_downsample_factor))
+        ctx.ui_runtime.gif_downsample_factor))
     result^.frame_step = update_settings_integer_slider(gif_slider_params(
         ctx, result^.rows.sliders.frame_step_y, 6202, "Capture every",
-        &ctx.ui_runtime.gif_frame_step))
+        ctx.ui_runtime.gif_frame_step))
+    if result^.downsample.changed {
+        ctx.ui_runtime.gif_downsample_factor = result^.downsample.value
+    }
+    if result^.frame_step.changed {
+        ctx.ui_runtime.gif_frame_step = result^.frame_step.value
+    }
 }
 
 // prepare_gif_capture_button resolves and applies the current capture action.
@@ -474,10 +468,7 @@ prepare_gif_capture_button :: proc(
     params := gif_save_button_params(ctx, result^.rows.save_button_y)
     result^.save_button = update_text_button(
         params, &ctx.ui_runtime.ui_press_owner)
-    id := register_gif_button(ctx, {
-        params.id, params.rect, params.label, params.enabled, 4})
-    if result^.save_button.clicked || semantic_command_requested(
-        ctx.ui_runtime.semantic_focus, id, .Activate) {
+    if result^.save_button.action.activated {
         ctx.ui_runtime.save_gif_requested = true
     }
 }

@@ -34,10 +34,12 @@ Animation_Control_Hit :: struct {
     toggle_pause_requested: bool,
 }
 
-// Animation_Control_Semantics groups one overlay control registration.
-Animation_Control_Semantics :: struct {
-    press_id: int,
+// Animation_Control_Descriptor describes one overlay button instance.
+Animation_Control_Descriptor :: struct {
+    id: int,
     rect: geometry.Rectangle,
+    icon_id: Icon_Button_Id,
+    toggle: bool,
     label: string,
     order: u16,
 }
@@ -95,43 +97,31 @@ animation_control_id :: #force_inline proc(id: int) -> bool {
 
 // Build shared icon-button parameters for one animation control.
 animation_control_button_params :: #force_inline proc(
-    id: int,
-    rect: geometry.Rectangle,
-    icon_id: Icon_Button_Id,
-    toggle: bool,
-    mouse_input: Input_Frame) -> Icon_Button_Params {
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    descriptor: Animation_Control_Descriptor,
+    mouse_input: Input_Frame,
+    clip: geometry.Rectangle) -> Icon_Button_Params {
     return {
-        id = id,
-        rect = rect,
-        icon_id = icon_id,
-        toggle = toggle,
+        id = descriptor.id,
+        rect = descriptor.rect,
+        icon_id = descriptor.icon_id,
+        toggle = descriptor.toggle,
         mouse = mouse_input,
-        interaction_space_rect = rect,
+        interaction_space_rect = descriptor.rect,
         interaction_enabled = true,
         inset_scale = ANIMATION_CONTROL_ICON_SCALE,
+        semantics = {
+            publish = true,
+            focus = runtime^.semantic_focus,
+            id = semantic_control_id(.Animation_Control, descriptor.id),
+            role = .Button,
+            states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+            region = .Animation_Overlay,
+            traversal_order = descriptor.order,
+            clip_bounds = viewmodel.Rectangle(clip),
+            label = descriptor.label,
+        },
     }
-}
-
-// register_animation_control publishes one visible overlay button.
-register_animation_control :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    control: Animation_Control_Semantics,
-    clip: geometry.Rectangle) -> viewmodel.Ui_Node_Id {
-    id := semantic_control_id(.Animation_Control, control.press_id)
-    _ = semantic_register_control(runtime^.semantic_focus, {
-        id = id,
-        role = .Button,
-        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-        actions = {.Focus, .Activate},
-        region = .Animation_Overlay,
-        traversal_order = control.order,
-        bounds = viewmodel.Rectangle(control.rect),
-        clip_bounds = viewmodel.Rectangle(clip),
-        label = control.label,
-    })
-    _ = semantic_focus_for_press(runtime^.semantic_focus,
-        &runtime^.ui_press_owner, .Icon_Button, control.press_id, id)
-    return id
 }
 
 // Resolve animation-control interaction and commit its actions before simulation.
@@ -145,25 +135,19 @@ prepare_animation_controls :: proc(
     slots := animation_control_layout_slots(
         geometry.Rectangle(ui_runtime^.ui_regions.world_rect))
     pause_icon := ui_runtime^.simulation_paused ? Icon_Button_Id.Play : .Pause
-    refresh := update_icon_button(animation_control_button_params(
-        ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
-        mouse_input), &ui_runtime^.ui_press_owner)
-    pause := update_icon_button(animation_control_button_params(
-        ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
-        ui_runtime^.simulation_paused, mouse_input),
-        &ui_runtime^.ui_press_owner)
-    refresh_id := register_animation_control(ui_runtime, {
-        ANIMATION_REFRESH_BUTTON_ID, slots.refresh, "Restart animation", 0},
-        slots.panel)
     pause_label := "Pause animation"
     if ui_runtime^.simulation_paused {pause_label = "Resume animation"}
-    pause_id := register_animation_control(ui_runtime, {
-        ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_label, 1}, slots.panel)
+    refresh := update_icon_button(animation_control_button_params(
+        ui_runtime, {ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
+            "Restart animation", 0}, mouse_input, slots.panel),
+        &ui_runtime^.ui_press_owner)
+    pause := update_icon_button(animation_control_button_params(
+        ui_runtime, {ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
+            ui_runtime^.simulation_paused, pause_label, 1}, mouse_input, slots.panel),
+        &ui_runtime^.ui_press_owner)
     hit := Animation_Control_Hit{
-        refresh.clicked || semantic_command_requested(
-            ui_runtime^.semantic_focus, refresh_id, .Activate),
-        pause.clicked || semantic_command_requested(
-            ui_runtime^.semantic_focus, pause_id, .Activate),
+        refresh.action.activated,
+        pause.action.activated,
     }
     apply_animation_control_hit(state, hit)
     return {visible = true, slots = slots, refresh = refresh, pause = pause}

@@ -28,8 +28,6 @@ TEXT_PADDING :: 8
 TEXT_WRAP_ADVANCE :: 8.0
 SCROLLBAR_WIDTH :: 8
 SCROLLBAR_THUMB_MIN_HEIGHT :: 24
-DYNVIEW_COPY_ICON_SIZE :: 14
-DYNVIEW_COPY_ICON_X_PAD :: 6
 ACCORDION_HEADER_HEIGHT :: f32(32)
 ACCORDION_PANEL_INSET :: f32(6)
 ACCORDION_HEADER_PADDING :: f32(10)
@@ -126,6 +124,7 @@ Input_Frame :: input.Input_Frame
 Ui_Geometry_Preparation :: struct {
     pointer_capture: viewmodel.Ui_Press_Owner_State,
     compile_dynview: bool,
+    splitters: Splitter_Preparation,
 }
 
 // Fixed frame-local control results prepared before services and rendering.
@@ -256,8 +255,9 @@ prepare_ui_geometry :: proc(
     frame_dt: f32) -> Ui_Geometry_Preparation {
     ui_runtime := &state^.ui_runtime
     capture_for_frame := ui_runtime^.ui_press_owner
-    update_splitters(
+    splitters := update_splitters(
         ui_runtime, mouse_input, min(f32(0.05), max(f32(0), frame_dt)))
+    apply_splitter_preparation(ui_runtime, splitters)
     regions := compute_ui_regions(ui_runtime.current_layout_mode,
         f32(ui_runtime^.window.width), f32(ui_runtime^.window.height),
         ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
@@ -277,19 +277,21 @@ prepare_ui_geometry :: proc(
     dynview.track_font(
         &state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE, TEXT_ROW_HEIGHT)
     dynview.track_style(&state^.dynview, dyncore.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
-    return {capture_for_frame, dyncompile.compile_is_needed(&state^.dynview)}
+    return {capture_for_frame, dyncompile.compile_is_needed(&state^.dynview),
+        splitters}
 }
 
 // draw_encoded_panel_geometry encodes visible composition backgrounds without text.
 draw_encoded_panel_geometry :: proc(
-    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    controls: Ui_Control_Preparation) {
     regions := state^.ui_runtime.ui_regions
     window := state^.ui_runtime.window
     if state^.ui_runtime.current_layout_mode == .Portrait {
         _ = native.draw_encoder_rectangle(encoder, {0, regions.world_rect.height,
             f32(window.width), f32(window.height) - regions.world_rect.height},
             UI_BACK_COLOR)
-        draw_encoded_accordion_geometry(state, encoder)
+        draw_encoded_accordion_geometry(state, encoder, controls)
         return
     }
     _ = native.draw_encoder_rectangle(encoder, {
@@ -304,7 +306,7 @@ draw_encoded_panel_geometry :: proc(
     }, UI_BACK_COLOR)
     draw_encoded_presentation_geometry(
         state, encoder, regions.text_rect)
-    draw_encoded_accordion_geometry(state, encoder)
+    draw_encoded_accordion_geometry(state, encoder, controls)
 }
 
 // draw_encoded_disclosure encodes one collapsed or expanded accordion chevron.
@@ -332,7 +334,7 @@ draw_encoded_disclosure :: proc(
 // draw_encoded_accordion_content encodes the active section's geometry.
 draw_encoded_accordion_content :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    layout: Accordion_Layout) {
+    layout: Accordion_Layout, controls: Ui_Control_Preparation) {
     runtime := &state^.ui_runtime
     _ = native.draw_encoder_rectangle(
         encoder, geometry.Rectangle(layout.content), UI_COMPONENT_BACKGROUND_COLOR)
@@ -347,11 +349,9 @@ draw_encoded_accordion_content :: proc(
         search_layout := library_search_layout(layout.content, show_suggestion)
         draw_encoded_tree_geometry(state, encoder, search_layout.tree)
     case .Save_Gif:
-        draw_encoded_gif_geometry(
-            state, encoder, geometry.Rectangle(layout.content))
+        draw_encoded_gif_geometry(encoder, controls.gif)
     case .Settings:
-        draw_encoded_settings_geometry(
-            state, encoder, geometry.Rectangle(layout.content))
+        draw_encoded_settings_geometry(encoder, controls.settings)
     }
 }
 
@@ -377,7 +377,8 @@ draw_encoded_accordion_headers :: proc(
 
 // draw_encoded_accordion_geometry encodes panel chrome while labels stay deferred.
 draw_encoded_accordion_geometry :: proc(
-    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    controls: Ui_Control_Preparation) {
     runtime := &state^.ui_runtime
     panel := runtime^.ui_regions.accordion_rect
     _ = native.draw_encoder_rectangle(
@@ -388,7 +389,7 @@ draw_encoded_accordion_geometry :: proc(
         runtime^.current_layout_mode, "Animation")
     layout := accordion_layout(
         geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
-    draw_encoded_accordion_content(state, encoder, layout)
+    draw_encoded_accordion_content(state, encoder, layout, controls)
     draw_encoded_accordion_headers(
         encoder, sections, layout, runtime^.active_accordion_section)
 }
@@ -554,8 +555,10 @@ prepare_active_accordion_controls :: proc(
 // Resolve geometry-known controls and commit their actions before services run.
 prepare_ui_controls :: proc(
     state: ^core.Euclid_General_State,
-    frame: Input_Frame) -> Ui_Control_Preparation {
+    frame: Input_Frame,
+    splitters: Splitter_Preparation) -> Ui_Control_Preparation {
     _ = semantic_begin(state^.ui_runtime.semantic_focus)
+    register_splitter_semantics(state^.ui_runtime.semantic_focus, splitters)
     animation_frame := ui_animation_control_input_frame(
         frame, state^.ui_runtime.interaction_frame)
     routed_frame := ui_accordion_input_frame(
@@ -580,8 +583,8 @@ finish_ui_semantics :: proc(state: ^core.Euclid_General_State) {
 prepare_and_finish_ui_layout :: proc(
     state: ^core.Euclid_General_State,
     frame: Input_Frame,
-    frame_dt: f32) -> Ui_Layout_Interaction_Preparation {
-    result := prepare_ui_layout_interaction(state, frame, frame_dt)
+    terminal: Terminal_Prepared_Frame) -> Ui_Layout_Interaction_Preparation {
+    result := prepare_ui_layout_interaction(state, frame, terminal)
     finish_ui_semantics(state)
     return result
 }
@@ -590,16 +593,18 @@ prepare_and_finish_ui_layout :: proc(
 prepare_ui_layout_interaction :: proc(
     state: ^core.Euclid_General_State,
     frame: Input_Frame,
-    frame_dt: f32) -> Ui_Layout_Interaction_Preparation {
+    terminal: Terminal_Prepared_Frame) -> Ui_Layout_Interaction_Preparation {
     if !ui_presentation_is_visible(&state^.ui_runtime) {
         state^.ui_runtime.view_text_scroll_max = 0
         return {}
     }
     if is_terminal_selected(state) {
-        register_terminal_semantics(state,
-            terminal_content_panel(state^.ui_runtime.ui_regions.text_rect))
+        bounds := terminal_content_panel(state^.ui_runtime.ui_regions.text_rect)
+        if terminal.available {bounds = terminal.bounds}
+        register_terminal_semantics(state, bounds, terminal.scroll)
         return {}
     }
+    state^.ui_runtime.terminal_semantic_focus_initialized = false
     routed := state^.ui_runtime.interaction_frame.presentation
     presentation_frame := input.input_frame_filter_pointer(frame,
         routed.pointer ? input.Input_Pointer_Fields{
@@ -608,6 +613,6 @@ prepare_ui_layout_interaction :: proc(
     if !routed.wheel { presentation_frame.mouse_wheel_delta = 0 }
     return {presentation = prepare_presentation_interaction(state,
         state^.ui_runtime.ui_regions.text_rect, presentation_frame,
-        routed.keyboard, frame_dt)}
+        routed.keyboard)}
 }
 

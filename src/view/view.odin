@@ -121,6 +121,7 @@ Frame_Draw_Preparation :: struct {
     input_frame: input.Input_Frame,
     terminal_frame: ui.Terminal_Prepared_Frame,
     controls: ui.Ui_Control_Preparation,
+    splitters: ui.Splitter_Preparation,
     layout_interaction: ui.Ui_Layout_Interaction_Preparation,
 }
 
@@ -517,6 +518,21 @@ route_ui_keyboard_frame :: proc(
     return input.input_frame_copy_unclaimed_events(frame, &event_claims, storage)
 }
 
+// frame_gif_capture_extents resolves logical and render dimensions for capture.
+frame_gif_capture_extents :: proc(
+    state: ^Euclid_General_State,
+    platform: ^native.Sdl_Platform) -> view_core.Gif_Capture_Extents {
+    world_rect := state^.ui_runtime.ui_regions.world_rect
+    return {
+        logical_width = max(1, int(world_rect.width)),
+        logical_height = max(1, int(world_rect.height)),
+        screen_width = platform^.metrics.logical_width,
+        screen_height = platform^.metrics.logical_height,
+        render_width = platform^.metrics.pixel_width,
+        render_height = platform^.metrics.pixel_height,
+    }
+}
+
 // prepare_sdl_frame advances UI, presentation, simulation, and display caches.
 prepare_sdl_frame :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
@@ -529,19 +545,11 @@ prepare_sdl_frame :: proc(
         state, input_frame, ui_geometry.pointer_capture)
     routed_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
-    controls := ui.prepare_ui_controls(state, routed_frame)
+    controls := ui.prepare_ui_controls(state, routed_frame, ui_geometry.splitters)
     service_library_search(state, ctx.search_service, frame_dt)
     terminal_frame := terminal_service_update(state, ctx.input_runtime, routed_frame)
     apply_sdl_cursor(state, ctx.platform)
-    world_rect := state^.ui_runtime.ui_regions.world_rect
-    gif_extents := view_core.Gif_Capture_Extents{
-        logical_width = max(1, int(world_rect.width)),
-        logical_height = max(1, int(world_rect.height)),
-        screen_width = ctx.platform^.metrics.logical_width,
-        screen_height = ctx.platform^.metrics.logical_height,
-        render_width = ctx.platform^.metrics.pixel_width,
-        render_height = ctx.platform^.metrics.pixel_height,
-    }
+    gif_extents := frame_gif_capture_extents(state, ctx.platform)
     alpha := accumulate_and_update_systems(state, frame_dt, gif_extents)
     native.sdl_chalk_audio_update(ctx.chalk_audio, &state^.chalk_audio,
         state^.user_drawing_sound_enabled,
@@ -551,9 +559,10 @@ prepare_sdl_frame :: proc(
     run_parallel_frame_preparation_after_ui(
         state, alpha, ui_geometry.compile_dynview)
     layout_interaction := ui.prepare_and_finish_ui_layout(
-        state, routed_frame, frame_dt)
+        state, routed_frame, terminal_frame)
     service_scenario_before_present(ctx)
-    return {input_frame, terminal_frame, controls, layout_interaction}
+    return {input_frame, terminal_frame, controls, ui_geometry.splitters,
+        layout_interaction}
 }
 
 // encode_sdl_world_geometry encodes the clipped world draw stream.
@@ -579,12 +588,10 @@ encode_sdl_world_geometry :: proc(
 encode_sdl_ui_geometry :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Frame_Draw_Preparation) {
-    ui.draw_encoded_panel_geometry(state, encoder)
+    ui.draw_encoded_panel_geometry(state, encoder, prepared.controls)
     ui.draw_encoded_animation_controls(
         state, encoder, prepared.controls.animation_controls)
-    ui.draw_encoded_splitters(
-        encoder, &state^.ui_runtime,
-        ui.input_frame_mouse_position(prepared.input_frame))
+    ui.draw_encoded_splitters(encoder, prepared.splitters)
     ui.draw_encoded_panel_text(state, encoder, prepared.controls)
     if ui.is_terminal_selected(state) {
         terminal_graphics_set_draw_encoder(state, encoder)

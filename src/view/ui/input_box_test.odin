@@ -121,8 +121,10 @@ input_box_keyboard_collapses_selection :: proc(t: ^testing.T) {
 input_box_pointer_drag_selects_borrowed_text :: proc(t: ^testing.T) {
     state := viewmodel.Ui_Input_Box_State{content_revision = 1}
     owner: viewmodel.Ui_Press_Owner_State
-    params := Input_Box_Params{id = 8, rect = {10, 10, 80, 24}, text = "abcdef",
-        content_revision = 1, state = &state, pointer_routed = true,
+    params := Input_Box_Params{rect = {10, 10, 80, 24},
+        descriptor = {id = {domain = .Library_Control, local_id = 8},
+            text = "abcdef", mode = .Editable, content_revision = 1},
+        state = &state, pointer_routed = true,
         column_advance = 10, frame = {mouse_position = {24, 15},
             mouse_pressed = {.Left}, mouse_down = {.Left}}}
     _ = input_box_prepare(params, &owner)
@@ -139,8 +141,10 @@ input_box_pointer_drag_selects_borrowed_text :: proc(t: ^testing.T) {
 input_box_scroll_tracks_caret_navigation :: proc(t: ^testing.T) {
     state: viewmodel.Ui_Input_Box_State
     owner: viewmodel.Ui_Press_Owner_State
-    params := Input_Box_Params{id = 9, rect = {0, 0, 28, 24}, text = "abcdef",
-        content_revision = 1, state = &state, column_advance = 10}
+    params := Input_Box_Params{rect = {0, 0, 28, 24},
+        descriptor = {id = {domain = .Library_Control, local_id = 9},
+            text = "abcdef", mode = .Read_Only, content_revision = 1},
+        state = &state, column_advance = 10}
     _ = input_box_prepare(params, &owner)
     testing.expect_value(t, state.scroll_x, f32(41))
     home := [1]input.Input_Event{{kind = .Press, key = .Home}}
@@ -148,4 +152,46 @@ input_box_scroll_tracks_caret_navigation :: proc(t: ^testing.T) {
     params.frame = input_box_test_frame(home[:])
     _ = input_box_prepare(params, &owner)
     testing.expect_value(t, state.scroll_x, f32(0))
+}
+
+// Verify prepared descriptors expose UTF-8 byte boundaries and codepoint columns.
+@(test)
+input_box_descriptor_projects_utf8_selection_geometry :: proc(t: ^testing.T) {
+    state := viewmodel.Ui_Input_Box_State{
+        cursor_byte = len("aé"), anchor_byte = len("a"), content_revision = 3}
+    owner: viewmodel.Ui_Press_Owner_State
+    result := input_box_prepare({
+        rect = {10, 20, 80, 24}, clip_rect = {5, 6, 100, 90},
+        descriptor = {id = {domain = .Library_Control, local_id = 10},
+            text = "aéz", mode = .Read_Only, cursor_byte = len("aé"),
+            anchor_byte = len("a"), content_revision = 3},
+        state = &state, column_advance = 10,
+    }, &owner)
+    testing.expect_value(t, result.descriptor.cursor_byte, len("aé"))
+    testing.expect_value(t, result.descriptor.anchor_byte, len("a"))
+    testing.expect_value(t, result.text_geometry.cursor_column, 2)
+    testing.expect_value(t, result.text_geometry.anchor_column, 1)
+    testing.expect_value(t, result.text_geometry.control.clip_bounds,
+        viewmodel.Rectangle{5, 6, 100, 90})
+    testing.expect_value(t, result.text_geometry.selection.width, f32(10))
+}
+
+// Verify read-only descriptor policy wins even when mutable storage is supplied.
+@(test)
+input_box_descriptor_rejects_read_only_mutation :: proc(t: ^testing.T) {
+    buffer: [8]u8
+    copy(buffer[:], "path")
+    length := 4
+    state := viewmodel.Ui_Input_Box_State{
+        cursor_byte = 4, anchor_byte = 4, content_revision = 1}
+    owner: viewmodel.Ui_Press_Owner_State
+    events := [1]input.Input_Event{{kind = .Text, codepoint = 'x'}}
+    result := input_box_prepare({
+        descriptor = {id = {domain = .Gif_Control, local_id = 11},
+            text = "path", mode = .Read_Only, content_revision = 1},
+        state = &state, focused = true, frame = input_box_test_frame(events[:]),
+        edit_target = {buffer[:], &length},
+    }, &owner)
+    testing.expect(t, !result.changed)
+    testing.expect_value(t, string(buffer[:length]), "path")
 }

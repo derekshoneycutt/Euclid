@@ -14,10 +14,10 @@ INPUT_BOX_TEXT_INSET :: f32(4)
 
 // Input_Box_Params groups borrowed content, geometry, and routed frame interaction.
 Input_Box_Params :: struct {
-    id: int,
     rect: geometry.Rectangle,
-    text: string,
-    content_revision: u64,
+    clip_rect: geometry.Rectangle,
+    descriptor: viewmodel.Ui_Editable_Text_Descriptor,
+    semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     state: ^viewmodel.Ui_Input_Box_State,
     frame: Input_Frame,
     focused: bool,
@@ -50,6 +50,9 @@ Input_Box_Edit_Target :: struct {
 Input_Box_Result :: struct {
     hovered: bool,
     focused: bool,
+    control_geometry: viewmodel.Ui_Control_Geometry,
+    descriptor: viewmodel.Ui_Editable_Text_Descriptor,
+    text_geometry: viewmodel.Ui_Editable_Text_Geometry,
     inner: geometry.Rectangle,
     text_x: f32,
     selection: geometry.Rectangle,
@@ -302,8 +305,9 @@ input_box_frame_requests_paste :: proc(frame: input.Input_Frame) -> bool {
 // input_box_apply_focused_input resolves editable or read-only keyboard policy.
 input_box_apply_focused_input :: proc(
     params: Input_Box_Params, resolved: ^Input_Box_Params) -> Input_Box_Update {
-    if params.edit_target.length == nil {
-        return input_box_apply_keyboard(params.state, params.text, params.frame)
+    if params.descriptor.mode == .Read_Only || params.edit_target.length == nil {
+        return input_box_apply_keyboard(
+            params.state, params.descriptor.text, params.frame)
     }
     clipboard_text := ""
     if input_box_frame_requests_paste(params.frame) {
@@ -311,7 +315,7 @@ input_box_apply_focused_input :: proc(
     }
     update := input_box_apply_edit_keyboard(
         params.state, params.edit_target, params.frame, clipboard_text)
-    resolved^.text = string(
+    resolved^.descriptor.text = string(
         params.edit_target.bytes[:params.edit_target.length^])
     return update
 }
@@ -321,17 +325,18 @@ input_box_hit_boundary :: proc(params: Input_Box_Params, x: f32) -> int {
     if params.column_advance <= 0 {return 0}
     local_x := x - params.rect.x - INPUT_BOX_TEXT_INSET + params.state^.scroll_x
     column := int(max(f32(0), local_x) / params.column_advance + 0.5)
-    return input_box_column_boundary(params.text, column)
+    return input_box_column_boundary(params.descriptor.text, column)
 }
 
 // input_box_update_pointer resolves shared capture and UTF-8-safe drag selection.
 input_box_update_pointer :: proc(
     params: Input_Box_Params, hovered: bool,
     owner: ^viewmodel.Ui_Press_Owner_State) {
-    owns := owner^.active && owner^.kind == .Input_Box && owner^.id == params.id
+    press_id := int(params.descriptor.id.local_id)
+    owns := owner^.active && owner^.kind == .Input_Box && owner^.id == press_id
     if params.pointer_routed && hovered && input_frame_left_pressed(params.frame) &&
         !owner^.active {
-        owner^ = {active = true, kind = .Input_Box, id = params.id}
+        owner^ = {active = true, kind = .Input_Box, id = press_id}
         params.state^.cursor_byte = input_box_hit_boundary(
             params, params.frame.mouse_position.x)
         params.state^.anchor_byte = params.state^.cursor_byte
@@ -354,11 +359,11 @@ input_box_update_pointer :: proc(
 input_box_reveal_cursor :: proc(
     params: Input_Box_Params, align_end: bool) {
     visible_width := max(f32(0), params.rect.width - INPUT_BOX_TEXT_INSET * 2)
-    total_width := f32(input_box_byte_column(params.text, len(params.text))) *
-        params.column_advance
+    text := params.descriptor.text
+    total_width := f32(input_box_byte_column(text, len(text))) * params.column_advance
     maximum := max(f32(0), total_width - visible_width + 1)
     cursor_x := f32(input_box_byte_column(
-        params.text, params.state^.cursor_byte)) * params.column_advance
+        text, params.state^.cursor_byte)) * params.column_advance
     if align_end {
         params.state^.scroll_x = maximum
     } else if cursor_x < params.state^.scroll_x {
@@ -375,7 +380,7 @@ input_box_prepare :: proc(
     owner: ^viewmodel.Ui_Press_Owner_State) -> Input_Box_Result {
     resolved := params
     changed := input_box_reconcile_content(
-        params.state, params.text, params.content_revision)
+        params.state, params.descriptor.text, params.descriptor.content_revision)
     hovered := geometry.rectangle_contains(params.rect,
         {params.frame.mouse_position.x, params.frame.mouse_position.y})
     input_box_update_pointer(params, hovered, owner)
@@ -383,7 +388,7 @@ input_box_prepare :: proc(
     if params.focused {
         update = input_box_apply_focused_input(params, &resolved)
         if update.copy_requested {
-            copied := params.text[update.copy_start:update.copy_end]
+            copied := params.descriptor.text[update.copy_start:update.copy_end]
             if update.copied_length > 0 {
                 copied = string(update.copied_bytes[:update.copied_length])
             }
@@ -395,7 +400,19 @@ input_box_prepare :: proc(
     result.changed = update.changed
     result.submit_requested = update.submit_requested
     result.tab_requested = update.tab_requested
+    input_box_publish_semantics(resolved, owner, &result)
     return result
+}
+
+// input_box_result_descriptor projects current bounded selection into the descriptor.
+input_box_result_descriptor :: proc(params: Input_Box_Params) ->
+    viewmodel.Ui_Editable_Text_Descriptor {
+    descriptor := params.descriptor
+    descriptor.cursor_byte = input_box_clamp_boundary(
+        descriptor.text, params.state^.cursor_byte)
+    descriptor.anchor_byte = input_box_clamp_boundary(
+        descriptor.text, params.state^.anchor_byte)
+    return descriptor
 }
 
 // input_box_draw_result derives clipped selection and caret rectangles.
@@ -406,17 +423,52 @@ input_box_draw_result :: proc(
     inner.width = max(f32(0), inner.width - INPUT_BOX_TEXT_INSET * 2)
     start := min(params.state^.anchor_byte, params.state^.cursor_byte)
     end := max(params.state^.anchor_byte, params.state^.cursor_byte)
-    start_x := f32(input_box_byte_column(params.text, start)) * params.column_advance
-    end_x := f32(input_box_byte_column(params.text, end)) * params.column_advance
+    text := params.descriptor.text
+    start_x := f32(input_box_byte_column(text, start)) * params.column_advance
+    end_x := f32(input_box_byte_column(text, end)) * params.column_advance
     caret_x := f32(input_box_byte_column(
-        params.text, params.state^.cursor_byte)) * params.column_advance
+        text, params.state^.cursor_byte)) * params.column_advance
     text_y := params.rect.y + (params.rect.height - TREE_FONT_SIZE) * 0.5
-    return {hovered = hovered, focused = params.focused, inner = inner,
+    descriptor := input_box_result_descriptor(params)
+    selection := geometry.Rectangle{inner.x + start_x - params.state^.scroll_x,
+        text_y, end_x - start_x, TREE_FONT_SIZE}
+    caret := geometry.Rectangle{inner.x + caret_x - params.state^.scroll_x,
+        text_y, 1, TREE_FONT_SIZE}
+    control := viewmodel.Ui_Control_Geometry{
+        viewmodel.Rectangle(params.rect), viewmodel.Rectangle(params.clip_rect)}
+    return {hovered = hovered, focused = params.focused,
+        control_geometry = control, descriptor = descriptor,
+        text_geometry = {
+            control = control,
+            caret = viewmodel.Rectangle(caret),
+            selection = viewmodel.Rectangle(selection),
+            cursor_column = input_box_byte_column(
+                descriptor.text, descriptor.cursor_byte),
+            anchor_column = input_box_byte_column(
+                descriptor.text, descriptor.anchor_byte),
+        }, inner = inner,
         text_x = inner.x - params.state^.scroll_x,
-        selection = {inner.x + start_x - params.state^.scroll_x, text_y,
-            end_x - start_x, TREE_FONT_SIZE},
-        caret = {inner.x + caret_x - params.state^.scroll_x, text_y,
-            1, TREE_FONT_SIZE}}
+        selection = selection, caret = caret}
+}
+
+// input_box_publish_semantics registers prepared text state and pointer focus.
+input_box_publish_semantics :: proc(
+    params: Input_Box_Params, owner: ^viewmodel.Ui_Press_Owner_State,
+    result: ^Input_Box_Result) {
+    descriptor := result^.descriptor
+    if params.semantic_focus == nil || descriptor.id == {} {return}
+    states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable, .Tab_Stop}
+    if descriptor.mode == .Read_Only {states += {.Read_Only}}
+    _ = semantic_register_control(params.semantic_focus, {
+        id = descriptor.id, parent = descriptor.parent, role = .Input,
+        states = states, actions = {.Focus}, region = descriptor.region,
+        traversal_order = descriptor.traversal_order,
+        bounds = result^.text_geometry.control.bounds,
+        clip_bounds = result^.text_geometry.control.clip_bounds,
+        label = descriptor.label, value = descriptor.text,
+    })
+    _ = semantic_focus_for_press(params.semantic_focus, owner, .Input_Box,
+        int(descriptor.id.local_id), descriptor.id)
 }
 
 // draw_encoded_input_box renders one prepared read-only field inside its clip.
@@ -424,16 +476,17 @@ draw_encoded_input_box :: proc(
     encoder: ^native.Draw_Encoder,
     params: Input_Box_Params, prepared: Input_Box_Result) {
     _ = native.draw_encoder_rectangle(
-        encoder, params.rect, UI_COMPONENT_BACKGROUND_COLOR)
+        encoder, prepared.control_geometry.bounds, UI_COMPONENT_BACKGROUND_COLOR)
     border := UI_BORDER_COLOR
     if prepared.focused {border = UI_TEXT_COLOR}
-    _ = native.draw_encoder_rectangle_outline(encoder, params.rect, 1, border)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, prepared.control_geometry.bounds, 1, border)
     _ = native.draw_encoder_push_scissor(encoder, prepared.inner)
     if prepared.selection.width > 0 {
         _ = native.draw_encoder_rectangle(encoder, prepared.selection, UI_BORDER_COLOR)
     }
     _ = view_core.ui_text_shaped({encoder = encoder, resolver = params.resolver,
-        key = .Regular, text = params.text,
+        key = .Regular, text = params.descriptor.text,
         position = {prepared.text_x, prepared.caret.y}, color = UI_TEXT_COLOR,
         font = view_core.ui_text_font(params.font)})
     if prepared.focused {

@@ -647,22 +647,25 @@ register_tree_item_semantics :: proc(
 // register_tree_semantics publishes one Tab stop and its visible descendants.
 register_tree_semantics :: proc(
     params: Tree_List_Params,
-    panel: geometry.Rectangle,
-    scroll_y: f32,
+    scroll: Scroll_Container_Update_Result,
     active: ^bridgemodel.Euclid_Julia_Animation_Interface) {
     tree_id := tree_semantic_id()
     active_id := tree_item_semantic_id(active)
     _ = semantic_register_control(params.ui_runtime^.semantic_focus, {
         id = tree_id, active_descendant = active_id, role = .Tree,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-        actions = {.Focus, .Select, .Expand, .Collapse},
+        actions = {.Focus, .Select, .Expand, .Collapse, .Scroll},
         region = .Accordion_Content, traversal_order = 3,
-        bounds = viewmodel.Rectangle(panel), clip_bounds = viewmodel.Rectangle(panel),
+        bounds = scroll.control_geometry.bounds,
+        clip_bounds = scroll.control_geometry.clip_bounds,
+        numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
+            f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
         label = "Animation library",
     })
     row := 0
+    panel := geometry.Rectangle(scroll.control_geometry.bounds)
     ctx := Tree_Semantic_Context{params.ui_runtime, params.visibility,
-        tree_id, panel, scroll_y, &row}
+        tree_id, panel, scroll.scroll_y_out, &row}
     for node := params.ji^.animation_head; node != nil; node = node^.next_in_registry {
         if node^.parent == nil {
             register_tree_item_semantics(ctx, params.ji, node, params.ji^.animation_count)
@@ -993,7 +996,7 @@ finish_tree_interaction :: proc(
         reconcile_tree_topology(params, scroll, content_height)
     }
     active := tree_resolve_active_node(params)
-    register_tree_semantics(params, scroll^.view_rect, scroll^.scroll_y_out, active)
+    register_tree_semantics(params, scroll^, active)
     if hit.hovered_node != nil && input_frame_left_pressed(params.mouse_input) ||
         hit.selected_node != nil || hit.toggled_node != nil {
         _ = semantic_request_pointer_focus(
@@ -1016,7 +1019,9 @@ prepare_tree_list_panel :: proc(params: Tree_List_Params) -> Tree_List_Preparati
         wheel_step = TREE_ROW_HEIGHT * WHEEL_SCROLL_MULTIPLIER,
         press_owner = &params.ui_runtime.ui_press_owner,
         state_in = {params.ui_runtime.tree_scroll_dragging,
-            params.ui_runtime.tree_scroll_drag_off}})
+            params.ui_runtime.tree_scroll_drag_off},
+        semantic_focus = params.ui_runtime.semantic_focus,
+        semantic_id = tree_semantic_id()})
     commit_tree_scroll(params, scroll)
     walk_ctx := Tree_Walk_Context{ji = params.ji, ui_runtime = params.ui_runtime,
         panel = scroll.view_rect, scroll_y = scroll.scroll_y_out,

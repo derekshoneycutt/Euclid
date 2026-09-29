@@ -3,7 +3,6 @@ package dynviewmodel
 import fontmodel "../../view/font/model"
 import presentation_model "../../bridge/presentation"
 import color "../../core/color"
-import geometry "../../core/geometry"
 import storage "../../core/storage"
 
 DYNVIEW_MAX_COMMANDS :: 1024
@@ -211,23 +210,6 @@ Dynview_Command :: struct {
     shape_edge_color_3: Color,
     shape_edge_color_4: Color,
     shape_edge_color_5: Color,
-}
-
-Dynview_Copy_Block :: struct {
-    block_id: i32,
-    block_kind: i32,
-    row_start: int,
-    row_end: int,
-    payload_offset: int,
-    payload_len: int,
-}
-
-Dynview_Copy_Hit_Target :: struct {
-    block_id: i32,
-    payload_offset: int,
-    payload_len: int,
-    rect: geometry.Rectangle,
-    hover_rect: geometry.Rectangle,
 }
 
 Dynview_Layout_Item_Kind :: enum {
@@ -816,9 +798,6 @@ Dynview_Compile_Cache :: struct {
     compiled_command_count: int,
     compiled_text_bytes_len: int,
     compiled_plain_text_len: int,
-    compiled_copy_payload_len: int,
-    copy_block_count: int,
-    copy_hit_target_count: int,
     layout_line_count: int,
     layout_item_count: int,
     math_program_count: int,
@@ -870,10 +849,6 @@ Dynview_Compile_Cache :: struct {
     document_layout_overfull_line_count: int,
 
     compiled_plain_text: []u8,
-    compiled_copy_payload: []u8,
-    copy_blocks: []Dynview_Copy_Block,
-    copy_hit_targets: []Dynview_Copy_Hit_Target,
-    copy_hit_target_builder: storage.Bounded_Element_Builder(Dynview_Copy_Hit_Target),
     layout_lines: []Dynview_Layout_Line,
     layout_items: []Dynview_Layout_Item,
     layout_line_builder: storage.Bounded_Element_Builder(Dynview_Layout_Line),
@@ -931,18 +906,6 @@ Dynview_System :: struct {
     cache_access_state: Dynview_Cache_Access_State,
     cache_worker_thread_id: int,
     math_shaping: fontmodel.Font_Math_Shaping_Capability,
-
-    copy_icon_hover_active: bool,
-    copy_icon_hover_block_id: i32,
-    copy_icon_hover_t: f32,
-
-    copy_icon_press_active: bool,
-    copy_icon_press_block_id: i32,
-    copy_icon_press_t: f32,
-
-    copy_icon_linger_active: bool,
-    copy_icon_linger_block_id: i32,
-    copy_icon_linger_remaining: f32,
 
     command_buffer: Dynview_Command_Buffer,
     compile_cache: Dynview_Compile_Cache,

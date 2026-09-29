@@ -46,9 +46,9 @@ semantic_documents_publish_without_command_layout :: proc(t: ^testing.T) {
     testing.expect(t, runtime^.compile_cache.layout_is_valid)
 }
 
-//   Verify compilation seals command text and canonical presentation bytes.
+//   Verify compilation seals command text.
 @(test)
-compiled_bytes_publish_sealed_plain_and_copy_payloads :: proc(t: ^testing.T) {
+compiled_bytes_publish_sealed_plain_text :: proc(t: ^testing.T) {
     arena: storage.Arena_Owner
     compiled_bytes_test_arena_init(t, &arena)
     defer storage.arena_owner_destroy(&arena)
@@ -57,8 +57,6 @@ compiled_bytes_publish_sealed_plain_and_copy_payloads :: proc(t: ^testing.T) {
     buffer := &runtime^.command_buffer
     copy(buffer^.text_bytes[:], "draw")
     buffer^.text_bytes_len = 4
-    presentation: string = "copy"
-    runtime^.content.presentation_bytes = transmute([]u8)presentation
     buffer^.command_count = 3
     buffer^.commands[0] = {kind = .Begin_Block, block_id = 7}
     buffer^.commands[1] = {kind = .Text_Run, text_offset = 0, text_len = 4}
@@ -69,12 +67,7 @@ compiled_bytes_publish_sealed_plain_and_copy_payloads :: proc(t: ^testing.T) {
     cache := &runtime^.compile_cache
     testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
     testing.expect_value(t, cache^.compiled_plain_text_len, 4)
-    testing.expect_value(t, cache^.compiled_copy_payload_len, 4)
     testing.expect_value(t, string(cache^.compiled_plain_text), "draw")
-    testing.expect_value(t, string(cache^.compiled_copy_payload), "copy")
-    testing.expect_value(t, cache^.copy_block_count, 1)
-    testing.expect_value(t, cache^.copy_blocks[0].payload_offset, 0)
-    testing.expect_value(t, cache^.copy_blocks[0].payload_len, 4)
 }
 
 //   Verify an incomplete command stream publishes no compiled byte aliases.
@@ -92,7 +85,6 @@ compiled_bytes_reject_incomplete_stream_without_publication :: proc(t: ^testing.
 
     testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_ILLEGAL_STATE)
     testing.expect_value(t, len(runtime^.compile_cache.compiled_plain_text), 0)
-    testing.expect_value(t, len(runtime^.compile_cache.compiled_copy_payload), 0)
 }
 
 //   Verify published immutable views override conflicting fixed staging records.
@@ -144,162 +136,4 @@ compiled_bytes_reject_plain_text_overflow_without_publication :: proc(t: ^testin
     testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OUT_OF_CAPACITY)
     testing.expect_value(t, cache^.compiled_plain_text_len, 0)
     testing.expect_value(t, len(cache^.compiled_plain_text), 0)
-}
-
-//   Verify canonical presentation bytes attach once to the first content block.
-@(test)
-compiled_copy_blocks_publish_ordered_payload_spans :: proc(t: ^testing.T) {
-    arena: storage.Arena_Owner
-    compiled_bytes_test_arena_init(t, &arena)
-    defer storage.arena_owner_destroy(&arena)
-    runtime := new(dynviewmodel.Dynview_System, context.allocator)
-    defer free(runtime, context.allocator)
-    presentation: string = "abcd"
-    runtime^.content.presentation_bytes = transmute([]u8)presentation
-    buffer := &runtime^.command_buffer
-    buffer^.command_count = 4
-    buffer^.commands[0] = {kind = .Begin_Block, block_id = 7}
-    buffer^.commands[1] = {kind = .End_Block}
-    buffer^.commands[2] = {kind = .Begin_Block, block_id = 9}
-    buffer^.commands[3] = {kind = .End_Block}
-
-    status := rebuild_compiled_plain_text(runtime, &arena)
-
-    blocks := runtime^.compile_cache.copy_blocks
-    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, len(blocks), 1)
-    testing.expect_value(t, blocks[0].block_id, i32(7))
-    testing.expect_value(t, blocks[0].payload_offset, 0)
-    testing.expect_value(t, blocks[0].payload_len, 4)
-    testing.expect_value(t,
-        string(runtime^.compile_cache.compiled_copy_payload), presentation)
-}
-
-//   Verify copy-block admission rejects one record beyond the command limit.
-@(test)
-compiled_copy_blocks_reject_exact_limit_overflow :: proc(t: ^testing.T) {
-    arena: storage.Arena_Owner
-    compiled_bytes_test_arena_init(t, &arena)
-    defer storage.arena_owner_destroy(&arena)
-    state := Dynview_Compile_State{
-        open_block = true,
-        block_has_copy_payload = true,
-    }
-    testing.expect_value(t, storage.bounded_element_builder_init(
-        &state.copy_block_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, &arena),
-        storage.Bounded_Builder_Status.Ok)
-    state.copy_block_builder.count = dynviewmodel.DYNVIEW_MAX_COMMANDS
-    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
-    defer free(cache, context.allocator)
-    cache^.compiled_copy_payload_len = 1
-
-    status := compile_end_block(cache, &state)
-
-    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OUT_OF_CAPACITY)
-    testing.expect_value(t, cache^.copy_block_count, 0)
-    testing.expect_value(t, len(cache^.copy_blocks), 0)
-}
-
-//   Verify repeated target refreshes reuse arena capacity and preserve geometry.
-@(test)
-copy_hit_targets_reuse_capacity_across_frames :: proc(t: ^testing.T) {
-    arena: storage.Arena_Owner
-    compiled_bytes_test_arena_init(t, &arena)
-    defer storage.arena_owner_destroy(&arena)
-    runtime := new(dynviewmodel.Dynview_System, context.allocator)
-    defer free(runtime, context.allocator)
-    cache := &runtime^.compile_cache
-    testing.expect_value(t, storage.bounded_element_builder_init(
-        &cache^.copy_hit_target_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, &arena),
-        storage.Bounded_Builder_Status.Ok)
-    cache^.is_valid = true
-    cache^.layout_is_valid = true
-    cache^.last_cell_height = 20
-    cache^.copy_blocks =
-        []dynviewmodel.Dynview_Copy_Block{{block_id = 3, payload_len = 2}}
-    cache^.copy_block_count = 1
-    cache^.layout_items =
-        []dynviewmodel.Dynview_Layout_Item{{block_id = 3, line_index = 0}}
-    cache^.layout_item_count = 1
-    cache^.layout_lines = []dynviewmodel.Dynview_Layout_Line{{row_span = 1}}
-    cache^.layout_line_count = 1
-    layout := Copy_Hit_Target_Layout{
-        panel = {width = 120, height = 100},
-        text_padding = 4,
-        icon_size = 12,
-    }
-
-    first_status := rebuild_copy_hit_targets(runtime, layout)
-    storage := raw_data(cache^.copy_hit_target_builder.storage)
-    capacity := cache^.copy_hit_target_builder.allocated_capacity
-    second_status := rebuild_copy_hit_targets(runtime, layout)
-
-    testing.expect_value(t, first_status, dyncore.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, second_status, dyncore.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, len(cache^.copy_hit_targets), 1)
-    testing.expect_value(t, cache^.copy_hit_targets[0].block_id, i32(3))
-    testing.expect_value(t, raw_data(cache^.copy_hit_target_builder.storage), storage)
-    testing.expect_value(t, cache^.copy_hit_target_builder.allocated_capacity, capacity)
-}
-
-//   Verify semantic documents derive copy geometry from sealed block bounds.
-@(test)
-document_copy_hit_target_uses_semantic_layout :: proc(t: ^testing.T) {
-    arena: storage.Arena_Owner
-    compiled_bytes_test_arena_init(t, &arena)
-    defer storage.arena_owner_destroy(&arena)
-    runtime := new(dynviewmodel.Dynview_System, context.allocator)
-    defer free(runtime, context.allocator)
-    cache := &runtime^.compile_cache
-    testing.expect_value(t, storage.bounded_element_builder_init(
-        &cache^.copy_hit_target_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, &arena),
-        storage.Bounded_Builder_Status.Ok)
-    documents := [1]dynviewmodel.Dynview_Document{{}}
-    runtime^.content.documents = documents[:]
-    cache^.is_valid = true
-    cache^.document_layout_is_valid = true
-    cache^.copy_blocks = []dynviewmodel.Dynview_Copy_Block{{
-        block_id = 7, payload_offset = 3, payload_len = 9}}
-    cache^.copy_block_count = 1
-    cache^.document_layout_blocks = []dynviewmodel.Dynview_Document_Layout_Block{
-        {reserved_top = 2, reserved_bottom = 24},
-        {reserved_top = 30, reserved_bottom = 58},
-    }
-
-    status := rebuild_copy_hit_targets(runtime, {
-        panel = {x = 5, y = 10, width = 120, height = 100},
-        scroll_y = 4, text_padding = 6, icon_size = 12})
-
-    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OK)
-    testing.expect_value(t, len(cache^.copy_hit_targets), 1)
-    target := cache^.copy_hit_targets[0]
-    testing.expect_value(t, target.block_id, i32(7))
-    testing.expect_value(t, target.payload_offset, 3)
-    testing.expect_value(t, target.payload_len, 9)
-    testing.expect_value(t, target.hover_rect.y, f32(14))
-    testing.expect_value(t, target.hover_rect.height, f32(56))
-}
-
-//   Verify hit-target admission rejects one visible record beyond its hard limit.
-@(test)
-copy_hit_targets_reject_exact_limit_overflow :: proc(t: ^testing.T) {
-    arena: storage.Arena_Owner
-    compiled_bytes_test_arena_init(t, &arena)
-    defer storage.arena_owner_destroy(&arena)
-    cache := new(dynviewmodel.Dynview_Compile_Cache, context.allocator)
-    defer free(cache, context.allocator)
-    testing.expect_value(t, storage.bounded_element_builder_init(
-        &cache^.copy_hit_target_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, &arena),
-        storage.Bounded_Builder_Status.Ok)
-    cache^.copy_hit_target_builder.count = dynviewmodel.DYNVIEW_MAX_COMMANDS
-
-    _, status := append_visible_copy_hit_target(
-        cache,
-        {block_id = 1, payload_len = 1},
-        {panel = {width = 100, height = 100}, icon_size = 12},
-        {top = 0, bottom = 20})
-
-    testing.expect_value(t, status, dyncore.DYNVIEW_STATUS_OUT_OF_CAPACITY)
-    testing.expect_value(t, cache^.copy_hit_target_count, 0)
-    testing.expect_value(t, len(cache^.copy_hit_targets), 0)
 }

@@ -11,6 +11,7 @@ import "core:testing"
 import app_core "../../core"
 import app_dynview "../../dynview"
 import geometry "../../core/geometry"
+import termhist "../../terminal/history"
 import "../input"
 
 //   Build one default-size landscape UI runtime for interaction tests.
@@ -473,15 +474,92 @@ checkbox_update_commits_without_drawing :: proc(t: ^testing.T) {
     testing.expect(t, !owner.active)
 }
 
-// Verify a copy-icon capture remains classified as Presentation interaction.
+// Verify checkbox preparation preserves distinct visual, hit, and clip geometry.
 @(test)
-ui_router_classifies_copy_capture_as_presentation :: proc(t: ^testing.T) {
-    target := ui_capture_target({active = true, kind = .Copy_Icon, id = 17})
-    testing.expect_value(t, target.kind,
-        viewmodel.Ui_Interaction_Target_Kind.Control)
-    testing.expect_value(t, target.focus.kind,
-        viewmodel.Ui_Focus_Kind.Presentation)
-    testing.expect_value(t, target.id, 17)
+checkbox_result_publishes_authoritative_geometry :: proc(t: ^testing.T) {
+    owner: viewmodel.Ui_Press_Owner_State
+    result := update_checkbox({
+        id = 42, rect = {10, 20, 30, 18}, checked = false, enabled = true,
+        interaction_space_rect = {0, 0, 100, 100}, interaction_enabled = true,
+        semantic_clip = {5, 6, 70, 80},
+    }, &owner)
+    testing.expect_value(t, result.box_rect,
+        geometry.Rectangle{16, 20, 18, 18})
+    testing.expect_value(t, result.control_geometry.bounds,
+        viewmodel.Rectangle{10, 20, 30, 18})
+    testing.expect_value(t, result.control_geometry.clip_bounds,
+        viewmodel.Rectangle{5, 6, 70, 80})
+}
+
+// Verify button preparation converges semantic activation and publishes geometry.
+@(test)
+text_button_converges_semantic_action_and_geometry :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    owner: viewmodel.Ui_Press_Owner_State
+    id := semantic_control_id(.Gif_Control, 77)
+    testing.expect(t, semantic_begin(semantic))
+    testing.expect(t, semantic_append_command(semantic, {
+        target = id, kind = .Activate}))
+    result := update_text_button({
+        id = 77, rect = {10, 20, 80, 24}, label = "Save", enabled = true,
+        interaction_space_rect = {0, 0, 200, 200}, interaction_enabled = true,
+        semantics = {
+            publish = true, focus = semantic, id = id, role = .Button,
+            states = button_semantic_states(true), region = .Accordion_Content,
+            clip_bounds = {0, 0, 100, 100}, label = "Save",
+        },
+    }, &owner)
+    testing.expect(t, result.action.activated)
+    testing.expect(t, .Semantic in result.action.sources)
+    testing.expect_value(t, result.control_geometry.bounds,
+        viewmodel.Rectangle{10, 20, 80, 24})
+    testing.expect_value(t, result.control_geometry.clip_bounds,
+        viewmodel.Rectangle{0, 0, 100, 100})
+}
+
+// Verify disabled button semantics publish without admitting activation.
+@(test)
+disabled_text_button_rejects_semantic_activation :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    owner: viewmodel.Ui_Press_Owner_State
+    id := semantic_control_id(.Gif_Control, 78)
+    testing.expect(t, semantic_begin(semantic))
+    testing.expect(t, semantic_append_command(semantic, {
+        target = id, kind = .Activate}))
+    result := update_text_button({
+        id = 78, rect = {10, 20, 80, 24}, label = "Saving", enabled = false,
+        interaction_space_rect = {0, 0, 200, 200}, interaction_enabled = true,
+        semantics = {
+            publish = true, focus = semantic, id = id, role = .Button,
+            states = button_semantic_states(false), region = .Accordion_Content,
+            clip_bounds = {0, 0, 100, 100}, label = "Saving",
+        },
+    }, &owner)
+    testing.expect(t, !result.action.activated)
+    testing.expect(t, card(result.action.sources) == 0)
+}
+
+// Verify simultaneous pointer and semantic routes still produce one activation.
+@(test)
+button_action_coalesces_duplicate_sources :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    owner: viewmodel.Ui_Press_Owner_State
+    id := semantic_control_id(.Animation_Control, 79)
+    testing.expect(t, semantic_begin(semantic))
+    testing.expect(t, semantic_append_command(semantic, {
+        target = id, kind = .Activate}))
+    result := button_resolve_action({
+        semantics = {focus = semantic, id = id, role = .Button,
+            states = button_semantic_states(true)},
+        bounds = {10, 20, 80, 24}, press_owner = &owner,
+        press_kind = .Icon_Button, press_id = 79, pointer_activated = true,
+    })
+    testing.expect(t, result.activated)
+    testing.expect(t, .Pointer in result.sources)
+    testing.expect(t, .Semantic in result.sources)
 }
 
 //   Verify splitter geometry uses an eight-pixel hit target and three-pixel line.
@@ -498,6 +576,19 @@ splitter_geometry_uses_distinct_hit_and_visible_widths :: proc(t: ^testing.T) {
     testing.expect_value(t, horizontal.hit_rect.height, f32(8))
     testing.expect_value(t, horizontal.visible_rect.height, f32(3))
     testing.expect_value(t, horizontal.hit_rect.width, f32(VIEW_WIDTH))
+
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
+        window = window, vertical_split_x = VIEW_WIDTH,
+        horizontal_split_y = VIEW_HEIGHT,
+    }
+    prepared := splitter_preparation(
+        &runtime, false, VIEW_WIDTH, VIEW_HEIGHT, {})
+    testing.expect_value(t, prepared.vertical.control_geometry.bounds,
+        viewmodel.Rectangle(vertical.hit_rect))
+    testing.expect_value(t, prepared.vertical.control_geometry.clip_bounds,
+        viewmodel.Rectangle{0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
+    testing.expect_value(t, prepared.vertical.visible_rect,
+        vertical.visible_rect)
 }
 
 //   Verify a changed split width invalidates Dynview panel layout for reflow.
@@ -646,19 +737,43 @@ splitter_drag_owns_press_until_release :: proc(t: ^testing.T) {
         vertical_split_x = VIEW_WIDTH,
         horizontal_split_y = VIEW_HEIGHT,
     }
-    update_splitters(&ui_runtime, {
+    _ = update_splitters(&ui_runtime, {
         mouse_position = {VIEW_WIDTH, 20},
         mouse_pressed = {.Left}, mouse_down = {.Left}}, 0.05)
     testing.expect(t, splitter_owns_press(
         ui_runtime.ui_press_owner, SPLITTER_VERTICAL_PRESS_ID))
 
-    update_splitters(&ui_runtime, {
+    dragged := update_splitters(&ui_runtime, {
         mouse_position = {0, 20}, mouse_down = {.Left}}, 0.05)
+    testing.expect_value(t, ui_runtime.vertical_split_x, f32(VIEW_WIDTH))
+    testing.expect(t, dragged.vertical.changed)
+    testing.expect(t, .Pointer in dragged.vertical.sources)
+    apply_splitter_preparation(&ui_runtime, dragged)
     testing.expect_value(t, ui_runtime.vertical_split_x, f32(WORLD_MIN_WIDTH))
     testing.expect(t, ui_runtime.ui_press_owner.active)
 
-    update_splitters(&ui_runtime, {mouse_position = {0, 20}}, 0.05)
+    _ = update_splitters(&ui_runtime, {mouse_position = {0, 20}}, 0.05)
     testing.expect(t, !ui_runtime.ui_press_owner.active)
+}
+
+// Verify splitter keyboard commands prepare a bounded value before owner commit.
+@(test)
+splitter_semantic_step_precedes_owner_commit :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    runtime := viewmodel.Euclid_Ui_Runtime_State{
+        semantic_focus = semantic, window = {WINDOW_WIDTH, WINDOW_HEIGHT},
+        vertical_split_x = VIEW_WIDTH, horizontal_split_y = VIEW_HEIGHT,
+    }
+    testing.expect(t, semantic_append_command(semantic, {
+        target = splitter_semantic_id(.Vertical), kind = .Increment}))
+    prepared := update_splitters(&runtime, {}, 0)
+    testing.expect_value(t, runtime.vertical_split_x, f32(VIEW_WIDTH))
+    testing.expect_value(t, prepared.vertical.value, f32(VIEW_WIDTH + 8))
+    testing.expect(t, prepared.vertical.changed)
+    testing.expect(t, .Semantic in prepared.vertical.sources)
+    apply_splitter_preparation(&runtime, prepared)
+    testing.expect_value(t, runtime.vertical_split_x, f32(VIEW_WIDTH + 8))
 }
 
 //   Verify active GIF phases lock and release splitter interaction.
@@ -901,6 +1016,48 @@ scroll_container_update_reserves_track_and_wheel :: proc(t: ^testing.T) {
     testing.expect(t, result.pointer_reserved)
     testing.expect(t, result.wheel_consumed)
     testing.expect_value(t, result.scroll_y_out, f32(20))
+    testing.expect(t, result.changed)
+    testing.expect(t, .Pointer in result.sources)
+    testing.expect_value(t, result.minimum, f32(0))
+    testing.expect_value(t, result.maximum, f32(160))
+    testing.expect_value(t, result.orientation,
+        viewmodel.Ui_Range_Orientation.Vertical)
+    testing.expect_value(t, result.control_geometry.bounds,
+        viewmodel.Rectangle{10, 20, 100, 80})
+    testing.expect_value(t, result.control_geometry.clip_bounds,
+        viewmodel.Rectangle{10, 20, 100, 80})
+}
+
+// Verify one scroll result coalesces pointer and composite semantic input.
+@(test)
+scroll_container_update_coalesces_input_sources :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    owner: viewmodel.Ui_Press_Owner_State
+    id := semantic_control_id(.Presentation, 7)
+    testing.expect(t, semantic_begin(semantic))
+    testing.expect(t, semantic_append_command(semantic, {
+        target = id, kind = .Scroll_Page, amount = 1}))
+    result := scroll_container_update({
+        id = 1002, rect = {10, 20, 100, 80}, content_height = 240,
+        mouse_input = {mouse_position = {20, 30}, mouse_wheel_delta = -1},
+        interaction_space_rect = {10, 20, 100, 80}, wheel_step = 20,
+        press_owner = &owner, semantic_focus = semantic, semantic_id = id,
+    })
+    testing.expect_value(t, result.scroll_y_out, f32(80))
+    testing.expect(t, .Pointer in result.sources)
+    testing.expect(t, .Semantic in result.sources)
+}
+
+// Verify reusable integer range operations normalize, round, and clamp values.
+@(test)
+integer_range_operations_are_bounded :: proc(t: ^testing.T) {
+    spec := range_integer_spec(10, 0, -2, -5)
+    testing.expect_value(t, spec, Integer_Range_Spec{0, 10, 2, 5})
+    testing.expect_value(t, range_integer_step(9, 1, spec), 10)
+    testing.expect_value(t, range_integer_step(2, -1, spec, true), 0)
+    testing.expect_value(t, range_integer_from_normalized(0.55, spec), 6)
+    testing.expect_value(t, range_integer_normalized(5, spec), f32(0.5))
 }
 
 // Verify thumb capture survives pointer exit and clears on physical release.
@@ -1184,11 +1341,23 @@ integer_slider_applies_semantic_keyboard_step :: proc(t: ^testing.T) {
     result := update_settings_integer_slider({
         panel = {0, 0, 200, 100}, row_y = 0,
         ui_runtime = &runtime, press_id = 6201, label = "Output scale",
-        value = &value, min_value = 1, max_value = 4,
+        value = value, min_value = 1, max_value = 4,
         semantic_domain = .Gif_Control,
     })
     testing.expect_value(t, result.value, 3)
-    testing.expect_value(t, value, 3)
+    testing.expect_value(t, value, 2)
+    testing.expect(t, result.changed)
+    testing.expect(t, .Semantic in result.sources)
+    testing.expect(t, .Pointer not_in result.sources)
+    testing.expect_value(t, result.minimum, 1)
+    testing.expect_value(t, result.maximum, 4)
+    testing.expect_value(t, result.track,
+        geometry.Rectangle{8, 22, 184, 8})
+    testing.expect_value(t, result.control_geometry.bounds,
+        viewmodel.Rectangle{8, 16, 184, 20})
+    testing.expect_value(t, result.control_geometry.clip_bounds,
+        viewmodel.Rectangle{0, 0, 200, 100})
+    testing.expect(t, result.knob.width > result.track.height)
 }
 
 //   Verify tree row lookup follows visible depth-first order across roots.
@@ -1318,7 +1487,7 @@ tree_keyboard_active_descendant_is_visible :: proc(t: ^testing.T) {
     testing.expect(t, !tree_item_is_keyboard_active(&runtime, &node))
 }
 
-// Verify document replacement preserves keyboard focus and scopes copy children.
+// Verify document replacement preserves keyboard focus on the document surface.
 @(test)
 presentation_semantics_reconcile_compilation_generation :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
@@ -1327,34 +1496,52 @@ presentation_semantics_reconcile_compilation_generation :: proc(t: ^testing.T) {
     defer free(semantic, context.allocator)
     state^.ui_runtime.semantic_focus = semantic
     state^.ui_runtime.interaction.logical_focus = {kind = .Presentation}
-    targets := [1]dynviewmodel.Dynview_Copy_Hit_Target{{
-        block_id = 7, payload_offset = 0, payload_len = 4,
-        rect = {10, 20, 14, 14}}}
-    state^.dynview.compile_cache.copy_hit_targets = targets[:]
-    state^.dynview.compile_cache.copy_hit_target_count = 1
     state^.dynview.compile_cache.compiled_revision = 12
 
     testing.expect(t, semantic_begin(semantic))
-    register_presentation_semantics(state, {0, 0, 200, 100})
+    register_presentation_semantics(state, {0, 0, 200, 100}, {})
     parent := presentation_semantic_id(state)
-    register_presentation_copy_semantics(state, parent, {0, 0, 200, 100})
     testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
     semantic^.logical_focus = parent
     semantic^.focus_origin = .Keyboard
-    child := dynview_copy_semantic_id(state, 7)
-    child_index := semantic_node_index(semantic_snapshot(semantic), child)
-    testing.expect(t, child_index >= 0)
-    testing.expect_value(t,
-        semantic_snapshot(semantic)^.nodes[child_index].parent, parent)
 
     state^.dynview.compile_cache.compiled_revision = 13
     testing.expect(t, semantic_begin(semantic))
-    register_presentation_semantics(state, {0, 0, 200, 100})
-    register_presentation_copy_semantics(
-        state, presentation_semantic_id(state), {0, 0, 200, 100})
+    register_presentation_semantics(state, {0, 0, 200, 100}, {})
     testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
     testing.expect_value(t, semantic^.logical_focus, presentation_semantic_id(state))
     testing.expect_value(t, semantic^.focus_origin, viewmodel.Ui_Focus_Origin.Keyboard)
+}
+
+// Verify Terminal's editable descriptor excludes completion and output policy state.
+@(test)
+terminal_editable_descriptor_exposes_only_committed_input :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    bytes: [16]u8
+    copy(bytes[:], "x=α")
+    history := termhist.Termhist_State{
+        text = bytes[:], text_len = len("x=α"), cursor = len("x=α"),
+        content_revision = 9,
+    }
+    state^.terminal.history = &history
+    state^.terminal.completion_preview_insertion = " + preview"
+    scroll := Scroll_Container_Update_Result{
+        view_rect = {10, 20, 200, 100},
+        control_geometry = {{10, 20, 200, 100}, {5, 6, 220, 130}},
+        scroll_y_out = 12,
+    }
+    descriptor, text_geometry := terminal_editable_text_adapter(state, {
+        padded_bounds = {14, 24, 192, 92}, line_height = 18, line_count = 3,
+    }, scroll)
+    testing.expect_value(t, descriptor.text, "x=α")
+    testing.expect_value(t, descriptor.cursor_byte, len("x=α"))
+    testing.expect_value(t, descriptor.anchor_byte, len("x=α"))
+    testing.expect_value(t, descriptor.content_revision, u64(9))
+    testing.expect(t, descriptor.text != state^.terminal.completion_preview_insertion)
+    testing.expect_value(t, text_geometry.cursor_column, 3)
+    testing.expect_value(t, text_geometry.selection.width, f32(0))
+    testing.expect_value(t, text_geometry.control, scroll.control_geometry)
 }
 
 // Verify Terminal registration publishes one generation-scoped global stop.
@@ -1367,7 +1554,7 @@ terminal_semantics_publish_single_surface :: proc(t: ^testing.T) {
     state^.ui_runtime.semantic_focus = semantic
     state^.terminal.animation_generation = 9
     testing.expect(t, semantic_begin(semantic))
-    register_terminal_semantics(state, {5, 6, 200, 120})
+    register_terminal_semantics(state, {5, 6, 200, 120}, {})
     testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
     snapshot := semantic_snapshot(semantic)
     index := semantic_node_index(snapshot, terminal_semantic_id(state))
@@ -1375,6 +1562,7 @@ terminal_semantics_publish_single_surface :: proc(t: ^testing.T) {
     testing.expect_value(t, snapshot^.nodes[index].role,
         viewmodel.Ui_Node_Role.Terminal)
     testing.expect(t, .Tab_Stop in snapshot^.nodes[index].states)
+    testing.expect(t, semantic_focus_matches_name(semantic, "terminal"))
 }
 
 //   Verify tree reveal scrolling moves only enough to expose the target row.

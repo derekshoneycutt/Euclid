@@ -29,10 +29,13 @@ Icon_Button_Params :: struct {
     interaction_space_rect: geometry.Rectangle,
     interaction_enabled: bool,
     inset_scale: f32,
+    semantics: Button_Semantics,
 }
 
 Icon_Button_Result :: struct {
     icon_drawn_rect: geometry.Rectangle,
+    control_geometry: viewmodel.Ui_Control_Geometry,
+    action: Button_Action_Result,
     hovered: bool,
     pressed: bool,
     clicked: bool,
@@ -116,6 +119,21 @@ icon_button_icon_draw_rect :: #force_inline proc(
     }
 }
 
+// icon_button_complete_result attaches authoritative geometry and action state.
+icon_button_complete_result :: proc(
+    params: Icon_Button_Params,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
+    slot_rect: geometry.Rectangle,
+    result: ^Icon_Button_Result) {
+    result^.control_geometry = {
+        bounds = viewmodel.Rectangle(slot_rect),
+        clip_bounds = params.semantics.clip_bounds,
+    }
+    result^.action = button_resolve_action({params.semantics,
+        result^.control_geometry.bounds, press_owner, .Icon_Button,
+        params.id, result^.clicked})
+}
+
 //   Resolve one icon button interaction without issuing drawing commands.
 update_icon_button :: proc(
     params: Icon_Button_Params,
@@ -151,6 +169,7 @@ update_icon_button :: proc(
         pressed = pressed,
         clicked = owns_press && input_frame_left_pressed(params.mouse),
     }
+    icon_button_complete_result(params, press_owner, slot_rect, &result)
     icon_button_release_press(press_owner, &owns_press, params.mouse)
     return result
 }

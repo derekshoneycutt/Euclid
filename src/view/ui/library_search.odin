@@ -35,18 +35,6 @@ Library_Search_Preparation :: struct {
     suggestion: Text_Button_Result,
 }
 
-// Library_Control_Semantics groups one search-control registration.
-Library_Control_Semantics :: struct {
-    id: int,
-    role: viewmodel.Ui_Node_Role,
-    rect: geometry.Rectangle,
-    label: string,
-    value: string,
-    enabled: bool,
-    order: u16,
-    press_kind: viewmodel.Ui_Press_Owner_Kind,
-}
-
 // library_search_layout reserves correction rows only while a suggestion is visible.
 library_search_layout :: proc(
     panel: geometry.Rectangle, show_suggestion: bool) -> Library_Search_Layout {
@@ -100,13 +88,22 @@ library_search_input_rect :: proc(
 // library_search_input_params borrows bounded query storage for one editable frame.
 library_search_input_params :: proc(
     state: ^core.Euclid_General_State, layout: Library_Search_Layout,
-    frame: Input_Frame) -> Input_Box_Params {
+    frame: Input_Frame, clip_rect: geometry.Rectangle) -> Input_Box_Params {
     search := &state^.ui_runtime.library_search
     focus := state^.ui_runtime.interaction_frame.effective_focus
     target := state^.ui_runtime.interaction_frame.pointer_target
-    return {id = LIBRARY_SEARCH_INPUT_ID, rect = layout.text_input,
-        text = string(search^.query[:search^.query_length]),
-        content_revision = search^.query_revision, state = &search^.input,
+    query := string(search^.query[:search^.query_length])
+    return {rect = layout.text_input,
+        clip_rect = clip_rect,
+        descriptor = {
+            id = semantic_control_id(.Library_Control, LIBRARY_SEARCH_INPUT_ID),
+            region = .Accordion_Content, label = "Search animations",
+            text = query, mode = .Editable,
+            cursor_byte = search^.input.cursor_byte,
+            anchor_byte = search^.input.anchor_byte,
+            content_revision = search^.query_revision,
+        },
+        semantic_focus = state^.ui_runtime.semantic_focus, state = &search^.input,
         frame = frame, focused = focus.kind == .Input_Box &&
             focus.id == LIBRARY_SEARCH_INPUT_ID,
         pointer_routed = target.focus.kind == .Input_Box &&
@@ -164,28 +161,6 @@ library_search_accept_suggestion_key :: proc(
     return false
 }
 
-// register_library_control publishes one search control and pointer focus.
-register_library_control :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    control: Library_Control_Semantics,
-    clip: geometry.Rectangle) -> viewmodel.Ui_Node_Id {
-    semantic_id := semantic_control_id(.Library_Control, control.id)
-    states := viewmodel.Ui_Node_State{.Visible, .Focusable, .Tab_Stop}
-    if control.enabled {states += {.Enabled}}
-    actions := viewmodel.Ui_Node_Action_Set{.Focus}
-    if control.role == .Button {actions += {.Activate}}
-    _ = semantic_register_control(runtime^.semantic_focus, {
-        id = semantic_id, role = control.role, states = states, actions = actions,
-        region = .Accordion_Content, traversal_order = control.order,
-        bounds = viewmodel.Rectangle(control.rect),
-        clip_bounds = viewmodel.Rectangle(clip),
-        label = control.label, value = control.value,
-    })
-    _ = semantic_focus_for_press(runtime^.semantic_focus,
-        &runtime^.ui_press_owner, control.press_kind, control.id, semantic_id)
-    return semantic_id
-}
-
 // prepare_library_clear resolves, registers, and applies the Clear action.
 prepare_library_clear :: proc(
     state: ^core.Euclid_General_State, panel: geometry.Rectangle,
@@ -195,14 +170,19 @@ prepare_library_clear :: proc(
         rect = layout.action, icon_id = .None, mouse = frame,
         interaction_space_rect = panel,
         interaction_enabled = search^.query_length > 0,
-        inset_scale = 0.55}, &state^.ui_runtime.ui_press_owner)
-    id := register_library_control(&state^.ui_runtime, {
-        id = LIBRARY_SEARCH_CLEAR_ID, role = .Button, rect = layout.action,
-        label = "Clear search", enabled = search^.query_length > 0,
-        order = 1, press_kind = .Icon_Button,
-    }, panel)
-    if result.clicked || semantic_command_requested(
-        state^.ui_runtime.semantic_focus, id, .Activate) {
+        inset_scale = 0.55,
+        semantics = {
+            publish = true,
+            focus = state^.ui_runtime.semantic_focus,
+            id = semantic_control_id(.Library_Control, LIBRARY_SEARCH_CLEAR_ID),
+            role = .Button,
+            states = button_semantic_states(search^.query_length > 0),
+            region = .Accordion_Content,
+            traversal_order = 1,
+            clip_bounds = viewmodel.Rectangle(panel),
+            label = "Clear search",
+        }}, &state^.ui_runtime.ui_press_owner)
+    if result.action.activated {
         library_search_clear_query(search)
     }
     return result
@@ -220,16 +200,22 @@ prepare_library_suggestion :: proc(
         mouse = frame, interaction_space_rect = panel,
         interaction_enabled = true,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
-        font_resolver = view_font.cache_terminal_resolver(&state^.font_cache)},
+        font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+        semantics = {
+            publish = true,
+            focus = state^.ui_runtime.semantic_focus,
+            id = semantic_control_id(
+                .Library_Control, LIBRARY_SEARCH_SUGGESTION_ID),
+            role = .Button,
+            states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+            region = .Accordion_Content,
+            traversal_order = 2,
+            clip_bounds = viewmodel.Rectangle(panel),
+            label = "Use suggested search",
+            value = suggestion,
+        }},
         &state^.ui_runtime.ui_press_owner)
-    id := register_library_control(&state^.ui_runtime, {
-        id = LIBRARY_SEARCH_SUGGESTION_ID, role = .Button,
-        rect = layout.suggestion, label = "Use suggested search",
-        value = suggestion, enabled = true, order = 2,
-        press_kind = .Text_Button,
-    }, panel)
-    if result.clicked || semantic_command_requested(
-        state^.ui_runtime.semantic_focus, id, .Activate) {
+    if result.action.activated {
         library_search_apply_suggestion(search)
     }
     return result
@@ -243,7 +229,7 @@ prepare_library_search :: proc(
     result := Library_Search_Preparation{layout = library_search_layout(
         panel, search^.suggestion_length > 0)}
     accept_suggestion := library_search_accept_suggestion_key(search, frame)
-    params := library_search_input_params(state, result.layout, frame)
+    params := library_search_input_params(state, result.layout, frame, panel)
     result.input = input_box_prepare(params, &state^.ui_runtime.ui_press_owner)
     library_search_apply_input(search, result.input)
     if accept_suggestion {
@@ -253,12 +239,6 @@ prepare_library_search :: proc(
     result.layout = library_search_layout(panel, search^.suggestion_length > 0)
     result.suggestion = prepare_library_suggestion(
         state, panel, frame, result.layout)
-    query := string(search^.query[:search^.query_length])
-    _ = register_library_control(&state^.ui_runtime, {
-        id = LIBRARY_SEARCH_INPUT_ID, role = .Input,
-        rect = result.layout.text_input, label = "Search animations",
-        value = query, enabled = true, order = 0, press_kind = .Input_Box,
-    }, panel)
     if result.input.hovered {state^.ui_runtime.cursor = .Text}
     return result
 }
@@ -287,7 +267,8 @@ draw_encoded_search_action :: proc(
 draw_encoded_library_search_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Library_Search_Preparation) {
-    params := library_search_input_params(state, prepared.layout, {})
+    params := library_search_input_params(state, prepared.layout, {},
+        geometry.Rectangle(prepared.input.control_geometry.clip_bounds))
     draw_encoded_input_box(encoder, params, prepared.input)
     clear := state^.ui_runtime.library_search.query_length > 0
     if clear || !prepared.input.focused {

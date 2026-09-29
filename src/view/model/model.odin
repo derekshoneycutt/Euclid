@@ -151,7 +151,6 @@ Ui_Press_Owner_Kind :: enum {
     Scrollbar,
     Splitter,
     Dynview_Selection,
-    Copy_Icon,
 }
 
 Ui_Press_Owner_State :: struct {
@@ -225,7 +224,6 @@ Ui_Node_Domain :: enum u8 {
     Gif_Control,
     Settings_Control,
     Presentation,
-    Dynview_Affordance,
     Terminal,
 }
 
@@ -281,6 +279,66 @@ Ui_Node_Action :: enum u8 {
 
 Ui_Node_Action_Set :: bit_set[Ui_Node_Action; u16]
 
+// Ui_Control_Action_Source records which input routes produced one control action.
+Ui_Control_Action_Source_Flag :: enum u8 {
+    Pointer,
+    Semantic,
+    Scenario,
+}
+
+Ui_Control_Action_Source :: bit_set[Ui_Control_Action_Source_Flag; u8]
+
+// Ui_Control_Geometry carries authoritative interaction and clipping bounds.
+Ui_Control_Geometry :: struct {
+    bounds: Rectangle,
+    clip_bounds: Rectangle,
+}
+
+// Ui_Range_Orientation describes the axis of one numeric control.
+Ui_Range_Orientation :: enum u8 {
+    Horizontal,
+    Vertical,
+}
+
+// Ui_Numeric_Range exposes typed range facts without parsing display text.
+Ui_Numeric_Range :: struct {
+    minimum: f64,
+    maximum: f64,
+    current: f64,
+    step: f64,
+    orientation: Ui_Range_Orientation,
+    present: bool,
+}
+
+// Ui_Editable_Text_Mode distinguishes mutable input from read-only text fields.
+Ui_Editable_Text_Mode :: enum u8 {
+    Read_Only,
+    Editable,
+}
+
+// Ui_Editable_Text_Descriptor borrows one committed UTF-8 value for a frame.
+Ui_Editable_Text_Descriptor :: struct {
+    id: Ui_Node_Id,
+    parent: Ui_Node_Id,
+    region: Ui_Focus_Region,
+    traversal_order: u16,
+    label: string,
+    text: string,
+    mode: Ui_Editable_Text_Mode,
+    cursor_byte: int,
+    anchor_byte: int,
+    content_revision: u64,
+}
+
+// Ui_Editable_Text_Geometry carries prepared control, caret, and selection facts.
+Ui_Editable_Text_Geometry :: struct {
+    control: Ui_Control_Geometry,
+    caret: Rectangle,
+    selection: Rectangle,
+    cursor_column: int,
+    anchor_column: int,
+}
+
 // Ui_Focus_Command_Kind identifies one action addressed to its current owner.
 Ui_Focus_Command_Kind :: enum u8 {
     None,
@@ -317,6 +375,7 @@ Ui_Focus_Region :: enum u8 {
     Animation_Overlay,
     Accordion_Headers,
     Accordion_Content,
+    Pane_Layout,
     Presentation,
 }
 
@@ -332,6 +391,7 @@ Ui_Semantic_Node :: struct {
     traversal_order: u16,
     bounds: Rectangle,
     clip_bounds: Rectangle,
+    numeric_range: Ui_Numeric_Range,
     label_offset: u32,
     label_length: u16,
     value_offset: u32,
@@ -460,6 +520,8 @@ Euclid_Ui_Runtime_State :: struct {
     text_scroll_drag_off: f32,
     terminal_scroll_dragging: bool,
     terminal_scroll_drag_off: f32,
+    terminal_semantic_focus_initialized: bool,
+    terminal_semantic_focus_generation: u64,
     dynview_selection: dynviewmodel.Dynview_Selection_State,
     vertical_split_x: f32,
     horizontal_split_y: f32,

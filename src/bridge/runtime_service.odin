@@ -1610,7 +1610,6 @@ install_view_snapshot_cache_counts :: proc(
     cache^.document_display_row_count = len(slot^.document_display_rows)
     cache^.is_valid = false
     cache^.layout_is_valid = false
-    cache^.copy_hit_target_count = 0
 }
 
 //   Return display-owned lifecycle, failure, and backpressure diagnostics.

@@ -234,32 +234,6 @@ dynview_selection_test_keyboard_home_end_are_bounded :: proc(t: ^testing.T) {
     testing.expect_value(t, selection.head.unit_index, 0)
 }
 
-// Verify a copy-icon press cannot claim Dynview selection ownership.
-@(test)
-dynview_selection_test_copy_icon_has_pointer_priority :: proc(t: ^testing.T) {
-    runtime := new(dynviewmodel.Dynview_System, context.allocator)
-    defer free(runtime, context.allocator)
-    runtime^.compile_cache.copy_hit_targets = []dynviewmodel.Dynview_Copy_Hit_Target{{
-        rect = {x = 10, y = 10, width = 20, height = 20},
-    }}
-    selection: dynviewmodel.Dynview_Selection_State
-    owner: viewmodel.Ui_Press_Owner_State
-    frame := input.Input_Frame{
-        mouse_position = {15, 15}, mouse_pressed = {.Left}, mouse_down = {.Left},
-    }
-
-    dynview_selection_update_mouse({
-        runtime = runtime, selection = &selection, press_owner = &owner,
-        content = {.Wrapped_Text, 1, 4}, view = {
-            panel = {0, 0, 100, 100}, row_height = 20,
-            wrap_advance = 8, fallback_text = "test",
-        }, frame = frame,
-    })
-
-    testing.expect(t, !selection.dragging)
-    testing.expect(t, !owner.active)
-}
-
 // Verify a pointer drag captures ownership and finalizes a nonempty range.
 @(test)
 dynview_selection_test_drag_finalizes_wrapped_range :: proc(t: ^testing.T) {

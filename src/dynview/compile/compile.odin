@@ -2,7 +2,6 @@ package dynview_compile
 
 import dynviewmodel "../model"
 
-import geometry "../../core/geometry"
 import storage "../../core/storage"
 
 import dyncore "../core"
@@ -13,18 +12,7 @@ import "core:os"
 
 Dynview_Compile_State :: struct {
     plain_text_builder: storage.Bounded_Byte_Builder,
-    copy_payload_builder: storage.Bounded_Byte_Builder,
-    copy_block_builder: storage.Bounded_Element_Builder(dynviewmodel.Dynview_Copy_Block),
     open_block: bool,
-    block_id: i32,
-    block_kind: i32,
-    block_row_start: int,
-    block_row_end: int,
-    block_payload_start: int,
-    block_has_copy_payload: bool,
-    presentation_consumed: bool,
-    presentation_bytes: []u8,
-    current_row: int,
 }
 
 //   Uniform handler shape for one dynview command kind during compilation.
@@ -70,15 +58,6 @@ Compiled_Optional_Group :: struct {
     close: u8,
 }
 
-Copy_Hit_Target_Layout :: struct {
-    panel: geometry.Rectangle,
-    scroll_y, text_padding, icon_size, icon_x_pad: f32,
-}
-
-Visible_Copy_Block_Rows :: struct {
-    top, bottom, last_hover_bottom: f32,
-}
-
 //   Append one compiled plain-text byte through the bounded cache builder.
 append_compiled_byte :: proc(
     cache: ^dynviewmodel.Dynview_Compile_Cache,
@@ -116,20 +95,6 @@ append_compiled_text_slice :: proc(
     return dyncore.compiled_builder_status(status)
 }
 
-//   Append one byte to compiled copy payload cache and report capacity errors.
-append_copy_payload_byte :: proc(
-    cache: ^dynviewmodel.Dynview_Compile_Cache,
-    state: ^Dynview_Compile_State,
-    value: u8) -> i32 {
-
-    status := storage.bounded_byte_builder_append(
-        &state^.copy_payload_builder, []u8{value})
-    if status == .Ok {
-        cache^.compiled_copy_payload_len = state^.copy_payload_builder.count
-    }
-    return dyncore.compiled_builder_status(status)
-}
-
 //   Require an open block before consuming block-scoped content commands.
 require_open_block :: #force_inline proc(open_block: bool) -> i32 {
     if open_block {
@@ -149,22 +114,6 @@ compile_begin_block :: #force_inline proc(
     }
 
     state^.open_block = true
-    state^.block_id = cmd.block_id
-    state^.block_kind = cmd.style_id
-    state^.block_row_start = state^.current_row
-    state^.block_row_end = state^.current_row
-    state^.block_payload_start = cache^.compiled_copy_payload_len
-    state^.block_has_copy_payload = false
-    if !state^.presentation_consumed && len(state^.presentation_bytes) > 0 {
-        status := storage.bounded_byte_builder_append(
-            &state^.copy_payload_builder, state^.presentation_bytes)
-        if status != .Ok {
-            return dyncore.compiled_builder_status(status)
-        }
-        cache^.compiled_copy_payload_len = state^.copy_payload_builder.count
-        state^.block_has_copy_payload = true
-        state^.presentation_consumed = true
-    }
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -175,24 +124,6 @@ compile_end_block :: #force_inline proc(
 
     if !state^.open_block {
         return dyncore.DYNVIEW_STATUS_ILLEGAL_STATE
-    }
-
-    if state^.block_has_copy_payload {
-        payload_len := cache^.compiled_copy_payload_len - state^.block_payload_start
-        block := dynviewmodel.Dynview_Copy_Block{
-            block_id = state^.block_id,
-            block_kind = state^.block_kind,
-            row_start = state^.block_row_start,
-            row_end = state^.block_row_end,
-            payload_offset = state^.block_payload_start,
-            payload_len = payload_len,
-        }
-        status := storage.bounded_element_builder_append(
-            &state^.copy_block_builder, []dynviewmodel.Dynview_Copy_Block{block})
-        if status != .Ok {
-            return dyncore.compiled_builder_status(status)
-        }
-        cache^.copy_block_count = state^.copy_block_builder.count
     }
 
     state^.open_block = false
@@ -211,7 +142,6 @@ compile_text_run :: #force_inline proc(
         return status
     }
 
-    state^.block_row_end = state^.current_row
     return append_compiled_text_slice(cache, buffer, state, cmd.text_offset, cmd.text_len)
 }
 
@@ -257,7 +187,6 @@ compile_script_attach_recursive :: #force_inline proc(
         return status
     }
 
-    state^.block_row_end = state^.current_row
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -331,7 +260,6 @@ compile_large_op_recursive :: #force_inline proc(
         return status
     }
 
-    state^.block_row_end = state^.current_row
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -349,7 +277,6 @@ compile_inline_line :: #force_inline proc(
         return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
-    state^.block_row_end = state^.current_row
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -368,7 +295,6 @@ compile_inline_box :: #force_inline proc(
         return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
-    state^.block_row_end = state^.current_row
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -386,7 +312,6 @@ compile_inline_circle :: #force_inline proc(
         return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
-    state^.block_row_end = state^.current_row
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -405,7 +330,6 @@ compile_inline_filled_box :: #force_inline proc(
         return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
-    state^.block_row_end = state^.current_row
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -423,7 +347,6 @@ compile_inline_filled_circle :: #force_inline proc(
         return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
-    state^.block_row_end = state^.current_row
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -441,7 +364,6 @@ compile_inline_pie_section :: #force_inline proc(
         return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
     }
 
-    state^.block_row_end = state^.current_row
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -460,14 +382,6 @@ compile_newline_command :: #force_inline proc(
         return status
     }
 
-    if state^.block_has_copy_payload {
-        status = append_copy_payload_byte(cache, state, '\n')
-        if status != dyncore.DYNVIEW_STATUS_OK {
-            return status
-        }
-    }
-
-    state^.current_row += 1
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -581,25 +495,10 @@ compiled_builders_init :: proc(
     if plain_status != .Ok {
         return dyncore.compiled_builder_status(plain_status)
     }
-    copy_status := storage.bounded_byte_builder_init(
-        &state^.copy_payload_builder, dynviewmodel.DYNVIEW_MAX_TEXT_BYTES, cache_arena)
-    if copy_status != .Ok {
-        return dyncore.compiled_builder_status(copy_status)
-    }
-    block_status := storage.bounded_element_builder_init(
-        &state^.copy_block_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, cache_arena)
-    if block_status != .Ok {
-        return dyncore.compiled_builder_status(block_status)
-    }
-    target_status := storage.bounded_element_builder_init(
-        &cache^.copy_hit_target_builder, dynviewmodel.DYNVIEW_MAX_COMMANDS, cache_arena)
-    if target_status != .Ok {
-        return dyncore.compiled_builder_status(target_status)
-    }
     return dyncore.DYNVIEW_STATUS_OK
 }
 
-//   Seal and publish all compiled text and copy-block payloads atomically.
+//   Seal and publish compiled plain text atomically.
 compiled_builders_seal :: proc(
     cache: ^dynviewmodel.Dynview_Compile_Cache,
     state: ^Dynview_Compile_State) -> i32 {
@@ -608,19 +507,7 @@ compiled_builders_seal :: proc(
     if plain_status != .Ok {
         return dyncore.compiled_builder_status(plain_status)
     }
-    copy_payload, copy_status := storage.bounded_byte_builder_seal(
-        &state^.copy_payload_builder)
-    if copy_status != .Ok {
-        return dyncore.compiled_builder_status(copy_status)
-    }
-    copy_blocks, block_status := storage.bounded_element_builder_seal(
-        &state^.copy_block_builder)
-    if block_status != .Ok {
-        return dyncore.compiled_builder_status(block_status)
-    }
     cache^.compiled_plain_text = plain_text
-    cache^.compiled_copy_payload = copy_payload
-    cache^.copy_blocks = copy_blocks
     return dyncore.DYNVIEW_STATUS_OK
 }
 
@@ -632,17 +519,9 @@ rebuild_compiled_plain_text :: proc(
     cache := &runtime^.compile_cache
     buffer := &runtime^.command_buffer
     cache^.compiled_plain_text = nil
-    cache^.compiled_copy_payload = nil
-    cache^.copy_blocks = nil
-    cache^.copy_hit_targets = nil
     cache^.compiled_plain_text_len = 0
-    cache^.compiled_copy_payload_len = 0
-    cache^.copy_block_count = 0
-    cache^.copy_hit_target_count = 0
 
-    compile_state := Dynview_Compile_State{
-        presentation_bytes = runtime^.content.presentation_bytes,
-    }
+    compile_state := Dynview_Compile_State{}
     init_status := compiled_builders_init(cache, &compile_state, cache_arena)
     if init_status != dyncore.DYNVIEW_STATUS_OK {
         return init_status
@@ -660,201 +539,13 @@ rebuild_compiled_plain_text :: proc(
     return compiled_builders_seal(cache, &compile_state)
 }
 
-//   Rebuild presentation copy icon hit targets from compiled copy blocks.
-rebuild_copy_hit_targets :: proc(
-    runtime: ^dynviewmodel.Dynview_System,
-    layout: Copy_Hit_Target_Layout) -> i32 {
-
-    if runtime == nil {
-        return dyncore.DYNVIEW_STATUS_INVALID_ARGUMENT
-    }
-
-    cache := &runtime^.compile_cache
-    cache^.copy_hit_targets = nil
-    cache^.copy_hit_target_count = 0
-    semantic_document := dynlayout.document_layout_is_authoritative(runtime)
-    if !cache^.is_valid || (!semantic_document && !cache^.layout_is_valid) {
-        return dyncore.DYNVIEW_STATUS_OK
-    }
-    clear_status := storage.bounded_element_builder_clear(
-        &cache^.copy_hit_target_builder)
-    if clear_status != .Ok {
-        return dyncore.compiled_builder_status(clear_status)
-    }
-    if semantic_document {
-        return rebuild_document_copy_hit_target(cache, layout)
-    }
-
-    return rebuild_legacy_copy_hit_targets(cache, layout)
-}
-
-// Rebuild copy hit targets for the legacy compiled command layout.
-rebuild_legacy_copy_hit_targets :: proc(
-    cache: ^dynviewmodel.Dynview_Compile_Cache,
-    layout: Copy_Hit_Target_Layout) -> i32 {
-
-    panel_top := layout.panel.y
-    last_hover_bottom := panel_top
-    for i in 0..<cache^.copy_block_count {
-        next_bottom, status := rebuild_one_copy_hit_target(cache,
-            cache^.copy_blocks[i], layout, last_hover_bottom)
-        if status != dyncore.DYNVIEW_STATUS_OK {
-            _ = storage.bounded_element_builder_clear(&cache^.copy_hit_target_builder)
-            return status
-        }
-        last_hover_bottom = next_bottom
-    }
-    targets, view_status := storage.bounded_element_builder_view(
-        &cache^.copy_hit_target_builder)
-    if view_status != .Ok {
-        return dyncore.compiled_builder_status(view_status)
-    }
-    cache^.copy_hit_targets = targets
-    cache^.copy_hit_target_count = len(targets)
-    return dyncore.DYNVIEW_STATUS_OK
-}
-
-//   Build the authored document copy action from sealed semantic block bounds.
-rebuild_document_copy_hit_target :: proc(
-    cache: ^dynviewmodel.Dynview_Compile_Cache,
-    layout: Copy_Hit_Target_Layout) -> i32 {
-
-    blocks := cache^.document_layout_blocks
-    if cache^.copy_block_count != 1 || len(blocks) == 0 {
-        return dyncore.DYNVIEW_STATUS_ILLEGAL_STATE
-    }
-    first := blocks[0]
-    last := blocks[len(blocks)-1]
-    content_origin := layout.panel.y + layout.text_padding - layout.scroll_y
-    rows := Visible_Copy_Block_Rows{
-        top = content_origin + first.reserved_top,
-        bottom = content_origin + last.reserved_bottom,
-        last_hover_bottom = layout.panel.y,
-    }
-    _, status := append_visible_copy_hit_target(
-        cache, cache^.copy_blocks[0], layout, rows)
-    if status != dyncore.DYNVIEW_STATUS_OK {
-        return status
-    }
-    targets, view_status := storage.bounded_element_builder_view(
-        &cache^.copy_hit_target_builder)
-    if view_status != .Ok {
-        return dyncore.compiled_builder_status(view_status)
-    }
-    cache^.copy_hit_targets = targets
-    cache^.copy_hit_target_count = len(targets)
-    return dyncore.DYNVIEW_STATUS_OK
-}
-
-//   Build one copy hit target for a block when its rows are visible on the panel.
-//   Returns the updated last-hover bottom edge (unchanged when nothing was added).
-rebuild_one_copy_hit_target :: proc(
-    cache: ^dynviewmodel.Dynview_Compile_Cache,
-    block: dynviewmodel.Dynview_Copy_Block,
-    layout: Copy_Hit_Target_Layout,
-    last_hover_bottom: f32) -> (f32, i32) {
-
-    line_span := dynlayout.layout_item_line_span_for_block(cache, block.block_id)
-    if !line_span.has_visible_items || line_span.last_line >= cache^.layout_line_count {
-        return last_hover_bottom, dyncore.DYNVIEW_STATUS_OK
-    }
-
-    panel_top := layout.panel.y
-    panel_bottom := layout.panel.y + layout.panel.height
-    start_line := cache^.layout_lines[line_span.first_line]
-    end_line := cache^.layout_lines[line_span.last_line]
-    row_top := layout.panel.y + layout.text_padding +
-        f32(start_line.row_start) * cache^.last_cell_height - layout.scroll_y
-    row_bottom := layout.panel.y + layout.text_padding +
-        f32(end_line.row_start + end_line.row_span) * cache^.last_cell_height -
-        layout.scroll_y
-    if row_bottom < panel_top || row_top > panel_bottom {
-        return last_hover_bottom, dyncore.DYNVIEW_STATUS_OK
-    }
-
-    return append_visible_copy_hit_target(
-        cache, block, layout, {row_top, row_bottom, last_hover_bottom})
-}
-
-//   Append the hit target for a visible copy block and return its hover bottom.
-append_visible_copy_hit_target :: proc(
-    cache: ^dynviewmodel.Dynview_Compile_Cache,
-    block: dynviewmodel.Dynview_Copy_Block,
-    layout: Copy_Hit_Target_Layout,
-    rows: Visible_Copy_Block_Rows) -> (f32, i32) {
-
-    panel := layout.panel
-    panel_top := panel.y
-    panel_bottom := panel.y + panel.height
-    visible_top := max(max(rows.top, panel_top), rows.last_hover_bottom)
-    visible_bottom := min(rows.bottom, panel_bottom)
-    hover_rect := geometry.Rectangle{
-        panel.x + layout.text_padding,
-        visible_top,
-        max(0.0, panel.width - layout.text_padding * 2),
-        max(0.0, visible_bottom - visible_top),
-    }
-    if hover_rect.height <= 0 || hover_rect.width <= 0 {
-        return rows.last_hover_bottom, dyncore.DYNVIEW_STATUS_OK
-    }
-
-    icon_x := panel.x + panel.width - layout.text_padding - layout.icon_size -
-        layout.icon_x_pad
-    icon_y := max(panel_top + 1, min(
-        rows.top + 2, panel_bottom - layout.icon_size - 1))
-    target := dynviewmodel.Dynview_Copy_Hit_Target{
-        block_id = block.block_id,
-        payload_offset = block.payload_offset,
-        payload_len = block.payload_len,
-        rect = {icon_x, icon_y, layout.icon_size, layout.icon_size},
-        hover_rect = hover_rect,
-    }
-    status := storage.bounded_element_builder_append(
-        &cache^.copy_hit_target_builder, []dynviewmodel.Dynview_Copy_Hit_Target{target})
-    if status != .Ok {
-        return rows.last_hover_bottom, dyncore.compiled_builder_status(status)
-    }
-    return hover_rect.y + hover_rect.height, dyncore.DYNVIEW_STATUS_OK
-}
-
-//   Return compiled copy payload string for one hit target index.
-copy_target_payload :: proc(
-    runtime: ^dynviewmodel.Dynview_System, target_index: int) -> string {
-    if runtime == nil || runtime^.cache_access_state != .Display_Readable {
-        return ""
-    }
-
-    cache := &runtime^.compile_cache
-    if target_index < 0 || target_index >= cache^.copy_hit_target_count {
-        return ""
-    }
-
-    target := cache^.copy_hit_targets[target_index]
-    if target.payload_offset < 0 || target.payload_len <= 0 {
-        return ""
-    }
-    if target.payload_offset + target.payload_len > cache^.compiled_copy_payload_len {
-        return ""
-    }
-
-    return string(cache^.compiled_copy_payload[
-            target.payload_offset:target.payload_offset + target.payload_len])
-}
-
 //   Clear worker-built views after a failed compile without touching semantic input.
 clear_partial_derived_views :: proc(cache: ^dynviewmodel.Dynview_Compile_Cache) {
     if cache == nil {
         return
     }
     cache^.compiled_plain_text_len = 0
-    cache^.compiled_copy_payload_len = 0
     cache^.compiled_plain_text = nil
-    cache^.compiled_copy_payload = nil
-    cache^.copy_blocks = nil
-    cache^.copy_hit_targets = nil
-    cache^.copy_hit_target_builder = {}
-    cache^.copy_block_count = 0
-    cache^.copy_hit_target_count = 0
     clear_document_shaped_records(cache)
     dynlayout.document_layout_clear(cache)
     dynmath.layout_reset_cache(cache)
@@ -1024,19 +715,3 @@ presentation_text_or_fallback :: proc(
     return string(runtime^.compile_cache.compiled_plain_text[:text_len])
 }
 
-//   Recompute copy hit-target cache for the current presentation panel and scroll.
-refresh_presentation_copy_targets :: proc(
-    runtime: ^dynviewmodel.Dynview_System,
-    layout: Copy_Hit_Target_Layout) {
-
-    if !runtime^.enabled {
-        runtime^.compile_cache.copy_hit_targets = nil
-        runtime^.compile_cache.copy_hit_target_count = 0
-        return
-    }
-
-    status := rebuild_copy_hit_targets(runtime, layout)
-    if status != dyncore.DYNVIEW_STATUS_OK {
-        runtime^.compile_cache.last_error_code = status
-    }
-}

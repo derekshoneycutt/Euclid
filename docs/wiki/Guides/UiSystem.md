@@ -40,7 +40,7 @@ This guide documents the current implementation. It focuses on:
 - fixed or resizable landscape panel layout and splitter behavior;
 - input snapshots, widget interaction, and shared press capture;
 - presentation, Terminal, accordion, animation controls, settings, and GIF composition;
-- scrolling, text selection, copy affordances, fonts, and drawing;
+- scrolling, text selection, clipboard publication, fonts, and drawing;
 - current verification surfaces and architectural limitations.
 
 It deliberately does not describe shape construction, constraint solving, particle
@@ -111,10 +111,10 @@ This is a hybrid model:
 | Startup presentation | `src/view/loading.odin`, `src/view/startup_outline.odin` | Loading milestones, reference UI silhouette, warning, and ready handoff. |
 | Shared UI entry point | `src/view/ui/ui.odin` | Constants, frame preparation, panel draw dispatch. |
 | Region layout | `src/view/ui/layout.odin` | Clamp and derive all panel rectangles. |
-| Splitters | `src/view/ui/splitter.odin` | Resize hit testing, capture, drag, fade, and cursor. |
+| Splitters | `src/view/ui/splitter.odin` | Prepared axis ranges, resize capture, owner commit, fade, and cursor. |
 | Containers | `src/view/ui/container.odin` | Clamped fill, border, and inner geometry. |
 | Scrolling | `src/view/ui/scroll.odin` | Viewport, wheel, thumb geometry, capture, scissor, and draw. |
-| Presentation panel | `src/view/ui/text_panel.odin` | Dynview/fallback dispatch, scrolling, selection, copy targets. |
+| Presentation panel | `src/view/ui/text_panel.odin` | Dynview/fallback dispatch, scrolling, selection, and clipboard publication. |
 | Dynview UI | `src/view/ui/dynview/` | Layout drawing, selection geometry, and styled presentation. |
 | Terminal facade | `src/view/ui/terminal.odin` | Terminal panel layout, scroll container, and draw calls. |
 | Terminal service | `src/view/terminal_service.odin` | Terminal lifecycle, input update, Julia messages, and links. |
@@ -123,8 +123,7 @@ This is a hybrid model:
 | Accordion children | `src/view/ui/tree_panel.odin` | Accordion orchestration plus catalogue traversal, reveal, and scrolling. |
 | Animation controls | `src/view/ui/animation_controls.odin` | World-anchored refresh and pause/play interaction and drawing. |
 | Utility panels | `settings_panel.odin`, `gif_panel.odin` | Runtime settings and GIF controls. |
-| Basic widgets | `*button.odin`, `checkbox.odin`, `sliders.odin` | Shared press/release and visuals. |
-| Copy affordances | `src/view/core/copy_interaction.odin` | Copy icon interaction and clipboard action. |
+| Basic widgets | `*button.odin`, `checkbox.odin`, `sliders.odin`, `range.odin` | Prepared actions, geometry, bounded values, and visuals. |
 | Input boundary | `src/view/input/` | Device polling, event storage, hotkeys, and Terminal encoding. |
 | Font service | `src/view/font/` | Face preparation, publication, lookup, and shaping identity. |
 | Shared state | `src/view/model/model.odin` | UI regions, press owner, interaction, selection, and GIF state. |
@@ -500,7 +499,7 @@ Ui_Press_Owner_State :: struct {
 ```
 
 Supported owner kinds currently include list items, icon and text buttons, checkboxes,
-sliders, scrollbars, splitters, Dynview selection, and copy icons.
+sliders, scrollbars, splitters, and Dynview selection.
 
 The common lifecycle is:
 
@@ -528,8 +527,9 @@ independent protocol mechanism.
 `Ui_Semantic_Focus_State` is display-owned and contains persistent logical focus,
 focus origin, bounded addressed commands, and two fixed semantic snapshots. UI
 preparation registers each current control into staging storage with identity, parent,
-role, state, actions, traversal region and order, final bounds, clip bounds, label, and
-value. Registration copies text into snapshot-owned fixed storage. Publication
+role, state, actions, traversal region and order, final bounds, clip bounds, label,
+value, and optional typed numeric range. Registration copies text into snapshot-owned
+fixed storage. Publication
 validates the complete snapshot, reconciles focus, and atomically swaps buffers;
 invalid or over-capacity staging never replaces the last complete snapshot.
 
@@ -545,7 +545,7 @@ Composite policy keeps navigation bounded:
 
 - the Library tree is one global Tab stop with a UUID-backed active descendant;
 - arrow, Home, End, Enter, and Space operate the visible tree topology;
-- Presentation is one generation-scoped document with child copy affordances;
+- Presentation is one generation-scoped document with selection and copy actions;
 - Terminal is one generation-scoped surface, retains plain Tab, and reserves Ctrl+Tab
     or Ctrl+Shift+Tab for leaving global focus forward or backward;
 - hidden, disabled, filtered, or replaced targets repair deterministically against the
@@ -585,8 +585,10 @@ press, enabled state, toggle state, and completed click. A click completes only 
 captured press reaches release according to the widget's hit policy.
 
 Each basic widget exposes an update procedure and a prepared-result draw procedure.
-Panel preparation commits actions and values; drawing only selects visual state from
-the prepared result.
+The result carries authoritative hit and clip geometry plus converged pointer and
+semantic action provenance. Panel preparation commits a domain action or value once;
+drawing and semantic publication consume the prepared facts without reconstructing
+geometry. This is an internal UI contract, not a native accessibility adapter.
 
 The world animation overlay uses icon buttons for:
 
@@ -626,6 +628,23 @@ Integer sliders support wheel steps, press capture, drag updates, clamping, and 
 numeric value label. The settings panel controls maximum dust particles. The GIF panel
 controls downsampling and frame step, each in the range one through four.
 
+`range.odin` owns pure integer and finite-float clamping, normalized-position,
+ordinary-step, page-step, and bound operations. A slider receives its current integer
+by value and returns the converged value, changed flag, source set, range facts, and
+track/knob geometry. Settings and GIF owners apply that value once after all input
+routes converge. Splitters use the float range vocabulary but retain pane constraints,
+orientation policy, GIF locking, ratios, overlap arbitration, and cursor feedback in
+their own component.
+
+### Editable Text
+
+Search, the read-only GIF path, and Terminal expose a shared borrowed editable-text
+descriptor containing semantic identity, committed UTF-8 text, mode, byte cursor and
+anchor, and content revision. Prepared text geometry carries the exact control bounds,
+clip, caret, selection, and codepoint columns used by the UI. Search retains bounded
+storage and query policy. Terminal adapts only committed Termhist input; completion
+preview, output, PTY behavior, history, and selection remain Terminal-owned.
+
 ### List Items And Expanders
 
 Animation rows use a list-item press transaction for selection. Expandable nodes also
@@ -651,16 +670,17 @@ Presentation, Terminal, and Tree all use the pre-render update path:
 
 ```mermaid
 flowchart LR
-    Geometry[Build geometry]
+    Geometry[Build geometry and range]
     Wheel[Apply hovered wheel]
     Capture[Resolve capture and drag]
+    Semantic[Apply composite semantic action]
     Commit[Commit scroll offset]
     Route[Route content input]
     Service[Update Terminal content]
     Scissor[Begin draw-only scissor]
     Draw[Draw content and scrollbar]
 
-    Geometry --> Wheel --> Capture --> Commit --> Route --> Service --> Scissor --> Draw
+    Geometry --> Wheel --> Capture --> Semantic --> Commit --> Route --> Service --> Scissor --> Draw
 ```
 
 The view rectangle, interaction-space rectangle, and optional scroll offset keep hit
@@ -673,6 +693,10 @@ $$
 
 The scrollbar is eight pixels wide and its thumb has a minimum height of 24 pixels.
 Thumb capture uses the shared press owner and persists while the button remains down.
+The prepared result also returns minimum, maximum, current offset, step, orientation,
+changed state, and pointer or semantic provenance. Those facts and scroll actions are
+published on the existing Presentation, Terminal, and Tree composite nodes. The thumb
+is a pointer affordance and never becomes a separate Tab stop.
 
 The complete visible track is reserved above Terminal content. Track wheel input always
 scrolls locally. In content, negotiated SGR mouse mode receives wheel input unless Shift
@@ -698,17 +722,15 @@ For an ordinary animation, the post-layout interaction stage:
 1. obtains the current immutable presentation snapshot;
 1. queries authoritative Dynview content height or the wrapped-text fallback height;
 1. updates and commits the shared presentation scroll container;
-1. refreshes bounded copy targets from authoritative layout;
-1. updates copy capture, clipboard publication, and visual transitions;
 1. reconciles and updates selection state;
 1. publishes a fixed preparation record for drawing.
 
 Drawing then clips with the prepared scroll result and renders selection, compiled or
-fallback content, copy affordances, and the scrollbar without changing interaction.
+fallback content, and the scrollbar without changing interaction.
 
 Dynview remains responsible for semantic content, shaping, line breaking, math layout,
-and copy-target generation. The UI supplies panel bounds, scroll offset, style metrics,
-selection input, clipping, and final draw placement.
+and semantic selection targets. The UI supplies panel bounds, scroll offset, style
+metrics, selection input, clipping, clipboard publication, and final draw placement.
 
 ### Selection
 
@@ -716,20 +738,10 @@ Dynview selection supports semantic documents, atomic source, and wrapped plain 
 The selection stores mode, revision, anchor, head, active state, and drag state.
 
 A left press inside selectable content captures `.Dynview_Selection` unless another
-widget owns the press or a copy icon occupies the point. Dragging updates the head, and
-release commits an active selection when anchor and head differ. `Ctrl+A` selects the
-complete logical content and `Ctrl+C` writes selected source to the clipboard only while
-Presentation has effective keyboard focus.
-
-### Copy Affordances
-
-Dynview compilation publishes bounded copy hit targets. The copy interaction runtime
-tracks one hovered block, one pressed block, and short linger feedback. On a matching
-release it publishes that block's canonical payload to the clipboard.
-
-Copy visual state remains in `Dynview_System`, while `.Copy_Icon` in the shared press
-owner retains the pointer transaction through release. Copy updates run before
-selection, so an admitted icon press has priority over selectable content.
+widget owns the press. Dragging updates the head, and release commits an active
+selection when anchor and head differ. `Ctrl+A` selects the complete logical content
+and `Ctrl+C` writes selected source to the clipboard only while Presentation has
+effective keyboard focus.
 
 ## Terminal Panel
 
@@ -967,7 +979,6 @@ temporary allocator already reset at frame completion.
 | `src/view/startup_outline_test.odin` | Fixed-capacity silhouette geometry and bounded milestone reveal. |
 | `src/view/ui/ui_test.odin` | Router priority, focus, capture, wheel ownership, regions, splitters, animation controls, accordion layout, tree layout, and scrolling. |
 | `src/view/ui/dynview/selection_test.odin` | Selection modes, hit boundaries, capture, and source extraction. |
-| `src/view/core/copy_interaction_test.odin` | Copy target identity, hover, press, release, and animation state. |
 | `src/view/input/input_test.odin` | Device-independent events, correlation, hotkeys, Terminal encoding. |
 | `src/view/terminal/terminal_test.odin` | Terminal geometry, input, selection, links, cursor, and rendering policy. |
 | `src/view/terminal_service_test.odin` | Display service selection and Terminal lifecycle behavior. |
