@@ -100,6 +100,14 @@
     },
     {
       "type": "library",
+      "bom-ref": "runtime:accesskit",
+      "name": "AccessKit C",
+      "version": "0.23.1",
+      "description": "Repository-owned native accessibility provider validated by per-target manifests under libs/accesskit.",
+      "scope": "required"
+    },
+    {
+      "type": "library",
       "bom-ref": "runtime:libpng",
       "name": "libpng",
       "version": "libpng16-16 ABI",
@@ -125,6 +133,7 @@
         "runtime:libjulia",
         "runtime:sdl3",
         "runtime:sdl3-image",
+        "runtime:accesskit",
         "runtime:libpng",
         "runtime:direct3d12",
         "pkg:julia/Colors",
@@ -159,6 +168,10 @@
     {
       "name": "euclid.runtime.windows.sdl-manifest",
       "value": "libs/sdl/bin/win64/manifest.toml"
+    },
+    {
+      "name": "euclid.runtime.accesskit-provider",
+      "value": "repository-owned AccessKit C 0.23.1 payloads with per-target manifests"
     }
   ]
 }

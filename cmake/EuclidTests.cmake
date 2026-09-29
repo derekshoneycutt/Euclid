@@ -100,6 +100,9 @@ if(BUILD_TESTING)
     euclid_add_driver_test(analyzer-regression
         ARGS analyzer-test
         LABELS "analysis")
+    euclid_add_driver_test(accesskit-abi
+        ARGS accesskit-abi
+        LABELS "abi;native")
     euclid_add_driver_test(headless-harness
         ARGS harness
         LABELS "integration;native")

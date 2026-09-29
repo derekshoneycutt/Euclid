@@ -26,6 +26,7 @@ Commands:
                                  Build debug and run one named scenario.
     scenario --all [--format=text|json]
                                  Build debug and run the scenario corpus.
+    accesskit-abi                Validate the pinned AccessKit C host ABI.
     analyzer-test                Run the analyzer's own test suite.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.
@@ -56,7 +57,7 @@ const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage",
     "harness",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
-    "analyzer-test", "wiki", "check-wiki", "clean"])
+    "accesskit-abi", "analyzer-test", "wiki", "check-wiki", "clean"])
 
 """Parse one required repository-driver command and its scoped arguments."""
 function parse_driver_invocation(arguments::Vector{String})
@@ -74,9 +75,10 @@ using TOML
 using UUIDs
 
 include(joinpath(@__DIR__, "build_config.jl"))
-using .EuclidBuildConfiguration: native_linker_flags, native_runtime_dirs,
-    native_runtime_environment, resolve_msvc_tool_path, sdl3_provider_identity,
-    sqlite3_artifact, sqlite3_tool_linker_flags
+using .EuclidBuildConfiguration: accesskit_provider_identity,
+    native_linker_flags, native_runtime_dirs, native_runtime_environment,
+    resolve_msvc_tool_path, sdl3_provider_identity, sqlite3_artifact,
+    sqlite3_tool_linker_flags
 include(joinpath(@__DIR__, "shaders.jl"))
 using .EuclidShaders: ShaderArtifacts, build_shaders
 
@@ -786,6 +788,19 @@ function native_graphics_runtime_components()
     return components
 end
 
+"""Describe the repository-owned AccessKit runtime in CycloneDX form."""
+function accesskit_runtime_component()
+    provider = accesskit_provider_identity()
+    return Dict{String,Any}(
+        "type" => "library", "bom-ref" => "native:accesskit",
+        "name" => "AccessKit C", "version" => provider.version,
+        "scope" => "required", "hashes" => [component_hash(
+            provider.library_path)],
+        "properties" => [
+            Dict("name" => "euclid:provider", "value" => "repository"),
+            Dict("name" => "euclid:manifest", "value" => provider.manifest_path)])
+end
+
 """Describe the statically linked repository SQLite build in CycloneDX form."""
 function sqlite3_runtime_component()
     artifact = sqlite3_artifact()
@@ -895,7 +910,7 @@ function runtime_sbom_components(
             "scope" => "required"))
     end
     append!(components, native_graphics_runtime_components(),
-        [sqlite3_runtime_component()],
+        [accesskit_runtime_component(), sqlite3_runtime_component()],
         shader_tool_components(shader_manifest_path),
         shader_artifact_components(shader_manifest_path))
     return components
@@ -1757,6 +1772,14 @@ function run_analyzer_test_command(arguments::Vector{String})
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end
 
+"""Run the pinned AccessKit C ABI probe for the active host target."""
+function run_accesskit_abi_command(arguments::Vector{String})
+    isempty(arguments) || error("accesskit-abi does not accept arguments.")
+    script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "run_accesskit_abi_probe.jl")
+    return run_command(Cmd([JULIA_EXE, script]); cwd=SCRIPT_DIR).exit_code
+end
+
 """Execute the finalized build plan, verification gate, and optional run step."""
 function execute_build_plan(command::BuildCommand, plan::BuildPlanToggles)
     julia_flags, runtime_dirs = prepare_build_plan(command, plan)
@@ -1780,6 +1803,8 @@ end
 
 """Execute analyzer, documentation, cleanup, and build-plan actions."""
 function execute_project_action(invocation::DriverInvocation)
+    invocation.action == :accesskit_abi &&
+        return run_accesskit_abi_command(invocation.arguments)
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
     if invocation.action in (:wiki, :check_wiki)

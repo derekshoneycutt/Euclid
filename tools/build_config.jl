@@ -3,7 +3,8 @@ module EuclidBuildConfiguration
 using SHA
 using TOML
 
-export native_linker_flags, native_runtime_dirs, native_runtime_environment,
+export accesskit_linker_flags, accesskit_manifest, accesskit_provider_identity,
+    native_linker_flags, native_runtime_dirs, native_runtime_environment,
     native_test_linker_flags, resolve_msvc_tool_path, sdl3_library_path,
     sdl3_linker_flags, sdl3_provider_identity, sdl3_image_library_path,
     sdl3_image_linker_flags, sdl3_image_provider_identity,
@@ -13,6 +14,12 @@ const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const JULIA_PROJECT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const IMPORT_LIB_DIR = joinpath(REPOSITORY_ROOT, "bin", ".native_import_libs")
 const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "sdl", "bin", "win64")
+const ACCESSKIT_ROOT = joinpath(REPOSITORY_ROOT, "libs", "accesskit")
+const ACCESSKIT_VERSION = "0.23.1"
+const ACCESSKIT_BUNDLE_SHA256 =
+    "35b7ca8a6f1e038b5da35e1e9e5a0adaed9bfcf21e1496d29598fbbadcc7043f"
+const ACCESSKIT_HEADER_SHA256 =
+    "1a99c7a8dac2f5b4fa99ab323d0274ab5a3bbac8bee02220ef941cde4d36af4f"
 const HARFBUZZ_PROVIDER_ENV = "EUCLID_HARFBUZZ_PROVIDER"
 const SQLITE3_SOURCE_DIR = joinpath(REPOSITORY_ROOT, "libs", "sqlite3", "source")
 const SQLITE3_BUILD_DIR = joinpath(REPOSITORY_ROOT, ".build", "sqlite3")
@@ -35,6 +42,128 @@ struct SQLite3Artifact
     archive_path::String
     fingerprint::String
     compiler_identity::String
+end
+
+struct AccessKitProviderIdentity
+    kind::Symbol
+    version::String
+    library_path::String
+    manifest_path::String
+end
+
+"""Return manifest vocabulary for one supported AccessKit target."""
+function accesskit_target(kernel::Symbol, architecture::Symbol)
+    platform, toolchain, abi, adapter_version = if kernel == :Linux
+        ("linux", "gnu", "gnu", "0.24.0")
+    elseif kernel == :Darwin
+        ("macos", "apple-clang", "darwin", "0.27.1")
+    elseif kernel == :NT
+        ("windows", "msvc", "msvc", "0.35.1")
+    else
+        error("AccessKit is unsupported on $kernel.")
+    end
+    normalized_architecture = architecture == :aarch64 ? "arm64" :
+        string(architecture)
+    kernel == :Linux && normalized_architecture != "x86_64" && error(
+        "AccessKit has no retained Linux $normalized_architecture payload.")
+    kernel == :NT && normalized_architecture != "x86_64" && error(
+        "AccessKit has no retained Windows $normalized_architecture payload.")
+    normalized_architecture in ("x86_64", "arm64") || error(
+        "AccessKit has no retained $platform $normalized_architecture payload.")
+    return (; platform, architecture=normalized_architecture, toolchain, abi,
+        adapter_version)
+end
+
+"""Validate one AccessKit payload file against its manifest hash."""
+function validate_accesskit_file(
+    root::AbstractString, record::AbstractDict, hash_file::Function)
+    relative_path = String(get(record, "file", ""))
+    isempty(relative_path) && error("AccessKit manifest contains an empty file path.")
+    path = joinpath(root, relative_path)
+    isfile(path) || error("Missing AccessKit payload file: $relative_path")
+    hash_file(path) == get(record, "sha256", "") || error(
+        "AccessKit payload hash mismatch: $relative_path")
+    return path
+end
+
+"""Validate the fixed release and target identity in one AccessKit manifest."""
+function validate_accesskit_manifest_identity(
+    manifest::AbstractDict, target::NamedTuple)
+    get(manifest, "schema_version", 0) == 1 || error(
+        "Unsupported AccessKit manifest schema.")
+    get(manifest, "name", "") == "accesskit-c" || error(
+        "AccessKit manifest has the wrong package name.")
+    get(manifest, "version", "") == ACCESSKIT_VERSION || error(
+        "AccessKit manifest has the wrong version.")
+    get(manifest, "bundle_sha256", "") == ACCESSKIT_BUNDLE_SHA256 || error(
+        "AccessKit manifest has the wrong release bundle hash.")
+    get(manifest, "accesskit_version", "") == "0.25.1" || error(
+        "AccessKit manifest has the wrong schema crate version.")
+    get(manifest, "adapter_version", "") == target.adapter_version || error(
+        "AccessKit manifest has the wrong adapter crate version.")
+    for field in (:platform, :architecture, :toolchain, :abi)
+        get(manifest, string(field), "") == getproperty(target, field) || error(
+            "AccessKit manifest has the wrong $(field).")
+    end
+end
+
+"""Validate and return the repository-owned AccessKit payload manifest."""
+function accesskit_manifest(
+    root::AbstractString=ACCESSKIT_ROOT;
+    kernel::Symbol=Sys.KERNEL,
+    architecture::Symbol=Sys.ARCH,
+    parse_file::Function=TOML.parsefile,
+    hash_file::Function=path -> bytes2hex(open(sha256, path)))
+    target = accesskit_target(kernel, architecture)
+    manifest_path = joinpath(root, "bin", target.platform,
+        target.architecture, "manifest.toml")
+    isfile(manifest_path) || error(
+        "Missing AccessKit manifest at $manifest_path")
+    manifest = parse_file(manifest_path)
+    validate_accesskit_manifest_identity(manifest, target)
+    header = Dict("file" => get(manifest, "header_file", ""),
+        "sha256" => get(manifest, "header_sha256", ""))
+    get(manifest, "header_sha256", "") == ACCESSKIT_HEADER_SHA256 || error(
+        "AccessKit manifest has the wrong tagged header hash.")
+    validate_accesskit_file(root, header, hash_file)
+    license = Dict("file" => get(manifest, "license_file", ""),
+        "sha256" => get(manifest, "license_sha256", ""))
+    validate_accesskit_file(root, license, hash_file)
+    for record in [get(manifest, "notice", Any[]); get(manifest, "artifact", Any[])]
+        validate_accesskit_file(root, record, hash_file)
+    end
+    isempty(get(manifest, "artifact", Any[])) && error(
+        "AccessKit manifest has no artifacts.")
+    return manifest
+end
+
+"""Resolve the validated repository-owned AccessKit provider."""
+function accesskit_provider_identity(
+    kernel::Symbol=Sys.KERNEL;
+    root::AbstractString=ACCESSKIT_ROOT,
+    architecture::Symbol=Sys.ARCH,
+    hash_file::Function=path -> bytes2hex(open(sha256, path)))
+    target = accesskit_target(kernel, architecture)
+    manifest = accesskit_manifest(root; kernel, architecture, hash_file)
+    runtime_role = kernel == :NT ? "runtime" : "runtime-link-library"
+    artifact = only(filter(record -> get(record, "role", "") == runtime_role,
+        manifest["artifact"]))
+    library_path = joinpath(root, String(artifact["file"]))
+    manifest_path = joinpath(root, "bin", target.platform,
+        target.architecture, "manifest.toml")
+    return AccessKitProviderIdentity(
+        :repository, String(manifest["version"]), library_path, manifest_path)
+end
+
+"""Return linker flags for the validated AccessKit payload."""
+function accesskit_linker_flags(
+    kernel::Symbol=Sys.KERNEL;
+    root::AbstractString=ACCESSKIT_ROOT,
+    architecture::Symbol=Sys.ARCH)
+    provider = accesskit_provider_identity(kernel; root, architecture)
+    directory = dirname(provider.library_path)
+    kernel == :NT && return "/LIBPATH:$(normpath(directory)) /DEFAULTLIB:accesskit.lib"
+    return "-L$directory -Wl,-rpath,$directory -laccesskit"
 end
 
 const SDL3_IMAGE_MINIMUM_VERSION = v"3.4.0"
@@ -591,6 +720,7 @@ function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
         Sys.iswindows() ? [Sys.BINDIR; jll_paths] : jll_paths
     end
     native_libraries = [
+        accesskit_provider_identity().library_path,
         sdl3_provider_identity().library_path,
         sdl3_image_provider_identity().library_path,
     ]
@@ -618,14 +748,16 @@ function native_linker_flags(provider::Symbol=harfbuzz_provider())
     provider = validate_harfbuzz_provider(provider)
     if Sys.iswindows()
         return "$(windows_linker_flags()) $(sdl3_linker_flags()) " *
-            "$(sdl3_image_linker_flags()) $(sqlite3_linker_flags())"
+            "$(sdl3_image_linker_flags()) $(accesskit_linker_flags()) " *
+            "$(sqlite3_linker_flags())"
     end
     (Sys.islinux() || Sys.isapple()) || error(
         "SDL3 application linkage is unsupported on $(Sys.KERNEL).")
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
     return "$harfbuzz_flags $(julia_linker_flags()) $(sdl3_linker_flags()) " *
-        "$(sdl3_image_linker_flags()) $(sqlite3_linker_flags())"
+        "$(sdl3_image_linker_flags()) $(accesskit_linker_flags()) " *
+        "$(sqlite3_linker_flags())"
 end
 
 """Append platform libraries and options required by Odin test executables."""

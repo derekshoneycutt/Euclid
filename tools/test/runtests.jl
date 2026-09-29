@@ -18,6 +18,42 @@ const JuliaTestReporter = Main.EuclidJuliaTestReporter
 const ScenarioRunner = Main.EuclidScenarioRunner
 
 @testset "Euclid tooling" begin
+    @testset "AccessKit provider" begin
+        provider = BuildConfiguration.accesskit_provider_identity()
+        @test provider.kind == :repository
+        @test provider.version == "0.23.1"
+        @test isfile(provider.library_path)
+        @test isfile(provider.manifest_path)
+        @test occursin("accesskit", BuildConfiguration.accesskit_linker_flags())
+        @test dirname(provider.library_path) in
+            BuildConfiguration.native_runtime_dirs()
+        @test occursin("accesskit", BuildConfiguration.native_linker_flags())
+
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; architecture=:unsupported)
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; hash_file=_ -> "invalid")
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("schema_version" => 2)))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("platform" => "wrong")))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("toolchain" => "wrong")))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("license_file" => "licenses/missing")))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path), Dict(
+                "artifact" => [Dict("file" => "bin/missing",
+                    "role" => "runtime-link-library", "sha256" => "missing")])))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("artifact" => Any[])))
+    end
+
     @testset "SDL3 providers" begin
         @test BuildConfiguration.sdl3_library_path(
             "/opt/sdl/lib";
@@ -220,6 +256,7 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test parse_driver_invocation(["check", "src"]).action == :check
         @test parse_driver_invocation(["evidence", "capabilities"]).action == :evidence
         @test parse_driver_invocation(["scenario", "example"]).action == :scenario
+        @test parse_driver_invocation(["accesskit-abi"]).action == :accesskit_abi
         @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
         @test_throws ErrorException parse_driver_invocation(["--run"])
         @test_throws ErrorException parse_driver_invocation(["-ABr"])
@@ -393,6 +430,9 @@ reflection_sha256 = "reflection"
                 "required"
             dependencies = only(bom["dependencies"])["dependsOn"]
             @test "native:sdl3" in dependencies
+            @test components["native:accesskit"]["version"] == "0.23.1"
+            @test components["native:accesskit"]["scope"] == "required"
+            @test "native:accesskit" in dependencies
             @test components["native:sqlite3"]["version"] == "3.53.4"
             @test components["native:sqlite3"]["scope"] == "required"
             @test "native:sqlite3" in dependencies

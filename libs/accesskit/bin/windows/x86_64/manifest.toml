@@ -1,0 +1,36 @@
+schema_version = 1
+name = "accesskit-c"
+version = "0.23.1"
+source_url = "https://github.com/AccessKit/accesskit-c/releases/tag/0.23.1"
+source_commit = "8b6ed37c20ed4c59390e253407983333053662ba"
+bundle_sha256 = "35b7ca8a6f1e038b5da35e1e9e5a0adaed9bfcf21e1496d29598fbbadcc7043f"
+platform = "windows"
+architecture = "x86_64"
+toolchain = "msvc"
+abi = "msvc"
+accesskit_version = "0.25.1"
+adapter_version = "0.35.1"
+header_file = "include/accesskit.h"
+header_sha256 = "1a99c7a8dac2f5b4fa99ab323d0274ab5a3bbac8bee02220ef941cde4d36af4f"
+license = "MIT"
+license_file = "licenses/LICENSE-MIT"
+license_sha256 = "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+dependencies = ["uiautomationcore.dll", "user32.dll", "oleaut32.dll", "combase.dll", "VCRUNTIME140.dll", "Universal CRT"]
+
+[[notice]]
+file = "licenses/AUTHORS"
+sha256 = "b7e5fc95eb3b8d2c44f2a56e924c24ffe59f644182592983ecd2826beb530996"
+
+[[notice]]
+file = "licenses/LICENSE.chromium"
+sha256 = "845022e0c1db1abb41a6ba4cd3c4b674ec290f3359d9d3c78ae558d4c0ed9308"
+
+[[artifact]]
+file = "bin/windows/x86_64/accesskit.dll"
+role = "runtime"
+sha256 = "d9f9d834eb0a86c799044800065887749397e2343f37681d38f9725535beaa63"
+
+[[artifact]]
+file = "bin/windows/x86_64/accesskit.lib"
+role = "import-library"
+sha256 = "2694f59a62376cbb608fd85a99bc5912cbd561dfc7a503db8f83cd9313543b0d"
