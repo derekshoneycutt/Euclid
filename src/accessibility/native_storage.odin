@@ -19,6 +19,7 @@ Identity_Domain :: enum u8 {
 // Qualified_Identity preserves every fact required to reject stale native targets.
 Qualified_Identity :: struct {
     domain: Identity_Domain,
+    owner_domain: u16,
     local_id: u64,
     stable_uuid: [16]u8,
     generation: u64,

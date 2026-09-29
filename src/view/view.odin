@@ -19,6 +19,7 @@ import native "native"
 import terminalview "terminal"
 import viewsearch "search"
 import "ui"
+import accessibility "../accessibility"
 import audio "../audio"
 import "../core"
 import geometry "../core/geometry"
@@ -33,6 +34,7 @@ import evidence_trace "../evidence/trace"
 import "../files"
 
 import "base:runtime"
+import "core:encoding/uuid"
 import "core:fmt"
 import "core:log"
 import "core:time"
@@ -518,6 +520,86 @@ route_ui_keyboard_frame :: proc(
     return input.input_frame_copy_unclaimed_events(frame, &event_claims, storage)
 }
 
+// accessibility_ui_identity preserves one complete semantic target for native lookup.
+accessibility_ui_identity :: proc(
+    id: viewmodel.Ui_Node_Id) -> accessibility.Qualified_Identity {
+    return {
+        domain = .Ui,
+        owner_domain = u16(id.domain),
+        local_id = id.local_id,
+        stable_uuid = cast([16]u8)id.stable_id,
+        generation = id.generation,
+    }
+}
+
+// drain_accessibility_actions converges validated native requests with UI commands.
+drain_accessibility_actions :: proc(
+    state: ^Euclid_General_State, platform: ^native.Sdl_Platform) {
+    for {
+        action: native.Sdl_Accessibility_Action
+        status := native.sdl_platform_drain_accessibility_action(platform, &action)
+        if status == .Empty || status == .Closing {return}
+        if status != .Ok {continue}
+        identity := action.identity
+        target := viewmodel.Ui_Node_Id{
+            domain = cast(viewmodel.Ui_Node_Domain)identity.owner_domain,
+            local_id = identity.local_id,
+            stable_id = cast(uuid.Identifier)identity.stable_uuid,
+            generation = identity.generation,
+        }
+        kind := viewmodel.Ui_Focus_Command_Kind.Focus
+        if action.kind == .Activate {kind = .Activate}
+        _ = ui.semantic_apply_external_action(
+            state^.ui_runtime.semantic_focus, target, kind)
+    }
+}
+
+// accessibility_button_bounds clips one semantic rectangle to its owner viewport.
+accessibility_button_bounds :: proc(
+    node: viewmodel.Ui_Semantic_Node) -> accessibility.Bounds {
+    x0 := max(node.bounds.x, node.clip_bounds.x)
+    y0 := max(node.bounds.y, node.clip_bounds.y)
+    x1 := min(node.bounds.x + node.bounds.width,
+        node.clip_bounds.x + node.clip_bounds.width)
+    y1 := min(node.bounds.y + node.bounds.height,
+        node.clip_bounds.y + node.clip_bounds.height)
+    return {f64(x0), f64(y0), f64(max(x0, x1)), f64(max(y0, y1))}
+}
+
+// publish_accessibility_button projects the committed restart control after UI layout.
+publish_accessibility_button :: proc(
+    state: ^Euclid_General_State, platform: ^native.Sdl_Platform) {
+    semantic := state^.ui_runtime.semantic_focus
+    snapshot := ui.semantic_snapshot(semantic)
+    root_bounds := accessibility.Bounds{0, 0,
+        f64(platform^.metrics.logical_width), f64(platform^.metrics.logical_height)}
+    publication := accessibility.Button_Publication_Input{
+        root_bounds = root_bounds,
+        window_focused = semantic^.window_focused,
+    }
+    target := ui.semantic_control_id(
+        .Animation_Control, ui.ANIMATION_REFRESH_BUTTON_ID)
+    index := ui.semantic_node_index(snapshot, target)
+    identity: accessibility.Qualified_Identity
+    if index >= 0 {
+        node := snapshot^.nodes[index]
+        publication.present = .Visible in node.states && node.role == .Button
+        publication.child_bounds = accessibility_button_bounds(node)
+        publication.label = ui.semantic_node_text(
+            snapshot, node.label_offset, node.label_length)
+        publication.child_enabled = .Enabled in node.states
+        publication.child_focusable = .Focusable in node.states
+        publication.child_focused = semantic^.logical_focus == node.id
+        publication.child_supports_focus = .Focus in node.actions
+        publication.child_supports_activate = .Activate in node.actions
+        identity = accessibility_ui_identity(node.id)
+    }
+    if !native.sdl_platform_publish_accessibility_button(
+        platform, publication, identity) && publication.present {
+        log.warn("accessibility_button_publication_failed")
+    }
+}
+
 // frame_gif_capture_extents resolves logical and render dimensions for capture.
 frame_gif_capture_extents :: proc(
     state: ^Euclid_General_State,
@@ -545,6 +627,7 @@ prepare_sdl_frame :: proc(
         state, input_frame, ui_geometry.pointer_capture)
     routed_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
+    drain_accessibility_actions(state, ctx.platform)
     controls := ui.prepare_ui_controls(state, routed_frame, ui_geometry.splitters)
     service_library_search(state, ctx.search_service, frame_dt)
     terminal_frame := terminal_service_update(state, ctx.input_runtime, routed_frame)
@@ -560,6 +643,7 @@ prepare_sdl_frame :: proc(
         state, alpha, ui_geometry.compile_dynview)
     layout_interaction := ui.prepare_and_finish_ui_layout(
         state, routed_frame, terminal_frame)
+    publish_accessibility_button(state, ctx.platform)
     service_scenario_before_present(ctx)
     return {input_frame, terminal_frame, controls, ui_geometry.splitters,
         layout_interaction}

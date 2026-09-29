@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture and validate Euclid's Phase 1 AT-SPI tree on Linux."""
+"""Capture and validate Euclid's Phase 2 AT-SPI button on Linux."""
 
 from __future__ import annotations
 
@@ -16,9 +16,10 @@ import pyatspi
 
 ROOT = Path(__file__).resolve().parents[2]
 BINARY = ROOT / ".build" / "debug" / "euclid"
-ARTIFACTS = Path(".build/accessibility-static-tree")
+ARTIFACTS = Path(".build/accessibility-button")
 REPORT = ROOT / ARTIFACTS / "atspi.json"
-LABEL = "Euclid workspace"
+LABEL = "Restart animation"
+SCENARIO = Path("tools/accessibility/accessibility-button-acceptance.jsonl")
 WINDOW_SELECTOR = "class:^euclid$"
 
 
@@ -35,8 +36,8 @@ def descendants(node, depth: int = 4):
         yield from descendants(child, depth - 1)
 
 
-def find_static_child():
-    """Return the first static Euclid label currently exposed on the desktop."""
+def find_button():
+    """Return the first Euclid restart button currently exposed on the desktop."""
     desktop = pyatspi.Registry.getDesktop(0)
     try:
         applications = list(desktop)
@@ -115,20 +116,20 @@ def wait_for_tree(timeout_seconds: float = 25.0):
     """Wait for AccessKit activation and return the application and static child."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        application, child = find_static_child()
+        application, child = find_button()
         if child is not None:
             return application, child
         time.sleep(0.1)
     raise RuntimeError(
-        "Euclid static accessibility child was not discovered; "
+        "Euclid accessibility button was not discovered; "
         f"desktop={json.dumps(desktop_summary(), sort_keys=True)}")
 
 
 def wait_for_removal(timeout_seconds: float = 5.0) -> bool:
-    """Return true once the static child has disappeared after process shutdown."""
+    """Return true once the button has disappeared after process shutdown."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        _, child = find_static_child()
+        _, child = find_button()
         if child is None:
             return True
         time.sleep(0.1)
@@ -145,6 +146,31 @@ def wait_for_node_record(node, predicate, timeout_seconds: float = 3.0) -> dict:
             return last_record
         time.sleep(0.05)
     raise RuntimeError(f"AT-SPI host transition timed out; last={last_record}")
+
+
+def action_names(node) -> list[str]:
+    """Return normalized actions exposed by one AT-SPI accessible."""
+    action = node.queryAction()
+    return [action.getName(index) for index in range(action.nActions)]
+
+
+def focus_button(node) -> dict:
+    """Request native focus and return the resulting focused record."""
+    if not node.queryComponent().grabFocus():
+        raise RuntimeError("AT-SPI rejected restart-button focus")
+    return wait_for_node_record(node, lambda record: record["focused"])
+
+
+def activate_button(node) -> str:
+    """Invoke the restart button's native click action."""
+    action = node.queryAction()
+    for index in range(action.nActions):
+        name = action.getName(index)
+        if name.lower() in ("click", "press", "activate"):
+            if not action.doAction(index):
+                raise RuntimeError(f"AT-SPI action was rejected: {name}")
+            return name
+    raise RuntimeError(f"restart button has no activation action: {action_names(node)}")
 
 
 def dispatch_hyprland(hyprctl: str, expression: str) -> None:
@@ -211,11 +237,14 @@ def wait_for_runtime_ready(process, diagnostics: Path) -> None:
 def run_session(session_index: int) -> dict:
     """Launch and validate one orderly Euclid accessibility session."""
     diagnostics = ROOT / ARTIFACTS / f"session-{session_index}.log"
+    scenario_artifacts = ARTIFACTS / f"session-{session_index}-evidence"
     diagnostics.parent.mkdir(parents=True, exist_ok=True)
     command = [
         str(BINARY),
         "--window-mode=resizable",
         f"--diagnostics={diagnostics}",
+        f"--scenario={SCENARIO}",
+        f"--scenario-artifacts={scenario_artifacts}",
     ]
     process = subprocess.Popen(
         command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -232,33 +261,42 @@ def run_session(session_index: int) -> dict:
         wait_for_runtime_ready(process, diagnostics)
         parent = child.parent
         transitions = exercise_host_transitions(parent, child)
+        focused = focus_button(child)
+        actions = action_names(child)
         result = {
-            "schema_version": 1,
+            "schema_version": 2,
             "session_type": os.environ.get("XDG_SESSION_TYPE", "unknown"),
             "video_driver": os.environ.get("SDL_VIDEODRIVER", "default"),
             "application": node_record(application),
             "root": node_record(parent),
             "child": node_record(child),
+            "focused_child": focused,
+            "actions": actions,
             "host_transitions": transitions,
         }
         if result["root"]["role"] not in ("application", "landmark"):
-            raise RuntimeError("static child parent is not an application root")
+            raise RuntimeError("button parent is not an application root")
         if result["root"]["child_count"] != 1:
             raise RuntimeError("synthetic application root does not have one child")
-        if result["child"]["role"] != "label":
-            raise RuntimeError("static child is not exposed as a label")
+        if result["child"]["role"] not in ("push button", "button"):
+            raise RuntimeError("restart control is not exposed as a button")
         if result["child"]["parent_path"] != result["root"]["object_path"]:
-            raise RuntimeError("static child parent link is inconsistent")
+            raise RuntimeError("button parent link is inconsistent")
         if result["root"]["parent_path"] != result["application"]["object_path"]:
             raise RuntimeError("synthetic root parent link is inconsistent")
         if result["child"]["bounds"]["width"] < 0 or \
                 result["child"]["bounds"]["height"] < 0:
-            raise RuntimeError("static child bounds are inverted")
-        close_host_window()
+            raise RuntimeError("button bounds are inverted")
+        result["invoked_action"] = activate_button(child)
         return_code = process.wait(timeout=20)
         if return_code != 0:
             stderr = process.stderr.read() if process.stderr else ""
             raise RuntimeError(f"Euclid orderly shutdown failed ({return_code}): {stderr}")
+        manifest_path = ROOT / scenario_artifacts / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        result["scenario_manifest"] = manifest
+        if manifest.get("result") != "passed":
+            raise RuntimeError(f"accessibility owner evidence failed: {manifest}")
         result["removed_after_shutdown"] = wait_for_removal()
         if not result["removed_after_shutdown"]:
             raise RuntimeError("accessibility provider remained after shutdown")
@@ -274,12 +312,12 @@ def run_session(session_index: int) -> dict:
 
 
 def run_probe() -> dict:
-    """Validate repeated Euclid sessions on one fresh accessibility bus."""
+    """Validate repeated Euclid sessions on the desktop accessibility bus."""
     if not BINARY.is_file():
         raise RuntimeError("debug binary missing; run cmake --build --preset debug")
     shutil.rmtree(ROOT / ARTIFACTS, ignore_errors=True)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "sessions": [run_session(1), run_session(2)],
     }
 

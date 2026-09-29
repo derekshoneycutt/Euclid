@@ -317,6 +317,31 @@ semantic_command_requested :: proc(
     return false
 }
 
+// semantic_apply_external_action validates and converges one owner-external action.
+semantic_apply_external_action :: proc(
+    state: ^viewmodel.Ui_Semantic_Focus_State,
+    target: viewmodel.Ui_Node_Id,
+    kind: viewmodel.Ui_Focus_Command_Kind) -> bool {
+    if state == nil {return false}
+    snapshot := semantic_snapshot(state)
+    index := semantic_node_index(snapshot, target)
+    if index < 0 {return false}
+    node := snapshot^.nodes[index]
+    required := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
+    if node.states & required != required {return false}
+    if kind == .Focus && .Focus in node.actions {
+        state^.logical_focus = target
+        state^.focus_origin = .Keyboard
+        state^.last_region = node.region
+        state^.last_traversal_order = node.traversal_order
+        return true
+    }
+    if kind == .Activate && .Activate in node.actions {
+        return semantic_append_command(state, {target = target, kind = kind})
+    }
+    return false
+}
+
 // semantic_request_pointer_focus moves focus to one registered staging node.
 semantic_request_pointer_focus :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,

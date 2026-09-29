@@ -7,6 +7,10 @@ import sdl "vendor:sdl3"
 import portable_accessibility "../../accessibility"
 import native_accessibility "accessibility"
 
+Sdl_Accessibility_Action :: native_accessibility.Adapter_Action
+Sdl_Accessibility_Action_Kind :: native_accessibility.Adapter_Action_Kind
+Sdl_Accessibility_Action_Status :: native_accessibility.Adapter_Action_Status
+
 when ODIN_OS == .Linux {
     SDL_GPU_DRIVER :: "vulkan"
     SDL_GPU_SHADER_FORMAT :: sdl.GPUShaderFormat{.SPIRV}
@@ -589,18 +593,15 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
     platform^ = {}
 }
 
-// sdl_platform_service_accessibility publishes static Linux bounds and host focus.
+// sdl_platform_service_accessibility retains host focus and forwards X11 root bounds.
 sdl_platform_service_accessibility :: proc(
     platform: ^Sdl_Platform, focused: bool) {
     if platform == nil {return}
     platform^.window_focused = focused
     when ODIN_OS == .Linux {
+        if platform^.accessibility.native == nil {return}
         width := f64(platform^.metrics.logical_width)
         height := f64(platform^.metrics.logical_height)
-        if !native_accessibility.unix_adapter_update(
-            &platform^.accessibility, width, height, focused) {
-            return
-        }
         if string(sdl.GetCurrentVideoDriver()) != "x11" {return}
         x, y: i32
         if !sdl.GetWindowPosition(platform^.window, &x, &y) {return}
@@ -610,6 +611,31 @@ sdl_platform_service_accessibility :: proc(
         native_accessibility.unix_adapter_set_root_bounds(
             &platform^.accessibility, outer, outer)
     }
+}
+
+// sdl_platform_publish_accessibility_button publishes one committed UI projection.
+sdl_platform_publish_accessibility_button :: proc(
+    platform: ^Sdl_Platform,
+    input: portable_accessibility.Button_Publication_Input,
+    identity: portable_accessibility.Qualified_Identity) -> bool {
+    if platform == nil {return false}
+    when ODIN_OS == .Linux {
+        return native_accessibility.unix_adapter_publish_button(
+            &platform^.accessibility, input, identity)
+    }
+    return true
+}
+
+// sdl_platform_drain_accessibility_action returns one validated native request.
+sdl_platform_drain_accessibility_action :: proc(
+    platform: ^Sdl_Platform,
+    destination: ^Sdl_Accessibility_Action) -> Sdl_Accessibility_Action_Status {
+    if platform == nil {return .Closing}
+    when ODIN_OS == .Linux {
+        return native_accessibility.unix_adapter_drain_action(
+            &platform^.accessibility, destination)
+    }
+    return .Empty
 }
 
 // sdl_platform_admit_gpu creates, claims, and configures the native GPU device.
@@ -668,18 +694,6 @@ sdl_platform_admit_window :: proc(
     return platform^.window != nil
 }
 
-// sdl_platform_admit_accessibility attaches the optional Linux window adapter.
-sdl_platform_admit_accessibility :: proc(platform: ^Sdl_Platform) {
-    when ODIN_OS == .Linux {
-        if !native_accessibility.unix_adapter_create(
-            &platform^.accessibility,
-            f64(platform^.metrics.logical_width),
-            f64(platform^.metrics.logical_height), platform^.window_focused) {
-            log.warn("accessibility_unix_adapter_unavailable")
-        }
-    }
-}
-
 // sdl_platform_create initializes one native GPU window and owned scene target.
 sdl_platform_create :: proc(
     platform: ^Sdl_Platform, options: Sdl_Platform_Options) -> bool {
@@ -709,7 +723,6 @@ sdl_platform_create :: proc(
     }
     platform^.window_focused =
         .INPUT_FOCUS in sdl.GetWindowFlags(platform^.window)
-    sdl_platform_admit_accessibility(platform)
     sdl_platform_log_ready(platform, present_mode)
     return true
 }

@@ -466,6 +466,53 @@ semantic_publication_marks_keyboard_focus_visible :: proc(t: ^testing.T) {
     testing.expect(t, .Focus_Visible not_in semantic_snapshot(state)^.nodes[0].states)
 }
 
+// Verify native-style focus and activation converge through current semantic facts.
+@(test)
+semantic_external_button_actions_validate_and_coalesce :: proc(t: ^testing.T) {
+    state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(state, context.allocator)
+    button := semantic_test_id(.Animation_Control, 2101)
+    testing.expect(t, semantic_begin(state))
+    testing.expect_value(t, semantic_register_control(state, {
+        id = button, role = .Button,
+        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+        actions = {.Focus, .Activate}, region = .Animation_Overlay,
+        label = "Restart animation",
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect(t, semantic_apply_external_action(state, button, .Focus))
+    testing.expect_value(t, state.logical_focus, button)
+    testing.expect(t, semantic_apply_external_action(state, button, .Activate))
+    testing.expect(t, semantic_apply_external_action(state, button, .Activate))
+    testing.expect(t, semantic_command_requested(state, button, .Activate))
+    action := button_resolve_action({
+        semantics = {focus = state, id = button,
+            states = {.Visible, .Enabled, .Focusable}},
+        pointer_activated = true,
+    })
+    testing.expect(t, action.activated)
+    testing.expect(t, .Pointer in action.sources && .Semantic in action.sources)
+}
+
+// Verify disabled and stale external targets cannot focus or activate.
+@(test)
+semantic_external_button_actions_reject_invalid_targets :: proc(t: ^testing.T) {
+    state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(state, context.allocator)
+    button := semantic_test_id(.Animation_Control, 2101)
+    testing.expect(t, semantic_begin(state))
+    testing.expect_value(t, semantic_register_control(state, {
+        id = button, role = .Button, states = {.Visible, .Focusable},
+        actions = {.Focus, .Activate}, label = "Restart animation",
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect(t, !semantic_apply_external_action(state, button, .Focus))
+    testing.expect(t, !semantic_apply_external_action(state, button, .Activate))
+    stale := button
+    stale.generation += 1
+    testing.expect(t, !semantic_apply_external_action(state, stale, .Activate))
+}
+
 // Verify unsupported role actions remain available to later input consumers.
 @(test)
 semantic_keyboard_rejects_unadvertised_action :: proc(t: ^testing.T) {

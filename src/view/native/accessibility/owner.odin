@@ -19,6 +19,30 @@ Adapter_Diagnostic_Event :: enum u8 {
     Destroy,
 }
 
+// Adapter_Action_Kind identifies one validated native action for the display owner.
+Adapter_Action_Kind :: enum u8 {
+    Focus,
+    Activate,
+}
+
+// Adapter_Action_Status identifies one display-thread drain or rejection outcome.
+Adapter_Action_Status :: enum u8 {
+    Ok,
+    Empty,
+    Closing,
+    Unknown_Target,
+    Stale_Generation,
+    Removed_Target,
+    Unsupported_Action,
+    Disabled_Target,
+}
+
+// Adapter_Action carries one validated native request without platform pointers.
+Adapter_Action :: struct {
+    kind: Adapter_Action_Kind,
+    identity: portable.Qualified_Identity,
+}
+
 // Adapter_Diagnostics records content-free callback and owner lifecycle counts.
 Adapter_Diagnostics :: struct {
     activations: u64,
@@ -27,6 +51,8 @@ Adapter_Diagnostics :: struct {
     deactivations: u64,
     updates: u64,
     destroys: u64,
+    rejected_actions: u64,
+    last_action_status: Adapter_Action_Status,
 }
 
 // Adapter owns one platform handle and its callback-visible publication.
@@ -35,9 +61,22 @@ Adapter :: struct {
     publication: portable.Protected_Publication,
     native_ids: portable.Native_Id_Registry,
     actions: portable.Action_Queue,
+    child_identity: portable.Qualified_Identity,
+    child_native_id: u64,
+    child_present: bool,
     delivered_generation: u64,
     diagnostics_mutex: sync.Mutex,
     diagnostics: Adapter_Diagnostics,
+}
+
+// adapter_record_action_rejection retains one typed display-thread rejection.
+adapter_record_action_rejection :: proc(
+    owner: ^Adapter, status: Adapter_Action_Status) {
+    if owner == nil || status == .Ok || status == .Empty {return}
+    sync.mutex_lock(&owner^.diagnostics_mutex)
+    owner^.diagnostics.rejected_actions += 1
+    owner^.diagnostics.last_action_status = status
+    sync.mutex_unlock(&owner^.diagnostics_mutex)
 }
 
 // adapter_record_diagnostic increments one bounded content-free lifecycle counter.
