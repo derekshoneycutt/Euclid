@@ -2,7 +2,15 @@ package view
 
 import viewmodel "model"
 
+import accessibility "../accessibility"
 import "core:testing"
+
+// Verify absent semantic relations remain absent across native projection.
+@(test)
+accessibility_ui_identity_preserves_empty_sentinel :: proc(t: ^testing.T) {
+    testing.expect_value(t, accessibility_ui_identity({}),
+        accessibility.Qualified_Identity{})
+}
 
 // Verify the startup silhouette covers every intended stable UI boundary.
 @(test)

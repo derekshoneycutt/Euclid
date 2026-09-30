@@ -7,6 +7,8 @@ import portable "../../../accessibility"
 
 import "core:math"
 import "base:runtime"
+import "core:log"
+import "core:unicode/utf8"
 
 // unix_configure_child copies the complete portable child record into AccessKit.
 unix_configure_child :: proc(
@@ -113,6 +115,10 @@ unix_control_role :: proc(role: portable.Publication_Role) -> accesskit.Role {
     case .Checkbox: return .Check_Box
     case .Slider: return .Slider
     case .Status: return .Status
+    case .Search_Input: return .Search_Input
+    case .Text_Run: return .Text_Run
+    case .Tree: return .Tree
+    case .Tree_Item: return .Tree_Item
     case .Button, .Accordion_Header: return .Button
     case .Label: return .Label
     }
@@ -135,6 +141,19 @@ unix_configure_control_actions :: proc(
     if .Set_Value in actions {
         accesskit.accesskit_node_add_action(node, .Set_Value)
     }
+    if .Replace_Selected_Text in actions {
+        accesskit.accesskit_node_add_action(node, .Replace_Selected_Text)
+    }
+    if .Set_Text_Selection in actions {
+        accesskit.accesskit_node_add_action(node, .Set_Text_Selection)
+    }
+    if .Select in actions {accesskit.accesskit_node_add_action(node, .Click)}
+    if .Expand in actions {accesskit.accesskit_node_add_action(node, .Expand)}
+    if .Collapse in actions {accesskit.accesskit_node_add_action(node, .Collapse)}
+    if .Scroll in actions {
+        accesskit.accesskit_node_add_action(node, .Scroll_Up)
+        accesskit.accesskit_node_add_action(node, .Scroll_Down)
+    }
 }
 
 // unix_configure_control_state publishes role-specific ordinary-control state.
@@ -152,6 +171,9 @@ unix_configure_control_state :: proc(
     if control.role == .Accordion_Header {
         accesskit.accesskit_node_set_expanded(node, control.expanded)
     }
+    if control.role == .Tree_Item && .Toggle in control.actions {
+        accesskit.accesskit_node_set_expanded(node, control.expanded)
+    }
     if control.role == .Status {
         accesskit.accesskit_node_set_live(node, .Polite)
     }
@@ -159,8 +181,14 @@ unix_configure_control_state :: proc(
 
 // unix_configure_control_range publishes one complete finite numeric range.
 unix_configure_control_range :: proc(
-    node: ^accesskit.Node, range: portable.Numeric_Range) {
+    node: ^accesskit.Node, control: portable.Control_Publication) {
+    range := control.range
     if !range.present {return}
+    if control.role == .Tree {
+        accesskit.accesskit_node_set_scroll_y(node, range.current)
+        accesskit.accesskit_node_set_scroll_y_min(node, range.minimum)
+        accesskit.accesskit_node_set_scroll_y_max(node, range.maximum)
+    }
     accesskit.accesskit_node_set_min_numeric_value(node, range.minimum)
     accesskit.accesskit_node_set_max_numeric_value(node, range.maximum)
     accesskit.accesskit_node_set_numeric_value(node, range.current)
@@ -168,6 +196,60 @@ unix_configure_control_range :: proc(
     orientation := accesskit.Orientation.Horizontal
     if range.vertical {orientation = .Vertical}
     accesskit.accesskit_node_set_orientation(node, orientation)
+}
+
+// unix_configure_control_set_facts publishes one TreeItem's structural position.
+unix_configure_control_set_facts :: proc(
+    node: ^accesskit.Node, control: portable.Control_Publication) {
+    if control.role != .Tree_Item {return}
+    if control.level > 0 {
+        accesskit.accesskit_node_set_level(node, uintptr(control.level))
+    }
+    if control.set_size > 0 {
+        accesskit.accesskit_node_set_size_of_set(node, uintptr(control.set_size))
+    }
+    if control.position_in_set > 0 {
+        accesskit.accesskit_node_set_position_in_set(
+            node, uintptr(control.position_in_set))
+    }
+}
+
+// unix_configure_control_text publishes copied editable text and selection facts.
+unix_configure_control_text :: proc(
+    node: ^accesskit.Node, publication: ^portable.Control_Tree_Publication,
+    control: portable.Control_Publication) {
+    if !control.text_present {return}
+    placeholder := portable.control_publication_text(
+        publication, control.placeholder_offset, control.placeholder_length)
+    if len(placeholder) > 0 {
+        accesskit.accesskit_node_set_placeholder_with_length(
+            node, cast(cstring)raw_data(placeholder), uintptr(len(placeholder)))
+    }
+    if control.role != .Search_Input && control.character_count > 0 {
+        first := int(control.character_offset)
+        accesskit.accesskit_node_set_character_lengths(node,
+            uintptr(control.character_count), &publication^.character_lengths[first])
+    }
+    if control.role != .Search_Input && control.word_start_count > 0 {
+        first := int(control.word_start_offset)
+        accesskit.accesskit_node_set_word_starts(node,
+            uintptr(control.word_start_count), &publication^.word_starts[first])
+    }
+    if control.role != .Search_Input {return}
+    selection_id := control.native_id
+    for candidate in publication^.controls[:publication^.control_count] {
+        if candidate.parent_native_id == control.native_id &&
+           candidate.role == .Text_Run {
+            selection_id = candidate.native_id
+            break
+        }
+    }
+    native_id := accesskit.Node_Id(selection_id)
+    selection := accesskit.Text_Selection{
+        anchor = {native_id, uintptr(control.anchor_character)},
+        focus = {native_id, uintptr(control.cursor_character)},
+    }
+    accesskit.accesskit_node_set_text_selection(node, selection)
 }
 
 // unix_configure_control copies one complete portable record into AccessKit.
@@ -180,26 +262,55 @@ unix_configure_control :: proc(
         publication, control.value_offset, control.value_length)
     accesskit.accesskit_node_set_label_with_length(
         node, cast(cstring)raw_data(label), uintptr(len(label)))
-    if len(value) > 0 {
+    if control.role == .Text_Run ||
+       control.role != .Search_Input && len(value) > 0 {
         accesskit.accesskit_node_set_value_with_length(
             node, cast(cstring)raw_data(value), uintptr(len(value)))
     }
     unix_configure_control_actions(node, control.actions)
     unix_configure_control_state(node, control)
-    unix_configure_control_range(node, control.range)
+    unix_configure_control_range(node, control)
+    unix_configure_control_set_facts(node, control)
+    unix_configure_control_text(node, publication, control)
     accesskit.accesskit_node_set_bounds(node, cast(accesskit.Rect)control.bounds)
+}
+
+// unix_configure_control_hierarchy publishes ordered children and active descendant.
+unix_configure_control_hierarchy :: proc(
+    node: ^accesskit.Node, publication: ^portable.Control_Tree_Publication,
+    control: portable.Control_Publication) {
+    child_ids: [portable.CONTROL_NODE_CAPACITY]accesskit.Node_Id
+    child_count := 0
+    for candidate in publication^.controls[:publication^.control_count] {
+        if candidate.parent_native_id != control.native_id {continue}
+        child_ids[child_count] = accesskit.Node_Id(candidate.native_id)
+        child_count += 1
+    }
+    accesskit.accesskit_node_set_children(
+        node, uintptr(child_count), &child_ids[0])
+    if control.active_descendant_native_id != 0 {
+        accesskit.accesskit_node_set_active_descendant(
+            node, accesskit.Node_Id(control.active_descendant_native_id))
+    } else {
+        accesskit.accesskit_node_clear_active_descendant(node)
+    }
+    if control.controls_native_id != 0 {
+        relation := accesskit.Node_Id(control.controls_native_id)
+        accesskit.accesskit_node_set_controls(node, 1, &relation)
+    }
 }
 
 // unix_control_root_update creates and transfers one complete synthetic root.
 unix_control_root_update :: proc(
     publication: ^portable.Control_Tree_Publication,
     child_ids: ^[portable.CONTROL_NODE_CAPACITY]accesskit.Node_Id,
+    child_count: int,
     focus_id: accesskit.Node_Id) -> ^accesskit.Tree_Update {
     root_id := accesskit.Node_Id(publication^.root_id)
     root := accesskit.accesskit_node_new(.Application)
     if root == nil {return nil}
     accesskit.accesskit_node_set_children(
-        root, uintptr(publication^.control_count), &child_ids^[0])
+        root, uintptr(child_count), &child_ids^[0])
     accesskit.accesskit_node_set_bounds(
         root, cast(accesskit.Rect)publication^.root_bounds)
     update := accesskit.accesskit_tree_update_with_capacity_and_focus(
@@ -228,6 +339,7 @@ unix_control_push_nodes :: proc(
         child := accesskit.accesskit_node_new(unix_control_role(control.role))
         if child == nil {return false}
         unix_configure_control(child, publication, control)
+        unix_configure_control_hierarchy(child, publication, control)
         accesskit.accesskit_tree_update_push_node(
             update, accesskit.Node_Id(control.native_id), child)
     }
@@ -240,13 +352,18 @@ unix_control_tree_update :: proc(
     if portable.control_tree_validate(publication) != .Ok {return nil}
     focus_id := accesskit.Node_Id(publication^.root_id)
     child_ids: [portable.CONTROL_NODE_CAPACITY]accesskit.Node_Id
-    for control, index in publication^.controls[:publication^.control_count] {
-        child_ids[index] = accesskit.Node_Id(control.native_id)
+    child_count := 0
+    for control in publication^.controls[:publication^.control_count] {
+        if control.parent_native_id == publication^.root_id {
+            child_ids[child_count] = accesskit.Node_Id(control.native_id)
+            child_count += 1
+        }
         if publication^.window_focused && control.focused {
-            focus_id = child_ids[index]
+            focus_id = accesskit.Node_Id(control.native_id)
         }
     }
-    update := unix_control_root_update(publication, &child_ids, focus_id)
+    update := unix_control_root_update(
+        publication, &child_ids, child_count, focus_id)
     if update == nil {return nil}
     if !unix_control_push_nodes(update, publication) {
         accesskit.accesskit_tree_update_free(update)
@@ -289,6 +406,112 @@ unix_adapter_notify_control_update :: proc(owner: ^Adapter) {
 }
 
 // unix_adapter_stage_controls resolves native IDs into complete portable records.
+unix_adapter_input_index :: proc(
+    input: Adapter_Tree_Input,
+    identity: portable.Qualified_Identity) -> int {
+    if identity == {} {return -1}
+    for source, index in input.controls {
+        if source.identity == identity {return index}
+    }
+    return -1
+}
+
+// unix_adapter_stage_validation builds temporary IDs without consuming registry IDs.
+unix_adapter_stage_validation :: proc(
+    input: Adapter_Tree_Input,
+    controls: ^[portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input) ->
+    bool {
+    for source, index in input.controls {
+        for prior in input.controls[:index] {
+            if prior.identity == source.identity {
+                log.warnf("accessibility_control_identity_duplicate index=%d prior=%d",
+                    index, unix_adapter_input_index(input, source.identity))
+                return false
+            }
+        }
+        controls^[index] = source.control
+        controls^[index].native_id = u64(index + 2)
+        parent_index := unix_adapter_input_index(input, source.parent_identity)
+        if source.parent_identity != {} && parent_index < 0 {return false}
+        if parent_index >= 0 {controls^[index].parent_native_id = u64(parent_index + 2)}
+        active_index := unix_adapter_input_index(
+            input, source.active_descendant_identity)
+        if source.active_descendant_identity != {} && active_index < 0 {return false}
+        if active_index >= 0 {
+            controls^[index].active_descendant_native_id = u64(active_index + 2)
+        }
+        controls_index := unix_adapter_input_index(input, source.controls_identity)
+        if source.controls_identity != {} && controls_index < 0 {return false}
+        if controls_index >= 0 {
+            controls^[index].controls_native_id = u64(controls_index + 2)
+        }
+    }
+    validation: portable.Control_Tree_Publication
+    status := portable.control_tree_build(&validation, {
+        root_bounds = input.root_bounds, window_focused = input.window_focused,
+        controls = controls^[:len(input.controls)],
+    })
+    if status != .Ok {
+        log.warnf("accessibility_control_validation_failed status=%v controls=%d",
+            status, len(input.controls))
+        return false
+    }
+    return true
+}
+
+// unix_adapter_resolve_relation maps one optional semantic identity to a native ID.
+unix_adapter_resolve_relation :: proc(
+    input: Adapter_Tree_Input,
+    native_ids: ^[portable.CONTROL_NODE_CAPACITY]u64,
+    identity: portable.Qualified_Identity) -> (u64, bool) {
+    if identity == {} {return 0, true}
+    index := unix_adapter_input_index(input, identity)
+    if index < 0 {return 0, false}
+    return native_ids^[index], true
+}
+
+// unix_adapter_resolve_control_ids assigns monotonic IDs to staged identities.
+unix_adapter_resolve_control_ids :: proc(
+    owner: ^Adapter, input: Adapter_Tree_Input,
+    native_ids: ^[portable.CONTROL_NODE_CAPACITY]u64) -> bool {
+    for source, index in input.controls {
+        native_id, resolved := portable.native_id_resolve(
+            &owner^.native_ids, source.identity)
+        if !resolved {
+            log.warnf(
+                "accessibility_control_identity_rejected index=%d owner=%d " +
+                "local_id=%d has_uuid=%v registry_count=%d",
+                index, source.identity.owner_domain, source.identity.local_id,
+                source.identity.stable_uuid != ([16]u8{}), owner^.native_ids.count)
+            return false
+        }
+        native_ids^[index] = native_id
+    }
+    return true
+}
+
+// unix_adapter_stage_control resolves one record's hierarchy relations.
+unix_adapter_stage_control :: proc(
+    input: Adapter_Tree_Input,
+    native_ids: ^[portable.CONTROL_NODE_CAPACITY]u64,
+    source: Adapter_Control_Input, index: int,
+    destination: ^portable.Control_Publication_Input) -> bool {
+    destination^ = source.control
+    destination^.native_id = native_ids^[index]
+    parent_id, parent_ok := unix_adapter_resolve_relation(
+        input, native_ids, source.parent_identity)
+    active_id, active_ok := unix_adapter_resolve_relation(
+        input, native_ids, source.active_descendant_identity)
+    controls_id, controls_ok := unix_adapter_resolve_relation(
+        input, native_ids, source.controls_identity)
+    if !parent_ok || !active_ok || !controls_ok {return false}
+    destination^.parent_native_id = parent_id
+    destination^.active_descendant_native_id = active_id
+    destination^.controls_native_id = controls_id
+    return true
+}
+
+// unix_adapter_stage_controls resolves native IDs into complete portable records.
 unix_adapter_stage_controls :: proc(
     owner: ^Adapter, input: Adapter_Tree_Input,
     controls: ^[portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input,
@@ -300,22 +523,12 @@ unix_adapter_stage_controls :: proc(
     }
     validation_controls:
         [portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input
+    if !unix_adapter_stage_validation(input, &validation_controls) {return false}
+    native_ids: [portable.CONTROL_NODE_CAPACITY]u64
+    if !unix_adapter_resolve_control_ids(owner, input, &native_ids) {return false}
     for source, index in input.controls {
-        validation_controls[index] = source.control
-        validation_controls[index].native_id = u64(index + 2)
-    }
-    validation: portable.Control_Tree_Publication
-    if portable.control_tree_build(&validation, {
-            root_bounds = input.root_bounds,
-            window_focused = input.window_focused,
-            controls = validation_controls[:len(input.controls)],
-        }) != .Ok {return false}
-    for source, index in input.controls {
-        native_id, resolved := portable.native_id_resolve(
-            &owner^.native_ids, source.identity)
-        if !resolved {return false}
-        controls^[index] = source.control
-        controls^[index].native_id = native_id
+        if !unix_adapter_stage_control(
+            input, &native_ids, source, index, &controls^[index]) {return false}
     }
     count^ = len(input.controls)
     return true
@@ -348,11 +561,16 @@ unix_adapter_publish_controls :: proc(
         return false
     }
     slice := controls[:control_count]
-    if portable.protected_publish_controls(&owner^.control_publication, {
+    status := portable.protected_publish_controls(&owner^.control_publication, {
             root_bounds = input.root_bounds,
             window_focused = input.window_focused,
             controls = slice,
-        }) != .Ok {return false}
+        })
+    if status != .Ok {
+        log.warnf("accessibility_control_publish_failed status=%v controls=%d",
+            status, control_count)
+        return false
+    }
     unix_adapter_retire_absent_controls(owner, slice)
     if owner^.native == nil {
         native := accesskit.accesskit_unix_adapter_new(
@@ -504,19 +722,63 @@ unix_validate_numeric_action :: proc(
     request: portable.Queued_Action,
     destination: ^Adapter_Action) -> Adapter_Action_Status {
     value := request.numeric_value
-    valid := .Set_Value in control^.actions && request.has_numeric_value &&
+    valid := request.has_numeric_value &&
         !math.is_nan(value) && !math.is_inf(value) && control^.range.present &&
         value >= control^.range.minimum && value <= control^.range.maximum
     if !valid {return .Invalid_Value}
+    if control^.role == .Tree && .Scroll in control^.actions {
+        destination^.kind = .Set_Scroll_Value
+        destination^.numeric_value = value
+        return .Ok
+    }
+    if .Set_Value not_in control^.actions {return .Invalid_Value}
     destination^.kind = .Set_Value
     destination^.numeric_value = value
     return .Ok
 }
 
-// unix_map_click_action preserves toggle precedence over ordinary activation.
+// unix_validate_text_action copies one already-bounded UTF-8 replacement.
+unix_validate_text_action :: proc(
+    control: ^portable.Control_Publication, request: portable.Queued_Action,
+    destination: ^Adapter_Action) -> Adapter_Action_Status {
+    if .Replace_Selected_Text not_in control^.actions ||
+       request.payload_length < 0 ||
+       request.payload_length > len(request.payload) {return .Invalid_Value}
+    payload := request.payload
+    text := string(payload[:request.payload_length])
+    if !utf8.valid_string(text) {return .Invalid_Value}
+    destination^.kind = .Replace_Selected_Text
+    if request.replace_entire_text {destination^.kind = .Replace_Text}
+    destination^.payload_length = request.payload_length
+    copy(destination^.payload[:request.payload_length],
+        payload[:request.payload_length])
+    return .Ok
+}
+
+// unix_validate_selection_action checks character indices against current text.
+unix_validate_selection_action :: proc(
+    control: ^portable.Control_Publication, request: portable.Queued_Action,
+    destination: ^Adapter_Action) -> Adapter_Action_Status {
+    if .Set_Text_Selection not_in control^.actions || !control^.text_present ||
+       request.selection_anchor > control^.character_count ||
+       request.selection_focus > control^.character_count {
+        return .Invalid_Value
+    }
+    destination^.kind = .Set_Text_Selection
+    destination^.selection_anchor = request.selection_anchor
+    destination^.selection_focus = request.selection_focus
+    return .Ok
+}
+
+// unix_map_click_action toggles branches and selects leaf TreeItems.
 unix_map_click_action :: proc(
     control: ^portable.Control_Publication,
     destination: ^Adapter_Action) -> Adapter_Action_Status {
+    if control^.role == .Tree_Item && .Toggle in control^.actions {
+        destination^.kind = .Toggle
+        return .Ok
+    }
+    if .Select in control^.actions {destination^.kind = .Select; return .Ok}
     if .Toggle in control^.actions {destination^.kind = .Toggle; return .Ok}
     if .Activate in control^.actions {destination^.kind = .Activate; return .Ok}
     return .Unsupported_Action
@@ -541,7 +803,23 @@ unix_map_control_action :: proc(
         required, mapped = .Decrement, .Decrement
     case .Set_Value:
         return unix_validate_numeric_action(control, request, destination)
-    case .Blur: return .Unsupported_Action
+    case .Replace_Selected_Text:
+        return unix_validate_text_action(control, request, destination)
+    case .Set_Text_Selection:
+        return unix_validate_selection_action(control, request, destination)
+    case .Expand:
+        required, mapped = .Expand, .Expand
+    case .Collapse:
+        required, mapped = .Collapse, .Collapse
+    case .Scroll_Up:
+        required, mapped = .Scroll, .Scroll
+        destination^.numeric_value = -1
+    case .Scroll_Down:
+        required, mapped = .Scroll, .Scroll
+        destination^.numeric_value = 1
+    case .Blur, .Scroll_Left, .Scroll_Right, .Scroll_Into_View,
+         .Set_Scroll_Offset:
+        return .Unsupported_Action
     }
     if required not_in control^.actions {return .Unsupported_Action}
     destination^.kind = mapped
@@ -610,39 +888,113 @@ unix_activation_callback :: proc "c" (user_data: rawptr) -> ^accesskit.Tree_Upda
     return unix_tree_update(&publication)
 }
 
+// unix_action_generation snapshots the generation against which ingress validates.
+unix_action_generation :: proc(owner: ^Adapter) -> (u64, bool) {
+    controls: portable.Control_Tree_Publication
+    if portable.protected_control_snapshot(&owner^.control_publication, &controls) {
+        return controls.generation, true
+    }
+    publication: portable.Static_Publication
+    if portable.protected_snapshot(&owner^.publication, &publication) {
+        return publication.generation, true
+    }
+    return 0, false
+}
+
+// unix_action_supported admits only actions translated by this adapter.
+unix_action_supported :: proc(action: accesskit.Action) -> bool {
+    #partial switch action {
+    case .Click, .Focus, .Increment, .Decrement, .Set_Value,
+         .Replace_Selected_Text, .Set_Text_Selection, .Expand, .Collapse,
+         .Scroll_Up, .Scroll_Down:
+        return true
+    case: return false
+    }
+}
+
+// unix_copy_text_value copies one native string payload into bounded storage.
+unix_copy_text_value :: proc(
+    request: ^accesskit.Action_Request,
+    copied: ^portable.Queued_Action) -> portable.Action_Queue_Status {
+    if !request^.data.has_value || request^.data.value.tag != .Value ||
+       request^.data.value.payload.value == nil {return .Invalid_Target}
+    source := cast([^]u8)request^.data.value.payload.value
+    for copied^.payload_length < len(copied^.payload) &&
+        source[copied^.payload_length] != 0 {
+        copied^.payload[copied^.payload_length] = source[copied^.payload_length]
+        copied^.payload_length += 1
+    }
+    if copied^.payload_length == len(copied^.payload) &&
+       source[copied^.payload_length] != 0 {return .Payload_Overflow}
+    return .Ok
+}
+
+// unix_text_run_target resolves the position node for one editable owner.
+unix_text_run_target :: proc(
+    publication: ^portable.Control_Tree_Publication,
+    owner_id: u64) -> accesskit.Node_Id {
+    for control in publication^.controls[:publication^.control_count] {
+        if control.parent_native_id == owner_id && control.role == .Text_Run {
+            return accesskit.Node_Id(control.native_id)
+        }
+    }
+    return accesskit.Node_Id(owner_id)
+}
+
+// unix_copy_selection_value validates and copies one TextRun selection payload.
+unix_copy_selection_value :: proc(
+    request: ^accesskit.Action_Request,
+    publication: ^portable.Control_Tree_Publication,
+    copied: ^portable.Queued_Action) -> portable.Action_Queue_Status {
+    if !request^.data.has_value ||
+       request^.data.value.tag != .Set_Text_Selection {return .Invalid_Target}
+    selection := request^.data.value.payload.set_text_selection
+    target := unix_text_run_target(publication, copied^.target_native_id)
+    if selection.anchor.node != target || selection.focus.node != target ||
+       selection.anchor.character_index > uintptr(max(u16)) ||
+       selection.focus.character_index > uintptr(max(u16)) {
+        return .Invalid_Target
+    }
+    copied^.selection_anchor = u16(selection.anchor.character_index)
+    copied^.selection_focus = u16(selection.focus.character_index)
+    return .Ok
+}
+
 // unix_copy_action_request copies one supported request into bounded owner storage.
 unix_copy_action_request :: proc(
     owner: ^Adapter, request: ^accesskit.Action_Request) -> portable.Action_Queue_Status {
     if owner == nil || request == nil {return .Invalid_Target}
-    generation: u64
+    generation, live := unix_action_generation(owner)
+    if !live {return .Closing}
     control_publication: portable.Control_Tree_Publication
-    if portable.protected_control_snapshot(
-            &owner^.control_publication, &control_publication) {
-        generation = control_publication.generation
-    } else {
-        publication: portable.Static_Publication
-        if !portable.protected_snapshot(&owner^.publication, &publication) {
-            return .Closing
-        }
-        generation = publication.generation
-    }
-     if request^.action != .Click && request^.action != .Focus &&
-         request^.action != .Increment && request^.action != .Decrement &&
-         request^.action != .Set_Value {
-        return .Invalid_Target
-    }
+    _ = portable.protected_control_snapshot(
+        &owner^.control_publication, &control_publication)
+    if !unix_action_supported(request^.action) {return .Invalid_Target}
     copied := portable.Queued_Action{
         kind = u16(request^.action),
         target_native_id = u64(request^.target_node),
         publication_generation = generation,
     }
-    if request^.action == .Set_Value {
-        if !request^.data.has_value ||
-           request^.data.value.tag != .Numeric_Value {
-            return .Invalid_Target
-        }
+    if request^.action == .Set_Value && request^.data.has_value &&
+       request^.data.value.tag == .Numeric_Value {
         copied.numeric_value = request^.data.value.payload.numeric_value
         copied.has_numeric_value = true
+    }
+    text_value := request^.action == .Replace_Selected_Text ||
+        request^.action == .Set_Value && request^.data.has_value &&
+        request^.data.value.tag == .Value
+    if request^.action == .Set_Value &&
+       !copied.has_numeric_value && !text_value {return .Invalid_Target}
+    if text_value {
+        copied.replace_entire_text = request^.action == .Set_Value
+        copied.kind = u16(accesskit.Action.Replace_Selected_Text)
+        status := unix_copy_text_value(request, &copied)
+        if status != .Ok {return status}
+    }
+    if request^.action == .Set_Text_Selection {
+        status := unix_copy_selection_value(
+            request, &control_publication, &copied)
+        if status != .Ok {return status}
     }
     return portable.action_queue_push(&owner^.actions, &copied)
 }

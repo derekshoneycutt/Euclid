@@ -10,6 +10,8 @@ import view_font "../font"
 LIBRARY_SEARCH_INPUT_ID :: 6401
 LIBRARY_SEARCH_CLEAR_ID :: 6402
 LIBRARY_SEARCH_SUGGESTION_ID :: 6403
+LIBRARY_SEARCH_STATUS_ID :: 6404
+LIBRARY_SEARCH_TEXT_RUN_ID :: 6410
 LIBRARY_SEARCH_INPUT_HEIGHT :: f32(30)
 LIBRARY_SEARCH_PROMPT_HEIGHT :: f32(20)
 LIBRARY_SEARCH_SUGGESTION_HEIGHT :: f32(24)
@@ -97,8 +99,10 @@ library_search_input_params :: proc(
         clip_rect = clip_rect,
         descriptor = {
             id = semantic_control_id(.Library_Control, LIBRARY_SEARCH_INPUT_ID),
+            text_run_id = semantic_control_id(
+                .Library_Control, LIBRARY_SEARCH_TEXT_RUN_ID),
             region = .Accordion_Content, label = "Search animations",
-            text = query, mode = .Editable,
+            placeholder = "Search animations", text = query, mode = .Editable,
             cursor_byte = search^.input.cursor_byte,
             anchor_byte = search^.input.anchor_byte,
             content_revision = search^.query_revision,
@@ -148,6 +152,61 @@ library_search_apply_suggestion :: proc(search: ^viewmodel.Library_Search_State)
     search^.submit_requested = true
 }
 
+// library_search_suggestion_label builds the bounded spoken correction target.
+library_search_suggestion_label :: proc(suggestion: string, storage: []u8) -> string {
+    prefix := "Use suggested search: "
+    required := len(prefix) + len(suggestion)
+    if len(suggestion) == 0 || required > len(storage) {return "Use suggested search"}
+    copy(storage[:], prefix)
+    copy(storage[len(prefix):], suggestion)
+    return string(storage[:required])
+}
+
+// library_search_append_decimal writes one nonnegative count into fixed storage.
+library_search_append_decimal :: proc(bytes: []u8, count: ^int, value: u32) {
+    divisor := u32(1)
+    for value / divisor >= 10 {divisor *= 10}
+    for divisor > 0 {
+        bytes[count^] = u8('0' + value / divisor % 10)
+        count^ += 1
+        divisor /= 10
+    }
+}
+
+// library_search_status_text formats one bounded meaningful search milestone.
+library_search_status_text :: proc(
+    search: ^viewmodel.Library_Search_State, storage: []u8) -> string {
+    if search == nil || len(storage) < 48 || search^.query_length == 0 {return ""}
+    if search^.invalid_query {return "Search query is invalid"}
+    if !search^.active {return "Searching animations"}
+    if search^.total_match_count == 0 {return "No matching animations"}
+    count := 0
+    prefix := "Matching animations: "
+    copy(storage[:], prefix)
+    count += len(prefix)
+    library_search_append_decimal(storage, &count, search^.total_match_count)
+    if search^.more_available {
+        suffix := " or more"
+        copy(storage[count:], suffix)
+        count += len(suffix)
+    }
+    return string(storage[:count])
+}
+
+// prepare_library_search_status publishes bounded result and error feedback.
+prepare_library_search_status :: proc(state: ^core.Euclid_General_State) {
+    storage: [64]u8
+    value := library_search_status_text(&state^.ui_runtime.library_search, storage[:])
+    if len(value) == 0 {return}
+    _ = semantic_register_control(state^.ui_runtime.semantic_focus, {
+        id = semantic_control_id(.Library_Control, LIBRARY_SEARCH_STATUS_ID),
+        role = .Status, states = {.Visible, .Enabled},
+        region = .Accordion_Content, traversal_order = 4,
+        bounds = {}, clip_bounds = {}, label = "Library search status",
+        value = value,
+    })
+}
+
 // library_search_accept_suggestion_key admits Right only at a collapsed end caret.
 library_search_accept_suggestion_key :: proc(
     search: ^viewmodel.Library_Search_State, frame: Input_Frame) -> bool {
@@ -195,6 +254,8 @@ prepare_library_suggestion :: proc(
     search := &state^.ui_runtime.library_search
     if search^.suggestion_length <= 0 {return {}}
     suggestion := string(search^.suggestion[:search^.suggestion_length])
+    label_storage: [viewmodel.LIBRARY_SEARCH_QUERY_BYTE_CAPACITY + 24]u8
+    action_label := library_search_suggestion_label(suggestion, label_storage[:])
     result := update_text_button({id = LIBRARY_SEARCH_SUGGESTION_ID,
         rect = layout.suggestion, label = suggestion, enabled = true,
         mouse = frame, interaction_space_rect = panel,
@@ -211,7 +272,7 @@ prepare_library_suggestion :: proc(
             region = .Accordion_Content,
             traversal_order = 2,
             clip_bounds = viewmodel.Rectangle(panel),
-            label = "Use suggested search",
+            label = action_label,
             value = suggestion,
         }},
         &state^.ui_runtime.ui_press_owner)
@@ -239,6 +300,7 @@ prepare_library_search :: proc(
     result.layout = library_search_layout(panel, search^.suggestion_length > 0)
     result.suggestion = prepare_library_suggestion(
         state, panel, frame, result.layout)
+    prepare_library_search_status(state)
     if result.input.hovered {state^.ui_runtime.cursor = .Text}
     return result
 }

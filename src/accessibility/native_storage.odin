@@ -4,7 +4,7 @@ import "core:sync"
 
 NATIVE_ID_CAPACITY :: 4096
 ACTION_QUEUE_CAPACITY :: 64
-ACTION_PAYLOAD_CAPACITY :: 64
+ACTION_PAYLOAD_CAPACITY :: 512
 SYNTHETIC_NATIVE_ID :: u64(1)
 
 // Identity_Domain distinguishes semantic identity owners in native lookup keys.
@@ -56,8 +56,11 @@ Queued_Action :: struct {
     publication_generation: u64,
     numeric_value: f64,
     has_numeric_value: bool,
+    replace_entire_text: bool,
     payload: [ACTION_PAYLOAD_CAPACITY]u8,
     payload_length: int,
+    selection_anchor: u16,
+    selection_focus: u16,
 }
 
 // Action_Queue_Status identifies one bounded action-ingress outcome.
@@ -109,7 +112,10 @@ native_id_registry_init :: proc(registry: ^Native_Id_Registry) {
 // native_id_resolve returns an existing mapping or allocates one monotonically.
 native_id_resolve :: proc(
     registry: ^Native_Id_Registry, identity: Qualified_Identity) -> (u64, bool) {
-    if registry == nil || identity.local_id == 0 {return 0, false}
+    if registry == nil ||
+       (identity.local_id == 0 && identity.stable_uuid == ([16]u8{})) {
+        return 0, false
+    }
     for index in 0..<registry^.count {
         entry := &registry^.entries[index]
         if entry^.identity == identity && entry^.active {

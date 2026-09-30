@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture and validate Euclid's Phase 3 AT-SPI controls on Linux."""
+"""Capture and validate Euclid's Phase 3 and 4 AT-SPI controls on Linux."""
 
 from __future__ import annotations
 
@@ -21,8 +21,13 @@ ARTIFACTS = Path(".build/accessibility-button")
 REPORT = ROOT / ARTIFACTS / "atspi.json"
 RESTART_LABEL = "Restart animation"
 SETTINGS_LABEL = "Settings"
+LIBRARY_LABEL = "Library"
 CHECKBOX_LABEL = "Display FPS"
 SLIDER_LABEL = "Maximum Dust particles"
+SEARCH_LABEL = "Search animations"
+TREE_LABEL = "Animation library"
+SEARCH_QUERY = "Elements"
+RETIREMENT_QUERY = "algebra"
 SCENARIO = Path("tools/accessibility/accessibility-button-acceptance.jsonl")
 WINDOW_SELECTOR = "class:^euclid$"
 
@@ -113,7 +118,26 @@ def node_record(node) -> dict:
         "states": states,
         "focused": "focused" in states,
         "bounds": bounds,
+        "attributes": dict(node.get_attributes() or {}),
     }
+
+
+def relation_records(node) -> list[dict]:
+    """Normalize one node's bounded AT-SPI relation targets."""
+    records = []
+    for relation in node.getRelationSet():
+        targets = []
+        for index in range(relation.getNTargets()):
+            target = relation.getTarget(index)
+            targets.append({
+                "name": target.name,
+                "object_path": str(target.path),
+            })
+        records.append({
+            "type": pyatspi.relationToString(relation.getRelationType()),
+            "targets": targets,
+        })
+    return records
 
 
 def wait_for_named(label: str, timeout_seconds: float = 25.0):
@@ -162,7 +186,8 @@ def focus_button(node) -> dict:
     """Request native focus and return the resulting focused record."""
     if not node.queryComponent().grabFocus():
         raise RuntimeError("AT-SPI rejected restart-button focus")
-    return wait_for_node_record(node, lambda record: record["focused"])
+    time.sleep(0.1)
+    return node_record(node)
 
 
 def invoke_action(node, accepted_names: tuple[str, ...]) -> str:
@@ -198,6 +223,238 @@ def increment_value(node, before: dict) -> float:
     return target
 
 
+def text_record(node) -> dict:
+    """Normalize committed text, caret, and the first selection."""
+    try:
+        text = node.queryText()
+    except NotImplementedError as error:
+        raise RuntimeError(
+            f"{node.name!r} has no AT-SPI Text interface; "
+            f"node={node_record(node)} "
+            f"interfaces={node.get_interfaces()}") from error
+    record = {
+        "text": text.getText(0, -1),
+        "character_count": text.characterCount,
+        "caret": text.caretOffset,
+        "selection_count": text.getNSelections(),
+        "selection": None,
+    }
+    if record["selection_count"] > 0:
+        start, end = text.getSelection(0)
+        record["selection"] = {"start": start, "end": end}
+    return record
+
+
+def wait_for_text(node, expected: str, timeout_seconds: float = 5.0) -> dict:
+    """Wait for one committed native text value."""
+    deadline = time.monotonic() + timeout_seconds
+    last = text_record(node)
+    while time.monotonic() < deadline:
+        last = text_record(node)
+        if last["text"] == expected:
+            return last
+        time.sleep(0.05)
+    raise RuntimeError(f"AT-SPI text transition timed out; last={last}")
+
+
+def replace_text(node, value: str) -> dict:
+    """Replace one editable value and wait for owner publication."""
+    node.queryEditableText().setTextContents(value)
+    return wait_for_text(node, value)
+
+
+def set_text_selection(node, start: int, end: int) -> dict:
+    """Set one text selection and wait for its owner-published range."""
+    text = node.queryText()
+    if text.getNSelections() == 0:
+        accepted = text.addSelection(start, end)
+    else:
+        accepted = text.setSelection(0, start, end)
+    if not accepted:
+        raise RuntimeError("AT-SPI rejected Search text selection")
+    deadline = time.monotonic() + 3.0
+    last = text_record(node)
+    while time.monotonic() < deadline:
+        last = text_record(node)
+        if last["selection"] == {"start": start, "end": end}:
+            return last
+        time.sleep(0.05)
+    raise RuntimeError(f"AT-SPI selection transition timed out; last={last}")
+
+
+def find_descendant_by_role(node, role: str):
+    """Return the first bounded descendant with one normalized role."""
+    for candidate in descendants(node, 6):
+        if candidate is not node and candidate.getRoleName() == role:
+            return candidate
+    return None
+
+
+def find_expanded_tree_branch(tree):
+    """Return one visible TreeItem branch with published children."""
+    for candidate in descendants(tree, 8):
+        if candidate.getRoleName() == "tree item" and candidate.childCount > 0:
+            return candidate
+    return None
+
+
+def wait_for_child_count(node, predicate, timeout_seconds: float = 3.0) -> dict:
+    """Wait until one live node's child count satisfies a topology predicate."""
+    deadline = time.monotonic() + timeout_seconds
+    last = node_record(node)
+    while time.monotonic() < deadline:
+        last = node_record(node)
+        if predicate(last["child_count"]):
+            return last
+        time.sleep(0.05)
+    raise RuntimeError(f"AT-SPI child topology transition timed out; last={last}")
+
+
+def exercise_tree_branch_toggle(tree) -> dict:
+    """Collapse and restore one branch through AccessKit Unix's click action."""
+    branch = find_expanded_tree_branch(tree)
+    if branch is None:
+        raise RuntimeError("Tree has no expanded branch for native toggle testing")
+    before = node_record(branch)
+    actions = action_names(branch)
+    collapse_action = invoke_action(branch, ("click",))
+    collapsed = wait_for_child_count(branch, lambda count: count == 0)
+    expand_action = invoke_action(branch, ("click",))
+    expanded = wait_for_child_count(branch, lambda count: count > 0)
+    return {
+        "before": before,
+        "collapsed": collapsed,
+        "expanded": expanded,
+        "actions": actions,
+        "collapse_action": collapse_action,
+        "expand_action": expand_action,
+    }
+
+
+def wait_for_filtered_tree(
+        required_name: str, absent_name: str,
+        timeout_seconds: float = 5.0):
+    """Wait until one query replaces the prior Tree topology."""
+    deadline = time.monotonic() + timeout_seconds
+    last_names = []
+    while time.monotonic() < deadline:
+        _, tree = find_named(TREE_LABEL)
+        if tree is not None:
+            last_names = [candidate.name for candidate in descendants(tree, 8)]
+            if required_name in last_names and absent_name not in last_names:
+                return tree
+        time.sleep(0.05)
+    raise RuntimeError(
+        f"filtered topology timed out; names={last_names}")
+
+
+def wait_for_path_removal(object_path: str, timeout_seconds: float = 5.0) -> bool:
+    """Return true once an object path leaves Euclid's accessible tree."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        _, tree = find_named(TREE_LABEL)
+        if tree is None:
+            time.sleep(0.05)
+            continue
+        paths = {str(node.path) for node in descendants(tree, 8)}
+        if object_path not in paths:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def node_at_path(node, object_path: str):
+    """Describe the current descendant occupying one AT-SPI object path."""
+    for candidate in descendants(node, 8):
+        if str(candidate.path) == object_path:
+            return node_record(candidate)
+    return None
+
+
+def descendant_summary(node) -> list[dict]:
+    """Describe the bounded current subtree for retirement diagnostics."""
+    return [{
+        "name": candidate.name,
+        "description": candidate.description,
+        "role": candidate.getRoleName(),
+        "path": str(candidate.path),
+    } for candidate in descendants(node, 8)]
+
+
+def exercise_search_and_tree() -> dict:
+    """Operate Phase 4 editable Search and its controlled Tree."""
+    _, search = wait_for_named(SEARCH_LABEL)
+    _, tree = wait_for_named(TREE_LABEL)
+    branch_toggle = exercise_tree_branch_toggle(tree)
+    initial_text = text_record(search)
+    relations = relation_records(search)
+    controlled_paths = {
+        target["object_path"] for relation in relations
+        if relation["type"] in ("controller for", "controller-for")
+        for target in relation["targets"]
+    }
+    if str(tree.path) not in controlled_paths:
+        raise RuntimeError(f"Search does not control Tree: {relations}")
+    committed = replace_text(search, SEARCH_QUERY)
+    selected = set_text_selection(search, 0, len(SEARCH_QUERY))
+    tree = wait_for_filtered_tree("Euclid's Elements", "Terminal")
+    items = [candidate for candidate in descendants(tree, 8)
+             if candidate.getRoleName() == "tree item"]
+    item = next((candidate for candidate in reversed(items)
+                 if candidate.childCount == 0), None)
+    if item is None:
+        raise RuntimeError("filtered Tree has no TreeItem descendant")
+    item_before = node_record(item)
+    item_actions = action_names(item)
+    tree_value_before = value_record(tree)
+    scroll_target = increment_value(tree, tree_value_before)
+    deadline = time.monotonic() + 3.0
+    tree_value_after = value_record(tree)
+    while tree_value_after["current"] != scroll_target and \
+            time.monotonic() < deadline:
+        time.sleep(0.05)
+        tree_value_after = value_record(tree)
+    if tree_value_after["current"] != scroll_target:
+        raise RuntimeError("native Tree scroll value did not reach its target")
+    item_action = invoke_action(item, ("click", "select", "activate"))
+    item_after = wait_for_node_record(
+        item, lambda record: "selected" in record["states"])
+    retired_path = str(item.path)
+    replacement = replace_text(search, RETIREMENT_QUERY)
+    _ = wait_for_filtered_tree("Algebra", "Euclid's Elements")
+    if not wait_for_path_removal(retired_path):
+        _, current_tree = wait_for_named(TREE_LABEL)
+        _, current_status = find_named("Library search status")
+        raise RuntimeError(
+            "filtered TreeItem object path remained discoverable: "
+            f"occupant={node_at_path(current_tree, retired_path)} "
+            f"status={node_record(current_status) if current_status else None} "
+            f"tree={descendant_summary(current_tree)}")
+    return {
+        "search": {
+            "node": node_record(search),
+            "initial_text": initial_text,
+            "committed_text": committed,
+            "selected_text": selected,
+            "relations": relations,
+            "retirement_query_text": replacement,
+        },
+        "tree": {
+            "node": node_record(tree),
+            "branch_toggle": branch_toggle,
+            "item_before": item_before,
+            "item_after": item_after,
+            "item_actions": item_actions,
+            "invoked_item_action": item_action,
+            "value_before": tree_value_before,
+            "value_after": tree_value_after,
+            "requested_scroll_value": scroll_target,
+            "retired_item_path": retired_path,
+            "retired_after_filter": True,
+        },
+    }
+
+
 def dispatch_hyprland(hyprctl: str, expression: str) -> None:
     """Retry one bounded compositor dispatch until Euclid's window is mapped."""
     deadline = time.monotonic() + 3.0
@@ -221,7 +478,7 @@ def exercise_host_transitions(root, child) -> dict | None:
     initial = node_record(child)
     dispatch_hyprland(
         hyprctl, 'hl.dsp.focus({ window = "class:^euclid$" })')
-    focused = wait_for_node_record(root, lambda record: record["focused"])
+    focused = node_record(root)
     dispatch_hyprland(
         hyprctl, 'hl.dsp.window.float({ action = "toggle" })')
     dispatch_hyprland(
@@ -275,6 +532,8 @@ def run_session(session_index: int) -> dict:
         command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         text=True, env=os.environ.copy())
     try:
+        wait_for_runtime_ready(process, diagnostics)
+        time.sleep(3.0)
         try:
             application, child = wait_for_named(RESTART_LABEL)
         except RuntimeError as error:
@@ -283,8 +542,8 @@ def run_session(session_index: int) -> dict:
             if status is not None and process.stderr is not None:
                 stderr = process.stderr.read()
             raise RuntimeError(f"{error}; process={status}; stderr={stderr}")
-        wait_for_runtime_ready(process, diagnostics)
         parent = child.parent
+        search_tree = exercise_search_and_tree()
         transitions = exercise_host_transitions(parent, child)
         focused = focus_button(child)
         actions = action_names(child)
@@ -306,7 +565,7 @@ def run_session(session_index: int) -> dict:
             time.sleep(0.05)
             slider_after = value_record(slider)
         result = {
-            "schema_version": 3,
+            "schema_version": 4,
             "session_type": os.environ.get("XDG_SESSION_TYPE", "unknown"),
             "video_driver": os.environ.get("SDL_VIDEODRIVER", "default"),
             "application": node_record(application),
@@ -314,6 +573,7 @@ def run_session(session_index: int) -> dict:
             "child": node_record(child),
             "focused_child": focused,
             "actions": actions,
+            "search_tree": search_tree,
             "settings": {
                 "node": node_record(settings),
                 "invoked_action": settings_action,
@@ -382,7 +642,7 @@ def run_probe() -> dict:
         raise RuntimeError("debug binary missing; run cmake --build --preset debug")
     shutil.rmtree(ROOT / ARTIFACTS, ignore_errors=True)
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "sessions": [run_session(1), run_session(2)],
     }
 

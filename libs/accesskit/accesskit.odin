@@ -24,20 +24,34 @@ Action :: enum u8 {
     Click = 0,
     Focus = 1,
     Blur = 2,
+    Collapse = 3,
+    Expand = 4,
     Decrement = 6,
     Increment = 7,
+    Replace_Selected_Text = 10,
+    Scroll_Down = 11,
+    Scroll_Left = 12,
+    Scroll_Right = 13,
+    Scroll_Up = 14,
+    Scroll_Into_View = 15,
+    Set_Scroll_Offset = 17,
+    Set_Text_Selection = 18,
     Set_Value = 20,
 }
 
 Role :: enum u8 {
     Unknown = 0,
+    Text_Run = 1,
     Label = 3,
+    Tree_Item = 9,
     Check_Box = 15,
     Text_Input = 17,
     Button = 18,
+    Search_Input = 32,
     Application = 49,
     Slider = 113,
     Status = 116,
+    Tree = 129,
 }
 
 Live :: enum u8 {
@@ -163,12 +177,30 @@ foreign accesskit_library {
     accesskit_node_set_disabled :: proc(node: ^Node) ---
     accesskit_node_set_children :: proc(
         node: ^Node, length: uintptr, values: [^]Node_Id) ---
+    accesskit_node_set_controls :: proc(
+        node: ^Node, length: uintptr, values: [^]Node_Id) ---
+    accesskit_node_set_active_descendant :: proc(node: ^Node, value: Node_Id) ---
+    accesskit_node_clear_active_descendant :: proc(node: ^Node) ---
     accesskit_node_set_label :: proc(node: ^Node, value: cstring) ---
     accesskit_node_set_label_with_length :: proc(
         node: ^Node, value: cstring, length: uintptr) ---
     accesskit_node_set_value :: proc(node: ^Node, value: cstring) ---
     accesskit_node_set_value_with_length :: proc(
         node: ^Node, value: cstring, length: uintptr) ---
+    accesskit_node_set_placeholder_with_length :: proc(
+        node: ^Node, value: cstring, length: uintptr) ---
+    accesskit_node_set_character_lengths :: proc(
+        node: ^Node, length: uintptr, values: [^]u8) ---
+    accesskit_node_set_word_starts :: proc(
+        node: ^Node, length: uintptr, values: [^]u8) ---
+    accesskit_node_set_text_selection :: proc(
+        node: ^Node, value: Text_Selection) ---
+    accesskit_node_set_scroll_y :: proc(node: ^Node, value: f64) ---
+    accesskit_node_set_scroll_y_min :: proc(node: ^Node, value: f64) ---
+    accesskit_node_set_scroll_y_max :: proc(node: ^Node, value: f64) ---
+    accesskit_node_set_level :: proc(node: ^Node, value: uintptr) ---
+    accesskit_node_set_size_of_set :: proc(node: ^Node, value: uintptr) ---
+    accesskit_node_set_position_in_set :: proc(node: ^Node, value: uintptr) ---
     accesskit_node_set_bounds :: proc(node: ^Node, value: Rect) ---
     accesskit_node_set_numeric_value :: proc(node: ^Node, value: f64) ---
     accesskit_node_set_min_numeric_value :: proc(node: ^Node, value: f64) ---

@@ -1275,6 +1275,34 @@ library_search_layout_reserves_only_visible_rows :: proc(t: ^testing.T) {
     testing.expect(t, suggested.tree.height >= 0)
 }
 
+// Verify Library Search status remains bounded to meaningful milestones.
+@(test)
+library_search_status_reports_results_and_empty_queries :: proc(t: ^testing.T) {
+    storage: [64]u8
+    search: viewmodel.Library_Search_State
+    testing.expect_value(t, library_search_status_text(&search, storage[:]), "")
+    search.query[0] = 'x'
+    search.query_length = 1
+    testing.expect_value(t, library_search_status_text(&search, storage[:]),
+        "Searching animations")
+    search.active = true
+    testing.expect_value(t, library_search_status_text(&search, storage[:]),
+        "No matching animations")
+    search.total_match_count = 42
+    search.more_available = true
+    testing.expect_value(t, library_search_status_text(&search, storage[:]),
+        "Matching animations: 42 or more")
+}
+
+// Verify the spoken suggestion action identifies its proposed correction.
+@(test)
+library_search_suggestion_label_names_target :: proc(t: ^testing.T) {
+    storage: [64]u8
+    testing.expect_value(t,
+        library_search_suggestion_label("Elements", storage[:]),
+        "Use suggested search: Elements")
+}
+
 // Verify edits debounce, Enter bypasses debounce, and clear restores ordinary state.
 @(test)
 library_search_input_policy_handles_edit_submit_and_clear :: proc(t: ^testing.T) {
@@ -1420,8 +1448,12 @@ tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
     testing.expect_value(t, tree.active_descendant, tree_item_semantic_id(&nodes[0]))
     child_index := semantic_node_index(snapshot, tree_item_semantic_id(&nodes[1]))
     testing.expect(t, child_index >= 0)
-    testing.expect_value(t, snapshot^.nodes[child_index].parent, tree_semantic_id())
-    testing.expect(t, .Tab_Stop not_in snapshot^.nodes[child_index].states)
+    child := snapshot^.nodes[child_index]
+    testing.expect_value(t, child.parent, tree_item_semantic_id(&nodes[0]))
+    testing.expect_value(t, child.level, u16(2))
+    testing.expect_value(t, child.position_in_set, u16(1))
+    testing.expect_value(t, child.set_size, u16(1))
+    testing.expect(t, .Tab_Stop not_in child.states)
 }
 
 // Verify routed tree commands move, reveal, and select through existing state.
@@ -1464,6 +1496,38 @@ tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
     _ = prepare_tree_list_panel(params)
     testing.expect_value(t, ji.selected_animation, &nodes[2])
     testing.expect(t, nodes[2].is_selected)
+}
+
+// Verify item-addressed native commands mutate their stable branch, not the roving item.
+@(test)
+tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
+    ji := bridgemodel.Euclid_Julia_Interface{}
+    nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
+    ji.animation_head = &nodes[0]
+    ji.animation_count = len(nodes)
+    for index in 0..<len(nodes) {
+        nodes[index].stable_id[0] = byte(index + 1)
+        if index + 1 < len(nodes) {nodes[index].next_in_registry = &nodes[index + 1]}
+    }
+    seed_tree_node(&nodes[0], nil, nil, &nodes[1], false)
+    seed_tree_node(&nodes[1], nil, &nodes[2], nil, true)
+    seed_tree_node(&nodes[2], &nodes[1], nil, nil, false)
+    semantic^.active_tree_item = nodes[0].stable_id
+    semantic^.commands[0] = {
+        target = tree_item_semantic_id(&nodes[1]), kind = .Toggle}
+    semantic^.command_count = 1
+    scroll_y: f32
+    params := Tree_List_Params{ji = &ji, ui_runtime = &runtime,
+        list_panel = {0, 0, 200, TREE_ROW_HEIGHT}, scroll_y = &scroll_y}
+
+    active := tree_apply_semantic_commands(params)
+
+    testing.expect(t, !nodes[1].is_expanded)
+    testing.expect_value(t, active, &nodes[1])
+    testing.expect_value(t, semantic^.active_tree_item, nodes[1].stable_id)
 }
 
 // Verify the roving tree descendant is identified only for keyboard-visible focus.

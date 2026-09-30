@@ -320,6 +320,37 @@ input_box_apply_focused_input :: proc(
     return update
 }
 
+// input_box_apply_semantic_text consumes copied native edits through owner storage.
+input_box_apply_semantic_text :: proc(
+    params: Input_Box_Params, resolved: ^Input_Box_Params) -> bool {
+    if params.semantic_focus == nil || params.edit_target.length == nil ||
+       params.descriptor.mode != .Editable {return false}
+    changed := false
+    commands := params.semantic_focus^.commands[:params.semantic_focus^.command_count]
+    for &command in commands {
+        if command.target != params.descriptor.id {continue}
+        text := string(params.edit_target.bytes[:params.edit_target.length^])
+        if command.kind == .Set_Text_Selection {
+            params.state^.anchor_byte = input_box_column_boundary(
+                text, int(command.selection_anchor))
+            params.state^.cursor_byte = input_box_column_boundary(
+                text, int(command.selection_focus))
+        } else if command.kind == .Replace_Selected_Text ||
+                  command.kind == .Replace_Text {
+            if command.kind == .Replace_Text {
+                params.state^.anchor_byte = 0
+                params.state^.cursor_byte = len(text)
+            }
+            replacement := string(command.payload[:command.payload_length])
+            changed = input_box_replace_selection(
+                params.state, params.edit_target, replacement) || changed
+        }
+    }
+    resolved^.descriptor.text = string(
+        params.edit_target.bytes[:params.edit_target.length^])
+    return changed
+}
+
 // input_box_hit_boundary maps one screen x coordinate to a borrowed-text boundary.
 input_box_hit_boundary :: proc(params: Input_Box_Params, x: f32) -> int {
     if params.column_advance <= 0 {return 0}
@@ -381,12 +412,13 @@ input_box_prepare :: proc(
     resolved := params
     changed := input_box_reconcile_content(
         params.state, params.descriptor.text, params.descriptor.content_revision)
+    semantic_changed := input_box_apply_semantic_text(params, &resolved)
     hovered := geometry.rectangle_contains(params.rect,
         {params.frame.mouse_position.x, params.frame.mouse_position.y})
-    input_box_update_pointer(params, hovered, owner)
+    input_box_update_pointer(resolved, hovered, owner)
     update: Input_Box_Update
     if params.focused {
-        update = input_box_apply_focused_input(params, &resolved)
+        update = input_box_apply_focused_input(resolved, &resolved)
         if update.copy_requested {
             copied := params.descriptor.text[update.copy_start:update.copy_end]
             if update.copied_length > 0 {
@@ -397,7 +429,7 @@ input_box_prepare :: proc(
     }
     input_box_reveal_cursor(resolved, changed)
     result := input_box_draw_result(resolved, hovered)
-    result.changed = update.changed
+    result.changed = update.changed || semantic_changed
     result.submit_requested = update.submit_requested
     result.tab_requested = update.tab_requested
     input_box_publish_semantics(resolved, owner, &result)
@@ -460,13 +492,32 @@ input_box_publish_semantics :: proc(
     states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable, .Tab_Stop}
     if descriptor.mode == .Read_Only {states += {.Read_Only}}
     _ = semantic_register_control(params.semantic_focus, {
-        id = descriptor.id, parent = descriptor.parent, role = .Input,
-        states = states, actions = {.Focus}, region = descriptor.region,
+        id = descriptor.id, parent = descriptor.parent,
+        controls = tree_semantic_id(), role = .Input,
+        states = states,
+        actions = {.Focus, .Replace_Selected_Text, .Set_Text_Selection},
+        region = descriptor.region,
         traversal_order = descriptor.traversal_order,
         bounds = result^.text_geometry.control.bounds,
         clip_bounds = result^.text_geometry.control.clip_bounds,
         label = descriptor.label, value = descriptor.text,
+        placeholder = descriptor.placeholder,
+        text_cursor_byte = descriptor.cursor_byte,
+        text_anchor_byte = descriptor.anchor_byte,
+        text_present = true,
     })
+    if descriptor.text_run_id != (viewmodel.Ui_Node_Id{}) {
+        _ = semantic_register_control(params.semantic_focus, {
+            id = descriptor.text_run_id, parent = descriptor.id,
+            role = .Text_Run, states = {.Visible, .Enabled},
+            region = descriptor.region,
+            traversal_order = descriptor.traversal_order,
+            bounds = result^.inner,
+            clip_bounds = result^.text_geometry.control.clip_bounds,
+            value = descriptor.text,
+            text_present = true,
+        })
+    }
     _ = semantic_focus_for_press(params.semantic_focus, owner, .Input_Box,
         int(descriptor.id.local_id), descriptor.id)
 }

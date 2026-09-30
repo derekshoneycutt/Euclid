@@ -27,6 +27,14 @@ Adapter_Action_Kind :: enum u8 {
     Increment,
     Decrement,
     Set_Value,
+    Replace_Selected_Text,
+    Replace_Text,
+    Set_Text_Selection,
+    Select,
+    Expand,
+    Collapse,
+    Scroll,
+    Set_Scroll_Value,
 }
 
 // Adapter_Action_Status identifies one display-thread drain or rejection outcome.
@@ -47,11 +55,18 @@ Adapter_Action :: struct {
     kind: Adapter_Action_Kind,
     identity: portable.Qualified_Identity,
     numeric_value: f64,
+    payload: [portable.ACTION_PAYLOAD_CAPACITY]u8,
+    payload_length: int,
+    selection_anchor: u16,
+    selection_focus: u16,
 }
 
 // Adapter_Control_Input pairs one complete portable record with semantic identity.
 Adapter_Control_Input :: struct {
     identity: portable.Qualified_Identity,
+    parent_identity: portable.Qualified_Identity,
+    active_descendant_identity: portable.Qualified_Identity,
+    controls_identity: portable.Qualified_Identity,
     control: portable.Control_Publication_Input,
 }
 

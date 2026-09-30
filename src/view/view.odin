@@ -523,6 +523,7 @@ route_ui_keyboard_frame :: proc(
 // accessibility_ui_identity preserves one complete semantic target for native lookup.
 accessibility_ui_identity :: proc(
     id: viewmodel.Ui_Node_Id) -> accessibility.Qualified_Identity {
+    if id == (viewmodel.Ui_Node_Id{}) {return {}}
     return {
         domain = .Ui,
         owner_domain = u16(id.domain),
@@ -530,6 +531,73 @@ accessibility_ui_identity :: proc(
         stable_uuid = cast([16]u8)id.stable_id,
         generation = id.generation,
     }
+}
+
+// accessibility_tree_focus_owner preserves one Tab stop for native item focus.
+accessibility_tree_focus_owner :: proc(
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
+    target: viewmodel.Ui_Node_Id) -> viewmodel.Ui_Node_Id {
+    snapshot := ui.semantic_snapshot(semantic)
+    index := ui.semantic_node_index(snapshot, target)
+    if index < 0 || snapshot^.nodes[index].role != .Tree_Item {return target}
+    semantic^.active_tree_item = target.stable_id
+    parent := snapshot^.nodes[index].parent
+    for parent != (viewmodel.Ui_Node_Id{}) {
+        parent_index := ui.semantic_node_index(snapshot, parent)
+        if parent_index < 0 {return target}
+        node := snapshot^.nodes[parent_index]
+        if node.role == .Tree {return node.id}
+        parent = node.parent
+    }
+    return target
+}
+
+// accessibility_command_kind maps one validated native action to UI vocabulary.
+accessibility_command_kind :: proc(
+    kind: native.Sdl_Accessibility_Action_Kind) -> viewmodel.Ui_Focus_Command_Kind {
+    switch kind {
+    case .Focus: return .Focus
+    case .Activate: return .Activate
+    case .Toggle: return .Toggle
+    case .Increment: return .Increment
+    case .Decrement: return .Decrement
+    case .Set_Value: return .Set_Value
+    case .Replace_Selected_Text: return .Replace_Selected_Text
+    case .Replace_Text: return .Replace_Text
+    case .Set_Text_Selection: return .Set_Text_Selection
+    case .Select: return .Select
+    case .Expand: return .Expand
+    case .Collapse: return .Collapse
+    case .Scroll: return .Scroll_Page
+    case .Set_Scroll_Value: return .Set_Scroll_Value
+    }
+    return .None
+}
+
+// apply_accessibility_action converges one validated request with its UI owner.
+apply_accessibility_action :: proc(
+    state: ^Euclid_General_State, action: ^native.Sdl_Accessibility_Action) {
+    identity := action^.identity
+    target := viewmodel.Ui_Node_Id{
+        domain = cast(viewmodel.Ui_Node_Domain)identity.owner_domain,
+        local_id = identity.local_id,
+        stable_id = cast(uuid.Identifier)identity.stable_uuid,
+        generation = identity.generation,
+    }
+    kind := accessibility_command_kind(action^.kind)
+    semantic := state^.ui_runtime.semantic_focus
+    if kind == .Focus {
+        target = accessibility_tree_focus_owner(semantic, target)
+    }
+    if kind == .Replace_Selected_Text || kind == .Replace_Text ||
+       kind == .Set_Text_Selection {
+        _ = ui.semantic_apply_external_text_action(semantic, target, kind,
+            string(action^.payload[:action^.payload_length]),
+            action^.selection_anchor, action^.selection_focus)
+        return
+    }
+    _ = ui.semantic_apply_external_action(
+        semantic, target, kind, action^.numeric_value)
 }
 
 // drain_accessibility_actions converges validated native requests with UI commands.
@@ -540,25 +608,7 @@ drain_accessibility_actions :: proc(
         status := native.sdl_platform_drain_accessibility_action(platform, &action)
         if status == .Empty || status == .Closing {return}
         if status != .Ok {continue}
-        identity := action.identity
-        target := viewmodel.Ui_Node_Id{
-            domain = cast(viewmodel.Ui_Node_Domain)identity.owner_domain,
-            local_id = identity.local_id,
-            stable_id = cast(uuid.Identifier)identity.stable_uuid,
-            generation = identity.generation,
-        }
-        kind := viewmodel.Ui_Focus_Command_Kind.Focus
-        switch action.kind {
-        case .Focus: kind = .Focus
-        case .Activate: kind = .Activate
-        case .Toggle: kind = .Toggle
-        case .Increment: kind = .Increment
-        case .Decrement: kind = .Decrement
-        case .Set_Value: kind = .Set_Value
-        }
-        semantic := state^.ui_runtime.semantic_focus
-        _ = ui.semantic_apply_external_action(
-            semantic, target, kind, action.numeric_value)
+        apply_accessibility_action(state, &action)
     }
 }
 
@@ -583,7 +633,11 @@ accessibility_publication_role :: proc(
     case .Slider: return .Slider, true
     case .Accordion_Header: return .Accordion_Header, true
     case .Status: return .Status, true
-    case .Surface, .Input, .Tree, .Tree_Item, .Document, .Terminal:
+    case .Input: return .Search_Input, true
+    case .Text_Run: return .Text_Run, true
+    case .Tree: return .Tree, true
+    case .Tree_Item: return .Tree_Item, true
+    case .Surface, .Document, .Terminal:
     }
     return {}, false
 }
@@ -599,6 +653,12 @@ accessibility_publication_actions :: proc(
     if .Decrement in actions {result += {.Decrement}}
     if .Set_To_Bound in actions {result += {.Set_To_Bound}}
     if .Set_Value in actions {result += {.Set_Value}}
+    if .Replace_Selected_Text in actions {result += {.Replace_Selected_Text}}
+    if .Set_Text_Selection in actions {result += {.Set_Text_Selection}}
+    if .Select in actions {result += {.Select}}
+    if .Expand in actions {result += {.Expand}}
+    if .Collapse in actions {result += {.Collapse}}
+    if .Scroll in actions {result += {.Scroll}}
     return result
 }
 
@@ -610,6 +670,10 @@ accessibility_control_input :: proc(
     role: accessibility.Publication_Role) -> native.Sdl_Accessibility_Control_Input {
     return {
         identity = accessibility_ui_identity(node.id),
+        parent_identity = accessibility_ui_identity(node.parent),
+        active_descendant_identity = accessibility_ui_identity(
+            node.active_descendant),
+        controls_identity = accessibility_ui_identity(node.controls),
         control = {
             role = role,
             bounds = accessibility_button_bounds(node),
@@ -617,6 +681,8 @@ accessibility_control_input :: proc(
                 snapshot, node.label_offset, node.label_length),
             value = ui.semantic_node_text(
                 snapshot, node.value_offset, node.value_length),
+            placeholder = ui.semantic_node_text(
+                snapshot, node.placeholder_offset, node.placeholder_length),
             actions = accessibility_publication_actions(node.actions),
             range = {node.numeric_range.minimum, node.numeric_range.maximum,
                 node.numeric_range.current, node.numeric_range.step,
@@ -628,6 +694,12 @@ accessibility_control_input :: proc(
             checked = .Checked in node.states,
             selected = .Selected in node.states,
             expanded = .Expanded in node.states,
+            text_present = node.text_present,
+            text_cursor_byte = int(node.text_cursor_byte),
+            text_anchor_byte = int(node.text_anchor_byte),
+            level = node.level,
+            position_in_set = node.position_in_set,
+            set_size = node.set_size,
         },
     }
 }
@@ -992,8 +1064,9 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
     display_profile: evidence_profile.State
     init_display_profile(&display_profile, settings^.profile_path)
     defer evidence_profile.destroy(&display_profile)
-    platform: native.Sdl_Platform
-    if !native.sdl_platform_create(&platform, {
+    platform := new(native.Sdl_Platform, context.allocator)
+    defer free(platform, context.allocator)
+    if !native.sdl_platform_create(platform, {
         title = WINDOW_TITLE,
         width = settings^.window.width,
         height = settings^.window.height,
@@ -1004,8 +1077,8 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
         log.error("sdl_platform_create_failed")
         return 1
     }
-    defer native.sdl_platform_destroy(&platform)
-    return run_sdl_platform_session(settings, &display_profile, &platform)
+    defer native.sdl_platform_destroy(platform)
+    return run_sdl_platform_session(settings, &display_profile, platform)
 }
 
 // sdl_font_texture_create creates one display-owned atlas candidate.

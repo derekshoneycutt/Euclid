@@ -105,6 +105,9 @@ scroll_container_apply_semantic :: proc(
         :params.semantic_focus.command_count] {
         if command.target == params.semantic_id && command.kind == .Scroll_Page {
             scroll_y^ += f32(command.amount) * page_step
+        } else if command.target == params.semantic_id &&
+                  command.kind == .Set_Scroll_Value {
+            scroll_y^ = f32(command.numeric_value)
         }
     }
     clamp_scroll_position(scroll_y, max_scroll)

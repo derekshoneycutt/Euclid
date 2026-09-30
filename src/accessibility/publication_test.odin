@@ -31,6 +31,105 @@ control_tree_builds_mixed_ordinary_controls :: proc(t: ^testing.T) {
         value.controls[2].value_offset, value.controls[2].value_length), "50000")
 }
 
+// Verify nested Phase 4 controls retain hierarchy and active descendant identity.
+@(test)
+control_tree_builds_search_and_tree_hierarchy :: proc(t: ^testing.T) {
+    controls := [5]Control_Publication_Input{
+        {native_id = 2, controls_native_id = 3, role = .Search_Input,
+            bounds = {10, 10, 220, 40}, label = "Search animations",
+            enabled = true, focusable = true, text_present = true},
+        {native_id = 6, parent_native_id = 2, role = .Text_Run,
+            bounds = {14, 14, 216, 36}, value = "axiom",
+            enabled = true, text_present = true},
+        {native_id = 3, role = .Tree, bounds = {10, 48, 280, 400},
+            label = "Animation library", active_descendant_native_id = 5,
+            enabled = true, focusable = true},
+        {native_id = 4, parent_native_id = 3, role = .Tree_Item,
+            bounds = {10, 48, 280, 72}, label = "Elements", enabled = true},
+        {native_id = 5, parent_native_id = 4, role = .Tree_Item,
+            bounds = {26, 72, 280, 96}, label = "Proposition I",
+            enabled = true, selected = true},
+    }
+    value: Control_Tree_Publication
+    testing.expect_value(t, control_tree_build(&value, {
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }), Publication_Status.Ok)
+    testing.expect_value(t, value.controls[0].parent_native_id, value.root_id)
+    testing.expect_value(t, value.controls[4].parent_native_id, u64(4))
+    testing.expect_value(t, value.controls[2].active_descendant_native_id, u64(5))
+    testing.expect_value(t, value.controls[0].controls_native_id, u64(3))
+    testing.expect_value(t, value.controls[1].parent_native_id, u64(2))
+    testing.expect_value(t, value.controls[1].role, Publication_Role.Text_Run)
+}
+
+// Verify editable text copies UTF-8 widths and byte selections as characters.
+@(test)
+control_tree_builds_utf8_editable_text :: proc(t: ^testing.T) {
+    controls := [1]Control_Publication_Input{{
+        native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
+        label = "Search animations", value = "aβc", placeholder = "Search",
+        enabled = true, focusable = true, text_present = true,
+        text_cursor_byte = 3, text_anchor_byte = 1,
+    }}
+    value: Control_Tree_Publication
+    testing.expect_value(t, control_tree_build(&value, {
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }), Publication_Status.Ok)
+    text := value.controls[0]
+    testing.expect_value(t, text.character_count, u16(3))
+    testing.expect_value(t, value.character_lengths[0], u8(1))
+    testing.expect_value(t, value.character_lengths[1], u8(2))
+    testing.expect_value(t, value.character_lengths[2], u8(1))
+    testing.expect_value(t, text.cursor_character, u16(2))
+    testing.expect_value(t, text.anchor_character, u16(1))
+    testing.expect_value(t, text.word_start_count, u16(1))
+    testing.expect_value(t, value.word_starts[text.word_start_offset], u8(0))
+    testing.expect_value(t, control_publication_text(&value,
+        text.placeholder_offset, text.placeholder_length), "Search")
+}
+
+// Verify editable text rejects selection offsets inside a UTF-8 sequence.
+@(test)
+control_tree_rejects_non_boundary_text_selection :: proc(t: ^testing.T) {
+    controls := [1]Control_Publication_Input{{
+        native_id = 2, role = .Search_Input, bounds = {10, 10, 220, 40},
+        value = "aβc", text_present = true,
+        text_cursor_byte = 2, text_anchor_byte = 0,
+    }}
+    value: Control_Tree_Publication
+    testing.expect_value(t, control_tree_build(&value, {
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }), Publication_Status.Invalid_Utf8)
+}
+
+// Verify malformed Phase 4 hierarchy cannot replace a complete publication.
+@(test)
+control_tree_rejects_dangling_cycles_and_unrelated_active_descendants :: proc(
+    t: ^testing.T) {
+    controls := [2]Control_Publication_Input{
+        {native_id = 2, role = .Tree, bounds = {0, 0, 200, 200},
+            label = "Library", enabled = true},
+        {native_id = 3, parent_native_id = 2, role = .Tree_Item,
+            bounds = {0, 0, 200, 24}, label = "Item", enabled = true},
+    }
+    value: Control_Tree_Publication
+    controls[1].parent_native_id = 99
+    testing.expect_value(t, control_tree_build(&value, {
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }), Publication_Status.Missing_Parent)
+    controls[0].parent_native_id = 3
+    controls[1].parent_native_id = 2
+    testing.expect_value(t, control_tree_build(&value, {
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }), Publication_Status.Cycle)
+    controls[0].parent_native_id = 0
+    controls[0].active_descendant_native_id = 3
+    controls[1].parent_native_id = 0
+    testing.expect_value(t, control_tree_build(&value, {
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }), Publication_Status.Unreachable_Node)
+}
+
 // Verify identical trees suppress generations and invalid ranges preserve state.
 @(test)
 protected_control_tree_suppresses_and_preserves :: proc(t: ^testing.T) {

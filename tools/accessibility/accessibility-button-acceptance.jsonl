@@ -1,3 +1,11 @@
 {"wait_state":"runtime_ready","timeout_ms":10000}
-{"wait_event":"animation_reset_committed","timeout_ms":30000}
+{"select_animation":"Proposition I","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"key":"tab"}
+{"key":"tab"}
+{"key":"tab"}
+{"key":"tab"}
+{"assert_focus":"accordion_library"}
+{"key":"enter"}
+{"wait_event":"animation_reset_committed","timeout_ms":60000}
 {"shutdown":true}

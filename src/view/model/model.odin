@@ -18,6 +18,7 @@ LIBRARY_SEARCH_VISIBLE_ID_CAPACITY :: 256
 UI_SEMANTIC_NODE_CAPACITY :: 1344
 UI_SEMANTIC_TEXT_CAPACITY :: 64 * 1024
 UI_FOCUS_COMMAND_CAPACITY :: 128
+UI_FOCUS_COMMAND_PAYLOAD_CAPACITY :: LIBRARY_SEARCH_QUERY_BYTE_CAPACITY
 Color :: color.Color_RGBA8
 Rectangle :: geometry.Rectangle
 Vector3 :: geometry.Vector3
@@ -240,6 +241,7 @@ Ui_Node_Role :: enum u8 {
     Surface,
     Button,
     Input,
+    Text_Run,
     Checkbox,
     Slider,
     Accordion_Header,
@@ -277,6 +279,8 @@ Ui_Node_Action :: enum u8 {
     Collapse,
     Copy,
     Scroll,
+    Replace_Selected_Text,
+    Set_Text_Selection,
 }
 
 Ui_Node_Action_Set :: bit_set[Ui_Node_Action; u16]
@@ -321,10 +325,12 @@ Ui_Editable_Text_Mode :: enum u8 {
 // Ui_Editable_Text_Descriptor borrows one committed UTF-8 value for a frame.
 Ui_Editable_Text_Descriptor :: struct {
     id: Ui_Node_Id,
+    text_run_id: Ui_Node_Id,
     parent: Ui_Node_Id,
     region: Ui_Focus_Region,
     traversal_order: u16,
     label: string,
+    placeholder: string,
     text: string,
     mode: Ui_Editable_Text_Mode,
     cursor_byte: int,
@@ -360,8 +366,14 @@ Ui_Focus_Command_Kind :: enum u8 {
     Tree_First,
     Tree_Last,
     Select,
+    Expand,
+    Collapse,
     Copy,
     Scroll_Page,
+    Set_Scroll_Value,
+    Replace_Selected_Text,
+    Replace_Text,
+    Set_Text_Selection,
 }
 
 // Ui_Focus_Command carries one bounded event-derived action to a semantic owner.
@@ -370,6 +382,10 @@ Ui_Focus_Command :: struct {
     kind: Ui_Focus_Command_Kind,
     amount: i32,
     numeric_value: f64,
+    payload: [UI_FOCUS_COMMAND_PAYLOAD_CAPACITY]u8,
+    payload_length: u16,
+    selection_anchor: u16,
+    selection_focus: u16,
     event_index: u16,
 }
 
@@ -388,6 +404,7 @@ Ui_Semantic_Node :: struct {
     id: Ui_Node_Id,
     parent: Ui_Node_Id,
     active_descendant: Ui_Node_Id,
+    controls: Ui_Node_Id,
     role: Ui_Node_Role,
     states: Ui_Node_State,
     actions: Ui_Node_Action_Set,
@@ -400,6 +417,14 @@ Ui_Semantic_Node :: struct {
     label_length: u16,
     value_offset: u32,
     value_length: u16,
+    placeholder_offset: u32,
+    placeholder_length: u16,
+    text_cursor_byte: u16,
+    text_anchor_byte: u16,
+    text_present: bool,
+    level: u16,
+    position_in_set: u16,
+    set_size: u16,
 }
 
 // Ui_Semantic_Node_Registration borrows text only for one atomic registration.
@@ -407,6 +432,7 @@ Ui_Semantic_Node_Registration :: struct {
     node: Ui_Semantic_Node,
     label: string,
     value: string,
+    placeholder: string,
 }
 
 // Ui_Semantic_Snapshot owns one complete immutable semantic tree publication.

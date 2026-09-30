@@ -176,6 +176,58 @@ input_box_descriptor_projects_utf8_selection_geometry :: proc(t: ^testing.T) {
     testing.expect_value(t, result.text_geometry.selection.width, f32(10))
 }
 
+// Verify copied native selection and replacement commands use ordinary edit storage.
+@(test)
+input_box_semantic_text_actions_preserve_utf8_boundaries :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    id := viewmodel.Ui_Node_Id{domain = .Library_Control, local_id = 11}
+    buffer: [16]u8
+    copy(buffer[:], "aβc")
+    length := len("aβc")
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1,
+        cursor_byte = length, anchor_byte = length}
+    semantic^.commands[0] = {target = id, kind = .Set_Text_Selection,
+        selection_anchor = 1, selection_focus = 2}
+    semantic^.commands[1] = {target = id, kind = .Replace_Selected_Text,
+        payload_length = 1}
+    semantic^.commands[1].payload[0] = 'x'
+    semantic^.command_count = 2
+    owner: viewmodel.Ui_Press_Owner_State
+    result := input_box_prepare({rect = {0, 0, 100, 24},
+        descriptor = {id = id, text = string(buffer[:length]), mode = .Editable,
+            content_revision = 1}, state = &state, semantic_focus = semantic,
+        edit_target = {buffer[:], &length}, column_advance = 10}, &owner)
+    testing.expect(t, result.changed)
+    testing.expect_value(t, string(buffer[:length]), "axc")
+    testing.expect_value(t, state.cursor_byte, 2)
+    testing.expect_value(t, state.anchor_byte, 2)
+}
+
+// Verify native full-text replacement ignores the owner's current selection.
+@(test)
+input_box_semantic_full_text_action_replaces_all :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    id := viewmodel.Ui_Node_Id{domain = .Library_Control, local_id = 11}
+    buffer: [16]u8
+    copy(buffer[:], "old")
+    length := 3
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1,
+        cursor_byte = 2, anchor_byte = 1}
+    semantic^.commands[0] = {target = id, kind = .Replace_Text,
+        payload_length = 3}
+    copy(semantic^.commands[0].payload[:], "new")
+    semantic^.command_count = 1
+    owner: viewmodel.Ui_Press_Owner_State
+    result := input_box_prepare({rect = {0, 0, 100, 24},
+        descriptor = {id = id, text = string(buffer[:length]), mode = .Editable,
+            content_revision = 1}, state = &state, semantic_focus = semantic,
+        edit_target = {buffer[:], &length}, column_advance = 10}, &owner)
+    testing.expect(t, result.changed)
+    testing.expect_value(t, string(buffer[:length]), "new")
+}
+
 // Verify read-only descriptor policy wins even when mutable storage is supplied.
 @(test)
 input_box_descriptor_rejects_read_only_mutation :: proc(t: ^testing.T) {

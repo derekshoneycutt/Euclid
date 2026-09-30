@@ -35,6 +35,7 @@ Semantic_Control_Registration :: struct {
     id: viewmodel.Ui_Node_Id,
     parent: viewmodel.Ui_Node_Id,
     active_descendant: viewmodel.Ui_Node_Id,
+    controls: viewmodel.Ui_Node_Id,
     role: viewmodel.Ui_Node_Role,
     states: viewmodel.Ui_Node_State,
     actions: viewmodel.Ui_Node_Action_Set,
@@ -45,6 +46,13 @@ Semantic_Control_Registration :: struct {
     numeric_range: viewmodel.Ui_Numeric_Range,
     label: string,
     value: string,
+    placeholder: string,
+    text_cursor_byte: int,
+    text_anchor_byte: int,
+    text_present: bool,
+    level: u16,
+    position_in_set: u16,
+    set_size: u16,
 }
 
 // semantic_control_id qualifies one existing widget identity by owning domain.
@@ -139,17 +147,21 @@ semantic_registration_status :: proc(
     empty_id := viewmodel.Ui_Node_Id{}
     if registration.node.id == empty_id {return .Invalid_Id}
     if semantic_node_index(snapshot, registration.node.id) >= 0 {return .Duplicate_Id}
-    if !utf8.valid_string(registration.label) || !utf8.valid_string(registration.value) {
+    if !utf8.valid_string(registration.label) ||
+       !utf8.valid_string(registration.value) ||
+       !utf8.valid_string(registration.placeholder) {
         return .Invalid_Utf8
     }
     if len(registration.label) > int(max(u16)) ||
-         len(registration.value) > int(max(u16)) {
+       len(registration.value) > int(max(u16)) ||
+       len(registration.placeholder) > int(max(u16)) {
         return .Text_Capacity
     }
     if snapshot^.node_count >= viewmodel.UI_SEMANTIC_NODE_CAPACITY {
         return .Node_Capacity
     }
-    required_text := len(registration.label) + len(registration.value)
+    required_text := len(registration.label) + len(registration.value) +
+        len(registration.placeholder)
     if required_text > viewmodel.UI_SEMANTIC_TEXT_CAPACITY - snapshot^.text_count {
         return .Text_Capacity
     }
@@ -175,6 +187,11 @@ semantic_register_node :: proc(
     node.value_length = u16(len(registration.value))
     copy(snapshot^.text[snapshot^.text_count:], transmute([]u8)registration.value)
     snapshot^.text_count += len(registration.value)
+    node.placeholder_offset = u32(snapshot^.text_count)
+    node.placeholder_length = u16(len(registration.placeholder))
+    copy(snapshot^.text[snapshot^.text_count:],
+        transmute([]u8)registration.placeholder)
+    snapshot^.text_count += len(registration.placeholder)
     snapshot^.nodes[snapshot^.node_count] = node
     snapshot^.node_count += 1
     return .Ok
@@ -194,6 +211,7 @@ semantic_register_control :: proc(
             id = control.id,
             parent = control.parent,
             active_descendant = control.active_descendant,
+            controls = control.controls,
             role = control.role,
             states = states,
             actions = control.actions,
@@ -202,9 +220,16 @@ semantic_register_control :: proc(
             bounds = control.bounds,
             clip_bounds = control.clip_bounds,
             numeric_range = control.numeric_range,
+            text_cursor_byte = u16(max(0, control.text_cursor_byte)),
+            text_anchor_byte = u16(max(0, control.text_anchor_byte)),
+            text_present = control.text_present,
+            level = control.level,
+            position_in_set = control.position_in_set,
+            set_size = control.set_size,
         },
         label = control.label,
         value = control.value,
+        placeholder = control.placeholder,
     })
 }
 
@@ -229,6 +254,10 @@ semantic_validate_snapshot :: proc(
     for node, index in snapshot^.nodes[:snapshot^.node_count] {
         if node.parent != root_parent &&
              semantic_node_index(snapshot, node.parent) < 0 {
+            return .Missing_Parent, node.id
+        }
+        if node.controls != root_parent &&
+             semantic_node_index(snapshot, node.controls) < 0 {
             return .Missing_Parent, node.id
         }
         if !semantic_node_is_tab_stop(node) {continue}
@@ -317,6 +346,27 @@ semantic_command_requested :: proc(
     return false
 }
 
+// semantic_simple_external_action authorizes one payload-free owner command.
+semantic_simple_external_action :: proc(
+    state: ^viewmodel.Ui_Semantic_Focus_State, node: viewmodel.Ui_Semantic_Node,
+    target: viewmodel.Ui_Node_Id, kind: viewmodel.Ui_Focus_Command_Kind) -> bool {
+    required_action: viewmodel.Ui_Node_Action
+    #partial switch kind {
+    case .Activate: required_action = .Activate
+    case .Toggle: required_action = .Toggle
+    case .Increment: required_action = .Increment
+    case .Decrement: required_action = .Decrement
+    case .Select: required_action = .Select
+    case .Expand: required_action = .Expand
+    case .Collapse: required_action = .Collapse
+    case: required_action = .Focus
+    }
+    if required_action != .Focus && required_action in node.actions {
+        return semantic_append_command(state, {target = target, kind = kind})
+    }
+    return false
+}
+
 // semantic_apply_external_action validates and converges one owner-external action.
 semantic_apply_external_action :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
@@ -328,8 +378,8 @@ semantic_apply_external_action :: proc(
     index := semantic_node_index(snapshot, target)
     if index < 0 {return false}
     node := snapshot^.nodes[index]
-    required := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
-    if node.states & required != required {return false}
+    required_states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
+    if node.states & required_states != required_states {return false}
     if kind == .Focus && .Focus in node.actions {
         state^.logical_focus = target
         state^.focus_origin = .Keyboard
@@ -337,21 +387,51 @@ semantic_apply_external_action :: proc(
         state^.last_traversal_order = node.traversal_order
         return true
     }
-    if kind == .Activate && .Activate in node.actions {
-        return semantic_append_command(state, {target = target, kind = kind})
-    }
-    if kind == .Toggle && .Toggle in node.actions {
-        return semantic_append_command(state, {target = target, kind = kind})
-    }
-    if kind == .Increment && .Increment in node.actions {
-        return semantic_append_command(state, {target = target, kind = kind})
-    }
-    if kind == .Decrement && .Decrement in node.actions {
-        return semantic_append_command(state, {target = target, kind = kind})
-    }
     if kind == .Set_Value && .Set_Value in node.actions {
         return semantic_append_command(state, {
             target = target, kind = kind, numeric_value = numeric_value})
+    }
+    if kind == .Scroll_Page && .Scroll in node.actions {
+        amount := i32(1)
+        if numeric_value < 0 {amount = -1}
+        return semantic_append_command(state, {
+            target = target, kind = kind, amount = amount})
+    }
+    if kind == .Set_Scroll_Value && .Scroll in node.actions {
+        return semantic_append_command(state, {
+            target = target, kind = kind, numeric_value = numeric_value})
+    }
+    return semantic_simple_external_action(state, node, target, kind)
+}
+
+// semantic_apply_external_text_action validates and copies one bounded text command.
+semantic_apply_external_text_action :: proc(
+    state: ^viewmodel.Ui_Semantic_Focus_State,
+    target: viewmodel.Ui_Node_Id,
+    kind: viewmodel.Ui_Focus_Command_Kind,
+    payload: string, anchor, focus: u16) -> bool {
+    if state == nil || len(payload) > viewmodel.UI_FOCUS_COMMAND_PAYLOAD_CAPACITY {
+        return false
+    }
+    snapshot := semantic_snapshot(state)
+    index := semantic_node_index(snapshot, target)
+    if index < 0 {return false}
+    node := snapshot^.nodes[index]
+    required := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
+    if node.states & required != required {return false}
+    command := viewmodel.Ui_Focus_Command{target = target, kind = kind,
+        payload_length = u16(len(payload)), selection_anchor = anchor,
+        selection_focus = focus}
+    if kind == .Replace_Selected_Text && .Replace_Selected_Text in node.actions {
+        copy(command.payload[:len(payload)], transmute([]u8)payload)
+        return semantic_append_command(state, command)
+    }
+    if kind == .Replace_Text && .Replace_Selected_Text in node.actions {
+        copy(command.payload[:len(payload)], transmute([]u8)payload)
+        return semantic_append_command(state, command)
+    }
+    if kind == .Set_Text_Selection && .Set_Text_Selection in node.actions {
+        return semantic_append_command(state, command)
     }
     return false
 }

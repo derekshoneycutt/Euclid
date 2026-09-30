@@ -28,6 +28,21 @@ native_id_registry_preserves_session_identity :: proc(t: ^testing.T) {
     testing.expect_value(t, registry.diagnostics.retired, 1)
 }
 
+// Verify UUID-backed semantic identities do not require an unrelated local ID.
+@(test)
+native_id_registry_accepts_stable_uuid_identity :: proc(t: ^testing.T) {
+    registry: Native_Id_Registry
+    native_id_registry_init(&registry)
+    identity := Qualified_Identity{domain = .Ui, owner_domain = 8}
+    identity.stable_uuid[0] = 1
+    native_id, ok := native_id_resolve(&registry, identity)
+    testing.expect(t, ok)
+    testing.expect_value(t, native_id, u64(2))
+    resolved, found := native_id_lookup(&registry, native_id)
+    testing.expect(t, found)
+    testing.expect_value(t, resolved, identity)
+}
+
 // Verify the registry rejects exhaustion without wrapping or retargeting IDs.
 @(test)
 native_id_registry_rejects_capacity_exhaustion :: proc(t: ^testing.T) {
