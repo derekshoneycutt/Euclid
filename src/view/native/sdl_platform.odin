@@ -604,20 +604,27 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
 // sdl_platform_service_accessibility retains and forwards native host focus.
 sdl_platform_service_accessibility :: proc(
     platform: ^Sdl_Platform, focused: bool) {
-    if platform == nil {return}
+    if platform == nil {
+        return
+    }
     platform^.window_focused = focused
     when ODIN_OS == .Linux {
-        if platform^.accessibility.native == nil {return}
+        if platform^.accessibility.native == nil {
+            return
+        }
         width := f64(platform^.metrics.logical_width)
         height := f64(platform^.metrics.logical_height)
-        if string(sdl.GetCurrentVideoDriver()) != "x11" {return}
+        if string(sdl.GetCurrentVideoDriver()) != "x11" {
+            return
+        }
         x, y: i32
-        if !sdl.GetWindowPosition(platform^.window, &x, &y) {return}
-        outer := {
-            f64(x), f64(y), f64(x) + width, f64(y) + height,
+        if !sdl.GetWindowPosition(platform^.window, &x, &y) {
+            return
         }
         native_accessibility.unix_adapter_set_root_bounds(
-            &platform^.accessibility, outer, outer)
+            &platform^.accessibility,
+            {f64(x), f64(y), f64(x) + width, f64(y) + height},
+            {f64(x), f64(y), f64(x) + width, f64(y) + height})
     } else when ODIN_OS == .Darwin {
         native_accessibility.macos_adapter_update_focus(
             &platform^.accessibility, focused)
