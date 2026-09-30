@@ -37,6 +37,24 @@ GIF busy/disabled observation, resize and 100/150/200 percent DPI evidence, and 
 Accessibility Insights review remain Phase 2 gates, so Phase 2 is not yet declared
 complete.
 
+Phase 3 native automation reached its first qualified gate on 2026-09-30. Two complete
+UIA sessions now prove Search Value and Text patterns, multibyte whole-value replacement,
+collapsed caret placement, whole-document selection, Tree hierarchy, branch expansion
+and collapse, selection, filtering, surviving identity continuity, stale retained-item
+rejection, retirement, runtime-ID non-reuse, provider removal, and repeated teardown.
+AccessKit Windows 0.35.1 leaves valid partial TextPattern range selection unchanged and
+exposes the filtered Tree RangeValue pattern as read-only. Inbox managed UIA exposes
+neither selected-text replacement nor the published `ControllerFor` relation. These
+version-qualified differences, plus the remaining manual review, prevent Phase 3 from
+being declared complete.
+
+Phase 4 qualification was executed on 2026-09-30. Focused accessibility tests, the
+Windows ABI and adjacent-loader probe, debug and default builds, two UIA sessions, the
+canonical 3,829-application-test and 710-analyzer-test gate, repository analysis, wiki,
+and closure generation pass. The parity freeze remains blocked by the Phase 2 and Phase
+3 gaps above, incomplete manual evidence, and the uncommitted candidate identity. See
+[Windows Accessibility Qualification](docs/wiki/Guides/WindowsAccessibilityQualification.md).
+
 The macOS implementation is complete through its current qualification workflow, with
 version-qualified native action limitations recorded separately. Windows now becomes
 the active accessibility development platform. Linux and macOS remain behavioral
@@ -206,13 +224,15 @@ translator into a Windows file or introduce UIA-specific semantics into UI owner
 
 Phase 1 supplies native admission diagnostics, hidden HWND creation, pre-show adapter
 attachment, publication and action dispatch, deterministic teardown, and automated UIA
-root and Restart-button evidence. Phase 2 now supplies stable ordinary-control evidence.
-The remaining work is:
+root and Restart-button evidence. Phase 2 supplies stable ordinary-control evidence,
+and Phase 3 supplies the qualified Search, filtering, Tree action, and identity evidence
+described above. The remaining work is:
 
 - transient GIF busy/disabled evidence and final relation review;
 - resize and 100/150/200 percent DPI bounds evidence;
-- Search value and text-selection operations;
-- Tree hierarchy, filtering, identity retirement, and scrolling;
+- partial and backward text selection plus selected-text replacement after the native
+  adapter exposes those operations;
+- native composite Tree scrolling after the adapter exposes a writable operation;
 - Accessibility Insights review and the final Windows qualification record.
 
 ## Windows Native Contracts
@@ -871,6 +891,11 @@ Phase 3 is complete only when:
 
 ## Phase 4: Windows 11 x64 Qualification Freeze
 
+**Qualification status:** executed on 2026-09-30, with all automated gates passing.
+The parity freeze remains blocked by version-qualified native text and scrolling
+limitations, incomplete transient-state/DPI/manual evidence, and the uncommitted
+candidate identity.
+
 ### Phase 4 Objective
 
 Freeze one reproducible Windows parity candidate, run every deterministic and native
@@ -1086,8 +1111,8 @@ UI Automation discovery and window interaction require a logged-in session.
   workflow.
 - `cmake/EuclidTargets.cmake` - proposed `accessibility-windows` convenience target.
 - `docs/wiki/Guides/AccessibilityVerification.md` - cross-platform operator workflow.
-- `docs/wiki/Guides/WindowsAccessibilityQualification.md` - proposed final Windows
-  qualification record.
+- `docs/wiki/Guides/WindowsAccessibilityQualification.md` - executed Windows
+  qualification record and blocking-difference ledger.
 - [`staging_windowsportable_discussion.md`](staging_windowsportable_discussion.md) -
   separate future portable Julia/runtime packaging discussion.
 

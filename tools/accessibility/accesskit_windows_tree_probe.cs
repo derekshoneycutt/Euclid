@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Automation;
+using System.Windows.Automation.Text;
 
 internal static class Program
 {
@@ -23,6 +24,14 @@ internal static class Program
     private const string HorizontalSplitterLabel = "Resize upper and lower panes";
     private const string GifHeaderLabel = "Save GIF";
     private const string GifStatusLabel = "GIF capture idle";
+    private const string SearchLabel = "Search animations";
+    private const string TreeLabel = "Animation library";
+    private const string SearchQuery = "Elements";
+    private const string MultibyteSearchQuery = "a\u03b2c";
+    private const string RetirementQuery = "algebra";
+    private const string SurvivingItemLabel = "Euclid's Elements";
+    private const string FirstRetiredItemLabel = "Terminal";
+    private const string RetirementResultLabel = "Algebra";
 
     [STAThread]
     private static int Main(string[] arguments)
@@ -71,16 +80,19 @@ internal static class Program
                 2, root, binary, scenario, artifactRoot, scenarioEnabled),
         ];
         var report = new Report(
-            SchemaVersion: 2,
+            SchemaVersion: 3,
             Platform: "windows",
             OperatingSystem: RuntimeInformation.OSDescription,
             Architecture: RuntimeInformation.OSArchitecture.ToString(),
             AccessKitWindowsVersion: "0.35.1",
-            AutomatedScope: "phase_2_stable_ordinary_controls",
+            AutomatedScope: "phase_3_search_and_tree",
             Result: "pass",
             Limitations:
             [
                 "inbox_managed_uia_controller_for_property_unavailable",
+                "accesskit_windows_0_35_1_partial_text_range_select_is_noop",
+                "selected_text_replacement_not_exposed_by_inbox_managed_uia",
+                "accesskit_windows_0_35_1_tree_range_value_is_read_only",
                 "transient_gif_busy_and_disabled_states_not_yet_automated",
                 "multi_dpi_and_resize_bounds_not_yet_automated",
             ],
@@ -176,6 +188,18 @@ internal static class Program
             }
 
             string[] initialChildren = GetChildNames(rootElement);
+            LibrarySnapshotRecord library = CaptureLibrarySnapshot(
+                rootElement, process, index);
+            AutomationElement survivingItem = WaitForNamedControl(
+                rootElement, process, SurvivingItemLabel, ControlType.TreeItem, index);
+            AutomationElement retirementItem = WaitForNamedControl(
+                rootElement, process, FirstRetiredItemLabel,
+                ControlType.TreeItem, index);
+            TreeInteractionRecord treeInteraction = ExerciseInitialTree(
+                rootElement, process, index, survivingItem);
+            SearchActionRecord search = ExerciseSearch(rootElement, process, index);
+            TreeFilterRecord treeFilter = ExerciseTreeFiltering(
+                rootElement, process, index, survivingItem, retirementItem);
             RangeFactsRecord verticalSplitter = GetRangeFacts(
                 WaitForNamedControl(rootElement, process, VerticalSplitterLabel,
                     ControlType.Slider, index), index);
@@ -251,6 +275,10 @@ internal static class Program
                 Root: rootRecord,
                 RestartButton: buttonRecord,
                 InitialChildren: initialChildren,
+                Library: library,
+                Search: search,
+                TreeInteraction: treeInteraction,
+                TreeFilter: treeFilter,
                 PauseButton: pause,
                 VerticalSplitter: verticalSplitter,
                 HorizontalSplitter: horizontalSplitter,
@@ -306,6 +334,580 @@ internal static class Program
                 $"Session {index} resumed button changed runtime identity.");
         }
         return new ButtonActionRecord(before, invoked, after, 2);
+    }
+
+    private static LibrarySnapshotRecord CaptureLibrarySnapshot(
+        AutomationElement root, Process process, int index)
+    {
+        AutomationElement search = WaitForNamedElement(
+            root, process, SearchLabel, index);
+        AutomationElement tree = WaitForNamedElement(
+            root, process, TreeLabel, index);
+        ElementRecord[] descendants = tree.FindAll(
+                TreeScope.Descendants, Condition.TrueCondition)
+            .Cast<AutomationElement>()
+            .Take(64)
+            .Select(GetElementRecord)
+            .ToArray();
+        return new LibrarySnapshotRecord(
+            GetElementRecord(search), GetElementRecord(tree), descendants);
+    }
+
+    private static SearchActionRecord ExerciseSearch(
+        AutomationElement root, Process process, int index)
+    {
+        AutomationElement search = WaitForNamedElement(
+            root, process, SearchLabel, index);
+        ElementRecord element = GetElementRecord(search);
+        SearchTextRecord initial = GetSearchTextRecord(search, index);
+        SetSearchValue(search, MultibyteSearchQuery, index);
+        SearchTextRecord multibyte = WaitForSearchValue(
+            root, process, index, MultibyteSearchQuery);
+        search = WaitForNamedElement(root, process, SearchLabel, index);
+        SelectSearchRange(search, 2, 2, index);
+        SearchTextRecord collapsed = WaitForSearchSelection(
+            root, process, index, "", 2, 2);
+        search = WaitForNamedElement(root, process, SearchLabel, index);
+        SelectSearchRange(search, 1, 2, index);
+        PartialTextSelectionRecord partialSelection =
+            WaitForPartialSearchSelection(
+                root, process, index, collapsed, "\u03b2", 1, 2);
+        search = WaitForNamedElement(root, process, SearchLabel, index);
+        SetSearchValue(search, SearchQuery, index);
+        SearchTextRecord filtered = WaitForSearchValue(
+            root, process, index, SearchQuery);
+        search = WaitForNamedElement(root, process, SearchLabel, index);
+        SelectSearchDocument(search, index);
+        SearchTextRecord selected = WaitForSearchSelection(
+            root, process, index, SearchQuery, 0, SearchQuery.Length);
+        if (!RuntimeIdentityEqual(element.RuntimeId, GetRuntimeId(search)))
+        {
+            throw new InvalidOperationException(
+                $"Session {index} Search changed runtime identity.");
+        }
+        return new SearchActionRecord(
+            element, initial, multibyte, collapsed,
+            partialSelection, filtered, selected);
+    }
+
+    private static TreeInteractionRecord ExerciseInitialTree(
+        AutomationElement root, Process process, int index,
+        AutomationElement branch)
+    {
+        ElementRecord branchBefore = GetElementRecord(branch);
+        string[] topLevelBefore = GetChildNames(WaitForNamedElement(
+            root, process, TreeLabel, index));
+        ExpandCollapseState initialState = GetExpandCollapseState(
+            branch, index, SurvivingItemLabel);
+        if (initialState == ExpandCollapseState.Expanded)
+        {
+            GetExpandCollapsePattern(branch, index, SurvivingItemLabel).Collapse();
+            _ = WaitForExpandCollapseState(
+                root, process, index, SurvivingItemLabel,
+                ExpandCollapseState.Collapsed);
+        }
+        branch = WaitForNamedControl(
+            root, process, SurvivingItemLabel, ControlType.TreeItem, index);
+        GetExpandCollapsePattern(branch, index, SurvivingItemLabel).Expand();
+        _ = WaitForExpandCollapseState(
+            root, process, index, SurvivingItemLabel,
+            ExpandCollapseState.Expanded);
+        branch = WaitForNamedControl(
+            root, process, SurvivingItemLabel, ControlType.TreeItem, index);
+        string[] branchChildren = GetChildNames(branch);
+        GetExpandCollapsePattern(branch, index, SurvivingItemLabel).Collapse();
+        _ = WaitForExpandCollapseState(
+            root, process, index, SurvivingItemLabel,
+            ExpandCollapseState.Collapsed);
+        branch = WaitForNamedControl(
+            root, process, SurvivingItemLabel, ControlType.TreeItem, index);
+        GetExpandCollapsePattern(branch, index, SurvivingItemLabel).Expand();
+        ExpandCollapseState restoredState = WaitForExpandCollapseState(
+            root, process, index, SurvivingItemLabel,
+            ExpandCollapseState.Expanded);
+
+        branch = WaitForNamedControl(
+            root, process, SurvivingItemLabel, ControlType.TreeItem, index);
+        if (!branch.TryGetCurrentPattern(
+                SelectionItemPattern.Pattern, out object selectionObject) ||
+            selectionObject is not SelectionItemPattern selection)
+        {
+            throw new InvalidOperationException(
+                $"Session {index} {SurvivingItemLabel} has no SelectionItem pattern.");
+        }
+        selection.Select();
+        WaitFor(
+            () =>
+            {
+                AutomationElement current = WaitForNamedControl(
+                    root, process, SurvivingItemLabel, ControlType.TreeItem, index);
+                return ((SelectionItemPattern)current.GetCurrentPattern(
+                    SelectionItemPattern.Pattern)).Current.IsSelected;
+            },
+            process,
+            TimeSpan.FromSeconds(5),
+            $"Session {index} did not select {SurvivingItemLabel}.");
+
+        AutomationElement tree = WaitForNamedElement(root, process, TreeLabel, index);
+        RangeFactsRecord rangeBefore = GetRangeFacts(tree, index);
+        double requested = rangeBefore.Value;
+        double observed = rangeBefore.Value;
+        if (rangeBefore.Maximum > rangeBefore.Minimum)
+        {
+            requested = rangeBefore.Value < rangeBefore.Maximum
+                ? Math.Min(rangeBefore.Maximum,
+                    rangeBefore.Value + Math.Max(rangeBefore.SmallChange, 1))
+                : Math.Max(rangeBefore.Minimum,
+                    rangeBefore.Value - Math.Max(rangeBefore.SmallChange, 1));
+            var range = (RangeValuePattern)tree.GetCurrentPattern(
+                RangeValuePattern.Pattern);
+            range.SetValue(requested);
+            observed = WaitForTreeRangeValue(root, process, index, requested);
+            tree = WaitForNamedElement(root, process, TreeLabel, index);
+            ((RangeValuePattern)tree.GetCurrentPattern(
+                RangeValuePattern.Pattern)).SetValue(rangeBefore.Value);
+            _ = WaitForTreeRangeValue(root, process, index, rangeBefore.Value);
+        }
+        return new TreeInteractionRecord(
+            branchBefore, initialState.ToString(), restoredState.ToString(),
+            topLevelBefore, branchChildren, true, rangeBefore, requested, observed);
+    }
+
+    private static TreeFilterRecord ExerciseTreeFiltering(
+        AutomationElement root, Process process, int index,
+        AutomationElement survivingItem, AutomationElement retirementItem)
+    {
+        int[] survivingRuntimeId = GetRuntimeId(survivingItem);
+        string[] filteredNames = WaitForTreeTopology(
+            root, process, index, SurvivingItemLabel, "Terminal");
+        TreeScrollRecord scroll = ExerciseFilteredTreeScroll(
+            root, process, index);
+        AutomationElement currentSurvivor = WaitForNamedControl(
+            root, process, SurvivingItemLabel, ControlType.TreeItem, index);
+        bool survivingIdentityContinuous = RuntimeIdentityEqual(
+            survivingRuntimeId, GetRuntimeId(currentSurvivor));
+        if (!survivingIdentityContinuous)
+        {
+            throw new InvalidOperationException(
+                $"Session {index} surviving TreeItem changed runtime identity.");
+        }
+        RetainedElementRecord firstRetired = ProbeRetainedTreeItem(
+            root, retirementItem, FirstRetiredItemLabel, index);
+
+        AutomationElement search = WaitForNamedElement(
+            root, process, SearchLabel, index);
+        SetSearchValue(search, RetirementQuery, index);
+        SearchTextRecord retirementText = WaitForSearchValue(
+            root, process, index, RetirementQuery);
+        string[] retirementNames = WaitForTreeTopology(
+            root, process, index, RetirementResultLabel, SurvivingItemLabel);
+        RetainedElementRecord survivorRetired = ProbeRetainedTreeItem(
+            root, currentSurvivor, SurvivingItemLabel, index);
+        search = WaitForNamedElement(root, process, SearchLabel, index);
+        SetSearchValue(search, "", index);
+        SearchTextRecord restoredText = WaitForSearchValue(
+            root, process, index, "");
+        string[] restoredNames = WaitForTreeTopology(
+            root, process, index, SurvivingItemLabel, "__absent_sentinel__");
+        AutomationElement returnedRetirement = WaitForNamedControl(
+            root, process, SurvivingItemLabel, ControlType.TreeItem, index);
+        bool retiredIdWasNotReused = !RuntimeIdentityEqual(
+            survivingRuntimeId, GetRuntimeId(returnedRetirement));
+        if (!retiredIdWasNotReused)
+        {
+            throw new InvalidOperationException(
+                $"Session {index} reused a retired Euclid runtime identity.");
+        }
+        return new TreeFilterRecord(
+            filteredNames, retirementNames, restoredNames,
+            survivingIdentityContinuous, scroll,
+            firstRetired, survivorRetired,
+            retiredIdWasNotReused, retirementText, restoredText);
+    }
+
+    private static TreeScrollRecord ExerciseFilteredTreeScroll(
+        AutomationElement root, Process process, int index)
+    {
+        AutomationElement tree = WaitForNamedElement(root, process, TreeLabel, index);
+        RangeFactsRecord before = GetRangeFacts(tree, index);
+        double step = Math.Max(before.SmallChange, 1);
+        double requested = before.Value < before.Maximum
+            ? Math.Min(before.Maximum, before.Value + step)
+            : Math.Max(before.Minimum, before.Value - step);
+        if (before.Maximum <= before.Minimum)
+        {
+            return new TreeScrollRecord(
+                before, requested, before.Value, before.Value, "no_positive_range");
+        }
+        try
+        {
+            ((RangeValuePattern)tree.GetCurrentPattern(
+                RangeValuePattern.Pattern)).SetValue(requested);
+        }
+        catch (InvalidOperationException) when (before.IsReadOnly)
+        {
+            return new TreeScrollRecord(
+                before, requested, before.Value, before.Value,
+                "provider_rejected_read_only_range");
+        }
+        double observed = WaitForTreeRangeValue(root, process, index, requested);
+        tree = WaitForNamedElement(root, process, TreeLabel, index);
+        ((RangeValuePattern)tree.GetCurrentPattern(
+            RangeValuePattern.Pattern)).SetValue(before.Value);
+        double restored = WaitForTreeRangeValue(
+            root, process, index, before.Value);
+        return new TreeScrollRecord(before, requested, observed, restored, "operated");
+    }
+
+    private static ExpandCollapsePattern GetExpandCollapsePattern(
+        AutomationElement element, int index, string name)
+    {
+        if (!element.TryGetCurrentPattern(
+                ExpandCollapsePattern.Pattern, out object pattern) ||
+            pattern is not ExpandCollapsePattern expandCollapse)
+        {
+            throw new InvalidOperationException(
+                $"Session {index} {name} has no ExpandCollapse pattern.");
+        }
+        return expandCollapse;
+    }
+
+    private static ExpandCollapseState GetExpandCollapseState(
+        AutomationElement element, int index, string name)
+    {
+        return GetExpandCollapsePattern(element, index, name)
+            .Current.ExpandCollapseState;
+    }
+
+    private static ExpandCollapseState WaitForExpandCollapseState(
+        AutomationElement root, Process process, int index,
+        string name, ExpandCollapseState expected)
+    {
+        ExpandCollapseState observed = ExpandCollapseState.LeafNode;
+        WaitFor(
+            () =>
+            {
+                AutomationElement element = WaitForNamedControl(
+                    root, process, name, ControlType.TreeItem, index);
+                observed = GetExpandCollapseState(element, index, name);
+                return observed == expected;
+            },
+            process,
+            TimeSpan.FromSeconds(5),
+            $"Session {index} {name} did not reach {expected}.");
+        return observed;
+    }
+
+    private static double WaitForTreeRangeValue(
+        AutomationElement root, Process process, int index, double expected)
+    {
+        double observed = double.NaN;
+        WaitFor(
+            () =>
+            {
+                AutomationElement tree = WaitForNamedElement(
+                    root, process, TreeLabel, index);
+                observed = GetRangeValue(tree, index);
+                return Math.Abs(observed - expected) <= 0.001;
+            },
+            process,
+            TimeSpan.FromSeconds(5),
+            $"Session {index} Tree scroll did not reach {expected}.");
+        return observed;
+    }
+
+    private static string[] WaitForTreeTopology(
+        AutomationElement root, Process process, int index,
+        string required, string absent)
+    {
+        string[] observed = [];
+        WaitFor(
+            () =>
+            {
+                AutomationElement tree = WaitForNamedElement(
+                    root, process, TreeLabel, index);
+                observed = tree.FindAll(
+                        TreeScope.Descendants, Condition.TrueCondition)
+                    .Cast<AutomationElement>()
+                    .Take(256)
+                    .Select(element => element.Current.Name)
+                    .ToArray();
+                return observed.Contains(required) && !observed.Contains(absent);
+            },
+            process,
+            TimeSpan.FromSeconds(5),
+            $"Session {index} Tree topology did not include {required} " +
+            $"and remove {absent}.");
+        return observed;
+    }
+
+    private static RetainedElementRecord ProbeRetainedTreeItem(
+        AutomationElement root, AutomationElement element,
+        string removedName, int index)
+    {
+        bool propertyAvailable = false;
+        bool actionRejected = false;
+        try
+        {
+            _ = element.Current.Name;
+            propertyAvailable = true;
+        }
+        catch (ElementNotAvailableException)
+        {
+            actionRejected = true;
+        }
+        if (propertyAvailable)
+        {
+            try
+            {
+                ExpandCollapsePattern pattern = GetExpandCollapsePattern(
+                    element, index, removedName);
+                if (pattern.Current.ExpandCollapseState == ExpandCollapseState.Expanded)
+                {
+                    pattern.Collapse();
+                }
+                else
+                {
+                    pattern.Expand();
+                }
+            }
+            catch (ElementNotAvailableException)
+            {
+                actionRejected = true;
+            }
+            catch (InvalidOperationException)
+            {
+                actionRejected = true;
+            }
+        }
+        AutomationElement tree = root.FindFirst(
+            TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.NameProperty, TreeLabel));
+        ElementRecord[] currentItems = tree is null
+            ? []
+            : tree.FindAll(TreeScope.Descendants, Condition.TrueCondition)
+                .Cast<AutomationElement>()
+                .Take(256)
+                .Select(GetElementRecord)
+                .ToArray();
+        bool removedFromTree = !currentItems.Any(item => item.Name == removedName);
+        if (!removedFromTree)
+        {
+            AutomationElement search = WaitForNamedElement(
+                root, Process.GetProcessById(element.Current.ProcessId),
+                SearchLabel, index);
+            throw new InvalidOperationException(
+                $"Session {index} stale {removedName} action changed current topology; " +
+                $"search={GetSearchTextRecord(search, index).Value}, " +
+                $"items=[{string.Join(", ", currentItems.Select(item =>
+                    $"{item.Name}:{string.Join('.', item.RuntimeId)}"))}].");
+        }
+        return new RetainedElementRecord(
+            propertyAvailable, actionRejected, removedFromTree);
+    }
+
+    private static void SetSearchValue(
+        AutomationElement search, string value, int index)
+    {
+        if (!search.TryGetCurrentPattern(
+                ValuePattern.Pattern, out object pattern) ||
+            pattern is not ValuePattern valuePattern)
+        {
+            throw new InvalidOperationException(
+                $"Session {index} Search has no Value pattern.");
+        }
+        valuePattern.SetValue(value);
+    }
+
+    private static SearchTextRecord WaitForSearchValue(
+        AutomationElement root, Process process, int index, string expected)
+    {
+        SearchTextRecord observed = new("", "", "", [], []);
+        WaitFor(
+            () =>
+            {
+                AutomationElement search = WaitForNamedElement(
+                    root, process, SearchLabel, index);
+                observed = GetSearchTextRecord(search, index);
+                return observed.Value == expected && observed.Text == expected;
+            },
+            process,
+            TimeSpan.FromSeconds(5),
+            $"Session {index} Search did not reach {expected}.");
+        return observed;
+    }
+
+    private static void SelectSearchDocument(
+        AutomationElement search, int index)
+    {
+        if (!search.TryGetCurrentPattern(
+                TextPattern.Pattern, out object pattern) ||
+            pattern is not TextPattern textPattern)
+        {
+            throw new InvalidOperationException(
+                $"Session {index} Search has no Text pattern.");
+        }
+        textPattern.DocumentRange.Select();
+    }
+
+    private static void SelectSearchRange(
+        AutomationElement search, int start, int end, int index)
+    {
+        if (!search.TryGetCurrentPattern(
+                TextPattern.Pattern, out object pattern) ||
+            pattern is not TextPattern textPattern)
+        {
+            throw new InvalidOperationException(
+                $"Session {index} Search has no Text pattern.");
+        }
+        var range = textPattern.DocumentRange.Clone();
+        var startBoundary = textPattern.DocumentRange.Clone();
+        var endBoundary = textPattern.DocumentRange.Clone();
+        int movedStart = startBoundary.MoveEndpointByUnit(
+            TextPatternRangeEndpoint.Start, TextUnit.Character, start);
+        int movedEnd = endBoundary.MoveEndpointByUnit(
+            TextPatternRangeEndpoint.Start, TextUnit.Character, end);
+        range.MoveEndpointByRange(
+            TextPatternRangeEndpoint.Start,
+            startBoundary,
+            TextPatternRangeEndpoint.Start);
+        range.MoveEndpointByRange(
+            TextPatternRangeEndpoint.End,
+            endBoundary,
+            TextPatternRangeEndpoint.Start);
+        if (start != end && range.GetText(-1) != MultibyteSearchQuery[start..end])
+        {
+            throw new InvalidOperationException(
+                $"Session {index} UIA range construction mismatch: " +
+                $"moved_start={movedStart}, moved_end={movedEnd}, " +
+                $"text={range.GetText(-1)}.");
+        }
+        range.Select();
+    }
+
+    private static SearchTextRecord WaitForSearchSelection(
+        AutomationElement root, Process process, int index,
+        string expected, int expectedStart, int expectedEnd)
+    {
+        SearchTextRecord observed = new("", "", "", [], []);
+        WaitFor(
+            () =>
+            {
+                AutomationElement search = WaitForNamedElement(
+                    root, process, SearchLabel, index);
+                observed = GetSearchTextRecord(search, index);
+                return observed.SelectionRanges.Any(selection =>
+                    selection.Text == expected &&
+                    selection.Start == expectedStart &&
+                    selection.End == expectedEnd);
+            },
+            process,
+            TimeSpan.FromSeconds(5),
+            $"Session {index} Search selection did not reach {expected}; " +
+            $"value={observed.Value}, ranges=[{string.Join(", ",
+                observed.SelectionRanges.Select(selection =>
+                    $"{selection.Text}:{selection.Start}-{selection.End}"))}].");
+        return observed;
+    }
+
+    private static PartialTextSelectionRecord WaitForPartialSearchSelection(
+        AutomationElement root, Process process, int index,
+        SearchTextRecord before, string expected, int expectedStart,
+        int expectedEnd)
+    {
+        SearchTextRecord observed = before;
+        string outcome = "";
+        var observation = Stopwatch.StartNew();
+        WaitFor(
+            () =>
+            {
+                AutomationElement search = WaitForNamedElement(
+                    root, process, SearchLabel, index);
+                observed = GetSearchTextRecord(search, index);
+                if (observed.SelectionRanges.Any(selection =>
+                        selection.Text == expected &&
+                        selection.Start == expectedStart &&
+                        selection.End == expectedEnd))
+                {
+                    outcome = "selected";
+                    return true;
+                }
+                if (observed.Value != before.Value || observed.Text != before.Text)
+                {
+                    outcome = "provider_mutated_value";
+                    return true;
+                }
+                bool rangeChanged = !observed.SelectionRanges.SequenceEqual(
+                    before.SelectionRanges);
+                if (rangeChanged)
+                {
+                    outcome = "provider_returned_different_range";
+                    return true;
+                }
+                if (observation.Elapsed >= TimeSpan.FromMilliseconds(500))
+                {
+                    outcome = "provider_noop";
+                    return true;
+                }
+                return false;
+            },
+            process,
+            TimeSpan.FromSeconds(5),
+            $"Session {index} partial Search selection was neither applied " +
+            $"nor rejected with an observable value mutation; value={observed.Value}, " +
+            $"text={observed.Text}, ranges=[{string.Join(", ",
+                observed.SelectionRanges.Select(selection =>
+                    $"{selection.Text}:{selection.Start}-{selection.End}"))}].");
+        return new PartialTextSelectionRecord(
+            expectedStart, expectedEnd, expected, before, observed, outcome);
+    }
+
+    private static SearchTextRecord GetSearchTextRecord(
+        AutomationElement search, int index)
+    {
+        if (!search.TryGetCurrentPattern(
+                ValuePattern.Pattern, out object valueObject) ||
+            valueObject is not ValuePattern valuePattern ||
+            !search.TryGetCurrentPattern(
+                TextPattern.Pattern, out object textObject) ||
+            textObject is not TextPattern textPattern)
+        {
+            throw new InvalidOperationException(
+                $"Session {index} Search lacks Value or Text support.");
+        }
+        var document = textPattern.DocumentRange;
+        var selections = textPattern.GetSelection();
+        TextSelectionRecord[] ranges = selections
+            .Select((_, selectionIndex) =>
+                GetTextSelectionRecord(textPattern, selectionIndex))
+            .ToArray();
+        return new SearchTextRecord(
+            valuePattern.Current.Value,
+            document.GetText(-1),
+            search.Current.HelpText,
+            ranges.Select(range => range.Text).ToArray(),
+            ranges);
+    }
+
+    private static TextSelectionRecord GetTextSelectionRecord(
+        TextPattern textPattern, int selectionIndex)
+    {
+        var document = textPattern.DocumentRange;
+        var selection = textPattern.GetSelection()[selectionIndex];
+        var startPrefix = document.Clone();
+        startPrefix.MoveEndpointByRange(
+            TextPatternRangeEndpoint.End,
+            selection,
+            TextPatternRangeEndpoint.Start);
+        var endPrefix = document.Clone();
+        endPrefix.MoveEndpointByRange(
+            TextPatternRangeEndpoint.End,
+            selection,
+            TextPatternRangeEndpoint.End);
+        return new TextSelectionRecord(
+            selection.GetText(-1),
+            startPrefix.GetText(-1).Length,
+            endPrefix.GetText(-1).Length);
     }
 
     private static AccordionRecord ExerciseSettings(
@@ -813,6 +1415,10 @@ internal sealed record SessionRecord(
     ElementRecord Root,
     ElementRecord RestartButton,
     string[] InitialChildren,
+    LibrarySnapshotRecord Library,
+    SearchActionRecord Search,
+    TreeInteractionRecord TreeInteraction,
+    TreeFilterRecord TreeFilter,
     ButtonActionRecord PauseButton,
     RangeFactsRecord VerticalSplitter,
     RangeFactsRecord HorizontalSplitter,
@@ -826,6 +1432,75 @@ internal sealed record SessionRecord(
     bool ResetObserved,
     int ExitCode,
     bool ProviderRemoved);
+
+internal sealed record LibrarySnapshotRecord(
+    ElementRecord Search,
+    ElementRecord Tree,
+    ElementRecord[] Descendants);
+
+internal sealed record SearchActionRecord(
+    ElementRecord Element,
+    SearchTextRecord Initial,
+    SearchTextRecord Multibyte,
+    SearchTextRecord Collapsed,
+    PartialTextSelectionRecord PartialSelection,
+    SearchTextRecord Filtered,
+    SearchTextRecord Selected);
+
+internal sealed record PartialTextSelectionRecord(
+    int RequestedStart,
+    int RequestedEnd,
+    string ExpectedText,
+    SearchTextRecord Before,
+    SearchTextRecord After,
+    string Outcome);
+
+internal sealed record SearchTextRecord(
+    string Value,
+    string Text,
+    string HelpText,
+    string[] Selections,
+    TextSelectionRecord[] SelectionRanges);
+
+internal sealed record TextSelectionRecord(
+    string Text,
+    int Start,
+    int End);
+
+internal sealed record TreeInteractionRecord(
+    ElementRecord Branch,
+    string InitialState,
+    string RestoredState,
+    string[] TopLevelChildren,
+    string[] ExpandedChildren,
+    bool Selected,
+    RangeFactsRecord RangeBefore,
+    double RequestedScrollValue,
+    double ObservedScrollValue);
+
+internal sealed record TreeFilterRecord(
+    string[] FilteredNames,
+    string[] RetirementNames,
+    string[] RestoredNames,
+    bool SurvivingIdentityContinuous,
+    TreeScrollRecord Scroll,
+    RetainedElementRecord FirstRetired,
+    RetainedElementRecord SurvivorRetired,
+    bool RetiredIdWasNotReused,
+    SearchTextRecord RetirementText,
+    SearchTextRecord RestoredText);
+
+internal sealed record TreeScrollRecord(
+    RangeFactsRecord Before,
+    double Requested,
+    double Observed,
+    double Restored,
+    string Outcome);
+
+internal sealed record RetainedElementRecord(
+    bool PropertyAvailable,
+    bool ActionRejected,
+    bool RemovedFromTree);
 
 internal sealed record ButtonActionRecord(
     ElementRecord Before,

@@ -1,6 +1,6 @@
 # Accessibility Verification
 
-## Windows Phase 2 ordinary controls
+## Windows Phase 2 and Phase 3 controls
 
 The Windows workflow requires Windows 11 x64, .NET SDK 10 or newer, a logged-in
 interactive desktop session, and the debug build. Run `cmake --build --preset debug`, then
@@ -16,11 +16,22 @@ movement; owner-observed reset; clean process exit; and provider removal. Normal
 schema-versioned evidence is written to `.build/accessibility-windows/uia.json`;
 session logs and scenario artifacts are stored beside it.
 
-The inbox managed UIA client reports the Settings `ControllerFor` property as
-unsupported even though the shared tree publishes the relation and Accessibility
-Insights can inspect the native tree. Transient GIF recording busy/disabled states and
-multi-DPI/resize bounds remain separate Phase 2 gates and are listed in the artifact's
-`limitations` field rather than claimed by this stable-control probe.
+The same sessions exercise the Phase 3 Library surface. They verify Search Value and
+Text patterns, the multibyte `a-beta-c` fixture, an explicit collapsed caret at
+character offset 2, whole-document selection, filtering, Tree selection and branch
+collapse/expand, surviving runtime identity, removed-element action rejection, and
+retired runtime-ID non-reuse. The filtered Tree publishes a positive composite range.
+
+AccessKit Windows 0.35.1 currently leaves a valid partial TextPattern range selection
+unchanged, and exposes the Tree RangeValue pattern as read-only. Inbox managed UIA also
+does not expose a selected-text replacement operation or the published `ControllerFor`
+relation. The evidence artifact records these limitations and does not claim partial
+selection, selected-text replacement, native composite scrolling, or managed relation
+inspection.
+
+Transient GIF recording busy/disabled states and multi-DPI/resize bounds remain
+separate Phase 2 gates and are listed in the artifact's `limitations` field rather
+than claimed by this stable-control probe.
 
 Euclid starts with the Library accordion active. Controls belonging to Settings or
 Save GIF are intentionally absent while those panels are collapsed. For manual review,
@@ -30,6 +41,9 @@ updates. Display FPS and the remaining Settings controls should then appear bene
 Settings pane. Repeat with Save GIF to inspect its buttons, ranges, and status node.
 Use a freshly built `bin/euclid.exe`; the automated command targets the debug executable
 unless `--binary=bin/euclid.exe` is supplied.
+
+The executed environment, automated results, evidence hashes, manual-review scope, and
+remaining blockers are recorded in [Windows Accessibility Qualification](WindowsAccessibilityQualification.md).
 
 ## macOS Phase 3 controls
 
