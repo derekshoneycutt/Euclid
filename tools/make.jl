@@ -1886,19 +1886,31 @@ function require_dotnet_file_app_sdk(dotnet::AbstractString)
 end
 
 """Build the .NET file-based accessibility probe command."""
-accessibility_windows_command(dotnet::AbstractString, script::AbstractString) =
-    Cmd([dotnet, "run", "--file", script])
+function accessibility_windows_command(
+    dotnet::AbstractString, script::AbstractString,
+    arguments::Vector{String}=String[])
+    command = String[dotnet, "run", "--file", script]
+    if !isempty(arguments)
+        push!(command, "--")
+        append!(command, arguments)
+    end
+    return Cmd(command)
+end
 
-"""Validate the Phase 1 root and Restart button through Windows UI Automation."""
+"""Validate Windows ordinary controls through UI Automation."""
 function run_accessibility_windows_command(arguments::Vector{String})
-    isempty(arguments) || error("accessibility-windows does not accept arguments.")
+    length(arguments) <= 1 || error(
+        "accessibility-windows accepts at most one --binary=PATH argument.")
+    if !isempty(arguments) && !startswith(only(arguments), "--binary=")
+        error("accessibility-windows accepts only --binary=PATH.")
+    end
     Sys.iswindows() || error("accessibility-windows is supported only on Windows.")
     dotnet = Sys.which("dotnet")
     dotnet === nothing && error("accessibility-windows requires .NET SDK 10 or newer.")
     require_dotnet_file_app_sdk(dotnet)
     script = joinpath(SCRIPT_DIR, "tools", "accessibility",
         "accesskit_windows_tree_probe.cs")
-    command = accessibility_windows_command(dotnet, script)
+    command = accessibility_windows_command(dotnet, script, arguments)
     environment = native_runtime_environment(native_runtime_dirs())
     command = environment === nothing ? command : addenv(command, environment)
     return run_command(command; cwd=SCRIPT_DIR).exit_code

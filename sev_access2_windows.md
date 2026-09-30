@@ -27,6 +27,16 @@ Invoke, owner-observed reset, focus gain and loss, provider removal, and clean r
 teardown. Accessibility Insights remains a later manual Windows parity gate; this
 Phase 1 record does not claim full Windows parity.
 
+Phase 2 stable-control automation completed on 2026-09-30. The two-session C# UIA
+workflow now proves Pause/Resume and Restart buttons, Settings expansion and panel
+presence, Display FPS toggle restoration, Maximum Dust range mutation and invalid
+rejection, both splitter ranges and orientations, idle GIF controls and status,
+identity continuity, focus movement, owner-observed reset, and repeated teardown. The
+inbox managed UIA client cannot read the published `ControllerFor` relation. Transient
+GIF busy/disabled observation, resize and 100/150/200 percent DPI evidence, and final
+Accessibility Insights review remain Phase 2 gates, so Phase 2 is not yet declared
+complete.
+
 The macOS implementation is complete through its current qualification workflow, with
 version-qualified native action limitations recorded separately. Windows now becomes
 the active accessibility development platform. Linux and macOS remain behavioral
@@ -196,12 +206,13 @@ translator into a Windows file or introduce UIA-specific semantics into UI owner
 
 Phase 1 supplies native admission diagnostics, hidden HWND creation, pre-show adapter
 attachment, publication and action dispatch, deterministic teardown, and automated UIA
-root and Restart-button evidence. The remaining work begins with Phase 2:
+root and Restart-button evidence. Phase 2 now supplies stable ordinary-control evidence.
+The remaining work is:
 
-- ordinary controls, status, and relation evidence;
+- transient GIF busy/disabled evidence and final relation review;
+- resize and 100/150/200 percent DPI bounds evidence;
 - Search value and text-selection operations;
 - Tree hierarchy, filtering, identity retirement, and scrolling;
-- DPI and resize qualification;
 - Accessibility Insights review and the final Windows qualification record.
 
 ## Windows Native Contracts
@@ -609,6 +620,10 @@ Phase 1 is complete only when:
 - no inspector or application crash remains unexplained.
 
 ## Phase 2: Ordinary Controls, Relations, Ranges, and Status
+
+**Implementation status:** stable-control automation passes twice on the qualified
+Windows 11 x64 host. Transient GIF busy/disabled state, resize and multi-DPI bounds,
+and the final Accessibility Insights review remain open before the Phase 2 exit gate.
 
 ### Phase 2 Objective
 

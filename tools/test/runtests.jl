@@ -317,6 +317,13 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test windows_probe.exec == [
             "dotnet", "run", "--file",
             "tools/accessibility/accesskit_windows_tree_probe.cs"]
+        release_probe = accessibility_windows_command(
+            "dotnet", "tools/accessibility/accesskit_windows_tree_probe.cs",
+            ["--binary=bin/euclid.exe"])
+        @test release_probe.exec == [
+            "dotnet", "run", "--file",
+            "tools/accessibility/accesskit_windows_tree_probe.cs", "--",
+            "--binary=bin/euclid.exe"]
         @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
         @test_throws ErrorException parse_driver_invocation(["--run"])
         @test_throws ErrorException parse_driver_invocation(["-ABr"])

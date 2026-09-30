@@ -1816,6 +1816,31 @@ accordion_header_keyboard_activation_selects_section :: proc(t: ^testing.T) {
     testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Settings)
 }
 
+// Verify a native Expand command selects the same accordion section owner.
+@(test)
+accordion_header_external_expand_selects_section :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    owner: viewmodel.Ui_Press_Owner_State
+    active := viewmodel.Ui_Accordion_Section.Library
+    sections := accordion_landscape_sections()
+    ctx := Accordion_Context{
+        panel = {10, 20, 300, 500},
+        press_owner = &owner,
+        semantic_focus = semantic,
+        active = active,
+    }
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_accordion(ctx, sections, &active)
+    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    target := accordion_semantic_id(.Settings)
+    testing.expect(t, semantic_apply_external_action(
+        semantic, target, .Expand))
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_accordion(ctx, sections, &active)
+    testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Settings)
+}
+
 // Verify the active header controls one panel that owns accordion content.
 @(test)
 accordion_publishes_controlled_content_panel :: proc(t: ^testing.T) {

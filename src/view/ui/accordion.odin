@@ -76,7 +76,7 @@ register_accordion_header :: proc(
         controls = controls,
         role = .Accordion_Header,
         states = states,
-        actions = {.Focus, .Activate},
+        actions = {.Focus, .Activate, .Expand},
         region = .Accordion_Headers,
         traversal_order = u16(order),
         bounds = viewmodel.Rectangle(rect),
@@ -216,7 +216,9 @@ prepare_accordion_header_interactions :: proc(
                 ctx, descriptor, result^.layout.headers[section_index],
                 u16(section_index)),
             ctx.press_owner)
-        if result^.headers[section_index].action.activated {
+        id := accordion_semantic_id(descriptor.section)
+        if result^.headers[section_index].action.activated ||
+           semantic_command_requested(ctx.semantic_focus, id, .Expand) {
             resolved = descriptor.section
         }
     }
