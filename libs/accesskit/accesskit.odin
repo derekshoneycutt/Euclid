@@ -181,6 +181,7 @@ foreign accesskit_library {
     accesskit_node_new :: proc(role: Role) -> ^Node ---
     accesskit_node_free :: proc(node: ^Node) ---
     accesskit_node_role :: proc(node: ^Node) -> Role ---
+    accesskit_node_supports_action :: proc(node: ^Node, action: Action) -> bool ---
     accesskit_node_add_action :: proc(node: ^Node, action: Action) ---
     accesskit_node_set_disabled :: proc(node: ^Node) ---
     accesskit_node_set_children :: proc(

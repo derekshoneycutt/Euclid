@@ -28,7 +28,7 @@ Commands:
                                  Build debug and run the scenario corpus.
     accesskit-abi                Validate the pinned AccessKit C host ABI.
     accessibility-tree           Validate Linux Phase 3 AT-SPI controls.
-    accessibility-macos          Validate macOS Phase 2 AX controls.
+    accessibility-macos          Validate macOS Phase 3 AX controls.
     analyzer-test                Run the analyzer's own test suite.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.
@@ -1824,7 +1824,7 @@ function run_accessibility_tree_command(arguments::Vector{String})
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end
 
-"""Validate ordinary controls through the logged-in macOS AX API."""
+"""Validate Phase 3 controls through the logged-in macOS AX API."""
 function run_accessibility_macos_command(arguments::Vector{String})
     isempty(arguments) || error("accessibility-macos does not accept arguments.")
     Sys.isapple() || error("accessibility-macos is supported only on macOS.")

@@ -115,6 +115,19 @@ accesskit_shared_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
     if update != nil {accesskit.accesskit_tree_update_free(update)}
 }
 
+// accesskit_shared_tree_scroll_supports_set_value verifies composite AX ranges.
+@(test)
+accesskit_shared_tree_scroll_supports_set_value :: proc(t: ^testing.T) {
+    node := accesskit.accesskit_node_new(.Tree)
+    testing.expect(t, node != nil)
+    if node == nil {return}
+    defer accesskit.accesskit_node_free(node)
+    accesskit_configure_control_actions(node, {.Scroll})
+    testing.expect(t, accesskit.accesskit_node_supports_action(node, .Scroll_Up))
+    testing.expect(t, accesskit.accesskit_node_supports_action(node, .Scroll_Down))
+    testing.expect(t, accesskit.accesskit_node_supports_action(node, .Set_Value))
+}
+
 // accesskit_shared_resolves_hierarchy_and_retires_ids verifies ID ownership.
 @(test)
 accesskit_shared_resolves_hierarchy_and_retires_ids :: proc(t: ^testing.T) {

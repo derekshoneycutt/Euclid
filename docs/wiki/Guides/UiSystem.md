@@ -1022,7 +1022,8 @@ are important when changing it:
     traversal, modal focus, and control-level focus are not implemented.
 1. `Ui_Press_Owner_State` is pointer capture, not focus, and covers one press at a time.
 1. Terminal child mouse capture and UI widget capture are independent mechanisms.
-1. Accessibility navigation is not implemented.
+1. Accessibility navigation covers the current control, Search, and Tree surface;
+    Dynview and Terminal semantic projection remain deferred.
 
 The repository root document `staging_uifocus.md` records the completed interaction
 migration and the deliberately deferred keyboard traversal and modal-focus work.

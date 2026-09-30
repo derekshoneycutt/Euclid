@@ -270,9 +270,10 @@ Accessibility callbacks can only copy protected publication state, admit bounded
 requests, update content-free diagnostics, and free transferred native requests. They
 cannot enter Julia or mutate display-owned UI state. Adapter teardown closes
 publication and action admission before freeing AccessKit and before destroying the SDL
-window. The Linux Phase 1 surface is intentionally limited to one synthetic root and
-one static noninteractive label; later controls require explicit semantic projection
-and action validation.
+window. Linux and macOS consume the same bounded semantic publication, AccessKit
+translation, action validation, and session-local identity model; platform owners are
+limited to native admission, lifecycle, focus and bounds forwarding, and queued-event
+delivery.
 
 Detailed contracts remain with their subsystem guides and owners. See
 [Tool Rendering](ToolRendering.md) for local shader locations and fallback cleanup,

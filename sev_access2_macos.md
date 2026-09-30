@@ -9,6 +9,13 @@ scrolling work. Its purpose is to bring that complete existing surface to Apple 
 macOS through AccessKit C 0.23.1, with intermediate native gates that isolate Cocoa
 admission, lifecycle, controls, text, and dynamic hierarchy before declaring parity.
 
+Qualification was executed on 2026-09-30 through Phase 4. Deterministic suites, builds,
+ABI checks, repeated native sessions, Inspector review, VoiceOver review, and teardown
+passed. The parity freeze remains **blocked** on two requirements that AccessKit macOS
+0.27.1 cannot dispatch: Tree expand/collapse and selected-text replacement. Composite
+Tree scrolling was requalified through a positive native range and is not a limitation.
+See [macOS Accessibility Qualification](docs/wiki/Guides/MacosAccessibilityQualification.md).
+
 This is not a cross-platform development loop. The delivery order is intentionally
 serial:
 

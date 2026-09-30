@@ -166,6 +166,7 @@ accesskit_configure_extended_actions :: proc(
     if .Scroll in actions {
         accesskit.accesskit_node_add_action(node, .Scroll_Up)
         accesskit.accesskit_node_add_action(node, .Scroll_Down)
+        accesskit.accesskit_node_add_action(node, .Set_Value)
     }
 }
 
