@@ -28,6 +28,7 @@ Commands:
                                  Build debug and run the scenario corpus.
     accesskit-abi                Validate the pinned AccessKit C host ABI.
     accessibility-tree           Validate Linux Phase 3 AT-SPI controls.
+    accessibility-macos          Validate macOS Phase 2 AX controls.
     analyzer-test                Run the analyzer's own test suite.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.
@@ -58,7 +59,8 @@ const DRIVER_COMMANDS = Set([
     "help", "build", "run", "run-only", "assets", "sysimage",
     "harness",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
-    "accesskit-abi", "accessibility-tree", "analyzer-test", "wiki",
+    "accesskit-abi", "accessibility-tree", "accessibility-macos",
+    "analyzer-test", "wiki",
     "check-wiki", "clean"])
 
 """Parse one required repository-driver command and its scoped arguments."""
@@ -142,6 +144,8 @@ const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
 const WIKI_GENERATOR = joinpath(SCRIPT_DIR, "tools", "code_wiki.jl")
 const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
+const MACOS_INFO_PLIST_PATH = joinpath(
+    SCRIPT_DIR, "tools", "macos", "Euclid-Info.plist")
 const ANALYZER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "analyze.jl")
 const TEST_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "test_runner.jl")
 const SCENARIO_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "scenario_runner.jl")
@@ -309,16 +313,32 @@ function load_cached_julia_sysimage(
     return JuliaSysimageArtifact(fingerprint, expected_digest, image_path)
 end
 
+"""Return the macOS application bundle output path."""
+macos_app_bundle_path(debug::Bool=false) = joinpath(
+    debug ? joinpath(SCRIPT_DIR, ".build", "debug") : BIN_DIR, "Euclid.app")
+
 """Return the expected output path for the Euclid application binary."""
-app_binary_path(debug::Bool=false) = debug ? debug_app_binary_path() :
-    joinpath(BIN_DIR, is_windows() ? "euclid.exe" : "euclid")
+function app_binary_path(debug::Bool=false)
+    debug && return debug_app_binary_path()
+    Sys.isapple() && return joinpath(
+        macos_app_bundle_path(), "Contents", "MacOS", "euclid")
+    return joinpath(BIN_DIR, is_windows() ? "euclid.exe" : "euclid")
+end
 
 """Return the isolated debug application output path."""
-debug_app_binary_path() = joinpath(
-    SCRIPT_DIR, ".build", "debug", is_windows() ? "euclid.exe" : "euclid")
+function debug_app_binary_path()
+    Sys.isapple() && return joinpath(
+        macos_app_bundle_path(true), "Contents", "MacOS", "euclid")
+    return joinpath(
+        SCRIPT_DIR, ".build", "debug", is_windows() ? "euclid.exe" : "euclid")
+end
+
+"""Return the assets package path adjacent to an application build."""
+runtime_assets_archive_path(debug::Bool=false) =
+    joinpath(dirname(app_binary_path(debug)), "assets.pkg")
 
 """Return the assets package path adjacent to the debug application."""
-debug_assets_archive_path() = joinpath(dirname(debug_app_binary_path()), "assets.pkg")
+debug_assets_archive_path() = runtime_assets_archive_path(true)
 
 """Return the asset identity sidecar adjacent to the debug package."""
 debug_assets_identity_path() = debug_assets_archive_path() * ".identity"
@@ -924,7 +944,8 @@ function runtime_sbom_document(
     binary_path::String, assets_path::String,
     shader_manifest_path::Union{Nothing,String}=nothing)
     timestamp = Dates.format(now(UTC), DateFormat("yyyy-mm-ddTHH:MM:SSZ"))
-    binary_name = is_windows() ? "bin/euclid.exe" : "bin/euclid"
+    binary_name = is_windows() ? "bin/euclid.exe" :
+        Sys.isapple() ? "bin/Euclid.app/Contents/MacOS/euclid" : "bin/euclid"
     components = runtime_sbom_components(
         runtime_libs, julia_packages, binary_name,
         binary_path, assets_path, shader_manifest_path)
@@ -958,7 +979,15 @@ function execute_odin_build(
     julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
     println("Building Odin...")
     mkpath(BIN_DIR)
-    debug && mkpath(dirname(debug_app_binary_path()))
+    mkpath(dirname(app_binary_path(debug)))
+    if Sys.isapple()
+        stale_binary = debug ?
+            joinpath(SCRIPT_DIR, ".build", "debug", "euclid") :
+            joinpath(BIN_DIR, "euclid")
+        rm(stale_binary; force=true)
+        contents_path = joinpath(macos_app_bundle_path(debug), "Contents")
+        cp(MACOS_INFO_PLIST_PATH, joinpath(contents_path, "Info.plist"); force=true)
+    end
 
     cmd_parts = odin_build_command(julia_linker_flags, debug, strict)
     return run_command(Cmd(cmd_parts); cwd=SRC_DIR, capture_output=true)
@@ -983,7 +1012,7 @@ end
 """Write the native loader environment consumed by the CodeLLDB launch."""
 function write_debug_environment(
     runtime_dirs::Vector{String};
-    path::String=joinpath(dirname(debug_app_binary_path()), "euclid.env"))
+    path::String=joinpath(SCRIPT_DIR, ".build", "debug", "euclid.env"))
     environment = native_runtime_environment(runtime_dirs)
     environment === nothing && return nothing
     value = Sys.iswindows() ? replace(environment.second, '\\' => '/') :
@@ -1229,14 +1258,14 @@ function build_assets(
     shaders = build_shaders(SCRIPT_DIR)
     package_identity = stage_assets_content(sysimage, shaders)
     finalize_assets_archive(package_identity)
-    if debug
-        debug_archive = debug_assets_archive_path()
-        debug_identity = debug_assets_identity_path()
-        mkpath(dirname(debug_archive))
-        cp(ASSETS_ARCHIVE_PATH, debug_archive; force=true)
-        cp(ASSETS_IDENTITY_PATH, debug_identity; force=true)
-        println("Wrote $debug_archive")
-        println("Wrote $debug_identity")
+    if debug || Sys.isapple()
+        runtime_archive = runtime_assets_archive_path(debug)
+        runtime_identity = runtime_archive * ".identity"
+        mkpath(dirname(runtime_archive))
+        cp(ASSETS_ARCHIVE_PATH, runtime_archive; force=true)
+        cp(ASSETS_IDENTITY_PATH, runtime_identity; force=true)
+        println("Wrote $runtime_archive")
+        println("Wrote $runtime_identity")
     end
 
     if do_build
@@ -1479,7 +1508,8 @@ end
 """Remove known generated build artifacts from the repository."""
 function clean_build_files()
     targets = String[
-        app_binary_path(),
+        Sys.isapple() ? macos_app_bundle_path() : app_binary_path(),
+        joinpath(BIN_DIR, "euclid"),
         ASSETS_ARCHIVE_PATH,
         joinpath(BIN_DIR, "runtime-closure.generated.cdx.json"),
         joinpath(BIN_DIR, "libeuclid.so"),
@@ -1794,6 +1824,17 @@ function run_accessibility_tree_command(arguments::Vector{String})
     return run_command(command; cwd=SCRIPT_DIR).exit_code
 end
 
+"""Validate ordinary controls through the logged-in macOS AX API."""
+function run_accessibility_macos_command(arguments::Vector{String})
+    isempty(arguments) || error("accessibility-macos does not accept arguments.")
+    Sys.isapple() || error("accessibility-macos is supported only on macOS.")
+    swift = Sys.which("swift")
+    swift === nothing && error("accessibility-macos requires the Swift toolchain.")
+    script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "accesskit_macos_tree_probe.swift")
+    return run_command(Cmd([swift, script]); cwd=SCRIPT_DIR).exit_code
+end
+
 """Execute the finalized build plan, verification gate, and optional run step."""
 function execute_build_plan(command::BuildCommand, plan::BuildPlanToggles)
     julia_flags, runtime_dirs = prepare_build_plan(command, plan)
@@ -1821,6 +1862,8 @@ function execute_project_action(invocation::DriverInvocation)
         return run_accesskit_abi_command(invocation.arguments)
     invocation.action == :accessibility_tree &&
         return run_accessibility_tree_command(invocation.arguments)
+    invocation.action == :accessibility_macos &&
+        return run_accessibility_macos_command(invocation.arguments)
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
     if invocation.action in (:wiki, :check_wiki)

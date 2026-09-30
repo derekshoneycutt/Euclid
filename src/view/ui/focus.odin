@@ -55,6 +55,15 @@ Semantic_Control_Registration :: struct {
     set_size: u16,
 }
 
+// External_Text_Action_Input carries one validated native text request.
+External_Text_Action_Input :: struct {
+    target: viewmodel.Ui_Node_Id,
+    kind: viewmodel.Ui_Focus_Command_Kind,
+    payload: string,
+    anchor: u16,
+    focus: u16,
+}
+
 // semantic_control_id qualifies one existing widget identity by owning domain.
 semantic_control_id :: #force_inline proc(
     domain: viewmodel.Ui_Node_Domain, local_id: int) -> viewmodel.Ui_Node_Id {
@@ -85,6 +94,7 @@ semantic_begin :: proc(state: ^viewmodel.Ui_Semantic_Focus_State) -> bool {
     staging^.generation = 0
     state^.staging_active = true
     state^.staging_rejected = false
+    state^.staging_accordion_parent = {}
     return true
 }
 
@@ -197,6 +207,19 @@ semantic_register_node :: proc(
     return .Ok
 }
 
+// semantic_control_parent resolves the active accordion panel when applicable.
+semantic_control_parent :: proc(
+    state: ^viewmodel.Ui_Semantic_Focus_State,
+    control: Semantic_Control_Registration) -> viewmodel.Ui_Node_Id {
+    parent := control.parent
+    empty_id: viewmodel.Ui_Node_Id
+    if state != nil && parent == empty_id &&
+       control.region == .Accordion_Content {
+        parent = state^.staging_accordion_parent
+    }
+    return parent
+}
+
 // semantic_register_control publishes one ordinary control into staging storage.
 semantic_register_control :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
@@ -209,7 +232,7 @@ semantic_register_control :: proc(
     return semantic_register_node(state, {
         node = {
             id = control.id,
-            parent = control.parent,
+            parent = semantic_control_parent(state, control),
             active_descendant = control.active_descendant,
             controls = control.controls,
             role = control.role,
@@ -407,30 +430,30 @@ semantic_apply_external_action :: proc(
 // semantic_apply_external_text_action validates and copies one bounded text command.
 semantic_apply_external_text_action :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
-    target: viewmodel.Ui_Node_Id,
-    kind: viewmodel.Ui_Focus_Command_Kind,
-    payload: string, anchor, focus: u16) -> bool {
-    if state == nil || len(payload) > viewmodel.UI_FOCUS_COMMAND_PAYLOAD_CAPACITY {
+    input: External_Text_Action_Input) -> bool {
+    if state == nil ||
+       len(input.payload) > viewmodel.UI_FOCUS_COMMAND_PAYLOAD_CAPACITY {
         return false
     }
     snapshot := semantic_snapshot(state)
-    index := semantic_node_index(snapshot, target)
+    index := semantic_node_index(snapshot, input.target)
     if index < 0 {return false}
     node := snapshot^.nodes[index]
     required := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
     if node.states & required != required {return false}
-    command := viewmodel.Ui_Focus_Command{target = target, kind = kind,
-        payload_length = u16(len(payload)), selection_anchor = anchor,
-        selection_focus = focus}
-    if kind == .Replace_Selected_Text && .Replace_Selected_Text in node.actions {
-        copy(command.payload[:len(payload)], transmute([]u8)payload)
+    command := viewmodel.Ui_Focus_Command{target = input.target, kind = input.kind,
+        payload_length = u16(len(input.payload)), selection_anchor = input.anchor,
+        selection_focus = input.focus}
+    if input.kind == .Replace_Selected_Text &&
+       .Replace_Selected_Text in node.actions {
+        copy(command.payload[:len(input.payload)], transmute([]u8)input.payload)
         return semantic_append_command(state, command)
     }
-    if kind == .Replace_Text && .Replace_Selected_Text in node.actions {
-        copy(command.payload[:len(payload)], transmute([]u8)payload)
+    if input.kind == .Replace_Text && .Replace_Selected_Text in node.actions {
+        copy(command.payload[:len(input.payload)], transmute([]u8)input.payload)
         return semantic_append_command(state, command)
     }
-    if kind == .Set_Text_Selection && .Set_Text_Selection in node.actions {
+    if input.kind == .Set_Text_Selection && .Set_Text_Selection in node.actions {
         return semantic_append_command(state, command)
     }
     return false

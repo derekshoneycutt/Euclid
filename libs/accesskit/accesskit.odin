@@ -20,6 +20,12 @@ Tree_Info :: struct {}
 // Unix_Adapter is opaque storage owned by the Linux window session.
 Unix_Adapter :: struct {}
 
+// Macos_Subclassing_Adapter is opaque storage owned by the Cocoa window session.
+Macos_Subclassing_Adapter :: struct {}
+
+// Macos_Queued_Events is transferred work raised exactly once on the main thread.
+Macos_Queued_Events :: struct {}
+
 Action :: enum u8 {
     Click = 0,
     Focus = 1,
@@ -47,8 +53,10 @@ Role :: enum u8 {
     Check_Box = 15,
     Text_Input = 17,
     Button = 18,
+    Pane = 20,
     Search_Input = 32,
     Application = 49,
+    Disclosure_Triangle = 67,
     Slider = 113,
     Status = 116,
     Tree = 129,
@@ -211,6 +219,7 @@ foreign accesskit_library {
     accesskit_node_set_toggled :: proc(node: ^Node, value: Toggled) ---
     accesskit_node_set_orientation :: proc(node: ^Node, value: Orientation) ---
     accesskit_node_set_live :: proc(node: ^Node, value: Live) ---
+    accesskit_node_set_busy :: proc(node: ^Node) ---
     accesskit_tree_update_with_capacity_and_focus :: proc(
         capacity: uintptr, focus: Node_Id) -> ^Tree_Update ---
     accesskit_tree_update_free :: proc(update: ^Tree_Update) ---
@@ -243,5 +252,37 @@ when ODIN_OS == .Linux {
             update_factory_userdata: rawptr) ---
         accesskit_unix_adapter_update_window_focus_state :: proc(
             adapter: ^Unix_Adapter, is_focused: bool) ---
+    }
+}
+
+when ODIN_OS == .Darwin {
+    foreign accesskit_library {
+        accesskit_macos_queued_events_raise :: proc(
+            events: ^Macos_Queued_Events) ---
+        accesskit_macos_subclassing_adapter_new :: proc(
+            view: rawptr,
+            activation_handler: Activation_Handler,
+            activation_handler_userdata: rawptr,
+            action_handler: Action_Handler,
+            action_handler_userdata: rawptr) -> ^Macos_Subclassing_Adapter ---
+        accesskit_macos_subclassing_adapter_for_window :: proc(
+            window: rawptr,
+            activation_handler: Activation_Handler,
+            activation_handler_userdata: rawptr,
+            action_handler: Action_Handler,
+            action_handler_userdata: rawptr) -> ^Macos_Subclassing_Adapter ---
+        accesskit_macos_subclassing_adapter_free :: proc(
+            adapter: ^Macos_Subclassing_Adapter) ---
+        accesskit_macos_subclassing_adapter_update_if_active :: proc(
+            adapter: ^Macos_Subclassing_Adapter,
+            update_factory: Tree_Update_Factory,
+            update_factory_userdata: rawptr) -> ^Macos_Queued_Events ---
+        accesskit_macos_subclassing_adapter_update_view_focus_state :: proc(
+            adapter: ^Macos_Subclassing_Adapter,
+            is_focused: bool) -> ^Macos_Queued_Events ---
+        accesskit_macos_add_focus_forwarder_to_window_class :: proc(
+            class_name: cstring) ---
+        accesskit_macos_add_focus_forwarder_to_window_class_with_length :: proc(
+            class_name: cstring, length: uintptr) ---
     }
 }

@@ -18,7 +18,7 @@ The recommendation is:
 > full three-platform qualification.
 
 This proposal is grounded in
-[`staging_access2_research.md`](staging_access2_research.md). That document is the
+[`sev_access2_research.md`](sev_access2_research.md). That document is the
 source ledger for current Euclid behavior, AccessKit C 0.23.1 capability, platform
 contracts, effective-control inventory, known gaps, and unresolved empirical questions.
 This staging document does not repeat that exhaustive ledger. It converts the research
@@ -1316,7 +1316,7 @@ The program is complete when all of the following are true:
 
 ## Relevant Files
 
-- [`staging_access2_research.md`](staging_access2_research.md) — evidence ledger and
+- [`sev_access2_research.md`](sev_access2_research.md) — evidence ledger and
   platform research controlling this proposal.
 - `libs/accesskit/` — new tagged header, license, manifest, binary, and Odin binding
   boundary.

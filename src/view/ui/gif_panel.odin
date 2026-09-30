@@ -399,9 +399,13 @@ register_gif_status :: proc(
         result^.rows.status_y, max(f32(0),
             ctx.panel.width - SETTINGS_PANEL_INSET * 2),
         SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET}
+    states := viewmodel.Ui_Node_State{.Visible}
+    if result^.phase == .Recording || result^.phase == .Finalizing {
+        states += {.Busy}
+    }
     _ = semantic_register_control(ctx.ui_runtime.semantic_focus, {
         id = semantic_control_id(.Gif_Control, GIF_STATUS_NODE_ID),
-        role = .Status, states = {.Visible}, bounds = bounds,
+        role = .Status, states = states, bounds = bounds,
         clip_bounds = viewmodel.Rectangle(ctx.panel),
         label = gif_accessibility_status_label(result^.phase),
     })

@@ -127,9 +127,7 @@ sdl_input_consume_event :: proc(
         }
     case .MOUSE_WHEEL:
         accumulation^.diagnostics.wheel_events += 1
-        delta := event^.wheel.y
-        if event^.wheel.direction == .FLIPPED {delta = -delta}
-        accumulation^.mouse_wheel_delta += delta
+        accumulation^.mouse_wheel_delta += event^.wheel.y
     case .WINDOW_FOCUS_GAINED:
         accumulation^.diagnostics.focus_events += 1
         accumulation^.focused = true

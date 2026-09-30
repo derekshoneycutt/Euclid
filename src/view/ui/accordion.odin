@@ -50,6 +50,12 @@ accordion_semantic_id :: #force_inline proc(
     return {domain = .Accordion, local_id = u64(section) + 1}
 }
 
+// accordion_panel_semantic_id returns the stable identity for one section panel.
+accordion_panel_semantic_id :: #force_inline proc(
+    section: viewmodel.Ui_Accordion_Section) -> viewmodel.Ui_Node_Id {
+    return {domain = .Accordion, local_id = u64(section) + 101}
+}
+
 // register_accordion_header publishes one operable header in visual order.
 register_accordion_header :: proc(
     ctx: Accordion_Context,
@@ -58,11 +64,16 @@ register_accordion_header :: proc(
     active: viewmodel.Ui_Accordion_Section,
     order: int) -> viewmodel.Ui_Node_Id {
     id := accordion_semantic_id(descriptor.section)
+    controls: viewmodel.Ui_Node_Id
     states := viewmodel.Ui_Node_State{
         .Visible, .Enabled, .Focusable, .Tab_Stop}
-    if descriptor.section == active {states += {.Selected, .Expanded}}
+    if descriptor.section == active {
+        states += {.Selected, .Expanded}
+        controls = accordion_panel_semantic_id(descriptor.section)
+    }
     _ = semantic_register_control(ctx.semantic_focus, {
         id = id,
+        controls = controls,
         role = .Accordion_Header,
         states = states,
         actions = {.Focus, .Activate},
@@ -73,6 +84,21 @@ register_accordion_header :: proc(
         label = descriptor.label,
     })
     return id
+}
+
+// register_accordion_panel publishes the active controlled content container.
+register_accordion_panel :: proc(
+    ctx: Accordion_Context, descriptor: Accordion_Section_Descriptor,
+    rect: geometry.Rectangle) {
+    id := accordion_panel_semantic_id(descriptor.section)
+    _ = semantic_register_control(ctx.semantic_focus, {
+        id = id, role = .Panel, states = {.Visible, .Enabled},
+        region = .Accordion_Content, bounds = viewmodel.Rectangle(rect),
+        clip_bounds = viewmodel.Rectangle(ctx.panel), label = descriptor.label,
+    })
+    if ctx.semantic_focus != nil {
+        ctx.semantic_focus^.staging_accordion_parent = id
+    }
 }
 
 // Return the three utility sections used by landscape composition.
@@ -235,6 +261,9 @@ prepare_accordion :: proc(
                 result.layout.headers[section_index]
         }
     }
+    selected_index := accordion_section_index(sections, selected)
+    register_accordion_panel(
+        ctx, sections.items[selected_index], result.layout.content)
     register_accordion_headers(ctx, sections, &result, selected)
     return result
 }

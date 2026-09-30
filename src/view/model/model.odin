@@ -245,6 +245,7 @@ Ui_Node_Role :: enum u8 {
     Checkbox,
     Slider,
     Accordion_Header,
+    Panel,
     Status,
     Tree,
     Tree_Item,
@@ -262,6 +263,7 @@ Ui_Node_State_Flag :: enum u8 {
     Expanded,
     Read_Only,
     Focus_Visible,
+    Busy,
 }
 
 Ui_Node_State :: bit_set[Ui_Node_State_Flag; u16]
@@ -479,6 +481,7 @@ Ui_Semantic_Focus_State :: struct {
     staging_index: u8,
     staging_active: bool,
     staging_rejected: bool,
+    staging_accordion_parent: Ui_Node_Id,
     window_focused: bool,
     logical_focus: Ui_Node_Id,
     focus_origin: Ui_Focus_Origin,

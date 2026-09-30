@@ -4,7 +4,6 @@ import "core:log"
 import "core:math"
 
 import sdl "vendor:sdl3"
-import portable_accessibility "../../accessibility"
 import native_accessibility "accessibility"
 
 Sdl_Accessibility_Action :: native_accessibility.Adapter_Action
@@ -134,6 +133,7 @@ Sdl_Platform :: struct {
     window_focused: bool,
     unavailable_frames: u64,
     input_diagnostics: Sdl_Input_Diagnostics,
+    accessibility_process_state: native_accessibility.Adapter_Process_State,
     accessibility: native_accessibility.Adapter,
 }
 
@@ -557,6 +557,20 @@ sdl_platform_save_png :: proc(
     return true
 }
 
+// sdl_platform_destroy_gpu releases admitted GPU resources in owner order.
+sdl_platform_destroy_gpu :: proc(platform: ^Sdl_Platform) {
+    if platform^.device == nil {return}
+    if !sdl.WaitForGPUIdle(platform^.device) {
+        log.errorf("sdl_gpu_idle_failed error=%s", sdl.GetError())
+    }
+    sdl_scene_targets_release(platform^.device, platform^.scene_target,
+        platform^.multisample_target)
+    if platform^.window_claimed {
+        sdl.ReleaseWindowFromGPUDevice(platform^.device, platform^.window)
+    }
+    sdl.DestroyGPUDevice(platform^.device)
+}
+
 // sdl_platform_destroy releases all admitted native resources in reverse order.
 sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
     if platform == nil {
@@ -575,18 +589,10 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
     }
     when ODIN_OS == .Linux {
         native_accessibility.unix_adapter_destroy(&platform^.accessibility)
+    } else when ODIN_OS == .Darwin {
+        native_accessibility.macos_adapter_destroy(&platform^.accessibility)
     }
-    if platform^.device != nil {
-        if !sdl.WaitForGPUIdle(platform^.device) {
-            log.errorf("sdl_gpu_idle_failed error=%s", sdl.GetError())
-        }
-        sdl_scene_targets_release(platform^.device, platform^.scene_target,
-            platform^.multisample_target)
-        if platform^.window_claimed {
-            sdl.ReleaseWindowFromGPUDevice(platform^.device, platform^.window)
-        }
-        sdl.DestroyGPUDevice(platform^.device)
-    }
+    sdl_platform_destroy_gpu(platform)
     if platform^.window != nil {
         sdl_platform_destroy_cursors(platform)
         sdl.DestroyWindow(platform^.window)
@@ -595,7 +601,7 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
     platform^ = {}
 }
 
-// sdl_platform_service_accessibility retains host focus and forwards X11 root bounds.
+// sdl_platform_service_accessibility retains and forwards native host focus.
 sdl_platform_service_accessibility :: proc(
     platform: ^Sdl_Platform, focused: bool) {
     if platform == nil {return}
@@ -607,12 +613,27 @@ sdl_platform_service_accessibility :: proc(
         if string(sdl.GetCurrentVideoDriver()) != "x11" {return}
         x, y: i32
         if !sdl.GetWindowPosition(platform^.window, &x, &y) {return}
-        outer := portable_accessibility.Bounds{
+        outer := {
             f64(x), f64(y), f64(x) + width, f64(y) + height,
         }
         native_accessibility.unix_adapter_set_root_bounds(
             &platform^.accessibility, outer, outer)
+    } else when ODIN_OS == .Darwin {
+        native_accessibility.macos_adapter_update_focus(
+            &platform^.accessibility, focused)
     }
+}
+
+// sdl_platform_cocoa_window returns SDL's borrowed NSWindow property.
+sdl_platform_cocoa_window :: proc(platform: ^Sdl_Platform) -> rawptr {
+    when ODIN_OS == .Darwin {
+        if platform == nil || platform^.window == nil {return nil}
+        properties := sdl.GetWindowProperties(platform^.window)
+        if properties == 0 {return nil}
+        return sdl.GetPointerProperty(
+            properties, sdl.PROP_WINDOW_COCOA_WINDOW_POINTER, nil)
+    }
+    return nil
 }
 
 // sdl_platform_publish_accessibility_controls publishes one complete control tree.
@@ -623,6 +644,10 @@ sdl_platform_publish_accessibility_controls :: proc(
     when ODIN_OS == .Linux {
         return native_accessibility.unix_adapter_publish_controls(
             &platform^.accessibility, input)
+    } else when ODIN_OS == .Darwin {
+        return native_accessibility.macos_adapter_publish_controls(
+            &platform^.accessibility, &platform^.accessibility_process_state,
+            sdl_platform_cocoa_window(platform), input)
     }
     return true
 }
@@ -634,6 +659,9 @@ sdl_platform_drain_accessibility_action :: proc(
     if platform == nil {return .Closing}
     when ODIN_OS == .Linux {
         return native_accessibility.unix_adapter_drain_action(
+            &platform^.accessibility, destination)
+    } else when ODIN_OS == .Darwin {
+        return native_accessibility.macos_adapter_drain_action(
             &platform^.accessibility, destination)
     }
     return .Empty

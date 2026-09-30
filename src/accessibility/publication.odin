@@ -19,6 +19,7 @@ Publication_Role :: enum u8 {
     Checkbox,
     Slider,
     Accordion_Header,
+    Panel,
     Status,
     Search_Input,
     Tree,
@@ -73,6 +74,7 @@ Control_Publication_Input :: struct {
     checked: bool,
     selected: bool,
     expanded: bool,
+    busy: bool,
     text_present: bool,
     text_cursor_byte: int,
     text_anchor_byte: int,
@@ -84,6 +86,7 @@ Control_Publication_Input :: struct {
 // Tree_Publication_Input borrows one complete flat ordinary-control projection.
 Tree_Publication_Input :: struct {
     root_bounds: Bounds,
+    bounds_scale: f64,
     window_focused: bool,
     controls: []Control_Publication_Input,
 }
@@ -116,6 +119,7 @@ Control_Publication :: struct {
     checked: bool,
     selected: bool,
     expanded: bool,
+    busy: bool,
     text_present: bool,
     level: u16,
     position_in_set: u16,
@@ -127,6 +131,7 @@ Control_Tree_Publication :: struct {
     generation: u64,
     root_id: u64,
     root_bounds: Bounds,
+    bounds_scale: f64,
     window_focused: bool,
     controls: [CONTROL_NODE_CAPACITY]Control_Publication,
     text: [CONTROL_TEXT_CAPACITY]u8,
@@ -264,33 +269,36 @@ control_tree_find_id :: proc(
     return -1
 }
 
+// control_node_validate_ancestor walks one bounded parent chain.
+control_node_validate_ancestor :: proc(
+    value: ^Control_Tree_Publication, start, ancestor: u64,
+    missing, exhausted: Publication_Status) -> Publication_Status {
+    current := start
+    for steps := 0; current != ancestor; steps += 1 {
+        if steps >= value^.control_count {return exhausted}
+        index := control_tree_find_id(value, current)
+        if index < 0 {return missing}
+        current = value^.controls[index].parent_native_id
+    }
+    return .Ok
+}
+
 // control_node_validate_hierarchy proves parent reachability and descendant facts.
 control_node_validate_hierarchy :: proc(
     value: ^Control_Tree_Publication,
     node: Control_Publication) -> Publication_Status {
     if node.parent_native_id == 0 {return .Missing_Parent}
     if node.parent_native_id == node.native_id {return .Cycle}
-    parent_id := node.parent_native_id
-    for steps := 0; parent_id != value^.root_id; steps += 1 {
-        if steps >= value^.control_count {return .Cycle}
-        parent_index := control_tree_find_id(value, parent_id)
-        if parent_index < 0 {return .Missing_Parent}
-        parent_id = value^.controls[parent_index].parent_native_id
-    }
+    parent_status := control_node_validate_ancestor(
+        value, node.parent_native_id, value^.root_id, .Missing_Parent, .Cycle)
+    if parent_status != .Ok {return parent_status}
     if node.active_descendant_native_id == 0 {return .Ok}
     descendant_index := control_tree_find_id(
         value, node.active_descendant_native_id)
     if descendant_index < 0 {return .Unreachable_Node}
-    descendant_parent := value^.controls[descendant_index].parent_native_id
-    for steps := 0; descendant_parent != node.native_id; steps += 1 {
-        if descendant_parent == value^.root_id || steps >= value^.control_count {
-            return .Unreachable_Node
-        }
-        parent_index := control_tree_find_id(value, descendant_parent)
-        if parent_index < 0 {return .Unreachable_Node}
-        descendant_parent = value^.controls[parent_index].parent_native_id
-    }
-    return .Ok
+    return control_node_validate_ancestor(value,
+        value^.controls[descendant_index].parent_native_id, node.native_id,
+        .Unreachable_Node, .Unreachable_Node)
 }
 
 // control_node_validate_relation rejects controls targets absent from the tree.
@@ -324,11 +332,18 @@ control_node_validate_content :: proc(
     if node.text_present {
         first := int(node.character_offset)
         last := first + int(node.character_count)
-        if last > value^.character_count || node.cursor_character > node.character_count ||
-           node.anchor_character > node.character_count {return .Capacity}
+        if last > value^.character_count ||
+           node.cursor_character > node.character_count ||
+           node.anchor_character > node.character_count {
+            return .Capacity
+        }
         byte_count := 0
-        for length in value^.character_lengths[first:last] {byte_count += int(length)}
-        if byte_count != len(text_value) {return .Invalid_Utf8}
+        for length in value^.character_lengths[first:last] {
+            byte_count += int(length)
+        }
+        if byte_count != len(text_value) {
+            return .Invalid_Utf8
+        }
     }
     return .Ok
 }
@@ -336,14 +351,20 @@ control_node_validate_content :: proc(
 // control_tree_validate proves IDs, text, bounds, roles, and ranges are complete.
 control_tree_validate :: proc(
     value: ^Control_Tree_Publication) -> Publication_Status {
-    if value == nil || value^.root_id == 0 {return .Invalid_Id}
-    if !bounds_are_valid(value^.root_bounds) {return .Invalid_Bounds}
+    if value == nil || value^.root_id == 0 {
+        return .Invalid_Id
+    }
+    if !bounds_are_valid(value^.root_bounds) {
+        return .Invalid_Bounds
+    }
     if value^.control_count < 0 || value^.control_count > CONTROL_NODE_CAPACITY ||
        value^.text_count < 0 || value^.text_count > CONTROL_TEXT_CAPACITY {
         return .Capacity
     }
     if value^.character_count < 0 ||
-       value^.character_count > CONTROL_CHARACTER_CAPACITY {return .Capacity}
+       value^.character_count > CONTROL_CHARACTER_CAPACITY {
+        return .Capacity
+    }
     for node, index in value^.controls[:value^.control_count] {
         identity_status := control_node_validate_identity(value, node, index)
         if identity_status != .Ok {return identity_status}
@@ -409,16 +430,10 @@ control_tree_copy_characters :: proc(
     return byte_offset == len(source.value)
 }
 
-// control_tree_append copies one source into the next candidate slot.
-control_tree_append :: proc(
-    candidate: ^Control_Tree_Publication,
-    source: Control_Publication_Input) -> Publication_Status {
-        if source.text_present &&
-           (!control_text_boundary(source.value, source.text_cursor_byte) ||
-            !control_text_boundary(source.value, source.text_anchor_byte)) {
-            return .Invalid_Utf8
-        }
-        node := Control_Publication{
+// control_publication_from_input copies non-text facts into owned storage.
+control_publication_from_input :: proc(
+    source: Control_Publication_Input) -> Control_Publication {
+    return {
             native_id = source.native_id,
             parent_native_id = source.parent_native_id,
             active_descendant_native_id = source.active_descendant_native_id,
@@ -428,9 +443,22 @@ control_tree_append :: proc(
             enabled = source.enabled, focusable = source.focusable,
             focused = source.focused, checked = source.checked,
             selected = source.selected, expanded = source.expanded,
+            busy = source.busy,
             level = source.level, position_in_set = source.position_in_set,
             set_size = source.set_size,
         }
+}
+
+// control_tree_append copies one source into the next candidate slot.
+control_tree_append :: proc(
+    candidate: ^Control_Tree_Publication,
+    source: Control_Publication_Input) -> Publication_Status {
+        if source.text_present &&
+           (!control_text_boundary(source.value, source.text_cursor_byte) ||
+            !control_text_boundary(source.value, source.text_anchor_byte)) {
+            return .Invalid_Utf8
+        }
+        node := control_publication_from_input(source)
         if node.parent_native_id == 0 {
             node.parent_native_id = candidate^.root_id
         }
@@ -454,9 +482,14 @@ control_tree_build :: proc(
     input: Tree_Publication_Input) -> Publication_Status {
     if destination == nil {return .Invalid_Id}
     if len(input.controls) > CONTROL_NODE_CAPACITY {return .Capacity}
+    bounds_scale := input.bounds_scale
+    if bounds_scale <= 0 || math.is_nan(bounds_scale) || math.is_inf(bounds_scale) {
+        bounds_scale = 1
+    }
     candidate := Control_Tree_Publication{
         root_id = SYNTHETIC_ROOT_ID,
         root_bounds = input.root_bounds,
+        bounds_scale = bounds_scale,
         window_focused = input.window_focused,
     }
     for source in input.controls {

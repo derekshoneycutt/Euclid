@@ -3,10 +3,30 @@ package native_accessibility
 import portable "../../../accessibility"
 import "core:sync"
 
+ADAPTER_NATIVE_CLASS_CAPACITY :: 16
+
 // Adapter_Create_Failure selects one test-only owner construction boundary.
 Adapter_Create_Failure :: enum u8 {
     None,
     After_Publication,
+}
+
+// Macos_Failure_Stage identifies one future Cocoa adapter failure boundary.
+Macos_Failure_Stage :: enum u8 {
+    None,
+    Cocoa_Property_Lookup,
+    Window_Class_Discovery,
+    Focus_Forwarder_Installation,
+    Adapter_Creation,
+    Update,
+    Focus_Update,
+    Queued_Event_Raise,
+    Teardown,
+}
+
+Macos_Failure_Diagnostics :: struct {
+    last_stage: Macos_Failure_Stage,
+    count: u64,
 }
 
 // Adapter_Diagnostic_Event identifies one bounded native lifecycle observation.
@@ -73,6 +93,7 @@ Adapter_Control_Input :: struct {
 // Adapter_Tree_Input borrows one complete display-owned ordinary-control projection.
 Adapter_Tree_Input :: struct {
     root_bounds: portable.Bounds,
+    bounds_scale: f64,
     window_focused: bool,
     controls: []Adapter_Control_Input,
 }
@@ -87,6 +108,14 @@ Adapter_Diagnostics :: struct {
     destroys: u64,
     rejected_actions: u64,
     last_action_status: Adapter_Action_Status,
+    macos_failures: Macos_Failure_Diagnostics,
+}
+
+// Adapter_Process_State retains irreversible native class setup across a session.
+Adapter_Process_State :: struct {
+    mutex: sync.Mutex,
+    native_classes: [ADAPTER_NATIVE_CLASS_CAPACITY]rawptr,
+    native_class_count: int,
 }
 
 // Adapter owns one platform handle and its callback-visible publication.
@@ -114,6 +143,24 @@ adapter_record_action_rejection :: proc(
     owner^.diagnostics.rejected_actions += 1
     owner^.diagnostics.last_action_status = status
     sync.mutex_unlock(&owner^.diagnostics_mutex)
+}
+
+// adapter_record_macos_failure retains one content-free Cocoa failure stage.
+adapter_record_macos_failure :: proc(
+    owner: ^Adapter, stage: Macos_Failure_Stage) {
+    if owner == nil || stage == .None {return}
+    sync.mutex_lock(&owner^.diagnostics_mutex)
+    owner^.diagnostics.macos_failures.last_stage = stage
+    owner^.diagnostics.macos_failures.count += 1
+    sync.mutex_unlock(&owner^.diagnostics_mutex)
+}
+
+// adapter_macos_failures_snapshot returns one synchronized failure observation.
+adapter_macos_failures_snapshot :: proc(owner: ^Adapter) -> Macos_Failure_Diagnostics {
+    if owner == nil {return {}}
+    sync.mutex_lock(&owner^.diagnostics_mutex)
+    defer sync.mutex_unlock(&owner^.diagnostics_mutex)
+    return owner^.diagnostics.macos_failures
 }
 
 // adapter_record_diagnostic increments one bounded content-free lifecycle counter.

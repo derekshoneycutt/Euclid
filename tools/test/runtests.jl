@@ -87,7 +87,8 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             is_file=path -> path == "/opt/sdl/lib/libSDL3.0.dylib",
             real_path=identity)
         @test darwin_provider.library_path == "/opt/sdl/lib/libSDL3.0.dylib"
-        windows_provider = BuildConfiguration.sdl3_provider_identity(:NT)
+        windows_provider = BuildConfiguration.sdl3_provider_identity(
+            :NT; architecture=:x86_64)
         @test windows_provider.kind == :repository
         @test windows_provider.version == "3.4.16"
         @test basename(windows_provider.library_path) == "SDL3.dll"
@@ -98,7 +99,8 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             :Linux; capture=flags_capture) == "-L/opt/sdl/lib -lSDL3"
         @test BuildConfiguration.sdl3_linker_flags(
             :Darwin; capture=flags_capture) == "-L/opt/sdl/lib -lSDL3"
-        @test endswith(BuildConfiguration.sdl3_linker_flags(:NT),
+        @test endswith(BuildConfiguration.sdl3_linker_flags(
+            :NT; architecture=:x86_64),
             "/DEFAULTLIB:SDL3.lib")
     end
 
@@ -139,7 +141,8 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             real_path=identity)
         @test darwin_provider.library_path ==
             "/opt/sdl-image/lib/libSDL3_image.0.dylib"
-        windows_provider = BuildConfiguration.sdl3_image_provider_identity(:NT)
+        windows_provider = BuildConfiguration.sdl3_image_provider_identity(
+            :NT; architecture=:x86_64)
         @test windows_provider.kind == :repository
         @test windows_provider.version == "3.4.6"
         @test basename(windows_provider.library_path) == "SDL3_image.dll"
@@ -162,7 +165,8 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             :Linux; capture=flags_capture) == "-lSDL3_image -lSDL3"
         @test BuildConfiguration.sdl3_image_linker_flags(
             :Darwin; capture=flags_capture) == "-lSDL3_image -lSDL3"
-        @test endswith(BuildConfiguration.sdl3_image_linker_flags(:NT),
+        @test endswith(BuildConfiguration.sdl3_image_linker_flags(
+            :NT; architecture=:x86_64),
             "/DEFAULTLIB:SDL3_image.lib")
         @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
             :Linux; capture=_ ->
@@ -176,13 +180,14 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             ["/opt/sdl/lib/libSDL3.so.0", "/opt/sdl/lib/libSDL3_image.so.0"]) ==
             ["/julia/lib", "/opt/sdl/lib"]
 
-        manifest = BuildConfiguration.windows_sdl_manifest()
+        manifest = BuildConfiguration.windows_sdl_manifest(
+            ; architecture=:x86_64)
         @test manifest["platform"] == "windows"
         @test manifest["architecture"] == "x86_64"
         @test_throws ErrorException BuildConfiguration.windows_sdl_manifest(
             ; architecture=:aarch64)
         @test_throws ErrorException BuildConfiguration.windows_sdl_manifest(
-            ; hash_file=_ -> "invalid")
+            ; architecture=:x86_64, hash_file=_ -> "invalid")
     end
 
     @testset "native linker platform selection" begin
@@ -257,6 +262,8 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test parse_driver_invocation(["evidence", "capabilities"]).action == :evidence
         @test parse_driver_invocation(["scenario", "example"]).action == :scenario
         @test parse_driver_invocation(["accesskit-abi"]).action == :accesskit_abi
+        @test parse_driver_invocation(["accessibility-macos"]).action ==
+            :accessibility_macos
         @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
         @test_throws ErrorException parse_driver_invocation(["--run"])
         @test_throws ErrorException parse_driver_invocation(["-ABr"])
@@ -321,6 +328,14 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             joinpath(dirname(debug_app_binary_path()), "assets.pkg")
         @test debug_assets_identity_path() ==
             joinpath(dirname(debug_app_binary_path()), "assets.pkg.identity")
+        if Sys.isapple()
+            @test app_binary_path() == joinpath(
+                BIN_DIR, "Euclid.app", "Contents", "MacOS", "euclid")
+            @test debug_app_binary_path() == joinpath(
+                SCRIPT_DIR, ".build", "debug", "Euclid.app",
+                "Contents", "MacOS", "euclid")
+            @test isfile(MACOS_INFO_PLIST_PATH)
+        end
         @test "-debug" in command
         @test "-o:none" in command
         @test "-vet" in command
@@ -421,8 +436,10 @@ reflection_sha256 = "reflection"
                 String[], JuliaPackageDep[], binary, assets, manifest)
             components = Dict(component["bom-ref"] => component
                 for component in bom["components"])
-            binary_ref = Sys.iswindows() ?
-                "file:bin/euclid.exe" : "file:bin/euclid"
+            binary_ref = Sys.iswindows() ? "file:bin/euclid.exe" :
+                Sys.isapple() ?
+                    "file:bin/Euclid.app/Contents/MacOS/euclid" :
+                    "file:bin/euclid"
             @test haskey(components[binary_ref], "hashes")
             @test haskey(components["file:bin/assets.pkg"], "hashes")
             @test components["build-tool:shadercross"]["scope"] == "excluded"

@@ -2,10 +2,9 @@ package accessibility
 
 import "core:testing"
 
-// Verify mixed ordinary controls retain complete native-ready semantic facts.
-@(test)
-control_tree_builds_mixed_ordinary_controls :: proc(t: ^testing.T) {
-    controls := [3]Control_Publication_Input{
+// phase_two_control_fixture returns representative ordinary-control facts.
+phase_two_control_fixture :: proc() -> [6]Control_Publication_Input {
+    return {
         {native_id = 2, role = .Button, bounds = {10, 10, 40, 30},
             label = "Restart animation", actions = {.Focus, .Activate},
             enabled = true, focusable = true, focused = true},
@@ -17,18 +16,36 @@ control_tree_builds_mixed_ordinary_controls :: proc(t: ^testing.T) {
             actions = {.Focus, .Increment, .Decrement, .Set_To_Bound},
             range = {0, 100000, 50000, 1000, false, true},
             enabled = true, focusable = true},
+        {native_id = 5, controls_native_id = 6, role = .Accordion_Header,
+            bounds = {200, 10, 360, 34}, label = "Save GIF",
+            actions = {.Focus, .Activate}, enabled = true, focusable = true,
+            expanded = true},
+        {native_id = 6, role = .Panel, bounds = {200, 40, 360, 120},
+            label = "GIF capture settings", enabled = true},
+        {native_id = 7, parent_native_id = 6, role = .Status,
+            bounds = {210, 80, 350, 104}, label = "GIF capture saving",
+            enabled = true, busy = true},
     }
+}
+
+// Verify Phase 2 controls retain complete native-ready semantic facts.
+@(test)
+control_tree_builds_mixed_ordinary_controls :: proc(t: ^testing.T) {
+    controls := phase_two_control_fixture()
     value: Control_Tree_Publication
     testing.expect_value(t, control_tree_build(&value, {
         root_bounds = {0, 0, 800, 600}, window_focused = true,
         controls = controls[:],
     }), Publication_Status.Ok)
-    testing.expect_value(t, value.control_count, 3)
+    testing.expect_value(t, value.control_count, 6)
     testing.expect_value(t, value.controls[0].role, Publication_Role.Button)
     testing.expect(t, value.controls[1].checked)
     testing.expect_value(t, value.controls[2].range.current, f64(50000))
     testing.expect_value(t, control_publication_text(&value,
         value.controls[2].value_offset, value.controls[2].value_length), "50000")
+    testing.expect_value(t, value.controls[3].controls_native_id, u64(6))
+    testing.expect(t, value.controls[3].expanded)
+    testing.expect(t, value.controls[5].busy)
 }
 
 // Verify nested Phase 4 controls retain hierarchy and active descendant identity.

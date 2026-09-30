@@ -24,6 +24,10 @@ const EXPECTED_ACCESSKIT_ABI = Dict(
     "action_request" => 80,
     "action_request_data_offset" => 32)
 
+if Sys.isapple()
+    EXPECTED_ACCESSKIT_ABI["macos_symbols"] = 1
+end
+
 """Return the retained library used to link the host C ABI probe."""
 function accesskit_probe_link_library()
     provider = accesskit_provider_identity()

@@ -20,7 +20,7 @@ unix_tree_update_builds_complete_static_tree :: proc(t: ^testing.T) {
     testing.expect_value(t,
         portable.publication_build(&publication, 800, 600, true),
         portable.Publication_Status.Ok)
-    update := unix_tree_update(&publication)
+    update := accesskit_tree_update(&publication)
     testing.expect(t, update != nil)
     if update != nil {accesskit.accesskit_tree_update_free(update)}
 }
@@ -46,7 +46,7 @@ unix_control_tree_update_builds_mixed_tree :: proc(t: ^testing.T) {
         root_bounds = {0, 0, 800, 600}, window_focused = true,
         controls = controls[:],
     }), portable.Publication_Status.Ok)
-    update := unix_control_tree_update(&publication)
+    update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
     if update != nil {accesskit.accesskit_tree_update_free(update)}
 }
@@ -70,9 +70,25 @@ unix_control_tree_update_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
     testing.expect_value(t, portable.control_tree_build(&publication, {
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
     }), portable.Publication_Status.Ok)
-    update := unix_control_tree_update(&publication)
+    update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
     if update != nil {accesskit.accesskit_tree_update_free(update)}
+}
+
+// unix_toggle_test_controls returns one button and checkbox fixture pair.
+unix_toggle_test_controls :: proc(
+    button_identity, checkbox_identity: portable.Qualified_Identity) ->
+    [2]Adapter_Control_Input {
+    return {
+        {identity = button_identity, control = {
+            role = .Button, bounds = {10, 10, 50, 34},
+            label = "Restart animation", actions = {.Focus, .Activate},
+            enabled = true, focusable = true}},
+        {identity = checkbox_identity, control = {
+            role = .Checkbox, bounds = {10, 40, 160, 64},
+            label = "Limit frame rate", actions = {.Focus, .Toggle},
+            enabled = true, focusable = true}},
+    }
 }
 
 // Verify live controls route checkbox clicks into owner toggle actions.
@@ -86,16 +102,7 @@ unix_control_publication_routes_toggle :: proc(t: ^testing.T) {
     checkbox_identity := portable.Qualified_Identity{
         domain = .Ui, owner_domain = 6, local_id = 6202,
     }
-    controls := [2]Adapter_Control_Input{
-        {identity = button_identity, control = {
-            role = .Button, bounds = {10, 10, 50, 34},
-            label = "Restart animation", actions = {.Focus, .Activate},
-            enabled = true, focusable = true}},
-        {identity = checkbox_identity, control = {
-            role = .Checkbox, bounds = {10, 40, 160, 64},
-            label = "Limit frame rate", actions = {.Focus, .Toggle},
-            enabled = true, focusable = true}},
-    }
+    controls := unix_toggle_test_controls(button_identity, checkbox_identity)
     input := Adapter_Tree_Input{
         root_bounds = {0, 0, 800, 600}, controls = controls[:],
     }
@@ -247,7 +254,7 @@ unix_control_publication_routes_selected_text :: proc(t: ^testing.T) {
         target_node = accesskit.Node_Id(fixture.owner_id), data = {has_value = true,
             value = {tag = .Value}}}
     request.data.value.payload.value = cast(cstring)raw_data(replacement)
-    testing.expect_value(t, unix_copy_action_request(owner, &request),
+    testing.expect_value(t, accesskit_copy_action_request(owner, &request),
         portable.Action_Queue_Status.Ok)
     action: Adapter_Action
     testing.expect_value(t, unix_adapter_drain_action(owner, &action),
@@ -269,7 +276,7 @@ unix_control_publication_routes_full_text :: proc(t: ^testing.T) {
         target_node = accesskit.Node_Id(fixture.owner_id), data = {has_value = true,
             value = {tag = .Value}}}
     request.data.value.payload.value = cast(cstring)raw_data(replacement)
-    testing.expect_value(t, unix_copy_action_request(owner, &request),
+    testing.expect_value(t, accesskit_copy_action_request(owner, &request),
         portable.Action_Queue_Status.Ok)
     action: Adapter_Action
     testing.expect_value(t, unix_adapter_drain_action(owner, &action),
@@ -293,7 +300,7 @@ unix_control_publication_routes_text_selection :: proc(t: ^testing.T) {
     request.data.value.payload.set_text_selection = {
         anchor = {accesskit.Node_Id(fixture.text_run_id), 1},
         focus = {accesskit.Node_Id(fixture.text_run_id), 2}}
-    testing.expect_value(t, unix_copy_action_request(owner, &request),
+    testing.expect_value(t, accesskit_copy_action_request(owner, &request),
         portable.Action_Queue_Status.Ok)
     action: Adapter_Action
     testing.expect_value(t, unix_adapter_drain_action(owner, &action),
@@ -309,15 +316,15 @@ unix_control_publication_routes_tree_item_actions :: proc(t: ^testing.T) {
     branch := portable.Control_Publication{role = .Tree_Item, enabled = true,
         actions = {.Select, .Expand, .Collapse, .Toggle}}
     action: Adapter_Action
-    testing.expect_value(t, unix_map_control_action(&branch,
+    testing.expect_value(t, adapter_map_control_action(&branch,
         {kind = u16(accesskit.Action.Click)}, &action), Adapter_Action_Status.Ok)
     testing.expect_value(t, action.kind, Adapter_Action_Kind.Toggle)
-    testing.expect_value(t, unix_map_control_action(&branch,
+    testing.expect_value(t, adapter_map_control_action(&branch,
         {kind = u16(accesskit.Action.Expand)}, &action), Adapter_Action_Status.Ok)
     testing.expect_value(t, action.kind, Adapter_Action_Kind.Expand)
     leaf := portable.Control_Publication{role = .Tree_Item, enabled = true,
         actions = {.Select}}
-    testing.expect_value(t, unix_map_control_action(&leaf,
+    testing.expect_value(t, adapter_map_control_action(&leaf,
         {kind = u16(accesskit.Action.Click)}, &action), Adapter_Action_Status.Ok)
     testing.expect_value(t, action.kind, Adapter_Action_Kind.Select)
 }
@@ -338,7 +345,7 @@ unix_action_request_copies_into_bounded_queue :: proc(t: ^testing.T) {
         action = .Click,
         target_node = accesskit.Node_Id(2),
     }
-    testing.expect_value(t, unix_copy_action_request(owner, &request),
+    testing.expect_value(t, accesskit_copy_action_request(owner, &request),
         portable.Action_Queue_Status.Ok)
     copied: portable.Queued_Action
     testing.expect(t, portable.action_queue_pop(&owner^.actions, &copied))
@@ -400,7 +407,7 @@ unix_button_removal_retires_identity :: proc(t: ^testing.T) {
     _, found := portable.native_id_lookup(&owner^.native_ids, retired_id)
     testing.expect(t, !found)
     testing.expect(t, !owner^.publication.current.child_present)
-    update := unix_tree_update(&owner^.publication.current)
+    update := accesskit_tree_update(&owner^.publication.current)
     testing.expect(t, update != nil)
     if update != nil {accesskit.accesskit_tree_update_free(update)}
 }
@@ -414,7 +421,7 @@ unix_activation_rejects_callback_after_close :: proc(t: ^testing.T) {
         portable.protected_publish(&owner^.publication, 800, 600, true),
         portable.Publication_Status.Ok)
     portable.protected_close(&owner^.publication)
-    testing.expect(t, unix_activation_callback(owner) == nil)
+    testing.expect(t, accesskit_activation_callback(owner) == nil)
     diagnostics := adapter_diagnostics_snapshot(owner)
     testing.expect_value(t, diagnostics.activations, 1)
     testing.expect_value(t, diagnostics.rejected_callbacks, 1)
@@ -428,7 +435,7 @@ unix_adapter_unwinds_injected_construction_failure :: proc(t: ^testing.T) {
     testing.expect(t, !unix_adapter_create(
         owner, 800, 600, true, .After_Publication))
     testing.expect(t, owner^.native == nil)
-    testing.expect(t, unix_activation_callback(owner) == nil)
+    testing.expect(t, accesskit_activation_callback(owner) == nil)
     request := portable.Queued_Action{target_native_id = 2}
     testing.expect_value(t,
         portable.action_queue_push(&owner^.actions, &request),
@@ -447,7 +454,7 @@ unix_adapter_records_service_deactivation :: proc(t: ^testing.T) {
     testing.expect_value(t,
         portable.protected_publish(&owner^.publication, 800, 600, true),
         portable.Publication_Status.Ok)
-    unix_deactivation_callback(owner)
+    accesskit_deactivation_callback(owner)
     publication: portable.Static_Publication
     testing.expect(t,
         portable.protected_snapshot(&owner^.publication, &publication))

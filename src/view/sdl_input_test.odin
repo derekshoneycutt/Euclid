@@ -72,7 +72,7 @@ sdl_input_test_text_rejects_invalid_utf8 :: proc(t: ^testing.T) {
     testing.expect_value(t, len(input.input_runtime_events(&runtime)), 0)
 }
 
-// Verify pointer edges, wheel direction, and focus follow SDL event values.
+// Verify pointer edges, delivered wheel signs, and focus follow SDL event values.
 @(test)
 sdl_input_test_pointer_wheel_and_focus :: proc(t: ^testing.T) {
     runtime: input.Input_Runtime
@@ -81,13 +81,18 @@ sdl_input_test_pointer_wheel_and_focus :: proc(t: ^testing.T) {
     pressed.button.button = sdl.BUTTON_LEFT
     pressed.button.down = true
     sdl_input_consume_event(&runtime, &pressed, &accumulation)
-    wheel := sdl.Event{type = .MOUSE_WHEEL}
-    wheel.wheel.y = 2.5
-    wheel.wheel.direction = .FLIPPED
-    sdl_input_consume_event(&runtime, &wheel, &accumulation)
+    normal_wheel := sdl.Event{type = .MOUSE_WHEEL}
+    normal_wheel.wheel.y = -1.25
+    normal_wheel.wheel.direction = .NORMAL
+    sdl_input_consume_event(&runtime, &normal_wheel, &accumulation)
+    flipped_wheel := sdl.Event{type = .MOUSE_WHEEL}
+    flipped_wheel.wheel.y = 2.5
+    flipped_wheel.wheel.direction = .FLIPPED
+    sdl_input_consume_event(&runtime, &flipped_wheel, &accumulation)
     lost := sdl.Event{type = .WINDOW_FOCUS_LOST}
     sdl_input_consume_event(&runtime, &lost, &accumulation)
     testing.expect(t, .Left in accumulation.mouse_pressed)
-    testing.expect_value(t, accumulation.mouse_wheel_delta, f32(-2.5))
+    testing.expect_value(t, accumulation.mouse_wheel_delta, f32(1.25))
+    testing.expect_value(t, accumulation.diagnostics.wheel_events, u64(2))
     testing.expect(t, !accumulation.focused)
 }

@@ -6,6 +6,9 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/.build/debug/euclid",
+      "osx": {
+        "program": "${workspaceFolder}/.build/debug/Euclid.app/Contents/MacOS/euclid"
+      },
       "windows": {
         "program": "${workspaceFolder}/.build/debug/euclid.exe"
       },
@@ -27,6 +30,9 @@
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/.build/debug/euclid",
+      "osx": {
+        "program": "${workspaceFolder}/.build/debug/Euclid.app/Contents/MacOS/euclid"
+      },
       "windows": {
         "program": "${workspaceFolder}/.build/debug/euclid.exe"
       },

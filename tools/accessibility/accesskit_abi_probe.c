@@ -27,6 +27,18 @@ int main(void) {
     printf("action_request_data_offset=%zu\n",
         offsetof(accesskit_action_request, data));
 
+#if defined(ACCESSKIT_MACOS)
+    printf("macos_symbols=%u\n", (unsigned)(
+        &accesskit_macos_queued_events_raise != NULL &&
+        &accesskit_macos_subclassing_adapter_new != NULL &&
+        &accesskit_macos_subclassing_adapter_for_window != NULL &&
+        &accesskit_macos_subclassing_adapter_free != NULL &&
+        &accesskit_macos_subclassing_adapter_update_if_active != NULL &&
+        &accesskit_macos_subclassing_adapter_update_view_focus_state != NULL &&
+        &accesskit_macos_add_focus_forwarder_to_window_class != NULL &&
+        &accesskit_macos_add_focus_forwarder_to_window_class_with_length != NULL));
+#endif
+
     accesskit_node *node = accesskit_node_new(ACCESSKIT_ROLE_BUTTON);
     if (node == NULL || accesskit_node_role(node) != ACCESSKIT_ROLE_BUTTON) {
         return 2;

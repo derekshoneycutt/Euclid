@@ -1816,6 +1816,38 @@ accordion_header_keyboard_activation_selects_section :: proc(t: ^testing.T) {
     testing.expect_value(t, active, viewmodel.Ui_Accordion_Section.Settings)
 }
 
+// Verify the active header controls one panel that owns accordion content.
+@(test)
+accordion_publishes_controlled_content_panel :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    owner: viewmodel.Ui_Press_Owner_State
+    active := viewmodel.Ui_Accordion_Section.Settings
+    testing.expect(t, semantic_begin(semantic))
+    _ = prepare_accordion({
+        panel = {10, 20, 300, 500}, press_owner = &owner,
+        semantic_focus = semantic, active = active,
+    }, accordion_landscape_sections(), &active)
+    child_id := semantic_control_id(.Settings_Control, 99)
+    _ = semantic_register_control(semantic, {
+        id = child_id, role = .Button, states = {.Visible, .Enabled},
+        region = .Accordion_Content, bounds = {20, 80, 100, 24},
+        clip_bounds = {10, 20, 300, 500}, label = "Child",
+    })
+    staging := semantic_staging_snapshot(semantic)
+    header_index := semantic_node_index(
+        staging, accordion_semantic_id(.Settings))
+    panel_id := accordion_panel_semantic_id(.Settings)
+    panel_index := semantic_node_index(staging, panel_id)
+    child_index := semantic_node_index(staging, child_id)
+    testing.expect(t, header_index >= 0 && panel_index >= 0 && child_index >= 0)
+    if header_index >= 0 && child_index >= 0 {
+        testing.expect_value(t,
+            staging^.nodes[header_index].controls, panel_id)
+        testing.expect_value(t, staging^.nodes[child_index].parent, panel_id)
+    }
+}
+
 //   Verify the tree row-count guard stops recursive walks.
 @(test)
 tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {

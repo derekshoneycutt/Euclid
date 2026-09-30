@@ -1699,6 +1699,19 @@ AnalysisSettings(
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
+                "view-window-loop-platform-owner",
+                "src/view/view.odin",
+                "run_window_loop",
+                :context,
+                "Window-session native state is allocated once and explicitly destroyed and freed when the display loop ends.";
+                operation="new",
+                target="native.Sdl_Platform",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
                 "view-runtime-session-semantic-focus",
                 "src/view/runtime_session.odin",
                 "init_ui_semantic_focus",
