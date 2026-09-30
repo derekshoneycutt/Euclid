@@ -10,6 +10,8 @@ import native_accessibility "accessibility"
 Sdl_Accessibility_Action :: native_accessibility.Adapter_Action
 Sdl_Accessibility_Action_Kind :: native_accessibility.Adapter_Action_Kind
 Sdl_Accessibility_Action_Status :: native_accessibility.Adapter_Action_Status
+Sdl_Accessibility_Control_Input :: native_accessibility.Adapter_Control_Input
+Sdl_Accessibility_Tree_Input :: native_accessibility.Adapter_Tree_Input
 
 when ODIN_OS == .Linux {
     SDL_GPU_DRIVER :: "vulkan"
@@ -613,15 +615,14 @@ sdl_platform_service_accessibility :: proc(
     }
 }
 
-// sdl_platform_publish_accessibility_button publishes one committed UI projection.
-sdl_platform_publish_accessibility_button :: proc(
+// sdl_platform_publish_accessibility_controls publishes one complete control tree.
+sdl_platform_publish_accessibility_controls :: proc(
     platform: ^Sdl_Platform,
-    input: portable_accessibility.Button_Publication_Input,
-    identity: portable_accessibility.Qualified_Identity) -> bool {
+    input: Sdl_Accessibility_Tree_Input) -> bool {
     if platform == nil {return false}
     when ODIN_OS == .Linux {
-        return native_accessibility.unix_adapter_publish_button(
-            &platform^.accessibility, input, identity)
+        return native_accessibility.unix_adapter_publish_controls(
+            &platform^.accessibility, input)
     }
     return true
 }

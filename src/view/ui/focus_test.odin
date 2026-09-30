@@ -494,6 +494,26 @@ semantic_external_button_actions_validate_and_coalesce :: proc(t: ^testing.T) {
     testing.expect(t, .Pointer in action.sources && .Semantic in action.sources)
 }
 
+// Verify native ranged values retain their exact payload for the current owner.
+@(test)
+semantic_external_slider_value_retains_payload :: proc(t: ^testing.T) {
+    state := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(state, context.allocator)
+    slider := semantic_test_id(.Settings_Control, 6101)
+    testing.expect(t, semantic_begin(state))
+    testing.expect_value(t, semantic_register_control(state, {
+        id = slider, role = .Slider,
+        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+        actions = {.Focus, .Increment, .Decrement, .Set_Value},
+        numeric_range = {0, 100, 25, 1, .Horizontal, true},
+        label = "Maximum Dust particles",
+    }), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t, semantic_publish(state), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect(t, semantic_apply_external_action(state, slider, .Set_Value, 42))
+    testing.expect_value(t, state^.command_count, 1)
+    testing.expect_value(t, state^.commands[0].numeric_value, f64(42))
+}
+
 // Verify disabled and stale external targets cannot focus or activate.
 @(test)
 semantic_external_button_actions_reject_invalid_targets :: proc(t: ^testing.T) {

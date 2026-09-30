@@ -2,7 +2,7 @@ package accessibility
 
 import "core:sync"
 
-NATIVE_ID_CAPACITY :: 64
+NATIVE_ID_CAPACITY :: 4096
 ACTION_QUEUE_CAPACITY :: 64
 ACTION_PAYLOAD_CAPACITY :: 64
 SYNTHETIC_NATIVE_ID :: u64(1)
@@ -54,6 +54,8 @@ Queued_Action :: struct {
     kind: u16,
     target_native_id: u64,
     publication_generation: u64,
+    numeric_value: f64,
+    has_numeric_value: bool,
     payload: [ACTION_PAYLOAD_CAPACITY]u8,
     payload_length: int,
 }
@@ -110,8 +112,8 @@ native_id_resolve :: proc(
     if registry == nil || identity.local_id == 0 {return 0, false}
     for index in 0..<registry^.count {
         entry := &registry^.entries[index]
-        if entry^.identity == identity {
-            return entry^.native_id, entry^.active
+        if entry^.identity == identity && entry^.active {
+            return entry^.native_id, true
         }
     }
     if registry^.count >= len(registry^.entries) || registry^.next_id == 0 {

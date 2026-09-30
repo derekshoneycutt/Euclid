@@ -548,9 +548,17 @@ drain_accessibility_actions :: proc(
             generation = identity.generation,
         }
         kind := viewmodel.Ui_Focus_Command_Kind.Focus
-        if action.kind == .Activate {kind = .Activate}
+        switch action.kind {
+        case .Focus: kind = .Focus
+        case .Activate: kind = .Activate
+        case .Toggle: kind = .Toggle
+        case .Increment: kind = .Increment
+        case .Decrement: kind = .Decrement
+        case .Set_Value: kind = .Set_Value
+        }
+        semantic := state^.ui_runtime.semantic_focus
         _ = ui.semantic_apply_external_action(
-            state^.ui_runtime.semantic_focus, target, kind)
+            semantic, target, kind, action.numeric_value)
     }
 }
 
@@ -566,37 +574,90 @@ accessibility_button_bounds :: proc(
     return {f64(x0), f64(y0), f64(max(x0, x1)), f64(max(y0, y1))}
 }
 
-// publish_accessibility_button projects the committed restart control after UI layout.
-publish_accessibility_button :: proc(
+// accessibility_publication_role maps one ordinary semantic role for projection.
+accessibility_publication_role :: proc(
+    role: viewmodel.Ui_Node_Role) -> (accessibility.Publication_Role, bool) {
+    switch role {
+    case .Button: return .Button, true
+    case .Checkbox: return .Checkbox, true
+    case .Slider: return .Slider, true
+    case .Accordion_Header: return .Accordion_Header, true
+    case .Status: return .Status, true
+    case .Surface, .Input, .Tree, .Tree_Item, .Document, .Terminal:
+    }
+    return {}, false
+}
+
+// accessibility_publication_actions maps advertised owner actions without widening.
+accessibility_publication_actions :: proc(
+    actions: viewmodel.Ui_Node_Action_Set) -> accessibility.Publication_Action_Set {
+    result: accessibility.Publication_Action_Set
+    if .Focus in actions {result += {.Focus}}
+    if .Activate in actions {result += {.Activate}}
+    if .Toggle in actions {result += {.Toggle}}
+    if .Increment in actions {result += {.Increment}}
+    if .Decrement in actions {result += {.Decrement}}
+    if .Set_To_Bound in actions {result += {.Set_To_Bound}}
+    if .Set_Value in actions {result += {.Set_Value}}
+    return result
+}
+
+// accessibility_control_input copies one committed ordinary semantic record.
+accessibility_control_input :: proc(
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
+    snapshot: ^viewmodel.Ui_Semantic_Snapshot,
+    node: viewmodel.Ui_Semantic_Node,
+    role: accessibility.Publication_Role) -> native.Sdl_Accessibility_Control_Input {
+    return {
+        identity = accessibility_ui_identity(node.id),
+        control = {
+            role = role,
+            bounds = accessibility_button_bounds(node),
+            label = ui.semantic_node_text(
+                snapshot, node.label_offset, node.label_length),
+            value = ui.semantic_node_text(
+                snapshot, node.value_offset, node.value_length),
+            actions = accessibility_publication_actions(node.actions),
+            range = {node.numeric_range.minimum, node.numeric_range.maximum,
+                node.numeric_range.current, node.numeric_range.step,
+                node.numeric_range.orientation == .Vertical,
+                node.numeric_range.present},
+            enabled = .Enabled in node.states,
+            focusable = .Focusable in node.states,
+            focused = semantic^.logical_focus == node.id,
+            checked = .Checked in node.states,
+            selected = .Selected in node.states,
+            expanded = .Expanded in node.states,
+        },
+    }
+}
+
+// publish_accessibility_controls projects all committed ordinary controls.
+publish_accessibility_controls :: proc(
     state: ^Euclid_General_State, platform: ^native.Sdl_Platform) {
     semantic := state^.ui_runtime.semantic_focus
     snapshot := ui.semantic_snapshot(semantic)
     root_bounds := accessibility.Bounds{0, 0,
         f64(platform^.metrics.logical_width), f64(platform^.metrics.logical_height)}
-    publication := accessibility.Button_Publication_Input{
-        root_bounds = root_bounds,
-        window_focused = semantic^.window_focused,
+    controls: [accessibility.CONTROL_NODE_CAPACITY]native.Sdl_Accessibility_Control_Input
+    control_count := 0
+    for node in snapshot^.nodes[:snapshot^.node_count] {
+        role, supported := accessibility_publication_role(node.role)
+        if !supported || .Visible not_in node.states {continue}
+        if control_count >= len(controls) {
+            log.warn("accessibility_control_capacity_exceeded")
+            return
+        }
+        controls[control_count] = accessibility_control_input(
+            semantic, snapshot, node, role)
+        control_count += 1
     }
-    target := ui.semantic_control_id(
-        .Animation_Control, ui.ANIMATION_REFRESH_BUTTON_ID)
-    index := ui.semantic_node_index(snapshot, target)
-    identity: accessibility.Qualified_Identity
-    if index >= 0 {
-        node := snapshot^.nodes[index]
-        publication.present = .Visible in node.states && node.role == .Button
-        publication.child_bounds = accessibility_button_bounds(node)
-        publication.label = ui.semantic_node_text(
-            snapshot, node.label_offset, node.label_length)
-        publication.child_enabled = .Enabled in node.states
-        publication.child_focusable = .Focusable in node.states
-        publication.child_focused = semantic^.logical_focus == node.id
-        publication.child_supports_focus = .Focus in node.actions
-        publication.child_supports_activate = .Activate in node.actions
-        identity = accessibility_ui_identity(node.id)
-    }
-    if !native.sdl_platform_publish_accessibility_button(
-        platform, publication, identity) && publication.present {
-        log.warn("accessibility_button_publication_failed")
+    if !native.sdl_platform_publish_accessibility_controls(platform, {
+            root_bounds = root_bounds,
+            window_focused = semantic^.window_focused,
+            controls = controls[:control_count],
+        }) {
+        log.warn("accessibility_control_publication_failed")
     }
 }
 
@@ -643,7 +704,7 @@ prepare_sdl_frame :: proc(
         state, alpha, ui_geometry.compile_dynview)
     layout_interaction := ui.prepare_and_finish_ui_layout(
         state, routed_frame, terminal_frame)
-    publish_accessibility_button(state, ctx.platform)
+    publish_accessibility_controls(state, ctx.platform)
     service_scenario_before_present(ctx)
     return {input_frame, terminal_frame, controls, ui_geometry.splitters,
         layout_interaction}

@@ -231,6 +231,12 @@ slider_apply_semantic_commands :: proc(
     if semantic_command_requested(params.ui_runtime.semantic_focus, id, .Set_Maximum) {
         result = params.max_value
     }
+    for command in params.ui_runtime.semantic_focus.commands[
+        :params.ui_runtime.semantic_focus.command_count] {
+        if command.target == id && command.kind == .Set_Value {
+            result = int(command.numeric_value)
+        }
+    }
     page_step := max(1, (params.max_value - params.min_value) / 10)
     if semantic_command_requested(params.ui_runtime.semantic_focus, id, .Page_Step) {
         for command in params.ui_runtime.semantic_focus.commands[
@@ -287,7 +293,7 @@ update_settings_integer_slider :: proc(
         _ = semantic_register_control(params.ui_runtime.semantic_focus, {
             id = id, role = .Slider,
             states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-            actions = {.Focus, .Increment, .Decrement, .Set_To_Bound},
+            actions = {.Focus, .Increment, .Decrement, .Set_To_Bound, .Set_Value},
             region = .Accordion_Content,
             traversal_order = params.semantic_order,
             bounds = result.control_geometry.bounds,

@@ -313,6 +313,9 @@ splitter_apply_semantic_axis :: proc(
     }
     for command in ui_runtime.semantic_focus.commands[
         :ui_runtime.semantic_focus.command_count] {
+        if command.target == id && command.kind == .Set_Value {
+            result = f32(command.numeric_value)
+        }
         if command.target == id && command.kind == .Page_Step {
             result = range_float_step(result, f32(command.amount), spec, true)
         }
@@ -440,7 +443,7 @@ register_splitter_semantics :: proc(
         _ = semantic_register_control(focus, {
             id = splitter_semantic_id(entry.axis), role = .Slider,
             states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-            actions = {.Focus, .Increment, .Decrement, .Set_To_Bound},
+            actions = {.Focus, .Increment, .Decrement, .Set_To_Bound, .Set_Value},
             region = .Pane_Layout,
             traversal_order = u16(order),
             bounds = entry.prepared.control_geometry.bounds,

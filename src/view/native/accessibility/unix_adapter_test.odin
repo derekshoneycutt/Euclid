@@ -19,6 +19,139 @@ unix_tree_update_builds_complete_static_tree :: proc(t: ^testing.T) {
     if update != nil {accesskit.accesskit_tree_update_free(update)}
 }
 
+// Verify native translation accepts a complete mixed ordinary-control tree.
+@(test)
+unix_control_tree_update_builds_mixed_tree :: proc(t: ^testing.T) {
+    controls := [3]portable.Control_Publication_Input{
+        {native_id = 2, role = .Button, bounds = {10, 10, 50, 34},
+            label = "Restart animation", actions = {.Focus, .Activate},
+            enabled = true, focusable = true, focused = true},
+        {native_id = 3, role = .Checkbox, bounds = {10, 40, 160, 64},
+            label = "Limit frame rate", actions = {.Focus, .Toggle},
+            enabled = true, focusable = true, checked = true},
+        {native_id = 4, role = .Slider, bounds = {10, 70, 180, 94},
+            label = "Maximum dust", value = "50000",
+            actions = {.Focus, .Increment, .Decrement},
+            range = {0, 100000, 50000, 1000, false, true},
+            enabled = true, focusable = true},
+    }
+    publication: portable.Control_Tree_Publication
+    testing.expect_value(t, portable.control_tree_build(&publication, {
+        root_bounds = {0, 0, 800, 600}, window_focused = true,
+        controls = controls[:],
+    }), portable.Publication_Status.Ok)
+    update := unix_control_tree_update(&publication)
+    testing.expect(t, update != nil)
+    if update != nil {accesskit.accesskit_tree_update_free(update)}
+}
+
+// Verify live controls route checkbox clicks into owner toggle actions.
+@(test)
+unix_control_publication_routes_toggle :: proc(t: ^testing.T) {
+    owner: Adapter
+    button_identity := portable.Qualified_Identity{
+        domain = .Ui, owner_domain = 1, local_id = 2101,
+    }
+    checkbox_identity := portable.Qualified_Identity{
+        domain = .Ui, owner_domain = 6, local_id = 6202,
+    }
+    controls := [2]Adapter_Control_Input{
+        {identity = button_identity, control = {
+            role = .Button, bounds = {10, 10, 50, 34},
+            label = "Restart animation", actions = {.Focus, .Activate},
+            enabled = true, focusable = true}},
+        {identity = checkbox_identity, control = {
+            role = .Checkbox, bounds = {10, 40, 160, 64},
+            label = "Limit frame rate", actions = {.Focus, .Toggle},
+            enabled = true, focusable = true}},
+    }
+    input := Adapter_Tree_Input{
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }
+    testing.expect(t, unix_adapter_publish_controls(&owner, input))
+    defer unix_adapter_destroy(&owner)
+    checkbox_native_id := owner.control_native_ids[1]
+    request := portable.Queued_Action{
+        kind = u16(accesskit.Action.Click),
+        target_native_id = checkbox_native_id,
+        publication_generation = owner.control_publication.current.generation,
+    }
+    testing.expect_value(t, portable.action_queue_push(&owner.actions, &request),
+        portable.Action_Queue_Status.Ok)
+    action: Adapter_Action
+    testing.expect_value(t, unix_adapter_drain_action(&owner, &action),
+        Adapter_Action_Status.Ok)
+    testing.expect_value(t, action.kind, Adapter_Action_Kind.Toggle)
+    testing.expect_value(t, action.identity, checkbox_identity)
+}
+
+// Verify removed controls retire IDs and reappearance allocates monotonically.
+@(test)
+unix_control_publication_reappearance_allocates_fresh_id :: proc(t: ^testing.T) {
+    owner: Adapter
+    checkbox_identity := portable.Qualified_Identity{
+        domain = .Ui, owner_domain = 6, local_id = 6202,
+    }
+    controls := [1]Adapter_Control_Input{{
+        identity = checkbox_identity,
+        control = {role = .Checkbox, bounds = {10, 40, 160, 64},
+            label = "Limit frame rate", actions = {.Focus, .Toggle},
+            enabled = true, focusable = true},
+    }}
+    input := Adapter_Tree_Input{
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }
+    testing.expect(t, unix_adapter_publish_controls(&owner, input))
+    defer unix_adapter_destroy(&owner)
+    checkbox_native_id := owner.control_native_ids[0]
+    input.controls = controls[:0]
+    testing.expect(t, unix_adapter_publish_controls(&owner, input))
+    _, found := portable.native_id_lookup(&owner.native_ids, checkbox_native_id)
+    testing.expect(t, !found)
+    input.controls = controls[:]
+    testing.expect(t, unix_adapter_publish_controls(&owner, input))
+    testing.expect(t, owner.control_native_ids[0] > checkbox_native_id)
+}
+
+// Verify copied native numeric values are range-validated before owner delivery.
+@(test)
+unix_control_publication_routes_numeric_value :: proc(t: ^testing.T) {
+    owner: Adapter
+    identity := portable.Qualified_Identity{
+        domain = .Ui, owner_domain = 6, local_id = 6101,
+    }
+    controls := [1]Adapter_Control_Input{{
+        identity = identity,
+        control = {role = .Slider, bounds = {10, 10, 180, 34},
+            label = "Maximum Dust particles", actions = {.Focus, .Set_Value},
+            range = {0, 100, 25, 1, false, true},
+            enabled = true, focusable = true},
+    }}
+    testing.expect(t, unix_adapter_publish_controls(&owner, {
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }))
+    defer unix_adapter_destroy(&owner)
+    request := portable.Queued_Action{
+        kind = u16(accesskit.Action.Set_Value),
+        target_native_id = owner.control_native_ids[0],
+        publication_generation = owner.control_publication.current.generation,
+        numeric_value = 42,
+        has_numeric_value = true,
+    }
+    testing.expect_value(t, portable.action_queue_push(&owner.actions, &request),
+        portable.Action_Queue_Status.Ok)
+    action: Adapter_Action
+    testing.expect_value(t, unix_adapter_drain_action(&owner, &action),
+        Adapter_Action_Status.Ok)
+    testing.expect_value(t, action.kind, Adapter_Action_Kind.Set_Value)
+    testing.expect_value(t, action.numeric_value, f64(42))
+    request.numeric_value = 101
+    testing.expect_value(t, portable.action_queue_push(&owner.actions, &request),
+        portable.Action_Queue_Status.Ok)
+    testing.expect_value(t, unix_adapter_drain_action(&owner, &action),
+        Adapter_Action_Status.Invalid_Value)
+}
+
 // Verify native requests copy target, kind, and observed publication generation.
 @(test)
 unix_action_request_copies_into_bounded_queue :: proc(t: ^testing.T) {

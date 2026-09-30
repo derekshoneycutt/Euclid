@@ -15,6 +15,8 @@ GIF_PATH_INPUT_BOX_ID :: 6205
 GIF_PATH_LABEL_WIDTH :: f32(42)
 GIF_PATH_INPUT_HEIGHT :: f32(24)
 GIF_PATH_INPUT_TOP_OFFSET :: f32(30)
+GIF_STATUS_NODE_ID :: 6301
+GIF_STATUS_NOTE_NODE_ID :: 6302
 
 //   Row y-positions for the GIF panel's two sliders.
 Gif_Slider_Rows :: struct {
@@ -308,6 +310,12 @@ gif_timing_button_params :: proc(
     ctx: Gif_Panel_Context,
     descriptor: Gif_Timing_Button_Descriptor) -> Text_Button_Params {
     enabled := gif_capture_button_enabled(ctx.ui_runtime.gif_capture_phase)
+    states := button_semantic_states(enabled)
+    animation_selected := descriptor.id == 6203 &&
+        ctx.ui_runtime.gif_timing_mode == .Animation
+    recorded_selected := descriptor.id == 6204 &&
+        ctx.ui_runtime.gif_timing_mode == .Recorded
+    if animation_selected || recorded_selected {states += {.Selected}}
     return {
         id = descriptor.id, rect = descriptor.rectangle, label = descriptor.label,
         enabled = enabled,
@@ -318,7 +326,7 @@ gif_timing_button_params :: proc(
             focus = ctx.ui_runtime.semantic_focus,
             id = semantic_control_id(.Gif_Control, descriptor.id),
             role = .Button,
-            states = button_semantic_states(enabled),
+            states = states,
             region = .Accordion_Content,
             traversal_order = descriptor.order,
             clip_bounds = viewmodel.Rectangle(ctx.panel),
@@ -368,6 +376,44 @@ gif_capture_status_label :: proc(
     }
 
     return "Status: Idle"
+}
+
+// gif_accessibility_status_label reports only meaningful capture milestones.
+gif_accessibility_status_label :: proc(
+    phase: viewmodel.Gif_Capture_Phase) -> string {
+    switch phase {
+    case .Idle: return "GIF capture idle"
+    case .Armed: return "GIF capture armed"
+    case .Recording: return "GIF capture recording"
+    case .Finalizing: return "GIF capture saving"
+    case .Saved: return "GIF capture saved"
+    case .Error: return "GIF capture error"
+    }
+    return "GIF capture idle"
+}
+
+// register_gif_status publishes bounded milestone and optional error detail nodes.
+register_gif_status :: proc(
+    ctx: Gif_Panel_Context, result: ^Gif_View_Preparation) {
+    bounds := viewmodel.Rectangle{ctx.panel.x + SETTINGS_PANEL_INSET,
+        result^.rows.status_y, max(f32(0),
+            ctx.panel.width - SETTINGS_PANEL_INSET * 2),
+        SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET}
+    _ = semantic_register_control(ctx.ui_runtime.semantic_focus, {
+        id = semantic_control_id(.Gif_Control, GIF_STATUS_NODE_ID),
+        role = .Status, states = {.Visible}, bounds = bounds,
+        clip_bounds = viewmodel.Rectangle(ctx.panel),
+        label = gif_accessibility_status_label(result^.phase),
+    })
+    if result^.status_note_len <= 0 {return}
+    note_bounds := bounds
+    note_bounds.y += SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET
+    note := string(result^.status_note[:result^.status_note_len])
+    _ = semantic_register_control(ctx.ui_runtime.semantic_focus, {
+        id = semantic_control_id(.Gif_Control, GIF_STATUS_NOTE_NODE_ID),
+        role = .Status, states = {.Visible}, bounds = note_bounds,
+        clip_bounds = viewmodel.Rectangle(ctx.panel), label = note,
+    })
 }
 
 //   Place one fixed-size GIF settings row and return it with the advanced cursor.
@@ -494,6 +540,7 @@ prepare_gif_view :: proc(
     result.captured_frames = ctx.ui_runtime.gif_captured_frames
     result.status_note = ctx.ui_runtime.gif_status_note
     result.status_note_len = ctx.ui_runtime.gif_status_note_len
+    register_gif_status(ctx, &result)
     prepare_gif_path_input(state, ctx, mouse_input, &result)
     return result
 }

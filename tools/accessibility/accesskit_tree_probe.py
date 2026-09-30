@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture and validate Euclid's Phase 2 AT-SPI button on Linux."""
+"""Capture and validate Euclid's Phase 3 AT-SPI controls on Linux."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import time
+import traceback
 
 import pyatspi
 
@@ -18,7 +19,10 @@ ROOT = Path(__file__).resolve().parents[2]
 BINARY = ROOT / ".build" / "debug" / "euclid"
 ARTIFACTS = Path(".build/accessibility-button")
 REPORT = ROOT / ARTIFACTS / "atspi.json"
-LABEL = "Restart animation"
+RESTART_LABEL = "Restart animation"
+SETTINGS_LABEL = "Settings"
+CHECKBOX_LABEL = "Display FPS"
+SLIDER_LABEL = "Maximum Dust particles"
 SCENARIO = Path("tools/accessibility/accessibility-button-acceptance.jsonl")
 WINDOW_SELECTOR = "class:^euclid$"
 
@@ -36,8 +40,8 @@ def descendants(node, depth: int = 4):
         yield from descendants(child, depth - 1)
 
 
-def find_button():
-    """Return the first Euclid restart button currently exposed on the desktop."""
+def find_named(label: str):
+    """Return the first Euclid node with one exact accessible name."""
     desktop = pyatspi.Registry.getDesktop(0)
     try:
         applications = list(desktop)
@@ -46,7 +50,7 @@ def find_button():
     for application in applications:
         try:
             for node in descendants(application):
-                if node.name == LABEL:
+                if node.name == label:
                     return application, node
         except Exception:
             continue
@@ -112,16 +116,16 @@ def node_record(node) -> dict:
     }
 
 
-def wait_for_tree(timeout_seconds: float = 25.0):
-    """Wait for AccessKit activation and return the application and static child."""
+def wait_for_named(label: str, timeout_seconds: float = 25.0):
+    """Wait for AccessKit activation and return one exact named node."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        application, child = find_button()
+        application, child = find_named(label)
         if child is not None:
             return application, child
         time.sleep(0.1)
     raise RuntimeError(
-        "Euclid accessibility button was not discovered; "
+        f"Euclid accessibility node {label!r} was not discovered; "
         f"desktop={json.dumps(desktop_summary(), sort_keys=True)}")
 
 
@@ -129,7 +133,7 @@ def wait_for_removal(timeout_seconds: float = 5.0) -> bool:
     """Return true once the button has disappeared after process shutdown."""
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
-        _, child = find_button()
+        _, child = find_named(RESTART_LABEL)
         if child is None:
             return True
         time.sleep(0.1)
@@ -161,16 +165,37 @@ def focus_button(node) -> dict:
     return wait_for_node_record(node, lambda record: record["focused"])
 
 
-def activate_button(node) -> str:
-    """Invoke the restart button's native click action."""
+def invoke_action(node, accepted_names: tuple[str, ...]) -> str:
+    """Invoke the first native action whose normalized name is accepted."""
     action = node.queryAction()
     for index in range(action.nActions):
         name = action.getName(index)
-        if name.lower() in ("click", "press", "activate"):
+        if name.lower() in accepted_names:
             if not action.doAction(index):
                 raise RuntimeError(f"AT-SPI action was rejected: {name}")
             return name
-    raise RuntimeError(f"restart button has no activation action: {action_names(node)}")
+    raise RuntimeError(
+        f"{node.name!r} has no accepted action: {action_names(node)}")
+
+
+def value_record(node) -> dict:
+    """Normalize one AT-SPI ranged-value record."""
+    value = node.queryValue()
+    return {
+        "current": value.currentValue,
+        "minimum": value.minimumValue,
+        "maximum": value.maximumValue,
+        "step": value.minimumIncrement,
+    }
+
+
+def increment_value(node, before: dict) -> float:
+    """Request one bounded increment through the AT-SPI Value interface."""
+    target = min(before["maximum"], before["current"] + before["step"])
+    if target <= before["current"]:
+        target = max(before["minimum"], before["current"] - before["step"])
+    node.queryValue().currentValue = target
+    return target
 
 
 def dispatch_hyprland(hyprctl: str, expression: str) -> None:
@@ -251,7 +276,7 @@ def run_session(session_index: int) -> dict:
         text=True, env=os.environ.copy())
     try:
         try:
-            application, child = wait_for_tree()
+            application, child = wait_for_named(RESTART_LABEL)
         except RuntimeError as error:
             status = process.poll()
             stderr = ""
@@ -263,8 +288,25 @@ def run_session(session_index: int) -> dict:
         transitions = exercise_host_transitions(parent, child)
         focused = focus_button(child)
         actions = action_names(child)
+        _, settings = wait_for_named(SETTINGS_LABEL)
+        settings_action = invoke_action(
+            settings, ("click", "press", "activate"))
+        _, checkbox = wait_for_named(CHECKBOX_LABEL)
+        _, slider = wait_for_named(SLIDER_LABEL)
+        checkbox_before = node_record(checkbox)
+        checkbox_action = invoke_action(
+            checkbox, ("click", "press", "activate"))
+        checkbox_after = wait_for_node_record(
+            checkbox, lambda record: record["states"] != checkbox_before["states"])
+        slider_before = value_record(slider)
+        slider_target = increment_value(slider, slider_before)
+        deadline = time.monotonic() + 3.0
+        slider_after = value_record(slider)
+        while slider_after["current"] != slider_target and time.monotonic() < deadline:
+            time.sleep(0.05)
+            slider_after = value_record(slider)
         result = {
-            "schema_version": 2,
+            "schema_version": 3,
             "session_type": os.environ.get("XDG_SESSION_TYPE", "unknown"),
             "video_driver": os.environ.get("SDL_VIDEODRIVER", "default"),
             "application": node_record(application),
@@ -272,12 +314,28 @@ def run_session(session_index: int) -> dict:
             "child": node_record(child),
             "focused_child": focused,
             "actions": actions,
+            "settings": {
+                "node": node_record(settings),
+                "invoked_action": settings_action,
+            },
+            "checkbox": {
+                "before": checkbox_before,
+                "after": checkbox_after,
+                "actions": action_names(checkbox),
+                "invoked_action": checkbox_action,
+            },
+            "slider": {
+                "node": node_record(slider),
+                "before": slider_before,
+                "after": slider_after,
+                "requested_value": slider_target,
+            },
             "host_transitions": transitions,
         }
         if result["root"]["role"] not in ("application", "landmark"):
             raise RuntimeError("button parent is not an application root")
-        if result["root"]["child_count"] != 1:
-            raise RuntimeError("synthetic application root does not have one child")
+        if result["root"]["child_count"] < 4:
+            raise RuntimeError("synthetic application root lacks ordinary controls")
         if result["child"]["role"] not in ("push button", "button"):
             raise RuntimeError("restart control is not exposed as a button")
         if result["child"]["parent_path"] != result["root"]["object_path"]:
@@ -287,7 +345,14 @@ def run_session(session_index: int) -> dict:
         if result["child"]["bounds"]["width"] < 0 or \
                 result["child"]["bounds"]["height"] < 0:
             raise RuntimeError("button bounds are inverted")
-        result["invoked_action"] = activate_button(child)
+        if result["checkbox"]["before"]["role"] not in ("check box", "checkbox"):
+            raise RuntimeError("settings toggle is not exposed as a checkbox")
+        if result["slider"]["node"]["role"] != "slider":
+            raise RuntimeError("maximum dust is not exposed as a slider")
+        if slider_after["current"] != slider_target:
+            raise RuntimeError("native slider value did not reach the requested value")
+        result["invoked_action"] = invoke_action(
+            child, ("click", "press", "activate"))
         return_code = process.wait(timeout=20)
         if return_code != 0:
             stderr = process.stderr.read() if process.stderr else ""
@@ -317,7 +382,7 @@ def run_probe() -> dict:
         raise RuntimeError("debug binary missing; run cmake --build --preset debug")
     shutil.rmtree(ROOT / ARTIFACTS, ignore_errors=True)
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "sessions": [run_session(1), run_session(2)],
     }
 
@@ -330,6 +395,7 @@ if __name__ == "__main__":
         REPORT.write_text(encoded, encoding="ascii")
         sys.stdout.write(encoded)
     except Exception as error:
+        traceback.print_exc()
         print(
             "accessibility tree probe failed: "
             f"{type(error).__name__}: {error!r}", file=sys.stderr)

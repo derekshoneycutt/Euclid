@@ -243,6 +243,7 @@ Ui_Node_Role :: enum u8 {
     Checkbox,
     Slider,
     Accordion_Header,
+    Status,
     Tree,
     Tree_Item,
     Document,
@@ -270,6 +271,7 @@ Ui_Node_Action :: enum u8 {
     Increment,
     Decrement,
     Set_To_Bound,
+    Set_Value,
     Select,
     Expand,
     Collapse,
@@ -349,6 +351,7 @@ Ui_Focus_Command_Kind :: enum u8 {
     Decrement,
     Set_Minimum,
     Set_Maximum,
+    Set_Value,
     Page_Step,
     Tree_Previous,
     Tree_Next,
@@ -366,6 +369,7 @@ Ui_Focus_Command :: struct {
     target: Ui_Node_Id,
     kind: Ui_Focus_Command_Kind,
     amount: i32,
+    numeric_value: f64,
     event_index: u16,
 }
 

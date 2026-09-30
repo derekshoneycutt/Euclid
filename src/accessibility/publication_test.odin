@@ -2,6 +2,58 @@ package accessibility
 
 import "core:testing"
 
+// Verify mixed ordinary controls retain complete native-ready semantic facts.
+@(test)
+control_tree_builds_mixed_ordinary_controls :: proc(t: ^testing.T) {
+    controls := [3]Control_Publication_Input{
+        {native_id = 2, role = .Button, bounds = {10, 10, 40, 30},
+            label = "Restart animation", actions = {.Focus, .Activate},
+            enabled = true, focusable = true, focused = true},
+        {native_id = 3, role = .Checkbox, bounds = {10, 40, 160, 64},
+            label = "Limit frame rate", actions = {.Focus, .Toggle},
+            enabled = true, focusable = true, checked = true},
+        {native_id = 4, role = .Slider, bounds = {10, 70, 180, 94},
+            label = "Maximum dust", value = "50000",
+            actions = {.Focus, .Increment, .Decrement, .Set_To_Bound},
+            range = {0, 100000, 50000, 1000, false, true},
+            enabled = true, focusable = true},
+    }
+    value: Control_Tree_Publication
+    testing.expect_value(t, control_tree_build(&value, {
+        root_bounds = {0, 0, 800, 600}, window_focused = true,
+        controls = controls[:],
+    }), Publication_Status.Ok)
+    testing.expect_value(t, value.control_count, 3)
+    testing.expect_value(t, value.controls[0].role, Publication_Role.Button)
+    testing.expect(t, value.controls[1].checked)
+    testing.expect_value(t, value.controls[2].range.current, f64(50000))
+    testing.expect_value(t, control_publication_text(&value,
+        value.controls[2].value_offset, value.controls[2].value_length), "50000")
+}
+
+// Verify identical trees suppress generations and invalid ranges preserve state.
+@(test)
+protected_control_tree_suppresses_and_preserves :: proc(t: ^testing.T) {
+    controls := [1]Control_Publication_Input{{
+        native_id = 2, role = .Slider, bounds = {10, 10, 180, 34},
+        label = "Output scale", actions = {.Focus, .Increment, .Decrement},
+        range = {1, 8, 2, 1, false, true}, enabled = true, focusable = true,
+    }}
+    protected: Protected_Control_Publication
+    input := Tree_Publication_Input{
+        root_bounds = {0, 0, 800, 600}, controls = controls[:],
+    }
+    testing.expect_value(t, protected_publish_controls(&protected, input),
+        Publication_Status.Ok)
+    testing.expect_value(t, protected_publish_controls(&protected, input),
+        Publication_Status.Ok)
+    testing.expect_value(t, protected.current.generation, u64(1))
+    controls[0].range.current = 9
+    testing.expect_value(t, protected_publish_controls(&protected, input),
+        Publication_Status.Invalid_Bounds)
+    testing.expect_value(t, protected.current.generation, u64(1))
+}
+
 // Verify the Phase 1 fixture is complete, stable, and snapshot-owned.
 @(test)
 publication_builds_static_root_and_child :: proc(t: ^testing.T) {

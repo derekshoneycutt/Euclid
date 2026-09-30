@@ -23,6 +23,10 @@ Adapter_Diagnostic_Event :: enum u8 {
 Adapter_Action_Kind :: enum u8 {
     Focus,
     Activate,
+    Toggle,
+    Increment,
+    Decrement,
+    Set_Value,
 }
 
 // Adapter_Action_Status identifies one display-thread drain or rejection outcome.
@@ -35,12 +39,27 @@ Adapter_Action_Status :: enum u8 {
     Removed_Target,
     Unsupported_Action,
     Disabled_Target,
+    Invalid_Value,
 }
 
 // Adapter_Action carries one validated native request without platform pointers.
 Adapter_Action :: struct {
     kind: Adapter_Action_Kind,
     identity: portable.Qualified_Identity,
+    numeric_value: f64,
+}
+
+// Adapter_Control_Input pairs one complete portable record with semantic identity.
+Adapter_Control_Input :: struct {
+    identity: portable.Qualified_Identity,
+    control: portable.Control_Publication_Input,
+}
+
+// Adapter_Tree_Input borrows one complete display-owned ordinary-control projection.
+Adapter_Tree_Input :: struct {
+    root_bounds: portable.Bounds,
+    window_focused: bool,
+    controls: []Adapter_Control_Input,
 }
 
 // Adapter_Diagnostics records content-free callback and owner lifecycle counts.
@@ -59,11 +78,14 @@ Adapter_Diagnostics :: struct {
 Adapter :: struct {
     native: rawptr,
     publication: portable.Protected_Publication,
+    control_publication: portable.Protected_Control_Publication,
     native_ids: portable.Native_Id_Registry,
     actions: portable.Action_Queue,
     child_identity: portable.Qualified_Identity,
     child_native_id: u64,
     child_present: bool,
+    control_native_ids: [portable.CONTROL_NODE_CAPACITY]u64,
+    control_count: int,
     delivered_generation: u64,
     diagnostics_mutex: sync.Mutex,
     diagnostics: Adapter_Diagnostics,

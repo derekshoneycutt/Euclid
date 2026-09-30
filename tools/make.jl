@@ -27,7 +27,7 @@ Commands:
     scenario --all [--format=text|json]
                                  Build debug and run the scenario corpus.
     accesskit-abi                Validate the pinned AccessKit C host ABI.
-    accessibility-tree           Validate the Linux Phase 2 AT-SPI button.
+    accessibility-tree           Validate Linux Phase 3 AT-SPI controls.
     analyzer-test                Run the analyzer's own test suite.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.

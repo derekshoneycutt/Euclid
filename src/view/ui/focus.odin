@@ -321,7 +321,8 @@ semantic_command_requested :: proc(
 semantic_apply_external_action :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     target: viewmodel.Ui_Node_Id,
-    kind: viewmodel.Ui_Focus_Command_Kind) -> bool {
+    kind: viewmodel.Ui_Focus_Command_Kind,
+    numeric_value: f64 = 0) -> bool {
     if state == nil {return false}
     snapshot := semantic_snapshot(state)
     index := semantic_node_index(snapshot, target)
@@ -338,6 +339,19 @@ semantic_apply_external_action :: proc(
     }
     if kind == .Activate && .Activate in node.actions {
         return semantic_append_command(state, {target = target, kind = kind})
+    }
+    if kind == .Toggle && .Toggle in node.actions {
+        return semantic_append_command(state, {target = target, kind = kind})
+    }
+    if kind == .Increment && .Increment in node.actions {
+        return semantic_append_command(state, {target = target, kind = kind})
+    }
+    if kind == .Decrement && .Decrement in node.actions {
+        return semantic_append_command(state, {target = target, kind = kind})
+    }
+    if kind == .Set_Value && .Set_Value in node.actions {
+        return semantic_append_command(state, {
+            target = target, kind = kind, numeric_value = numeric_value})
     }
     return false
 }

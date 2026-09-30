@@ -24,6 +24,9 @@ Action :: enum u8 {
     Click = 0,
     Focus = 1,
     Blur = 2,
+    Decrement = 6,
+    Increment = 7,
+    Set_Value = 20,
 }
 
 Role :: enum u8 {
@@ -33,6 +36,25 @@ Role :: enum u8 {
     Text_Input = 17,
     Button = 18,
     Application = 49,
+    Slider = 113,
+    Status = 116,
+}
+
+Live :: enum u8 {
+    Off = 0,
+    Polite = 1,
+    Assertive = 2,
+}
+
+Toggled :: enum u8 {
+    False = 0,
+    True = 1,
+    Mixed = 2,
+}
+
+Orientation :: enum u8 {
+    Horizontal = 0,
+    Vertical = 1,
 }
 
 Node_Id :: distinct u64
@@ -117,6 +139,9 @@ Deactivation_Handler :: proc "c" (user_data: rawptr)
 
 #assert(size_of(Action) == 1)
 #assert(size_of(Role) == 1)
+#assert(size_of(Toggled) == 1)
+#assert(size_of(Orientation) == 1)
+#assert(size_of(Live) == 1)
 #assert(size_of(Node_Id) == 8)
 #assert(size_of(Tree_Id) == 16)
 #assert(size_of(Optional_Node_Id) == 16)
@@ -145,6 +170,15 @@ foreign accesskit_library {
     accesskit_node_set_value_with_length :: proc(
         node: ^Node, value: cstring, length: uintptr) ---
     accesskit_node_set_bounds :: proc(node: ^Node, value: Rect) ---
+    accesskit_node_set_numeric_value :: proc(node: ^Node, value: f64) ---
+    accesskit_node_set_min_numeric_value :: proc(node: ^Node, value: f64) ---
+    accesskit_node_set_max_numeric_value :: proc(node: ^Node, value: f64) ---
+    accesskit_node_set_numeric_value_step :: proc(node: ^Node, value: f64) ---
+    accesskit_node_set_expanded :: proc(node: ^Node, value: bool) ---
+    accesskit_node_set_selected :: proc(node: ^Node, value: bool) ---
+    accesskit_node_set_toggled :: proc(node: ^Node, value: Toggled) ---
+    accesskit_node_set_orientation :: proc(node: ^Node, value: Orientation) ---
+    accesskit_node_set_live :: proc(node: ^Node, value: Live) ---
     accesskit_tree_update_with_capacity_and_focus :: proc(
         capacity: uintptr, focus: Node_Id) -> ^Tree_Update ---
     accesskit_tree_update_free :: proc(update: ^Tree_Update) ---
