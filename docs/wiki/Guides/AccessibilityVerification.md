@@ -1,5 +1,20 @@
 # Accessibility Verification
 
+## Windows Phase 1 root and button
+
+The Windows workflow requires Windows 11 x64, .NET SDK 10 or newer, a logged-in
+interactive desktop session, and the debug build. Run `cmake --build --preset debug`, then
+`julia tools/make.jl accessibility-windows`.
+
+The command compiles and runs the file-based C# UI Automation probe, then runs two
+complete application sessions. In each session it discovers the root and Restart
+button through UI Automation, checks the button's role, name, enabled
+state, focusability, bounds, focus gain and loss, and Invoke pattern, invokes it exactly
+once, and requires the passive scenario to observe the existing reset-owner event. It
+then requires clean process exit and provider removal. Normalized evidence is written
+to `.build/accessibility-windows/uia.json`; session logs and scenario artifacts are
+stored beside it.
+
 ## macOS Phase 3 controls
 
 The qualified macOS workflow requires an Apple Silicon host, a logged-in GUI session,

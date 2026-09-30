@@ -8,6 +8,7 @@ import "core:testing"
 
 import sdl "vendor:sdl3"
 import stbi "vendor:stb/image"
+import native_accessibility "accessibility"
 
 Sdl_Capture_Completion_Test_State :: struct {
     pixels: rawptr,
@@ -17,6 +18,123 @@ Sdl_Capture_Completion_Test_State :: struct {
     map_count: int,
     unmap_count: int,
     release_count: int,
+}
+
+Sdl_Windows_Admission_Test_State :: struct {
+    order: [4]int,
+    order_count: int,
+    publish_succeeds: bool,
+    hwnd_calls: int,
+    publish_calls: int,
+    show_calls: int,
+}
+
+// sdl_windows_admission_test_record appends one observed lifecycle step.
+sdl_windows_admission_test_record :: proc(
+    state: ^Sdl_Windows_Admission_Test_State, value: int) {
+    state^.order[state^.order_count] = value
+    state^.order_count += 1
+}
+
+// sdl_windows_admission_test_hwnd records borrowed-handle lookup.
+sdl_windows_admission_test_hwnd :: proc(
+    user_data: rawptr, _: ^sdl.Window) -> rawptr {
+    state := cast(^Sdl_Windows_Admission_Test_State)user_data
+    state^.hwnd_calls += 1
+    sdl_windows_admission_test_record(state, 1)
+    return user_data
+}
+
+// sdl_windows_admission_test_publish records adapter publication and admission.
+sdl_windows_admission_test_publish :: proc(
+    user_data: rawptr, owner: ^native_accessibility.Adapter, _: rawptr,
+    _: Sdl_Accessibility_Tree_Input) -> bool {
+    state := cast(^Sdl_Windows_Admission_Test_State)user_data
+    state^.publish_calls += 1
+    sdl_windows_admission_test_record(state, 2)
+    if state^.publish_succeeds {owner^.native = user_data}
+    return state^.publish_succeeds
+}
+
+// sdl_windows_admission_test_show records one native visibility request.
+sdl_windows_admission_test_show :: proc(
+    user_data: rawptr, _: ^sdl.Window) -> bool {
+    state := cast(^Sdl_Windows_Admission_Test_State)user_data
+    state^.show_calls += 1
+    sdl_windows_admission_test_record(state, 3)
+    return true
+}
+
+// sdl_windows_admission_test_operations binds one deterministic fixture.
+sdl_windows_admission_test_operations :: proc(
+    state: ^Sdl_Windows_Admission_Test_State) ->
+    Sdl_Windows_Accessibility_Operations {
+    return {
+        user_data = state,
+        hwnd = sdl_windows_admission_test_hwnd,
+        publish = sdl_windows_admission_test_publish,
+        show = sdl_windows_admission_test_show,
+    }
+}
+
+// Verify only Windows starts SDL's application window hidden.
+@(test)
+sdl_windows_window_flags_start_hidden :: proc(t: ^testing.T) {
+    flags := sdl_platform_window_flags({resizable = true})
+    testing.expect(t, .HIGH_PIXEL_DENSITY in flags)
+    testing.expect(t, .RESIZABLE in flags)
+    when ODIN_OS == .Windows {
+        testing.expect(t, .HIDDEN in flags)
+    } else {
+        testing.expect(t, .HIDDEN not_in flags)
+    }
+}
+
+// Verify HWND lookup and publication precede one show attempt.
+@(test)
+sdl_windows_accessibility_admission_precedes_one_shot_show :: proc(t: ^testing.T) {
+    state := Sdl_Windows_Admission_Test_State{publish_succeeds = true}
+    platform := new(Sdl_Platform, context.allocator)
+    defer free(platform, context.allocator)
+    platform^.window = cast(^sdl.Window)&state
+    operations := sdl_windows_admission_test_operations(&state)
+    testing.expect(t, sdl_platform_windows_publish_with_operations(
+        platform, {}, operations))
+    testing.expect_value(t, state.order_count, 3)
+    testing.expect_value(t, state.order[0], 1)
+    testing.expect_value(t, state.order[1], 2)
+    testing.expect_value(t, state.order[2], 3)
+    testing.expect(t, platform^.accessibility_admission_attempted)
+    testing.expect(t, platform^.window_show_attempted)
+    testing.expect(t, platform^.window_shown)
+
+    testing.expect(t, sdl_platform_windows_publish_with_operations(
+        platform, {}, operations))
+    testing.expect_value(t, state.hwnd_calls, 1)
+    testing.expect_value(t, state.publish_calls, 2)
+    testing.expect_value(t, state.show_calls, 1)
+}
+
+// Verify failed accessibility still shows once and cannot retry admission.
+@(test)
+sdl_windows_accessibility_failure_still_shows_without_retry :: proc(t: ^testing.T) {
+    state: Sdl_Windows_Admission_Test_State
+    platform := new(Sdl_Platform, context.allocator)
+    defer free(platform, context.allocator)
+    platform^.window = cast(^sdl.Window)&state
+    operations := sdl_windows_admission_test_operations(&state)
+    testing.expect(t, !sdl_platform_windows_publish_with_operations(
+        platform, {}, operations))
+    testing.expect_value(t, state.hwnd_calls, 1)
+    testing.expect_value(t, state.publish_calls, 1)
+    testing.expect_value(t, state.show_calls, 1)
+    testing.expect(t, platform^.window_shown)
+
+    testing.expect(t, !sdl_platform_windows_publish_with_operations(
+        platform, {}, operations))
+    testing.expect_value(t, state.hwnd_calls, 1)
+    testing.expect_value(t, state.publish_calls, 1)
+    testing.expect_value(t, state.show_calls, 1)
 }
 
 // Verify Windows content scaling preserves baseline application dimensions.

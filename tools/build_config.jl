@@ -3,9 +3,11 @@ module EuclidBuildConfiguration
 using SHA
 using TOML
 
-export accesskit_linker_flags, accesskit_manifest, accesskit_provider_identity,
+export accesskit_artifact_path, accesskit_linker_flags, accesskit_manifest,
+    accesskit_provider_identity,
     native_linker_flags, native_runtime_dirs, native_runtime_environment,
-    native_test_linker_flags, resolve_msvc_tool_path, sdl3_library_path,
+    native_test_linker_flags, msvc_build_environment, resolve_msvc_tool_path,
+    sdl3_library_path,
     sdl3_linker_flags, sdl3_provider_identity, sdl3_image_library_path,
     sdl3_image_linker_flags, sdl3_image_provider_identity,
     sqlite3_artifact, sqlite3_tool_linker_flags, windows_sdl_manifest
@@ -137,6 +139,29 @@ function accesskit_manifest(
     return manifest
 end
 
+"""Return the unique artifact record with one manifest role."""
+function accesskit_artifact_record(manifest::AbstractDict, role::AbstractString)
+    matches = filter(record -> get(record, "role", "") == role,
+        get(manifest, "artifact", Any[]))
+    length(matches) == 1 || error(
+        "AccessKit manifest must contain exactly one $role artifact.")
+    return only(matches)
+end
+
+"""Resolve one validated AccessKit artifact by manifest role."""
+function accesskit_artifact_path(
+    role::AbstractString,
+    kernel::Symbol=Sys.KERNEL;
+    root::AbstractString=ACCESSKIT_ROOT,
+    architecture::Symbol=Sys.ARCH,
+    parse_file::Function=TOML.parsefile,
+    hash_file::Function=path -> bytes2hex(open(sha256, path)))
+    manifest = accesskit_manifest(
+        root; kernel, architecture, parse_file, hash_file)
+    artifact = accesskit_artifact_record(manifest, role)
+    return joinpath(root, String(artifact["file"]))
+end
+
 """Resolve the validated repository-owned AccessKit provider."""
 function accesskit_provider_identity(
     kernel::Symbol=Sys.KERNEL;
@@ -146,8 +171,7 @@ function accesskit_provider_identity(
     target = accesskit_target(kernel, architecture)
     manifest = accesskit_manifest(root; kernel, architecture, hash_file)
     runtime_role = kernel == :NT ? "runtime" : "runtime-link-library"
-    artifact = only(filter(record -> get(record, "role", "") == runtime_role,
-        manifest["artifact"]))
+    artifact = accesskit_artifact_record(manifest, runtime_role)
     library_path = joinpath(root, String(artifact["file"]))
     manifest_path = joinpath(root, "bin", target.platform,
         target.architecture, "manifest.toml")
@@ -506,6 +530,27 @@ function resolve_msvc_tool_path(find_glob::String, error_message::String)
     return path
 end
 
+"""Capture the Visual Studio x64 compiler and Windows SDK environment."""
+function msvc_build_environment()
+    vcvars = resolve_msvc_tool_path(
+        "VC/Auxiliary/Build/vcvars64.bat",
+        "Could not locate vcvars64.bat. Install the C++ Build Tools workload.")
+    output = IOBuffer()
+    command = Cmd(["cmd", "/d", "/c", "call", vcvars, ">nul", "&&", "set"])
+    process = run(pipeline(ignorestatus(command), stdout=output, stderr=devnull))
+    process.exitcode == 0 || error(
+        "Could not initialize the Visual Studio x64 build environment.")
+    environment = Dict{String,String}()
+    for line in split(String(take!(output)), '\n')
+        separator = findfirst(==('='), line)
+        (separator === nothing || separator == firstindex(line)) && continue
+        key = strip(line[firstindex(line):prevind(line, separator)])
+        value = strip(line[nextind(line, separator):end])
+        environment[key] = value
+    end
+    return environment
+end
+
 """Resolve the host C compiler and static archiver for SQLite."""
 function sqlite3_tool_paths(kernel::Symbol=Sys.KERNEL)
     if kernel == :NT
@@ -565,16 +610,23 @@ function build_sqlite3_archive(
     kernel::Symbol=Sys.KERNEL)
     object_path = joinpath(directory, kernel == :NT ? "sqlite3.obj" : "sqlite3.o")
     archive_path = joinpath(directory, kernel == :NT ? "sqlite3.lib" : "libsqlite3.a")
-    compile_result = capture_command(Cmd(
-        sqlite3_compile_arguments(compiler, object_path, kernel)))
+    compile_command = Cmd(sqlite3_compile_arguments(compiler, object_path, kernel))
+    kernel == :NT && (compile_command = addenv(
+        compile_command, msvc_build_environment()))
+    compile_result = capture_command(compile_command)
     compile_result.exit_code == 0 || error(
-        "SQLite compilation failed: $(strip(compile_result.error_output))")
+        "SQLite compilation failed: " *
+        strip(compile_result.output * compile_result.error_output))
     archive_arguments = kernel == :NT ?
         [archiver, "/nologo", "/OUT:$archive_path", object_path] :
         [archiver, "rcs", archive_path, object_path]
-    archive_result = capture_command(Cmd(archive_arguments))
+    archive_command = Cmd(archive_arguments)
+    kernel == :NT && (archive_command = addenv(
+        archive_command, msvc_build_environment()))
+    archive_result = capture_command(archive_command)
     archive_result.exit_code == 0 || error(
-        "SQLite archive creation failed: $(strip(archive_result.error_output))")
+        "SQLite archive creation failed: " *
+        strip(archive_result.output * archive_result.error_output))
     return archive_path
 end
 

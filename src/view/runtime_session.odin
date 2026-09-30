@@ -11,7 +11,6 @@ import "ui"
 import "../core"
 import color "../core/color"
 import "../dynview"
-import evidence_allocation "../evidence/allocation"
 import evidence_artifact "../evidence/artifact"
 import evidence_export "../evidence/export"
 import "../evidence/observe"
@@ -27,7 +26,6 @@ import "core:log"
 import "core:math"
 
 when !core.SCENARIOS_ENABLED {
-    _ :: evidence_allocation
     _ :: observe
 }
 import "core:math/linalg"

@@ -1,8 +1,11 @@
 #!/usr/bin/env julia
 
 include(joinpath(@__DIR__, "..", "build_config.jl"))
-using .EuclidBuildConfiguration: accesskit_manifest, accesskit_provider_identity,
-    native_runtime_environment
+using .EuclidBuildConfiguration: accesskit_artifact_path,
+    accesskit_provider_identity, msvc_build_environment,
+    native_runtime_environment,
+    resolve_msvc_tool_path
+using SHA
 
 const EXPECTED_ACCESSKIT_ABI = Dict(
     "action_click" => 0,
@@ -27,25 +30,57 @@ const EXPECTED_ACCESSKIT_ABI = Dict(
 if Sys.isapple()
     EXPECTED_ACCESSKIT_ABI["macos_symbols"] = 1
 end
+if Sys.iswindows()
+    EXPECTED_ACCESSKIT_ABI["windows_symbols"] = 1
+    EXPECTED_ACCESSKIT_ABI["windows_module_adjacent"] = 1
+end
 
 """Return the retained library used to link the host C ABI probe."""
 function accesskit_probe_link_library()
     provider = accesskit_provider_identity()
     Sys.iswindows() || return provider.library_path
-    manifest = accesskit_manifest()
-    artifact = only(filter(record ->
-        get(record, "role", "") == "import-library", manifest["artifact"]))
-    return joinpath(dirname(dirname(dirname(dirname(provider.library_path)))),
-        String(artifact["file"]))
+    return accesskit_artifact_path("import-library")
+end
+
+"""Stage and verify the exact AccessKit runtime beside the Windows probe."""
+function stage_accesskit_probe_runtime(output_path::String)
+    source = accesskit_artifact_path("runtime")
+    destination = joinpath(dirname(output_path), basename(source))
+    cp(source, destination; force=true)
+    expected = bytes2hex(open(sha256, source))
+    bytes2hex(open(sha256, destination)) == expected || error(
+        "Staged AccessKit probe runtime hash mismatch.")
+    return source
+end
+
+"""Return PATH without the retained source provider directory."""
+function probe_windows_path(source_runtime::String)
+    source_directory = lowercase(normpath(dirname(source_runtime)))
+    entries = split(get(ENV, "PATH", ""), ';'; keepempty=false)
+    filtered = filter(entries) do entry
+        lowercase(normpath(entry)) != source_directory
+    end
+    return join(filtered, ';')
 end
 
 """Compile the AccessKit C ABI probe with the active host compiler."""
 function compile_accesskit_abi_probe(output_path::String)
-    compiler = Sys.which("clang")
-    compiler === nothing && error("AccessKit ABI probe requires clang.")
     repository_root = normpath(joinpath(@__DIR__, "..", ".."))
     source = joinpath(@__DIR__, "accesskit_abi_probe.c")
     include_directory = joinpath(repository_root, "libs", "accesskit", "include")
+    if Sys.iswindows()
+        compiler = resolve_msvc_tool_path(
+            "VC/Tools/MSVC/**/bin/Hostx64/x64/cl.exe",
+            "Could not locate MSVC cl.exe. Install the C++ Build Tools workload.")
+        arguments = [compiler, "/nologo", "/std:c11", "/W4", "/WX",
+            "/I$include_directory", source, accesskit_probe_link_library(),
+            "/Fe:$output_path"]
+        run(addenv(Cmd(Cmd(arguments); dir=repository_root),
+            msvc_build_environment()))
+        return
+    end
+    compiler = Sys.which("clang")
+    compiler === nothing && error("AccessKit ABI probe requires clang.")
     arguments = [compiler, "-std=c11", "-Wall", "-Wextra", "-Werror",
         "-I$include_directory", source, accesskit_probe_link_library(),
         "-o", output_path]
@@ -71,7 +106,12 @@ function run_accesskit_abi_probe()
         Sys.iswindows() ? "accesskit_abi_probe.exe" : "accesskit_abi_probe")
     compile_accesskit_abi_probe(executable)
     provider = accesskit_provider_identity()
-    environment = native_runtime_environment([dirname(provider.library_path)])
+    environment = if Sys.iswindows()
+        source_runtime = stage_accesskit_probe_runtime(executable)
+        "PATH" => probe_windows_path(source_runtime)
+    else
+        native_runtime_environment([dirname(provider.library_path)])
+    end
     command = addenv(Cmd([executable]), environment)
     output = read(command, String)
     actual = parse_accesskit_abi_output(output)

@@ -1069,30 +1069,54 @@ decode_and_extract_archive_payload :: proc(archive_path, unpack_dir: string) -> 
 
 //   Publish a validated candidate tree while preserving the previous tree on failure.
 publish_candidate_unpack_directory :: proc(
-    candidate_dir, unpack_dir, backup_dir: string) -> bool {
+    candidate_dir, unpack_dir, backup_dir: string,
+    report_failure := true) -> bool {
     _ = os.remove_all(backup_dir)
     had_active := os.is_directory(unpack_dir)
     if had_active && os.rename(unpack_dir, backup_dir) != nil {
-        fmt.eprintln("asset unpack failed: could not preserve active asset tree")
+        if report_failure {
+            fmt.eprintln("asset unpack failed: could not preserve active asset tree")
+        }
         return false
     }
     if os.rename(candidate_dir, unpack_dir) != nil {
         if had_active {
             _ = os.rename(backup_dir, unpack_dir)
         }
-        fmt.eprintln("asset unpack failed: could not publish candidate asset tree")
+        if report_failure {
+            fmt.eprintln("asset unpack failed: could not publish candidate asset tree")
+        }
         return false
     }
     _ = os.remove_all(backup_dir)
     return true
 }
 
+// Publish one validated candidate or accept a concurrent validated winner.
+publish_validated_asset_candidate :: proc(
+    candidate_dir, unpack_dir, backup_dir, package_identity: string) -> bool {
+    for _ in 0..<100 {
+        if publish_candidate_unpack_directory(
+            candidate_dir, unpack_dir, backup_dir, false) {
+            return true
+        }
+        if is_assets_unpack_ready(unpack_dir, package_identity) {
+            _ = os.remove_all(candidate_dir)
+            _ = os.remove_all(backup_dir)
+            return true
+        }
+        time.sleep(time.Millisecond)
+    }
+    return false
+}
+
 //   Extract and validate an archive into a sibling candidate directory.
 replace_packaged_asset_tree :: proc(
     archive_path, unpack_dir, package_identity, archive_sha256: string,
     expected_fingerprint: string = "") -> bool {
-    candidate_dir := fmt.tprintf("%s.candidate", unpack_dir)
-    backup_dir := fmt.tprintf("%s.previous", unpack_dir)
+    transaction_id := os.get_current_thread_id()
+    candidate_dir := fmt.tprintf("%s.candidate.%d", unpack_dir, transaction_id)
+    backup_dir := fmt.tprintf("%s.previous.%d", unpack_dir, transaction_id)
     if !file_matches_sha256(archive_path, archive_sha256) {
         fmt.eprintln("asset unpack failed: archive digest does not match identity")
         return false
@@ -1101,7 +1125,7 @@ replace_packaged_asset_tree :: proc(
         return false
     }
     if !decode_and_extract_archive_payload(archive_path, candidate_dir) ||
-       !is_assets_unpack_ready(candidate_dir, package_identity) {
+         !is_assets_unpack_ready(candidate_dir, package_identity) {
         _ = os.remove_all(candidate_dir)
         fmt.eprintln("asset unpack failed: candidate asset tree is incomplete")
         return false
@@ -1115,11 +1139,14 @@ replace_packaged_asset_tree :: proc(
             return false
         }
     }
-    if !publish_candidate_unpack_directory(candidate_dir, unpack_dir, backup_dir) {
+    published := publish_validated_asset_candidate(
+        candidate_dir, unpack_dir, backup_dir, package_identity)
+    if !published {
         _ = os.remove_all(candidate_dir)
-        return false
+        _ = os.remove_all(backup_dir)
+        fmt.eprintln("asset unpack failed: concurrent publication did not settle")
     }
-    return true
+    return published
 }
 
 //   Unpack assets.pkg for an executable directory with optional forced refresh.

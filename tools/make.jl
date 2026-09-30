@@ -29,6 +29,7 @@ Commands:
     accesskit-abi                Validate the pinned AccessKit C host ABI.
     accessibility-tree           Validate Linux Phase 3 AT-SPI controls.
     accessibility-macos          Validate macOS Phase 3 AX controls.
+    accessibility-windows        Validate Windows Phase 1 UIA root and button.
     analyzer-test                Run the analyzer's own test suite.
     wiki                         Generate the publishable Wiki artifact.
     check-wiki                   Verify that the Wiki artifact is current.
@@ -60,6 +61,7 @@ const DRIVER_COMMANDS = Set([
     "harness",
     "unit", "vet", "test", "check", "stats", "evidence", "scenario",
     "accesskit-abi", "accessibility-tree", "accessibility-macos",
+    "accessibility-windows",
     "analyzer-test", "wiki",
     "check-wiki", "clean"])
 
@@ -79,7 +81,8 @@ using TOML
 using UUIDs
 
 include(joinpath(@__DIR__, "build_config.jl"))
-using .EuclidBuildConfiguration: accesskit_provider_identity,
+using .EuclidBuildConfiguration: accesskit_artifact_path,
+    accesskit_provider_identity,
     native_linker_flags, native_runtime_dirs, native_runtime_environment,
     resolve_msvc_tool_path, sdl3_provider_identity, sqlite3_artifact,
     sqlite3_tool_linker_flags
@@ -331,6 +334,32 @@ function debug_app_binary_path()
         macos_app_bundle_path(true), "Contents", "MacOS", "euclid")
     return joinpath(
         SCRIPT_DIR, ".build", "debug", is_windows() ? "euclid.exe" : "euclid")
+end
+
+"""Return the adjacent Windows AccessKit runtime path for one application build."""
+accesskit_runtime_path(debug::Bool=false) =
+    joinpath(dirname(app_binary_path(debug)), "accesskit.dll")
+
+"""Copy one validated AccessKit runtime and verify the staged bytes."""
+function stage_accesskit_runtime(
+    source::String,
+    destination::String;
+    hash_file::Function=path -> bytes2hex(open(sha256, path)),
+    copy_file::Function=(source, destination) -> cp(source, destination; force=true))
+    expected_hash = hash_file(source)
+    mkpath(dirname(destination))
+    copy_file(source, destination)
+    isfile(destination) || error("AccessKit runtime staging produced no file.")
+    hash_file(destination) == expected_hash || error(
+        "Staged AccessKit runtime hash mismatch.")
+    return destination
+end
+
+"""Stage the manifest-validated Windows AccessKit runtime beside the application."""
+function stage_accesskit_runtime(debug::Bool=false)
+    Sys.iswindows() || return nothing
+    source = accesskit_artifact_path("runtime")
+    return stage_accesskit_runtime(source, accesskit_runtime_path(debug))
 end
 
 """Return the assets package path adjacent to an application build."""
@@ -1376,7 +1405,7 @@ function read_asset_package_identity(path::String)
     fields = Dict{String,String}()
     expected_fields = Set((
         "schema_version", "package_identity", "archive_sha256"))
-    for line in eachline(path)
+    for line in readlines(path)
         pair = split(line, '='; limit=2)
         length(pair) == 2 || return nothing
         pair[1] in expected_fields || return nothing
@@ -1515,6 +1544,7 @@ function clean_build_files()
         joinpath(BIN_DIR, "libeuclid.so"),
         joinpath(BIN_DIR, "libeuclid.dll"),
         joinpath(BIN_DIR, "libeuclid.dylib"),
+        joinpath(BIN_DIR, "accesskit.dll"),
         joinpath(BIN_DIR, "build"),
         ASSETS_STAGING_DIR,
         joinpath(BIN_DIR, ".native_import_libs"),
@@ -1670,6 +1700,7 @@ function run_plan_packaging(
     if !build_ok && (plan.do_assets || command.action == :sysimage)
         println(stderr, "Skipping assets and sysimage because the build failed.")
     end
+    plan.do_build && build_ok && stage_accesskit_runtime(command.debug)
     plan.do_assets && build_ok && build_assets(
         plan.do_build, command.debug; force_sysimage=command.action == :sysimage)
     return nothing
@@ -1835,6 +1866,44 @@ function run_accessibility_macos_command(arguments::Vector{String})
     return run_command(Cmd([swift, script]); cwd=SCRIPT_DIR).exit_code
 end
 
+"""Parse the SDK version reported by `dotnet --version`."""
+function parse_dotnet_sdk_version(output::AbstractString)
+    candidate = strip(output)
+    isempty(candidate) && error("dotnet --version returned an empty response.")
+    version = tryparse(VersionNumber, candidate)
+    if version === nothing
+        error("Unable to parse .NET SDK version: $(repr(candidate)).")
+    end
+    return version
+end
+
+"""Require a .NET SDK with file-based app support."""
+function require_dotnet_file_app_sdk(dotnet::AbstractString)
+    version = parse_dotnet_sdk_version(read(Cmd([dotnet, "--version"]), String))
+    version.major >= 10 || error(
+        "accessibility-windows requires .NET SDK 10 or newer; found $version.")
+    return version
+end
+
+"""Build the .NET file-based accessibility probe command."""
+accessibility_windows_command(dotnet::AbstractString, script::AbstractString) =
+    Cmd([dotnet, "run", "--file", script])
+
+"""Validate the Phase 1 root and Restart button through Windows UI Automation."""
+function run_accessibility_windows_command(arguments::Vector{String})
+    isempty(arguments) || error("accessibility-windows does not accept arguments.")
+    Sys.iswindows() || error("accessibility-windows is supported only on Windows.")
+    dotnet = Sys.which("dotnet")
+    dotnet === nothing && error("accessibility-windows requires .NET SDK 10 or newer.")
+    require_dotnet_file_app_sdk(dotnet)
+    script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "accesskit_windows_tree_probe.cs")
+    command = accessibility_windows_command(dotnet, script)
+    environment = native_runtime_environment(native_runtime_dirs())
+    command = environment === nothing ? command : addenv(command, environment)
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
 """Execute the finalized build plan, verification gate, and optional run step."""
 function execute_build_plan(command::BuildCommand, plan::BuildPlanToggles)
     julia_flags, runtime_dirs = prepare_build_plan(command, plan)
@@ -1864,6 +1933,8 @@ function execute_project_action(invocation::DriverInvocation)
         return run_accessibility_tree_command(invocation.arguments)
     invocation.action == :accessibility_macos &&
         return run_accessibility_macos_command(invocation.arguments)
+    invocation.action == :accessibility_windows &&
+        return run_accessibility_windows_command(invocation.arguments)
     invocation.action == :analyzer_test &&
         return run_analyzer_test_command(invocation.arguments)
     if invocation.action in (:wiki, :check_wiki)

@@ -29,6 +29,22 @@ Macos_Failure_Diagnostics :: struct {
     count: u64,
 }
 
+// Windows_Failure_Stage identifies one HWND adapter failure boundary.
+Windows_Failure_Stage :: enum u8 {
+    None,
+    Initial_Publication,
+    Hwnd_Property_Lookup,
+    Adapter_Creation,
+    Update,
+    Queued_Event_Raise,
+    Teardown,
+}
+
+Windows_Failure_Diagnostics :: struct {
+    last_stage: Windows_Failure_Stage,
+    count: u64,
+}
+
 // Adapter_Diagnostic_Event identifies one bounded native lifecycle observation.
 Adapter_Diagnostic_Event :: enum u8 {
     Activation,
@@ -109,6 +125,7 @@ Adapter_Diagnostics :: struct {
     rejected_actions: u64,
     last_action_status: Adapter_Action_Status,
     macos_failures: Macos_Failure_Diagnostics,
+    windows_failures: Windows_Failure_Diagnostics,
 }
 
 // Adapter_Process_State retains irreversible native class setup across a session.
@@ -131,6 +148,7 @@ Adapter :: struct {
     control_native_ids: [portable.CONTROL_NODE_CAPACITY]u64,
     control_count: int,
     delivered_generation: u64,
+    windows_admission_attempted: bool,
     diagnostics_mutex: sync.Mutex,
     diagnostics: Adapter_Diagnostics,
 }
@@ -161,6 +179,25 @@ adapter_macos_failures_snapshot :: proc(owner: ^Adapter) -> Macos_Failure_Diagno
     sync.mutex_lock(&owner^.diagnostics_mutex)
     defer sync.mutex_unlock(&owner^.diagnostics_mutex)
     return owner^.diagnostics.macos_failures
+}
+
+// adapter_record_windows_failure retains one content-free HWND failure stage.
+adapter_record_windows_failure :: proc(
+    owner: ^Adapter, stage: Windows_Failure_Stage) {
+    if owner == nil || stage == .None {return}
+    sync.mutex_lock(&owner^.diagnostics_mutex)
+    owner^.diagnostics.windows_failures.last_stage = stage
+    owner^.diagnostics.windows_failures.count += 1
+    sync.mutex_unlock(&owner^.diagnostics_mutex)
+}
+
+// adapter_windows_failures_snapshot returns one synchronized failure observation.
+adapter_windows_failures_snapshot :: proc(
+    owner: ^Adapter) -> Windows_Failure_Diagnostics {
+    if owner == nil {return {}}
+    sync.mutex_lock(&owner^.diagnostics_mutex)
+    defer sync.mutex_unlock(&owner^.diagnostics_mutex)
+    return owner^.diagnostics.windows_failures
 }
 
 // adapter_record_diagnostic increments one bounded content-free lifecycle counter.

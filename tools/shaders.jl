@@ -420,7 +420,8 @@ function shadercross_needs_configure(
     configured = "CMAKE_GENERATOR:INTERNAL=Ninja" in entries &&
         "SPIRV_WERROR:BOOL=OFF" in entries
     if source !== nothing
-        configured &= "CMAKE_HOME_DIRECTORY:INTERNAL=$(normpath(source))" in entries
+        cmake_source = replace(normpath(source), '\\' => '/')
+        configured &= "CMAKE_HOME_DIRECTORY:INTERNAL=$cmake_source" in entries
     end
     return !configured
 end

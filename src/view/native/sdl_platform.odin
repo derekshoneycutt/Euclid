@@ -131,6 +131,9 @@ Sdl_Platform :: struct {
     resize_pending: bool,
     text_input_active: bool,
     window_focused: bool,
+    accessibility_admission_attempted: bool,
+    window_show_attempted: bool,
+    window_shown: bool,
     unavailable_frames: u64,
     input_diagnostics: Sdl_Input_Diagnostics,
     accessibility_process_state: native_accessibility.Adapter_Process_State,
@@ -147,6 +150,15 @@ Sdl_Platform_Options :: struct {
     antialiasing: bool,
 }
 
+// Sdl_Windows_Accessibility_Operations isolates HWND admission ordering for tests.
+Sdl_Windows_Accessibility_Operations :: struct {
+    user_data: rawptr,
+    hwnd: proc(user_data: rawptr, window: ^sdl.Window) -> rawptr,
+    publish: proc(user_data: rawptr, owner: ^native_accessibility.Adapter,
+        hwnd: rawptr, input: Sdl_Accessibility_Tree_Input) -> bool,
+    show: proc(user_data: rawptr, window: ^sdl.Window) -> bool,
+}
+
 // Sdl_Swapchain_Image records one acquired presentation texture and extent.
 Sdl_Swapchain_Image :: struct {
     texture: ^sdl.GPUTexture,
@@ -158,6 +170,12 @@ Sdl_Swapchain_Image :: struct {
 Sdl_Scene_Targets :: struct {
     scene: ^sdl.GPUTexture,
     multisample: ^sdl.GPUTexture,
+}
+
+SDL_WINDOWS_ACCESSIBILITY_OPERATIONS :: Sdl_Windows_Accessibility_Operations{
+    hwnd = sdl_windows_native_hwnd,
+    publish = sdl_windows_native_publish,
+    show = sdl_windows_native_show,
 }
 
 // sdl_scale_or_one normalizes failed SDL scale queries.
@@ -591,6 +609,8 @@ sdl_platform_destroy :: proc(platform: ^Sdl_Platform) {
         native_accessibility.unix_adapter_destroy(&platform^.accessibility)
     } else when ODIN_OS == .Darwin {
         native_accessibility.macos_adapter_destroy(&platform^.accessibility)
+    } else when ODIN_OS == .Windows {
+        native_accessibility.windows_adapter_destroy(&platform^.accessibility)
     }
     sdl_platform_destroy_gpu(platform)
     if platform^.window != nil {
@@ -643,6 +663,62 @@ sdl_platform_cocoa_window :: proc(platform: ^Sdl_Platform) -> rawptr {
     return nil
 }
 
+// sdl_platform_win32_hwnd returns SDL's borrowed HWND property.
+sdl_platform_win32_hwnd :: proc(window: ^sdl.Window) -> rawptr {
+    when ODIN_OS == .Windows {
+        if window == nil {return nil}
+        properties := sdl.GetWindowProperties(window)
+        if properties == 0 {return nil}
+        return sdl.GetPointerProperty(
+            properties, sdl.PROP_WINDOW_WIN32_HWND_POINTER, nil)
+    }
+    return nil
+}
+
+// sdl_windows_native_hwnd resolves the borrowed handle after SDL window creation.
+sdl_windows_native_hwnd :: proc(_: rawptr, window: ^sdl.Window) -> rawptr {
+    return sdl_platform_win32_hwnd(window)
+}
+
+// sdl_windows_native_publish attaches or updates the HWND subclassing adapter.
+sdl_windows_native_publish :: proc(
+    _: rawptr, owner: ^native_accessibility.Adapter, hwnd: rawptr,
+    input: Sdl_Accessibility_Tree_Input) -> bool {
+    when ODIN_OS == .Windows {
+        return native_accessibility.windows_adapter_publish_controls(
+            owner, hwnd, input)
+    }
+    return false
+}
+
+// sdl_windows_native_show makes one successfully created SDL window visible.
+sdl_windows_native_show :: proc(_: rawptr, window: ^sdl.Window) -> bool {
+    when ODIN_OS == .Windows {return sdl.ShowWindow(window)}
+    return false
+}
+
+// sdl_platform_windows_publish_with_operations admits before one show attempt.
+sdl_platform_windows_publish_with_operations :: proc(
+    platform: ^Sdl_Platform, input: Sdl_Accessibility_Tree_Input,
+    operations: Sdl_Windows_Accessibility_Operations) -> bool {
+    if platform == nil || platform^.window == nil {return false}
+    if platform^.accessibility_admission_attempted {
+        if platform^.accessibility.native == nil {return false}
+        return operations.publish(operations.user_data,
+            &platform^.accessibility, nil, input)
+    }
+    platform^.accessibility_admission_attempted = true
+    hwnd := operations.hwnd(operations.user_data, platform^.window)
+    published := operations.publish(operations.user_data,
+        &platform^.accessibility, hwnd, input)
+    if !platform^.window_show_attempted {
+        platform^.window_show_attempted = true
+        platform^.window_shown = operations.show(
+            operations.user_data, platform^.window)
+    }
+    return published
+}
+
 // sdl_platform_publish_accessibility_controls publishes one complete control tree.
 sdl_platform_publish_accessibility_controls :: proc(
     platform: ^Sdl_Platform,
@@ -655,6 +731,9 @@ sdl_platform_publish_accessibility_controls :: proc(
         return native_accessibility.macos_adapter_publish_controls(
             &platform^.accessibility, &platform^.accessibility_process_state,
             sdl_platform_cocoa_window(platform), input)
+    } else when ODIN_OS == .Windows {
+        return sdl_platform_windows_publish_with_operations(
+            platform, input, SDL_WINDOWS_ACCESSIBILITY_OPERATIONS)
     }
     return true
 }
@@ -669,6 +748,9 @@ sdl_platform_drain_accessibility_action :: proc(
             &platform^.accessibility, destination)
     } else when ODIN_OS == .Darwin {
         return native_accessibility.macos_adapter_drain_action(
+            &platform^.accessibility, destination)
+    } else when ODIN_OS == .Windows {
+        return native_accessibility.windows_adapter_drain_action(
             &platform^.accessibility, destination)
     }
     return .Empty
@@ -717,16 +799,23 @@ sdl_platform_log_ready :: proc(
         platform^.metrics.display_scale, platform^.metrics.content_scale)
 }
 
+// sdl_platform_window_flags selects platform-specific initial visibility.
+sdl_platform_window_flags :: proc(options: Sdl_Platform_Options) -> sdl.WindowFlags {
+    flags: sdl.WindowFlags = {.HIGH_PIXEL_DENSITY}
+    if options.resizable {flags += {.RESIZABLE}}
+    when ODIN_OS == .Windows {flags += {.HIDDEN}}
+    return flags
+}
+
 // sdl_platform_admit_window creates the native high-density application window.
 sdl_platform_admit_window :: proc(
     platform: ^Sdl_Platform, options: Sdl_Platform_Options) -> bool {
     content_scale := sdl_primary_content_scale()
     window_width := sdl_startup_extent(options.width, content_scale)
     window_height := sdl_startup_extent(options.height, content_scale)
-    flags: sdl.WindowFlags = {.HIGH_PIXEL_DENSITY}
-    if options.resizable {flags += {.RESIZABLE}}
     platform^.window = sdl.CreateWindow(
-        options.title, i32(window_width), i32(window_height), flags)
+        options.title, i32(window_width), i32(window_height),
+        sdl_platform_window_flags(options))
     return platform^.window != nil
 }
 

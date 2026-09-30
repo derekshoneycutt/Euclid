@@ -1,2 +1,4 @@
 libs/sdl/bin/win64/licenses/*.txt text eol=lf
 libs/sdl_shadercross/bin/win64/licenses/*.txt text eol=crlf
+libs/accesskit/include/accesskit.h text eol=lf
+libs/accesskit/licenses/* text eol=lf

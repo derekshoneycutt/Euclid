@@ -424,7 +424,6 @@ draw_encoded_drawing_surface :: proc(
 //
 // Returns:
 //   - none.
-
 draw_encoded_basic_point :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     item: ^shapemodel.Shapes_Point_Draw, high: bool) {

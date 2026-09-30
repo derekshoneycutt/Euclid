@@ -28,6 +28,13 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test dirname(provider.library_path) in
             BuildConfiguration.native_runtime_dirs()
         @test occursin("accesskit", BuildConfiguration.native_linker_flags())
+        expected_role = Sys.iswindows() ? "runtime" : "runtime-link-library"
+        @test BuildConfiguration.accesskit_artifact_path(expected_role) ==
+            provider.library_path
+        if Sys.iswindows()
+            @test basename(BuildConfiguration.accesskit_artifact_path(
+                "import-library")) == "accesskit.lib"
+        end
 
         @test_throws ErrorException BuildConfiguration.accesskit_manifest(
             ; architecture=:unsupported)
@@ -52,6 +59,40 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test_throws ErrorException BuildConfiguration.accesskit_manifest(
             ; parse_file=path -> merge(TOML.parsefile(path),
                 Dict("artifact" => Any[])))
+        @test_throws ErrorException BuildConfiguration.accesskit_artifact_path(
+            "missing")
+        @test_throws ErrorException BuildConfiguration.accesskit_artifact_path(
+            expected_role;
+            parse_file=path -> begin
+                manifest = TOML.parsefile(path)
+                push!(manifest["artifact"], copy(first(manifest["artifact"])))
+                manifest
+            end)
+    end
+
+    @testset "AccessKit runtime staging" begin
+        mktempdir() do root
+            source = joinpath(root, "source", "accesskit.dll")
+            destination = joinpath(root, "output", "accesskit.dll")
+            mkpath(dirname(source))
+            write(source, "validated")
+            write_destination = stage_accesskit_runtime(source, destination)
+            @test write_destination == destination
+            @test read(destination, String) == "validated"
+
+            write(destination, "stale")
+            stage_accesskit_runtime(source, destination)
+            @test read(destination, String) == "validated"
+
+            @test_throws ErrorException stage_accesskit_runtime(
+                source, destination;
+                copy_file=(_, target) -> write(target, "corrupt"))
+        end
+        if Sys.iswindows()
+            @test accesskit_runtime_path() == joinpath(BIN_DIR, "accesskit.dll")
+            @test accesskit_runtime_path(true) ==
+                joinpath(SCRIPT_DIR, ".build", "debug", "accesskit.dll")
+        end
     end
 
     @testset "SDL3 providers" begin
@@ -264,6 +305,18 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         @test parse_driver_invocation(["accesskit-abi"]).action == :accesskit_abi
         @test parse_driver_invocation(["accessibility-macos"]).action ==
             :accessibility_macos
+        @test parse_driver_invocation(["accessibility-windows"]).action ==
+            :accessibility_windows
+        @test parse_dotnet_sdk_version("10.0.401\n") == v"10.0.401"
+        @test parse_dotnet_sdk_version("10.0.100-preview.1") ==
+            v"10.0.100-preview.1"
+        @test_throws ErrorException parse_dotnet_sdk_version("")
+        @test_throws ErrorException parse_dotnet_sdk_version("not-a-version")
+        windows_probe = accessibility_windows_command(
+            "dotnet", "tools/accessibility/accesskit_windows_tree_probe.cs")
+        @test windows_probe.exec == [
+            "dotnet", "run", "--file",
+            "tools/accessibility/accesskit_windows_tree_probe.cs"]
         @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
         @test_throws ErrorException parse_driver_invocation(["--run"])
         @test_throws ErrorException parse_driver_invocation(["-ABr"])

@@ -26,6 +26,12 @@ Macos_Subclassing_Adapter :: struct {}
 // Macos_Queued_Events is transferred work raised exactly once on the main thread.
 Macos_Queued_Events :: struct {}
 
+// Windows_Subclassing_Adapter is opaque storage owned by the Win32 window session.
+Windows_Subclassing_Adapter :: struct {}
+
+// Windows_Queued_Events is transferred work raised exactly once on the window thread.
+Windows_Queued_Events :: struct {}
+
 Action :: enum u8 {
     Click = 0,
     Focus = 1,
@@ -285,5 +291,24 @@ when ODIN_OS == .Darwin {
             class_name: cstring) ---
         accesskit_macos_add_focus_forwarder_to_window_class_with_length :: proc(
             class_name: cstring, length: uintptr) ---
+    }
+}
+
+when ODIN_OS == .Windows {
+    foreign accesskit_library {
+        accesskit_windows_queued_events_raise :: proc(
+            events: ^Windows_Queued_Events) ---
+        accesskit_windows_subclassing_adapter_new :: proc(
+            hwnd: rawptr,
+            activation_handler: Activation_Handler,
+            activation_handler_userdata: rawptr,
+            action_handler: Action_Handler,
+            action_handler_userdata: rawptr) -> ^Windows_Subclassing_Adapter ---
+        accesskit_windows_subclassing_adapter_free :: proc(
+            adapter: ^Windows_Subclassing_Adapter) ---
+        accesskit_windows_subclassing_adapter_update_if_active :: proc(
+            adapter: ^Windows_Subclassing_Adapter,
+            update_factory: Tree_Update_Factory,
+            update_factory_userdata: rawptr) -> ^Windows_Queued_Events ---
     }
 }
