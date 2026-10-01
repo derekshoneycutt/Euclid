@@ -75,6 +75,13 @@ navigation_order = 42
 owner = "guide_authors"
 
 [[guides]]
+title = "SQLite Architecture"
+path = "Guides/Sqlite3.md"
+summary = "Immutable search database, FTS5 and spellfix schema, linkage, ownership, and query flow."
+navigation_order = 43
+owner = "guide_authors"
+
+[[guides]]
 title = "Tool Rendering"
 path = "Guides/ToolRendering.md"
 summary = "Pen and compass geometry, shading, and rendering contracts."
@@ -146,6 +153,14 @@ guide_paths = [
     "Guides/ParticleSystem.md#rendering",
 ]
 symbol_prefixes = ["dust_", "particle_", "emit_", "queue_dust_"]
+
+[[guide_relations]]
+package_id = "odin:src:view:search"
+guide_paths = [
+    "Guides/Sqlite3.md#runtime-query-path",
+    "Guides/Sqlite3.md#persisted-database-model",
+]
+symbol_prefixes = []
 
 [[guide_relations]]
 package_id = "julia:EuclidAnimations"
