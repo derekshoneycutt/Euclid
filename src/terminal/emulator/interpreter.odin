@@ -591,13 +591,17 @@ interpreter_enter_escape_family :: proc(
 //   - Routes to intermediate, CSI, or OSC parsing; applies keypad mode escapes;
 //     handles embedded controls; or records unsupported or malformed input.
 interpreter_ingest_escape_byte :: proc(interpreter: ^Interpreter, byte: u8) {
-    if interpreter_apply_escape_control(interpreter, byte) { return }
+    if interpreter_apply_escape_control(interpreter, byte) {
+        return 
+    }
     if byte >= 0x20 && byte <= 0x2f {
         interpreter.state = .Escape_Intermediate
         interpreter.sequence_bytes += 1
         return
     }
-    if interpreter_enter_escape_family(interpreter, byte) { return }
+    if interpreter_enter_escape_family(interpreter, byte) {
+        return 
+    }
     if byte == '=' || byte == '>' {
         interpreter.input_mode.keypad_application = byte == '='
         interpreter_reset_sequence(interpreter)
@@ -744,7 +748,9 @@ interpreter_ingest_string_sequence_byte :: proc(
 //   - Advances parser/grid state and may increment malformed/unsupported counters.
 interpreter_ingest_byte :: proc(interpreter: ^Interpreter, byte: u8) {
     if interpreter_cancel_sequence(interpreter, byte) ||
-        interpreter_restart_escape_sequence(interpreter, byte) { return }
+        interpreter_restart_escape_sequence(interpreter, byte) {
+        return
+    }
     if !interpreter_ingest_control_sequence_byte(interpreter, byte) {
         interpreter_ingest_string_sequence_byte(interpreter, byte)
     }
@@ -766,7 +772,9 @@ interpreter_ingest_osc_hyperlink_byte :: proc(
 interpreter_ingest_osc_shell_byte :: proc(interpreter: ^Interpreter, byte: u8) {
     state := interpreter.shell_integration
     if state == nil || state.candidate_byte_count >= len(state.candidate) {
-        if state != nil { state.candidate_invalid = true }
+        if state != nil {
+            state.candidate_invalid = true 
+        }
         return
     }
     state.candidate[state.candidate_byte_count] = byte
@@ -917,7 +925,9 @@ interpreter_ingest_dcs_query_state_byte :: proc(
         interpreter_ingest_dcs_query_byte(interpreter, byte)
         return true
     }
-    if interpreter.state != .Dcs_Query_Escape { return false }
+    if interpreter.state != .Dcs_Query_Escape {
+        return false 
+    }
     if byte == '\\' {
         interpreter_finish_dcs_query(interpreter)
         interpreter_reset_sequence(interpreter)
@@ -931,7 +941,9 @@ interpreter_ingest_dcs_query_state_byte :: proc(
 // Consume one byte in a Sixel DCS candidate or terminator-aware discard state.
 interpreter_ingest_dcs_state_byte :: proc(
     interpreter: ^Interpreter, byte: u8) {
-    if interpreter_ingest_dcs_query_state_byte(interpreter, byte) { return }
+    if interpreter_ingest_dcs_query_state_byte(interpreter, byte) {
+        return 
+    }
     graphics := interpreter.title_state.graphics if
         interpreter.title_state != nil else nil
     #partial switch interpreter.state {
@@ -1165,6 +1177,30 @@ interpreter_ingest_osc_byte :: proc(interpreter: ^Interpreter, byte: u8) {
     interpreter_ingest_osc_payload_byte(interpreter, byte)
 }
 
+// Retain one OSC palette byte, returning whether this command owns the payload.
+interpreter_ingest_osc_palette_byte :: proc(
+    interpreter: ^Interpreter, byte: u8) -> bool {
+    command := interpreter.osc_command
+    is_palette := command == 4 ||
+        (command >= 10 && command <= 12) || command == 104 ||
+        (command >= 110 && command <= 112)
+    if !is_palette {
+        return false
+    }
+    state := interpreter.title_state
+    if state == nil || state.palette.candidate_byte_count >=
+        len(state.palette.candidate) {
+        if state != nil {
+            state.palette.candidate_invalid = true
+        }
+        return true
+    }
+    palette := &state.palette
+    palette.candidate[palette.candidate_byte_count] = byte
+    palette.candidate_byte_count += 1
+    return true
+}
+
 // Retain one supported OSC payload byte in its command-specific candidate storage.
 interpreter_ingest_osc_payload_byte :: proc(
     interpreter: ^Interpreter, byte: u8) {
@@ -1185,19 +1221,7 @@ interpreter_ingest_osc_payload_byte :: proc(
         interpreter_ingest_osc_shell_byte(interpreter, byte)
         return
     }
-    if interpreter.osc_command == 4 ||
-        (interpreter.osc_command >= 10 && interpreter.osc_command <= 12) ||
-        interpreter.osc_command == 104 ||
-        (interpreter.osc_command >= 110 && interpreter.osc_command <= 112) {
-        state := interpreter.title_state
-        if state == nil || state.palette.candidate_byte_count >=
-            len(state.palette.candidate) {
-            if state != nil { state.palette.candidate_invalid = true }
-            return
-        }
-        palette := &state.palette
-        palette.candidate[palette.candidate_byte_count] = byte
-        palette.candidate_byte_count += 1
+    if interpreter_ingest_osc_palette_byte(interpreter, byte) {
         return
     }
     interpreter_ingest_osc_title_byte(interpreter, byte)
@@ -1326,7 +1350,9 @@ interpreter_finish_osc :: proc(interpreter: ^Interpreter) {
 interpreter_invalidate_palette_rendering :: proc(interpreter: ^Interpreter) {
     grids := [2]^termgrid.Grid{interpreter.grid, interpreter.alternate_grid}
     for grid in grids {
-        if grid == nil { continue }
+        if grid == nil {
+            continue 
+        }
         for &row in grid.rows {
             termgrid.grid_mark_dirty(&row, 0, grid.columns)
         }
@@ -1340,7 +1366,9 @@ interpreter_reject_osc_color_candidate :: proc(
     candidate_invalid: bool) -> bool {
     available_responses := len(state.responses) - state.response_count
     if !candidate_invalid && result.valid &&
-        result.query_count <= available_responses { return false }
+        result.query_count <= available_responses {
+        return false
+    }
     state.palette.color_rejection_count += 1
     if result.query_count > available_responses {
         state.palette.query_rejection_count += u64(result.query_count)
@@ -1384,7 +1412,9 @@ interpreter_finish_osc_color :: proc(interpreter: ^Interpreter) {
         interpreter.osc_command,
         palette.candidate[:palette.candidate_byte_count], operations[:])
     if interpreter_reject_osc_color_candidate(
-        state, result, palette.candidate_invalid) { return }
+        state, result, palette.candidate_invalid) {
+        return
+    }
     producer := interpreter_sequence_producer(interpreter)
     mutated := false
     for operation in operations[:result.count] {
@@ -1829,7 +1859,9 @@ interpreter_apply_mode_query :: proc(interpreter: ^Interpreter) -> bool {
         return false
     }
     parameter := interpreter_parameter(interpreter, 0, -1)
-    if parameter < 0 { return false }
+    if parameter < 0 {
+        return false 
+    }
     status: u32
     if parameter == 4 {
         status = 1 if interpreter.grid.editing.insert_mode else 2
@@ -1909,12 +1941,16 @@ interpreter_apply_window_report :: proc(interpreter: ^Interpreter) -> bool {
     }
     switch interpreter_parameter(interpreter, 0, 0) {
     case 14:
-        if !geometry.valid { return false }
+        if !geometry.valid {
+            return false 
+        }
         response.kind = .Window_Pixels
         response.first = geometry.window_height
         response.second = geometry.window_width
     case 16:
-        if !geometry.valid { return false }
+        if !geometry.valid {
+            return false 
+        }
         response.kind = .Cell_Pixels
         response.first = geometry.cell_height
         response.second = geometry.cell_width
@@ -2015,7 +2051,9 @@ interpreter_display_mode_status :: proc(
     case 1049: return 1 if interpreter.alternate_screen_active else 2, true
     case 2026:
         synchronized := interpreter.synchronized_output
-        if synchronized == nil { return 0, true }
+        if synchronized == nil {
+            return 0, true 
+        }
         return 1 if synchronized.active else 2, true
     }
     return 0, false
@@ -2052,7 +2090,9 @@ interpreter_apply_private_mode_query :: proc(
         return false
     }
     parameter := interpreter_parameter(interpreter, 0, -1)
-    if parameter < 0 { return false }
+    if parameter < 0 {
+        return false 
+    }
     interpreter_enqueue_response(interpreter, {
         kind = .Private_Mode_Status,
         first = u32(parameter),
@@ -2099,7 +2139,9 @@ interpreter_set_modify_other_keys :: proc(interpreter: ^Interpreter) -> bool {
     }
     state := interpreter.title_state
     if interpreter.parameter_count == 1 {
-        if state != nil { state.modify_other_keys_level = 0 }
+        if state != nil {
+            state.modify_other_keys_level = 0 
+        }
         return true
     }
     if interpreter.parameter_count != 2 || interpreter.parameters[1] < 0 ||
@@ -2197,11 +2239,19 @@ interpreter_apply_kitty_flags :: proc(interpreter: ^Interpreter) -> bool {
         return false
     }
     state := interpreter_active_kitty_state(interpreter)
-    if state == nil { return true }
+    if state == nil {
+        return true 
+    }
     flags := u8(interpreter.parameters[0] & int(KITTY_KEYBOARD_SUPPORTED_FLAGS))
-    if mode == 1 { state.flags = flags }
-    if mode == 2 { state.flags |= flags }
-    if mode == 3 { state.flags &~= flags }
+    if mode == 1 {
+        state.flags = flags 
+    }
+    if mode == 2 {
+        state.flags |= flags 
+    }
+    if mode == 3 {
+        state.flags &~= flags 
+    }
     return true
 }
 
@@ -2476,7 +2526,9 @@ interpreter_apply_dec_state_private_mode :: proc(
 interpreter_apply_display_private_mode :: proc(
     interpreter: ^Interpreter, parameter: int, final: u8) -> (bool, bool) {
     if parameter == 1049 {
-        if interpreter.alternate_grid == nil { return false, true }
+        if interpreter.alternate_grid == nil {
+            return false, true 
+        }
         if final == 'h' {
             interpreter_enter_alternate_screen(interpreter)
         } else {

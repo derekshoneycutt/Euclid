@@ -306,14 +306,18 @@ Draw_Encoder :: struct {
 // draw_encoder_record_curve_reduction accumulates bounded projected point counts.
 draw_encoder_record_curve_reduction :: #force_inline proc(
     encoder: ^Draw_Encoder, candidate_count, retained_count: int) {
-    if encoder == nil || candidate_count < 0 || retained_count < 0 {return}
+    if encoder == nil || candidate_count < 0 || retained_count < 0 {
+       return
+    }
     encoder^.statistics.curve_candidate_points += u32(candidate_count)
     encoder^.statistics.curve_retained_points += u32(retained_count)
 }
 
 // draw_encoder_enable_strokes records optional pipeline availability for fallbacks.
 draw_encoder_enable_strokes :: proc(encoder: ^Draw_Encoder, enabled: bool) {
-    if encoder != nil {encoder^.strokes_enabled = enabled}
+    if encoder != nil {
+       encoder^.strokes_enabled = enabled
+    }
 }
 
 // draw_encoder_begin resets one frame over caller-owned bounded storage.
@@ -350,7 +354,9 @@ draw_encoder_begin :: proc(
 // draw_encoder_enable_dust_instancing records optional pipeline availability.
 draw_encoder_enable_dust_instancing :: proc(
     encoder: ^Draw_Encoder, enabled: bool) {
-    if encoder != nil {encoder^.dust_instancing_enabled = enabled}
+    if encoder != nil {
+       encoder^.dust_instancing_enabled = enabled
+    }
 }
 
 // draw_encoder_intersect returns the visible overlap of two logical clips.
@@ -470,7 +476,9 @@ draw_encoder_append_stroke :: proc(
         encoder^.stroke_vertex_count + len(vertices) > len(encoder^.stroke_vertices) ||
         encoder^.stroke_draw_count >= len(encoder^.stroke_draws) ||
         encoder^.command_count >= len(encoder^.commands) {
-        if encoder != nil {encoder^.statistics.stroke_overflows += 1}
+        if encoder != nil {
+           encoder^.statistics.stroke_overflows += 1
+        }
         return false
     }
     draw_index := encoder^.stroke_draw_count
@@ -601,7 +609,9 @@ draw_encoder_commit_dust :: proc(
     } else {
         admitted = draw_encoder_commit_expanded_dust(encoder, count, texture)
     }
-    if !admitted {return false}
+    if !admitted {
+       return false
+    }
     return draw_encoder_finish_dust(encoder, count)
 }
 
@@ -677,7 +687,9 @@ draw_encoder_rectangle :: proc(
     encoder: ^Draw_Encoder,
     rectangle: geometry.Rectangle,
     draw_color: color.Color_RGBA8) -> bool {
-    if rectangle.width <= 0 || rectangle.height <= 0 {return false}
+    if rectangle.width <= 0 || rectangle.height <= 0 {
+       return false
+    }
     positions := [4]geometry.Vector2{
         {rectangle.x, rectangle.y},
         {rectangle.x + rectangle.width, rectangle.y},
@@ -693,7 +705,9 @@ draw_encoder_rectangle :: proc(
 draw_encoder_rectangle_outline :: proc(
     encoder: ^Draw_Encoder, rectangle: geometry.Rectangle, thickness: f32,
     draw_color: color.Color_RGBA8) -> bool {
-    if rectangle.width <= 0 || rectangle.height <= 0 || thickness <= 0 {return false}
+    if rectangle.width <= 0 || rectangle.height <= 0 || thickness <= 0 {
+       return false
+    }
     inset := min(thickness, min(rectangle.width, rectangle.height) * 0.5)
     left, top := rectangle.x, rectangle.y
     right, bottom := left + rectangle.width, top + rectangle.height
@@ -712,7 +726,9 @@ draw_encoder_line :: proc(
     width: f32, draw_color: color.Color_RGBA8) -> bool {
     delta := second - first
     length := f32(math.sqrt(f64(delta.x * delta.x + delta.y * delta.y)))
-    if length <= 0 || width <= 0 {return false}
+    if length <= 0 || width <= 0 {
+       return false
+    }
     half_width := width * 0.5
     along := delta / length * half_width
     normal := geometry.Vector2{-along.y, along.x}
@@ -779,7 +795,9 @@ draw_polyline_next_group :: proc(
 draw_polyline_join :: proc(
     previous, current, next: geometry.Vector2,
     kind: Draw_Polyline_Point_Kind, miter_limit: f32) -> Draw_Polyline_Join {
-    if kind == .Cusp {return .Cusp}
+    if kind == .Cusp {
+       return .Cusp
+    }
     incoming := draw_polyline_unit(previous, current)
     outgoing := draw_polyline_unit(current, next)
     normal_sum := geometry.Vector2{-incoming.y - outgoing.y,
@@ -849,10 +867,14 @@ draw_polyline_compact_summary :: proc(
         draw_polyline_distance_squared(first.point, last.point) <= epsilon_squared {
         summary.raw_end = last_start
         summary.group_count -= 1
-        if last.kind == .Cusp {summary.first_kind = .Cusp}
+        if last.kind == .Cusp {
+           summary.first_kind = .Cusp
+        }
     }
     minimum := 2
-    if topology == .Closed {minimum = 3}
+    if topology == .Closed {
+       minimum = 3
+    }
     return summary, summary.group_count >= minimum
 }
 
@@ -978,10 +1000,14 @@ draw_polyline_emit_endpoint :: proc(
     radius := style.width * 0.5
     pair := draw_polyline_emit_pair(builder, point, {-tangent.y, tangent.x}, radius)
     cap := style.finish_cap
-    if start {cap = style.start_cap}
+    if start {
+       cap = style.start_cap
+    }
     if cap == .Round {
         outward := tangent
-        if start {outward = -tangent}
+        if start {
+           outward = -tangent
+        }
         draw_polyline_emit_fan(builder, point, outward, radius)
     }
     return {incoming = pair, outgoing = pair}
@@ -1142,12 +1168,18 @@ draw_polyline_emit_closed :: proc(
 draw_encoder_polyline :: proc(
     encoder: ^Draw_Encoder, points: []geometry.Vector2,
     kinds: []Draw_Polyline_Point_Kind, style: Draw_Polyline_Style) -> bool {
-    if encoder == nil {return false}
+    if encoder == nil {
+       return false
+    }
     summary, valid := draw_polyline_preflight(points, kinds, style)
-    if !valid {return false}
+    if !valid {
+       return false
+    }
     batch, ready := draw_encoder_prepare(encoder, summary.vertices,
         summary.indices, {pipeline = .Colored})
-    if !ready {return false}
+    if !ready {
+       return false
+    }
     builder := Draw_Polyline_Builder{encoder = encoder, batch = batch,
         base_vertex = u32(encoder^.vertex_count), color = style.color}
     if style.topology == .Open {

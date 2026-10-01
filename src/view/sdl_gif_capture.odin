@@ -19,7 +19,9 @@ Sdl_Gif_Capture_Context :: struct {
 // sdl_gif_capture_abort closes native state and removes unpublished output.
 sdl_gif_capture_abort :: proc(user_data: rawptr) {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
-    if owner == nil {return}
+    if owner == nil {
+        return
+    }
     native.sdl_gif_encoder_abort(&owner.encoder)
     files.destroy_gif_output_transaction(&owner.transaction, owner.allocator)
 }
@@ -28,7 +30,9 @@ sdl_gif_capture_abort :: proc(user_data: rawptr) {
 sdl_gif_capture_begin :: proc(
     user_data: rawptr, width, height: int) -> bool {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
-    if owner == nil || owner.allocator.procedure == nil {return false}
+    if owner == nil || owner.allocator.procedure == nil {
+        return false
+    }
     sdl_gif_capture_abort(user_data)
     transaction, reserved := files.reserve_gif_output_transaction(owner.allocator)
     if !reserved {
@@ -52,7 +56,9 @@ sdl_gif_capture_begin :: proc(
 sdl_gif_capture_stage_frame :: proc(
     user_data: rawptr, frame: view_core.Gif_Capture_Frame) -> bool {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
-    if owner == nil {return false}
+    if owner == nil {
+        return false
+    }
     return native.sdl_gif_encoder_stage_frame(&owner.encoder, {
         pixels = frame.pixels,
         width = frame.width,
@@ -64,7 +70,9 @@ sdl_gif_capture_stage_frame :: proc(
 // sdl_gif_capture_commit_frame submits the staged frame with its resolved duration.
 sdl_gif_capture_commit_frame :: proc(user_data: rawptr, duration_ms: u64) -> bool {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
-    if owner == nil {return false}
+    if owner == nil {
+        return false
+    }
     return native.sdl_gif_encoder_commit_frame(&owner.encoder, duration_ms)
 }
 
@@ -85,14 +93,18 @@ sdl_gif_capture_close :: proc(user_data: rawptr) -> bool {
 // sdl_gif_capture_published_path returns the current published path while owned.
 sdl_gif_capture_published_path :: proc(user_data: rawptr) -> string {
     owner := cast(^Sdl_Gif_Capture_Context)user_data
-    if owner == nil {return ""}
+    if owner == nil {
+        return ""
+    }
     return owner.transaction.final_path
 }
 
 // sdl_gif_capture_operations exposes the display-owned encoder to capture policy.
 sdl_gif_capture_operations :: proc(
     owner: ^Sdl_Gif_Capture_Context) -> view_core.Gif_Capture_Operations {
-    if owner == nil {return {}}
+    if owner == nil {
+        return {}
+    }
     return {
         user_data = rawptr(owner),
         begin = sdl_gif_capture_begin,
@@ -108,7 +120,9 @@ sdl_gif_capture_operations :: proc(
 bind_sdl_gif_capture :: proc(
     owner: ^Sdl_Gif_Capture_Context,
     session: ^view_core.Gif_Capture_Session) -> bool {
-    if owner == nil || session == nil {return false}
+    if owner == nil || session == nil {
+        return false
+    }
     owner.allocator = context.allocator
     return view_core.gif_capture_bind_operations(
         session, sdl_gif_capture_operations(owner))
@@ -116,7 +130,9 @@ bind_sdl_gif_capture :: proc(
 
 // unbind_sdl_gif_capture releases any retained native or path state.
 unbind_sdl_gif_capture :: proc(owner: ^Sdl_Gif_Capture_Context) {
-    if owner == nil {return}
+    if owner == nil {
+        return
+    }
     sdl_gif_capture_abort(rawptr(owner))
     owner.allocator = {}
 }

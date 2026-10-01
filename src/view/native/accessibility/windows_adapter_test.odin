@@ -23,8 +23,12 @@ windows_test_create :: proc(user_data, _: rawptr, owner: ^Adapter) -> rawptr {
     fixture^.owner = owner
     update := accesskit_activation_callback(owner)
     fixture^.activation_complete = update != nil
-    if update != nil {accesskit.accesskit_tree_update_free(update)}
-    if fixture^.create_succeeds {return user_data}
+    if update != nil {
+        accesskit.accesskit_tree_update_free(update)
+    }
+    if fixture^.create_succeeds {
+        return user_data
+    }
     return nil
 }
 

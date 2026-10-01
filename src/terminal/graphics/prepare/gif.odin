@@ -102,20 +102,30 @@ gif_word :: proc(bytes: []u8, index: int) -> int {
 // Skip one complete GIF data sub-block chain.
 gif_skip_sub_blocks :: proc(bytes: []u8, index: ^int) -> bool {
     for {
-        if index^ >= len(bytes) { return false }
+        if index^ >= len(bytes) {
+            return false 
+        }
         count := int(bytes[index^])
         index^ += 1
-        if count == 0 { return true }
-        if count > len(bytes) - index^ { return false }
+        if count == 0 {
+            return true 
+        }
+        if count > len(bytes) - index^ {
+            return false 
+        }
         index^ += count
     }
 }
 
 // Skip a global or local color table selected by one packed descriptor byte.
 gif_skip_color_table :: proc(bytes: []u8, index: ^int, packed: u8) -> bool {
-    if packed & 0x80 == 0 { return true }
+    if packed & 0x80 == 0 {
+        return true 
+    }
     byte_count := 3 * (1 << (u32(packed & 0x07) + 1))
-    if byte_count > len(bytes) - index^ { return false }
+    if byte_count > len(bytes) - index^ {
+        return false 
+    }
     index^ += byte_count
     return true
 }
@@ -127,44 +137,70 @@ gif_walk_graphic_control :: proc(bytes: []u8, state: ^Gif_Walk_State) -> bool {
         return false
     }
     delay_cs := gif_word(bytes, state.index + 2)
-    if delay_cs > max(int) / 10 { return false }
+    if delay_cs > max(int) / 10 {
+        return false 
+    }
     state.pending_delay_ms = delay_cs * 10
     state.index += 6
     return true
 }
 
+// Walk application sub-blocks and retain a recognized loop-count record.
+gif_walk_application_blocks :: proc(
+    bytes: []u8, state: ^Gif_Walk_State, is_loop: bool,
+    found_loop: ^bool) -> bool {
+    for {
+        if state.index >= len(bytes) {
+            return false
+        }
+        count := int(bytes[state.index])
+        state.index += 1
+        if count == 0 {
+            break
+        }
+        if count > len(bytes) - state.index {
+            return false
+        }
+        if is_loop && !found_loop^ && count >= 3 && bytes[state.index] == 1 {
+            if state.has_loop_extension {
+                return false
+            }
+            state.repeat_count = gif_word(bytes, state.index + 1)
+            state.has_loop_extension = true
+            state.infinite = state.repeat_count == 0
+            found_loop^ = true
+        }
+        state.index += count
+    }
+    return true
+}
+
 // Consume one application extension and recover a Netscape-style loop count.
 gif_walk_application :: proc(bytes: []u8, state: ^Gif_Walk_State) -> bool {
-    if state.index >= len(bytes) { return false }
+    if state.index >= len(bytes) {
+        return false
+    }
     identifier_count := int(bytes[state.index])
     state.index += 1
-    if identifier_count > len(bytes) - state.index { return false }
+    if identifier_count > len(bytes) - state.index {
+        return false
+    }
     is_loop := identifier_count == 11 &&
         (string(bytes[state.index:state.index + 11]) == "NETSCAPE2.0" ||
         string(bytes[state.index:state.index + 11]) == "ANIMEXTS1.0")
     state.index += identifier_count
     found_loop := false
-    for {
-        if state.index >= len(bytes) { return false }
-        count := int(bytes[state.index])
-        state.index += 1
-        if count == 0 { break }
-        if count > len(bytes) - state.index { return false }
-        if is_loop && !found_loop && count >= 3 && bytes[state.index] == 1 {
-            if state.has_loop_extension { return false }
-            state.repeat_count = gif_word(bytes, state.index + 1)
-            state.has_loop_extension = true
-            state.infinite = state.repeat_count == 0
-            found_loop = true
-        }
-        state.index += count
+    if !gif_walk_application_blocks(bytes, state, is_loop, &found_loop) {
+        return false
     }
     return !is_loop || found_loop
 }
 
 // Consume one extension block while retaining animation metadata when relevant.
 gif_walk_extension :: proc(bytes: []u8, state: ^Gif_Walk_State) -> bool {
-    if state.index >= len(bytes) { return false }
+    if state.index >= len(bytes) {
+        return false 
+    }
     label := bytes[state.index]
     state.index += 1
     switch label {
@@ -179,7 +215,9 @@ gif_walk_extension :: proc(bytes: []u8, state: ^Gif_Walk_State) -> bool {
 
 // Consume one image descriptor and its complete compressed-data block chain.
 gif_walk_image :: proc(bytes: []u8, state: ^Gif_Walk_State) -> bool {
-    if len(bytes) - state.index < 10 { return false }
+    if len(bytes) - state.index < 10 {
+        return false 
+    }
     packed := bytes[state.index + 8]
     state.index += 9
     if !gif_skip_color_table(bytes, &state.index, packed) ||
@@ -286,10 +324,14 @@ gif_walk :: proc(
         return {}
     }
     state := Gif_Walk_State{index = 13}
-    if !gif_skip_color_table(bytes, &state.index, bytes[10]) { return {} }
+    if !gif_skip_color_table(bytes, &state.index, bytes[10]) {
+        return {} 
+    }
     result := Gif_Animation_Inspection{width = width, height = height}
     for state.index < len(bytes) {
-        if taskpool.task_cancellation_requested(token) { return {} }
+        if taskpool.task_cancellation_requested(token) {
+            return {} 
+        }
         finished, valid := gif_walk_marker(bytes, {
             limits = limits,
             attachment_limits = {
@@ -297,8 +339,12 @@ gif_walk :: proc(
                 animation_max_frame_duration_ns = limits.max_frame_duration_ns,
             },
         }, &state, &result)
-        if !valid { return {} }
-        if finished { return result }
+        if !valid {
+            return {} 
+        }
+        if finished {
+            return result 
+        }
     }
     return {}
 }
@@ -313,9 +359,13 @@ inspect_gif_animation :: proc(
         return {}
     }
     result.decoded_byte_count = result.width * result.height * 4 * result.frame_count
-    if result.frame_count > max(int) / int(size_of(i32)) { return {} }
+    if result.frame_count > max(int) / int(size_of(i32)) {
+        return {} 
+    }
     delay_bytes := result.frame_count * int(size_of(i32))
-    if result.decoded_byte_count > max(int) - delay_bytes { return {} }
+    if result.decoded_byte_count > max(int) - delay_bytes {
+        return {} 
+    }
     // Preserve the conservative decoder working-budget charge used by admission.
     result.temporary_decode_byte_count = result.decoded_byte_count + delay_bytes
     if len(bytes) > limits.peak_byte_limit ||
@@ -392,15 +442,21 @@ gif_walk_frame_table :: proc(
     }
     canvas_byte_count := inspection.width * inspection.height * 4
     for state.index < len(bytes) {
-        if taskpool.task_cancellation_requested(token) {return {}}
+        if taskpool.task_cancellation_requested(token) {
+           return {}
+        }
         finished, valid := gif_walk_marker(bytes, {
             limits = request.limits,
             frames = request.destination.frames,
             attachment_limits = request.attachment_limits,
             canvas_byte_count = canvas_byte_count,
         }, &state, &result)
-        if !valid {return {}}
-        if finished {return result}
+        if !valid {
+           return {}
+        }
+        if finished {
+           return result
+        }
     }
     return {}
 }
@@ -426,7 +482,9 @@ decode_preflighted_gif_animation :: proc(
         return {}, false
     }
     expected := gif_walk_frame_table(bytes, request, token)
-    if !gif_stream_metadata_matches(expected, inspection) { return {}, false }
+    if !gif_stream_metadata_matches(expected, inspection) {
+        return {}, false 
+    }
     token_copy := token
     decoded := termgraphicsnative.decode_animated_gif(&{
         bytes = bytes,
@@ -449,7 +507,9 @@ decode_gif_animation :: proc(
     attachment_limits: termattachment.Limits,
     token: taskpool.Task_Cancellation_Token = {}) -> (Gif_Animation_Inspection, bool) {
     inspection := inspect_gif_animation(bytes, limits, token)
-    if !inspection.valid { return {}, false }
+    if !inspection.valid {
+        return {}, false 
+    }
     return decode_preflighted_gif_animation(bytes, {
         limits = limits,
         inspection = inspection,

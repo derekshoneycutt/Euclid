@@ -81,12 +81,16 @@ animation_reservation_valid :: proc(
         return 0, .Byte_Limit_Exceeded
     }
     retained_byte_count, charge_outcome := animation_retained_byte_count(reservation)
-    if charge_outcome != .Admitted { return 0, charge_outcome }
+    if charge_outcome != .Admitted {
+        return 0, charge_outcome 
+    }
     width := reservation.metadata.metrics.width
     validation := attachment_admission_valid(
         store, reservation.metadata, reservation.payload_byte_count,
         width * 4, .Rgba8)
-    if validation != .Admitted { return 0, validation }
+    if validation != .Admitted {
+        return 0, validation 
+    }
     if retained_byte_count > store.limits.cpu_byte_limit {
         return 0, .Byte_Limit_Exceeded
     }
@@ -101,7 +105,9 @@ animation_allocate :: proc(
     store: ^Store, reservation: Animation_Reservation) -> Animation_Allocation {
     pixels, pixels_error := make(
         []u8, reservation.payload_byte_count, store.payload_allocator)
-    if pixels_error != nil { return {} }
+    if pixels_error != nil {
+        return {} 
+    }
     frames, frames_error := make(
         []Animation_Frame, reservation.frame_count, store.payload_allocator)
     if frames_error != nil {
@@ -203,7 +209,9 @@ animation_preparation_publish :: proc(
         return .Stale
     }
     cycle_duration_ns, valid := animation_frames_valid(entry, store.limits)
-    if !valid { return .Stale }
+    if !valid {
+        return .Stale 
+    }
     entry.animation_timeline.cycle_duration_ns = cycle_duration_ns
     store.animation_decode_byte_count -= entry.animation_decode_byte_count
     entry.animation_decode_byte_count = 0

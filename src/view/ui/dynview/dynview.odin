@@ -108,8 +108,12 @@ draw_presentation_dynview :: proc(
         draw_document_layout(ctx, params.scroll_y, params.metrics.padding)
         return true
     }
-    if runtime^.command_buffer.command_count <= 0 {return false}
-    if !runtime^.compile_cache.layout_is_valid {return false}
+    if runtime^.command_buffer.command_count <= 0 {
+        return false
+    }
+    if !runtime^.compile_cache.layout_is_valid {
+        return false
+    }
     draw_cached_layout(ctx, params.scroll_y, params.metrics.padding)
     _ = ui_runtime
     return true

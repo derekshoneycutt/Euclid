@@ -1,7 +1,6 @@
 package bridge
 
 import animation_model "../core/animation"
-import bridgemodel "model"
 
 import julialib "../../libs/julia/bindings"
 import "../core"
@@ -13,10 +12,10 @@ Animation_Value_Abi_Identity :: struct {
     schema_high : u64,
 }
 
-// Carry animation catalog ordering and node classification across the C ABI.
-Animation_Descriptor_Abi_Metadata :: struct {
+// Return the copied path length and native catalogue node kind.
+Animation_Implementation_Path_Metadata :: struct {
+    byte_count: i32,
     node_kind: i32,
-    sibling_order: i32,
 }
 
 //   Convert a canonical animation-value result to its stable bridge status.
@@ -168,164 +167,45 @@ set_null_animations :: proc "c" (
     state^.julia_interface^.null_animation.entry = entry
 }
 
-//   Register one validated catalog descriptor without loading its implementation.
+// Copy a generation-local implementation path and report its required byte count.
 @(export)
-add_animation_descriptor :: proc "c" (
+copy_animation_implementation_path :: proc "c" (
     state: ^core.Euclid_General_State,
-    name, stable_id, parent_stable_id: cstring,
-    metadata: Animation_Descriptor_Abi_Metadata) -> int {
+    stable_id: cstring,
+    destination: ^u8,
+    destination_capacity: i32,
+    metadata: ^Animation_Implementation_Path_Metadata) -> i32 {
 
-    if state == nil || state^.julia_interface == nil || name == nil ||
-        metadata.node_kind < i32(bridgemodel.Animation_Node_Kind.Category) ||
-        metadata.node_kind > i32(bridgemodel.Animation_Node_Kind.Terminal) ||
-        metadata.sibling_order < 0 {
-        return -1
+    if state == nil || state^.julia_interface == nil || stable_id == nil ||
+        destination_capacity < 0 || metadata == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     context = state^.saved_context
-    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
-    if !parsed_ok || reject_duplicate_stable_id(
-        state, name, stable_id, parsed_stable_id, parent_stable_id) {
-        return -1
-    }
-    parent: ^bridgemodel.Euclid_Julia_Animation_Interface
-    if parent_stable_id != nil && len(string(parent_stable_id)) > 0 {
-        parent_ok: bool
-        parent, parent_ok = resolve_parent_animation_by_stable_id(
-            state, parent_stable_id)
-        if !parent_ok {
-            return -1
-        }
-    }
-    node, inserted := add_animation_to_registry(
-        state, nil, name, parsed_stable_id, parent)
-    if !inserted {
-        return -1
-    }
-    node^.node_kind = bridgemodel.Animation_Node_Kind(metadata.node_kind)
-    node^.sibling_order = metadata.sibling_order
-    return 1
-}
-
-//   Bind one loader-rooted Julia entry to an existing UUID catalog node.
-@(export)
-bind_animation_entry :: proc "c" (
-    state: ^core.Euclid_General_State,
-    entry: ^julialib.jl_value_t,
-    stable_id: cstring) -> int {
-
-    if state == nil || state^.julia_interface == nil || entry == nil {
-        return -1
-    }
-    context = state^.saved_context
+    metadata^ = {}
     parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, stable_id)
     if !parsed_ok {
-        return -1
+        return BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    node := find_registered_animation_by_stable_id(state, parsed_stable_id)
+    node := find_animation_by_stable_id(state, parsed_stable_id)
     if node == nil {
-        return -1
+        return BRIDGE_STATUS_NOT_FOUND
     }
-    if node^.entry != nil && node^.entry != entry {
-        return -1
+    metadata^.node_kind = i32(node^.node_kind)
+    if node^.node_kind == .Terminal {
+        return BRIDGE_STATUS_OK
     }
-    node^.entry = entry
-    return 1
-}
-
-//   Register a top-level animation interface entry in the Julia animation registry.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - entry: Julia callable implementing Enter, Tick, and Exit operations.
-//   - name: Null-terminated animation label string from Julia.
-//   - stable_id: Null-terminated UUID identity string for restore/persistence.
-//
-// Returns:
-//   - 1 when inserted successfully.
-//   - -1 when validation or insertion fails.
-@(export)
-add_root_animation_interface :: proc "c" (
-    state : ^core.Euclid_General_State,
-    entry: ^julialib.jl_value_t,
-    name, stable_id : cstring) -> int {
-
-    context = state^.saved_context
-
-    if entry == nil {
-        return -1
+    path_byte_count := i32(len(node^.implementation_path))
+    if path_byte_count <= 0 {
+        return BRIDGE_STATUS_ILLEGAL_STATE
     }
-
-    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
-    if !parsed_ok {
-        return -1
+    metadata^.byte_count = path_byte_count
+    if destination == nil || destination_capacity < path_byte_count {
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
-    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, "") {
-        return -1
-    }
-
-    _, inserted := add_animation_to_registry(
-        state,
-        entry,
-        name,
-        parsed_stable_id,
-        nil)
-    if !inserted {
-        return -1
-    }
-
-    return 1
-}
-
-//   Register a child animation interface and link it under an existing parent animation.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - entry: Julia callable implementing Enter, Tick, and Exit operations.
-//   - name: Null-terminated animation label string from Julia.
-//   - stable_id: Null-terminated UUID identity string for restore/persistence.
-//   - parent_stable_id: Parent animation UUID string that receives the new child entry.
-//
-// Returns:
-//   - 1 when inserted successfully.
-//   - -1 when parent_stable_id does not reference a registered animation.
-@(export)
-add_child_animation_interface :: proc "c" (
-    state : ^core.Euclid_General_State,
-    entry: ^julialib.jl_value_t,
-    name, stable_id : cstring,
-    parent_stable_id: cstring) -> int {
-
-    context = state^.saved_context
-
-    if entry == nil {
-        return -1
-    }
-
-    parent, ok := resolve_parent_animation_by_stable_id(state, parent_stable_id)
-    if !ok {
-        return -1
-    }
-
-    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
-    if !parsed_ok {
-        return -1
-    }
-    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id,
-        parent_stable_id) {
-        return -1
-    }
-
-    _, inserted := add_animation_to_registry(
-        state,
-        entry,
-        name,
-        parsed_stable_id,
-        parent)
-    if !inserted {
-        return -1
-    }
-
-    return 1
+    destination_bytes := cast([^]u8)destination
+    copy(destination_bytes[:path_byte_count],
+        transmute([]u8)node^.implementation_path)
+    return BRIDGE_STATUS_OK
 }
 
 //   Mark that an animation cycle boundary occurred so host-side systems can consume it once.

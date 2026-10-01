@@ -918,7 +918,9 @@ cache_publish :: proc(cache: ^Font_Cache, prepared: ^Prepared_Font) -> bool {
             identity = u64(prepared.key) + 1,
             generation = prepared.generation,
         })
-    if !uploaded {return false}
+    if !uploaded {
+       return false
+    }
     if !cache_publish_texture(cache, prepared, texture) {
         cache.texture_operations.release(
             cache.texture_operations.user_data, texture)
@@ -933,7 +935,9 @@ cache_publish_texture :: proc(
     texture: Font_Texture) -> bool {
     entry := &cache.entries[int(prepared.key)]
     generation := prepared.generation
-    if generation != entry.requested_generation {return false}
+    if generation != entry.requested_generation {
+       return false
+    }
     candidate: Font_Cache_Entry
     if !cache_publication_candidates(cache, prepared, texture, &candidate) {
         return false

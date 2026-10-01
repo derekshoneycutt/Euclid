@@ -29,7 +29,9 @@ create_floor_constraint :: proc "c" (
     height, bounce: f32, enabled: u8) -> i32 {
     context = state^.saved_context
     entity, found := constraint_target(state, point)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     _, status := shapes.world_create_floor_constraint(state^.shape_world, {
         point = entity, height = height, bounce = bounce, enabled = enabled != 0})
     return bridge_shape_status(status)
@@ -42,7 +44,9 @@ create_snap_to_floor_constraint :: proc "c" (
     height, allowance: f32, enabled: u8) -> i32 {
     context = state^.saved_context
     entity, found := constraint_target(state, point)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     _, status := shapes.world_create_snap_to_floor_constraint(state^.shape_world, {
         point = entity, height = height, allowance = allowance,
         enabled = enabled != 0})
@@ -56,7 +60,9 @@ create_snap_point_constraint :: proc "c" (
     position: Vector3, enabled: u8) -> i32 {
     context = state^.saved_context
     entity, found := constraint_target(state, point)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     _, status := shapes.world_create_snap_point_constraint(state^.shape_world, {
         point = entity, position = position, enabled = enabled != 0})
     return bridge_shape_status(status)
@@ -71,8 +77,12 @@ create_distance_constraint :: proc "c" (
     first_entity, first_found := constraint_target(state, input.first)
     second_entity, second_found := constraint_target(state, input.second)
     policy, policy_valid := constraint_movement(input.movement)
-    if !first_found || !second_found {return BRIDGE_STATUS_NOT_FOUND}
-    if !policy_valid {return BRIDGE_STATUS_INVALID_ARGUMENT}
+    if !first_found || !second_found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    if !policy_valid {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
     _, status := shapes.world_create_distance_constraint(state^.shape_world, {
         first = first_entity, second = second_entity, length = input.length,
         movement = policy, enabled = input.enabled != 0})
@@ -108,7 +118,9 @@ create_angle_constraint :: proc(
     if !first_found || !pivot_found || !second_found {
         return BRIDGE_STATUS_NOT_FOUND
     }
-    if !policy_valid {return BRIDGE_STATUS_INVALID_ARGUMENT}
+    if !policy_valid {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
     _, status := shapes.world_create_angle_constraint(state^.shape_world, kind, {
         first = first_entity, pivot = pivot_entity, second = second_entity,
         limit = input.limit, movement = policy, enabled = input.enabled != 0})
@@ -146,7 +158,9 @@ get_total_constraint_error_bridge :: proc "c" (
 apply_all_constraints_bridge :: proc "c" (
     state: ^core.Euclid_General_State, reverse: u8) -> i32 {
     context = state^.saved_context
-    if state^.shape_world == nil {return BRIDGE_STATUS_ILLEGAL_STATE}
+    if state^.shape_world == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
     if reverse != 0 {
         shapes.world_apply_all_constraints_reverse(state^.shape_world)
     } else {
@@ -165,8 +179,12 @@ solve_constraints_to_error :: proc "c" (
         return make_solve_result(BRIDGE_STATUS_INVALID_ARGUMENT, 0, 0, 0, 0)
     }
     iteration_limit := max_iterations
-    if iteration_limit <= 0 {iteration_limit = 32}
-    if iteration_limit > 4096 {iteration_limit = 4096}
+    if iteration_limit <= 0 {
+        iteration_limit = 32
+    }
+    if iteration_limit > 4096 {
+        iteration_limit = 4096
+    }
     initial_error := shapes.world_total_constraint_error(state^.shape_world)
     error := initial_error
     iterations: i32

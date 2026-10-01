@@ -120,7 +120,9 @@ terminal_clipboard_copy_requested :: proc(
 
 // Extract the active view selection as plain text for clipboard publication.
 terminal_view_selection_text :: proc(term: ^viewterminalmodel.Terminal_State) -> string {
-    if term == nil || !term.view_selection_active { return "" }
+    if term == nil || !term.view_selection_active {
+        return ""
+    }
     start, end := terminal_selection_ordered(
         term.view_selection_anchor, term.view_selection_head)
     line_count := terminal_line_count(term)

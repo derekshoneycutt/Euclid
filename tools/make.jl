@@ -1243,7 +1243,7 @@ function run_search_index_builder(
     result = run_command(Cmd([
         executable, corpus_path, database_path, corpus_fingerprint,
     ]); cwd=SCRIPT_DIR, capture_output=true)
-    result.exit_code == 0 || error(
+    result.exit_code == 0 && isempty(result.stderr) || error(
         "Search index build failed: $(strip(result.stdout * result.stderr))")
     isfile(database_path) || error("Search index builder produced no database.")
     return nothing
@@ -1264,7 +1264,7 @@ function stage_search_asset()
     first_digest = sysimage_artifact_sha256(first_candidate)
     first_digest == sysimage_artifact_sha256(second_candidate) || error(
         "Search database generation is not byte deterministic.")
-    staged_path = joinpath(ASSETS_STAGING_DIR, "search", "animations.sqlite3")
+    staged_path = joinpath(ASSETS_STAGING_DIR, "catalog", "animations.sqlite3")
     mkpath(dirname(staged_path))
     mv(first_candidate, staged_path; force=true)
     rm(second_candidate; force=true)
@@ -1336,10 +1336,10 @@ julia_root=julia
 content_root=content
 content_input_fingerprint=$(content_input_fingerprint())
 package_identity=$package_identity
-search_database=search/animations.sqlite3
-search_database_sha256=$(search.database_sha256)
-search_corpus_fingerprint=$(search.corpus_fingerprint)
-search_schema_version=1
+catalog_database=catalog/animations.sqlite3
+catalog_database_sha256=$(search.database_sha256)
+catalog_corpus_fingerprint=$(search.corpus_fingerprint)
+catalog_schema_version=2
 shader_root=shaders
 shader_manifest=shaders/manifest.toml
 shader_manifest_sha256=$(bytes2hex(open(sha256, shaders.manifest_path)))
@@ -1363,7 +1363,7 @@ function staged_asset_package_identity()
     end
     sort!(paths; by=path -> replace(relpath(path, ASSETS_STAGING_DIR), '\\' => '/'))
     return fingerprint_sysimage_inputs(
-        paths, ASSETS_STAGING_DIR; identity="euclid-assets-v1")
+        paths, ASSETS_STAGING_DIR; identity="euclid-assets-v1-catalog-schema-2")
 end
 
 """Populate asset staging with content and validated generated artifacts."""

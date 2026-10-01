@@ -90,7 +90,9 @@ sdl_gif_encoder_commit_frame :: proc(
     surface := sdl.CreateSurfaceFrom(
         i32(encoder.width), i32(encoder.height), .RGBA32,
         raw_data(encoder.staged_pixels), i32(pitch_bytes))
-    if surface == nil {return false}
+    if surface == nil {
+       return false
+    }
     defer sdl.DestroySurface(surface)
     if !image.AddAnimationEncoderFrame(
         encoder.handle, surface, duration_ms) {
@@ -104,7 +106,9 @@ sdl_gif_encoder_commit_frame :: proc(
 
 // sdl_gif_encoder_close closes one nonempty stream exactly once.
 sdl_gif_encoder_close :: proc(encoder: ^Sdl_Gif_Encoder) -> bool {
-    if encoder == nil || encoder.handle == nil || encoder.staged {return false}
+    if encoder == nil || encoder.handle == nil || encoder.staged {
+       return false
+    }
     handle := encoder.handle
     has_frames := encoder.frame_count > 0
     staged_pixels := encoder.staged_pixels
@@ -120,7 +124,9 @@ sdl_gif_encoder_close :: proc(encoder: ^Sdl_Gif_Encoder) -> bool {
 
 // sdl_gif_encoder_abort closes and clears one stream without publishing it.
 sdl_gif_encoder_abort :: proc(encoder: ^Sdl_Gif_Encoder) {
-    if encoder == nil {return}
+    if encoder == nil {
+       return
+    }
     if encoder.handle != nil {
         _ = image.CloseAnimationEncoder(encoder.handle)
     }

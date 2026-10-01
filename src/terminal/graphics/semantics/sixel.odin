@@ -54,7 +54,9 @@ graphics_sixel_parse_number :: proc(
     value := 0
     for index^ < len(bytes) && bytes[index^] >= '0' && bytes[index^] <= '9' {
         digit := int(bytes[index^] - '0')
-        if value > (max(int) - digit) / 10 { return 0, false }
+        if value > (max(int) - digit) / 10 {
+            return 0, false 
+        }
         value = value * 10 + digit
         index^ += 1
     }
@@ -78,10 +80,14 @@ graphics_sixel_parse_parameters :: proc(
     count := 0
     for count < len(result.values) {
         value, present := graphics_sixel_parse_number(bytes, index)
-        if !present { break }
+        if !present {
+            break 
+        }
         result.values[count] = value
         count += 1
-        if index^ >= len(bytes) || bytes[index^] != ';' { break }
+        if index^ >= len(bytes) || bytes[index^] != ';' {
+            break 
+        }
         index^ += 1
     }
     result.count = count
@@ -130,12 +136,19 @@ graphics_sixel_hls :: proc(hue, lightness, saturation: int) -> (u32, bool) {
     sector_remainder := sector - f32(int(sector / 2) * 2)
     second := chroma * f32(1 - abs(sector_remainder - 1))
     red, green, blue: f32
-    if sector < 1 { red, green = chroma, second
-    } else if sector < 2 { red, green = second, chroma
-    } else if sector < 3 { green, blue = chroma, second
-    } else if sector < 4 { green, blue = second, chroma
-    } else if sector < 5 { red, blue = second, chroma
-    } else { red, blue = chroma, second }
+    if sector < 1 {
+        red, green = chroma, second
+    } else if sector < 2 {
+        red, green = second, chroma
+    } else if sector < 3 {
+        green, blue = chroma, second
+    } else if sector < 4 {
+        green, blue = second, chroma
+    } else if sector < 5 {
+        red, blue = second, chroma
+    } else {
+        red, blue = chroma, second
+    }
     match := f32(lightness) / 100 - chroma / 2
     return graphics_sixel_rgb(
         int((red + match) * 100), int((green + match) * 100),
@@ -162,8 +175,12 @@ graphics_sixel_apply_palette :: proc(
     }
     index := parameters[0]
     semantics.palette_count = max(semantics.palette_count, index + 1)
-    if count == 1 { return true }
-    if count != 5 { return false }
+    if count == 1 {
+        return true 
+    }
+    if count != 5 {
+        return false 
+    }
     color: u32
     valid := false
     if parameters[1] == 2 {
@@ -173,7 +190,9 @@ graphics_sixel_apply_palette :: proc(
         color, valid = graphics_sixel_hls(
             parameters[2], parameters[3], parameters[4])
     }
-    if valid { semantics.palette[index] = color }
+    if valid {
+        semantics.palette[index] = color 
+    }
     return valid
 }
 
@@ -224,7 +243,9 @@ graphics_sixel_apply_command :: proc(
     switch command {
     case '!':
         repeat, present := graphics_sixel_parse_number(bytes, index)
-        if !present || index^ >= len(bytes) { return false }
+        if !present || index^ >= len(bytes) {
+            return false 
+        }
         byte := bytes[index^]
         index^ += 1
         return graphics_sixel_apply_data(
@@ -301,10 +322,14 @@ graphics_queue_sixel_decode :: proc(
     semantics_context: ^Context, state: ^gfxprotocol.Graphics_Parser_State,
     frame: gfxprotocol.Graphics_Frame, semantics: Sixel_Semantics) -> bool {
     anchor, valid := graphics_context_anchor(semantics_context)
-    if !valid { return false }
+    if !valid {
+        return false 
+    }
     attachment_id, status := graphics_reserve_pending_attachment(
         state, .Sixel, semantics.width, semantics.height, false)
-    if status != .Ok { return false }
+    if status != .Ok {
+        return false 
+    }
     request := gfxprotocol.Graphics_Decode_Request{
         kind = .Sixel, producer = frame.producer, transfer_id = frame.transfer_id,
         attachment_id = attachment_id, width = semantics.width, height = semantics.height,
@@ -330,6 +355,26 @@ graphics_queue_sixel_decode :: proc(
     return false
 }
 
+// Commit Sixel cursor movement after the decode request has been accepted.
+graphics_sixel_apply_cursor_effects :: proc(
+    ctx: ^Context, rows, pixel_width: int,
+    scrolling_mode, cursor_right_mode: bool) {
+    if scrolling_mode {
+        graphics_kitty_advance_cursor(ctx, rows)
+    } else if rows > 1 {
+        graphics_kitty_advance_cursor(ctx, rows - 1)
+    }
+    if cursor_right_mode && ctx.cell_width != nil &&
+        ctx.advance_columns != nil {
+        cell_width, cell_width_valid :=
+            ctx.cell_width(ctx.user_data)
+        if cell_width_valid && cell_width > 0 {
+            columns := (pixel_width + cell_width - 1) / cell_width
+            ctx.advance_columns(ctx.user_data, columns)
+        }
+    }
+}
+
 //   Queue one validated Sixel decode request and commit synchronous cursor effects.
 //
 // Parameters:
@@ -350,11 +395,17 @@ graphics_apply_sixel_frame :: proc(
     frame: gfxprotocol.Graphics_Frame) -> bool {
     bytes, found := termattachment.transfer_bytes(state.store, frame.transfer_id)
     header := frame.header
-    if !found { return false }
+    if !found {
+        return false 
+    }
     semantics := graphics_parse_sixel(
         bytes, header[:frame.header_byte_count], state.store.limits)
-    if !semantics.valid { return false }
-    if !gfxprotocol.graphics_parser_decode_request_has_capacity(state) { return false }
+    if !semantics.valid {
+        return false 
+    }
+    if !gfxprotocol.graphics_parser_decode_request_has_capacity(state) {
+        return false 
+    }
     anchor, valid := graphics_context_anchor(semantics_context)
     if !valid || !graphics_queue_sixel_decode(semantics_context, state, frame, semantics) {
         return false
@@ -365,20 +416,8 @@ graphics_apply_sixel_frame :: proc(
             pixel_height = semantics.height,
             sizing = .Explicit_Pixels,
         }, {width = semantics.width, height = semantics.height})
-    if anchor.sixel_scrolling_mode {
-        graphics_kitty_advance_cursor(semantics_context, rows)
-    } else if rows > 1 {
-        graphics_kitty_advance_cursor(semantics_context, rows - 1)
-    }
-    if anchor.sixel_cursor_right_mode && semantics_context.cell_width != nil &&
-        semantics_context.advance_columns != nil {
-        cell_width, cell_width_valid :=
-            semantics_context.cell_width(semantics_context.user_data)
-        if cell_width_valid && cell_width > 0 {
-            columns := (semantics.width + cell_width - 1) / cell_width
-            semantics_context.advance_columns(
-                semantics_context.user_data, columns)
-        }
-    }
+    graphics_sixel_apply_cursor_effects(
+        semantics_context, rows, semantics.width,
+        anchor.sixel_scrolling_mode, anchor.sixel_cursor_right_mode)
     return true
 }

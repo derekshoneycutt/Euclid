@@ -61,14 +61,18 @@ shell_integration_init :: proc(
         return false
     }
     blocks, allocation_error := make([]termmodel.Command_Block, capacity, allocator)
-    if allocation_error != nil { return false }
+    if allocation_error != nil {
+        return false 
+    }
     state^ = {allocator = allocator, command_blocks = blocks}
     return true
 }
 
 // Release command-block storage and clear all shell integration state.
 shell_integration_destroy :: proc(state: ^Shell_Integration_State) {
-    if state == nil { return }
+    if state == nil {
+        return 
+    }
     delete(state.command_blocks, state.allocator)
     state^ = {}
 }
@@ -77,7 +81,9 @@ shell_integration_destroy :: proc(state: ^Shell_Integration_State) {
 shell_command_block :: proc(
     state: ^Shell_Integration_State,
     index: int) -> (termmodel.Command_Block, bool) {
-    if state == nil || index < 0 { return {}, false }
+    if state == nil || index < 0 {
+        return {}, false 
+    }
     if index < state.command_count {
         slot := (state.command_first + index) % len(state.command_blocks)
         return state.command_blocks[slot], true
@@ -90,20 +96,26 @@ shell_command_block :: proc(
 
 // Return the number of closed and active blocks currently available for navigation.
 shell_command_block_count :: proc(state: ^Shell_Integration_State) -> int {
-    if state == nil { return 0 }
+    if state == nil {
+        return 0 
+    }
     return state.command_count + int(state.active_command_present)
 }
 
 // Produce the next nonzero lifecycle generation.
 shell_command_next_generation :: proc(state: ^Shell_Integration_State) -> u32 {
     state.next_generation += 1
-    if state.next_generation == 0 { state.next_generation = 1 }
+    if state.next_generation == 0 {
+        state.next_generation = 1 
+    }
     return state.next_generation
 }
 
 // Append the active candidate to the bounded chronological ring and clear it.
 shell_command_close_active :: proc(state: ^Shell_Integration_State) {
-    if !state.active_command_present || len(state.command_blocks) == 0 { return }
+    if !state.active_command_present || len(state.command_blocks) == 0 {
+        return 
+    }
     slot := (state.command_first + state.command_count) % len(state.command_blocks)
     if state.command_count == len(state.command_blocks) {
         slot = state.command_first
@@ -164,7 +176,9 @@ shell_command_marker_malformed :: proc(
 shell_command_admit_marker :: proc(
     state: ^Shell_Integration_State, admission: Shell_Marker_Admission,
     position: termmodel.Terminal_Semantic_Position) {
-    if len(state.command_blocks) == 0 { return }
+    if len(state.command_blocks) == 0 {
+        return 
+    }
     if admission.kind == .Prompt {
         if state.active_command_present &&
             (.Command in state.active_command.present ||
@@ -184,17 +198,23 @@ shell_command_admit_marker :: proc(
     } else {
         shell_command_apply_marker(&state.active_command, admission, position)
     }
-    if admission.kind == .Finished { shell_command_close_active(state) }
+    if admission.kind == .Finished {
+        shell_command_close_active(state) 
+    }
 }
 
 // Remove blocks after their last semantic position leaves retained scrollback.
 shell_command_evict_through :: proc(
     state: ^Shell_Integration_State, logical_line_id: i64) {
-    if state == nil { return }
+    if state == nil {
+        return 
+    }
     for state.command_count > 0 {
         block := &state.command_blocks[state.command_first]
         last := shell_command_last_position(block)
-        if i64(last.logical_line_id) > logical_line_id { break }
+        if i64(last.logical_line_id) > logical_line_id {
+            break 
+        }
         if state.search_match_generation == block.generation {
             state.search_match_generation = 0
             state.search_match_byte_offset = 0
@@ -220,10 +240,14 @@ shell_command_evict_through :: proc(
 // Report whether a command generation remains in the closed ring or active candidate.
 shell_command_generation_retained :: proc(
     state: ^Shell_Integration_State, generation: u32) -> bool {
-    if state == nil || generation == 0 { return false }
+    if state == nil || generation == 0 {
+        return false 
+    }
     for index in 0..<state.command_count {
         slot := (state.command_first + index) % len(state.command_blocks)
-        if state.command_blocks[slot].generation == generation { return true }
+        if state.command_blocks[slot].generation == generation {
+            return true 
+        }
     }
     return state.active_command_present &&
         state.active_command.generation == generation
@@ -232,18 +256,30 @@ shell_command_generation_retained :: proc(
 // Return the earliest semantic endpoint present in one command block.
 shell_command_first_position :: proc(
     block: ^termmodel.Command_Block) -> termmodel.Terminal_Semantic_Position {
-    if .Prompt in block.present { return block.prompt }
-    if .Command in block.present { return block.command }
-    if .Execution in block.present { return block.execution }
+    if .Prompt in block.present {
+        return block.prompt 
+    }
+    if .Command in block.present {
+        return block.command 
+    }
+    if .Execution in block.present {
+        return block.execution 
+    }
     return block.finished
 }
 
 // Return the latest semantic endpoint present in one command block.
 shell_command_last_position :: proc(
     block: ^termmodel.Command_Block) -> termmodel.Terminal_Semantic_Position {
-    if .Finished in block.present { return block.finished }
-    if .Execution in block.present { return block.execution }
-    if .Command in block.present { return block.command }
+    if .Finished in block.present {
+        return block.finished 
+    }
+    if .Execution in block.present {
+        return block.execution 
+    }
+    if .Command in block.present {
+        return block.command 
+    }
     return block.prompt
 }
 
@@ -329,7 +365,9 @@ shell_integration_parse_marker :: proc(payload: []u8) -> Shell_Marker_Admission 
         if len(payload) == 1 {
             return {kind = .Finished, valid = true}
         }
-        if payload[1] != ';' { return {} }
+        if payload[1] != ';' {
+            return {} 
+        }
         status, valid := shell_integration_parse_status(payload[2:])
         return {.Finished, status, valid, valid}
     }

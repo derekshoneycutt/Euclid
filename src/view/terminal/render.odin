@@ -208,9 +208,13 @@ terminal_draw_output_cursor_glyph :: proc(
     presentation: Terminal_Output_Cursor_Presentation, position: geometry.Vector2,
     theme: Terminal_Draw_Theme) {
     cells, ok := terminal_output_row(term, presentation.line)
-    if !ok || presentation.column >= len(cells) { return }
+    if !ok || presentation.column >= len(cells) {
+        return
+    }
     cell := &cells[presentation.column]
-    if cell.continuation || cell.grapheme_len == 0 { return }
+    if cell.continuation || cell.grapheme_len == 0 {
+        return
+    }
     key := terminal_font_key_for_cell(cell.style)
     regular := terminal_font_resolve(font_resolver, .Regular)
     _ = terminal_draw_shaped_output_run({
@@ -330,7 +334,9 @@ terminal_draw_command_statuses :: proc(
             continue
         }
         position, found := terminal_semantic_view_position(term, block.finished)
-        if !found { continue }
+        if !found {
+            continue
+        }
         _ = native.draw_encoder_rectangle(layout.encoder, {
             origin.x, origin.y + f32(position.line) * layout.line_height + 3,
             2, TERMINAL_FONT_SIZE - 6,
@@ -344,7 +350,9 @@ terminal_draw_command_search :: proc(
     encoder: ^native.Draw_Encoder,
     bounds: geometry.Rectangle, theme: Terminal_Draw_Theme) {
     shell := term.shell_integration
-    if shell == nil || !shell.search_editing { return }
+    if shell == nil || !shell.search_editing {
+        return
+    }
     query := string(shell.search_query[:shell.search_query_byte_count])
     height := TERMINAL_FONT_SIZE + 6
     position := geometry.Vector2{bounds.x + 4, bounds.y + bounds.height - height + 3}
@@ -363,13 +371,17 @@ terminal_draw_command_search :: proc(
 //   - Zero-based line and true, or zero and false when the row is not presented.
 terminal_raster_line :: proc(
     term: ^viewterminalmodel.Terminal_State, logical_row: i64) -> (int, bool) {
-    if term == nil { return 0, false }
+    if term == nil {
+        return 0, false
+    }
     line_count := terminal_visible_scrollback_count(term)
     line_count += len(term.synchronized_output.checkpoint.grid_rows) if
         term.synchronized_output.active else len(term.output_grid.rows)
     for line in 0..<line_count {
         candidate, found := terminal_output_logical_row(term, line)
-        if found && candidate == logical_row { return line, true }
+        if found && candidate == logical_row {
+            return line, true
+        }
     }
     return 0, false
 }
@@ -403,8 +415,12 @@ terminal_raster_allocation :: proc(
     if height <= 0 && placement_geometry.row_span > 0 {
         height = f32(placement_geometry.row_span) * line_height
     }
-    if width <= 0 { width = f32(source.width) }
-    if height <= 0 { height = f32(source.height) }
+    if width <= 0 {
+        width = f32(source.width)
+    }
+    if height <= 0 {
+        height = f32(source.height)
+    }
     return {width, height}
 }
 
@@ -417,7 +433,9 @@ terminal_raster_apply_sizing :: proc(
     if sizing == .Fit || sizing == .Intrinsic_Centered {
         scale := min(allocation.x / f32(source.width),
             allocation.y / f32(source.height))
-        if sizing == .Intrinsic_Centered { scale = min(scale, 1) }
+        if sizing == .Intrinsic_Centered {
+            scale = min(scale, 1)
+        }
         destination.width = f32(source.width) * scale
         destination.height = f32(source.height) * scale
         destination.x += (allocation.x - destination.width) / 2
@@ -446,7 +464,9 @@ terminal_raster_geometry :: proc(
     column_width, line_height: f32) -> Terminal_Raster_Geometry {
     geometry := placement.geometry
     source, source_valid := terminal_raster_source(geometry, metrics)
-    if !source_valid { return {} }
+    if !source_valid {
+        return {}
+    }
     allocation := terminal_raster_allocation(
         geometry, source, column_width, line_height)
     destination := termattachment.Render_Rectangle{
@@ -486,18 +506,24 @@ terminal_draw_raster :: proc(
     term: ^viewterminalmodel.Terminal_State, renderer: termattachment.Raster_Renderer,
     placement: termattachment.Placement_Metadata,
     draw: Terminal_Raster_Draw_Context) {
-    if !terminal_raster_in_layer(placement.geometry.z_index, draw.layer) { return }
+    if !terminal_raster_in_layer(placement.geometry.z_index, draw.layer) {
+        return
+    }
     line, found := terminal_raster_line(term, placement.geometry.logical_row)
     metrics, metrics_found := termattachment.attachment_metrics(
         term.synchronized_output.attachments, placement.attachment_id)
-    if !found || !metrics_found { return }
+    if !found || !metrics_found {
+        return
+    }
     anchor := geometry.Vector2{
         draw.origin.x + f32(placement.geometry.column) * draw.column_width,
         draw.origin.y + f32(line) * draw.layout.line_height,
     }
     geometry := terminal_raster_geometry(
         placement, metrics, anchor, draw.column_width, draw.layout.line_height)
-    if !geometry.valid { return }
+    if !geometry.valid {
+        return
+    }
     renderer.draw(renderer.user_data, {
         attachment_id = placement.attachment_id, source = geometry.source,
         destination = geometry.destination,
@@ -511,7 +537,9 @@ terminal_draw_raster :: proc(
 // Return the lowest drawable raster edge in terminal content coordinates.
 terminal_raster_content_height :: proc(
     term: ^viewterminalmodel.Terminal_State, column_width, line_height: f32) -> f32 {
-    if term == nil { return 0 }
+    if term == nil {
+        return 0
+    }
     placements:
         [termattachment.DEFAULT_PLACEMENT_CAPACITY]termattachment.Placement_Metadata
     count := terminal_collect_raster_placements(term, placements[:])
@@ -520,7 +548,9 @@ terminal_raster_content_height :: proc(
         line, found := terminal_raster_line(term, placement.geometry.logical_row)
         metrics, metrics_found := termattachment.attachment_metrics(
             term.synchronized_output.attachments, placement.attachment_id)
-        if !found || !metrics_found { continue }
+        if !found || !metrics_found {
+            continue
+        }
         geometry := terminal_raster_geometry(placement, metrics,
             {0, f32(line) * line_height}, column_width, line_height)
         if geometry.valid {
@@ -537,7 +567,9 @@ terminal_draw_rasters :: proc(
     term: ^viewterminalmodel.Terminal_State, renderer: termattachment.Raster_Renderer,
     layout: Terminal_Draw_Layout, origin: geometry.Vector2,
     layer: Terminal_Raster_Layer) {
-    if renderer.draw == nil { return }
+    if renderer.draw == nil {
+        return
+    }
     placements:
         [termattachment.DEFAULT_PLACEMENT_CAPACITY]termattachment.Placement_Metadata
     count := terminal_collect_raster_placements(term, placements[:])
@@ -1101,7 +1133,9 @@ terminal_draw_prompt_base :: proc(request: Terminal_Prompt_Draw) {
 // Return whether terminal text contains a byte with visible ink potential.
 terminal_text_has_visible_bytes :: proc(text: string) -> bool {
     for byte in transmute([]u8)text {
-        if byte > ' ' { return true }
+        if byte > ' ' {
+            return true
+        }
     }
     return false
 }
@@ -1109,7 +1143,9 @@ terminal_text_has_visible_bytes :: proc(text: string) -> bool {
 // Report whether one text span contains only ASCII bytes.
 terminal_text_is_ascii :: proc(text: string) -> bool {
     for byte in transmute([]u8)text {
-        if byte >= 0x80 { return false }
+        if byte >= 0x80 {
+            return false
+        }
     }
     return true
 }
@@ -1225,7 +1261,9 @@ terminal_draw_output_cell :: proc(
 terminal_draw_output_underlines :: proc(draw: Terminal_Shaped_Output_Context) {
     underline_y := draw.position.y + TERMINAL_FONT_SIZE - 1
     for &cell, column in draw.cells {
-        if cell.continuation || !cell.style.underline { continue }
+        if cell.continuation || !cell.style.underline {
+            continue
+        }
         color := terminal_resolve_foreground(
             draw.palette, cell.style.foreground,
             draw.theme.default_foreground)
@@ -1248,7 +1286,9 @@ terminal_draw_output_shaped_chunk :: proc(
     color := terminal_resolve_foreground(
         ctx.palette, cell.style.foreground,
         ctx.theme.default_foreground)
-    if chunk_end - column <= 1 { return column, false }
+    if chunk_end - column <= 1 {
+        return column, false
+    }
     drawn := terminal_draw_shaped_output_run({
         encoder = ctx.encoder,
         resolver = ctx.resolver,
@@ -1304,6 +1344,34 @@ terminal_draw_output_row :: proc(
     terminal_draw_output_underlines(draw)
 }
 
+// Draw one run of equal foreground color and return the next leading column.
+terminal_draw_link_hover_run :: proc(
+    draw: Terminal_Shaped_Output_Context, run_start, limit: int,
+    underline_y: f32) -> int {
+    cell := &draw.cells[run_start]
+    color := terminal_resolve_foreground(
+        draw.palette, cell.style.foreground, draw.theme.default_foreground)
+    column := run_start + max(int(cell.width), 1)
+    for column < limit {
+        next := &draw.cells[column]
+        if next.continuation {
+            column += 1
+            continue
+        }
+        next_color := terminal_resolve_foreground(
+            draw.palette, next.style.foreground, draw.theme.default_foreground)
+        if next_color != color {
+            break
+        }
+        column += max(int(next.width), 1)
+    }
+    _ = native.draw_encoder_line(draw.encoder,
+        {draw.position.x + f32(run_start) * draw.column_width, underline_y},
+        {draw.position.x + f32(min(column, limit)) * draw.column_width, underline_y},
+        1, color)
+    return column
+}
+
 // Draw one transient link underline split where resolved foreground color changes.
 terminal_draw_link_hover :: proc(
     draw: Terminal_Shaped_Output_Context, hit: Terminal_Link_Hit) {
@@ -1311,32 +1379,11 @@ terminal_draw_link_hover :: proc(
     limit := clamp(hit.column_end, column, len(draw.cells))
     underline_y := draw.position.y + TERMINAL_FONT_SIZE - 1
     for column < limit {
-        cell := &draw.cells[column]
-        if cell.continuation {
+        if draw.cells[column].continuation {
             column += 1
             continue
         }
-        color := terminal_resolve_foreground(
-            draw.palette, cell.style.foreground,
-            draw.theme.default_foreground)
-        run_start := column
-        column += max(int(cell.width), 1)
-        for column < limit {
-            next := &draw.cells[column]
-            if next.continuation { column += 1; continue }
-            next_color := terminal_resolve_foreground(
-                draw.palette, next.style.foreground,
-                draw.theme.default_foreground)
-            if next_color != color { break }
-            column += max(int(next.width), 1)
-        }
-        _ = native.draw_encoder_line(draw.encoder,
-            {draw.position.x +
-                f32(run_start) * draw.column_width, underline_y},
-            {draw.position.x +
-                f32(min(column, limit)) * draw.column_width,
-                underline_y},
-            1, color)
+        column = terminal_draw_link_hover_run(draw, column, limit, underline_y)
     }
 }
 
@@ -1759,7 +1806,9 @@ terminal_draw_shaped_prompt_span :: proc(
 
     cells: [TERMINAL_SHAPING_RUN_COLUMNS]termgrid.Cell
     cell_count, built := terminal_prompt_cells(draw.text, cells[:])
-    if !built { return false }
+    if !built {
+        return false
+    }
     regular := terminal_font_resolve(draw.resolver, .Regular)
     return terminal_draw_shaped_output_run({
         encoder = draw.encoder,

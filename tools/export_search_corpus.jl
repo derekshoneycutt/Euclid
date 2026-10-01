@@ -9,11 +9,29 @@ const CONTENT_ROOT = joinpath(REPOSITORY_ROOT, "src", "content")
 include(joinpath(JULIA_ROOT, "script.jl"))
 include(joinpath(JULIA_ROOT, "search", "search_corpus.jl"))
 
-"""Return authored search content from one loaded production sidecar."""
-function load_search_content(generation, descriptor)
-    loader = Base.invokelatest(
-        getfield, generation.animation_catalog, :ensure_animation_loaded)
-    implementation = Base.invokelatest(loader, generation.content, descriptor.id)
+module BuildAnimationCatalogInput
+using UUIDs
+using ..AnimationCatalog
+include(joinpath(@__DIR__, "..", "src", "content", "animation_catalog_data.jl"))
+end
+
+"""Create a disposable owner module for build-time animation and sidecar loading."""
+function create_build_content_module()
+    content = Module(gensym(:EuclidBuildContent), false, false)
+    Core.eval(content, :(const OdinJuliaBridge = $OdinJuliaBridge))
+    Core.eval(content, :(const EuclidAnimations = $EuclidAnimations))
+    Core.eval(content, :(const EuclidGeometry = $EuclidGeometry))
+    Core.eval(content, :(const EuclidLatex = $EuclidLatex))
+    Core.eval(content, :(const EuclidSearchContent = $EuclidSearchContent))
+    Core.eval(content, :(const AnimationCatalog = $AnimationCatalog))
+    Base.include(content, joinpath(CONTENT_ROOT, "nullanimation.jl"))
+    return content
+end
+
+"""Return authored search content from one loaded build-time sidecar."""
+function load_search_content(content, descriptors, descriptor)
+    implementation = AnimationCatalog.ensure_animation_loaded(
+        CONTENT_ROOT, descriptors, descriptor.id; owner=content)
     animation_module = parentmodule(implementation.entry)
     content_name = Symbol(string(nameof(animation_module)), "Content")
     isdefined(animation_module, content_name) || error(
@@ -25,16 +43,15 @@ end
 
 """Build and atomically publish the canonical built-in search corpus."""
 function export_search_corpus(destination::String)
-    generation = create_euclid_runtime_generation(CONTENT_ROOT)
-    descriptors = Base.invokelatest(
-        getfield, generation.animation_catalog, :AnimationDescriptors)
-    documents = EuclidSearchCorpus.build_search_documents(
-        descriptors, descriptor -> load_search_content(generation, descriptor))
+    descriptors = BuildAnimationCatalogInput.AnimationDescriptors
+    content = create_build_content_module()
+    records = EuclidSearchCorpus.build_catalog_corpus(
+        descriptors, descriptor -> load_search_content(content, descriptors, descriptor))
     mkpath(dirname(destination))
     candidate = destination * ".candidate"
     try
         open(candidate, "w") do io
-            EuclidSearchCorpus.write_search_corpus(io, documents)
+            EuclidSearchCorpus.write_catalog_corpus(io, records)
         end
         mv(candidate, destination; force=true)
     finally

@@ -22,7 +22,9 @@ unix_tree_update_builds_complete_static_tree :: proc(t: ^testing.T) {
         portable.Publication_Status.Ok)
     update := accesskit_tree_update(&publication)
     testing.expect(t, update != nil)
-    if update != nil {accesskit.accesskit_tree_update_free(update)}
+    if update != nil {
+       accesskit.accesskit_tree_update_free(update)
+    }
 }
 
 // Verify native translation accepts a complete mixed ordinary-control tree.
@@ -48,7 +50,9 @@ unix_control_tree_update_builds_mixed_tree :: proc(t: ^testing.T) {
     }), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
-    if update != nil {accesskit.accesskit_tree_update_free(update)}
+    if update != nil {
+       accesskit.accesskit_tree_update_free(update)
+    }
 }
 
 // Verify native translation accepts nested Search and Tree records.
@@ -72,7 +76,9 @@ unix_control_tree_update_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
     }), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
-    if update != nil {accesskit.accesskit_tree_update_free(update)}
+    if update != nil {
+       accesskit.accesskit_tree_update_free(update)
+    }
 }
 
 // unix_toggle_test_controls returns one button and checkbox fixture pair.
@@ -409,7 +415,9 @@ unix_button_removal_retires_identity :: proc(t: ^testing.T) {
     testing.expect(t, !owner^.publication.current.child_present)
     update := accesskit_tree_update(&owner^.publication.current)
     testing.expect(t, update != nil)
-    if update != nil {accesskit.accesskit_tree_update_free(update)}
+    if update != nil {
+       accesskit.accesskit_tree_update_free(update)
+    }
 }
 
 // Verify closing publication storage prevents a late activation callback.

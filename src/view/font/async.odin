@@ -342,9 +342,13 @@ cache_commit_uploaded_preparation :: proc(cache: ^Font_Cache) -> bool {
 cache_texture_upload_completed :: proc(
     user_data: rawptr, identity, generation: u64, succeeded: bool) {
     cache := cast(^Font_Cache)user_data
-    if cache == nil || cache.preparation.state != .Uploading {return}
+    if cache == nil || cache.preparation.state != .Uploading {
+       return
+    }
     task := &cache.preparation.task
-    if identity != u64(task.key) + 1 || generation != task.generation {return}
+    if identity != u64(task.key) + 1 || generation != task.generation {
+       return
+    }
     texture := cache.preparation.pending_texture
     published := succeeded && cache_preparation_is_current(cache) &&
         cache_commit_uploaded_preparation(cache)
@@ -383,7 +387,9 @@ cache_begin_preparation_upload :: proc(cache: ^Font_Cache) -> bool {
             completion = cache_texture_upload_completed,
             completion_data = cache,
         })
-    if !queued {return false}
+    if !queued {
+       return false
+    }
     cache.preparation.pending_texture = texture
     cache.preparation.state = .Uploading
     return true
@@ -502,7 +508,9 @@ cache_service :: proc(cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
     if cache.preparation.state == .Idle {
         return
     }
-    if cache.preparation.state == .Uploading {return}
+    if cache.preparation.state == .Uploading {
+       return
+    }
     if cache.preparation.state == .Retry {
         cache_submit_preparation(cache, pool)
         return

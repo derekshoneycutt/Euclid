@@ -113,9 +113,15 @@ input_terminal_enqueue_paste :: proc(
 //   - The xterm parameter `1 + Shift + 2*Alt + 4*Control`; Super is ignored.
 input_terminal_modifier_parameter :: proc(modifiers: Input_Modifiers) -> u8 {
     parameter: u8 = 1
-    if .Shift in modifiers { parameter += 1 }
-    if .Alt in modifiers { parameter += 2 }
-    if .Control in modifiers { parameter += 4 }
+    if .Shift in modifiers {
+        parameter += 1 
+    }
+    if .Alt in modifiers {
+        parameter += 2 
+    }
+    if .Control in modifiers {
+        parameter += 4 
+    }
     return parameter
 }
 
@@ -575,7 +581,9 @@ input_terminal_append_sgr_color :: proc(
     bytes: []u8, count: ^int, color: termmodel.Terminal_Color_Reference,
     foreground: bool) {
     kind := termpalette.terminal_color_kind(color)
-    if kind == .Default { return }
+    if kind == .Default {
+        return 
+    }
     bytes[count^] = ';'; count^ += 1
     input_terminal_append_decimal(bytes, count, 38 if foreground else 48)
     bytes[count^] = ';'; count^ += 1
@@ -610,7 +618,9 @@ input_terminal_format_decrqss_payload :: proc(
         }
         parameters := [3]int{1, 3, 4}
         for flag, index in flags {
-            if attributes & flag == 0 { continue }
+            if attributes & flag == 0 {
+                continue 
+            }
             bytes[count] = ';'; count += 1
             input_terminal_append_decimal(bytes, &count, parameters[index])
         }
@@ -656,7 +666,9 @@ input_terminal_append_capability_name :: proc(
     for word in words {
         for index in 0..<4 {
             byte := u8(word >> u32(index * 8))
-            if byte == 0 { return }
+            if byte == 0 {
+                return 
+            }
             bytes[count^] = byte
             count^ += 1
         }
@@ -766,6 +778,28 @@ input_terminal_enqueue_response :: proc(
     return input_runtime_enqueue_bytes(runtime, bytes[:count])
 }
 
+// Append Kitty image and placement identity fields to one response header.
+input_terminal_append_kitty_graphics_identity :: proc(
+    bytes: []u8, count: ^int, response: gfxprotocol.Kitty_Graphics_Response) {
+    if response.image_id != 0 {
+        bytes[count^] = 'i'; count^ += 1
+        bytes[count^] = '='; count^ += 1
+        input_terminal_append_decimal(bytes, count, int(response.image_id))
+    } else if response.image_number != 0 {
+        bytes[count^] = 'I'; count^ += 1
+        bytes[count^] = '='; count^ += 1
+        input_terminal_append_decimal(bytes, count, int(response.image_number))
+    }
+    if response.placement_id != 0 {
+        if count^ > 3 {
+            bytes[count^] = ','; count^ += 1
+        }
+        bytes[count^] = 'p'; count^ += 1
+        bytes[count^] = '='; count^ += 1
+        input_terminal_append_decimal(bytes, count, int(response.placement_id))
+    }
+}
+
 // Format one structured Kitty graphics acknowledgement into fixed storage.
 input_terminal_format_kitty_graphics_response :: proc(
     bytes: []u8, response: gfxprotocol.Kitty_Graphics_Response) -> int {
@@ -773,21 +807,7 @@ input_terminal_format_kitty_graphics_response :: proc(
     bytes[count] = '\e'; count += 1
     bytes[count] = '_'; count += 1
     bytes[count] = 'G'; count += 1
-    if response.image_id != 0 {
-        bytes[count] = 'i'; count += 1
-        bytes[count] = '='; count += 1
-        input_terminal_append_decimal(bytes, &count, int(response.image_id))
-    } else if response.image_number != 0 {
-        bytes[count] = 'I'; count += 1
-        bytes[count] = '='; count += 1
-        input_terminal_append_decimal(bytes, &count, int(response.image_number))
-    }
-    if response.placement_id != 0 {
-        if count > 3 { bytes[count] = ','; count += 1 }
-        bytes[count] = 'p'; count += 1
-        bytes[count] = '='; count += 1
-        input_terminal_append_decimal(bytes, &count, int(response.placement_id))
-    }
+    input_terminal_append_kitty_graphics_identity(bytes, &count, response)
     bytes[count] = ';'; count += 1
     status := "OK"
     #partial switch response.status {
@@ -813,16 +833,22 @@ input_terminal_drain_graphics_responses :: proc(
     graphics := interpreter.title_state.graphics
     for {
         response, present := gfxprotocol.graphics_parser_peek_kitty_response(graphics)
-        if !present { return true }
+        if !present {
+            return true 
+        }
         if !input_terminal_producer_matches_owner(response.producer, runtime.owner) {
-            if response.producer.kind == .Julia_Evaluation { return true }
+            if response.producer.kind == .Julia_Evaluation {
+                return true 
+            }
             graphics.kitty_response_stale_discard_count += 1
             gfxprotocol.graphics_parser_pop_kitty_response(graphics)
             continue
         }
         bytes: [64]u8
         count := input_terminal_format_kitty_graphics_response(bytes[:], response)
-        if !input_runtime_enqueue_bytes(runtime, bytes[:count]) { return false }
+        if !input_runtime_enqueue_bytes(runtime, bytes[:count]) {
+            return false 
+        }
         gfxprotocol.graphics_parser_pop_kitty_response(graphics)
     }
 }
@@ -870,7 +896,9 @@ input_terminal_drain_responses :: proc(
         }
         ready, waiting := input_terminal_response_ready(
             interpreter, response, runtime.owner)
-        if waiting { return true }
+        if waiting {
+            return true 
+        }
         if !ready {
             continue
         }
@@ -992,7 +1020,9 @@ input_terminal_admit_modify_other_key :: proc(
     if !input_runtime_enqueue_bytes(runtime, bytes[:count]) {
         return false
     }
-    if event.correlation.valid { claims^ = admitted_claims }
+    if event.correlation.valid {
+        claims^ = admitted_claims 
+    }
     return true
 }
 
@@ -1023,7 +1053,9 @@ input_terminal_enqueue_modify_other_key :: proc(
 // Return the Kitty modifier parameter, including the supported Super bit.
 input_terminal_kitty_modifier_parameter :: proc(modifiers: Input_Modifiers) -> u8 {
     parameter := input_terminal_modifier_parameter(modifiers)
-    if .Super in modifiers { parameter += 8 }
+    if .Super in modifiers {
+        parameter += 8 
+    }
     return parameter
 }
 
@@ -1070,7 +1102,9 @@ input_terminal_append_kitty_modifiers :: proc(
     bytes: []u8, count: ^int, event: Input_Event, flags: u8,
     force: bool = false) {
     report_type := flags & 2 != 0 && event.kind != .Press
-    if card(event.modifiers) == 0 && !report_type && !force { return }
+    if card(event.modifiers) == 0 && !report_type && !force {
+        return 
+    }
     bytes[count^] = ';'; count^ += 1
     input_terminal_append_decimal(bytes, count,
         int(input_terminal_kitty_modifier_parameter(event.modifiers)))
@@ -1104,7 +1138,9 @@ input_terminal_format_kitty_key :: proc(
     if report_text {
         bytes[count] = ';'; count += 1
         for offset in 0..<associated.count {
-            if offset > 0 { bytes[count] = ':'; count += 1 }
+            if offset > 0 {
+                bytes[count] = ':'; count += 1 
+            }
             input_terminal_append_decimal(bytes, &count,
                 int(frame.events[associated.start + offset].codepoint))
         }
@@ -1122,7 +1158,9 @@ input_terminal_kitty_functional_key :: proc(
         index := int(key) - int(Input_Key.Insert)
         return {number = numbers[index], final = finals[index]}
     }
-    if key < .F1 || key > .F12 { return {} }
+    if key < .F1 || key > .F12 {
+        return {} 
+    }
     numbers := [12]int{1, 1, 13, 1, 15, 17, 18, 19, 20, 21, 23, 24}
     finals := [12]u8{'P', 'Q', '~', 'S', '~', '~', '~', '~', '~', '~', '~', '~'}
     index := int(key) - int(Input_Key.F1)
@@ -1133,7 +1171,9 @@ input_terminal_kitty_functional_key :: proc(
 input_terminal_format_kitty_functional :: proc(
     bytes: []u8, event: Input_Event, flags: u8) -> (int, bool) {
     key := input_terminal_kitty_functional_key(event.key)
-    if key.final == 0 { return 0, false }
+    if key.final == 0 {
+        return 0, false 
+    }
     count := 0
     bytes[count] = '\e'; count += 1
     bytes[count] = '['; count += 1
@@ -1154,7 +1194,9 @@ input_terminal_kitty_keypad_codepoint :: proc(key: Input_Key) -> (rune, bool) {
 // Return whether a frame contains any unclaimed text evidence.
 input_terminal_frame_has_text :: proc(frame: Input_Frame) -> bool {
     for event in frame.events {
-        if event.kind == .Text { return true }
+        if event.kind == .Text {
+            return true 
+        }
     }
     return false
 }
@@ -1162,9 +1204,15 @@ input_terminal_frame_has_text :: proc(frame: Input_Frame) -> bool {
 // Return whether accepted Kitty reporting flags require one ordinary key identity.
 input_terminal_kitty_reports_ordinary :: proc(
     frame: Input_Frame, event: Input_Event, flags: u8) -> bool {
-    if flags & 8 != 0 { return true }
-    if flags & (4 | 16) != 0 && event.correlation.valid { return true }
-    if card(event.modifiers) == 0 || event.modifiers == {.Shift} { return false }
+    if flags & 8 != 0 {
+        return true
+    }
+    if flags & (4 | 16) != 0 && event.correlation.valid {
+        return true
+    }
+    if card(event.modifiers) == 0 || event.modifiers == {.Shift} {
+        return false
+    }
     return event.correlation.valid || .Control in event.modifiers ||
         !input_terminal_frame_has_text(frame)
 }
@@ -1211,7 +1259,9 @@ input_terminal_admit_kitty_key :: proc(
     if !input_runtime_enqueue_bytes(runtime, bytes[:count]) {
         return false
     }
-    if event.correlation.valid { claims^ = admitted_claims }
+    if event.correlation.valid {
+        claims^ = admitted_claims 
+    }
     return true
 }
 
@@ -1231,7 +1281,9 @@ input_terminal_enqueue_kitty_functional :: proc(
         return .Not_Applicable
     }
     key := input_terminal_kitty_functional_key(event.key)
-    if key.final == 0 { return .Not_Applicable }
+    if key.final == 0 {
+        return .Not_Applicable 
+    }
     return .Consumed if input_terminal_admit_kitty_functional(
         runtime, event, flags) else .Blocked
 }
@@ -1242,8 +1294,12 @@ input_terminal_kitty_event_applies :: proc(
     report_type := flags & 2 != 0
     report_key := flags & (1 | 8) != 0 ||
         flags & (4 | 16) != 0 && event.correlation.valid
-    if event.kind == .Release { return report_type }
-    if event.kind == .Press { return report_key }
+    if event.kind == .Release {
+        return report_type 
+    }
+    if event.kind == .Press {
+        return report_key 
+    }
     return event.kind == .Repeat && (report_type || report_key)
 }
 
@@ -1369,8 +1425,12 @@ input_terminal_mouse_button_code :: proc(button: Input_Mouse_Button) -> int {
 //   - Shift is reserved for local selection and scrolling before protocol encoding.
 input_terminal_mouse_modifier_code :: proc(modifiers: Input_Modifiers) -> int {
     code := 0
-    if .Alt in modifiers { code += 8 }
-    if .Control in modifiers { code += 16 }
+    if .Alt in modifiers {
+        code += 8 
+    }
+    if .Control in modifiers {
+        code += 16 
+    }
     return code
 }
 
@@ -1598,7 +1658,9 @@ input_terminal_enqueue_frame_event :: proc(
     case .Press, .Repeat, .Release:
         outcome := input_terminal_enqueue_protocol_key(
             runtime, frame, event_index, mode, claims)
-        if outcome == .Blocked { return false }
+        if outcome == .Blocked {
+            return false 
+        }
         if outcome == .Not_Applicable && event.kind != .Release {
             input_terminal_enqueue_key_event(runtime, event, mode.terminal)
         }

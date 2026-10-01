@@ -61,12 +61,12 @@ end
     identity_call = bridge_test_call(parameter_type="AnimationValueIdentityABI")
     @test length(CodeWiki.pair_bridge_records(
         [identity_export], [identity_call])) == 1
-    metadata_export = bridge_test_export(
-        parameter_type="Animation_Descriptor_Abi_Metadata")
-    metadata_call = bridge_test_call(
-        parameter_type="AnimationDescriptorABIMetadata")
+    path_export = bridge_test_export(
+        parameter_type="Animation_Implementation_Path_Metadata")
+    path_call = bridge_test_call(
+        parameter_type="AnimationImplementationPathMetadata")
     @test length(CodeWiki.pair_bridge_records(
-        [metadata_export], [metadata_call])) == 1
+        [path_export], [path_call])) == 1
     vector_export = bridge_test_export(parameter_type="Vector3")
     vector_call = bridge_test_call(parameter_type="NTuple{3,Cfloat}")
     @test length(CodeWiki.pair_bridge_records(
@@ -88,8 +88,8 @@ end
     packages = CodeWiki.extract_default_wiki_packages(repository_root)
     pairs = extract_bridge_pairs(packages, repository_root)
 
-    @test length(pairs) == 82
-    @test sum(length(pair.julia_calls) for pair in pairs) == 91
+    @test length(pairs) == 79
+    @test sum(length(pair.julia_calls) for pair in pairs) == 88
     @test first(pairs).abi_name < last(pairs).abi_name
     @test all(pair -> !isempty(pair.odin_export.doc_markdown), pairs)
     @test all(pair -> all(call -> !isempty(call.doc_markdown), pair.julia_calls), pairs)

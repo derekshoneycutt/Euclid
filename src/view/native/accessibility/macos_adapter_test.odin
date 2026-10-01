@@ -36,7 +36,9 @@ MACOS_TEST_FAILURE_STAGES :: [5]Macos_Failure_Stage{
 // macos_test_content_view simulates native content-view admission.
 macos_test_content_view :: proc(user_data, _: rawptr) -> rawptr {
     fixture := cast(^Macos_Test_Fixture)user_data
-    if fixture^.has_content_view {return user_data}
+    if fixture^.has_content_view {
+       return user_data
+    }
     return nil
 }
 
@@ -44,7 +46,9 @@ macos_test_content_view :: proc(user_data, _: rawptr) -> rawptr {
 macos_test_window_class :: proc(
     user_data, _: rawptr) -> (rawptr, cstring) {
     fixture := cast(^Macos_Test_Fixture)user_data
-    if fixture^.has_window_class {return user_data, "EuclidTestWindow"}
+    if fixture^.has_window_class {
+       return user_data, "EuclidTestWindow"
+    }
     return nil, nil
 }
 
@@ -59,7 +63,9 @@ macos_test_install :: proc(user_data: rawptr, _: cstring) -> bool {
 macos_test_create :: proc(user_data, _: rawptr, _: ^Adapter) -> rawptr {
     fixture := cast(^Macos_Test_Fixture)user_data
     fixture^.creates += 1
-    if fixture^.create_succeeds {return user_data}
+    if fixture^.create_succeeds {
+       return user_data
+    }
     return nil
 }
 
@@ -167,7 +173,9 @@ macos_adapter_partial_admission_failures_are_typed :: proc(t: ^testing.T) {
         fixture := fixture_input
         owner := new(Adapter, context.allocator)
         window := rawptr(&fixture)
-        if index == 0 {window = nil}
+        if index == 0 {
+           window = nil
+        }
         testing.expect(t, !macos_adapter_publish_controls_with_operations(
             owner, window, input, macos_test_operations(&fixture), process_state))
         diagnostics := adapter_macos_failures_snapshot(owner)

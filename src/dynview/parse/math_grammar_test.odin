@@ -321,7 +321,9 @@ tex_parse_math_matches_unicode_roles :: proc(t: ^testing.T) {
     index := output.programs[output.root_program].first_op
     for expected_index in 0..<6 {
         testing.expect(t, index >= 0)
-        if index < 0 { break }
+        if index < 0 {
+            break
+        }
         testing.expect_value(t, output.ops[index].style_role,
             expected_roles[expected_index])
         testing.expect_value(t, output.ops[index].atom_class,

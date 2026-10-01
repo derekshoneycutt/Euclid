@@ -51,7 +51,9 @@ Kitty_Non_Transmit_Result :: struct {
 
 // Snapshot the active terminal anchor through the borrowed semantics_context capability.
 graphics_context_anchor :: proc(semantics_context: ^Context) -> (Anchor, bool) {
-    if semantics_context == nil || semantics_context.anchor == nil { return {}, false }
+    if semantics_context == nil || semantics_context.anchor == nil {
+        return {}, false 
+    }
     return semantics_context.anchor(semantics_context.user_data)
 }
 
@@ -79,7 +81,9 @@ graphics_semantics_enable :: proc(state: ^gfxprotocol.Graphics_Parser_State) {
 //     no-op.
 graphics_semantics_abort_assemblies :: proc(
     state: ^gfxprotocol.Graphics_Parser_State) {
-    if state == nil { return }
+    if state == nil {
+        return 
+    }
     graphics_kitty_abort_chunks(state)
     graphics_iterm2_abort_multipart(state)
 }
@@ -96,7 +100,9 @@ graphics_semantics_abort_assemblies :: proc(
 graphics_semantics_producer_boundary :: proc(
     state: ^gfxprotocol.Graphics_Parser_State,
     producer: termmodel.Terminal_Producer) {
-    if state == nil { return }
+    if state == nil {
+        return 
+    }
     if state.kitty_chunk_active && state.kitty_chunk_producer != producer {
         graphics_kitty_abort_chunks(state)
     }
@@ -136,12 +142,16 @@ graphics_parse_decimal :: proc(bytes: []u8) -> (int, bool) {
 // Returns:
 //   - The parsed `i32` and true, or zero and false for malformed or out-of-range input.
 graphics_parse_i32 :: proc(bytes: []u8) -> (i32, bool) {
-    if len(bytes) == 0 { return 0, false }
+    if len(bytes) == 0 {
+        return 0, false 
+    }
     negative := bytes[0] == '-'
     digits := bytes[1:] if negative else bytes
     value, valid := graphics_parse_decimal(digits)
     limit := int(max(i32)) + (1 if negative else 0)
-    if !valid || value > limit { return 0, false }
+    if !valid || value > limit {
+        return 0, false 
+    }
     signed := -i64(value) if negative else i64(value)
     return i32(signed), true
 }
@@ -168,7 +178,9 @@ graphics_parse_kitty_animation_action :: proc(
 //   - True only for a supported image, placement, or animation action.
 graphics_parse_kitty_action :: proc(
     controls: ^gfxprotocol.Kitty_Controls, value: []u8) -> bool {
-    if len(value) != 1 { return false }
+    if len(value) != 1 {
+        return false 
+    }
     switch value[0] {
     case 't': controls.action = .Transmit
     case 'T': controls.action = .Transmit_And_Place
@@ -236,7 +248,9 @@ graphics_parse_kitty_geometry_number :: proc(
 //     invalid `u32`, quiet-mode, boolean, or continuation value.
 graphics_parse_kitty_u32_number :: proc(
     controls: ^gfxprotocol.Kitty_Controls, key: u8, value: int) -> bool {
-    if value > int(max(u32)) { return false }
+    if value > int(max(u32)) {
+        return false 
+    }
     switch key {
     case 'i': controls.image_id = u32(value)
     case 'I': controls.image_number = u32(value)
@@ -251,13 +265,19 @@ graphics_parse_kitty_mode_number :: proc(
     controls: ^gfxprotocol.Kitty_Controls, key: u8, value: int) -> bool {
     switch key {
     case 'q':
-        if value > 2 { return false }
+        if value > 2 {
+            return false 
+        }
         controls.quiet = value
     case 'm':
-        if value > 1 { return false }
+        if value > 1 {
+            return false 
+        }
         controls.more = value == 1
     case 'C':
-        if value > 1 { return false }
+        if value > 1 {
+            return false 
+        }
         controls.preserve_cursor = value == 1
     case: return false
     }
@@ -285,17 +305,25 @@ graphics_parse_kitty_identity_number :: proc(
 //     when false is returned.
 graphics_parse_kitty_raw_token :: proc(
     controls: ^gfxprotocol.Kitty_Controls, token: []u8) -> bool {
-    if len(token) < 3 || token[1] != '=' { return false }
+    if len(token) < 3 || token[1] != '=' {
+        return false 
+    }
     key := token[0]
     value := token[2:]
-    if key == 'a' { return graphics_parse_kitty_action(controls, value) }
-    if key == 't' { return len(value) == 1 && value[0] == 'd' }
+    if key == 'a' {
+        return graphics_parse_kitty_action(controls, value) 
+    }
+    if key == 't' {
+        return len(value) == 1 && value[0] == 'd' 
+    }
     if key == 'o' {
         controls.zlib_compressed = len(value) == 1 && value[0] == 'z'
         return controls.zlib_compressed
     }
     if key == 'd' {
-        if len(value) != 1 { return false }
+        if len(value) != 1 {
+            return false 
+        }
         controls.delete_selector = value[0]
         return true
     }
@@ -320,12 +348,16 @@ graphics_finalize_kitty_animation_controls :: proc(
         controls.gap_ms = controls.z_index
         controls.gap_specified = controls.z_index != 0
         controls.composition_mode = controls.offset_x
-        if controls.offset_y > int(max(u32)) { return false }
+        if controls.offset_y > int(max(u32)) {
+            return false 
+        }
         controls.background_rgba = u32(controls.offset_y)
         controls.background_specified = controls.offset_y != 0
         return controls.composition_mode == 0 || controls.composition_mode == 1
     case .Animate:
-        if controls.height > int(max(u32)) { return false }
+        if controls.height > int(max(u32)) {
+            return false 
+        }
         controls.current_frame = controls.columns
         controls.edit_frame = controls.rows
         controls.animation_state = controls.width
@@ -366,7 +398,9 @@ graphics_kitty_animation_attachment :: proc(
         return {}, false
     }
     index := graphics_kitty_find_image(state, controls)
-    if index < 0 { return {}, false }
+    if index < 0 {
+        return {}, false 
+    }
     return state.kitty_images[index].attachment_id, true
 }
 
@@ -375,7 +409,9 @@ graphics_kitty_mutation_pending :: proc(
     state: ^gfxprotocol.Graphics_Parser_State,
     id: termattachment.Attachment_Id) -> bool {
     for request in state.kitty_mutation_requests[:state.kitty_mutation_request_count] {
-        if request.attachment_id == id { return true }
+        if request.attachment_id == id {
+            return true 
+        }
     }
     return false
 }
@@ -406,22 +442,30 @@ graphics_kitty_queue_animation_command :: proc(
         state, command) else .Capacity_Exceeded
 }
 
+// Validate Kitty frame dimensions and exact RGB/RGBA payload length.
+graphics_kitty_frame_payload_valid :: proc(
+    payload: []u8, controls: gfxprotocol.Kitty_Controls) -> bool {
+    bytes_per_pixel := 3 if controls.format == 24 else 4
+    return (controls.format == 24 || controls.format == 32) &&
+        controls.width > 0 && controls.height > 0 &&
+        controls.width <= max(int) / controls.height &&
+        controls.width * controls.height <= max(int) / bytes_per_pixel &&
+        len(payload) == controls.width * controls.height * bytes_per_pixel
+}
+
 // Apply one borrowed RGB/RGBA Kitty frame upload or edit transactionally.
 graphics_kitty_apply_frame_payload :: proc(
     state: ^gfxprotocol.Graphics_Parser_State, payload: []u8,
     controls: gfxprotocol.Kitty_Controls) ->
     gfxprotocol.Kitty_Graphics_Response_Status {
     id, found := graphics_kitty_animation_attachment(state, controls)
-    if !found { return .Not_Found }
+    if !found {
+        return .Not_Found 
+    }
     if !gfxprotocol.graphics_parser_animation_command_has_capacity(state) {
         return .Capacity_Exceeded
     }
-    bytes_per_pixel := 3 if controls.format == 24 else 4
-    if controls.format != 24 && controls.format != 32 ||
-        controls.width <= 0 || controls.height <= 0 ||
-        controls.width > max(int) / controls.height ||
-        controls.width * controls.height > max(int) / bytes_per_pixel ||
-        len(payload) != controls.width * controls.height * bytes_per_pixel {
+    if !graphics_kitty_frame_payload_valid(payload, controls) {
         return .Invalid
     }
     outcome := termattachment.kitty_animation_mutate_frame(state.store, id, {
@@ -439,7 +483,9 @@ graphics_kitty_apply_frame_payload :: proc(
         overwrite = controls.composition_mode == 1,
     })
     status := graphics_kitty_mutation_status(outcome)
-    if status != .Ok { return status }
+    if status != .Ok {
+        return status 
+    }
     return graphics_kitty_queue_animation_command(state, {
         attachment_id = id, kind = .Refresh,
     })
@@ -451,7 +497,9 @@ graphics_kitty_apply_frame :: proc(
     controls: gfxprotocol.Kitty_Controls) ->
     gfxprotocol.Kitty_Graphics_Response_Status {
     payload, found := termattachment.transfer_bytes(state.store, frame.transfer_id)
-    if !found { return .Invalid }
+    if !found {
+        return .Invalid 
+    }
     return graphics_kitty_apply_frame_payload(state, payload, controls)
 }
 
@@ -486,7 +534,9 @@ graphics_kitty_queue_frame_transactions :: proc(
         width = transaction.dimensions.width,
         height = transaction.dimensions.height,
     })
-    if !queued { gfxprotocol.graphics_parser_cancel_mutation_request(state, sequence) }
+    if !queued {
+        gfxprotocol.graphics_parser_cancel_mutation_request(state, sequence) 
+    }
     return queued
 }
 
@@ -502,13 +552,19 @@ graphics_kitty_queue_encoded_frame :: proc(
         return .Capacity_Exceeded
     }
     kind, supported := graphics_kitty_decode_kind(controls)
-    if !supported { return .Unsupported }
+    if !supported {
+        return .Unsupported 
+    }
     dimensions, valid := graphics_kitty_decode_dimensions(
         state, frame, controls, kind)
-    if !valid { return .Invalid }
+    if !valid {
+        return .Invalid 
+    }
     temporary_id, status := graphics_reserve_pending_attachment(
         state, .Kitty, dimensions.width, dimensions.height, false)
-    if status != .Ok { return status }
+    if status != .Ok {
+        return status 
+    }
     queued := graphics_kitty_queue_frame_transactions(state, frame, controls, {
         id = id,
         temporary_id = temporary_id,
@@ -587,12 +643,16 @@ graphics_kitty_apply_composition :: proc(
     controls: gfxprotocol.Kitty_Controls) ->
     gfxprotocol.Kitty_Graphics_Response_Status {
     id, found := graphics_kitty_animation_attachment(state, controls)
-    if !found { return .Not_Found }
+    if !found {
+        return .Not_Found 
+    }
     if !gfxprotocol.graphics_parser_animation_command_has_capacity(state) {
         return .Capacity_Exceeded
     }
     metrics, metrics_found := termattachment.attachment_metrics(state.store, id)
-    if !metrics_found { return .Not_Found }
+    if !metrics_found {
+        return .Not_Found 
+    }
     width := controls.source_width if controls.source_width > 0 else metrics.width
     height := controls.source_height if controls.source_height > 0 else metrics.height
     outcome := termattachment.kitty_animation_compose(state.store, id, {
@@ -607,7 +667,9 @@ graphics_kitty_apply_composition :: proc(
         overwrite = controls.composition_mode == 1,
     })
     status := graphics_kitty_mutation_status(outcome)
-    if status != .Ok { return status }
+    if status != .Ok {
+        return status 
+    }
     return graphics_kitty_queue_animation_command(state, {
         attachment_id = id, kind = .Refresh,
     })
@@ -619,7 +681,9 @@ graphics_kitty_apply_animation_control :: proc(
     controls: gfxprotocol.Kitty_Controls) ->
     gfxprotocol.Kitty_Graphics_Response_Status {
     id, found := graphics_kitty_animation_attachment(state, controls)
-    if !found { return .Not_Found }
+    if !found {
+        return .Not_Found 
+    }
     if !gfxprotocol.graphics_parser_animation_command_has_capacity(state) {
         return .Capacity_Exceeded
     }
@@ -631,7 +695,9 @@ graphics_kitty_apply_animation_control :: proc(
             loop_count = controls.loop_count,
         })
     status := graphics_kitty_mutation_status(outcome)
-    if status != .Ok { return status }
+    if status != .Ok {
+        return status 
+    }
     return graphics_kitty_queue_animation_command(state, {
         attachment_id = id,
         kind = .Control,
@@ -646,14 +712,18 @@ graphics_kitty_delete_animation_frames :: proc(
     controls: gfxprotocol.Kitty_Controls) ->
     gfxprotocol.Kitty_Graphics_Response_Status {
     id, found := graphics_kitty_animation_attachment(state, controls)
-    if !found { return .Not_Found }
+    if !found {
+        return .Not_Found 
+    }
     if !gfxprotocol.graphics_parser_animation_command_has_capacity(state) {
         return .Capacity_Exceeded
     }
     outcome := termattachment.kitty_animation_delete_frames(
         state.store, id, controls.rows, controls.delete_selector == 'F')
     status := graphics_kitty_mutation_status(outcome)
-    if status != .Ok { return status }
+    if status != .Ok {
+        return status 
+    }
     return graphics_kitty_queue_animation_command(state, {
         attachment_id = id, kind = .Refresh,
     })
@@ -680,7 +750,9 @@ graphics_parse_kitty_raw_controls :: proc(
         }
         start = index + 1
     }
-    if !graphics_finalize_kitty_animation_controls(&controls) { return {} }
+    if !graphics_finalize_kitty_animation_controls(&controls) {
+        return {} 
+    }
     controls.valid = true
     return controls
 }
@@ -768,7 +840,9 @@ graphics_kitty_store_image :: proc(
             }
         }
     }
-    if index < 0 { return false }
+    if index < 0 {
+        return false 
+    }
     state.kitty_images[index] = {
         image_id = controls.image_id,
         image_number = controls.image_number,
@@ -795,7 +869,9 @@ graphics_kitty_store_placement :: proc(
     state: ^gfxprotocol.Graphics_Parser_State,
     controls: gfxprotocol.Kitty_Controls,
     placement_id: termattachment.Placement_Id) -> bool {
-    if controls.placement_id == 0 { return true }
+    if controls.placement_id == 0 {
+        return true 
+    }
     for &identity in state.kitty_placements {
         if identity.active && identity.placement_id == controls.placement_id {
             termattachment.placement_remove(state.store, identity.internal_id)
@@ -846,16 +922,22 @@ graphics_kitty_admission_status :: proc(
 graphics_placement_rows :: proc(
     semantics_context: ^Context, geometry: termattachment.Placement_Geometry,
     dimensions: termattachment.Intrinsic_Metrics) -> int {
-    if geometry.row_span > 0 { return geometry.row_span }
+    if geometry.row_span > 0 {
+        return geometry.row_span 
+    }
     pixel_height := geometry.pixel_height
-    if pixel_height <= 0 { pixel_height = dimensions.height }
+    if pixel_height <= 0 {
+        pixel_height = dimensions.height 
+    }
     if pixel_height <= 0 || semantics_context == nil ||
         semantics_context.cell_height == nil {
         return 1
     }
     cell_height, valid := semantics_context.cell_height(
         semantics_context.user_data)
-    if !valid || cell_height <= 0 { return 1 }
+    if !valid || cell_height <= 0 {
+        return 1 
+    }
     return max((pixel_height + cell_height - 1) / cell_height, 1)
 }
 
@@ -885,7 +967,9 @@ graphics_kitty_geometry :: proc(
     semantics_context: ^Context,
     controls: gfxprotocol.Kitty_Controls) -> termattachment.Placement_Geometry {
     anchor, valid := graphics_context_anchor(semantics_context)
-    if !valid { return {} }
+    if !valid {
+        return {} 
+    }
     return {
         screen = anchor.screen,
         logical_row = anchor.logical_row,
@@ -1025,7 +1109,9 @@ graphics_prepare_kitty_decode_target :: proc(
     attachment_id, status := graphics_reserve_pending_attachment(
         state, .Kitty, result.dimensions.width, result.dimensions.height, has_identity)
     result.status = status
-    if status != .Ok { return result }
+    if status != .Ok {
+        return result 
+    }
     result.attachment_id = attachment_id
     if has_identity && !graphics_kitty_store_image(state, controls, attachment_id) {
         gfxprotocol.graphics_discard_pending_attachment(state, attachment_id)
@@ -1082,16 +1168,22 @@ graphics_queue_kitty_decode :: proc(
     controls: gfxprotocol.Kitty_Controls) ->
         gfxprotocol.Kitty_Graphics_Response_Status {
     kind, supported := graphics_kitty_decode_kind(controls)
-    if !supported { return .Unsupported }
+    if !supported {
+        return .Unsupported 
+    }
     if !gfxprotocol.graphics_parser_decode_request_has_capacity(state) {
         return .Capacity_Exceeded
     }
     dimensions, dimensions_valid := graphics_kitty_decode_dimensions(
         state, frame, controls, kind)
-    if !dimensions_valid { return .Invalid }
+    if !dimensions_valid {
+        return .Invalid 
+    }
     target := graphics_prepare_kitty_decode_target(
         semantics_context, state, controls, {kind = kind, dimensions = dimensions})
-    if target.status != .Ok { return target.status }
+    if target.status != .Ok {
+        return target.status 
+    }
     request := graphics_kitty_decode_request(
         semantics_context, frame, controls, target)
     if !gfxprotocol.graphics_parser_queue_decode_request(state, request) {
@@ -1123,7 +1215,9 @@ graphics_kitty_delete_identity :: proc(
     switch controls.delete_selector {
     case 'i', 'I':
         index := graphics_kitty_find_image(state, controls)
-        if index < 0 { return .Invalid }
+        if index < 0 {
+            return .Invalid 
+        }
         graphics_kitty_remove_image(state, index)
     case 'p', 'P':
         if !graphics_kitty_delete_placement(state, controls.placement_id) {
@@ -1182,13 +1276,19 @@ graphics_kitty_delete :: proc(
     semantics_context: ^Context, state: ^gfxprotocol.Graphics_Parser_State,
     controls: gfxprotocol.Kitty_Controls) ->
         gfxprotocol.Kitty_Graphics_Response_Status {
-    if state == nil || state.store == nil { return .Invalid }
+    if state == nil || state.store == nil {
+        return .Invalid 
+    }
     if controls.delete_selector == 'f' || controls.delete_selector == 'F' {
         return graphics_kitty_delete_animation_frames(state, controls)
     }
-    if semantics_context == nil { return .Invalid }
+    if semantics_context == nil {
+        return .Invalid 
+    }
     anchor, valid := graphics_context_anchor(semantics_context)
-    if !valid { return .Invalid }
+    if !valid {
+        return .Invalid 
+    }
     if controls.delete_selector == 'i' || controls.delete_selector == 'I' ||
         controls.delete_selector == 'p' || controls.delete_selector == 'P' ||
         controls.delete_selector == 'a' || controls.delete_selector == 'A' {
@@ -1279,13 +1379,19 @@ graphics_apply_kitty_raw :: proc(
         gfxprotocol.Kitty_Graphics_Response_Status {
     payload, found := termattachment.transfer_bytes(state.store, frame.transfer_id)
     bytes_per_pixel, valid := graphics_validate_kitty_raw(controls, payload, found)
-    if !valid { return .Invalid }
+    if !valid {
+        return .Invalid 
+    }
     attachment_id, status := graphics_admit_kitty_raw(
         state, controls, payload, bytes_per_pixel)
-    if status != .Ok { return status }
+    if status != .Ok {
+        return status 
+    }
     has_identity := controls.image_id != 0 || controls.image_number != 0
     if controls.action == .Transmit {
-        if has_identity { return .Ok }
+        if has_identity {
+            return .Ok 
+        }
         termattachment.attachment_remove(state.store, attachment_id)
         return .Invalid
     }
@@ -1306,7 +1412,9 @@ graphics_apply_kitty_delete_controls :: proc(
     gfxprotocol.Kitty_Graphics_Response_Status {
     if controls.delete_selector == 'f' || controls.delete_selector == 'F' {
         id, found := graphics_kitty_animation_attachment(state, controls)
-        if !found { return .Not_Found }
+        if !found {
+            return .Not_Found 
+        }
         if graphics_kitty_mutation_pending(state, id) {
             return .Ok if graphics_kitty_defer_mutation(
                 state, id, controls, .Delete) else .Capacity_Exceeded
@@ -1322,7 +1430,9 @@ graphics_apply_kitty_frame_controls :: proc(
     controls: gfxprotocol.Kitty_Controls) ->
     (gfxprotocol.Kitty_Graphics_Response_Status, bool) {
     id, found := graphics_kitty_animation_attachment(state, controls)
-    if !found { return .Not_Found, false }
+    if !found {
+        return .Not_Found, false 
+    }
     if controls.format == 100 || controls.zlib_compressed {
         status := graphics_kitty_queue_encoded_frame(state, frame, controls, id)
         return status, status == .Ok
@@ -1333,7 +1443,9 @@ graphics_apply_kitty_frame_controls :: proc(
     payload, payload_found := termattachment.transfer_bytes(
         state.store, frame.transfer_id)
     _, valid := graphics_validate_kitty_raw(controls, payload, payload_found)
-    if !valid { return .Invalid, false }
+    if !valid {
+        return .Invalid, false 
+    }
     queued := graphics_kitty_defer_mutation(
         state, id, controls, .Frame, frame.transfer_id)
     return .Ok if queued else .Capacity_Exceeded, queued
@@ -1346,7 +1458,9 @@ graphics_apply_kitty_timeline_controls :: proc(
     kind: gfxprotocol.Kitty_Mutation_Kind) ->
     gfxprotocol.Kitty_Graphics_Response_Status {
     id, found := graphics_kitty_animation_attachment(state, controls)
-    if !found { return .Not_Found }
+    if !found {
+        return .Not_Found 
+    }
     if graphics_kitty_mutation_pending(state, id) {
         return .Ok if graphics_kitty_defer_mutation(
             state, id, controls, kind) else .Capacity_Exceeded
@@ -1370,7 +1484,9 @@ graphics_apply_kitty_non_transmit :: proc(
     }
     if controls.action == .Animate || controls.action == .Compose {
         kind: gfxprotocol.Kitty_Mutation_Kind = .Control
-        if controls.action == .Compose { kind = .Compose }
+        if controls.action == .Compose {
+            kind = .Compose 
+        }
         return {status = graphics_apply_kitty_timeline_controls(
             state, controls, kind), handled = true}
     }
@@ -1381,7 +1497,9 @@ graphics_apply_kitty_non_transmit :: proc(
         }
         dimensions, found := termattachment.attachment_metrics(
             state.store, state.kitty_images[index].attachment_id)
-        if !found { return {status = .Invalid, handled = true} }
+        if !found {
+            return {status = .Invalid, handled = true} 
+        }
         status := graphics_kitty_place(
             semantics_context, state, controls,
             state.kitty_images[index].attachment_id, dimensions)
@@ -1411,10 +1529,14 @@ graphics_apply_kitty_controls :: proc(
     frame: gfxprotocol.Graphics_Frame,
     controls: gfxprotocol.Kitty_Controls) -> (
         gfxprotocol.Kitty_Graphics_Response_Status, bool) {
-    if !controls.valid { return .Invalid, false }
+    if !controls.valid {
+        return .Invalid, false 
+    }
     result := graphics_apply_kitty_non_transmit(
         semantics_context, state, frame, controls)
-    if result.handled { return result.status, result.retained }
+    if result.handled {
+        return result.status, result.retained 
+    }
     status := result.status
     if controls.format == 100 || controls.zlib_compressed {
         status = graphics_queue_kitty_decode(semantics_context, state, frame, controls)
@@ -1508,7 +1630,9 @@ graphics_apply_kitty_frame :: proc(
     if !state.kitty_chunk_active {
         aggregate, outcome := termattachment.transfer_begin(
             state.store, .Kitty, state.store.limits.transfer_byte_limit)
-        if outcome != .Admitted { return .Capacity_Exceeded, false }
+        if outcome != .Admitted {
+            return .Capacity_Exceeded, false 
+        }
         state.kitty_chunk_frame = frame
         state.kitty_chunk_frame.transfer_id = aggregate
         state.kitty_chunk_controls = controls
@@ -1522,7 +1646,9 @@ graphics_apply_kitty_frame :: proc(
         graphics_kitty_abort_chunks(state)
         return .Capacity_Exceeded, false
     }
-    if controls.more { return .Ok, false }
+    if controls.more {
+        return .Ok, false 
+    }
     return graphics_kitty_complete_chunks(semantics_context, state), false
 }
 
@@ -1590,7 +1716,9 @@ graphics_semantics_consume_frames :: proc(semantics_context: ^Context) {
     state := semantics_context.state
     for {
         frame, available := gfxprotocol.graphics_parser_take_frame(state)
-        if !available { break }
+        if !available {
+            break 
+        }
         retained := graphics_semantics_apply_frame(semantics_context, state, frame)
         if frame.transfer_id.generation != 0 && !retained {
             termattachment.transfer_remove(state.store, frame.transfer_id)

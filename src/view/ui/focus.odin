@@ -73,20 +73,26 @@ semantic_control_id :: #force_inline proc(
 // semantic_snapshot returns the immutable snapshot used for current routing.
 semantic_snapshot :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State) -> ^viewmodel.Ui_Semantic_Snapshot {
-    if state == nil {return nil}
+    if state == nil {
+        return nil
+    }
     return &state^.snapshots[state^.committed_index]
 }
 
 // semantic_staging_snapshot returns the snapshot currently accepting registrations.
 semantic_staging_snapshot :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State) -> ^viewmodel.Ui_Semantic_Snapshot {
-    if state == nil || !state^.staging_active {return nil}
+    if state == nil || !state^.staging_active {
+        return nil
+    }
     return &state^.snapshots[state^.staging_index]
 }
 
 // semantic_begin starts a fresh staging snapshot without disturbing committed data.
 semantic_begin :: proc(state: ^viewmodel.Ui_Semantic_Focus_State) -> bool {
-    if state == nil {return false}
+    if state == nil {
+        return false
+    }
     state^.staging_index = state^.committed_index == 0 ? 1 : 0
     staging := &state^.snapshots[state^.staging_index]
     staging^.node_count = 0
@@ -102,9 +108,13 @@ semantic_begin :: proc(state: ^viewmodel.Ui_Semantic_Focus_State) -> bool {
 semantic_node_index :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
     id: viewmodel.Ui_Node_Id) -> int {
-    if snapshot == nil {return -1}
+    if snapshot == nil {
+        return -1
+    }
     for index in 0..<snapshot^.node_count {
-        if snapshot^.nodes[index].id == id {return index}
+        if snapshot^.nodes[index].id == id {
+            return index
+        }
     }
     return -1
 }
@@ -113,10 +123,14 @@ semantic_node_index :: proc(
 semantic_node_text :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
     offset: u32, length: u16) -> string {
-    if snapshot == nil {return ""}
+    if snapshot == nil {
+        return ""
+    }
     first := int(offset)
     last := first + int(length)
-    if first < 0 || last < first || last > snapshot^.text_count {return ""}
+    if first < 0 || last < first || last > snapshot^.text_count {
+        return ""
+    }
     return string(snapshot^.text[first:last])
 }
 
@@ -124,9 +138,13 @@ semantic_node_text :: proc(
 semantic_focus_matches_name :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State, name: string) -> bool {
     snapshot := semantic_snapshot(state)
-    if snapshot == nil {return false}
+    if snapshot == nil {
+        return false
+    }
     index := semantic_node_index(snapshot, state^.logical_focus)
-    if index < 0 {return false}
+    if index < 0 {
+        return false
+    }
     id := snapshot^.nodes[index].id
     for entry in SCENARIO_FOCUS_NAMES {
         if entry.name == name {
@@ -141,7 +159,9 @@ semantic_reject :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     status: viewmodel.Ui_Semantic_Status,
     id: viewmodel.Ui_Node_Id) -> viewmodel.Ui_Semantic_Status {
-    if state == nil {return status}
+    if state == nil {
+        return status
+    }
     state^.staging_rejected = true
     state^.diagnostics.rejection_count += 1
     state^.diagnostics.last_rejection = status
@@ -155,8 +175,12 @@ semantic_registration_status :: proc(
     registration: viewmodel.Ui_Semantic_Node_Registration) ->
     viewmodel.Ui_Semantic_Status {
     empty_id := viewmodel.Ui_Node_Id{}
-    if registration.node.id == empty_id {return .Invalid_Id}
-    if semantic_node_index(snapshot, registration.node.id) >= 0 {return .Duplicate_Id}
+    if registration.node.id == empty_id {
+        return .Invalid_Id
+    }
+    if semantic_node_index(snapshot, registration.node.id) >= 0 {
+        return .Duplicate_Id
+    }
     if !utf8.valid_string(registration.label) ||
        !utf8.valid_string(registration.value) ||
        !utf8.valid_string(registration.placeholder) {
@@ -184,10 +208,16 @@ semantic_register_node :: proc(
     registration: viewmodel.Ui_Semantic_Node_Registration) ->
     viewmodel.Ui_Semantic_Status {
     snapshot := semantic_staging_snapshot(state)
-    if snapshot == nil {return .Not_Staging}
-    if state^.staging_rejected {return state^.diagnostics.last_rejection}
+    if snapshot == nil {
+        return .Not_Staging
+    }
+    if state^.staging_rejected {
+        return state^.diagnostics.last_rejection
+    }
     status := semantic_registration_status(snapshot, registration)
-    if status != .Ok {return semantic_reject(state, status, registration.node.id)}
+    if status != .Ok {
+        return semantic_reject(state, status, registration.node.id)
+    }
     node := registration.node
     node.label_offset = u32(snapshot^.text_count)
     node.label_length = u16(len(registration.label))
@@ -272,7 +302,9 @@ semantic_node_is_tab_stop :: proc(node: viewmodel.Ui_Semantic_Node) -> bool {
 semantic_validate_snapshot :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot) ->
     (viewmodel.Ui_Semantic_Status, viewmodel.Ui_Node_Id) {
-    if snapshot == nil {return .Invalid_Argument, {}}
+    if snapshot == nil {
+        return .Invalid_Argument, {}
+    }
     root_parent := viewmodel.Ui_Node_Id{}
     for node, index in snapshot^.nodes[:snapshot^.node_count] {
         if node.parent != root_parent &&
@@ -283,7 +315,9 @@ semantic_validate_snapshot :: proc(
              semantic_node_index(snapshot, node.controls) < 0 {
             return .Missing_Parent, node.id
         }
-        if !semantic_node_is_tab_stop(node) {continue}
+        if !semantic_node_is_tab_stop(node) {
+            continue
+        }
         for prior in snapshot^.nodes[:index] {
             if semantic_node_is_tab_stop(prior) &&
                  prior.region == node.region &&
@@ -307,9 +341,13 @@ semantic_edge_tab_stop :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot, reverse: bool) -> int {
     result := -1
     for node, index in snapshot^.nodes[:snapshot^.node_count] {
-        if !semantic_node_is_tab_stop(node) {continue}
+        if !semantic_node_is_tab_stop(node) {
+            continue
+        }
         if result < 0 || reverse == semantic_tab_stop_before(
-            snapshot^.nodes[result], node) {result = index}
+            snapshot^.nodes[result], node) {
+            result = index
+        }
     }
     return result
 }
@@ -321,7 +359,9 @@ semantic_tab_anchor_index :: proc(
     index := semantic_node_index(snapshot, focused)
     for index >= 0 {
         node := snapshot^.nodes[index]
-        if semantic_node_is_tab_stop(node) {return index}
+        if semantic_node_is_tab_stop(node) {
+            return index
+        }
         index = semantic_node_index(snapshot, node.parent)
     }
     return -1
@@ -332,18 +372,30 @@ semantic_next_tab_stop :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
     focused: viewmodel.Ui_Node_Id, reverse: bool) -> int {
     anchor := semantic_tab_anchor_index(snapshot, focused)
-    if anchor < 0 {return semantic_edge_tab_stop(snapshot, reverse)}
+    if anchor < 0 {
+        return semantic_edge_tab_stop(snapshot, reverse)
+    }
     result := -1
     anchor_node := snapshot^.nodes[anchor]
     for node, index in snapshot^.nodes[:snapshot^.node_count] {
-        if !semantic_node_is_tab_stop(node) {continue}
+        if !semantic_node_is_tab_stop(node) {
+            continue
+        }
         follows := semantic_tab_stop_before(anchor_node, node)
-        if reverse {follows = semantic_tab_stop_before(node, anchor_node)}
-        if !follows {continue}
+        if reverse {
+            follows = semantic_tab_stop_before(node, anchor_node)
+        }
+        if !follows {
+            continue
+        }
         if result < 0 || reverse == semantic_tab_stop_before(
-            snapshot^.nodes[result], node) {result = index}
+            snapshot^.nodes[result], node) {
+            result = index
+        }
     }
-    if result >= 0 {return result}
+    if result >= 0 {
+        return result
+    }
     return semantic_edge_tab_stop(snapshot, reverse)
 }
 
@@ -351,7 +403,9 @@ semantic_next_tab_stop :: proc(
 semantic_append_command :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     command: viewmodel.Ui_Focus_Command) -> bool {
-    if state^.command_count >= len(state^.commands) {return false}
+    if state^.command_count >= len(state^.commands) {
+        return false
+    }
     state^.commands[state^.command_count] = command
     state^.command_count += 1
     return true
@@ -362,9 +416,13 @@ semantic_command_requested :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     target: viewmodel.Ui_Node_Id,
     kind: viewmodel.Ui_Focus_Command_Kind) -> bool {
-    if state == nil {return false}
+    if state == nil {
+        return false
+    }
     for command in state^.commands[:state^.command_count] {
-        if command.target == target && command.kind == kind {return true}
+        if command.target == target && command.kind == kind {
+            return true
+        }
     }
     return false
 }
@@ -390,19 +448,45 @@ semantic_simple_external_action :: proc(
     return false
 }
 
+// Convert and enqueue an external page-scroll action when the node permits it.
+semantic_external_scroll_action :: proc(
+    state: ^viewmodel.Ui_Semantic_Focus_State,
+    node: viewmodel.Ui_Semantic_Node, target: viewmodel.Ui_Node_Id,
+    kind: viewmodel.Ui_Focus_Command_Kind, numeric_value: f64) -> bool {
+    if kind == .Scroll_Page && .Scroll in node.actions {
+        amount := i32(1)
+        if numeric_value < 0 {
+            amount = -1
+        }
+        return semantic_append_command(state, {
+            target = target, kind = kind, amount = amount})
+    }
+    if kind == .Set_Scroll_Value && .Scroll in node.actions {
+        return semantic_append_command(state, {
+            target = target, kind = kind, numeric_value = numeric_value})
+    }
+    return false
+}
+
 // semantic_apply_external_action validates and converges one owner-external action.
 semantic_apply_external_action :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     target: viewmodel.Ui_Node_Id,
     kind: viewmodel.Ui_Focus_Command_Kind,
     numeric_value: f64 = 0) -> bool {
-    if state == nil {return false}
+    if state == nil {
+        return false
+    }
     snapshot := semantic_snapshot(state)
     index := semantic_node_index(snapshot, target)
-    if index < 0 {return false}
+    if index < 0 {
+        return false
+    }
     node := snapshot^.nodes[index]
     required_states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
-    if node.states & required_states != required_states {return false}
+    if node.states & required_states != required_states {
+        return false
+    }
     if kind == .Focus && .Focus in node.actions {
         state^.logical_focus = target
         state^.focus_origin = .Keyboard
@@ -414,15 +498,8 @@ semantic_apply_external_action :: proc(
         return semantic_append_command(state, {
             target = target, kind = kind, numeric_value = numeric_value})
     }
-    if kind == .Scroll_Page && .Scroll in node.actions {
-        amount := i32(1)
-        if numeric_value < 0 {amount = -1}
-        return semantic_append_command(state, {
-            target = target, kind = kind, amount = amount})
-    }
-    if kind == .Set_Scroll_Value && .Scroll in node.actions {
-        return semantic_append_command(state, {
-            target = target, kind = kind, numeric_value = numeric_value})
+    if semantic_external_scroll_action(state, node, target, kind, numeric_value) {
+        return true
     }
     return semantic_simple_external_action(state, node, target, kind)
 }
@@ -437,10 +514,14 @@ semantic_apply_external_text_action :: proc(
     }
     snapshot := semantic_snapshot(state)
     index := semantic_node_index(snapshot, input.target)
-    if index < 0 {return false}
+    if index < 0 {
+        return false
+    }
     node := snapshot^.nodes[index]
     required := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
-    if node.states & required != required {return false}
+    if node.states & required != required {
+        return false
+    }
     command := viewmodel.Ui_Focus_Command{target = input.target, kind = input.kind,
         payload_length = u16(len(input.payload)), selection_anchor = input.anchor,
         selection_focus = input.focus}
@@ -478,7 +559,9 @@ semantic_request_pointer_focus :: proc(
 
 // semantic_clear_pointer_focus clears control focus for a broad pointer target.
 semantic_clear_pointer_focus :: proc(state: ^viewmodel.Ui_Semantic_Focus_State) {
-    if state == nil {return}
+    if state == nil {
+        return
+    }
     state^.logical_focus = {}
     state^.focus_origin = .Pointer
     state^.last_region = .None
@@ -493,7 +576,9 @@ semantic_focus_for_press :: proc(
     press_id: int,
     target: viewmodel.Ui_Node_Id) -> bool {
     if owner == nil || !owner^.active || owner^.kind != kind ||
-        owner^.id != press_id {return false}
+        owner^.id != press_id {
+        return false
+    }
     return semantic_request_pointer_focus(state, target)
 }
 
@@ -501,12 +586,18 @@ semantic_focus_for_press :: proc(
 semantic_activation_command :: proc(
     node: viewmodel.Ui_Semantic_Node,
     event: input.Input_Event) -> viewmodel.Ui_Focus_Command_Kind {
-    if event.kind != .Press {return .None}
+    if event.kind != .Press {
+        return .None
+    }
     if node.role == .Checkbox && event.key == .Space &&
-        .Toggle in node.actions {return .Toggle}
+        .Toggle in node.actions {
+        return .Toggle
+    }
     if (node.role == .Button || node.role == .Accordion_Header) &&
         (event.key == .Enter || event.key == .Space) &&
-        .Activate in node.actions {return .Activate}
+        .Activate in node.actions {
+        return .Activate
+    }
     return .None
 }
 
@@ -520,10 +611,18 @@ semantic_slider_command :: proc(
     if (key == .Right || key == .Up) && .Increment in node.actions {
         return .Increment, 1
     }
-    if key == .Home && .Set_To_Bound in node.actions {return .Set_Minimum, 0}
-    if key == .End && .Set_To_Bound in node.actions {return .Set_Maximum, 0}
-    if key == .Page_Down && .Decrement in node.actions {return .Page_Step, -1}
-    if key == .Page_Up && .Increment in node.actions {return .Page_Step, 1}
+    if key == .Home && .Set_To_Bound in node.actions {
+        return .Set_Minimum, 0
+    }
+    if key == .End && .Set_To_Bound in node.actions {
+        return .Set_Maximum, 0
+    }
+    if key == .Page_Down && .Decrement in node.actions {
+        return .Page_Step, -1
+    }
+    if key == .Page_Up && .Increment in node.actions {
+        return .Page_Step, 1
+    }
     return .None, 0
 }
 
@@ -531,9 +630,15 @@ semantic_slider_command :: proc(
 semantic_document_command :: proc(
     node: viewmodel.Ui_Semantic_Node,
     key: input.Input_Key) -> (viewmodel.Ui_Focus_Command_Kind, i32) {
-    if .Scroll not_in node.actions {return .None, 0}
-    if key == .Page_Down {return .Scroll_Page, 1}
-    if key == .Page_Up {return .Scroll_Page, -1}
+    if .Scroll not_in node.actions {
+        return .None, 0
+    }
+    if key == .Page_Down {
+        return .Scroll_Page, 1
+    }
+    if key == .Page_Up {
+        return .Scroll_Page, -1
+    }
     return .None, 0
 }
 
@@ -548,8 +653,12 @@ semantic_tree_command :: proc(
         return .Tree_Child
     }
     if key == .Space &&
-        (.Expand in node.actions || .Collapse in node.actions) {return .Toggle}
-    if .Select not_in node.actions {return .None}
+        (.Expand in node.actions || .Collapse in node.actions) {
+        return .Toggle
+    }
+    if .Select not_in node.actions {
+        return .None
+    }
     #partial switch key {
     case .Up: return .Tree_Previous
     case .Down: return .Tree_Next
@@ -564,9 +673,13 @@ semantic_tree_command :: proc(
 semantic_command_for_event :: proc(
     node: viewmodel.Ui_Semantic_Node,
     event: input.Input_Event) -> (viewmodel.Ui_Focus_Command_Kind, i32) {
-    if event.kind != .Press && event.kind != .Repeat {return .None, 0}
+    if event.kind != .Press && event.kind != .Repeat {
+        return .None, 0
+    }
     if .Control in event.modifiers || .Alt in event.modifiers ||
-        .Super in event.modifiers {return .None, 0}
+        .Super in event.modifiers {
+        return .None, 0
+    }
     #partial switch node.role {
     case .Button, .Accordion_Header:
         return semantic_activation_command(node, event), 0
@@ -598,10 +711,14 @@ semantic_route_traversal :: proc(
         focused_index < 0 && terminal_owns_keyboard
     if event.kind != .Press || event.key != .Tab || .Alt in event.modifiers ||
         .Super in event.modifiers ||
-        terminal_focused != (.Control in event.modifiers) {return false}
+        terminal_focused != (.Control in event.modifiers) {
+        return false
+    }
     next := semantic_next_tab_stop(snapshot, state^.logical_focus,
         .Shift in event.modifiers)
-    if next < 0 || !input.input_event_claim(frame, event_index, claims) {return false}
+    if next < 0 || !input.input_event_claim(frame, event_index, claims) {
+        return false
+    }
     node := snapshot^.nodes[next]
     state^.logical_focus = node.id
     state^.focus_origin = .Keyboard
@@ -618,10 +735,14 @@ semantic_route_focused_command :: proc(
     frame: input.Input_Frame, event_index: int,
     claims: ^input.Input_Event_Claim_State) {
     focused_index := semantic_node_index(snapshot, state^.logical_focus)
-    if focused_index < 0 {return}
+    if focused_index < 0 {
+        return
+    }
     kind, amount := semantic_command_for_event(
         snapshot^.nodes[focused_index], frame.events[event_index])
-    if kind == .None || !input.input_event_claim(frame, event_index, claims) {return}
+    if kind == .None || !input.input_event_claim(frame, event_index, claims) {
+        return
+    }
     _ = semantic_append_command(state, {
         target = state^.logical_focus, kind = kind, amount = amount,
         event_index = u16(event_index)})
@@ -633,14 +754,20 @@ semantic_route_keyboard :: proc(
     frame: input.Input_Frame,
     terminal_owns_keyboard: bool = false) -> input.Input_Event_Claim_State {
     claims: input.Input_Event_Claim_State
-    if state == nil {return claims}
+    if state == nil {
+        return claims
+    }
     state^.window_focused = frame.window_focused
     state^.command_count = 0
     snapshot := semantic_snapshot(state)
     for _, event_index in frame.events {
         if semantic_route_traversal(state, frame, event_index,
-            terminal_owns_keyboard, &claims) {continue}
-        if terminal_owns_keyboard {continue}
+            terminal_owns_keyboard, &claims) {
+            continue
+        }
+        if terminal_owns_keyboard {
+            continue
+        }
         semantic_route_focused_command(
             state, snapshot, frame, event_index, &claims)
     }
@@ -659,7 +786,9 @@ semantic_legacy_focus :: proc(
     (viewmodel.Ui_Focus_Target, bool) {
     snapshot := semantic_snapshot(state)
     index := semantic_node_index(snapshot, state^.logical_focus)
-    if index < 0 {return {}, false}
+    if index < 0 {
+        return {}, false
+    }
     node := snapshot^.nodes[index]
     if node.role == .Terminal || node.id.domain == .Terminal {
         return {kind = .Terminal}, true
@@ -670,7 +799,9 @@ semantic_legacy_focus :: proc(
     if node.role == .Input {
         return {kind = .Input_Box, id = int(node.id.local_id)}, true
     }
-    if node.id.domain == .Animation_Control {return {}, true}
+    if node.id.domain == .Animation_Control {
+        return {}, true
+    }
     return {kind = .Accordion}, true
 }
 
@@ -681,18 +812,30 @@ semantic_nearest_candidate :: proc(
     require_same_parent: bool) -> int {
     next_index, prior_index := -1, -1
     for node, index in snapshot^.nodes[:snapshot^.node_count] {
-        if !semantic_node_is_focus_candidate(node) {continue}
-        if !require_same_parent && !semantic_node_is_tab_stop(node) {continue}
+        if !semantic_node_is_focus_candidate(node) {
+            continue
+        }
+        if !require_same_parent && !semantic_node_is_tab_stop(node) {
+            continue
+        }
         if node.region != reference.region ||
-            (require_same_parent && node.parent != reference.parent) {continue}
+            (require_same_parent && node.parent != reference.parent) {
+            continue
+        }
         if node.traversal_order > reference.traversal_order &&
              (next_index < 0 || node.traversal_order <
-                snapshot^.nodes[next_index].traversal_order) {next_index = index}
+                snapshot^.nodes[next_index].traversal_order) {
+            next_index = index
+        }
         if node.traversal_order < reference.traversal_order &&
              (prior_index < 0 || node.traversal_order >
-                snapshot^.nodes[prior_index].traversal_order) {prior_index = index}
+                snapshot^.nodes[prior_index].traversal_order) {
+            prior_index = index
+        }
     }
-    if next_index >= 0 {return next_index}
+    if next_index >= 0 {
+        return next_index
+    }
     return prior_index
 }
 
@@ -700,7 +843,9 @@ semantic_nearest_candidate :: proc(
 semantic_first_candidate :: proc(snapshot: ^viewmodel.Ui_Semantic_Snapshot) -> int {
     result := -1
     for node, index in snapshot^.nodes[:snapshot^.node_count] {
-        if !semantic_node_is_tab_stop(node) {continue}
+        if !semantic_node_is_tab_stop(node) {
+            continue
+        }
         if result < 0 || node.region < snapshot^.nodes[result].region ||
             (node.region == snapshot^.nodes[result].region &&
              node.traversal_order < snapshot^.nodes[result].traversal_order) {
@@ -717,7 +862,9 @@ semantic_generation_replacement :: proc(
     for node, index in snapshot^.nodes[:snapshot^.node_count] {
         if node.id.domain == id.domain && node.id.local_id == id.local_id &&
             node.id.stable_id == id.stable_id &&
-            semantic_node_is_focus_candidate(node) {return index}
+            semantic_node_is_focus_candidate(node) {
+                return index
+            }
     }
     return -1
 }
@@ -727,20 +874,30 @@ semantic_find_repair_candidate :: proc(
     current, previous: ^viewmodel.Ui_Semantic_Snapshot,
     focused: viewmodel.Ui_Node_Id) -> int {
     previous_index := semantic_node_index(previous, focused)
-    if previous_index < 0 {return semantic_first_candidate(current)}
+    if previous_index < 0 {
+        return semantic_first_candidate(current)
+    }
     replacement := semantic_generation_replacement(current, focused)
-    if replacement >= 0 {return replacement}
+    if replacement >= 0 {
+        return replacement
+    }
     previous_node := previous^.nodes[previous_index]
     empty_id := viewmodel.Ui_Node_Id{}
     if previous_node.parent != empty_id {
         sibling := semantic_nearest_candidate(current, previous_node, true)
-        if sibling >= 0 {return sibling}
+        if sibling >= 0 {
+            return sibling
+        }
         parent := semantic_node_index(current, previous_node.parent)
         if parent >= 0 && semantic_node_is_focus_candidate(
-            current^.nodes[parent]) {return parent}
+            current^.nodes[parent]) {
+            return parent
+        }
     }
     nearby := semantic_nearest_candidate(current, previous_node, false)
-    if nearby >= 0 {return nearby}
+    if nearby >= 0 {
+        return nearby
+    }
     return semantic_first_candidate(current)
 }
 
@@ -749,10 +906,14 @@ semantic_reconcile_focus :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     current, previous: ^viewmodel.Ui_Semantic_Snapshot) {
     empty_id := viewmodel.Ui_Node_Id{}
-    if state^.logical_focus == empty_id {return}
+    if state^.logical_focus == empty_id {
+        return
+    }
     focused_index := semantic_node_index(current, state^.logical_focus)
     if focused_index >= 0 && semantic_node_is_focus_candidate(
-        current^.nodes[focused_index]) {return}
+        current^.nodes[focused_index]) {
+        return
+    }
     replacement := semantic_find_repair_candidate(current, previous,
         state^.logical_focus)
     if replacement < 0 {
@@ -774,16 +935,22 @@ semantic_refresh_focus_visible :: proc(
     for &node in snapshot^.nodes[:snapshot^.node_count] {
         node.states -= {.Focus_Visible}
     }
-    if !state^.window_focused || state^.focus_origin != .Keyboard {return}
+    if !state^.window_focused || state^.focus_origin != .Keyboard {
+        return
+    }
     index := semantic_node_index(snapshot, state^.logical_focus)
-    if index >= 0 {snapshot^.nodes[index].states += {.Focus_Visible}}
+    if index >= 0 {
+        snapshot^.nodes[index].states += {.Focus_Visible}
+    }
 }
 
 // semantic_publish validates, reconciles, and atomically commits the staging snapshot.
 semantic_publish :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State) -> viewmodel.Ui_Semantic_Status {
     staging := semantic_staging_snapshot(state)
-    if staging == nil {return .Not_Staging}
+    if staging == nil {
+        return .Not_Staging
+    }
     if state^.staging_rejected {
         state^.staging_active = false
         return state^.diagnostics.last_rejection

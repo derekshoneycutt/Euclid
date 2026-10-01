@@ -336,26 +336,11 @@ world_sample_circle_region :: proc(
     return true
 }
 
-// Push one analytic circle region through shared polygon packet triangulation.
-world_cache_push_circle_region :: proc(
-    world: ^shapemodel.Shape_World,
-    source: World_Draw_Source,
-    geometry: shapemodel.Shape_Circle_Region_Geometry,
-    alpha: f32) {
-    region, found := world_lerped_circle_region(world, geometry, alpha)
-    if !found {return}
-    reservation := reserve_polygon_cache_ranges_storage(
-        &world.draw_cache, CIRCLE_REGION_VERTEX_COUNT)
-    if !reservation.ok {return}
-    vertices := world.draw_cache.polygon_vertices[
-        reservation.first_vertex:reservation.first_vertex + CIRCLE_REGION_VERTEX_COUNT]
-    if !world_sample_circle_region(region, vertices) {
-        rollback_polygon_cache_ranges_storage(&world.draw_cache,
-            CIRCLE_REGION_VERTEX_COUNT, reservation.max_triangle_count)
-        return
-    }
-    triangle_count := triangulate_polygon_ear_clip_storage(&world.draw_cache,
-        reservation.first_vertex, vertices, reservation.first_triangle)
+// Finalize one circle-region packet after its boundary has been triangulated.
+world_cache_commit_circle_region :: proc(
+    world: ^shapemodel.Shape_World, source: World_Draw_Source,
+    region: World_Lerped_Circle_Region,
+    reservation: Polygon_Cache_Range_Reservation, triangle_count: int) {
     finalize_polygon_triangle_reservation_storage(
         &world.draw_cache, reservation.first_triangle, triangle_count)
     slot, has_slot := draw_cache_next_item_slot_storage(&world.draw_cache)
@@ -365,10 +350,40 @@ world_cache_push_circle_region :: proc(
         return
     }
     kind := Shapes_Point_Type.Lens
-    if region.value.operation == .Difference {kind = .Lune}
+    if region.value.operation == .Difference {
+        kind = .Lune
+    }
     slot^ = Shapes_Polygon_Draw{world_make_draw_base(source, kind),
         reservation.first_vertex, CIRCLE_REGION_VERTEX_COUNT,
         reservation.first_triangle, triangle_count}
+}
+
+// Push one analytic circle region through shared polygon packet triangulation.
+world_cache_push_circle_region :: proc(
+    world: ^shapemodel.Shape_World,
+    source: World_Draw_Source,
+    geometry: shapemodel.Shape_Circle_Region_Geometry,
+    alpha: f32) {
+    region, found := world_lerped_circle_region(world, geometry, alpha)
+    if !found {
+       return
+    }
+    reservation := reserve_polygon_cache_ranges_storage(
+        &world.draw_cache, CIRCLE_REGION_VERTEX_COUNT)
+    if !reservation.ok {
+       return
+    }
+    vertices := world.draw_cache.polygon_vertices[
+        reservation.first_vertex:reservation.first_vertex + CIRCLE_REGION_VERTEX_COUNT]
+    if !world_sample_circle_region(region, vertices) {
+        rollback_polygon_cache_ranges_storage(&world.draw_cache,
+            CIRCLE_REGION_VERTEX_COUNT, reservation.max_triangle_count)
+        return
+    }
+    triangle_count := triangulate_polygon_ear_clip_storage(&world.draw_cache,
+        reservation.first_vertex, vertices, reservation.first_triangle)
+    world_cache_commit_circle_region(
+        world, source, region, reservation, triangle_count)
 }
 
 // Resolve and interpolate one host's trochoid description.
@@ -740,7 +755,9 @@ world_cache_push_geometry :: proc(
     source: World_Draw_Source,
     geometry: shapemodel.Shape_Geometry,
     alpha: f32) {
-    if world_cache_push_instrument(world, source, geometry, alpha) {return}
+    if world_cache_push_instrument(world, source, geometry, alpha) {
+       return
+    }
     switch geometry.kind {
     case .Point: world_cache_push_point(world, source, alpha)
     case .Line: world_cache_push_line(world, source, geometry.payload.line, alpha)

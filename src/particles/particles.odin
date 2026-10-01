@@ -445,7 +445,9 @@ emit_shape_world_geometry_burst :: proc(
     geometry: shapemodel.Shape_Geometry) {
     if geometry.kind == .Point {
         position, found := shape_world_burst_position(ctx.world, entity)
-        if found {emit_point_burst(ctx.particles, position, ctx.color)}
+        if found {
+           emit_point_burst(ctx.particles, position, ctx.color)
+        }
         return
     }
     if geometry.kind == .Line {
@@ -459,6 +461,23 @@ emit_shape_world_geometry_burst :: proc(
         return
     }
     emit_shape_world_constructed_burst(ctx, entity, geometry)
+}
+
+//   Emit visible non-tool geometry after resolving and kicking its clear effect.
+emit_shape_world_hide_geometry_burst :: proc(
+    ctx: Shape_World_Burst_Context, entity: shapemodel.Shape_Entity,
+    kick_dust: bool) -> bool {
+    geometry, found := shapemodel.shape_component_get(
+        &ctx.world^.geometries, &ctx.world^.registry, entity)
+    if !found || geometry^.kind == .Pen || geometry^.kind == .Compass ||
+        geometry^.kind == .Trochoid_Tool || geometry^.kind == .Cycloid_Tool {
+        return false
+    }
+    if kick_dust {
+        kick_existing_dust(ctx.particles)
+    }
+    emit_shape_world_geometry_burst(ctx, entity, geometry^)
+    return true
 }
 
 //   Emit clear dust for one visible entity before its presentation is hidden.
@@ -478,21 +497,17 @@ emit_shape_world_hide_burst :: proc(
     }
     if shapemodel.shape_component_contains(&world.labels, &world.registry, entity) {
         position, position_found := shape_world_burst_position(world, entity)
-        if !position_found {return false}
-        if kick_dust {kick_existing_dust(ps)}
+        if !position_found {
+           return false
+        }
+        if kick_dust {
+           kick_existing_dust(ps)
+        }
         emit_label_burst(ps, position, style^.color)
         return true
     }
-    geometry, geometry_found := shapemodel.shape_component_get(
-        &world.geometries, &world.registry, entity)
-    if !geometry_found || geometry^.kind == .Pen || geometry^.kind == .Compass ||
-        geometry^.kind == .Trochoid_Tool || geometry^.kind == .Cycloid_Tool {
-        return false
-    }
-    if kick_dust {kick_existing_dust(ps)}
-    emit_shape_world_geometry_burst(
-        {ps, world, style^.color}, entity, geometry^)
-    return true
+    return emit_shape_world_hide_geometry_burst(
+        {ps, world, style^.color}, entity, kick_dust)
 }
 
 //   Emit clear dust for every visible label and geometry in one canonical world.
@@ -513,7 +528,9 @@ emit_shape_world_clear_burst :: proc(
         ctx := Shape_World_Burst_Context{ps, world, style.color}
         if shapemodel.shape_component_contains(&world.labels, &world.registry, entity) {
             position, found := shape_world_burst_position(world, entity)
-            if found {emit_label_burst(ps, position, style.color)}
+            if found {
+               emit_label_burst(ps, position, style.color)
+            }
             continue
         }
         geometry, found := shapemodel.shape_component_get(
@@ -955,7 +972,9 @@ emit_scenario_dust :: proc(
     emitted := 0
     for index in 0..<int(request.count) {
         slot, ok := reserve_dead_low_particle_slot(ps)
-        if !ok {break}
+        if !ok {
+           break
+        }
         origin := scenario_dust_origin(request, index, generator)
         spawn_dust_particle_index_with_generator(ps, slot, origin, color.WHITE, generator)
         ps^.dust_spawn_sequence += 1
@@ -1212,7 +1231,9 @@ dust_tool_contacts_can_coalesce :: proc(
 
 // Coalesce adjacent redundant contacts without changing raw queue admission.
 coalesce_dust_tool_contacts :: proc(ps: ^Particle_System) {
-    if ps == nil || ps^.dust_tool_contact_count < 2 {return}
+    if ps == nil || ps^.dust_tool_contact_count < 2 {
+       return
+    }
     write_count := 1
     for read_index in 1..<ps^.dust_tool_contact_count {
         current := ps^.dust_tool_contacts[read_index]
@@ -1262,7 +1283,9 @@ apply_dust_filled_sweep_leg :: proc(
         current := math.lerp(intent^.segment_first, intent^.segment_second, leg_t)
         position := math.lerp(first, second, leg_t)
         motion := current - previous
-        if motion.x == 0 && motion.y == 0 {motion = endpoint_motion}
+        if motion.x == 0 && motion.y == 0 {
+           motion = endpoint_motion
+        }
         ps^.dust_tool_contact_field_node_visit_count +=
             dust_field_apply_tool_motion(&ps^.dust_field,
                 {position.x, position.y}, {motion.x, motion.y})
@@ -1280,48 +1303,58 @@ apply_dust_filled_sweep_to_field :: proc(
     }
 }
 
+// Apply one queued contact to deposited field momentum.
+apply_dust_tool_contact_to_field :: proc(
+    ps: ^Particle_System, intent: ^particlemodel.Dust_Tool_Contact,
+    field: ^particlemodel.Dust_Field_State) {
+    if intent^.source == .Compass_Filled_Sweep {
+        apply_dust_filled_sweep_to_field(ps, intent)
+        return
+    }
+    if !intent^.has_sweep {
+        ps^.dust_tool_contact_field_node_visit_count +=
+            dust_field_apply_tool_point(field, {intent^.endpoint.x, intent^.endpoint.y})
+        ps^.dust_tool_contact_sample_count += 1
+        return
+    }
+    interval_count := dust_tool_sweep_interval_count(
+        intent^.segment_first, intent^.segment_second)
+    inv_intervals := f32(1.0) / f32(interval_count)
+    for sample_index in 0..=interval_count {
+        interpolation := f32(sample_index) * inv_intervals
+        position := Vector2{
+            math.lerp(intent^.segment_first.x, intent^.segment_second.x, interpolation),
+            math.lerp(intent^.segment_first.y, intent^.segment_second.y, interpolation)}
+        ps^.dust_tool_contact_field_node_visit_count +=
+            dust_field_apply_tool_point(field, position)
+        ps^.dust_tool_contact_sample_count += 1
+    }
+}
+
 // Apply queued contacts to deposited field momentum in command order.
 apply_dust_tool_contacts_to_field :: proc(ps: ^Particle_System) {
-    if ps == nil {return}
+    if ps == nil {
+        return
+    }
     ps^.dust_tool_contact_sample_count = 0
     ps^.dust_tool_contact_field_node_visit_count = 0
-    if ps^.dust_tool_contact_count == 0 {return}
+    if ps^.dust_tool_contact_count == 0 {
+        return
+    }
     coalesce_dust_tool_contacts(ps)
     field := &ps^.dust_field
     for contact_index in 0..<ps^.dust_tool_contact_count {
         intent := &ps^.dust_tool_contacts[contact_index]
-        if intent^.source == .Compass_Filled_Sweep {
-            apply_dust_filled_sweep_to_field(ps, intent)
-            continue
-        }
-        if !intent^.has_sweep {
-            ps^.dust_tool_contact_field_node_visit_count +=
-                dust_field_apply_tool_point(
-                    field, {intent^.endpoint.x, intent^.endpoint.y})
-            ps^.dust_tool_contact_sample_count += 1
-            continue
-        }
-        interval_count := dust_tool_sweep_interval_count(
-            intent^.segment_first, intent^.segment_second)
-        inv_intervals := f32(1.0) / f32(interval_count)
-        for sample_index in 0..=interval_count {
-            interpolation := f32(sample_index) * inv_intervals
-            position := Vector2{
-                math.lerp(intent^.segment_first.x, intent^.segment_second.x,
-                    interpolation),
-                math.lerp(intent^.segment_first.y, intent^.segment_second.y,
-                    interpolation)}
-            ps^.dust_tool_contact_field_node_visit_count +=
-                dust_field_apply_tool_point(field, position)
-                    ps^.dust_tool_contact_sample_count += 1
-        }
+        apply_dust_tool_contact_to_field(ps, intent, field)
     }
     ps^.dust_tool_contact_count = 0
 }
 
 // Discard pending tool contacts at a runtime generation boundary.
 discard_dust_tool_contacts :: proc(ps: ^Particle_System) {
-    if ps != nil {ps^.dust_tool_contact_count = 0}
+    if ps != nil {
+       ps^.dust_tool_contact_count = 0
+    }
 }
 
 //   Batch update for mid-layer ember particles.

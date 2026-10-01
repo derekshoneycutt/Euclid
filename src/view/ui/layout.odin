@@ -10,8 +10,12 @@ AUTO_LANDSCAPE_ASPECT_THRESHOLD :: f32(1.1)
 resolve_initial_layout_mode :: proc(
     preference: viewmodel.Layout_Preference,
     width, height: f32) -> viewmodel.Ui_Layout_Mode {
-    if preference == .Landscape { return .Landscape }
-    if preference == .Portrait { return .Portrait }
+    if preference == .Landscape {
+        return .Landscape
+    }
+    if preference == .Portrait {
+        return .Portrait
+    }
     if width / max(height, f32(1)) < AUTO_PORTRAIT_ASPECT_THRESHOLD {
         return .Portrait
     }
@@ -23,8 +27,12 @@ resolve_layout_mode :: proc(
     preference: viewmodel.Layout_Preference,
     current: viewmodel.Ui_Layout_Mode,
     width, height: f32) -> viewmodel.Ui_Layout_Mode {
-    if preference == .Landscape { return .Landscape }
-    if preference == .Portrait { return .Portrait }
+    if preference == .Landscape {
+        return .Landscape
+    }
+    if preference == .Portrait {
+        return .Portrait
+    }
     aspect := width / max(height, f32(1))
     if current == .Landscape && aspect < AUTO_PORTRAIT_ASPECT_THRESHOLD {
         return .Portrait

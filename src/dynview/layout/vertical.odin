@@ -93,9 +93,17 @@ document_block_starts_document :: #force_inline proc(
     documents: []dynviewmodel.Dynview_Document,
     block_index: int) -> bool {
     for document in documents {
-        if document.block_start == block_index {return true}
+        if document.block_start == block_index {
+            return true
+        }
     }
     return false
+}
+
+// Identify blocks that begin a fresh spacing context with no prior glue.
+document_block_starts_spacing_group :: #force_inline proc(
+    documents: []dynviewmodel.Dynview_Document, block_index: int) -> bool {
+    return block_index == 0 || document_block_starts_document(documents, block_index)
 }
 
 // Resolve collapsed vertical glue before one block from adjacent block kinds.
@@ -108,10 +116,9 @@ document_block_spacing_before :: proc(
     if block_index < 0 || block_index >= len(blocks) {
         return 0, false
     }
-    if block_index == 0 {
+    if document_block_starts_spacing_group(documents, block_index) {
         return 0, true
     }
-    if document_block_starts_document(documents, block_index) {return 0, true}
     previous_block := blocks[block_index-1]
     current_block := blocks[block_index]
     previous := previous_block.kind
@@ -146,14 +153,20 @@ document_line_shape_center :: proc(
     ascent, descent: f32
     found := false
     for item_index in line.item_start..<line.item_start+line.item_count {
-        if item_index < 0 || item_index >= builders^.items.count {return 0, false}
+        if item_index < 0 || item_index >= builders^.items.count {
+            return 0, false
+        }
         item := builders^.items.storage[item_index]
-        if item.box_kind == .Shape {continue}
+        if item.box_kind == .Shape {
+            continue
+        }
         ascent = max(ascent, item.ascent)
         descent = max(descent, item.descent)
         found = true
     }
-    if found {return line.baseline+(descent-ascent)*0.5, true}
+    if found {
+        return line.baseline+(descent-ascent)*0.5, true
+    }
     return (line.top+line.bottom)*0.5, true
 }
 
@@ -164,7 +177,9 @@ document_place_line_contents :: proc(
     line: dynviewmodel.Dynview_Document_Layout_Line) -> bool {
 
     shape_center, center_ok := document_line_shape_center(builders, line)
-    if !center_ok {return false}
+    if !center_ok {
+        return false
+    }
     for item_index in line.item_start..<line.item_start+line.item_count {
         if item_index < 0 || item_index >= builders^.items.count {
             return false
@@ -227,7 +242,9 @@ document_list_block_top :: proc(
     block_index: int,
     default_top: f32) -> f32 {
 
-    if block_index <= 0 {return default_top}
+    if block_index <= 0 {
+        return default_top
+    }
     blocks := builders^.blocks.storage[:builders^.blocks.count]
     current := blocks[block_index]
     previous := blocks[block_index-1]
@@ -239,8 +256,12 @@ document_list_block_top :: proc(
     new_item := current_source.kind == .List_Item &&
         previous_source.list_id == current_source.list_id &&
         previous_source.item_ordinal != current_source.item_ordinal
-    if same_item && !previous.list_label_above {return previous.top}
-    if !same_item && !new_item {return default_top}
+    if same_item && !previous.list_label_above {
+        return previous.top
+    }
+    if !same_item && !new_item {
+        return default_top
+    }
     previous_line := builders^.lines.storage[
         previous.line_start+previous.line_count-1]
     current_line := builders^.lines.storage[current.line_start]

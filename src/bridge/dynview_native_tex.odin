@@ -220,15 +220,21 @@ dynview_native_import_document_semantics :: proc(
     display_row_start := cache.document_display_row_count
     status := dynview_native_import_document_rows(
         cache, document, source_offset, program_base)
-    if status != BRIDGE_STATUS_OK {return status}
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
     status = dynview_native_import_document_blocks(cache, document, {
         source = source_offset, inline_start = inline_start,
         display_row = display_row_start,
     })
-    if status != BRIDGE_STATUS_OK {return status}
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
     status = dynview_native_import_document_inlines(
         cache, document, source_offset, text_offset, program_base)
-    if status != BRIDGE_STATUS_OK {return status}
+    if status != BRIDGE_STATUS_OK {
+        return status
+    }
     dynview_native_publish_document(cache, document, {
         source = source_offset, text = text_offset, block = block_start,
         inline_start = inline_start, display_row = display_row_start,
@@ -245,7 +251,9 @@ dynview_native_import_document_rows :: proc(
     for row in document.document_display_rows {
         converted, ok := dynview_native_document_display_row(
             row, document, source_offset, program_base)
-        if !ok {return BRIDGE_STATUS_INVALID_ARGUMENT}
+        if !ok {
+            return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
         cache.document_display_rows[cache.document_display_row_count] = converted
         cache.document_display_row_count += 1
     }
@@ -263,7 +271,9 @@ dynview_native_import_document_blocks :: proc(
         converted, ok := dynview_native_document_block(
             block, document, offsets.source, offsets.inline_start,
             offsets.display_row)
-        if !ok {return BRIDGE_STATUS_INVALID_ARGUMENT}
+        if !ok {
+            return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
         dynview_native_number_display_rows(cache, converted, &next_number)
         cache.document_blocks[cache.document_block_count] = converted
         cache.document_block_count += 1
@@ -280,7 +290,9 @@ dynview_native_import_document_inlines :: proc(
     for item in document.document_inlines {
         converted, ok := dynview_native_document_inline(
             item, document, source_offset, text_offset, program_base)
-        if !ok {return BRIDGE_STATUS_INVALID_ARGUMENT}
+        if !ok {
+            return BRIDGE_STATUS_INVALID_ARGUMENT
+        }
         cache.document_inlines[cache.document_inline_count] = converted
         cache.document_inline_count += 1
     }
@@ -390,7 +402,9 @@ dynview_native_number_display_rows :: proc(
     block: dynviewmodel.Dynview_Document_Block,
     next_number: ^int) {
 
-    if !block.display_numbered {return}
+    if !block.display_numbered {
+        return
+    }
     for relative_index in 0..<block.display_row_count {
         row := &cache.document_display_rows[block.display_row_start+relative_index]
         eligible := !row.suppress_number

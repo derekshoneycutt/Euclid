@@ -50,7 +50,9 @@ interpreter_graphics_cell_height :: proc(user_data: rawptr) -> (int, bool) {
 // Advance terminal columns for one synchronous graphics placement effect.
 interpreter_graphics_advance_columns :: proc(user_data: rawptr, columns: int) {
     interpreter := cast(^Interpreter)user_data
-    if interpreter == nil || interpreter.grid == nil { return }
+    if interpreter == nil || interpreter.grid == nil {
+        return 
+    }
     grid := interpreter.grid
     termgrid.grid_set_cursor(
         grid, grid.cursor.row, grid.cursor.column + max(columns, 0))
@@ -59,7 +61,9 @@ interpreter_graphics_advance_columns :: proc(user_data: rawptr, columns: int) {
 // Advance terminal rows for one synchronous graphics placement effect.
 interpreter_graphics_advance_rows :: proc(user_data: rawptr, rows: int) {
     interpreter := cast(^Interpreter)user_data
-    if interpreter == nil || interpreter.grid == nil { return }
+    if interpreter == nil || interpreter.grid == nil {
+        return 
+    }
     for _ in 0..<max(rows, 1) {
         termgrid.grid_index_forward(interpreter.grid, true)
     }
@@ -67,7 +71,9 @@ interpreter_graphics_advance_rows :: proc(user_data: rawptr, rows: int) {
 
 // Consume queued graphics frames through explicit terminal capabilities.
 interpreter_consume_graphics_frames :: proc(interpreter: ^Interpreter) {
-    if interpreter == nil || interpreter.title_state == nil { return }
+    if interpreter == nil || interpreter.title_state == nil {
+        return 
+    }
     semantics_context := gfxsemantics.Context{
         state = interpreter.title_state.graphics,
         user_data = interpreter,

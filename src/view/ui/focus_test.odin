@@ -190,7 +190,9 @@ semantic_registration_accepts_maximum_text_capacity :: proc(t: ^testing.T) {
     half := viewmodel.UI_SEMANTIC_TEXT_CAPACITY / 2
     text := make([]u8, half, context.allocator)
     defer delete(text, context.allocator)
-    for &byte in text {byte = 'a'}
+    for &byte in text {
+        byte = 'a'
+    }
     testing.expect(t, semantic_begin(state))
     testing.expect_value(t, semantic_register_node(state, {
         node = semantic_test_node(semantic_test_id(.Application, 1), {},

@@ -636,7 +636,9 @@ library_search_query_changed :: proc(
     search^.generation += 1
     search^.scenario_correlation = 0
     search^.scenario_correlation_generation = 0
-    if content_replaced {search^.query_revision += 1}
+    if content_replaced {
+       search^.query_revision += 1
+    }
     library_search_clear_results(search)
     search^.query_dirty = search^.query_length > 0
     search^.submit_requested = false

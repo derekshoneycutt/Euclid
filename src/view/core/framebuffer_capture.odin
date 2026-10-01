@@ -87,7 +87,9 @@ framebuffer_crop_with_operations :: proc(
     row_bytes := width * FRAMEBUFFER_PIXEL_BYTES
     pixels, allocation_error := operations.allocate(
         operations.user_data, row_bytes * height)
-    if allocation_error != nil {return false}
+    if allocation_error != nil {
+       return false
+    }
     for row in 0..<height {
         source := capture.pixels[row * capture.pitch_bytes:][:row_bytes]
         copy(pixels[row * row_bytes:][:row_bytes], source)
@@ -112,7 +114,9 @@ framebuffer_resize_with_operations :: proc(
     row_bytes := width * FRAMEBUFFER_PIXEL_BYTES
     pixels, allocation_error := operations.allocate(
         operations.user_data, row_bytes * height)
-    if allocation_error != nil {return false}
+    if allocation_error != nil {
+       return false
+    }
     for y in 0..<height {
         source_y := y * capture.height / height
         for x in 0..<width {

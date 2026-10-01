@@ -38,7 +38,9 @@ accesskit_substrate_builds_static_tree_update :: proc(t: ^testing.T) {
     root := accesskit.accesskit_node_new(.Unknown)
     child := accesskit.accesskit_node_new(.Label)
     testing.expect(t, root != nil && child != nil)
-    if root == nil || child == nil {return}
+    if root == nil || child == nil {
+        return
+    }
     accesskit.accesskit_node_set_children(root, 1, &child_id)
     accesskit.accesskit_node_set_value_with_length(child, "Euclid", 6)
     accesskit.accesskit_node_set_bounds(child, {0, 0, 100, 40})

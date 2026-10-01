@@ -51,7 +51,9 @@ graphics_test_gif_cancel_at_poll :: proc(user_data: rawptr) -> bool {
 graphics_test_gif_concurrent_barrier :: proc(user_data: rawptr) -> bool {
     payload := cast(^Gif_Concurrent_Payload)user_data
     payload.callback_count += 1
-    if payload.callback_count != 2 {return false}
+    if payload.callback_count != 2 {
+       return false
+    }
     sync.mutex_lock(&payload.gate.mutex)
     payload.gate.decoder_count += 1
     sync.cond_broadcast(&payload.gate.changed)

@@ -251,6 +251,13 @@ Julia_Runtime_Diagnostics :: struct {
     runtime_generation: u64,
 }
 
+// Decoded scalar fields from one Julia-owned Terminal lifecycle command.
+Julia_Terminal_Lifecycle_Command :: struct {
+    kind: i32,
+    generation: u64,
+    valid: bool,
+}
+
 //   Borrow the asset-root selection retained for the Julia service lifetime.
 julia_service_asset_config :: proc(
     service: ^Julia_Runtime_Service) -> files.Asset_Root_Config {
@@ -2642,7 +2649,9 @@ send_terminal_session_ready :: proc(
     }
     _ = drain_julia_egress_returns(service)
     message, message_error := communication_link_alloc(&service^.event_link)
-    if message_error != .None { return .Allocation_Failed }
+    if message_error != .None {
+        return .Allocation_Failed
+    }
     bytes, allocation_error := communication_link_alloc_bytes(
         &service^.event_link, len(ready.banner))
     if allocation_error != .None {
@@ -2886,8 +2895,7 @@ destroy_julia_runtime_service :: proc(service: ^Julia_Runtime_Service) {
 initialize_julia_state :: proc(state: ^core.Euclid_General_State) -> bool {
     assert_julia_runtime_owner(state)
     state^.saved_context = context
-    prepare_julia_interface_generation(state^.julia_interface)
-    if !julia_interface_handles_valid(state^.julia_interface) {
+    if !prepare_julia_interface_content(state^.julia_interface) {
         log.error("julia_content_interface_handles_invalid")
         clean_julia_interface_instance(state^.julia_interface)
         return false
@@ -3470,8 +3478,12 @@ send_terminal_value_until_sent :: proc(
     service: ^Julia_Runtime_Service, value: bridgemodel.Julia_Host_Egress) -> bool {
     for {
         outcome := send_terminal_egress(service, value)
-        if outcome == .Sent { return true }
-        if outcome == .Runtime_Stopping { return false }
+        if outcome == .Sent {
+            return true
+        }
+        if outcome == .Runtime_Stopping {
+            return false
+        }
         time.sleep(time.Millisecond)
     }
 }
@@ -3481,8 +3493,12 @@ send_terminal_output_until_sent :: proc(
     service: ^Julia_Runtime_Service, output: protocol.Terminal_Output_Batch) -> bool {
     for {
         outcome := send_terminal_output(service, output)
-        if outcome == .Sent { return true }
-        if outcome == .Runtime_Stopping { return false }
+        if outcome == .Sent {
+            return true
+        }
+        if outcome == .Runtime_Stopping {
+            return false
+        }
         time.sleep(time.Millisecond)
     }
 }
@@ -3568,48 +3584,70 @@ julia_terminal_emit_session_ready :: proc(
             animation_generation = generation,
             banner = banner,
         })
-        if outcome == .Sent { return true }
-        if outcome == .Runtime_Stopping { return false }
+        if outcome == .Sent {
+            return true
+        }
+        if outcome == .Runtime_Stopping {
+            return false
+        }
         time.sleep(time.Millisecond)
     }
+}
+
+
+
+// Read primitive lifecycle fields while the Julia command is rooted.
+julia_terminal_lifecycle_command_read :: proc(
+    host: ^Julia_Runtime_Host) -> Julia_Terminal_Lifecycle_Command {
+    command := julialib.jl_call1(
+        host^.terminal_take_session_lifecycle, host^.runtime)
+    if command == nil || julialib.jl_exception_occurred() != nil {
+        print_julia_exception("terminal_host_take_session_lifecycle")
+        return {}
+    }
+    gc_stack := julialib.jl_get_pgcstack()
+    if gc_stack == nil {
+        return {}
+    }
+    frame := Julia_Terminal_Command_Gc_Frame{
+        encoded_root_count = 1 << 2,
+        previous = gc_stack^,
+        command = command,
+    }
+    gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
+    result := Julia_Terminal_Lifecycle_Command{
+        kind = i32(julialib.jl_unbox_int32(
+            julialib.jl_get_nth_field(command, 0))),
+        generation = u64(julialib.jl_unbox_uint64(
+            julialib.jl_get_nth_field(command, 1))),
+        valid = true,
+    }
+    gc_stack^ = frame.previous
+    return result
 }
 
 //   Publish every ready Terminal session lifecycle observation.
 julia_terminal_emit_session_lifecycle :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
     for {
-        command := julialib.jl_call1(
-            host^.terminal_take_session_lifecycle, host^.runtime)
-        if command == nil || julialib.jl_exception_occurred() != nil {
-            print_julia_exception("terminal_host_take_session_lifecycle")
+        command := julia_terminal_lifecycle_command_read(host)
+        if !command.valid {
             return false
         }
-        gc_stack := julialib.jl_get_pgcstack()
-        if gc_stack == nil {
-            return false
-        }
-        frame := Julia_Terminal_Command_Gc_Frame{
-            encoded_root_count = 1 << 2,
-            previous = gc_stack^,
-            command = command,
-        }
-        gc_stack^ = (^julialib.jl_gcframe_t)(&frame)
-        kind := i32(julialib.jl_unbox_int32(
-            julialib.jl_get_nth_field(command, 0)))
-        if kind == 0 {
-            gc_stack^ = frame.previous
+        if command.kind == 0 {
             return true
         }
-        generation := u64(julialib.jl_unbox_uint64(
-            julialib.jl_get_nth_field(command, 1)))
-        gc_stack^ = frame.previous
-        if kind == 2 {
+        if command.kind == 2 {
             if !send_terminal_value_until_sent(service,
                 protocol.Terminal_Session_Stopped{
-                    animation_generation = generation,
-                }) { return true }
+                    animation_generation = command.generation,
+                }) {
+                return true
+            }
         } else if !julia_terminal_emit_session_ready(
-            service, host, generation) { return false }
+            service, host, command.generation) {
+            return false
+        }
     }
 }
 
@@ -3618,9 +3656,13 @@ julia_terminal_emit_tick_stream :: proc(
     service: ^Julia_Runtime_Service, host: ^Julia_Runtime_Host) -> bool {
     for {
         command := julialib.jl_call1(host^.terminal_take_tick_stream, host^.runtime)
-        if command == nil || julialib.jl_exception_occurred() != nil { return false }
+        if command == nil || julialib.jl_exception_occurred() != nil {
+            return false
+        }
         kind := i32(julialib.jl_unbox_int32(julialib.jl_get_nth_field(command, 0)))
-        if kind == 0 { return true }
+        if kind == 0 {
+            return true
+        }
         animation_generation := u64(julialib.jl_unbox_uint64(
             julialib.jl_get_nth_field(command, 1)))
         stream_generation := u64(julialib.jl_unbox_uint64(
@@ -3639,7 +3681,9 @@ julia_terminal_emit_tick_stream :: proc(
                 stream_generation = stream_generation,
             }
         }
-        if !send_terminal_value_until_sent(service, value) { return false }
+        if !send_terminal_value_until_sent(service, value) {
+            return false
+        }
     }
 }
 
@@ -3672,8 +3716,12 @@ julia_terminal_send_completion :: proc(
                     show_candidates = julialib.jl_unbox_bool(
                         julialib.jl_get_nth_field(command, 5)) != 0,
         })
-        if outcome == .Sent { return true }
-        if outcome == .Runtime_Stopping { return false }
+        if outcome == .Sent {
+            return true
+        }
+        if outcome == .Runtime_Stopping {
+            return false
+        }
         time.sleep(time.Millisecond)
     }
 }
@@ -3688,7 +3736,9 @@ julia_terminal_emit_completions :: proc(
             return false
         }
         gc_stack := julialib.jl_get_pgcstack()
-        if gc_stack == nil { return false }
+        if gc_stack == nil {
+            return false
+        }
         frame := Julia_Terminal_Command_Gc_Frame{
             encoded_root_count = 1 << 2,
             previous = gc_stack^,
@@ -3705,7 +3755,9 @@ julia_terminal_emit_completions :: proc(
         sent := julia_terminal_send_completion(
             service, host, command, kind, request_id)
         gc_stack^ = frame.previous
-        if !sent { return false }
+        if !sent {
+            return false
+        }
     }
 }
 
@@ -3723,8 +3775,12 @@ julia_terminal_service :: proc(
     if !julia_terminal_emit_session_lifecycle(service, host) {
         return false
     }
-    if !julia_terminal_emit_tick_stream(service, host) { return false }
-    if !julia_terminal_emit_completions(service, host) { return false }
+    if !julia_terminal_emit_tick_stream(service, host) {
+        return false
+    }
+    if !julia_terminal_emit_completions(service, host) {
+        return false
+    }
     for {
         command := julialib.jl_call1(
             host^.terminal_take_evaluation, host^.runtime)
@@ -3779,7 +3835,9 @@ shutdown_julia_runtime_host :: proc(
         event^.succeeded = event^.succeeded && result != nil &&
             julialib.jl_exception_occurred() == nil &&
             julialib.jl_unbox_bool(result) != 0
-        if !event^.succeeded { print_julia_exception("terminal_host_shutdown") }
+        if !event^.succeeded {
+            print_julia_exception("terminal_host_shutdown")
+        }
     }
     attach_julia_control_evidence(service, decoded, event)
     finalize_julia_worker_host(service, host, frame)
@@ -3809,7 +3867,9 @@ process_julia_terminal_ingress :: proc(
     accepted := host^.runtime != nil &&
         julia_terminal_dispatch_ingress(service, host, message)
     _ = communication_link_return(&service^.request_link, message)
-    if !accepted { fmt.eprintln("Julia worker: Terminal ingress rejected") }
+    if !accepted {
+        fmt.eprintln("Julia worker: Terminal ingress rejected")
+    }
     return accepted
 }
 

@@ -183,48 +183,74 @@ terminal_palette_cursor_rgba :: proc(palette: ^Terminal_Palette_State) -> u32 {
 
 // Parse one ASCII hexadecimal digit.
 terminal_color_hex_digit :: proc(byte: u8) -> (u32, bool) {
-    if byte >= '0' && byte <= '9' { return u32(byte - '0'), true }
-    if byte >= 'a' && byte <= 'f' { return u32(byte - 'a' + 10), true }
-    if byte >= 'A' && byte <= 'F' { return u32(byte - 'A' + 10), true }
+    if byte >= '0' && byte <= '9' {
+        return u32(byte - '0'), true 
+    }
+    if byte >= 'a' && byte <= 'f' {
+        return u32(byte - 'a' + 10), true 
+    }
+    if byte >= 'A' && byte <= 'F' {
+        return u32(byte - 'A' + 10), true 
+    }
     return 0, false
 }
 
 // Parse and normalize one one-to-four-digit hexadecimal channel to eight bits.
 terminal_color_parse_channel :: proc(bytes: []u8) -> (u32, bool) {
-    if len(bytes) < 1 || len(bytes) > 4 { return 0, false }
+    if len(bytes) < 1 || len(bytes) > 4 {
+        return 0, false 
+    }
     value: u32
     for byte in bytes {
         digit, valid := terminal_color_hex_digit(byte)
-        if !valid { return 0, false }
+        if !valid {
+            return 0, false 
+        }
         value = value << 4 | digit
     }
     maximum := u32(1) << u32(len(bytes) * 4) - 1
     return (value * 255 + maximum / 2) / maximum, true
 }
 
+// Split the three slash-delimited channels of one xterm rgb specification.
+terminal_color_rgb_specification_channels :: proc(
+    bytes: []u8, channels: ^[3][]u8) -> bool {
+    if len(bytes) < 4 || bytes[0] != 'r' || bytes[1] != 'g' ||
+        bytes[2] != 'b' || bytes[3] != ':' {
+        return false
+    }
+    start, channel := 4, 0
+    for index in start..=len(bytes) {
+        if index < len(bytes) && bytes[index] != '/' {
+            continue
+        }
+        if channel >= 3 {
+            return false
+        }
+        channels[channel] = bytes[start:index]
+        channel += 1
+        start = index + 1
+    }
+    return channel == 3
+}
+
 // Extract three equal-width channels from one supported xterm color syntax.
 terminal_color_specification_channels :: proc(
     bytes: []u8, channels: ^[3][]u8) -> bool {
     if len(bytes) > 0 && bytes[0] == '#' {
-        if (len(bytes) - 1) % 3 != 0 { return false }
+        if (len(bytes) - 1) % 3 != 0 {
+            return false
+        }
         width := (len(bytes) - 1) / 3
-        if width < 1 || width > 4 { return false }
+        if width < 1 || width > 4 {
+            return false
+        }
         for index in 0..<3 {
             start := 1 + index * width
             channels[index] = bytes[start:start + width]
         }
-    } else {
-        if len(bytes) < 4 || bytes[0] != 'r' || bytes[1] != 'g' ||
-            bytes[2] != 'b' || bytes[3] != ':' { return false }
-        start, channel := 4, 0
-        for index in start..=len(bytes) {
-            if index < len(bytes) && bytes[index] != '/' { continue }
-            if channel >= 3 { return false }
-            channels[channel] = bytes[start:index]
-            channel += 1
-            start = index + 1
-        }
-        if channel != 3 { return false }
+    } else if !terminal_color_rgb_specification_channels(bytes, channels) {
+        return false
     }
     return len(channels[0]) == len(channels[1]) &&
         len(channels[1]) == len(channels[2])
@@ -239,18 +265,26 @@ terminal_color_parse_specification :: proc(bytes: []u8) -> (u32, bool) {
     red, red_valid := terminal_color_parse_channel(channels[0])
     green, green_valid := terminal_color_parse_channel(channels[1])
     blue, blue_valid := terminal_color_parse_channel(channels[2])
-    if !red_valid || !green_valid || !blue_valid { return 0, false }
+    if !red_valid || !green_valid || !blue_valid {
+        return 0, false 
+    }
     return red << 24 | green << 16 | blue << 8 | 0xff, true
 }
 
 // Parse one bounded decimal palette index.
 terminal_color_parse_index :: proc(bytes: []u8) -> (u16, bool) {
-    if len(bytes) == 0 { return 0, false }
+    if len(bytes) == 0 {
+        return 0, false 
+    }
     value := 0
     for byte in bytes {
-        if byte < '0' || byte > '9' { return 0, false }
+        if byte < '0' || byte > '9' {
+            return 0, false 
+        }
         value = value * 10 + int(byte - '0')
-        if value > 255 { return 0, false }
+        if value > 255 {
+            return 0, false 
+        }
     }
     return u16(value), true
 }
@@ -258,11 +292,17 @@ terminal_color_parse_index :: proc(bytes: []u8) -> (u16, bool) {
 // Split one semicolon-delimited payload into caller-owned bounded token storage.
 terminal_color_split_payload :: proc(
     payload: []u8, tokens: []([]u8)) -> (int, bool) {
-    if len(payload) == 0 { return 0, true }
+    if len(payload) == 0 {
+        return 0, true 
+    }
     count, start := 0, 0
     for index in 0..=len(payload) {
-        if index < len(payload) && payload[index] != ';' { continue }
-        if count >= len(tokens) || index == start { return 0, false }
+        if index < len(payload) && payload[index] != ';' {
+            continue 
+        }
+        if count >= len(tokens) || index == start {
+            return 0, false 
+        }
         tokens[count] = payload[start:index]
         count += 1
         start = index + 1
@@ -274,11 +314,15 @@ terminal_color_split_payload :: proc(
 terminal_palette_parse_indexed_pairs :: proc(
     tokens: []([]u8), operations: []Terminal_Palette_Operation) ->
     Terminal_Palette_Parse_Result {
-    if len(tokens) == 0 || len(tokens) % 2 != 0 { return {} }
+    if len(tokens) == 0 || len(tokens) % 2 != 0 {
+        return {} 
+    }
     result := Terminal_Palette_Parse_Result{valid = true}
     for index in 0..<len(tokens) / 2 {
             palette_index, index_valid := terminal_color_parse_index(tokens[index * 2])
-            if !index_valid { return {} }
+            if !index_valid {
+                return {} 
+            }
             specification := tokens[index * 2 + 1]
             operation := Terminal_Palette_Operation{
                 target = .Indexed, index = palette_index,
@@ -288,7 +332,9 @@ terminal_palette_parse_indexed_pairs :: proc(
                 result.query_count += 1
             } else {
                 rgba, valid := terminal_color_parse_specification(specification)
-                if !valid { return {} }
+                if !valid {
+                    return {} 
+                }
                 operation.rgba = rgba
             }
             operations[result.count] = operation
@@ -305,10 +351,14 @@ terminal_palette_parse_indexed_resets :: proc(
         operations[0] = {target = .Indexed, reset = true, reset_all = true}
         return {count = 1, valid = true}
     }
-    if len(tokens) > len(operations) { return {} }
+    if len(tokens) > len(operations) {
+        return {} 
+    }
     for token, index in tokens {
         palette_index, valid := terminal_color_parse_index(token)
-        if !valid { return {} }
+        if !valid {
+            return {} 
+        }
         operations[index] = {
             target = .Indexed, index = palette_index, reset = true,
         }
@@ -328,11 +378,15 @@ terminal_palette_parse_default_color :: proc(
     case: return {}
     }
     if command >= 110 {
-        if len(tokens) != 0 { return {} }
+        if len(tokens) != 0 {
+            return {} 
+        }
         operations[0] = {target = target, reset = true}
         return {count = 1, valid = true}
     }
-    if len(tokens) != 1 { return {} }
+    if len(tokens) != 1 {
+        return {} 
+    }
     operation := Terminal_Palette_Operation{target = target}
     if len(tokens[0]) == 1 && tokens[0][0] == '?' {
         operation.query = true
@@ -340,7 +394,9 @@ terminal_palette_parse_default_color :: proc(
         return {count = 1, query_count = 1, valid = true}
     } else {
         rgba, valid := terminal_color_parse_specification(tokens[0])
-        if !valid { return {} }
+        if !valid {
+            return {} 
+        }
         operation.rgba = rgba
     }
     operations[0] = operation
@@ -353,7 +409,9 @@ terminal_palette_parse_osc :: proc(
     operations: []Terminal_Palette_Operation) -> Terminal_Palette_Parse_Result {
     tokens: [TERMINAL_COLOR_OPERATION_CAPACITY * 2][]u8
     token_count, valid := terminal_color_split_payload(payload, tokens[:])
-    if !valid { return {} }
+    if !valid {
+        return {} 
+    }
     switch command {
     case 4:
         return terminal_palette_parse_indexed_pairs(
@@ -410,7 +468,9 @@ terminal_palette_store_operation :: proc(
 terminal_palette_apply_operation :: proc(
     palette: ^Terminal_Palette_State,
     operation: Terminal_Palette_Operation) -> bool {
-    if operation.query { return false }
+    if operation.query {
+        return false 
+    }
     if operation.reset_all {
         palette.colors = palette.defaults
         return true

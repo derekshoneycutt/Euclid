@@ -103,7 +103,9 @@ clipboard_base64_value :: proc(byte: u8) -> (u8, bool) {
 clipboard_base64_spelling_valid :: proc(encoded: []u8, padding: int) -> bool {
     for byte, index in encoded {
         if index >= len(encoded) - padding {
-            if byte != '=' { return false }
+            if byte != '=' {
+                return false 
+            }
         } else if _, valid := clipboard_base64_value(byte); !valid {
             return false
         }
@@ -126,7 +128,9 @@ clipboard_base64_canonical :: proc(encoded: []u8) -> bool {
             padding = 2
         }
     }
-    if !clipboard_base64_spelling_valid(encoded, padding) { return false }
+    if !clipboard_base64_spelling_valid(encoded, padding) {
+        return false 
+    }
     if padding == 2 {
         value, _ := clipboard_base64_value(encoded[len(encoded) - 3])
         return value & 0x0f == 0

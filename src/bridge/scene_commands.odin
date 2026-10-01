@@ -265,7 +265,9 @@ validate_command_shape_trochoid :: proc(
 validate_command_shape_trochoid_frontier :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
-    if !found {return false}
+    if !found {
+        return false
+    }
     value, has_value := shapemodel.shape_component_get(
         &state^.shape_world^.trochoids, &state^.shape_world^.registry, entity)
     return has_value && shapemodel.shape_scalar_is_finite(command^.scalar) &&
@@ -320,7 +322,9 @@ command_cycloid_line :: proc(state: ^core.Euclid_General_State,
         &state^.shape_world^.transforms, &state^.shape_world^.registry, first_entity)
     second, second_ok := shapemodel.shape_component_get(
         &state^.shape_world^.transforms, &state^.shape_world^.registry, second_entity)
-    if !first_ok || !second_ok {return {}, false}
+    if !first_ok || !second_ok {
+        return {}, false
+    }
     return {first.position, second.position}, true
 }
 
@@ -343,7 +347,9 @@ validate_command_shape_cycloid :: proc(
 validate_command_shape_cycloid_frontier :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
-    if !found {return false}
+    if !found {
+        return false
+    }
     value, has_value := shapemodel.shape_component_get(&state^.shape_world^.cycloids,
         &state^.shape_world^.registry, entity)
     return has_value && shapemodel.shape_parameter_is_in_directed_domain(
@@ -403,7 +409,9 @@ validate_command_shape_active_feature :: proc(
 validate_command_tool_lock :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
     entity, found := validate_command_shape_entity(state, command)
-    if !found {return false}
+    if !found {
+        return false
+    }
     _, constraint_found := tool_lock_constraint(state, entity)
     return constraint_found
 }

@@ -629,7 +629,9 @@ terminal_restore_output_checkpoint :: proc(term: ^viewterminalmodel.Terminal_Sta
 terminal_continuation_indent :: proc(source: string) -> string {
     last_line_start := 0
     for byte, index in source {
-        if byte == '\n' { last_line_start = index + 1 }
+        if byte == '\n' {
+            last_line_start = index + 1
+        }
     }
     indent_end := last_line_start
     for indent_end < len(source) &&

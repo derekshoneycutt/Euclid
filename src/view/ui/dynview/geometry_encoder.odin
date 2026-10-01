@@ -29,7 +29,9 @@ Rule_Encode_Geometry :: struct {
 // encode_edge_color returns an explicit edge color or its inherited fallback.
 encode_edge_color :: #force_inline proc(
     edge_color, fallback: dynviewmodel.Color) -> dynviewmodel.Color {
-    if edge_color == {} {return fallback}
+    if edge_color == {} {
+        return fallback
+    }
     return edge_color
 }
 
@@ -91,7 +93,9 @@ encode_circle :: proc(
 encode_polygon :: proc(
     encoder: ^native.Draw_Encoder, points: []geometry.Vector2,
     style: Polygon_Encode_Style) {
-    if len(points) < 3 {return}
+    if len(points) < 3 {
+        return
+    }
     if style.filled {
         for index in 1..<len(points)-1 {
             _ = native.draw_encoder_triangle(
@@ -143,13 +147,27 @@ encode_pie_point :: #force_inline proc(
         center.y - radius * f32(math.sin(radians))}
 }
 
+// encode_pie_radial_outline draws the two radial edges for an outlined pie.
+encode_pie_radial_outline :: proc(
+    encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
+    center: geometry.Vector2, radius: f32, draw_color: dynviewmodel.Color) {
+    outline_color := item.outline_color if item.has_outline_color else draw_color
+    stroke := max(1, item.inline_outline_stroke)
+    start_point := encode_pie_point(center, radius, item.pie_start_angle_degrees)
+    end_point := encode_pie_point(center, radius, item.pie_end_angle_degrees)
+    _ = native.draw_encoder_line(encoder, center, start_point, stroke, outline_color)
+    _ = native.draw_encoder_line(encoder, center, end_point, stroke, outline_color)
+}
+
 // encode_pie_section encodes one filled or outlined arc with radial edges.
 encode_pie_section :: proc(
     encoder: ^native.Draw_Encoder, item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32, draw_color: dynviewmodel.Color) {
     sweep := positive_sweep_degrees(
         item.pie_start_angle_degrees, item.pie_end_angle_degrees)
-    if sweep <= 0 {return}
+    if sweep <= 0 {
+        return
+    }
     center := geometry.Vector2{item_x + item.pie_center_offset_x,
         item_y + item.pie_center_offset_y}
     visual_radius := max(
@@ -158,7 +176,7 @@ encode_pie_section :: proc(
     radius := max(0.5, visual_radius-item.inline_atom_stroke*0.5)
     segments := max(1, int(math.ceil(f64(sweep/8))))
     previous := encode_pie_point(center, radius, item.pie_start_angle_degrees)
-    outline_color := item.has_outline_color ? item.outline_color : draw_color
+    outline_color := item.outline_color if item.has_outline_color else draw_color
     stroke := max(1, item.inline_outline_stroke)
     for index in 0..<segments {
         angle := item.pie_start_angle_degrees +
@@ -174,11 +192,7 @@ encode_pie_section :: proc(
         previous = next
     }
     if !item.pie_is_filled || item.inline_outline_stroke > 0 {
-        start_point := encode_pie_point(
-            center, radius, item.pie_start_angle_degrees)
-        end_point := encode_pie_point(center, radius, item.pie_end_angle_degrees)
-        _ = native.draw_encoder_line(encoder, center, start_point, stroke, outline_color)
-        _ = native.draw_encoder_line(encoder, center, end_point, stroke, outline_color)
+        encode_pie_radial_outline(encoder, item, center, radius, draw_color)
     }
 }
 
@@ -265,7 +279,9 @@ encode_inline_item :: proc(
     style := dyncore.style_by_id(item.style_id)
     draw_color := dynlayout.inline_draw_color(style, item)
     origin := geometry.Vector2{item_x, item_y}
-    if encode_inline_shape(encoder, item, origin, draw_color) {return}
+    if encode_inline_shape(encoder, item, origin, draw_color) {
+        return
+    }
     encode_inline_rule(encoder, item, origin, style.color)
 }
 
@@ -273,7 +289,9 @@ encode_inline_item :: proc(
 draw_encoded_geometry :: proc(
     runtime: ^dynviewmodel.Dynview_System, encoder: ^native.Draw_Encoder,
     panel: geometry.Rectangle, scroll_y, text_padding: f32) {
-    if runtime == nil || !runtime^.compile_cache.layout_is_valid {return}
+    if runtime == nil || !runtime^.compile_cache.layout_is_valid {
+        return
+    }
     cache := &runtime^.compile_cache
     _ = native.draw_encoder_push_scissor(encoder, panel)
     for line_index in 0..<cache^.layout_line_count {

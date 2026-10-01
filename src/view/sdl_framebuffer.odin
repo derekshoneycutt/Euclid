@@ -32,7 +32,9 @@ sdl_framebuffer_begin :: proc(user_data: rawptr) -> bool {
 sdl_framebuffer_allocate :: proc(
     user_data: rawptr, byte_count: int) -> ([]u8, mem.Allocator_Error) {
     owner := cast(^Sdl_Framebuffer_Context)user_data
-    if owner == nil || !owner^.capture_active {return nil, .Invalid_Argument}
+    if owner == nil || !owner^.capture_active {
+        return nil, .Invalid_Argument
+    }
     allocator := storage.arena_owner_allocator(&owner^.storage)
     return make([]u8, byte_count, allocator)
 }
@@ -40,17 +42,23 @@ sdl_framebuffer_allocate :: proc(
 // sdl_framebuffer_load downloads the owned scene target into capture storage.
 sdl_framebuffer_load :: proc(user_data: rawptr) -> view_core.Framebuffer_Pixels {
     owner := cast(^Sdl_Framebuffer_Context)user_data
-    if owner == nil || owner^.platform == nil || !owner^.storage.initialized {return {}}
+    if owner == nil || owner^.platform == nil || !owner^.storage.initialized {
+        return {}
+    }
     width := owner^.platform^.scene_width
     height := owner^.platform^.scene_height
     if width == 0 || height == 0 || u64(width) > u64(math.max(int)) / 4 {
         return {}
     }
     pitch_bytes := int(width) * 4
-    if u64(height) > u64(math.max(int) / pitch_bytes) {return {}}
+    if u64(height) > u64(math.max(int) / pitch_bytes) {
+        return {}
+    }
     byte_count := pitch_bytes * int(height)
     pixels, allocation_error := sdl_framebuffer_allocate(user_data, byte_count)
-    if allocation_error != nil {return {}}
+    if allocation_error != nil {
+        return {}
+    }
     timing: native.Sdl_Capture_Timing
     if !native.sdl_platform_read_scene_rgba8(owner^.platform, pixels, &timing) {
         return {}
@@ -65,7 +73,9 @@ sdl_framebuffer_load :: proc(user_data: rawptr) -> view_core.Framebuffer_Pixels 
 // sdl_framebuffer_unload retires one image before capture-domain reset.
 sdl_framebuffer_unload :: proc(
     _: rawptr, capture: ^view_core.Framebuffer_Pixels) {
-    if capture != nil {capture^ = {}}
+    if capture != nil {
+        capture^ = {}
+    }
 }
 
 // sdl_framebuffer_reset releases all storage for one completed capture chain.
@@ -80,7 +90,9 @@ sdl_framebuffer_reset :: proc(user_data: rawptr) {
 // sdl_framebuffer_export persists one borrowed capture through SDL core PNG support.
 sdl_framebuffer_export :: proc(
     _: rawptr, capture: ^view_core.Framebuffer_Pixels, path: cstring) -> bool {
-    if capture == nil {return false}
+    if capture == nil {
+        return false
+    }
     return native.sdl_platform_save_png(capture^.pixels, capture^.width,
         capture^.height, capture^.pitch_bytes, path)
 }
@@ -88,7 +100,9 @@ sdl_framebuffer_export :: proc(
 // sdl_framebuffer_operations exposes readback and persistence through one display owner.
 sdl_framebuffer_operations :: proc(
     owner: ^Sdl_Framebuffer_Context) -> view_core.Framebuffer_Capture_Operations {
-    if owner == nil || !owner^.storage.initialized {return {}}
+    if owner == nil || !owner^.storage.initialized {
+        return {}
+    }
     return {
         user_data = rawptr(owner),
         begin = sdl_framebuffer_begin,
@@ -102,7 +116,9 @@ sdl_framebuffer_operations :: proc(
 
 // bind_sdl_framebuffer_capture admits display-owned capture storage.
 bind_sdl_framebuffer_capture :: proc(owner: ^Sdl_Framebuffer_Context) -> bool {
-    if owner == nil || owner^.platform == nil {return false}
+    if owner == nil || owner^.platform == nil {
+        return false
+    }
     return storage.arena_owner_init(&owner^.storage)
 }
 

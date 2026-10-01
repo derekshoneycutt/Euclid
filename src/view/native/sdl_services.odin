@@ -12,10 +12,14 @@ Sdl_Cursor_Kind :: enum u8 {
 
 // sdl_platform_sync_text_input follows the window's effective focus exactly once.
 sdl_platform_sync_text_input :: proc(platform: ^Sdl_Platform, focused: bool) {
-    if platform^.text_input_active == focused {return}
+    if platform^.text_input_active == focused {
+       return
+    }
     changed := sdl.StartTextInput(platform^.window) if focused else
         sdl.StopTextInput(platform^.window)
-    if changed {platform^.text_input_active = focused}
+    if changed {
+       platform^.text_input_active = focused
+    }
 }
 
 // sdl_platform_admit_cursors creates every cursor required by current UI policy.

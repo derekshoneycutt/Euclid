@@ -46,7 +46,9 @@ Terminal_Content_Route :: struct {
 // terminal_semantic_id identifies one replaceable Terminal animation session.
 terminal_semantic_id :: #force_inline proc(
     state: ^core.Euclid_General_State) -> viewmodel.Ui_Node_Id {
-    if state == nil {return {}}
+    if state == nil {
+        return {}
+    }
     return {domain = .Terminal, local_id = 0,
         generation = state^.terminal.animation_generation}
 }
@@ -64,19 +66,18 @@ terminal_editable_cursor_row :: proc(text: string, cursor: int) -> (int, int) {
     return row, line_start
 }
 
-// terminal_editable_text_adapter exposes committed prompt input without preview text.
-terminal_editable_text_adapter :: proc(
+// Build caret and selection geometry for committed Terminal text.
+terminal_editable_text_geometry :: proc(
     state: ^core.Euclid_General_State,
     layout: terminalview.Terminal_Draw_Layout,
-    scroll: Scroll_Container_Update_Result) ->
-    (viewmodel.Ui_Editable_Text_Descriptor, viewmodel.Ui_Editable_Text_Geometry) {
+    scroll: Scroll_Container_Update_Result, text: string, cursor: int) ->
+        viewmodel.Ui_Editable_Text_Geometry {
     term := &state^.terminal
-    if term.history == nil {return {}, {}}
-    text := termhist.termhist_current_text(term.history)
-    cursor := input_box_clamp_boundary(text, termhist.termhist_cursor(term.history))
     row, line_start := terminal_editable_cursor_row(text, cursor)
     prefix := terminalview.TERMINAL_CONTINUATION_PROMPT
-    if row == 0 {prefix = terminalview.terminal_primary_prompt_prefix(term)}
+    if row == 0 {
+        prefix = terminalview.terminal_primary_prompt_prefix(term)
+    }
     column := input_box_byte_column(text[line_start:cursor], cursor - line_start)
     prefix_columns := input_box_byte_column(prefix, len(prefix))
     column_width := terminalview.terminal_column_width(layout.regular)
@@ -87,18 +88,34 @@ terminal_editable_text_adapter :: proc(
         max(f32(1), column_width), layout.line_height,
     }
     control := scroll.control_geometry
+    return {
+        control = control, caret = caret,
+        selection = {caret.x, caret.y, 0, caret.height},
+        cursor_column = input_box_byte_column(text, cursor),
+        anchor_column = input_box_byte_column(text, cursor),
+    }
+}
+
+// terminal_editable_text_adapter exposes committed prompt input without preview text.
+terminal_editable_text_adapter :: proc(
+    state: ^core.Euclid_General_State,
+    layout: terminalview.Terminal_Draw_Layout,
+    scroll: Scroll_Container_Update_Result) ->
+        (viewmodel.Ui_Editable_Text_Descriptor, viewmodel.Ui_Editable_Text_Geometry) {
+    term := &state^.terminal
+    if term.history == nil {
+        return {}, {}
+    }
+    text := termhist.termhist_current_text(term.history)
+    cursor := input_box_clamp_boundary(text, termhist.termhist_cursor(term.history))
+    geometry := terminal_editable_text_geometry(state, layout, scroll, text, cursor)
     descriptor := viewmodel.Ui_Editable_Text_Descriptor{
         id = terminal_semantic_id(state), region = .Presentation,
         label = "Terminal input", text = text, mode = .Editable,
         cursor_byte = cursor, anchor_byte = cursor,
         content_revision = termhist.termhist_content_revision(term.history),
     }
-    return descriptor, {
-        control = control, caret = caret,
-        selection = {caret.x, caret.y, 0, caret.height},
-        cursor_column = input_box_byte_column(text, cursor),
-        anchor_column = input_box_byte_column(text, cursor),
-    }
+    return descriptor, geometry
 }
 
 // register_terminal_semantics publishes one application-level Terminal surface.
@@ -293,7 +310,9 @@ terminal_draw_encoded :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Terminal_Prepared_Frame) {
     term := &state^.terminal
-    if encoder == nil || !term.initialized || !prepared.available {return}
+    if encoder == nil || !term.initialized || !prepared.available {
+        return
+    }
     resolver := font.cache_terminal_resolver(&state^.font_cache)
     layout := prepared.layout
     layout.encoder = encoder

@@ -48,7 +48,9 @@ terminal_test_shape_high_glyph :: proc(
     _: rawptr, _: font.Font_Key, _: string,
     output: []font.Shaped_Glyph) -> (int, bool) {
 
-    if len(output) == 0 { return 0, false }
+    if len(output) == 0 {
+        return 0, false
+    }
     output[0] = {glyph_id = 4000, x_advance = 10}
     return 1, true
 }
@@ -60,7 +62,9 @@ terminal_test_resolve_high_glyph :: proc(
 
     state := cast(^Terminal_Test_Shaped_Font)user_data
     state.resolve_count += 1
-    if !state.resident || glyph_id != 4000 { return {}, false }
+    if !state.resident || glyph_id != 4000 {
+        return {}, false
+    }
     return {base_size = 32}, true
 }
 

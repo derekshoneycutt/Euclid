@@ -118,7 +118,9 @@ scroll_container_apply_semantic :: proc(
 scroll_container_refresh_semantic_geometry :: proc(
     params: Scroll_Container_Update_Params, before_semantic, scroll_y: f32,
     interaction: ^Scroll_Container_Interaction_Result) {
-    if scroll_y == before_semantic {return}
+    if scroll_y == before_semantic {
+        return
+    }
     interaction^.scrollbar = build_vertical_scrollbar(
         {params.rect, params.content_height, scroll_y,
             max(0.0, params.content_height - params.rect.height)},
@@ -140,6 +142,25 @@ scroll_container_update_wheel :: proc(
     return consumed
 }
 
+// Apply a captured thumb drag to the scroll position and rebuild its geometry.
+scroll_container_update_thumb_drag :: proc(
+    input: Scroll_Container_Interaction_Input,
+    state: Scroll_Container_State,
+    scroll_y: ^f32) -> Vertical_Scrollbar_Geometry {
+    scrollbar := input.initial
+    thumb_range := input.params.rect.height - scrollbar.thumb_height
+    if thumb_range <= SCROLLBAR_DRAG_EPSILON {
+        scroll_y^ = 0
+    } else {
+        thumb_y := input.local_mouse.y - state.drag_offset_y
+        scroll_y^ = clamp((thumb_y - input.params.rect.y) / thumb_range, 0, 1) *
+            input.max_scroll
+    }
+    return build_vertical_scrollbar(
+        {input.params.rect, input.params.content_height, scroll_y^, input.max_scroll},
+        SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
+}
+
 // Advance capture, drag, and release state against prepared scrollbar geometry.
 scroll_container_update_interaction :: proc(
     input: Scroll_Container_Interaction_Input,
@@ -148,7 +169,9 @@ scroll_container_update_interaction :: proc(
     state := params.state_in
     owns_press := scroll_container_owns_press(params.press_owner, params.id)
     owned_for_frame := owns_press
-    if state.is_dragging_thumb && !owns_press { state = {} }
+    if state.is_dragging_thumb && !owns_press {
+        state = {}
+    }
     if input.initial.has_scrollbar && !state.is_dragging_thumb {
         scroll_container_try_capture_press(params.press_owner, params.id,
             {params.mouse_input, input.hovered_thumb, input.local_mouse,
@@ -160,17 +183,7 @@ scroll_container_update_interaction :: proc(
     scrollbar := input.initial
     if state.is_dragging_thumb && owns_press &&
         input_frame_left_down(params.mouse_input) {
-        thumb_range := params.rect.height - scrollbar.thumb_height
-        if thumb_range <= SCROLLBAR_DRAG_EPSILON {
-            scroll_y^ = 0
-        } else {
-            thumb_y := input.local_mouse.y - state.drag_offset_y
-            scroll_y^ = clamp((thumb_y - params.rect.y) / thumb_range, 0, 1) *
-                input.max_scroll
-        }
-        scrollbar = build_vertical_scrollbar(
-            {params.rect, params.content_height, scroll_y^, input.max_scroll},
-            SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
+        scrollbar = scroll_container_update_thumb_drag(input, state, scroll_y)
     } else if state.is_dragging_thumb && owns_press || !input.initial.has_scrollbar {
         scroll_container_release_press(params.press_owner, params.id,
             &state.is_dragging_thumb, &state.drag_offset_y)

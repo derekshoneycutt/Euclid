@@ -29,7 +29,9 @@ Playback_Plan :: struct {
 
 // Add one frame duration to display time without wrapping.
 playback_deadline :: proc(now_ns, duration_ns: u64) -> u64 {
-    if duration_ns > max(u64) - now_ns { return max(u64) }
+    if duration_ns > max(u64) - now_ns {
+        return max(u64) 
+    }
     return now_ns + duration_ns
 }
 
@@ -72,7 +74,9 @@ playback_plan :: proc(
     original_frame := entry.frame_index
     transition_count := 0
     for _ in 0..<PLAYBACK_TRANSITION_LIMIT {
-        if now_ns < candidate.deadline_ns { break }
+        if now_ns < candidate.deadline_ns {
+            break 
+        }
         if candidate.frame_index + 1 < len(animation.frames) {
             candidate.frame_index += 1
         } else if candidate.loading {
@@ -100,14 +104,18 @@ playback_plan :: proc(
 
 // Freeze one timeline while retaining its exact remaining frame duration.
 playback_pause :: proc(entry: ^Playback_Entry, now_ns: u64) {
-    if entry == nil || !entry.active || entry.paused || entry.completed { return }
+    if entry == nil || !entry.active || entry.paused || entry.completed {
+        return 
+    }
     entry.remaining_ns = entry.deadline_ns - now_ns if now_ns < entry.deadline_ns else 0
     entry.paused = true
 }
 
 // Resume one frozen timeline without applying elapsed wall-clock catch-up.
 playback_resume :: proc(entry: ^Playback_Entry, now_ns: u64) {
-    if entry == nil || !entry.active || !entry.paused || entry.completed { return }
+    if entry == nil || !entry.active || !entry.paused || entry.completed {
+        return 
+    }
     entry.deadline_ns = playback_deadline(now_ns, entry.remaining_ns)
     entry.remaining_ns = 0
     entry.paused = false
@@ -116,7 +124,9 @@ playback_resume :: proc(entry: ^Playback_Entry, now_ns: u64) {
 // Apply one completed draw epoch without charging hidden wall-clock time.
 playback_visibility_commit :: proc(
     entry: ^Playback_Entry, completed_epoch, now_ns: u64) {
-    if entry == nil || !entry.active { return }
+    if entry == nil || !entry.active {
+        return 
+    }
     if entry.visible_epoch == completed_epoch {
         playback_resume(entry, now_ns)
     } else {

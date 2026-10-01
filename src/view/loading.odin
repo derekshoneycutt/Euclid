@@ -3,6 +3,7 @@ package view
 import native "native"
 
 import bridgemodel "../bridge/model"
+import viewcatalog "catalog"
 
 import "../files"
 import julia "../bridge"
@@ -217,6 +218,7 @@ loading_content_failed :: proc(
 //   - ok: true when state was created and content initialization completed.
 loading_load_content :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
+    catalog_service: ^viewcatalog.Catalog_Service,
     settings: ^Euclid_Run_Settings,
     initialize_id: u64,
     display: ^Loading_Display) -> (^Euclid_General_State, bool) {
@@ -227,6 +229,10 @@ loading_load_content :: proc(
         log.error("julia_startup_failed phase=state_create")
         julia.destroy_julia_runtime_service(julia_service)
         return nil, false
+    }
+    if !session_materialize_catalogue(state, catalog_service) {
+        log.error("catalog_startup_failed phase=registry_materialize")
+        return loading_content_failed(state, julia_service)
     }
     record_runtime_lifecycle(state, .Runtime_Starting, initialize_id)
     content_id, content_sent := julia.try_submit_runtime_content_initialize(
@@ -265,15 +271,12 @@ loading_prepare_assets_phase :: proc(
 //   Pair initialized runtime owners for transfer to the window loop.
 loading_runtime_session :: proc(
     state: ^Euclid_General_State,
-    service: ^bridgemodel.Julia_Runtime_Service) -> (Euclid_Runtime_Session, bool) {
+    service: ^bridgemodel.Julia_Runtime_Service,
+    catalog_service: ^viewcatalog.Catalog_Service) -> (Euclid_Runtime_Session, bool) {
     session := Euclid_Runtime_Session{
         state = state,
         julia_service = service,
-        search_service = session_create_search_service(),
-    }
-    if session.search_service == nil {
-        _ = shutdown_runtime_session(session)
-        return {}, false
+        catalog_service = catalog_service,
     }
     if !session_start_presentation(&session) {
         _ = shutdown_runtime_session(session)
@@ -296,6 +299,28 @@ loading_set_window_icon :: proc(platform: ^native.Sdl_Platform) {
     }
 }
 
+// Start catalogue and Julia services during the visible startup phase.
+loading_start_runtime_services :: proc(
+    timing_profile: ^evidence_profile.State, display: ^Loading_Display,
+    settings: ^Euclid_Run_Settings, started: ^Loading_Julia_Service,
+    catalog_service: ^^viewcatalog.Catalog_Service) -> bool {
+    evidence_profile.zone_begin(timing_profile, "start Julia")
+    started_at := begin_startup_phase(display, "Starting Julia", 0.7)
+    catalog_service^ = session_create_catalog_service()
+    if catalog_service^ == nil {
+        return false
+    }
+    if !loading_start_julia_service(
+        started, display, julia_worker_profile_path(settings^.profile_path)) {
+        viewcatalog.catalog_service_destroy_owned(catalog_service^)
+        catalog_service^ = nil
+        return false
+    }
+    end_startup_phase("Starting Julia", started_at)
+    evidence_profile.zone_end(timing_profile)
+    return true
+}
+
 // Initialize startup phases while the window stays responsive.
 initialize_window_runtime_with_loading :: proc(
     settings: ^Euclid_Run_Settings,
@@ -310,28 +335,26 @@ initialize_window_runtime_with_loading :: proc(
     }
     loading_set_window_icon(platform)
 
-    evidence_profile.zone_begin(timing_profile, "start Julia")
-    started_at := begin_startup_phase(&display, "Starting Julia", 0.7)
     started_service: Loading_Julia_Service
-    if !loading_start_julia_service(
-        &started_service, &display,
-        julia_worker_profile_path(settings^.profile_path)) {
+    catalog_service: ^viewcatalog.Catalog_Service
+    if !loading_start_runtime_services(
+        timing_profile, &display, settings, &started_service, &catalog_service) {
         return {}, false
     }
-    end_startup_phase("Starting Julia", started_at)
-    evidence_profile.zone_end(timing_profile)
 
     evidence_profile.zone_begin(timing_profile, "load content")
-    started_at = begin_startup_phase(&display, "Loading content", 1)
+    started_at := begin_startup_phase(&display, "Loading content", 1)
     state, content_ok := loading_load_content(
-        started_service.service, settings, started_service.initialize_id,
-        &display)
+        started_service.service, catalog_service, settings,
+        started_service.initialize_id, &display)
     if !content_ok {
+        viewcatalog.catalog_service_destroy_owned(catalog_service)
         return {}, false
     }
     end_startup_phase("Loading content", started_at)
     evidence_profile.zone_end(timing_profile)
 
     end_startup_phase("Total startup", startup_started_at)
-    return loading_runtime_session(state, started_service.service)
+    return loading_runtime_session(
+        state, started_service.service, catalog_service)
 }

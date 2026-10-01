@@ -156,7 +156,9 @@ Adapter :: struct {
 // adapter_record_action_rejection retains one typed display-thread rejection.
 adapter_record_action_rejection :: proc(
     owner: ^Adapter, status: Adapter_Action_Status) {
-    if owner == nil || status == .Ok || status == .Empty {return}
+    if owner == nil || status == .Ok || status == .Empty {
+       return
+    }
     sync.mutex_lock(&owner^.diagnostics_mutex)
     owner^.diagnostics.rejected_actions += 1
     owner^.diagnostics.last_action_status = status
@@ -166,7 +168,9 @@ adapter_record_action_rejection :: proc(
 // adapter_record_macos_failure retains one content-free Cocoa failure stage.
 adapter_record_macos_failure :: proc(
     owner: ^Adapter, stage: Macos_Failure_Stage) {
-    if owner == nil || stage == .None {return}
+    if owner == nil || stage == .None {
+       return
+    }
     sync.mutex_lock(&owner^.diagnostics_mutex)
     owner^.diagnostics.macos_failures.last_stage = stage
     owner^.diagnostics.macos_failures.count += 1
@@ -175,7 +179,9 @@ adapter_record_macos_failure :: proc(
 
 // adapter_macos_failures_snapshot returns one synchronized failure observation.
 adapter_macos_failures_snapshot :: proc(owner: ^Adapter) -> Macos_Failure_Diagnostics {
-    if owner == nil {return {}}
+    if owner == nil {
+       return {}
+    }
     sync.mutex_lock(&owner^.diagnostics_mutex)
     defer sync.mutex_unlock(&owner^.diagnostics_mutex)
     return owner^.diagnostics.macos_failures
@@ -184,7 +190,9 @@ adapter_macos_failures_snapshot :: proc(owner: ^Adapter) -> Macos_Failure_Diagno
 // adapter_record_windows_failure retains one content-free HWND failure stage.
 adapter_record_windows_failure :: proc(
     owner: ^Adapter, stage: Windows_Failure_Stage) {
-    if owner == nil || stage == .None {return}
+    if owner == nil || stage == .None {
+       return
+    }
     sync.mutex_lock(&owner^.diagnostics_mutex)
     owner^.diagnostics.windows_failures.last_stage = stage
     owner^.diagnostics.windows_failures.count += 1
@@ -194,7 +202,9 @@ adapter_record_windows_failure :: proc(
 // adapter_windows_failures_snapshot returns one synchronized failure observation.
 adapter_windows_failures_snapshot :: proc(
     owner: ^Adapter) -> Windows_Failure_Diagnostics {
-    if owner == nil {return {}}
+    if owner == nil {
+       return {}
+    }
     sync.mutex_lock(&owner^.diagnostics_mutex)
     defer sync.mutex_unlock(&owner^.diagnostics_mutex)
     return owner^.diagnostics.windows_failures
@@ -203,7 +213,9 @@ adapter_windows_failures_snapshot :: proc(
 // adapter_record_diagnostic increments one bounded content-free lifecycle counter.
 adapter_record_diagnostic :: proc(
     owner: ^Adapter, event: Adapter_Diagnostic_Event) {
-    if owner == nil {return}
+    if owner == nil {
+       return
+    }
     sync.mutex_lock(&owner^.diagnostics_mutex)
     defer sync.mutex_unlock(&owner^.diagnostics_mutex)
     switch event {
@@ -218,7 +230,9 @@ adapter_record_diagnostic :: proc(
 
 // adapter_diagnostics_snapshot returns one synchronized lifecycle observation.
 adapter_diagnostics_snapshot :: proc(owner: ^Adapter) -> Adapter_Diagnostics {
-    if owner == nil {return {}}
+    if owner == nil {
+       return {}
+    }
     sync.mutex_lock(&owner^.diagnostics_mutex)
     defer sync.mutex_unlock(&owner^.diagnostics_mutex)
     return owner^.diagnostics

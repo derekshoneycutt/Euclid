@@ -33,7 +33,9 @@ Gif_Capture_Test_Encoder :: struct {
 // Admit one non-overlapping test capture transaction.
 framebuffer_test_begin :: proc(user_data: rawptr) -> bool {
     state := cast(^Framebuffer_Capture_Test_State)user_data
-    if state.capture_active {return false}
+    if state.capture_active {
+       return false
+    }
     state.capture_active = true
     return true
 }
@@ -42,7 +44,9 @@ framebuffer_test_begin :: proc(user_data: rawptr) -> bool {
 framebuffer_test_allocate :: proc(
     user_data: rawptr, byte_count: int) -> ([]u8, mem.Allocator_Error) {
     state := cast(^Framebuffer_Capture_Test_State)user_data
-    if !state.capture_active {return nil, .Invalid_Argument}
+    if !state.capture_active {
+       return nil, .Invalid_Argument
+    }
     state.allocation_count += 1
     if state.fail_allocation_at == state.allocation_count {
         return nil, .Out_Of_Memory
@@ -55,7 +59,9 @@ framebuffer_test_load :: proc(user_data: rawptr) -> Framebuffer_Pixels {
     state := cast(^Framebuffer_Capture_Test_State)user_data
     pixels, allocation_error := framebuffer_test_allocate(
         user_data, len(state^.source))
-    if allocation_error != nil {return {}}
+    if allocation_error != nil {
+       return {}
+    }
     copy(pixels, state^.source)
     return {pixels = pixels, width = state^.width, height = state^.height,
         pitch_bytes = state^.pitch_bytes}
@@ -112,7 +118,9 @@ framebuffer_test_source :: proc(
 gif_capture_test_stage_frame :: proc(
     user_data: rawptr, _: Gif_Capture_Frame) -> bool {
     encoder := cast(^Gif_Capture_Test_Encoder)user_data
-    if encoder == nil || encoder.staged {return false}
+    if encoder == nil || encoder.staged {
+       return false
+    }
     encoder.staged = true
     encoder.stage_count += 1
     return true
@@ -134,7 +142,9 @@ gif_capture_test_commit_frame :: proc(user_data: rawptr, duration_ms: u64) -> bo
 // Close one test stream only after its staged frame is committed.
 gif_capture_test_close :: proc(user_data: rawptr) -> bool {
     encoder := cast(^Gif_Capture_Test_Encoder)user_data
-    if encoder == nil || encoder.staged {return false}
+    if encoder == nil || encoder.staged {
+       return false
+    }
     encoder.close_count += 1
     return true
 }
@@ -142,7 +152,9 @@ gif_capture_test_close :: proc(user_data: rawptr) -> bool {
 // Clear any staged test frame during capture abort.
 gif_capture_test_abort :: proc(user_data: rawptr) {
     encoder := cast(^Gif_Capture_Test_Encoder)user_data
-    if encoder != nil {encoder.staged = false}
+    if encoder != nil {
+       encoder.staged = false
+    }
 }
 
 // Return a stable synthetic output path after test finalization.

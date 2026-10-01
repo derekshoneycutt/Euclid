@@ -2361,7 +2361,9 @@ draw_regular_text_run :: proc(
 // draw_cached_math_text_run attempts one resident math glyph run.
 draw_cached_math_text_run :: proc(
     params: Text_Run_Draw_Params, text_font: view_core.Ui_Text_Font) -> bool {
-    if params.item.kind != .Math_Glyph_Run {return false}
+    if params.item.kind != .Math_Glyph_Run {
+        return false
+    }
     return draw_cached_math_site({
         ctx = {
             encoder = params.encoder,
@@ -2384,7 +2386,9 @@ draw_text_run_content :: proc(
         draw_regular_text_run(params, text_font)
         return
     }
-    if draw_cached_math_text_run(params, text_font) {return}
+    if draw_cached_math_text_run(params, text_font) {
+        return
+    }
     draw_math_text({
         encoder = params.encoder,
         state = params.state,
@@ -2437,6 +2441,17 @@ document_optional_draw_color :: #force_inline proc(
     return color.value if color.present else {}
 }
 
+// Copy five optional semantic edge colors into a native shape draw item.
+document_shape_draw_edge_colors :: proc(
+    result: ^dynviewmodel.Dynview_Layout_Item,
+    shape: dynviewmodel.Dynview_Document_Shape) {
+    result^.shape_edge_color_1 = document_optional_draw_color(shape.edge_colors[0])
+    result^.shape_edge_color_2 = document_optional_draw_color(shape.edge_colors[1])
+    result^.shape_edge_color_3 = document_optional_draw_color(shape.edge_colors[2])
+    result^.shape_edge_color_4 = document_optional_draw_color(shape.edge_colors[3])
+    result^.shape_edge_color_5 = document_optional_draw_color(shape.edge_colors[4])
+}
+
 // Convert one semantic shape into the established allocation-free draw payload.
 document_shape_draw_item :: proc(
     item: dynviewmodel.Dynview_Document_Layout_Item,
@@ -2464,13 +2479,11 @@ document_shape_draw_item :: proc(
         outline_color = document_draw_color(
             shape.arc_color if shape.arc_color.present else shape.color),
     }
-    result.shape_edge_color_1 = document_optional_draw_color(shape.edge_colors[0])
-    result.shape_edge_color_2 = document_optional_draw_color(shape.edge_colors[1])
-    result.shape_edge_color_3 = document_optional_draw_color(shape.edge_colors[2])
-    result.shape_edge_color_4 = document_optional_draw_color(shape.edge_colors[3])
-    result.shape_edge_color_5 = document_optional_draw_color(shape.edge_colors[4])
+    document_shape_draw_edge_colors(&result, shape)
     draw_kind := document_shape_draw_kind(shape, result.inline_outline_stroke)
-    if !draw_kind.ok {return {}, false}
+    if !draw_kind.ok {
+        return {}, false
+    }
     result.kind = draw_kind.kind
     result.inline_outline_stroke = draw_kind.outline_stroke
     return result, true
@@ -2481,10 +2494,14 @@ document_shape_draw_kind :: proc(
     shape: dynviewmodel.Dynview_Document_Shape,
     outline_stroke: f32) -> Document_Shape_Draw_Kind_Result {
 
-    if shape.kind == .None {return {{}, outline_stroke, false}}
+    if shape.kind == .None {
+        return {{}, outline_stroke, false}
+    }
     kinds := DOCUMENT_SHAPE_DRAW_KINDS
     kind := kinds[shape.kind]
-    if shape.kind == .Point {return {kind, 0, true}}
+    if shape.kind == .Point {
+        return {kind, 0, true}
+    }
     if shape.filled {
         #partial switch shape.kind {
         case .Circle: kind = .Inline_Filled_Circle
@@ -2519,7 +2536,9 @@ document_prose_content :: proc(
     ctx: Layout_Draw_Context,
     item: dynviewmodel.Dynview_Document_Layout_Item) -> Document_Prose_Content {
     run, run_valid := document_prose_shaped_run(ctx, item)
-    if !run_valid {return {}}
+    if !run_valid {
+        return {}
+    }
     if run.text_offset < 0 || run.text_count <= 0 ||
         run.text_count > len(ctx.runtime^.content.document_text)-run.text_offset {
         return {}
@@ -2529,7 +2548,9 @@ document_prose_content :: proc(
     column_advance, advance_valid := view_core.ui_text_column_advance(
         font.cache_borrow(&ctx.state^.font_cache, run.effective_font_key),
         ctx.font_size)
-    if !advance_valid {return {}}
+    if !advance_valid {
+        return {}
+    }
     return {run, text, column_advance, true}
 }
 
@@ -2540,7 +2561,9 @@ draw_document_prose_item :: proc(
     semantic_inline: dynviewmodel.Dynview_Document_Inline,
     position: geometry.Vector2) -> bool {
     content := document_prose_content(ctx, item)
-    if !content.ok {return false}
+    if !content.ok {
+        return false
+    }
     cache := &ctx.runtime^.compile_cache
     run := content.run
     line_top := view_core.ui_text_cached_run_line_top(
@@ -2604,7 +2627,9 @@ draw_document_display_number :: proc(
     line: dynviewmodel.Dynview_Document_Layout_Line,
     origin: geometry.Vector2) {
 
-    if line.display_number <= 0 {return}
+    if line.display_number <= 0 {
+        return
+    }
     style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_DEFAULT)
     baseline := origin.y+line.baseline+line.display_number_baseline_offset
     position := geometry.Vector2{origin.x+line.display_number_x,

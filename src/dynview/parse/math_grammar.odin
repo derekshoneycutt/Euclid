@@ -283,8 +283,12 @@ tex_math_append_text_atoms :: proc(
     offset := token.start
     for offset < token.end {
         result := tex_math_append_text_atom(parser, program_id, offset, token.end)
-        if !result.ok {return -1}
-        if result.index >= 0 {last_index = result.index}
+        if !result.ok {
+            return -1
+        }
+        if result.index >= 0 {
+            last_index = result.index
+        }
         offset = result.next
     }
     return last_index
@@ -327,7 +331,9 @@ tex_math_scalar_run_end :: proc(
     for end < token_end {
         width := tex_utf8_sequence_width(source, end)
         next_role, next_class := tex_math_scalar_class(source, end, width)
-        if next_role != role || next_class != atom_class {break}
+        if next_role != role || next_class != atom_class {
+            break
+        }
         end += width
     }
     return end
@@ -367,10 +373,18 @@ tex_math_scalar_class :: proc(
 
 //   Classify one non-ASCII scalar using the frozen TeX atom sets.
 tex_math_unicode_atom_class :: proc(scalar: string) -> Tex_Math_Atom_Class {
-    if strings.contains(TEX_MATH_BINARY_SCALARS, scalar) { return .Bin }
-    if strings.contains(TEX_MATH_RELATION_SCALARS, scalar) { return .Rel }
-    if strings.contains(TEX_MATH_OPEN_SCALARS, scalar) { return .Open }
-    if strings.contains(TEX_MATH_CLOSE_SCALARS, scalar) { return .Close }
+    if strings.contains(TEX_MATH_BINARY_SCALARS, scalar) {
+        return .Bin 
+    }
+    if strings.contains(TEX_MATH_RELATION_SCALARS, scalar) {
+        return .Rel 
+    }
+    if strings.contains(TEX_MATH_OPEN_SCALARS, scalar) {
+        return .Open 
+    }
+    if strings.contains(TEX_MATH_CLOSE_SCALARS, scalar) {
+        return .Close 
+    }
     return .Ord
 }
 
@@ -444,7 +458,9 @@ tex_math_parse_structured_command :: proc(
     program_id: int,
     command: string) -> Tex_Math_Command_Result {
     fraction := tex_math_parse_fraction_command(parser, program_id, command)
-    if fraction.handled {return fraction}
+    if fraction.handled {
+        return fraction
+    }
     index := -1
     status := Tex_Parse_Status.Ok
     switch command {
@@ -513,9 +529,15 @@ tex_math_fixed_delimiter_policy :: proc(
         growth = 4
     }
     suffix := command[len(command)-1]
-    if suffix == 'l' { return growth, .Open }
-    if suffix == 'r' { return growth, .Close }
-    if suffix == 'm' { return growth, .Rel }
+    if suffix == 'l' {
+        return growth, .Open 
+    }
+    if suffix == 'r' {
+        return growth, .Close 
+    }
+    if suffix == 'm' {
+        return growth, .Rel 
+    }
     return growth, .Ord
 }
 
@@ -609,7 +631,9 @@ tex_math_append_text_run :: proc(
     text: string,
     atom_class: Tex_Math_Atom_Class) -> (int, Tex_Parse_Status) {
     span, ok := tex_semantic_append_text(parser.output, text)
-    if !ok { return -1, .Work_Limit }
+    if !ok {
+        return -1, .Work_Limit 
+    }
     index := tex_semantic_append_op(parser.output, program_id, {
         kind = .Text_Run, text = span, style_role = .Text,
         atom_class = atom_class, child_program = -1,
@@ -632,7 +656,9 @@ tex_math_take_nested_raw_group :: proc(
         if token_status != .Ok {
             return {}, false
         }
-        if token.kind == .Left_Brace { depth += 1 }
+        if token.kind == .Left_Brace {
+            depth += 1 
+        }
         if token.kind == .Right_Brace {
             depth -= 1
             if depth == 0 {
@@ -848,7 +874,9 @@ tex_math_delimiter_kind :: proc(delimiter: string) -> Tex_Delimiter_Kind {
         {"\\langle", .Left_Angle}, {"\\rangle", .Right_Angle},
     }
     for entry in entries {
-        if entry.text == delimiter {return entry.kind}
+        if entry.text == delimiter {
+            return entry.kind
+        }
     }
     return .None
 }
@@ -983,7 +1011,9 @@ tex_math_parse_binomial :: proc(
     }
     status := tex_math_build_binomial_content(
         parser, stack_program, content_program, top, bottom)
-    if status != .Ok {return -1, status}
+    if status != .Ok {
+        return -1, status
+    }
     if explicit_style {
         return tex_math_append_style_override(
             parser, program_id, content_program, level)
@@ -1009,7 +1039,9 @@ tex_math_build_binomial_content :: proc(
         tertiary_program = -1,
         table_descriptor = -1,
     })
-    if status != .Ok {return status}
+    if status != .Ok {
+        return status
+    }
     delimited_text := tex_math_stretch_text(
         parser.output, "(", stack_program, ")")
     _, status = tex_math_append_stretch_delimiter(parser, content_program, {

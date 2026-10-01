@@ -26,6 +26,16 @@ Document_Display_Program_Node_Result :: struct {
     ok: bool,
 }
 
+// Inputs for lowering one semantic aligned-display row.
+Document_Display_Row_Lowering :: struct {
+    cache: ^dynviewmodel.Dynview_Compile_Cache,
+    content: ^dynviewmodel.Dynview_Content_View,
+    block: dynviewmodel.Dynview_Document_Block,
+    row: dynviewmodel.Dynview_Document_Display_Row,
+    search_start: int,
+    builders: ^Document_Layout_Builders,
+}
+
 // Initialize every semantic layout builder in the worker-owned cache arena.
 document_layout_builders_init :: proc(
     builders: ^Document_Layout_Builders,
@@ -246,6 +256,41 @@ document_display_program_node :: proc(
     return {next = search_start}
 }
 
+// Lower one display row's primary math and optional aligned secondary math.
+document_lower_display_row :: proc(
+    input: Document_Display_Row_Lowering) ->
+    Document_Display_Program_Node_Result {
+    primary := document_display_program_node(
+        input.cache, input.content, input.block,
+        input.row.primary_program_id, input.search_start)
+    if !primary.ok {
+        return {ok = false}
+    }
+    status := document_append_layout_node(input.builders, primary.node)
+    if status != .Ok {
+        return {ok = false}
+    }
+    if input.row.secondary_program_id < 0 {
+        return primary
+    }
+    status = document_append_layout_node(input.builders, {
+        kind = .Glue, inline_index = -1, shaped_run_index = -1})
+    if status != .Ok {
+        return {ok = false}
+    }
+    secondary := document_display_program_node(
+        input.cache, input.content, input.block,
+        input.row.secondary_program_id, primary.next)
+    if !secondary.ok {
+        return {ok = false}
+    }
+    status = document_append_layout_node(input.builders, secondary.node)
+    if status != .Ok {
+        return {ok = false}
+    }
+    return secondary
+}
+
 // Lower one technical display block as ordered row math boxes and align spacers.
 document_lower_display_block :: proc(
     cache: ^dynviewmodel.Dynview_Compile_Cache,
@@ -262,24 +307,13 @@ document_lower_display_block :: proc(
     rows := content^.document_display_rows[block.display_row_start:
         block.display_row_start+block.display_row_count]
     for row in rows {
-        primary := document_display_program_node(
-            cache, content, block, row.primary_program_id, search_start)
-        if !primary.ok {return .Invalid_Argument}
-        status := document_append_layout_node(builders, primary.node)
-        if status != .Ok {return status}
-        search_start = primary.next
-        if row.secondary_program_id < 0 {
-            continue
+        lowered := document_lower_display_row(
+            Document_Display_Row_Lowering{
+                cache, content, block, row, search_start, builders})
+        if !lowered.ok {
+            return .Invalid_Argument
         }
-        status = document_append_layout_node(builders, {
-            kind = .Glue, inline_index = -1, shaped_run_index = -1})
-        if status != .Ok {return status}
-        secondary := document_display_program_node(
-            cache, content, block, row.secondary_program_id, search_start)
-        if !secondary.ok {return .Invalid_Argument}
-        status = document_append_layout_node(builders, secondary.node)
-        if status != .Ok {return status}
-        search_start = secondary.next
+        search_start = lowered.next
     }
     return .Ok
 }

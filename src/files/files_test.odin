@@ -135,15 +135,15 @@ write_required_entry :: proc(root_dir, rel_path: string) -> bool {
 }
 
 //   Write the fixed search database fixture required by manifest readiness tests.
-write_test_search_database :: proc(unpack_dir: string) -> bool {
+write_test_catalog_database :: proc(unpack_dir: string) -> bool {
     search_content := "search-index-fixture"
     search_path, search_err := filepath.join(
-        []string{unpack_dir, "search/animations.sqlite3"}, context.allocator)
+        []string{unpack_dir, "catalog/animations.sqlite3"}, context.allocator)
     if search_err != nil {
         return false
     }
     defer delete(search_path)
-    if !write_required_entry(unpack_dir, "search/animations.sqlite3") ||
+    if !write_required_entry(unpack_dir, "catalog/animations.sqlite3") ||
        os.write_entire_file(search_path, search_content) != nil {
         return false
     }
@@ -156,21 +156,23 @@ write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
     image_path := fmt.tprintf(
         "sysimage/%s/%s", fingerprint, PACKAGED_SYSIMAGE_FILENAME)
     if !write_required_entry(unpack_dir, image_path) ||
-       !write_test_search_database(unpack_dir) {
+       !write_test_catalog_database(unpack_dir) {
         return false
     }
     manifest_path, manifest_err := filepath.join(
         []string{unpack_dir, "manifest.txt"}, context.allocator)
-    if manifest_err != nil {return false}
+    if manifest_err != nil {
+        return false
+    }
     defer delete(manifest_path)
     search_digest :=
         "9c2bd1ef8519dc108aff1e657288781b79a6fa08b171c33390ada221592b5b2e"
     manifest := fmt.tprintf(
         "schema_version=3\npackage_identity=%s\nsysimage_path=%s\n" +
         "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
-        "sysimage_platform=%s\nsearch_database=search/animations.sqlite3\n" +
-        "search_database_sha256=%s\nsearch_corpus_fingerprint=%s\n" +
-        "search_schema_version=1\n",
+        "sysimage_platform=%s\ncatalog_database=catalog/animations.sqlite3\n" +
+        "catalog_database_sha256=%s\ncatalog_corpus_fingerprint=%s\n" +
+        "catalog_schema_version=2\n",
         fingerprint, image_path, fingerprint, fingerprint,
         PACKAGED_SYSIMAGE_PLATFORM, search_digest, fingerprint)
     return os.write_entire_file(manifest_path, manifest) == nil
@@ -180,12 +182,10 @@ write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
 build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
     required := []string{
         "julia/script.jl",
-        "content/animation_catalog_generation.jl",
-        "content/animation_catalog_data.jl",
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
         "NewCMSansMath-Regular.otf",
-        "search/animations.sqlite3",
+        "catalog/animations.sqlite3",
     }
 
     for rel_path in required {
@@ -227,7 +227,7 @@ is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
 
     search_path, search_join_error := filepath.join(
-        []string{unpack_dir, "search/animations.sqlite3"}, context.allocator)
+        []string{unpack_dir, "catalog/animations.sqlite3"}, context.allocator)
     defer delete(search_path)
     testing.expect(t, search_join_error == nil)
     testing.expect(t, os.write_entire_file(search_path, "tampered") == nil)

@@ -43,7 +43,9 @@ accesskit_shared_builds_complete_static_tree :: proc(t: ^testing.T) {
         portable.Publication_Status.Ok)
     update := accesskit_tree_update(&publication)
     testing.expect(t, update != nil)
-    if update != nil {accesskit.accesskit_tree_update_free(update)}
+    if update != nil {
+       accesskit.accesskit_tree_update_free(update)
+    }
 }
 
 // accesskit_shared_scales_logical_bounds verifies the physical-pixel contract.
@@ -88,7 +90,9 @@ accesskit_shared_builds_mixed_control_tree :: proc(t: ^testing.T) {
     }), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
-    if update != nil {accesskit.accesskit_tree_update_free(update)}
+    if update != nil {
+       accesskit.accesskit_tree_update_free(update)
+    }
 }
 
 // accesskit_shared_builds_search_tree_hierarchy verifies nested translation.
@@ -112,7 +116,9 @@ accesskit_shared_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
     }), portable.Publication_Status.Ok)
     update := accesskit_control_tree_update(&publication)
     testing.expect(t, update != nil)
-    if update != nil {accesskit.accesskit_tree_update_free(update)}
+    if update != nil {
+       accesskit.accesskit_tree_update_free(update)
+    }
 }
 
 // accesskit_shared_tree_scroll_supports_set_value verifies composite AX ranges.
@@ -120,7 +126,9 @@ accesskit_shared_builds_search_tree_hierarchy :: proc(t: ^testing.T) {
 accesskit_shared_tree_scroll_supports_set_value :: proc(t: ^testing.T) {
     node := accesskit.accesskit_node_new(.Tree)
     testing.expect(t, node != nil)
-    if node == nil {return}
+    if node == nil {
+       return
+    }
     defer accesskit.accesskit_node_free(node)
     accesskit_configure_control_actions(node, {.Scroll})
     testing.expect(t, accesskit.accesskit_node_supports_action(node, .Scroll_Up))

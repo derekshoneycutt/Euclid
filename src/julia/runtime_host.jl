@@ -14,7 +14,7 @@ end
 """One independently owned generation of reloadable Euclid content."""
 struct EuclidRuntimeGeneration
     content::Module
-    animation_catalog::Module
+    source_root::String
     null_animation::Module
     harness_scenarios::Module
 end
@@ -80,7 +80,7 @@ function create_euclid_runtime_host(
         animation_runtime_generation=UInt64(0),
         animation_implementation_loader=(id ->
             load_generation_animation_implementation(
-                generation, terminal_animation_callback, id)),
+                generation, state_ptr, terminal_animation_callback, id)),
         actor_runtime)
     return EuclidRuntimeHost(
         state_ptr, generation, nothing, reactor,
@@ -222,24 +222,47 @@ function await_animation_supervisor!(host::EuclidRuntimeHost)::Bool
     return false
 end
 
-"""Resolve null, Terminal, or path-backed implementations for one generation."""
+"""Resolve null, Terminal, or path-backed implementations from native catalogue data."""
 function load_generation_animation_implementation(
-    generation::EuclidRuntimeGeneration, terminal_animation_callback::Function,
-    animation_id::UUID)
-    constructor = Base.invokelatest(
-        getfield, generation.animation_catalog, :AnimationImplementation)
+    generation::EuclidRuntimeGeneration, state_ptr::Ptr{Cvoid},
+    terminal_animation_callback::Function, animation_id::UUID)
     if animation_id == UUID(UInt128(0))
-        return constructor(
+        return AnimationCatalog.AnimationImplementation(
             animation_id, getfield(generation.null_animation, :animation_entry))
     end
-    descriptors = Base.invokelatest(
-        getfield, generation.animation_catalog, :AnimationDescriptors)
-    descriptor = only(filter(candidate -> candidate.id == animation_id, descriptors))
-    terminal_kind = Base.invokelatest(
-        getfield, generation.animation_catalog, :TerminalNode)
-    descriptor.kind === terminal_kind &&
-        return constructor(animation_id, terminal_animation_callback)
-    return load_generation_animation(generation, animation_id)
+    path_bytes = Vector{UInt8}(undef,
+        OdinJuliaBridge.ANIMATION_IMPLEMENTATION_PATH_MAX_BYTES)
+    status, metadata =
+        OdinJuliaBridge.copy_animation_implementation_path(
+            state_ptr, string(animation_id), path_bytes)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK ||
+        throw(ArgumentError("native catalogue rejected animation UUID"))
+    path = _animation_implementation_path_from_metadata(metadata, path_bytes)
+    if path === nothing
+        return AnimationCatalog.AnimationImplementation(
+            animation_id, terminal_animation_callback)
+    end
+    return load_generation_animation(generation, animation_id, path)
+end
+
+"""Validate copied catalogue metadata and return its path, or `nothing` for Terminal."""
+function _animation_implementation_path_from_metadata(
+    metadata::OdinJuliaBridge.AnimationImplementationPathMetadata,
+    path_bytes::Vector{UInt8})::Union{Nothing,String}
+
+    terminal_kind = Int32(AnimationCatalog.TerminalNode)
+    if metadata.node_kind == terminal_kind
+        metadata.byte_count == 0 ||
+            throw(ArgumentError("Terminal catalogue node has an implementation path"))
+        return nothing
+    end
+    path_backed_kinds = (Int32(AnimationCatalog.CategoryNode),
+        Int32(AnimationCatalog.LeafNode))
+    metadata.node_kind in path_backed_kinds ||
+        throw(ArgumentError("native catalogue returned an invalid animation kind"))
+    0 < metadata.byte_count <= length(path_bytes) ||
+        throw(ArgumentError("native catalogue returned an invalid implementation path"))
+    return String(copy(@view path_bytes[1:Int(metadata.byte_count)]))
 end
 
 """Resolve the implementation used when adopting an animation for one tick."""
@@ -247,7 +270,7 @@ function load_tick_implementation(
     host::EuclidRuntimeHost, generation::EuclidRuntimeGeneration,
     animation_id::UUID)
     return load_generation_animation_implementation(
-        generation, host.terminal_animation_callback, animation_id)
+        generation, host.state_ptr, host.terminal_animation_callback, animation_id)
 end
 
 """Return the live program actor matching one native tick, or `nothing`."""
@@ -367,7 +390,7 @@ function animation_host_lifecycle(
             state.active_animation_generation, payload.animation_generation,
             animation_id,
             id -> load_generation_animation_implementation(
-                candidate, host.terminal_animation_callback, id))
+                candidate, host.state_ptr, host.terminal_animation_callback, id))
     else
         return ANIMATION_LIFECYCLE_FAILED
     end
@@ -423,22 +446,28 @@ function create_euclid_runtime_generation(
     Core.eval(content, :(const EuclidLatex = $EuclidLatex))
     Core.eval(content, :(const EuclidSearchContent = $EuclidSearchContent))
     Core.eval(content, :(const AnimationCatalog = $AnimationCatalog))
-    Base.include(content, joinpath(root, "animation_catalog_generation.jl"))
     Base.include(content, joinpath(root, "nullanimation.jl"))
     Base.include(content, joinpath(root, "harness_scenarios.jl"))
     return EuclidRuntimeGeneration(
         content,
-        Base.invokelatest(getfield, content, :AnimationCatalogGeneration),
+        root,
         Base.invokelatest(getfield, content, :NullAnimation),
         Base.invokelatest(getfield, content, :EuclidHarnessScenarios))
 end
 
-"""Load one animation into the content module owned by a generation."""
+"""Load one catalogue-selected implementation into a generation-owned module."""
 function load_generation_animation(
-    generation::EuclidRuntimeGeneration, id)::Any
+    generation::EuclidRuntimeGeneration, id::UUID,
+    implementation_path::AbstractString)::Any
 
-    loader = getfield(generation.animation_catalog, :ensure_animation_loaded)
-    return Base.invokelatest(loader, generation.content, id)
+    path = String(implementation_path)
+    AnimationCatalog._implementation_path_is_safe(path) ||
+        throw(ArgumentError("animation implementation path is unsafe"))
+    result = Base.include(generation.content, joinpath(generation.source_root, path))
+    result isa AnimationCatalog.AnimationImplementation ||
+        throw(ArgumentError("animation program returned an invalid result"))
+    result.id == id || throw(ArgumentError("animation implementation id mismatch"))
+    return result
 end
 
 """Return the committed generation owned by a valid runtime host."""

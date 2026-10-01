@@ -38,7 +38,9 @@ terminal_graphics_runtime_init :: proc(state: ^core.Euclid_General_State) -> boo
 terminal_graphics_bind_native :: proc(
     state: ^core.Euclid_General_State, platform: ^native.Sdl_Platform,
     runtime: ^native.Sdl_Draw_Runtime) -> bool {
-    if state == nil || state^.terminal_graphics_user_data == nil {return false}
+    if state == nil || state^.terminal_graphics_user_data == nil {
+        return false
+    }
     return viewgraphics.service_bind_native(
         cast(^viewgraphics.Service)state^.terminal_graphics_user_data,
         platform, runtime)
@@ -47,7 +49,9 @@ terminal_graphics_bind_native :: proc(
 // terminal_graphics_set_draw_encoder lends the active frame encoder to raster draws.
 terminal_graphics_set_draw_encoder :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
-    if state == nil || state^.terminal_graphics_user_data == nil {return}
+    if state == nil || state^.terminal_graphics_user_data == nil {
+        return
+    }
     viewgraphics.service_set_draw_encoder(
         cast(^viewgraphics.Service)state^.terminal_graphics_user_data, encoder)
 }

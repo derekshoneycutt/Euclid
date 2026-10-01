@@ -10,6 +10,7 @@ include(joinpath(@__DIR__, "..", "make.jl"))
 include(joinpath(@__DIR__, "..", "julia_test_reporter.jl"))
 include(joinpath(@__DIR__, "..", "scenario_runner.jl"))
 include(joinpath(@__DIR__, "shader_tests.jl"))
+include(joinpath(@__DIR__, "search_index_builder_tests.jl"))
 
 const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner

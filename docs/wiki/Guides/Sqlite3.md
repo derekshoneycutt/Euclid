@@ -22,7 +22,7 @@ indexes. Its main boundaries are:
 - The native index builder owns schema creation, indexing, validation, and vacuuming.
 - Asset packaging owns reproducibility checks, hashes, and package-manifest metadata.
 - The files subsystem resolves and validates the extracted packaged asset.
-- The search worker exclusively owns SQLite connections and prepared statements.
+- The catalogue worker exclusively owns SQLite connections and prepared statements.
 - The display thread owns query intent, result commitment, and catalogue-ID resolution.
 
 ```mermaid
@@ -32,7 +32,7 @@ flowchart LR
     Builder[Standalone Odin index builder]
     Database[Immutable animations.sqlite3]
     Package[Validated assets package]
-    Worker[Dedicated search worker]
+    Worker[Dedicated catalogue worker]
     Display[Display-owned Library UI]
 
     Content -->|Julia export| Corpus
@@ -46,8 +46,8 @@ flowchart LR
 
 The important ownership rule is that drawing and widget code never call SQLite. Search
 requests and results cross bounded channels as pointer-free values. The display resolves
-returned source-aware document IDs against the active Julia catalogue only after a
-result passes query-generation and index-generation checks.
+returned source-aware document IDs against the active native catalogue registry only
+after a result passes query-generation and index-generation checks.
 
 ## Native Dependency and Linkage
 
@@ -83,9 +83,9 @@ The database build is part of asset generation rather than application startup.
    result before vacuuming it.
 1. `tools/make.jl` independently builds two candidate databases and requires their file
    digests to match. This makes byte reproducibility part of asset admission.
-1. The accepted database is staged as `search/animations.sqlite3` inside
-   `assets.pkg`. The package manifest records its SHA-256 digest, corpus fingerprint,
-   and search schema version.
+1. The accepted database is staged as `catalog/animations.sqlite3` inside
+    `assets.pkg`. The package manifest records its SHA-256 digest, catalogue corpus
+    fingerprint, and catalogue schema version.
 
 The canonical corpus currently contains 138 nodes. Records carry a source namespace,
 stable UUID, node kind, display name, hierarchy path, aliases, and semantic text.
@@ -110,12 +110,16 @@ erDiagram
         text value
     }
 
-    SEARCH_DOCUMENTS {
+    ANIMATION_CATALOG {
         integer rowid PK
         text source_namespace
-        text document_id
+        text animation_id
+        text parent_animation_id FK
         integer node_kind
         text display_name
+        integer sibling_order
+        integer catalog_order
+        text implementation_path
         text hierarchy_path
         text aliases
         text semantic_text
@@ -134,7 +138,7 @@ erDiagram
         integer rank
     }
 
-    SEARCH_DOCUMENTS ||--|| ANIMATION_SEARCH : "external content rowid"
+    ANIMATION_CATALOG ||--|| ANIMATION_SEARCH : "external content rowid"
 ```
 
 ### `search_metadata`
@@ -144,7 +148,7 @@ stores:
 
 | Key | Current meaning |
 | --- | --- |
-| `schema_version` | Persisted Euclid schema version, currently `1`. |
+| `schema_version` | Persisted Euclid schema version, currently `2`. |
 | `sqlite_version` | Required SQLite implementation version, currently `3.53.4`. |
 | `catalog_fingerprint` | SHA-256 identity of the canonical corpus. |
 | `document_count` | Required catalogue row count, currently `138`. |
@@ -155,18 +159,19 @@ stores:
 The worker requires exact values before publishing readiness. This rejects mismatched
 content, schema, tokenizer assumptions, query syntax, and SQLite builds at the boundary.
 
-### `search_documents`
+### `animation_catalog`
 
-This ordinary table is the canonical stored content for search. `(source_namespace,
-document_id)` is unique, while integer `rowid` provides the external-content identity
-used by FTS5. Aliases are newline-joined into one searchable text stream. Runtime rows
-return only namespace and stable document ID; display text and tree placement continue
-to come from the active catalogue rather than becoming SQLite-owned UI state.
+This ordinary table stores the package's static catalogue records and searchable text.
+`(source_namespace, animation_id)` is unique, parent IDs reference another catalogue
+record, and partial unique indexes enforce sibling order for both roots and children.
+Integer `rowid` provides the external-content identity used by FTS5. Runtime search rows
+return only namespace and stable animation ID; accepted IDs are resolved through the
+native registry, and display code never accesses SQLite directly.
 
 ### `animation_search`
 
 `animation_search` is an external-content FTS5 table over the four searchable text
-columns in `search_documents`. External content avoids storing a second authoritative
+columns in `animation_catalog`. External content avoids storing a second authoritative
 copy of those text values while preserving an optimized inverted index.
 
 Its tokenizer is:
@@ -216,7 +221,7 @@ temporary FTS5 projection using plain `unicode61 remove_diacritics 2` tokenizati
 
 ```mermaid
 erDiagram
-    SEARCH_DOCUMENTS {
+    ANIMATION_CATALOG {
         integer rowid PK
         text display_name
         text hierarchy_path
@@ -240,7 +245,7 @@ erDiagram
         integer rank
     }
 
-    SEARCH_DOCUMENTS ||--o{ PLAIN_SEARCH : "concatenated text"
+    ANIMATION_CATALOG ||--o{ PLAIN_SEARCH : "concatenated text"
     PLAIN_SEARCH ||--o{ PLAIN_SEARCH_VOCABULARY : "fts5vocab projection"
     PLAIN_SEARCH_VOCABULARY ||--o{ SEARCH_TERMS : "term and derived rank"
 ```
@@ -255,7 +260,8 @@ Runtime startup follows a fail-closed path:
 
 1. `src/files/files.odin` validates the asset manifest, fixed relative database path,
    schema version, database digest shape, and corpus fingerprint shape.
-1. The runtime session resolves the extracted database and creates the search service.
+1. The runtime session resolves the extracted database and creates the catalogue
+    service, which currently exposes the Library search capability.
 1. The worker opens `file:...?...immutable=1` with read-only, URI, and no-mutex flags.
 1. The worker registers spellfix, prepares the fixed statement set, and validates every
    required metadata value against the package fingerprint.
@@ -263,11 +269,12 @@ Runtime startup follows a fail-closed path:
 
 The dedicated worker owns the connection from open through statement finalization and
 close. `SQLITE_OPEN_NOMUTEX` is valid because no other thread accesses that connection.
-The service uses a fixed 256 KiB TLSF-backed allocator and capacity-eight request and
-result channels. It coalesces queued work toward the newest query generation so stale
-typing work does not monopolize the worker.
+The service uses a fixed TLSF-backed allocator and capacity-eight request, query-result,
+and control-result channels. Separate result channels prevent synchronous reload
+coordination from consuming an asynchronous Library query result. The worker coalesces
+queued query work toward the newest generation without crossing a control command.
 
-The query compiler in `src/view/search/query.odin` is the security and syntax boundary.
+The query compiler in `src/view/catalog/query.odin` is the security and syntax boundary.
 It validates bounded UTF-8 friendly syntax, normalizes punctuation to token separators,
 and emits only quoted terms, `AND`, `NOT`, and a final bare-term prefix marker. Raw user
 text never receives FTS5 grammar authority and all SQL values are bound parameters.
@@ -279,17 +286,24 @@ visible state, then resolves accepted UUIDs through the active catalogue.
 
 ## Failure and Lifecycle Semantics
 
-SQLite is required for the current built-in Library search service. A missing asset,
-digest or metadata mismatch, extension-registration failure, statement failure, or
-database-open failure prevents search-service startup and causes runtime-session startup
-to fail. Query parse failures are reported as invalid input; execution failures produce
-a stable failed status rather than exposing SQLite diagnostics to UI state.
+SQLite is required for the catalogue service and its built-in Library search capability.
+A missing asset, digest or metadata mismatch, extension-registration failure, statement
+failure, or database-open failure prevents catalogue-service startup and causes runtime
+session startup to fail. Query parse failures are reported as invalid input; execution
+failures produce a stable failed status rather than exposing SQLite diagnostics to UI.
+
+Reload opens and validates a candidate immutable connection while the active connection
+continues serving queries. The candidate snapshot builds the inactive native registry;
+promotion swaps database and snapshot generations but retains the previous connection
+until Julia generation commit and native publication succeed. Discard reverses a
+provisional promotion, while finalization closes the retired connection. Search results
+carry the database generation and stale results are rejected after promotion.
 
 Shutdown sends a bounded control message, drains through the worker's stopped result,
-joins the thread, finalizes prepared statements in reverse order, closes the connection,
-destroys channels, and releases service storage. The asset remains immutable for the
-entire session, so no journal, WAL, migration, or write-contention policy exists in the
-runtime architecture.
+joins the thread, finalizes prepared statements in reverse order, closes active and
+candidate connections, destroys channels, and releases service storage. Every database
+connection is immutable, so no journal, WAL, migration, or write-contention policy
+exists in the runtime architecture.
 
 ## Module Map
 
@@ -302,8 +316,9 @@ runtime architecture.
 | Index construction | Schema, insertion, FTS rebuild, spellfix vocabulary, validation. | `tools/search_index_builder/main.odin` |
 | Asset packaging | Double-build reproducibility, digesting, staging, manifest publication. | `tools/make.jl` |
 | Asset admission | Manifest validation, extraction, path and fingerprint resolution. | `src/files/files.odin` |
-| Query contract | Friendly syntax admission and bounded FTS5 MATCH compilation. | `src/view/search/query.odin` |
-| Database owner | Immutable connection, prepared statements, FTS and spellfix execution. | `src/view/search/worker.odin` |
+| Catalogue model | Bounded snapshots, worker protocol values, service storage, and generation contracts. | `src/core/catalog/model.odin` |
+| Query contract | Friendly syntax admission and bounded FTS5 MATCH compilation. | `src/view/catalog/query.odin` |
+| Catalogue service | Active and staged immutable connections, prepared statements, snapshot publication, FTS, and spellfix execution. | `src/view/catalog/worker.odin` |
 | Display coordinator | Debounce, submission, generation checks, catalogue resolution, UI commit. | `src/view/library_search.odin`, `src/view/runtime_session.odin` |
 
 ## Current Constraints
@@ -330,7 +345,7 @@ Relevant checks are layered:
 
 - Julia corpus tests verify canonical records and deterministic serialization.
 - Search query tests verify admitted syntax and exact MATCH compilation.
-- Search worker tests exercise metadata admission, FTS results, spellfix suggestions,
+- Catalogue worker tests exercise metadata admission, FTS results, spellfix suggestions,
   queue capacity, and generation rejection.
 - Files tests verify package-manifest and extracted-asset admission.
 - Asset generation proves two independently built database files are byte-identical.

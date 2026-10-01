@@ -57,13 +57,13 @@ Packaged_Sysimage_Metadata :: struct {
     input_fingerprint: string,
     artifact_sha256: string,
     package_identity: string,
-    search_relative_path: string,
-    search_database_sha256: string,
-    search_corpus_fingerprint: string,
+    catalog_relative_path: string,
+    catalog_database_sha256: string,
+    catalog_corpus_fingerprint: string,
 }
 
 // Resolved immutable search asset and the corpus identity it must contain.
-Packaged_Search_Asset :: struct {
+Packaged_Catalog_Asset :: struct {
     database_path: string,
     corpus_fingerprint: string,
 }
@@ -88,10 +88,10 @@ Manifest_Parse_State :: struct {
     digest_seen: bool,
     identity_seen: bool,
     platform_ok: bool,
-    search_path_seen: bool,
-    search_digest_seen: bool,
-    search_corpus_seen: bool,
-    search_schema_ok: bool,
+    catalog_path_seen: bool,
+    catalog_digest_seen: bool,
+    catalog_corpus_seen: bool,
+    catalog_schema_ok: bool,
 }
 
 //   Release strings retained by packaged sysimage metadata.
@@ -104,16 +104,18 @@ destroy_packaged_sysimage_metadata :: proc(
     delete(metadata.input_fingerprint, allocator)
     delete(metadata.artifact_sha256, allocator)
     delete(metadata.package_identity, allocator)
-    delete(metadata.search_relative_path, allocator)
-    delete(metadata.search_database_sha256, allocator)
-    delete(metadata.search_corpus_fingerprint, allocator)
+    delete(metadata.catalog_relative_path, allocator)
+    delete(metadata.catalog_database_sha256, allocator)
+    delete(metadata.catalog_corpus_fingerprint, allocator)
     metadata^ = {}
 }
 
 //   Release strings retained from one package identity sidecar.
 destroy_asset_package_sidecar :: proc(
     sidecar: ^Asset_Package_Sidecar, allocator: mem.Allocator) {
-    if sidecar == nil {return}
+    if sidecar == nil {
+        return
+    }
     delete(sidecar.package_identity, allocator)
     delete(sidecar.archive_sha256, allocator)
     sidecar^ = {}
@@ -135,7 +137,9 @@ is_lower_sha256 :: proc(value: string) -> bool {
 
 //   Decode one canonical lowercase SHA-256 identity into fixed storage.
 parse_lower_sha256 :: proc(value: string) -> ([32]byte, bool) {
-    if !is_lower_sha256(value) {return {}, false}
+    if !is_lower_sha256(value) {
+        return {}, false
+    }
     result: [32]byte
     for index in 0..<32 {
         high := value[index * 2]
@@ -164,21 +168,23 @@ assign_search_manifest_field :: proc(
     state: ^Manifest_Parse_State, key, value: string,
     allocator: mem.Allocator) -> (bool, bool) {
     switch key {
-    case "search_database":
+    case "catalog_database":
         return assign_unique_manifest_string(
-            &state.metadata.search_relative_path, &state.search_path_seen,
+            &state.metadata.catalog_relative_path, &state.catalog_path_seen,
             value, allocator), true
-    case "search_database_sha256":
+    case "catalog_database_sha256":
         return assign_unique_manifest_string(
-            &state.metadata.search_database_sha256, &state.search_digest_seen,
+            &state.metadata.catalog_database_sha256, &state.catalog_digest_seen,
             value, allocator), true
-    case "search_corpus_fingerprint":
+    case "catalog_corpus_fingerprint":
         return assign_unique_manifest_string(
-            &state.metadata.search_corpus_fingerprint, &state.search_corpus_seen,
+            &state.metadata.catalog_corpus_fingerprint, &state.catalog_corpus_seen,
             value, allocator), true
-    case "search_schema_version":
-        if state.search_schema_ok || value != "1" {return false, true}
-        state.search_schema_ok = true
+    case "catalog_schema_version":
+        if state.catalog_schema_ok || value != "2" {
+            return false, true
+        }
+        state.catalog_schema_ok = true
         return true, true
     }
     return true, false
@@ -190,10 +196,14 @@ assign_sysimage_manifest_field :: proc(
     allocator: mem.Allocator) -> bool {
     search_ok, search_matched := assign_search_manifest_field(
         state, key, value, allocator)
-    if search_matched {return search_ok}
+    if search_matched {
+        return search_ok
+    }
     switch key {
     case "schema_version":
-        if state.schema_seen || value != "3" { return false }
+        if state.schema_seen || value != "3" {
+            return false
+        }
         state.schema_seen = true
     case "package_identity":
         return assign_unique_manifest_string(
@@ -221,17 +231,17 @@ packaged_sysimage_manifest_is_valid :: proc(state: ^Manifest_Parse_State) -> boo
     metadata := &state.metadata
     return state.schema_seen && state.identity_seen && state.path_seen &&
         state.input_seen && state.digest_seen && state.platform_ok &&
-        state.search_path_seen && state.search_digest_seen &&
-        state.search_corpus_seen && state.search_schema_ok &&
+        state.catalog_path_seen && state.catalog_digest_seen &&
+        state.catalog_corpus_seen && state.catalog_schema_ok &&
         is_safe_asset_relative_path(metadata.relative_path) &&
         strings.has_prefix(metadata.relative_path, "sysimage/") &&
         strings.has_suffix(metadata.relative_path, PACKAGED_SYSIMAGE_FILENAME) &&
         is_lower_sha256(metadata.package_identity) &&
         is_lower_sha256(metadata.input_fingerprint) &&
         is_lower_sha256(metadata.artifact_sha256) &&
-        metadata.search_relative_path == "search/animations.sqlite3" &&
-        is_lower_sha256(metadata.search_database_sha256) &&
-        is_lower_sha256(metadata.search_corpus_fingerprint)
+        metadata.catalog_relative_path == "catalog/animations.sqlite3" &&
+        is_lower_sha256(metadata.catalog_database_sha256) &&
+        is_lower_sha256(metadata.catalog_corpus_fingerprint)
 }
 
 //   Parse and validate bounded packaged sysimage metadata.
@@ -271,14 +281,20 @@ assign_asset_sidecar_field :: proc(
     allocator: mem.Allocator) -> bool {
     switch key {
     case "schema_version":
-        if state.schema_seen || value != "1" {return false}
+        if state.schema_seen || value != "1" {
+            return false
+        }
         state.schema_seen = true
     case "package_identity":
-        if state.identity_seen {return false}
+        if state.identity_seen {
+            return false
+        }
         state.sidecar.package_identity = strings.clone(value, allocator)
         state.identity_seen = true
     case "archive_sha256":
-        if state.digest_seen {return false}
+        if state.digest_seen {
+            return false
+        }
         state.sidecar.archive_sha256 = strings.clone(value, allocator)
         state.digest_seen = true
     case:
@@ -301,7 +317,9 @@ parse_asset_package_sidecar :: proc(
         if newline >= 0 {
             line = remaining[:newline]
             remaining = remaining[newline + 1:]
-        } else {remaining = ""}
+        } else {
+            remaining = ""
+        }
         separator := strings.index_byte(line, '=')
         if separator <= 0 || !assign_asset_sidecar_field(
             &state, line[:separator], line[separator + 1:], allocator) {
@@ -312,7 +330,9 @@ parse_asset_package_sidecar :: proc(
     valid := state.schema_seen && state.identity_seen && state.digest_seen &&
         is_lower_sha256(state.sidecar.package_identity) &&
         is_lower_sha256(state.sidecar.archive_sha256)
-    if !valid {destroy_asset_package_sidecar(&state.sidecar, allocator)}
+    if !valid {
+        destroy_asset_package_sidecar(&state.sidecar, allocator)
+    }
     return state.sidecar, valid
 }
 
@@ -321,9 +341,13 @@ read_asset_package_sidecar :: proc(
     exe_dir: string, allocator: mem.Allocator) -> (Asset_Package_Sidecar, bool) {
     path, path_err := filepath.join(
         []string{exe_dir, ASSET_PACKAGE_IDENTITY}, context.temp_allocator)
-    if path_err != nil {return {}, false}
+    if path_err != nil {
+        return {}, false
+    }
     source, read_err := os.read_entire_file(path, context.temp_allocator)
-    if read_err != nil {return {}, false}
+    if read_err != nil {
+        return {}, false
+    }
     return parse_asset_package_sidecar(string(source), allocator)
 }
 
@@ -495,7 +519,9 @@ packaged_sysimage_input_fingerprint_with_config :: proc(
     allocator: mem.Allocator) -> (string, bool) {
     exe_dir, exe_ok := resolve_executable_dir_with_config(
         config, context.temp_allocator)
-    if !exe_ok {return "", false}
+    if !exe_ok {
+        return "", false
+    }
     unpack_dir, unpack_ok := resolve_current_asset_unpack_dir(
         exe_dir, context.temp_allocator)
     if !unpack_ok {
@@ -766,7 +792,9 @@ packaged_asset_package_identity_with_config :: proc(
     }
     sidecar, sidecar_ok := read_asset_package_sidecar(
         exe_dir, context.temp_allocator)
-    if !sidecar_ok {return {}, false}
+    if !sidecar_ok {
+        return {}, false
+    }
     return parse_lower_sha256(sidecar.package_identity)
 }
 
@@ -784,9 +812,9 @@ packaged_asset_path :: proc(
 }
 
 //   Resolve the validated built-in search database under an optional asset root.
-packaged_search_asset_with_config :: proc(
+packaged_catalog_asset_with_config :: proc(
     config: ^Asset_Root_Config,
-    allocator: mem.Allocator) -> (Packaged_Search_Asset, bool) {
+    allocator: mem.Allocator) -> (Packaged_Catalog_Asset, bool) {
     exe_dir, exe_ok := resolve_executable_dir_with_config(
         config, context.temp_allocator)
     if !exe_ok || !ensure_packaged_assets_unpacked_with_force(exe_dir, false) {
@@ -794,14 +822,20 @@ packaged_search_asset_with_config :: proc(
     }
     unpack_dir, unpack_ok := resolve_current_asset_unpack_dir(
         exe_dir, context.temp_allocator)
-    if !unpack_ok {return {}, false}
+    if !unpack_ok {
+        return {}, false
+    }
     metadata, metadata_ok := read_packaged_sysimage_metadata(
         unpack_dir, context.temp_allocator)
-    if !metadata_ok {return {}, false}
+    if !metadata_ok {
+        return {}, false
+    }
     path, path_error := filepath.join(
-        []string{unpack_dir, metadata.search_relative_path}, allocator)
-    if path_error != nil {return {}, false}
-    fingerprint := strings.clone(metadata.search_corpus_fingerprint, allocator)
+        []string{unpack_dir, metadata.catalog_relative_path}, allocator)
+    if path_error != nil {
+        return {}, false
+    }
+    fingerprint := strings.clone(metadata.catalog_corpus_fingerprint, allocator)
     return {database_path = path, corpus_fingerprint = fingerprint}, true
 }
 
@@ -886,7 +920,9 @@ ensure_directory_exists :: proc(path: string) -> bool {
 resolve_asset_unpack_dir :: proc(
     package_identity: string,
     allocator := context.temp_allocator) -> (string, bool) {
-    if !is_lower_sha256(package_identity) {return "", false}
+    if !is_lower_sha256(package_identity) {
+        return "", false
+    }
     base_dir := ""
     cache_dir, _ := os.user_cache_dir(allocator)
     temp_dir, _ := os.temp_directory(allocator)
@@ -920,7 +956,9 @@ resolve_current_asset_unpack_dir :: proc(
     allocator := context.temp_allocator) -> (string, bool) {
     sidecar, sidecar_ok := read_asset_package_sidecar(
         exe_dir, context.temp_allocator)
-    if !sidecar_ok {return "", false}
+    if !sidecar_ok {
+        return "", false
+    }
     return resolve_asset_unpack_dir(sidecar.package_identity, allocator)
 }
 
@@ -928,12 +966,10 @@ resolve_current_asset_unpack_dir :: proc(
 baseline_asset_entries_exist :: proc(unpack_dir: string) -> bool {
     required_entries := []string{
         "julia/script.jl",
-        "content/animation_catalog_generation.jl",
-        "content/animation_catalog_data.jl",
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
         "NewCMSansMath-Regular.otf",
-        "search/animations.sqlite3",
+        "catalog/animations.sqlite3",
         "manifest.txt",
     }
 
@@ -973,16 +1009,18 @@ is_assets_unpack_ready :: proc(
     if !metadata_ok {
         return false
     }
-    if metadata.package_identity != expected_package_identity {return false}
+    if metadata.package_identity != expected_package_identity {
+        return false
+    }
     image_path, image_err := filepath.join(
         []string{unpack_dir, metadata.relative_path}, context.temp_allocator)
     if image_err != nil || !os.exists(image_path) {
         return false
     }
     search_path, search_error := filepath.join(
-        []string{unpack_dir, metadata.search_relative_path}, context.temp_allocator)
+        []string{unpack_dir, metadata.catalog_relative_path}, context.temp_allocator)
     if search_error != nil ||
-       !file_matches_sha256(search_path, metadata.search_database_sha256) {
+       !file_matches_sha256(search_path, metadata.catalog_database_sha256) {
         return false
     }
     return platform_terminfo_exists(unpack_dir)

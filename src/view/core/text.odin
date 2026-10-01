@@ -143,8 +143,12 @@ ui_text_measure_monospace :: proc(
     font_size, spacing: f32) -> (f32, bool) {
     advance, valid := ui_text_column_advance(atlas, font_size)
     count := dyncore.text_codepoint_count_span(text, 0, len(text))
-    if !valid || count < 0 {return 0, false}
-    if count == 0 {return 0, true}
+    if !valid || count < 0 {
+       return 0, false
+    }
+    if count == 0 {
+       return 0, true
+    }
     return f32(count)*advance + f32(count - 1)*spacing, true
 }
 
@@ -509,7 +513,9 @@ draw_wrapped_text_content :: proc(
     start := 0
     row := 0
 
-    if len(text) == 0 {return}
+    if len(text) == 0 {
+       return
+    }
 
     for start < len(text) {
         span := dyncore.next_wrapped_text_span(text, start, max_chars)

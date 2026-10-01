@@ -69,6 +69,39 @@ Cycloid_Tool_Pose :: struct {
     rolling_orientation: f32,
 }
 
+// Final sampled extent and status inputs shared by marked curve explications.
+Curve_Explication_Finalization :: struct {
+    vertex_count: int,
+    capacity_limited: bool,
+    frontier_reached: bool,
+    domain_finished: bool,
+}
+
+// Prepared cycloid samples and destinations for one bounded frontier emission.
+Cycloid_Explication_Samples :: struct {
+    first, second: Vector3,
+    value: shapemodel.Shape_Cycloid,
+    parameters: []f32,
+    kinds: []Curve_Point_Kind,
+    parameter_count: int,
+    capacity_limited: bool,
+    vertices: []Vector3,
+    output_kinds: []Curve_Point_Kind,
+}
+
+// Prepared trochoid samples and destinations for one bounded frontier emission.
+Trochoid_Explication_Samples :: struct {
+    center: Vector3,
+    value: shapemodel.Shape_Trochoid,
+    parameters: []f32,
+    kinds: []Curve_Point_Kind,
+    parameter_count: int,
+    capacity_limited: bool,
+    vertices: []Vector3,
+    output_kinds: []Curve_Point_Kind,
+}
+
+
 // Rotate one planar vector while preserving its z coordinate.
 rotate_planar :: #force_inline proc(vector: Vector3, angle: f32) -> Vector3 {
     sine, cosine := math.sincos(angle)
@@ -209,12 +242,16 @@ curve_insert_parameter :: proc(buffer: Curve_Parameter_Buffer,
     kind: Curve_Point_Kind) -> (int, bool) {
     for index in 0..<count {
         if curve_parameters_match(buffer.parameters[index], parameter) {
-            if kind == .Cusp {buffer.kinds[index] = .Cusp}
+            if kind == .Cusp {
+               buffer.kinds[index] = .Cusp
+            }
             return count, true
         }
         if parameter_precedes_frontier(buffer.start, buffer.parameters[count - 1],
             parameter, buffer.parameters[index]) {
-            if count >= len(buffer.parameters) {return count, false}
+            if count >= len(buffer.parameters) {
+               return count, false
+            }
             for destination := count; destination > index; destination -= 1 {
                 buffer.parameters[destination] = buffer.parameters[destination - 1]
                 buffer.kinds[destination] = buffer.kinds[destination - 1]
@@ -241,7 +278,9 @@ curve_seed_cusp_parameters :: proc(parameters: []f32, kinds: []Curve_Point_Kind,
             kinds[count - 1] = .Cusp
             continue
         }
-        if count >= len(parameters) {return count, true}
+        if count >= len(parameters) {
+           return count, true
+        }
         parameters[count] = parameter
         kinds[count] = .Cusp
         count += 1
@@ -249,7 +288,9 @@ curve_seed_cusp_parameters :: proc(parameters: []f32, kinds: []Curve_Point_Kind,
     if curve_parameters_match(parameters[count - 1], finish) {
         return count, false
     }
-    if count >= len(parameters) {return count, true}
+    if count >= len(parameters) {
+       return count, true
+    }
     parameters[count] = finish
     kinds[count] = .Ordinary
     return count + 1, false
@@ -258,7 +299,9 @@ curve_seed_cusp_parameters :: proc(parameters: []f32, kinds: []Curve_Point_Kind,
 // Classify closure from complete world-space output and endpoint cusp intent.
 curve_explication_topology :: proc(vertices: []Vector3, kinds: []Curve_Point_Kind,
     count: int, complete: bool) -> Curve_Topology {
-    if !complete || count < 2 {return .Open}
+    if !complete || count < 2 {
+       return .Open
+    }
     delta := vertices[count - 1] - vertices[0]
     scale := max(f32(1), max(math.abs(vertices[0].x), math.abs(vertices[0].y)))
     tolerance := CURVE_CUSP_RELATIVE_TOLERANCE * scale
@@ -280,7 +323,9 @@ curve_insert_base_parameters :: proc(buffer: Curve_Parameter_Buffer,
         parameter := math.lerp(buffer.start, finish, progress)
         next_count, inserted := curve_insert_parameter(
             buffer, current_count, parameter, .Ordinary)
-        if !inserted {return current_count, true}
+        if !inserted {
+           return current_count, true
+        }
         current_count = next_count
     }
     return current_count, false
@@ -289,7 +334,9 @@ curve_insert_base_parameters :: proc(buffer: Curve_Parameter_Buffer,
 // Map bounded construction pressure to the public explication status.
 curve_explication_status :: #force_inline proc(
     capacity_limited: bool) -> Curve_Explication_Status {
-    if capacity_limited {return .Capacity_Limited}
+    if capacity_limited {
+       return .Capacity_Limited
+    }
     return .Complete
 }
 
@@ -332,7 +379,9 @@ cycloid_full_domain_parameters :: proc(first, second: Vector3,
     }
     count, capacity_limited := curve_seed_cusp_parameters(parameters[:], kinds[:],
         value.parameter_start, value.parameter_finish, sequence)
-    if capacity_limited {return count, true}
+    if capacity_limited {
+       return count, true
+    }
     base_limited: bool
     buffer := Curve_Parameter_Buffer{
         parameters[:], kinds[:], value.parameter_start}
@@ -366,6 +415,51 @@ cycloid_explication_is_valid :: proc(first, second: Vector3,
         len(vertices) >= CYCLOID_MAX_VERTICES &&
         (kinds == nil || len(kinds) >= CYCLOID_MAX_VERTICES)
 }
+// Build one bounded result from sampled points and the reached frontier.
+curve_explication_result :: proc(
+    vertices: []Vector3, kinds: []Curve_Point_Kind,
+    finalization: Curve_Explication_Finalization) ->
+    Curve_Explication_Result {
+    status := curve_explication_status(finalization.capacity_limited)
+    topology := curve_explication_topology(
+        vertices, kinds, finalization.vertex_count,
+        finalization.frontier_reached && finalization.domain_finished)
+    return {finalization.vertex_count, status, topology}
+}
+
+// Emit sampled cycloid points through its requested draw frontier.
+cycloid_emit_frontier_samples :: proc(
+    input: Cycloid_Explication_Samples) -> Curve_Explication_Finalization {
+    vertex_count := 0
+    for parameter, index in input.parameters[:input.parameter_count] {
+        if !parameter_precedes_frontier(input.value.parameter_start,
+            input.value.parameter_finish, parameter, input.value.draw_parameter) {
+            break
+        }
+        input.vertices[vertex_count] = cycloid_point(
+            input.first, input.second, input.value, parameter)
+        if input.output_kinds != nil {
+            input.output_kinds[vertex_count] = input.kinds[index]
+        }
+        vertex_count += 1
+    }
+    final_parameter := input.parameters[max(vertex_count - 1, 0)]
+    frontier_reached := curve_parameters_match(
+        final_parameter, input.value.draw_parameter)
+    if !frontier_reached && vertex_count < len(input.vertices) {
+        input.vertices[vertex_count] = cycloid_point(
+            input.first, input.second, input.value, input.value.draw_parameter)
+        if input.output_kinds != nil {
+            input.output_kinds[vertex_count] = .Ordinary
+        }
+        vertex_count += 1
+        frontier_reached = true
+    }
+    return {
+        vertex_count, input.capacity_limited, frontier_reached,
+        input.value.draw_parameter == input.value.parameter_finish,
+    }
+}
 
 // Explicate a cycloid interval through the shared marked implementation.
 cycloid_explicate_internal :: proc(first, second: Vector3,
@@ -379,30 +473,16 @@ cycloid_explicate_internal :: proc(first, second: Vector3,
     kinds: [CYCLOID_MAX_VERTICES]Curve_Point_Kind
     parameter_count, capacity_limited := cycloid_full_domain_parameters(
         first, second, value, &parameters, &kinds)
-    vertex_count := 0
-    for parameter, index in parameters[:parameter_count] {
-        if !parameter_precedes_frontier(value.parameter_start,
-            value.parameter_finish, parameter, value.draw_parameter) {
-            break
-        }
-        vertices[vertex_count] = cycloid_point(first, second, value, parameter)
-        if output_kinds != nil {output_kinds[vertex_count] = kinds[index]}
-        vertex_count += 1
-    }
-    final_parameter := parameters[max(vertex_count - 1, 0)]
-    frontier_reached := curve_parameters_match(final_parameter, value.draw_parameter)
-    if !frontier_reached &&
-        vertex_count < len(vertices) {
-        vertices[vertex_count] = cycloid_point(
-            first, second, value, value.draw_parameter)
-        if output_kinds != nil {output_kinds[vertex_count] = .Ordinary}
-        vertex_count += 1
-        frontier_reached = true
-    }
-    status := curve_explication_status(capacity_limited)
-    topology := curve_explication_topology(vertices, kinds[:], vertex_count,
-        frontier_reached && value.draw_parameter == value.parameter_finish)
-    return {vertex_count, status, topology}
+    finalization := cycloid_emit_frontier_samples({
+        first, second, value, parameters[:], kinds[:], parameter_count,
+        capacity_limited, vertices, output_kinds,
+    })
+    return curve_explication_result(vertices, kinds[:], {
+        vertex_count = finalization.vertex_count,
+        capacity_limited = finalization.capacity_limited,
+        frontier_reached = finalization.frontier_reached,
+        domain_finished = finalization.domain_finished,
+    })
 }
 
 // Explicate one cycloid while preserving aligned analytic cusp metadata.
@@ -452,7 +532,9 @@ trochoid_cusp_sequence :: proc(
     }
     frequency := f64(value.fixed_radius / value.rolling_radius)
     offset := f64(value.tracer_phase)
-    if value.mode == .Internal {offset = -offset}
+    if value.mode == .Internal {
+       offset = -offset
+    }
     return curve_cusp_sequence(
         value.parameter_start, value.parameter_finish, frequency, offset)
 }
@@ -465,7 +547,9 @@ trochoid_full_domain_parameters :: proc(
     count, capacity_limited := curve_seed_cusp_parameters(parameters[:], kinds[:],
         value.parameter_start, value.parameter_finish,
         trochoid_cusp_sequence(value))
-    if capacity_limited {return count, true}
+    if capacity_limited {
+       return count, true
+    }
     base_limited: bool
     buffer := Curve_Parameter_Buffer{
         parameters[:], kinds[:], value.parameter_start}
@@ -489,6 +573,40 @@ trochoid_full_domain_parameters :: proc(
     return count, capacity_limited
 }
 
+// Emit sampled trochoid points through its requested draw frontier.
+trochoid_emit_frontier_samples :: proc(
+    input: Trochoid_Explication_Samples) -> Curve_Explication_Finalization {
+    vertex_count := 0
+    for parameter, index in input.parameters[:input.parameter_count] {
+        if !parameter_precedes_frontier(input.value.parameter_start,
+            input.value.parameter_finish, parameter, input.value.draw_parameter) {
+            break
+        }
+        input.vertices[vertex_count] = trochoid_point(
+            input.center, input.value, parameter)
+        if input.output_kinds != nil {
+            input.output_kinds[vertex_count] = input.kinds[index]
+        }
+        vertex_count += 1
+    }
+    final_parameter := input.parameters[max(vertex_count - 1, 0)]
+    frontier_reached := curve_parameters_match(
+        final_parameter, input.value.draw_parameter)
+    if !frontier_reached && vertex_count < len(input.vertices) {
+        input.vertices[vertex_count] = trochoid_point(
+            input.center, input.value, input.value.draw_parameter)
+        if input.output_kinds != nil {
+            input.output_kinds[vertex_count] = .Ordinary
+        }
+        vertex_count += 1
+        frontier_reached = true
+    }
+    return {
+        vertex_count, input.capacity_limited, frontier_reached,
+        input.value.draw_parameter == input.value.parameter_finish,
+    }
+}
+
 // Explicate a trochoid interval through the shared marked implementation.
 trochoid_explicate_internal :: proc(
     center: Vector3, value: shapemodel.Shape_Trochoid,
@@ -502,29 +620,16 @@ trochoid_explicate_internal :: proc(
     kinds: [TROCHOID_MAX_VERTICES]Curve_Point_Kind
     parameter_count, capacity_limited := trochoid_full_domain_parameters(
         center, value, &parameters, &kinds)
-    vertex_count := 0
-    for parameter, index in parameters[:parameter_count] {
-        if !parameter_precedes_frontier(value.parameter_start,
-            value.parameter_finish, parameter, value.draw_parameter) {
-            break
-        }
-        vertices[vertex_count] = trochoid_point(center, value, parameter)
-        if output_kinds != nil {output_kinds[vertex_count] = kinds[index]}
-        vertex_count += 1
-    }
-    final_parameter := parameters[max(vertex_count - 1, 0)]
-    frontier_reached := curve_parameters_match(final_parameter, value.draw_parameter)
-    if !frontier_reached &&
-        vertex_count < len(vertices) {
-        vertices[vertex_count] = trochoid_point(center, value, value.draw_parameter)
-        if output_kinds != nil {output_kinds[vertex_count] = .Ordinary}
-        vertex_count += 1
-        frontier_reached = true
-    }
-    status := curve_explication_status(capacity_limited)
-    topology := curve_explication_topology(vertices, kinds[:], vertex_count,
-        frontier_reached && value.draw_parameter == value.parameter_finish)
-    return {vertex_count, status, topology}
+    finalization := trochoid_emit_frontier_samples({
+        center, value, parameters[:], kinds[:], parameter_count,
+        capacity_limited, vertices, output_kinds,
+    })
+    return curve_explication_result(vertices, kinds[:], {
+        vertex_count = finalization.vertex_count,
+        capacity_limited = finalization.capacity_limited,
+        frontier_reached = finalization.frontier_reached,
+        domain_finished = finalization.domain_finished,
+    })
 }
 
 // Explicate one trochoid while preserving aligned analytic cusp metadata.

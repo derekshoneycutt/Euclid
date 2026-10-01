@@ -34,7 +34,9 @@ point_in_polygon :: proc(point: Vector2, polygon: []Vector2) -> bool {
 
 // sample_dust_hypocycloid_points writes one normalized closed atlas contour.
 sample_dust_hypocycloid_points :: proc(points: []Vector2, k: int) -> int {
-    if k < 3 || len(points) < DUST_HYPOCYCLOID_SAMPLE_COUNT {return 0}
+    if k < 3 || len(points) < DUST_HYPOCYCLOID_SAMPLE_COUNT {
+       return 0
+    }
     outer_radius := f32(k - 1)
     frequency := f64(k - 1)
     max_radius: f32
@@ -45,8 +47,12 @@ sample_dust_hypocycloid_points :: proc(points: []Vector2, k: int) -> int {
         max_radius = max(max_radius, math.sqrt_f32(x * x + y * y))
         points[index] = {x, y}
     }
-    if max_radius <= 0 {return 0}
+    if max_radius <= 0 {
+        return 0
+    }
     scale := 0.82 / max_radius
-    for &point in points[:DUST_HYPOCYCLOID_SAMPLE_COUNT] {point *= scale}
+    for &point in points[:DUST_HYPOCYCLOID_SAMPLE_COUNT] {
+        point *= scale
+    }
     return DUST_HYPOCYCLOID_SAMPLE_COUNT
 }

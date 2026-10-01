@@ -41,6 +41,18 @@ Tree_Semantic_Context :: struct {
     row: ^int,
 }
 
+// Prepared facts for publishing one tree item's semantics.
+Tree_Item_Semantic_Publication :: struct {
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    depth: int,
+    item_id: viewmodel.Ui_Node_Id,
+    parent_id: viewmodel.Ui_Node_Id,
+    states: viewmodel.Ui_Node_State,
+    actions: viewmodel.Ui_Node_Action_Set,
+    position: u16,
+    size: u16,
+}
+
 // Tree_Visible_Node_Context groups one bounded visible-row lookup.
 Tree_Visible_Node_Context :: struct {
     ji: ^bridgemodel.Euclid_Julia_Interface,
@@ -115,10 +127,16 @@ Encoded_Tree_Walk_Context :: struct {
 tree_node_is_visible :: proc(
     policy: Tree_Visibility_Policy,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
-    if node == nil {return false}
-    if policy.search == nil || !policy.search^.active {return true}
+    if node == nil {
+        return false
+    }
+    if policy.search == nil || !policy.search^.active {
+        return true
+    }
     for index in 0..<policy.search^.visible_id_count {
-        if policy.search^.visible_ids[index] == node^.stable_id {return true}
+        if policy.search^.visible_ids[index] == node^.stable_id {
+            return true
+        }
     }
     return false
 }
@@ -127,11 +145,19 @@ tree_node_is_visible :: proc(
 tree_node_is_effectively_expanded :: proc(
     policy: Tree_Visibility_Policy,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
-    if node == nil {return false}
-    if node^.is_expanded {return true}
-    if policy.search == nil || !policy.search^.active {return false}
+    if node == nil {
+        return false
+    }
+    if node^.is_expanded {
+        return true
+    }
+    if policy.search == nil || !policy.search^.active {
+        return false
+    }
     for child := node^.first_child; child != nil; child = child^.next_sibling {
-        if tree_node_is_visible(policy, child) {return true}
+        if tree_node_is_visible(policy, child) {
+            return true
+        }
     }
     return false
 }
@@ -144,7 +170,9 @@ tree_semantic_id :: #force_inline proc() -> viewmodel.Ui_Node_Id {
 // tree_item_semantic_id identifies one catalogue item by its permanent UUID.
 tree_item_semantic_id :: #force_inline proc(
     node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> viewmodel.Ui_Node_Id {
-    if node == nil {return {}}
+    if node == nil {
+        return {}
+    }
     return {domain = .Animation_Tree, stable_id = node^.stable_id}
 }
 
@@ -152,9 +180,13 @@ tree_item_semantic_id :: #force_inline proc(
 tree_find_stable_id :: proc(
     ji: ^bridgemodel.Euclid_Julia_Interface,
     stable_id: uuid.Identifier) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
-    if ji == nil {return nil}
+    if ji == nil {
+        return nil
+    }
     for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
-        if node^.stable_id == stable_id {return node}
+        if node^.stable_id == stable_id {
+            return node
+        }
     }
     return nil
 }
@@ -163,22 +195,20 @@ tree_find_stable_id :: proc(
 tree_item_is_keyboard_active :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
-    if runtime == nil || node == nil || runtime^.semantic_focus == nil {return false}
+    if runtime == nil || node == nil || runtime^.semantic_focus == nil {
+        return false
+    }
     semantic := runtime^.semantic_focus
     return semantic^.window_focused && semantic^.focus_origin == .Keyboard &&
         semantic^.logical_focus == tree_semantic_id() &&
         semantic^.active_tree_item == node^.stable_id
 }
 
-// draw_encoded_tree_node encodes one visible tree branch without its labels.
-draw_encoded_tree_node :: proc(
+// Draw the visible row background, focus outline, and disclosure control.
+draw_encoded_tree_row :: proc(
     ctx: Encoded_Tree_Walk_Context,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    depth, remaining: int) {
-    if ctx.ji == nil || node == nil || remaining <= 0 ||
-        !tree_node_is_visible(ctx.visibility, node) {return}
-    row_y := ctx.panel.y + ctx.content_y^ - ctx.scroll_y
-    ctx.content_y^ += TREE_ROW_HEIGHT
+    depth: int, row_y: f32) {
     row := geometry.Rectangle{
         ctx.panel.x, row_y, ctx.panel.width, TREE_ROW_HEIGHT}
     if row.y + row.height >= ctx.panel.y &&
@@ -199,7 +229,23 @@ draw_encoded_tree_node :: proc(
                 tree_node_is_effectively_expanded(ctx.visibility, node))
         }
     }
-    if !tree_node_is_effectively_expanded(ctx.visibility, node) {return}
+}
+
+// draw_encoded_tree_node encodes one visible tree branch without its labels.
+draw_encoded_tree_node :: proc(
+    ctx: Encoded_Tree_Walk_Context,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    depth, remaining: int) {
+    if ctx.ji == nil || node == nil || remaining <= 0 ||
+        !tree_node_is_visible(ctx.visibility, node) {
+        return
+    }
+    row_y := ctx.panel.y + ctx.content_y^ - ctx.scroll_y
+    ctx.content_y^ += TREE_ROW_HEIGHT
+    draw_encoded_tree_row(ctx, node, depth, row_y)
+    if !tree_node_is_effectively_expanded(ctx.visibility, node) {
+        return
+    }
     for child, steps := node^.first_child, 0;
         child != nil && steps < ctx.ji^.animation_count;
         child, steps = child^.next_sibling, steps + 1 {
@@ -211,7 +257,9 @@ draw_encoded_tree_node :: proc(
 draw_encoded_tree_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     panel: geometry.Rectangle) {
-    if state == nil || state^.julia_interface == nil {return}
+    if state == nil || state^.julia_interface == nil {
+        return
+    }
     ji := state^.julia_interface
     visibility := Tree_Visibility_Policy{search = &state^.ui_runtime.library_search}
     content_height := f32(count_visible_tree_rows_all_roots(
@@ -246,7 +294,9 @@ draw_encoded_tree_node_text :: proc(
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth, remaining: int) {
     if node == nil || remaining <= 0 ||
-        !tree_node_is_visible(ctx.visibility, node) {return}
+        !tree_node_is_visible(ctx.visibility, node) {
+        return
+    }
     row_y := ctx.panel.y + ctx.content_y^ - ctx.scroll_y
     ctx.content_y^ += TREE_ROW_HEIGHT
     if row_y + TREE_ROW_HEIGHT >= ctx.panel.y &&
@@ -255,7 +305,9 @@ draw_encoded_tree_node_text :: proc(
             ctx.panel.x + f32(depth) * TREE_INDENT + TREE_ROW_LABEL_OFFSET_X,
             row_y + TREE_ROW_LABEL_OFFSET_Y)
     }
-    if !tree_node_is_effectively_expanded(ctx.visibility, node) {return}
+    if !tree_node_is_effectively_expanded(ctx.visibility, node) {
+        return
+    }
     for child, steps := node^.first_child, 0;
         child != nil && steps < ctx.ji^.animation_count;
         child, steps = child^.next_sibling, steps + 1 {
@@ -268,7 +320,9 @@ draw_encoded_tree_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     panel: geometry.Rectangle) {
     ji := state^.julia_interface
-    if ji == nil {return}
+    if ji == nil {
+        return
+    }
     visibility := Tree_Visibility_Policy{search = &state^.ui_runtime.library_search}
     content_height := f32(count_visible_tree_rows_all_roots(
         ji, visibility)) * TREE_ROW_HEIGHT
@@ -293,7 +347,9 @@ selected_animation_title :: proc(state: ^core.Euclid_General_State) -> string {
         return "Animation"
     }
     title := state^.julia_interface^.selected_animation^.name
-    if len(title) == 0 { return "Animation" }
+    if len(title) == 0 {
+        return "Animation"
+    }
     return title
 }
 
@@ -455,15 +511,23 @@ tree_visible_node_at_row_limited :: proc(
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     remaining: int) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
     if ctx.ji == nil || node == nil || remaining <= 0 ||
-        !tree_node_is_visible(ctx.policy, node) {return nil}
-    if ctx.row^ == ctx.target_row {return node}
+        !tree_node_is_visible(ctx.policy, node) {
+        return nil
+    }
+    if ctx.row^ == ctx.target_row {
+        return node
+    }
     ctx.row^ += 1
-    if !tree_node_is_effectively_expanded(ctx.policy, node) {return nil}
+    if !tree_node_is_effectively_expanded(ctx.policy, node) {
+        return nil
+    }
     for child, steps := node^.first_child, 0;
         child != nil && steps < ctx.ji^.animation_count;
         child, steps = child^.next_sibling, steps + 1 {
         found := tree_visible_node_at_row_limited(ctx, child, remaining - 1)
-        if found != nil {return found}
+        if found != nil {
+            return found
+        }
     }
     return nil
 }
@@ -473,13 +537,19 @@ tree_visible_node_at_row :: proc(
     ji: ^bridgemodel.Euclid_Julia_Interface,
     target_row: int,
     policy: Tree_Visibility_Policy) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
-    if ji == nil || target_row < 0 {return nil}
+    if ji == nil || target_row < 0 {
+        return nil
+    }
     row := 0
     ctx := Tree_Visible_Node_Context{ji, target_row, &row, policy}
     for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
-        if node^.parent != nil {continue}
+        if node^.parent != nil {
+            continue
+        }
         found := tree_visible_node_at_row_limited(ctx, node, ji^.animation_count)
-        if found != nil {return found}
+        if found != nil {
+            return found
+        }
     }
     return nil
 }
@@ -507,7 +577,9 @@ tree_set_active_node :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     reveal: bool) {
-    if runtime == nil || runtime^.semantic_focus == nil || node == nil {return}
+    if runtime == nil || runtime^.semantic_focus == nil || node == nil {
+        return
+    }
     runtime^.semantic_focus^.active_tree_item = node^.stable_id
     if reveal {
         runtime^.tree_reveal_stable_id = node^.stable_id
@@ -559,7 +631,9 @@ tree_apply_child_command :: proc(
         return active
     }
     for child := active^.first_child; child != nil; child = child^.next_sibling {
-        if tree_node_is_visible(policy, child) {return child}
+        if tree_node_is_visible(policy, child) {
+            return child
+        }
     }
     return active
 }
@@ -574,11 +648,17 @@ tree_apply_structure_command :: proc(
     case .Tree_Parent: return tree_apply_parent_command(active)
     case .Tree_Child: return tree_apply_child_command(params.visibility, active)
     case .Toggle:
-        if active^.first_child != nil {active^.is_expanded = !active^.is_expanded}
+        if active^.first_child != nil {
+            active^.is_expanded = !active^.is_expanded
+        }
     case .Expand:
-        if active^.first_child != nil {active^.is_expanded = true}
+        if active^.first_child != nil {
+            active^.is_expanded = true
+        }
     case .Collapse:
-        if active^.first_child != nil {active^.is_expanded = false}
+        if active^.first_child != nil {
+            active^.is_expanded = false
+        }
     case:
     }
     return active
@@ -590,14 +670,18 @@ tree_apply_semantic_command :: proc(
     active: ^bridgemodel.Euclid_Julia_Animation_Interface,
     command: viewmodel.Ui_Focus_Command) ->
         ^bridgemodel.Euclid_Julia_Animation_Interface {
-    if active == nil {return active}
+    if active == nil {
+        return active
+    }
     target := tree_semantic_navigation_target(params, active, command.kind)
     target = tree_apply_structure_command(params, target, command.kind)
     if command.kind == .Select {
         set_selected_animation(params.ji, active)
         params.ui_runtime^.view_text_scroll_y = 0
     }
-    if target != nil {tree_set_active_node(params.ui_runtime, target, true)}
+    if target != nil {
+        tree_set_active_node(params.ui_runtime, target, true)
+    }
     return target
 }
 
@@ -606,10 +690,16 @@ tree_semantic_command_target :: proc(
     params: Tree_List_Params,
     active: ^bridgemodel.Euclid_Julia_Animation_Interface,
     target: viewmodel.Ui_Node_Id) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
-    if target == tree_semantic_id() {return active}
-    if target.domain != .Animation_Tree {return nil}
+    if target == tree_semantic_id() {
+        return active
+    }
+    if target.domain != .Animation_Tree {
+        return nil
+    }
     node := tree_find_stable_id(params.ji, target.stable_id)
-    if !tree_node_is_visible(params.visibility, node) {return nil}
+    if !tree_node_is_visible(params.visibility, node) {
+        return nil
+    }
     return node
 }
 
@@ -618,13 +708,19 @@ tree_apply_semantic_commands :: proc(
     params: Tree_List_Params) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
     active := tree_resolve_active_node(params)
     semantic := params.ui_runtime^.semantic_focus
-    if semantic == nil {return active}
+    if semantic == nil {
+        return active
+    }
     for command in semantic^.commands[:semantic^.command_count] {
         target := tree_semantic_command_target(params, active, command.target)
-        if target == nil {continue}
+        if target == nil {
+            continue
+        }
         active = tree_apply_semantic_command(params, target, command)
     }
-    if active != nil {tree_set_active_node(params.ui_runtime, active, false)}
+    if active != nil {
+        tree_set_active_node(params.ui_runtime, active, false)
+    }
     return active
 }
 
@@ -633,16 +729,54 @@ tree_item_set_facts :: proc(
     ji: ^bridgemodel.Euclid_Julia_Interface,
     policy: Tree_Visibility_Policy,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> (u16, u16) {
-    if ji == nil || node == nil {return 0, 0}
+    if ji == nil || node == nil {
+        return 0, 0
+    }
     position, size: u16
     for candidate := ji^.animation_head; candidate != nil;
         candidate = candidate^.next_in_registry {
         if candidate^.parent != node^.parent ||
-           !tree_node_is_visible(policy, candidate) {continue}
+           !tree_node_is_visible(policy, candidate) {
+            continue
+        }
         size += 1
-        if candidate == node {position = size}
+        if candidate == node {
+            position = size
+        }
     }
     return position, size
+}
+
+// Publish one visible tree node using its computed parent, state, and geometry.
+tree_publish_item_semantics :: proc(
+    ctx: Tree_Semantic_Context, publication: Tree_Item_Semantic_Publication) {
+    bounds := geometry.Rectangle{ctx.panel.x,
+        ctx.panel.y + f32(ctx.row^) * TREE_ROW_HEIGHT - ctx.scroll_y,
+        ctx.panel.width, TREE_ROW_HEIGHT}
+    _ = semantic_register_control(ctx.runtime^.semantic_focus, {
+        id = publication.item_id, parent = publication.parent_id,
+        role = .Tree_Item, states = publication.states,
+        actions = publication.actions, region = .Accordion_Content,
+        traversal_order = u16(ctx.row^), bounds = viewmodel.Rectangle(bounds),
+        clip_bounds = viewmodel.Rectangle(ctx.panel), label = publication.node^.name,
+        level = u16(publication.depth + 1),
+        position_in_set = publication.position, set_size = publication.size,
+    })
+}
+
+// Recursively publish the visible children of one expanded semantic node.
+tree_publish_semantic_children :: proc(
+    ctx: Tree_Semantic_Context, ji: ^bridgemodel.Euclid_Julia_Interface,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    depth, remaining: int) {
+    if !tree_node_is_effectively_expanded(ctx.policy, node) {
+        return
+    }
+    for child, steps := node^.first_child, 0;
+        child != nil && steps < ji^.animation_count;
+        child, steps = child^.next_sibling, steps + 1 {
+        register_tree_item_semantics(ctx, ji, child, depth + 1, remaining - 1)
+    }
 }
 
 // register_tree_item_semantics publishes one visible branch without allocation.
@@ -651,33 +785,32 @@ register_tree_item_semantics :: proc(
     ji: ^bridgemodel.Euclid_Julia_Interface,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth, remaining: int) {
-    if node == nil || remaining <= 0 || !tree_node_is_visible(ctx.policy, node) {return}
+    if node == nil || remaining <= 0 || !tree_node_is_visible(ctx.policy, node) {
+        return
+    }
     item_id := tree_item_semantic_id(node)
     states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable}
-    if node^.is_selected {states += {.Selected}}
-    if tree_node_is_effectively_expanded(ctx.policy, node) {states += {.Expanded}}
+    if node^.is_selected {
+        states += {.Selected}
+    }
+    if tree_node_is_effectively_expanded(ctx.policy, node) {
+        states += {.Expanded}
+    }
     actions := viewmodel.Ui_Node_Action_Set{.Focus, .Select}
-    if node^.first_child != nil {actions += {.Expand, .Collapse, .Toggle}}
-    bounds := geometry.Rectangle{ctx.panel.x,
-        ctx.panel.y + f32(ctx.row^) * TREE_ROW_HEIGHT - ctx.scroll_y,
-        ctx.panel.width, TREE_ROW_HEIGHT}
+    if node^.first_child != nil {
+        actions += {.Expand, .Collapse, .Toggle}
+    }
     parent_id := ctx.tree_id
-    if node^.parent != nil {parent_id = tree_item_semantic_id(node^.parent)}
+    if node^.parent != nil {
+        parent_id = tree_item_semantic_id(node^.parent)
+    }
     position, size := tree_item_set_facts(ji, ctx.policy, node)
-    _ = semantic_register_control(ctx.runtime^.semantic_focus, {
-        id = item_id, parent = parent_id, role = .Tree_Item,
-        states = states, actions = actions, region = .Accordion_Content,
-        traversal_order = u16(ctx.row^), bounds = viewmodel.Rectangle(bounds),
-        clip_bounds = viewmodel.Rectangle(ctx.panel), label = node^.name,
-        level = u16(depth + 1), position_in_set = position, set_size = size,
+    tree_publish_item_semantics(ctx, {
+        node = node, depth = depth, item_id = item_id, parent_id = parent_id,
+        states = states, actions = actions, position = position, size = size,
     })
     ctx.row^ += 1
-    if !tree_node_is_effectively_expanded(ctx.policy, node) {return}
-    for child, steps := node^.first_child, 0;
-        child != nil && steps < ji^.animation_count;
-        child, steps = child^.next_sibling, steps + 1 {
-        register_tree_item_semantics(ctx, ji, child, depth + 1, remaining - 1)
-    }
+    tree_publish_semantic_children(ctx, ji, node, depth, remaining)
 }
 
 // register_tree_semantics publishes one Tab stop and its visible descendants.
@@ -767,7 +900,9 @@ merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
     if src.toggled_node != nil {
         dst.toggled_node = src.toggled_node
     }
-    if src.hovered_node != nil { dst.hovered_node = src.hovered_node }
+    if src.hovered_node != nil {
+        dst.hovered_node = src.hovered_node
+    }
     if src.hovered_expander_node != nil {
         dst.hovered_expander_node = src.hovered_expander_node
     }
@@ -871,7 +1006,9 @@ update_tree_node_expander_hit :: proc(
     if expander_result.clicked {
         hit.toggled_node = node
     }
-    if expander_result.hovered { hit.hovered_expander_node = node }
+    if expander_result.hovered {
+        hit.hovered_expander_node = node
+    }
 }
 
 //   Resolve one tree row and capture selection, hover, and toggle identities.
@@ -909,7 +1046,9 @@ update_tree_node_row :: proc(
     if list_item_result.clicked {
         hit.selected_node = node
     }
-    if list_item_result.hovered { hit.hovered_node = node }
+    if list_item_result.hovered {
+        hit.hovered_node = node
+    }
 }
 
 //   Walk and merge child-node hits for one expanded parent.
@@ -942,7 +1081,9 @@ walk_update_tree_node_limited :: proc(
         return hit
     }
 
-    if !tree_node_is_visible(ctx.visibility, node) {return hit}
+    if !tree_node_is_visible(ctx.visibility, node) {
+        return hit
+    }
     child_first := expanded_first_child(node, ctx.visibility)
 
     row_y_world := content_y^
@@ -1046,7 +1187,9 @@ finish_tree_interaction :: proc(
 prepare_tree_list_panel :: proc(params: Tree_List_Params) -> Tree_List_Preparation {
     _ = tree_apply_semantic_commands(params)
     total_rows := count_visible_tree_rows_all_roots(params.ji, params.visibility)
-    if total_rows <= 0 { return {} }
+    if total_rows <= 0 {
+        return {}
+    }
     content_h := f32(total_rows) * TREE_ROW_HEIGHT
     apply_pending_tree_reveal(params, content_h)
     scroll := scroll_container_update({id = UI_TREE_SCROLLBAR_ID,

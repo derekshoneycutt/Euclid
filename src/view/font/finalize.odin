@@ -23,7 +23,9 @@ prepared_is_valid :: proc(prepared: ^Prepared_Font) -> bool {
     }
     if prepared.complete_face {
         for glyph, index in prepared.glyphs {
-            if glyph.glyph_id != u32(index) {return false}
+            if glyph.glyph_id != u32(index) {
+               return false
+            }
         }
     }
     return true
@@ -50,7 +52,9 @@ finalize_texture :: proc(
             completion = request.completion,
             completion_data = request.completion_data,
         }) {
-        if texture.handle != nil {operations.release(operations.user_data, texture)}
+        if texture.handle != nil {
+           operations.release(operations.user_data, texture)
+        }
         return {}, false
     }
     return texture, true
@@ -59,7 +63,9 @@ finalize_texture :: proc(
 // prepared_face binds validated portable metrics to one uploaded atlas.
 prepared_face :: proc(
     prepared: ^Prepared_Font, texture: Font_Texture) -> (Font_Face, bool) {
-    if !prepared_is_valid(prepared) || texture.handle == nil {return {}, false}
+    if !prepared_is_valid(prepared) || texture.handle == nil {
+       return {}, false
+    }
     space_advance: i32
     for glyph in prepared.glyphs {
         if glyph.value == ' ' {
@@ -85,8 +91,12 @@ finalize_face :: proc(
     identity, generation: u64) -> (Font_Face, bool) {
     texture, uploaded := finalize_texture(
         prepared, operations, {identity = identity, generation = generation})
-    if !uploaded {return {}, false}
+    if !uploaded {
+       return {}, false
+    }
     face, valid := prepared_face(prepared, texture)
-    if !valid {operations.release(operations.user_data, texture)}
+    if !valid {
+       operations.release(operations.user_data, texture)
+    }
     return face, valid
 }

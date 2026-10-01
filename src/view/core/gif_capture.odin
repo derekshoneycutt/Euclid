@@ -174,17 +174,25 @@ gif_capture_stage_frame :: proc(
 
 // gif_capture_fixed_step_duration_ms converts deterministic progress to GIF time.
 gif_capture_fixed_step_duration_ms :: #force_inline proc(fixed_steps: u64) -> u64 {
-    if fixed_steps == 0 {return 0}
+    if fixed_steps == 0 {
+       return 0
+    }
     saturation_steps := GIF_MAX_DELAY_MS * u64(LIMIT_FPS) / 1000
-    if fixed_steps >= saturation_steps {return GIF_MAX_DELAY_MS}
+    if fixed_steps >= saturation_steps {
+       return GIF_MAX_DELAY_MS
+    }
     duration_ms := (fixed_steps * 1000 + u64(LIMIT_FPS / 2)) / u64(LIMIT_FPS)
     return clamp(duration_ms, GIF_MIN_DELAY_MS, GIF_MAX_DELAY_MS)
 }
 
 // gif_capture_elapsed_duration_ms converts monotonic elapsed seconds to GIF time.
 gif_capture_elapsed_duration_ms :: #force_inline proc(seconds: f64) -> u64 {
-    if seconds <= 0 {return 0}
-    if seconds >= f64(GIF_MAX_DELAY_MS) / 1000 {return GIF_MAX_DELAY_MS}
+    if seconds <= 0 {
+       return 0
+    }
+    if seconds >= f64(GIF_MAX_DELAY_MS) / 1000 {
+       return GIF_MAX_DELAY_MS
+    }
     return clamp(u64(seconds * 1000 + 0.5), GIF_MIN_DELAY_MS, GIF_MAX_DELAY_MS)
 }
 
@@ -197,7 +205,9 @@ gif_capture_nominal_duration_ms :: #force_inline proc(frame_step: int) -> u64 {
 gif_capture_commit_staged_frame :: proc(
     state: ^core.Euclid_General_State, fixed_step: u64) -> bool {
     session := &state^.gif_capture
-    if !session.staged {return true}
+    if !session.staged {
+       return true
+    }
     duration_ms: u64
     switch session.active_timing_mode {
     case .Animation:

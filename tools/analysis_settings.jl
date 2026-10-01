@@ -1191,13 +1191,38 @@ AnalysisSettings(
             ReviewedAllocationPolicy(
                 "bridge-interface-registry-growing-arena",
                 "src/bridge/bootstrap.odin",
-                "ensure_julia_interface_registry_arena",
+                "ensure_julia_interface_instance_registry_arena",
                 :arena,
                 "One interface-generation arena is bulk-reset on reuse or rollback and destroyed at service teardown.";
                 operation="arena_init_growing",
                 target="iface^.animation_registry_arena",
                 certainty=:definite,
                 response=Ignore),
+            ReviewedAllocationPolicy(
+                "bridge-catalog-snapshot-registry-nodes",
+                "src/bridge/animations.odin",
+                "catalog_snapshot_allocate_nodes",
+                :unknown,
+                "Generation-local registry nodes and copied catalogue strings use the interface arena, which is bulk-reset on rollback and destroyed at interface teardown.";
+                operation="new",
+                target="bridgemodel.Euclid_Julia_Animation_Interface",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "catalog-service-generation-snapshots",
+                "src/view/catalog/worker.odin",
+                "catalog_service_init_snapshots",
+                :custom,
+                "The active and staged bounded catalogue snapshots are allocated once from the service-owned mutex-wrapped TLSF allocator and reclaimed by catalog_service_release_allocator after the worker joins.";
+                operation="new",
+                target="Catalog_Snapshot",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
+                maximum_matches=2),
             ReviewedAllocationPolicy(
                 "view-terminal-retained-text",
                 "src/view/terminal/lifecycle.odin",
@@ -1350,16 +1375,6 @@ AnalysisSettings(
                 "A dedicated arena is used to allocate lookup information.";
                 operation="make",
                 target="[]bridgemodel.Euclid_Julia_Animation_Lookup_Entry",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "bridge-animation-add-registered-arena",
-                "src/bridge/animations.odin",
-                "add_animation_to_registry",
-                :unknown,
-                "A dedicated arena is used to allocate new animation registries.";
-                operation="new",
-                target="bridgemodel.Euclid_Julia_Animation_Interface",
                 certainty=:definite,
                 response=Ignore),
             # Bridge Runtime Service Allocations ; these allocate the main bridge runtime
@@ -1927,10 +1942,6 @@ AnalysisSettings(
         CallRootEntryPoint(
             "odin-bridge:init_euclid_scripts", :julia, "init_euclid_scripts",
             "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
-        CallRootEntryPoint(
-            "odin-bridge:ensure_generation_animation_loaded", :julia,
-            "ensure_generation_animation_loaded",
-            "src/bridge/animations.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:invoke_generation_harness_scenario", :julia,
             "invoke_generation_harness_scenario",

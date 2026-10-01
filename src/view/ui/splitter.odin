@@ -105,7 +105,9 @@ splitter_geometry :: proc(
         }
     }
     horizontal_width := split_x
-    if mode == .Portrait { horizontal_width = f32(window.width) }
+    if mode == .Portrait {
+        horizontal_width = f32(window.width)
+    }
     return {
         visible_rect = {0, split_y - SPLITTER_VISIBLE_WIDTH * 0.5,
             horizontal_width, SPLITTER_VISIBLE_WIDTH},
@@ -284,8 +286,12 @@ splitter_apply_drag :: proc(
 // Resolve one portable cursor from current splitter hover and capture targets.
 splitter_cursor :: proc(
     vertical_target, horizontal_target: f32) -> viewmodel.Ui_Cursor_Kind {
-    if vertical_target > 0 {return .Resize_Ew}
-    if horizontal_target > 0 {return .Resize_Ns}
+    if vertical_target > 0 {
+        return .Resize_Ew
+    }
+    if horizontal_target > 0 {
+        return .Resize_Ns
+    }
     return .Default
 }
 
@@ -293,11 +299,15 @@ splitter_cursor :: proc(
 splitter_apply_semantic_axis :: proc(
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, axis: Splitter_Axis,
     value, minimum, maximum: f32) -> f32 {
-    if ui_runtime.semantic_focus == nil {return value}
+    if ui_runtime.semantic_focus == nil {
+        return value
+    }
     id := splitter_semantic_id(axis)
     spec, valid := range_float_spec(minimum, maximum, 8,
         max(f32(8), (maximum - minimum) / 10))
-    if !valid {return value}
+    if !valid {
+        return value
+    }
     result := value
     if semantic_command_requested(ui_runtime.semantic_focus, id, .Increment) {
         result = range_float_step(result, 1, spec)
@@ -419,7 +429,9 @@ update_splitters :: proc(
 apply_splitter_preparation :: proc(
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     prepared: Splitter_Preparation) {
-    if !prepared.vertical.changed && !prepared.horizontal.changed {return}
+    if !prepared.vertical.changed && !prepared.horizontal.changed {
+        return
+    }
     ui_runtime.vertical_split_x = prepared.vertical.value
     ui_runtime.horizontal_split_y = prepared.horizontal.value
     splitter_store_ratios(ui_runtime)
@@ -429,7 +441,9 @@ apply_splitter_preparation :: proc(
 register_splitter_semantics :: proc(
     focus: ^viewmodel.Ui_Semantic_Focus_State,
     prepared: Splitter_Preparation) {
-    if prepared.locked {return}
+    if prepared.locked {
+        return
+    }
     axes := [2]struct {
         axis: Splitter_Axis,
         prepared: Splitter_Axis_Preparation,
@@ -439,7 +453,9 @@ register_splitter_semantics :: proc(
         {.Horizontal, prepared.horizontal, "Resize upper and lower panes"},
     }
     for entry, order in axes {
-        if !entry.prepared.present {continue}
+        if !entry.prepared.present {
+            continue
+        }
         _ = semantic_register_control(focus, {
             id = splitter_semantic_id(entry.axis), role = .Slider,
             states = {.Visible, .Enabled, .Focusable, .Tab_Stop},

@@ -28,9 +28,13 @@ terminal_output_hyperlink_at :: proc(
 
 // Report whether one cell ends a detected-link token.
 terminal_link_cell_is_boundary :: proc(cell: ^termgrid.Cell) -> bool {
-    if cell == nil || cell.continuation || cell.grapheme_len == 0 { return true }
+    if cell == nil || cell.continuation || cell.grapheme_len == 0 {
+        return true
+    }
     for byte in cell.grapheme[:cell.grapheme_len] {
-        if termhyperlink.hyperlink_uri_byte_rejected(byte) { return true }
+        if termhyperlink.hyperlink_uri_byte_rejected(byte) {
+            return true
+        }
     }
     return false
 }
@@ -52,8 +56,12 @@ terminal_link_unmatched_closer :: proc(bytes: []u8, closer: u8) -> bool {
     }
     balance := 0
     for byte in bytes {
-        if byte == opener { balance += 1 }
-        if byte == closer { balance -= 1 }
+        if byte == opener {
+            balance += 1
+        }
+        if byte == closer {
+            balance -= 1
+        }
     }
     return balance < 0
 }
@@ -91,9 +99,13 @@ terminal_link_copy_candidate :: proc(
     hit: ^Terminal_Link_Hit) -> bool {
     for index in start..<end {
         cell := &cells[index]
-        if cell.continuation { continue }
+        if cell.continuation {
+            continue
+        }
         bytes := cell.grapheme[:cell.grapheme_len]
-        if hit.uri_byte_count + len(bytes) >= len(hit.uri) { return false }
+        if hit.uri_byte_count + len(bytes) >= len(hit.uri) {
+            return false
+        }
         copy(hit.uri[hit.uri_byte_count:], bytes)
         hit.uri_byte_count += len(bytes)
     }
@@ -107,8 +119,12 @@ terminal_link_trimmed_column_end :: proc(
     column_end := start
     for index in start..<end {
         cell := &cells[index]
-        if cell.continuation { continue }
-        if copied >= byte_count { break }
+        if cell.continuation {
+            continue
+        }
+        if copied >= byte_count {
+            break
+        }
         copied += int(cell.grapheme_len)
         column_end = index + max(int(cell.width), 1)
     }
@@ -119,10 +135,14 @@ terminal_link_trimmed_column_end :: proc(
 terminal_detect_link_at :: proc(
     cells: []termgrid.Cell, line, column: int) -> Terminal_Link_Hit {
     if column < 0 || column >= len(cells) || cells[column].continuation ||
-        terminal_link_cell_is_boundary(&cells[column]) { return {} }
+        terminal_link_cell_is_boundary(&cells[column]) {
+        return {}
+    }
     start := column
     for start > 0 && !cells[start - 1].continuation &&
-        !terminal_link_cell_is_boundary(&cells[start - 1]) { start -= 1 }
+        !terminal_link_cell_is_boundary(&cells[start - 1]) {
+        start -= 1
+    }
     end := column + max(int(cells[column].width), 1)
     for end < len(cells) &&
         !terminal_link_cell_is_boundary(&cells[end]) {
@@ -132,7 +152,9 @@ terminal_detect_link_at :: proc(
         kind = .Detected, line = line,
         column_start = start, column_end = end,
     }
-    if !terminal_link_copy_candidate(cells, start, end, &hit) { return {} }
+    if !terminal_link_copy_candidate(cells, start, end, &hit) {
+        return {}
+    }
     trimmed := terminal_link_trim_candidate(hit.uri[:hit.uri_byte_count])
     hit.uri_byte_count = trimmed
     hit.column_end = terminal_link_trimmed_column_end(
@@ -140,7 +162,9 @@ terminal_detect_link_at :: proc(
     uri := string(hit.uri[:hit.uri_byte_count])
     parsed, supported := termhyperlink.hyperlink_uri_scheme(uri)
     if !supported || parsed.scheme == .File ||
-        !termhyperlink.hyperlink_uri_valid(uri) || column >= hit.column_end { return {} }
+        !termhyperlink.hyperlink_uri_valid(uri) || column >= hit.column_end {
+        return {}
+    }
     hit.identity_hash = terminal_link_hit_hash(
         hit.uri[:hit.uri_byte_count], line, hit.column_start, hit.column_end)
     return hit
@@ -150,7 +174,9 @@ terminal_detect_link_at :: proc(
 terminal_clear_hyperlink_press :: proc(term: ^viewterminalmodel.Terminal_State) {
     term.hyperlink_pressed = 0
     registry := term.hyperlink_registry
-    if registry == nil { return }
+    if registry == nil {
+        return
+    }
     registry.detected_pressed_hash = 0
     registry.detected_pressed_line = 0
     registry.detected_pressed_start = 0
@@ -179,7 +205,9 @@ terminal_hyperlink_release_matches :: proc(
         return hit.handle != 0 && hit.handle == term.hyperlink_pressed
     }
     registry := term.hyperlink_registry
-    if registry == nil { return false }
+    if registry == nil {
+        return false
+    }
     return hit.kind == .Detected && hit.identity_hash != 0 &&
         hit.identity_hash == registry.detected_pressed_hash &&
         hit.line == registry.detected_pressed_line &&
@@ -219,7 +247,9 @@ terminal_hit_test_link :: proc(
             column_start = start, column_end = end}
     }
     cells, ok := terminal_output_row(term, line)
-    if !ok { return {} }
+    if !ok {
+        return {}
+    }
     return terminal_detect_link_at(cells, line, column)
 }
 
@@ -285,7 +315,9 @@ terminal_activate_hyperlink :: proc(
         uri := string(detected.uri[:detected.uri_byte_count])
         parsed, supported := termhyperlink.hyperlink_uri_scheme(uri)
         if !supported || parsed.scheme == .File ||
-            !termhyperlink.hyperlink_uri_valid(uri) { return false }
+            !termhyperlink.hyperlink_uri_valid(uri) {
+            return false
+        }
         return sink.activate(sink.user_data, cstring(&detected.uri[0]))
     }
     uri, valid := termhyperlink.hyperlink_registry_cstring(

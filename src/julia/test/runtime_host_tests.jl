@@ -22,11 +22,9 @@ end
 
 """Return the stable UUID registered for the generation's Terminal node."""
 function runtime_host_terminal_id(host::EuclidRuntimeHost)::UUID
-    generation = active_euclid_runtime_generation(host)
-    descriptors = getfield(generation.animation_catalog, :AnimationDescriptors)
-    terminal_kind = getfield(generation.animation_catalog, :TerminalNode)
+    descriptors = AnimationCatalogGeneration.AnimationDescriptors
     return only(descriptor.id for descriptor in descriptors
-        if descriptor.kind === terminal_kind)
+        if descriptor.kind === AnimationCatalog.TerminalNode)
 end
 
 @testset "runtime host tick cadence" begin
@@ -109,6 +107,10 @@ end
 @testset "runtime host activates Terminal through lifecycle supervisor" begin
     host = create_euclid_runtime_host(Ptr{Cvoid}(1))
     terminal_id = runtime_host_terminal_id(host)
+    host.reactor.animation_supervisor_state.load_implementation = id ->
+        AnimationCatalog.AnimationImplementation(
+            id, host.terminal_animation_callback)
+    empty!(host.reactor.animation_supervisor_state.implementation_cache)
     payload = NativeAnimationLifecyclePayload(
         UInt64(70), UInt64(0), UInt64(1),
         Int32(EuclidPolicy.AnimationActivate))
@@ -374,20 +376,18 @@ end
 @testset "runtime generation isolation" begin
     first_generation = create_euclid_runtime_generation()
     second_generation = create_euclid_runtime_generation()
-    first_descriptors = Base.invokelatest(
-        getfield, first_generation.animation_catalog, :AnimationDescriptors)
-    second_descriptors = Base.invokelatest(
-        getfield, second_generation.animation_catalog, :AnimationDescriptors)
+    @test first_generation.content !== second_generation.content
+    @test !isdefined(first_generation.content, :AnimationCatalogGeneration)
+    @test !isdefined(second_generation.content, :AnimationCatalogGeneration)
 
-    @test first_generation.animation_catalog !== second_generation.animation_catalog
-    @test first_descriptors !== second_descriptors
-    @test getfield(first_generation.content, :AnimationCatalog) === AnimationCatalog
-    @test getfield(second_generation.content, :AnimationCatalog) === AnimationCatalog
+    descriptor = only(filter(
+        item -> item.id == RuntimeHostPointId,
+        AnimationCatalogGeneration.AnimationDescriptors))
 
     first_implementation = load_generation_animation(
-        first_generation, RuntimeHostPointId)
+        first_generation, RuntimeHostPointId, descriptor.implementation_path)
     second_implementation = load_generation_animation(
-        second_generation, RuntimeHostPointId)
+        second_generation, RuntimeHostPointId, descriptor.implementation_path)
     first_module = getfield(first_generation.content, :ElementsOneDefinitionPoint)
     second_module = getfield(second_generation.content, :ElementsOneDefinitionPoint)
 
@@ -396,6 +396,27 @@ end
     @test first_module !== second_module
     @test parentmodule(first_module) === first_generation.content
     @test parentmodule(second_module) === second_generation.content
+    @test_throws ArgumentError load_generation_animation(
+        first_generation, RuntimeHostPointId, "../outside.jl")
+    mismatch_generation = create_euclid_runtime_generation()
+    @test_throws ArgumentError load_generation_animation(
+        mismatch_generation, UUID(UInt128(1)), descriptor.implementation_path)
+
+    path_bytes = UInt8[0x61, 0x2e, 0x6a, 0x6c]
+    terminal_metadata = OdinJuliaBridge.AnimationImplementationPathMetadata(
+        Int32(0), Int32(AnimationCatalog.TerminalNode))
+    @test _animation_implementation_path_from_metadata(
+        terminal_metadata, path_bytes) === nothing
+    @test_throws ArgumentError _animation_implementation_path_from_metadata(
+        OdinJuliaBridge.AnimationImplementationPathMetadata(
+            Int32(1), Int32(AnimationCatalog.TerminalNode)), path_bytes)
+    @test_throws ArgumentError _animation_implementation_path_from_metadata(
+        OdinJuliaBridge.AnimationImplementationPathMetadata(Int32(4), Int32(9)),
+        path_bytes)
+    leaf_metadata = OdinJuliaBridge.AnimationImplementationPathMetadata(
+        Int32(4), Int32(AnimationCatalog.LeafNode))
+    @test _animation_implementation_path_from_metadata(
+        leaf_metadata, path_bytes) == "a.jl"
 
     state_ptr = Ptr{Cvoid}(1)
     host = create_euclid_runtime_host(state_ptr)

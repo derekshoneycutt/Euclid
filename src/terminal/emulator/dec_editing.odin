@@ -80,7 +80,9 @@ interpreter_apply_tab_clear :: proc(interpreter: ^Interpreter) -> bool {
 // Apply one supported insert or sixel scrolling mode toggle.
 interpreter_apply_editing_toggle :: proc(
     interpreter: ^Interpreter, enabled: bool) -> bool {
-    if interpreter.parameter_count != 1 { return false }
+    if interpreter.parameter_count != 1 {
+        return false 
+    }
     switch interpreter_parameter(interpreter, 0, -1) {
     case 4: interpreter.grid.editing.insert_mode = enabled
     case 80: interpreter.grid.editing.sixel_scrolling_mode = enabled

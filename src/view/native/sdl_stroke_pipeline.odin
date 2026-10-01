@@ -45,18 +45,10 @@ sdl_stroke_target_description :: proc() -> sdl.GPUColorTargetDescription {
     }
 }
 
-// sdl_stroke_pipeline_create binds the reflected 36-byte stroke vertex ABI.
-sdl_stroke_pipeline_create :: proc(
-    device: ^sdl.GPUDevice,
-    paths: Sdl_Stroke_Shader_Paths,
+// Create a stroke pipeline from shaders whose lifetime is held by the caller.
+sdl_stroke_pipeline_build :: proc(
+    device: ^sdl.GPUDevice, vertex_shader, fragment_shader: ^sdl.GPUShader,
     sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
-    vertex_shader := sdl_draw_shader_create(device, paths.vertex, .VERTEX, 0, 1)
-    if vertex_shader == nil {return nil}
-    defer sdl.ReleaseGPUShader(device, vertex_shader)
-    fragment_shader := sdl_draw_shader_create(
-        device, paths.fragment, .FRAGMENT, 0, 1)
-    if fragment_shader == nil {return nil}
-    defer sdl.ReleaseGPUShader(device, fragment_shader)
     input := sdl_stroke_vertex_input()
     targets := [1]sdl.GPUColorTargetDescription{
         sdl_stroke_target_description()}
@@ -82,14 +74,38 @@ sdl_stroke_pipeline_create :: proc(
     })
 }
 
+// sdl_stroke_pipeline_create binds the reflected 36-byte stroke vertex ABI.
+sdl_stroke_pipeline_create :: proc(
+    device: ^sdl.GPUDevice,
+    paths: Sdl_Stroke_Shader_Paths,
+    sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
+    vertex_shader := sdl_draw_shader_create(device, paths.vertex, .VERTEX, 0, 1)
+    if vertex_shader == nil {
+        return nil
+    }
+    defer sdl.ReleaseGPUShader(device, vertex_shader)
+    fragment_shader := sdl_draw_shader_create(
+        device, paths.fragment, .FRAGMENT, 0, 1)
+    if fragment_shader == nil {
+        return nil
+    }
+    defer sdl.ReleaseGPUShader(device, fragment_shader)
+    return sdl_stroke_pipeline_build(
+        device, vertex_shader, fragment_shader, sample_count)
+}
+
 // sdl_stroke_runtime_admit transactionally publishes optional stroke resources.
 sdl_stroke_runtime_admit :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
     paths: Sdl_Stroke_Shader_Paths,
     sample_count: sdl.GPUSampleCount) -> bool {
-    if runtime == nil || device == nil || runtime^.stroke_ready {return false}
+    if runtime == nil || device == nil || runtime^.stroke_ready {
+       return false
+    }
     pipeline := sdl_stroke_pipeline_create(device, paths, sample_count)
-    if pipeline == nil {return false}
+    if pipeline == nil {
+       return false
+    }
     vertex_buffer := sdl.CreateGPUBuffer(device, {
         usage = {.VERTEX},
         size = u32(size_of(Stroke_Vertex) * STROKE_VERTEX_CAPACITY),
@@ -137,15 +153,23 @@ sdl_stroke_upload :: proc(
     runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
     device: ^sdl.GPUDevice, command_buffer: ^sdl.GPUCommandBuffer) -> bool {
     byte_count := u32(encoder^.stroke_vertex_count * size_of(Stroke_Vertex))
-    if byte_count == 0 {return true}
-    if !runtime^.stroke_ready {return false}
+    if byte_count == 0 {
+       return true
+    }
+    if !runtime^.stroke_ready {
+       return false
+    }
     mapped := sdl.MapGPUTransferBuffer(device, runtime^.stroke_upload_buffer, true)
-    if mapped == nil {return false}
+    if mapped == nil {
+       return false
+    }
     mem.copy(mapped, raw_data(
         encoder^.stroke_vertices[:encoder^.stroke_vertex_count]), int(byte_count))
     sdl.UnmapGPUTransferBuffer(device, runtime^.stroke_upload_buffer)
     copy_pass := sdl.BeginGPUCopyPass(command_buffer)
-    if copy_pass == nil {return false}
+    if copy_pass == nil {
+       return false
+    }
     sdl.UploadToGPUBuffer(copy_pass,
         {transfer_buffer = runtime^.stroke_upload_buffer},
         {buffer = runtime^.stroke_vertex_buffer, size = byte_count}, true)

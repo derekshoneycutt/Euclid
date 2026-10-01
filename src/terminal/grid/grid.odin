@@ -283,7 +283,9 @@ grid_reset_row_identity :: proc(grid: ^Grid, row_index: int) {
 grid_row_grapheme_count :: proc(row: ^Row) -> u32 {
     result: u32
     for &cell in row.cells {
-        if !cell.continuation && cell.grapheme_len > 0 { result += 1 }
+        if !cell.continuation && cell.grapheme_len > 0 {
+            result += 1 
+        }
     }
     return result
 }
@@ -294,7 +296,9 @@ grid_row_grapheme_offset :: proc(row: ^Row, column: int) -> u32 {
     limit := clamp(column, 0, len(row.cells))
     for cell_index in 0..<limit {
         cell := &row.cells[cell_index]
-        if !cell.continuation && cell.grapheme_len > 0 { result += 1 }
+        if !cell.continuation && cell.grapheme_len > 0 {
+            result += 1 
+        }
     }
     return result
 }
@@ -1235,7 +1239,9 @@ grid_place_rune :: proc(
     row := &grid.rows[grid.cursor.row]
     column := grid.cursor.column
     grid_clear_cell(grid, grid.cursor.row, column)
-    if rune_width == 2 { grid_clear_cell(grid, grid.cursor.row, column + 1) }
+    if rune_width == 2 {
+        grid_clear_cell(grid, grid.cursor.row, column + 1) 
+    }
     cell := &row.cells[column]
     cell.style = grid.style
     cell.hyperlink = grid.hyperlink
@@ -1244,7 +1250,9 @@ grid_place_rune :: proc(
     cell.regional_indicator = unicode_is_regional_indicator(codepoint)
     cell.emoji_candidate = unicode_is_emoji(codepoint)
     grid_append_cluster_bytes(grid, cell, encoded)
-    if rune_width == 2 { row.cells[column + 1] = {continuation = true} }
+    if rune_width == 2 {
+        row.cells[column + 1] = {continuation = true} 
+    }
     grid_mark_dirty(row, column, column + int(rune_width))
 }
 

@@ -38,7 +38,9 @@ sdl_input_test_keyboard_order_and_kinds :: proc(t: ^testing.T) {
         {scancode = .A, mod = {.LCTRL}, down = true, repeat = true},
         {scancode = .A, mod = {}, down = false},
     }
-    for event in events {sdl_input_append_keyboard(&runtime, event, &accumulation)}
+    for event in events {
+       sdl_input_append_keyboard(&runtime, event, &accumulation)
+    }
     captured := input.input_runtime_events(&runtime)
     testing.expect_value(t, len(captured), 3)
     testing.expect_value(t, captured[0].kind, input.Input_Event_Kind.Press)

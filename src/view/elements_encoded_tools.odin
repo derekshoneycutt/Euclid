@@ -14,7 +14,9 @@ encoded_stroke_pack_occluders :: proc(
     uniforms: ^native.Stroke_Fragment_Uniforms,
     encoder: ^native.Draw_Encoder,
     ctx: ^Tool_Brush_Occluder_Context) {
-    if ctx == nil {return}
+    if ctx == nil {
+        return
+    }
     scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
     scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
     average_scale := (scale_x + scale_y) * 0.5
@@ -197,7 +199,9 @@ draw_encoded_compass_arc :: proc(
     occluders: ^Tool_Brush_Occluder_Context) {
     basis, ok := compass_top_circle_basis(
         compass^.joint1, compass^.pivot, compass^.joint2)
-    if !ok {return}
+    if !ok {
+        return
+    }
     draw := Compass_Arc_Draw{state, compass^.brush_size}
     scale_x := f32(encoder^.physical_extent.x) / encoder^.logical_extent.x
     scale_y := f32(encoder^.physical_extent.y) / encoder^.logical_extent.y
@@ -249,11 +253,17 @@ encoded_compass_arc_submit :: proc(
 encoded_compass_active_dot :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     compass: ^shapemodel.Shapes_Compass_Draw) {
-    if compass^.active_child != 1 && compass^.active_child != 3 {return}
+    if compass^.active_child != 1 && compass^.active_child != 3 {
+        return
+    }
     active := compass^.color
-    if compass^.has_active_color {active = compass^.active_color}
+    if compass^.has_active_color {
+        active = compass^.active_color
+    }
     point := compass^.joint1
-    if compass^.active_child == 3 {point = compass^.joint2}
+    if compass^.active_child == 3 {
+        point = compass^.joint2
+    }
     center := view_core.iso_to_cartesian(point, state^.iso_scale^)
     _ = native.draw_encoder_circle(
         encoder, geometry.Vector2(center), compass^.brush_size, active)
@@ -385,11 +395,15 @@ draw_encoded_high_instrument :: proc(
         draw_encoded_cycloid_tool(state, encoder, &typed)
     case shapemodel.Shapes_Pen_Draw:
         caster: ^shapemodel.Shapes_Compass_Draw
-        if pen_receives_compass {caster = &cache^.compass}
+        if pen_receives_compass {
+            caster = &cache^.compass
+        }
         draw_encoded_cached_pen(state, encoder, &typed, caster)
     case shapemodel.Shapes_Compass_Draw:
         caster: ^shapemodel.Shapes_Pen_Draw
-        if compass_receives_pen {caster = &cache^.pen}
+        if compass_receives_pen {
+            caster = &cache^.pen
+        }
         draw_encoded_compass(state, encoder, &typed, caster)
     case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Point_Draw,
         shapemodel.Shapes_Line_Draw, shapemodel.Shapes_Circle_Draw,
@@ -405,18 +419,24 @@ draw_encoded_high_merged_item :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     cache: ^shapemodel.Shapes_Draw_Cache, index: int,
     ctx: ^High_Merged_Draw_Context) {
-    if ctx^.defer_guide && index == ctx^.guide_index {return}
+    if ctx^.defer_guide && index == ctx^.guide_index {
+        return
+    }
     if ctx^.defer_guide && index == ctx^.compass_index {
         draw_encoded_trochoid_tool(state, encoder, &cache^.trochoid_tool)
     }
     if ctx^.has_crossing && index == ctx^.crossing.polygon_index {
         caster: ^shapemodel.Shapes_Compass_Draw
-        if ctx^.pen_receives_compass {caster = &cache^.compass}
+        if ctx^.pen_receives_compass {
+            caster = &cache^.compass
+        }
         draw_encoded_pen_crossing(
             state, encoder, &ctx^.crossing, caster)
         return
     }
-    if ctx^.has_crossing && index == ctx^.crossing.pen_index {return}
+    if ctx^.has_crossing && index == ctx^.crossing.pen_index {
+        return
+    }
     if !draw_encoded_high_instrument(state, encoder, &cache^.items[index],
         ctx^.pen_receives_compass, ctx^.compass_receives_pen) {
         draw_encoded_high_regular(state, encoder, &cache^.items[index])
@@ -435,7 +455,9 @@ draw_encoded_shapes_high_merged_cached :: proc(
     _, compass_index := find_cached_compass_item(cache)
     _, guide_index := find_cached_trochoid_tool_item(cache)
     pen_draw_index := pen_index
-    if ctx.has_crossing {pen_draw_index = ctx.crossing.polygon_index}
+    if ctx.has_crossing {
+        pen_draw_index = ctx.crossing.polygon_index
+    }
     ctx.pen_receives_compass, ctx.compass_receives_pen =
         tool_brush_interaction_receivers(pen_draw_index, compass_index)
     ctx.defer_guide = trochoid_tool_defers_to_compass(
@@ -501,7 +523,9 @@ draw_encoded_compass_shadow_arc :: proc(
     compass: ^shapemodel.Shapes_Compass_Draw, thickness, height: f32) {
     basis, ok := compass_top_circle_basis(
         compass^.joint1, compass^.pivot, compass^.joint2)
-    if !ok {return}
+    if !ok {
+        return
+    }
     projected: [COMPASS_TOPCIRCLE_VECTORS]geometry.Vector2
     step := basis.theta_out / f32(COMPASS_TOPCIRCLE_SEGMENTS)
     for index in 0..=COMPASS_TOPCIRCLE_SEGMENTS {

@@ -31,20 +31,26 @@ Graphics_Semantics_Test_Context :: struct {
 // Return the fixture's current stable terminal anchor.
 graphics_semantics_test_anchor :: proc(user_data: rawptr) -> (Anchor, bool) {
     fixture := cast(^Graphics_Semantics_Test_Context)user_data
-    if fixture == nil { return {}, false }
+    if fixture == nil {
+        return {}, false 
+    }
     return fixture.anchor, true
 }
 
 // Record synchronous row advancement requested by semantic placement.
 graphics_semantics_test_advance :: proc(user_data: rawptr, rows: int) {
     fixture := cast(^Graphics_Semantics_Test_Context)user_data
-    if fixture != nil { fixture.advanced_rows += rows }
+    if fixture != nil {
+        fixture.advanced_rows += rows 
+    }
 }
 
 // Return the fixture's configured terminal cell height.
 graphics_semantics_test_cell_height :: proc(user_data: rawptr) -> (int, bool) {
     fixture := cast(^Graphics_Semantics_Test_Context)user_data
-    if fixture == nil || fixture.cell_height <= 0 { return 0, false }
+    if fixture == nil || fixture.cell_height <= 0 {
+        return 0, false 
+    }
     return fixture.cell_height, true
 }
 

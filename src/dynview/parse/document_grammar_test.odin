@@ -240,6 +240,18 @@ tex_parse_document_accepts_explicit_paragraphs :: proc(t: ^testing.T) {
     testing.expect_value(t, output.document_blocks[1].inline_count, 1)
 }
 
+// Check style assignments on the representative prose syntax fixture.
+tex_test_familiar_prose_styles :: proc(
+    t: ^testing.T, output: ^Tex_Semantic_Output) {
+    testing.expect_value(t, tex_semantic_text(
+        output, output^.document_inlines[0].text), "bold")
+    testing.expect_value(t, output^.document_inlines[0].font_flags, i32(36))
+    testing.expect_value(t, output^.document_inlines[2].font_flags, i32(37))
+    testing.expect_value(t, output^.document_inlines[4].font_flags, i32(36))
+    testing.expect_value(t, output^.document_inlines[6].font_flags, i32(4))
+    testing.expect_value(t, output^.document_inlines[8].font_flags, i32(4))
+}
+
 // Verify Phase 8 prose syntax preserves scoped style, spaces, and literal text.
 @(test)
 tex_parse_document_accepts_familiar_prose_syntax :: proc(t: ^testing.T) {
@@ -251,13 +263,7 @@ tex_parse_document_accepts_familiar_prose_syntax :: proc(t: ^testing.T) {
     status := tex_parse_document(source, output)
 
     testing.expect_value(t, status, Tex_Parse_Status.Ok)
-    testing.expect_value(t, tex_semantic_text(
-        output, output.document_inlines[0].text), "bold")
-    testing.expect_value(t, output.document_inlines[0].font_flags, i32(36))
-    testing.expect_value(t, output.document_inlines[2].font_flags, i32(37))
-    testing.expect_value(t, output.document_inlines[4].font_flags, i32(36))
-    testing.expect_value(t, output.document_inlines[6].font_flags, i32(4))
-    testing.expect_value(t, output.document_inlines[8].font_flags, i32(4))
+    tex_test_familiar_prose_styles(t, output)
     nonbreaking_count := 0
     controlled_count := 0
     escaped_special_count := 0
@@ -265,13 +271,21 @@ tex_parse_document_accepts_familiar_prose_syntax :: proc(t: ^testing.T) {
     for inline_index in 0..<output.document_inline_count {
         semantic_inline := output.document_inlines[inline_index]
         if semantic_inline.kind == .Space {
-            if semantic_inline.space_kind == .Nonbreaking {nonbreaking_count += 1}
-            if semantic_inline.space_kind == .Controlled {controlled_count += 1}
+            if semantic_inline.space_kind == .Nonbreaking {
+                nonbreaking_count += 1
+            }
+            if semantic_inline.space_kind == .Controlled {
+                controlled_count += 1
+            }
         } else if semantic_inline.kind == .Text {
             text := tex_semantic_text(output, semantic_inline.text)
             if text == "%" || text == "#" || text == "_" || text == "&" ||
-                text == "{" || text == "}" {escaped_special_count += 1}
-            if text == "gone" {comment_text_found = true}
+                text == "{" || text == "}" {
+                escaped_special_count += 1
+            }
+            if text == "gone" {
+                comment_text_found = true
+            }
         }
     }
     testing.expect_value(t, nonbreaking_count, 1)

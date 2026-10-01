@@ -4,20 +4,24 @@ using UUIDs
 using ..AnimationCatalog
 using ..EuclidSearchContent
 
-export SEARCH_CORPUS_SCHEMA_VERSION, SearchDocument,
-    build_search_documents, write_search_corpus
+export CATALOG_CORPUS_SCHEMA_VERSION, CatalogCorpusRecord,
+    build_catalog_corpus, write_catalog_corpus
 
-const SEARCH_CORPUS_SCHEMA_VERSION = 1
-const SEARCH_SOURCE_NAMESPACE = "builtin"
-const SEARCH_NAME_BYTE_CAPACITY = 256
-const SEARCH_PATH_BYTE_CAPACITY = 2 * 1024
+const CATALOG_CORPUS_SCHEMA_VERSION = 2
+const CATALOG_SOURCE_NAMESPACE = "builtin"
+const CATALOG_NAME_BYTE_CAPACITY = 256
+const CATALOG_PATH_BYTE_CAPACITY = 2 * 1024
 
-"""Canonical build-time record for one searchable catalog document."""
-struct SearchDocument
+"""Canonical build-time record for one animation catalogue entry."""
+struct CatalogCorpusRecord
     source_namespace::String
-    document_id::String
+    animation_id::String
+    parent_animation_id::Union{String,Nothing}
     node_kind::UInt8
     display_name::String
+    sibling_order::Int
+    catalog_order::Int
+    implementation_path::Union{String,Nothing}
     hierarchy_path::String
     semantic_text::String
     aliases::Vector{String}
@@ -38,38 +42,52 @@ function hierarchy_path(
     return join(names, " / ")
 end
 
-"""Reject catalog-derived strings outside the canonical corpus bounds."""
-function validate_document_strings(name::String, path::String)
+"""Reject catalogue strings outside the canonical corpus bounds."""
+function validate_document_strings(
+    name::String, hierarchy::String, implementation_path::Union{String,Nothing})
+
     isempty(strip(name)) && throw(ArgumentError("search document name is empty"))
     occursin('\0', name) && throw(ArgumentError("search document name contains NUL"))
-    ncodeunits(name) <= SEARCH_NAME_BYTE_CAPACITY ||
+    ncodeunits(name) <= CATALOG_NAME_BYTE_CAPACITY ||
         throw(ArgumentError("search document name exceeds byte capacity"))
-    occursin('\0', path) && throw(ArgumentError("search document path contains NUL"))
-    ncodeunits(path) <= SEARCH_PATH_BYTE_CAPACITY ||
-        throw(ArgumentError("search document path exceeds byte capacity"))
+    occursin('\0', hierarchy) &&
+        throw(ArgumentError("search document hierarchy contains NUL"))
+    ncodeunits(hierarchy) <= CATALOG_PATH_BYTE_CAPACITY ||
+        throw(ArgumentError("search document hierarchy exceeds byte capacity"))
+    if implementation_path !== nothing
+        occursin('\0', implementation_path) &&
+            throw(ArgumentError("implementation path contains NUL"))
+        ncodeunits(implementation_path) <= CATALOG_PATH_BYTE_CAPACITY ||
+            throw(ArgumentError("implementation path exceeds byte capacity"))
+    end
     return nothing
 end
 
-"""Build UUID-ordered search documents from catalog facts and authored content."""
-function build_search_documents(
+"""Build UUID-ordered records with order from validated descriptor order."""
+function build_catalog_corpus(
     descriptors::Vector{AnimationDescriptor}, content_loader::Function)
 
     by_id = validate_catalog(descriptors)
-    documents = SearchDocument[]
+    catalog_order = Dict(descriptor.id => index - 1
+        for (index, descriptor) in enumerate(descriptors))
+    records = CatalogCorpusRecord[]
     for descriptor in sort(descriptors; by=item -> string(item.id))
-        path = hierarchy_path(descriptor, by_id)
-        validate_document_strings(descriptor.display_name, path)
+        hierarchy = hierarchy_path(descriptor, by_id)
+        validate_document_strings(
+            descriptor.display_name, hierarchy, descriptor.implementation_path)
         content = descriptor.kind == TerminalNode ? nothing : content_loader(descriptor)
         content === nothing || content isa SearchContent ||
             throw(ArgumentError("sidecar returned invalid search content"))
         semantic_text = content === nothing ? "" : content.text
         aliases = content === nothing ? String[] : collect(content.aliases)
-        push!(documents, SearchDocument(
-            SEARCH_SOURCE_NAMESPACE, string(descriptor.id),
-            UInt8(descriptor.kind), descriptor.display_name, path,
-            semantic_text, aliases))
+        push!(records, CatalogCorpusRecord(
+            CATALOG_SOURCE_NAMESPACE, string(descriptor.id),
+            descriptor.parent_id === nothing ? nothing : string(descriptor.parent_id),
+            UInt8(descriptor.kind), descriptor.display_name, descriptor.sibling_order,
+            catalog_order[descriptor.id], descriptor.implementation_path,
+            hierarchy, semantic_text, aliases))
     end
-    return documents
+    return records
 end
 
 """Write one JSON string with deterministic escaping."""
@@ -93,31 +111,45 @@ function write_json_string(io::IO, value::String)
     print(io, '"')
 end
 
-"""Write one canonical search document as a versioned JSON Lines record."""
-function write_search_document(io::IO, document::SearchDocument)
-    print(io, "{\"schema\":", SEARCH_CORPUS_SCHEMA_VERSION,
+"""Write one canonical catalogue record as a versioned JSON Lines record."""
+function write_catalog_record(io::IO, record::CatalogCorpusRecord)
+    print(io, "{\"schema\":", CATALOG_CORPUS_SCHEMA_VERSION,
         ",\"source_namespace\":")
-    write_json_string(io, document.source_namespace)
-    print(io, ",\"document_id\":")
-    write_json_string(io, document.document_id)
-    print(io, ",\"node_kind\":", document.node_kind, ",\"display_name\":")
-    write_json_string(io, document.display_name)
+    write_json_string(io, record.source_namespace)
+    print(io, ",\"animation_id\":")
+    write_json_string(io, record.animation_id)
+    print(io, ",\"parent_animation_id\":")
+    if record.parent_animation_id === nothing
+        print(io, "null")
+    else
+        write_json_string(io, record.parent_animation_id)
+    end
+    print(io, ",\"node_kind\":", record.node_kind, ",\"display_name\":")
+    write_json_string(io, record.display_name)
+    print(io, ",\"sibling_order\":", record.sibling_order,
+        ",\"catalog_order\":", record.catalog_order,
+        ",\"implementation_path\":")
+    if record.implementation_path === nothing
+        print(io, "null")
+    else
+        write_json_string(io, record.implementation_path)
+    end
     print(io, ",\"hierarchy_path\":")
-    write_json_string(io, document.hierarchy_path)
+    write_json_string(io, record.hierarchy_path)
     print(io, ",\"semantic_text\":")
-    write_json_string(io, document.semantic_text)
+    write_json_string(io, record.semantic_text)
     print(io, ",\"aliases\":[")
-    for (index, alias) in enumerate(document.aliases)
+    for (index, alias) in enumerate(record.aliases)
         index > 1 && print(io, ',')
         write_json_string(io, alias)
     end
     println(io, "]}")
 end
 
-"""Write the complete canonical corpus in its existing stable document order."""
-function write_search_corpus(io::IO, documents::Vector{SearchDocument})
-    for document in documents
-        write_search_document(io, document)
+"""Write the complete canonical corpus in stable UUID order."""
+function write_catalog_corpus(io::IO, records::Vector{CatalogCorpusRecord})
+    for record in records
+        write_catalog_record(io, record)
     end
     return nothing
 end

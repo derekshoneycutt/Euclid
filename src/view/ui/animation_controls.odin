@@ -136,7 +136,9 @@ prepare_animation_controls :: proc(
         geometry.Rectangle(ui_runtime^.ui_regions.world_rect))
     pause_icon := ui_runtime^.simulation_paused ? Icon_Button_Id.Play : .Pause
     pause_label := "Pause animation"
-    if ui_runtime^.simulation_paused {pause_label = "Resume animation"}
+    if ui_runtime^.simulation_paused {
+        pause_label = "Resume animation"
+    }
     refresh := update_icon_button(animation_control_button_params(
         ui_runtime, {ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
             "Restart animation", 0}, mouse_input, slots.panel),
@@ -240,7 +242,9 @@ draw_encoded_control_glyph :: proc(
 draw_encoded_animation_controls :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Animation_Control_Preparation) {
-    if !prepared.visible {return}
+    if !prepared.visible {
+        return
+    }
     panel := prepared.slots.panel
     _ = native.draw_encoder_rectangle(encoder, panel, UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(encoder, panel, 1, UI_BORDER_COLOR)

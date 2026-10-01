@@ -17,7 +17,7 @@ import "font"
 import "input"
 import native "native"
 import terminalview "terminal"
-import viewsearch "search"
+import viewcatalog "catalog"
 import "ui"
 import accessibility "../accessibility"
 import audio "../audio"
@@ -93,7 +93,7 @@ Window_Frame_Context :: struct {
     chalk_audio: ^native.Sdl_Chalk_Audio_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
-    search_service: ^viewsearch.Search_Service,
+    catalog_service: ^viewcatalog.Catalog_Service,
     scenario_runtime: ^Scenario_Runtime,
     capture_sink: capture.Sink,
     framebuffer_operations: view_core.Framebuffer_Capture_Operations,
@@ -107,7 +107,7 @@ Display_Loop_Context :: struct {
     chalk_audio: ^native.Sdl_Chalk_Audio_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
-    search_service: ^viewsearch.Search_Service,
+    catalog_service: ^viewcatalog.Catalog_Service,
     display_profile: ^evidence_profile.State,
 }
 
@@ -150,14 +150,18 @@ deferred_visual_capabilities :: proc(
     result := Deferred_Visual_Capabilities{
         gif_readback = state^.ui_runtime.gif_capture_phase != .Idle,
     }
-    when core.SCENARIOS_ENABLED {result.scenario_readback = true}
+    when core.SCENARIOS_ENABLED {
+        result.scenario_readback = true
+    }
     return result
 }
 
 // report_draw_frame_telemetry logs one representative submitted geometry frame.
 report_draw_frame_telemetry :: proc(
     state: ^Euclid_General_State, runtime: ^native.Sdl_Draw_Runtime) {
-    if runtime^.telemetry_reported {return}
+    if runtime^.telemetry_reported {
+        return
+    }
     frame := runtime^.last_frame
     deferred := deferred_visual_capabilities(state)
     log.infof("sdl_geometry_frame vertices=%d indices=%d batches=%d commands=%d " +
@@ -314,8 +318,11 @@ bind_sdl_chalk_audio :: proc(
 // Build the texture owner used while native render resources are admitted.
 sdl_font_texture_context :: proc(display: Display_Loop_Context) ->
     Sdl_Font_Texture_Context {
-    return {platform = display.platform, runtime = display.draw_runtime,
-        submit_immediately = true}
+    return {
+        platform = display.platform,
+        runtime = display.draw_runtime,
+        submit_immediately = true,
+    }
 }
 
 // initialize_and_run_sdl_session admits native fonts and Terminal textures.
@@ -523,7 +530,9 @@ route_ui_keyboard_frame :: proc(
 // accessibility_ui_identity preserves one complete semantic target for native lookup.
 accessibility_ui_identity :: proc(
     id: viewmodel.Ui_Node_Id) -> accessibility.Qualified_Identity {
-    if id == (viewmodel.Ui_Node_Id{}) {return {}}
+    if id == (viewmodel.Ui_Node_Id{}) {
+        return {}
+    }
     return {
         domain = .Ui,
         owner_domain = u16(id.domain),
@@ -539,14 +548,20 @@ accessibility_tree_focus_owner :: proc(
     target: viewmodel.Ui_Node_Id) -> viewmodel.Ui_Node_Id {
     snapshot := ui.semantic_snapshot(semantic)
     index := ui.semantic_node_index(snapshot, target)
-    if index < 0 || snapshot^.nodes[index].role != .Tree_Item {return target}
+    if index < 0 || snapshot^.nodes[index].role != .Tree_Item {
+        return target
+    }
     semantic^.active_tree_item = target.stable_id
     parent := snapshot^.nodes[index].parent
     for parent != (viewmodel.Ui_Node_Id{}) {
         parent_index := ui.semantic_node_index(snapshot, parent)
-        if parent_index < 0 {return target}
+        if parent_index < 0 {
+            return target
+        }
         node := snapshot^.nodes[parent_index]
-        if node.role == .Tree {return node.id}
+        if node.role == .Tree {
+            return node.id
+        }
         parent = node.parent
     }
     return target
@@ -586,7 +601,9 @@ accessibility_extended_command_kind :: proc(
 accessibility_command_kind :: proc(
     kind: native.Sdl_Accessibility_Action_Kind) -> viewmodel.Ui_Focus_Command_Kind {
     mapped := accessibility_primary_command_kind(kind)
-    if mapped != .None {return mapped}
+    if mapped != .None {
+        return mapped
+    }
     return accessibility_extended_command_kind(kind)
 }
 
@@ -626,8 +643,12 @@ drain_accessibility_actions :: proc(
     for {
         action: native.Sdl_Accessibility_Action
         status := native.sdl_platform_drain_accessibility_action(platform, &action)
-        if status == .Empty || status == .Closing {return}
-        if status != .Ok {continue}
+        if status == .Empty || status == .Closing {
+            return
+        }
+        if status != .Ok {
+            continue
+        }
         apply_accessibility_action(state, &action)
     }
 }
@@ -675,7 +696,9 @@ accessibility_composite_publication_role :: proc(
 accessibility_publication_role :: proc(
     role: viewmodel.Ui_Node_Role) -> (accessibility.Publication_Role, bool) {
     mapped, supported := accessibility_ordinary_publication_role(role)
-    if supported {return mapped, true}
+    if supported {
+        return mapped, true
+    }
     return accessibility_composite_publication_role(role)
 }
 
@@ -683,13 +706,27 @@ accessibility_publication_role :: proc(
 accessibility_ordinary_publication_actions :: proc(
     actions: viewmodel.Ui_Node_Action_Set) -> accessibility.Publication_Action_Set {
     result: accessibility.Publication_Action_Set
-    if .Focus in actions {result += {.Focus}}
-    if .Activate in actions {result += {.Activate}}
-    if .Toggle in actions {result += {.Toggle}}
-    if .Increment in actions {result += {.Increment}}
-    if .Decrement in actions {result += {.Decrement}}
-    if .Set_To_Bound in actions {result += {.Set_To_Bound}}
-    if .Set_Value in actions {result += {.Set_Value}}
+    if .Focus in actions {
+        result += {.Focus}
+    }
+    if .Activate in actions {
+        result += {.Activate}
+    }
+    if .Toggle in actions {
+        result += {.Toggle}
+    }
+    if .Increment in actions {
+        result += {.Increment}
+    }
+    if .Decrement in actions {
+        result += {.Decrement}
+    }
+    if .Set_To_Bound in actions {
+        result += {.Set_To_Bound}
+    }
+    if .Set_Value in actions {
+        result += {.Set_Value}
+    }
     return result
 }
 
@@ -697,12 +734,24 @@ accessibility_ordinary_publication_actions :: proc(
 accessibility_extended_publication_actions :: proc(
     actions: viewmodel.Ui_Node_Action_Set) -> accessibility.Publication_Action_Set {
     result: accessibility.Publication_Action_Set
-    if .Replace_Selected_Text in actions {result += {.Replace_Selected_Text}}
-    if .Set_Text_Selection in actions {result += {.Set_Text_Selection}}
-    if .Select in actions {result += {.Select}}
-    if .Expand in actions {result += {.Expand}}
-    if .Collapse in actions {result += {.Collapse}}
-    if .Scroll in actions {result += {.Scroll}}
+    if .Replace_Selected_Text in actions {
+        result += {.Replace_Selected_Text}
+    }
+    if .Set_Text_Selection in actions {
+        result += {.Set_Text_Selection}
+    }
+    if .Select in actions {
+        result += {.Select}
+    }
+    if .Expand in actions {
+        result += {.Expand}
+    }
+    if .Collapse in actions {
+        result += {.Collapse}
+    }
+    if .Scroll in actions {
+        result += {.Scroll}
+    }
     return result
 }
 
@@ -773,7 +822,9 @@ publish_accessibility_controls :: proc(
     control_count := 0
     for node in snapshot^.nodes[:snapshot^.node_count] {
         role, supported := accessibility_publication_role(node.role)
-        if !supported || .Visible not_in node.states {continue}
+        if !supported || .Visible not_in node.states {
+            continue
+        }
         if control_count >= len(controls) {
             log.warn("accessibility_control_capacity_exceeded")
             return
@@ -821,7 +872,7 @@ prepare_sdl_frame :: proc(
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
     drain_accessibility_actions(state, ctx.platform)
     controls := ui.prepare_ui_controls(state, routed_frame, ui_geometry.splitters)
-    service_library_search(state, ctx.search_service, frame_dt)
+    service_library_search(state, ctx.catalog_service, frame_dt)
     terminal_frame := terminal_service_update(state, ctx.input_runtime, routed_frame)
     apply_sdl_cursor(state, ctx.platform)
     gif_extents := frame_gif_capture_extents(state, ctx.platform)
@@ -945,7 +996,9 @@ prepare_window_scenario :: proc(
     runtime: ^Scenario_Runtime,
     framebuffer_operations: view_core.Framebuffer_Capture_Operations) ->
         Window_Scenario_Preparation {
-    if len(settings^.scenario_input) == 0 {return {loaded = true}}
+    if len(settings^.scenario_input) == 0 {
+        return {loaded = true}
+    }
     if !scenario_runtime_load_file(runtime, state, settings^.scenario_input) {
         fmt.eprintln("Failed to load semantic scenario: ", settings^.scenario_input)
         log.error("scenario_load_failed")
@@ -966,7 +1019,7 @@ window_frame_context :: proc(
         chalk_audio = display.chalk_audio,
         input_runtime = display.input_runtime,
         presentation = display.presentation,
-        search_service = display.search_service,
+        catalog_service = display.catalog_service,
         scenario_runtime = scenario.runtime,
         capture_sink = scenario.capture_sink,
         framebuffer_operations = framebuffer_operations,
@@ -1065,8 +1118,23 @@ display_loop_context :: proc(
         draw_runtime = draw_runtime,
         input_runtime = input_runtime,
         presentation = session.presentation,
-        search_service = session.search_service,
+        catalog_service = session.catalog_service,
         display_profile = display_profile,
+    }
+}
+
+// run_sdl_platform_session owns draw, input, and Euclid state on one platform.
+admit_optional_draw_pipelines :: proc(
+    runtime: ^native.Sdl_Draw_Runtime, platform: ^native.Sdl_Platform) {
+    if !native.sdl_stroke_runtime_admit(
+        runtime, platform^.device, sdl_stroke_shader_paths(),
+        platform^.sample_count) {
+        log.warn("sdl_stroke_runtime_unavailable")
+    }
+    if !native.sdl_dust_runtime_admit(
+        runtime, platform^.device, sdl_dust_shader_paths(),
+        platform^.sample_count) {
+        log.warn("sdl_dust_runtime_unavailable")
     }
 }
 
@@ -1082,19 +1150,12 @@ run_sdl_platform_session :: proc(
         return 1
     }
     defer native.sdl_draw_runtime_destroy(&draw_runtime, platform^.device)
-    if !native.sdl_stroke_runtime_admit(
-        &draw_runtime, platform^.device, sdl_stroke_shader_paths(),
-        platform^.sample_count) {
-        log.warn("sdl_stroke_runtime_unavailable")
-    }
-    if !native.sdl_dust_runtime_admit(
-        &draw_runtime, platform^.device, sdl_dust_shader_paths(),
-        platform^.sample_count) {
-        log.warn("sdl_dust_runtime_unavailable")
-    }
+    admit_optional_draw_pipelines(&draw_runtime, platform)
 
     input_runtime := input.input_runtime_create(context.allocator)
-    if input_runtime == nil { return 1 }
+    if input_runtime == nil {
+        return 1
+    }
     defer input.input_runtime_destroy(input_runtime, context.allocator)
 
     session, ok := initialize_window_runtime_with_loading(
@@ -1144,16 +1205,24 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
 sdl_font_texture_create :: proc(
     user_data: rawptr, width, height: u32) -> font.Font_Texture {
     owner := cast(^Sdl_Font_Texture_Context)user_data
-    if owner == nil {return {}}
+    if owner == nil {
+        return {}
+    }
     texture := native.sdl_sampled_texture_create(owner.platform, width, height)
-    return {texture.handle, texture.width, texture.height}
+    return {
+        texture.handle,
+        texture.width,
+        texture.height,
+    }
 }
 
 // sdl_font_texture_upload queues one gray-alpha atlas upload.
 sdl_font_texture_upload :: proc(
     user_data: rawptr, request: font.Font_Texture_Upload_Request) -> bool {
     owner := cast(^Sdl_Font_Texture_Context)user_data
-    if owner == nil || owner.runtime == nil {return false}
+    if owner == nil || owner.runtime == nil {
+        return false
+    }
     texture := request.texture
     sampled := native.Sampled_Texture{texture.handle, texture.width, texture.height}
     queued := native.texture_operation_enqueue_upload(
@@ -1166,9 +1235,12 @@ sdl_font_texture_upload :: proc(
             generation = request.generation,
             callback = {
                 native.Texture_Operation_Completion(request.completion),
-                request.completion_data},
+                request.completion_data,
+            },
         })
-    if !queued || !owner.submit_immediately {return queued}
+    if !queued || !owner.submit_immediately {
+        return queued
+    }
     return native.sdl_draw_submit_texture_operations(
         owner.platform, owner.runtime)
 }
@@ -1177,8 +1249,14 @@ sdl_font_texture_upload :: proc(
 sdl_font_texture_release :: proc(
     user_data: rawptr, texture: font.Font_Texture) {
     owner := cast(^Sdl_Font_Texture_Context)user_data
-    if owner == nil {return}
-    sampled := native.Sampled_Texture{texture.handle, texture.width, texture.height}
+    if owner == nil {
+        return
+    }
+    sampled := native.Sampled_Texture{
+        texture.handle,
+        texture.width,
+        texture.height,
+    }
     native.sdl_sampled_texture_release(owner.platform, &sampled)
 }
 
@@ -1211,7 +1289,9 @@ shutdown_window_runtime :: proc(
 // initialize_sdl_font_resources admits required atlases and shaping state.
 initialize_sdl_font_resources :: proc(
     state: ^Euclid_General_State, owner: ^Sdl_Font_Texture_Context) -> bool {
-    if state == nil || owner == nil {return false}
+    if state == nil || owner == nil {
+        return false
+    }
     if !font.cache_init(
         &state^.font_cache, sdl_font_texture_operations(owner)) {
         return false

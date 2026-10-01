@@ -99,9 +99,27 @@ resolve_julia_interface_callbacks :: proc(
     iface^.invoke_with_exception_diagnostics = julialib.jl_get_function(
         main_module, "invoke_with_exception_diagnostics")
     iface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
-    iface^.ensure_animation_loaded = julialib.jl_get_function(
-        main_module, "ensure_animation_loaded")
     iface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
+}
+
+// Prepare Julia callback state without discarding the admitted catalogue registry.
+prepare_julia_interface_content :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface) -> bool {
+    if iface == nil || iface^.catalog_generation == 0 ||
+       iface^.animation_count <= 0 {
+        return false
+    }
+    main_module := resolve_main_module()
+    if main_module == nil {
+        return false
+    }
+    iface^.null_animation = {}
+    iface^.current_animation = &iface^.null_animation
+    iface^.selected_animation = nil
+    iface^.pending_animation_reset = false
+    iface^.animation_reset_cooldown_remaining = 0
+    resolve_julia_interface_callbacks(iface, main_module)
+    return julia_interface_handles_valid(iface)
 }
 
 //   Return the inactive state-owned interface generation slot for staged registration.
@@ -128,7 +146,6 @@ julia_interface_handles_valid :: proc(
     handles := [?]rawptr{
         iface^.invoke_with_exception_diagnostics,
         iface^.init_scripts,
-        iface^.ensure_animation_loaded,
         iface^.global_loop,
     }
     for handle in handles {
@@ -139,19 +156,12 @@ julia_interface_handles_valid :: proc(
     return true
 }
 
-//   Ensure the animation registry arena allocator exists for bridge storage.
-//
-// Parameters:
-//   - state: Global runtime state containing the Julia interface.
-//
-// Returns:
-//   - ok: true when name arena allocator is ready for use.
-ensure_julia_interface_registry_arena :: proc(state: ^core.Euclid_General_State) -> bool {
-    if state == nil || state^.julia_interface == nil {
+//   Ensure one interface generation owns a ready registry arena allocator.
+ensure_julia_interface_instance_registry_arena :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface) -> bool {
+    if iface == nil {
         return false
     }
-
-    iface := state^.julia_interface
     if iface^.animation_registry_arena_initialized {
         return true
     }
@@ -185,6 +195,7 @@ clean_julia_interface_instance :: proc(iface: ^bridgemodel.Euclid_Julia_Interfac
     iface^.animation_lookup_entries = nil
     iface^.animation_lookup_capacity = 0
     iface^.animation_lookup_count = 0
+    iface^.catalog_generation = 0
     iface^.selected_animation = nil
     iface^.current_animation = &iface^.null_animation
 }

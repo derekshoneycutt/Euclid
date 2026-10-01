@@ -95,7 +95,9 @@ Action_Queue :: struct {
 
 // native_id_registry_init reserves the synthetic root ID for one window session.
 native_id_registry_init :: proc(registry: ^Native_Id_Registry) {
-    if registry == nil {return}
+    if registry == nil {
+        return
+    }
     registry^ = {}
     registry^.entries[0] = {
         identity = {domain = .Synthetic, local_id = SYNTHETIC_ROOT_ID},
@@ -140,7 +142,9 @@ native_id_resolve :: proc(
 // native_id_lookup resolves one active native ID back to its qualified identity.
 native_id_lookup :: proc(
     registry: ^Native_Id_Registry, native_id: u64) -> (Qualified_Identity, bool) {
-    if registry == nil || native_id == 0 {return {}, false}
+    if registry == nil || native_id == 0 {
+        return {}, false
+    }
     for index in 0..<registry^.count {
         entry := registry^.entries[index]
         if entry.native_id == native_id && entry.active {
@@ -152,10 +156,14 @@ native_id_lookup :: proc(
 
 // native_id_retire invalidates one mapping without making its ID reusable.
 native_id_retire :: proc(registry: ^Native_Id_Registry, native_id: u64) -> bool {
-    if registry == nil || native_id == SYNTHETIC_NATIVE_ID {return false}
+    if registry == nil || native_id == SYNTHETIC_NATIVE_ID {
+        return false
+    }
     for index in 0..<registry^.count {
         entry := &registry^.entries[index]
-        if entry^.native_id != native_id || !entry^.active {continue}
+        if entry^.native_id != native_id || !entry^.active {
+            continue
+        }
         entry^.active = false
         registry^.active_count -= 1
         registry^.diagnostics.retired += 1
@@ -196,10 +204,14 @@ action_queue_push :: proc(
 
 // action_queue_pop removes one copied request at the display-thread boundary.
 action_queue_pop :: proc(queue: ^Action_Queue, destination: ^Queued_Action) -> bool {
-    if queue == nil || destination == nil {return false}
+    if queue == nil || destination == nil {
+        return false
+    }
     sync.mutex_lock(&queue^.mutex)
     defer sync.mutex_unlock(&queue^.mutex)
-    if queue^.count == 0 {return false}
+    if queue^.count == 0 {
+        return false
+    }
     destination^ = queue^.entries[queue^.read_index]
     queue^.entries[queue^.read_index] = {}
     queue^.read_index = (queue^.read_index + 1) % len(queue^.entries)
@@ -210,7 +222,9 @@ action_queue_pop :: proc(queue: ^Action_Queue, destination: ^Queued_Action) -> b
 
 // action_queue_close rejects new callbacks while preserving accepted drainable work.
 action_queue_close :: proc(queue: ^Action_Queue) {
-    if queue == nil {return}
+    if queue == nil {
+        return
+    }
     sync.mutex_lock(&queue^.mutex)
     queue^.closing = true
     sync.mutex_unlock(&queue^.mutex)
@@ -219,7 +233,9 @@ action_queue_close :: proc(queue: ^Action_Queue) {
 // action_queue_diagnostics_snapshot returns synchronized queue pressure counters.
 action_queue_diagnostics_snapshot :: proc(
     queue: ^Action_Queue) -> Action_Queue_Diagnostics {
-    if queue == nil {return {}}
+    if queue == nil {
+        return {}
+    }
     sync.mutex_lock(&queue^.mutex)
     defer sync.mutex_unlock(&queue^.mutex)
     return queue^.diagnostics

@@ -415,7 +415,9 @@ shape_get_arc :: proc "c" (
         return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
     }
     arc, found := shapemodel.shape_component_get(source.arcs, source.registry, entity)
-    if !found {return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}}
+    if !found {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
     return {BRIDGE_STATUS_OK, packed,
         {arc.radius, arc.start_theta, arc.sweep_theta}}
 }
@@ -433,7 +435,9 @@ shape_get_trochoid :: proc "c" (
     }
     value, found := shapemodel.shape_component_get(
         source.trochoids, source.registry, entity)
-    if !found {return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}}
+    if !found {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
     return {BRIDGE_STATUS_OK, packed, {i32(value.mode), value.fixed_radius,
         value.rolling_radius, value.tracer_distance, value.tracer_phase, value.rotation,
         value.parameter_start, value.parameter_finish, value.draw_parameter}}
@@ -473,12 +477,18 @@ shape_set_position :: proc "c" (
     if command != nil {
         command.position = position
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     transform, has_transform := shapemodel.shape_component_get_mut(
         &state.shape_world.transforms, &state.shape_world.registry, entity)
-    if !has_transform {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_transform {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     transform.position = position
     return BRIDGE_STATUS_OK
 }
@@ -499,16 +509,35 @@ shape_set_arc :: proc "c" (
     if command != nil {
         command.arc = value
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current, has_arc := shapemodel.shape_component_get_mut(
         &state.shape_world.arcs, &state.shape_world.registry, entity)
-    if !has_arc {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_arc {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current.radius = value.radius
     current.start_theta = value.start_theta
     current.sweep_theta = value.sweep_theta
     return BRIDGE_STATUS_OK
+}
+
+// Restore the previous interpolation sample after replacing trochoid values.
+bridge_trochoid_preserve_previous :: proc(
+    current: ^shapemodel.Shape_Trochoid, previous: shapemodel.Shape_Trochoid) {
+    current^.previous_fixed_radius = previous.previous_fixed_radius
+    current^.previous_rolling_radius = previous.previous_rolling_radius
+    current^.previous_tracer_distance = previous.previous_tracer_distance
+    current^.previous_tracer_phase = previous.previous_tracer_phase
+    current^.previous_rotation = previous.previous_rotation
+    current^.previous_parameter_start = previous.previous_parameter_start
+    current^.previous_parameter_finish = previous.previous_parameter_finish
+    current^.previous_draw_parameter = previous.previous_draw_parameter
 }
 
 // Set one live trochoid's complete mutable description.
@@ -523,13 +552,21 @@ shape_set_trochoid :: proc "c" (
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     command, captured := capture_shape_command(state, .Set_Shape_Trochoid, packed)
-    if command != nil {command.trochoid = value}
-    if captured {return BRIDGE_STATUS_OK}
+    if command != nil {
+        command.trochoid = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current, has_value := shapemodel.shape_component_get_mut(
         &state.shape_world.trochoids, &state.shape_world.registry, entity)
-    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_value {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     style, has_style := shapemodel.shape_component_get(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
     if !has_style || current.mode != value.mode && style.visible {
@@ -537,14 +574,7 @@ shape_set_trochoid :: proc "c" (
     }
     previous := current^
     current^ = value
-    current.previous_fixed_radius = previous.previous_fixed_radius
-    current.previous_rolling_radius = previous.previous_rolling_radius
-    current.previous_tracer_distance = previous.previous_tracer_distance
-    current.previous_tracer_phase = previous.previous_tracer_phase
-    current.previous_rotation = previous.previous_rotation
-    current.previous_parameter_start = previous.previous_parameter_start
-    current.previous_parameter_finish = previous.previous_parameter_finish
-    current.previous_draw_parameter = previous.previous_draw_parameter
+    bridge_trochoid_preserve_previous(current, previous)
     return BRIDGE_STATUS_OK
 }
 
@@ -560,10 +590,16 @@ shape_set_trochoid_frontier :: proc "c" (
     }
     command, captured := capture_shape_command(
         state, .Set_Shape_Trochoid_Frontier, packed)
-    if command != nil {command.scalar = frontier}
-    if captured {return BRIDGE_STATUS_OK}
+    if command != nil {
+        command.scalar = frontier
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current, has_value := shapemodel.shape_component_get_mut(
         &state.shape_world.trochoids, &state.shape_world.registry, entity)
     if !has_value || !shapemodel.shape_parameter_is_in_directed_domain(
@@ -572,6 +608,17 @@ shape_set_trochoid_frontier :: proc "c" (
     }
     current.draw_parameter = frontier
     return BRIDGE_STATUS_OK
+}
+
+// Restore the previous interpolation sample after replacing cycloid values.
+bridge_cycloid_preserve_previous :: proc(
+    current: ^shapemodel.Shape_Cycloid, previous: shapemodel.Shape_Cycloid) {
+    current^.previous_rolling_radius = previous.previous_rolling_radius
+    current^.previous_tracer_distance = previous.previous_tracer_distance
+    current^.previous_tracer_phase = previous.previous_tracer_phase
+    current^.previous_parameter_start = previous.previous_parameter_start
+    current^.previous_parameter_finish = previous.previous_parameter_finish
+    current^.previous_draw_parameter = previous.previous_draw_parameter
 }
 
 // Set one live cycloid's complete scalar description against its immutable rail.
@@ -594,19 +641,20 @@ shape_set_cycloid :: proc "c" (
         return BRIDGE_STATUS_INVALID_ARGUMENT
     }
     command, captured := capture_shape_command(state, .Set_Shape_Cycloid, packed)
-    if command != nil {command.cycloid = value}
-    if captured {return BRIDGE_STATUS_OK}
+    if command != nil {
+        command.cycloid = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     current, has_value := shapemodel.shape_component_get_mut(
         &state.shape_world.cycloids, &state.shape_world.registry, entity)
-    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_value {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     previous := current^
     current^ = value
-    current.previous_rolling_radius = previous.previous_rolling_radius
-    current.previous_tracer_distance = previous.previous_tracer_distance
-    current.previous_tracer_phase = previous.previous_tracer_phase
-    current.previous_parameter_start = previous.previous_parameter_start
-    current.previous_parameter_finish = previous.previous_parameter_finish
-    current.previous_draw_parameter = previous.previous_draw_parameter
+    bridge_cycloid_preserve_previous(current, previous)
     return BRIDGE_STATUS_OK
 }
 
@@ -622,10 +670,16 @@ shape_set_cycloid_frontier :: proc "c" (
     }
     command, captured := capture_shape_command(
         state, .Set_Shape_Cycloid_Frontier, packed)
-    if command != nil {command.scalar = frontier}
-    if captured {return BRIDGE_STATUS_OK}
+    if command != nil {
+        command.scalar = frontier
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current, has_value := shapemodel.shape_component_get_mut(
         &state.shape_world.cycloids, &state.shape_world.registry, entity)
     if !has_value || !shapemodel.shape_parameter_is_in_directed_domain(
@@ -643,10 +697,14 @@ shape_set_visible_local :: proc(
     visible: u8,
     kick_dust: bool) -> (i32, bool) {
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND, false}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND, false
+    }
     style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
-    if !has_style {return BRIDGE_STATUS_NOT_FOUND, false}
+    if !has_style {
+        return BRIDGE_STATUS_NOT_FOUND, false
+    }
     target_visible := visible != 0
     emitted := false
     if style^.visible && !target_visible {
@@ -671,7 +729,9 @@ shape_set_visible :: proc "c" (
     if command != nil {
         command.flag = visible != 0
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     status, _ := shape_set_visible_local(state, packed, visible, true)
     return status
 }
@@ -687,12 +747,18 @@ shape_set_color :: proc "c" (
     if command != nil {
         command.color = color
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
-    if !has_style {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_style {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     style.color = {color.r, color.g, color.b, color.a}
     return BRIDGE_STATUS_OK
 }
@@ -709,12 +775,18 @@ shape_set_active_color :: proc "c" (
     if command != nil {
         command.color = color
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
-    if !has_style {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_style {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     style.active_color = color
     return BRIDGE_STATUS_OK
 }
@@ -726,17 +798,25 @@ shape_set_brush_size :: proc "c" (
     packed: u64,
     brush_size: f32) -> i32 {
     context = state.saved_context
-    if brush_size < 0 {return BRIDGE_STATUS_INVALID_ARGUMENT}
+    if brush_size < 0 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
     command, captured := capture_shape_command(state, .Set_Shape_Brush, packed)
     if command != nil {
         command.scalar = brush_size
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     style, has_style := shapemodel.shape_component_get_mut(
         &state.shape_world.render_styles, &state.shape_world.registry, entity)
-    if !has_style {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_style {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     style.brush_size = brush_size
     return BRIDGE_STATUS_OK
 }
@@ -752,12 +832,18 @@ shape_set_active_feature :: proc "c" (
     if command != nil {
         command.integer = int(active_feature)
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     feature, has_feature := shapemodel.shape_component_get_mut(
         &state.shape_world.active_features, &state.shape_world.registry, entity)
-    if !has_feature {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_feature {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     feature.index = active_feature
     return BRIDGE_STATUS_OK
 }

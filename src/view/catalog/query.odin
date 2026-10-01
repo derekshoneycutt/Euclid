@@ -1,4 +1,4 @@
-package search
+package catalog
 
 import "core:unicode/utf8"
 
@@ -56,7 +56,9 @@ search_ascii_is_token_byte :: proc(value: u8) -> bool {
 // Append one byte to a bounded item, reporting saturation without partial overflow.
 search_item_append_byte :: proc(item: ^Search_Query_Item, value: u8) -> bool {
     count := int(item.text_length)
-    if count >= len(item.text) {return false}
+    if count >= len(item.text) {
+        return false
+    }
     item.text[count] = value
     item.text_length += 1
     return true
@@ -65,7 +67,9 @@ search_item_append_byte :: proc(item: ^Search_Query_Item, value: u8) -> bool {
 // Add one canonical separator between tokenizer-visible runs.
 search_item_append_separator :: proc(item: ^Search_Query_Item) -> bool {
     count := int(item.text_length)
-    if count == 0 || item.text[count - 1] == ' ' {return true}
+    if count == 0 || item.text[count - 1] == ' ' {
+        return true
+    }
     return search_item_append_byte(item, ' ')
 }
 
@@ -74,7 +78,9 @@ search_normalize_item :: proc(source: string, item: ^Search_Query_Item) -> bool 
     offset := 0
     for offset < len(source) {
         _, width := utf8.decode_rune(source[offset:])
-        if width <= 0 {return false}
+        if width <= 0 {
+            return false
+        }
         first := source[offset]
         if first >= 0x80 || search_ascii_is_token_byte(first) {
             for byte_index in 0..<width {
@@ -124,7 +130,9 @@ search_query_item_is_positive :: proc(kind: Search_Query_Item_Kind) -> bool {
 search_query_add_item :: proc(
     parsed: ^Search_Parsed_Query, kind: Search_Query_Item_Kind,
     source: string) -> Search_Query_Parse_Status {
-    if int(parsed.item_count) >= len(parsed.items) {return .Too_Many_Items}
+    if int(parsed.item_count) >= len(parsed.items) {
+        return .Too_Many_Items
+    }
     item := &parsed.items[parsed.item_count]
     item.kind = kind
     if !search_normalize_item(source, item) {
@@ -134,6 +142,24 @@ search_query_add_item :: proc(
         return .Empty_Item
     }
     parsed.item_count += 1
+    return .Success
+}
+
+// Scan one quoted or bare query item and report unmatched quotes.
+search_query_scan_item :: proc(
+    source: string, cursor: ^int, quoted: bool) -> Search_Query_Parse_Status {
+    if quoted {
+        for cursor^ < len(source) && source[cursor^] != '"' {
+           cursor^ += 1
+        }
+        if cursor^ >= len(source) {
+           return .Unmatched_Quote
+        }
+    } else {
+        for cursor^ < len(source) && !search_query_is_space(source[cursor^]) {
+            cursor^ += 1
+        }
+    }
     return .Success
 }
 
@@ -150,20 +176,22 @@ search_query_parse_item :: proc(
         }
     }
     quoted := source[cursor^] == '"'
-    if quoted {cursor^ += 1}
-    start := cursor^
     if quoted {
-        for cursor^ < len(source) && source[cursor^] != '"' {cursor^ += 1}
-        if cursor^ >= len(source) {return .Unmatched_Quote}
-    } else {
-        for cursor^ < len(source) && !search_query_is_space(source[cursor^]) {
-            cursor^ += 1
-        }
+        cursor^ += 1
+    }
+    start := cursor^
+    scan_status := search_query_scan_item(source, cursor, quoted)
+    if scan_status != .Success {
+        return scan_status
     }
     kind: Search_Query_Item_Kind = negative ? .Negative_Term : .Positive_Term
-    if quoted {kind = negative ? .Negative_Phrase : .Positive_Phrase}
+    if quoted {
+        kind = negative ? .Negative_Phrase : .Positive_Phrase
+    }
     status := search_query_add_item(parsed, kind, source[start:cursor^])
-    if quoted {cursor^ += 1}
+    if quoted {
+        cursor^ += 1
+    }
     return status
 }
 
@@ -171,28 +199,46 @@ search_query_parse_item :: proc(
 search_query_parse :: proc(
     source: string, parsed: ^Search_Parsed_Query) -> Search_Query_Parse_Status {
     parsed^ = {}
-    if len(source) > SEARCH_QUERY_BYTE_CAPACITY {return .Source_Too_Long}
-    if !utf8.valid_string(source) {return .Invalid_Utf8}
-    if search_query_has_unsupported_control(source) {return .Unsupported_Control}
+    if len(source) > SEARCH_QUERY_BYTE_CAPACITY {
+        return .Source_Too_Long
+    }
+    if !utf8.valid_string(source) {
+        return .Invalid_Utf8
+    }
+    if search_query_has_unsupported_control(source) {
+        return .Unsupported_Control
+    }
     cursor := 0
     positive_count := 0
     for cursor < len(source) {
         search_query_skip_space(source, &cursor)
-        if cursor >= len(source) {break}
+        if cursor >= len(source) {
+            break
+        }
         status := search_query_parse_item(source, &cursor, parsed)
-        if status != .Success {return status}
+        if status != .Success {
+            return status
+        }
         kind := parsed.items[parsed.item_count - 1].kind
-        if search_query_item_is_positive(kind) {positive_count += 1}
+        if search_query_item_is_positive(kind) {
+            positive_count += 1
+        }
     }
-    if parsed.item_count == 0 {return .Empty}
-    if positive_count == 0 {return .No_Positive_Item}
+    if parsed.item_count == 0 {
+        return .Empty
+    }
+    if positive_count == 0 {
+        return .No_Positive_Item
+    }
     return .Success
 }
 
 // Append fixed compiler-owned syntax to the MATCH output.
 search_match_append :: proc(output: ^Search_Compiled_Query, value: string) -> bool {
     count := int(output.byte_count)
-    if len(value) > len(output.bytes) - count {return false}
+    if len(value) > len(output.bytes) - count {
+        return false
+    }
     copy(output.bytes[count:], transmute([]u8)value)
     output.byte_count += u16(len(value))
     return true
@@ -202,7 +248,9 @@ search_match_append :: proc(output: ^Search_Compiled_Query, value: string) -> bo
 search_compile_item :: proc(
     output: ^Search_Compiled_Query, item: ^Search_Query_Item,
     prefix: bool) -> bool {
-    if !search_match_append(output, "\"") {return false}
+    if !search_match_append(output, "\"") {
+        return false
+    }
     text := string(item.text[:item.text_length])
     if !search_match_append(output, text) || !search_match_append(output, "\"") {
         return false
@@ -216,7 +264,9 @@ search_parsed_query_compile :: proc(
     result := Search_Compiled_Query{status = .Success, parsed = parsed}
     positive_written := 0
     for &item, index in result.parsed.items[:result.parsed.item_count] {
-        if item.kind == .Negative_Term || item.kind == .Negative_Phrase {continue}
+        if item.kind == .Negative_Term || item.kind == .Negative_Phrase {
+            continue
+        }
         if positive_written > 0 && !search_match_append(&result, " AND ") {
             result.status = .Match_Too_Long
             return result
@@ -230,7 +280,9 @@ search_parsed_query_compile :: proc(
         positive_written += 1
     }
     for &item in result.parsed.items[:result.parsed.item_count] {
-        if item.kind != .Negative_Term && item.kind != .Negative_Phrase {continue}
+        if item.kind != .Negative_Term && item.kind != .Negative_Phrase {
+            continue
+        }
         if !search_match_append(&result, " NOT ") ||
            !search_compile_item(&result, &item, false) {
             result.status = .Match_Too_Long
@@ -244,7 +296,9 @@ search_parsed_query_compile :: proc(
 search_query_compile :: proc(source: string) -> Search_Compiled_Query {
     parsed: Search_Parsed_Query
     status := search_query_parse(source, &parsed)
-    if status != .Success {return {status = status, parsed = parsed}}
+    if status != .Success {
+        return {status = status, parsed = parsed}
+    }
     return search_parsed_query_compile(parsed)
 }
 

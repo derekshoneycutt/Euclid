@@ -219,7 +219,9 @@ draw_cache_item_depth_and_flatness :: proc(
     item: ^Shapes_Draw_Cache_Item) -> (f32, bool) {
 
     instrument := draw_cache_instrument_depth_and_flatness(item)
-    if instrument.handled {return instrument.depth, instrument.flat}
+    if instrument.handled {
+       return instrument.depth, instrument.flat
+    }
     switch &typed in item {
     case Shapes_Label_Draw:
         return draw_cache_visual_depth(typed.point1),

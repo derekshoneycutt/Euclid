@@ -8,56 +8,25 @@ function invoke_with_exception_diagnostics(callback, arguments...)
     end
 end
 
-"""Register metadata and eager entries from one explicit content generation."""
-function register_euclid_generation(
+"""Install null-animation behavior for one explicit content generation."""
+function initialize_euclid_generation(
     host::EuclidRuntimeHost,
     generation::EuclidRuntimeGeneration,
     state_ptr::Ptr{Cvoid})
 
     state_ptr == host.state_ptr || throw(ArgumentError("state_ptr does not match host"))
-    registration_started = time_ns()
     OdinJuliaBridge.set_null_animations(
         state_ptr,
         Base.invokelatest(
             getfield, generation.null_animation, :animation_entry))
-
-    register_catalog = Base.invokelatest(
-        getfield, generation.animation_catalog, :register_animation_catalog)
-    Base.invokelatest(
-        register_catalog, state_ptr, host.terminal_animation_callback)
-    println("Julia startup: content registration completed in ",
-        round((time_ns() - registration_started) / 1_000_000; digits=2), " ms")
     return true
 end
 
 """Register the active host generation and prime stable startup services."""
 function init_euclid_scripts(host::EuclidRuntimeHost, state_ptr::Ptr{Cvoid})
     generation = active_euclid_runtime_generation(host)
-    register_euclid_generation(host, generation, state_ptr)
+    initialize_euclid_generation(host, generation, state_ptr)
     return true
-end
-
-"""Load and bind one catalog implementation selected by permanent UUID."""
-function ensure_animation_loaded(
-    host::EuclidRuntimeHost, state_ptr::Ptr{Cvoid},
-    stable_id::AbstractString)::Bool
-
-    id = UUID(String(stable_id))
-    generation = active_euclid_runtime_generation(host)
-    implementation = load_generation_animation(generation, id)
-    return OdinJuliaBridge.bind_animation_entry(
-        state_ptr, implementation.entry, string(id)) == 1
-end
-
-"""Load and bind one animation from an explicit uncommitted generation."""
-function ensure_generation_animation_loaded(
-    generation::EuclidRuntimeGeneration, state_ptr::Ptr{Cvoid},
-    stable_id::AbstractString)::Bool
-
-    id = UUID(String(stable_id))
-    implementation = load_generation_animation(generation, id)
-    return OdinJuliaBridge.bind_animation_entry(
-        state_ptr, implementation.entry, string(id)) == 1
 end
 
 """Invoke one scenario owned by the host's committed content generation."""

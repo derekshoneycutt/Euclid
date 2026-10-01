@@ -270,9 +270,13 @@ graphics_parser_mutation_request_has_capacity :: proc(
 // Retain one Kitty store mutation and assign its nonzero stream sequence.
 graphics_parser_queue_mutation_request :: proc(
     state: ^Graphics_Parser_State, request: Kitty_Mutation_Request) -> (u64, bool) {
-    if !graphics_parser_mutation_request_has_capacity(state) { return 0, false }
+    if !graphics_parser_mutation_request_has_capacity(state) {
+        return 0, false 
+    }
     state.kitty_mutation_sequence += 1
-    if state.kitty_mutation_sequence == 0 { state.kitty_mutation_sequence = 1 }
+    if state.kitty_mutation_sequence == 0 {
+        state.kitty_mutation_sequence = 1 
+    }
     candidate := request
     candidate.sequence = state.kitty_mutation_sequence
     state.kitty_mutation_requests[state.kitty_mutation_request_count] = candidate
@@ -284,7 +288,9 @@ graphics_parser_queue_mutation_request :: proc(
 graphics_parser_mark_mutation_ready :: proc(
     state: ^Graphics_Parser_State, sequence: u64,
     temporary_attachment_id: termattachment.Attachment_Id) -> bool {
-    if state == nil || sequence == 0 { return false }
+    if state == nil || sequence == 0 {
+        return false 
+    }
     for &request in state.kitty_mutation_requests[:state.kitty_mutation_request_count] {
         if request.sequence == sequence &&
             request.temporary_attachment_id == temporary_attachment_id {
@@ -315,10 +321,14 @@ graphics_parser_take_mutation_request :: proc(
 // Cancel one retained mutation and release its direct or temporary input ownership.
 graphics_parser_cancel_mutation_request :: proc(
     state: ^Graphics_Parser_State, sequence: u64) -> bool {
-    if state == nil || sequence == 0 { return false }
+    if state == nil || sequence == 0 {
+        return false 
+    }
     for index in 0..<state.kitty_mutation_request_count {
         request := state.kitty_mutation_requests[index]
-        if request.sequence != sequence { continue }
+        if request.sequence != sequence {
+            continue 
+        }
         if state.store != nil && request.transfer_id.generation != 0 {
             termattachment.transfer_remove(state.store, request.transfer_id)
         }
@@ -369,7 +379,9 @@ graphics_parser_queue_animation_command :: proc(
 // Remove and return the oldest retained Kitty animation effect.
 graphics_parser_take_animation_command :: proc(
     state: ^Graphics_Parser_State) -> (Kitty_Animation_Command, bool) {
-    if state == nil || state.kitty_animation_command_count == 0 { return {}, false }
+    if state == nil || state.kitty_animation_command_count == 0 {
+        return {}, false 
+    }
     command := state.kitty_animation_commands[0]
     for index in 1..<state.kitty_animation_command_count {
         state.kitty_animation_commands[index - 1] =
@@ -534,11 +546,21 @@ graphics_parser_append_header :: proc(
 
 // Decode one standard Base64 alphabet byte into its six-bit value.
 graphics_base64_value :: proc(byte: u8) -> (u8, bool) {
-    if byte >= 'A' && byte <= 'Z' { return byte - 'A', true }
-    if byte >= 'a' && byte <= 'z' { return byte - 'a' + 26, true }
-    if byte >= '0' && byte <= '9' { return byte - '0' + 52, true }
-    if byte == '+' { return 62, true }
-    if byte == '/' { return 63, true }
+    if byte >= 'A' && byte <= 'Z' {
+        return byte - 'A', true 
+    }
+    if byte >= 'a' && byte <= 'z' {
+        return byte - 'a' + 26, true 
+    }
+    if byte >= '0' && byte <= '9' {
+        return byte - '0' + 52, true 
+    }
+    if byte == '+' {
+        return 62, true 
+    }
+    if byte == '/' {
+        return 63, true 
+    }
     return 0, false
 }
 
@@ -546,8 +568,12 @@ graphics_base64_value :: proc(byte: u8) -> (u8, bool) {
 graphics_decode_base64_quantum :: proc(
     quantum: [4]u8) -> (Graphics_Base64_Quantum, bool) {
     padding := 0
-    if quantum[3] == '=' { padding += 1 }
-    if quantum[2] == '=' { padding += 1 }
+    if quantum[3] == '=' {
+        padding += 1 
+    }
+    if quantum[2] == '=' {
+        padding += 1 
+    }
     first, first_ok := graphics_base64_value(quantum[0])
     second, second_ok := graphics_base64_value(quantum[1])
     third, third_ok := graphics_base64_value(quantum[2])
@@ -806,7 +832,9 @@ graphics_parser_peek_kitty_response :: proc(
 
 // Remove the oldest Kitty graphics response after delivery or stale rejection.
 graphics_parser_pop_kitty_response :: proc(state: ^Graphics_Parser_State) -> bool {
-    if state == nil || state.kitty_response_count == 0 { return false }
+    if state == nil || state.kitty_response_count == 0 {
+        return false 
+    }
     for index in 1..<state.kitty_response_count {
         state.kitty_responses[index - 1] = state.kitty_responses[index]
     }

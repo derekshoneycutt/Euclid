@@ -206,7 +206,9 @@ ui_save_layout_section :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
 ui_transition_layout :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     destination: viewmodel.Ui_Layout_Mode) -> bool {
-    if destination == runtime^.current_layout_mode { return false }
+    if destination == runtime^.current_layout_mode {
+        return false
+    }
     ui_save_layout_section(runtime)
     ui_release_geometry_capture(runtime)
     runtime^.current_layout_mode = destination
@@ -363,7 +365,9 @@ draw_encoded_accordion_headers :: proc(
         header := layout.headers[index]
         expanded := sections.items[index].section == active
         fill := BACKGROUND_COLOR
-        if expanded {fill = UI_COMPONENT_BACKGROUND_COLOR}
+        if expanded {
+            fill = UI_COMPONENT_BACKGROUND_COLOR
+        }
         _ = native.draw_encoder_rectangle(
             encoder, geometry.Rectangle(header), fill)
         _ = native.draw_encoder_rectangle_outline(
@@ -398,7 +402,9 @@ draw_encoded_accordion_geometry :: proc(
 draw_encoded_label :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     text: string, x, y: f32) {
-    if len(text) == 0 {return}
+    if len(text) == 0 {
+        return
+    }
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     _ = view_core.ui_text_shaped({
         encoder = encoder,
@@ -457,7 +463,9 @@ draw_encoded_focus_outline :: proc(
         semantic^.focus_origin != .Keyboard {return}
     snapshot := semantic_snapshot(semantic)
     index := semantic_node_index(snapshot, semantic^.logical_focus)
-    if index < 0 || .Focus_Visible not_in snapshot^.nodes[index].states {return}
+    if index < 0 || .Focus_Visible not_in snapshot^.nodes[index].states {
+        return
+    }
     node := snapshot^.nodes[index]
     _ = native.draw_encoder_push_scissor(encoder, node.clip_bounds)
     _ = native.draw_encoder_rectangle_outline(
@@ -575,7 +583,9 @@ prepare_ui_controls :: proc(
 
 // finish_ui_semantics atomically publishes all geometry and layout registrations.
 finish_ui_semantics :: proc(state: ^core.Euclid_General_State) {
-    if state == nil {return}
+    if state == nil {
+        return
+    }
     _ = semantic_publish(state^.ui_runtime.semantic_focus)
 }
 
@@ -600,7 +610,9 @@ prepare_ui_layout_interaction :: proc(
     }
     if is_terminal_selected(state) {
         bounds := terminal_content_panel(state^.ui_runtime.ui_regions.text_rect)
-        if terminal.available {bounds = terminal.bounds}
+        if terminal.available {
+            bounds = terminal.bounds
+        }
         register_terminal_semantics(state, bounds, terminal.scroll)
         return {}
     }
@@ -610,7 +622,9 @@ prepare_ui_layout_interaction :: proc(
         routed.pointer ? input.Input_Pointer_Fields{
             .Screen_Position, .Motion, .Press_Edges, .Release_Edges, .Levels,
             .Wheel} : input.Input_Pointer_Fields{.Screen_Position})
-    if !routed.wheel { presentation_frame.mouse_wheel_delta = 0 }
+    if !routed.wheel {
+        presentation_frame.mouse_wheel_delta = 0
+    }
     return {presentation = prepare_presentation_interaction(state,
         state^.ui_runtime.ui_regions.text_rect, presentation_frame,
         routed.keyboard)}

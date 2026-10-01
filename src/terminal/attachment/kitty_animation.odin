@@ -10,6 +10,14 @@ Kitty_Animation_Allocation :: struct {
     valid: bool,
 }
 
+// Bounds and selection policy for compaction after deleting animation frames.
+Kitty_Frame_Compaction :: struct {
+    old_frame_count: int,
+    canvas_byte_count: int,
+    remove_index: int,
+    all: bool,
+}
+
 // Validated indexes and geometry for one transactional Kitty frame mutation.
 Kitty_Frame_Plan :: struct {
     canvas_byte_count: int,
@@ -48,13 +56,21 @@ kitty_animation_allocate :: proc(
     }
     pixel_byte_count := frame_count * canvas_byte_count
     descriptor_byte_count := frame_count * int(size_of(Animation_Frame))
-    if pixel_byte_count > max(int) - descriptor_byte_count { return {} }
+    if pixel_byte_count > max(int) - descriptor_byte_count {
+        return {} 
+    }
     byte_count := pixel_byte_count + descriptor_byte_count
-    if byte_count > store.limits.cpu_byte_limit { return {} }
+    if byte_count > store.limits.cpu_byte_limit {
+        return {} 
+    }
     if store.cpu_byte_count - entry.cpu_byte_count + byte_count >
-        store.limits.cpu_byte_limit { return {} }
+        store.limits.cpu_byte_limit {
+        return {}
+    }
     pixels, pixels_error := make([]u8, pixel_byte_count, store.payload_allocator)
-    if pixels_error != nil { return {} }
+    if pixels_error != nil {
+        return {} 
+    }
     frames, frames_error := make(
         []Animation_Frame, frame_count, store.payload_allocator)
     if frames_error != nil {
@@ -67,7 +83,9 @@ kitty_animation_allocate :: proc(
 // Copy one static RGB/RGBA root into a full-canvas RGBA destination.
 kitty_animation_copy_root :: proc(destination: []u8, entry: ^Attachment_Entry) -> bool {
     canvas_byte_count, valid := kitty_animation_canvas_byte_count(entry)
-    if !valid || len(destination) != canvas_byte_count { return false }
+    if !valid || len(destination) != canvas_byte_count {
+        return false 
+    }
     width := entry.metadata.metrics.width
     height := entry.metadata.metrics.height
     bytes_per_pixel := 3 if entry.payload_format == .Rgb8 else 4
@@ -185,8 +203,12 @@ kitty_animation_apply_patch :: proc(
 
 // Convert a Kitty frame gap to a retained duration, preserving gapless negatives.
 kitty_animation_duration :: proc(mutation: Kitty_Frame_Mutation) -> (u64, bool) {
-    if !mutation.gap_specified { return KITTY_DEFAULT_FRAME_DURATION_NS, true }
-    if mutation.gap_ms < 0 { return 0, true }
+    if !mutation.gap_specified {
+        return KITTY_DEFAULT_FRAME_DURATION_NS, true 
+    }
+    if mutation.gap_ms < 0 {
+        return 0, true 
+    }
     converted := u64(mutation.gap_ms) * 1_000_000
     return converted, converted > 0
 }
@@ -279,7 +301,9 @@ kitty_animation_build_replacement :: proc(
     (Kitty_Animation_Allocation, Animation_Mutation_Outcome) {
     allocation := kitty_animation_allocate(
         store, entry, plan.frame_count, plan.canvas_byte_count)
-    if !allocation.valid { return {}, .Capacity_Exceeded }
+    if !allocation.valid {
+        return {}, .Capacity_Exceeded 
+    }
     if !kitty_animation_copy_existing(
         &allocation, entry, plan.old_frame_count, plan.canvas_byte_count) {
         kitty_animation_release(store, allocation)
@@ -319,7 +343,9 @@ kitty_animation_commit :: proc(
     entry.cpu_byte_count = allocation.byte_count
     entry.last_used = store_next_sequence(store)
     store.cpu_byte_count += allocation.byte_count
-    if !was_animated { store.animated_attachment_count += 1 }
+    if !was_animated {
+        store.animated_attachment_count += 1 
+    }
 }
 
 // Create or edit one Kitty frame through a complete transactional storage swap.
@@ -331,10 +357,14 @@ kitty_animation_mutate_frame :: proc(
         return .Stale
     }
     plan := kitty_animation_frame_plan(store, entry, mutation)
-    if !plan.valid { return .Invalid }
+    if !plan.valid {
+        return .Invalid 
+    }
     allocation, preparation_outcome := kitty_animation_build_replacement(
         store, entry, mutation, plan)
-    if preparation_outcome != .Found { return preparation_outcome }
+    if preparation_outcome != .Found {
+        return preparation_outcome 
+    }
     cycle_duration_ns, cycle_valid := kitty_animation_cycle_duration(
         store, allocation.frames)
     if !cycle_valid {
@@ -375,6 +405,20 @@ kitty_animation_apply_composition :: proc(
 }
 
 // Atomically compose one checked source-frame rectangle into a destination frame.
+kitty_animation_copy_composition_base :: proc(
+    store: ^Store, entry: ^Attachment_Entry,
+    allocation: ^Kitty_Animation_Allocation,
+    frame_count, canvas_byte_count: int) -> bool {
+    if kitty_animation_copy_existing(
+        allocation, entry, frame_count, canvas_byte_count) {
+        return true
+    }
+    delete(allocation^.frames, store.payload_allocator)
+    delete(allocation^.pixels, store.payload_allocator)
+    return false
+}
+
+// Atomically compose one checked source-frame rectangle into a destination frame.
 kitty_animation_composition_valid :: proc(
     composition: Kitty_Frame_Composition, width, height: int) -> bool {
     return composition.width > 0 && composition.height > 0 &&
@@ -402,17 +446,19 @@ kitty_animation_compose :: proc(
         composition.destination_frame, frame_count)
     width := entry.metadata.metrics.width
     height := entry.metadata.metrics.height
-    if !valid || !source_valid || !destination_valid { return .Not_Found }
+    if !valid || !source_valid || !destination_valid {
+        return .Not_Found 
+    }
     if !kitty_animation_composition_valid(composition, width, height) {
         return .Invalid
     }
     allocation := kitty_animation_allocate(
         store, entry, frame_count, canvas_byte_count)
-    if !allocation.valid { return .Capacity_Exceeded }
-    if !kitty_animation_copy_existing(
-        &allocation, entry, frame_count, canvas_byte_count) {
-        delete(allocation.frames, store.payload_allocator)
-        delete(allocation.pixels, store.payload_allocator)
+    if !allocation.valid {
+        return .Capacity_Exceeded 
+    }
+    if !kitty_animation_copy_composition_base(
+        store, entry, &allocation, frame_count, canvas_byte_count) {
         return .Invalid
     }
     kitty_animation_apply_composition(
@@ -420,6 +466,32 @@ kitty_animation_compose :: proc(
     kitty_animation_commit(
         store, entry, allocation, entry.animation_timeline.cycle_duration_ns)
     return .Found
+}
+
+// Copy retained root/selected frames into replacement storage and total duration.
+kitty_animation_copy_retained_frames :: proc(
+    entry: ^Attachment_Entry, allocation: ^Kitty_Animation_Allocation,
+    compaction: Kitty_Frame_Compaction) -> u64 {
+    destination := 0
+    cycle_duration_ns: u64
+    for source in 0..<compaction.old_frame_count {
+        if source > 0 && (compaction.all || source == compaction.remove_index) {
+            continue
+        }
+        copy(allocation^.pixels[
+            destination * compaction.canvas_byte_count:
+                (destination + 1) * compaction.canvas_byte_count],
+            entry^.payload[source * compaction.canvas_byte_count:
+                (source + 1) * compaction.canvas_byte_count])
+        allocation^.frames[destination] = entry^.animation_frames[source]
+        allocation^.frames[destination].pixels = {
+            offset = destination * compaction.canvas_byte_count,
+            count = compaction.canvas_byte_count,
+        }
+        cycle_duration_ns += allocation^.frames[destination].duration_ns
+        destination += 1
+    }
+    return cycle_duration_ns
 }
 
 // Atomically remove one non-root frame or every non-root animation frame.
@@ -431,33 +503,55 @@ kitty_animation_delete_frames :: proc(
         return .Stale
     }
     old_frame_count := len(entry.animation_frames)
-    if old_frame_count <= 1 { return .Not_Found }
+    if old_frame_count <= 1 {
+        return .Not_Found 
+    }
     remove_index := -1
     if !all {
         remove_index, _ = kitty_animation_frame_index(frame_number, old_frame_count)
-        if remove_index <= 0 { return .Not_Found }
+        if remove_index <= 0 {
+            return .Not_Found 
+        }
     }
     frame_count := 1 if all else old_frame_count - 1
     canvas_byte_count, valid := kitty_animation_canvas_byte_count(entry)
-    if !valid { return .Invalid }
+    if !valid {
+        return .Invalid 
+    }
     allocation := kitty_animation_allocate(
         store, entry, frame_count, canvas_byte_count)
-    if !allocation.valid { return .Capacity_Exceeded }
-    destination := 0
-    cycle_duration_ns: u64
-    for source in 0..<old_frame_count {
-        if source > 0 && (all || source == remove_index) { continue }
-        copy(allocation.pixels[
-            destination * canvas_byte_count:(destination + 1) * canvas_byte_count],
-            entry.payload[source * canvas_byte_count:(source + 1) * canvas_byte_count])
-        allocation.frames[destination] = entry.animation_frames[source]
-        allocation.frames[destination].pixels = {
-            offset = destination * canvas_byte_count, count = canvas_byte_count,
-        }
-        cycle_duration_ns += allocation.frames[destination].duration_ns
-        destination += 1
+    if !allocation.valid {
+        return .Capacity_Exceeded 
     }
+    cycle_duration_ns := kitty_animation_copy_retained_frames(
+        entry, &allocation, Kitty_Frame_Compaction{
+            old_frame_count, canvas_byte_count, remove_index, all})
     kitty_animation_commit(store, entry, allocation, cycle_duration_ns)
+    return .Found
+}
+
+// Validate and update one frame's duration while preserving cycle bounds.
+kitty_animation_update_frame_gap :: proc(
+    store: ^Store, entry: ^Attachment_Entry,
+    control: Kitty_Animation_Control) -> Animation_Mutation_Outcome {
+    frame_index, valid := kitty_animation_frame_index(
+        control.frame_number, len(entry.animation_frames))
+    if !valid || control.gap_ms == 0 {
+        return .Invalid
+    }
+    duration_ns := u64(0) if control.gap_ms < 0 else
+        u64(control.gap_ms) * 1_000_000
+    old_duration_ns := entry.animation_frames[frame_index].duration_ns
+    cycle_without_frame := entry.animation_timeline.cycle_duration_ns - old_duration_ns
+    if duration_ns > store.limits.animation_max_frame_duration_ns ||
+        duration_ns > 0 &&
+            duration_ns < store.limits.animation_min_frame_duration_ns ||
+        duration_ns > store.limits.animation_duration_ns_limit - cycle_without_frame {
+        return .Invalid
+    }
+    entry.animation_timeline.cycle_duration_ns = cycle_without_frame
+    entry.animation_frames[frame_index].duration_ns = duration_ns
+    entry.animation_timeline.cycle_duration_ns += duration_ns
     return .Found
 }
 
@@ -471,24 +565,10 @@ kitty_animation_control :: proc(
         return .Stale
     }
     if control.gap_specified {
-        frame_index, valid := kitty_animation_frame_index(
-            control.frame_number, len(entry.animation_frames))
-        if !valid || control.gap_ms == 0 { return .Invalid }
-        duration_ns := u64(0) if control.gap_ms < 0 else
-            u64(control.gap_ms) * 1_000_000
-        old_duration_ns := entry.animation_frames[frame_index].duration_ns
-        cycle_without_frame := entry.animation_timeline.cycle_duration_ns -
-            old_duration_ns
-        if duration_ns > store.limits.animation_max_frame_duration_ns ||
-            duration_ns > 0 &&
-                duration_ns < store.limits.animation_min_frame_duration_ns ||
-            duration_ns > store.limits.animation_duration_ns_limit -
-                cycle_without_frame {
-            return .Invalid
+        gap_outcome := kitty_animation_update_frame_gap(store, entry, control)
+        if gap_outcome != .Found {
+            return gap_outcome
         }
-        entry.animation_timeline.cycle_duration_ns = cycle_without_frame
-        entry.animation_frames[frame_index].duration_ns = duration_ns
-        entry.animation_timeline.cycle_duration_ns += duration_ns
     }
     if control.loop_count > 0 {
         entry.animation_timeline.infinite = control.loop_count == 1

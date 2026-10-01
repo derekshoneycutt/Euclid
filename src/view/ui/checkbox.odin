@@ -198,8 +198,12 @@ checkbox_apply_semantics :: proc(
         result^.checked_out = !params.checked
     }
     states := viewmodel.Ui_Node_State{.Visible, .Focusable, .Tab_Stop}
-    if params.enabled {states += {.Enabled}}
-    if result^.checked_out {states += {.Checked}}
+    if params.enabled {
+        states += {.Enabled}
+    }
+    if result^.checked_out {
+        states += {.Checked}
+    }
     _ = semantic_register_control(params.semantic_focus, {
         id = id, role = .Checkbox, states = states,
         actions = {.Focus, .Toggle}, region = .Accordion_Content,

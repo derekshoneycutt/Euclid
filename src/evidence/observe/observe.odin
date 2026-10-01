@@ -334,7 +334,9 @@ observe_display_particles :: proc(
         particles.dust_tool_contact_field_node_visit_count
     result.dust_rendered_count = particles.last_render_low
     for index in 0..<particles.use_max_dust_particles {
-        if !particles.low_particles[index].alive {continue}
+        if !particles.low_particles[index].alive {
+            continue
+        }
         result.dust_live_count += 1
         if particles.low_particles.pos_z[index] > 0 {
             result.dust_airborne_count += 1

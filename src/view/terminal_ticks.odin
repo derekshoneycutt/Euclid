@@ -34,10 +34,14 @@ terminal_tick_configure :: proc(
     request: protocol.Tick_Stream_Configure_Requested) -> bool {
     if state == nil || !state^.terminal.initialized ||
        request.animation_generation != state^.terminal.animation_generation ||
-       request.stream_generation == 0 { return false }
+       request.stream_generation == 0 {
+        return false
+    }
     publisher := &state^.terminal_tick_publisher
     if request.animation_generation == publisher^.animation_generation &&
-       request.stream_generation < publisher^.stream_generation { return false }
+       request.stream_generation < publisher^.stream_generation {
+        return false
+    }
     interval_steps := terminal_tick_interval_steps(request.requested_period_ns)
     publisher^ = {
         animation_generation = request.animation_generation,
@@ -59,11 +63,15 @@ terminal_tick_configure :: proc(
 terminal_tick_stop :: proc(
     state: ^core.Euclid_General_State,
     request: protocol.Tick_Stream_Stop_Requested) -> bool {
-    if state == nil { return false }
+    if state == nil {
+        return false
+    }
     publisher := &state^.terminal_tick_publisher
     if !publisher^.active ||
        request.animation_generation != publisher^.animation_generation ||
-       request.stream_generation != publisher^.stream_generation { return false }
+       request.stream_generation != publisher^.stream_generation {
+        return false
+    }
     publisher^.active = false
     publisher^.accumulated_steps = 0
     publisher^.pulse = {}
@@ -80,7 +88,9 @@ terminal_tick_stop :: proc(
 // Record one deterministic update in bounded coalesced publisher state.
 terminal_tick_record_step :: proc(
     publisher: ^viewterminalmodel.Terminal_Tick_Publisher, simulation_tick: u64) {
-    if publisher == nil || !publisher^.active { return }
+    if publisher == nil || !publisher^.active {
+        return
+    }
     if publisher^.pulse_pending {
         publisher^.pulse.last_simulation_tick = simulation_tick
         publisher^.pulse.step_count += 1
@@ -92,7 +102,9 @@ terminal_tick_record_step :: proc(
     publisher^.accumulated_last_tick = simulation_tick
     publisher^.accumulated_steps += 1
     if publisher^.acknowledgement_pending ||
-       publisher^.accumulated_steps < publisher^.interval_steps { return }
+       publisher^.accumulated_steps < publisher^.interval_steps {
+        return
+    }
     publisher^.next_sequence += 1
     publisher^.pulse = {
         animation_generation = publisher^.animation_generation,
@@ -108,12 +120,16 @@ terminal_tick_record_step :: proc(
 
 // Publish pending acknowledgement and pulse traffic without blocking display work.
 terminal_tick_publish :: proc(state: ^core.Euclid_General_State) {
-    if state == nil || state^.julia_runtime_service == nil { return }
+    if state == nil || state^.julia_runtime_service == nil {
+        return
+    }
     publisher := &state^.terminal_tick_publisher
     if publisher^.acknowledgement_pending {
         outcome := bridge.send_terminal_ingress(
             state^.julia_runtime_service, publisher^.acknowledgement)
-        if outcome != .Sent { return }
+        if outcome != .Sent {
+            return
+        }
         publisher^.acknowledgement_pending = false
     }
     if publisher^.pulse_pending && bridge.send_terminal_ingress(

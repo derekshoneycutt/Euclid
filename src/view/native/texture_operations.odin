@@ -139,7 +139,9 @@ texture_operation_enqueue :: proc(
     queue: ^Texture_Operation_Queue, operation: Texture_Operation) -> bool {
     if queue == nil || queue^.count >= len(queue^.operations) ||
         operation.generation == 0 || operation.texture == nil {
-        if queue != nil {queue^.overflow_count += 1}
+        if queue != nil {
+           queue^.overflow_count += 1
+        }
         return false
     }
     candidate := operation
@@ -174,7 +176,9 @@ texture_operation_enqueue_upload :: proc(
     queue: ^Texture_Operation_Queue, request: Texture_Upload_Request) -> bool {
     if request.kind != .Create && request.kind != .Update ||
         !sampled_texture_is_valid(request.texture) {
-        if queue != nil {queue^.overflow_count += 1}
+        if queue != nil {
+           queue^.overflow_count += 1
+        }
         return false
     }
     return texture_operation_enqueue(queue, {
@@ -196,7 +200,9 @@ texture_operation_enqueue_retire :: proc(
     queue: ^Texture_Operation_Queue, texture: Sampled_Texture,
     identity, generation: u64, callback: Texture_Operation_Callback = {}) -> bool {
     if !sampled_texture_is_valid(texture) {
-        if queue != nil {queue^.overflow_count += 1}
+        if queue != nil {
+           queue^.overflow_count += 1
+        }
         return false
     }
     return texture_operation_enqueue(queue, {

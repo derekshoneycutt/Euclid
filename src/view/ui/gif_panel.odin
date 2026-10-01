@@ -180,7 +180,9 @@ gif_path_input_params :: proc(
     target := runtime^.interaction_frame.pointer_target
     advance, measured := view_core.ui_text_column_advance(
         view_font.cache_borrow(&state^.font_cache, .Regular), TREE_FONT_SIZE)
-    if !measured {advance = TEXT_WRAP_ADVANCE}
+    if !measured {
+        advance = TEXT_WRAP_ADVANCE
+    }
     return {rect = rect, clip_rect = runtime^.ui_regions.accordion_rect,
         descriptor = {
             id = semantic_control_id(.Gif_Control, GIF_PATH_INPUT_BOX_ID),
@@ -207,7 +209,9 @@ draw_encoded_gif_value :: proc(
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     width, measured := view_core.ui_text_measure_monospace(
         text, face, TREE_FONT_SIZE, 0)
-    if !measured {width = 20}
+    if !measured {
+        width = 20
+    }
     draw_encoded_label(state, encoder, text,
         settings_right_aligned_x(panel, width), row_y)
 }
@@ -226,7 +230,9 @@ gif_output_scale_label :: proc(factor: int) -> string {
 // gif_capture_cadence_label describes how often one presentation is sampled.
 gif_capture_cadence_label :: proc(frame_step: int) -> string {
     clamped := clamp(frame_step, 1, 4)
-    if clamped == 1 {return "frame"}
+    if clamped == 1 {
+        return "frame"
+    }
     return fmt.tprintf("%d frames", clamped)
 }
 
@@ -251,7 +257,9 @@ draw_encoded_gif_button_text :: proc(
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     width, measured := view_core.ui_text_measure_monospace(
         text, face, TREE_FONT_SIZE, 0)
-    if !measured {width = 0}
+    if !measured {
+        width = 0
+    }
     draw_encoded_label(state, encoder, text,
         rectangle.x + max(f32(0), (rectangle.width - width) * 0.5),
         rectangle.y + (rectangle.height - TREE_FONT_SIZE) * 0.5)
@@ -315,7 +323,9 @@ gif_timing_button_params :: proc(
         ctx.ui_runtime.gif_timing_mode == .Animation
     recorded_selected := descriptor.id == 6204 &&
         ctx.ui_runtime.gif_timing_mode == .Recorded
-    if animation_selected || recorded_selected {states += {.Selected}}
+    if animation_selected || recorded_selected {
+        states += {.Selected}
+    }
     return {
         id = descriptor.id, rect = descriptor.rectangle, label = descriptor.label,
         enabled = enabled,
@@ -409,7 +419,9 @@ register_gif_status :: proc(
         clip_bounds = viewmodel.Rectangle(ctx.panel),
         label = gif_accessibility_status_label(result^.phase),
     })
-    if result^.status_note_len <= 0 {return}
+    if result^.status_note_len <= 0 {
+        return
+    }
     note_bounds := bounds
     note_bounds.y += SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET
     note := string(result^.status_note[:result^.status_note_len])
@@ -485,7 +497,9 @@ prepare_gif_path_input :: proc(
     mouse_input: Input_Frame, result: ^Gif_View_Preparation) {
     result^.last_path = string(ctx.ui_runtime.last_gif_path[
         :ctx.ui_runtime.last_gif_path_len])
-    if !gif_path_input_visible(ctx.ui_runtime) {return}
+    if !gif_path_input_visible(ctx.ui_runtime) {
+        return
+    }
     params := gif_path_input_params(state,
         gif_path_input_rect_for_panel(ctx.panel), mouse_input, result^.last_path)
     result^.path_input = input_box_prepare(params, &ctx.ui_runtime.ui_press_owner)
@@ -528,7 +542,9 @@ prepare_gif_view :: proc(
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
     mouse_input: Input_Frame) -> Gif_View_Preparation {
-    if state == nil || state.particle_system == nil { return {} }
+    if state == nil || state.particle_system == nil {
+        return {}
+    }
     ctx := Gif_Panel_Context{panel, mouse_input, &state.ui_runtime,
         view_font.cache_borrow(&state.font_cache, .Regular),
         view_font.cache_terminal_resolver(&state.font_cache)}

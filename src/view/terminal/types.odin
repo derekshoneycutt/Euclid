@@ -102,6 +102,15 @@ Terminal_Command_Search_Match :: struct {
     valid: bool,
 }
 
+// Mutable ordered candidate bounds shared while scanning one command search.
+Terminal_Command_Search_Accumulator :: struct {
+    current: Terminal_Command_Search_Match,
+    direction: int,
+    block_index: int,
+    absolute: Terminal_Command_Search_Match,
+    relative: Terminal_Command_Search_Match,
+}
+
 // Display-thread boundary used to activate a validated NUL-terminated URI.
 Terminal_Hyperlink_Activation_Proc :: proc(
     user_data: rawptr, uri: cstring) -> bool

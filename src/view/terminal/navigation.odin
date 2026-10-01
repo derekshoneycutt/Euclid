@@ -17,7 +17,9 @@ terminal_find_shell_prompt_row :: proc(
         line >= 0 && line < line_count;
         line += direction {
         markers, present := terminal_output_row_shell_markers(term, line)
-        if present && markers.present[.Prompt] { return line, true }
+        if present && markers.present[.Prompt] {
+            return line, true
+        }
     }
     return 0, false
 }
@@ -28,7 +30,9 @@ terminal_find_logical_row :: proc(
     line_count := terminal_line_count(term)
     for line in 0..<line_count {
         candidate, present := terminal_output_logical_row(term, line)
-        if present && candidate == logical_line_id { return line, true }
+        if present && candidate == logical_line_id {
+            return line, true
+        }
     }
     return 0, false
 }
@@ -40,7 +44,9 @@ terminal_find_shell_prompt :: proc(
         return 0, false
     }
     current_id, current_present := terminal_output_logical_row(term, start_line)
-    if !current_present { return 0, false }
+    if !current_present {
+        return 0, false
+    }
     target_id: i64
     found := false
     count := termshellintegration.shell_command_block_count(term.shell_integration)
@@ -50,17 +56,23 @@ terminal_find_shell_prompt :: proc(
     for index in 0..<count {
         block, present := termshellintegration.shell_command_block(
             term.shell_integration, index)
-        if !present || .Prompt not_in block.present { continue }
+        if !present || .Prompt not_in block.present {
+            continue
+        }
         candidate := i64(block.prompt.logical_line_id)
         eligible := candidate < current_id if direction < 0 else candidate > current_id
-        if !eligible { continue }
+        if !eligible {
+            continue
+        }
         if !found || (direction < 0 && candidate > target_id) ||
             (direction > 0 && candidate < target_id) {
             target_id = candidate
             found = true
         }
     }
-    if !found { return 0, false }
+    if !found {
+        return 0, false
+    }
     return terminal_find_logical_row(term, target_id)
 }
 
@@ -77,15 +89,23 @@ terminal_semantic_view_position :: proc(
             continue
         }
         cells, cells_found := terminal_output_row(term, line)
-        if !cells_found { continue }
+        if !cells_found {
+            continue
+        }
         count := termgrid.grid_row_grapheme_count(&termgrid.Row{cells = cells})
         if position.grapheme_offset >
-            semantic_row.grapheme_offset + count { continue }
+            semantic_row.grapheme_offset + count {
+            continue
+        }
         column_offset := position.grapheme_offset - semantic_row.grapheme_offset
         column := 0
         for &cell, cell_index in cells {
-            if cell.continuation || cell.grapheme_len == 0 { continue }
-            if column_offset == 0 { break }
+            if cell.continuation || cell.grapheme_len == 0 {
+                continue
+            }
+            if column_offset == 0 {
+                break
+            }
             column_offset -= 1
             column = cell_index + max(int(cell.width), 1)
         }
@@ -100,14 +120,18 @@ terminal_shell_block_at_line :: proc(
     term: ^viewterminalmodel.Terminal_State, line: int) ->
         (termmodel.Command_Block, bool) {
     logical_id, present := terminal_output_logical_row(term, line)
-    if !present { return {}, false }
+    if !present {
+        return {}, false
+    }
     result: termmodel.Command_Block
     found := false
     count := termshellintegration.shell_command_block_count(term.shell_integration)
     for index in 0..<count {
         block, block_present := termshellintegration.shell_command_block(
             term.shell_integration, index)
-        if !block_present { continue }
+        if !block_present {
+            continue
+        }
         first := i64(termshellintegration.shell_command_first_position(
             &block).logical_line_id)
         last := i64(termshellintegration.shell_command_last_position(
@@ -116,7 +140,9 @@ terminal_shell_block_at_line :: proc(
             result, found = block, true
             continue
         }
-        if first <= logical_id { result, found = block, true }
+        if first <= logical_id {
+            result, found = block, true
+        }
     }
     return result, found
 }
@@ -133,7 +159,9 @@ terminal_command_range :: proc(
         start, end = block.execution, block.finished
         required = {.Execution, .Finished}
     }
-    if block.present & required != required { return {} }
+    if block.present & required != required {
+        return {}
+    }
     first, first_ok := terminal_semantic_view_position(term, start)
     last, last_ok := terminal_semantic_view_position(term, end)
     return {start = first, end = last,
@@ -148,18 +176,45 @@ terminal_command_search_append_row :: proc(
     first := clamp(start, 0, len(text))
     last := clamp(end, first, len(text))
     count := last - first
-    if workspace.byte_count + count > len(workspace.text) { return false }
+    if workspace.byte_count + count > len(workspace.text) {
+        return false
+    }
     destination := workspace.byte_count
     copy(workspace.text[destination:destination + count], text[first:last])
     for column in 0..=len(cells) {
-        if column < len(cells) && cells[column].continuation { continue }
+        if column < len(cells) && cells[column].continuation {
+            continue
+        }
         offset := terminal_output_row_byte_offset(cells, column)
-        if offset < first || offset > last { continue }
+        if offset < first || offset > last {
+            continue
+        }
         mapped := destination + offset - first
         workspace.boundaries[mapped] = true
         workspace.positions[mapped] = {line = line, byte_offset = offset}
     }
     workspace.byte_count += count
+    return true
+}
+
+// Append a logical newline only when the source rows were not soft-wrapped.
+terminal_command_search_append_row_separator :: proc(
+    term: ^viewterminalmodel.Terminal_State,
+    workspace: ^Terminal_Command_Search_Workspace, line, row_end: int) -> bool {
+    wrapped, found := terminal_output_row_wrapped(term, line)
+    if !found {
+        return false
+    }
+    if wrapped {
+        return true
+    }
+    if workspace.byte_count == len(workspace.text) {
+        return false
+    }
+    workspace.boundaries[workspace.byte_count] = true
+    workspace.positions[workspace.byte_count] = {line = line, byte_offset = row_end}
+    workspace.text[workspace.byte_count] = '\n'
+    workspace.byte_count += 1
     return true
 }
 
@@ -169,29 +224,30 @@ terminal_command_search_workspace :: proc(
     workspace: ^Terminal_Command_Search_Workspace) -> bool {
     workspace^ = {}
     command_range := terminal_command_range(term, block, .Command)
-    if !command_range.valid { return false }
+    if !command_range.valid {
+        return false
+    }
     for line := command_range.start.line;
         line <= command_range.end.line; line += 1 {
         cells, found := terminal_output_row(term, line)
-        if !found { return false }
+        if !found {
+            return false
+        }
         row_start := command_range.start.byte_offset if
             line == command_range.start.line else 0
         row_end := command_range.end.byte_offset if
             line == command_range.end.line else
             len(terminal_output_row_text(cells))
         if !terminal_command_search_append_row(
-            workspace, cells, line, row_start, row_end) { return false }
-        if line == command_range.end.line { continue }
-        wrapped, wrapped_found := terminal_output_row_wrapped(term, line)
-        if !wrapped_found { return false }
-        if !wrapped {
-            if workspace.byte_count == len(workspace.text) { return false }
-            workspace.boundaries[workspace.byte_count] = true
-            workspace.positions[workspace.byte_count] = {
-                line = line, byte_offset = row_end,
-            }
-            workspace.text[workspace.byte_count] = '\n'
-            workspace.byte_count += 1
+            workspace, cells, line, row_start, row_end) {
+            return false
+        }
+        if line == command_range.end.line {
+            continue
+        }
+        if !terminal_command_search_append_row_separator(
+            term, workspace, line, row_end) {
+            return false
         }
     }
     workspace.boundaries[workspace.byte_count] = true
@@ -205,9 +261,13 @@ terminal_command_search_matches :: proc(
     query: []u8, offset: int) -> bool {
     if offset < 0 || offset + len(query) > workspace.byte_count ||
         !workspace.boundaries[offset] ||
-        !workspace.boundaries[offset + len(query)] { return false }
+        !workspace.boundaries[offset + len(query)] {
+        return false
+    }
     for byte, index in query {
-        if workspace.text[offset + index] != byte { return false }
+        if workspace.text[offset + index] != byte {
+            return false
+        }
     }
     return true
 }
@@ -253,7 +313,9 @@ terminal_command_search_current :: proc(
         byte_offset = shell.search_match_byte_offset,
         valid = shell.search_match_generation != 0,
     }
-    if !result.valid { return result }
+    if !result.valid {
+        return result
+    }
     count := termshellintegration.shell_command_block_count(shell)
     for index in 0..<count {
         block, present := termshellintegration.shell_command_block(shell, index)
@@ -266,6 +328,32 @@ terminal_command_search_current :: proc(
     return result
 }
 
+// Collect candidate matches from one command block into ordered search targets.
+terminal_command_search_block :: proc(
+    term: ^viewterminalmodel.Terminal_State, block: termmodel.Command_Block,
+    query: []u8, accumulator: ^Terminal_Command_Search_Accumulator,
+    workspace: ^Terminal_Command_Search_Workspace) {
+    block_copy := block
+    if !terminal_command_search_workspace(term, &block_copy, workspace) {
+        return
+    }
+    for offset in 0..=workspace.byte_count - len(query) {
+        if !terminal_command_search_matches(workspace, query, offset) {
+            continue
+        }
+        candidate := Terminal_Command_Search_Match{
+            block = block,
+            start = workspace.positions[offset],
+            end = workspace.positions[offset + len(query)],
+            block_index = accumulator^.block_index,
+            byte_offset = offset, valid = true,
+        }
+        terminal_command_search_consider(
+            candidate, accumulator^.current, accumulator^.direction,
+            &accumulator^.absolute, &accumulator^.relative)
+    }
+}
+
 // Find and select the next or previous literal command match with wraparound.
 terminal_command_search :: proc(
     term: ^viewterminalmodel.Terminal_State, direction: int) -> bool {
@@ -274,28 +362,25 @@ terminal_command_search :: proc(
         return false
     }
     query := shell.search_query[:shell.search_query_byte_count]
-    current := terminal_command_search_current(shell)
     count := termshellintegration.shell_command_block_count(shell)
-    absolute, relative: Terminal_Command_Search_Match
+    accumulator := Terminal_Command_Search_Accumulator{
+        current = terminal_command_search_current(shell), direction = direction,
+    }
     workspace: Terminal_Command_Search_Workspace
     for index in 0..<count {
         block, present := termshellintegration.shell_command_block(shell, index)
-        if !present || !terminal_command_search_workspace(
-            term, &block, &workspace) { continue }
-        for offset in 0..=workspace.byte_count - len(query) {
-            if !terminal_command_search_matches(&workspace, query, offset) { continue }
-            candidate := Terminal_Command_Search_Match{
-                block = block,
-                start = workspace.positions[offset],
-                end = workspace.positions[offset + len(query)],
-                block_index = index, byte_offset = offset, valid = true,
-            }
-            terminal_command_search_consider(
-                candidate, current, direction, &absolute, &relative)
+        if !present {
+            continue
         }
+        accumulator.block_index = index
+        terminal_command_search_block(
+            term, block, query, &accumulator, &workspace)
     }
-    result := relative if relative.valid else absolute
-    if !result.valid { return false }
+    result := accumulator.relative if accumulator.relative.valid else
+        accumulator.absolute
+    if !result.valid {
+        return false
+    }
     shell.search_match_generation = result.block.generation
     shell.search_match_byte_offset = result.byte_offset
     term.view_selection_anchor = result.start
@@ -307,7 +392,9 @@ terminal_command_search :: proc(
 
 // Begin a fresh bounded local command-search edit transaction.
 terminal_command_search_begin :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
-    if term == nil || term.shell_integration == nil { return false }
+    if term == nil || term.shell_integration == nil {
+        return false
+    }
     shell := term.shell_integration
     shell.search_query = {}
     shell.search_query_byte_count = 0
@@ -321,7 +408,9 @@ terminal_command_search_begin :: proc(term: ^viewterminalmodel.Terminal_State) -
 terminal_command_search_append :: proc(
     term: ^viewterminalmodel.Terminal_State, codepoint: rune) -> bool {
     shell := term.shell_integration
-    if shell == nil || !shell.search_editing { return false }
+    if shell == nil || !shell.search_editing {
+        return false
+    }
     bytes, byte_count := utf8.encode_rune(codepoint)
     if shell.search_query_byte_count + byte_count > len(shell.search_query) {
         return false
@@ -341,7 +430,9 @@ terminal_command_search_backspace :: proc(
         return false
     }
     index := shell.search_query_byte_count - 1
-    for index > 0 && shell.search_query[index] & 0xc0 == 0x80 { index -= 1 }
+    for index > 0 && shell.search_query[index] & 0xc0 == 0x80 {
+        index -= 1
+    }
     for byte_index in index..<shell.search_query_byte_count {
         shell.search_query[byte_index] = 0
     }
@@ -355,7 +446,9 @@ terminal_command_search_backspace :: proc(
 terminal_update_command_search :: proc(
     term: ^viewterminalmodel.Terminal_State, event: input.Input_Event) -> bool {
     shell := term.shell_integration
-    if shell == nil || !shell.search_editing { return false }
+    if shell == nil || !shell.search_editing {
+        return false
+    }
     if event.kind == .Text {
         terminal_command_search_append(term, event.codepoint)
     } else if event.kind == .Press && event.key == .Backspace {
@@ -375,7 +468,9 @@ terminal_command_search_set_query :: proc(
     term: ^viewterminalmodel.Terminal_State, query: string) -> bool {
     shell := term.shell_integration
     if shell == nil || len(query) > len(shell.search_query) ||
-        !utf8.valid_string(query) { return false }
+        !utf8.valid_string(query) {
+        return false
+    }
     shell.search_query = {}
     copy(shell.search_query[:], transmute([]u8)query)
     shell.search_query_byte_count = len(query)
@@ -387,12 +482,18 @@ terminal_command_search_set_query :: proc(
 // Select one indexed command or output range nearest the current scroll position.
 terminal_select_command_range :: proc(
     term: ^viewterminalmodel.Terminal_State, kind: Terminal_Command_Range) -> bool {
-    if term == nil || term.geometry.line_height <= 0 { return false }
+    if term == nil || term.geometry.line_height <= 0 {
+        return false
+    }
     line := int(term.scroll_offset_y / term.geometry.line_height)
     block, found := terminal_shell_block_at_line(term, line)
-    if !found { return false }
+    if !found {
+        return false
+    }
     command_range := terminal_command_range(term, &block, kind)
-    if !command_range.valid { return false }
+    if !command_range.valid {
+        return false
+    }
     term.view_selection_anchor = command_range.start
     term.view_selection_head = command_range.end
     term.view_selection_active = true
@@ -403,16 +504,22 @@ terminal_select_command_range :: proc(
 // Find the nearest indexed command start before or after one presented line.
 terminal_find_shell_command :: proc(
     term: ^viewterminalmodel.Terminal_State, start_line, direction: int) -> (int, bool) {
-    if term == nil || direction == 0 { return 0, false }
+    if term == nil || direction == 0 {
+        return 0, false
+    }
     current_id, current_present := terminal_output_logical_row(term, start_line)
-    if !current_present { return 0, false }
+    if !current_present {
+        return 0, false
+    }
     target_id: i64
     found := false
     count := termshellintegration.shell_command_block_count(term.shell_integration)
     for index in 0..<count {
         block, present := termshellintegration.shell_command_block(
             term.shell_integration, index)
-        if !present || .Command not_in block.present { continue }
+        if !present || .Command not_in block.present {
+            continue
+        }
         candidate := i64(block.command.logical_line_id)
         eligible := candidate < current_id if direction < 0 else candidate > current_id
         if eligible && (!found || (direction < 0 && candidate > target_id) ||
@@ -420,7 +527,9 @@ terminal_find_shell_command :: proc(
             target_id, found = candidate, true
         }
     }
-    if !found { return 0, false }
+    if !found {
+        return 0, false
+    }
     return terminal_find_logical_row(term, target_id)
 }
 
@@ -437,8 +546,12 @@ terminal_update_shell_navigation_event :: proc(
         }
         return true
     }
-    if event.modifiers != {.Control, .Alt} { return false }
-    if event.key == .F { terminal_command_search_begin(term); return true }
+    if event.modifiers != {.Control, .Alt} {
+        return false
+    }
+    if event.key == .F {
+        terminal_command_search_begin(term); return true
+    }
     if direction != 0 {
         if line, found := terminal_find_shell_command(
             term, current_line, direction); found {
@@ -448,7 +561,9 @@ terminal_update_shell_navigation_event :: proc(
         terminal_select_command_range(term, .Command)
     } else if event.key == .O {
         terminal_select_command_range(term, .Output)
-    } else { return false }
+    } else {
+        return false
+    }
     return true
 }
 
@@ -460,11 +575,17 @@ terminal_update_shell_navigation :: proc(
         return 0, false
     }
     for event, index in frame.events {
-        if terminal_update_command_search(term, event) { return index, true }
-        if event.kind != .Press { continue }
+        if terminal_update_command_search(term, event) {
+            return index, true
+        }
+        if event.kind != .Press {
+            continue
+        }
         current_line := int(term.scroll_offset_y / term.geometry.line_height)
         if terminal_update_shell_navigation_event(
-            term, event, current_line) { return index, true }
+            term, event, current_line) {
+            return index, true
+        }
     }
     return 0, false
 }

@@ -11,6 +11,7 @@ import "../files"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../particles"
+import catalog "../view/catalog"
 import view_core "../view/core"
 import terminalview "../view/terminal"
 import viewterminalmodel "../view/terminal/model"
@@ -21,6 +22,7 @@ import "core:fmt"
 import "core:log"
 import "core:strings"
 import "core:time"
+import "core:unicode/utf8"
 
 TERMINAL_ANIMATION_NAME :: "Terminal"
 ANIMATION_LOOKUP_INITIAL_RESERVE :: 512
@@ -65,7 +67,7 @@ call_julia_callback2 :: proc(
         callback, first, second)
 }
 
-//   Invoke Julia-side script initialization and select initial catalog metadata.
+//   Invoke Julia-side script initialization after native catalogue materialization.
 //
 // Parameters:
 //   - state: Global runtime state passed through to Julia callback entry points.
@@ -87,7 +89,7 @@ init_euclid_scripts :: proc(state: ^core.Euclid_General_State) -> bool {
         print_julia_exception("init_euclid_scripts")
         return false
     }
-    if !finish_registered_euclid_generation(state) {
+    if !finish_euclid_generation(state) {
         log.error("julia_content_finish_generation_failed")
         return false
     }
@@ -95,7 +97,7 @@ init_euclid_scripts :: proc(state: ^core.Euclid_General_State) -> bool {
 }
 
 //   Complete native initialization after one generation registers its callbacks.
-finish_registered_euclid_generation :: proc(
+finish_euclid_generation :: proc(
     state: ^core.Euclid_General_State) -> bool {
     if state^.julia_interface^.selected_animation == nil {
         select_default_animation(state)
@@ -103,7 +105,7 @@ finish_registered_euclid_generation :: proc(
     return true
 }
 
-//   Register one explicitly rooted candidate without executing animation policy.
+//   Initialize one explicitly rooted candidate without executing animation policy.
 init_euclid_generation :: proc(
     state: ^core.Euclid_General_State,
     generation: ^julialib.jl_value_t) -> bool {
@@ -113,7 +115,7 @@ init_euclid_generation :: proc(
         return false
     }
     callback := julialib.jl_get_function(
-        main_module, "register_euclid_generation")
+        main_module, "initialize_euclid_generation")
     if callback == nil {
         return false
     }
@@ -124,7 +126,7 @@ init_euclid_generation :: proc(
     }
     _ = julialib.jl_call(callback, &args[0], 3)
     if julialib.jl_exception_occurred() != nil {
-        print_julia_exception("register_euclid_generation")
+        print_julia_exception("initialize_euclid_generation")
         return false
     }
     return true
@@ -701,12 +703,12 @@ select_default_animation :: proc(state: ^core.Euclid_General_State) {
         if node == nil {
             break
         }
-        if node^.name == TERMINAL_ANIMATION_NAME {
+        if node^.node_kind == .Terminal {
             continue
         }
-
-        target = node
-        break
+        if target == nil || node^.catalog_order < target^.catalog_order {
+            target = node
+        }
     }
 
     if target == nil {
@@ -952,6 +954,27 @@ refresh_packaged_assets :: proc(
     return true
 }
 
+//   Admit the refreshed package database without replacing the active catalogue.
+stage_packaged_catalogue_reload :: proc(
+    state: ^core.Euclid_General_State,
+    service: ^Julia_Runtime_Service, package_identity: [32]byte) -> bool {
+    if state == nil || state^.catalog_service == nil {
+        mark_julia_reload_failed(service, package_identity)
+        return false
+    }
+    catalog_service := state^.catalog_service
+    asset_config := julia_service_asset_config(service)
+    asset, asset_ok := files.packaged_catalog_asset_with_config(
+        &asset_config, context.temp_allocator)
+    if asset_ok && catalog.catalog_service_stage(
+        catalog_service, asset.database_path, asset.corpus_fingerprint) {
+        return true
+    }
+    fmt.eprintln("Julia asset reload: candidate catalogue admission failed")
+    mark_julia_reload_failed(service, package_identity)
+    return false
+}
+
 //   Construct one generation into a caller-rooted Julia value slot.
 create_julia_runtime_generation :: proc(
     service: ^Julia_Runtime_Service) -> ^julialib.jl_value_t {
@@ -1062,6 +1085,29 @@ create_julia_interface_reload_candidate :: proc(
     return candidate
 }
 
+//   Stage catalogue state and validate one fully described reload transaction.
+stage_and_validate_julia_interface_reload :: proc(
+    transaction: ^Julia_Interface_Reload_Transaction) -> bool {
+    if !stage_packaged_catalogue_reload(
+        transaction^.state, transaction^.service,
+        transaction^.package_identity) {
+        return false
+    }
+    return validate_julia_interface_reload(transaction)
+}
+
+//   Require the Julia owner thread's GC stack before rooting a reload candidate.
+reload_candidate_gc_stack :: proc(
+    service: ^Julia_Runtime_Service,
+    package_identity: [32]byte) -> ^^julialib.jl_gcframe_t {
+    gc_stack := julialib.jl_get_pgcstack()
+    if gc_stack == nil {
+        fmt.eprintln("Julia asset reload: owner thread has no GC stack")
+        mark_julia_reload_failed(service, package_identity)
+    }
+    return gc_stack
+}
+
 //   Register and validate one fresh interface before retiring the active generation.
 stage_julia_interface_reload :: proc(
     state: ^core.Euclid_General_State, host: ^Julia_Runtime_Host,
@@ -1073,10 +1119,8 @@ stage_julia_interface_reload :: proc(
     if !admitted {
         return false
     }
-    gc_stack := julialib.jl_get_pgcstack()
+    gc_stack := reload_candidate_gc_stack(service, package_identity)
     if gc_stack == nil {
-        fmt.eprintln("Julia asset reload: owner thread has no GC stack")
-        mark_julia_reload_failed(service, package_identity)
         return false
     }
     candidate: ^julialib.jl_value_t
@@ -1091,7 +1135,7 @@ stage_julia_interface_reload :: proc(
     if candidate == nil {
         return false
     }
-    return validate_julia_interface_reload(&Julia_Interface_Reload_Transaction{
+    transaction := Julia_Interface_Reload_Transaction{
         state = state,
         host = host,
         request = request,
@@ -1099,7 +1143,8 @@ stage_julia_interface_reload :: proc(
         stable_id = stable_id,
         candidate = candidate,
         service = service,
-    })
+    }
+    return stage_and_validate_julia_interface_reload(&transaction)
 }
 
 //   Register one candidate and select its requested target without entering it.
@@ -1135,6 +1180,26 @@ reject_julia_interface_reload :: proc(
     return false
 }
 
+//   Materialize the admitted candidate catalogue into the inactive native registry.
+stage_julia_interface_catalogue :: proc(
+    transaction: ^Julia_Interface_Reload_Transaction) -> bool {
+    staged_interface := transaction^.staged_interface
+    catalog_service := transaction^.state^.catalog_service
+    snapshot := catalog.catalog_service_staged_snapshot(
+        catalog_service)
+    if snapshot == nil || !catalog_snapshot_materialize(staged_interface, snapshot) {
+        return false
+    }
+    for source := transaction^.previous_interface^.animation_head;
+         source != nil; source = source^.next_in_registry {
+        target := animation_lookup_find(staged_interface, source^.stable_id)
+        if target != nil {
+            target^.is_expanded = source^.is_expanded
+        }
+    }
+    return true
+}
+
 //   Register and resolve the requested animation in one inactive interface.
 prepare_julia_interface_reload_candidate :: proc(
     transaction: ^Julia_Interface_Reload_Transaction) -> bool {
@@ -1146,20 +1211,23 @@ prepare_julia_interface_reload_candidate :: proc(
     prepare_julia_interface_generation(staged_interface)
     if !julia_interface_handles_valid(staged_interface) {
         fmt.eprintln("Julia asset reload: stable callback validation failed")
-        clean_julia_interface_instance(staged_interface)
-        mark_julia_reload_failed(
-            transaction^.service, transaction^.package_identity)
         return false
     }
     staged_interface^.asset_package_identity = transaction^.package_identity
     staged_interface^.asset_package_identity_valid = true
+    if !stage_julia_interface_catalogue(transaction) {
+        return false
+    }
     state^.julia_interface = staged_interface
     initialized, restored := initialize_and_restore_julia_candidate(
         state, transaction^.stable_id, transaction^.candidate)
     if !initialized || !restored {
         message := "Julia asset reload: active animation restoration failed"
-        if !initialized { message = "Julia asset reload: candidate registration failed" }
-        return reject_julia_interface_reload(transaction, message, false)
+        if !initialized {
+            message = "Julia asset reload: candidate registration failed"
+        }
+        fmt.eprintln(message)
+        return false
     }
     transaction^.target = state^.julia_interface^.selected_animation
     return true
@@ -1180,19 +1248,28 @@ activate_julia_interface_reload_candidate :: proc(
         return reject_julia_interface_reload(transaction,
             "Julia asset reload: candidate activation failed", true)
     }
-    if !commit_julia_runtime_generation(service, candidate) {
-        return reject_julia_interface_reload(transaction,
-            "Julia asset reload: candidate commit failed", true)
-    }
     return true
 }
 
 //   Validate one rooted candidate against the inactive interface and publish on success.
 validate_julia_interface_reload :: proc(
     transaction: ^Julia_Interface_Reload_Transaction) -> bool {
-    if !prepare_julia_interface_reload_candidate(transaction) ||
-        !activate_julia_interface_reload_candidate(transaction) {
+    if !prepare_julia_interface_reload_candidate(transaction) {
+        return reject_julia_interface_reload(transaction,
+            "Julia asset reload: candidate preparation failed", false)
+    }
+    if !activate_julia_interface_reload_candidate(transaction) {
         return false
+    }
+    catalog_service := transaction^.state^.catalog_service
+    if !catalog.catalog_service_commit(catalog_service) {
+        return reject_julia_interface_reload(transaction,
+            "Julia asset reload: catalogue commit failed", true)
+    }
+    if !commit_julia_runtime_generation(
+        transaction^.service, transaction^.candidate) {
+        return reject_julia_interface_reload(transaction,
+            "Julia asset reload: candidate commit failed", true)
     }
     state := transaction^.state
     commit_animation_selection(state, transaction^.target)
@@ -1200,6 +1277,9 @@ validate_julia_interface_reload :: proc(
     publish_julia_interface_reload(
         state, transaction^.previous_interface,
         transaction^.staged_slot, transaction^.service)
+    if !catalog.catalog_service_finalize(catalog_service) {
+        log.error("catalog_reload_finalize_failed")
+    }
     return true
 }
 
@@ -1209,6 +1289,9 @@ rollback_julia_interface_reload :: proc(
     previous_interface, staged_interface: ^bridgemodel.Euclid_Julia_Interface,
     service: ^Julia_Runtime_Service, package_identity: [32]byte) {
 
+    if state^.catalog_service != nil {
+        _ = catalog.catalog_service_discard(state^.catalog_service)
+    }
     clean_julia_interface_instance(staged_interface)
     state^.julia_interface = previous_interface
     service^.reload_failure_injection = .None
@@ -1306,38 +1389,6 @@ parse_animation_stable_id :: proc(stable_id, name: cstring) -> (uuid.Identifier,
     return id, true
 }
 
-//   Find an already registered animation by stable UUID identity.
-find_registered_animation_by_stable_id :: proc(
-    state: ^core.Euclid_General_State,
-    stable_id: uuid.Identifier) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
-
-    return find_animation_by_stable_id(state, stable_id)
-}
-
-//   Reject duplicate stable UUID registration before insertion.
-reject_duplicate_stable_id :: proc(
-    state: ^core.Euclid_General_State,
-    name, stable_id_text: cstring,
-    stable_id: uuid.Identifier,
-    parent_stable_id_text: cstring) -> bool {
-
-    existing_animation := find_registered_animation_by_stable_id(state, stable_id)
-    if existing_animation == nil {
-        return false
-    }
-
-    fmt.eprintln(
-        "add animation interface failed: duplicate stable_id '",
-        string(stable_id_text),
-        "' for ",
-        string(name),
-        " conflicts with existing animation name '",
-        existing_animation^.name,
-        "' parent_stable_id=",
-        string(parent_stable_id_text))
-    return true
-}
-
 //   Create a forward-only iterator over the animation registry list.
 animation_iterator_begin :: proc(
     ji: ^bridgemodel.Euclid_Julia_Interface) ->
@@ -1347,7 +1398,9 @@ animation_iterator_begin :: proc(
         return {}
     }
 
-    return bridgemodel.Euclid_Julia_Animation_Iterator{current = ji^.animation_head}
+    return bridgemodel.Euclid_Julia_Animation_Iterator{
+        current = ji^.animation_head,
+    }
 }
 
 //   Return the current iterator node and advance to the next registry entry.
@@ -1383,6 +1436,216 @@ animation_link_child :: proc(
     sibling^.next_sibling = child
     child^.prev_sibling = sibling
     parent^.last_child = child
+}
+
+//   Insert one child by its validated sibling order without disturbing tree links.
+animation_link_child_ordered :: proc(
+    parent, child: ^bridgemodel.Euclid_Julia_Animation_Interface) -> bool {
+    if parent == nil || child == nil {
+        return false
+    }
+    for sibling := parent^.first_child; sibling != nil; sibling = sibling^.next_sibling {
+        if sibling^.sibling_order == child^.sibling_order {
+            return false
+        }
+        if sibling^.sibling_order > child^.sibling_order {
+            child^.parent = parent
+            child^.next_sibling = sibling
+            child^.prev_sibling = sibling^.prev_sibling
+            if sibling^.prev_sibling == nil {
+                parent^.first_child = child
+            } else {
+                sibling^.prev_sibling^.next_sibling = child
+            }
+            sibling^.prev_sibling = child
+            return true
+        }
+    }
+    animation_link_child(parent, child)
+    return true
+}
+
+//   Materialize a validated catalogue snapshot into an empty generation-local registry.
+catalog_snapshot_materialize :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface,
+    snapshot: ^catalog.Catalog_Snapshot) -> bool {
+    if !catalog_snapshot_shape_is_valid(snapshot) || iface == nil ||
+       iface^.animation_count != 0 || iface^.animation_lookup_count != 0 ||
+       !ensure_julia_interface_instance_registry_arena(iface) {
+        return false
+    }
+    iface^.catalog_generation = snapshot^.generation
+    if !catalog_snapshot_allocate_nodes(iface, snapshot) ||
+       !catalog_snapshot_link_parents(iface, snapshot) {
+        clean_julia_interface_instance(iface)
+        return false
+    }
+    return iface^.animation_count == int(snapshot^.record_count)
+}
+
+//   Validate snapshot bounds, identity uniqueness, paths, and parent topology.
+catalog_snapshot_shape_is_valid :: proc(snapshot: ^catalog.Catalog_Snapshot) -> bool {
+    if snapshot == nil || snapshot^.generation == 0 ||
+       snapshot^.record_count == 0 ||
+       snapshot^.record_count > catalog.CATALOG_RECORD_CAPACITY {
+        return false
+    }
+    terminal_count := 0
+    for index in 0..<int(snapshot^.record_count) {
+        if snapshot^.records[index].node_kind == .Terminal {
+            terminal_count += 1
+        }
+        if !catalog_snapshot_record_is_valid(snapshot, index) {
+            return false
+        }
+    }
+    return terminal_count == 1
+}
+
+//   Validate one bounded row and its ancestor chain before registry allocation.
+catalog_snapshot_record_is_valid :: proc(
+    snapshot: ^catalog.Catalog_Snapshot, index: int) -> bool {
+    record := &snapshot^.records[index]
+    if record.stable_id == (uuid.Identifier{}) || record.catalog_order != i32(index) ||
+       record.sibling_order < 0 ||
+       record.display_name_length == 0 ||
+       record.display_name_length > catalog.CATALOG_NAME_BYTE_CAPACITY ||
+       record.implementation_path_length > catalog.CATALOG_PATH_BYTE_CAPACITY {
+        return false
+    }
+    name := string(record.display_name[:record.display_name_length])
+    if !utf8.valid_string(name) || strings.contains(name, "\x00") {
+        return false
+    }
+    if record.node_kind == .Terminal {
+        if record.has_parent || record.implementation_path_length != 0 {
+            return false
+        }
+    } else if record.node_kind == .Category || record.node_kind == .Leaf {
+        path := record.implementation_path[:record.implementation_path_length]
+        if !catalog_path_bytes_are_safe(path) {
+            return false
+        }
+    } else {
+        return false
+    }
+    for prior_index in 0..<index {
+        prior := &snapshot^.records[prior_index]
+        same_parent := prior.has_parent == record.has_parent &&
+            (!record.has_parent || prior.parent_stable_id == record.parent_stable_id)
+        if prior.stable_id == record.stable_id ||
+           (same_parent && prior.sibling_order == record.sibling_order) {
+            return false
+        }
+    }
+    return catalog_snapshot_ancestor_chain_is_valid(snapshot, index)
+}
+
+//   Verify every parent exists and the row's ancestor chain is acyclic.
+catalog_snapshot_ancestor_chain_is_valid :: proc(
+    snapshot: ^catalog.Catalog_Snapshot, index: int) -> bool {
+    record := &snapshot^.records[index]
+    if !record.has_parent {
+        return true
+    }
+    current_id := record.parent_stable_id
+    for _ in 0..<int(snapshot^.record_count) {
+        if current_id == record.stable_id {
+            return false
+        }
+        parent_index := catalog_snapshot_record_index(snapshot, current_id)
+        if parent_index < 0 {
+            return false
+        }
+        parent := &snapshot^.records[parent_index]
+        if !parent.has_parent {
+            return true
+        }
+        current_id = parent.parent_stable_id
+    }
+    return false
+}
+
+//   Find one stable identity in fixed snapshot storage.
+catalog_snapshot_record_index :: proc(
+    snapshot: ^catalog.Catalog_Snapshot, stable_id: uuid.Identifier) -> int {
+    for index in 0..<int(snapshot^.record_count) {
+        if snapshot^.records[index].stable_id == stable_id {
+            return index
+        }
+    }
+    return -1
+}
+
+//   Reject paths that are absolute, noncanonical, or escape package content.
+catalog_path_bytes_are_safe :: proc(path: []u8) -> bool {
+    if len(path) == 0 || path[0] == '/' {
+        return false
+    }
+    component_start := 0
+    for index in 0..=len(path) {
+        if index < len(path) && path[index] != '/' {
+            if path[index] == '\\' || path[index] == ':' {
+                return false
+            }
+            continue
+        }
+        component := string(path[component_start:index])
+        if len(component) == 0 || component == "." || component == ".." {
+            return false
+        }
+        component_start = index + 1
+    }
+    return true
+}
+
+//   Allocate nodes and UUID lookup entries in catalogue order.
+catalog_snapshot_allocate_nodes :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface,
+    snapshot: ^catalog.Catalog_Snapshot) -> bool {
+    for index in 0..<int(snapshot^.record_count) {
+        record := &snapshot^.records[index]
+        node := new(bridgemodel.Euclid_Julia_Animation_Interface,
+            iface^.animation_registry_allocator)
+        if node == nil {
+            return false
+        }
+        node^.stable_id = record.stable_id
+        node^.node_kind = bridgemodel.Animation_Node_Kind(record.node_kind)
+        node^.sibling_order = record.sibling_order
+        node^.catalog_order = record.catalog_order
+        node^.name = strings.clone(
+            string(record.display_name[:record.display_name_length]),
+            iface^.animation_registry_allocator)
+        if record.implementation_path_length > 0 {
+            node^.implementation_path = strings.clone(
+                string(record.implementation_path[:record.implementation_path_length]),
+                iface^.animation_registry_allocator)
+        }
+        animation_append_to_registry(iface, node)
+        if !animation_lookup_insert(iface, node^.stable_id, node) {
+            return false
+        }
+    }
+    return true
+}
+
+//   Resolve parent UUIDs only after all nodes and lookup entries exist.
+catalog_snapshot_link_parents :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface,
+    snapshot: ^catalog.Catalog_Snapshot) -> bool {
+    for index in 0..<int(snapshot^.record_count) {
+        record := &snapshot^.records[index]
+        if !record.has_parent {
+            continue
+        }
+        child := animation_lookup_find(iface, record.stable_id)
+        parent := animation_lookup_find(iface, record.parent_stable_id)
+        if child == nil || !animation_link_child_ordered(parent, child) {
+            return false
+        }
+    }
+    return true
 }
 
 //   Append a new node to the registry's arena-backed insertion order list.
@@ -1607,67 +1870,4 @@ animation_lookup_find :: proc(
     }
 
     return ji^.animation_lookup_entries[index].animation
-}
-
-//   Construct and register one animation node using arena storage and UUID lookup.
-add_animation_to_registry :: proc(
-    state: ^core.Euclid_General_State,
-    entry: ^julialib.jl_value_t,
-    name: cstring,
-    stable_id: uuid.Identifier,
-    parent: ^bridgemodel.Euclid_Julia_Animation_Interface) -> (
-        ^bridgemodel.Euclid_Julia_Animation_Interface, bool) {
-
-    if state == nil || state^.julia_interface == nil {
-        return nil, false
-    }
-
-    if !ensure_julia_interface_registry_arena(state) {
-        return nil, false
-    }
-
-    ji := state^.julia_interface
-    node := new(bridgemodel.Euclid_Julia_Animation_Interface,
-        ji^.animation_registry_allocator)
-    if node == nil {
-        return nil, false
-    }
-
-    node^.entry = entry
-    node^.name = strings.clone(string(name), ji^.animation_registry_allocator)
-    node^.stable_id = stable_id
-
-    animation_append_to_registry(ji, node)
-    animation_link_child(parent, node)
-
-    if !animation_lookup_insert(ji, stable_id, node) {
-        return nil, false
-    }
-
-    return node, true
-}
-
-//   Resolve a parent animation from the stable UUID text supplied by Julia.
-resolve_parent_animation_by_stable_id :: proc(
-    state: ^core.Euclid_General_State,
-    parent_stable_id_text: cstring) ->
-        (^bridgemodel.Euclid_Julia_Animation_Interface, bool) {
-
-    if parent_stable_id_text == nil {
-        return nil, false
-    }
-
-    parsed_parent_stable_id, ok := parse_animation_stable_id(
-        parent_stable_id_text,
-        parent_stable_id_text)
-    if !ok {
-        return nil, false
-    }
-
-    parent := find_registered_animation_by_stable_id(state, parsed_parent_stable_id)
-    if parent == nil {
-        return nil, false
-    }
-
-    return parent, true
 }

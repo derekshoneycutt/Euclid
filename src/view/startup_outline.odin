@@ -40,7 +40,9 @@ startup_outline_append_segment :: proc(
     assert(outline^.segment_count < STARTUP_OUTLINE_SEGMENT_CAP)
     delta := second - first
     length := f32(math.sqrt(f64(delta.x * delta.x + delta.y * delta.y)))
-    if length <= 0 {return}
+    if length <= 0 {
+        return
+    }
     outline^.segments[outline^.segment_count] = {first, second, length}
     outline^.segment_count += 1
     outline^.total_length += length
@@ -99,7 +101,9 @@ startup_outline_create :: proc(
 startup_outline_rebuild :: proc(
     outline: ^Startup_Outline, metrics: viewmodel.Ui_Window_Metrics,
     layout: viewmodel.Ui_Layout_Mode) -> bool {
-    if outline^.metrics == metrics && outline^.layout == layout { return false }
+    if outline^.metrics == metrics && outline^.layout == layout {
+        return false
+    }
     reveal_ratio: f32
     target_ratio: f32
     if outline^.total_length > 0 {
@@ -151,7 +155,9 @@ startup_outline_draw :: proc(
     accepted := true
     for index in 0..<outline^.segment_count {
         segment := outline^.segments[index]
-        if remaining <= 0 {break}
+        if remaining <= 0 {
+            break
+        }
         visible_length := min(remaining, segment.length)
         ratio := visible_length / segment.length
         endpoint := segment.first + (segment.second - segment.first) * ratio

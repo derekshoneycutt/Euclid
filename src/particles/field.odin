@@ -26,6 +26,15 @@ DUST_PRESSURE_ACCELERATION_MAX :: f32(0.03)
 DUST_VISCOSITY :: f32(0.000048)
 DUST_DRAG_RATE :: f32(1.5)
 
+// Scalar input for one weighted dust-field tool impulse.
+Dust_Field_Tool_Impulse_Node :: struct {
+    node: int,
+    delta_x, delta_y, distance_sq: f32,
+    radius, direction_length: f32,
+    direction: Vector2,
+    directional: bool,
+}
+
 // Map a board-space position onto the fixed dust-field lattice.
 dust_field_coordinates :: proc(position: Vector2) -> Vector2 {
     scale := f32(DUST_FIELD_INTERVAL_COUNT)
@@ -174,40 +183,58 @@ dust_field_tool_bounds :: proc(
     }
 }
 
+// Apply one already weighted radial or directional impulse to a field node.
+dust_field_apply_tool_impulse_node :: proc(
+    field: ^Dust_Field_State, input: Dust_Field_Tool_Impulse_Node) {
+    node := input.node
+    radius := input.radius
+    if field^.density[node] <= DUST_DENSITY_EPSILON ||
+        input.distance_sq > radius * radius {
+        return
+    }
+    distance := f32(math.sqrt(f64(input.distance_sq)))
+    falloff := DUST_CONTACT_PUSH_SPEED * (1 - distance / radius)
+    if input.directional {
+        field^.momentum_x[node] +=
+            field^.density[node] * input.direction.x * falloff / input.direction_length
+        field^.momentum_y[node] +=
+            field^.density[node] * input.direction.y * falloff / input.direction_length
+    } else if distance > 0 {
+        field^.momentum_x[node] +=
+            field^.density[node] * input.delta_x * falloff / distance
+        field^.momentum_y[node] +=
+            field^.density[node] * input.delta_y * falloff / distance
+    }
+}
+
 // Add one radial or authored-direction impulse to occupied nodes near a tool sample.
 dust_field_apply_tool_impulse :: proc(
     field: ^Dust_Field_State, position, direction: Vector2,
     directional: bool) -> u64 {
-    if !field^.support_bounds.valid {return 0}
+    if !field^.support_bounds.valid {
+       return 0
+    }
     direction_length := f32(math.sqrt(f64(
         direction.x * direction.x + direction.y * direction.y)))
-    if directional && direction_length <= DUST_DENSITY_EPSILON {return 0}
+    if directional && direction_length <= DUST_DENSITY_EPSILON {
+       return 0
+    }
     radius := f32(DUST_CONTACT_PUSH_RADIUS)
     bounds := dust_field_tool_bounds(field, position)
-    if bounds.min_x > bounds.max_x || bounds.min_y > bounds.max_y {return 0}
+    if bounds.min_x > bounds.max_x || bounds.min_y > bounds.max_y {
+       return 0
+    }
     visits: u64
     for y in int(bounds.min_y)..=int(bounds.max_y) {
         for x in int(bounds.min_x)..=int(bounds.max_x) {
             visits += 1
             node := y * DUST_FIELD_DIM + x
-            density := field^.density[node]
             delta_x := f32(x) * DUST_FIELD_SPACING - position.x
             delta_y := f32(y) * DUST_FIELD_SPACING - position.y
             distance_sq := delta_x * delta_x + delta_y * delta_y
-            if density <= DUST_DENSITY_EPSILON || distance_sq > radius * radius {
-                continue
-            }
-            distance := f32(math.sqrt(f64(distance_sq)))
-            falloff := DUST_CONTACT_PUSH_SPEED * (1 - distance / radius)
-            if directional {
-                field^.momentum_x[node] +=
-                    density * direction.x * falloff / direction_length
-                field^.momentum_y[node] +=
-                    density * direction.y * falloff / direction_length
-            } else if distance > 0 {
-                field^.momentum_x[node] += density * delta_x * falloff / distance
-                field^.momentum_y[node] += density * delta_y * falloff / distance
-            }
+            dust_field_apply_tool_impulse_node(
+                field, {node, delta_x, delta_y, distance_sq, radius,
+                    direction_length, direction, directional})
         }
     }
     return visits

@@ -221,10 +221,14 @@ bounds_are_valid :: proc(bounds: Bounds) -> bool {
 
 // numeric_range_is_valid accepts finite ordered values and one positive step.
 numeric_range_is_valid :: proc(value: Numeric_Range) -> bool {
-    if !value.present {return true}
+    if !value.present {
+        return true
+    }
     values := [4]f64{value.minimum, value.maximum, value.current, value.step}
     for item in values {
-        if math.is_nan(item) || math.is_inf(item) {return false}
+        if math.is_nan(item) || math.is_inf(item) {
+            return false
+        }
     }
     return value.minimum <= value.current && value.current <= value.maximum &&
         value.minimum <= value.maximum && value.step > 0
@@ -232,18 +236,26 @@ numeric_range_is_valid :: proc(value: Numeric_Range) -> bool {
 
 // control_text_boundary reports whether one byte offset starts a UTF-8 character.
 control_text_boundary :: proc(value: string, offset: int) -> bool {
-    if offset < 0 || offset > len(value) {return false}
-    if offset == 0 || offset == len(value) {return true}
+    if offset < 0 || offset > len(value) {
+        return false
+    }
+    if offset == 0 || offset == len(value) {
+        return true
+    }
     return value[offset] & 0xc0 != 0x80
 }
 
 // control_publication_text returns one validated copied string slice.
 control_publication_text :: proc(
     value: ^Control_Tree_Publication, offset, length: u16) -> string {
-    if value == nil {return ""}
+    if value == nil {
+        return ""
+    }
     start := int(offset)
     finish := start + int(length)
-    if start < 0 || finish < start || finish > value^.text_count {return ""}
+    if start < 0 || finish < start || finish > value^.text_count {
+        return ""
+    }
     return string(value^.text[start:finish])
 }
 
@@ -251,10 +263,16 @@ control_publication_text :: proc(
 control_node_validate_identity :: proc(
     value: ^Control_Tree_Publication,
     node: Control_Publication, index: int) -> Publication_Status {
-    if node.native_id == 0 {return .Invalid_Id}
-    if node.native_id == value^.root_id {return .Duplicate_Id}
+    if node.native_id == 0 {
+        return .Invalid_Id
+    }
+    if node.native_id == value^.root_id {
+        return .Duplicate_Id
+    }
     for prior in value^.controls[:index] {
-        if prior.native_id == node.native_id {return .Duplicate_Id}
+        if prior.native_id == node.native_id {
+            return .Duplicate_Id
+        }
     }
     return .Ok
 }
@@ -262,9 +280,13 @@ control_node_validate_identity :: proc(
 // control_tree_find_id resolves one projected native ID without allocation.
 control_tree_find_id :: proc(
     value: ^Control_Tree_Publication, native_id: u64) -> int {
-    if value == nil || native_id == 0 {return -1}
+    if value == nil || native_id == 0 {
+        return -1
+    }
     for node, index in value^.controls[:value^.control_count] {
-        if node.native_id == native_id {return index}
+        if node.native_id == native_id {
+            return index
+        }
     }
     return -1
 }
@@ -275,9 +297,13 @@ control_node_validate_ancestor :: proc(
     missing, exhausted: Publication_Status) -> Publication_Status {
     current := start
     for steps := 0; current != ancestor; steps += 1 {
-        if steps >= value^.control_count {return exhausted}
+        if steps >= value^.control_count {
+            return exhausted
+        }
         index := control_tree_find_id(value, current)
-        if index < 0 {return missing}
+        if index < 0 {
+            return missing
+        }
         current = value^.controls[index].parent_native_id
     }
     return .Ok
@@ -287,15 +313,25 @@ control_node_validate_ancestor :: proc(
 control_node_validate_hierarchy :: proc(
     value: ^Control_Tree_Publication,
     node: Control_Publication) -> Publication_Status {
-    if node.parent_native_id == 0 {return .Missing_Parent}
-    if node.parent_native_id == node.native_id {return .Cycle}
+    if node.parent_native_id == 0 {
+        return .Missing_Parent
+    }
+    if node.parent_native_id == node.native_id {
+        return .Cycle
+    }
     parent_status := control_node_validate_ancestor(
         value, node.parent_native_id, value^.root_id, .Missing_Parent, .Cycle)
-    if parent_status != .Ok {return parent_status}
-    if node.active_descendant_native_id == 0 {return .Ok}
+    if parent_status != .Ok {
+        return parent_status
+    }
+    if node.active_descendant_native_id == 0 {
+        return .Ok
+    }
     descendant_index := control_tree_find_id(
         value, node.active_descendant_native_id)
-    if descendant_index < 0 {return .Unreachable_Node}
+    if descendant_index < 0 {
+        return .Unreachable_Node
+    }
     return control_node_validate_ancestor(value,
         value^.controls[descendant_index].parent_native_id, node.native_id,
         .Unreachable_Node, .Unreachable_Node)
@@ -305,7 +341,9 @@ control_node_validate_hierarchy :: proc(
 control_node_validate_relation :: proc(
     value: ^Control_Tree_Publication,
     node: Control_Publication) -> Publication_Status {
-    if node.controls_native_id == 0 {return .Ok}
+    if node.controls_native_id == 0 {
+        return .Ok
+    }
     if control_tree_find_id(value, node.controls_native_id) < 0 {
         return .Unreachable_Node
     }
@@ -319,7 +357,9 @@ control_node_validate_content :: proc(
     if !bounds_are_valid(node.bounds) || !numeric_range_is_valid(node.range) {
         return .Invalid_Bounds
     }
-    if node.role == .Slider && !node.range.present {return .Invalid_Bounds}
+    if node.role == .Slider && !node.range.present {
+        return .Invalid_Bounds
+    }
     label := control_publication_text(value, node.label_offset, node.label_length)
     text_value := control_publication_text(
         value, node.value_offset, node.value_length)
@@ -367,13 +407,21 @@ control_tree_validate :: proc(
     }
     for node, index in value^.controls[:value^.control_count] {
         identity_status := control_node_validate_identity(value, node, index)
-        if identity_status != .Ok {return identity_status}
+        if identity_status != .Ok {
+            return identity_status
+        }
         hierarchy_status := control_node_validate_hierarchy(value, node)
-        if hierarchy_status != .Ok {return hierarchy_status}
+        if hierarchy_status != .Ok {
+            return hierarchy_status
+        }
         relation_status := control_node_validate_relation(value, node)
-        if relation_status != .Ok {return relation_status}
+        if relation_status != .Ok {
+            return relation_status
+        }
         content_status := control_node_validate_content(value, node)
-        if content_status != .Ok {return content_status}
+        if content_status != .Ok {
+            return content_status
+        }
     }
     return .Ok
 }
@@ -393,16 +441,10 @@ control_tree_copy_text :: proc(
     return true
 }
 
-// control_tree_copy_characters copies UTF-8 widths and selection character indices.
-control_tree_copy_characters :: proc(
+// Copy UTF-8 character widths and word starts into bounded publication storage.
+control_tree_copy_character_metadata :: proc(
     destination: ^Control_Tree_Publication, node: ^Control_Publication,
     source: Control_Publication_Input) -> bool {
-    if !source.text_present {return true}
-    if !control_text_boundary(source.value, source.text_cursor_byte) ||
-       !control_text_boundary(source.value, source.text_anchor_byte) {return false}
-    node^.text_present = true
-    node^.character_offset = u16(destination^.character_count)
-    node^.word_start_offset = u16(destination^.word_start_count)
     byte_offset := 0
     previous_space := true
     for byte_offset < len(source.value) {
@@ -410,9 +452,15 @@ control_tree_copy_characters :: proc(
             return false
         }
         _, width := utf8.decode_rune(source.value[byte_offset:])
-        if width <= 0 || width > int(max(u8)) {return false}
-        if byte_offset < source.text_cursor_byte {node^.cursor_character += 1}
-        if byte_offset < source.text_anchor_byte {node^.anchor_character += 1}
+        if width <= 0 || width > int(max(u8)) {
+            return false
+        }
+        if byte_offset < source.text_cursor_byte {
+            node^.cursor_character += 1
+        }
+        if byte_offset < source.text_anchor_byte {
+            node^.anchor_character += 1
+        }
         destination^.character_lengths[destination^.character_count] = u8(width)
         is_space := source.value[byte_offset] == ' ' ||
             source.value[byte_offset] == '\t' || source.value[byte_offset] == '\n'
@@ -428,6 +476,23 @@ control_tree_copy_characters :: proc(
         byte_offset += width
     }
     return byte_offset == len(source.value)
+}
+
+// control_tree_copy_characters copies UTF-8 widths and selection character indices.
+control_tree_copy_characters :: proc(
+    destination: ^Control_Tree_Publication, node: ^Control_Publication,
+    source: Control_Publication_Input) -> bool {
+    if !source.text_present {
+        return true
+    }
+    if !control_text_boundary(source.value, source.text_cursor_byte) ||
+       !control_text_boundary(source.value, source.text_anchor_byte) {
+        return false
+    }
+    node^.text_present = true
+    node^.character_offset = u16(destination^.character_count)
+    node^.word_start_offset = u16(destination^.word_start_count)
+    return control_tree_copy_character_metadata(destination, node, source)
 }
 
 // control_publication_from_input copies non-text facts into owned storage.
@@ -480,8 +545,12 @@ control_tree_append :: proc(
 control_tree_build :: proc(
     destination: ^Control_Tree_Publication,
     input: Tree_Publication_Input) -> Publication_Status {
-    if destination == nil {return .Invalid_Id}
-    if len(input.controls) > CONTROL_NODE_CAPACITY {return .Capacity}
+    if destination == nil {
+        return .Invalid_Id
+    }
+    if len(input.controls) > CONTROL_NODE_CAPACITY {
+        return .Capacity
+    }
     bounds_scale := input.bounds_scale
     if bounds_scale <= 0 || math.is_nan(bounds_scale) || math.is_inf(bounds_scale) {
         bounds_scale = 1
@@ -494,7 +563,9 @@ control_tree_build :: proc(
     }
     for source in input.controls {
         status := control_tree_append(&candidate, source)
-        if status != .Ok {return status}
+        if status != .Ok {
+            return status
+        }
     }
     status := control_tree_validate(&candidate)
     if status == .Ok {
@@ -518,13 +589,19 @@ control_trees_match :: proc(
 protected_publish_controls :: proc(
     protected: ^Protected_Control_Publication,
     input: Tree_Publication_Input) -> Publication_Status {
-    if protected == nil {return .Invalid_Id}
+    if protected == nil {
+        return .Invalid_Id
+    }
     sync.mutex_lock(&protected^.mutex)
     defer sync.mutex_unlock(&protected^.mutex)
-    if protected^.closing {return .Invalid_Id}
+    if protected^.closing {
+        return .Invalid_Id
+    }
     candidate: Control_Tree_Publication
     status := control_tree_build(&candidate, input)
-    if status != .Ok {return status}
+    if status != .Ok {
+        return status
+    }
     if control_tree_validate(&protected^.current) == .Ok &&
        control_trees_match(protected^.current, candidate) {
         return .Ok
@@ -538,17 +615,23 @@ protected_publish_controls :: proc(
 protected_control_snapshot :: proc(
     protected: ^Protected_Control_Publication,
     destination: ^Control_Tree_Publication) -> bool {
-    if protected == nil || destination == nil {return false}
+    if protected == nil || destination == nil {
+        return false
+    }
     sync.mutex_lock(&protected^.mutex)
     defer sync.mutex_unlock(&protected^.mutex)
-    if protected^.closing {return false}
+    if protected^.closing {
+        return false
+    }
     destination^ = protected^.current
     return control_tree_validate(destination) == .Ok
 }
 
 // protected_control_close rejects observations before native teardown begins.
 protected_control_close :: proc(protected: ^Protected_Control_Publication) {
-    if protected == nil {return}
+    if protected == nil {
+        return
+    }
     sync.mutex_lock(&protected^.mutex)
     protected^.closing = true
     sync.mutex_unlock(&protected^.mutex)
@@ -556,11 +639,21 @@ protected_control_close :: proc(protected: ^Protected_Control_Publication) {
 
 // publication_validate_child proves the projected child's complete tree contract.
 publication_validate_child :: proc(value: ^Static_Publication) -> Publication_Status {
-    if value^.child_id == 0 {return .Invalid_Id}
-    if value^.root_id == value^.child_id {return .Duplicate_Id}
-    if value^.child_parent_id == value^.child_id {return .Cycle}
-    if value^.child_parent_id == 0 {return .Missing_Parent}
-    if value^.child_parent_id != value^.root_id {return .Unreachable_Node}
+    if value^.child_id == 0 {
+        return .Invalid_Id
+    }
+    if value^.root_id == value^.child_id {
+        return .Duplicate_Id
+    }
+    if value^.child_parent_id == value^.child_id {
+        return .Cycle
+    }
+    if value^.child_parent_id == 0 {
+        return .Missing_Parent
+    }
+    if value^.child_parent_id != value^.root_id {
+        return .Unreachable_Node
+    }
     if value^.label_length < 0 || value^.label_length > len(value^.label) {
         return .Capacity
     }
@@ -576,9 +669,15 @@ publication_validate_child :: proc(value: ^Static_Publication) -> Publication_St
 
 // publication_validate proves the complete rooted-tree contract.
 publication_validate :: proc(value: ^Static_Publication) -> Publication_Status {
-    if value == nil || value^.root_id == 0 {return .Invalid_Id}
-    if !bounds_are_valid(value^.root_bounds) {return .Invalid_Bounds}
-    if !value^.child_present {return .Ok}
+    if value == nil || value^.root_id == 0 {
+        return .Invalid_Id
+    }
+    if !bounds_are_valid(value^.root_bounds) {
+        return .Invalid_Bounds
+    }
+    if !value^.child_present {
+        return .Ok
+    }
     return publication_validate_child(value)
 }
 
@@ -586,7 +685,9 @@ publication_validate :: proc(value: ^Static_Publication) -> Publication_Status {
 publication_build :: proc(
     destination: ^Static_Publication, width, height: f64,
     focused: bool) -> Publication_Status {
-    if destination == nil {return .Invalid_Id}
+    if destination == nil {
+        return .Invalid_Id
+    }
     next_generation := destination^.generation + 1
     candidate := Static_Publication{
         generation = next_generation,
@@ -603,7 +704,9 @@ publication_build :: proc(
     copy(candidate.label[:], transmute([]u8)label)
     candidate.label_length = len(label)
     status := publication_validate(&candidate)
-    if status == .Ok {destination^ = candidate}
+    if status == .Ok {
+        destination^ = candidate
+    }
     return status
 }
 
@@ -611,8 +714,12 @@ publication_build :: proc(
 publication_build_button :: proc(
     destination: ^Static_Publication,
     input: Button_Publication_Input) -> Publication_Status {
-    if destination == nil || input.child_id == 0 {return .Invalid_Id}
-    if len(input.label) > len(destination^.label) {return .Capacity}
+    if destination == nil || input.child_id == 0 {
+        return .Invalid_Id
+    }
+    if len(input.label) > len(destination^.label) {
+        return .Capacity
+    }
     candidate := Static_Publication{
         generation = destination^.generation + 1,
         root_id = SYNTHETIC_ROOT_ID,
@@ -632,7 +739,9 @@ publication_build_button :: proc(
     copy(candidate.label[:], transmute([]u8)input.label)
     candidate.label_length = len(input.label)
     status := publication_validate(&candidate)
-    if status == .Ok {destination^ = candidate}
+    if status == .Ok {
+        destination^ = candidate
+    }
     return status
 }
 
@@ -640,7 +749,9 @@ publication_build_button :: proc(
 publication_build_root :: proc(
     destination: ^Static_Publication, bounds: Bounds,
     focused: bool) -> Publication_Status {
-    if destination == nil {return .Invalid_Id}
+    if destination == nil {
+        return .Invalid_Id
+    }
     candidate := Static_Publication{
         generation = destination^.generation + 1,
         root_id = SYNTHETIC_ROOT_ID,
@@ -648,7 +759,9 @@ publication_build_root :: proc(
         window_focused = focused,
     }
     status := publication_validate(&candidate)
-    if status == .Ok {destination^ = candidate}
+    if status == .Ok {
+        destination^ = candidate
+    }
     return status
 }
 
@@ -665,10 +778,14 @@ publications_match :: proc(left, right: Static_Publication) -> bool {
 protected_publish_button :: proc(
     protected: ^Protected_Publication,
     input: Button_Publication_Input) -> Publication_Status {
-    if protected == nil {return .Invalid_Id}
+    if protected == nil {
+        return .Invalid_Id
+    }
     sync.mutex_lock(&protected^.mutex)
     defer sync.mutex_unlock(&protected^.mutex)
-    if protected^.closing {return .Invalid_Id}
+    if protected^.closing {
+        return .Invalid_Id
+    }
     candidate: Static_Publication
     status := Publication_Status.Ok
     if input.present {
@@ -680,7 +797,9 @@ protected_publish_button :: proc(
         status = publication_build_root(
             &candidate, input.root_bounds, input.window_focused)
     }
-    if status != .Ok {return status}
+    if status != .Ok {
+        return status
+    }
     if publication_validate(&protected^.current) == .Ok &&
        publications_match(protected^.current, candidate) {
         return .Ok
@@ -694,10 +813,14 @@ protected_publish_button :: proc(
 protected_publish :: proc(
     protected: ^Protected_Publication, width, height: f64,
     focused: bool) -> Publication_Status {
-    if protected == nil {return .Invalid_Id}
+    if protected == nil {
+        return .Invalid_Id
+    }
     sync.mutex_lock(&protected^.mutex)
     defer sync.mutex_unlock(&protected^.mutex)
-    if protected^.closing {return .Invalid_Id}
+    if protected^.closing {
+        return .Invalid_Id
+    }
     current := &protected^.current
     if publication_validate(current) == .Ok &&
        current^.root_bounds.x1 == width && current^.root_bounds.y1 == height &&
@@ -711,17 +834,23 @@ protected_publish :: proc(
 protected_snapshot :: proc(
     protected: ^Protected_Publication,
     destination: ^Static_Publication) -> bool {
-    if protected == nil || destination == nil {return false}
+    if protected == nil || destination == nil {
+        return false
+    }
     sync.mutex_lock(&protected^.mutex)
     defer sync.mutex_unlock(&protected^.mutex)
-    if protected^.closing {return false}
+    if protected^.closing {
+        return false
+    }
     destination^ = protected^.current
     return publication_validate(destination) == .Ok
 }
 
 // protected_close prevents callbacks from observing publication storage as current.
 protected_close :: proc(protected: ^Protected_Publication) {
-    if protected == nil {return}
+    if protected == nil {
+        return
+    }
     sync.mutex_lock(&protected^.mutex)
     protected^.closing = true
     sync.mutex_unlock(&protected^.mutex)

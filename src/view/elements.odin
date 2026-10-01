@@ -381,15 +381,6 @@ trochoid_tool_defers_to_compass :: #force_inline proc(
     return guide_index >= 0 && compass_index >= 0 && guide_index > compass_index
 }
 
-
-//   Render the base isometric drawing plane and its border triangles.
-//
-// Parameters:
-//   - state: Global app state providing surface geometry and iso projection scale.
-//
-// Returns:
-//   - none.
-
 // draw_encoded_drawing_surface encodes the projected plane and border triangles.
 draw_encoded_drawing_surface :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder) {
@@ -584,7 +575,9 @@ draw_encoded_tool_segment :: proc(
     thickness, draw_color := draw.thickness, draw.color
     delta := p1 - p0
     segment_length := linalg.length(delta)
-    if segment_length <= 0 || thickness <= 0 {return}
+    if segment_length <= 0 || thickness <= 0 {
+        return
+    }
     if !encoder^.strokes_enabled {
         points := [2]geometry.Vector2{geometry.Vector2(p0), geometry.Vector2(p1)}
         style := native.Draw_Polyline_Style{width = thickness,
@@ -618,9 +611,13 @@ draw_encoded_cached_pen :: proc(
     second := view_core.iso_to_cartesian(pen^.joint2, state^.iso_scale^)
     if pen^.active_child == 1 || pen^.active_child == 2 {
         active := pen^.color
-        if pen^.has_active_color {active = pen^.active_color}
+        if pen^.has_active_color {
+           active = pen^.active_color
+        }
         center := first
-        if pen^.active_child == 2 {center = second}
+        if pen^.active_child == 2 {
+           center = second
+        }
         _ = native.draw_encoder_circle(
             encoder, geometry.Vector2(center), pen^.brush_size, active)
     }
@@ -665,24 +662,6 @@ draw_encoded_cached_shadow_pass :: proc(
     }
 }
 
-//   Render cached shadow overlays for pen and compass tool geometry.
-//
-// Parameters:
-//   - state: Global app state containing tool shadow draw-cache entries.
-//
-// Returns:
-//   - none.
-
-//   Render floor shadows for cached low-layer geometry when any defining point is above the surface.
-//
-// Notes:
-//   - Flat and below-surface geometry draws no shadow.
-//   - Labels are intentionally excluded from the shape-shadow pass.
-
-//   Draw one cached item only when it belongs to the lower geometry layer.
-
-//   Draw one cached item's floor shadow when that item can cast one.
-
 //   Return true when a cached point draw item belongs to the elevated layer.
 draw_cached_point_is_elevated :: #force_inline proc(
     p: ^shapemodel.Shapes_Point_Draw) -> bool {
@@ -722,30 +701,6 @@ draw_cached_polygon_is_elevated :: #force_inline proc(
     return has_any_elevated_shadow_point(vertices)
 }
 
-//   Draw one cached point only when it belongs to the lower geometry layer.
-
-//   Draw one cached point only when it belongs to the merged higher layer.
-
-//   Draw one cached line only when it belongs to the lower geometry layer.
-
-//   Draw one cached line only when it belongs to the merged higher layer.
-
-//   Draw one cached circle only when it belongs to the lower geometry layer.
-
-//   Draw one cached circle only when it belongs to the merged higher layer.
-
-//   Draw one cached filled circle only when it belongs to the lower geometry layer.
-
-//   Draw one cached filled circle only when it belongs to the merged higher layer.
-
-// Draw one cached curve only when all of it belongs to the lower geometry layer.
-
-// Draw one cached curve in the higher layer when any vertex is elevated.
-
-//   Draw one cached polygon only when it belongs to the lower geometry layer.
-
-//   Draw one cached polygon only when it belongs to the merged higher layer.
-
 // Return one planar world-space point on a guide ring.
 trochoid_tool_ring_point :: #force_inline proc(
     center: Vector3, radius, angle: f32) -> Vector3 {
@@ -767,9 +722,13 @@ build_trochoid_tool_ring_samples :: proc(
         projected := view_core.iso_to_cartesian(center3d, state^.iso_scale^)
         tangent_point := view_core.iso_to_cartesian(
             center3d + tangent3d, state^.iso_scale^)
+
         tangent := tangent_point - projected
         tangent_length := linalg.length(tangent)
-        if tangent_length <= 0.0001 {return false}
+        if tangent_length <= 0.0001 {
+            return false
+        }
+
         tangent /= tangent_length
         perpendicular := Vector2{-tangent.y, tangent.x}
         samples^.tangents_view[index] =
@@ -935,9 +894,15 @@ z_split_clip_segment_halfspace :: #force_inline proc(
 // Classify one source edge by its selected halfspace transition.
 curve_visible_edge_kind :: #force_inline proc(
     first_in, second_in: bool) -> Curve_Visible_Edge_Kind {
-    if first_in && second_in {return .Inside}
-    if first_in {return .Exit}
-    if second_in {return .Entry}
+    if first_in && second_in {
+        return .Inside
+    }
+    if first_in {
+        return .Exit
+    }
+    if second_in {
+        return .Entry
+    }
     return .Hidden
 }
 
@@ -989,7 +954,9 @@ curve_visible_append_point :: #force_inline proc(input: Curve_Visible_Run_Input,
     buffers: Curve_Visible_Run_Buffers, point: Vector3,
     kind: shapemodel.Curve_Point_Kind, point_count: ^int) {
     projected := point
-    if input.shadow {projected = project_to_floor_shadow(point, input.scale)}
+    if input.shadow {
+        projected = project_to_floor_shadow(point, input.scale)
+    }
     buffers.points[point_count^] = view_core.iso_to_cartesian(projected, input.scale)
     buffers.kinds[point_count^] = kind
     point_count^ += 1
@@ -1044,14 +1011,18 @@ curve_visible_write_edge :: proc(
 // Clip world-space curve edges and assemble contiguous projected visible runs.
 build_projected_curve_visible_runs :: proc(input: Curve_Visible_Run_Input,
     buffers: Curve_Visible_Run_Buffers) -> Curve_Visible_Run_Result {
-    if len(input.points) < 2 || len(input.kinds) < len(input.points) {return {}}
+    if len(input.points) < 2 || len(input.kinds) < len(input.points) {
+        return {}
+    }
     counts := curve_visible_run_counts(input.points, input.keep_above)
     if counts.point_count > len(buffers.points) ||
         counts.point_count > len(buffers.kinds) || counts.run_count > len(buffers.runs) {
         return {}
     }
     output_topology := shapemodel.Curve_Topology.Open
-    if counts.unchanged && counts.run_count == 1 {output_topology = input.topology}
+    if counts.unchanged && counts.run_count == 1 {
+        output_topology = input.topology
+    }
     writer := Curve_Visible_Run_Writer{input = input, buffers = buffers}
     for index in 1..<len(input.points) {
         first_in := z_split_point_in_halfspace(input.points[index - 1], input.keep_above)
@@ -1069,8 +1040,12 @@ build_projected_curve_visible_runs :: proc(input: Curve_Visible_Run_Input,
 // curve_reduction_budget selects one stable logical-pixel quality tier.
 curve_reduction_budget :: #force_inline proc(
     half_scale: f32) -> Curve_Reduction_Budget {
-    if half_scale < 240 {return {0.20, 0.12, COLORED_STROKE_MITER_LIMIT}}
-    if half_scale < 480 {return {0.30, 0.18, COLORED_STROKE_MITER_LIMIT}}
+    if half_scale < 240 {
+        return {0.20, 0.12, COLORED_STROKE_MITER_LIMIT}
+    }
+    if half_scale < 480 {
+        return {0.30, 0.18, COLORED_STROKE_MITER_LIMIT}
+    }
     return {0.40, 0.24, COLORED_STROKE_MITER_LIMIT}
 }
 
@@ -1079,7 +1054,9 @@ curve_reduction_distance_to_chord :: proc(
     point, first, last: Vector2) -> f32 {
     chord := last - first
     length_squared := linalg.dot(chord, chord)
-    if length_squared <= 0 {return linalg.length(point - first)}
+    if length_squared <= 0 {
+        return linalg.length(point - first)
+    }
     parameter := math.clamp(linalg.dot(point - first, chord) / length_squared, 0, 1)
     return linalg.length(point - (first + chord * parameter))
 }
@@ -1104,11 +1081,15 @@ curve_reduction_join_passes :: proc(
     outgoing := next - current
     incoming_length := linalg.length(incoming)
     outgoing_length := linalg.length(outgoing)
-    if incoming_length <= 0 || outgoing_length <= 0 {return false}
+    if incoming_length <= 0 || outgoing_length <= 0 {
+        return false
+    }
     cosine := math.clamp(linalg.dot(
         incoming / incoming_length, outgoing / outgoing_length), -1, 1)
     denominator := math.sqrt(max((1 + cosine) * 0.5, 0))
-    if denominator <= native.DRAW_POLYLINE_MITER_EPSILON {return false}
+    if denominator <= native.DRAW_POLYLINE_MITER_EPSILON {
+        return false
+    }
     ratio := 1 / denominator
     return ratio <= budget.miter_limit &&
         width * 0.5 * (ratio - 1) <= budget.stroke_error
@@ -1118,7 +1099,9 @@ curve_reduction_join_passes :: proc(
 curve_reduction_mandatory :: #force_inline proc(
     points: []Vector2, kinds: []shapemodel.Curve_Point_Kind,
     index: int, width: f32, budget: Curve_Reduction_Budget) -> bool {
-    if kinds[index] == .Cusp {return true}
+    if kinds[index] == .Cusp {
+        return true
+    }
     return !curve_reduction_join_passes(
         points[index - 1], points[index], points[index + 1], width, budget)
 }
@@ -1132,11 +1115,17 @@ curve_reduction_next_index :: proc(
     best := anchor + 1
     for candidate in anchor + 1..=last {
         if candidate > anchor + 1 && curve_reduction_mandatory(
-            points, kinds, candidate - 1, width, budget) {break}
-        if !curve_reduction_span_passes(points, anchor, candidate, budget) {break}
+            points, kinds, candidate - 1, width, budget) {
+            break
+        }
+        if !curve_reduction_span_passes(points, anchor, candidate, budget) {
+            break
+        }
         if previous >= 0 && kinds[anchor] != .Cusp &&
             !curve_reduction_join_passes(points[previous], points[anchor],
-                points[candidate], width, budget) {break}
+                points[candidate], width, budget) {
+            break
+        }
         best = candidate
     }
     return best
@@ -1152,7 +1141,9 @@ curve_reduction_summarize_run :: proc(
         next := curve_reduction_next_index(
             points, kinds, {previous, anchor}, width, budget)
         summary.retained_count += 1
-        if summary.retained_count == 2 {summary.second_index = next}
+        if summary.retained_count == 2 {
+            summary.second_index = next
+        }
         summary.before_last_index = summary.last_index
         summary.last_index = next
         previous, anchor = anchor, next
@@ -1165,7 +1156,9 @@ curve_reduction_closed_passes :: proc(
     points: []Vector2, kinds: []shapemodel.Curve_Point_Kind,
     summary: Curve_Reduction_Run_Summary, width: f32,
     budget: Curve_Reduction_Budget) -> bool {
-    if summary.retained_count < 4 || kinds[0] == .Cusp {return true}
+    if summary.retained_count < 4 || kinds[0] == .Cusp {
+        return true
+    }
     seam_previous := summary.before_last_index
     return curve_reduction_join_passes(points[seam_previous], points[0],
         points[summary.second_index], width, budget)
@@ -1201,13 +1194,19 @@ curve_reduction_input_valid :: proc(
         budget.miter_limit <= 1 || math.is_nan(budget.center_error) ||
         math.is_nan(budget.stroke_error) || math.is_nan(budget.miter_limit) ||
         math.is_inf(budget.center_error) || math.is_inf(budget.stroke_error) ||
-        math.is_inf(budget.miter_limit) {return false}
+        math.is_inf(budget.miter_limit) {
+        return false
+    }
     if visible.point_count > len(buffers.points) ||
         visible.point_count > len(buffers.kinds) ||
-        visible.run_count > len(buffers.runs) {return false}
+        visible.run_count > len(buffers.runs) {
+        return false
+    }
     for run in buffers.runs[:visible.run_count] {
         if run.first_point < 0 || run.point_count < 2 ||
-            run.first_point + run.point_count > visible.point_count {return false}
+            run.first_point + run.point_count > visible.point_count {
+            return false
+        }
     }
     return true
 }
@@ -1220,7 +1219,9 @@ curve_reduction_apply_run :: proc(
     kinds := buffers.kinds[run.first_point:run.first_point + run.point_count]
     summary := curve_reduction_summarize_run(points, kinds, width, budget)
     if run.topology != .Open && !curve_reduction_closed_passes(
-        points, kinds, summary, width, budget) {summary.retained_count = run.point_count}
+        points, kinds, summary, width, budget) {
+        summary.retained_count = run.point_count
+    }
     if summary.retained_count != run.point_count {
         return curve_reduction_write_run(buffers, run, destination, width, budget)
     }
@@ -1834,31 +1835,6 @@ project_iso_points_batch_with_components :: proc(
 
 
 
-//   Render one cached label draw item.
-
-
-//   Render one cached point floor shadow.
-
-
-//   Render one cached line floor shadow.
-
-// Draw one elevated guide ring as ordinary segmented floor shadows.
-
-// Render elevated floor shadows for both guide rings and the orientation handle.
-
-// Render floor shadows for the exact rail, rolling ring, and orientation handle.
-
-// Render floor shadows for every segment in one explicated curve packet.
-
-
-//   Render one cached circle/arc floor shadow.
-
-
-//   Render one cached filled-circle floor shadow.
-
-
-//   Render one cached point draw item.
-
 // draw_encoded_cached_point encodes one projected cached point.
 draw_encoded_cached_point :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
@@ -1869,7 +1845,6 @@ draw_encoded_cached_point :: proc(
 }
 
 
-//   Render one cached line draw item.
 
 // draw_encoded_cached_line encodes one visible z-clipped cached line fragment.
 draw_encoded_cached_line :: proc(
@@ -1877,7 +1852,9 @@ draw_encoded_cached_line :: proc(
     line: ^shapemodel.Shapes_Line_Draw, keep_above: bool) {
     clipped0, clipped1: Vector3
     if !z_split_clip_segment_halfspace(
-        line^.point1, line^.point2, keep_above, &clipped0, &clipped1) {return}
+        line^.point1, line^.point2, keep_above, &clipped0, &clipped1) {
+        return
+    }
     draw_color := line^.color
     if !keep_above &&
         (z_split_sign(clipped0.z) < 0 || z_split_sign(clipped1.z) < 0) {
@@ -1905,7 +1882,9 @@ draw_encoded_curve_visible_runs :: proc(
         model_kinds := buffers.kinds[run.first_point:run.first_point + run.point_count]
         kinds := transmute([]native.Draw_Polyline_Point_Kind)model_kinds
         topology := native.Draw_Polyline_Topology.Open
-        if run.topology != .Open {topology = .Closed}
+        if run.topology != .Open {
+            topology = .Closed
+        }
         style := native.Draw_Polyline_Style{width = width,
             miter_limit = COLORED_STROKE_MITER_LIMIT, color = draw_color,
             topology = topology, start_cap = .Round, finish_cap = .Round}
@@ -1928,10 +1907,14 @@ draw_encoded_cached_curve :: proc(
     buffers := Curve_Visible_Run_Buffers{projected[:], projected_kinds[:], runs[:]}
     result := build_projected_curve_visible_runs({state^.iso_scale^,
         vertices, kinds, curve^.topology, keep_above, false}, buffers)
-    if !result.ok {return}
+    if !result.ok {
+        return
+    }
     reduction := reduce_projected_curve_visible_runs(buffers, result,
         curve^.brush_size, curve_reduction_budget(state^.iso_scale^.half_scale))
-    if !reduction.ok {return}
+    if !reduction.ok {
+        return
+    }
     native.draw_encoder_record_curve_reduction(
         encoder, reduction.candidate_count, reduction.retained_count)
     result.point_count = reduction.retained_count
@@ -2004,9 +1987,13 @@ draw_encoded_cached_filled_circle :: proc(
 draw_encoded_cached_polygon :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     polygon: ^shapemodel.Shapes_Polygon_Draw) {
-    if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {return}
+    if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
+        return
+    }
     projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
-    if !project_cached_polygon_vertices(state, polygon, projected[:]) {return}
+    if !project_cached_polygon_vertices(state, polygon, projected[:]) {
+        return
+    }
     cache := &state^.shape_world^.draw_cache
     triangles := cache^.polygon_triangles[polygon^.first_triangle:
         polygon^.first_triangle + polygon^.triangle_count]
@@ -2016,7 +2003,9 @@ draw_encoded_cached_polygon :: proc(
         third := triangle.c - polygon^.first_vertex
         if first < 0 || first >= polygon^.vertex_count || second < 0 ||
             second >= polygon^.vertex_count || third < 0 ||
-            third >= polygon^.vertex_count {continue}
+            third >= polygon^.vertex_count {
+            continue
+        }
         _ = native.draw_encoder_triangle(encoder,
             geometry.Vector2(projected[first]), geometry.Vector2(projected[second]),
             geometry.Vector2(projected[third]), color.Color_RGBA8(polygon^.color))
@@ -2027,7 +2016,9 @@ draw_encoded_cached_polygon :: proc(
 draw_encoded_cached_point_shadow :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     point: ^shapemodel.Shapes_Point_Draw) {
-    if !shadow_point_is_elevated(point^.point1) {return}
+    if !shadow_point_is_elevated(point^.point1) {
+        return
+    }
     screen := shadow_to_screen(point^.point1, state)
     draw_color := encoded_shadow_color(point^.point1.z)
     _ = native.draw_encoder_circle(encoder, geometry.Vector2(screen),
@@ -2039,10 +2030,14 @@ draw_encoded_cached_line_shadow :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     line: ^shapemodel.Shapes_Line_Draw) {
     points := [2]Vector3{line^.point1, line^.point2}
-    if !has_any_elevated_shadow_point(points[:]) {return}
+    if !has_any_elevated_shadow_point(points[:]) {
+        return
+    }
     clipped0, clipped1: Vector3
     if !z_split_clip_segment_halfspace(
-        line^.point1, line^.point2, true, &clipped0, &clipped1) {return}
+        line^.point1, line^.point2, true, &clipped0, &clipped1) {
+        return
+    }
     clipped := [2]Vector3{clipped0, clipped1}
     draw_color := encoded_shadow_color(average_shadow_height(clipped[:]))
     projected := [2]geometry.Vector2{
@@ -2062,7 +2057,9 @@ draw_encoded_cached_curve_shadow :: proc(
     cache := &state^.shape_world^.draw_cache
     vertices := cache^.curve_vertices[
         curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
-    if !has_any_elevated_shadow_point(vertices) {return}
+    if !has_any_elevated_shadow_point(vertices) {
+        return
+    }
     kinds := cache^.curve_vertex_kinds[
         curve^.first_vertex:curve^.first_vertex + curve^.vertex_count]
     projected: [MAX_CURVE_VISIBLE_POINTS]Vector2
@@ -2071,11 +2068,15 @@ draw_encoded_cached_curve_shadow :: proc(
     buffers := Curve_Visible_Run_Buffers{projected[:], projected_kinds[:], runs[:]}
     result := build_projected_curve_visible_runs({state^.iso_scale^,
         vertices, kinds, curve^.topology, true, true}, buffers)
-    if !result.ok {return}
+    if !result.ok {
+        return
+    }
     thickness := math.max(curve^.brush_size * 0.8, SHADOW_MIN_THICKNESS)
     reduction := reduce_projected_curve_visible_runs(buffers, result, thickness,
         curve_reduction_budget(state^.iso_scale^.half_scale))
-    if !reduction.ok {return}
+    if !reduction.ok {
+        return
+    }
     native.draw_encoder_record_curve_reduction(
         encoder, reduction.candidate_count, reduction.retained_count)
     result.point_count = reduction.retained_count
@@ -2087,7 +2088,9 @@ draw_encoded_cached_curve_shadow :: proc(
 draw_encoded_cached_circle_shadow :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     circle: ^shapemodel.Shapes_Circle_Draw) {
-    if !shadow_point_is_elevated(circle^.center) {return}
+    if !shadow_point_is_elevated(circle^.center) {
+        return
+    }
     geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
         circle^.start_theta, circle^.sweep_theta)
     points: [CIRCLE_ARC_SEGMENTS + 1]Vector3
@@ -2109,7 +2112,9 @@ draw_encoded_cached_circle_shadow :: proc(
 draw_encoded_cached_filled_circle_shadow :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     circle: ^shapemodel.Shapes_Filled_Circle_Draw) {
-    if !shadow_point_is_elevated(circle^.center) {return}
+    if !shadow_point_is_elevated(circle^.center) {
+        return
+    }
     geometry_value := circle_arc_geometry(circle^.center, circle^.radius,
         circle^.start_theta, circle^.sweep_theta)
     points: [CIRCLE_ARC_SEGMENTS + 1]Vector3
@@ -2127,11 +2132,15 @@ draw_encoded_cached_filled_circle_shadow :: proc(
 draw_encoded_cached_polygon_shadow :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     polygon: ^shapemodel.Shapes_Polygon_Draw) {
-    if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {return}
+    if polygon^.vertex_count < 3 || polygon^.triangle_count <= 0 {
+        return
+    }
     cache := &state^.shape_world^.draw_cache
     vertices := cache^.polygon_vertices[
         polygon^.first_vertex:polygon^.first_vertex + polygon^.vertex_count]
-    if !has_any_elevated_shadow_point(vertices) {return}
+    if !has_any_elevated_shadow_point(vertices) {
+        return
+    }
     projected: [shapemodel.MAX_DRAW_CACHE_POLYGON_VERTICES]Vector2
     for index in 0..<polygon^.vertex_count {
         projected[index] = shadow_to_screen(vertices[index], state)
@@ -2145,20 +2154,14 @@ draw_encoded_cached_polygon_shadow :: proc(
         third := triangle.c - polygon^.first_vertex
         if first < 0 || first >= polygon^.vertex_count || second < 0 ||
             second >= polygon^.vertex_count || third < 0 ||
-            third >= polygon^.vertex_count {continue}
+            third >= polygon^.vertex_count {
+            continue
+        }
         _ = native.draw_encoder_triangle(encoder,
             geometry.Vector2(projected[first]), geometry.Vector2(projected[second]),
             geometry.Vector2(projected[third]), draw_color)
     }
 }
-
-// Render every segment in one explicated curve using ordinary line styling.
-
-
-//   Render one cached circle/arc draw item.
-
-//   Render one cached filled-circle draw item.
-
 
 //   Batch-project cached polygon vertices into screen space.
 project_cached_polygon_vertices :: #force_inline proc(
@@ -2183,16 +2186,6 @@ project_cached_polygon_vertices :: #force_inline proc(
 
     return true
 }
-
-//   Draw all cached triangles for a polygon using projected vertex positions.
-
-
-//   Render one cached polygon floor shadow.
-
-//   Render one cached polygon draw item.
-
-
-//   Render active-end indicator for cached pen tool.
 
 //   Compute the orthonormal arc basis, radius, and outside sweep for a compass.
 //
@@ -2283,14 +2276,3 @@ build_compass_arc_samples :: proc(
     }
     return true
 }
-
-//   Render active-end indicator for cached compass tool.
-
-
-//   Render floor shadow for cached pen tool geometry.
-
-
-//   Render floor-shadow arc segment outside the compass swing angle.
-
-
-//   Render floor shadow for cached compass tool geometry.

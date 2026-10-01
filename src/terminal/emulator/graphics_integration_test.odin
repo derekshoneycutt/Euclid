@@ -608,6 +608,25 @@ graphics_test_kitty_raw_transmit_and_place :: proc(t: ^testing.T) {
 }
 
 // Verify timg's line-feed and cursor-up Kitty sequence retains one logical row.
+graphics_test_kitty_timg_frames_retain_anchor :: proc(
+    t: ^testing.T, interpreter: ^Interpreter,
+    graphics: ^gfxprotocol.Graphics_Parser_State,
+    store: ^termattachment.Store) {
+    IMAGE :: "\e_Ga=T,f=100,i=7,r=2,q=2;iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\e\\"
+    expected_row: i64
+    for frame_index in 0..<4 {
+        testing.expect(t, interpreter_write(interpreter, IMAGE + "\n\e[2A"))
+        request, available := gfxprotocol.graphics_parser_take_decode_request(graphics)
+        testing.expect(t, available)
+        if frame_index == 0 {
+            expected_row = request.geometry.logical_row
+        }
+        testing.expect_value(t, request.geometry.logical_row, expected_row)
+        termattachment.transfer_remove(store, request.transfer_id)
+    }
+}
+
+// Verify timg's line-feed and cursor-up Kitty sequence retains one logical row.
 @(test)
 graphics_test_kitty_timg_animation_retains_anchor :: proc(t: ^testing.T) {
     store: termattachment.Store
@@ -631,18 +650,8 @@ graphics_test_kitty_timg_animation_retains_anchor :: proc(t: ^testing.T) {
     defer graphics_test_destroy(&store, &graphics, &grid)
     gfxsemantics.graphics_semantics_enable(&graphics)
     termgrid.grid_set_cursor(&grid, 3, 0)
-
-    IMAGE :: "\e_Ga=T,f=100,i=7,r=2,q=2;iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\e\\"
-    expected_row: i64
-    for frame_index in 0..<4 {
-        testing.expect(t, interpreter_write(&interpreter, IMAGE + "\n\e[2A"))
-        request, available :=
-            gfxprotocol.graphics_parser_take_decode_request(&graphics)
-        testing.expect(t, available)
-        if frame_index == 0 { expected_row = request.geometry.logical_row }
-        testing.expect_value(t, request.geometry.logical_row, expected_row)
-        termattachment.transfer_remove(&store, request.transfer_id)
-    }
+    graphics_test_kitty_timg_frames_retain_anchor(
+        t, &interpreter, &graphics, &store)
     testing.expect_value(t, store.placement_count, 1)
     testing.expect_value(t, grid.cursor.row, 3)
 }
@@ -1069,7 +1078,9 @@ graphics_test_expect_sixel_timg_frames :: proc(
         request, available := gfxprotocol.graphics_parser_take_decode_request(
             targets.graphics)
         testing.expect(t, available)
-        if frame_index == 0 { expected_row = request.geometry.logical_row }
+        if frame_index == 0 {
+            expected_row = request.geometry.logical_row 
+        }
         testing.expect_value(t, request.geometry.logical_row, expected_row)
         testing.expect_value(t, targets.grid.cursor.row, 9)
         testing.expect_value(t, targets.grid.cursor.column, 2)

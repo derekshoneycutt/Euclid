@@ -75,7 +75,9 @@ input_box_clamp_boundary :: proc(text: string, offset: int) -> int {
 // input_box_previous_boundary returns the codepoint boundary before one offset.
 input_box_previous_boundary :: proc(text: string, offset: int) -> int {
     result := input_box_clamp_boundary(text, offset)
-    if result <= 0 {return 0}
+    if result <= 0 {
+        return 0
+    }
     result -= 1
     for result > 0 && dyncore.text_is_utf8_trailing_byte(text[result]) {
         result -= 1
@@ -86,7 +88,9 @@ input_box_previous_boundary :: proc(text: string, offset: int) -> int {
 // input_box_next_boundary returns the codepoint boundary after one offset.
 input_box_next_boundary :: proc(text: string, offset: int) -> int {
     result := input_box_clamp_boundary(text, offset)
-    if result >= len(text) {return len(text)}
+    if result >= len(text) {
+        return len(text)
+    }
     return min(len(text), result + max(1,
         dyncore.text_utf8_sequence_len(text, result)))
 }
@@ -101,7 +105,9 @@ input_box_byte_column :: #force_inline proc(text: string, offset: int) -> int {
 input_box_column_boundary :: proc(text: string, column: int) -> int {
     offset := 0
     for _ in 0..<max(0, column) {
-        if offset >= len(text) {break}
+        if offset >= len(text) {
+            break
+        }
         offset = input_box_next_boundary(text, offset)
     }
     return offset
@@ -110,7 +116,9 @@ input_box_column_boundary :: proc(text: string, column: int) -> int {
 // input_box_reconcile_content resets interaction to newly published borrowed text.
 input_box_reconcile_content :: proc(
     state: ^viewmodel.Ui_Input_Box_State, text: string, revision: u64) -> bool {
-    if state == nil {return false}
+    if state == nil {
+        return false
+    }
     if state^.content_revision != revision {
         state^.cursor_byte = len(text)
         state^.anchor_byte = len(text)
@@ -142,7 +150,9 @@ input_box_move_cursor :: proc(
     case .End: destination = len(text)
     case: return
     }
-    if !extend {state^.anchor_byte = destination}
+    if !extend {
+        state^.anchor_byte = destination
+    }
     state^.cursor_byte = destination
 }
 
@@ -151,9 +161,13 @@ input_box_apply_keyboard :: proc(
     state: ^viewmodel.Ui_Input_Box_State,
     text: string, frame: input.Input_Frame) -> Input_Box_Update {
     result: Input_Box_Update
-    if state == nil {return result}
+    if state == nil {
+        return result
+    }
     for event in frame.events {
-        if event.kind != .Press && event.kind != .Repeat {continue}
+        if event.kind != .Press && event.kind != .Repeat {
+            continue
+        }
         control := .Control in event.modifiers
         if control && event.key == .A {
             state^.anchor_byte = 0
@@ -174,7 +188,9 @@ input_box_apply_keyboard :: proc(
 input_box_replace_selection :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
     replacement: string) -> bool {
-    if state == nil || target.length == nil {return false}
+    if state == nil || target.length == nil {
+        return false
+    }
     text_length := clamp(target.length^, 0, len(target.bytes))
     text := string(target.bytes[:text_length])
     first := min(input_box_clamp_boundary(text, state^.anchor_byte),
@@ -187,7 +203,9 @@ input_box_replace_selection :: proc(
         dyncore.text_is_utf8_trailing_byte(replacement[inserted]) {
         inserted -= 1
     }
-    if first == last && inserted == 0 {return false}
+    if first == last && inserted == 0 {
+        return false
+    }
     tail_length := text_length - last
     copy(target.bytes[first + inserted:first + inserted + tail_length],
         target.bytes[last:text_length])
@@ -206,8 +224,11 @@ input_box_delete_selection :: proc(
     first := min(state^.anchor_byte, state^.cursor_byte)
     last := max(state^.anchor_byte, state^.cursor_byte)
     if first == last {
-        if backwards {first = input_box_previous_boundary(text, first)}
-        else {last = input_box_next_boundary(text, last)}
+        if backwards {
+            first = input_box_previous_boundary(text, first)
+        } else {
+            last = input_box_next_boundary(text, last)
+        }
     }
     state^.anchor_byte = first
     state^.cursor_byte = last
@@ -261,11 +282,17 @@ input_box_apply_edit_event :: proc(
             state, target, string(encoded[:count])) || result^.changed
         return
     }
-    if event.kind != .Press && event.kind != .Repeat {return}
+    if event.kind != .Press && event.kind != .Repeat {
+        return
+    }
     control := .Control in event.modifiers
     if control && input_box_apply_edit_control(
-        state, target, event, clipboard_text, result) {return}
-    if control {return}
+        state, target, event, clipboard_text, result) {
+        return
+    }
+    if control {
+        return
+    }
     if event.key == .Backspace || event.key == .Delete {
         result^.changed = input_box_delete_selection(
             state, target, event.key == .Backspace) || result^.changed
@@ -285,7 +312,9 @@ input_box_apply_edit_keyboard :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
     frame: input.Input_Frame, clipboard_text: string = "") -> Input_Box_Update {
     result: Input_Box_Update
-    if state == nil || target.length == nil {return result}
+    if state == nil || target.length == nil {
+        return result
+    }
     for event in frame.events {
         input_box_apply_edit_event(
             state, target, event, clipboard_text, &result)
@@ -297,7 +326,9 @@ input_box_apply_edit_keyboard :: proc(
 input_box_frame_requests_paste :: proc(frame: input.Input_Frame) -> bool {
     for event in frame.events {
         if (event.kind == .Press || event.kind == .Repeat) &&
-            event.key == .V && .Control in event.modifiers {return true}
+            event.key == .V && .Control in event.modifiers {
+            return true
+        }
     }
     return false
 }
@@ -324,11 +355,15 @@ input_box_apply_focused_input :: proc(
 input_box_apply_semantic_text :: proc(
     params: Input_Box_Params, resolved: ^Input_Box_Params) -> bool {
     if params.semantic_focus == nil || params.edit_target.length == nil ||
-       params.descriptor.mode != .Editable {return false}
+       params.descriptor.mode != .Editable {
+        return false
+    }
     changed := false
     commands := params.semantic_focus^.commands[:params.semantic_focus^.command_count]
     for &command in commands {
-        if command.target != params.descriptor.id {continue}
+        if command.target != params.descriptor.id {
+            continue
+        }
         text := string(params.edit_target.bytes[:params.edit_target.length^])
         if command.kind == .Set_Text_Selection {
             params.state^.anchor_byte = input_box_column_boundary(
@@ -353,7 +388,9 @@ input_box_apply_semantic_text :: proc(
 
 // input_box_hit_boundary maps one screen x coordinate to a borrowed-text boundary.
 input_box_hit_boundary :: proc(params: Input_Box_Params, x: f32) -> int {
-    if params.column_advance <= 0 {return 0}
+    if params.column_advance <= 0 {
+        return 0
+    }
     local_x := x - params.rect.x - INPUT_BOX_TEXT_INSET + params.state^.scroll_x
     column := int(max(f32(0), local_x) / params.column_advance + 0.5)
     return input_box_column_boundary(params.descriptor.text, column)
@@ -483,14 +520,37 @@ input_box_draw_result :: proc(
         selection = selection, caret = caret}
 }
 
+// Publish one semantic text-run child beneath its editable input control.
+input_box_publish_text_run :: proc(
+    params: Input_Box_Params, descriptor: viewmodel.Ui_Editable_Text_Descriptor,
+    result: Input_Box_Result) {
+    if descriptor.text_run_id == (viewmodel.Ui_Node_Id{}) {
+        return
+    }
+    _ = semantic_register_control(params.semantic_focus, {
+        id = descriptor.text_run_id, parent = descriptor.id,
+        role = .Text_Run, states = {.Visible, .Enabled},
+        region = descriptor.region,
+        traversal_order = descriptor.traversal_order,
+        bounds = result.inner,
+        clip_bounds = result.text_geometry.control.clip_bounds,
+        value = descriptor.text,
+        text_present = true,
+    })
+}
+
 // input_box_publish_semantics registers prepared text state and pointer focus.
 input_box_publish_semantics :: proc(
     params: Input_Box_Params, owner: ^viewmodel.Ui_Press_Owner_State,
     result: ^Input_Box_Result) {
     descriptor := result^.descriptor
-    if params.semantic_focus == nil || descriptor.id == {} {return}
+    if params.semantic_focus == nil || descriptor.id == {} {
+        return
+    }
     states := viewmodel.Ui_Node_State{.Visible, .Enabled, .Focusable, .Tab_Stop}
-    if descriptor.mode == .Read_Only {states += {.Read_Only}}
+    if descriptor.mode == .Read_Only {
+        states += {.Read_Only}
+    }
     _ = semantic_register_control(params.semantic_focus, {
         id = descriptor.id, parent = descriptor.parent,
         controls = tree_semantic_id(), role = .Input,
@@ -506,18 +566,7 @@ input_box_publish_semantics :: proc(
         text_anchor_byte = descriptor.anchor_byte,
         text_present = true,
     })
-    if descriptor.text_run_id != (viewmodel.Ui_Node_Id{}) {
-        _ = semantic_register_control(params.semantic_focus, {
-            id = descriptor.text_run_id, parent = descriptor.id,
-            role = .Text_Run, states = {.Visible, .Enabled},
-            region = descriptor.region,
-            traversal_order = descriptor.traversal_order,
-            bounds = result^.inner,
-            clip_bounds = result^.text_geometry.control.clip_bounds,
-            value = descriptor.text,
-            text_present = true,
-        })
-    }
+    input_box_publish_text_run(params, descriptor, result^)
     _ = semantic_focus_for_press(params.semantic_focus, owner, .Input_Box,
         int(descriptor.id.local_id), descriptor.id)
 }
@@ -529,7 +578,9 @@ draw_encoded_input_box :: proc(
     _ = native.draw_encoder_rectangle(
         encoder, prepared.control_geometry.bounds, UI_COMPONENT_BACKGROUND_COLOR)
     border := UI_BORDER_COLOR
-    if prepared.focused {border = UI_TEXT_COLOR}
+    if prepared.focused {
+        border = UI_TEXT_COLOR
+    }
     _ = native.draw_encoder_rectangle_outline(
         encoder, prepared.control_geometry.bounds, 1, border)
     _ = native.draw_encoder_push_scissor(encoder, prepared.inner)

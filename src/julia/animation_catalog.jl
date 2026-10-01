@@ -1,12 +1,10 @@
 module AnimationCatalog
 
 using UUIDs
-using ..OdinJuliaBridge
 
 export AnimationDescriptor, AnimationImplementation,
     AnimationNodeKind, CategoryNode, LeafNode, TerminalNode,
-    animation, ensure_animation_loaded, register_animation_catalog,
-    validate_catalog
+    animation, ensure_animation_loaded, validate_catalog
 
 @enum AnimationNodeKind::UInt8 begin
     CategoryNode = 1
@@ -102,29 +100,6 @@ function _validate_catalog_hierarchy(by_id::Dict{UUID,AnimationDescriptor})
             current = by_id[current].parent_id
         end
     end
-end
-
-"""Register validated metadata and bind the sole eager Terminal implementation."""
-function register_animation_catalog(
-    state_ptr::Ptr{Cvoid}, terminal_entry::Function,
-    descriptors::Vector{AnimationDescriptor})
-
-    validate_catalog(descriptors)
-    for descriptor in descriptors
-        parent_id = descriptor.parent_id
-        parent_text = parent_id === nothing ? "" : string(parent_id)
-        status = OdinJuliaBridge.add_animation_descriptor(
-            state_ptr, descriptor.display_name, string(descriptor.id), parent_text,
-            Int32(descriptor.kind), Int32(descriptor.sibling_order))
-        status == 1 || throw(ErrorException(
-            "host rejected animation descriptor: $(descriptor.id)"))
-    end
-    terminal = only(filter(
-        descriptor -> descriptor.kind == TerminalNode, descriptors))
-    status = OdinJuliaBridge.bind_animation_entry(
-        state_ptr, terminal_entry, string(terminal.id))
-    status == 1 || throw(ErrorException("host rejected Terminal entry binding"))
-    return nothing
 end
 
 """Evaluate and validate one animation program in a named module owner."""

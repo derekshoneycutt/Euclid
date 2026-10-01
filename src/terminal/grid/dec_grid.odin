@@ -49,7 +49,9 @@ grid_tab_backward :: proc(grid: ^Grid, amount: int) {
 
 // Save the active DEC cursor, rendition, and addressing state.
 grid_dec_save_state :: proc(grid: ^Grid) {
-    if grid == nil { return }
+    if grid == nil {
+        return 
+    }
     grid.editing.dec_saved = {
         cursor = grid.cursor,
         style = grid.style,
@@ -63,9 +65,13 @@ grid_dec_save_state :: proc(grid: ^Grid) {
 
 // Restore previously saved DEC state, clamped to current screen geometry.
 grid_dec_restore_state :: proc(grid: ^Grid) {
-    if grid == nil { return }
+    if grid == nil {
+        return 
+    }
     saved := grid.editing.dec_saved
-    if !saved.valid { return }
+    if !saved.valid {
+        return 
+    }
     grid.style = saved.style
     grid.hyperlink = saved.hyperlink
     grid.editing.origin_mode = saved.origin_mode
@@ -76,9 +82,13 @@ grid_dec_restore_state :: proc(grid: ^Grid) {
 
 // Apply IND or NEL within the active vertical margin region.
 grid_index_forward :: proc(grid: ^Grid, reset_column: bool) {
-    if grid == nil { return }
+    if grid == nil {
+        return 
+    }
     grid.cursor.wrap_pending = false
-    if reset_column { grid.cursor.column = 0 }
+    if reset_column {
+        grid.cursor.column = 0 
+    }
     if grid.cursor.row == grid.editing.scroll_bottom {
         grid_scroll_region_up(
             grid, grid.editing.scroll_top, grid.editing.scroll_bottom, 1)
@@ -89,7 +99,9 @@ grid_index_forward :: proc(grid: ^Grid, reset_column: bool) {
 
 // Apply RI within the active vertical margin region.
 grid_index_reverse :: proc(grid: ^Grid) {
-    if grid == nil { return }
+    if grid == nil {
+        return 
+    }
     grid.cursor.wrap_pending = false
     if grid.cursor.row == grid.editing.scroll_top {
         grid_scroll_region_down(
@@ -129,7 +141,9 @@ grid_edit_lines :: proc(grid: ^Grid, amount: int, insert: bool) {
 
 // Selectively erase one line according to the requested mode.
 grid_selective_erase_line :: proc(grid: ^Grid, mode: int) -> bool {
-    if grid == nil { return false }
+    if grid == nil {
+        return false 
+    }
     column := grid.cursor.column
     switch mode {
     case 0: grid_erase_range(grid, grid.cursor.row, column, grid.columns, true)
@@ -142,7 +156,9 @@ grid_selective_erase_line :: proc(grid: ^Grid, mode: int) -> bool {
 
 // Selectively erase one display according to the requested mode.
 grid_selective_erase_display :: proc(grid: ^Grid, mode: int) -> bool {
-    if grid == nil || mode < 0 || mode > 2 { return false }
+    if grid == nil || mode < 0 || mode > 2 {
+        return false 
+    }
     if mode == 0 {
         grid_erase_range(
             grid, grid.cursor.row, grid.cursor.column, grid.columns, true)

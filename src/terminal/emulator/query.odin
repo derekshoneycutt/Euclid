@@ -54,9 +54,15 @@ query_prepare_decrqss_response :: proc(
     if len(selector) == 1 && selector[0] == 'm' {
         style := query_context.style
         response.kind = .Decrqss_Sgr
-        if style.bold { response.first |= TERMINAL_SGR_BOLD }
-        if style.italic { response.first |= TERMINAL_SGR_ITALIC }
-        if style.underline { response.first |= TERMINAL_SGR_UNDERLINE }
+        if style.bold {
+            response.first |= TERMINAL_SGR_BOLD 
+        }
+        if style.italic {
+            response.first |= TERMINAL_SGR_ITALIC 
+        }
+        if style.underline {
+            response.first |= TERMINAL_SGR_UNDERLINE 
+        }
         response.second = u32(style.foreground)
         response.third = u32(style.background)
     } else if len(selector) == 2 && selector[0] == ' ' && selector[1] == 'q' {
@@ -90,7 +96,9 @@ terminal_capability_classify :: proc(decoded: []u8) -> Terminal_Capability_Kind 
         return .Colors
     }
     if len(decoded) == 3 && decoded[0] == 'R' && decoded[1] == 'G' &&
-        decoded[2] == 'B' { return .Rgb }
+        decoded[2] == 'B' {
+        return .Rgb
+    }
     if len(decoded) == 2 && decoded[0] == 'T' && decoded[1] == 'c' {
         return .Truecolor
     }
@@ -102,14 +110,18 @@ terminal_capability_prepare_response :: proc(
     encoded: []u8,
     producer: termmodel.Terminal_Producer) -> (termmodel.Terminal_Response, bool) {
     if len(encoded) == 0 || len(encoded) > TERMINAL_CAPABILITY_NAME_CAPACITY ||
-        len(encoded) % 2 != 0 { return {}, false }
+        len(encoded) % 2 != 0 {
+        return {}, false
+    }
     decoded: [TERMINAL_CAPABILITY_NAME_CAPACITY / 2]u8
     decoded_count := len(encoded) / 2
     for index in 0..<decoded_count {
         high, high_valid := termpalette.terminal_color_hex_digit(encoded[index * 2])
         low, low_valid := termpalette.terminal_color_hex_digit(
             encoded[index * 2 + 1])
-        if !high_valid || !low_valid { return {}, false }
+        if !high_valid || !low_valid {
+            return {}, false 
+        }
         decoded[index] = u8(high << 4 | low)
     }
     response := termmodel.Terminal_Response{
@@ -127,11 +139,17 @@ query_prepare_xtgetcap_responses :: proc(
     responses: []termmodel.Terminal_Response) -> (int, bool) {
     count, start := 0, 0
     for index in 0..=len(candidate) {
-        if index < len(candidate) && candidate[index] != ';' { continue }
-        if count >= len(responses) || index == start { return 0, false }
+        if index < len(candidate) && candidate[index] != ';' {
+            continue 
+        }
+        if count >= len(responses) || index == start {
+            return 0, false 
+        }
         response, valid := terminal_capability_prepare_response(
             candidate[start:index], query_context.producer)
-        if !valid { return 0, false }
+        if !valid {
+            return 0, false 
+        }
         responses[count] = response
         count += 1
         start = index + 1
@@ -141,7 +159,9 @@ query_prepare_xtgetcap_responses :: proc(
 
 // Snapshot all query-visible terminal values without exposing parser storage.
 interpreter_query_context :: proc(interpreter: ^Interpreter) -> Query_Context {
-    if interpreter == nil || interpreter.grid == nil { return {} }
+    if interpreter == nil || interpreter.grid == nil {
+        return {} 
+    }
     result := Query_Context{
         style = interpreter.grid.style,
         scroll_top = interpreter.grid.editing.scroll_top,
@@ -162,7 +182,9 @@ interpreter_query_context :: proc(interpreter: ^Interpreter) -> Query_Context {
 // Finish one bounded DECRQSS or XTGETTCAP query after its complete ST terminator.
 interpreter_finish_dcs_query :: proc(interpreter: ^Interpreter) {
     state := interpreter.title_state
-    if state == nil { return }
+    if state == nil {
+        return 
+    }
     if state.query_candidate_invalid {
         state.query_rejection_count += 1
         return
@@ -182,7 +204,9 @@ interpreter_finish_dcs_query :: proc(interpreter: ^Interpreter) {
     }
     if !valid || count > len(state.responses) - state.response_count {
         state.query_rejection_count += 1
-        if valid { state.response_rejection_count += 1 }
+        if valid {
+            state.response_rejection_count += 1 
+        }
         return
     }
     for response in responses[:count] {

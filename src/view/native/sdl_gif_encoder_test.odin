@@ -11,7 +11,9 @@ import image "vendor:sdl3/image"
 // gif_encoder_test_path creates one allocator-owned temporary GIF path.
 gif_encoder_test_path :: proc(filename: string) -> (string, bool) {
     directory, directory_error := os.temp_directory(context.temp_allocator)
-    if directory_error != nil {return "", false}
+    if directory_error != nil {
+       return "", false
+    }
     path, path_error := filepath.join(
         []string{directory, filename}, context.allocator)
     return path, path_error == nil && len(path) > 0
@@ -20,9 +22,13 @@ gif_encoder_test_path :: proc(filename: string) -> (string, bool) {
 // gif_encoder_test_decode verifies dimensions and delays from one encoded stream.
 gif_encoder_test_decode :: proc(path: cstring) -> bool {
     stream := sdl.IOFromFile(path, "rb")
-    if stream == nil {return false}
+    if stream == nil {
+       return false
+    }
     decoder := image.CreateAnimationDecoder_IO(stream, true, "GIF")
-    if decoder == nil {return false}
+    if decoder == nil {
+       return false
+    }
     defer image.CloseAnimationDecoder(decoder)
     expected_delays := [2]u64{40, 80}
     for expected_delay in expected_delays {
@@ -33,8 +39,12 @@ gif_encoder_test_decode :: proc(path: cstring) -> bool {
         }
         valid := frame != nil && frame.w == 2 && frame.h == 1 &&
             delay == expected_delay
-        if frame != nil {sdl.DestroySurface(frame)}
-        if !valid {return false}
+        if frame != nil {
+           sdl.DestroySurface(frame)
+        }
+        if !valid {
+           return false
+        }
     }
     frame: ^sdl.Surface
     delay: u64

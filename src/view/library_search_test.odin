@@ -1,11 +1,12 @@
 package view
 
 import bridgemodel "../bridge/model"
+import bridge "../bridge"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../files"
 import viewmodel "model"
-import viewsearch "search"
+import viewcatalog "catalog"
 
 import "core:encoding/uuid"
 import "core:os"
@@ -72,25 +73,22 @@ LIBRARY_SEARCH_QUALITY_FIXTURES :: [?]Library_Search_Quality_Fixture{
 }
 
 // search_test_document_key builds one canonical built-in result identity.
-search_test_document_key :: proc(text: string) -> viewsearch.Search_Document_Key {
-    result := viewsearch.Search_Document_Key{source_namespace = .Builtin}
+search_test_document_key :: proc(text: string) -> viewcatalog.Search_Document_Key {
+    result := viewcatalog.Search_Document_Key{source_namespace = .Builtin}
     copy(result.document_id.bytes[:], text)
     return result
 }
 
 // library_search_quality_fixture_matches checks one natural query against the packaged corpus.
 library_search_quality_fixture_matches :: proc(
-    t: ^testing.T, service: ^viewsearch.Search_Service,
+    t: ^testing.T, service: ^viewcatalog.Catalog_Service,
+    registry: ^bridgemodel.Euclid_Julia_Interface,
     fixture: Library_Search_Quality_Fixture, generation: u64) {
     stable_id, read_error := uuid.read(fixture.expected_id)
     testing.expect(t, read_error == .None)
-    node := bridgemodel.Euclid_Julia_Animation_Interface{
-        stable_id = stable_id, name = fixture.display_name}
     state := new(Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    state^.julia_interface = &state^.julia_interface_slots[0]
-    state^.julia_interface^.animation_head = &node
-    state^.julia_interface^.animation_count = 1
+    state^.julia_interface = registry
     search := &state^.ui_runtime.library_search
     copy(search^.query[:], fixture.query)
     search^.query_length = len(fixture.query)
@@ -100,13 +98,20 @@ library_search_quality_fixture_matches :: proc(
 
     for _ in 0..<1000 {
         service_library_search(state, service, 0.016)
-        if search^.active {break}
+        if search^.active {
+           break
+        }
         time.sleep(time.Millisecond)
     }
     testing.expect(t, search^.active)
     testing.expect(t, search^.total_match_count > 0)
-    testing.expect_value(t, search^.visible_id_count, 1)
-    testing.expect_value(t, search^.visible_ids[0], stable_id)
+    testing.expect(t, search^.visible_id_count > 0)
+    matched_node_is_visible := false
+    for index in 0..<search^.visible_id_count {
+        matched_node_is_visible = matched_node_is_visible ||
+            search^.visible_ids[index] == stable_id
+    }
+    testing.expect(t, matched_node_is_visible)
 }
 
 // Verify a current result derives ancestors without mutating stored expansion.
@@ -129,7 +134,7 @@ library_search_commit_derives_visible_ancestry :: proc(t: ^testing.T) {
     search.query_length = 4
     search.generation = 7
     search.index_generation = 11
-    result := viewsearch.Search_Query_Result{generation = 7,
+    result := viewcatalog.Search_Query_Result{generation = 7,
         index_generation = 11, status = .Ready, total_match_count = 1,
         returned_count = 1}
     result.document_keys[0] = search_test_document_key(
@@ -150,7 +155,7 @@ library_search_commit_rejects_stale_generation :: proc(t: ^testing.T) {
     search.generation = 8
     search.index_generation = 12
     search.visible_id_count = 1
-    result := viewsearch.Search_Query_Result{generation = 7,
+    result := viewcatalog.Search_Query_Result{generation = 7,
         index_generation = 12, status = .Ready}
     testing.expect(t, !library_search_commit_result(state, &result))
     testing.expect_value(t, search.visible_id_count, 1)
@@ -171,7 +176,7 @@ library_search_commit_records_typed_evidence :: proc(t: ^testing.T) {
     search^.index_generation = 11
     search^.scenario_correlation = 23
     search^.scenario_correlation_generation = 1
-    result := viewsearch.Search_Query_Result{generation = 7,
+    result := viewcatalog.Search_Query_Result{generation = 7,
         index_generation = 11, status = .Ready, total_match_count = 81,
         returned_count = 64, more_available = true, suggestion_length = 3}
     copy(result.suggestion_bytes[:], "ray")
@@ -217,19 +222,33 @@ library_search_packaged_index_commits_visible_node :: proc(t: ^testing.T) {
     defer delete(bin_dir)
     asset_config := files.make_asset_root_config(bin_dir, context.allocator)
     defer files.destroy_asset_root_config(&asset_config)
-    asset, asset_ok := files.packaged_search_asset_with_config(
+    asset, asset_ok := files.packaged_catalog_asset_with_config(
         &asset_config, context.allocator)
     defer delete(asset.database_path, context.allocator)
     defer delete(asset.corpus_fingerprint, context.allocator)
     testing.expect(t, asset_ok)
-    service := viewsearch.search_service_create(
+    service := viewcatalog.catalog_service_create(
         asset.database_path, asset.corpus_fingerprint)
     testing.expect(t, service != nil)
-    if service == nil {return}
-    defer viewsearch.search_service_destroy_owned(service)
+    if service == nil {
+       return
+    }
+    defer viewcatalog.catalog_service_destroy_owned(service)
+
+    registry_state := new(Euclid_General_State, context.allocator)
+    defer bridge.destroy_julia_interface_resources(registry_state)
+    defer free(registry_state, context.allocator)
+    registry := &registry_state^.julia_interface_slots[0]
+    registry_state^.julia_interface = registry
+    snapshot := viewcatalog.catalog_service_snapshot(service)
+    testing.expect(t, snapshot != nil)
+    if snapshot == nil {
+       return
+    }
+    testing.expect(t, bridge.catalog_snapshot_materialize(registry, snapshot))
 
     for fixture, index in LIBRARY_SEARCH_QUALITY_FIXTURES {
         library_search_quality_fixture_matches(
-            t, service, fixture, u64(index + 1))
+            t, service, registry, fixture, u64(index + 1))
     }
 }

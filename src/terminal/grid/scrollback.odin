@@ -372,7 +372,9 @@ display_checkpoint_copy_shell :: proc(
 display_checkpoint_capture_shell :: proc(
     checkpoint: ^Display_Checkpoint,
     shell: ^termshellintegration.Shell_Integration_State) {
-    if shell == nil { return }
+    if shell == nil {
+        return 
+    }
     copy(checkpoint.shell_command_blocks, shell.command_blocks)
     checkpoint.shell_command_first = shell.command_first
     checkpoint.shell_command_count = shell.command_count
@@ -384,7 +386,9 @@ display_checkpoint_capture_shell :: proc(
 display_checkpoint_restore_shell :: proc(
     checkpoint: ^Display_Checkpoint,
     shell: ^termshellintegration.Shell_Integration_State) {
-    if shell == nil { return }
+    if shell == nil {
+        return 
+    }
     copy(shell.command_blocks, checkpoint.shell_command_blocks)
     shell.command_first = checkpoint.shell_command_first
     shell.command_count = checkpoint.shell_command_count

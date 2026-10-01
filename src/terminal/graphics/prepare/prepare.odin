@@ -88,7 +88,9 @@ jpeg_is_start_of_frame :: proc(marker: u8) -> bool {
 // Read dimensions from one validated JPEG start-of-frame segment.
 jpeg_frame_dimensions :: proc(
     bytes: []u8, index, segment_length: int) -> Image_Dimensions {
-    if segment_length < 8 || bytes[index + 2] == 0 { return {} }
+    if segment_length < 8 || bytes[index + 2] == 0 {
+        return {} 
+    }
     height := read_u16_be(bytes, index + 3)
     width := read_u16_be(bytes, index + 5)
     return {width, height, width > 0 && height > 0}
@@ -96,18 +98,32 @@ jpeg_frame_dimensions :: proc(
 
 // Read dimensions from one bounded JPEG marker stream before scan data begins.
 jpeg_dimensions :: proc(bytes: []u8) -> Image_Dimensions {
-    if len(bytes) < 4 || bytes[0] != 0xff || bytes[1] != 0xd8 { return {} }
+    if len(bytes) < 4 || bytes[0] != 0xff || bytes[1] != 0xd8 {
+        return {} 
+    }
     index := 2
     for index < len(bytes) {
-        for index < len(bytes) && bytes[index] == 0xff { index += 1 }
-        if index >= len(bytes) { return {} }
+        for index < len(bytes) && bytes[index] == 0xff {
+            index += 1 
+        }
+        if index >= len(bytes) {
+            return {} 
+        }
         marker := bytes[index]
         index += 1
-        if marker == 0x00 || marker == 0xd9 || marker == 0xda { return {} }
-        if marker == 0x01 || marker >= 0xd0 && marker <= 0xd7 { continue }
-        if index > len(bytes) - 2 { return {} }
+        if marker == 0x00 || marker == 0xd9 || marker == 0xda {
+            return {} 
+        }
+        if marker == 0x01 || marker >= 0xd0 && marker <= 0xd7 {
+            continue 
+        }
+        if index > len(bytes) - 2 {
+            return {} 
+        }
         segment_length := read_u16_be(bytes, index)
-        if segment_length < 2 || segment_length > len(bytes) - index { return {} }
+        if segment_length < 2 || segment_length > len(bytes) - index {
+            return {} 
+        }
         if jpeg_is_start_of_frame(marker) {
             return jpeg_frame_dimensions(bytes, index, segment_length)
         }
@@ -122,7 +138,9 @@ encoded_image_dimensions :: proc(
     switch format {
     case .Png:
         if len(bytes) < 24 || read_u32_be(bytes, 8) != 13 ||
-            string(bytes[12:16]) != "IHDR" { return {} }
+            string(bytes[12:16]) != "IHDR" {
+            return {}
+        }
         width := read_u32_be(bytes, 16)
         height := read_u32_be(bytes, 20)
         if width == 0 || height == 0 ||
@@ -133,7 +151,9 @@ encoded_image_dimensions :: proc(
     case .Jpeg:
         return jpeg_dimensions(bytes)
     case .Gif:
-        if len(bytes) < 10 { return {} }
+        if len(bytes) < 10 {
+            return {} 
+        }
         width := int(bytes[6]) | int(bytes[7]) << 8
         height := int(bytes[8]) | int(bytes[9]) << 8
         return {width, height, width > 0 && height > 0}
@@ -176,7 +196,9 @@ encoded_image_format :: proc(bytes: []u8) -> Encoded_Image_Format {
 inspect_image :: proc(
     bytes: []u8, limits: termattachment.Limits) -> Image_Inspection {
     format := encoded_image_format(bytes)
-    if format == .Unknown { return {} }
+    if format == .Unknown {
+        return {} 
+    }
     dimensions := encoded_image_dimensions(bytes, format)
     if !dimensions.valid || dimensions.width > limits.dimension_limit ||
         dimensions.height > limits.dimension_limit ||
@@ -196,7 +218,9 @@ inspect_image :: proc(
 prepare_encoded_image :: proc(
     request: ^Prepare_Request,
     token: taskpool.Task_Cancellation_Token = {}) -> bool {
-    if taskpool.task_cancellation_requested(token) { return false }
+    if taskpool.task_cancellation_requested(token) {
+        return false 
+    }
     inspection := inspect_image(request.input, {
         attachment_capacity = 1,
         placement_capacity = 1,
@@ -232,7 +256,9 @@ prepare_encoded_image :: proc(
 prepare_animated_gif :: proc(
     request: ^Prepare_Request,
     token: taskpool.Task_Cancellation_Token = {}) -> bool {
-    if len(request.animation_frames) <= 1 { return false }
+    if len(request.animation_frames) <= 1 {
+        return false 
+    }
     inspection, decoded := decode_preflighted_gif_animation(
         request.input, {
             limits = gif_animation_limits(request.attachment_limits),
@@ -255,7 +281,9 @@ prepare_zlib :: proc(
     if expected <= 0 || len(request.output) != request.width * request.height * 4 {
         return false
     }
-    if taskpool.task_cancellation_requested(token) { return false }
+    if taskpool.task_cancellation_requested(token) {
+        return false 
+    }
     decoded := stbi.zlib_decode_buffer(
         raw_data(request.output), c.int(expected), raw_data(request.input),
         c.int(len(request.input)))
@@ -287,7 +315,9 @@ sixel_number :: proc(bytes: []u8, index: ^int) -> (int, bool) {
     value := 0
     for index^ < len(bytes) && bytes[index^] >= '0' && bytes[index^] <= '9' {
         digit := int(bytes[index^] - '0')
-        if value > (max(int) - digit) / 10 { return 0, false }
+        if value > (max(int) - digit) / 10 {
+            return 0, false 
+        }
         value = value * 10 + digit
         index^ += 1
     }
@@ -300,10 +330,14 @@ sixel_parameters :: proc(bytes: []u8, index: ^int) -> ([5]int, int) {
     count := 0
     for count < len(values) {
         value, present := sixel_number(bytes, index)
-        if !present { break }
+        if !present {
+            break 
+        }
         values[count] = value
         count += 1
-        if index^ >= len(bytes) || bytes[index^] != ';' { break }
+        if index^ >= len(bytes) || bytes[index^] != ';' {
+            break 
+        }
         index^ += 1
     }
     return values, count
@@ -333,12 +367,19 @@ sixel_hls :: proc(hue, lightness, saturation: int) -> (u32, bool) {
     remainder := sector - f32(int(sector / 2) * 2)
     second := chroma * f32(1 - abs(remainder - 1))
     red, green, blue: f32
-    if sector < 1 { red, green = chroma, second
-    } else if sector < 2 { red, green = second, chroma
-    } else if sector < 3 { green, blue = chroma, second
-    } else if sector < 4 { green, blue = second, chroma
-    } else if sector < 5 { red, blue = second, chroma
-    } else { red, blue = chroma, second }
+    if sector < 1 {
+        red, green = chroma, second
+    } else if sector < 2 {
+        red, green = second, chroma
+    } else if sector < 3 {
+        green, blue = chroma, second
+    } else if sector < 4 {
+        green, blue = second, chroma
+    } else if sector < 5 {
+        red, blue = second, chroma
+    } else {
+        red, blue = chroma, second
+    }
     match := f32(lightness) / 100 - chroma / 2
     packed := u32(int((red + match) * 255)) << 24 |
         u32(int((green + match) * 255)) << 16 |
@@ -355,7 +396,9 @@ sixel_paint :: proc(
         return false
     }
     color := state.palette[state.selected_color]
-    if color == 0 { color = 0x000000ff }
+    if color == 0 {
+        color = 0x000000ff 
+    }
     bits := byte - '?'
     for column in 0..<repeat {
         for bit in 0..<6 {
@@ -377,8 +420,12 @@ sixel_palette :: proc(
         return false
     }
     state.selected_color = values[0]
-    if count == 1 { return true }
-    if count != 5 { return false }
+    if count == 1 {
+        return true 
+    }
+    if count != 5 {
+        return false 
+    }
     if values[1] == 2 {
         if min(values[2], values[3], values[4]) < 0 ||
             max(values[2], values[3], values[4]) > 100 {
@@ -392,7 +439,9 @@ sixel_palette :: proc(
     }
     if values[1] == 1 {
         color, valid := sixel_hls(values[2], values[3], values[4])
-        if valid { state.palette[values[0]] = color }
+        if valid {
+            state.palette[values[0]] = color 
+        }
         return valid
     }
     return false
@@ -409,7 +458,9 @@ sixel_apply_command :: proc(
     switch byte {
     case '!':
         repeat, present := sixel_number(request.input, index)
-        if !present || index^ >= len(request.input) { return false }
+        if !present || index^ >= len(request.input) {
+            return false 
+        }
         byte = request.input[index^]
         index^ += 1
         return sixel_paint(request, state, byte, repeat)
@@ -432,7 +483,9 @@ prepare_sixel :: proc(
     token: taskpool.Task_Cancellation_Token = {}) -> bool {
     background := u32(0) if request.transparent_background else u32(0x000000ff)
     for row in 0..<request.height {
-        if taskpool.task_cancellation_requested(token) { return false }
+        if taskpool.task_cancellation_requested(token) {
+            return false 
+        }
         for column in 0..<request.width {
             sixel_write_color(
                 request.output, row * request.width + column, background)
@@ -441,8 +494,12 @@ prepare_sixel :: proc(
     state := Sixel_State{palette = request.palette}
     index := 0
     for index < len(request.input) {
-        if taskpool.task_cancellation_requested(token) { return false }
-        if !sixel_apply_command(request, &state, &index) { return false }
+        if taskpool.task_cancellation_requested(token) {
+            return false 
+        }
+        if !sixel_apply_command(request, &state, &index) {
+            return false 
+        }
     }
     return true
 }
@@ -459,11 +516,15 @@ prepare :: proc(
         request.width * request.height > max(int) / 4 {
         return false
     }
-    if taskpool.task_cancellation_requested(token) { return false }
+    if taskpool.task_cancellation_requested(token) {
+        return false 
+    }
     if request.kind == .Animated_Gif {
         return prepare_animated_gif(request, token)
     }
-    if len(request.output) != request.width * request.height * 4 { return false }
+    if len(request.output) != request.width * request.height * 4 {
+        return false 
+    }
     switch request.kind {
     case .Encoded_Image: return prepare_encoded_image(request, token)
     case .Animated_Gif: return false

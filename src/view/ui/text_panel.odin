@@ -31,7 +31,9 @@ Presentation_Content_Interaction :: struct {
 // presentation_semantic_id identifies one compiled document generation.
 presentation_semantic_id :: #force_inline proc(
     state: ^core.Euclid_General_State) -> viewmodel.Ui_Node_Id {
-    if state == nil {return {}}
+    if state == nil {
+        return {}
+    }
     return {domain = .Presentation,
         generation = state^.dynview.compile_cache.compiled_revision}
 }
@@ -64,7 +66,9 @@ register_presentation_semantics :: proc(
 draw_encoded_presentation_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     panel: geometry.Rectangle) {
-    if state == nil || state^.julia_interface == nil {return}
+    if state == nil || state^.julia_interface == nil {
+        return
+    }
     _ = native.draw_encoder_rectangle(
         encoder, panel, BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
@@ -74,7 +78,9 @@ draw_encoded_presentation_geometry :: proc(
         encoder, text_panel, UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
         encoder, text_panel, 1, UI_BORDER_COLOR)
-    if is_terminal_selected(state) {return}
+    if is_terminal_selected(state) {
+        return
+    }
     ui_dynview.draw_encoded_geometry(&state^.dynview, encoder,
         text_panel, state^.ui_runtime.view_text_scroll_y,
         TEXT_PADDING)
@@ -97,7 +103,9 @@ view_text_content_panel :: proc(
 draw_encoded_presentation_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     presentation: Presentation_Preparation) {
-    if state == nil || encoder == nil || !presentation.active {return}
+    if state == nil || encoder == nil || !presentation.active {
+        return
+    }
     _ = native.draw_encoder_push_scissor(
         encoder, geometry.Rectangle(presentation.scroll.view_rect))
     ui_dynview.dynview_draw_selection({
@@ -219,7 +227,9 @@ prepare_presentation_interaction :: proc(
     if state == nil || state^.julia_interface == nil || is_terminal_selected(state) {
         return {}
     }
-    if !ui_presentation_is_visible(&state^.ui_runtime) { return {} }
+    if !ui_presentation_is_visible(&state^.ui_runtime) {
+        return {}
+    }
     text_panel := view_text_content_panel(panel)
     view_text := julia.current_view_snapshot_text(state)
     content_h := dynlayout.presentation_content_height_or_fallback(&state.dynview,

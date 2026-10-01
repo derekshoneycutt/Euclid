@@ -11,7 +11,9 @@ curve_test_distinct_cusp_count :: proc(kinds: []Curve_Point_Kind,
     result: Curve_Explication_Result) -> int {
     count := 0
     for kind in kinds[:result.vertex_count] {
-        if kind == .Cusp {count += 1}
+        if kind == .Cusp {
+           count += 1
+        }
     }
     if result.topology == .Cusp_Closed && kinds[result.vertex_count - 1] == .Cusp {
         count -= 1

@@ -52,7 +52,9 @@ sdl_windows_admission_test_publish :: proc(
     state := cast(^Sdl_Windows_Admission_Test_State)user_data
     state^.publish_calls += 1
     sdl_windows_admission_test_record(state, 2)
-    if state^.publish_succeeds {owner^.native = user_data}
+    if state^.publish_succeeds {
+       owner^.native = user_data
+    }
     return state^.publish_succeeds
 }
 
@@ -315,7 +317,9 @@ sdl_capture_png_preserves_padded_rgba_rows :: proc(t: ^testing.T) {
     decoded := stbi.load_from_memory(raw_data(encoded), c.int(len(encoded)),
         &width, &height, &channels, 4)
     testing.expect(t, decoded != nil)
-    if decoded == nil {return}
+    if decoded == nil {
+       return
+    }
     defer stbi.image_free(decoded)
     testing.expect_value(t, width, c.int(2))
     testing.expect_value(t, height, c.int(2))

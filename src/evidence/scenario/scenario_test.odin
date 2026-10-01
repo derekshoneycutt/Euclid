@@ -160,8 +160,12 @@ scenario_test_parse_view_content_actions :: proc(t: ^testing.T) {
 scenario_test_view_content_respects_text_capacity :: proc(t: ^testing.T) {
     accepted_bytes: [SCENARIO_TEXT_CAPACITY]u8
     rejected_bytes: [SCENARIO_TEXT_CAPACITY + 1]u8
-    for &value in accepted_bytes { value = 'x' }
-    for &value in rejected_bytes { value = 'x' }
+    for &value in accepted_bytes {
+        value = 'x'
+    }
+    for &value in rejected_bytes {
+        value = 'x'
+    }
     accepted, accepted_ok := text_copy(string(accepted_bytes[:]))
     _, rejected_ok := text_copy(string(rejected_bytes[:]))
     testing.expect(t, accepted_ok)

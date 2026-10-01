@@ -44,15 +44,21 @@ ui_icon_button_capture_target :: proc(
 ui_scrollbar_capture_target :: proc(
     capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
     focus := viewmodel.Ui_Focus_Kind.Accordion
-    if capture.id == UI_PRESENTATION_SCROLLBAR_ID {focus = .Presentation}
-    if capture.id == UI_TERMINAL_SCROLLBAR_ID {focus = .Terminal}
+    if capture.id == UI_PRESENTATION_SCROLLBAR_ID {
+        focus = .Presentation
+    }
+    if capture.id == UI_TERMINAL_SCROLLBAR_ID {
+        focus = .Terminal
+    }
     return ui_interaction_target(.Scrollbar, focus, capture.id)
 }
 
 // Classify legacy singleton capture until widget call sites register with the router.
 ui_capture_target :: proc(
     capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
-    if !capture.active { return {} }
+    if !capture.active {
+        return {}
+    }
     switch capture.kind {
     case .Splitter:
         return ui_interaction_target(.Splitter, id = capture.id)
@@ -127,9 +133,13 @@ ui_hide_presentation_interaction :: proc(
 ui_publish_presentation_visibility :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
     visible := ui_composition_presentation_visible(runtime)
-    if runtime^.presentation_visible == visible { return false }
+    if runtime^.presentation_visible == visible {
+        return false
+    }
     runtime^.presentation_visible = visible
-    if !visible { ui_hide_presentation_interaction(runtime) }
+    if !visible {
+        ui_hide_presentation_interaction(runtime)
+    }
     return true
 }
 
@@ -170,14 +180,20 @@ ui_world_hover_target :: proc(
 ui_splitter_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse: geometry.Vector2) -> viewmodel.Ui_Interaction_Target {
-    if splitters_locked_for_gif(runtime^.gif_capture_phase) {return {}}
+    if splitters_locked_for_gif(runtime^.gif_capture_phase) {
+        return {}
+    }
     axis, hovered := splitter_hovered_axis(mouse,
         runtime^.current_layout_mode,
         runtime^.vertical_split_x, runtime^.horizontal_split_y,
         runtime^.window)
-    if !hovered {return {}}
+    if !hovered {
+        return {}
+    }
     id := SPLITTER_VERTICAL_PRESS_ID
-    if axis == .Horizontal {id = SPLITTER_HORIZONTAL_PRESS_ID}
+    if axis == .Horizontal {
+        id = SPLITTER_HORIZONTAL_PRESS_ID
+    }
     return ui_interaction_target(.Splitter, id = id)
 }
 
@@ -188,12 +204,16 @@ ui_hover_target :: proc(
     terminal_present: bool) -> viewmodel.Ui_Interaction_Target {
     mouse := input_frame_mouse_position(frame)
     splitter := ui_splitter_hover_target(runtime, mouse)
-    if splitter.kind != .None {return splitter}
+    if splitter.kind != .None {
+        return splitter
+    }
     regions := runtime^.ui_regions
     if ui_presentation_is_visible(runtime) {
         target := ui_presentation_target(
             geometry.Vector2(mouse), regions, terminal_present)
-        if target.kind != .None { return target }
+        if target.kind != .None {
+            return target
+        }
     }
     if gif_path_input_visible(runtime) && geometry.rectangle_contains(
         gif_path_input_rect(runtime), geometry.Vector2(mouse)) {
@@ -261,6 +281,16 @@ ui_terminal_effectively_focused :: #force_inline proc(
         logical_focus.kind == .Terminal
 }
 
+// Route wheel input to hover only when no pointer capture owns the frame.
+ui_interaction_wheel_target :: #force_inline proc(
+    delta: f32, capture, hover: viewmodel.Ui_Interaction_Target) ->
+    viewmodel.Ui_Interaction_Target {
+    if delta != 0 && capture.kind == .None {
+        return hover
+    }
+    return {}
+}
+
 // Reconcile persistent logical focus and this frame's effective Terminal focus.
 ui_route_interaction_frame :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
@@ -269,15 +299,15 @@ ui_route_interaction_frame :: proc(
     capture_owner := ui_valid_capture_owner(runtime, input.capture)
     capture := ui_capture_target(capture_owner)
     pointer_target := hover
-    if capture.kind != .None { pointer_target = capture }
+    if capture.kind != .None {
+        pointer_target = capture
+    }
     logical_focus := ui_route_logical_focus(runtime, input, pointer_target)
     terminal_focused := ui_terminal_effectively_focused(
         logical_focus, input.frame.window_focused, input.terminal_present,
         ui_presentation_is_visible(runtime))
-    wheel_target: viewmodel.Ui_Interaction_Target
-    if input.frame.mouse_wheel_delta != 0 && capture.kind == .None {
-        wheel_target = hover
-    }
+    wheel_target := ui_interaction_wheel_target(
+        input.frame.mouse_wheel_delta, capture, hover)
     result := viewmodel.Ui_Interaction_Frame{
         logical_focus = logical_focus,
         hover = hover,
@@ -304,7 +334,9 @@ ui_apply_semantic_focus :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: Input_Frame, terminal_present: bool) {
     target, present := semantic_legacy_focus(runtime^.semantic_focus)
-    if !present {return}
+    if !present {
+        return
+    }
     routed := &runtime^.interaction_frame
     prior_terminal := runtime^.interaction.terminal_effectively_focused
     terminal_focused := ui_terminal_effectively_focused(
@@ -361,7 +393,9 @@ ui_refine_terminal_scroll_route :: proc(
     frame := &runtime^.interaction_frame
     scrollbar := ui_interaction_target(
         .Scrollbar, .Terminal, UI_TERMINAL_SCROLLBAR_ID)
-    if over_track { frame^.hover = scrollbar }
+    if over_track {
+        frame^.hover = scrollbar
+    }
     capture := frame^.pointer_capture
     capture_allows_scrollbar := capture.kind == .None ||
         capture.kind == .Scrollbar && capture.focus.kind == .Terminal
@@ -379,7 +413,9 @@ ui_terminal_captured_pointer_fields :: proc(
     local_capture: bool,
     child_capture: bool) -> input.Input_Pointer_Fields {
     fields: input.Input_Pointer_Fields
-    if local_capture { fields += {.Screen_Position, .Release_Edges} }
+    if local_capture {
+        fields += {.Screen_Position, .Release_Edges}
+    }
     if child_capture {
         fields += {.Motion, .Release_Edges, .Levels, .Terminal_Position,
             .Terminal_Ownership}

@@ -36,7 +36,9 @@ Sdl_Input_Accumulation :: struct {
 sdl_input_key_from_scancode :: proc(
     scancode: sdl.Scancode) -> (input.Input_Key, bool) {
     for mapped, key_value in SDL_INPUT_SCANCODES {
-        if mapped == scancode {return input.Input_Key(key_value), true}
+        if mapped == scancode {
+            return input.Input_Key(key_value), true
+        }
     }
     return {}, false
 }
@@ -44,10 +46,18 @@ sdl_input_key_from_scancode :: proc(
 // sdl_input_modifiers converts one event-time SDL modifier snapshot.
 sdl_input_modifiers :: proc(modifiers: sdl.Keymod) -> input.Input_Modifiers {
     result: input.Input_Modifiers
-    if .LCTRL in modifiers || .RCTRL in modifiers {result += {.Control}}
-    if .LSHIFT in modifiers || .RSHIFT in modifiers {result += {.Shift}}
-    if .LALT in modifiers || .RALT in modifiers {result += {.Alt}}
-    if .LGUI in modifiers || .RGUI in modifiers {result += {.Super}}
+    if .LCTRL in modifiers || .RCTRL in modifiers {
+        result += {.Control}
+    }
+    if .LSHIFT in modifiers || .RSHIFT in modifiers {
+        result += {.Shift}
+    }
+    if .LALT in modifiers || .RALT in modifiers {
+        result += {.Alt}
+    }
+    if .LGUI in modifiers || .RGUI in modifiers {
+        result += {.Super}
+    }
     return result
 }
 
@@ -63,7 +73,9 @@ sdl_input_append_keyboard :: proc(
     }
     accumulation^.diagnostics.key_events += 1
     kind := input.Input_Event_Kind.Release
-    if event.down {kind = .Repeat if event.repeat else .Press}
+    if event.down {
+        kind = .Repeat if event.repeat else .Press
+    }
     input.input_runtime_append_event(runtime, {
         kind = kind,
         key = key,
@@ -76,7 +88,9 @@ sdl_input_append_keyboard :: proc(
 sdl_input_append_text :: proc(
     runtime: ^input.Input_Runtime, text: cstring,
     accumulation: ^Sdl_Input_Accumulation) {
-    if text == nil {return}
+    if text == nil {
+        return
+    }
     source := string(text)
     if !utf8.valid_string(source) {
         accumulation^.diagnostics.invalid_text_events += 1
@@ -84,7 +98,9 @@ sdl_input_append_text :: proc(
     }
     for offset := 0; offset < len(source); {
         codepoint, width := utf8.decode_rune(source[offset:])
-        if width == 0 {return}
+        if width == 0 {
+            return
+        }
         input.input_runtime_append_event(runtime, {
             kind = .Text,
             modifiers = accumulation^.modifiers,
@@ -141,9 +157,15 @@ sdl_input_consume_event :: proc(
 sdl_input_mouse_buttons :: proc(
     flags: sdl.MouseButtonFlags) -> input.Input_Mouse_Buttons {
     result: input.Input_Mouse_Buttons
-    if .LEFT in flags {result += {.Left}}
-    if .MIDDLE in flags {result += {.Middle}}
-    if .RIGHT in flags {result += {.Right}}
+    if .LEFT in flags {
+        result += {.Left}
+    }
+    if .MIDDLE in flags {
+        result += {.Middle}
+    }
+    if .RIGHT in flags {
+        result += {.Right}
+    }
     return result
 }
 
@@ -207,8 +229,12 @@ sdl_platform_handle_event :: proc(
         platform^.close_requested = true
         return
     }
-    if event^.window.windowID != window_id {return}
-    if event^.type == .WINDOW_CLOSE_REQUESTED {platform^.close_requested = true}
+    if event^.window.windowID != window_id {
+        return
+    }
+    if event^.type == .WINDOW_CLOSE_REQUESTED {
+        platform^.close_requested = true
+    }
     if event^.type == .WINDOW_RESIZED || event^.type == .WINDOW_PIXEL_SIZE_CHANGED ||
        event^.type == .WINDOW_DISPLAY_SCALE_CHANGED {
         platform^.resize_pending = true
@@ -224,7 +250,9 @@ sdl_platform_handle_event :: proc(
 
 // sdl_platform_refresh_observed_metrics updates last-good window observations.
 sdl_platform_refresh_observed_metrics :: proc(platform: ^native.Sdl_Platform) {
-    if !platform^.resize_pending {return}
+    if !platform^.resize_pending {
+        return
+    }
     if metrics, ok := native.sdl_platform_metrics(platform^.window); ok {
         platform^.metrics = metrics
     }
@@ -238,7 +266,9 @@ sdl_platform_poll_events :: proc(
         modifiers = sdl_input_modifiers(sdl.GetModState()),
         focused = .INPUT_FOCUS in sdl.GetWindowFlags(platform^.window),
     }
-    if runtime != nil && !input.input_runtime_begin_frame(runtime) {return {}}
+    if runtime != nil && !input.input_runtime_begin_frame(runtime) {
+        return {}
+    }
     window_id := sdl.GetWindowID(platform^.window)
     event: sdl.Event
     for sdl.PollEvent(&event) {
@@ -248,6 +278,8 @@ sdl_platform_poll_events :: proc(
     sdl_platform_refresh_observed_metrics(platform)
     native.sdl_platform_service_accessibility(platform, accumulation.focused)
     native.sdl_platform_sync_text_input(platform, accumulation.focused)
-    if runtime == nil {return {}}
+    if runtime == nil {
+        return {}
+    }
     return sdl_input_finish_frame(platform, runtime, accumulation)
 }

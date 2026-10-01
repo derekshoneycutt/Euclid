@@ -6,7 +6,7 @@ import shapemodel "../shapes/model"
 
 import view_core "core"
 import viewmodel "model"
-import viewsearch "search"
+import viewcatalog "catalog"
 import "ui"
 import "../core"
 import color "../core/color"
@@ -35,7 +35,7 @@ Euclid_Runtime_Session :: struct {
     state : ^Euclid_General_State,
     julia_service : ^bridgemodel.Julia_Runtime_Service,
     presentation : ^Presentation_Runtime,
-    search_service: ^viewsearch.Search_Service,
+    catalog_service: ^viewcatalog.Catalog_Service,
 }
 
 //   Created Julia runtime service plus its completed initialize request id.
@@ -133,11 +133,43 @@ record_runtime_lifecycle :: proc(
 }
 
 //   Allocate runtime state and complete the Julia content Invoke phase.
+session_initialize_content :: proc(
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
+    state: ^Euclid_General_State, content_id_out: ^u64) -> bool {
+    content_id, content_sent := julia.try_submit_runtime_content_initialize(
+        julia_service, state)
+    if !content_sent {
+        log.error("julia_startup_failed phase=content_submit")
+        return false
+    }
+    content_id_out^ = content_id
+    return wait_for_julia_request(
+        julia_service, content_id, .Invoke_Complete, 10.0)
+}
+
+//   Allocate runtime state and complete the Julia content Invoke phase.
+//
+// Returns:
+//   - ok: true when state was created and content initialization completed.
+session_materialize_catalogue :: proc(
+    state: ^Euclid_General_State,
+    catalog_service: ^viewcatalog.Catalog_Service) -> bool {
+    state^.catalog_service = catalog_service
+    snapshot := viewcatalog.catalog_service_snapshot(catalog_service)
+    if snapshot == nil || !julia.catalog_snapshot_materialize(
+        state^.julia_interface, snapshot) {
+        return false
+    }
+    return true
+}
+
+//   Allocate runtime state and complete the Julia content Invoke phase.
 //
 // Returns:
 //   - ok: true when state was created and content initialization completed.
 session_load_content :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
+    catalog_service: ^viewcatalog.Catalog_Service,
     settings: ^Euclid_Run_Settings,
     initialize_id: u64,
     out_state: ^^Euclid_General_State) -> bool {
@@ -148,20 +180,17 @@ session_load_content :: proc(
         julia.destroy_julia_runtime_service(julia_service)
         return false
     }
-
-    record_runtime_lifecycle(state, .Runtime_Starting, initialize_id)
-    content_id, content_sent := julia.try_submit_runtime_content_initialize(
-        julia_service, state)
-    if !content_sent {
-        log.error("julia_startup_failed phase=content_submit")
+    if !session_materialize_catalogue(state, catalog_service) {
+        log.error("catalog_startup_failed phase=registry_materialize")
         shutdown_runtime_session(Euclid_Runtime_Session{
             state = state,
             julia_service = julia_service,
         })
         return false
     }
-    if !wait_for_julia_request(
-        julia_service, content_id, .Invoke_Complete, 10.0) {
+    record_runtime_lifecycle(state, .Runtime_Starting, initialize_id)
+    content_id: u64
+    if !session_initialize_content(julia_service, state, &content_id) {
         shutdown_runtime_session(Euclid_Runtime_Session{
             state = state,
             julia_service = julia_service,
@@ -178,14 +207,16 @@ session_load_content :: proc(
 }
 
 //   Resolve and start the immutable built-in search index for one runtime session.
-session_create_search_service :: proc(
-    asset_config: ^files.Asset_Root_Config = nil) -> ^viewsearch.Search_Service {
-    asset, asset_ok := files.packaged_search_asset_with_config(
+session_create_catalog_service :: proc(
+    asset_config: ^files.Asset_Root_Config = nil) -> ^viewcatalog.Catalog_Service {
+    asset, asset_ok := files.packaged_catalog_asset_with_config(
         asset_config, context.temp_allocator)
     if asset_ok {
-        service := viewsearch.search_service_create(
+        service := viewcatalog.catalog_service_create(
             asset.database_path, asset.corpus_fingerprint)
-        if service != nil {return service}
+        if service != nil {
+            return service
+        }
     }
     log.error("search_startup_failed")
     return nil
@@ -194,8 +225,29 @@ session_create_search_service :: proc(
 //   Create and attach presentation resources to one initialized runtime session.
 session_start_presentation :: proc(session: ^Euclid_Runtime_Session) -> bool {
     session.presentation = create_presentation_runtime()
-    if session.presentation == nil {return false}
+    if session.presentation == nil {
+        return false
+    }
     julia_egress_router_attach(session.state, session.presentation)
+    return true
+}
+
+// Attach presentation resources and return the fully initialized session value.
+session_finalize_presentation :: proc(
+    state: ^Euclid_General_State,
+    julia_service: ^bridgemodel.Julia_Runtime_Service,
+    catalog_service: ^viewcatalog.Catalog_Service,
+    out_session: ^Euclid_Runtime_Session) -> bool {
+    session := Euclid_Runtime_Session{
+        state = state,
+        julia_service = julia_service,
+        catalog_service = catalog_service,
+    }
+    if !session_start_presentation(&session) {
+        _ = shutdown_runtime_session(session)
+        return false
+    }
+    out_session^ = session
     return true
 }
 
@@ -211,29 +263,27 @@ create_runtime_session :: proc(
         !files.ensure_packaged_assets_unpacked_root(asset_config) {
         return {}, false
     }
+    catalog_service := session_create_catalog_service(asset_config)
+    if catalog_service == nil {
+        return {}, false
+    }
     started: Session_Julia_Service
     if !session_start_julia_service(
         &started, julia_worker_profile_path(settings^.profile_path), asset_config) {
+        viewcatalog.catalog_service_destroy_owned(catalog_service)
         return {}, false
     }
     julia_service := started.service
 
     state: ^Euclid_General_State
-    if !session_load_content(julia_service, settings, started.initialize_id, &state) {
+    if !session_load_content(
+        julia_service, catalog_service, settings, started.initialize_id, &state) {
+        viewcatalog.catalog_service_destroy_owned(catalog_service)
         return {}, false
     }
-    search_service := session_create_search_service(asset_config)
-    if search_service == nil {
-        _ = shutdown_runtime_session({state = state, julia_service = julia_service})
-        return {}, false
-    }
-    session := Euclid_Runtime_Session{
-        state = state,
-        julia_service = julia_service,
-        search_service = search_service,
-    }
-    if !session_start_presentation(&session) {
-        _ = shutdown_runtime_session(session)
+    session: Euclid_Runtime_Session
+    if !session_finalize_presentation(
+        state, julia_service, catalog_service, &session) {
         return {}, false
     }
     return session, true
@@ -322,10 +372,23 @@ init_ui_gif_fields :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
     view_core.clear_gif_status_note(runtime)
 }
 
+// Resolve the initial accordion section and presentation visibility from layout.
+init_ui_active_section :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
+    runtime^.active_accordion_section = runtime^.landscape.active_section
+    if runtime^.current_layout_mode == .Portrait {
+        runtime^.active_accordion_section = runtime^.portrait.active_section
+    }
+    runtime^.presentation_visible =
+        runtime^.current_layout_mode == .Landscape ||
+        runtime^.active_accordion_section == .View
+}
+
 //   Initialize display-owned UI policy and layout memory from run settings.
 init_ui_semantic_focus :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
-    if runtime == nil {return false}
+    if runtime == nil {
+        return false
+    }
     runtime^.semantic_focus = new(
         viewmodel.Ui_Semantic_Focus_State, context.allocator)
     return runtime^.semantic_focus != nil
@@ -335,7 +398,9 @@ init_ui_semantic_focus :: proc(
 init_ui_runtime_fields :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     settings: ^Euclid_Run_Settings) -> bool {
-    if settings == nil || !init_ui_semantic_focus(runtime) {return false}
+    if settings == nil || !init_ui_semantic_focus(runtime) {
+        return false
+    }
     runtime^.limit_fps = settings^.limit_fps
     runtime^.simulation_paused = false
     runtime^.use_simd_batch_projection =
@@ -358,13 +423,7 @@ init_ui_runtime_fields :: proc(
     runtime^.current_layout_mode = ui.resolve_initial_layout_mode(
         settings^.window.layout,
         f32(settings^.window.width), f32(settings^.window.height))
-    runtime^.active_accordion_section = runtime^.landscape.active_section
-    if runtime^.current_layout_mode == .Portrait {
-        runtime^.active_accordion_section = runtime^.portrait.active_section
-    }
-    runtime^.presentation_visible =
-        runtime^.current_layout_mode == .Landscape ||
-        runtime^.active_accordion_section == .View
+    init_ui_active_section(runtime)
     init_ui_layout_pixels(runtime, settings^.window.width, settings^.window.height)
     init_ui_gif_fields(runtime)
     return true
@@ -380,7 +439,9 @@ init_runtime_fields :: proc(
     state^.simulation_time = 0
     state^.current_delta_time = view_core.FIXED_DT
     state^.accumulator = 0
-    if !init_ui_runtime_fields(&state^.ui_runtime, settings) {return false}
+    if !init_ui_runtime_fields(&state^.ui_runtime, settings) {
+        return false
+    }
     dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
     view_core.screenshake_clear(state^.iso_scale)
     return true
@@ -453,7 +514,9 @@ init_runtime_executors :: proc(state: ^Euclid_General_State) -> bool {
         fmt.eprintln("Failed to initialize the simulation task pool.")
         return false
     }
-    if terminal_graphics_runtime_init(state) { return true }
+    if terminal_graphics_runtime_init(state) {
+        return true
+    }
     fmt.eprintln("Failed to initialize terminal graphics.")
     return false
 }
@@ -485,7 +548,9 @@ initiate_animations_state :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
     settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
     state := make_animations_state(julia_service, settings)
-    if state == nil {return nil}
+    if state == nil {
+        return nil
+    }
     if !julia.animation_storage_init(
         &state^.animation_memory,
         &state^.animation_values,
@@ -596,8 +661,8 @@ shutdown_runtime_session :: proc(
     }
 
     quiesce_presentation_runtime(session.state, session.presentation)
-    if session.search_service != nil {
-        viewsearch.search_service_destroy_owned(session.search_service)
+    if session.catalog_service != nil {
+        viewcatalog.catalog_service_destroy_owned(session.catalog_service)
     }
     julia_egress_router_detach(session.state, session.presentation)
     destroy_presentation_runtime(session.presentation)

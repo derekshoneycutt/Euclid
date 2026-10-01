@@ -37,7 +37,9 @@ Button_Action_Input :: struct {
 button_semantic_states :: #force_inline proc(
     enabled: bool) -> viewmodel.Ui_Node_State {
     states := viewmodel.Ui_Node_State{.Visible, .Focusable, .Tab_Stop}
-    if enabled {states += {.Enabled}}
+    if enabled {
+        states += {.Enabled}
+    }
     return states
 }
 

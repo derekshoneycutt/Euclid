@@ -185,7 +185,9 @@ sdl_scale_or_one :: proc(scale: f32) -> f32 {
 
 // sdl_content_scale separates platform content scaling from pixel density.
 sdl_content_scale :: proc(display_scale, pixel_density: f32) -> f32 {
-    if display_scale <= 0 || pixel_density <= 0 {return 1}
+    if display_scale <= 0 || pixel_density <= 0 {
+       return 1
+    }
     return display_scale / pixel_density
 }
 
@@ -208,7 +210,9 @@ sdl_startup_extent :: proc(extent: int, content_scale: f32) -> int {
 // sdl_primary_content_scale returns the startup display's readable-content scale.
 sdl_primary_content_scale :: proc() -> f32 {
     display := sdl.GetPrimaryDisplay()
-    if display == 0 {return 1}
+    if display == 0 {
+       return 1
+    }
     return sdl_scale_or_one(sdl.GetDisplayContentScale(display))
 }
 
@@ -243,7 +247,9 @@ sdl_scene_target_create :: proc(
         return nil
     }
     usage: sdl.GPUTextureUsageFlags = {.COLOR_TARGET}
-    if sample_count == ._1 {usage += {.SAMPLER}}
+    if sample_count == ._1 {
+       usage += {.SAMPLER}
+    }
     return sdl.CreateGPUTexture(device, {
         type = .D2,
         format = SDL_SCENE_FORMAT,
@@ -259,7 +265,9 @@ sdl_scene_target_create :: proc(
 // sdl_scene_sample_count selects the best requested scene sample count.
 sdl_scene_sample_count :: proc(
     device: ^sdl.GPUDevice, antialiasing: bool) -> sdl.GPUSampleCount {
-    if !antialiasing {return ._1}
+    if !antialiasing {
+       return ._1
+    }
     if sdl.GPUTextureSupportsSampleCount(device, SDL_SCENE_FORMAT, ._4) {
         return ._4
     }
@@ -284,7 +292,9 @@ sdl_scene_sample_count_value :: proc(sample_count: sdl.GPUSampleCount) -> int {
 sdl_scene_multisample_target_create :: proc(
     device: ^sdl.GPUDevice, width, height: u32,
     sample_count: sdl.GPUSampleCount) -> ^sdl.GPUTexture {
-    if sample_count == ._1 {return nil}
+    if sample_count == ._1 {
+       return nil
+    }
     return sdl_scene_target_create(device, width, height, sample_count)
 }
 
@@ -295,7 +305,9 @@ sdl_scene_targets_create :: proc(
     targets := Sdl_Scene_Targets{
         scene = sdl_scene_target_create(device, width, height, ._1),
     }
-    if targets.scene == nil {return {}}
+    if targets.scene == nil {
+       return {}
+    }
     targets.multisample = sdl_scene_multisample_target_create(
         device, width, height, sample_count)
     if sample_count != ._1 && targets.multisample == nil {
@@ -312,7 +324,9 @@ sdl_scene_targets_release :: proc(
     if multisample_target != nil {
         sdl.ReleaseGPUTexture(device, multisample_target)
     }
-    if scene_target != nil {sdl.ReleaseGPUTexture(device, scene_target)}
+    if scene_target != nil {
+       sdl.ReleaseGPUTexture(device, scene_target)
+    }
 }
 
 // sdl_platform_refresh_target atomically replaces a mismatched scene target.
@@ -331,7 +345,9 @@ sdl_platform_refresh_target :: proc(platform: ^Sdl_Platform) -> bool {
     }
     candidate := sdl_scene_targets_create(
         platform^.device, width, height, platform^.sample_count)
-    if candidate.scene == nil {return false}
+    if candidate.scene == nil {
+       return false
+    }
     if platform^.scene_target != nil {
         if !sdl.WaitForGPUIdle(platform^.device) {
             sdl_scene_targets_release(
@@ -388,10 +404,14 @@ sdl_platform_present_draw :: proc(
     }
     command_buffer: ^sdl.GPUCommandBuffer
     image, acquired := sdl_swapchain_acquire(platform, &command_buffer)
-    if !acquired {return .Failed}
+    if !acquired {
+       return .Failed
+    }
     if image.texture == nil {
         platform^.unavailable_frames += 1
-        if !sdl.SubmitGPUCommandBuffer(command_buffer) {return .Failed}
+        if !sdl.SubmitGPUCommandBuffer(command_buffer) {
+           return .Failed
+        }
         return .Unavailable
     }
     if !sdl_draw_submit(platform, runtime, encoder,
@@ -485,7 +505,9 @@ sdl_capture_complete :: proc(
     wait_finished_at := sdl_time_ticks()
     mapped := operations.map_transfer(
         operations.user_data, completion.device, completion.transfer)
-    if mapped == nil {return false}
+    if mapped == nil {
+       return false
+    }
     defer operations.unmap(
         operations.user_data, completion.device, completion.transfer)
     copied := sdl_capture_copy_rgba8(
@@ -503,7 +525,9 @@ sdl_capture_submit_scene :: proc(
     platform: ^Sdl_Platform, transfer: ^sdl.GPUTransferBuffer,
     layout: Sdl_Capture_Transfer_Layout) -> ^sdl.GPUFence {
     command_buffer := sdl.AcquireGPUCommandBuffer(platform^.device)
-    if command_buffer == nil {return nil}
+    if command_buffer == nil {
+       return nil
+    }
     copy_pass := sdl.BeginGPUCopyPass(command_buffer)
     if copy_pass == nil {
         _ = sdl.CancelGPUCommandBuffer(command_buffer)
@@ -526,15 +550,23 @@ sdl_platform_read_scene_rgba8 :: proc(
     }
     layout := sdl_capture_transfer_layout(
         platform^.scene_width, platform^.scene_height)
-    if !layout.valid {return false}
+    if !layout.valid {
+       return false
+    }
     row_bytes := int(platform^.scene_width) * 4
-    if len(destination) != row_bytes * int(platform^.scene_height) {return false}
+    if len(destination) != row_bytes * int(platform^.scene_height) {
+       return false
+    }
     transfer := sdl.CreateGPUTransferBuffer(platform^.device, {
         usage = .DOWNLOAD, size = u32(layout.transfer_bytes)})
-    if transfer == nil {return false}
+    if transfer == nil {
+       return false
+    }
     defer sdl.ReleaseGPUTransferBuffer(platform^.device, transfer)
     fence := sdl_capture_submit_scene(platform, transfer, layout)
-    if fence == nil {return false}
+    if fence == nil {
+       return false
+    }
     return sdl_capture_complete({
         device = platform^.device,
         transfer = transfer,
@@ -577,7 +609,9 @@ sdl_platform_save_png :: proc(
 
 // sdl_platform_destroy_gpu releases admitted GPU resources in owner order.
 sdl_platform_destroy_gpu :: proc(platform: ^Sdl_Platform) {
-    if platform^.device == nil {return}
+    if platform^.device == nil {
+       return
+    }
     if !sdl.WaitForGPUIdle(platform^.device) {
         log.errorf("sdl_gpu_idle_failed error=%s", sdl.GetError())
     }
@@ -654,9 +688,13 @@ sdl_platform_service_accessibility :: proc(
 // sdl_platform_cocoa_window returns SDL's borrowed NSWindow property.
 sdl_platform_cocoa_window :: proc(platform: ^Sdl_Platform) -> rawptr {
     when ODIN_OS == .Darwin {
-        if platform == nil || platform^.window == nil {return nil}
+        if platform == nil || platform^.window == nil {
+           return nil
+        }
         properties := sdl.GetWindowProperties(platform^.window)
-        if properties == 0 {return nil}
+        if properties == 0 {
+           return nil
+        }
         return sdl.GetPointerProperty(
             properties, sdl.PROP_WINDOW_COCOA_WINDOW_POINTER, nil)
     }
@@ -666,9 +704,13 @@ sdl_platform_cocoa_window :: proc(platform: ^Sdl_Platform) -> rawptr {
 // sdl_platform_win32_hwnd returns SDL's borrowed HWND property.
 sdl_platform_win32_hwnd :: proc(window: ^sdl.Window) -> rawptr {
     when ODIN_OS == .Windows {
-        if window == nil {return nil}
+        if window == nil {
+           return nil
+        }
         properties := sdl.GetWindowProperties(window)
-        if properties == 0 {return nil}
+        if properties == 0 {
+           return nil
+        }
         return sdl.GetPointerProperty(
             properties, sdl.PROP_WINDOW_WIN32_HWND_POINTER, nil)
     }
@@ -701,9 +743,13 @@ sdl_windows_native_show :: proc(_: rawptr, window: ^sdl.Window) -> bool {
 sdl_platform_windows_publish_with_operations :: proc(
     platform: ^Sdl_Platform, input: Sdl_Accessibility_Tree_Input,
     operations: Sdl_Windows_Accessibility_Operations) -> bool {
-    if platform == nil || platform^.window == nil {return false}
+    if platform == nil || platform^.window == nil {
+       return false
+    }
     if platform^.accessibility_admission_attempted {
-        if platform^.accessibility.native == nil {return false}
+        if platform^.accessibility.native == nil {
+           return false
+        }
         return operations.publish(operations.user_data,
             &platform^.accessibility, nil, input)
     }
@@ -723,7 +769,9 @@ sdl_platform_windows_publish_with_operations :: proc(
 sdl_platform_publish_accessibility_controls :: proc(
     platform: ^Sdl_Platform,
     input: Sdl_Accessibility_Tree_Input) -> bool {
-    if platform == nil {return false}
+    if platform == nil {
+       return false
+    }
     when ODIN_OS == .Linux {
         return native_accessibility.unix_adapter_publish_controls(
             &platform^.accessibility, input)
@@ -742,7 +790,9 @@ sdl_platform_publish_accessibility_controls :: proc(
 sdl_platform_drain_accessibility_action :: proc(
     platform: ^Sdl_Platform,
     destination: ^Sdl_Accessibility_Action) -> Sdl_Accessibility_Action_Status {
-    if platform == nil {return .Closing}
+    if platform == nil {
+       return .Closing
+    }
     when ODIN_OS == .Linux {
         return native_accessibility.unix_adapter_drain_action(
             &platform^.accessibility, destination)
@@ -802,7 +852,9 @@ sdl_platform_log_ready :: proc(
 // sdl_platform_window_flags selects platform-specific initial visibility.
 sdl_platform_window_flags :: proc(options: Sdl_Platform_Options) -> sdl.WindowFlags {
     flags: sdl.WindowFlags = {.HIGH_PIXEL_DENSITY}
-    if options.resizable {flags += {.RESIZABLE}}
+    if options.resizable {
+       flags += {.RESIZABLE}
+    }
     when ODIN_OS == .Windows {flags += {.HIDDEN}}
     return flags
 }

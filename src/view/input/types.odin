@@ -270,12 +270,24 @@ input_frame_filter_pointer :: proc(
     frame: Input_Frame, fields: Input_Pointer_Fields,
     hidden_position: Input_Position = {}) -> Input_Frame {
     result := frame
-    if .Screen_Position not_in fields { result.mouse_position = hidden_position }
-    if .Motion not_in fields { result.mouse_moved = false }
-    if .Press_Edges not_in fields { result.mouse_pressed = {} }
-    if .Release_Edges not_in fields { result.mouse_released = {} }
-    if .Levels not_in fields { result.mouse_down = {} }
-    if .Wheel not_in fields { result.mouse_wheel_delta = 0 }
+    if .Screen_Position not_in fields {
+        result.mouse_position = hidden_position 
+    }
+    if .Motion not_in fields {
+        result.mouse_moved = false 
+    }
+    if .Press_Edges not_in fields {
+        result.mouse_pressed = {} 
+    }
+    if .Release_Edges not_in fields {
+        result.mouse_released = {} 
+    }
+    if .Levels not_in fields {
+        result.mouse_down = {} 
+    }
+    if .Wheel not_in fields {
+        result.mouse_wheel_delta = 0 
+    }
     if .Terminal_Position not_in fields {
         result.terminal_mouse_position = {}
         result.terminal_mouse_pixel_position = {}

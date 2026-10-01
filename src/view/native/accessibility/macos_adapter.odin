@@ -26,7 +26,9 @@ macos_native_content_view :: proc(_: rawptr, window: rawptr) -> rawptr {
 macos_native_window_class :: proc(
     _: rawptr, window: rawptr) -> (rawptr, cstring) {
     window_class := objc.object_getClass(cast(objc.id)window)
-    if window_class == nil {return nil, nil}
+    if window_class == nil {
+       return nil, nil
+    }
     return rawptr(window_class), objc.class_getName(window_class)
 }
 

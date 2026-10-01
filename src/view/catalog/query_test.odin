@@ -1,4 +1,4 @@
-package search
+package catalog
 
 import "core:testing"
 
@@ -51,7 +51,9 @@ search_query_rejects_invalid_and_saturated_input :: proc(t: ^testing.T) {
         Search_Query_Parse_Status.No_Positive_Item)
 
     oversized: [SEARCH_QUERY_BYTE_CAPACITY + 1]u8
-    for &value in oversized {value = 'a'}
+    for &value in oversized {
+       value = 'a'
+    }
     testing.expect_value(t, search_query_compile(string(oversized[:])).status,
         Search_Query_Parse_Status.Source_Too_Long)
 }

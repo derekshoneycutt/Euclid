@@ -46,7 +46,9 @@ terminal_output_row :: proc(
 // Return the stable logical-row identity for one presented output line.
 terminal_output_logical_row :: proc(
     term: ^viewterminalmodel.Terminal_State, line: int) -> (i64, bool) {
-    if term == nil || line < 0 { return 0, false }
+    if term == nil || line < 0 {
+        return 0, false
+    }
     scrollback_count := terminal_visible_scrollback_count(term)
     if line < scrollback_count {
         if term.synchronized_output.active {
@@ -60,7 +62,9 @@ terminal_output_logical_row :: proc(
     screen_row := line - scrollback_count
     if term.synchronized_output.active {
         rows := term.synchronized_output.checkpoint.grid_rows
-        if screen_row < 0 || screen_row >= len(rows) { return 0, false }
+        if screen_row < 0 || screen_row >= len(rows) {
+            return 0, false
+        }
         return rows[screen_row].logical_id, true
     }
     if screen_row < 0 || screen_row >= len(term.output_grid.rows) {
@@ -72,7 +76,9 @@ terminal_output_logical_row :: proc(
 // Return semantic line identity and starting grapheme ordinal for one output row.
 terminal_output_semantic_row :: proc(
     term: ^viewterminalmodel.Terminal_State, line: int) -> Terminal_Output_Semantic_Row {
-    if term == nil || line < 0 { return {} }
+    if term == nil || line < 0 {
+        return {}
+    }
     scrollback_count := terminal_visible_scrollback_count(term)
     if line < scrollback_count {
         if term.synchronized_output.active {
@@ -86,7 +92,9 @@ terminal_output_semantic_row :: proc(
     screen_row := line - scrollback_count
     if term.synchronized_output.active {
         rows := term.synchronized_output.checkpoint.grid_rows
-        if screen_row < 0 || screen_row >= len(rows) { return {} }
+        if screen_row < 0 || screen_row >= len(rows) {
+            return {}
+        }
         row := rows[screen_row]
         return {row.logical_line_id, row.grapheme_offset, true}
     }
@@ -100,7 +108,9 @@ terminal_output_semantic_row :: proc(
 // Return whether one presented physical row soft-wraps into its successor.
 terminal_output_row_wrapped :: proc(
     term: ^viewterminalmodel.Terminal_State, line: int) -> (bool, bool) {
-    if term == nil || line < 0 { return false, false }
+    if term == nil || line < 0 {
+        return false, false
+    }
     scrollback_count := terminal_visible_scrollback_count(term)
     if line < scrollback_count {
         if term.synchronized_output.active {
@@ -114,7 +124,9 @@ terminal_output_row_wrapped :: proc(
     screen_row := line - scrollback_count
     if term.synchronized_output.active {
         rows := term.synchronized_output.checkpoint.grid_rows
-        if screen_row < 0 || screen_row >= len(rows) { return false, false }
+        if screen_row < 0 || screen_row >= len(rows) {
+            return false, false
+        }
         return rows[screen_row].wrapped, true
     }
     if screen_row < 0 || screen_row >= len(term.output_grid.rows) {
@@ -135,14 +147,18 @@ terminal_visible_scrollback_count :: proc(
         }
         return term.synchronized_output.checkpoint.scrollback_count
     }
-    if term.output_interpreter.alternate_screen_active { return 0 }
+    if term.output_interpreter.alternate_screen_active {
+        return 0
+    }
     return term.output_scrollback.count
 }
 
 // Return whether one row contains a visible leader or continuation cell.
 terminal_output_row_occupied :: proc(cells: []termgrid.Cell) -> bool {
     for &cell in cells {
-        if cell.grapheme_len > 0 || cell.continuation { return true }
+        if cell.grapheme_len > 0 || cell.continuation {
+            return true
+        }
     }
     return false
 }
@@ -160,7 +176,9 @@ terminal_grid_line_count :: proc(term: ^viewterminalmodel.Terminal_State) -> int
         cursor = term.synchronized_output.checkpoint.grid_cursor
         row_count = len(term.synchronized_output.checkpoint.grid_rows)
     }
-    if !output_started { return 0 }
+    if !output_started {
+        return 0
+    }
     count := cursor.row
     for row_index := row_count - 1; row_index >= 0; row_index -= 1 {
         cells: []termgrid.Cell
@@ -171,7 +189,9 @@ terminal_grid_line_count :: proc(term: ^viewterminalmodel.Terminal_State) -> int
         } else {
             cells = term.output_grid.rows[row_index].cells
         }
-        if !ok { continue }
+        if !ok {
+            continue
+        }
         if terminal_output_row_occupied(cells) {
             count = max(count, row_index + 1)
             break

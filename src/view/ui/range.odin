@@ -39,14 +39,18 @@ range_integer_step :: proc(
     value: int, amount: int, spec: Integer_Range_Spec,
     page: bool = false) -> int {
     increment := spec.step
-    if page {increment = spec.page_step}
+    if page {
+        increment = spec.page_step
+    }
     return range_integer_clamp(value + amount * increment, spec)
 }
 
 // range_integer_normalized maps one integer value into the unit interval.
 range_integer_normalized :: proc(value: int, spec: Integer_Range_Spec) -> f32 {
     extent := spec.maximum - spec.minimum
-    if extent <= 0 {return 0}
+    if extent <= 0 {
+        return 0
+    }
     return f32(range_integer_clamp(value, spec) - spec.minimum) / f32(extent)
 }
 
@@ -64,7 +68,9 @@ range_float_spec :: proc(
     minimum, maximum, step, page_step: f32) -> (Float_Range_Spec, bool) {
     if math.is_nan(minimum) || math.is_inf(minimum) || math.is_nan(maximum) ||
         math.is_inf(maximum) || math.is_nan(step) || math.is_inf(step) ||
-        math.is_nan(page_step) || math.is_inf(page_step) {return {}, false}
+        math.is_nan(page_step) || math.is_inf(page_step) {
+        return {}, false
+    }
     low := min(minimum, maximum)
     high := max(minimum, maximum)
     return {low, high, max(f32(0), abs(step)), max(f32(0), abs(page_step))}, true
@@ -72,7 +78,9 @@ range_float_spec :: proc(
 
 // range_float_clamp confines one finite value to a validated float range.
 range_float_clamp :: proc(value: f32, spec: Float_Range_Spec) -> f32 {
-    if math.is_nan(value) || math.is_inf(value) {return spec.minimum}
+    if math.is_nan(value) || math.is_inf(value) {
+        return spec.minimum
+    }
     return clamp(value, spec.minimum, spec.maximum)
 }
 
@@ -81,7 +89,9 @@ range_float_step :: proc(
     value, amount: f32, spec: Float_Range_Spec,
     page: bool = false) -> f32 {
     increment := spec.step
-    if page {increment = spec.page_step}
+    if page {
+        increment = spec.page_step
+    }
     return range_float_clamp(value + amount * increment, spec)
 }
 
@@ -89,6 +99,8 @@ range_float_step :: proc(
 range_action_source :: #force_inline proc(
     changed: bool, source: viewmodel.Ui_Control_Action_Source_Flag) ->
     viewmodel.Ui_Control_Action_Source {
-    if changed {return {source}}
+    if changed {
+        return {source}
+    }
     return {}
 }

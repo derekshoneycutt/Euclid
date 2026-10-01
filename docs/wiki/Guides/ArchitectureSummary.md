@@ -30,8 +30,8 @@ The overall structure includes 2 programming languages, Odin and Julia.
   (`Euclid_General_State`), rendering, UI, and systems (shapes + particles +
   gif capture).
 - **Julia** runtime code provides the sysimage-owned host, policy, authoring APIs, and
-  bridge wrappers. Generation-owned content loaded from `src/content/` registers an
-  animation tree and drives per-animation behavior through those stable APIs.
+  bridge wrappers. Odin materializes the packaged SQLite catalogue into a native
+  generation-scoped tree; Julia content drives per-animation behavior through stable APIs.
 
 A useful mental model:
 
@@ -78,15 +78,16 @@ If you are new, read in this order:
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `libs/julia/bindings/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution, transactional GIF publication, and native static and animated image decode. | `src/files/files.odin`, `src/terminal/graphics/native/sdl_image.odin` |
+| **Odin** | Catalogue Service | Bounded catalogue protocols, worker-owned immutable database generations, prepared search statements, and FTS/spellfix execution. | `src/core/catalog/model.odin`, `src/view/catalog/worker.odin` |
 | **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
 | **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/particles.odin` |
 | **---** | **--- Julia Modules ---** | **---** | **---** |
-| **Julia** | Runtime Bootstrap | Script loading, animation registration, and global frame dispatch. | `src/julia/script.jl` |
+| **Julia** | Runtime Bootstrap | Script loading, null-animation behavior, and global frame dispatch. | `src/julia/script.jl` |
 | **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
 | **Julia** | Shared Animation Utilities | Sysimage-owned reusable animation and geometry helpers. | `src/julia/animations.jl`, `src/julia/geometry.jl` |
 | **Julia** | Application Reactor | One bounded actor scheduler for persistent Terminal roots, generation-scoped Terminal services, and animation policy supervision. | `src/julia/runtime.jl`, `src/julia/host/`, `src/julia/policy/`, `src/julia/terminal/` |
 | **Julia** | LaTeX Facade | Defines canonical TeX displayables and submits exact MIME bytes to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
-| **Julia Content** | Generation Bootstrap | Catalog descriptors, null behavior, and harness scenarios loaded into each generation. | `src/content/animation_catalog_generation.jl`, `src/content/nullanimation.jl`, `src/content/harness_scenarios.jl` |
+| **Julia Content** | Generation Bootstrap | Null behavior and harness scenarios loaded into each generation; catalogue descriptors remain build-time inputs. | `src/content/nullanimation.jl`, `src/content/harness_scenarios.jl`, `src/julia/animation_catalog.jl` |
 | **Julia Content** | Content Modules | Domain roots and leaf animation definitions loaded at startup or on demand. | `src/content/elements/`, `src/content/proclus/`, `src/content/hilbert/`, `src/content/algebra/`, `src/content/curves/` |
 
 ### Cross-Module Contracts
@@ -121,18 +122,20 @@ Dynview production callers import the child package that owns each symbol. Root
 `core` owns shared primitives, `math` measurement, `layout` placement, `compile`
 rebuild ordering, and `view/ui/dynview` display-thread drawing.
 
-Content startup registers metadata without evaluating path-backed programs. Each item
-has a permanent UUID and a generation-local compatibility implementation. The Julia
+The catalogue worker validates packaged SQLite and publishes a bounded snapshot before
+Julia content initialization. Odin builds the native UUID tree from that snapshot and
+copies implementation paths to Julia only when a program is selected. The Julia
 animation supervisor resolves and caches implementations, owns lifecycle policy, and
-keeps exactly one active program actor. That actor alone adapts typed lifecycle and tick
-commands to the existing `animation_entry` interface. Julia roots the runtime host and
-committed generation, while Odin-held Julia pointers remain borrowed.
+keeps exactly one active program actor. That actor adapts typed lifecycle and tick
+commands to the `animation_entry` interface. Julia roots the runtime host and committed
+generation, while Odin-held Julia pointers remain borrowed.
 
-Reload builds and registers a candidate against the inactive interface, roots it
-separately, and asks the supervisor to stop the prior actor, reset native state, and
-validate the candidate actor before one commit. Failure retires candidate roots and
-restores the prior program actor; candidate state never leaks into the committed
-generation.
+Reload asks the catalogue worker to admit a candidate immutable database while the
+active connection continues serving search. Its bounded candidate snapshot materializes
+the inactive native interface before Julia roots and validates the candidate generation.
+Catalogue promotion remains reversible until Julia commit and native publication
+succeed; failure restores the prior database, snapshot, interface, generation, and
+selected program actor. Finalization then retires the previous database connection.
 
 Semantic evidence is authoritative for behavioral claims. Diagnostics explain
 operation and failure, while Spall profiles measure timing; neither substitutes for
@@ -825,7 +828,8 @@ the owner responsible for release.
   closure and use platform-relative loader metadata.
 - Builds compile canonical HLSL offline and package validated SPIR-V, reflection JSON,
   shader ABI metadata, Julia scripts, the deterministic
-  `search/animations.sqlite3` index, and other assets into `bin/assets.pkg`; HLSL and
+  `catalog/animations.sqlite3` catalogue and search index, and other assets into
+  `bin/assets.pkg`; HLSL and
   build-only shader tools are not runtime assets. Debug builds publish a matching
   package and `assets.pkg.identity` commit sidecar beside the debug executable.
 - SDL_shadercross and its recursive dependencies are tracked under
@@ -888,8 +892,8 @@ Choose the owning module first, then touch that module's highlighted files.
 1. Implement the module's direct `animation_entry` dispatcher for Enter, Tick, and Exit.
 1. Publish the named `get_view_content` producer from `initialize`, or from `loop`
   only when semantic view content changes, using `publish_view_content`.
-1. Register `animation_entry` via `add_child_animation_interface` in the relevant
-  group init script.
+1. Add a descriptor and implementation path to the build-time catalogue data, then
+  regenerate the packaged SQLite catalogue and search index.
 1. If bridge functionality is missing, add symmetric Odin export + Julia wrapper.
 
 Review [AnimationsStyle.md](AnimationsStyle.md) for considerations on how to

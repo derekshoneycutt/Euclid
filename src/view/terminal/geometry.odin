@@ -136,13 +136,17 @@ terminal_reflow_view_position :: proc(
     (viewterminalmodel.Terminal_View_Position, bool) {
     cells, found := terminal_output_row(term, position.line)
     logical_row, logical_found := terminal_output_logical_row(term, position.line)
-    if !found || !logical_found { return {}, false }
+    if !found || !logical_found {
+        return {}, false
+    }
     column := terminal_output_row_column_offset(cells, position.byte_offset)
     semantic, semantic_found := termgrid.reflow_resolve_old(
         &prepared.reflow, {logical_row, column})
     relocated, relocated_found := termgrid.reflow_resolve_semantic(
         &prepared.reflow, semantic)
-    if !semantic_found || !relocated_found { return {}, false }
+    if !semantic_found || !relocated_found {
+        return {}, false
+    }
     row := &prepared.reflow.rows[relocated.row]
     return {
         line = relocated.row,
@@ -162,7 +166,9 @@ terminal_reflow_placement :: proc(
         &ctx.primary.reflow, semantic)
     logical_row, row_found := termgrid.primary_reflow_logical_row(
         ctx.primary, relocated.row)
-    if !old_found || !new_found || !row_found { return {}, false }
+    if !old_found || !new_found || !row_found {
+        return {}, false
+    }
     result := geometry
     result.logical_row = logical_row
     result.column = relocated.column
@@ -171,7 +177,9 @@ terminal_reflow_placement :: proc(
 
 // Release every unpublished resize resource after failed preparation.
 terminal_discard_prepared_resize :: proc(prepared: ^Prepared_Terminal_Resize) {
-    if prepared == nil { return }
+    if prepared == nil {
+        return
+    }
     termattachment.placement_checkpoint_destroy(&prepared.placements)
     termgrid.display_checkpoint_destroy(&prepared.synchronized_checkpoint)
     termgrid.display_checkpoint_destroy(&prepared.checkpoint)
@@ -188,7 +196,9 @@ terminal_prepare_resize_placements :: proc(
     if !termattachment.placement_checkpoint_init(
         &prepared.placements, attachments, allocator) ||
         !termattachment.placement_checkpoint_capture(
-            &prepared.placements, attachments) { return false }
+            &prepared.placements, attachments) {
+        return false
+    }
     ctx := Terminal_Placement_Reflow_Context{&prepared.primary}
     return termattachment.placement_checkpoint_relocate(
         &prepared.placements, .Primary, &ctx, terminal_reflow_placement)
@@ -211,14 +221,18 @@ terminal_prepare_resize_view_state :: proc(
     }
     prepared.scroll_offset_y = term.scroll_offset_y
     if term.output_interpreter.alternate_screen_active ||
-        term.scroll_offset_y <= 0 { return }
+        term.scroll_offset_y <= 0 {
+        return
+    }
     pitch := TERMINAL_FONT_SIZE + TERMINAL_LINE_SPACING
     anchor := viewterminalmodel.Terminal_View_Position{
         line = int(term.scroll_offset_y / pitch),
     }
     relocated, retained := terminal_reflow_view_position(
         term, &prepared.primary, anchor)
-    if retained { prepared.scroll_offset_y = f32(relocated.line) * pitch }
+    if retained {
+        prepared.scroll_offset_y = f32(relocated.line) * pitch
+    }
 }
 
 // Prepare semantic primary and coordinate-preserving alternate grid replacements.
@@ -232,7 +246,9 @@ terminal_prepare_resize_grids :: proc(
     }
     source, source_ok := termgrid.primary_reflow_source(
         primary_grid, &term.output_scrollback, allocator)
-    if !source_ok { return false }
+    if !source_ok {
+        return false
+    }
     primary, primary_result := termgrid.primary_reflow_prepare(source, {
         old_grid = primary_grid,
         old_scrollback = &term.output_scrollback,
@@ -241,11 +257,15 @@ terminal_prepare_resize_grids :: proc(
         allocator = allocator,
     })
     delete(source, allocator)
-    if primary_result != .Prepared { return false }
+    if primary_result != .Prepared {
+        return false
+    }
     prepared.primary = primary
     alternate, result := termgrid.grid_prepare_resize(alternate_grid,
         int(dimensions.columns), int(dimensions.rows), allocator)
-    if result != .Prepared { return false }
+    if result != .Prepared {
+        return false
+    }
     prepared.alternate = alternate
     return true
 }
@@ -351,7 +371,9 @@ terminal_publish_resize_resources :: proc(
     alternate_active: bool) -> Terminal_Superseded_Display {
     primary_grid := &term.output_grid
     alternate_grid := &term.output_alternate_grid
-    if alternate_active { primary_grid, alternate_grid = alternate_grid, primary_grid }
+    if alternate_active {
+        primary_grid, alternate_grid = alternate_grid, primary_grid
+    }
     superseded := Terminal_Superseded_Display{primary_grid^, alternate_grid^}
     primary_grid^ = prepared.primary.grid
     prepared.primary.grid = {}

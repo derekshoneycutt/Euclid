@@ -47,7 +47,9 @@ build_native_dust_hypocycloid :: proc(
     pixels: []u8, tile_x, tile_y, k: int) {
     points: [DUST_HYPOCYCLOID_SAMPLE_COUNT]Vector2
     count := sample_dust_hypocycloid_points(points[:], k)
-    if count == 0 {return}
+    if count == 0 {
+       return
+    }
     center := (f32(DUST_TEXTURE_SIZE) - 1) * 0.5
     origin_x, origin_y := tile_x * DUST_TEXTURE_SIZE, tile_y * DUST_TEXTURE_SIZE
     for y in 0..<DUST_TEXTURE_SIZE {
@@ -60,7 +62,9 @@ build_native_dust_hypocycloid :: proc(
                             DUST_HYPOCYCLOID_SUPERSAMPLE_GRID - center) / center,
                         (f32(y) + (f32(sample_y) + 0.5) /
                             DUST_HYPOCYCLOID_SUPERSAMPLE_GRID - center) / center}
-                    if point_in_polygon(point, points[:count]) {coverage += 1}
+                    if point_in_polygon(point, points[:count]) {
+                        coverage += 1
+                    }
                 }
             }
             if coverage > 0 {
@@ -73,7 +77,9 @@ build_native_dust_hypocycloid :: proc(
 
 // build_native_dust_atlas initializes and rasterizes the complete RGBA8 atlas.
 build_native_dust_atlas :: proc(pixels: []u8) -> bool {
-    if len(pixels) != DUST_ATLAS_PIXEL_BYTES {return false}
+    if len(pixels) != DUST_ATLAS_PIXEL_BYTES {
+        return false
+    }
     for pixel in 0..<DUST_ATLAS_SIZE * DUST_ATLAS_SIZE {
         offset := pixel * 4
         pixels[offset] = 255
@@ -104,11 +110,17 @@ initialize_native_dust_atlas :: proc(
     runtime: ^native.Sdl_Draw_Runtime) -> bool {
     pixels, allocation_error := make(
         []u8, DUST_ATLAS_PIXEL_BYTES, context.temp_allocator)
-    if allocation_error != nil {return false}
-    if !build_native_dust_atlas(pixels) {return false}
+    if allocation_error != nil {
+        return false
+    }
+    if !build_native_dust_atlas(pixels) {
+        return false
+    }
     candidate := native.sdl_sampled_texture_create(
         platform, DUST_ATLAS_SIZE, DUST_ATLAS_SIZE)
-    if !native.sampled_texture_is_valid(candidate) {return false}
+    if !native.sampled_texture_is_valid(candidate) {
+        return false
+    }
     if !native.texture_operation_enqueue_upload(
         &runtime^.texture_operations, {
             kind = .Create, texture = candidate, format = .Rgba8,
@@ -134,7 +146,9 @@ encode_low_particles :: proc(
         state^.ui_runtime.use_simd_batch_projection)
     count := 0
     for screen, index in ps.low_particle_screens[:projected_count] {
-        if !ps.low_particles.alive[index] {continue}
+        if !ps.low_particles.alive[index] {
+            continue
+        }
         t := math.clamp(
             ps.low_particles.age[index] / ps.low_particles.life[index], 0, 1)
         particle_color := ps.low_particles.color[index]
@@ -163,7 +177,9 @@ encode_mid_particles :: proc(
         screens[:], state^.iso_scale^}, state^.ui_runtime.use_simd_batch_projection)
     count := 0
     for screen, index in screens[:projected_count] {
-        if !ps.particles.alive[index] {continue}
+        if !ps.particles.alive[index] {
+            continue
+        }
         t := math.clamp(ps.particles.age[index] / ps.particles.life[index], 0, 1)
         particle_color := ps.particles.color[index]
         white_mix := math.lerp(ps.particles.ember_white_at_birth[index], 0, t)
@@ -176,7 +192,9 @@ encode_mid_particles :: proc(
         if native.draw_encoder_texture_quad(encoder,
             {screen.x - diameter * 0.5, screen.y - diameter * 0.5,
                 diameter, diameter}, {0, 0, 1.0 / DUST_ATLAS_COLUMNS,
-                1.0 / DUST_ATLAS_ROWS}, tint, {texture, .Linear}) {count += 1}
+                1.0 / DUST_ATLAS_ROWS}, tint, {texture, .Linear}) {
+            count += 1
+        }
     }
     ps.last_render_mid = count
 }
@@ -192,7 +210,9 @@ encode_high_particles :: proc(
         state^.ui_runtime.use_simd_batch_projection)
     count := 0
     for screen, index in screens[:projected_count] {
-        if !ps.high_particles.alive[index] {continue}
+        if !ps.high_particles.alive[index] {
+           continue
+        }
         count += 1
         if ps.high_particles.lit_frames[index] > 0 {
             _ = native.draw_encoder_rectangle(

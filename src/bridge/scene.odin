@@ -12,7 +12,9 @@ tool_dust_contact_on_floor :: #force_inline proc(position: Vector3) -> bool {
 
 // Convert a boolean value to its C ABI u8 representation.
 to_u8 :: #force_inline proc(value: bool) -> u8 {
-    if value {return 1}
+    if value {
+        return 1
+    }
     return 0
 }
 

@@ -42,9 +42,13 @@ Iterm2_Decode_Target :: struct {
 // Returns:
 //   - True only when length and byte content are identical.
 graphics_bytes_equal :: proc(bytes: []u8, expected: string) -> bool {
-    if len(bytes) != len(expected) { return false }
+    if len(bytes) != len(expected) {
+        return false 
+    }
     for byte, index in transmute([]u8)expected {
-        if bytes[index] != byte { return false }
+        if bytes[index] != byte {
+            return false 
+        }
     }
     return true
 }
@@ -58,7 +62,9 @@ graphics_bytes_equal :: proc(bytes: []u8, expected: string) -> bool {
 // Returns:
 //   - True only when `bytes` is long enough and ends with `suffix`.
 graphics_bytes_has_suffix :: proc(bytes: []u8, suffix: string) -> bool {
-    if len(bytes) < len(suffix) { return false }
+    if len(bytes) < len(suffix) {
+        return false 
+    }
     return graphics_bytes_equal(bytes[len(bytes) - len(suffix):], suffix)
 }
 
@@ -78,7 +84,9 @@ graphics_bytes_has_suffix :: proc(bytes: []u8, suffix: string) -> bool {
 //   - Writes exactly one destination for a numeric value; `auto` leaves all three zero.
 graphics_iterm2_parse_dimension :: proc(
     value: []u8, cells, pixels, percent: ^int) -> bool {
-    if graphics_bytes_equal(value, "auto") { return true }
+    if graphics_bytes_equal(value, "auto") {
+        return true 
+    }
     digits := value
     destination := cells
     if graphics_bytes_has_suffix(value, "px") {
@@ -94,6 +102,16 @@ graphics_iterm2_parse_dimension :: proc(
     }
     destination^ = parsed
     return true
+}
+
+// Parse the recognized boolean preserve-aspect-ratio metadata value.
+graphics_iterm2_parse_aspect_ratio :: proc(
+    controls: ^Iterm2_Controls, value: []u8) -> bool {
+    if graphics_bytes_equal(value, "0") {
+        controls.preserve_aspect_ratio = false
+        return true
+    }
+    return graphics_bytes_equal(value, "1")
 }
 
 //   Apply one iTerm2 metadata token while tolerating extension keys.
@@ -112,9 +130,13 @@ graphics_iterm2_parse_token :: proc(
     controls: ^Iterm2_Controls, token: []u8) -> bool {
     separator := -1
     for byte, index in token {
-        if byte == '=' { separator = index; break }
+        if byte == '=' {
+            separator = index; break 
+        }
     }
-    if separator <= 0 { return true }
+    if separator <= 0 {
+        return true 
+    }
     key := token[:separator]
     value := token[separator + 1:]
     if graphics_bytes_equal(key, "inline") {
@@ -137,11 +159,7 @@ graphics_iterm2_parse_token :: proc(
             &controls.height_percent)
     }
     if graphics_bytes_equal(key, "preserveAspectRatio") {
-        if graphics_bytes_equal(value, "0") {
-            controls.preserve_aspect_ratio = false
-            return true
-        }
-        return graphics_bytes_equal(value, "1")
+        return graphics_iterm2_parse_aspect_ratio(controls, value)
     }
     return true
 }
@@ -158,7 +176,9 @@ graphics_iterm2_parse_controls :: proc(header: []u8) -> Iterm2_Controls {
     controls := Iterm2_Controls{preserve_aspect_ratio = true}
     start := 0
     for index in 0..=len(header) {
-        if index != len(header) && header[index] != ';' { continue }
+        if index != len(header) && header[index] != ';' {
+            continue 
+        }
         if !graphics_iterm2_parse_token(&controls, header[start:index]) {
             return {}
         }
@@ -186,10 +206,16 @@ graphics_iterm2_request :: proc(
     semantics_context: ^Context, frame: gfxprotocol.Graphics_Frame,
     controls: Iterm2_Controls) -> gfxprotocol.Graphics_Decode_Request {
     anchor, valid := graphics_context_anchor(semantics_context)
-    if !valid { return {} }
+    if !valid {
+        return {} 
+    }
     sizing := termattachment.Sizing_Mode.Intrinsic_Centered
-    if controls.column_span > 0 || controls.row_span > 0 { sizing = .Explicit_Cells }
-    if controls.pixel_width > 0 || controls.pixel_height > 0 { sizing = .Explicit_Pixels }
+    if controls.column_span > 0 || controls.row_span > 0 {
+        sizing = .Explicit_Cells 
+    }
+    if controls.pixel_width > 0 || controls.pixel_height > 0 {
+        sizing = .Explicit_Pixels 
+    }
     return {
         kind = .Iterm2_Image,
         producer = frame.producer,
@@ -233,7 +259,9 @@ graphics_iterm2_queue_static_request :: proc(
     inspection: termgraphicsprepare.Image_Inspection) ->
     (gfxprotocol.Graphics_Decode_Request, bool) {
     target := graphics_iterm2_reserve_static_target(state, inspection)
-    if !target.valid { return prepared, false }
+    if !target.valid {
+        return prepared, false 
+    }
     request := prepared
     request.kind = target.kind
     request.attachment_id = target.attachment_id
@@ -269,7 +297,9 @@ graphics_iterm2_queue_request :: proc(
     valid_size := request.declared_byte_count == 0 ||
         request.declared_byte_count == len(bytes)
     inspection := termgraphicsprepare.inspect_image(bytes, state.store.limits)
-    if !found || !valid_size || !inspection.valid { return {}, false }
+    if !found || !valid_size || !inspection.valid {
+        return {}, false 
+    }
     prepared := request
     prepared.width = inspection.width
     prepared.height = inspection.height
@@ -292,7 +322,9 @@ graphics_iterm2_queue_request :: proc(
 graphics_iterm2_advance_cursor :: proc(
     semantics_context: ^Context,
     request: gfxprotocol.Graphics_Decode_Request) {
-    if !request.place { return }
+    if !request.place {
+        return 
+    }
     rows := graphics_placement_rows(
         semantics_context, request.geometry,
         {width = request.width, height = request.height})
@@ -341,7 +373,9 @@ graphics_iterm2_begin_multipart :: proc(
     }
     transfer_id, outcome := termattachment.transfer_begin(
         state.store, .Iterm2, state.store.limits.transfer_byte_limit)
-    if outcome != .Admitted { return }
+    if outcome != .Admitted {
+        return 
+    }
     request := graphics_iterm2_request(semantics_context, frame, controls)
     request.transfer_id = transfer_id
     state.iterm_multipart_transfer_id = transfer_id

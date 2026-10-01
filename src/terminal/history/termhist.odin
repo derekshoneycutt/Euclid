@@ -170,7 +170,9 @@ termhist_cursor :: proc(state: ^Termhist_State) -> int {
 
 // termhist_content_revision returns the live input's monotonic content generation.
 termhist_content_revision :: proc(state: ^Termhist_State) -> u64 {
-    if state == nil {return 0}
+    if state == nil {
+       return 0
+    }
     return state.content_revision
 }
 

@@ -174,7 +174,9 @@ TEX_MATH_LARGE_OPERATORS :: [?]Tex_Math_Large_Operator{
 //   Resolve one historical accent command.
 tex_math_registry_accent :: proc(command: string) -> (Tex_Math_Accent, bool) {
     for accent in TEX_MATH_ACCENTS {
-        if accent.command == command { return accent, true }
+        if accent.command == command {
+            return accent, true 
+        }
     }
     return {}, false
 }
@@ -182,7 +184,9 @@ tex_math_registry_accent :: proc(command: string) -> (Tex_Math_Accent, bool) {
 //   Return whether one command selects a fixed-size delimiter.
 tex_math_registry_is_fixed_delimiter :: proc(command: string) -> bool {
     for candidate in TEX_MATH_FIXED_DELIMITER_COMMANDS {
-        if candidate == command { return true }
+        if candidate == command {
+            return true 
+        }
     }
     return false
 }

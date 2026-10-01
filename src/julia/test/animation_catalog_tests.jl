@@ -46,17 +46,39 @@ const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content")
     ]
     loader = descriptor -> EuclidSearchContent.SearchContent(
         "Semantic content for $(descriptor.display_name).", ("alternate",))
-    documents = EuclidSearchCorpus.build_search_documents(descriptors, loader)
-    @test getproperty.(documents, :document_id) ==
+    records = EuclidSearchCorpus.build_catalog_corpus(descriptors, loader)
+    @test getproperty.(records, :animation_id) ==
         string.([child_id, parent_id, terminal_id])
-    @test documents[1].hierarchy_path == "Geometry / Perpendicular"
-    @test documents[3].semantic_text == ""
-    @test isempty(documents[3].aliases)
+    @test getproperty.(records, :catalog_order) == [2, 0, 1]
+    @test records[1].parent_animation_id == string(parent_id)
+    @test records[1].hierarchy_path == "Geometry / Perpendicular"
+    @test records[1].sibling_order == 0
+    @test records[1].implementation_path == "geometry/perpendicular.jl"
+    @test records[3].semantic_text == ""
+    @test isempty(records[3].aliases)
     first_output = IOBuffer()
     second_output = IOBuffer()
-    EuclidSearchCorpus.write_search_corpus(first_output, documents)
-    EuclidSearchCorpus.write_search_corpus(second_output, documents)
-    @test take!(first_output) == take!(second_output)
+    EuclidSearchCorpus.write_catalog_corpus(first_output, records)
+    EuclidSearchCorpus.write_catalog_corpus(second_output, records)
+    first_bytes = take!(first_output)
+    @test first_bytes == take!(second_output)
+    @test EuclidSearchCorpus.CATALOG_CORPUS_SCHEMA_VERSION == 2
+    @test String(first_bytes) == """
+    {"schema":2,"source_namespace":"builtin","animation_id":"10000000-0000-0000-0000-000000000000","parent_animation_id":"50000000-0000-0000-0000-000000000000","node_kind":2,"display_name":"Perpendicular","sibling_order":0,"catalog_order":2,"implementation_path":"geometry/perpendicular.jl","hierarchy_path":"Geometry / Perpendicular","semantic_text":"Semantic content for Perpendicular.","aliases":["alternate"]}
+    {"schema":2,"source_namespace":"builtin","animation_id":"50000000-0000-0000-0000-000000000000","parent_animation_id":null,"node_kind":1,"display_name":"Geometry","sibling_order":0,"catalog_order":0,"implementation_path":"geometry/overview.jl","hierarchy_path":"Geometry","semantic_text":"Semantic content for Geometry.","aliases":["alternate"]}
+    {"schema":2,"source_namespace":"builtin","animation_id":"90000000-0000-0000-0000-000000000000","parent_animation_id":null,"node_kind":3,"display_name":"Terminal","sibling_order":1,"catalog_order":1,"implementation_path":null,"hierarchy_path":"Terminal","semantic_text":"","aliases":[]}
+    """
+    unsafe_descriptors = copy(descriptors)
+    unsafe_descriptors[3] = AnimationDescriptor(child_id, parent_id, "Perpendicular", 0,
+        LeafNode, "geometry/../outside.jl")
+    @test_throws ArgumentError EuclidSearchCorpus.build_catalog_corpus(
+        unsafe_descriptors, loader)
+    oversized_descriptors = copy(descriptors)
+    oversized_descriptors[3] = AnimationDescriptor(
+        child_id, parent_id, "Perpendicular", 0, LeafNode,
+        repeat("a", EuclidSearchCorpus.CATALOG_PATH_BYTE_CAPACITY + 1))
+    @test_throws ArgumentError EuclidSearchCorpus.build_catalog_corpus(
+        oversized_descriptors, loader)
 end
 
 @testset "search content value contract" begin
@@ -148,6 +170,22 @@ end
 
 @testset "complete production catalog contract" begin
     @test length(AnimationDescriptors) == 138
+    corpus_records = EuclidSearchCorpus.build_catalog_corpus(
+        AnimationDescriptors,
+        _ -> EuclidSearchContent.SearchContent("Catalog metadata.", ()))
+    ordered_records = sort(corpus_records; by=record -> record.catalog_order)
+    @test getproperty.(ordered_records, :catalog_order) == collect(0:137)
+    @test getproperty.(ordered_records, :sibling_order) ==
+        getproperty.(AnimationDescriptors, :sibling_order)
+    @test getproperty.(ordered_records, :implementation_path) ==
+        getproperty.(AnimationDescriptors, :implementation_path)
+    @test count(record -> record.implementation_path === nothing,
+        ordered_records) == 1
+    @test only(filter(record -> record.implementation_path === nothing,
+        ordered_records)).node_kind == UInt8(TerminalNode)
+    @test all(record -> !isempty(record.animation_id) &&
+        !isempty(record.display_name) && !isempty(record.hierarchy_path),
+        ordered_records)
     @test count(descriptor -> descriptor.kind == TerminalNode,
         AnimationDescriptors) == 1
     roots = filter(descriptor -> descriptor.parent_id === nothing,
@@ -181,7 +219,8 @@ end
     @test production_content_sidecars() == expected_sidecars
     generation = create_euclid_runtime_generation(ProductionContentRoot)
     for descriptor in path_backed
-        implementation = load_generation_animation(generation, descriptor.id)
+        implementation = load_generation_animation(
+            generation, descriptor.id, descriptor.implementation_path)
         @test implementation.id == descriptor.id
         @test nameof(implementation.entry) == :animation_entry
         source = read(

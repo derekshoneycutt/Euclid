@@ -19,9 +19,13 @@ Adapter_Action_Mapping :: struct {
 adapter_input_index :: proc(
     input: Adapter_Tree_Input,
     identity: portable.Qualified_Identity) -> int {
-    if identity == {} {return -1}
+    if identity == {
+       } {return -1
+    }
     for source, index in input.controls {
-        if source.identity == identity {return index}
+        if source.identity == identity {
+           return index
+        }
     }
     return -1
 }
@@ -30,7 +34,9 @@ adapter_input_index :: proc(
 adapter_stage_identity_unique :: proc(
     input: Adapter_Tree_Input, source: Adapter_Control_Input, index: int) -> bool {
     for prior in input.controls[:index] {
-        if prior.identity != source.identity {continue}
+        if prior.identity != source.identity {
+           continue
+        }
         log.warnf("accessibility_control_identity_duplicate index=%d prior=%d",
             index, adapter_input_index(input, source.identity))
         return false
@@ -43,19 +49,29 @@ adapter_stage_validation_control :: proc(
     input: Adapter_Tree_Input, source: Adapter_Control_Input, index: int,
     controls: ^[portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input) ->
     bool {
-    if !adapter_stage_identity_unique(input, source, index) {return false}
+    if !adapter_stage_identity_unique(input, source, index) {
+       return false
+    }
     controls^[index] = source.control
     controls^[index].native_id = u64(index + 2)
     parent_index := adapter_input_index(input, source.parent_identity)
-    if source.parent_identity != {} && parent_index < 0 {return false}
-    if parent_index >= 0 {controls^[index].parent_native_id = u64(parent_index + 2)}
+    if source.parent_identity != {
+       } && parent_index < 0 {return false
+    }
+    if parent_index >= 0 {
+       controls^[index].parent_native_id = u64(parent_index + 2)
+    }
     active_index := adapter_input_index(input, source.active_descendant_identity)
-    if source.active_descendant_identity != {} && active_index < 0 {return false}
+    if source.active_descendant_identity != {
+       } && active_index < 0 {return false
+    }
     if active_index >= 0 {
         controls^[index].active_descendant_native_id = u64(active_index + 2)
     }
     controls_index := adapter_input_index(input, source.controls_identity)
-    if source.controls_identity != {} && controls_index < 0 {return false}
+    if source.controls_identity != {
+       } && controls_index < 0 {return false
+    }
     if controls_index >= 0 {
         controls^[index].controls_native_id = u64(controls_index + 2)
     }
@@ -91,9 +107,13 @@ adapter_resolve_relation :: proc(
     input: Adapter_Tree_Input,
     native_ids: ^[portable.CONTROL_NODE_CAPACITY]u64,
     identity: portable.Qualified_Identity) -> (u64, bool) {
-    if identity == {} {return 0, true}
+    if identity == {
+       } {return 0, true
+    }
     index := adapter_input_index(input, identity)
-    if index < 0 {return 0, false}
+    if index < 0 {
+       return 0, false
+    }
     return native_ids^[index], true
 }
 
@@ -131,7 +151,9 @@ adapter_stage_control :: proc(
         input, native_ids, source.active_descendant_identity)
     controls_id, controls_ok := adapter_resolve_relation(
         input, native_ids, source.controls_identity)
-    if !parent_ok || !active_ok || !controls_ok {return false}
+    if !parent_ok || !active_ok || !controls_ok {
+       return false
+    }
     destination^.parent_native_id = parent_id
     destination^.active_descendant_native_id = active_id
     destination^.controls_native_id = controls_id
@@ -150,9 +172,13 @@ adapter_stage_controls :: proc(
     }
     validation_controls:
         [portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input
-    if !adapter_stage_validation(input, &validation_controls) {return false}
+    if !adapter_stage_validation(input, &validation_controls) {
+       return false
+    }
     native_ids: [portable.CONTROL_NODE_CAPACITY]u64
-    if !adapter_resolve_control_ids(owner, input, &native_ids) {return false}
+    if !adapter_resolve_control_ids(owner, input, &native_ids) {
+       return false
+    }
     for source, index in input.controls {
         if !adapter_stage_control(
             input, &native_ids, source, index, &controls^[index]) {return false}
@@ -167,9 +193,13 @@ adapter_retire_absent_controls :: proc(
     for old_id in owner^.control_native_ids[:owner^.control_count] {
         retained := false
         for control in controls {
-            if control.native_id == old_id {retained = true; break}
+            if control.native_id == old_id {
+               retained = true; break
+            }
         }
-        if !retained {_ = portable.native_id_retire(&owner^.native_ids, old_id)}
+        if !retained {
+           _ = portable.native_id_retire(&owner^.native_ids, old_id)
+        }
     }
     owner^.control_native_ids = {}
     owner^.control_count = len(controls)
@@ -180,7 +210,9 @@ adapter_retire_absent_controls :: proc(
 
 // adapter_publish_controls owns one complete portable control publication.
 adapter_publish_controls :: proc(owner: ^Adapter, input: Adapter_Tree_Input) -> bool {
-    if owner == nil {return false}
+    if owner == nil {
+       return false
+    }
     controls: [portable.CONTROL_NODE_CAPACITY]portable.Control_Publication_Input
     control_count: int
     if !adapter_stage_controls(owner, input, &controls, &control_count) {
@@ -207,7 +239,9 @@ adapter_publish_present_button :: proc(
     owner: ^Adapter, input: portable.Button_Publication_Input,
     identity: portable.Qualified_Identity) -> bool {
     child_id, child_ok := portable.native_id_resolve(&owner^.native_ids, identity)
-    if !child_ok {return false}
+    if !child_ok {
+       return false
+    }
     publication_input := input
     publication_input.child_id = child_id
     if portable.protected_publish_button(
@@ -240,9 +274,13 @@ adapter_publish_removed_button :: proc(
 adapter_publish_button :: proc(
     owner: ^Adapter, input: portable.Button_Publication_Input,
     identity: portable.Qualified_Identity) -> bool {
-    if owner == nil {return false}
+    if owner == nil {
+       return false
+    }
     if owner^.native_ids.count == 0 {
-        if !input.present {return true}
+        if !input.present {
+           return true
+        }
         portable.native_id_registry_init(&owner^.native_ids)
     }
     if input.present {
@@ -254,13 +292,17 @@ adapter_publish_button :: proc(
 // adapter_initialize_static owns the initial synthetic publication.
 adapter_initialize_static :: proc(
     owner: ^Adapter, width, height: f64, focused: bool) -> bool {
-    if owner == nil {return false}
+    if owner == nil {
+       return false
+    }
     portable.native_id_registry_init(&owner^.native_ids)
     child_id, child_ok := portable.native_id_resolve(&owner^.native_ids, {
         domain = .Synthetic,
         local_id = portable.STATIC_CHILD_ID,
     })
-    if !child_ok || child_id != portable.STATIC_CHILD_ID {return false}
+    if !child_ok || child_id != portable.STATIC_CHILD_ID {
+       return false
+    }
     return portable.protected_publish(
         &owner^.publication, width, height, focused) == .Ok
 }
@@ -275,7 +317,9 @@ adapter_validate_action :: proc(
     }
     identity, found := portable.native_id_lookup(
         &owner^.native_ids, request.target_native_id)
-    if !found {return .Unknown_Target}
+    if !found {
+       return .Unknown_Target
+    }
     if !publication.child_present || request.target_native_id != publication.child_id {
         return .Removed_Target
     }
@@ -286,7 +330,9 @@ adapter_validate_action :: proc(
     }
     if request.kind == u16(accesskit.Action.Click) &&
        publication.child_supports_activate {
-        if !publication.child_enabled {return .Disabled_Target}
+        if !publication.child_enabled {
+           return .Disabled_Target
+        }
         destination^ = {kind = .Activate, identity = identity}
         return .Ok
     }
@@ -299,7 +345,9 @@ adapter_control_by_native_id :: proc(
     native_id: u64) -> ^portable.Control_Publication {
     for index in 0..<publication^.control_count {
         candidate := &publication^.controls[index]
-        if candidate^.native_id == native_id {return candidate}
+        if candidate^.native_id == native_id {
+           return candidate
+        }
     }
     return nil
 }
@@ -313,13 +361,17 @@ adapter_validate_numeric_action :: proc(
     valid := request.has_numeric_value &&
         !math.is_nan(value) && !math.is_inf(value) && control^.range.present &&
         value >= control^.range.minimum && value <= control^.range.maximum
-    if !valid {return .Invalid_Value}
+    if !valid {
+       return .Invalid_Value
+    }
     if control^.role == .Tree && .Scroll in control^.actions {
         destination^.kind = .Set_Scroll_Value
         destination^.numeric_value = value
         return .Ok
     }
-    if .Set_Value not_in control^.actions {return .Invalid_Value}
+    if .Set_Value not_in control^.actions {
+       return .Invalid_Value
+    }
     destination^.kind = .Set_Value
     destination^.numeric_value = value
     return .Ok
@@ -334,9 +386,13 @@ adapter_validate_text_action :: proc(
        request.payload_length > len(request.payload) {return .Invalid_Value}
     payload := request.payload
     text := string(payload[:request.payload_length])
-    if !utf8.valid_string(text) {return .Invalid_Value}
+    if !utf8.valid_string(text) {
+       return .Invalid_Value
+    }
     destination^.kind = .Replace_Selected_Text
-    if request.replace_entire_text {destination^.kind = .Replace_Text}
+    if request.replace_entire_text {
+       destination^.kind = .Replace_Text
+    }
     destination^.payload_length = request.payload_length
     copy(destination^.payload[:request.payload_length],
         payload[:request.payload_length])
@@ -366,9 +422,15 @@ adapter_map_click_action :: proc(
         destination^.kind = .Toggle
         return .Ok
     }
-    if .Select in control^.actions {destination^.kind = .Select; return .Ok}
-    if .Toggle in control^.actions {destination^.kind = .Toggle; return .Ok}
-    if .Activate in control^.actions {destination^.kind = .Activate; return .Ok}
+    if .Select in control^.actions {
+       destination^.kind = .Select; return .Ok
+    }
+    if .Toggle in control^.actions {
+       destination^.kind = .Toggle; return .Ok
+    }
+    if .Activate in control^.actions {
+       destination^.kind = .Activate; return .Ok
+    }
     return .Unsupported_Action
 }
 
@@ -393,7 +455,9 @@ adapter_map_control_action :: proc(
     request: portable.Queued_Action,
     destination: ^Adapter_Action) -> Adapter_Action_Status {
     action := accesskit.Action(request.kind)
-    if action == .Click {return adapter_map_click_action(control, destination)}
+    if action == .Click {
+       return adapter_map_click_action(control, destination)
+    }
     if action == .Set_Value {
         return adapter_validate_numeric_action(control, request, destination)
     }
@@ -422,10 +486,16 @@ adapter_validate_control_action :: proc(
     }
     identity, found := portable.native_id_lookup(
         &owner^.native_ids, request.target_native_id)
-    if !found {return .Unknown_Target}
+    if !found {
+       return .Unknown_Target
+    }
     control := adapter_control_by_native_id(publication, request.target_native_id)
-    if control == nil {return .Removed_Target}
-    if !control^.enabled {return .Disabled_Target}
+    if control == nil {
+       return .Removed_Target
+    }
+    if !control^.enabled {
+       return .Disabled_Target
+    }
     destination^.identity = identity
     return adapter_map_control_action(control, request, destination)
 }
@@ -433,9 +503,13 @@ adapter_validate_control_action :: proc(
 // adapter_drain_action validates one copied request against current publication.
 adapter_drain_action :: proc(
     owner: ^Adapter, destination: ^Adapter_Action) -> Adapter_Action_Status {
-    if owner == nil || destination == nil {return .Closing}
+    if owner == nil || destination == nil {
+       return .Closing
+    }
     request: portable.Queued_Action
-    if !portable.action_queue_pop(&owner^.actions, &request) {return .Empty}
+    if !portable.action_queue_pop(&owner^.actions, &request) {
+       return .Empty
+    }
     control_publication: portable.Control_Tree_Publication
     if portable.protected_control_snapshot(
             &owner^.control_publication, &control_publication) {
@@ -565,7 +639,9 @@ accesskit_copy_action_payload :: proc(
         copied^.replace_entire_text = request^.action == .Set_Value
         copied^.kind = u16(accesskit.Action.Replace_Selected_Text)
         status := accesskit_copy_text_value(request, copied)
-        if status != .Ok {return status}
+        if status != .Ok {
+           return status
+        }
     }
     if request^.action == .Set_Text_Selection {
         return accesskit_copy_selection_value(request, publication, copied)
@@ -577,13 +653,19 @@ accesskit_copy_action_payload :: proc(
 accesskit_copy_action_request :: proc(
     owner: ^Adapter,
     request: ^accesskit.Action_Request) -> portable.Action_Queue_Status {
-    if owner == nil || request == nil {return .Invalid_Target}
+    if owner == nil || request == nil {
+       return .Invalid_Target
+    }
     generation, live := adapter_action_generation(owner)
-    if !live {return .Closing}
+    if !live {
+       return .Closing
+    }
     control_publication: portable.Control_Tree_Publication
     _ = portable.protected_control_snapshot(
         &owner^.control_publication, &control_publication)
-    if !accesskit_action_supported(request^.action) {return .Invalid_Target}
+    if !accesskit_action_supported(request^.action) {
+       return .Invalid_Target
+    }
     copied := portable.Queued_Action{
         kind = u16(request^.action),
         target_native_id = u64(request^.target_node),
@@ -591,7 +673,9 @@ accesskit_copy_action_request :: proc(
     }
     status := accesskit_copy_action_payload(
         request, &control_publication, &copied)
-    if status != .Ok {return status}
+    if status != .Ok {
+       return status
+    }
     return portable.action_queue_push(&owner^.actions, &copied)
 }
 
@@ -601,7 +685,9 @@ accesskit_action_callback :: proc "c" (
     context = runtime.default_context()
     owner := cast(^Adapter)user_data
     adapter_record_diagnostic(owner, .Action)
-    if request == nil {return}
+    if request == nil {
+       return
+    }
     defer accesskit.accesskit_action_request_free(request)
     _ = accesskit_copy_action_request(owner, request)
 }
@@ -614,7 +700,9 @@ accesskit_deactivation_callback :: proc "c" (user_data: rawptr) {
 
 // adapter_close_admission rejects callbacks before native teardown begins.
 adapter_close_admission :: proc(owner: ^Adapter) {
-    if owner == nil {return}
+    if owner == nil {
+       return
+    }
     portable.protected_close(&owner^.publication)
     portable.protected_control_close(&owner^.control_publication)
     portable.action_queue_close(&owner^.actions)

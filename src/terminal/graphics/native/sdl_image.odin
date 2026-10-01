@@ -50,9 +50,13 @@ decode_static_image :: proc(
         return false
     }
     stream := sdl.IOFromConstMem(raw_data(bytes), uint(len(bytes)))
-    if stream == nil { return false }
+    if stream == nil {
+        return false 
+    }
     surface := image.LoadTyped_IO(stream, true, static_image_type(format))
-    if surface == nil { return false }
+    if surface == nil {
+        return false 
+    }
     defer sdl.DestroySurface(surface)
     if int(surface.w) != width || int(surface.h) != height ||
         surface.pixels == nil || surface.pitch <= 0 {
@@ -100,6 +104,21 @@ animated_gif_decode_frame :: proc(
             .RGBA32, raw_data(destination), c.int(width * 4))
 }
 
+// Reject an animated decoder that exposes more frames than preflight admitted.
+animated_gif_decoder_has_exact_frame_count :: proc(
+    decoder: ^image.AnimationDecoder) -> bool {
+    extra_surface: ^sdl.Surface
+    ignored_duration_ms: u64
+    if !image.GetAnimationDecoderFrame(
+        decoder, &extra_surface, &ignored_duration_ms) {
+        return true
+    }
+    if extra_surface != nil {
+        sdl.DestroySurface(extra_surface)
+    }
+    return false
+}
+
 // Decode_Animated_Gif streams composited GIF frames into caller-owned RGBA32 storage.
 decode_animated_gif :: proc(
     request: ^Animated_Gif_Decode_Request) -> Animated_Gif_Decode_Result {
@@ -108,26 +127,30 @@ decode_animated_gif :: proc(
         return {}
     }
     stream := sdl.IOFromConstMem(raw_data(request.bytes), uint(len(request.bytes)))
-    if stream == nil {return {}}
+    if stream == nil {
+       return {}
+    }
     decoder := image.CreateAnimationDecoder_IO(stream, true, "GIF")
-    if decoder == nil {return {}}
+    if decoder == nil {
+       return {}
+    }
     defer image.CloseAnimationDecoder(decoder)
     result: Animated_Gif_Decode_Result
     canvas_byte_count := request.width * request.height * 4
     for index in 0..<request.frame_count {
-        if animated_gif_decode_cancelled(request) {return {}}
+        if animated_gif_decode_cancelled(request) {
+           return {}
+        }
         destination := request.frame_bytes[
             index * canvas_byte_count:][:canvas_byte_count]
         if !animated_gif_decode_frame(
             decoder, destination, request.width, request.height) {return {}}
         result.frame_count += 1
     }
-    if animated_gif_decode_cancelled(request) {return {}}
-    extra_surface: ^sdl.Surface
-    ignored_duration_ms: u64
-    if image.GetAnimationDecoderFrame(
-        decoder, &extra_surface, &ignored_duration_ms) {
-        if extra_surface != nil {sdl.DestroySurface(extra_surface)}
+    if animated_gif_decode_cancelled(request) {
+       return {}
+    }
+     if !animated_gif_decoder_has_exact_frame_count(decoder) {
         return {}
     }
     result.complete = image.GetAnimationDecoderStatus(decoder) == .COMPLETE

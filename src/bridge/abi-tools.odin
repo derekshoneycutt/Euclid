@@ -19,13 +19,19 @@ tool_position :: proc(
     if snapshot != nil {
         transform, found := shapemodel.shape_component_get(
             &snapshot^.shapes.transforms, &snapshot^.shapes.registry, entity)
-        if found {return transform^.position, true}
+        if found {
+            return transform^.position, true
+        }
         return {}, false
     }
-    if state^.shape_world == nil {return {}, false}
+    if state^.shape_world == nil {
+        return {}, false
+    }
     transform, found := shapemodel.shape_component_get(
         &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
-    if !found {return {}, false}
+    if !found {
+        return {}, false
+    }
     return transform^.position, true
 }
 
@@ -105,14 +111,18 @@ set_cycloid_tool_line :: proc "c" (state: ^core.Euclid_General_State,
         command^.position = first
         command^.second_position = second
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     first_transform, first_ok := shapemodel.shape_component_get_mut(
         &state^.shape_world^.transforms, &state^.shape_world^.registry,
         state^.world_cycloid_tool.first)
     second_transform, second_ok := shapemodel.shape_component_get_mut(
         &state^.shape_world^.transforms, &state^.shape_world^.registry,
         state^.world_cycloid_tool.second)
-    if !first_ok || !second_ok {return BRIDGE_STATUS_NOT_FOUND}
+    if !first_ok || !second_ok {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     first_transform.position = first
     second_transform.position = second
     return BRIDGE_STATUS_OK
@@ -139,11 +149,15 @@ set_cycloid_tool_geometry :: proc "c" (state: ^core.Euclid_General_State,
         command^.entity = packed
         command^.cycloid_tool = value
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     current, found := shapemodel.shape_component_get_mut(
         &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
         state^.world_cycloid_tool.shape)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     previous := current^
     current^ = value
     current.previous_rolling_radius = previous.previous_rolling_radius
@@ -160,7 +174,9 @@ set_cycloid_tool_parameter :: proc "c" (
     state: ^core.Euclid_General_State, parameter: f32) -> i32 {
     context = state^.saved_context
     source, available := bridge_shape_query_source(state)
-    if !available {return BRIDGE_STATUS_NOT_FOUND}
+    if !available {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current, found := shapemodel.shape_component_get(source.cycloid_tools,
         source.registry, state^.world_cycloid_tool.shape)
     if !found || !shapemodel.shape_parameter_is_in_directed_domain(
@@ -173,11 +189,15 @@ set_cycloid_tool_parameter :: proc "c" (
         command^.entity = packed
         command^.scalar = parameter
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     mutable, has_value := shapemodel.shape_component_get_mut(
         &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
         state^.world_cycloid_tool.shape)
-    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_value {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     mutable.parameter = parameter
     return BRIDGE_STATUS_OK
 }
@@ -207,6 +227,17 @@ set_trochoid_tool_position :: proc "c" (
         shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape), position)
 }
 
+// Restore the previous interpolation sample after replacing tool values.
+bridge_trochoid_tool_preserve_previous :: proc(
+    current: ^shapemodel.Shape_Trochoid_Tool,
+    previous: shapemodel.Shape_Trochoid_Tool) {
+    current^.previous_fixed_radius = previous.previous_fixed_radius
+    current^.previous_rolling_radius = previous.previous_rolling_radius
+    current^.previous_parameter = previous.previous_parameter
+    current^.previous_rotation = previous.previous_rotation
+    current^.previous_orientation_phase = previous.previous_orientation_phase
+}
+
 // Atomically configure the process-global guide's complete analytic state.
 @(export)
 set_trochoid_tool_geometry :: proc "c" (
@@ -223,12 +254,18 @@ set_trochoid_tool_geometry :: proc "c" (
         command^.entity = packed
         command^.trochoid_tool = value
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current, has_value := shapemodel.shape_component_get_mut(
         &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry, entity)
-    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_value {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     style, has_style := shapemodel.shape_component_get(
         &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
     if !has_style || current.mode != value.mode && style.visible {
@@ -236,11 +273,7 @@ set_trochoid_tool_geometry :: proc "c" (
     }
     previous := current^
     current^ = value
-    current.previous_fixed_radius = previous.previous_fixed_radius
-    current.previous_rolling_radius = previous.previous_rolling_radius
-    current.previous_parameter = previous.previous_parameter
-    current.previous_rotation = previous.previous_rotation
-    current.previous_orientation_phase = previous.previous_orientation_phase
+    bridge_trochoid_tool_preserve_previous(current, previous)
     return BRIDGE_STATUS_OK
 }
 
@@ -258,12 +291,18 @@ set_trochoid_tool_parameter :: proc "c" (
         command^.entity = packed
         command^.scalar = parameter
     }
-    if captured {return BRIDGE_STATUS_OK}
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
     entity, found := bridge_shape_resolve(state, packed)
-    if !found {return BRIDGE_STATUS_NOT_FOUND}
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current, has_value := shapemodel.shape_component_get_mut(
         &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry, entity)
-    if !has_value {return BRIDGE_STATUS_NOT_FOUND}
+    if !has_value {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
     current.parameter = parameter
     return BRIDGE_STATUS_OK
 }
@@ -272,7 +311,9 @@ set_trochoid_tool_parameter :: proc "c" (
 tool_lock_constraint :: proc(
     state: ^core.Euclid_General_State,
     entity: shapemodel.Shape_Entity) -> (^shapemodel.Shape_Constraint, bool) {
-    if state^.shape_world == nil {return nil, false}
+    if state^.shape_world == nil {
+        return nil, false
+    }
     index: u16
     switch entity {
     case state^.world_pen.joint1:
@@ -286,7 +327,9 @@ tool_lock_constraint :: proc(
     case:
         return nil, false
     }
-    if index >= state^.shape_world^.constraints.count {return nil, false}
+    if index >= state^.shape_world^.constraints.count {
+        return nil, false
+    }
     constraint := &state^.shape_world^.constraints.values[index]
     if constraint^.kind != .Snap_Point ||
         constraint^.payload.snap_point.point != entity {
@@ -305,14 +348,18 @@ set_tool_position :: proc(
         command^.position = position
         command^.flag = sweep
     }
-    if captured || state^.shape_world == nil {return}
+    if captured || state^.shape_world == nil {
+        return
+    }
     previous_first, previous_first_found := tool_position(
         state, state^.world_compass.joint1)
     previous_second, previous_second_found := tool_position(
         state, state^.world_compass.joint2)
     transform, found := shapemodel.shape_component_get_mut(
         &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
-    if !found {return}
+    if !found {
+        return
+    }
     transform^.position = position
     if sweep && entity == state^.world_compass.joint2 &&
         previous_first_found && previous_second_found {
@@ -340,9 +387,13 @@ set_tool_lock :: proc(
         command^.flag = enabled
         command^.integer = int(sweep)
     }
-    if captured {return}
+    if captured {
+        return
+    }
     constraint, found := tool_lock_constraint(state, entity)
-    if !found {return}
+    if !found {
+        return
+    }
     if enabled {
         set_tool_position(state, entity, position, sweep)
         constraint^.payload.snap_point.position = position
@@ -381,7 +432,9 @@ set_pen_active :: proc "c" (
     state: ^core.Euclid_General_State, active_abi: i32, color: Bridge_Color) {
 
     context = state^.saved_context
-    if active_abi < 0 || active_abi > i32(max(u16)) {return}
+    if active_abi < 0 || active_abi > i32(max(u16)) {
+        return
+    }
     packed := shapemodel.shape_entity_pack(state^.world_pen.shape)
     _ = shape_set_active_color(state, packed, color)
     _ = shape_set_active_feature(state, packed, u16(active_abi))
@@ -442,7 +495,9 @@ move_pen_joint1 :: proc "c" (state: ^core.Euclid_General_State, pos: Vector3) {
 get_pen_joint1_position :: proc "c" (state: ^core.Euclid_General_State) -> Vector3 {
     context = state^.saved_context
     position, found := tool_position(state, state^.world_pen.joint1)
-    if found {return position}
+    if found {
+        return position
+    }
     return {0, 0, 0}
 }
 
@@ -489,7 +544,9 @@ move_pen_joint2 :: proc "c" (state: ^core.Euclid_General_State, pos: Vector3) {
 get_pen_joint2_position :: proc "c" (state: ^core.Euclid_General_State) -> Vector3 {
     context = state^.saved_context
     position, found := tool_position(state, state^.world_pen.joint2)
-    if found {return position}
+    if found {
+        return position
+    }
     return {0, 0, 0}
 }
 
@@ -526,7 +583,9 @@ set_compass_active :: proc "c" (
     state: ^core.Euclid_General_State, active_abi: i32, color: Bridge_Color) {
 
     context = state^.saved_context
-    if active_abi < 0 || active_abi > i32(max(u16)) {return}
+    if active_abi < 0 || active_abi > i32(max(u16)) {
+        return
+    }
     packed := shapemodel.shape_entity_pack(state^.world_compass.shape)
     _ = shape_set_active_color(state, packed, color)
     _ = shape_set_active_feature(state, packed, u16(active_abi))
@@ -592,7 +651,9 @@ get_compass_joint1_position :: proc "c" (
     state: ^core.Euclid_General_State) -> Vector3 {
     context = state^.saved_context
     position, found := tool_position(state, state^.world_compass.joint1)
-    if found {return position}
+    if found {
+        return position
+    }
     return {0, 0, 0}
 }
 
@@ -644,7 +705,9 @@ get_compass_joint2_position :: proc "c" (
     state: ^core.Euclid_General_State) -> Vector3 {
     context = state^.saved_context
     position, found := tool_position(state, state^.world_compass.joint2)
-    if found {return position}
+    if found {
+        return position
+    }
     return {0, 0, 0}
 }
 

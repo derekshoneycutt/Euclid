@@ -123,35 +123,56 @@ input_event_claim :: proc(
     return true
 }
 
-// input_frame_copy_unclaimed_events copies ordered unclaimed events into caller storage.
+// Remap copied-event correlation indexes and clear links to omitted or invalid partners.
+input_frame_repair_copied_correlations :: proc(
+    source_events: []Input_Event, copied_events: []Input_Event,
+    remap: []int) {
+    for &event in copied_events {
+        if !event.correlation.valid {
+            continue
+        }
+        old_partner := int(event.correlation.partner_index)
+        if old_partner < 0 || old_partner >= len(source_events) {
+            event.correlation = {}
+            continue
+        }
+        partner := remap[old_partner]
+        if partner < 0 {
+            event.correlation = {}
+        } else {
+            event.correlation.partner_index = u16(partner)
+        }
+    }
+}
+
+// Copy ordered unclaimed events into caller storage and preserve valid correlation links.
 input_frame_copy_unclaimed_events :: proc(
     frame: Input_Frame, claims: ^Input_Event_Claim_State,
     storage: []Input_Event) -> Input_Frame {
-    if claims == nil {return frame}
+    if claims == nil {
+        return frame
+    }
     result := frame
     result.events = nil
-    if len(storage) < len(frame.events) {return result}
+    if len(storage) < len(frame.events) {
+        return result
+    }
     remap: [INPUT_EVENT_CAPACITY]int
-    for &index in remap {index = -1}
+    for &index in remap {
+        index = -1
+    }
     count := 0
     for event, old_index in frame.events {
-        if claims^.claimed[old_index] {continue}
+        if claims^.claimed[old_index] {
+            continue
+        }
         remap[old_index] = count
         storage[count] = event
         count += 1
     }
     result.events = storage[:count]
-    for &event in result.events {
-        if !event.correlation.valid {continue}
-        old_partner := int(event.correlation.partner_index)
-        if old_partner < 0 || old_partner >= len(frame.events) {
-            event.correlation = {}
-            continue
-        }
-        partner := remap[old_partner]
-        if partner < 0 {event.correlation = {}}
-        else {event.correlation.partner_index = u16(partner)}
-    }
+    input_frame_repair_copied_correlations(
+        frame.events, result.events, remap[:len(frame.events)])
     return result
 }
 
@@ -324,7 +345,9 @@ input_runtime_correlation_candidates :: proc(
             candidates.physical_count += 1
         } else if event.origin == .Device && event.kind == .Text &&
             event.codepoint != 0 {
-            if candidates.text_start < 0 { candidates.text_start = index }
+            if candidates.text_start < 0 {
+                candidates.text_start = index 
+            }
             candidates.text_count += 1
         }
     }
@@ -453,7 +476,9 @@ input_event_claim_pair :: proc(
         return false
     }
     if !input_event_text_claims_valid(
-        frame, physical_index, text_start, text_count, state) { return false }
+        frame, physical_index, text_start, text_count, state) {
+        return false
+    }
     state.claimed[physical_index] = true
     for index in text_start..<text_start + text_count {
         state.claimed[index] = true

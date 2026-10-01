@@ -171,19 +171,27 @@ store_allocate_tables :: proc(
     candidate: ^Store, limits: Limits, table_allocator: mem.Allocator) -> bool {
     attachments, attachment_error := make(
         []Attachment_Entry, limits.attachment_capacity, table_allocator)
-    if attachment_error != nil { return false }
+    if attachment_error != nil {
+        return false 
+    }
     candidate.attachments = attachments
     placements, placement_error := make(
         []Placement_Entry, limits.placement_capacity, table_allocator)
-    if placement_error != nil { return false }
+    if placement_error != nil {
+        return false 
+    }
     candidate.placements = placements
     transfers, transfer_error := make(
         []Transfer_Entry, limits.transfer_capacity, table_allocator)
-    if transfer_error != nil { return false }
+    if transfer_error != nil {
+        return false 
+    }
     candidate.transfers = transfers
     residency, residency_error := make(
         []Residency_Entry, limits.attachment_capacity, table_allocator)
-    if residency_error != nil { return false }
+    if residency_error != nil {
+        return false 
+    }
     candidate.residency = residency
     return true
 }
@@ -410,8 +418,12 @@ attachment_admission_valid :: proc(
         return .Byte_Limit_Exceeded
     }
     bytes_per_pixel := 1
-    if payload_format == .Rgb8 { bytes_per_pixel = 3 }
-    if payload_format == .Rgba8 { bytes_per_pixel = 4 }
+    if payload_format == .Rgb8 {
+        bytes_per_pixel = 3 
+    }
+    if payload_format == .Rgba8 {
+        bytes_per_pixel = 4 
+    }
     if payload_stride < width * bytes_per_pixel ||
         payload_byte_count < payload_stride * height {
         return .Invalid
@@ -629,7 +641,9 @@ attachment_admit :: proc(
 attachment_reserve :: proc(
     store: ^Store, reservation: Attachment_Reservation) ->
     (Attachment_Id, Admission_Outcome) {
-    if store == nil { return {}, .Invalid }
+    if store == nil {
+        return {}, .Invalid 
+    }
     validation := attachment_admission_valid(
         store, reservation.metadata, reservation.payload_byte_count,
         reservation.payload_stride, reservation.payload_format)
@@ -800,7 +814,9 @@ attachment_payload :: proc(
 attachment_metrics :: proc(
     store: ^Store, id: Attachment_Id) -> (Intrinsic_Metrics, bool) {
     entry, outcome := attachment_entry(store, id)
-    if outcome != .Found || !entry.prepared { return {}, false }
+    if outcome != .Found || !entry.prepared {
+        return {}, false 
+    }
     return entry.metadata.metrics, true
 }
 
@@ -902,7 +918,9 @@ attachment_remove :: proc(store: ^Store, id: Attachment_Id) -> Handle_Outcome {
         return .Stale
     }
     if entry.pin_count > 0 {
-        if !entry.prepared { entry.removal_requested = true }
+        if !entry.prepared {
+            entry.removal_requested = true 
+        }
         return .Stale
     }
     attachment_entry_remove(store, id.slot, false)
@@ -912,7 +930,9 @@ attachment_remove :: proc(store: ^Store, id: Attachment_Id) -> Handle_Outcome {
 // Return the first inactive placement slot, or negative one when the table is full.
 placement_available_slot :: proc(store: ^Store) -> int {
     for &entry, index in store.placements {
-        if !entry.active { return index }
+        if !entry.active {
+            return index 
+        }
     }
     return -1
 }
@@ -998,15 +1018,23 @@ placement_metadata :: proc(
 placements_collect :: proc(
     store: ^Store, screen: Screen_Identity,
     output: []Placement_Metadata) -> int {
-    if store == nil { return 0 }
+    if store == nil {
+        return 0 
+    }
     required := 0
     for &entry in store.placements {
-        if entry.active && entry.metadata.geometry.screen == screen { required += 1 }
+        if entry.active && entry.metadata.geometry.screen == screen {
+            required += 1 
+        }
     }
-    if required > len(output) { return 0 }
+    if required > len(output) {
+        return 0 
+    }
     count := 0
     for &entry in store.placements {
-        if !entry.active || entry.metadata.geometry.screen != screen { continue }
+        if !entry.active || entry.metadata.geometry.screen != screen {
+            continue 
+        }
         insertion := count
         for insertion > 0 &&
             output[insertion - 1].geometry.z_index > entry.metadata.geometry.z_index {
@@ -1027,15 +1055,23 @@ placements_collect :: proc(
 placement_checkpoint_collect :: proc(
     checkpoint: ^Placement_Checkpoint, screen: Screen_Identity,
     output: []Placement_Metadata) -> int {
-    if checkpoint == nil || !checkpoint.valid { return 0 }
+    if checkpoint == nil || !checkpoint.valid {
+        return 0 
+    }
     required := 0
     for &entry in checkpoint.placements {
-        if entry.active && entry.metadata.geometry.screen == screen { required += 1 }
+        if entry.active && entry.metadata.geometry.screen == screen {
+            required += 1 
+        }
     }
-    if required > len(output) { return 0 }
+    if required > len(output) {
+        return 0 
+    }
     count := 0
     for &entry in checkpoint.placements {
-        if !entry.active || entry.metadata.geometry.screen != screen { continue }
+        if !entry.active || entry.metadata.geometry.screen != screen {
+            continue 
+        }
         insertion := count
         for insertion > 0 &&
             output[insertion - 1].geometry.z_index > entry.metadata.geometry.z_index {
@@ -1167,7 +1203,9 @@ placements_remove_screen :: proc(store: ^Store, screen: Screen_Identity) -> int 
 placements_remove_position :: proc(
     store: ^Store, screen: Screen_Identity,
     logical_row: i64, column: int) -> int {
-    if store == nil { return 0 }
+    if store == nil {
+        return 0 
+    }
     removed := 0
     for &entry, slot in store.placements {
         geometry := entry.metadata.geometry
@@ -1187,7 +1225,9 @@ placements_remove_position :: proc(
 placements_remove_resident_position_origin_except :: proc(
     store: ^Store, target: Placement_Geometry, origin: Protocol_Origin,
     retained_attachment_id: Attachment_Id) -> int {
-    if store == nil { return 0 }
+    if store == nil {
+        return 0 
+    }
     removed := 0
     for &entry, slot in store.placements {
         geometry := entry.metadata.geometry
@@ -1217,7 +1257,9 @@ placements_remove_resident_position_origin_except :: proc(
 placements_remove_row_range :: proc(
     store: ^Store, screen: Screen_Identity,
     first_row, last_row: i64) -> int {
-    if store == nil || first_row > last_row { return 0 }
+    if store == nil || first_row > last_row {
+        return 0 
+    }
     removed := 0
     for &entry, slot in store.placements {
         geometry := entry.metadata.geometry
@@ -1236,7 +1278,9 @@ placements_remove_row_range :: proc(
 // Remove placements beginning at one terminal column on one screen.
 placements_remove_column :: proc(
     store: ^Store, screen: Screen_Identity, column: int) -> int {
-    if store == nil { return 0 }
+    if store == nil {
+        return 0 
+    }
     removed := 0
     for &entry, slot in store.placements {
         geometry := entry.metadata.geometry
@@ -1254,7 +1298,9 @@ placements_remove_column :: proc(
 // Remove placements with one exact z-index on one screen.
 placements_remove_z_index :: proc(
     store: ^Store, screen: Screen_Identity, z_index: i32) -> int {
-    if store == nil { return 0 }
+    if store == nil {
+        return 0 
+    }
     removed := 0
     for &entry, slot in store.placements {
         geometry := entry.metadata.geometry
@@ -1414,10 +1460,14 @@ placement_checkpoint_copy :: proc(
 placement_checkpoint_relocate :: proc(
     checkpoint: ^Placement_Checkpoint, screen: Screen_Identity,
     user_data: rawptr, relocate: Placement_Relocate_Handler) -> bool {
-    if checkpoint == nil || !checkpoint.valid || relocate == nil { return false }
+    if checkpoint == nil || !checkpoint.valid || relocate == nil {
+        return false 
+    }
     retained := checkpoint.placement_count
     for &entry in checkpoint.placements {
-        if !entry.active || entry.metadata.geometry.screen != screen { continue }
+        if !entry.active || entry.metadata.geometry.screen != screen {
+            continue 
+        }
         geometry, keep := relocate(user_data, entry.metadata.geometry)
         if !keep {
             generation := entry.generation
@@ -1478,7 +1528,9 @@ placement_checkpoint_restore :: proc(
 // Return the first inactive transfer slot, or negative one when the table is full.
 transfer_available_slot :: proc(store: ^Store) -> int {
     for &entry, index in store.transfers {
-        if !entry.active { return index }
+        if !entry.active {
+            return index 
+        }
     }
     return -1
 }
@@ -1725,7 +1777,9 @@ residency_commit :: proc(
     store: ^Store, attachment: ^Attachment_Entry,
     id: Attachment_Id, byte_count: int) -> bool {
     resident := &store.residency[id.slot]
-    if resident.resident { return false }
+    if resident.resident {
+        return false 
+    }
     resident^ = {
         attachment_id = id,
         byte_count = byte_count,
@@ -1820,9 +1874,13 @@ residency_remove :: proc(store: ^Store, id: Attachment_Id) -> Handle_Outcome {
 //   - `.Found` after advancing recency, or `.Stale` when residency is unavailable.
 residency_touch :: proc(store: ^Store, id: Attachment_Id) -> Handle_Outcome {
     resident := residency_entry(store, id)
-    if resident == nil { return .Stale }
+    if resident == nil {
+        return .Stale 
+    }
     resident.last_used = store_next_sequence(store)
     attachment, outcome := attachment_entry(store, id)
-    if outcome == .Found { attachment.last_used = store.sequence }
+    if outcome == .Found {
+        attachment.last_used = store.sequence 
+    }
     return .Found
 }

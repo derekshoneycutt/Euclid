@@ -258,8 +258,9 @@ termgrid_test_interpreter_decrqss_queries :: proc(t: ^testing.T) {
     grid: termgrid.Grid
     retained: Terminal_Title_State
     interpreter: Interpreter
-    if !termgrid_test_init_query_interpreter(
-        t, &grid, &interpreter, &retained) { return }
+    if !termgrid_test_init_query_interpreter(t, &grid, &interpreter, &retained) {
+        return
+    }
     defer termgrid.grid_destroy(&grid)
     producer := Terminal_Producer{.Terminal_Session, 8, 2}
     testing.expect(t, interpreter_write(&interpreter,
@@ -311,8 +312,9 @@ termgrid_test_interpreter_xtgetcap_queries :: proc(t: ^testing.T) {
     grid: termgrid.Grid
     retained: Terminal_Title_State
     interpreter: Interpreter
-    if !termgrid_test_init_query_interpreter(
-        t, &grid, &interpreter, &retained) { return }
+    if !termgrid_test_init_query_interpreter(t, &grid, &interpreter, &retained) {
+        return
+    }
     defer termgrid.grid_destroy(&grid)
     producer := Terminal_Producer{.Julia_Evaluation, 19, 0}
     request := "\eP+q544e;436f;524742;5463;5a5a\e\\"
@@ -337,8 +339,9 @@ termgrid_test_interpreter_rejects_dcs_queries_transactionally :: proc(
     grid: termgrid.Grid
     retained: Terminal_Title_State
     interpreter: Interpreter
-    if !termgrid_test_init_query_interpreter(
-        t, &grid, &interpreter, &retained) { return }
+    if !termgrid_test_init_query_interpreter(t, &grid, &interpreter, &retained) {
+        return
+    }
     defer termgrid.grid_destroy(&grid)
     testing.expect(t, interpreter_write(&interpreter, "\eP+q54xz\e\\"))
     testing.expect_value(t, retained.response_count, 0)
@@ -354,7 +357,9 @@ termgrid_test_interpreter_rejects_dcs_queries_transactionally :: proc(
     testing.expect_value(t, retained.response_rejection_count, u64(1))
 
     overflow_payload: [TERMINAL_QUERY_BYTE_CAPACITY + 1]u8
-    for &byte in overflow_payload { byte = '4' }
+    for &byte in overflow_payload {
+        byte = '4' 
+    }
     testing.expect(t, interpreter_write(&interpreter, "\eP+q"))
     testing.expect(t, interpreter_write(
         &interpreter, transmute(string)overflow_payload[:]))
@@ -369,8 +374,9 @@ termgrid_test_interpreter_ansi_mode_queries :: proc(t: ^testing.T) {
     grid: termgrid.Grid
     retained: Terminal_Title_State
     interpreter: Interpreter
-    if !termgrid_test_init_query_interpreter(
-        t, &grid, &interpreter, &retained) { return }
+    if !termgrid_test_init_query_interpreter(t, &grid, &interpreter, &retained) {
+        return
+    }
     defer termgrid.grid_destroy(&grid)
     producer := Terminal_Producer{.Terminal_Session, 4, 6}
     fixtures := [?]Terminal_Query_Fixture{
@@ -388,7 +394,9 @@ termgrid_test_interpreter_ansi_mode_queries :: proc(t: ^testing.T) {
 
 // Set every row's dirty flag for a dynamic-color redraw assertion.
 termgrid_test_set_rows_dirty :: proc(grid: ^termgrid.Grid, dirty: bool) {
-    for &row in grid.rows { row.dirty = dirty }
+    for &row in grid.rows {
+        row.dirty = dirty 
+    }
 }
 
 // Verify a committed dynamic palette update dirtied both display grids.
@@ -397,15 +405,21 @@ termgrid_test_expect_dynamic_palette_commit :: proc(
     grid, alternate: ^termgrid.Grid) {
     testing.expect_value(t, retained.palette.colors[1], u32(0x112233ff))
     testing.expect_value(t, retained.palette.generation, u64(1))
-    for row in grid.rows { testing.expect(t, row.dirty) }
-    for row in alternate.rows { testing.expect(t, row.dirty) }
+    for row in grid.rows {
+        testing.expect(t, row.dirty) 
+    }
+    for row in alternate.rows {
+        testing.expect(t, row.dirty) 
+    }
 }
 
 // Verify a dynamic palette query leaves generation and row dirtiness unchanged.
 termgrid_test_expect_dynamic_palette_query :: proc(
     t: ^testing.T, retained: ^Terminal_Title_State, grid: ^termgrid.Grid) {
     testing.expect_value(t, retained.palette.generation, u64(1))
-    for row in grid.rows { testing.expect(t, !row.dirty) }
+    for row in grid.rows {
+        testing.expect(t, !row.dirty) 
+    }
 }
 
 // Verify fragmented dynamic-color sets, queries, resets, and redraw generation.
@@ -2015,8 +2029,9 @@ termgrid_test_interpreter_captures_mode_query_responses :: proc(t: ^testing.T) {
     grid: termgrid.Grid
     interpreter: Interpreter
     retained: Terminal_Title_State
-    if !termgrid_test_init_query_interpreter(
-        t, &grid, &interpreter, &retained) { return }
+    if !termgrid_test_init_query_interpreter(t, &grid, &interpreter, &retained) {
+        return
+    }
     defer termgrid.grid_destroy(&grid)
     producer := Terminal_Producer{.Terminal_Session, 11, 17}
     testing.expect(t, interpreter_write(&interpreter, "\e[>4;2m\e[=3u"))

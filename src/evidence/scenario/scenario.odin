@@ -402,12 +402,18 @@ scenario_apply_dust_emission :: proc(
 scenario_dust_emission_action_select :: proc(
     root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
     value, present := root["emit_dust"]
-    if !present {return 0, true}
+    if !present {
+        return 0, true
+    }
     payload, payload_ok := value.(json.Object)
-    if !payload_ok || len(payload) != 6 {return 0, false}
+    if !payload_ok || len(payload) != 6 {
+        return 0, false
+    }
     required := [?]string{"distribution", "count", "x", "y", "radius", "seed"}
     for field in required {
-        if _, found := payload[field]; !found {return 0, false}
+        if _, found := payload[field]; !found {
+            return 0, false
+        }
     }
     if !scenario_apply_dust_emission(raw.emit_dust, payload, command) {
         return 0, false
@@ -419,12 +425,18 @@ scenario_dust_emission_action_select :: proc(
 scenario_dust_contact_action_select :: proc(
     root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
     value, present := root["contact_dust"]
-    if !present {return 0, true}
+    if !present {
+        return 0, true
+    }
     payload, payload_ok := value.(json.Object)
-    if !payload_ok || len(payload) != 2 {return 0, false}
+    if !payload_ok || len(payload) != 2 {
+        return 0, false
+    }
     x_value, x_present := payload["x"]
     y_value, y_present := payload["y"]
-    if !x_present || !y_present {return 0, false}
+    if !x_present || !y_present {
+        return 0, false
+    }
     x, x_ok := scenario_json_f32(x_value)
     y, y_ok := scenario_json_f32(y_value)
     if !x_ok || !y_ok || x < 0 || x > 1 || y < 0 || y > 1 {
@@ -827,9 +839,13 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
 
 // scenario_key_payload_fields_are_valid rejects unsupported structured key fields.
 scenario_key_payload_fields_are_valid :: proc(payload: json.Object) -> bool {
-    if len(payload) < 1 || len(payload) > 3 {return false}
+    if len(payload) < 1 || len(payload) > 3 {
+        return false
+    }
     for field in payload {
-        if field != "name" && field != "shift" && field != "ctrl" {return false}
+        if field != "name" && field != "shift" && field != "ctrl" {
+            return false
+        }
     }
     return true
 }
@@ -838,19 +854,27 @@ scenario_key_payload_fields_are_valid :: proc(payload: json.Object) -> bool {
 scenario_key_optional_bool :: proc(
     payload: json.Object, field: string, result: ^bool) -> bool {
     value, found := payload[field]
-    if !found {return true}
+    if !found {
+        return true
+    }
     decoded, valid := value.(bool)
-    if !valid {return false}
+    if !valid {
+        return false
+    }
     result^ = decoded
     return true
 }
 
 // scenario_key_payload applies one exact modifier-bearing key object.
 scenario_key_payload :: proc(payload: json.Object, command: ^Command) -> bool {
-    if !scenario_key_payload_fields_are_valid(payload) {return false}
+    if !scenario_key_payload_fields_are_valid(payload) {
+        return false
+    }
     name_value, name_present := payload["name"]
     name, name_ok := name_value.(string)
-    if !name_present || !name_ok || len(name) == 0 {return false}
+    if !name_present || !name_ok || len(name) == 0 {
+        return false
+    }
     if !scenario_key_optional_bool(payload, "shift", &command^.key_shift) ||
         !scenario_key_optional_bool(payload, "ctrl", &command^.key_control) {
         return false
@@ -864,14 +888,18 @@ scenario_key_payload :: proc(payload: json.Object, command: ^Command) -> bool {
 scenario_key_action_select :: proc(
     root: json.Object, command: ^Command) -> (int, bool) {
     value, present := root["key"]
-    if !present {return 0, true}
+    if !present {
+        return 0, true
+    }
     if name, name_ok := value.(string); name_ok {
         command^.kind = .Key
         command^.text, _ = text_copy(name)
         return 1, len(name) > 0
     }
     payload, payload_ok := value.(json.Object)
-    if !payload_ok || !scenario_key_payload(payload, command) {return 0, false}
+    if !payload_ok || !scenario_key_payload(payload, command) {
+        return 0, false
+    }
     return 1, true
 }
 
@@ -907,19 +935,29 @@ scenario_structured_action_select :: proc(
     root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
     selected := 0
     count, valid := scenario_key_action_select(root, command)
-    if !valid {return 0, false}
+    if !valid {
+        return 0, false
+    }
     selected += count
     count, valid = scenario_view_content_action_select(root, raw, command)
-    if !valid {return 0, false}
+    if !valid {
+        return 0, false
+    }
     selected += count
     count, valid = scenario_dust_emission_action_select(root, raw, command)
-    if !valid {return 0, false}
+    if !valid {
+        return 0, false
+    }
     selected += count
     count, valid = scenario_dust_contact_action_select(root, raw, command)
-    if !valid {return 0, false}
+    if !valid {
+        return 0, false
+    }
     selected += count
     count, valid = scenario_numeric_action_select(root, command)
-    if !valid {return 0, false}
+    if !valid {
+        return 0, false
+    }
     return selected + count, true
 }
 

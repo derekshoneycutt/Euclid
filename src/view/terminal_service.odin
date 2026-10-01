@@ -196,7 +196,9 @@ terminal_service_session_ready :: proc(
     state: ^core.Euclid_General_State,
     ready: protocol.Terminal_Session_Ready) -> bool {
     if !terminal_service_generation_matches(
-        state, ready.animation_generation) { return false }
+        state, ready.animation_generation) {
+        return false
+    }
     state^.terminal.julia_session_ready = true
     if !state^.terminal.banner_ready {
         terminalview.terminal_display_banner(&state^.terminal, ready.banner)
@@ -265,7 +267,9 @@ terminal_service_write_clipboard :: proc(_: rawptr, text: string) -> bool {
 terminal_service_apply_submission :: proc(
     state: ^core.Euclid_General_State,
     submission: terminalview.Terminal_Submission) {
-    if !submission.submitted { return }
+    if !submission.submitted {
+        return
+    }
     if state^.terminal.input_mode == .Shell {
         _ = shell_service_submit(state, submission.text)
     } else {

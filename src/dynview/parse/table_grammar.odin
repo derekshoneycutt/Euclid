@@ -278,12 +278,16 @@ tex_math_take_raw_group :: proc(
     depth := 1
     for depth > 0 {
         token, status = tex_math_take(parser)
-        if status != .Ok { return {}, false }
+        if status != .Ok {
+            return {}, false 
+        }
         if token.kind == .Left_Brace {
             depth += 1
         } else if token.kind == .Right_Brace {
             depth -= 1
-            if depth == 0 { break }
+            if depth == 0 {
+                break 
+            }
         }
         if _, ok := tex_semantic_append_text(
             parser.output, tex_token_text(parser.cursor.source, token)); !ok {
@@ -406,12 +410,16 @@ tex_table_apply_environment_preset :: proc(
     columns := descriptor.columns
     argument_text := tex_semantic_text(output, argument)
     if environment == "cases" || environment == "dcases" {
-        if !tex_table_apply_cases_environment(descriptor, environment) {return false}
+        if !tex_table_apply_cases_environment(descriptor, environment) {
+            return false
+        }
     } else if environment == "aligned" || environment == "alignedat" {
         if !tex_table_apply_aligned_environment(
             descriptor, environment, argument_text) {return false}
     } else if environment == "gathered" {
-        if columns != 1 { return false }
+        if columns != 1 {
+            return false 
+        }
         descriptor.cell_style, descriptor.row_spacing = .Display, .Alignment
     } else if environment == "smallmatrix" {
         descriptor.cell_style, descriptor.row_spacing = .Script, .Tight
@@ -432,7 +440,9 @@ tex_table_apply_cases_environment :: proc(
     descriptor: ^Tex_Table_Descriptor,
     environment: string) -> bool {
 
-    if descriptor.columns != 2 {return false}
+    if descriptor.columns != 2 {
+        return false
+    }
     tex_table_apply_cases_preset(descriptor, environment == "dcases")
     return true
 }
@@ -443,7 +453,9 @@ tex_table_apply_aligned_environment :: proc(
     environment, argument: string) -> bool {
 
     columns := descriptor.columns
-    if columns < 2 || columns%2 != 0 {return false}
+    if columns < 2 || columns%2 != 0 {
+        return false
+    }
     if environment == "alignedat" &&
         !tex_table_alignedat_columns_match(argument, columns) {return false}
     tex_table_apply_aligned_preset(descriptor, environment == "aligned")
@@ -456,7 +468,9 @@ tex_table_apply_cases_preset :: proc(
     display: bool) {
     descriptor.cell_style = .Display if display else .Text
     descriptor.row_spacing = .Cases
-    for column in 0..<descriptor.columns { descriptor.alignments[column] = .Left }
+    for column in 0..<descriptor.columns {
+        descriptor.alignments[column] = .Left 
+    }
     for boundary in 0..=descriptor.columns {
         descriptor.boundary_gaps[boundary].unit = .Zero
     }
@@ -488,10 +502,14 @@ tex_table_alignedat_columns_match :: proc(argument: string, columns: int) -> boo
 
 //   Parse one bounded positive decimal integer.
 tex_table_parse_positive_integer :: proc(text: string) -> (int, bool) {
-    if len(text) == 0 { return 0, false }
+    if len(text) == 0 {
+        return 0, false 
+    }
     value := 0
     for byte in transmute([]u8)text {
-        if byte < '0' || byte > '9' { return 0, false }
+        if byte < '0' || byte > '9' {
+            return 0, false 
+        }
         value = value*10 + int(byte-'0')
     }
     return value, value > 0

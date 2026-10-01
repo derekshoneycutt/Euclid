@@ -144,13 +144,19 @@ reflow_occupied_columns :: proc(cells: []Cell) -> int {
 
 // Report whether one source row contains only complete leading-cell geometry.
 reflow_source_cells_valid :: proc(cells: []Cell) -> bool {
-    if len(cells) == 0 { return false }
+    if len(cells) == 0 {
+        return false 
+    }
     for cell, column in cells {
         if cell.continuation {
-            if column == 0 || cells[column - 1].width != 2 { return false }
+            if column == 0 || cells[column - 1].width != 2 {
+                return false 
+            }
             continue
         }
-        if cell.width > 2 { return false }
+        if cell.width > 2 {
+            return false 
+        }
         if cell.width == 2 &&
             (column + 1 >= len(cells) || !cells[column + 1].continuation) {
             return false
@@ -165,9 +171,13 @@ reflow_measure_cells :: proc(
     columns: int) -> Reflow_Result {
     used := reflow_occupied_columns(cells)
     for cell in cells[:used] {
-        if cell.continuation || cell.width < 1 { continue }
+        if cell.continuation || cell.width < 1 {
+            continue 
+        }
         width := int(cell.width)
-        if width > columns { return .Cell_Too_Wide }
+        if width > columns {
+            return .Cell_Too_Wide 
+        }
         if column^ + width > columns {
             result.row_count += 1
             column^ = 0
@@ -176,6 +186,32 @@ reflow_measure_cells :: proc(
         result.grapheme_count += 1
     }
     return .Prepared
+}
+
+// Resolve one source row's logical line and validate its chronological identity.
+reflow_measure_source_line_id :: proc(
+    source: []Reflow_Source_Row, source_index: int,
+    current_line_id: termmodel.Terminal_Logical_Line_Id) ->
+    (termmodel.Terminal_Logical_Line_Id, bool) {
+    source_row := source[source_index]
+    line_id := source_row.logical_line_id if
+        source_row.logical_line_id != 0 else
+        termmodel.Terminal_Logical_Line_Id(source_row.logical_row_id)
+    if source_index > 0 && source[source_index - 1].wrapped &&
+        source_row.logical_line_id == 0 {
+        line_id = current_line_id
+    }
+    if source_row.logical_row_id == 0 {
+        return line_id, false
+    }
+    if source_index > 0 {
+        previous := source[source_index - 1]
+        if source_row.logical_row_id <= previous.logical_row_id ||
+            (previous.wrapped && line_id != current_line_id) {
+            return line_id, false
+        }
+    }
+    return line_id, true
 }
 
 // Count leading graphemes and emitted rows without allocating replacement state.
@@ -188,26 +224,18 @@ reflow_measure :: proc(
     column := 0
     current_line_id: termmodel.Terminal_Logical_Line_Id
     for source_row, source_index in source {
-        line_id := source_row.logical_line_id if
-            source_row.logical_line_id != 0 else
-            termmodel.Terminal_Logical_Line_Id(source_row.logical_row_id)
-        if source_index > 0 && source[source_index - 1].wrapped &&
-            source_row.logical_line_id == 0 {
-            line_id = current_line_id
-        }
-        if source_row.logical_row_id == 0 ||
-            (source_index > 0 && source_row.logical_row_id <=
-                source[source_index - 1].logical_row_id) ||
-            (source_index > 0 && source[source_index - 1].wrapped &&
-                line_id != current_line_id) ||
-            !reflow_source_cells_valid(source_row.cells) {
+        line_id, identity_valid := reflow_measure_source_line_id(
+            source, source_index, current_line_id)
+        if !identity_valid || !reflow_source_cells_valid(source_row.cells) {
             return {result = .Invalid_Input}
         }
         current_line_id = line_id
         result.old_boundary_count += len(source_row.cells) + 1
         measure_result := reflow_measure_cells(
             &result, &column, source_row.cells, columns)
-        if measure_result != .Prepared { return {result = measure_result} }
+        if measure_result != .Prepared {
+            return {result = measure_result} 
+        }
         if !source_row.wrapped && source_index + 1 < len(source) {
             result.row_count += 1
             column = 0
@@ -231,7 +259,9 @@ reflow_publish_semantic :: proc(
 
 // Release all storage owned by an uncommitted or inspected reflow result.
 reflow_destroy :: proc(prepared: ^Prepared_Reflow) {
-    if prepared == nil { return }
+    if prepared == nil {
+        return 
+    }
     delete(prepared.semantic_to_new, prepared.allocator)
     delete(prepared.old_to_semantic, prepared.allocator)
     delete(prepared.rows, prepared.allocator)
@@ -241,7 +271,9 @@ reflow_destroy :: proc(prepared: ^Prepared_Reflow) {
 
 // Release every resource owned by an uncommitted primary reflow candidate.
 primary_reflow_destroy :: proc(prepared: ^Prepared_Primary_Reflow) {
-    if prepared == nil { return }
+    if prepared == nil {
+        return 
+    }
     reflow_destroy(&prepared.reflow)
     grid_destroy(&prepared.grid)
     scrollback_destroy(&prepared.scrollback)
@@ -283,7 +315,9 @@ reflow_map_old_row :: proc(
             semantic = {state.logical_line_id, grapheme_offset},
         }
         state.old_index += 1
-        if column == len(source.cells) { continue }
+        if column == len(source.cells) {
+            continue 
+        }
         cell := &source.cells[column]
         if !cell.continuation && cell.width > 0 {
             grapheme_offset += 1
@@ -295,7 +329,9 @@ reflow_map_old_row :: proc(
 reflow_start_row :: proc(
     prepared: ^Prepared_Reflow, state: ^Reflow_Emit_State) {
     state.retained_row = state.global_row - state.retained_start
-    if state.retained_row < 0 { return }
+    if state.retained_row < 0 {
+        return 
+    }
     row := &prepared.rows[state.retained_row]
     row.logical_line_id = state.logical_line_id
     row.grapheme_offset = state.line_offset
@@ -309,7 +345,9 @@ reflow_start_row :: proc(
 // Publish the boundary following one retained emitted grapheme.
 reflow_publish_cell_end :: proc(
     prepared: ^Prepared_Reflow, state: ^Reflow_Emit_State) {
-    if state.retained_row < 0 { return }
+    if state.retained_row < 0 {
+        return 
+    }
     reflow_publish_semantic(prepared, {
         semantic = {state.logical_line_id, state.line_offset},
         new = {state.retained_row, state.column},
@@ -344,7 +382,9 @@ reflow_emit_cell :: proc(
 reflow_advance_source_row :: proc(
     prepared: ^Prepared_Reflow, source: []Reflow_Source_Row,
     source_index: int, state: ^Reflow_Emit_State) {
-    if source[source_index].wrapped || source_index + 1 >= len(source) { return }
+    if source[source_index].wrapped || source_index + 1 >= len(source) {
+        return 
+    }
     state.global_row += 1
     state.column = 0
     next := source[source_index + 1]
@@ -377,7 +417,9 @@ reflow_emit :: proc(
         used := reflow_occupied_columns(source_row.cells)
         for cell_index := 0; cell_index < used; cell_index += 1 {
             cell := &source_row.cells[cell_index]
-            if cell.continuation || cell.width == 0 { continue }
+            if cell.continuation || cell.width == 0 {
+                continue 
+            }
             reflow_emit_cell(prepared, source_row.cells, cell_index,
                 columns, &state)
         }
@@ -391,9 +433,13 @@ reflow_emit :: proc(
 reflow_resolve_old :: proc(
     prepared: ^Prepared_Reflow, old: Reflow_Old_Position) ->
     (termmodel.Terminal_Semantic_Position, bool) {
-    if prepared == nil { return {}, false }
+    if prepared == nil {
+        return {}, false 
+    }
     for entry in prepared.old_to_semantic {
-        if entry.old == old { return entry.semantic, true }
+        if entry.old == old {
+            return entry.semantic, true 
+        }
     }
     return {}, false
 }
@@ -402,9 +448,13 @@ reflow_resolve_old :: proc(
 reflow_resolve_semantic :: proc(
     prepared: ^Prepared_Reflow, semantic: termmodel.Terminal_Semantic_Position) ->
     (Reflow_New_Position, bool) {
-    if prepared == nil { return {}, false }
+    if prepared == nil {
+        return {}, false 
+    }
     for entry in prepared.semantic_to_new {
-        if entry.semantic == semantic { return entry.new, true }
+        if entry.semantic == semantic {
+            return entry.new, true 
+        }
     }
     return {}, false
 }
@@ -414,13 +464,17 @@ reflow_relocate_shell_markers :: proc(
     prepared: ^Prepared_Reflow, source: []Reflow_Source_Row) {
     for source_row in source {
         for kind in termmodel.Shell_Marker_Kind {
-            if !source_row.shell_markers.present[kind] { continue }
+            if !source_row.shell_markers.present[kind] {
+                continue 
+            }
             semantic, old_found := reflow_resolve_old(prepared, {
                 source_row.logical_row_id,
                 int(source_row.shell_markers.columns[kind]),
             })
             position, new_found := reflow_resolve_semantic(prepared, semantic)
-            if !old_found || !new_found { continue }
+            if !old_found || !new_found {
+                continue 
+            }
             markers := &prepared.rows[position.row].shell_markers
             markers.present[kind] = true
             markers.columns[kind] = u16(position.column)
@@ -438,9 +492,13 @@ reflow_prepare :: proc(
     source: []Reflow_Source_Row, columns, row_capacity: int,
     allocator: mem.Allocator, relocation_capacity := int(max(int))) ->
     (Prepared_Reflow, Reflow_Result) {
-    if row_capacity < 1 { return {}, .Invalid_Input }
+    if row_capacity < 1 {
+        return {}, .Invalid_Input 
+    }
     measure := reflow_measure(source, columns)
-    if measure.result != .Prepared { return {}, measure.result }
+    if measure.result != .Prepared {
+        return {}, measure.result 
+    }
     if measure.old_boundary_count + measure.grapheme_count +
         measure.row_count > relocation_capacity {
         return {}, .Relocation_Capacity_Exceeded
@@ -500,7 +558,9 @@ primary_reflow_materialize_rows :: proc(
     next_id := old_grid.editing.next_logical_row_id
     for &row, row_index in prepared.reflow.rows {
         next_id += 1
-        if next_id <= 0 { next_id = 1 }
+        if next_id <= 0 {
+            next_id = 1 
+        }
         if row_index < prepared.grid_row_start {
             if !scrollback_commit(&prepared.scrollback, row.cells, {
                 logical_row_id = next_id,
@@ -509,7 +569,9 @@ primary_reflow_materialize_rows :: proc(
                 logical_line_id = row.logical_line_id,
                 grapheme_offset = row.grapheme_offset,
                 head_truncated = row.head_truncated,
-            }) { return false }
+            }) {
+                return false
+            }
             continue
         }
         target_row := row_index - prepared.grid_row_start
@@ -555,14 +617,18 @@ primary_reflow_initialize_destinations :: proc(
         request.allocator, {
             attachment_store = old_scrollback.attachment_store,
             shell_integration = old_scrollback.shell_integration,
-        }) { return false }
+        }) {
+            return false
+        }
     if !grid_init(&prepared.grid, request.columns, request.rows,
         request.allocator, {
         scrollback = {},
         ambiguous_width = old_grid.editing.ambiguous_width,
         attachment_store = old_grid.editing.attachment_store,
         screen = .Primary,
-    }) { return false }
+    }) {
+        return false
+    }
     return true
 }
 
@@ -579,7 +645,9 @@ primary_reflow_prepare :: proc(
     prepared: Prepared_Primary_Reflow
     reflow, result := reflow_prepare(
         source, columns, old_scrollback.capacity + rows, allocator)
-    if result != .Prepared { return {}, result }
+    if result != .Prepared {
+        return {}, result 
+    }
     prepared.reflow = reflow
     if !primary_reflow_initialize_destinations(&prepared, request) {
         primary_reflow_destroy(&prepared)
@@ -639,7 +707,9 @@ primary_reflow_grid_source :: proc(row: ^Row) -> Reflow_Source_Row {
 primary_reflow_source :: proc(
     grid: ^Grid, scrollback: ^Scrollback, allocator: mem.Allocator) ->
     ([]Reflow_Source_Row, bool) {
-    if grid == nil || scrollback == nil { return nil, false }
+    if grid == nil || scrollback == nil {
+        return nil, false 
+    }
     grid_count := clamp(grid.cursor.row + 1, 1, len(grid.rows))
     for row_index := len(grid.rows) - 1; row_index >= grid_count; row_index -= 1 {
         if reflow_occupied_columns(grid.rows[row_index].cells) > 0 {
@@ -649,10 +719,14 @@ primary_reflow_source :: proc(
     }
     source, allocation_error := make(
         []Reflow_Source_Row, scrollback.count + grid_count, allocator)
-    if allocation_error != nil { return nil, false }
+    if allocation_error != nil {
+        return nil, false 
+    }
     for index in 0..<scrollback.count {
         row, found := scrollback_row(scrollback, index)
-        if !found { delete(source, allocator); return nil, false }
+        if !found {
+            delete(source, allocator); return nil, false 
+        }
         source[index] = primary_reflow_scrollback_source(row)
     }
     for row_index in 0..<grid_count {
@@ -662,11 +736,40 @@ primary_reflow_source :: proc(
     return source, true
 }
 
+// Copy checkpoint scrollback and grid rows into chronological source descriptors.
+reflow_checkpoint_copy_source_rows :: proc(
+    checkpoint: ^Display_Checkpoint,
+    source: []Reflow_Source_Row, grid_count: int) -> bool {
+    for index in 0..<checkpoint.scrollback_count {
+        row, found := display_checkpoint_scrollback_row(checkpoint, index)
+        if !found {
+            return false
+        }
+        source[index] = {row.cells, row.logical_id, row.wrapped,
+            row.shell_markers, row.logical_line_id, row.grapheme_offset,
+            row.head_truncated}
+    }
+    for row_index in 0..<grid_count {
+        cells, found := display_checkpoint_grid_row(checkpoint, row_index)
+        if !found {
+            return false
+        }
+        row := checkpoint.grid_rows[row_index]
+        source[checkpoint.scrollback_count + row_index] = {
+            cells, row.logical_id, row.wrapped, row.shell_markers,
+            row.logical_line_id, row.grapheme_offset, row.head_truncated,
+        }
+    }
+    return true
+}
+
 // Allocate chronological source descriptors borrowed from one valid checkpoint.
 reflow_checkpoint_source :: proc(
     checkpoint: ^Display_Checkpoint, allocator: mem.Allocator) ->
     ([]Reflow_Source_Row, bool) {
-    if checkpoint == nil || !checkpoint.valid { return nil, false }
+    if checkpoint == nil || !checkpoint.valid {
+        return nil, false 
+    }
     grid_count := clamp(
         checkpoint.grid_cursor.row + 1, 1, len(checkpoint.grid_rows))
     for row_index := len(checkpoint.grid_rows) - 1;
@@ -679,22 +782,12 @@ reflow_checkpoint_source :: proc(
     }
     source, allocation_error := make([]Reflow_Source_Row,
         checkpoint.scrollback_count + grid_count, allocator)
-    if allocation_error != nil { return nil, false }
-    for index in 0..<checkpoint.scrollback_count {
-        row, found := display_checkpoint_scrollback_row(checkpoint, index)
-        if !found { delete(source, allocator); return nil, false }
-        source[index] = {row.cells, row.logical_id, row.wrapped,
-            row.shell_markers, row.logical_line_id, row.grapheme_offset,
-            row.head_truncated}
+    if allocation_error != nil {
+        return nil, false 
     }
-    for row_index in 0..<grid_count {
-        cells, found := display_checkpoint_grid_row(checkpoint, row_index)
-        if !found { delete(source, allocator); return nil, false }
-        row := checkpoint.grid_rows[row_index]
-        source[checkpoint.scrollback_count + row_index] = {
-            cells, row.logical_id, row.wrapped, row.shell_markers,
-            row.logical_line_id, row.grapheme_offset, row.head_truncated,
-        }
+    if !reflow_checkpoint_copy_source_rows(checkpoint, source, grid_count) {
+        delete(source, allocator)
+        return nil, false
     }
     return source, true
 }
@@ -707,7 +800,9 @@ reflow_checkpoint_placement :: proc(
     semantic, old_found := reflow_resolve_old(
         ctx.reflow, {geometry.logical_row, geometry.column})
     relocated, new_found := reflow_resolve_semantic(ctx.reflow, semantic)
-    if !old_found || !new_found { return {}, false }
+    if !old_found || !new_found {
+        return {}, false 
+    }
     result := geometry
     result.logical_row = ctx.first_logical_row_id + i64(relocated.row)
     result.column = relocated.column
@@ -820,9 +915,13 @@ reflow_checkpoint_cursor :: proc(
 reflow_checkpoint_placements :: proc(
     destination, source: ^Display_Checkpoint, reflow: ^Prepared_Reflow,
     first_logical_row_id: i64) -> bool {
-    if !source.placements.valid { return true }
+    if !source.placements.valid {
+        return true 
+    }
     if !termattachment.placement_checkpoint_copy(
-        &destination.placements, &source.placements) { return false }
+        &destination.placements, &source.placements) {
+        return false
+    }
     ctx := Reflow_Checkpoint_Placement_Context{reflow, first_logical_row_id}
     return termattachment.placement_checkpoint_relocate(
         &destination.placements, .Primary, &ctx,
@@ -839,9 +938,13 @@ display_checkpoint_reflow_init :: proc(
         destination, request.template_grid, request.scrollback, allocator) {
         return false
     }
-    if source == nil || !source.valid { return true }
+    if source == nil || !source.valid {
+        return true 
+    }
     descriptors, source_ok := reflow_checkpoint_source(source, allocator)
-    if !source_ok { display_checkpoint_destroy(destination); return false }
+    if !source_ok {
+        display_checkpoint_destroy(destination); return false 
+    }
     reflow, result := reflow_prepare(
         descriptors, columns, len(request.scrollback.rows) + rows, allocator)
     delete(descriptors, allocator)

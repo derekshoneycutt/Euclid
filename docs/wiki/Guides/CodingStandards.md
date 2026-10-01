@@ -213,8 +213,8 @@ Code review MUST reject a violation even when the compiler or formatter accepts 
 
 ### Function Size and Complexity
 
-- A function/procedure SHOULD remain at or below 20 executable lines.
-- More than 20 executable lines requires review justification; more than 30
+- A function/procedure SHOULD remain at or below 35 executable lines.
+- More than 45 executable lines requires review justification; more than 65
   requires a documented exception and a clear reason decomposition would make
   the code worse.
 - Each function/procedure must have one clear responsibility.

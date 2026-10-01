@@ -165,7 +165,9 @@ shell_test_empty_and_capacity_limits :: proc(t: ^testing.T) {
         shell_parse("  \t\r\n ").kind, Shell_Parse_Result_Kind.Empty)
 
     oversized: [SHELL_SOURCE_BYTE_CAPACITY + 1]u8
-    for &byte in oversized { byte = 'a' }
+    for &byte in oversized {
+        byte = 'a' 
+    }
     result := shell_parse(string(oversized[:]))
     testing.expect_value(t, result.kind, Shell_Parse_Result_Kind.Error)
     testing.expect_value(t, result.error.kind, Shell_Parse_Error_Kind.Source_Too_Long)

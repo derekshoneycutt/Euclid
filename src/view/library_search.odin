@@ -5,7 +5,7 @@ import "../core"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import viewmodel "model"
-import viewsearch "search"
+import viewcatalog "catalog"
 
 import "core:encoding/uuid"
 
@@ -16,12 +16,18 @@ library_search_record_commit :: proc(
     search := &state^.ui_runtime.library_search
     flags: evidence_trace.Flags
     correlation_kind := evidence_trace.Correlation_Kind.None
-    if search^.scenario_correlation != 0 {flags += {.Required}}
+    if search^.scenario_correlation != 0 {
+        flags += {.Required}
+    }
     if search^.scenario_correlation != 0 {
         correlation_kind = .Scenario_Action
     }
-    if more_available {flags += {.Truncated}}
-    if suggestion_available {flags += {.Suggested}}
+    if more_available {
+        flags += {.Truncated}
+    }
+    if suggestion_available {
+        flags += {.Suggested}
+    }
     _ = evidence_session.session_record(
         &state^.evidence_session, &state^.evidence_ring, {
             lane = .Presentation,
@@ -48,9 +54,13 @@ library_search_record_clear_commit :: proc(state: ^core.Euclid_General_State) {
 library_search_add_visible_id :: proc(
     search: ^viewmodel.Library_Search_State, stable_id: uuid.Identifier) {
     for index in 0..<search^.visible_id_count {
-        if search^.visible_ids[index] == stable_id {return}
+        if search^.visible_ids[index] == stable_id {
+           return
+        }
     }
-    if search^.visible_id_count >= len(search^.visible_ids) {return}
+    if search^.visible_id_count >= len(search^.visible_ids) {
+       return
+    }
     search^.visible_ids[search^.visible_id_count] = stable_id
     search^.visible_id_count += 1
 }
@@ -59,9 +69,13 @@ library_search_add_visible_id :: proc(
 library_search_find_node :: proc(
     ji: ^bridgemodel.Euclid_Julia_Interface,
     stable_id: uuid.Identifier) -> ^bridgemodel.Euclid_Julia_Animation_Interface {
-    if ji == nil {return nil}
+    if ji == nil {
+        return nil
+    }
     for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
-        if node^.stable_id == stable_id {return node}
+        if node^.stable_id == stable_id {
+            return node
+        }
     }
     return nil
 }
@@ -70,10 +84,14 @@ library_search_find_node :: proc(
 library_search_add_result_path :: proc(
     search: ^viewmodel.Library_Search_State,
     ji: ^bridgemodel.Euclid_Julia_Interface,
-    key: ^viewsearch.Search_Document_Key) {
-    if key == nil || key^.source_namespace != .Builtin {return}
+    key: ^viewcatalog.Search_Document_Key) {
+    if key == nil || key^.source_namespace != .Builtin {
+        return
+    }
     stable_id, read_error := uuid.read(string(key^.document_id.bytes[:]))
-    if read_error != .None {return}
+    if read_error != .None {
+        return
+    }
     node := library_search_find_node(ji, stable_id)
     for steps := 0; node != nil && steps < ji^.animation_count; steps += 1 {
         library_search_add_visible_id(search, node^.stable_id)
@@ -84,16 +102,20 @@ library_search_add_result_path :: proc(
 // library_search_commit_result accepts one current worker result into display state.
 library_search_commit_result :: proc(
     state: ^core.Euclid_General_State,
-    result: ^viewsearch.Search_Query_Result) -> bool {
+    result: ^viewcatalog.Search_Query_Result) -> bool {
     search := &state^.ui_runtime.library_search
     if result == nil || result^.generation != search^.generation ||
-        result^.index_generation != search^.index_generation {return false}
+        result^.index_generation != search^.index_generation {
+            return false
+        }
     if result^.status == .Invalid_Query {
         viewmodel.library_search_clear_results(search)
         search^.invalid_query = true
         return true
     }
-    if result^.status != .Ready {return false}
+    if result^.status != .Ready {
+        return false
+    }
     viewmodel.library_search_clear_results(search)
     search^.active = search^.query_length > 0
     search^.total_match_count = result^.total_match_count
@@ -114,10 +136,12 @@ library_search_commit_result :: proc(
 
 // library_search_drain_results commits only current worker publications.
 library_search_drain_results :: proc(
-    state: ^core.Euclid_General_State, service: ^viewsearch.Search_Service) {
+    state: ^core.Euclid_General_State, service: ^viewcatalog.Catalog_Service) {
     for {
-        result, received := viewsearch.search_service_try_receive(service)
-        if !received {return}
+        result, received := viewcatalog.catalog_service_try_receive(service)
+        if !received {
+            return
+        }
         _ = library_search_commit_result(state, &result)
     }
 }
@@ -125,19 +149,19 @@ library_search_drain_results :: proc(
 // library_search_submit_current validates and nonblockingly submits current intent.
 library_search_submit_current :: proc(
     state: ^core.Euclid_General_State,
-    service: ^viewsearch.Search_Service) -> bool {
+    service: ^viewcatalog.Catalog_Service) -> bool {
     search := &state^.ui_runtime.library_search
     source := string(search^.query[:search^.query_length])
-    compiled := viewsearch.search_query_compile(source)
+    compiled := viewcatalog.search_query_compile(source)
     if compiled.status != .Success {
         search^.invalid_query = true
         search^.query_dirty = false
         search^.submit_requested = false
         return false
     }
-    request, valid := viewsearch.search_query_request_make(
+    request, valid := viewcatalog.search_query_request_make(
         search^.generation, 0, source)
-    if !valid || !viewsearch.search_service_try_submit(service, request) {
+    if !valid || !viewcatalog.catalog_service_try_submit(service, request) {
         return false
     }
     search^.invalid_query = false
@@ -160,12 +184,14 @@ library_search_debounce_ready :: proc(
 // service_library_search advances debounce, submission, and result commitment.
 service_library_search :: proc(
     state: ^core.Euclid_General_State,
-    service: ^viewsearch.Search_Service,
+    service: ^viewcatalog.Catalog_Service,
     frame_dt: f32) {
-    if state == nil || service == nil {return}
+    if state == nil || service == nil {
+        return
+    }
     search := &state^.ui_runtime.library_search
     search^.worker_available = true
-    search^.index_generation = viewsearch.search_service_index_generation(service)
+    search^.index_generation = viewcatalog.catalog_service_index_generation(service)
     library_search_drain_results(state, service)
     if library_search_debounce_ready(search, frame_dt) {
         _ = library_search_submit_current(state, service)

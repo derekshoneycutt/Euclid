@@ -19,7 +19,9 @@ playback_test_upload :: proc(
     user_data: rawptr, id: termattachment.Attachment_Id,
     pixels: []u8) -> bool {
     fixture := cast(^Playback_Test_Upload)user_data
-    if fixture == nil || id.generation == 0 || len(pixels) == 0 { return false }
+    if fixture == nil || id.generation == 0 || len(pixels) == 0 {
+        return false 
+    }
     fixture.call_count += 1
     fixture.first_byte = pixels[0]
     return fixture.accept

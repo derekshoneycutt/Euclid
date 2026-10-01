@@ -46,11 +46,15 @@ sdl_dust_pipeline_create :: proc(
     paths: Sdl_Dust_Shader_Paths,
     sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
     vertex_shader := sdl_draw_shader_create(device, paths.vertex, .VERTEX, 0, 1)
-    if vertex_shader == nil {return nil}
+    if vertex_shader == nil {
+       return nil
+    }
     defer sdl.ReleaseGPUShader(device, vertex_shader)
     fragment_shader := sdl_draw_shader_create(
         device, paths.fragment, .FRAGMENT, 1, 0)
-    if fragment_shader == nil {return nil}
+    if fragment_shader == nil {
+       return nil
+    }
     defer sdl.ReleaseGPUShader(device, fragment_shader)
     input := sdl_dust_vertex_input()
     targets := [1]sdl.GPUColorTargetDescription{sdl_stroke_target_description()}
@@ -95,7 +99,9 @@ sdl_dust_runtime_admit :: proc(
     }
     runtime^.dust_pipeline = sdl_dust_pipeline_create(
         device, paths, sample_count)
-    if runtime^.dust_pipeline == nil {return true}
+    if runtime^.dust_pipeline == nil {
+       return true
+    }
     runtime^.dust_quad_buffer = sdl.CreateGPUBuffer(device, {
         usage = {.VERTEX},
         size = u32(size_of(Dust_Quad_Vertex) * DUST_QUAD_VERTEX_COUNT),
@@ -140,7 +146,9 @@ sdl_dust_stage_upload :: proc(
     runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
     device: ^sdl.GPUDevice, layout: Sdl_Dust_Upload_Layout) -> bool {
     mapped := sdl.MapGPUTransferBuffer(device, runtime^.dust_upload_buffer, true)
-    if mapped == nil {return false}
+    if mapped == nil {
+       return false
+    }
     quad := [DUST_QUAD_VERTEX_COUNT]Dust_Quad_Vertex{
         {{-0.5, -0.5}, {0, 0}}, {{-0.5, 0.5}, {0, 1}},
         {{0.5, 0.5}, {1, 1}}, {{-0.5, -0.5}, {0, 0}},
@@ -166,7 +174,9 @@ sdl_dust_record_upload :: proc(
     runtime: ^Sdl_Draw_Runtime, command_buffer: ^sdl.GPUCommandBuffer,
     layout: Sdl_Dust_Upload_Layout) -> bool {
     copy_pass := sdl.BeginGPUCopyPass(command_buffer)
-    if copy_pass == nil {return false}
+    if copy_pass == nil {
+       return false
+    }
     if layout.instance_bytes > 0 {
         sdl.UploadToGPUBuffer(copy_pass, {transfer_buffer = runtime^.dust_upload_buffer},
             {buffer = runtime^.dust_quad_buffer, size = layout.quad_bytes}, true)
@@ -193,8 +203,12 @@ sdl_dust_upload :: proc(
         expanded_bytes = u32(
             encoder^.dust_expanded_vertex_count * size_of(Draw_Vertex)),
     }
-    if layout.instance_bytes == 0 && layout.expanded_bytes == 0 {return true}
-    if runtime^.dust_upload_buffer == nil {return false}
+    if layout.instance_bytes == 0 && layout.expanded_bytes == 0 {
+       return true
+    }
+    if runtime^.dust_upload_buffer == nil {
+       return false
+    }
     return sdl_dust_stage_upload(runtime, encoder, device, layout) &&
         sdl_dust_record_upload(runtime, command_buffer, layout)
 }

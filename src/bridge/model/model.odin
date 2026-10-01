@@ -168,6 +168,8 @@ Euclid_Julia_Animation_Interface :: struct {
     stable_id: uuid.Identifier,
     node_kind: Animation_Node_Kind,
     sibling_order: i32,
+    catalog_order: i32,
+    implementation_path: string,
     is_expanded: bool,
     is_selected: bool,
 
@@ -196,10 +198,10 @@ Euclid_Julia_Animation_Iterator :: struct {
 Euclid_Julia_Interface :: struct {
     invoke_with_exception_diagnostics: ^julialib.jl_value_t,
     init_scripts: ^julialib.jl_value_t,
-    ensure_animation_loaded: ^julialib.jl_value_t,
     global_loop: ^julialib.jl_value_t,
     asset_package_identity: [32]byte,
     asset_package_identity_valid: bool,
+    catalog_generation: u64,
 
     null_animation: Euclid_Julia_Animation_Interface,
 

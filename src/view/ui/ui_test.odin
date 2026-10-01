@@ -1456,6 +1456,30 @@ tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
     testing.expect(t, .Tab_Stop not_in child.states)
 }
 
+// Build the semantic tree fixture used by the command-routing test.
+tree_semantic_commands_fixture :: proc(
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    ji: ^bridgemodel.Euclid_Julia_Interface,
+    nodes: []bridgemodel.Euclid_Julia_Animation_Interface,
+    scroll_y: ^f32) -> Tree_List_Params {
+    runtime^.semantic_focus = semantic
+    ji^.animation_head = &nodes[0]
+    ji^.animation_count = len(nodes)
+    ji^.selected_animation = &nodes[0]
+    for index in 0..<len(nodes) {
+        nodes[index].stable_id[0] = byte(index + 1)
+        if index + 1 < len(nodes) {
+            nodes[index].next_in_registry = &nodes[index + 1]
+        }
+    }
+    seed_tree_node(&nodes[0], nil, &nodes[1], nil, true)
+    seed_tree_node(&nodes[1], &nodes[0], nil, &nodes[2], false)
+    seed_tree_node(&nodes[2], &nodes[0], nil, nil, false)
+    return Tree_List_Params{ji = ji, ui_runtime = runtime,
+        list_panel = {0, 0, 200, TREE_ROW_HEIGHT}, scroll_y = scroll_y}
+}
+
 // Verify routed tree commands move, reveal, and select through existing state.
 @(test)
 tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
@@ -1464,19 +1488,9 @@ tree_semantic_commands_roam_and_select :: proc(t: ^testing.T) {
     runtime := viewmodel.Euclid_Ui_Runtime_State{semantic_focus = semantic}
     ji := bridgemodel.Euclid_Julia_Interface{}
     nodes: [3]bridgemodel.Euclid_Julia_Animation_Interface
-    ji.animation_head = &nodes[0]
-    ji.animation_count = len(nodes)
-    ji.selected_animation = &nodes[0]
-    for index in 0..<len(nodes) {
-        nodes[index].stable_id[0] = byte(index + 1)
-        if index + 1 < len(nodes) {nodes[index].next_in_registry = &nodes[index + 1]}
-    }
-    seed_tree_node(&nodes[0], nil, &nodes[1], nil, true)
-    seed_tree_node(&nodes[1], &nodes[0], nil, &nodes[2], false)
-    seed_tree_node(&nodes[2], &nodes[0], nil, nil, false)
     scroll_y: f32
-    params := Tree_List_Params{ji = &ji, ui_runtime = &runtime,
-        list_panel = {0, 0, 200, TREE_ROW_HEIGHT}, scroll_y = &scroll_y}
+    params := tree_semantic_commands_fixture(
+        semantic, &runtime, &ji, nodes[:], &scroll_y)
     testing.expect(t, semantic_begin(semantic))
     _ = prepare_tree_list_panel(params)
     testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
@@ -1510,7 +1524,9 @@ tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
     ji.animation_count = len(nodes)
     for index in 0..<len(nodes) {
         nodes[index].stable_id[0] = byte(index + 1)
-        if index + 1 < len(nodes) {nodes[index].next_in_registry = &nodes[index + 1]}
+        if index + 1 < len(nodes) {
+            nodes[index].next_in_registry = &nodes[index + 1]
+        }
     }
     seed_tree_node(&nodes[0], nil, nil, &nodes[1], false)
     seed_tree_node(&nodes[1], nil, &nodes[2], nil, true)

@@ -65,7 +65,9 @@ draw_encoded_checkbox_geometry :: proc(
     encoder: ^native.Draw_Encoder, rectangle: geometry.Rectangle, checked: bool) {
     _ = native.draw_encoder_rectangle_outline(
         encoder, geometry.Rectangle(rectangle), 1, UI_BORDER_COLOR)
-    if !checked {return}
+    if !checked {
+        return
+    }
     first := geometry.Vector2{rectangle.x + 3,
         rectangle.y + rectangle.height * 0.55}
     second := geometry.Vector2{rectangle.x + 6,
@@ -109,6 +111,23 @@ draw_encoded_settings_geometry :: proc(
     draw_encoded_settings_checkboxes(encoder, prepared)
 }
 
+// Draw labels attached to the five prepared settings checkboxes.
+draw_encoded_settings_check_labels :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
+    labels := [5]struct{label: string, y: f32}{
+        {"Display FPS", rows.fps_y}, {"Limit FPS", rows.limit_y},
+        {"Enable Drawing Sound", rows.sound_y},
+        {settings_simd_label(prepared.simd_available), rows.simd_y},
+        {settings_gpu_dust_label(prepared.gpu_available), rows.gpu_dust_y},
+    }
+    for item in labels {
+        draw_encoded_label(state, encoder, item.label,
+            x + SETTINGS_CHECKBOX_SIZE + SETTINGS_CHECKBOX_LABEL_GAP,
+            item.y - SETTINGS_CHECKBOX_TEXT_OFFSET_Y)
+    }
+}
+
 // draw_encoded_settings_text emits current labels, values, and counters.
 draw_encoded_settings_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
@@ -123,7 +142,9 @@ draw_encoded_settings_text :: proc(
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
     value_width, measured := view_core.ui_text_measure_monospace(
         value, face, TREE_FONT_SIZE, 0)
-    if !measured {value_width = 40}
+    if !measured {
+        value_width = 40
+    }
     draw_encoded_label(state, encoder, "Maximum Dust particles", x, rows.slider_label_y)
     draw_encoded_label(state, encoder, value,
         settings_right_aligned_x(panel, value_width), rows.slider_label_y)
@@ -135,28 +156,22 @@ draw_encoded_settings_text :: proc(
         {state = state, panel = panel, font = face,
             font_resolver = view_font.cache_terminal_resolver(&state^.font_cache)},
         rows.stats_y, encoder, animation_entries_added)
-    labels := [5]struct{label: string, y: f32}{
-        {"Display FPS", rows.fps_y}, {"Limit FPS", rows.limit_y},
-        {"Enable Drawing Sound", rows.sound_y},
-        {settings_simd_label(prepared.simd_available), rows.simd_y},
-        {settings_gpu_dust_label(prepared.gpu_available), rows.gpu_dust_y},
-    }
-    for item in labels {
-        draw_encoded_label(state, encoder, item.label,
-            x + SETTINGS_CHECKBOX_SIZE + SETTINGS_CHECKBOX_LABEL_GAP,
-            item.y - SETTINGS_CHECKBOX_TEXT_OFFSET_Y)
-    }
+    draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
 }
 
 // settings_simd_label describes whether SIMD projection can be selected.
 settings_simd_label :: proc(available: bool) -> string {
-    if available {return "Use SIMD Projection"}
+    if available {
+        return "Use SIMD Projection"
+    }
     return "Use SIMD Projection (Unavailable)"
 }
 
 // settings_gpu_dust_label describes whether GPU dust can be selected.
 settings_gpu_dust_label :: proc(available: bool) -> string {
-    if available {return "GPU Dust Instancing"}
+    if available {
+        return "GPU Dust Instancing"
+    }
     return "GPU Dust Instancing (Unavailable)"
 }
 
@@ -327,7 +342,9 @@ prepare_settings_view :: proc(
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
     mouse_input: Input_Frame) -> Settings_View_Preparation {
-    if state == nil || state.particle_system == nil { return {} }
+    if state == nil || state.particle_system == nil {
+        return {}
+    }
     stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
         panel.y + SETTINGS_HEADER_TOP_OFFSET,
         panel.width - SETTINGS_PANEL_INSET * 2,
@@ -351,7 +368,9 @@ apply_settings_preparation :: proc(
     if prepared.max_particles.changed {
         state.particle_system.use_max_dust_particles = prepared.max_particles.value
     }
-    if prepared.fps.toggled { state.ui_runtime.display_fps = prepared.fps.checked_out }
+    if prepared.fps.toggled {
+        state.ui_runtime.display_fps = prepared.fps.checked_out
+    }
     if prepared.limit.toggled {
         state.ui_runtime.limit_fps = prepared.limit.checked_out
     }

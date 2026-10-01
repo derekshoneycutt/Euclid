@@ -7,7 +7,7 @@ there are some things that do need to start early.
 
 ## v1
 
-Core Content (>163 animations; 100 complete):
+Core Content (>260 animations; 119 complete):
 
 - [ ] Euclid Elements, Book 1 "the intro core, pythagorus" (85 animations; 38 complete)
   - [X] Definitions (31 animations)
@@ -177,6 +177,7 @@ General features:
   - [X] Sums, Products, Integrals
   - [X] More advanced math layouts and features
   - [X] Basic document mode formatting
+  - [ ] Single-line mode formatting
 - [X] Naive spatial-aware shape drawing
 - [X] Improved pen clipping through 3D polygons
 - [X] Resizable layout via Splitters
@@ -187,8 +188,9 @@ General features:
   - [X] Initial creation and access
   - [X] Full-text search tables
   - [X] Initial spellcheck suggestions
-  - [ ] Animation catalog manifest tables
+  - [X] Animation catalog manifest tables
   - [ ] Localization tables
+  - [ ] Basic initial user settings structure
   - [ ] Search and use history
   - [ ] Search autocompletion nice-to-haves
 - [ ] Full input system

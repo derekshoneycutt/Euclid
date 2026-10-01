@@ -220,7 +220,9 @@ scenario_issue_terminal_text :: proc(
     offset := 0
     for offset < len(text) {
         codepoint, width := utf8.decode_rune(text[offset:])
-        if width == 0 { return false }
+        if width == 0 {
+            return false
+        }
         events[count] = {kind = .Text, codepoint = codepoint}
         count += 1
         offset += width
@@ -237,8 +239,12 @@ scenario_issue_key :: proc(
     }
     name := scenario.text_string(&command.text)
     modifiers: input.Input_Modifiers
-    if command.key_shift {modifiers += {.Shift}}
-    if command.key_control {modifiers += {.Control}}
+    if command.key_shift {
+        modifiers += {.Shift}
+    }
+    if command.key_control {
+        modifiers += {.Control}
+    }
     for entry in SCENARIO_KEY_NAMES {
         if entry.name == name {
             event := input.Input_Event{
@@ -441,7 +447,9 @@ scenario_issue_library_search_action :: proc(
     #partial switch command.kind {
     case .Set_Library_Search:
         query := scenario.text_string(&command.text)
-        if len(query) == 0 || len(query) > len(search^.query) {return true, false}
+        if len(query) == 0 || len(query) > len(search^.query) {
+            return true, false
+        }
         copy(search^.query[:len(query)], query)
         search^.query_length = len(query)
         viewmodel.library_search_query_changed(search, 0, true)
@@ -449,7 +457,9 @@ scenario_issue_library_search_action :: proc(
         search^.input.anchor_byte = search^.query_length
         search^.submit_requested = true
     case .Apply_Library_Search_Suggestion:
-        if search^.suggestion_length == 0 {return true, false}
+        if search^.suggestion_length == 0 {
+            return true, false
+        }
         ui.library_search_apply_suggestion(search)
     case .Clear_Library_Search:
         ui.library_search_clear_query(search)
@@ -680,7 +690,9 @@ scenario_issue_particle_action :: proc(
     particle_system := runtime.state^.particle_system
     #partial switch command.kind {
     case .Contact_Dust:
-        if particle_system == nil {return true, false}
+        if particle_system == nil {
+            return true, false
+        }
         accepted := particles.queue_dust_tool_contact(
             particle_system, {
                 endpoint = {command.value, command.secondary_value, 0},

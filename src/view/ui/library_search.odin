@@ -142,7 +142,9 @@ library_search_clear_query :: proc(search: ^viewmodel.Library_Search_State) {
 
 // library_search_apply_suggestion replaces the query and requests immediate search.
 library_search_apply_suggestion :: proc(search: ^viewmodel.Library_Search_State) {
-    if search^.suggestion_length <= 0 {return}
+    if search^.suggestion_length <= 0 {
+        return
+    }
     copy(search^.query[:search^.suggestion_length],
         search^.suggestion[:search^.suggestion_length])
     search^.query_length = search^.suggestion_length
@@ -156,7 +158,9 @@ library_search_apply_suggestion :: proc(search: ^viewmodel.Library_Search_State)
 library_search_suggestion_label :: proc(suggestion: string, storage: []u8) -> string {
     prefix := "Use suggested search: "
     required := len(prefix) + len(suggestion)
-    if len(suggestion) == 0 || required > len(storage) {return "Use suggested search"}
+    if len(suggestion) == 0 || required > len(storage) {
+        return "Use suggested search"
+    }
     copy(storage[:], prefix)
     copy(storage[len(prefix):], suggestion)
     return string(storage[:required])
@@ -165,7 +169,9 @@ library_search_suggestion_label :: proc(suggestion: string, storage: []u8) -> st
 // library_search_append_decimal writes one nonnegative count into fixed storage.
 library_search_append_decimal :: proc(bytes: []u8, count: ^int, value: u32) {
     divisor := u32(1)
-    for value / divisor >= 10 {divisor *= 10}
+    for value / divisor >= 10 {
+        divisor *= 10
+    }
     for divisor > 0 {
         bytes[count^] = u8('0' + value / divisor % 10)
         count^ += 1
@@ -176,10 +182,18 @@ library_search_append_decimal :: proc(bytes: []u8, count: ^int, value: u32) {
 // library_search_status_text formats one bounded meaningful search milestone.
 library_search_status_text :: proc(
     search: ^viewmodel.Library_Search_State, storage: []u8) -> string {
-    if search == nil || len(storage) < 48 || search^.query_length == 0 {return ""}
-    if search^.invalid_query {return "Search query is invalid"}
-    if !search^.active {return "Searching animations"}
-    if search^.total_match_count == 0 {return "No matching animations"}
+    if search == nil || len(storage) < 48 || search^.query_length == 0 {
+        return ""
+    }
+    if search^.invalid_query {
+        return "Search query is invalid"
+    }
+    if !search^.active {
+        return "Searching animations"
+    }
+    if search^.total_match_count == 0 {
+        return "No matching animations"
+    }
     count := 0
     prefix := "Matching animations: "
     copy(storage[:], prefix)
@@ -197,7 +211,9 @@ library_search_status_text :: proc(
 prepare_library_search_status :: proc(state: ^core.Euclid_General_State) {
     storage: [64]u8
     value := library_search_status_text(&state^.ui_runtime.library_search, storage[:])
-    if len(value) == 0 {return}
+    if len(value) == 0 {
+        return
+    }
     _ = semantic_register_control(state^.ui_runtime.semantic_focus, {
         id = semantic_control_id(.Library_Control, LIBRARY_SEARCH_STATUS_ID),
         role = .Status, states = {.Visible, .Enabled},
@@ -212,10 +228,14 @@ library_search_accept_suggestion_key :: proc(
     search: ^viewmodel.Library_Search_State, frame: Input_Frame) -> bool {
     if search == nil || search^.suggestion_length <= 0 ||
         search^.input.cursor_byte != search^.query_length ||
-        search^.input.anchor_byte != search^.query_length {return false}
+        search^.input.anchor_byte != search^.query_length {
+        return false
+    }
     for event in frame.events {
         if (event.kind == .Press || event.kind == .Repeat) &&
-            event.key == .Right && event.modifiers == {} {return true}
+            event.key == .Right && event.modifiers == {} {
+            return true
+        }
     }
     return false
 }
@@ -252,7 +272,9 @@ prepare_library_suggestion :: proc(
     state: ^core.Euclid_General_State, panel: geometry.Rectangle,
     frame: Input_Frame, layout: Library_Search_Layout) -> Text_Button_Result {
     search := &state^.ui_runtime.library_search
-    if search^.suggestion_length <= 0 {return {}}
+    if search^.suggestion_length <= 0 {
+        return {}
+    }
     suggestion := string(search^.suggestion[:search^.suggestion_length])
     label_storage: [viewmodel.LIBRARY_SEARCH_QUERY_BYTE_CAPACITY + 24]u8
     action_label := library_search_suggestion_label(suggestion, label_storage[:])
@@ -301,7 +323,9 @@ prepare_library_search :: proc(
     result.suggestion = prepare_library_suggestion(
         state, panel, frame, result.layout)
     prepare_library_search_status(state)
-    if result.input.hovered {state^.ui_runtime.cursor = .Text}
+    if result.input.hovered {
+        state^.ui_runtime.cursor = .Text
+    }
     return result
 }
 

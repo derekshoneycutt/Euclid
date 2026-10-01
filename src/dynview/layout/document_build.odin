@@ -88,10 +88,16 @@ document_measure_math_programs :: proc(runtime: ^dynviewmodel.Dynview_System) ->
     cache := &runtime^.compile_cache
     measured: [dynviewmodel.DYNVIEW_MAX_MATH_PROGRAMS]bool
     for item in runtime^.content.document_inlines {
-        if item.kind != .Math {continue}
+        if item.kind != .Math {
+            continue
+        }
         program_id := item.math_program_id
-        if program_id < 0 || program_id >= cache^.math_program_count {return false}
-        if measured[program_id] {continue}
+        if program_id < 0 || program_id >= cache^.math_program_count {
+            return false
+        }
+        if measured[program_id] {
+            continue
+        }
         if cache^.math_programs[program_id].draw_width > 0 {
             measured[program_id] = true
             continue
@@ -354,7 +360,9 @@ document_layout_finish_block :: proc(
             cache^.document_layout_overfull_line_count += 1
         }
         status := document_layout_place_line(cache, builders, line_index, line)
-        if status != .Ok {return status}
+        if status != .Ok {
+            return status
+        }
         if line^.display_number > 0 {
             number_ascent := cache^.last_font_size*0.8
             number_descent := cache^.last_font_size*0.2
@@ -380,7 +388,9 @@ document_layout_finish_block :: proc(
 document_display_number_width :: proc(
     number: int, cell_width: f32) -> f32 {
 
-    if number <= 0 {return 0}
+    if number <= 0 {
+        return 0
+    }
     digits := 1
     for remaining := number; remaining >= 10; remaining /= 10 {
         digits += 1
@@ -416,7 +426,9 @@ document_layout_measure_display :: proc(
             document_display_number_width(row.number, ctx.cache^.last_cell_width))
         cursor += node_count
     }
-    if cursor != block.node_start+block.node_count {return {}, .Invalid_Argument}
+    if cursor != block.node_start+block.node_count {
+        return {}, .Invalid_Argument
+    }
     result.numbered_width = max(
         1, ctx.available_width-number_column-ctx.cache^.last_font_size)
     result.alignment_gap = ctx.cache^.last_font_size*0.5
@@ -471,12 +483,16 @@ document_layout_compose_display :: proc(
     ctx: Document_Display_Compose_Context) -> storage.Bounded_Builder_Status {
 
     measured, status := document_layout_measure_display(ctx)
-    if status != .Ok {return status}
+    if status != .Ok {
+        return status
+    }
     cursor := ctx.block.node_start
     for row, relative_index in measured.rows {
         cursor, status = document_layout_append_display_row(
             ctx, measured, row, relative_index, cursor)
-        if status != .Ok {return status}
+        if status != .Ok {
+            return status
+        }
     }
     return .Ok
 }
@@ -500,7 +516,9 @@ document_layout_compose_blocks :: proc(
     }
     for _, block_index in builders^.blocks.storage[:builders^.blocks.count] {
         status := document_layout_compose_block(ctx, block_index)
-        if status != .Ok {return status}
+        if status != .Ok {
+            return status
+        }
     }
     return .Ok
 }
@@ -516,9 +534,13 @@ document_layout_measure_list_columns :: proc(
         if block.source_block_index < 0 ||
             block.source_block_index >= len(source_blocks) {return false}
         source := source_blocks[block.source_block_index]
-        if source.kind != .List_Item {continue}
+        if source.kind != .List_Item {
+            continue
+        }
         list_id := int(source.list_id)
-        if list_id <= 0 || list_id >= len(columns) {return false}
+        if list_id <= 0 || list_id >= len(columns) {
+            return false
+        }
         width: f32
         for node in builders^.nodes.storage[
             block.node_start:block.node_start+block.node_count] {width += node.width}
@@ -542,7 +564,9 @@ document_layout_resolve_block_measure :: proc(
     label_column: f32
     if source.list_kind != .None {
         list_id := int(source.list_id)
-        if list_id <= 0 || list_id >= len(ctx.label_columns) {return {}, false}
+        if list_id <= 0 || list_id >= len(ctx.label_columns) {
+            return {}, false
+    }
         label_column = ctx.label_columns[list_id]
     }
     label_width: f32
@@ -589,7 +613,9 @@ document_layout_compose_block :: proc(
         block.source_block_index >= len(ctx.source_blocks) {return .Invalid_Argument}
     source := ctx.source_blocks[block.source_block_index]
     measure, measure_ok := document_layout_resolve_block_measure(ctx, block, source)
-    if !measure_ok {return .Invalid_Argument}
+    if !measure_ok {
+        return .Invalid_Argument
+    }
     record := &ctx.builders^.blocks.storage[block_index]
     record^.content_origin = measure.origin
     record^.content_width = measure.width
@@ -598,10 +624,14 @@ document_layout_compose_block :: proc(
     target_start := ctx.builders^.copy_targets.count
     status := document_layout_compose_block_lines(
         ctx, block, source, block_index, measure.width)
-    if status != .Ok {return status}
+    if status != .Ok {
+        return status
+    }
     status = document_layout_finish_block(
         ctx.cache, ctx.builders, block_index, block.node_start, line_start)
-    if status != .Ok {return status}
+    if status != .Ok {
+        return status
+    }
     separator, replace := document_layout_block_selection_separator(
         ctx.source_blocks, block.source_block_index)
     if replace && target_start < ctx.builders^.copy_targets.count {

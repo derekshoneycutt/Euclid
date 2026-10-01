@@ -142,7 +142,9 @@ raster_rectangles_intersect :: proc(
 // Record an exact animation generation drawn during the open display epoch.
 playback_visibility_record :: proc(
     service: ^Service, id: termattachment.Attachment_Id) {
-    if service == nil || id.slot < 0 || id.slot >= len(service.playbacks) { return }
+    if service == nil || id.slot < 0 || id.slot >= len(service.playbacks) {
+        return 
+    }
     entry := &service.playbacks[id.slot]
     if entry.active && entry.attachment_id == id {
         entry.visible_epoch = service.visibility_epoch
@@ -164,11 +166,46 @@ playback_visibility_begin_frame :: proc(service: ^Service, now_ns: u64) {
         }
     }
     if completed_epoch == max(u64) {
-        for &entry in service.playbacks { entry.visible_epoch = 0 }
+        for &entry in service.playbacks {
+            entry.visible_epoch = 0 
+        }
         service.visibility_epoch = 1
     } else {
         service.visibility_epoch += 1
     }
+}
+
+// Draw a validated raster request through the display-owned encoder.
+service_draw_resolved_raster :: proc(
+    service: ^Service, request: termattachment.Raster_Draw_Request) -> bool {
+    entry := &service.textures[request.attachment_id.slot]
+    source := request.source
+    if !entry.resident || entry.attachment_id != request.attachment_id ||
+        entry.texture.handle == nil || source.x < 0 || source.y < 0 ||
+        source.x + source.width > int(entry.texture.width) ||
+        source.y + source.height > int(entry.texture.height) {
+        service.draw_rejection_count += 1
+        return false
+    }
+    if service.encoder == nil {
+        return false
+    }
+    uv := geometry.Rectangle{
+        f32(source.x)/f32(entry.texture.width),
+        f32(source.y)/f32(entry.texture.height),
+        f32(source.width)/f32(entry.texture.width),
+        f32(source.height)/f32(entry.texture.height),
+    }
+    destination := geometry.Rectangle{request.destination.x, request.destination.y,
+        request.destination.width, request.destination.height}
+    if !native.draw_encoder_texture_quad(service.encoder, destination, uv,
+        color.WHITE, {entry.texture.handle, .Linear}) {
+        return false
+    }
+    termattachment.residency_touch(service.store, request.attachment_id)
+    playback_visibility_record(service, request.attachment_id)
+    service.draw_count += 1
+    return true
 }
 
 //   Draw one exact-generation texture through the terminal renderer capability.
@@ -185,38 +222,19 @@ service_draw_raster :: proc(
         request.attachment_id.slot >= len(service.textures) ||
         request.source.width <= 0 || request.source.height <= 0 ||
         !raster_rectangles_intersect(request.destination, request.clip) {
-        if service != nil { service.draw_rejection_count += 1 }
+        if service != nil {
+            service.draw_rejection_count += 1
+        }
         return false
     }
-    entry := &service.textures[request.attachment_id.slot]
-    source := request.source
-    if !entry.resident || entry.attachment_id != request.attachment_id ||
-        entry.texture.handle == nil || source.x < 0 || source.y < 0 ||
-        source.x + source.width > int(entry.texture.width) ||
-        source.y + source.height > int(entry.texture.height) {
-        service.draw_rejection_count += 1
-        return false
-    }
-    if service.encoder == nil {return false}
-    uv := geometry.Rectangle{
-        f32(source.x)/f32(entry.texture.width),
-        f32(source.y)/f32(entry.texture.height),
-        f32(source.width)/f32(entry.texture.width),
-        f32(source.height)/f32(entry.texture.height),
-    }
-    destination := geometry.Rectangle{request.destination.x, request.destination.y,
-        request.destination.width, request.destination.height}
-    if !native.draw_encoder_texture_quad(service.encoder, destination, uv,
-        color.WHITE, {entry.texture.handle, .Linear}) {return false}
-    termattachment.residency_touch(service.store, request.attachment_id)
-    playback_visibility_record(service, request.attachment_id)
-    service.draw_count += 1
-    return true
+    return service_draw_resolved_raster(service, request)
 }
 
 //   Return the borrowing renderer capability for one live display service.
 service_renderer :: proc(service: ^Service) -> termattachment.Raster_Renderer {
-    if service == nil || service.store == nil { return {} }
+    if service == nil || service.store == nil {
+        return {} 
+    }
     return {user_data = service, draw = service_draw_raster}
 }
 
@@ -224,7 +242,9 @@ service_renderer :: proc(service: ^Service) -> termattachment.Raster_Renderer {
 service_bind_native :: proc(
     service: ^Service, platform: ^native.Sdl_Platform,
     runtime: ^native.Sdl_Draw_Runtime) -> bool {
-    if service == nil || platform == nil || runtime == nil {return false}
+    if service == nil || platform == nil || runtime == nil {
+       return false
+    }
     service.platform = platform
     service.draw_runtime = runtime
     return true
@@ -233,24 +253,18 @@ service_bind_native :: proc(
 // service_set_draw_encoder binds the encoder used only during one frame build.
 service_set_draw_encoder :: proc(
     service: ^Service, encoder: ^native.Draw_Encoder) {
-    if service != nil {service.encoder = encoder}
+    if service != nil {
+       service.encoder = encoder
+    }
 }
 
-//   Copy content-free graphics lifecycle counters into a display observation.
-service_observe :: proc(service: ^Service, result: ^observe.Display) {
-    if service == nil || service.store == nil || result == nil { return }
+// Copy attachment, byte, and admission counters into one observation.
+service_observe_attachment_counters :: proc(
+    service: ^Service, result: ^observe.Display) {
     result.graphics_transfer_admission_count =
         service.store.diagnostics.transfer_admission_count
     result.graphics_transfer_rejection_count =
         service.store.diagnostics.transfer_rejection_count
-    result.graphics_decode_count = service.decode_count
-    result.graphics_failure_count = service.failure_count
-    result.graphics_cancellation_count = service.cancellation_count
-    result.graphics_publication_count = service.publication_count
-    result.graphics_stale_completion_count = service.stale_completion_count
-    result.graphics_eviction_count = service.eviction_count
-    result.graphics_draw_count = service.draw_count
-    result.graphics_draw_rejection_count = service.draw_rejection_count
     result.graphics_cpu_byte_count = service.store.cpu_byte_count
     result.graphics_gpu_byte_count = service.store.gpu_byte_count
     result.graphics_animation_decode_byte_count =
@@ -261,6 +275,19 @@ service_observe :: proc(service: ^Service, result: ^observe.Display) {
         service.store.diagnostics.animation_admission_count
     result.graphics_animation_rejection_count =
         service.store.diagnostics.animation_rejection_count
+}
+
+// Copy worker, draw, GIF, and playback counters into one observation.
+service_observe_runtime_counters :: proc(
+    service: ^Service, result: ^observe.Display) {
+    result.graphics_decode_count = service.decode_count
+    result.graphics_failure_count = service.failure_count
+    result.graphics_cancellation_count = service.cancellation_count
+    result.graphics_publication_count = service.publication_count
+    result.graphics_stale_completion_count = service.stale_completion_count
+    result.graphics_eviction_count = service.eviction_count
+    result.graphics_draw_count = service.draw_count
+    result.graphics_draw_rejection_count = service.draw_rejection_count
     result.graphics_gif_preflight_acceptance_count =
         service.parser.gif_preflight_acceptance_count
     result.graphics_gif_preflight_rejection_count =
@@ -275,6 +302,15 @@ service_observe :: proc(service: ^Service, result: ^observe.Display) {
     result.graphics_visibility_resume_count = service.visibility_resume_count
 }
 
+//   Copy content-free graphics lifecycle counters into a display observation.
+service_observe :: proc(service: ^Service, result: ^observe.Display) {
+    if service == nil || service.store == nil || result == nil {
+        return
+    }
+    service_observe_attachment_counters(service, result)
+    service_observe_runtime_counters(service, result)
+}
+
 //   Execute one finite CPU preparation without GPU calls or terminal owners.
 //
 // Returns:
@@ -283,7 +319,9 @@ prepare_task_execute :: proc(
     payload: rawptr, token: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     task := cast(^Prepare_Task)payload
     prepared := termgraphicsprepare.prepare(&task.request, token)
-    if taskpool.task_cancellation_requested(token) { return .Cancelled }
+    if taskpool.task_cancellation_requested(token) {
+        return .Cancelled 
+    }
     return .Succeeded if prepared else .Failed
 }
 
@@ -293,7 +331,9 @@ gif_preflight_task_execute :: proc(
     task := cast(^Gif_Preflight_Task)payload
     task.inspection = termgraphicsprepare.inspect_gif_animation(
         task.input, task.limits, token)
-    if taskpool.task_cancellation_requested(token) { return .Cancelled }
+    if taskpool.task_cancellation_requested(token) {
+        return .Cancelled 
+    }
     return .Succeeded if task.inspection.valid else .Failed
 }
 
@@ -320,9 +360,13 @@ service_bind_session :: proc(
 //   Record one exact-generation texture publication as required presentation evidence.
 service_record_publication :: proc(
     service: ^Service, id: termattachment.Attachment_Id) {
-    if service.trace_ring == nil { return }
+    if service.trace_ring == nil {
+        return 
+    }
     metrics, found := termattachment.attachment_metrics(service.store, id)
-    if !found { return }
+    if !found {
+        return 
+    }
     trace.ring_record(service.trace_ring, trace.Event{
         correlation = u64(id.slot),
         generation = id.generation,
@@ -341,9 +385,13 @@ service_record_publication :: proc(
 service_record_animation :: proc(
     service: ^Service, id: termattachment.Attachment_Id,
     frame_index: int, completed_cycles: u64, completed: bool) {
-    if service.trace_ring == nil || frame_index < 0 { return }
+    if service.trace_ring == nil || frame_index < 0 {
+        return 
+    }
     cycles := u32(completed_cycles)
-    if completed_cycles > u64(max(u32)) { cycles = max(u32) }
+    if completed_cycles > u64(max(u32)) {
+        cycles = max(u32) 
+    }
     trace.ring_record(service.trace_ring, trace.Event{
         timestamp_ns = service.monotonic_ns,
         correlation = u64(id.slot),
@@ -396,11 +444,17 @@ operation_prepare_output :: proc(
 operation_prepare :: proc(service: ^Service, operation: ^Operation) -> bool {
     input, input_found := termattachment.transfer_bytes(
         service.store, operation.decode.transfer_id)
-    if !input_found { return false }
+    if !input_found {
+        return false 
+    }
     kind, supported := operation_prepare_kind(operation.decode.kind)
-    if !supported { return false }
+    if !supported {
+        return false 
+    }
     destination := operation_prepare_output(service, operation, kind)
-    if !destination.found { return false }
+    if !destination.found {
+        return false 
+    }
     operation.task = {
         session_generation = service.session_generation,
         request = {
@@ -425,7 +479,9 @@ operation_preflight_prepare :: proc(
     service: ^Service, operation: ^Operation) -> bool {
     input, found := termattachment.transfer_bytes(
         service.store, operation.decode.transfer_id)
-    if !found { return false }
+    if !found {
+        return false 
+    }
     operation.preflight = {
         session_generation = service.session_generation,
         input = input,
@@ -486,7 +542,9 @@ operation_preflight_admit :: proc(
     inspection := operation.preflight.inspection
     attachment_id, reserved := operation_preflight_reserve(
         service, operation, inspection)
-    if !reserved { return false }
+    if !reserved {
+        return false 
+    }
     operation.decode.attachment_id = attachment_id
     if operation.decode.place {
         _, outcome := termattachment.placement_admit(service.store, {
@@ -623,7 +681,9 @@ texture_update_completed :: proc(
     }
     slot := int(identity - 1)
     texture := &service.textures[slot]
-    if !texture.updating || texture.attachment_id.generation != generation {return}
+    if !texture.updating || texture.attachment_id.generation != generation {
+       return
+    }
     plan := texture.pending_playback
     texture.updating = false
     texture.pending_playback = {}
@@ -640,13 +700,17 @@ texture_animation_payload :: proc(
     (termattachment.Payload_View, bool) {
     animation, found := termattachment.animation_view(service.store, id)
     metrics, metrics_found := termattachment.attachment_metrics(service.store, id)
-    if !found || !metrics_found || len(animation.frames) == 0 { return {}, false }
+    if !found || !metrics_found || len(animation.frames) == 0 {
+        return {}, false 
+    }
     frame_index := 0
     playback := &service.playbacks[id.slot]
     if playback.active && playback.attachment_id == id {
         frame_index = playback.frame_index
     }
-    if frame_index < 0 || frame_index >= len(animation.frames) { return {}, false }
+    if frame_index < 0 || frame_index >= len(animation.frames) {
+        return {}, false 
+    }
     frame := animation.frames[frame_index].pixels
     if frame.offset < 0 || frame.count <= 0 ||
         frame.offset > len(animation.pixels) - frame.count {
@@ -664,7 +728,9 @@ texture_payload :: proc(
     service: ^Service, id: termattachment.Attachment_Id) ->
     (termattachment.Payload_View, bool) {
     payload, found := termattachment.attachment_payload(service.store, id)
-    if found { return payload, true }
+    if found {
+        return payload, true 
+    }
     return texture_animation_payload(service, id)
 }
 
@@ -672,13 +738,45 @@ texture_payload :: proc(
 texture_activate_playback :: proc(
     service: ^Service, id: termattachment.Attachment_Id) -> bool {
     animation, found := termattachment.animation_view(service.store, id)
-    if !found { return true }
+    if !found {
+        return true 
+    }
     entry := &service.playbacks[id.slot]
-    if entry.active && entry.attachment_id == id { return true }
+    if entry.active && entry.attachment_id == id {
+        return true 
+    }
     candidate, valid := playback_begin(id, animation, service.monotonic_ns)
-    if !valid { return false }
+    if !valid {
+        return false 
+    }
     entry^ = candidate
     return true
+}
+
+// Create and enqueue one candidate texture, releasing residency on failure.
+texture_candidate_enqueue :: proc(
+    service: ^Service, id: termattachment.Attachment_Id,
+    payload: termattachment.Payload_View,
+    info: Texture_Payload_Info) -> native.Sampled_Texture {
+    candidate := native.sdl_sampled_texture_create(
+        service.platform, info.width, info.height)
+    if candidate.handle != nil && native.texture_operation_enqueue_upload(
+        &service.draw_runtime^.texture_operations, {
+            kind = .Create,
+            texture = candidate,
+            format = info.format,
+            source = payload.bytes,
+            identity = u64(id.slot) + 1,
+            generation = id.generation,
+            callback = {texture_upload_completed, service},
+        }) {
+        return candidate
+    }
+    native.sdl_sampled_texture_release(service.platform, &candidate)
+    log.warnf("terminal_texture_enqueue_failed slot=%d generation=%d bytes=%d",
+        id.slot, id.generation, len(payload.bytes))
+    termattachment.residency_remove(service.store, id)
+    return {}
 }
 
 //   Publish one immutable RGBA attachment as an exact display-owned texture.
@@ -694,30 +792,24 @@ texture_publish :: proc(
         return false
     }
     payload, found := texture_payload(service, id)
-    if !found { return false }
+    if !found {
+        return false 
+    }
     info, valid := texture_payload_info(payload)
-    if !valid { return false }
+    if !valid {
+        return false 
+    }
     entry := &service.textures[id.slot]
-    if entry.publishing {return entry.candidate_id == id}
+    if entry.publishing {
+       return entry.candidate_id == id
+    }
     admission := termattachment.residency_admit(
         service.store, id, len(payload.bytes), texture_evict, service)
-    if admission.outcome != .Admitted { return false }
-    candidate := native.sdl_sampled_texture_create(
-        service.platform, info.width, info.height)
-    if candidate.handle == nil || !native.texture_operation_enqueue_upload(
-        &service.draw_runtime^.texture_operations, {
-            kind = .Create,
-            texture = candidate,
-            format = info.format,
-            source = payload.bytes,
-            identity = u64(id.slot) + 1,
-            generation = id.generation,
-            callback = {texture_upload_completed, service},
-        }) {
-        native.sdl_sampled_texture_release(service.platform, &candidate)
-        log.warnf("terminal_texture_enqueue_failed slot=%d generation=%d bytes=%d",
-            id.slot, id.generation, len(payload.bytes))
-        termattachment.residency_remove(service.store, id)
+    if admission.outcome != .Admitted {
+        return false 
+    }
+    candidate := texture_candidate_enqueue(service, id, payload, info)
+    if candidate.handle == nil {
         return false
     }
     entry.candidate = candidate
@@ -780,7 +872,9 @@ playback_command_candidate :: proc(
         candidate.frame_index = len(animation.frames) - 1
     }
     if command.current_frame > 0 {
-        if command.current_frame > len(animation.frames) { return entry, false }
+        if command.current_frame > len(animation.frames) {
+            return entry, false 
+        }
         candidate.frame_index = command.current_frame - 1
     }
     if command.kind == .Control {
@@ -812,19 +906,27 @@ playback_apply_command :: proc(
     service: ^Service, command: gfxprotocol.Kitty_Animation_Command,
     now_ns: u64, upload: Playback_Upload_Handler, user_data: rawptr) {
     id := command.attachment_id
-    if id.slot < 0 || id.slot >= len(service.playbacks) { return }
+    if id.slot < 0 || id.slot >= len(service.playbacks) {
+        return 
+    }
     animation, found := termattachment.animation_view(service.store, id)
-    if !found { return }
+    if !found {
+        return 
+    }
     entry := &service.playbacks[id.slot]
     if !entry.active || entry.attachment_id != id {
         candidate, valid := playback_begin(id, animation, now_ns)
-        if !valid { return }
+        if !valid {
+            return 
+        }
         candidate.stopped = true
         entry^ = candidate
     }
     candidate, valid := playback_command_candidate(
         entry^, command, animation, now_ns)
-    if !valid { return }
+    if !valid {
+        return 
+    }
     if !playback_upload_frame(
         service, id, animation, candidate.frame_index,
         {handler = upload, user_data = user_data}) {
@@ -836,40 +938,54 @@ playback_apply_command :: proc(
         candidate.completed_cycles, false)
 }
 
+// Apply one parser-retained frame command to the resident texture.
+playback_apply_texture_command :: proc(
+    service: ^Service, command: gfxprotocol.Kitty_Animation_Command,
+    now_ns: u64) {
+    id := command.attachment_id
+    if id.slot < 0 || id.slot >= len(service.playbacks) {
+        return
+    }
+    animation, found := termattachment.animation_view(service.store, id)
+    if !found {
+        return
+    }
+    entry := &service.playbacks[id.slot]
+    if !entry.active || entry.attachment_id != id {
+        candidate, valid := playback_begin(id, animation, now_ns)
+        if !valid {
+            return
+        }
+        candidate.stopped = true
+        entry^ = candidate
+    }
+    candidate, valid := playback_command_candidate(
+        entry^, command, animation, now_ns)
+    if !valid {
+        return
+    }
+    plan := Playback_Plan{candidate = candidate,
+        frame_changed = true, valid = true}
+    frame := animation.frames[candidate.frame_index].pixels
+    if frame.offset < 0 || frame.count <= 0 ||
+        frame.offset > len(animation.pixels) - frame.count ||
+        !playback_upload_texture(service, id,
+            animation.pixels[frame.offset:frame.offset + frame.count]) {
+        service.playback_upload_failure_count += 1
+        return
+    }
+    service.textures[id.slot].pending_playback = plan
+}
+
 // Consume retained Kitty animation effects in terminal stream order.
 playback_apply_commands :: proc(service: ^Service, now_ns: u64) {
     for {
         command, available := gfxprotocol.graphics_parser_take_animation_command(
             service.parser)
-        if !available { return }
-        id := command.attachment_id
-        if id.slot < 0 || id.slot >= len(service.playbacks) {continue}
-        animation, found := termattachment.animation_view(service.store, id)
-        if !found {continue}
-        entry := &service.playbacks[id.slot]
-        if !entry.active || entry.attachment_id != id {
-            candidate, valid := playback_begin(id, animation, now_ns)
-            if !valid {continue}
-            candidate.stopped = true
-            entry^ = candidate
+        if !available {
+            return
         }
-        candidate, valid := playback_command_candidate(
-            entry^, command, animation, now_ns)
-        if !valid {continue}
-        plan := Playback_Plan{
-            candidate = candidate,
-            frame_changed = true,
-            valid = true,
-        }
-        frame := animation.frames[candidate.frame_index].pixels
-        if frame.offset < 0 || frame.count <= 0 ||
-            frame.offset > len(animation.pixels) - frame.count ||
-            !playback_upload_texture(service, id,
-                animation.pixels[frame.offset:frame.offset + frame.count]) {
-            service.playback_upload_failure_count += 1
-            continue
-        }
-        service.textures[id.slot].pending_playback = plan
+        playback_apply_texture_command(service, command, now_ns)
     }
 }
 
@@ -878,7 +994,9 @@ playback_commit_plan :: proc(
     service: ^Service, entry: ^Playback_Entry, plan: Playback_Plan) {
     service.playback_transition_count += u64(plan.transition_count)
     completed_now := !entry.completed && plan.candidate.completed
-    if completed_now { service.playback_completion_count += 1 }
+    if completed_now {
+        service.playback_completion_count += 1 
+    }
     entry^ = plan.candidate
     if plan.frame_changed {
         service_record_animation(service, entry.attachment_id, entry.frame_index,
@@ -894,7 +1012,9 @@ playback_commit_plan :: proc(
 playback_update_entry :: proc(
     service: ^Service, entry: ^Playback_Entry, now_ns: u64,
     upload: Playback_Upload_Handler, user_data: rawptr) {
-    if !entry.active { return }
+    if !entry.active {
+        return 
+    }
     animation, found := termattachment.animation_view(
         service.store, entry.attachment_id)
     if !found {
@@ -903,7 +1023,9 @@ playback_update_entry :: proc(
         return
     }
     plan := playback_plan(entry^, animation, now_ns)
-    if !plan.valid { return }
+    if !plan.valid {
+        return 
+    }
     if plan.frame_changed {
         frame := animation.frames[plan.candidate.frame_index].pixels
         if frame.offset < 0 || frame.count <= 0 ||
@@ -920,7 +1042,9 @@ playback_update_entry :: proc(
 // Advance every fixed playback slot with bounded per-entry transition work.
 playback_update_all :: proc(service: ^Service, now_ns: u64) {
     for &entry in service.playbacks {
-        if !entry.active {continue}
+        if !entry.active {
+           continue
+        }
         animation, found := termattachment.animation_view(
             service.store, entry.attachment_id)
         if !found {
@@ -929,7 +1053,9 @@ playback_update_all :: proc(service: ^Service, now_ns: u64) {
             continue
         }
         plan := playback_plan(entry, animation, now_ns)
-        if !plan.valid {continue}
+        if !plan.valid {
+           continue
+        }
         if !plan.frame_changed {
             playback_commit_plan(service, &entry, plan)
             continue
@@ -955,9 +1081,13 @@ texture_publish_prepared_all :: proc(service: ^Service) {
     for slot in 0..<service.store.limits.attachment_capacity {
         id, prepared := termattachment.attachment_prepared_id_at(
             service.store, slot)
-        if !prepared { continue }
+        if !prepared {
+            continue 
+        }
         entry := &service.textures[slot]
-        if entry.resident && entry.attachment_id == id { continue }
+        if entry.resident && entry.attachment_id == id {
+            continue 
+        }
         if !texture_publish(service, id) {
             service.failure_count += 1
             gfxprotocol.graphics_discard_attachment(service.parser, id)
@@ -1016,10 +1146,14 @@ operation_apply_mutations :: proc(service: ^Service) {
     for {
         request, available := gfxprotocol.graphics_parser_take_mutation_request(
             service.parser)
-        if !available { return }
+        if !available {
+            return 
+        }
         status := gfxsemantics.graphics_kitty_apply_mutation_request(
             service.parser, request)
-        if status != .Ok { service.failure_count += 1 }
+        if status != .Ok {
+            service.failure_count += 1 
+        }
     }
 }
 
@@ -1118,12 +1252,18 @@ operation_poll_all :: proc(service: ^Service, pool: ^taskpool.Task_Pool) {
 
 //   Fill idle operation slots from the terminal decode queue.
 operation_intake :: proc(service: ^Service) {
-    if service.unbinding || service.stopped { return }
+    if service.unbinding || service.stopped {
+        return 
+    }
     for &operation in service.operations {
-        if operation.state != .Idle { continue }
+        if operation.state != .Idle {
+            continue 
+        }
         request, available := gfxprotocol.graphics_parser_take_decode_request(
             service.parser)
-        if !available { return }
+        if !available {
+            return 
+        }
         operation.decode = request
         if request.kind == .Iterm2_Gif_Preflight &&
             operation_preflight_prepare(service, &operation) {
@@ -1184,7 +1324,9 @@ texture_service_removals :: proc(service: ^Service) {
 //   - Must be called only by the display owner while the SDL_GPU device is live.
 service_update :: proc(
     service: ^Service, pool: ^taskpool.Task_Pool, monotonic_ns: u64) {
-    if service == nil || service.store == nil || pool == nil { return }
+    if service == nil || service.store == nil || pool == nil {
+        return 
+    }
     service.monotonic_ns = monotonic_ns
     texture_service_removals(service)
     playback_visibility_begin_frame(service, monotonic_ns)
@@ -1219,7 +1361,9 @@ service_cancel_producer :: proc(
     for _ in 0..<queued_count {
         request, available := gfxprotocol.graphics_parser_take_decode_request(
             service.parser)
-        if !available { break }
+        if !available {
+            break 
+        }
         if request.producer == producer {
             operation := Operation{decode = request}
             operation_discard(service, &operation)
@@ -1249,7 +1393,9 @@ service_discard_parser_requests :: proc(service: ^Service) {
     for {
         request, available := gfxprotocol.graphics_parser_take_decode_request(
             service.parser)
-        if !available { return }
+        if !available {
+            return 
+        }
         operation := Operation{decode = request}
         operation_discard(service, &operation)
     }
@@ -1285,7 +1431,9 @@ service_finish_operations :: proc(
 // Unload every resident texture and remove its residency accounting.
 service_unload_textures :: proc(service: ^Service) {
     for &entry in service.textures {
-        if !entry.resident { continue }
+        if !entry.resident {
+            continue 
+        }
         id := entry.attachment_id
         texture_evict(service, id)
         termattachment.residency_remove(service.store, id)
@@ -1298,7 +1446,9 @@ service_unload_textures :: proc(service: ^Service) {
 //   - Rejects parser work, joins accepted tasks, unloads cache entries, and clears all
 //     borrowed session pointers while leaving the service reusable.
 service_unbind_session :: proc(service: ^Service, pool: ^taskpool.Task_Pool) {
-    if service == nil || service.store == nil || pool == nil { return }
+    if service == nil || service.store == nil || pool == nil {
+        return 
+    }
     service.unbinding = true
     service_discard_parser_requests(service)
     service_finish_operations(service, pool)
@@ -1322,7 +1472,9 @@ service_unbind_session :: proc(service: ^Service, pool: ^taskpool.Task_Pool) {
 
 // Permanently stop the graphics service after unbinding its current session.
 service_shutdown :: proc(service: ^Service, pool: ^taskpool.Task_Pool) {
-    if service == nil { return }
+    if service == nil {
+        return 
+    }
     service_unbind_session(service, pool)
     service.stopped = true
 }

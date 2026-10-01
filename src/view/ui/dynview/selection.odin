@@ -183,7 +183,9 @@ dynview_document_hit_boundary :: proc(
     view: Dynview_Selection_View,
     point: geometry.Vector2) -> dynviewmodel.Dynview_Selection_Position {
 
-    if len(targets) == 0 {return {}}
+    if len(targets) == 0 {
+        return {}
+    }
     nearest := 0
     nearest_distance := dynview_selection_rect_distance_squared(
         point, dynview_document_target_rect(targets[0], view))
@@ -196,16 +198,22 @@ dynview_document_hit_boundary :: proc(
     }
     rect := dynview_document_target_rect(targets[nearest], view)
     boundary := nearest
-    if point.x >= rect.x+rect.width*0.5 {boundary += 1}
+    if point.x >= rect.x+rect.width*0.5 {
+        boundary += 1
+    }
     return {unit_index = boundary}
 }
 
 // Return the byte boundary after a requested number of UTF-8 codepoints.
 dynview_text_byte_boundary :: proc(text: string, unit_index: int) -> int {
-    if unit_index <= 0 {return 0}
+    if unit_index <= 0 {
+        return 0
+    }
     units := 0
     for offset := 0; offset < len(text); {
-        if units == unit_index {return offset}
+        if units == unit_index {
+            return offset
+        }
         offset += max(1, dyncore.text_utf8_sequence_len(text, offset))
         units += 1
     }
@@ -255,7 +263,9 @@ dynview_selection_hit_boundary :: proc(
             runtime^.compile_cache.document_layout_copy_targets, view, point)
     case .Atomic_Source:
         rect, ok := dynview_atomic_selection_rect(runtime, view)
-        if !ok {return {}}
+        if !ok {
+            return {}
+        }
         return {unit_index = point.x >= rect.x+rect.width*0.5 ? 1 : 0}
     case .Wrapped_Text:
         return dynview_wrapped_hit_boundary(view.fallback_text, view, point)
@@ -286,7 +296,9 @@ dynview_selection_update_mouse :: proc(
         selection^.active, selection^.dragging = false, true
         owner^ = {active = true, kind = .Dynview_Selection, id = 1001}
     }
-    if !dynview_selection_owns_press(owner) {return}
+    if !dynview_selection_owns_press(owner) {
+        return
+    }
     selection^.head = dynview_selection_hit_boundary(runtime, content, view, point)
     selection^.active = selection^.anchor != selection^.head
     if .Left in frame.mouse_released || .Left not_in frame.mouse_down {
@@ -301,10 +313,18 @@ dynview_selection_navigation_target :: proc(
     unit_count: int,
     key: input.Input_Key) -> (int, bool) {
     current := clamp(selection.head.unit_index, 0, unit_count)
-    if key == .Left || key == .Up {return max(current - 1, 0), true}
-    if key == .Right || key == .Down {return min(current + 1, unit_count), true}
-    if key == .Home {return 0, true}
-    if key == .End {return unit_count, true}
+    if key == .Left || key == .Up {
+        return max(current - 1, 0), true
+    }
+    if key == .Right || key == .Down {
+        return min(current + 1, unit_count), true
+    }
+    if key == .Home {
+        return 0, true
+    }
+    if key == .End {
+        return unit_count, true
+    }
     return current, false
 }
 
@@ -315,10 +335,14 @@ dynview_selection_apply_navigation :: proc(
     event: input.Input_Event) {
     if event.kind != .Press && event.kind != .Repeat ||
         .Control in event.modifiers || .Alt in event.modifiers ||
-        .Super in event.modifiers {return}
+        .Super in event.modifiers {
+        return
+    }
     target, handled := dynview_selection_navigation_target(
         selection^, unit_count, event.key)
-    if !handled {return}
+    if !handled {
+        return
+    }
     if .Shift not_in event.modifiers {
         if selection^.active && (event.key == .Left || event.key == .Up) {
             target = min(selection^.anchor.unit_index, selection^.head.unit_index)
@@ -351,7 +375,9 @@ dynview_selection_update_keyboard :: proc(
         return
     }
     selected := dynview_selection_text(runtime, selection^, fallback_text)
-    if len(selected) > 0 {input.input_set_clipboard_text(selected)}
+    if len(selected) > 0 {
+        input.input_set_clipboard_text(selected)
+    }
 }
 
 // Compose one active selection according to its presentation mode.
@@ -360,7 +386,9 @@ dynview_selection_text :: proc(
     selection: dynviewmodel.Dynview_Selection_State,
     fallback_text: string) -> string {
 
-    if !selection.active {return ""}
+    if !selection.active {
+        return ""
+    }
     start, end := dynview_selection_ordered(selection.anchor, selection.head)
     switch selection.mode {
     case .Semantic_Document:
@@ -387,37 +415,51 @@ dynview_draw_selection_rect :: proc(
     }
 }
 
-// Draw semantic selection as merged full-line-height fragments.
-dynview_draw_document_selection :: proc(draw: Dynview_Selection_Draw) {
+// Draw one merged semantic selection fragment and return the next target index.
+dynview_draw_document_selection_group :: proc(
+    draw: Dynview_Selection_Draw, cursor, end, first_line, last_line: int) -> int {
     cache := &draw.runtime^.compile_cache
     targets := cache^.document_layout_copy_targets
+    line_index := targets[cursor].line_index
+    group_end := cursor + 1
+    left, right := targets[cursor].x, targets[cursor].x + targets[cursor].width
+    for group_end < end && targets[group_end].line_index == line_index {
+        left = min(left, targets[group_end].x)
+        right = max(right, targets[group_end].x + targets[group_end].width)
+        group_end += 1
+    }
+    content_left := draw.view.panel.x+draw.view.text_padding
+    content_right := draw.view.panel.x+draw.view.panel.width-draw.view.text_padding
+    if line_index >= 0 && line_index < len(cache^.document_layout_lines) {
+        line := cache^.document_layout_lines[line_index]
+        x0 := content_left + left
+        x1 := content_left + right
+        if first_line != last_line && line_index != first_line {
+            x0 = content_left
+        }
+        if first_line != last_line && line_index != last_line {
+            x1 = content_right
+        }
+        y := draw.view.panel.y + draw.view.text_padding - draw.view.scroll_y + line.top
+        dynview_draw_selection_rect(draw, {x0, y, x1-x0, line.bottom-line.top})
+    }
+    return group_end
+}
+
+// Draw semantic selection as merged full-line-height fragments.
+dynview_draw_document_selection :: proc(draw: Dynview_Selection_Draw) {
+    targets := draw.runtime^.compile_cache.document_layout_copy_targets
     start, end := dynview_selection_ordered(
         draw.selection.anchor, draw.selection.head)
     if start.unit_index < 0 || end.unit_index > len(targets) ||
-        start.unit_index >= end.unit_index {return}
+        start.unit_index >= end.unit_index {
+        return
+    }
     first_line := targets[start.unit_index].line_index
     last_line := targets[end.unit_index-1].line_index
-    content_left := draw.view.panel.x+draw.view.text_padding
-    content_right := draw.view.panel.x+draw.view.panel.width-draw.view.text_padding
     for cursor := start.unit_index; cursor < end.unit_index; {
-        line_index := targets[cursor].line_index
-        group_end := cursor+1
-        left, right := targets[cursor].x, targets[cursor].x+targets[cursor].width
-        for group_end < end.unit_index && targets[group_end].line_index == line_index {
-            left = min(left, targets[group_end].x)
-            right = max(right, targets[group_end].x+targets[group_end].width)
-            group_end += 1
-        }
-        if line_index >= 0 && line_index < len(cache^.document_layout_lines) {
-            line := cache^.document_layout_lines[line_index]
-            x0 := content_left+left
-            x1 := content_left+right
-            if first_line != last_line && line_index != first_line {x0 = content_left}
-            if first_line != last_line && line_index != last_line {x1 = content_right}
-            y := draw.view.panel.y+draw.view.text_padding-draw.view.scroll_y+line.top
-            dynview_draw_selection_rect(draw, {x0, y, x1-x0, line.bottom-line.top})
-        }
-        cursor = group_end
+        cursor = dynview_draw_document_selection_group(
+            draw, cursor, end.unit_index, first_line, last_line)
     }
 }
 
@@ -440,22 +482,32 @@ dynview_draw_wrapped_selection :: proc(draw: Dynview_Selection_Draw) {
             right_units := math.clamp(end.unit_index-row_start, 0, row_end-row_start)
             x0 := content_left+f32(left_units)*view.wrap_advance
             x1 := content_left+f32(right_units)*view.wrap_advance
-            if start.unit_index <= row_start {x0 = content_left}
-            if end.unit_index > row_end {x1 = content_right}
+            if start.unit_index <= row_start {
+                x0 = content_left
+            }
+            if end.unit_index > row_end {
+                x1 = content_right
+            }
             y := view.panel.y+view.text_padding+f32(row)*view.row_height-view.scroll_y
             dynview_draw_selection_rect(draw, {x0, y, x1-x0, view.row_height})
         }
-        if span.next_start <= byte_start {break}
+        if span.next_start <= byte_start {
+            break
+        }
         byte_start, row = span.next_start, row+1
     }
 }
 
 // Draw the active selection beneath presentation glyphs and semantic content.
 dynview_draw_selection :: proc(draw: Dynview_Selection_Draw) {
-    if draw.encoder == nil || !draw.selection.active {return}
+    if draw.encoder == nil || !draw.selection.active {
+        return
+    }
     switch draw.selection.mode {
     case .Semantic_Document:
-        if draw.runtime != nil {dynview_draw_document_selection(draw)}
+        if draw.runtime != nil {
+            dynview_draw_document_selection(draw)
+        }
     case .Wrapped_Text:
         dynview_draw_wrapped_selection(draw)
     case .Atomic_Source:
@@ -474,7 +526,9 @@ dynview_atomic_selection_rect :: proc(
     view: Dynview_Selection_View) -> (geometry.Rectangle, bool) {
 
     cache := &runtime^.compile_cache
-    if cache^.layout_item_count <= 0 {return {}, false}
+    if cache^.layout_item_count <= 0 {
+        return {}, false
+    }
     first := cache^.layout_items[0]
     left := view.panel.x+view.text_padding+first.content_offset_x
     top := view.panel.y+view.text_padding+

@@ -193,7 +193,9 @@ sdl_draw_runtime_release_core_state :: proc(
 // sdl_draw_runtime_release_gpu releases admitted GPU members in reverse order.
 sdl_draw_runtime_release_gpu :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) {
-    if device == nil {return}
+    if device == nil {
+       return
+    }
     if runtime^.dust_atlas.handle != nil {
         sdl.ReleaseGPUTexture(
             device, cast(^sdl.GPUTexture)runtime^.dust_atlas.handle)
@@ -208,7 +210,9 @@ sdl_draw_runtime_release_gpu :: proc(
 // sdl_draw_runtime_destroy releases all display-owned draw resources.
 sdl_draw_runtime_destroy :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) {
-    if runtime == nil {return}
+    if runtime == nil {
+       return
+    }
     sdl_draw_discard_texture_operations(runtime, device)
     sdl_draw_runtime_release_gpu(runtime, device)
     if runtime^.arena_initialized {
@@ -222,7 +226,9 @@ sdl_draw_shader_create :: proc(
     device: ^sdl.GPUDevice, path: string, stage: sdl.GPUShaderStage,
     sampler_count, uniform_count: u32) -> ^sdl.GPUShader {
     source, read_error := os.read_entire_file(path, context.temp_allocator)
-    if read_error != nil || len(source) == 0 {return nil}
+    if read_error != nil || len(source) == 0 {
+       return nil
+    }
     return sdl.CreateGPUShader(device, {
         code_size = len(source),
         code = raw_data(source),
@@ -240,13 +246,19 @@ sdl_draw_pipeline_create :: proc(
     textured: bool,
     sample_count: sdl.GPUSampleCount) -> ^sdl.GPUGraphicsPipeline {
     vertex_shader := sdl_draw_shader_create(device, vertex_path, .VERTEX, 0, 1)
-    if vertex_shader == nil {return nil}
+    if vertex_shader == nil {
+       return nil
+    }
     defer sdl.ReleaseGPUShader(device, vertex_shader)
     sampler_count: u32 = 0
-    if textured {sampler_count = 1}
+    if textured {
+       sampler_count = 1
+    }
     fragment_shader := sdl_draw_shader_create(
         device, fragment_path, .FRAGMENT, sampler_count, 0)
-    if fragment_shader == nil {return nil}
+    if fragment_shader == nil {
+       return nil
+    }
     defer sdl.ReleaseGPUShader(device, fragment_shader)
     return sdl_draw_pipeline_create_from_shaders(
         device, vertex_shader, fragment_shader, textured, sample_count)
@@ -263,8 +275,12 @@ sdl_draw_vertex_input :: proc(textured: bool) -> Sdl_Draw_Vertex_Input {
         {location = 2, buffer_slot = 0, format = .UBYTE4_NORM, offset = 16},
     }
     input.attribute_count = 2
-    if textured {input.attribute_count = 3}
-    if !textured {input.attributes[1] = input.attributes[2]}
+    if textured {
+       input.attribute_count = 3
+    }
+    if !textured {
+       input.attributes[1] = input.attributes[2]
+    }
     return input
 }
 
@@ -370,37 +386,49 @@ sdl_draw_runtime_allocate_storage :: proc(runtime: ^Sdl_Draw_Runtime) -> bool {
     return true
 }
 
+// Create all GPU resources for one not-yet-published draw runtime candidate.
+sdl_draw_runtime_create_gpu_resources :: proc(
+    candidate: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
+    paths: Sdl_Draw_Shader_Paths, sample_count: sdl.GPUSampleCount) -> bool {
+    candidate^.colored_pipeline = sdl_draw_pipeline_create(device,
+        paths.colored_vertex, paths.colored_fragment, false, sample_count)
+    candidate^.textured_pipeline = sdl_draw_pipeline_create(device,
+        paths.textured_vertex, paths.textured_fragment, true, sample_count)
+    candidate^.nearest_sampler = sdl_draw_sampler_create(device, .NEAREST)
+    candidate^.linear_sampler = sdl_draw_sampler_create(device, .LINEAR)
+    candidate^.vertex_buffer = sdl.CreateGPUBuffer(device, {
+        usage = {.VERTEX}, size = u32(size_of(Draw_Vertex) * DRAW_VERTEX_CAPACITY)})
+    candidate^.index_buffer = sdl.CreateGPUBuffer(device, {
+        usage = {.INDEX}, size = u32(size_of(u32) * DRAW_INDEX_CAPACITY)})
+    upload_size := size_of(Draw_Vertex) * DRAW_VERTEX_CAPACITY +
+        size_of(u32) * DRAW_INDEX_CAPACITY
+    candidate^.upload_buffer = sdl.CreateGPUTransferBuffer(device, {
+        usage = .UPLOAD, size = u32(upload_size)})
+    candidate^.texture_upload_buffer = sdl.CreateGPUTransferBuffer(device, {
+        usage = .UPLOAD, size = TEXTURE_UPLOAD_BYTE_CAPACITY})
+    return candidate^.colored_pipeline != nil && candidate^.textured_pipeline != nil &&
+        candidate^.nearest_sampler != nil && candidate^.linear_sampler != nil &&
+        candidate^.vertex_buffer != nil && candidate^.index_buffer != nil &&
+        candidate^.upload_buffer != nil && candidate^.texture_upload_buffer != nil
+}
+
 // sdl_draw_runtime_create admits a complete renderer candidate transactionally.
 sdl_draw_runtime_create :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice,
     paths: Sdl_Draw_Shader_Paths,
     sample_count: sdl.GPUSampleCount) -> bool {
-    if runtime == nil || device == nil {return false}
+    if runtime == nil || device == nil {
+       return false
+    }
     candidate: Sdl_Draw_Runtime
     defer if candidate.colored_pipeline != nil || candidate.arena_initialized {
         sdl_draw_runtime_destroy(&candidate, device)
     }
-    if !sdl_draw_runtime_allocate_storage(&candidate) {return false}
-    candidate.colored_pipeline = sdl_draw_pipeline_create(device,
-        paths.colored_vertex, paths.colored_fragment, false, sample_count)
-    candidate.textured_pipeline = sdl_draw_pipeline_create(device,
-        paths.textured_vertex, paths.textured_fragment, true, sample_count)
-    candidate.nearest_sampler = sdl_draw_sampler_create(device, .NEAREST)
-    candidate.linear_sampler = sdl_draw_sampler_create(device, .LINEAR)
-    candidate.vertex_buffer = sdl.CreateGPUBuffer(device, {
-        usage = {.VERTEX}, size = u32(size_of(Draw_Vertex) * DRAW_VERTEX_CAPACITY)})
-    candidate.index_buffer = sdl.CreateGPUBuffer(device, {
-        usage = {.INDEX}, size = u32(size_of(u32) * DRAW_INDEX_CAPACITY)})
-    upload_size := size_of(Draw_Vertex) * DRAW_VERTEX_CAPACITY +
-        size_of(u32) * DRAW_INDEX_CAPACITY
-    candidate.upload_buffer = sdl.CreateGPUTransferBuffer(device, {
-        usage = .UPLOAD, size = u32(upload_size)})
-    candidate.texture_upload_buffer = sdl.CreateGPUTransferBuffer(device, {
-        usage = .UPLOAD, size = TEXTURE_UPLOAD_BYTE_CAPACITY})
-    if candidate.colored_pipeline == nil || candidate.textured_pipeline == nil ||
-        candidate.nearest_sampler == nil || candidate.linear_sampler == nil ||
-        candidate.vertex_buffer == nil || candidate.index_buffer == nil ||
-        candidate.upload_buffer == nil || candidate.texture_upload_buffer == nil {
+    if !sdl_draw_runtime_allocate_storage(&candidate) {
+       return false
+    }
+    if !sdl_draw_runtime_create_gpu_resources(
+        &candidate, device, paths, sample_count) {
         return false
     }
     runtime^ = candidate
@@ -431,7 +459,9 @@ sdl_sampled_texture_create :: proc(
 // sdl_sampled_texture_release immediately releases one owner-held texture.
 sdl_sampled_texture_release :: proc(
     platform: ^Sdl_Platform, texture: ^Sampled_Texture) {
-    if platform == nil || platform^.device == nil || texture == nil {return}
+    if platform == nil || platform^.device == nil || texture == nil {
+       return
+    }
     if texture^.handle != nil {
         sdl.ReleaseGPUTexture(
             platform^.device, cast(^sdl.GPUTexture)texture^.handle)
@@ -442,7 +472,9 @@ sdl_sampled_texture_release :: proc(
 // sdl_draw_batch_command_valid checks one ordinary indexed draw reference.
 sdl_draw_batch_command_valid :: proc(
     encoder: ^Draw_Encoder, command: Draw_Command) -> bool {
-    if command.index >= u32(encoder^.batch_count) {return false}
+    if command.index >= u32(encoder^.batch_count) {
+       return false
+    }
     batch := encoder^.batches[command.index]
     return batch.pipeline != .Textured || batch.texture != nil
 }
@@ -450,7 +482,9 @@ sdl_draw_batch_command_valid :: proc(
 // sdl_draw_tool_command_valid checks one stroke-stream draw reference.
 sdl_draw_tool_command_valid :: proc(
     encoder: ^Draw_Encoder, command: Draw_Command) -> bool {
-    if command.index >= u32(encoder^.stroke_draw_count) {return false}
+    if command.index >= u32(encoder^.stroke_draw_count) {
+       return false
+    }
     draw := encoder^.stroke_draws[command.index]
     return draw.vertex_count > 0 && draw.first_vertex + draw.vertex_count <=
         u32(encoder^.stroke_vertex_count)
@@ -469,7 +503,9 @@ sdl_draw_instanced_dust_command_valid :: proc(
 // sdl_draw_expanded_dust_command_valid checks one expanded vertex prefix.
 sdl_draw_expanded_dust_command_valid :: proc(
     encoder: ^Draw_Encoder, command: Draw_Command) -> bool {
-    if command.index >= u32(encoder^.dust_expanded_draw_count) {return false}
+    if command.index >= u32(encoder^.dust_expanded_draw_count) {
+       return false
+    }
     draw := encoder^.dust_expanded_draws[command.index]
     return draw.texture != nil && draw.count > 0 &&
         draw.first + draw.count <= u32(encoder^.dust_expanded_vertex_count)
@@ -490,7 +526,9 @@ sdl_draw_command_valid :: proc(
 // sdl_draw_encoder_commands_valid rejects incomplete or unsupported command state.
 sdl_draw_encoder_commands_valid :: proc(encoder: ^Draw_Encoder) -> bool {
     for command in encoder^.commands[:encoder^.command_count] {
-        if !sdl_draw_command_valid(encoder, command) {return false}
+        if !sdl_draw_command_valid(encoder, command) {
+           return false
+        }
     }
     return true
 }
@@ -614,27 +652,10 @@ sdl_draw_record_statistics :: proc(
     sdl_draw_accumulate_statistics(&runtime^.statistics, frame)
 }
 
-// sdl_draw_upload records cycled vertex and index uploads for one frame.
-sdl_draw_upload :: proc(
-    runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
-    device: ^sdl.GPUDevice, command_buffer: ^sdl.GPUCommandBuffer) -> bool {
-    vertex_bytes := u32(encoder^.vertex_count * size_of(Draw_Vertex))
-    index_bytes := u32(encoder^.index_count * size_of(u32))
-    if vertex_bytes == 0 && index_bytes == 0 {return true}
-    mapped := sdl.MapGPUTransferBuffer(device, runtime^.upload_buffer, true)
-    if mapped == nil {return false}
-    mapped_bytes := (cast([^]u8)mapped)[:int(vertex_bytes + index_bytes)]
-    if vertex_bytes > 0 {
-        mem.copy(rawptr(&mapped_bytes[0]), raw_data(
-            encoder^.vertices[:encoder^.vertex_count]), int(vertex_bytes))
-    }
-    if index_bytes > 0 {
-        mem.copy(rawptr(&mapped_bytes[int(vertex_bytes)]), raw_data(
-            encoder^.indices[:encoder^.index_count]), int(index_bytes))
-    }
-    sdl.UnmapGPUTransferBuffer(device, runtime^.upload_buffer)
-    copy_pass := sdl.BeginGPUCopyPass(command_buffer)
-    if copy_pass == nil {return false}
+// Issue the already staged vertex and index transfers for one frame.
+sdl_draw_issue_buffer_uploads :: proc(
+    runtime: ^Sdl_Draw_Runtime, copy_pass: ^sdl.GPUCopyPass,
+    vertex_bytes, index_bytes: u32) {
     if vertex_bytes > 0 {
         sdl.UploadToGPUBuffer(copy_pass,
             {transfer_buffer = runtime^.upload_buffer},
@@ -646,6 +667,36 @@ sdl_draw_upload :: proc(
             {buffer = runtime^.index_buffer, size = index_bytes}, true)
     }
     sdl.EndGPUCopyPass(copy_pass)
+}
+
+// sdl_draw_upload records cycled vertex and index uploads for one frame.
+sdl_draw_upload :: proc(
+    runtime: ^Sdl_Draw_Runtime, encoder: ^Draw_Encoder,
+    device: ^sdl.GPUDevice, command_buffer: ^sdl.GPUCommandBuffer) -> bool {
+    vertex_bytes := u32(encoder^.vertex_count * size_of(Draw_Vertex))
+    index_bytes := u32(encoder^.index_count * size_of(u32))
+    if vertex_bytes == 0 && index_bytes == 0 {
+       return true
+    }
+    mapped := sdl.MapGPUTransferBuffer(device, runtime^.upload_buffer, true)
+    if mapped == nil {
+       return false
+    }
+    mapped_bytes := (cast([^]u8)mapped)[:int(vertex_bytes + index_bytes)]
+    if vertex_bytes > 0 {
+        mem.copy(rawptr(&mapped_bytes[0]), raw_data(
+            encoder^.vertices[:encoder^.vertex_count]), int(vertex_bytes))
+    }
+    if index_bytes > 0 {
+        mem.copy(rawptr(&mapped_bytes[int(vertex_bytes)]), raw_data(
+            encoder^.indices[:encoder^.index_count]), int(index_bytes))
+    }
+    sdl.UnmapGPUTransferBuffer(device, runtime^.upload_buffer)
+    copy_pass := sdl.BeginGPUCopyPass(command_buffer)
+    if copy_pass == nil {
+       return false
+    }
+    sdl_draw_issue_buffer_uploads(runtime, copy_pass, vertex_bytes, index_bytes)
     return true
 }
 
@@ -653,13 +704,19 @@ sdl_draw_upload :: proc(
 sdl_draw_normalize_textures :: proc(
     runtime: ^Sdl_Draw_Runtime, device: ^sdl.GPUDevice) -> bool {
     queue := &runtime^.texture_operations
-    if queue^.byte_count == 0 {return true}
+    if queue^.byte_count == 0 {
+       return true
+    }
     mapped := sdl.MapGPUTransferBuffer(device, runtime^.texture_upload_buffer, true)
-    if mapped == nil {return false}
+    if mapped == nil {
+       return false
+    }
     mapped_bytes := (cast([^]u8)mapped)[:int(queue^.byte_count)]
     normalized := true
     for operation in queue^.operations[:queue^.count] {
-        if operation.kind == .Retire {continue}
+        if operation.kind == .Retire {
+           continue
+        }
         first := int(operation.byte_offset)
         last := first + int(operation.byte_count)
         if last > len(mapped_bytes) || !texture_normalize_rgba8(
@@ -677,11 +734,17 @@ sdl_draw_record_texture_uploads :: proc(
     runtime: ^Sdl_Draw_Runtime,
     command_buffer: ^sdl.GPUCommandBuffer) -> bool {
     queue := &runtime^.texture_operations
-    if queue^.byte_count == 0 {return true}
+    if queue^.byte_count == 0 {
+       return true
+    }
     copy_pass := sdl.BeginGPUCopyPass(command_buffer)
-    if copy_pass == nil {return false}
+    if copy_pass == nil {
+       return false
+    }
     for operation in queue^.operations[:queue^.count] {
-        if operation.kind == .Retire {continue}
+        if operation.kind == .Retire {
+           continue
+        }
         sdl.UploadToGPUTexture(copy_pass, {
             transfer_buffer = runtime^.texture_upload_buffer,
             offset = operation.byte_offset,
@@ -745,7 +808,9 @@ sdl_draw_submit_texture_operations :: proc(
         return false
     }
     command_buffer := sdl.AcquireGPUCommandBuffer(platform^.device)
-    if command_buffer == nil {return false}
+    if command_buffer == nil {
+       return false
+    }
     if !sdl_draw_upload_textures(runtime, platform^.device, command_buffer) {
         _ = sdl.CancelGPUCommandBuffer(command_buffer)
         sdl_draw_discard_texture_operations(runtime, platform^.device)
@@ -769,7 +834,9 @@ sdl_draw_record_batch :: proc(
         i32(batch.scissor.width), i32(batch.scissor.height)})
     if batch.pipeline == .Textured {
         sampler := runtime^.nearest_sampler
-        if batch.sampler == .Linear {sampler = runtime^.linear_sampler}
+        if batch.sampler == .Linear {
+           sampler = runtime^.linear_sampler
+        }
         binding := [1]sdl.GPUTextureSamplerBinding{{
             texture = cast(^sdl.GPUTexture)batch.texture,
             sampler = sampler,
@@ -810,7 +877,9 @@ sdl_draw_record_batch_command :: proc(
     if !state^.pipeline_bound || state^.active_kind != .Batch ||
         batch.pipeline != state^.active_pipeline {
         pipeline := ctx.runtime^.colored_pipeline
-        if batch.pipeline == .Textured {pipeline = ctx.runtime^.textured_pipeline}
+        if batch.pipeline == .Textured {
+           pipeline = ctx.runtime^.textured_pipeline
+        }
         sdl.BindGPUGraphicsPipeline(ctx.pass, pipeline)
         state^.active_pipeline = batch.pipeline
     }
@@ -870,7 +939,9 @@ sdl_draw_record_scene :: proc(
         sdl_scene_color_target_info(platform, clear_color)}
     pass := sdl.BeginGPURenderPass(
         command_buffer, raw_data(target[:]), len(target), nil)
-    if pass == nil {return false}
+    if pass == nil {
+       return false
+    }
     sdl_draw_bind_2d_buffers(runtime, pass)
     sdl.SetGPUViewport(pass, {
         w = f32(platform^.scene_width), h = f32(platform^.scene_height),
@@ -909,7 +980,9 @@ sdl_draw_pipeline_binding_count :: proc(encoder: ^Draw_Encoder) -> u32 {
             changed = changed || batch.pipeline != previous_pipeline
             previous_pipeline = batch.pipeline
         }
-        if changed {count += 1}
+        if changed {
+           count += 1
+        }
         previous_kind = command.kind
     }
     return count

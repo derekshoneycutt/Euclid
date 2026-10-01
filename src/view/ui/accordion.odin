@@ -117,7 +117,9 @@ accordion_landscape_sections :: proc() -> Accordion_Section_Set {
 // Return the selected View followed by portrait's three utility sections.
 accordion_portrait_sections :: proc(title: string) -> Accordion_Section_Set {
     view_title := title
-    if len(view_title) == 0 { view_title = "Animation" }
+    if len(view_title) == 0 {
+        view_title = "Animation"
+    }
     return {
         items = {
             {section = .View, label = view_title},
@@ -132,7 +134,9 @@ accordion_portrait_sections :: proc(title: string) -> Accordion_Section_Set {
 // Return ordered descriptors for the resolved layout without retaining title storage.
 accordion_sections_for_layout :: proc(
     mode: viewmodel.Ui_Layout_Mode, title: string) -> Accordion_Section_Set {
-    if mode == .Portrait { return accordion_portrait_sections(title) }
+    if mode == .Portrait {
+        return accordion_portrait_sections(title)
+    }
     return accordion_landscape_sections()
 }
 
@@ -141,7 +145,9 @@ accordion_section_index :: proc(
     sections: Accordion_Section_Set,
     active: viewmodel.Ui_Accordion_Section) -> int {
     for index in 0..<sections.count {
-        if sections.items[index].section == active { return index }
+        if sections.items[index].section == active {
+            return index
+        }
     }
     return 0
 }

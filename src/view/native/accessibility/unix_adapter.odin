@@ -49,15 +49,21 @@ unix_adapter_notify_control_update :: proc(owner: ^Adapter) {
 // unix_adapter_publish_controls wraps shared publication with Unix lifecycle.
 unix_adapter_publish_controls :: proc(
     owner: ^Adapter, input: Adapter_Tree_Input) -> bool {
-    if owner == nil {return false}
+    if owner == nil {
+       return false
+    }
     had_native := owner^.native != nil
-    if !adapter_publish_controls(owner, input) {return false}
+    if !adapter_publish_controls(owner, input) {
+       return false
+    }
     if had_native {
         unix_adapter_notify_control_update(owner)
         return true
     }
     owner^.native = rawptr(unix_adapter_new(owner))
-    if owner^.native != nil {return true}
+    if owner^.native != nil {
+       return true
+    }
     adapter_close_admission(owner)
     return false
 }
@@ -66,10 +72,16 @@ unix_adapter_publish_controls :: proc(
 unix_adapter_create_button :: proc(
     owner: ^Adapter, input: portable.Button_Publication_Input,
     identity: portable.Qualified_Identity) -> bool {
-    if owner == nil || owner^.native != nil || !input.present {return false}
-    if !adapter_publish_button(owner, input, identity) {return false}
+    if owner == nil || owner^.native != nil || !input.present {
+       return false
+    }
+    if !adapter_publish_button(owner, input, identity) {
+       return false
+    }
     owner^.native = rawptr(unix_adapter_new(owner))
-    if owner^.native != nil {return true}
+    if owner^.native != nil {
+       return true
+    }
     adapter_close_admission(owner)
     return false
 }
@@ -78,12 +90,18 @@ unix_adapter_create_button :: proc(
 unix_adapter_publish_button :: proc(
     owner: ^Adapter, input: portable.Button_Publication_Input,
     identity: portable.Qualified_Identity) -> bool {
-    if owner == nil {return false}
+    if owner == nil {
+       return false
+    }
     if owner^.native == nil {
-        if !input.present {return true}
+        if !input.present {
+           return true
+        }
         return unix_adapter_create_button(owner, input, identity)
     }
-    if !adapter_publish_button(owner, input, identity) {return false}
+    if !adapter_publish_button(owner, input, identity) {
+       return false
+    }
     unix_adapter_notify_update(owner)
     return true
 }
@@ -98,14 +116,20 @@ unix_adapter_drain_action :: proc(
 unix_adapter_create :: proc(
     owner: ^Adapter, width, height: f64, focused: bool,
     fail_at: Adapter_Create_Failure = .None) -> bool {
-    if owner == nil || owner^.native != nil {return false}
-    if !adapter_initialize_static(owner, width, height, focused) {return false}
+    if owner == nil || owner^.native != nil {
+       return false
+    }
+    if !adapter_initialize_static(owner, width, height, focused) {
+       return false
+    }
     if fail_at == .After_Publication {
         adapter_close_admission(owner)
         return false
     }
     owner^.native = rawptr(unix_adapter_new(owner))
-    if owner^.native != nil {return true}
+    if owner^.native != nil {
+       return true
+    }
     adapter_close_admission(owner)
     return false
 }
@@ -113,7 +137,9 @@ unix_adapter_create :: proc(
 // unix_adapter_set_root_bounds forwards known X11 outer and inner rectangles.
 unix_adapter_set_root_bounds :: proc(
     owner: ^Adapter, outer, inner: portable.Bounds) {
-    if owner == nil || owner^.native == nil {return}
+    if owner == nil || owner^.native == nil {
+       return
+    }
     accesskit.accesskit_unix_adapter_set_root_window_bounds(
         cast(^accesskit.Unix_Adapter)owner^.native,
         cast(accesskit.Rect)outer, cast(accesskit.Rect)inner)
@@ -121,7 +147,9 @@ unix_adapter_set_root_bounds :: proc(
 
 // unix_adapter_destroy closes callbacks before freeing the native adapter.
 unix_adapter_destroy :: proc(owner: ^Adapter) {
-    if owner == nil {return}
+    if owner == nil {
+       return
+    }
     adapter_close_admission(owner)
     if owner^.native != nil {
         accesskit.accesskit_unix_adapter_free(

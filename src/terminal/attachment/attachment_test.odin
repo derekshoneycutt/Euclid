@@ -94,7 +94,9 @@ attachment_test_relocate :: proc(
     user_data: rawptr, geometry: Placement_Geometry) ->
     (Placement_Geometry, bool) {
     evicted_row := (^i64)(user_data)^
-    if geometry.logical_row == evicted_row { return {}, false }
+    if geometry.logical_row == evicted_row {
+        return {}, false 
+    }
     result := geometry
     result.logical_row += 10
     result.column += 2

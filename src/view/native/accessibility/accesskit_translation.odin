@@ -19,7 +19,9 @@ accesskit_configure_child :: proc(
         accesskit.accesskit_node_set_label_with_length(
             child, cast(cstring)&publication^.label[0],
             uintptr(publication^.label_length))
-        if !publication^.child_enabled {accesskit.accesskit_node_set_disabled(child)}
+        if !publication^.child_enabled {
+           accesskit.accesskit_node_set_disabled(child)
+        }
         if publication^.child_supports_focus {
             accesskit.accesskit_node_add_action(child, .Focus)
         }
@@ -40,11 +42,17 @@ accesskit_static_nodes :: proc(
     publication: ^portable.Static_Publication) -> (^accesskit.Node, ^accesskit.Node) {
     root := accesskit.accesskit_node_new(.Application)
     child_role := accesskit.Role.Label
-    if publication^.child_role == .Button {child_role = .Button}
+    if publication^.child_role == .Button {
+       child_role = .Button
+    }
     child := accesskit.accesskit_node_new(child_role)
     if root == nil || child == nil {
-        if root != nil {accesskit.accesskit_node_free(root)}
-        if child != nil {accesskit.accesskit_node_free(child)}
+        if root != nil {
+           accesskit.accesskit_node_free(root)
+        }
+        if child != nil {
+           accesskit.accesskit_node_free(child)
+        }
         return nil, nil
     }
     child_id := accesskit.Node_Id(publication^.child_id)
@@ -60,7 +68,9 @@ accesskit_root_tree_update :: proc(
     publication: ^portable.Static_Publication) -> ^accesskit.Tree_Update {
     root_id := accesskit.Node_Id(publication^.root_id)
     root := accesskit.accesskit_node_new(.Application)
-    if root == nil {return nil}
+    if root == nil {
+       return nil
+    }
     accesskit.accesskit_node_set_bounds(
         root, cast(accesskit.Rect)publication^.root_bounds)
     update := accesskit.accesskit_tree_update_with_capacity_and_focus(1, root_id)
@@ -82,7 +92,9 @@ accesskit_child_tree_update :: proc(
         focus_id = child_id
     }
     root, child := accesskit_static_nodes(publication)
-    if root == nil {return nil}
+    if root == nil {
+       return nil
+    }
     update := accesskit.accesskit_tree_update_with_capacity_and_focus(2, focus_id)
     if update == nil {
         accesskit.accesskit_node_free(root)
@@ -106,8 +118,12 @@ accesskit_child_tree_update :: proc(
 // accesskit_tree_update translates one validated static publication.
 accesskit_tree_update :: proc(
     publication: ^portable.Static_Publication) -> ^accesskit.Tree_Update {
-    if portable.publication_validate(publication) != .Ok {return nil}
-    if !publication^.child_present {return accesskit_root_tree_update(publication)}
+    if portable.publication_validate(publication) != .Ok {
+       return nil
+    }
+    if !publication^.child_present {
+       return accesskit_root_tree_update(publication)
+    }
     return accesskit_child_tree_update(publication)
 }
 
@@ -129,7 +145,9 @@ accesskit_ordinary_control_role :: proc(
 // accesskit_control_role maps one portable control role to AccessKit.
 accesskit_control_role :: proc(role: portable.Publication_Role) -> accesskit.Role {
     mapped, supported := accesskit_ordinary_control_role(role)
-    if supported {return mapped}
+    if supported {
+       return mapped
+    }
     #partial switch role {
     case .Search_Input: return .Search_Input
     case .Text_Run: return .Text_Run
@@ -142,13 +160,21 @@ accesskit_control_role :: proc(role: portable.Publication_Role) -> accesskit.Rol
 // accesskit_configure_basic_actions advertises ordinary owner actions.
 accesskit_configure_basic_actions :: proc(
     node: ^accesskit.Node, actions: portable.Publication_Action_Set) {
-    if .Focus in actions {accesskit.accesskit_node_add_action(node, .Focus)}
+    if .Focus in actions {
+       accesskit.accesskit_node_add_action(node, .Focus)
+    }
     if .Activate in actions || .Toggle in actions {
         accesskit.accesskit_node_add_action(node, .Click)
     }
-    if .Increment in actions {accesskit.accesskit_node_add_action(node, .Increment)}
-    if .Decrement in actions {accesskit.accesskit_node_add_action(node, .Decrement)}
-    if .Set_Value in actions {accesskit.accesskit_node_add_action(node, .Set_Value)}
+    if .Increment in actions {
+       accesskit.accesskit_node_add_action(node, .Increment)
+    }
+    if .Decrement in actions {
+       accesskit.accesskit_node_add_action(node, .Decrement)
+    }
+    if .Set_Value in actions {
+       accesskit.accesskit_node_add_action(node, .Set_Value)
+    }
 }
 
 // accesskit_configure_extended_actions advertises text and composite actions.
@@ -160,9 +186,15 @@ accesskit_configure_extended_actions :: proc(
     if .Set_Text_Selection in actions {
         accesskit.accesskit_node_add_action(node, .Set_Text_Selection)
     }
-    if .Select in actions {accesskit.accesskit_node_add_action(node, .Click)}
-    if .Expand in actions {accesskit.accesskit_node_add_action(node, .Expand)}
-    if .Collapse in actions {accesskit.accesskit_node_add_action(node, .Collapse)}
+    if .Select in actions {
+       accesskit.accesskit_node_add_action(node, .Click)
+    }
+    if .Expand in actions {
+       accesskit.accesskit_node_add_action(node, .Expand)
+    }
+    if .Collapse in actions {
+       accesskit.accesskit_node_add_action(node, .Collapse)
+    }
     if .Scroll in actions {
         accesskit.accesskit_node_add_action(node, .Scroll_Up)
         accesskit.accesskit_node_add_action(node, .Scroll_Down)
@@ -180,13 +212,19 @@ accesskit_configure_control_actions :: proc(
 // accesskit_configure_control_state publishes role-specific control state.
 accesskit_configure_control_state :: proc(
     node: ^accesskit.Node, control: portable.Control_Publication) {
-    if !control.enabled {accesskit.accesskit_node_set_disabled(node)}
+    if !control.enabled {
+       accesskit.accesskit_node_set_disabled(node)
+    }
     if control.role == .Checkbox {
         toggled := accesskit.Toggled.False
-        if control.checked {toggled = .True}
+        if control.checked {
+           toggled = .True
+        }
         accesskit.accesskit_node_set_toggled(node, toggled)
     }
-    if control.selected {accesskit.accesskit_node_set_selected(node, true)}
+    if control.selected {
+       accesskit.accesskit_node_set_selected(node, true)
+    }
     if control.role == .Accordion_Header {
         accesskit.accesskit_node_set_expanded(node, control.expanded)
     }
@@ -195,7 +233,9 @@ accesskit_configure_control_state :: proc(
     }
     if control.role == .Status {
         accesskit.accesskit_node_set_live(node, .Polite)
-        if control.busy {accesskit.accesskit_node_set_busy(node)}
+        if control.busy {
+           accesskit.accesskit_node_set_busy(node)
+        }
     }
 }
 
@@ -203,7 +243,9 @@ accesskit_configure_control_state :: proc(
 accesskit_configure_control_range :: proc(
     node: ^accesskit.Node, control: portable.Control_Publication) {
     range := control.range
-    if !range.present {return}
+    if !range.present {
+       return
+    }
     if control.role == .Tree {
         accesskit.accesskit_node_set_scroll_y(node, range.current)
         accesskit.accesskit_node_set_scroll_y_min(node, range.minimum)
@@ -238,6 +280,19 @@ accesskit_configure_control_set_facts :: proc(
     }
 }
 
+// Resolve the text-run node used as the selection anchor for one search input.
+accesskit_control_selection_id :: proc(
+    publication: ^portable.Control_Tree_Publication,
+    control: portable.Control_Publication) -> u64 {
+    for candidate in publication^.controls[:publication^.control_count] {
+        if candidate.parent_native_id == control.native_id &&
+           candidate.role == .Text_Run {
+            return candidate.native_id
+        }
+    }
+    return control.native_id
+}
+
 // accesskit_configure_control_text publishes copied editable text and selection.
 accesskit_configure_control_text :: proc(
     node: ^accesskit.Node, publication: ^portable.Control_Tree_Publication,
@@ -261,15 +316,10 @@ accesskit_configure_control_text :: proc(
         accesskit.accesskit_node_set_word_starts(node,
             uintptr(control.word_start_count), &publication^.word_starts[first])
     }
-    if control.role != .Search_Input {return}
-    selection_id := control.native_id
-    for candidate in publication^.controls[:publication^.control_count] {
-        if candidate.parent_native_id == control.native_id &&
-           candidate.role == .Text_Run {
-            selection_id = candidate.native_id
-            break
-        }
+    if control.role != .Search_Input {
+       return
     }
+    selection_id := accesskit_control_selection_id(publication, control)
     native_id := accesskit.Node_Id(selection_id)
     accesskit.accesskit_node_set_text_selection(node, {
         anchor = {native_id, uintptr(control.anchor_character)},
@@ -308,7 +358,9 @@ accesskit_configure_control_hierarchy :: proc(
     child_ids: [portable.CONTROL_NODE_CAPACITY]accesskit.Node_Id
     child_count := 0
     for candidate in publication^.controls[:publication^.control_count] {
-        if candidate.parent_native_id != control.native_id {continue}
+        if candidate.parent_native_id != control.native_id {
+           continue
+        }
         child_ids[child_count] = accesskit.Node_Id(candidate.native_id)
         child_count += 1
     }
@@ -333,7 +385,9 @@ accesskit_control_root_update :: proc(
     focus_id: accesskit.Node_Id) -> ^accesskit.Tree_Update {
     root_id := accesskit.Node_Id(publication^.root_id)
     root := accesskit.accesskit_node_new(.Application)
-    if root == nil {return nil}
+    if root == nil {
+       return nil
+    }
     accesskit.accesskit_node_set_children(root, uintptr(child_count), &child_ids^[0])
     accesskit.accesskit_node_set_bounds(
         root, accesskit_physical_bounds(
@@ -362,7 +416,9 @@ accesskit_control_push_nodes :: proc(
     publication: ^portable.Control_Tree_Publication) -> bool {
     for control in publication^.controls[:publication^.control_count] {
         child := accesskit.accesskit_node_new(accesskit_control_role(control.role))
-        if child == nil {return false}
+        if child == nil {
+           return false
+        }
         accesskit_configure_control(child, publication, control)
         accesskit_configure_control_hierarchy(child, publication, control)
         accesskit.accesskit_tree_update_push_node(
@@ -374,7 +430,9 @@ accesskit_control_push_nodes :: proc(
 // accesskit_control_tree_update builds one complete rooted control update.
 accesskit_control_tree_update :: proc(
     publication: ^portable.Control_Tree_Publication) -> ^accesskit.Tree_Update {
-    if portable.control_tree_validate(publication) != .Ok {return nil}
+    if portable.control_tree_validate(publication) != .Ok {
+       return nil
+    }
     focus_id := accesskit.Node_Id(publication^.root_id)
     child_ids: [portable.CONTROL_NODE_CAPACITY]accesskit.Node_Id
     child_count := 0
@@ -389,7 +447,9 @@ accesskit_control_tree_update :: proc(
     }
     update := accesskit_control_root_update(
         publication, &child_ids, child_count, focus_id)
-    if update == nil {return nil}
+    if update == nil {
+       return nil
+    }
     if !accesskit_control_push_nodes(update, publication) {
         accesskit.accesskit_tree_update_free(update)
         return nil
