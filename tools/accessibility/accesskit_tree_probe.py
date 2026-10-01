@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture and validate Euclid's Phase 3 and 4 AT-SPI controls on Linux."""
+"""Capture and validate Euclid's native AT-SPI surface on Linux."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ SLIDER_LABEL = "Maximum Dust particles"
 SEARCH_LABEL = "Search animations"
 TREE_LABEL = "Animation library"
 SEARCH_QUERY = "Elements"
+MULTIBYTE_QUERY = "Éléments 🧭"
 RETIREMENT_QUERY = "algebra"
 SCENARIO = Path("tools/accessibility/accessibility-button-acceptance.jsonl")
 WINDOW_SELECTOR = "class:^euclid$"
@@ -85,6 +86,102 @@ def desktop_summary() -> list[dict]:
     return records
 
 
+def normalized_value(value):
+    """Convert one pyatspi or D-Bus result into stable JSON evidence."""
+    if value is None or isinstance(value, (bool, float, int, str)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): normalized_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [normalized_value(item) for item in value]
+    if all(hasattr(value, field) for field in ("x", "y", "width", "height")):
+        return {
+            "x": value.x,
+            "y": value.y,
+            "width": value.width,
+            "height": value.height,
+        }
+    if hasattr(value, "path"):
+        return {
+            "name": getattr(value, "name", None),
+            "object_path": str(value.path),
+        }
+    return repr(value)
+
+
+def rectangle_center(value) -> tuple[int, int]:
+    """Return the center of one pyatspi object or tuple rectangle."""
+    if all(hasattr(value, field) for field in ("x", "y", "width", "height")):
+        x, y, width, height = value.x, value.y, value.width, value.height
+    elif isinstance(value, (list, tuple)) and len(value) == 4:
+        x, y, width, height = value
+    else:
+        raise TypeError(f"unsupported rectangle result: {value!r}")
+    return x + max(0, width // 2), y + max(0, height // 2)
+
+
+def exception_record(error: Exception) -> dict:
+    """Classify one native operation exception without discarding its details."""
+    message = str(error)
+    lowered = message.lower()
+    status = "unsupported" if "not supported" in lowered or \
+        "unsupported" in lowered else "error"
+    return {
+        "status": status,
+        "exception_type": f"{type(error).__module__}.{type(error).__name__}",
+        "message": message,
+    }
+
+
+def observe_operation(operation) -> dict:
+    """Run one native query and retain success, unsupported, or error evidence."""
+    try:
+        return {"status": "passed", "value": normalized_value(operation())}
+    except Exception as error:
+        return exception_record(error)
+
+
+def interface_names(node) -> list[str]:
+    """Return sorted native interfaces without relying on inspector rendering."""
+    return sorted(str(name) for name in node.get_interfaces())
+
+
+def component_record(node) -> dict:
+    """Exercise applicable AT-SPI Component queries as independent observations."""
+    component = node.queryComponent()
+    extents = component.getExtents(pyatspi.DESKTOP_COORDS)
+    center_x = extents.x + max(0, extents.width // 2)
+    center_y = extents.y + max(0, extents.height // 2)
+    operations = {
+        "alpha": lambda: component.getAlpha(),
+        "mdi_z_order": lambda: component.getMDIZOrder(),
+        "layer": lambda: component.getLayer(),
+        "extents_desktop": lambda: component.getExtents(pyatspi.DESKTOP_COORDS),
+        "position_desktop": lambda: component.getPosition(pyatspi.DESKTOP_COORDS),
+        "size": lambda: component.getSize(),
+        "contains_center": lambda: component.contains(
+            center_x, center_y, pyatspi.DESKTOP_COORDS),
+        "accessible_at_center": lambda: component.getAccessibleAtPoint(
+            center_x, center_y, pyatspi.DESKTOP_COORDS),
+    }
+    return {name: observe_operation(operation)
+            for name, operation in operations.items()}
+
+
+def component_scroll_record(node) -> dict:
+    """Exercise native Component scrolling as explicit mutating operations."""
+    component = node.queryComponent()
+    extents = component.getExtents(pyatspi.DESKTOP_COORDS)
+    operations = {
+        "scroll_to_anywhere": lambda: component.scrollTo(
+            pyatspi.SCROLL_ANYWHERE),
+        "scroll_to_current_point": lambda: component.scrollToPoint(
+            pyatspi.DESKTOP_COORDS, extents.x, extents.y),
+    }
+    return {name: observe_operation(operation)
+            for name, operation in operations.items()}
+
+
 def node_record(node) -> dict:
     """Normalize stable machine-readable role, state, relation, and bounds facts."""
     try:
@@ -107,18 +204,25 @@ def node_record(node) -> dict:
         parent_path = str(node.parent.path)
     except (AttributeError, NotImplementedError):
         parent_path = None
+    try:
+        process_id = node.get_process_id()
+    except (AttributeError, NotImplementedError):
+        process_id = None
     return {
         "accessible_id": accessible_id,
         "object_path": str(node.path),
         "parent_path": parent_path,
         "name": node.name,
+        "description": node.description,
         "role": node.getRoleName(),
+        "process_id": process_id,
         "child_count": node.childCount,
         "index_in_parent": node.getIndexInParent(),
         "states": states,
         "focused": "focused" in states,
         "bounds": bounds,
         "attributes": dict(node.get_attributes() or {}),
+        "interfaces": interface_names(node),
     }
 
 
@@ -180,6 +284,16 @@ def action_names(node) -> list[str]:
     """Return normalized actions exposed by one AT-SPI accessible."""
     action = node.queryAction()
     return [action.getName(index) for index in range(action.nActions)]
+
+
+def action_records(node) -> list[dict]:
+    """Return complete native action metadata exposed by one accessible."""
+    action = node.queryAction()
+    return [{
+        "name": action.getName(index),
+        "description": action.getDescription(index),
+        "key_binding": action.getKeyBinding(index),
+    } for index in range(action.nActions)]
 
 
 def focus_button(node) -> dict:
@@ -245,6 +359,94 @@ def text_record(node) -> dict:
     return record
 
 
+def text_conformance_record(node) -> dict:
+    """Observe text boundaries, attributes, geometry, and point hit testing."""
+    text = node.queryText()
+    count = text.characterCount
+    final_offset = max(0, count - 1)
+    boundaries = {
+        "character": pyatspi.TEXT_BOUNDARY_CHAR,
+        "word_start": pyatspi.TEXT_BOUNDARY_WORD_START,
+        "word_end": pyatspi.TEXT_BOUNDARY_WORD_END,
+        "line_start": pyatspi.TEXT_BOUNDARY_LINE_START,
+        "line_end": pyatspi.TEXT_BOUNDARY_LINE_END,
+        "sentence_start": pyatspi.TEXT_BOUNDARY_SENTENCE_START,
+        "sentence_end": pyatspi.TEXT_BOUNDARY_SENTENCE_END,
+    }
+    record = {
+        "full_text": observe_operation(lambda: text.getText(0, -1)),
+        "attributes": {
+            "first": observe_operation(lambda: text.getAttributes(0)),
+            "final": observe_operation(lambda: text.getAttributes(final_offset)),
+            "end": observe_operation(lambda: text.getAttributes(count)),
+            "default": observe_operation(lambda: text.getDefaultAttributes()),
+        },
+        "boundaries": {
+            name: {
+                "at": observe_operation(
+                    lambda boundary=boundary: text.getTextAtOffset(0, boundary)),
+                "before_end": observe_operation(
+                    lambda boundary=boundary: text.getTextBeforeOffset(
+                        count, boundary)),
+                "after_first": observe_operation(
+                    lambda boundary=boundary: text.getTextAfterOffset(
+                        0, boundary)),
+            }
+            for name, boundary in boundaries.items()
+        },
+        "character_extents": observe_operation(
+            lambda: text.getCharacterExtents(0, pyatspi.DESKTOP_COORDS)),
+        "range_extents": observe_operation(
+            lambda: text.getRangeExtents(0, count, pyatspi.DESKTOP_COORDS)),
+    }
+    try:
+        extents = text.getCharacterExtents(0, pyatspi.DESKTOP_COORDS)
+        center_x, center_y = rectangle_center(extents)
+        record["offset_at_character_center"] = observe_operation(
+            lambda: text.getOffsetAtPoint(
+                center_x, center_y, pyatspi.DESKTOP_COORDS))
+    except Exception as error:
+        record["offset_at_character_center"] = exception_record(error)
+    return record
+
+
+def expect_unsupported_edit(node, name: str, operation) -> dict:
+    """Require one advertised granular edit to fail before Euclid mutation."""
+    before = text_record(node)
+    try:
+        result = operation()
+    except Exception as error:
+        outcome = exception_record(error)
+        after = text_record(node)
+        if outcome["status"] != "unsupported":
+            raise RuntimeError(f"{name} failed unexpectedly: {outcome}") from error
+        if after["text"] != before["text"]:
+            raise RuntimeError(f"{name} mutated text despite unsupported result")
+        outcome["text_unchanged"] = True
+        return outcome
+    after = text_record(node)
+    raise RuntimeError(
+        f"{name} unexpectedly succeeded: result={result!r} before={before} "
+        f"after={after}")
+
+
+def editable_text_limit_record(node) -> dict:
+    """Assert AccessKit Unix's advertised granular editing limitations."""
+    editable = node.queryEditableText()
+    return {
+        "insert_text": expect_unsupported_edit(
+            node, "insertText", lambda: editable.insertText(0, "x", 1)),
+        "delete_text": expect_unsupported_edit(
+            node, "deleteText", lambda: editable.deleteText(0, 1)),
+        "copy_text": expect_unsupported_edit(
+            node, "copyText", lambda: editable.copyText(0, 1)),
+        "cut_text": expect_unsupported_edit(
+            node, "cutText", lambda: editable.cutText(0, 1)),
+        "paste_text": expect_unsupported_edit(
+            node, "pasteText", lambda: editable.pasteText(0)),
+    }
+
+
 def wait_for_text(node, expected: str, timeout_seconds: float = 5.0) -> dict:
     """Wait for one committed native text value."""
     deadline = time.monotonic() + timeout_seconds
@@ -290,6 +492,22 @@ def find_descendant_by_role(node, role: str):
     return None
 
 
+def find_text_descendant(node):
+    """Return the first descendant that independently exposes AT-SPI Text."""
+    for candidate in descendants(node, 6):
+        if candidate is node:
+            continue
+        try:
+            candidate.queryText()
+        except (AttributeError, NotImplementedError):
+            continue
+        except Exception:
+            continue
+        else:
+            return candidate
+    return None
+
+
 def find_expanded_tree_branch(tree):
     """Return one visible TreeItem branch with published children."""
     for candidate in descendants(tree, 8):
@@ -326,6 +544,8 @@ def exercise_tree_branch_toggle(tree) -> dict:
         "collapsed": collapsed,
         "expanded": expanded,
         "actions": actions,
+        "action_details": action_records(branch),
+        "component": component_record(branch),
         "collapse_action": collapse_action,
         "expand_action": expand_action,
     }
@@ -387,6 +607,7 @@ def exercise_search_and_tree() -> dict:
     _, tree = wait_for_named(TREE_LABEL)
     branch_toggle = exercise_tree_branch_toggle(tree)
     initial_text = text_record(search)
+    text_run = find_text_descendant(search)
     relations = relation_records(search)
     controlled_paths = {
         target["object_path"] for relation in relations
@@ -395,6 +616,12 @@ def exercise_search_and_tree() -> dict:
     }
     if str(tree.path) not in controlled_paths:
         raise RuntimeError(f"Search does not control Tree: {relations}")
+    multibyte = replace_text(search, MULTIBYTE_QUERY)
+    multibyte_selection = set_text_selection(search, 0, len(MULTIBYTE_QUERY))
+    text_conformance = {"owner": text_conformance_record(search)}
+    if text_run is not None:
+        text_conformance["text_run"] = text_conformance_record(text_run)
+    editing_limits = editable_text_limit_record(search)
     committed = replace_text(search, SEARCH_QUERY)
     selected = set_text_selection(search, 0, len(SEARCH_QUERY))
     tree = wait_for_filtered_tree("Euclid's Elements", "Terminal")
@@ -406,6 +633,8 @@ def exercise_search_and_tree() -> dict:
         raise RuntimeError("filtered Tree has no TreeItem descendant")
     item_before = node_record(item)
     item_actions = action_names(item)
+    item_action_details = action_records(item)
+    item_component = component_record(item)
     tree_value_before = value_record(tree)
     scroll_target = increment_value(tree, tree_value_before)
     deadline = time.monotonic() + 3.0
@@ -430,27 +659,46 @@ def exercise_search_and_tree() -> dict:
             f"occupant={node_at_path(current_tree, retired_path)} "
             f"status={node_record(current_status) if current_status else None} "
             f"tree={descendant_summary(current_tree)}")
+    _, status = find_named("Library search status")
     return {
         "search": {
             "node": node_record(search),
+            "component": component_record(search),
+            "text_projection": "descendant" if text_run is not None else "owner",
+            "text_run": {
+                "node": node_record(text_run),
+                "component": component_record(text_run),
+            } if text_run is not None else None,
             "initial_text": initial_text,
+            "multibyte_text": multibyte,
+            "multibyte_selection": multibyte_selection,
             "committed_text": committed,
             "selected_text": selected,
             "relations": relations,
+            "text_conformance": text_conformance,
+            "editable_text_limits": editing_limits,
             "retirement_query_text": replacement,
         },
         "tree": {
             "node": node_record(tree),
+            "component": component_record(tree),
+            "component_scroll": component_scroll_record(tree),
             "branch_toggle": branch_toggle,
             "item_before": item_before,
             "item_after": item_after,
             "item_actions": item_actions,
+            "item_action_details": item_action_details,
+            "item_component": item_component,
             "invoked_item_action": item_action,
             "value_before": tree_value_before,
             "value_after": tree_value_after,
             "requested_scroll_value": scroll_target,
             "retired_item_path": retired_path,
             "retired_after_filter": True,
+            "status": {
+                "node": node_record(status),
+                "component": component_record(status),
+            } if status is not None else None,
         },
     }
 
@@ -565,12 +813,16 @@ def run_session(session_index: int) -> dict:
             time.sleep(0.05)
             slider_after = value_record(slider)
         result = {
-            "schema_version": 4,
+            "schema_version": 5,
             "session_type": os.environ.get("XDG_SESSION_TYPE", "unknown"),
             "video_driver": os.environ.get("SDL_VIDEODRIVER", "default"),
             "application": node_record(application),
             "root": node_record(parent),
             "child": node_record(child),
+            "component": {
+                "root": component_record(parent),
+                "button": component_record(child),
+            },
             "focused_child": focused,
             "actions": actions,
             "search_tree": search_tree,
@@ -641,19 +893,38 @@ def run_probe() -> dict:
     if not BINARY.is_file():
         raise RuntimeError("debug binary missing; run cmake --build --preset debug")
     shutil.rmtree(ROOT / ARTIFACTS, ignore_errors=True)
-    return {
-        "schema_version": 4,
-        "sessions": [run_session(1), run_session(2)],
-    }
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
+    report = {"schema_version": 6, "status": "running", "sessions": []}
+    for session_index in (1, 2):
+        try:
+            report["sessions"].append(run_session(session_index))
+        except Exception as error:
+            report["status"] = "failed"
+            report["failure"] = {
+                "session_index": session_index,
+                **exception_record(error),
+            }
+            write_report(report)
+            raise
+        write_report(report)
+    report["status"] = "passed"
+    write_report(report)
+    return report
+
+
+def write_report(report: dict) -> str:
+    """Atomically replace the machine-readable probe checkpoint."""
+    encoded = json.dumps(report, indent=2, sort_keys=True) + "\n"
+    temporary = REPORT.with_suffix(".json.tmp")
+    temporary.write_text(encoded, encoding="ascii")
+    temporary.replace(REPORT)
+    return encoded
 
 
 if __name__ == "__main__":
     try:
         report = run_probe()
-        encoded = json.dumps(report, indent=2, sort_keys=True) + "\n"
-        REPORT.parent.mkdir(parents=True, exist_ok=True)
-        REPORT.write_text(encoded, encoding="ascii")
-        sys.stdout.write(encoded)
+        sys.stdout.write(write_report(report))
     except Exception as error:
         traceback.print_exc()
         print(

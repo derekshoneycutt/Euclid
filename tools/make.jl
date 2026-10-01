@@ -27,7 +27,7 @@ Commands:
     scenario --all [--format=text|json]
                                  Build debug and run the scenario corpus.
     accesskit-abi                Validate the pinned AccessKit C host ABI.
-    accessibility-tree           Validate Linux Phase 3 AT-SPI controls.
+    accessibility-tree           Validate Linux AT-SPI controls and interfaces.
     accessibility-macos          Validate macOS Phase 3 AX controls.
     accessibility-windows        Validate Windows Phase 1 UIA root and button.
     analyzer-test                Run the analyzer's own test suite.
@@ -1849,6 +1849,11 @@ function run_accessibility_tree_command(arguments::Vector{String})
     Sys.islinux() || error("accessibility-tree is supported only on Linux.")
     python = Sys.which("python3")
     python === nothing && error("accessibility-tree requires python3 and pyatspi.")
+    test_script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "accesskit_tree_probe_test.py")
+    test_command = Cmd([python, test_script])
+    test_status = run_command(test_command; cwd=SCRIPT_DIR).exit_code
+    test_status == 0 || return test_status
     script = joinpath(SCRIPT_DIR, "tools", "accessibility",
         "accesskit_tree_probe.py")
     command = Cmd([python, script])

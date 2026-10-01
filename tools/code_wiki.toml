@@ -82,6 +82,13 @@ navigation_order = 45
 owner = "guide_authors"
 
 [[guides]]
+title = "Accessibility"
+path = "Guides/Accessibility.md"
+summary = "Cross-platform sidebar support, native probes, qualification evidence, exclusions, and AccessKit limits."
+navigation_order = 47
+owner = "guide_authors"
+
+[[guides]]
 title = "UI System"
 path = "Guides/UiSystem.md"
 summary = "Display-owned layout, panels, input, widgets, scrolling, and rendering."

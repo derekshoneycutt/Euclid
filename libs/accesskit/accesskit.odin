@@ -55,17 +55,30 @@ Role :: enum u8 {
     Unknown = 0,
     Text_Run = 1,
     Label = 3,
+    List_Item = 7,
+    Paragraph = 13,
     Tree_Item = 9,
     Check_Box = 15,
     Text_Input = 17,
     Button = 18,
     Pane = 20,
+    List = 24,
     Search_Input = 32,
     Application = 49,
+    Blockquote = 53,
     Disclosure_Triangle = 67,
+    Document = 68,
+    Math = 92,
     Slider = 113,
     Status = 116,
     Tree = 129,
+}
+
+Text_Direction :: enum u8 {
+    Left_To_Right = 0,
+    Right_To_Left = 1,
+    Top_To_Bottom = 2,
+    Bottom_To_Top = 3,
 }
 
 Live :: enum u8 {
@@ -117,6 +130,12 @@ Text_Position :: struct {
 
 Text_Selection :: struct {
     anchor, focus: Text_Position,
+}
+
+Optional_Coords :: struct {
+    has_value: bool,
+    length: uintptr,
+    values: [^]f32,
 }
 
 Point :: struct {
@@ -178,6 +197,7 @@ Deactivation_Handler :: proc "c" (user_data: rawptr)
 #assert(size_of(Rect) == 32)
 #assert(size_of(Text_Position) == 16)
 #assert(size_of(Text_Selection) == 32)
+#assert(size_of(Optional_Coords) == 24)
 #assert(size_of(Action_Data_Tag) == 4)
 #assert(size_of(Action_Data) == 40)
 #assert(size_of(Optional_Action_Data) == 48)
@@ -206,6 +226,16 @@ foreign accesskit_library {
         node: ^Node, value: cstring, length: uintptr) ---
     accesskit_node_set_character_lengths :: proc(
         node: ^Node, length: uintptr, values: [^]u8) ---
+    accesskit_node_character_positions :: proc(
+        node: ^Node) -> Optional_Coords ---
+    accesskit_node_set_character_positions :: proc(
+        node: ^Node, length: uintptr, values: [^]f32) ---
+    accesskit_node_character_widths :: proc(
+        node: ^Node) -> Optional_Coords ---
+    accesskit_node_set_character_widths :: proc(
+        node: ^Node, length: uintptr, values: [^]f32) ---
+    accesskit_node_set_text_direction :: proc(
+        node: ^Node, value: Text_Direction) ---
     accesskit_node_set_word_starts :: proc(
         node: ^Node, length: uintptr, values: [^]u8) ---
     accesskit_node_set_text_selection :: proc(

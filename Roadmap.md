@@ -141,7 +141,7 @@ General features:
   - [X] Flickers
 - [X] Comprehensive Odin-Julia Bridge interface between the two languages
 - [X] Basic state-machine supported julia animations structure
-- [X] Initial library of standard animations for drawing primitives2
+- [X] Initial library of standard animations for drawing primitives
 - [X] Restart and Pause functionality
 - [X] GIF Saving
 - [X] Initial Settings panel
@@ -149,7 +149,7 @@ General features:
 - [X] UUID animation handles
 - [X] Improved UI layout system
 - [X] Improved hybrid immediate mode, block-based view text rendering
-- [X] Terminal / REPL
+- [ ] Terminal / REPL
   - [X] Basic setup and availability
   - [X] Basic help feature
   - [X] Basic input tab completion support, including unicode characters & function names
@@ -157,10 +157,9 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
+  - [ ] Julia syntax highlighting
+  - [ ] History explorer Julia-REPL style
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
-- [X] Comprehensive mouse/keyboard focus system
-- [ ] Accesibility Features
-- [ ] IME etc.
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation
@@ -184,7 +183,19 @@ General features:
 - [X] Window sizing and portrait
 - [X] SDL3 Migration
 - [X] Drawing Sounds
-- [X] Full-text search
+- [ ] Sqlite backend
+  - [X] Initial creation and access
+  - [X] Full-text search tables
+  - [X] Initial spellcheck suggestions
+  - [ ] Animation catalog manifest tables
+  - [ ] Localization tables
+  - [ ] Search and use history
+  - [ ] Search autocompletion nice-to-haves
+- [ ] Full input system
+  - [X] Comprehensive mouse/keyboard focus system
+  - [X] Basic initial accesibility support
+  - [ ] Additional accessibility support (nice-to-have)
+  - [ ] IME etc. (nice-to-have)
 
 Final tasks:
 
