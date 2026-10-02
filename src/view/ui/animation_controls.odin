@@ -191,7 +191,7 @@ draw_encoded_refresh_glyph :: proc(
     center := geometry.Vector2{rectangle.x + rectangle.width * 0.5,
         rectangle.y + rectangle.height * 0.5}
     radius := min(rectangle.width, rectangle.height) * 0.34
-    starts := [2]f32{math.PI * (2.0 / 9.0), math.PI * (11.0 / 9.0)}
+    starts := [2]f32{math.PI / 3.0, math.PI * (4.0 / 3.0)}
     ends := [2]f32{math.PI * (10.0 / 9.0), math.PI * (19.0 / 9.0)}
     for arc_index in 0..<2 {
         previous := center +
@@ -207,6 +207,15 @@ draw_encoded_refresh_glyph :: proc(
             _ = native.draw_encoder_line(encoder, previous, current, 1.6, draw_color)
             previous = current
         }
+        radial := geometry.Vector2{f32(math.cos(f64(ends[arc_index]))),
+            f32(math.sin(f64(ends[arc_index])))}
+        tangent := geometry.Vector2{-radial.y, radial.x}
+        head_base := previous - tangent * (radius * 0.32)
+        head_wing := radial * (radius * 0.24)
+        _ = native.draw_encoder_line(
+            encoder, head_base + head_wing, previous, 1.6, draw_color)
+        _ = native.draw_encoder_line(
+            encoder, head_base - head_wing, previous, 1.6, draw_color)
     }
 }
 
