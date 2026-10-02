@@ -467,6 +467,20 @@ AnalysisSettings(
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
+                "view-font-optional-raster-glyph-metadata",
+                "src/view/font/font.odin",
+                "font_raster_instance_glyphs_init",
+                :custom,
+                "Optional raster glyph tables use the cache-owned 64 MiB TLSF pool. " *
+                    "Retirement reuses freed blocks; cache teardown releases the backing.";
+                operation="make",
+                target="[]Font_Glyph_Record",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
                 "test-core-arena-owner-partial-init",
                 "src/core/storage/arena_owner_test.odin",
                 "arena_owner_test_init_failure",

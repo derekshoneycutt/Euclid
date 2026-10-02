@@ -2,6 +2,7 @@ package ui_dynview
 
 import dynviewmodel "../../../dynview/model"
 import native "../../native"
+import font "../../font"
 
 import "core:testing"
 
@@ -34,6 +35,33 @@ layout_draw_test_stretch_delimiter_preserves_child_style :: proc(t: ^testing.T) 
     }
     testing.expect_value(t, stretch_delimiter_child_style(item),
         dynmath.Math_Style{.Text, true})
+}
+
+// Verify a mathematical construction cannot combine different raster instances.
+@(test)
+layout_draw_test_stretch_glyphs_require_same_raster_identity :: proc(
+    t: ^testing.T) {
+
+    first := font.Resolved_Glyph{
+        raster_slot_index = 3,
+        raster_slot_incarnation = 12,
+        raster_pixel_height = 18,
+    }
+    same_instance := first
+    different_slot := font.Resolved_Glyph{
+        raster_slot_index = 4,
+        raster_slot_incarnation = 12,
+        raster_pixel_height = 18,
+    }
+    recycled_slot := font.Resolved_Glyph{
+        raster_slot_index = 3,
+        raster_slot_incarnation = 13,
+        raster_pixel_height = 18,
+    }
+
+    testing.expect(t, stretch_glyphs_share_raster(first, same_instance))
+    testing.expect(t, !stretch_glyphs_share_raster(first, different_slot))
+    testing.expect(t, !stretch_glyphs_share_raster(first, recycled_slot))
 }
 
 // Verify authoritative document shapes append to the active native encoder.

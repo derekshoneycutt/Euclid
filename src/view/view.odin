@@ -935,6 +935,7 @@ encode_sdl_ui_geometry :: proc(
 encode_sdl_geometry_frame :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
     prepared: Frame_Draw_Preparation) -> native.Sdl_Frame_Result {
+    font.cache_frame_begin(&state^.font_cache)
     encoder: native.Draw_Encoder
     _ = native.draw_encoder_begin(&encoder, ctx.draw_runtime^.storage, {
         f32(ctx.platform^.metrics.logical_width),
@@ -945,9 +946,11 @@ encode_sdl_geometry_frame :: proc(
         &encoder, ctx.draw_runtime^.dust_ready)
     encode_sdl_world_geometry(state, ctx, &encoder)
     encode_sdl_ui_geometry(state, &encoder, prepared)
-    return native.sdl_platform_present_draw(
+    result := native.sdl_platform_present_draw(
         ctx.platform, ctx.draw_runtime, &encoder,
         native.to_sdl_color(BACKGROUND_COLOR))
+    font.cache_frame_end(&state^.font_cache)
+    return result
 }
 
 // Run one SDL geometry frame while later visual capabilities remain dormant.

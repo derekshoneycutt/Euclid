@@ -369,4 +369,6 @@ Terminal_Shaped_Run_Workspace :: struct {
     shaped_glyphs: [TERMINAL_SHAPING_CAPACITY]font.Shaped_Glyph,
     source_columns: [TERMINAL_SHAPING_CAPACITY]int,
     glyph_count: int,
+    raster_request: font.Font_Raster_Request,
+    raster_selection: font.Font_Raster_Selection,
 }

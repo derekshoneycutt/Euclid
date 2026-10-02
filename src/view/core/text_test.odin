@@ -35,7 +35,10 @@ text_test_resolved_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
         resolved = {
             texture = {handle = texture, width = 32, height = 32},
             source = {x = 1, y = 2, width = 8, height = 10},
-            base_size = 32,
+            raster_pixel_height = 32,
+            raster_ascent = 24,
+            canonical_pixel_height = 32,
+            canonical_raster_ascent = 24,
         },
         font_size = 16,
         color = color.WHITE,
@@ -45,10 +48,65 @@ text_test_resolved_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
     testing.expect_value(t, batches[0].sampler, native.Draw_Sampler.Linear)
 }
 
+// Verify bitmap metrics use raster height while HarfBuzz offsets stay canonical.
+@(test)
+text_test_resolved_glyph_separates_raster_and_shaping_scales :: proc(t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    texture := rawptr(uintptr(1))
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+
+    ui_text_draw_resolved_glyph({
+        encoder = &encoder,
+        resolved = {
+            texture = {handle = texture, width = 32, height = 32},
+            source = {x = 1, y = 2, width = 8, height = 10},
+            offset_x = 6,
+            offset_y = 20,
+            raster_pixel_height = 24,
+            raster_ascent = 18,
+            canonical_pixel_height = 32,
+            canonical_raster_ascent = 24,
+        },
+        position = {10, 20},
+        font_size = 12,
+        color = color.WHITE,
+        x_offset = 64,
+    })
+
+    testing.expect_value(t, encoder.batch_count, 1)
+    testing.expect_value(t, vertices[0].position.x, f32(13))
+    testing.expect_value(t, vertices[0].position.y, f32(30))
+    testing.expect_value(t, vertices[1].position.x, f32(17))
+}
+
+// Verify glyph origins align independently on nonuniform physical transforms.
+@(test)
+text_test_glyph_origin_snaps_to_physical_grid :: proc(t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {150, 125}))
+
+    snapped := ui_text_snap_glyph_origin(&encoder, {10.4, 20.4})
+    testing.expect_value(t, snapped.x, f32(16)/f32(1.5))
+    testing.expect_value(t, snapped.y, f32(20))
+}
+
 // Reject one requested glyph so cached drawing can prove atomic preflight fallback.
 text_test_resolve_cached_glyph :: proc(
     user_data: rawptr, key: view_font.Font_Key,
-    glyph_id: u32) -> (view_font.Resolved_Glyph, bool) {
+    glyph_id: u32, _: view_font.Font_Raster_Request) ->
+    (view_font.Resolved_Glyph, bool) {
 
     _ = key
     state := cast(^Cached_Glyph_Resolver_Test_State)user_data
@@ -59,13 +117,15 @@ text_test_resolve_cached_glyph :: proc(
 // Return pending for the requested rune and a resident sentinel for U+FFFD.
 text_test_resolve_codepoint :: proc(
     user_data: rawptr, key: view_font.Font_Key,
-    codepoint: rune) -> (
+    codepoint: rune, _: view_font.Font_Raster_Request) -> (
     view_font.Resolved_Glyph, view_font.Font_Glyph_Resolve_Status) {
 
     state := cast(^Codepoint_Resolver_Test_State)user_data
     state.requested_codepoint = codepoint
     if codepoint == rune(0xfffd) {
-        return {advance_x = i32(state.replacement_id), base_size = 32}, .Resident
+        return {
+            advance_x = i32(state.replacement_id), raster_pixel_height = 32,
+        }, .Resident
     }
     return {}, .Pending
 }
@@ -100,7 +160,13 @@ text_test_pending_codepoint_uses_replacement :: proc(t: ^testing.T) {
         resolve_codepoint = text_test_resolve_codepoint,
     }
 
-    resolution := ui_text_resolve_codepoint(resolver, .Regular, 'α')
+    raster_request := view_font.Font_Raster_Request{
+        key = .Regular, source_generation = 1,
+        logical_size = 16, scene_pixels_per_logical_unit = 1,
+        pixel_height = 16, policy = .Stb_Grayscale,
+    }
+    resolution := ui_text_resolve_codepoint(
+        resolver, .Regular, 'α', raster_request)
     testing.expect(t, resolution.drawable)
     testing.expect_value(
         t, resolution.status, view_font.Font_Glyph_Resolve_Status.Pending)

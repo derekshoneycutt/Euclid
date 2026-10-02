@@ -9,6 +9,7 @@ import "core:os"
 import "core:testing"
 import "core:thread"
 import vmem "core:mem/virtual"
+import geometry "../../core/geometry"
 
 Codepoint_Resolver_Test_Result :: struct {
     ascii : Font_Glyph_Resolve_Status,
@@ -31,6 +32,591 @@ Math_Shaping_Task_Test_Result :: struct {
 Font_Cancel_Test_State :: struct {
     query_count: int,
     cancel_at: int,
+}
+
+Font_Codepoint_Fallback_Test_Result :: struct {
+    glyph_id: u32,
+    raster_slot_index: i32,
+    configured: bool,
+}
+
+// Configure a minimal resident face/raster pair for optional-instance tests.
+font_test_configure_raster_cache :: proc(cache: ^Font_Cache, glyph_count: int) -> bool {
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
+    entry.state = .Ready
+    entry.generation = 1
+    entry.requested_generation = 1
+    entry.raster_ascent = 24
+    entry.font = {base_size = JULIA_MONO_FONT_SIZE}
+    entry.canonical_raster = {
+        identity = {
+            key = .Regular,
+            source_generation = 1,
+            pixel_height = JULIA_MONO_FONT_SIZE,
+            policy = .Stb_Grayscale,
+            slot_incarnation = fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION,
+        },
+        state = .Resident,
+        raster_ascent = 24,
+        texture = {handle = rawptr(uintptr(1)), width = 16, height = 16},
+    }
+    if !font_generation_glyphs_init(entry, glyph_count, context.allocator) {
+        return false
+    }
+    entry.canonical_raster.glyphs[2] = {
+        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        offset_y = 24,
+        advance_x = 8,
+        state = .Resident,
+    }
+    return true
+}
+
+// Verify optional bitmap advances never replace canonical text spacing.
+@(test)
+view_test_optional_raster_preserves_canonical_advance :: proc(t: ^testing.T) {
+    entry: Font_Cache_Entry
+    testing.expect(t, font_generation_glyphs_init(
+        &entry, 8, context.allocator))
+    defer font_generation_glyphs_destroy(&entry)
+    entry.canonical_raster.glyphs[2] = {
+        advance_x = 8,
+        state = .Resident,
+    }
+    optional_glyphs: [8]Font_Glyph_Record
+    optional_glyphs[2] = {
+        rectangle = {x = 1, y = 1, width = 2, height = 4},
+        advance_x = 3,
+        state = .Resident,
+    }
+    optional := Font_Raster_Instance{
+        identity = {pixel_height = 12, slot_incarnation = 2},
+        state = .Resident,
+        texture = {handle = rawptr(uintptr(1)), width = 8, height = 8},
+        glyphs = optional_glyphs[:],
+    }
+
+    resolved, resident := font_generation_resolve_glyph(
+        &entry, &optional, 2, 4)
+    testing.expect(t, resident)
+    testing.expect_value(t, resolved.advance_x, i32(3))
+    testing.expect_value(t, resolved.canonical_advance_x, i32(8))
+
+    entry.canonical_raster.glyphs[2].state = .Missing
+    unresolved_canonical, fallback_resident := font_generation_resolve_glyph(
+        &entry, &optional, 2, 4)
+    testing.expect(t, fallback_resident)
+    testing.expect_value(t, unresolved_canonical.canonical_advance_x, i32(8))
+}
+
+// Verify target-size requests retain canonical imagery and create exact-size page work.
+@(test)
+view_test_optional_raster_admission_and_fallback :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    testing.expect(t, font_test_configure_raster_cache(&cache, 8))
+    request, valid := cache_raster_request(&cache, .Regular, 12, 1.5)
+    testing.expect(t, valid)
+    testing.expect_value(t, request.pixel_height, u32(18))
+
+    resolved, ready := cache_terminal_resolve_glyph(
+        &cache, .Regular, 2, request)
+    testing.expect(t, ready)
+    testing.expect_value(t, resolved.texture.handle, rawptr(uintptr(1)))
+    testing.expect_value(t, resolved.raster_pixel_height, i32(32))
+    selected := cache_next_optional_raster_slot(&cache)
+    testing.expect(t, selected.found)
+    testing.expect_value(t, selected.key, Font_Key.Regular)
+    slot_index := int(selected.slot_index)
+    testing.expect_value(
+        t, cache.optional_rasters[slot_index].identity.pixel_height, u32(18))
+    testing.expect_value(
+        t, cache.optional_rasters[slot_index].glyphs[2].state,
+        Font_Glyph_State.Pending)
+    cache_optional_raster_destroy(&cache, &cache.optional_rasters[slot_index])
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Verify target-page tasks retain their raster identity and bounded reservation.
+@(test)
+view_test_optional_raster_page_task_identity :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    testing.expect(t, font_test_configure_raster_cache(&cache, 8))
+    request, valid := cache_raster_request(&cache, .Regular, 12, 1.5)
+    testing.expect(t, valid)
+    _, _ = cache_terminal_resolve_glyph(&cache, .Regular, 2, request)
+    selected := cache_next_optional_raster_slot(&cache)
+    testing.expect(t, selected.found)
+    slot_index := int(selected.slot_index)
+    testing.expect(t, cache_preparation_arena_init(&cache))
+    task: Font_Prepare_Task
+    testing.expect(t, cache_prepare_page_task(
+        &cache, .Regular, &task, i32(slot_index)))
+    testing.expect_value(t, task.pixel_size, i32(18))
+    testing.expect_value(
+        t, task.raster_slot_incarnation,
+        cache.optional_rasters[slot_index].identity.slot_incarnation)
+    testing.expect_value(
+        t, task.rgba_reservation_bytes,
+        u64(fontmodel.FONT_RASTER_PAGE_RESERVATION_RGBA_BYTES))
+    testing.expect_value(
+        t, prepare_task_execute(&task, taskpool.Task_Cancellation_Token{}),
+        taskpool.Task_Result.Succeeded)
+    testing.expect_value(t, task.prepared.base_size, i32(18))
+    testing.expect(t, task.prepared.atlas_width > 0 && task.prepared.atlas_height > 0)
+    prepare_destroy(&task.prepared)
+    cache.preparation.task = task
+    cache_restore_page_demand(&cache)
+    testing.expect_value(
+        t, cache.optional_rasters[slot_index].glyphs[2].state,
+        Font_Glyph_State.Pending)
+    cache.preparation.state = .Idle
+    cache_preparation_arena_destroy(&cache)
+    cache_optional_raster_destroy(&cache, &cache.optional_rasters[slot_index])
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Configure canonical and partial target images for a two-glyph run.
+font_test_configure_partial_glyph_run :: proc(
+    cache: ^Font_Cache, request: ^fontmodel.Font_Raster_Request) -> int {
+
+    if !font_test_configure_raster_cache(cache, 8) {
+        return -1
+    }
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.canonical_raster.glyphs[3] = {
+        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        offset_y = 24,
+        advance_x = 8,
+        state = .Resident,
+    }
+    raster_request, valid := cache_raster_request(cache, .Regular, 12, 1.5)
+    if !valid {
+        return -1
+    }
+    request^ = raster_request
+    slot_index, admitted := cache_optional_raster_admit(cache, raster_request)
+    if !admitted {
+        return -1
+    }
+    partial := &cache.optional_rasters[slot_index]
+    partial.state = .Resident
+    partial.raster_ascent = 14
+    partial.texture = {handle = rawptr(uintptr(2)), width = 16, height = 16}
+    partial.glyphs[2] = {
+        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        offset_y = 14,
+        advance_x = 8,
+        state = .Resident,
+    }
+    return int(slot_index)
+}
+
+// Verify a partial target raster cannot mix focus within a complete glyph run.
+@(test)
+view_test_glyph_run_selects_one_complete_raster :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    request: fontmodel.Font_Raster_Request
+    slot_index := font_test_configure_partial_glyph_run(&cache, &request)
+    testing.expect(t, slot_index >= 0)
+    glyph_ids := [2]u32{2, 3}
+    selection, selected := cache_terminal_select_glyph_raster(
+        &cache, .Regular, glyph_ids[:], request)
+    testing.expect(t, selected)
+    testing.expect_value(t, selection.slot_index, i32(-1))
+    testing.expect_value(t, selection.pixel_height, u32(JULIA_MONO_FONT_SIZE))
+    for glyph_id in glyph_ids {
+        resolved, resident := cache_terminal_resolve_selected_glyph(
+            &cache, .Regular, glyph_id, request, selection)
+        testing.expect(t, resident)
+        testing.expect_value(t, resolved.raster_slot_index, i32(-1))
+        testing.expect_value(
+            t, resolved.texture.handle, rawptr(uintptr(1)))
+    }
+
+    cache_optional_raster_destroy(
+        &cache, &cache.optional_rasters[slot_index])
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Verify a run is rejected when no resident raster contains all of its glyphs.
+@(test)
+view_test_glyph_run_rejects_incomplete_residency :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    request: fontmodel.Font_Raster_Request
+    slot_index := font_test_configure_partial_glyph_run(&cache, &request)
+    testing.expect(t, slot_index >= 0)
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.canonical_raster.glyphs[3].state = .Missing
+    glyph_ids := [2]u32{2, 3}
+    _, incomplete_run_selected := cache_terminal_select_glyph_raster(
+        &cache, .Regular, glyph_ids[:], request)
+    testing.expect(t, !incomplete_run_selected)
+
+    cache_optional_raster_destroy(
+        &cache, &cache.optional_rasters[slot_index])
+    font_generation_glyphs_destroy(entry)
+}
+
+// Inspect prepared atlas coverage for one rasterized glyph.
+font_test_page_has_coverage :: proc(prepared: ^Prepared_Font) -> bool {
+    rectangle := prepared.rectangles[0]
+    for row in rectangle.y..<rectangle.y + rectangle.height {
+        for column in rectangle.x..<rectangle.x + rectangle.width {
+            alpha_index := (row*prepared.atlas_width + column)*2 + 1
+            if prepared.atlas_pixels[alpha_index] > 0 {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+// Publish one prepared test page after converting its reservation to actual bytes.
+font_test_publish_page :: proc(
+    cache: ^Font_Cache, task: ^Font_Prepare_Task,
+    slot_index: int) -> (u64, bool) {
+
+    rgba_bytes := u64(task.prepared.atlas_width) *
+        u64(task.prepared.atlas_height) * 4
+    if !font_raster_budget_shrink_candidate(
+        &cache.raster_budget, task.rgba_reservation_bytes, rgba_bytes) {
+        return 0, false
+    }
+    task.rgba_reservation_bytes = rgba_bytes
+    texture := Font_Texture{
+        handle = rawptr(uintptr(2)),
+        width = u32(task.prepared.atlas_width),
+        height = u32(task.prepared.atlas_height),
+    }
+    return rgba_bytes, cache_publish_glyph_page_texture(
+        cache, &task.prepared, task, texture)
+}
+
+// Resolve the known published glyph from its optional raster instance.
+font_test_resolve_page_glyph :: proc(
+    cache: ^Font_Cache, slot_index: int) -> (Resolved_Glyph, bool) {
+
+    return font_generation_resolve_glyph(
+        &cache.entries[int(Font_Key.Regular)],
+        &cache.optional_rasters[slot_index], 0)
+}
+
+// Verify published glyph coverage remains usable after preparation storage resets.
+font_test_page_survives_preparation_reset :: proc(
+    t: ^testing.T, cache: ^Font_Cache, request: fontmodel.Font_Raster_Request,
+    slot_index: int, expected_source: geometry.Rectangle) {
+
+    after_reset, resident := cache_terminal_resolve_glyph(
+        cache, .Regular, 0, request)
+    testing.expect(t, resident)
+    testing.expect_value(t, after_reset.texture.handle, rawptr(uintptr(2)))
+    testing.expect_value(t, after_reset.source, expected_source)
+    _, drawable := font_raster_bitmap_top_logical({
+        line_top = 0,
+        logical_size = request.logical_size,
+        canonical_pixel_height = after_reset.canonical_pixel_height,
+        canonical_ascent = after_reset.canonical_raster_ascent,
+        bitmap_offset_y = after_reset.offset_y,
+        raster_pixel_height = u32(after_reset.raster_pixel_height),
+        raster_ascent = after_reset.raster_ascent,
+    })
+    testing.expect(t, drawable)
+}
+
+// Verify optional atlas publication commits bytes and makes target-size glyphs resident.
+@(test)
+view_test_optional_raster_page_publication :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    testing.expect(t, font_test_configure_raster_cache(&cache, 8))
+    request, _ := cache_raster_request(&cache, .Regular, 12, 1.5)
+    _, _ = cache_terminal_resolve_glyph(&cache, .Regular, 0, request)
+    selected := cache_next_optional_raster_slot(&cache)
+    testing.expect(t, selected.found)
+    slot_index := int(selected.slot_index)
+    testing.expect(t, cache_preparation_arena_init(&cache))
+
+    task: Font_Prepare_Task
+    testing.expect(t, cache_prepare_page_task(
+        &cache, .Regular, &task, i32(slot_index)))
+    testing.expect_value(
+        t, prepare_task_execute(&task, taskpool.Task_Cancellation_Token{}),
+        taskpool.Task_Result.Succeeded)
+    testing.expect(t, font_test_page_has_coverage(&task.prepared))
+    rgba_bytes, published := font_test_publish_page(&cache, &task, slot_index)
+    testing.expect(t, published)
+    testing.expect_value(t, cache.raster_budget.resident_bytes, rgba_bytes)
+    testing.expect_value(
+        t, cache.optional_rasters[slot_index].state,
+        fontmodel.Font_Raster_Instance_State.Resident)
+    resolved, resident := font_test_resolve_page_glyph(&cache, slot_index)
+    testing.expect(t, resident)
+    testing.expect_value(t, resolved.texture.handle, rawptr(uintptr(2)))
+    testing.expect_value(t, resolved.raster_pixel_height, i32(18))
+
+    cache.preparation.task = task
+    cache_finish_preparation(&cache)
+    font_test_page_survives_preparation_reset(
+        t, &cache, request, slot_index, resolved.source)
+
+    cache_preparation_arena_destroy(&cache)
+    cache_optional_raster_destroy(&cache, &cache.optional_rasters[slot_index])
+    testing.expect_value(t, cache.raster_budget.resident_bytes, u64(0))
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Configure a resident optional raster with one drawable glyph.
+font_test_configure_resident_optional_glyph :: proc(
+    cache: ^Font_Cache, request: ^fontmodel.Font_Raster_Request) -> int {
+
+    if !font_test_configure_raster_cache(cache, 8) {
+        return -1
+    }
+    raster_request, valid := cache_raster_request(cache, .Regular, 12, 1.5)
+    if !valid {
+        return -1
+    }
+    request^ = raster_request
+    slot_index, admitted := cache_optional_raster_admit(cache, raster_request)
+    if !admitted {
+        return -1
+    }
+    raster := &cache.optional_rasters[slot_index]
+    raster.state = .Resident
+    raster.raster_ascent = 14
+    raster.texture = {handle = rawptr(uintptr(2)), width = 16, height = 16}
+    raster.glyphs[2] = {
+        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        offset_y = 14,
+        advance_x = 8,
+        state = .Resident,
+    }
+    return int(slot_index)
+}
+
+// Verify an active frame pin prevents optional-raster retirement.
+@(test)
+view_test_optional_raster_frame_pin_blocks_retirement :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    request: fontmodel.Font_Raster_Request
+    slot_index := font_test_configure_resident_optional_glyph(&cache, &request)
+    testing.expect(t, slot_index >= 0)
+    raster := &cache.optional_rasters[slot_index]
+    cache_frame_begin(&cache)
+    resolved, resident := cache_terminal_resolve_glyph(
+        &cache, .Regular, 2, request)
+    testing.expect(t, resident)
+    testing.expect_value(t, resolved.raster_slot_index, i32(slot_index))
+    testing.expect_value(
+        t, raster.frame_pin_count, u32(1))
+    testing.expect(t, !cache_optional_raster_retire_lru(&cache))
+    cache_frame_end(&cache)
+    testing.expect_value(t, raster.frame_pin_count, u32(0))
+    testing.expect(t, cache_optional_raster_retire_lru(&cache))
+    testing.expect_value(t, raster.state, fontmodel.Font_Raster_Instance_State.Vacant)
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Verify a recycled raster slot rejects glyph identities from its prior occupant.
+@(test)
+view_test_optional_raster_reuse_rejects_stale_glyph :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    request: fontmodel.Font_Raster_Request
+    slot_index := font_test_configure_resident_optional_glyph(&cache, &request)
+    testing.expect(t, slot_index >= 0)
+    raster := &cache.optional_rasters[slot_index]
+    metadata_backing := raw_data(cache.raster_metadata_backing)
+    resolved, resident := cache_terminal_resolve_glyph(
+        &cache, .Regular, 2, request)
+    testing.expect(t, resident)
+    testing.expect(t, cache_optional_raster_retire_lru(&cache))
+    replacement_index, replacement_admitted :=
+        cache_optional_raster_admit(&cache, request)
+    testing.expect(t, replacement_admitted)
+    testing.expect_value(t, replacement_index, i32(slot_index))
+    testing.expect_value(
+        t, raw_data(cache.raster_metadata_backing), metadata_backing)
+    replacement := &cache.optional_rasters[replacement_index]
+    testing.expect(t,
+        replacement.identity.slot_incarnation != resolved.raster_slot_incarnation)
+    replacement.state = .Resident
+    cache_frame_begin(&cache)
+    testing.expect(t, !cache_frame_pin_glyph(&cache, resolved))
+    testing.expect_value(t, replacement.frame_pin_count, u32(0))
+    cache_frame_end(&cache)
+    testing.expect(t, cache_optional_raster_destroy(&cache, replacement))
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Verify a stale upload callback cannot complete a newer serialized operation.
+@(test)
+view_test_upload_completion_rejects_stale_identity :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    cache.preparation.state = .Uploading
+    cache.preparation.task = {
+        kind = .Glyph_Page,
+        key = .Regular,
+        generation = 3,
+        upload_identity = 42,
+    }
+    cache.preparation.pending_texture = {
+        handle = rawptr(uintptr(7)), width = 8, height = 8,
+    }
+
+    cache_texture_upload_completed(&cache, 41, 3, true)
+
+    testing.expect_value(
+        t, cache.preparation.state, Font_Prepare_Operation_State.Uploading)
+    testing.expect_value(
+        t, cache.preparation.pending_texture.handle, rawptr(uintptr(7)))
+    testing.expect_value(t, cache.preparation.failure_count, u64(0))
+}
+
+// Verify an exact upload token still cannot publish into a reincarnated slot.
+@(test)
+view_test_upload_completion_rejects_reused_raster_slot :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    testing.expect(t, font_test_configure_raster_cache(&cache, 8))
+    request, _ := cache_raster_request(&cache, .Regular, 12, 1.5)
+    slot_index, admitted := cache_optional_raster_admit(&cache, request)
+    testing.expect(t, admitted)
+    raster := &cache.optional_rasters[slot_index]
+    raster.state = .Preparing
+    cache.preparation.state = .Uploading
+    cache.preparation.task = {
+        kind = .Glyph_Page,
+        key = .Regular,
+        generation = 1,
+        raster_slot_index = slot_index,
+        raster_slot_incarnation = raster.identity.slot_incarnation - 1,
+        upload_identity = 42,
+    }
+
+    cache_texture_upload_completed(&cache, 42, 1, true)
+
+    testing.expect_value(
+        t, cache.preparation.state, Font_Prepare_Operation_State.Idle)
+    testing.expect_value(t, cache.preparation.failure_count, u64(1))
+    testing.expect_value(t, raster.state, fontmodel.Font_Raster_Instance_State.Preparing)
+    testing.expect_value(t, cache.raster_budget.resident_bytes, u64(0))
+    cache_optional_raster_destroy(&cache, raster)
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Verify optional-slot pressure requests canonical coverage without losing the face.
+@(test)
+view_test_optional_raster_slot_pressure_falls_back :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    testing.expect(t, font_test_configure_raster_cache(&cache, 8))
+    cache.raster_budget.optional_instance_count =
+        u32(fontmodel.FONT_OPTIONAL_RASTER_INSTANCE_CAPACITY)
+    request, valid := cache_raster_request(&cache, .Regular, 12, 1.5)
+    testing.expect(t, valid)
+
+    _, ready := cache_terminal_resolve_glyph(&cache, .Regular, 3, request)
+    testing.expect(t, !ready)
+    testing.expect_value(
+        t, cache.entries[int(Font_Key.Regular)].canonical_raster.glyphs[3].state,
+        Font_Glyph_State.Pending)
+    testing.expect_value(t, cache.raster_budget.optional_instance_count,
+        u32(fontmodel.FONT_OPTIONAL_RASTER_INSTANCE_CAPACITY))
+
+    cache.raster_budget.optional_instance_count = 0
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Verify unseen glyphs request canonical fallback and target-size pixels together.
+@(test)
+view_test_unseen_glyph_requests_canonical_and_optional :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    testing.expect(t, font_test_configure_raster_cache(&cache, 8))
+    request, _ := cache_raster_request(&cache, .Regular, 12, 1.5)
+    _, ready := cache_terminal_resolve_glyph(&cache, .Regular, 3, request)
+    testing.expect(t, !ready)
+    selected := cache_next_optional_raster_slot(&cache)
+    testing.expect(t, selected.found)
+    testing.expect_value(
+        t, cache.entries[int(Font_Key.Regular)].canonical_raster.glyphs[3].state,
+        Font_Glyph_State.Pending)
+    testing.expect_value(
+        t, cache.optional_rasters[selected.slot_index].glyphs[3].state,
+        Font_Glyph_State.Pending)
+    cache_optional_raster_destroy(
+        &cache, &cache.optional_rasters[selected.slot_index])
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Verify optional raster admission charges reservations and retirement together.
+@(test)
+view_test_font_raster_budget_reservations :: proc(t: ^testing.T) {
+    budget: Font_Raster_Budget
+    first_bytes := u64(64 * 1024 * 1024)
+    second_bytes := u64(64 * 1024 * 1024)
+    testing.expect(t, font_raster_budget_reserve_instance(&budget))
+    testing.expect(t, font_raster_budget_reserve_instance(&budget))
+    testing.expect(t, font_raster_budget_reserve_bytes(&budget, first_bytes))
+    testing.expect(t, font_raster_budget_publish(&budget, first_bytes))
+    testing.expect(t, font_raster_budget_reserve_bytes(&budget, second_bytes))
+    testing.expect(t, !font_raster_budget_reserve_bytes(&budget, 1))
+    testing.expect(t, font_raster_budget_publish(&budget, second_bytes))
+    testing.expect(t, font_raster_budget_begin_retirement(&budget, first_bytes))
+    testing.expect(t, !font_raster_budget_reserve_bytes(&budget, 1))
+    testing.expect(t, font_raster_budget_release_bytes(&budget, first_bytes, true))
+    testing.expect(t, font_raster_budget_release_instance(&budget))
+    testing.expect(t, font_raster_budget_begin_retirement(&budget, second_bytes))
+    testing.expect(t, font_raster_budget_release_bytes(&budget, second_bytes, true))
+    testing.expect(t, font_raster_budget_release_instance(&budget))
+    testing.expect_value(t, budget.optional_instance_count, u32(0))
+    testing.expect_value(t, budget.pending_retirement_bytes, u64(0))
+}
+
+// Verify a failed candidate returns both its bytes and optional slot.
+@(test)
+view_test_font_raster_budget_candidate_rollback :: proc(t: ^testing.T) {
+    budget: Font_Raster_Budget
+    reservation := u64(8 * 1024 * 1024)
+    testing.expect(t, font_raster_budget_reserve_instance(&budget))
+    testing.expect(t, font_raster_budget_reserve_bytes(&budget, reservation))
+    testing.expect(t, font_raster_budget_release_bytes(&budget, reservation, false))
+    testing.expect(t, font_raster_budget_release_instance(&budget))
+    testing.expect_value(t, budget.candidate_bytes, u64(0))
+    testing.expect_value(t, budget.optional_instance_count, u32(0))
+}
+
+// Verify byte reservations retire an unused optional raster before rejecting demand.
+@(test)
+view_test_font_raster_budget_retires_lru :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    defer cache_raster_metadata_allocator_destroy(&cache)
+    testing.expect(t, font_test_configure_raster_cache(&cache, 8))
+    request, _ := cache_raster_request(&cache, .Regular, 12, 1.5)
+    slot_index, admitted := cache_optional_raster_admit(&cache, request)
+    testing.expect(t, admitted)
+    raster := &cache.optional_rasters[slot_index]
+    raster.state = .Resident
+    raster.charged_rgba_bytes = u64(96 * 1024 * 1024)
+    cache.raster_budget.resident_bytes = raster.charged_rgba_bytes
+
+    reservation := u64(64 * 1024 * 1024)
+    testing.expect(t, cache_raster_budget_reserve_with_retirement(
+        &cache, reservation))
+    testing.expect_value(t, raster.state, fontmodel.Font_Raster_Instance_State.Vacant)
+    testing.expect_value(t, cache.raster_budget.resident_bytes, u64(0))
+    testing.expect_value(t, cache.raster_budget.pending_retirement_bytes, u64(0))
+    testing.expect_value(t, cache.raster_budget.candidate_bytes, reservation)
+    testing.expect(t, font_raster_budget_release_bytes(
+        &cache.raster_budget, reservation, false))
+    font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
 }
 
 // Request cancellation at one deterministic preparation checkpoint.
@@ -63,8 +649,10 @@ font_test_configure_stale_page :: proc(
         requested_generation = 6,
         resident = true,
         state = .Requested,
-        glyphs = glyphs,
-        queued_demand_count = 1,
+        canonical_raster = {
+            glyphs = glyphs,
+            queued_demand_count = 1,
+        },
     }
     cache.preparation.state = .Queued
     cache.preparation.handle = handle
@@ -72,6 +660,7 @@ font_test_configure_stale_page :: proc(
         kind = .Glyph_Page,
         key = .Bold,
         generation = 5,
+        raster_slot_index = -1,
         glyph_id_count = 2,
         demanded_glyph_count = 1,
     }
@@ -146,7 +735,8 @@ view_expect_codepoint_resolver_result :: proc(
     testing.expect_value(
         t, result.capacity, Font_Glyph_Resolve_Status.Capacity_Exhausted)
     testing.expect_value(t, result.pending_count, i32(1))
-    testing.expect_value(t, entry.pending_glyph_count, result.pending_count)
+    testing.expect_value(
+        t, entry.canonical_raster.pending_glyph_count, result.pending_count)
     testing.expect_value(t, entry.pending_codepoint_count, u64(1))
     testing.expect_value(t, entry.unsupported_codepoint_count, u64(1))
     testing.expect_value(t, entry.capacity_rejection_count, u64(1))
@@ -228,6 +818,93 @@ view_test_terminal_regular_font_key_is_shared :: proc(t: ^testing.T) {
 
     resolved := cache_terminal_resolve(&cache, .Regular)
     testing.expect_value(t, resolved.base_size, i32(32))
+}
+
+// Verify raster selection rounds up and reports height clamps explicitly.
+@(test)
+view_test_raster_height_selection :: proc(t: ^testing.T) {
+    ordinary := font_raster_height_select(12, 1.5)
+    testing.expect(t, ordinary.valid && !ordinary.quality_limited)
+    testing.expect_value(t, ordinary.pixel_height, u32(18))
+
+    fractional := font_raster_height_select(12, 1.25)
+    testing.expect_value(t, fractional.pixel_height, u32(15))
+
+    too_small := font_raster_height_select(1, 1)
+    testing.expect(t, too_small.valid && too_small.quality_limited)
+    testing.expect_value(t, too_small.pixel_height, u32(4))
+
+    too_large := font_raster_height_select(200, 2)
+    testing.expect(t, too_large.valid && too_large.quality_limited)
+    testing.expect_value(t, too_large.pixel_height, u32(256))
+
+    invalid := font_raster_height_select(0, 1)
+    testing.expect(t, !invalid.valid)
+}
+
+// Verify physical raster metrics normalize against their own pixel height.
+@(test)
+view_test_raster_metric_normalization :: proc(t: ^testing.T) {
+    from_24, valid_24 := font_raster_metric_to_logical(6, 12, 24)
+    from_48, valid_48 := font_raster_metric_to_logical(12, 12, 48)
+    testing.expect(t, valid_24 && valid_48)
+    testing.expect_value(t, from_24, f32(3))
+    testing.expect_value(t, from_48, f32(3))
+    _, zero_height_valid := font_raster_metric_to_logical(1, 12, 0)
+    testing.expect(t, !zero_height_valid)
+}
+
+// Verify scaled raster bearings preserve the same canonical logical baseline.
+@(test)
+view_test_raster_baseline_placement_is_height_independent :: proc(t: ^testing.T) {
+    top_24, valid_24 := font_raster_bitmap_top_logical({
+        line_top = 10, logical_size = 12, canonical_pixel_height = 32,
+        canonical_ascent = 24, bitmap_offset_y = 20,
+        raster_pixel_height = 24, raster_ascent = 18,
+    })
+    top_48, valid_48 := font_raster_bitmap_top_logical({
+        line_top = 10, logical_size = 12, canonical_pixel_height = 32,
+        canonical_ascent = 24, bitmap_offset_y = 40,
+        raster_pixel_height = 48, raster_ascent = 36,
+    })
+    testing.expect(t, valid_24 && valid_48)
+    testing.expect_value(t, top_24, f32(20))
+    testing.expect_value(t, top_48, top_24)
+}
+
+// Verify a resident canonical atlas has identity separate from its face generation.
+@(test)
+view_test_canonical_raster_identity :: proc(t: ^testing.T) {
+    cache: Font_Cache
+    cache.entries[int(Font_Key.Bold)] = {
+        font = {base_size = 32},
+        generation = 7,
+        raster_ascent = 24,
+        resident = true,
+    }
+
+    identity, ready := cache_raster_identity(&cache, .Bold)
+    testing.expect(t, ready)
+    testing.expect_value(t, identity.key, Font_Key.Bold)
+    testing.expect_value(t, identity.source_generation, u64(7))
+    testing.expect_value(t, identity.pixel_height, u32(32))
+    testing.expect_value(t, identity.policy, fontmodel.Font_Raster_Policy.Stb_Grayscale)
+    testing.expect_value(t, identity.slot_incarnation,
+        u64(fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION))
+
+    metrics, metrics_ready := cache_canonical_raster_metrics(&cache, .Bold)
+    testing.expect(t, metrics_ready)
+    testing.expect_value(t, metrics.pixel_height, u32(32))
+    testing.expect_value(t, metrics.ascent, f32(24))
+
+    request, request_ready := cache_raster_request(&cache, .Bold, 12, 1.5)
+    testing.expect(t, request_ready && !request.quality_limited)
+    testing.expect_value(t, request.key, Font_Key.Bold)
+    testing.expect_value(t, request.source_generation, u64(7))
+    testing.expect_value(t, request.logical_size, f32(12))
+    testing.expect_value(t, request.scene_pixels_per_logical_unit, f32(1.5))
+    testing.expect_value(t, request.pixel_height, u32(18))
+    testing.expect_value(t, request.policy, fontmodel.Font_Raster_Policy.Stb_Grayscale)
 }
 
 // Verify the shipped faces yield a measurable lowercase match scale in MATH constants.
@@ -352,7 +1029,7 @@ view_test_math_generation_teardown :: proc(t: ^testing.T) {
     testing.expect(t, entry.shaping.face == nil)
     testing.expect(t, entry.shaping.font == nil)
     testing.expect(t, entry.shaping.buffer == nil)
-    testing.expect_value(t, len(entry.glyphs), 0)
+    testing.expect_value(t, len(entry.canonical_raster.glyphs), 0)
 }
 
 // Verify NewCM vertical variants are bounded, ordered, stable, and generation-safe.
@@ -769,6 +1446,17 @@ view_test_prepare_glyph_page :: proc(t: ^testing.T) {
     first, second: Prepared_Font
     testing.expect(t, prepare_glyph_page(request, &first, context.allocator))
     testing.expect(t, prepare_glyph_page(request, &second, context.allocator))
+    testing.expect(t, first.raster_ascent > 0)
+    _, drawable := font_raster_bitmap_top_logical({
+        line_top = 0,
+        logical_size = f32(request.pixel_size),
+        canonical_pixel_height = u32(request.pixel_size),
+        canonical_ascent = first.raster_ascent,
+        bitmap_offset_y = first.glyphs[1].offset_y,
+        raster_pixel_height = u32(request.pixel_size),
+        raster_ascent = first.raster_ascent,
+    })
+    testing.expect(t, drawable)
     testing.expect_value(t, first.glyph_count, i32(len(glyph_ids)))
     testing.expect_value(t, first.atlas_width, second.atlas_width)
     testing.expect_value(t, first.atlas_height, second.atlas_height)
@@ -827,16 +1515,17 @@ view_test_font_generation_glyph_demand_lifecycle :: proc(t: ^testing.T) {
     entry: Font_Cache_Entry
     testing.expect(t, font_generation_glyphs_init(
         &entry, 6795, context.allocator))
-    testing.expect_value(t, len(entry.glyphs), 6795)
+    testing.expect_value(t, len(entry.canonical_raster.glyphs), 6795)
     testing.expect(t, font_generation_request_glyph(&entry, 4000))
     testing.expect(t, !font_generation_request_glyph(&entry, 4000))
     testing.expect(t, !font_generation_request_glyph(&entry, 6795))
-    testing.expect_value(t, entry.pending_glyph_count, i32(1))
-    testing.expect_value(t, entry.glyphs[4000].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.canonical_raster.pending_glyph_count, i32(1))
+    testing.expect_value(
+        t, entry.canonical_raster.glyphs[4000].state, Font_Glyph_State.Pending)
 
     font_generation_glyphs_destroy(&entry)
-    testing.expect_value(t, len(entry.glyphs), 0)
-    testing.expect_value(t, entry.pending_glyph_count, i32(0))
+    testing.expect_value(t, len(entry.canonical_raster.glyphs), 0)
+    testing.expect_value(t, entry.canonical_raster.pending_glyph_count, i32(0))
     font_generation_glyphs_destroy(&entry)
 }
 
@@ -852,13 +1541,14 @@ view_test_glyph_resolver_records_missing_demand :: proc(t: ^testing.T) {
     testing.expect(t, font_generation_glyphs_init(
         entry, 32, context.allocator))
 
-    _, first_resident := cache_terminal_resolve_glyph(
+    _, first_resident := cache_terminal_resolve_glyph_canonical(
         &cache, .Regular, 17)
-    _, second_resident := cache_terminal_resolve_glyph(
+    _, second_resident := cache_terminal_resolve_glyph_canonical(
         &cache, .Regular, 17)
     testing.expect(t, !first_resident && !second_resident)
-    testing.expect_value(t, entry.pending_glyph_count, i32(1))
-    testing.expect_value(t, entry.glyphs[17].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.canonical_raster.pending_glyph_count, i32(1))
+    testing.expect_value(
+        t, entry.canonical_raster.glyphs[17].state, Font_Glyph_State.Pending)
     font_generation_glyphs_destroy(entry)
 }
 
@@ -885,14 +1575,17 @@ view_test_page_task_batches_pending_glyphs :: proc(t: ^testing.T) {
         t, task.demanded_glyph_count, i32(FONT_GLYPH_PAGE_REQUEST_CAPACITY))
     testing.expect_value(t, task.glyph_ids[0], u32(0))
     testing.expect_value(t, task.glyph_ids[255], u32(255))
-    testing.expect_value(t, entry.glyphs[255].state, Font_Glyph_State.Queued)
-    testing.expect_value(t, entry.glyphs[256].state, Font_Glyph_State.Pending)
-    testing.expect_value(t, entry.queued_demand_count, i32(256))
+    testing.expect_value(
+        t, entry.canonical_raster.glyphs[255].state, Font_Glyph_State.Queued)
+    testing.expect_value(
+        t, entry.canonical_raster.glyphs[256].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.canonical_raster.queued_demand_count, i32(256))
 
     cache.preparation.task = task
     cache_fail_preparation(&cache)
-    testing.expect_value(t, entry.glyphs[0].state, Font_Glyph_State.Pending)
-    testing.expect_value(t, entry.queued_demand_count, i32(0))
+    testing.expect_value(
+        t, entry.canonical_raster.glyphs[0].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.canonical_raster.queued_demand_count, i32(0))
     cache.preparation.state = .Idle
     cache_preparation_arena_destroy(&cache)
     font_generation_glyphs_destroy(entry)
@@ -921,9 +1614,11 @@ view_test_page_task_fills_sparse_demand :: proc(t: ^testing.T) {
 
     cache.preparation.task = task
     cache_restore_page_demand(&cache)
-    testing.expect_value(t, entry.glyphs[17].state, Font_Glyph_State.Pending)
-    testing.expect_value(t, entry.glyphs[0].state, Font_Glyph_State.Missing)
-    testing.expect_value(t, entry.pending_glyph_count, i32(1))
+    testing.expect_value(
+        t, entry.canonical_raster.glyphs[17].state, Font_Glyph_State.Pending)
+    testing.expect_value(
+        t, entry.canonical_raster.glyphs[0].state, Font_Glyph_State.Missing)
+    testing.expect_value(t, entry.canonical_raster.pending_glyph_count, i32(1))
     cache.preparation.state = .Idle
     cache_preparation_arena_destroy(&cache)
     font_generation_glyphs_destroy(entry)
@@ -938,13 +1633,14 @@ view_test_page_capacity_blocks_scheduling :: proc(t: ^testing.T) {
     entry.state = .Ready
     entry.generation = 1
     entry.requested_generation = 1
-    entry.page_count = fontmodel.FONT_GLYPH_PAGE_CAPACITY
+    entry.canonical_raster.page_count = fontmodel.FONT_GLYPH_PAGE_CAPACITY
     testing.expect(t, font_generation_glyphs_init(
         entry, 2, context.allocator))
     testing.expect(t, !font_generation_request_glyph(entry, 1))
     testing.expect_value(
-        t, entry.glyphs[1].state, Font_Glyph_State.Capacity_Blocked)
-    testing.expect_value(t, entry.pending_glyph_count, i32(0))
+        t, entry.canonical_raster.glyphs[1].state,
+        Font_Glyph_State.Capacity_Blocked)
+    testing.expect_value(t, entry.canonical_raster.pending_glyph_count, i32(0))
     _, found := cache_next_page_key(&cache)
     testing.expect(t, !found)
     font_generation_glyphs_destroy(entry)
@@ -954,17 +1650,19 @@ view_test_page_capacity_blocks_scheduling :: proc(t: ^testing.T) {
 @(test)
 view_test_final_queued_page_blocks_new_demand :: proc(t: ^testing.T) {
     entry: Font_Cache_Entry
-    entry.page_count = fontmodel.FONT_GLYPH_PAGE_CAPACITY - 1
-    entry.pending_glyph_count = 1
-    entry.queued_demand_count = 1
+    entry.canonical_raster.page_count =
+        fontmodel.FONT_GLYPH_PAGE_CAPACITY - 1
+    entry.canonical_raster.pending_glyph_count = 1
+    entry.canonical_raster.queued_demand_count = 1
     testing.expect(t, font_generation_glyphs_init(
         &entry, 4, context.allocator))
-    entry.glyphs[0].state = .Queued
+    entry.canonical_raster.glyphs[0].state = .Queued
 
     testing.expect(t, !font_generation_request_glyph(&entry, 1))
     testing.expect_value(
-        t, entry.glyphs[1].state, Font_Glyph_State.Capacity_Blocked)
-    testing.expect_value(t, entry.pending_glyph_count, i32(1))
+        t, entry.canonical_raster.glyphs[1].state,
+        Font_Glyph_State.Capacity_Blocked)
+    testing.expect_value(t, entry.canonical_raster.pending_glyph_count, i32(1))
     font_generation_glyphs_destroy(&entry)
 }
 
@@ -978,19 +1676,21 @@ view_test_stale_page_restores_old_generation_demand :: proc(t: ^testing.T) {
     testing.expect(t, font_generation_glyphs_init(
         entry, 32, context.allocator))
     testing.expect(t, font_generation_request_glyph(entry, 17))
-    entry.glyphs[17].state = .Queued
+    entry.canonical_raster.glyphs[17].state = .Queued
     cache.preparation.task = {
         kind = .Glyph_Page,
         key = .Regular,
         generation = 4,
+        raster_slot_index = -1,
         glyph_id_count = 1,
         demanded_glyph_count = 1,
     }
     cache.preparation.task.glyph_ids[0] = 17
 
     cache_restore_page_demand(&cache)
-    testing.expect_value(t, entry.glyphs[17].state, Font_Glyph_State.Pending)
-    testing.expect_value(t, entry.pending_glyph_count, i32(1))
+    testing.expect_value(
+        t, entry.canonical_raster.glyphs[17].state, Font_Glyph_State.Pending)
+    testing.expect_value(t, entry.canonical_raster.pending_glyph_count, i32(1))
     font_generation_glyphs_destroy(entry)
 }
 
@@ -1049,15 +1749,10 @@ view_test_harfbuzz_nominal_glyph :: proc(t: ^testing.T) {
     testing.expect(t, !surrogate_found)
 }
 
-// Verify direct codepoint resolution reports residency, demand, and hard bounds.
-@(test)
-view_test_codepoint_resolver_status :: proc(t: ^testing.T) {
-    source, read_error := os.read_entire_file(
-        "assets/JuliaMono-Regular.ttf", context.allocator)
-    testing.expect(t, read_error == nil)
-    defer delete(source)
+// Prepare a resident JuliaMono cmap and bounded canonical glyph table for status tests.
+font_test_initialize_codepoint_resolver :: proc(
+    t: ^testing.T, cache: ^Font_Cache, source: []u8) -> ^Font_Cache_Entry {
 
-    cache: Font_Cache
     entry := &cache.entries[int(Font_Key.Regular)]
     entry.resident = true
     entry.state = .Ready
@@ -1067,19 +1762,33 @@ view_test_codepoint_resolver_status :: proc(t: ^testing.T) {
         source, JULIA_MONO_FONT_SIZE, &entry.shaping))
     testing.expect(t, font_generation_glyphs_init(
         entry, 10000, context.allocator))
+    return entry
+}
+
+// Verify direct codepoint resolution reports residency, demand, and hard bounds.
+@(test)
+view_test_codepoint_resolver_status :: proc(t: ^testing.T) {
+    source, read_error := os.read_entire_file(
+        "assets/JuliaMono-Regular.ttf", context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+
+    cache: Font_Cache
+    entry := font_test_initialize_codepoint_resolver(t, &cache, source)
 
     ascii_id, _ := harfbuzz_nominal_glyph(&entry.shaping, 'A')
-    entry.glyphs[ascii_id].state = .Resident
+    entry.canonical_raster.glyphs[ascii_id].state = .Resident
+    raster_request, _ := cache_raster_request(&cache, .Regular, 32, 1)
     _, ascii_status := cache_terminal_resolve_codepoint(
-        &cache, .Regular, 'A')
+        &cache, .Regular, 'A', raster_request)
     _, math_status := cache_terminal_resolve_codepoint(
-        &cache, .Regular, '∫')
-    pending_count := entry.pending_glyph_count
+        &cache, .Regular, '∫', raster_request)
+    pending_count := entry.canonical_raster.pending_glyph_count
     _, unsupported_status := cache_terminal_resolve_codepoint(
-        &cache, .Regular, rune(0x10ffff))
-    entry.page_count = fontmodel.FONT_GLYPH_PAGE_CAPACITY
+        &cache, .Regular, rune(0x10ffff), raster_request)
+    entry.canonical_raster.page_count = fontmodel.FONT_GLYPH_PAGE_CAPACITY
     _, capacity_status := cache_terminal_resolve_codepoint(
-        &cache, .Regular, 'α')
+        &cache, .Regular, 'α', raster_request)
 
     view_expect_codepoint_resolver_result(t, entry, {
         ascii = ascii_status,
@@ -1089,6 +1798,83 @@ view_test_codepoint_resolver_status :: proc(t: ^testing.T) {
         pending_count = pending_count,
     })
 
+    harfbuzz_shaper_destroy(&entry.shaping)
+    font_generation_glyphs_destroy(entry)
+}
+
+// Verify general-text fallback rasters stay pinned through frame submission.
+font_test_configure_codepoint_fallback :: proc(
+    cache: ^Font_Cache, source: []u8) -> Font_Codepoint_Fallback_Test_Result {
+
+    entry := &cache.entries[int(Font_Key.Regular)]
+    entry.resident = true
+    entry.state = .Ready
+    entry.generation = 1
+    entry.requested_generation = 1
+    if !harfbuzz_shaper_init(source, JULIA_MONO_FONT_SIZE, &entry.shaping) ||
+        !font_generation_glyphs_init(entry, 10000, context.allocator) {
+        return {}
+    }
+    glyph_id, supported := harfbuzz_nominal_glyph(&entry.shaping, 'A')
+    if !supported {
+        return {}
+    }
+    fallback_request, valid := cache_raster_request(cache, .Regular, 16, 1)
+    if !valid {
+        return {}
+    }
+    fallback_index, admitted := cache_optional_raster_admit(
+        cache, fallback_request)
+    if !admitted {
+        return {}
+    }
+    fallback := &cache.optional_rasters[fallback_index]
+    fallback.state = .Resident
+    fallback.raster_ascent = 12
+    fallback.texture = {handle = rawptr(uintptr(2)), width = 16, height = 16}
+    fallback.glyphs[glyph_id] = {
+        rectangle = {x = 1, y = 1, width = 4, height = 8},
+        offset_y = 12,
+        advance_x = 8,
+        state = .Resident,
+    }
+    return {glyph_id, fallback_index, true}
+}
+
+// Verify general-text fallback rasters stay pinned through frame submission.
+@(test)
+view_test_codepoint_fallback_pins_optional_raster :: proc(t: ^testing.T) {
+    source, read_error := os.read_entire_file(
+        "assets/JuliaMono-Regular.ttf", context.allocator)
+    testing.expect(t, read_error == nil)
+    defer delete(source)
+
+    cache: Font_Cache
+    fixture := font_test_configure_codepoint_fallback(&cache, source)
+    testing.expect(t, fixture.configured && fixture.glyph_id > 0)
+    fallback := &cache.optional_rasters[int(fixture.raster_slot_index)]
+
+    target_request, target_request_valid := cache_raster_request(
+        &cache, .Regular, 12, 1.5)
+    testing.expect(t, target_request_valid)
+    cache_frame_begin(&cache)
+    resolved, status := cache_terminal_resolve_codepoint(
+        &cache, .Regular, 'A', target_request)
+    testing.expect_value(t, status, Font_Glyph_Resolve_Status.Resident)
+    testing.expect_value(
+        t, resolved.raster_slot_index, fixture.raster_slot_index)
+    testing.expect_value(t, fallback.frame_pin_count, u32(1))
+    testing.expect(t, !cache_optional_raster_retire_lru(&cache))
+    cache_frame_end(&cache)
+    testing.expect_value(t, fallback.frame_pin_count, u32(0))
+
+    for _, index in cache.optional_rasters {
+        raster := &cache.optional_rasters[index]
+        if raster.state != .Vacant {
+            _ = cache_optional_raster_destroy(&cache, raster)
+        }
+    }
+    entry := &cache.entries[int(Font_Key.Regular)]
     harfbuzz_shaper_destroy(&entry.shaping)
     font_generation_glyphs_destroy(entry)
 }
@@ -1426,6 +2212,17 @@ view_test_cache_service_discards_stale_completion :: proc(t: ^testing.T) {
     testing.expect_value(t, cache.entries[int(Font_Key.Bold)].generation, u64(4))
 }
 
+// Build the exact identity carried by the canonical seed preparation path.
+font_test_canonical_seed_task :: proc(
+    key: Font_Key, generation: u64) -> Font_Prepare_Task {
+    return {
+        kind = .Seed,
+        key = key,
+        generation = generation,
+        pixel_size = JULIA_MONO_FONT_SIZE,
+    }
+}
+
 // Verify a superseded accepted seed is cancelled, joined, and classified separately.
 @(test)
 view_test_cache_service_cancels_superseded_preparation :: proc(t: ^testing.T) {
@@ -1445,11 +2242,7 @@ view_test_cache_service_cancels_superseded_preparation :: proc(t: ^testing.T) {
     }
     cache.preparation.state = .Queued
     cache.preparation.handle = handle
-    cache.preparation.task = {
-        kind = .Seed,
-        key = .Bold,
-        generation = 5,
-    }
+    cache.preparation.task = font_test_canonical_seed_task(.Bold, 5)
 
     for !cache_preparation_idle(&cache) {
         cache_service(&cache, &pool)
@@ -1487,7 +2280,9 @@ view_test_cache_service_cancelled_page_restores_demand :: proc(t: ^testing.T) {
     testing.expect(t, observed)
     testing.expect_value(t, glyphs[17].state, Font_Glyph_State.Pending)
     testing.expect_value(t, glyphs[18].state, Font_Glyph_State.Missing)
-    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].queued_demand_count, i32(0))
+    testing.expect_value(t,
+        cache.entries[int(Font_Key.Bold)].canonical_raster.queued_demand_count,
+        i32(0))
     testing.expect_value(t, cache.preparation.cancellation_completion_count, u64(1))
     testing.expect_value(t, pool.outstanding_count, 0)
 }
@@ -1513,11 +2308,7 @@ view_test_cache_service_preserves_current_other_key_work :: proc(t: ^testing.T) 
     }
     cache.preparation.state = .Queued
     cache.preparation.handle = handle
-    cache.preparation.task = {
-        kind = .Seed,
-        key = .Bold,
-        generation = 5,
-    }
+    cache.preparation.task = font_test_canonical_seed_task(.Bold, 5)
 
     cache_service(&cache, &pool)
     testing.expect_value(t, cache.preparation.cancellation_request_count, u64(0))

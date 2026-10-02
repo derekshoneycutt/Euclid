@@ -235,11 +235,13 @@ prose_shaping_service :: proc(
         requested_key := fontmodel.Font_Key(key_index)
         identity, ready :=
             font.cache_shaping_identity(&data^.state^.font_cache, requested_key)
-        if !ready {
+        raster_metrics, raster_ready := font.cache_canonical_raster_metrics(
+            &data^.state^.font_cache, requested_key)
+        if !ready || !raster_ready {
             return {}
         }
         result.fonts[key_index] = {
-            identity.key, identity.generation, identity.raster_ascent}
+            identity.key, identity.generation, raster_metrics.ascent}
     }
     return result
 }

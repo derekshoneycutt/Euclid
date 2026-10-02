@@ -21,6 +21,12 @@ import "core:math"
 import "core:strings"
 import "core:unicode/utf8"
 
+Terminal_Shaped_Glyph_Quad :: struct {
+    destination: geometry.Rectangle,
+    uv: geometry.Rectangle,
+    valid: bool,
+}
+
 //   Append streamed ANSI output through the bounded terminal interpreter.
 //
 // Notes:
@@ -1558,29 +1564,83 @@ terminal_draw_shaped_glyph :: proc(
     resolved: font.Resolved_Glyph, glyph: font.Shaped_Glyph,
     cell_position: geometry.Vector2, color: Color) {
 
-    if !terminal_shaped_source_has_ink(resolved.source) {
+    quad := terminal_shaped_glyph_quad(encoder, resolved, glyph, cell_position)
+    if !quad.valid {
         return
     }
-    scale := TERMINAL_FONT_SIZE/f32(resolved.base_size)
-    offset_scale := scale/64
+    _ = native.draw_encoder_texture_quad(encoder, quad.destination, quad.uv,
+        color, {texture = resolved.texture.handle, sampler = .Linear})
+}
+
+// Prepare atlas and destination geometry for one terminal shaped glyph.
+terminal_shaped_glyph_quad :: proc(
+    encoder: ^native.Draw_Encoder, resolved: font.Resolved_Glyph,
+    glyph: font.Shaped_Glyph,
+    cell_position: geometry.Vector2) -> Terminal_Shaped_Glyph_Quad {
+
+    if !terminal_shaped_source_has_ink(resolved.source) ||
+        resolved.raster_pixel_height <= 0 {
+        return {}
+    }
+    destination, positioned := terminal_shaped_glyph_destination(
+        encoder, resolved, glyph, cell_position)
+    if !positioned {
+        return {}
+    }
+    return {
+        destination = destination,
+        uv = terminal_shaped_glyph_uv(resolved),
+        valid = true,
+    }
+}
+
+// Convert glyph bearings and shaped offsets to a snapped terminal position.
+terminal_shaped_glyph_destination :: proc(
+    encoder: ^native.Draw_Encoder, resolved: font.Resolved_Glyph,
+    glyph: font.Shaped_Glyph, cell_position: geometry.Vector2) -> (
+    geometry.Rectangle, bool) {
+
+    scale := TERMINAL_FONT_SIZE/f32(resolved.raster_pixel_height)
+    offset_scale := TERMINAL_FONT_SIZE/f32(font.JULIA_MONO_FONT_SIZE)/64
+    bitmap_top, valid_top := font.font_raster_bitmap_top_logical(
+        {
+            line_top = cell_position.y,
+            logical_size = TERMINAL_FONT_SIZE,
+            canonical_pixel_height = resolved.canonical_pixel_height,
+            canonical_ascent = resolved.canonical_raster_ascent,
+            bitmap_offset_y = resolved.offset_y,
+            raster_pixel_height = u32(resolved.raster_pixel_height),
+            raster_ascent = resolved.raster_ascent,
+        })
+    if !valid_top {
+        return {}, false
+    }
     destination := geometry.Rectangle{
         x = cell_position.x + f32(resolved.offset_x)*scale +
             f32(glyph.x_offset)*offset_scale,
-        y = cell_position.y + f32(resolved.offset_y)*scale +
-            f32(glyph.y_offset)*offset_scale,
+        y = bitmap_top + f32(glyph.y_offset)*offset_scale,
         width = resolved.source.width*scale,
         height = resolved.source.height*scale,
     }
+    destination_origin := view_core.ui_text_snap_glyph_origin(
+        encoder, {destination.x, destination.y})
+    destination.x = destination_origin.x
+    destination.y = destination_origin.y
+    return destination, true
+}
+
+// Normalize the glyph source rectangle against its owning atlas dimensions.
+terminal_shaped_glyph_uv :: proc(
+    resolved: font.Resolved_Glyph) -> geometry.Rectangle {
+
     texture_width := f32(resolved.texture.width)
     texture_height := f32(resolved.texture.height)
-    uv := geometry.Rectangle{
+    return {
         resolved.source.x/texture_width,
         resolved.source.y/texture_height,
         resolved.source.width/texture_width,
         resolved.source.height/texture_height,
     }
-    _ = native.draw_encoder_texture_quad(encoder, destination, uv,
-        color, {texture = resolved.texture.handle, sampler = .Linear})
 }
 
 // Return whether one shaped glyph atlas rectangle contains drawable ink.
@@ -1647,15 +1707,32 @@ terminal_shaped_glyphs_resident :: proc(
     request: Terminal_Shaped_Run_Draw,
     workspace: ^Terminal_Shaped_Run_Workspace, glyph_count: int) -> bool {
 
-    for glyph in workspace.shaped_glyphs[:glyph_count] {
-        _, resident := request.resolver.resolve_glyph(
-            request.resolver.user_data, request.key, glyph.glyph_id)
-        if !resident {
-            terminal_record_shape_fallback(request.resolver, .Pending_Glyph)
-            return false
-        }
+    selection, resident := view_core.ui_text_shape_glyphs_are_resident(
+        request.resolver, request.key,
+        workspace.shaped_glyphs[:glyph_count], workspace.raster_request)
+    if !resident {
+        terminal_record_shape_fallback(request.resolver, .Pending_Glyph)
+        return false
     }
+    workspace.raster_selection = selection
     return true
+}
+
+// Shape flattened terminal text and validate its horizontal glyph output.
+terminal_shape_validated_glyphs :: proc(
+    request: Terminal_Shaped_Run_Draw,
+    workspace: ^Terminal_Shaped_Run_Workspace,
+    text: string) -> (int, bool) {
+
+    glyph_count, shaped := request.resolver.shape(
+        request.resolver.user_data, request.key, text,
+        workspace.shaped_glyphs[:])
+    if !shaped || !terminal_shaped_run_is_valid(
+        workspace.shaped_glyphs[:], len(request.cells), glyph_count) {
+        terminal_record_shape_fallback(request.resolver, .Invalid_Result)
+        return 0, false
+    }
+    return glyph_count, true
 }
 
 //   Prepare and validate one eligible run without issuing partial draw commands.
@@ -1685,12 +1762,9 @@ terminal_prepare_shaped_run :: proc(
     if !built {
         return false
     }
-    glyph_count, shaped := request.resolver.shape(
-        request.resolver.user_data, request.key, text,
-        workspace.shaped_glyphs[:])
-    if !shaped || !terminal_shaped_run_is_valid(
-        workspace.shaped_glyphs[:], len(request.cells), glyph_count) {
-        terminal_record_shape_fallback(request.resolver, .Invalid_Result)
+    glyph_count, valid_shape := terminal_shape_validated_glyphs(
+        request, workspace, text)
+    if !valid_shape {
         return false
     }
     if !terminal_map_shape_clusters(
@@ -1698,6 +1772,12 @@ terminal_prepare_shaped_run :: proc(
         return false
     }
     terminal_map_shape_cell_columns(request.cells, workspace)
+    raster_request, request_valid := view_core.ui_text_raster_request(
+        request.resolver, request.key, TERMINAL_FONT_SIZE, request.encoder)
+    if !request_valid {
+        return false
+    }
+    workspace.raster_request = raster_request
     if !terminal_shaped_glyphs_resident(request, workspace, glyph_count) {
         return false
     }
@@ -1735,8 +1815,9 @@ terminal_draw_shaped_output_run :: proc(
                 request.column_width,
             request.position.y,
         }
-        resolved, resident := request.resolver.resolve_glyph(
-            request.resolver.user_data, request.key, glyph.glyph_id)
+        resolved, resident := view_core.ui_text_resolve_selected_glyph(
+            request.resolver, request.key, glyph.glyph_id,
+            workspace.raster_request, workspace.raster_selection)
         assert(resident)
         terminal_draw_shaped_glyph(
             request.encoder, resolved, glyph, cell_position, request.color)

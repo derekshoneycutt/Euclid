@@ -267,6 +267,10 @@ prepare_glyph_page_populate :: proc(
         return false
     }
     prepared.face_glyph_count = info.numGlyphs
+    ascent: i32
+    stbtt.GetFontVMetrics(info, &ascent, nil, nil)
+    prepared.raster_ascent = f32(ascent) *
+        stbtt.ScaleForPixelHeight(info, f32(request.pixel_size))
     if !prepare_glyph_page_metrics(
         info, request.pixel_size, request.glyph_ids, prepared.glyphs,
         request.cancellation) || !prepare_commit_layout({

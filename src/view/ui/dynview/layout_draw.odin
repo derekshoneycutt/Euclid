@@ -112,6 +112,12 @@ Stretch_Construction_Position :: struct {
     origin_x, baseline_y, vertical_origin: f32,
 }
 
+Stretch_Construction_Raster :: struct {
+    request: fontmodel.Font_Raster_Request,
+    selection: font.Font_Raster_Selection,
+    ready: bool,
+}
+
 //   Normalized control-point geometry for one stretched brace glyph.
 Brace_Control_Geometry :: struct {
     r_norm : f32,
@@ -217,6 +223,16 @@ Layout_Draw_Context :: struct {
     panel : geometry.Rectangle,
     font : font.Font_Face,
     font_size : f32,
+}
+
+//   Complete inputs for emitting one selected horizontal glyph-accent run.
+Accent_Glyph_Parts_Draw :: struct {
+    ctx: Layout_Draw_Context,
+    construction: fontmodel.Font_Math_Stretch_Construction,
+    raster: Stretch_Construction_Raster,
+    draw_x, baseline_y: f32,
+    item: dynviewmodel.Dynview_Layout_Item,
+    color: dynviewmodel.Color,
 }
 
 //   Inputs for one unshaped math run resolved through demand-loaded glyph pages.
@@ -465,28 +481,48 @@ draw_glyph_accent_construction :: proc(
     construction := item.accent_glyph_construction
     cache := &ctx.runtime^.compile_cache
     if !item.accent_geometry_valid || !construction.valid ||
-        item.accent_glyph_font_generation != cache^.shaped_font_generation ||
-        !stretch_construction_is_resident(ctx, construction) {
+        item.accent_glyph_font_generation != cache^.shaped_font_generation {
         return false
     }
-    resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
-    for index in 0..<construction.count {
-        part := construction.parts[index]
-        glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = part.glyph_id}}
-        if !view_core.ui_text_cached_shaped_run({
-            encoder = ctx.encoder,
-            resolver = resolver, key = .Math_Regular, glyphs = glyphs[:],
-            position = {
-                draw_x+item.accent_glyph_x+
-                    part.advance_offset*item.accent_glyph_scale,
-                baseline_y+item.accent_glyph_line_top,
-            },
-            color = color,
-            font_size = item.math_font_size,
-            base_pixel_size = cache^.math_constants.base_pixel_size,
-        }) {
+    raster := stretch_construction_select_raster(
+        ctx, construction, item.math_font_size)
+    if !raster.ready {
+        return false
+    }
+    return draw_glyph_accent_parts({
+        ctx = ctx,
+        construction = construction,
+        raster = raster,
+        draw_x = draw_x,
+        baseline_y = baseline_y,
+        item = item,
+        color = color,
+    })
+}
+
+// Emit every accent part from the already selected complete raster.
+draw_glyph_accent_parts :: proc(draw: Accent_Glyph_Parts_Draw) -> bool {
+
+    resolver := font.cache_terminal_resolver(&draw.ctx.state^.font_cache)
+    for index in 0..<draw.construction.count {
+        part := draw.construction.parts[index]
+        resolved, resident := view_core.ui_text_resolve_selected_glyph(
+            resolver, .Math_Regular, part.glyph_id,
+            draw.raster.request, draw.raster.selection)
+        if !resident {
             return false
         }
+        view_core.ui_text_draw_resolved_glyph({
+            encoder = draw.ctx.encoder,
+            resolved = resolved,
+            position = {
+                draw.draw_x+draw.item.accent_glyph_x+
+                    part.advance_offset*draw.item.accent_glyph_scale,
+                draw.baseline_y+draw.item.accent_glyph_line_top,
+            },
+            font_size = draw.item.math_font_size,
+            color = draw.color,
+        })
     }
     return true
 }
@@ -718,7 +754,8 @@ draw_sealed_radical :: proc(
     item := layout.item
     construction := item.math_stretch_constructions[0]
     if !item.radical_geometry_valid || !construction.valid ||
-        !stretch_construction_is_resident(layout.ctx, construction) {
+        !stretch_construction_is_resident(
+            layout.ctx, construction, item.math_font_size) {
         return false
     }
     if !draw_stretch_construction(layout.ctx, item, construction, {
@@ -1383,23 +1420,48 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     return width
 }
 
-//   Demand every selected glyph before drawing any part of a construction.
-stretch_construction_is_resident :: proc(
+//   Compare two borrowed glyphs for exact raster-instance coherence.
+stretch_glyphs_share_raster :: #force_inline proc(
+    first, next: font.Resolved_Glyph) -> bool {
+
+    return first.raster_slot_index == next.raster_slot_index &&
+        first.raster_slot_incarnation == next.raster_slot_incarnation &&
+        first.raster_pixel_height == next.raster_pixel_height
+}
+
+//   Demand every selected glyph from one raster before drawing a construction.
+stretch_construction_select_raster :: proc(
     ctx: Layout_Draw_Context,
-    construction: fontmodel.Font_Math_Stretch_Construction) -> bool {
+    construction: fontmodel.Font_Math_Stretch_Construction,
+    logical_size: f32) -> Stretch_Construction_Raster {
 
     if ctx.state == nil || !construction.valid || construction.count <= 0 ||
         construction.count > len(construction.parts) {
-        return false
+        return {}
     }
-    resident := true
+    resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
+    raster_request, request_valid := view_core.ui_text_raster_request(
+        resolver, .Math_Regular, logical_size, ctx.encoder)
+    if !request_valid {
+        return {}
+    }
+    glyph_ids: [fontmodel.FONT_MATH_GLYPH_PART_CAPACITY]u32
     for index in 0..<construction.count {
-        _, found := font.cache_terminal_resolve_glyph(
-            &ctx.state^.font_cache, .Math_Regular,
-            construction.parts[index].glyph_id)
-        resident = resident && found
+        glyph_ids[index] = construction.parts[index].glyph_id
     }
-    return resident
+    selection, ready := view_core.ui_text_select_glyph_ids(
+        resolver, .Math_Regular, glyph_ids[:construction.count], raster_request)
+    return {raster_request, selection, ready}
+}
+
+// Demand a complete construction from one resident raster.
+stretch_construction_is_resident :: #force_inline proc(
+    ctx: Layout_Draw_Context,
+    construction: fontmodel.Font_Math_Stretch_Construction,
+    logical_size: f32) -> bool {
+
+    return stretch_construction_select_raster(
+        ctx, construction, logical_size).ready
 }
 
 //   Draw one fully resident bottom-to-top OpenType MATH construction.
@@ -1410,7 +1472,9 @@ draw_stretch_construction :: proc(
     position: Stretch_Construction_Position,
     color: dynviewmodel.Color) -> bool {
 
-    if !stretch_construction_is_resident(ctx, construction) {
+    raster := stretch_construction_select_raster(
+        ctx, construction, item.math_font_size)
+    if !raster.ready {
         return false
     }
     cache := &ctx.runtime^.compile_cache
@@ -1418,20 +1482,22 @@ draw_stretch_construction :: proc(
     raster_scale := item.math_font_size/cache^.math_constants.base_pixel_size
     for index in 0..<construction.count {
         part := construction.parts[index]
-        glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = part.glyph_id}}
         part_baseline := position.baseline_y + position.vertical_origin -
             part.advance_offset*item.math_stretch_scale
-        if !view_core.ui_text_cached_shaped_run({
-            encoder = ctx.encoder,
-            resolver = resolver, key = .Math_Regular, glyphs = glyphs[:],
-            position = {position.origin_x,
-                part_baseline-item.math_stretch_raster_ascent*raster_scale},
-            color = color,
-            font_size = item.math_font_size,
-            base_pixel_size = cache^.math_constants.base_pixel_size,
-        }) {
+        resolved, resident := view_core.ui_text_resolve_selected_glyph(
+            resolver, .Math_Regular, part.glyph_id,
+            raster.request, raster.selection)
+        if !resident {
             return false
         }
+        view_core.ui_text_draw_resolved_glyph({
+            encoder = ctx.encoder,
+            resolved = resolved,
+            position = {position.origin_x,
+                part_baseline-item.math_stretch_raster_ascent*raster_scale},
+            font_size = item.math_font_size,
+            color = color,
+        })
     }
     return true
 }
@@ -1450,7 +1516,8 @@ draw_sealed_stretch_delimiters :: proc(
     }
     for construction in item.math_stretch_constructions {
         if construction.valid &&
-            !stretch_construction_is_resident(ctx, construction) {
+            !stretch_construction_is_resident(
+                ctx, construction, item.math_font_size) {
             return false
         }
     }

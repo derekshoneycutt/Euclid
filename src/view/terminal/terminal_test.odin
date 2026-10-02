@@ -60,11 +60,20 @@ terminal_test_shaped_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
     terminal_draw_shaped_glyph(
         &encoder,
         {texture = {handle = texture, width = 32, height = 32},
-            source = {x = 1, y = 2, width = 8, height = 10}, base_size = 32},
-        {}, {}, Color{255, 255, 255, 255})
+            source = {x = 1, y = 2, width = 8, height = 10},
+            offset_x = 6, offset_y = 20, raster_pixel_height = 24,
+            raster_ascent = 18, canonical_pixel_height = 32,
+            canonical_raster_ascent = 24},
+        {x_offset = 64, y_offset = 64}, {10, 20}, Color{255, 255, 255, 255})
 
     testing.expect_value(t, encoder.batch_count, 1)
     testing.expect_value(t, batches[0].sampler, native.Draw_Sampler.Linear)
+    raster_scale := TERMINAL_FONT_SIZE/f32(24)
+    shaping_scale := TERMINAL_FONT_SIZE/f32(font.JULIA_MONO_FONT_SIZE)
+    testing.expect_value(t, vertices[0].position.x,
+        f32(15))
+    testing.expect_value(t, vertices[0].position.y,
+        f32(34))
 }
 
 // Return one high glyph ID for every bounded terminal shaping request.
@@ -82,14 +91,15 @@ terminal_test_shape_high_glyph :: proc(
 // Resolve the fake high glyph only after the test marks its page resident.
 terminal_test_resolve_high_glyph :: proc(
     user_data: rawptr, _: font.Font_Key,
-    glyph_id: u32) -> (font.Resolved_Glyph, bool) {
+    glyph_id: u32, _: font.Font_Raster_Request) ->
+    (font.Resolved_Glyph, bool) {
 
     state := cast(^Terminal_Test_Shaped_Font)user_data
     state.resolve_count += 1
     if !state.resident || glyph_id != 4000 {
         return {}, false
     }
-    return {base_size = 32}, true
+    return {raster_pixel_height = 32}, true
 }
 
 // Record pending-glyph fallback without retaining test request data.

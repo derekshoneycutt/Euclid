@@ -30,13 +30,36 @@ prepare_task_cancel_requested :: proc(user_data: rawptr) -> bool {
     return token != nil && taskpool.task_cancellation_requested(token^)
 }
 
+// Select the oldest optional raster with bounded pending glyph work.
+cache_next_optional_raster_slot :: proc(
+    cache: ^Font_Cache) -> fontmodel.Font_Raster_Slot_Selection {
+    if cache == nil {
+        return {}
+    }
+    selected_key := Font_Key.Regular
+    selected_index := i32(-1)
+    selected_tick := max(u64)
+    for raster, slot_index in cache.optional_rasters {
+        if (raster.state != .Preparing && raster.state != .Resident) ||
+            raster.pending_glyph_count <= 0 ||
+            raster.page_count >= fontmodel.FONT_GLYPH_PAGE_CAPACITY {
+            continue
+        }
+        if raster.first_pending_demand_tick < selected_tick {
+            selected_key = raster.identity.key
+            selected_index = i32(slot_index)
+            selected_tick = raster.first_pending_demand_tick
+        }
+    }
+    return {key = selected_key, slot_index = selected_index,
+        found = selected_index >= 0}
+}
+
 //   Prepare one task-owned font result without touching display resources.
 prepare_task_execute :: proc(
     payload: rawptr,
     token: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     task := cast(^Font_Prepare_Task)payload
-    path := string(task.path_storage[:task.path_length])
-    prepared := false
     cancellation_token := token
     cancellation := Font_Prepare_Cancellation{
         user_data = &cancellation_token,
@@ -44,26 +67,27 @@ prepare_task_execute :: proc(
     }
     switch task.kind {
     case .Seed:
-        prepared = prepare({
+        if prepare({
             key = task.key,
             generation = task.generation,
-            path = path,
+            path = string(task.path_storage[:task.path_length]),
             pixel_size = task.pixel_size,
             codepoints = task.codepoints[:task.codepoint_count],
             cancellation = cancellation,
-        }, &task.prepared, task.allocator, .Arena)
+        }, &task.prepared, task.allocator, .Arena) {
+            return .Succeeded
+        }
     case .Glyph_Page:
-        prepared = prepare_glyph_page({
+        if prepare_glyph_page({
             key = task.key,
             generation = task.generation,
-            path = path,
+            path = string(task.path_storage[:task.path_length]),
             pixel_size = task.pixel_size,
             glyph_ids = task.glyph_ids[:task.glyph_id_count],
             cancellation = cancellation,
-        }, &task.prepared, task.allocator, .Arena)
-    }
-    if prepared {
-        return .Succeeded
+        }, &task.prepared, task.allocator, .Arena) {
+            return .Succeeded
+        }
     }
     return .Failed
 }
@@ -151,8 +175,9 @@ cache_next_page_key :: proc(cache: ^Font_Cache) -> (Font_Key, bool) {
         entry := &cache.entries[entry_index]
         if entry.resident && entry.state == .Ready &&
             entry.generation == entry.requested_generation &&
-            entry.pending_glyph_count > 0 &&
-            entry.page_count < fontmodel.FONT_GLYPH_PAGE_CAPACITY {
+            entry.canonical_raster.pending_glyph_count > 0 &&
+            entry.canonical_raster.page_count <
+                fontmodel.FONT_GLYPH_PAGE_CAPACITY {
             return Font_Key(entry_index), true
         }
     }
@@ -161,9 +186,9 @@ cache_next_page_key :: proc(cache: ^Font_Cache) -> (Font_Key, bool) {
 
 //   Queue pending demand first and report whether the task owns any demand.
 cache_page_task_queue_pending :: proc(
-    entry: ^Font_Cache_Entry, task: ^Font_Prepare_Task) -> bool {
+    raster: ^Font_Raster_Instance, task: ^Font_Prepare_Task) -> bool {
 
-    for &glyph, glyph_id in entry.glyphs {
+    for &glyph, glyph_id in raster.glyphs {
         if glyph.state != .Pending {
             continue
         }
@@ -180,9 +205,9 @@ cache_page_task_queue_pending :: proc(
 
 //   Fill unused page slots with missing face glyphs in glyph-ID order.
 cache_page_task_fill_missing :: proc(
-    entry: ^Font_Cache_Entry, task: ^Font_Prepare_Task) {
+    raster: ^Font_Raster_Instance, task: ^Font_Prepare_Task) {
 
-    for &glyph, glyph_id in entry.glyphs {
+    for &glyph, glyph_id in raster.glyphs {
         if task.glyph_id_count == FONT_GLYPH_PAGE_REQUEST_CAPACITY {
             break
         }
@@ -195,49 +220,99 @@ cache_page_task_fill_missing :: proc(
     }
 }
 
+// Resolve the canonical or currently preparable optional raster for a page task.
+cache_page_task_raster :: proc(
+    cache: ^Font_Cache, key: Font_Key,
+    raster_slot_index: i32) -> ^Font_Raster_Instance {
+
+    if raster_slot_index < 0 {
+        return &cache.entries[int(key)].canonical_raster
+    }
+    if raster_slot_index >= len(cache.optional_rasters) {
+        return nil
+    }
+    raster := &cache.optional_rasters[raster_slot_index]
+    if raster.state != .Preparing && raster.state != .Resident {
+        return nil
+    }
+    return raster
+}
+
 //   Copy pending IDs first, then fill the page with deterministic missing IDs.
 //
 // Returns:
 //   - True when at least one glyph ID was transferred to the task.
 cache_prepare_page_task :: proc(
     cache: ^Font_Cache, key: Font_Key,
-    task: ^Font_Prepare_Task) -> bool {
+    task: ^Font_Prepare_Task, raster_slot_index := i32(-1)) -> bool {
 
     entry := &cache.entries[int(key)]
+    raster := cache_page_task_raster(cache, key, raster_slot_index)
+    if raster == nil {
+        return false
+    }
+    reservation_bytes := u64(fontmodel.FONT_RASTER_PAGE_RESERVATION_RGBA_BYTES)
+    if !cache_raster_budget_reserve_with_retirement(
+        cache, reservation_bytes, raster_slot_index) {
+        return false
+    }
     task^ = {
         kind = .Glyph_Page,
         key = key,
         generation = entry.generation,
-        pixel_size = JULIA_MONO_FONT_SIZE,
+        raster_slot_index = raster_slot_index,
+        raster_slot_incarnation = raster.identity.slot_incarnation,
+        rgba_reservation_bytes = reservation_bytes,
+        pixel_size = i32(raster.identity.pixel_height),
         allocator = vmem.arena_allocator(&cache.preparation_arena),
     }
     if !prepare_task_set_path(task, cache_source_path(cache, key)) {
+        _ = font_raster_budget_release_bytes(
+            &cache.raster_budget, task.rgba_reservation_bytes, false)
         return false
     }
-    if !cache_page_task_queue_pending(entry, task) {
+    if !cache_page_task_queue_pending(raster, task) {
+        _ = font_raster_budget_release_bytes(
+            &cache.raster_budget, task.rgba_reservation_bytes, false)
         return false
     }
-    entry.queued_demand_count = task.demanded_glyph_count
-    cache_page_task_fill_missing(entry, task)
+    raster.queued_demand_count = task.demanded_glyph_count
+    cache_page_task_fill_missing(raster, task)
     return true
 }
 
 //   Start one glyph-page operation in the serialized preparation slot.
-cache_begin_page_request :: proc(cache: ^Font_Cache, key: Font_Key) {
+cache_begin_page_request :: proc(
+    cache: ^Font_Cache, key: Font_Key, raster_slot_index := i32(-1)) {
     if !cache_preparation_arena_init(cache) {
         return
     }
     cache.preparation.state = .Retry
-    if !cache_prepare_page_task(cache, key, &cache.preparation.task) {
+    if !cache_prepare_page_task(
+        cache, key, &cache.preparation.task, raster_slot_index) {
         cache.preparation.state = .Idle
         cache.preparation.failure_count += 1
     }
 }
 
+// Copy the key's required startup coverage into the seed preparation task.
+cache_seed_task_set_codepoints :: proc(task: ^Font_Prepare_Task, key: Font_Key) {
+    codepoints := required_seed_codepoints(key)
+    copy(task.codepoints[:], codepoints.values[:codepoints.count])
+    task.codepoint_count = codepoints.count
+}
+
 //   Start one seed-generation operation in the serialized preparation slot.
 cache_begin_seed_request :: proc(cache: ^Font_Cache, key: Font_Key) {
     entry := &cache.entries[int(key)]
+    reservation_bytes := u64(fontmodel.FONT_RASTER_PAGE_RESERVATION_RGBA_BYTES)
+    if !cache_raster_budget_reserve_with_retirement(
+        cache, reservation_bytes) {
+        return
+    }
     if !cache_preparation_arena_init(cache) {
+        _ = font_raster_budget_release_bytes(
+            &cache.raster_budget, reservation_bytes, false)
         entry.state = .Failed
         cache.preparation.failure_count += 1
         return
@@ -248,19 +323,21 @@ cache_begin_seed_request :: proc(cache: ^Font_Cache, key: Font_Key) {
         kind = .Seed,
         key = key,
         generation = entry.requested_generation,
+        raster_slot_index = -1,
+        rgba_reservation_bytes = reservation_bytes,
         pixel_size = JULIA_MONO_FONT_SIZE,
         allocator = vmem.arena_allocator(&cache.preparation_arena),
     }
     if !prepare_task_set_path(
         &cache.preparation.task, cache_source_path(cache, key)) {
         entry.state = .Failed
+        _ = font_raster_budget_release_bytes(
+            &cache.raster_budget, reservation_bytes, false)
         cache.preparation.state = .Idle
         cache.preparation.failure_count += 1
         return
     }
-    codepoints := required_seed_codepoints(key)
-    copy(cache.preparation.task.codepoints[:], codepoints.values[:codepoints.count])
-    cache.preparation.task.codepoint_count = codepoints.count
+    cache_seed_task_set_codepoints(&cache.preparation.task, key)
 }
 
 //   Move the oldest recorded optional demand into the single preparation slot.
@@ -278,9 +355,25 @@ cache_begin_next_request :: proc(cache: ^Font_Cache) {
     }
     key, found := cache_next_requested_key(cache)
     if !found {
+        optional_slot := cache_next_optional_raster_slot(cache)
+        if optional_slot.found {
+            raster := &cache.optional_rasters[optional_slot.slot_index]
+            age := cache.raster_request_clock - raster.first_pending_demand_tick
+            if age >= fontmodel.FONT_RASTER_DEMAND_AGE_TICKS {
+                cache_begin_page_request(
+                    cache, optional_slot.key, optional_slot.slot_index)
+                return
+            }
+        }
         page_key, page_found := cache_next_page_key(cache)
         if page_found {
             cache_begin_page_request(cache, page_key)
+            return
+        }
+        fallback_slot := cache_next_optional_raster_slot(cache)
+        if fallback_slot.found {
+            cache_begin_page_request(
+                cache, fallback_slot.key, fallback_slot.slot_index)
         }
         return
     }
@@ -298,7 +391,8 @@ cache_preparation_is_current :: proc(cache: ^Font_Cache) -> bool {
     case .Seed:
         return task.generation == entry.requested_generation
     case .Glyph_Page:
-        return task.generation == entry.generation &&
+        return cache_preparation_raster(cache, task) != nil &&
+            task.generation == entry.generation &&
             entry.generation == entry.requested_generation &&
             entry.state == .Ready
     }
@@ -328,14 +422,16 @@ cache_request_preparation_cancellation :: proc(
 cache_commit_uploaded_preparation :: proc(cache: ^Font_Cache) -> bool {
     task := &cache.preparation.task
     texture := cache.preparation.pending_texture
+    published := false
     switch task.kind {
     case .Seed:
-        return cache_publish_texture(cache, &task.prepared, texture)
+        published = cache_publish_texture(
+            cache, &task.prepared, texture, task.rgba_reservation_bytes)
     case .Glyph_Page:
-        return cache_publish_glyph_page_texture(
+        published = cache_publish_glyph_page_texture(
             cache, &task.prepared, task, texture)
     }
-    return false
+    return published
 }
 
 // cache_texture_upload_completed commits or rolls back one exact pending atlas.
@@ -346,7 +442,7 @@ cache_texture_upload_completed :: proc(
        return
     }
     task := &cache.preparation.task
-    if identity != u64(task.key) + 1 || generation != task.generation {
+     if identity != task.upload_identity || generation != task.generation {
        return
     }
     texture := cache.preparation.pending_texture
@@ -370,19 +466,32 @@ cache_texture_upload_completed :: proc(
     cache_finish_preparation(cache)
 }
 
-// cache_begin_preparation_upload queues one atlas while retaining its CPU storage.
+// Queue one atlas upload while retaining its CPU storage until completion.
 cache_begin_preparation_upload :: proc(cache: ^Font_Cache) -> bool {
     task := &cache.preparation.task
     if task.kind == .Glyph_Page {
         entry := &cache.entries[int(task.key)]
+        raster := cache_preparation_raster(cache, task)
         if !cache_glyph_page_matches_task(&task.prepared, task) ||
-            !cache_glyph_page_can_publish(entry, &task.prepared) {
+            !cache_glyph_page_can_publish(entry, raster, &task.prepared) {
             return false
         }
     }
+    actual_bytes := u64(task.prepared.atlas_width) *
+        u64(task.prepared.atlas_height) * 4
+    if !font_raster_budget_shrink_candidate(
+        &cache.raster_budget, task.rgba_reservation_bytes, actual_bytes) {
+        return false
+    }
+    task.rgba_reservation_bytes = actual_bytes
+    cache.next_upload_identity += 1
+    if cache.next_upload_identity == 0 {
+        cache.next_upload_identity = 1
+    }
+    task.upload_identity = cache.next_upload_identity
     texture, queued := finalize_texture(
         &task.prepared, cache.texture_operations, {
-            identity = u64(task.key) + 1,
+            identity = task.upload_identity,
             generation = task.generation,
             completion = cache_texture_upload_completed,
             completion_data = cache,
@@ -398,21 +507,34 @@ cache_begin_preparation_upload :: proc(cache: ^Font_Cache) -> bool {
 //   Restore demanded and prefetched page IDs after failure or supersession.
 cache_restore_page_demand :: proc(cache: ^Font_Cache) {
     task := &cache.preparation.task
+    if task.rgba_reservation_bytes > 0 {
+        _ = font_raster_budget_release_bytes(
+            &cache.raster_budget, task.rgba_reservation_bytes, false)
+    }
     if task.kind != .Glyph_Page {
         return
     }
     entry := &cache.entries[int(task.key)]
+    raster := &entry.canonical_raster
+    if task.raster_slot_index >= 0 &&
+        task.raster_slot_index < len(cache.optional_rasters) {
+        candidate := &cache.optional_rasters[task.raster_slot_index]
+        if candidate.identity.slot_incarnation != task.raster_slot_incarnation {
+            return
+        }
+        raster = candidate
+    }
     if task.generation != entry.generation {
         return
     }
     for glyph_id, index in task.glyph_ids[:task.glyph_id_count] {
-        if glyph_id < u32(len(entry.glyphs)) &&
-            entry.glyphs[glyph_id].state == .Queued {
-            entry.glyphs[glyph_id].state =
+        if glyph_id < u32(len(raster.glyphs)) &&
+            raster.glyphs[glyph_id].state == .Queued {
+            raster.glyphs[glyph_id].state =
                 .Pending if i32(index) < task.demanded_glyph_count else .Missing
         }
     }
-    entry.queued_demand_count = 0
+    raster.queued_demand_count = 0
 }
 
 //   Lazily reserve one fixed virtual arena shared by serialized preparations.
@@ -502,6 +624,9 @@ cache_complete_preparation :: proc(
 cache_service :: proc(cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
     if cache == nil || pool == nil {
         return
+    }
+    if cache.raster_request_clock < max(u64) {
+        cache.raster_request_clock += 1
     }
     source_monitor_service(cache, source_monitor_now_ns())
     cache_begin_next_request(cache)
@@ -600,11 +725,16 @@ cache_preparation_idle :: proc(cache: ^Font_Cache) -> bool {
 // Side effects:
 //   - Clears prepared/task/handle state, transitions to Idle, and bulk-resets arena use.
 cache_finish_preparation :: proc(cache: ^Font_Cache) {
+    task := cache.preparation.task
     prepare_destroy(&cache.preparation.task.prepared)
     cache.preparation.task = {}
     cache.preparation.handle = {}
     cache.preparation.state = .Idle
     cache_preparation_arena_reset(cache)
+    if task.kind == .Glyph_Page {
+        entry := &cache.entries[int(task.key)]
+        cache_destroy_stale_optional_rasters(cache, task.key, entry.generation)
+    }
 }
 
 //   Mark the active optional generation failed while preserving any resident font.
@@ -617,7 +747,10 @@ cache_fail_preparation :: proc(cache: ^Font_Cache) {
     entry := &cache.entries[int(key)]
     if cache.preparation.task.kind == .Glyph_Page {
         cache_restore_page_demand(cache)
-    } else if cache.preparation.task.generation == entry.requested_generation {
-        entry.state = .Failed
+    } else {
+        cache_restore_page_demand(cache)
+        if cache.preparation.task.generation == entry.requested_generation {
+            entry.state = .Failed
+        }
     }
 }

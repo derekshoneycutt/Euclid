@@ -1,6 +1,7 @@
 package fontmodel
 
 import "base:runtime"
+import tlsf "core:mem/tlsf"
 import vmem "core:mem/virtual"
 
 import geometry "../../../core/geometry"
@@ -9,11 +10,37 @@ import "../../../taskpool"
 // Number of indexed font variants through the final `Font_Key` value.
 FONT_KEY_COUNT :: int(Font_Key.Math_Regular) + 1
 
+// Inclusive physical pixel-height limits for on-demand font raster selection.
+FONT_RASTER_MIN_PIXEL_HEIGHT :: 4
+FONT_RASTER_MAX_PIXEL_HEIGHT :: 256
+
+// Stable slot identity for each face's pinned canonical raster.
+FONT_CANONICAL_RASTER_SLOT_INCARNATION :: 1
+
 // Maximum bytes retained for one display-owned font source path.
 FONT_SOURCE_PATH_CAPACITY :: 1024
 
+// Maximum RGBA charge reserved for one optional atlas before CPU pixel allocation.
+FONT_RASTER_PAGE_RESERVATION_RGBA_BYTES :: 64 * 1024 * 1024
+
+// Maximum face glyph records admitted to one raster instance.
+FONT_RASTER_GLYPH_RECORD_CAPACITY :: 65535
+
+// Reusable metadata capacity shared by all cache-owned optional raster instances.
+FONT_OPTIONAL_GLYPH_METADATA_BYTE_BUDGET :: 64 * 1024 * 1024
+FONT_OPTIONAL_GLYPH_METADATA_POOL_OVERHEAD :: 64 * 1024
+
+// Visible optional raster demand ages into priority after this many cache services.
+FONT_RASTER_DEMAND_AGE_TICKS :: 60
+
 // Maximum concurrently resident glyph-atlas pages per font generation.
 FONT_GLYPH_PAGE_CAPACITY :: 32
+
+// Maximum optional physical-size raster instances resident across the cache.
+FONT_OPTIONAL_RASTER_INSTANCE_CAPACITY :: 16
+
+// Logical RGBA atlas budget, including candidates and application-owned retirement.
+FONT_RASTER_RGBA_BYTE_BUDGET :: 128 * 1024 * 1024
 
 // Maximum runes in either required startup seed policy.
 FONT_SEED_CODEPOINT_CAPACITY :: 512
@@ -184,7 +211,59 @@ Font_Math_Shaping_Capability :: struct {
 Font_Shaping_Identity :: struct {
     key: Font_Key,
     generation: u64,
-    raster_ascent: f32,
+    canonical_pixel_size: f32,
+}
+
+Font_Raster_Policy :: enum u32 {
+    Stb_Grayscale,
+}
+
+Font_Raster_Identity :: struct {
+    key: Font_Key,
+    source_generation: u64,
+    pixel_height: u32,
+    policy: Font_Raster_Policy,
+    slot_incarnation: u64,
+}
+
+Font_Raster_Metrics :: struct {
+    pixel_height: u32,
+    ascent: f32,
+}
+
+Font_Raster_Height_Selection :: struct {
+    pixel_height: u32,
+    quality_limited: bool,
+    valid: bool,
+}
+
+Font_Raster_Request :: struct {
+    key: Font_Key,
+    source_generation: u64,
+    logical_size: f32,
+    scene_pixels_per_logical_unit: f32,
+    pixel_height: u32,
+    policy: Font_Raster_Policy,
+    quality_limited: bool,
+}
+
+Font_Raster_Budget :: struct {
+    resident_bytes: u64,
+    candidate_bytes: u64,
+    pending_retirement_bytes: u64,
+    optional_instance_count: u32,
+    optional_glyph_metadata_bytes: u64,
+}
+
+Font_Raster_Slot_Selection :: struct {
+    key: Font_Key,
+    slot_index: i32,
+    found: bool,
+}
+
+Font_Raster_Frame_Pin :: struct {
+    slot_index: i32,
+    slot_incarnation: u64,
 }
 
 Font_Glyph_Extents :: struct {
@@ -220,6 +299,14 @@ Font_Glyph_Record :: struct {
     advance_x: i32,
     page_index: u16,
     state: Font_Glyph_State,
+}
+
+Font_Raster_Instance_State :: enum u8 {
+    Vacant,
+    Reserved,
+    Preparing,
+    Resident,
+    Retiring,
 }
 
 // Font_Texture is one opaque display-owned sampled atlas with portable dimensions.
@@ -273,9 +360,27 @@ Font_Glyph_Page :: struct {
     glyph_count: i32,
 }
 
+Font_Raster_Instance :: struct {
+    identity: Font_Raster_Identity,
+    state: Font_Raster_Instance_State,
+    raster_ascent: f32,
+    texture: Font_Texture,
+    glyphs: []Font_Glyph_Record,
+    glyph_allocator: runtime.Allocator,
+    pages: [FONT_GLYPH_PAGE_CAPACITY]Font_Glyph_Page,
+    page_count: i32,
+    pending_glyph_count: i32,
+    queued_demand_count: i32,
+    charged_rgba_bytes: u64,
+    last_used_tick: u64,
+    first_pending_demand_tick: u64,
+    frame_pin_count: u32,
+}
+
 Font_Cache_Entry :: struct {
     font: Font_Face,
     shaping: Font_Shaping_Resource,
+    canonical_raster: Font_Raster_Instance,
     raster_ascent: f32,
     generation: u64,
     requested_generation: u64,
@@ -284,12 +389,6 @@ Font_Cache_Entry :: struct {
     request_count: u64,
     coalesced_request_count: u64,
     fallback_resolution_count: u64,
-    glyphs: []Font_Glyph_Record,
-    glyph_allocator: runtime.Allocator,
-    pages: [FONT_GLYPH_PAGE_CAPACITY]Font_Glyph_Page,
-    page_count: i32,
-    pending_glyph_count: i32,
-    queued_demand_count: i32,
     page_publication_count: u64,
     prefetched_glyph_count: u64,
     pending_codepoint_count: u64,
@@ -353,6 +452,10 @@ Font_Prepare_Task :: struct {
     kind: Font_Prepare_Operation_Kind,
     key: Font_Key,
     generation: u64,
+    raster_slot_index: i32,
+    raster_slot_incarnation: u64,
+    upload_identity: u64,
+    rgba_reservation_bytes: u64,
     path_storage: [1024]u8,
     path_length: int,
     pixel_size: i32,
@@ -407,13 +510,24 @@ Font_Source_Path :: struct {
 
 Font_Cache :: struct {
     entries: [FONT_KEY_COUNT]Font_Cache_Entry,
+    optional_rasters: [FONT_OPTIONAL_RASTER_INSTANCE_CAPACITY]Font_Raster_Instance,
+    frame_pins: [FONT_OPTIONAL_RASTER_INSTANCE_CAPACITY]Font_Raster_Frame_Pin,
+    frame_pin_count: int,
+    frame_active: bool,
+    next_raster_slot_incarnation: u64,
+    next_upload_identity: u64,
+    raster_request_clock: u64,
     source_paths: [FONT_KEY_COUNT]Font_Source_Path,
     preparation: Font_Prepare_Operation,
     preparation_arena: vmem.Arena,
     preparation_arena_initialized: bool,
+    raster_metadata_allocator: tlsf.Allocator,
+    raster_metadata_backing: []u8,
+    raster_metadata_allocator_initialized: bool,
     source_monitor: Font_Source_Monitor,
     shutting_down: bool,
     shaping_telemetry: Font_Shaping_Telemetry,
     shaped_glyphs: [FONT_SHAPED_GLYPH_CAPACITY]Shaped_Glyph,
     texture_operations: Font_Texture_Operations,
+    raster_budget: Font_Raster_Budget,
 }

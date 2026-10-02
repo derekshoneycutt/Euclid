@@ -6,6 +6,8 @@ import native "../native"
 import color "../../core/color"
 import geometry "../../core/geometry"
 
+import "core:math"
+
 //   Draw environment for wrapped text content: the clipping panel, scroll
 //   offset, font, and typography metrics, grouped so the draw call passes one
 //   coherent value.
@@ -52,6 +54,8 @@ Unshaped_Text_Draw :: struct {
     font: Ui_Text_Font,
 }
 
+UI_TEXT_GLYPH_SELECTION_CAPACITY :: 4096
+
 //   One immutable cached shaped run ready for proportional glyph drawing.
 Cached_Shaped_Run_Draw :: struct {
     encoder: ^native.Draw_Encoder,
@@ -88,11 +92,67 @@ Resolved_Glyph_Draw :: struct {
     y_offset: i32,
 }
 
+//   Atlas and destination rectangles validated for one resolved glyph.
+Resolved_Glyph_Quad :: struct {
+    destination: geometry.Rectangle,
+    uv: geometry.Rectangle,
+    valid: bool,
+}
+
 //   Resolved codepoint draw data plus original residency and drawability state.
 Codepoint_Resolution :: struct {
     glyph: view_font.Resolved_Glyph,
     status: view_font.Font_Glyph_Resolve_Status,
     drawable: bool,
+}
+
+//   Prepared raster and complete selection for one cached monospace run.
+Cached_Monospace_Preflight :: struct {
+    raster_request: view_font.Font_Raster_Request,
+    selection: view_font.Font_Raster_Selection,
+    ready: bool,
+}
+
+//   Prepared bounded glyph IDs and one complete raster for unshaped text.
+Unshaped_Glyph_Preflight :: struct {
+    glyph_count: int,
+    all_resident: bool,
+    selection: view_font.Font_Raster_Selection,
+    ready: bool,
+}
+
+//   Validated shaped-run inputs ready for coherent glyph resolution.
+Shaped_Run_Preflight :: struct {
+    glyphs: []view_font.Shaped_Glyph,
+    column_advance: f32,
+    raster_request: view_font.Font_Raster_Request,
+    selection: view_font.Font_Raster_Selection,
+    reason: view_font.Shape_Fallback_Reason,
+    ready: bool,
+}
+
+// Bind logical font size and actual encoder scale to the cache's face generation.
+ui_text_raster_request :: proc(
+    resolver: view_font.Font_Resolver, key: view_font.Font_Key,
+    font_size: f32, encoder: ^native.Draw_Encoder) ->
+    (view_font.Font_Raster_Request, bool) {
+
+    if font_size <= 0 {
+        return {}, false
+    }
+    scene_scale := f32(1)
+    if encoder != nil && encoder.logical_extent.x > 0 &&
+        encoder.logical_extent.y > 0 {
+        scene_scale = max(
+            f32(encoder.physical_extent[0])/encoder.logical_extent.x,
+            f32(encoder.physical_extent[1])/encoder.logical_extent.y)
+    }
+    if resolver.request_raster == nil {
+        return {key = key, logical_size = font_size,
+            scene_pixels_per_logical_unit = scene_scale}, true
+    }
+    return resolver.request_raster(
+        resolver.user_data, key, font_size, scene_scale)
 }
 
 //   Wrap a font with the default UI text size.
@@ -177,31 +237,103 @@ ui_text_shape_is_valid :: proc(
 
 //   Draw one normalized resident glyph with optional HarfBuzz offsets.
 ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
+    quad := ui_text_resolved_glyph_quad(draw)
+    if !quad.valid {
+        return
+    }
+    resolved := draw.resolved
+    _ = native.draw_encoder_texture_quad(draw.encoder,
+        quad.destination, quad.uv, draw.color,
+        {texture = resolved.texture.handle, sampler = .Linear})
+}
+
+// Build the destination and atlas coordinates for a normalized resident glyph.
+ui_text_resolved_glyph_quad :: proc(draw: Resolved_Glyph_Draw) -> Resolved_Glyph_Quad {
+
     resolved := draw.resolved
     if draw.encoder == nil || resolved.texture.handle == nil ||
         resolved.texture.width == 0 || resolved.texture.height == 0 {
-        return
+        return {}
     }
-    scale := draw.font_size/f32(resolved.base_size)
-    offset_scale := scale/64
-    destination := geometry.Rectangle{
-        x = draw.position.x + f32(resolved.offset_x)*scale +
-            f32(draw.x_offset)*offset_scale,
-        y = draw.position.y + f32(resolved.offset_y)*scale +
-            f32(draw.y_offset)*offset_scale,
-        width = resolved.source.width*scale,
-        height = resolved.source.height*scale,
+    destination, valid := ui_text_resolved_glyph_destination(draw)
+    if !valid {
+        return {}
     }
     texture_width := f32(resolved.texture.width)
     texture_height := f32(resolved.texture.height)
-    uv := geometry.Rectangle{
-        resolved.source.x/texture_width,
-        resolved.source.y/texture_height,
-        resolved.source.width/texture_width,
-        resolved.source.height/texture_height,
+    return {
+        destination = destination,
+        uv = {
+            resolved.source.x/texture_width,
+            resolved.source.y/texture_height,
+            resolved.source.width/texture_width,
+            resolved.source.height/texture_height,
+        },
+        valid = true,
     }
-    _ = native.draw_encoder_texture_quad(draw.encoder, destination, uv,
-        draw.color, {texture = resolved.texture.handle, sampler = .Linear})
+}
+
+// Convert canonical bitmap metrics and shaping offsets into a snapped quad origin.
+ui_text_resolved_glyph_destination :: proc(draw: Resolved_Glyph_Draw) -> (
+    geometry.Rectangle, bool) {
+
+    resolved := draw.resolved
+    if resolved.raster_pixel_height <= 0 {
+        return {}, false
+    }
+    scale, valid_scale := ui_text_resolved_raster_scale(draw)
+    if !valid_scale {
+        return {}, false
+    }
+    offset_scale := draw.font_size/f32(view_font.JULIA_MONO_FONT_SIZE)/64
+    bitmap_top, valid_top := view_font.font_raster_bitmap_top_logical(
+        {
+            line_top = draw.position.y,
+            logical_size = draw.font_size,
+            canonical_pixel_height = resolved.canonical_pixel_height,
+            canonical_ascent = resolved.canonical_raster_ascent,
+            bitmap_offset_y = resolved.offset_y,
+            raster_pixel_height = u32(resolved.raster_pixel_height),
+            raster_ascent = resolved.raster_ascent,
+        })
+    if !valid_top {
+        return {}, false
+    }
+    destination := geometry.Rectangle{
+        x = draw.position.x + f32(resolved.offset_x)*scale +
+            f32(draw.x_offset)*offset_scale,
+        y = bitmap_top + f32(draw.y_offset)*offset_scale,
+        width = resolved.source.width*scale,
+        height = resolved.source.height*scale,
+    }
+    origin := ui_text_snap_glyph_origin(
+        draw.encoder, {destination.x, destination.y})
+    destination.x = origin.x
+    destination.y = origin.y
+    return destination, true
+}
+
+// Convert one resolved raster texel to logical units for the current draw size.
+ui_text_resolved_raster_scale :: proc(draw: Resolved_Glyph_Draw) -> (f32, bool) {
+    return view_font.font_raster_metric_to_logical(
+        1, draw.font_size, u32(draw.resolved.raster_pixel_height))
+}
+
+// Align a glyph bitmap origin to the physical pixel grid without changing layout.
+ui_text_snap_glyph_origin :: proc(
+    encoder: ^native.Draw_Encoder,
+    position: geometry.Vector2) -> geometry.Vector2 {
+
+    if encoder == nil || encoder.logical_extent.x <= 0 ||
+        encoder.logical_extent.y <= 0 {
+        return position
+    }
+    scale_x := f64(encoder.physical_extent[0])/f64(encoder.logical_extent.x)
+    scale_y := f64(encoder.physical_extent[1])/f64(encoder.logical_extent.y)
+    return {
+        f32(math.floor(f64(position.x)*scale_x + 0.5)/scale_x),
+        f32(math.floor(f64(position.y)*scale_y + 0.5)/scale_y),
+    }
 }
 
 //   Convert one cached 26.6 glyph position and advance to pixel coordinates.
@@ -256,14 +388,21 @@ ui_text_cached_shaped_run :: proc(request: Cached_Shaped_Run_Draw) -> bool {
         request.font_size <= 0 || request.base_pixel_size <= 0 {
         return false
     }
-    if !ui_text_shape_glyphs_are_resident(
-        request.resolver, request.key, request.glyphs) {
+    raster_request, request_valid := ui_text_raster_request(
+        request.resolver, request.key, request.font_size, request.encoder)
+    if !request_valid {
+        return false
+    }
+    selection, selected := ui_text_shape_glyphs_are_resident(
+        request.resolver, request.key, request.glyphs, raster_request)
+    if !selected {
         return false
     }
     pen_x := request.position.x
     for glyph in request.glyphs {
-        resolved, resident := request.resolver.resolve_glyph(
-            request.resolver.user_data, request.key, glyph.glyph_id)
+        resolved, resident := ui_text_resolve_selected_glyph(
+            request.resolver, request.key, glyph.glyph_id,
+            raster_request, selection)
         assert(resident)
         placement := ui_text_cached_glyph_placement(
             glyph, pen_x, request.position.y,
@@ -281,21 +420,17 @@ ui_text_cached_shaped_run :: proc(request: Cached_Shaped_Run_Draw) -> bool {
 }
 
 //   Draw one sealed JuliaMono run on the source-column grid used by the terminal.
-ui_text_cached_monospace_run :: proc(request: Cached_Monospace_Run_Draw) -> bool {
+ui_text_cached_monospace_run :: proc(
+    request: Cached_Monospace_Run_Draw) -> bool {
     shaped := request.shaped
-    if shaped.resolver.resolve_glyph == nil || len(shaped.glyphs) == 0 ||
-        len(request.text) == 0 || request.column_advance <= 0 ||
-        shaped.font_size <= 0 || shaped.base_pixel_size <= 0 {
-        return false
-    }
-    if !ui_text_shape_clusters_are_valid(request.text, shaped.glyphs) ||
-        !ui_text_shape_glyphs_are_resident(
-            shaped.resolver, shaped.key, shaped.glyphs) {
+    preflight := ui_text_cached_monospace_preflight(request)
+    if !preflight.ready {
         return false
     }
     for glyph in shaped.glyphs {
-        resolved, resident := shaped.resolver.resolve_glyph(
-            shaped.resolver.user_data, shaped.key, glyph.glyph_id)
+        resolved, resident := ui_text_resolve_selected_glyph(
+            shaped.resolver, shaped.key, glyph.glyph_id,
+            preflight.raster_request, preflight.selection)
         assert(resident)
         position, valid := ui_text_cached_monospace_glyph_placement(
             request, glyph)
@@ -311,21 +446,42 @@ ui_text_cached_monospace_run :: proc(request: Cached_Monospace_Run_Draw) -> bool
     return true
 }
 
+// Validate the run and pin one raster containing every cached monospace glyph.
+ui_text_cached_monospace_preflight :: proc(
+    request: Cached_Monospace_Run_Draw) -> Cached_Monospace_Preflight {
+
+    shaped := request.shaped
+    if shaped.resolver.resolve_glyph == nil || len(shaped.glyphs) == 0 ||
+        len(request.text) == 0 || request.column_advance <= 0 ||
+        shaped.font_size <= 0 || shaped.base_pixel_size <= 0 {
+        return {}
+    }
+    raster_request, valid := ui_text_raster_request(
+        shaped.resolver, shaped.key, shaped.font_size, shaped.encoder)
+    if !valid || !ui_text_shape_clusters_are_valid(request.text, shaped.glyphs) {
+        return {}
+    }
+    selection, selected := ui_text_shape_glyphs_are_resident(
+        shaped.resolver, shaped.key, shaped.glyphs, raster_request)
+    return {raster_request, selection, selected}
+}
+
 //   Resolve one codepoint or the resident replacement glyph while recording demand.
 ui_text_resolve_codepoint :: proc(
     resolver: view_font.Font_Resolver, key: view_font.Font_Key,
-    codepoint: rune) -> Codepoint_Resolution {
+    codepoint: rune,
+    raster_request: view_font.Font_Raster_Request) -> Codepoint_Resolution {
 
     if resolver.resolve_codepoint == nil {
         return {status = .Unsupported}
     }
     resolved, status := resolver.resolve_codepoint(
-        resolver.user_data, key, codepoint)
+        resolver.user_data, key, codepoint, raster_request)
     if status == .Resident {
         return {glyph = resolved, status = status, drawable = true}
     }
     replacement, replacement_status := resolver.resolve_codepoint(
-        resolver.user_data, key, rune(0xfffd))
+        resolver.user_data, key, rune(0xfffd), raster_request)
     return {
         glyph = replacement,
         status = status,
@@ -334,27 +490,80 @@ ui_text_resolve_codepoint :: proc(
 }
 
 //   Draw UTF-8 without shaping while resolving every rune through glyph pages.
-ui_text_unshaped_paged :: proc(request: Unshaped_Text_Draw) -> bool {
-    draw_x := request.position.x
+ui_text_unshaped_paged :: proc(
+    request: Unshaped_Text_Draw) -> bool {
+    raster_request, request_valid := ui_text_raster_request(
+        request.resolver, request.key, request.font.font_size, request.encoder)
+    if !request_valid {
+        return false
+    }
+    glyph_ids: [UI_TEXT_GLYPH_SELECTION_CAPACITY]u32
+    preflight := ui_text_unshaped_preflight(request, raster_request, &glyph_ids)
+    if !preflight.ready {
+        return false
+    }
+    if !ui_text_draw_unshaped_glyphs(
+        request, raster_request, preflight.selection,
+        glyph_ids[:preflight.glyph_count]) {
+        return false
+    }
+    return preflight.all_resident
+}
+
+// Collect drawable glyphs and select one raster containing the complete run.
+ui_text_unshaped_preflight :: proc(
+    request: Unshaped_Text_Draw,
+    raster_request: view_font.Font_Raster_Request,
+    glyph_ids: ^[UI_TEXT_GLYPH_SELECTION_CAPACITY]u32) -> Unshaped_Glyph_Preflight {
+
+    if len(request.text) > UI_TEXT_GLYPH_SELECTION_CAPACITY {
+        return {}
+    }
+    count := 0
     all_resident := true
     for codepoint in request.text {
         resolution := ui_text_resolve_codepoint(
-            request.resolver, request.key, codepoint)
+            request.resolver, request.key, codepoint, raster_request)
         if !resolution.drawable {
-            return false
+            return {}
         }
         all_resident = all_resident && resolution.status == .Resident
+        glyph_ids[count] = resolution.glyph.glyph_id
+        count += 1
+    }
+    selection, selected := ui_text_select_glyph_ids(
+        request.resolver, request.key, glyph_ids[:count], raster_request)
+    if !selected {
+        return {}
+    }
+    return {count, all_resident, selection, true}
+}
+
+// Resolve and emit every glyph from the preselected raster instance.
+ui_text_draw_unshaped_glyphs :: proc(
+    request: Unshaped_Text_Draw,
+    raster_request: view_font.Font_Raster_Request,
+    selection: view_font.Font_Raster_Selection,
+    glyph_ids: []u32) -> bool {
+
+    draw_x := request.position.x
+    for glyph_id in glyph_ids {
+        resolved, resident := ui_text_resolve_selected_glyph(
+            request.resolver, request.key, glyph_id, raster_request, selection)
+        if !resident {
+            return false
+        }
         ui_text_draw_resolved_glyph({
             encoder = request.encoder,
-            resolved = resolution.glyph,
+            resolved = resolved,
             position = {draw_x, request.position.y},
             font_size = request.font.font_size,
             color = request.color,
         })
-        draw_x += f32(resolution.glyph.advance_x)*
-            request.font.font_size/f32(resolution.glyph.base_size)
+        draw_x += f32(resolved.canonical_advance_x)*
+            request.font.font_size/f32(view_font.JULIA_MONO_FONT_SIZE)
     }
-    return all_resident
+    return true
 }
 
 //   Draw one shaped request through page-aware unshaped glyph resolution.
@@ -386,12 +595,15 @@ ui_text_shape_clusters_are_valid :: proc(
 //   Draw one fully validated shaped run on Euclid's fixed source-column grid.
 ui_text_draw_shaped_run :: proc(
     request: Shaped_Text_Draw, glyphs: []view_font.Shaped_Glyph,
-    column_advance: f32) {
+    column_advance: f32,
+    raster_request: view_font.Font_Raster_Request,
+    selection: view_font.Font_Raster_Selection) {
 
     for glyph in glyphs {
         column, _ := ui_text_cluster_column(request.text, glyph.cluster)
-        resolved, resident := request.resolver.resolve_glyph(
-            request.resolver.user_data, request.key, glyph.glyph_id)
+        resolved, resident := ui_text_resolve_selected_glyph(
+            request.resolver, request.key, glyph.glyph_id,
+            raster_request, selection)
         assert(resident)
         ui_text_draw_resolved_glyph({
             encoder = request.encoder,
@@ -411,19 +623,97 @@ ui_text_draw_shaped_run :: proc(
 //   Resolve every shaped glyph before drawing to preserve whole-run fallback.
 ui_text_shape_glyphs_are_resident :: proc(
     resolver: view_font.Font_Resolver, key: view_font.Font_Key,
-    glyphs: []view_font.Shaped_Glyph) -> bool {
+    glyphs: []view_font.Shaped_Glyph,
+    raster_request: view_font.Font_Raster_Request) -> (
+        view_font.Font_Raster_Selection, bool) {
 
     if resolver.resolve_glyph == nil {
-        return false
+        return {}, false
     }
-    for glyph in glyphs {
-        _, resident := resolver.resolve_glyph(
-            resolver.user_data, key, glyph.glyph_id)
+    glyph_ids: [UI_TEXT_GLYPH_SELECTION_CAPACITY]u32
+    if len(glyphs) > len(glyph_ids) {
+        return {}, false
+    }
+    for glyph, index in glyphs {
+        glyph_ids[index] = glyph.glyph_id
+    }
+    return ui_text_select_glyph_ids(
+        resolver, key, glyph_ids[:len(glyphs)], raster_request)
+}
+
+// Select one raster containing the complete glyph-ID sequence.
+ui_text_select_glyph_ids :: proc(
+    resolver: view_font.Font_Resolver, key: view_font.Font_Key,
+    glyph_ids: []u32, raster_request: view_font.Font_Raster_Request) -> (
+        view_font.Font_Raster_Selection, bool) {
+
+    if len(glyph_ids) == 0 || resolver.resolve_glyph == nil {
+        return {}, false
+    }
+    if resolver.select_glyph_raster != nil {
+        return resolver.select_glyph_raster(
+            resolver.user_data, key, glyph_ids, raster_request)
+    }
+    first: view_font.Resolved_Glyph
+    for glyph_id, index in glyph_ids {
+        resolved, resident := resolver.resolve_glyph(
+            resolver.user_data, key, glyph_id, raster_request)
         if !resident {
-            return false
+            return {}, false
+        }
+        if index == 0 {
+            first = resolved
+        } else if !ui_text_glyphs_share_raster(first, resolved) {
+            return {}, false
         }
     }
-    return true
+    selection := ui_text_raster_selection(first)
+    return selection, selection.pixel_height > 0
+}
+
+// Resolve one glyph and enforce the selected run identity.
+ui_text_resolve_selected_glyph :: proc(
+    resolver: view_font.Font_Resolver, key: view_font.Font_Key,
+    glyph_id: u32, raster_request: view_font.Font_Raster_Request,
+    selection: view_font.Font_Raster_Selection) -> (view_font.Resolved_Glyph, bool) {
+
+    if resolver.resolve_selected_glyph != nil {
+        return resolver.resolve_selected_glyph(
+            resolver.user_data, key, glyph_id, raster_request, selection)
+    }
+    resolved, resident := resolver.resolve_glyph(
+        resolver.user_data, key, glyph_id, raster_request)
+    return resolved, resident && ui_text_glyph_matches_selection(resolved, selection)
+}
+
+// Compare the exact raster identity of two resolved glyphs.
+ui_text_glyphs_share_raster :: #force_inline proc(
+    first, next: view_font.Resolved_Glyph) -> bool {
+
+    return first.raster_slot_index == next.raster_slot_index &&
+        first.raster_slot_incarnation == next.raster_slot_incarnation &&
+        first.raster_pixel_height == next.raster_pixel_height
+}
+
+// Convert one resolved glyph's identity to a reusable run selection.
+ui_text_raster_selection :: #force_inline proc(
+    glyph: view_font.Resolved_Glyph) -> view_font.Font_Raster_Selection {
+
+    return {
+        slot_index = glyph.raster_slot_index,
+        slot_incarnation = glyph.raster_slot_incarnation,
+        pixel_height = u32(glyph.raster_pixel_height),
+    }
+}
+
+// Confirm one resolved glyph belongs to the selected raster instance.
+ui_text_glyph_matches_selection :: #force_inline proc(
+    glyph: view_font.Resolved_Glyph,
+    selection: view_font.Font_Raster_Selection) -> bool {
+
+    return glyph.raster_slot_index == selection.slot_index &&
+        glyph.raster_slot_incarnation == selection.slot_incarnation &&
+        u32(glyph.raster_pixel_height) == selection.pixel_height
 }
 
 //   Record one rejection and draw the complete run through the fallback path.
@@ -435,39 +725,80 @@ ui_text_shaped_fallback :: proc(
     return false
 }
 
+// Validate shaped output and preserve its canonical glyph slice and advance.
+ui_text_shaped_geometry_preflight :: proc(
+    request: Shaped_Text_Draw) -> Shaped_Run_Preflight {
+
+    resolver := request.resolver
+    result := Shaped_Run_Preflight{reason = .Invalid_Result}
+    if len(request.text) > len(resolver.workspace) {
+        result.reason = .Workspace_Overflow
+        return result
+    }
+    glyph_count, shaped := resolver.shape(
+        resolver.user_data, request.key, request.text, resolver.workspace)
+    if !shaped || !ui_text_shape_is_valid(
+        request.text, resolver.workspace, glyph_count) {
+        return result
+    }
+    column_advance, advance_valid := ui_text_column_advance(
+        request.font.font, request.font.font_size)
+    if !advance_valid {
+        return result
+    }
+    glyphs := resolver.workspace[:glyph_count]
+    if !ui_text_shape_clusters_are_valid(request.text, glyphs) {
+        result.reason = .Invalid_Cluster
+        return result
+    }
+    result.glyphs = glyphs
+    result.column_advance = column_advance
+    result.ready = true
+    return result
+}
+
+// Select one resident raster that contains every validated shaped glyph.
+ui_text_shaped_preflight :: proc(
+    request: Shaped_Text_Draw) -> Shaped_Run_Preflight {
+
+    result := ui_text_shaped_geometry_preflight(request)
+    if !result.ready {
+        return result
+    }
+    resolver := request.resolver
+    raster_request, request_valid := ui_text_raster_request(
+        resolver, request.key, request.font.font_size, request.encoder)
+    if !request_valid {
+        return result
+    }
+    selection, selected := ui_text_shape_glyphs_are_resident(
+        resolver, request.key, result.glyphs, raster_request)
+    if !selected {
+        result.reason = .Pending_Glyph
+        result.ready = false
+        return result
+    }
+    result.raster_request = raster_request
+    result.selection = selection
+    return result
+}
+
 //   Shape and draw one UTF-8 run, falling back atomically to ordinary text encoding.
 ui_text_shaped_f32 :: proc(
     request: Shaped_Text_Draw) -> bool {
 
     resolver := request.resolver
-    text := request.text
-
-    if len(text) < 2 || resolver.shape == nil {
+    if len(request.text) < 2 || resolver.shape == nil {
         ui_text_draw_unshaped(request)
         return false
     }
-    if len(text) > len(resolver.workspace) {
-        return ui_text_shaped_fallback(request, .Workspace_Overflow)
+    preflight := ui_text_shaped_preflight(request)
+    if !preflight.ready {
+        return ui_text_shaped_fallback(request, preflight.reason)
     }
-    glyph_count, shaped := resolver.shape(
-        resolver.user_data, request.key, text, resolver.workspace)
-    if !shaped || !ui_text_shape_is_valid(
-        text, resolver.workspace, glyph_count) {
-        return ui_text_shaped_fallback(request, .Invalid_Result)
-    }
-    column_advance, advance_valid := ui_text_column_advance(
-        request.font.font, request.font.font_size)
-    if !advance_valid {
-        return ui_text_shaped_fallback(request, .Invalid_Result)
-    }
-    glyphs := resolver.workspace[:glyph_count]
-    if !ui_text_shape_clusters_are_valid(text, glyphs) {
-        return ui_text_shaped_fallback(request, .Invalid_Cluster)
-    }
-    if !ui_text_shape_glyphs_are_resident(resolver, request.key, glyphs) {
-        return ui_text_shaped_fallback(request, .Pending_Glyph)
-    }
-    ui_text_draw_shaped_run(request, glyphs, column_advance)
+    ui_text_draw_shaped_run(
+        request, preflight.glyphs, preflight.column_advance,
+        preflight.raster_request, preflight.selection)
     return true
 }
 
