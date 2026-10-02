@@ -4,10 +4,11 @@
 
 Euclid uses SQLite as a repository-owned, statically linked search engine over the
 built-in animation catalogue. SQLite is not an application state store and is not
-entered from the display thread. The current database is a deterministic packaged
-asset: Julia produces its canonical source records, a standalone Odin tool builds and
-validates the database, and one dedicated Odin worker owns the immutable runtime
-connection.
+entered from the display thread. Both the standalone builder and runtime catalogue use
+the `src/sqlite` mechanics substrate; each retains its own SQL, schema, and domain
+policy. Julia produces the canonical source records, the builder creates and validates
+a deterministic database asset, and one dedicated Odin worker owns the immutable
+runtime connection.
 
 This guide describes the current implementation. Search history, writable profile
 storage, vectors, localization, and learned ranking remain separate future design work.
@@ -19,10 +20,13 @@ indexes. Its main boundaries are:
 
 - Julia owns catalogue descriptors and authored search sidecars.
 - Build tooling converts those facts into a canonical JSON Lines corpus.
-- The native index builder owns schema creation, indexing, validation, and vacuuming.
+- The native index builder owns schema creation, indexing, transaction, validation, and
+    vacuum policy while using shared SQLite mechanics.
+- `src/sqlite` owns native connection, statement, binding, stepping, and column mechanics.
 - Asset packaging owns reproducibility checks, hashes, and package-manifest metadata.
 - The files subsystem resolves and validates the extracted packaged asset.
-- The catalogue worker exclusively owns SQLite connections and prepared statements.
+- The catalogue store owns catalogue SQL, admission, query ranking, and named statements.
+- The catalogue worker exclusively owns store connections and request execution.
 - The display thread owns query intent, result commitment, and catalogue-ID resolution.
 
 ```mermaid
@@ -66,9 +70,21 @@ and macOS or `sqlite3.lib` on Windows. Both the application and standalone index
 link that repository-owned archive. Linux tool linkage also includes `libm`, `libdl`,
 and pthreads.
 
-The narrow Odin binding in `libs/sqlite3/sqlite3.odin` exposes only the connection,
-statement, bind, column, execution, diagnostics, and extension-registration APIs Euclid
-uses. SQLite handles and column pointers never enter shared application models.
+The narrow Odin binding in `libs/sqlite3/sqlite3.odin` exposes the raw connection,
+statement, bind, column, execution, diagnostics, and extension-registration ABI.
+Production mechanics are wrapped by `src/sqlite`, whose explicit `Connection` and
+`Statement` values provide open modes, persistent prepare, row/done/failure stepping,
+reset with binding clearance, typed binds, bounded text copies, checked numeric reads,
+and structured error facts. Text binding uses explicit byte lengths and
+`SQLITE_TRANSIENT`; it does not allocate a temporary C string. Immutable URI path
+encoding uses caller-provided scratch storage.
+
+`src/sqlite` owns mechanics only. It has no schema, catalogue types, worker, migration,
+transaction policy, pool, or connection arena. Concrete consumers own named statement
+sets and retain their own SQL and failure policy. The catalogue runtime uses
+`src/view/catalog/database.odin` and `statements.odin`; the standalone builder uses a
+fixed `Builder_Statements` set in `tools/search_index_builder/main.odin`. Raw ABI use is
+limited to the substrate and dedicated raw-boundary tests.
 
 ## Build and Packaging Pipeline
 
@@ -79,8 +95,9 @@ The database build is part of asset generation rather than application startup.
 1. `tools/export_search_corpus.jl` atomically writes the canonical JSON Lines corpus and
    reports its lowercase SHA-256 fingerprint.
 1. `tools/search_index_builder/main.odin` validates bounded records, creates the schema,
-   inserts documents, rebuilds FTS5, derives spellfix vocabulary, and validates the
-   result before vacuuming it.
+   inserts documents through named substrate-backed statements, rebuilds FTS5, derives
+   spellfix vocabulary, and validates the result before vacuuming it. Its transaction,
+   schema, ordering, and fail-fast policy remain builder-owned.
 1. `tools/make.jl` independently builds two candidate databases and requires their file
    digests to match. This makes byte reproducibility part of asset admission.
 1. The accepted database is staged as `catalog/animations.sqlite3` inside
@@ -156,8 +173,9 @@ stores:
 | `query_contract_version` | Runtime query/compiler contract, currently `1`. |
 | `index_generation` | Corpus fingerprint used to derive the runtime generation. |
 
-The worker requires exact values before publishing readiness. This rejects mismatched
-content, schema, tokenizer assumptions, query syntax, and SQLite builds at the boundary.
+The catalogue store requires exact values before publishing readiness. This rejects
+mismatched content, schema, tokenizer assumptions, query syntax, and SQLite builds at
+the boundary.
 
 ### `animation_catalog`
 
@@ -262,17 +280,20 @@ Runtime startup follows a fail-closed path:
    schema version, database digest shape, and corpus fingerprint shape.
 1. The runtime session resolves the extracted database and creates the catalogue
     service, which currently exposes the Library search capability.
-1. The worker opens `file:...?...immutable=1` with read-only, URI, and no-mutex flags.
-1. The worker registers spellfix, prepares the fixed statement set, and validates every
-   required metadata value against the package fingerprint.
-1. Only then does it publish `Ready` and expose the derived index generation.
+1. The catalogue database opens the immutable URI through `src/sqlite` with read-only,
+    URI, and no-mutex flags.
+1. It registers spellfix, prepares the complete named statement set, validates required
+    metadata against the package fingerprint, then materializes and seals a generation.
+1. The worker publishes `Ready` only when database and materialized-generation
+    identities match.
 
 The dedicated worker owns the connection from open through statement finalization and
 close. `SQLITE_OPEN_NOMUTEX` is valid because no other thread accesses that connection.
-The service uses a fixed TLSF-backed allocator and capacity-eight request, query-result,
-and control-result channels. Separate result channels prevent synchronous reload
-coordination from consuming an asynchronous Library query result. The worker coalesces
-queued query work toward the newest generation without crossing a control command.
+The service uses a fixed TLSF-backed allocator and two stable arena-backed generation
+slots with capacity-eight request, query-result, and control-result channels. Separate
+result channels prevent synchronous reload coordination from consuming an asynchronous
+Library query result. The worker coalesces queued query work toward the newest generation
+without crossing a control command.
 
 The query compiler in `src/view/catalog/query.odin` is the security and syntax boundary.
 It validates bounded UTF-8 friendly syntax, normalizes punctuation to token separators,
@@ -293,11 +314,14 @@ session startup to fail. Query parse failures are reported as invalid input; exe
 failures produce a stable failed status rather than exposing SQLite diagnostics to UI.
 
 Reload opens and validates a candidate immutable connection while the active connection
-continues serving queries. The candidate snapshot builds the inactive native registry;
-promotion swaps database and snapshot generations but retains the previous connection
+continues serving queries. The candidate generation builds the inactive native registry;
+promotion swaps database and generation slots together but retains the previous pair
 until Julia generation commit and native publication succeed. Discard reverses a
-provisional promotion, while finalization closes the retired connection. Search results
-carry the database generation and stale results are rejected after promotion.
+provisional promotion, while finalization closes and resets only the retired pair. Stage,
+commit, rollback, and finalize acknowledgements verify database/generation identity.
+Search results carry the database generation and stale results are rejected after
+promotion. The bridge resolves packed text through validated generation references and
+clones names and paths into interface-owned storage.
 
 Shutdown sends a bounded control message, drains through the worker's stopped result,
 joins the thread, finalizes prepared statements in reverse order, closes active and
@@ -309,16 +333,19 @@ exists in the runtime architecture.
 
 | Layer | Responsibility | Primary files |
 | --- | --- | --- |
-| Native dependency | Vendored amalgamation, spellfix source, compile switches, narrow Odin ABI. | `libs/sqlite3/` |
+| Raw native dependency | Vendored amalgamation, spellfix source, compile switches, narrow Odin ABI. | `libs/sqlite3/` |
+| Runtime mechanics substrate | Explicit connections/statements, typed binding and columns, lifecycle, and structured errors. | `src/sqlite/` |
 | Build configuration | Content-addressed static archive and platform linker flags. | `tools/build_config.jl` |
 | Corpus authority | Catalogue-derived records and authored semantic search content. | `src/julia/search/search_corpus.jl`, `src/julia/search/search_content.jl` |
 | Corpus export | Atomic JSON Lines publication and corpus fingerprint. | `tools/export_search_corpus.jl` |
-| Index construction | Schema, insertion, FTS rebuild, spellfix vocabulary, validation. | `tools/search_index_builder/main.odin` |
+| Index construction | Concrete builder statements, schema, transaction, insertion, FTS rebuild, spellfix vocabulary, validation, and vacuum. | `tools/search_index_builder/main.odin` |
 | Asset packaging | Double-build reproducibility, digesting, staging, manifest publication. | `tools/make.jl` |
 | Asset admission | Manifest validation, extraction, path and fingerprint resolution. | `src/files/files.odin` |
-| Catalogue model | Bounded snapshots, worker protocol values, service storage, and generation contracts. | `src/core/catalog/model.odin` |
+| Catalogue model | Bounded protocols and packed generation contracts. | `src/core/catalog/model.odin` |
 | Query contract | Friendly syntax admission and bounded FTS5 MATCH compilation. | `src/view/catalog/query.odin` |
-| Catalogue service | Active and staged immutable connections, prepared statements, snapshot publication, FTS, and spellfix execution. | `src/view/catalog/worker.odin` |
+| Catalogue database and statements | Immutable admission, metadata, search, spellfix, and the complete named statement set. | `src/view/catalog/database.odin`, `src/view/catalog/statements.odin` |
+| Catalogue generation | Bounded row codecs, packed text append, topology validation, and sealing. | `src/view/catalog/generation.odin` |
+| Catalogue worker and service | Thread scheduling, bounded channels, active/staged generation slots, publication, rollback, and retirement. | `src/view/catalog/worker.odin`, `src/view/catalog/service.odin` |
 | Display coordinator | Debounce, submission, generation checks, catalogue resolution, UI commit. | `src/view/library_search.odin`, `src/view/runtime_session.odin` |
 
 ## Current Constraints
@@ -348,7 +375,8 @@ Relevant checks are layered:
 - Catalogue worker tests exercise metadata admission, FTS results, spellfix suggestions,
   queue capacity, and generation rejection.
 - Files tests verify package-manifest and extracted-asset admission.
-- Asset generation proves two independently built database files are byte-identical.
+- Asset generation proves two independently built database files are byte-identical;
+    the builder and catalogue runtime share mechanics but not domain policy.
 - The canonical repository gate builds the application and runs all tests and analysis:
 
 ```sh

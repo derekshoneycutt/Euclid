@@ -155,9 +155,9 @@ session_materialize_catalogue :: proc(
     state: ^Euclid_General_State,
     catalog_service: ^viewcatalog.Catalog_Service) -> bool {
     state^.catalog_service = catalog_service
-    snapshot := viewcatalog.catalog_service_snapshot(catalog_service)
-    if snapshot == nil || !julia.catalog_snapshot_materialize(
-        state^.julia_interface, snapshot) {
+    generation := viewcatalog.catalog_service_generation(catalog_service)
+    if generation == nil || !julia.catalog_generation_materialize(
+        state^.julia_interface, generation) {
         return false
     }
     return true

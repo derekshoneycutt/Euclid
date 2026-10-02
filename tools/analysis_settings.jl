@@ -1201,7 +1201,7 @@ AnalysisSettings(
             ReviewedAllocationPolicy(
                 "bridge-catalog-snapshot-registry-nodes",
                 "src/bridge/animations.odin",
-                "catalog_snapshot_allocate_nodes",
+                "catalog_generation_allocate_nodes",
                 :unknown,
                 "Generation-local registry nodes and copied catalogue strings use the interface arena, which is bulk-reset on rollback and destroyed at interface teardown.";
                 operation="new",
@@ -1212,17 +1212,30 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "catalog-service-generation-snapshots",
-                "src/view/catalog/worker.odin",
-                "catalog_service_init_snapshots",
+                "src/view/catalog/service.odin",
+                "catalog_service_init_generations",
                 :custom,
-                "The active and staged bounded catalogue snapshots are allocated once from the service-owned mutex-wrapped TLSF allocator and reclaimed by catalog_service_release_allocator after the worker joins.";
+                "The active and staged compact catalogue generation slots are allocated once from the service-owned mutex-wrapped TLSF allocator; their stable arena owners are destroyed after the worker joins.";
                 operation="new",
-                target="Catalog_Snapshot",
+                target="Catalog_Generation",
                 allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=2,
                 maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "sqlite-immutable-open-uri-scratch",
+                "src/sqlite/connection.odin",
+                "sqlite_open_filename",
+                :custom,
+                "The escaped immutable URI is built in the caller-provided scratch allocator and consumed synchronously by sqlite3_open_v2; the caller reclaims the temporary bytes with that allocator's reset.",
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
                 "view-terminal-retained-text",
                 "src/view/terminal/lifecycle.odin",

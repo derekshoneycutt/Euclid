@@ -78,7 +78,9 @@ If you are new, read in this order:
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `libs/julia/bindings/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution, transactional GIF publication, and native static and animated image decode. | `src/files/files.odin`, `src/terminal/graphics/native/sdl_image.odin` |
-| **Odin** | Catalogue Service | Bounded catalogue protocols, worker-owned immutable database generations, prepared search statements, and FTS/spellfix execution. | `src/core/catalog/model.odin`, `src/view/catalog/worker.odin` |
+| **Odin** | SQLite Runtime Substrate | Explicit native connection and statement lifecycle, typed binding and columns, and structured mechanics errors. | `src/sqlite/`, `libs/sqlite3/sqlite3.odin` |
+| **Odin** | Catalogue Store and Service | Named catalogue SQL, immutable admission/search policy, packed generations, worker scheduling, and paired active/staged publication. | `src/core/catalog/model.odin`, `src/view/catalog/database.odin`, `src/view/catalog/statements.odin`, `src/view/catalog/generation.odin`, `src/view/catalog/worker.odin`, `src/view/catalog/service.odin` |
+| **Odin** | Search Index Builder | Deterministic database construction using `src/sqlite`; schema, transaction, indexing, validation, and vacuum policy remain builder-owned. | `tools/search_index_builder/main.odin` |
 | **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
 | **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/particles.odin` |
 | **---** | **--- Julia Modules ---** | **---** | **---** |
@@ -122,20 +124,22 @@ Dynview production callers import the child package that owns each symbol. Root
 `core` owns shared primitives, `math` measurement, `layout` placement, `compile`
 rebuild ordering, and `view/ui/dynview` display-thread drawing.
 
-The catalogue worker validates packaged SQLite and publishes a bounded snapshot before
-Julia content initialization. Odin builds the native UUID tree from that snapshot and
-copies implementation paths to Julia only when a program is selected. The Julia
-animation supervisor resolves and caches implementations, owns lifecycle policy, and
-keeps exactly one active program actor. That actor adapts typed lifecycle and tick
-commands to the `animation_entry` interface. Julia roots the runtime host and committed
-generation, while Odin-held Julia pointers remain borrowed.
+The catalogue store validates packaged SQLite and publishes a bounded, sealed
+arena-backed generation before Julia content initialization. Its packed UTF-8 text is
+resolved through checked offset/length references. Odin builds the native UUID tree from
+that generation and copies implementation paths to Julia only when a program is
+selected. The Julia animation supervisor resolves and caches implementations, owns
+lifecycle policy, and keeps exactly one active program actor. That actor adapts typed
+lifecycle and tick commands to the `animation_entry` interface. Julia roots the runtime
+host and committed generation, while Odin-held Julia pointers remain borrowed.
 
-Reload asks the catalogue worker to admit a candidate immutable database while the
-active connection continues serving search. Its bounded candidate snapshot materializes
-the inactive native interface before Julia roots and validates the candidate generation.
-Catalogue promotion remains reversible until Julia commit and native publication
-succeed; failure restores the prior database, snapshot, interface, generation, and
-selected program actor. Finalization then retires the previous database connection.
+Reload asks the catalogue worker to admit a candidate immutable database and materialize
+its staged generation while the active pair continues serving search. Its bounded
+candidate generation materializes the inactive native interface before Julia roots and
+validates the candidate generation. Catalogue promotion swaps database and generation
+slots together and remains reversible until Julia commit and native publication succeed;
+failure restores the prior database, generation, interface, and selected program actor.
+Finalization then closes and resets the retired pair.
 
 Semantic evidence is authoritative for behavioral claims. Diagnostics explain
 operation and failure, while Spall profiles measure timing; neither substitutes for

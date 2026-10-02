@@ -4,6 +4,7 @@ import bridgemodel "model"
 
 import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
+import catalogdata "../core/catalog"
 
 import "../core"
 import "../shapes"
@@ -13,11 +14,15 @@ import "core:encoding/uuid"
 import "core:strings"
 import "core:testing"
 
-//   Build a compact catalogue fixture with intentionally nonsequential child order.
-catalog_materializer_test_snapshot :: proc() -> ^catalog.Catalog_Snapshot {
-    snapshot := new(catalog.Catalog_Snapshot, context.allocator)
-    snapshot^.generation = 17
-    snapshot^.record_count = 4
+//   Build a compact generation fixture with intentionally nonsequential child order.
+catalog_materializer_test_snapshot :: proc() -> ^catalog.Catalog_Generation {
+    generation := new(catalog.Catalog_Generation, context.allocator)
+    if catalogdata.catalog_generation_init(generation) != .Ok ||
+       catalogdata.catalog_generation_begin(generation, 17) != .Ok {
+        catalogdata.catalog_generation_destroy(generation)
+        free(generation, context.allocator)
+        return nil
+    }
     records := [?]catalog.Catalog_Record{
         {stable_id = catalog_materializer_test_id(1), node_kind = .Category,
             sibling_order = 0, catalog_order = 0},
@@ -30,24 +35,37 @@ catalog_materializer_test_snapshot :: proc() -> ^catalog.Catalog_Snapshot {
         {stable_id = catalog_materializer_test_id(4), node_kind = .Terminal,
             sibling_order = 1, catalog_order = 3},
     }
+    names := [?]string{"Root", "Later child", "Earlier child", "Terminal"}
+    paths := [?]string{"root.jl", "later.jl", "earlier.jl", ""}
     for index in 0..<len(records) {
-        snapshot^.records[index] = records[index]
+        if !catalog_materializer_test_append(
+            generation, &records[index], names[index], paths[index]) {
+            catalogdata.catalog_generation_destroy(generation)
+            free(generation, context.allocator)
+            return nil
+        }
     }
-    copy(snapshot^.records[0].display_name[:], "Root")
-    snapshot^.records[0].display_name_length = 4
-    copy(snapshot^.records[0].implementation_path[:], "root.jl")
-    snapshot^.records[0].implementation_path_length = 7
-    copy(snapshot^.records[1].display_name[:], "Later child")
-    snapshot^.records[1].display_name_length = 11
-    copy(snapshot^.records[1].implementation_path[:], "later.jl")
-    snapshot^.records[1].implementation_path_length = 8
-    copy(snapshot^.records[2].display_name[:], "Earlier child")
-    snapshot^.records[2].display_name_length = 13
-    copy(snapshot^.records[2].implementation_path[:], "earlier.jl")
-    snapshot^.records[2].implementation_path_length = 10
-    copy(snapshot^.records[3].display_name[:], "Terminal")
-    snapshot^.records[3].display_name_length = 8
-    return snapshot
+    if catalogdata.catalog_generation_seal(generation) != .Ok {
+        catalogdata.catalog_generation_destroy(generation)
+        free(generation, context.allocator)
+        return nil
+    }
+    return generation
+}
+
+//   Append one record's strings before storing its generation-local references.
+catalog_materializer_test_append :: proc(
+    generation: ^catalog.Catalog_Generation, record: ^catalog.Catalog_Record,
+    name, path: string) -> bool {
+    name_status := catalogdata.catalog_generation_append_text(
+        generation, name, catalog.CATALOG_NAME_BYTE_CAPACITY, &record^.display_name)
+    path_status := catalogdata.catalog_generation_append_text(
+        generation, path, catalog.CATALOG_PATH_BYTE_CAPACITY,
+        &record^.implementation_path)
+    if name_status != .Ok || path_status != .Ok {
+        return false
+    }
+    return catalogdata.catalog_generation_append_record(generation, record^) == .Ok
 }
 
 //   Return a distinct nonzero stable identity for one fixture record.
@@ -64,7 +82,8 @@ catalog_snapshot_materializes_native_registry :: proc(t: ^testing.T) {
     defer destroy_julia_interface_instance(&iface)
     snapshot := catalog_materializer_test_snapshot()
     defer free(snapshot, context.allocator)
-    testing.expect(t, catalog_snapshot_materialize(&iface, snapshot))
+    defer catalogdata.catalog_generation_destroy(snapshot)
+    testing.expect(t, catalog_generation_materialize(&iface, snapshot))
     testing.expect_value(t, iface.catalog_generation, u64(17))
     testing.expect_value(t, iface.animation_count, 4)
     root := animation_lookup_find(&iface, catalog_materializer_test_id(1))
@@ -72,6 +91,10 @@ catalog_snapshot_materializes_native_registry :: proc(t: ^testing.T) {
     if root == nil {
          return 
     }
+    testing.expect_value(t, root^.name, "Root")
+    testing.expect_value(t, root^.implementation_path, "root.jl")
+    testing.expect_value(t, catalogdata.catalog_generation_reset(snapshot),
+        catalogdata.Catalog_Generation_Status.Ok)
     testing.expect_value(t, root^.name, "Root")
     testing.expect_value(t, root^.implementation_path, "root.jl")
     testing.expect_value(t, root^.next_in_registry^.catalog_order, i32(1))
@@ -100,7 +123,8 @@ catalog_path_copy_uses_materialized_registry :: proc(t: ^testing.T) {
     state^.saved_context = context
     snapshot := catalog_materializer_test_snapshot()
     defer free(snapshot, context.allocator)
-    testing.expect(t, catalog_snapshot_materialize(iface, snapshot))
+    defer catalogdata.catalog_generation_destroy(snapshot)
+    testing.expect(t, catalog_generation_materialize(iface, snapshot))
 
     destination: [16]u8
     status, metadata := catalog_path_copy_test_call(
@@ -153,13 +177,14 @@ catalog_snapshot_materializer_rejects_invalid_topology :: proc(t: ^testing.T) {
     defer destroy_julia_interface_instance(&iface)
     snapshot := catalog_materializer_test_snapshot()
     defer free(snapshot, context.allocator)
+    defer catalogdata.catalog_generation_destroy(snapshot)
     snapshot^.records[2].stable_id = snapshot^.records[1].stable_id
-    testing.expect(t, !catalog_snapshot_materialize(&iface, snapshot))
+    testing.expect(t, !catalog_generation_materialize(&iface, snapshot))
     testing.expect_value(t, iface.animation_count, 0)
     testing.expect_value(t, iface.animation_lookup_count, 0)
     snapshot^.records[2].stable_id = catalog_materializer_test_id(3)
     snapshot^.records[2].parent_stable_id = catalog_materializer_test_id(9)
-    testing.expect(t, !catalog_snapshot_materialize(&iface, snapshot))
+    testing.expect(t, !catalog_generation_materialize(&iface, snapshot))
     testing.expect_value(t, iface.animation_count, 0)
     testing.expect_value(t, iface.catalog_generation, u64(0))
 }
@@ -174,7 +199,8 @@ programmatic_selection_synchronizes_tree_state :: proc(t: ^testing.T) {
     state^.julia_interface = ji
     snapshot := catalog_materializer_test_snapshot()
     defer free(snapshot, context.allocator)
-    testing.expect(t, catalog_snapshot_materialize(ji, snapshot))
+    defer catalogdata.catalog_generation_destroy(snapshot)
+    testing.expect(t, catalog_generation_materialize(ji, snapshot))
     root := animation_lookup_find(ji, catalog_materializer_test_id(1))
     selected := animation_lookup_find(ji, catalog_materializer_test_id(2))
     earlier_sibling := animation_lookup_find(ji, catalog_materializer_test_id(3))

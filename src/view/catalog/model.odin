@@ -2,6 +2,7 @@ package catalog
 
 import model "../../core/catalog"
 
+
 SEARCH_QUERY_BYTE_CAPACITY :: model.SEARCH_QUERY_BYTE_CAPACITY
 SEARCH_QUERY_ITEM_CAPACITY :: model.SEARCH_QUERY_ITEM_CAPACITY
 SEARCH_QUERY_ITEM_BYTE_CAPACITY :: model.SEARCH_QUERY_ITEM_BYTE_CAPACITY
@@ -16,7 +17,7 @@ SEARCH_FINGERPRINT_BYTE_COUNT :: model.SEARCH_FINGERPRINT_BYTE_COUNT
 
 Catalog_Node_Kind :: model.Catalog_Node_Kind
 Catalog_Record :: model.Catalog_Record
-Catalog_Snapshot :: model.Catalog_Snapshot
+Catalog_Generation :: model.Catalog_Generation
 Search_Source_Namespace :: model.Search_Source_Namespace
 Search_Document_Id :: model.Search_Document_Id
 Search_Document_Key :: model.Search_Document_Key
@@ -28,6 +29,8 @@ Search_Worker_Request_Kind :: model.Search_Worker_Request_Kind
 Search_Worker_Request :: model.Search_Worker_Request
 Search_Result_Acceptance :: model.Search_Result_Acceptance
 Catalog_Candidate_State :: model.Catalog_Candidate_State
+
+// View-owned coordinator state for one worker and its two stable generations.
 Catalog_Service :: model.Catalog_Service
 
 // Validate both asynchronous generations before display-owned state replacement.

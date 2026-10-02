@@ -1,6 +1,7 @@
 package catalog
 
 import sqlite3 "../../../libs/sqlite3"
+import catalogdata "../../core/catalog"
 
 import "core:c"
 import "core:fmt"
@@ -221,15 +222,16 @@ search_worker_executes_bounded_ranked_queries :: proc(t: ^testing.T) {
     testing.expect(t, catalog_service_init(
         &service, fixture.path, SEARCH_TEST_FINGERPRINT))
     defer catalog_service_destroy(&service)
-    snapshot := catalog_service_snapshot(&service)
-    testing.expect(t, snapshot != nil)
-    testing.expect_value(t, snapshot^.generation, service.index_generation)
-    testing.expect_value(t, snapshot^.record_count, u16(CATALOG_EXPECTED_RECORD_COUNT))
+    generation := catalog_service_generation(&service)
+    testing.expect(t, generation != nil)
+    testing.expect_value(t, generation^.generation, service.index_generation)
+    testing.expect_value(t, generation^.record_count, u16(CATALOG_EXPECTED_RECORD_COUNT))
     testing.expect_value(t,
-        snapshot^.records[137].node_kind, Catalog_Node_Kind.Terminal)
-    testing.expect_value(t,
-        string(snapshot^.records[0].display_name[:
-            snapshot^.records[0].display_name_length]), "Perpendicular")
+        generation^.records[137].node_kind, Catalog_Node_Kind.Terminal)
+    name, name_status := catalogdata.catalog_generation_text(
+        generation, generation^.records[0].display_name)
+    testing.expect_value(t, name_status, catalogdata.Catalog_Generation_Status.Ok)
+    testing.expect_value(t, name, "Perpendicular")
 
     prefix := search_test_query(t, &service, 7, "perpend")
     testing.expect_value(t, prefix.status, Search_Query_Status.Ready)
@@ -319,7 +321,7 @@ search_test_catalog_candidate_lifecycle :: proc(
     testing.expect(t, valid && catalog_service_try_submit(service, queued))
     testing.expect(t, catalog_service_stage(
         service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
-    staged := catalog_service_staged_snapshot(service)
+    staged := catalog_service_staged_generation(service)
     testing.expect(t, staged != nil && staged^.generation != active_generation)
     before_commit := search_test_receive(service)
     testing.expect_value(t, before_commit.index_generation, active_generation)
@@ -327,7 +329,17 @@ search_test_catalog_candidate_lifecycle :: proc(
 
     testing.expect(t, catalog_service_stage(
         service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
-    candidate_generation := catalog_service_staged_snapshot(service)^.generation
+    staged = catalog_service_staged_generation(service)
+    staged_generation := staged^.generation
+    staged^.generation += 1
+    testing.expect(t, !catalog_service_commit(service))
+    staged^.generation = staged_generation
+    testing.expect(t, catalog_service_discard(service))
+    testing.expect_value(t, catalog_service_index_generation(service), active_generation)
+
+    testing.expect(t, catalog_service_stage(
+        service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
+    candidate_generation := catalog_service_staged_generation(service)^.generation
     testing.expect(t, catalog_service_commit(service))
     testing.expect(t, catalog_service_discard(service))
     after_rollback := search_test_query(t, service, 2, "perpendicular")

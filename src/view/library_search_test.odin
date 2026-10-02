@@ -240,12 +240,12 @@ library_search_packaged_index_commits_visible_node :: proc(t: ^testing.T) {
     defer free(registry_state, context.allocator)
     registry := &registry_state^.julia_interface_slots[0]
     registry_state^.julia_interface = registry
-    snapshot := viewcatalog.catalog_service_snapshot(service)
-    testing.expect(t, snapshot != nil)
-    if snapshot == nil {
+     generation := viewcatalog.catalog_service_generation(service)
+     testing.expect(t, generation != nil)
+     if generation == nil {
        return
     }
-    testing.expect(t, bridge.catalog_snapshot_materialize(registry, snapshot))
+     testing.expect(t, bridge.catalog_generation_materialize(registry, generation))
 
     for fixture, index in LIBRARY_SEARCH_QUALITY_FIXTURES {
         library_search_quality_fixture_matches(
