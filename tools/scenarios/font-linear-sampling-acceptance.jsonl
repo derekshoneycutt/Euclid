@@ -1,0 +1,15 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"Small text - hyphen. $a-b=0, -1, x_i^2, \\dots, \\alpha+\\beta, \\frac{1}{2}, \\sqrt{x}, \\check a, \\left\\{\\frac{a}{b}\\right\\}$.\\par\nSmall text - hyphen. $a-b=0, -1, x_i^2, \\dots, \\alpha+\\beta, \\frac{1}{2}, \\sqrt{x}, \\check a, \\left\\{\\frac{a}{b}\\right\\}$.\\par\nSmall text - hyphen. $a-b=0, -1, x_i^2, \\dots, \\alpha+\\beta, \\frac{1}{2}, \\sqrt{x}, \\check a, \\left\\{\\frac{a}{b}\\right\\}$.\\par\nSmall text - hyphen. $a-b=0, -1, x_i^2, \\dots, \\alpha+\\beta, \\frac{1}{2}, \\sqrt{x}, \\check a, \\left\\{\\frac{a}{b}\\right\\}$.\\par\nSmall text - hyphen. $a-b=0, -1, x_i^2, \\dots, \\alpha+\\beta, \\frac{1}{2}, \\sqrt{x}, \\check a, \\left\\{\\frac{a}{b}\\right\\}$."},"as":"font-fixture"}
+{"wait_event":"presentation_semantic_published","correlation":"font-fixture","timeout_ms":10000}
+{"set_splitters":{"vertical":700,"horizontal":580}}
+{"set_view_scroll":{"y":0.25}}
+{"screenshot":".build/font-phase1-origin.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_view_scroll":{"y":1.25}}
+{"screenshot":".build/font-phase1-scroll-a.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_view_scroll":{"y":2.5}}
+{"screenshot":".build/font-phase1-scroll-b.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

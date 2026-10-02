@@ -201,7 +201,7 @@ ui_text_draw_resolved_glyph :: proc(draw: Resolved_Glyph_Draw) {
         resolved.source.height/texture_height,
     }
     _ = native.draw_encoder_texture_quad(draw.encoder, destination, uv,
-        draw.color, {texture = resolved.texture.handle})
+        draw.color, {texture = resolved.texture.handle, sampler = .Linear})
 }
 
 //   Convert one cached 26.6 glyph position and advance to pixel coordinates.

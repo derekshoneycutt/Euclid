@@ -2,6 +2,8 @@
 package view_core
 
 import view_font "../font"
+import native "../native"
+import color "../../core/color"
 
 import "core:testing"
 
@@ -13,6 +15,34 @@ Codepoint_Resolver_Test_State :: struct {
 Cached_Glyph_Resolver_Test_State :: struct {
     calls: int,
     reject_glyph_id: u32,
+}
+
+// Verify shared UI glyph emission records linear texture filtering.
+@(test)
+text_test_resolved_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    texture := rawptr(uintptr(1))
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+
+    ui_text_draw_resolved_glyph({
+        encoder = &encoder,
+        resolved = {
+            texture = {handle = texture, width = 32, height = 32},
+            source = {x = 1, y = 2, width = 8, height = 10},
+            base_size = 32,
+        },
+        font_size = 16,
+        color = color.WHITE,
+    })
+
+    testing.expect_value(t, encoder.batch_count, 1)
+    testing.expect_value(t, batches[0].sampler, native.Draw_Sampler.Linear)
 }
 
 // Reject one requested glyph so cached drawing can prove atomic preflight fallback.

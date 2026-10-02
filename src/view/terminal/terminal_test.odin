@@ -14,11 +14,35 @@ import termhist "../../terminal/history"
 import termmodel "../../terminal/model"
 import termpalette "../../terminal/palette"
 import termshellintegration "../../terminal/shell_integration"
+import native "../native"
 import "../font"
 import "../input"
 
 import "core:mem"
 import "core:testing"
+
+// Verify Terminal glyph emission records linear texture filtering.
+@(test)
+terminal_test_shaped_glyph_uses_linear_sampling :: proc(t: ^testing.T) {
+    vertices: [4]native.Draw_Vertex
+    indices: [6]u32
+    batches: [1]native.Draw_Batch
+    commands: [1]native.Draw_Command
+    encoder: native.Draw_Encoder
+    texture := rawptr(uintptr(1))
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+
+    terminal_draw_shaped_glyph(
+        &encoder,
+        {texture = {handle = texture, width = 32, height = 32},
+            source = {x = 1, y = 2, width = 8, height = 10}, base_size = 32},
+        {}, {}, Color{255, 255, 255, 255})
+
+    testing.expect_value(t, encoder.batch_count, 1)
+    testing.expect_value(t, batches[0].sampler, native.Draw_Sampler.Linear)
+}
 
 // Fake display adapter facts captured by hyperlink activation tests.
 Terminal_Test_Hyperlink_Activation :: struct {

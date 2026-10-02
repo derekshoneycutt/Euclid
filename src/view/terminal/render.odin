@@ -1580,7 +1580,7 @@ terminal_draw_shaped_glyph :: proc(
         resolved.source.height/texture_height,
     }
     _ = native.draw_encoder_texture_quad(encoder, destination, uv,
-        color, {texture = resolved.texture.handle})
+        color, {texture = resolved.texture.handle, sampler = .Linear})
 }
 
 // Return whether one shaped glyph atlas rectangle contains drawable ink.

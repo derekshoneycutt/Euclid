@@ -343,6 +343,26 @@ draw_encoder_test_textured_quad_records_state_and_uvs :: proc(t: ^testing.T) {
     testing.expect_value(t, vertices[6].texcoord, geometry.Vector2{0.75, 0.75})
 }
 
+// Verify non-font texture callers can retain nearest-neighbor sampling.
+@(test)
+draw_encoder_test_nearest_sampler_remains_available :: proc(t: ^testing.T) {
+    vertices: [4]Draw_Vertex
+    indices: [6]u32
+    batches: [1]Draw_Batch
+    commands: [1]Draw_Command
+    encoder: Draw_Encoder
+    texture := rawptr(uintptr(1))
+    testing.expect(t, draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {100, 100}, {100, 100}))
+
+    testing.expect(t, draw_encoder_texture_quad(&encoder, {10, 20, 30, 40},
+        {0, 0, 1, 1}, color.WHITE, {texture, .Nearest}))
+
+    testing.expect_value(t, encoder.batch_count, 1)
+    testing.expect_value(t, batches[0].sampler, Draw_Sampler.Nearest)
+}
+
 // sdl_draw_expect_accumulated_statistics checks totals and capacity high waters.
 sdl_draw_expect_accumulated_statistics :: proc(
     t: ^testing.T, runtime: ^Sdl_Draw_Runtime) {
