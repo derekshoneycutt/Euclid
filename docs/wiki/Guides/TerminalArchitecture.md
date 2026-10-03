@@ -526,6 +526,13 @@ flowchart LR
 | Composition | Terminal view | Draw placements at their sealed z-order relative to text. |
 
 Static PNG, JPEG, and GIF pixels decode through a worker-local SDL_image surface.
+Kitty compressed RGB/RGBA uses conventional zlib through Odin's `vendor:zlib`
+binding. `uncompress2` writes into the exact reserved raw-pixel extent; success
+requires a valid checksum, exact decoded size, and complete input consumption.
+RGB expands backward into RGBA within the same attachment buffer. Zlib owns and
+releases its internal native workspace within each call; no second pixel buffer
+is allocated. Cancellation is checked before and after decompression and during
+RGB/RGBA normalization, not within the single decompression call.
 Animated GIF uses the SDL_image streaming decoder as its sole production pixel source.
 The allocation-free Euclid GIF walk remains authoritative for dimensions, frame count,
 encoded delays, normalized durations, loop metadata, admission limits, and exact output

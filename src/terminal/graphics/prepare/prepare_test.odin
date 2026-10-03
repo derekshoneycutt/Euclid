@@ -154,7 +154,7 @@ graphics_test_prepare_gif_first_frame :: proc(t: ^testing.T) {
     testing.expect_value(t, output[3], u8(255))
 }
 
-// Verify exact RGB and RGBA zlib streams expand in place without transient storage.
+// Verify exact RGB and RGBA zlib streams expand without a second pixel buffer.
 @(test)
 graphics_test_prepare_zlib :: proc(t: ^testing.T) {
     rgb := [14]u8{120, 156, 99, 100, 98, 102, 97, 101, 3, 0, 0, 62, 0, 22}
@@ -188,6 +188,59 @@ graphics_test_rejects_zlib_expansion_beyond_extent :: proc(t: ^testing.T) {
     }
     testing.expect(t, !prepare(&request))
     testing.expect_value(t, output[4], u8(0xa5))
+}
+
+// Verify malformed, truncated, and trailing zlib data never succeeds.
+@(test)
+graphics_test_rejects_invalid_zlib_streams :: proc(t: ^testing.T) {
+    compressed := [15]u8{
+        120, 156, 99, 100, 98, 102, 97, 101, 3, 0, 0, 62, 0, 22, 0,
+    }
+    output: [8]u8
+    request := Prepare_Request{
+        kind = .Zlib_Rgb, width = 2, height = 1, output = output[:],
+    }
+    for length in 0..<14 {
+        request.input = compressed[:length]
+        testing.expect(t, !prepare(&request))
+    }
+    request.input = compressed[:]
+    testing.expect(t, !prepare(&request))
+    request.input = compressed[:14]
+    compressed[13] ~= 1
+    testing.expect(t, !prepare(&request))
+    compressed[13] ~= 1
+    compressed[0] = 0
+    testing.expect(t, !prepare(&request))
+}
+
+// Verify valid streams must fill the exact declared raw pixel extent.
+@(test)
+graphics_test_rejects_short_zlib_output :: proc(t: ^testing.T) {
+    compressed := [14]u8{
+        120, 156, 99, 100, 98, 102, 97, 101, 3, 0, 0, 62, 0, 22,
+    }
+    output: [8]u8
+    request := Prepare_Request{
+        kind = .Zlib_Rgba, input = compressed[:], width = 2, height = 1,
+        output = output[:],
+    }
+    testing.expect(t, !prepare(&request))
+}
+
+// Verify zlib stored DEFLATE blocks use the same exact RGB output contract.
+@(test)
+graphics_test_prepare_zlib_stored_block :: proc(t: ^testing.T) {
+    compressed := [17]u8{
+        120, 1, 1, 6, 0, 249, 255, 1, 2, 3, 4, 5, 6, 0, 62, 0, 22,
+    }
+    output: [8]u8
+    request := Prepare_Request{
+        kind = .Zlib_Rgb, input = compressed[:], width = 2, height = 1,
+        output = output[:],
+    }
+    testing.expect(t, prepare(&request))
+    testing.expect_value(t, output, [8]u8{1, 2, 3, 255, 4, 5, 6, 255})
 }
 
 // Verify Sixel repeat, palette selection, bands, and transparent background expansion.

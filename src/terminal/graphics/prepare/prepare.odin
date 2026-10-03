@@ -5,8 +5,7 @@ import "../../../taskpool"
 import termattachment "../../attachment"
 import termgraphicsnative "../native"
 
-import "core:c"
-import stbi "vendor:stb/image"
+import zlib "vendor:zlib"
 
 // Encoded image formats admitted by static terminal graphics protocols.
 Encoded_Image_Format :: enum u8 {
@@ -273,6 +272,20 @@ prepare_animated_gif :: proc(
         inspection.height == request.height
 }
 
+// Decode one complete zlib stream into an exact borrowed destination without growth.
+decode_zlib_exact :: proc(input, output: []u8) -> bool {
+    if u64(len(output)) > u64(max(zlib.uLongf)) ||
+        u64(len(input)) > u64(max(zlib.uLong)) {
+        return false
+    }
+    decoded_size := zlib.uLongf(len(output))
+    consumed_size := zlib.uLong(len(input))
+    status := zlib.uncompress2(
+        raw_data(output), &decoded_size, raw_data(input), &consumed_size)
+    return status == zlib.OK && decoded_size == zlib.uLongf(len(output)) &&
+        consumed_size == zlib.uLong(len(input))
+}
+
 //   Expand one zlib stream into an exact raw RGB or RGBA destination.
 prepare_zlib :: proc(
     request: ^Prepare_Request, bytes_per_pixel: int,
@@ -284,10 +297,8 @@ prepare_zlib :: proc(
     if taskpool.task_cancellation_requested(token) {
         return false 
     }
-    decoded := stbi.zlib_decode_buffer(
-        raw_data(request.output), c.int(expected), raw_data(request.input),
-        c.int(len(request.input)))
-    if int(decoded) != expected || taskpool.task_cancellation_requested(token) {
+    if !decode_zlib_exact(request.input, request.output[:expected]) ||
+        taskpool.task_cancellation_requested(token) {
         return false
     }
     for pixel := request.width * request.height - 1; pixel >= 0; pixel -= 1 {

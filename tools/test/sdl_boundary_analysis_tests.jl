@@ -102,7 +102,7 @@ end
 
         @test length(result.diagnostics) == 1
         @test result.diagnostics[1].path == "src/view/native/sdl_icon.odin"
-        @test occursin("expected 1 import", result.diagnostics[1].message)
+        @test occursin("expected 2 import", result.diagnostics[1].message)
     end
 
     @testset "fixtures are outside exact owner policy" begin

@@ -7,7 +7,7 @@ import "core:os"
 import "core:testing"
 
 import sdl "vendor:sdl3"
-import stbi "vendor:stb/image"
+import image "vendor:sdl3/image"
 import native_accessibility "accessibility"
 
 Sdl_Capture_Completion_Test_State :: struct {
@@ -310,19 +310,21 @@ sdl_capture_png_preserves_padded_rgba_rows :: proc(t: ^testing.T) {
     }
     testing.expect(t, sdl_platform_save_png(
         pixels[:], 2, 2, 12, ".build/test-artifacts/sdl-capture-padded.png"))
-    encoded, read_error := os.read_entire_file(path, context.allocator)
-    testing.expect(t, read_error == nil)
-    defer delete(encoded)
-    width, height, channels: c.int
-    decoded := stbi.load_from_memory(raw_data(encoded), c.int(len(encoded)),
-        &width, &height, &channels, 4)
-    testing.expect(t, decoded != nil)
-    if decoded == nil {
-       return
+    surface := image.Load(".build/test-artifacts/sdl-capture-padded.png")
+    testing.expect(t, surface != nil)
+    if surface == nil {
+        return
     }
-    defer stbi.image_free(decoded)
-    testing.expect_value(t, width, c.int(2))
-    testing.expect_value(t, height, c.int(2))
+    defer sdl.DestroySurface(surface)
+    testing.expect_value(t, surface.w, c.int(2))
+    testing.expect_value(t, surface.h, c.int(2))
+    if surface.w != 2 || surface.h != 2 {
+        return
+    }
+    decoded: [16]u8
+    testing.expect(t, sdl.ConvertPixels(
+        surface.w, surface.h, surface.format, surface.pixels, surface.pitch,
+        .RGBA32, raw_data(decoded[:]), 8))
     expected := [16]u8{
         255, 0, 0, 255, 0, 255, 0, 128,
         0, 0, 255, 64, 255, 255, 255, 0,

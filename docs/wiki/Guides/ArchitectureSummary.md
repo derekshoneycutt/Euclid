@@ -265,7 +265,7 @@ The repository analyzer classifies every production SDL import under one exact o
 | --- | --- |
 | Platform shell | Native view owners create the SDL window, GPU device, scene target, timing state, cursors, clipboard, and input frames. |
 | Rendering | Native draw, stroke, and dust owners hold SDL_GPU pipelines and buffers; higher packages append portable bounded commands. |
-| Images and capture | SDL_image workers decode Terminal pixels, while framebuffer readback and the streaming GIF encoder operate on the SDL scene target. |
+| Images and capture | SDL_image workers decode Terminal pixels; the display-owned icon adapter loads and releases its temporary SDL_image surface. Framebuffer readback and the streaming GIF encoder operate on the SDL scene target. |
 | Publication | Font and Terminal graphics policy retain bounded generation, publication, playback, and cleanup state through portable records. |
 | Accessibility | Portable storage owns validated native-ready facts, monotonic IDs, and bounded callback ingress; the display-owned platform adapter owns AccessKit handles and host focus/bounds forwarding. |
 
