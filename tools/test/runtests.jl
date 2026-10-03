@@ -282,8 +282,10 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         end
     end
 
-    @testset "Linux FreeType adapter inputs" begin
-        if Sys.islinux()
+    @testset "Unix FreeType adapter inputs" begin
+        @test_throws ErrorException BuildConfiguration.freetype_jll_paths(:NT)
+        @test_throws ErrorException BuildConfiguration.freetype_jll_paths(:FreeBSD)
+        if Sys.islinux() || Sys.isapple()
             paths = BuildConfiguration.freetype_jll_paths()
             @test paths.version == "2.14.3+1"
             @test isfile(paths.library_path)
@@ -296,10 +298,21 @@ const ScenarioRunner = Main.EuclidScenarioRunner
             linker_flags = BuildConfiguration.freetype_linker_flags()
             @test occursin("-L$(dirname(artifact.archive_path))", linker_flags)
             @test occursin("-leuclid_freetype", linker_flags)
+            if Sys.isapple()
+                @test !occursin("-rpath-link", linker_flags)
+                @test all(directory -> "-Wl,-rpath,$directory" in
+                    split(linker_flags), paths.runtime_dirs)
+            else
+                @test occursin("-Wl,-rpath-link,", linker_flags)
+            end
             @test occursin(paths.library_path,
                 BuildConfiguration.native_linker_flags())
             @test dirname(paths.library_path) in
                 BuildConfiguration.native_runtime_dirs()
+            @test dirname(paths.library_path) in
+                BuildConfiguration.native_runtime_dirs(:system)
+            @test occursin(paths.library_path,
+                BuildConfiguration.native_linker_flags(:system))
         else
             @test_throws ErrorException BuildConfiguration.freetype_jll_paths()
         end
@@ -515,9 +528,11 @@ runtime_artifact_sha256 = "runtime-artifact"
 reflection = "stroke3d.vert.json"
 reflection_sha256 = "reflection"
 """)
+            freetype_runtime = Sys.islinux() ? "libfreetype.so.6" :
+                "@rpath/libfreetype.6.dylib"
             bom = runtime_sbom_document(
                 "00000000-0000-0000-0000-000000000000",
-                Sys.islinux() ? ["libfreetype.so.6"] : String[],
+                Sys.islinux() || Sys.isapple() ? [freetype_runtime] : String[],
                 JuliaPackageDep[], binary, assets, manifest)
             components = Dict(component["bom-ref"] => component
                 for component in bom["components"])
@@ -538,11 +553,12 @@ reflection_sha256 = "reflection"
             @test components["native:sqlite3"]["version"] == "3.53.4"
             @test components["native:sqlite3"]["scope"] == "required"
             @test "native:sqlite3" in dependencies
-            if Sys.islinux()
-                freetype = components["runtime:libfreetype.so.6"]
+            if Sys.islinux() || Sys.isapple()
+                freetype = components["runtime:$freetype_runtime"]
                 @test freetype["version"] == "2.14.3+1"
                 @test freetype["hashes"][1]["alg"] == "SHA-256"
                 @test freetype["properties"][1]["value"] == "FreeType2_jll"
+                @test "runtime:$freetype_runtime" in dependencies
             end
             graphics_runtime = Sys.isapple() ? "native:metal-framework" :
                 Sys.iswindows() ? "native:direct3d12" : "native:vulkan-loader"

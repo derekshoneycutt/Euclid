@@ -950,7 +950,8 @@ function runtime_sbom_components(
             "name" => lib,
             "version" => "unknown",
             "scope" => "required")
-        if Sys.islinux() && lib == "libfreetype.so.6"
+        if (Sys.islinux() && lib == "libfreetype.so.6") ||
+            (Sys.isapple() && basename(lib) == "libfreetype.6.dylib")
             artifact = EuclidBuildConfiguration.freetype_jll_paths()
             component["version"] = artifact.version
             component["hashes"] = [component_hash(artifact.library_path)]

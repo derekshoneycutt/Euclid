@@ -56,6 +56,8 @@ isolated under `.build/cmake/` while preserving Euclid's existing outputs under
 Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each tool
 available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
 Julia project by default, so a separate HarfBuzz installation is not required.
+Linux and macOS font rasterization uses the pinned `FreeType2_jll` library and
+matching headers; a separate FreeType installation is not required.
 
 ### Unix (Linux/macOS) requirements
 
@@ -136,14 +138,6 @@ julia tools/make.jl stats src/main.odin --line=310
 julia tools/make.jl evidence capabilities
 julia tools/make.jl unit odin
 julia tools/make.jl run --debug -- --diagnostics=.build/debug/euclid.log
-```
-
-Additionally, on Linux you might need to build the STB font vendor packages in Odin to get
-an appropriate build. This can typically be done by locating the Odin directory and
-running something like this:
-
-```sh
-sudo /usr/lib64/odin/vendor/stb/src/build_stb.sh
 ```
 
 ## Questions?

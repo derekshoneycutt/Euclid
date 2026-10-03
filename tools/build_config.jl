@@ -676,10 +676,10 @@ function sqlite3_tool_linker_flags(kernel::Symbol=Sys.KERNEL)
     error("SQLite build-tool linkage is unsupported on $kernel.")
 end
 
-"""Resolve the pinned Linux FreeType library, headers, and runtime directories."""
+"""Resolve the pinned Unix FreeType library, headers, and runtime directories."""
 function freetype_jll_paths(kernel::Symbol=Sys.KERNEL)
-    kernel == :Linux || error(
-        "The Phase 2 FreeType adapter currently supports Linux only.")
+    (kernel == :Linux || kernel == :Darwin) || error(
+        "The FreeType adapter is unsupported on $kernel.")
     snippet = "using FreeType2_jll; " *
         "println(FreeType2_jll.libfreetype_path); " *
         "println.(FreeType2_jll.LIBPATH_list); " *
@@ -742,7 +742,7 @@ function build_freetype_archive(
     return archive_path
 end
 
-"""Build or reuse the content-addressed Linux FreeType adapter archive."""
+"""Build or reuse the content-addressed Unix FreeType adapter archive."""
 function freetype_artifact(kernel::Symbol=Sys.KERNEL)
     paths = freetype_jll_paths(kernel)
     compiler = Sys.which(get(ENV, "CC", "cc"))
@@ -772,12 +772,14 @@ function freetype_artifact(kernel::Symbol=Sys.KERNEL)
         unique(paths.runtime_dirs))
 end
 
-"""Return Linux linker flags for the pinned FreeType and Euclid adapter."""
+"""Return Unix linker flags for the pinned FreeType and Euclid adapter."""
 function freetype_linker_flags(kernel::Symbol=Sys.KERNEL)
     artifact = freetype_artifact(kernel)
+    runtime_flags = kernel == :Linux ?
+        "-Wl,-rpath-link,$(join(artifact.runtime_dirs, ':'))" :
+        join(["-Wl,-rpath,$directory" for directory in artifact.runtime_dirs], " ")
     return "-L$(dirname(artifact.archive_path)) -leuclid_freetype " *
-        "$(artifact.library_path) " *
-        "-Wl,-rpath-link,$(join(artifact.runtime_dirs, ':'))"
+        "$(artifact.library_path) $runtime_flags"
 end
 
 """Generate one MSVC import library from a Windows DLL."""
@@ -891,7 +893,8 @@ function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
         sdl3_provider_identity().library_path,
         sdl3_image_provider_identity().library_path,
     ]
-    Sys.islinux() && append!(paths, freetype_jll_paths().runtime_dirs)
+    (Sys.islinux() || Sys.isapple()) &&
+        append!(paths, freetype_jll_paths().runtime_dirs)
     return native_runtime_directories(paths, native_libraries)
 end
 
@@ -923,7 +926,7 @@ function native_linker_flags(provider::Symbol=harfbuzz_provider())
         "SDL3 application linkage is unsupported on $(Sys.KERNEL).")
     harfbuzz_flags = provider == :jll ? unix_harfbuzz_jll_linker_flags() :
         system_harfbuzz_linker_flags()
-    freetype_flags = Sys.islinux() ? freetype_linker_flags() : ""
+    freetype_flags = freetype_linker_flags()
     return "$harfbuzz_flags $(julia_linker_flags()) $(sdl3_linker_flags()) " *
         "$(sdl3_image_linker_flags()) $(accesskit_linker_flags()) " *
         "$(sqlite3_linker_flags()) $freetype_flags"

@@ -44,7 +44,7 @@ font_freetype_face_release_partial :: proc(
     source: []u8, handle: ^freetype.Freetype_Face,
     allocator: mem.Allocator,
     allocation_mode: Prepared_Font_Allocation_Mode) {
-    when ODIN_OS == .Linux {
+    when ODIN_OS == .Linux || ODIN_OS == .Darwin {
         if handle != nil {
             freetype.euclid_ft_close(handle)
         }
@@ -58,7 +58,7 @@ font_freetype_face_release_partial :: proc(
 font_freetype_face_configure :: proc(
     handle: ^freetype.Freetype_Face, info: freetype.Freetype_Info,
     pixel_size: i32) -> Font_Freetype_Size_Result {
-    when ODIN_OS == .Linux {
+    when ODIN_OS == .Linux || ODIN_OS == .Darwin {
         denominator := i64(info.hhea_ascender) - i64(info.hhea_descender)
         if info.glyph_count == 0 || info.units_per_em == 0 || denominator <= 0 {
             return {}
@@ -80,31 +80,35 @@ font_freetype_face_configure :: proc(
     }
 }
 
-// Acquire, normalize, and publish one Linux face over caller-owned source bytes.
-font_freetype_face_open_linux :: proc(
+// Acquire, normalize, and publish one native face over caller-owned source bytes.
+font_freetype_face_open_native :: proc(
     source: []u8, pixel_size: i32,
     output: ^Font_Freetype_Face) -> bool {
-    handle: ^freetype.Freetype_Face
-    info: freetype.Freetype_Info
-    status := freetype.euclid_ft_open(&source[0], u64(len(source)),
-        FONT_FREETYPE_NATIVE_MEMORY_LIMIT_BYTES, &handle, &info)
-    if status != .Ok {
+    when ODIN_OS == .Linux || ODIN_OS == .Darwin {
+        handle: ^freetype.Freetype_Face
+        info: freetype.Freetype_Info
+        status := freetype.euclid_ft_open(&source[0], u64(len(source)),
+            FONT_FREETYPE_NATIVE_MEMORY_LIMIT_BYTES, &handle, &info)
+        if status != .Ok {
+            return false
+        }
+        size := font_freetype_face_configure(handle, info, pixel_size)
+        if !size.ready {
+            freetype.euclid_ft_close(handle)
+            return false
+        }
+        output^ = {
+            source = source,
+            handle = handle,
+            info = info,
+            pixel_size = pixel_size,
+            scale = size.scale,
+            raster_ascent = size.raster_ascent,
+        }
+        return true
+    } else {
         return false
     }
-    size := font_freetype_face_configure(handle, info, pixel_size)
-    if !size.ready {
-        freetype.euclid_ft_close(handle)
-        return false
-    }
-    output^ = {
-        source = source,
-        handle = handle,
-        info = info,
-        pixel_size = pixel_size,
-        scale = size.scale,
-        raster_ascent = size.raster_ascent,
-    }
-    return true
 }
 
 // Open one source with an operation-owned FreeType face and normalized size.
@@ -122,8 +126,8 @@ font_freetype_face_open :: proc(
     if !source_ready {
         return false
     }
-    when ODIN_OS == .Linux {
-        if font_freetype_face_open_linux(source, pixel_size, output) {
+    when ODIN_OS == .Linux || ODIN_OS == .Darwin {
+        if font_freetype_face_open_native(source, pixel_size, output) {
             return true
         }
     }
@@ -149,7 +153,7 @@ font_freetype_face_close :: proc(
 // Resolve one Unicode codepoint through the admitted FreeType cmap.
 font_freetype_glyph_index :: proc(
     face: ^Font_Freetype_Face, codepoint: rune) -> (u32, bool) {
-    when ODIN_OS == .Linux {
+    when ODIN_OS == .Linux || ODIN_OS == .Darwin {
         if face == nil || face.handle == nil || codepoint < 0 {
             return 0, false
         }
@@ -165,7 +169,7 @@ font_freetype_glyph_index :: proc(
 // Read one glyph's unscaled horizontal advance in font units.
 font_freetype_glyph_advance :: proc(
     face: ^Font_Freetype_Face, glyph_id: u32) -> (i32, bool) {
-    when ODIN_OS == .Linux {
+    when ODIN_OS == .Linux || ODIN_OS == .Darwin {
         if face == nil || face.handle == nil {
             return 0, false
         }
@@ -181,7 +185,7 @@ font_freetype_glyph_advance :: proc(
 // Render one glyph using the selected grayscale raster policy.
 font_freetype_render_glyph :: proc(
     face: ^Font_Freetype_Face, glyph_id: u32) -> (Font_Freetype_Bitmap, bool) {
-    when ODIN_OS == .Linux {
+    when ODIN_OS == .Linux || ODIN_OS == .Darwin {
         if face == nil || face.handle == nil {
             return {}, false
         }

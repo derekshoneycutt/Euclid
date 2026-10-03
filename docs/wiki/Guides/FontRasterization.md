@@ -8,9 +8,9 @@ font preparation worker uses FreeType only to produce grayscale coverage and
 bitmap bearings. The display thread remains the owner of atlas publication and
 GPU textures.
 
-## Linux Policy
+## Linux and macOS Policy
 
-The production Linux raster policy is FreeType light hinting with
+The production Linux and macOS raster policy is FreeType light hinting with
 `FT_LOAD_TARGET_LIGHT | FT_LOAD_NO_BITMAP` and `FT_RENDER_MODE_NORMAL`. Required
 seed rasters and demand-paged rasters use the same policy. Policy is part of
 `Font_Raster_Identity`; stale or mismatched requests cannot publish into the
@@ -18,9 +18,10 @@ active cache. The native adapter intentionally exposes no unhinted or font-nativ
 hinting mode.
 
 FreeType uses the directly declared `FreeType2_jll` 2.14.3+1 dependency and its
-matching artifact headers on Linux. The repository-owned C adapter hides FreeType
-layouts and uses operation-local allocation callbacks. The source bytes outlive
-the face, and borrowed glyph-slot pixels are copied before another load or close.
+matching artifact headers on Linux and macOS. The repository-owned C adapter hides
+FreeType layouts and uses operation-local allocation callbacks. The source bytes
+outlive the face, and borrowed glyph-slot pixels are copied before another load or
+close.
 
 ## Bounded Native Memory
 
@@ -40,7 +41,12 @@ are not included in these native figures.
 ## Platform Status
 
 The adapter, pinned runtime linkage, memory tests, and runtime SBOM provenance are
-currently implemented and verified on Linux x86_64. macOS and Windows remain
-unsupported by the FreeType adapter until their respective platform work adds
-and tests the native build, linkage, runtime loading, and deployment paths. A
-successful Linux build is not cross-platform acceptance.
+implemented and verified on Linux x86_64 and Apple Silicon macOS. macOS builds
+link the pinned JLL dylib and embed its runtime directories as Mach-O rpaths,
+including when system HarfBuzz is selected. The application bundle and native
+test executables use the same adapter and raster policy; no Homebrew FreeType
+installation is required. Source-built bundles depend on the local Julia
+artifacts, rather than embedding a relocatable FreeType runtime.
+
+Windows remains unsupported by the FreeType adapter. Intel and universal macOS
+builds are not supported by the application toolchain.

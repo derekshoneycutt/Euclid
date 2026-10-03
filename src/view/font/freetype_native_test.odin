@@ -6,7 +6,7 @@ import freetype "../../../libs/freetype/bindings"
 import "core:os"
 import "core:testing"
 
-when ODIN_OS == .Linux {
+when ODIN_OS == .Linux || ODIN_OS == .Darwin {
     // Verify glyph queries, bitmap copying, and native memory statistics.
     freetype_test_native_render :: proc(t: ^testing.T, face: ^freetype.Freetype_Face) {
         glyph: u32
