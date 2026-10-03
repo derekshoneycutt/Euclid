@@ -51,6 +51,7 @@ end
 
 struct FreeTypeArtifact
     archive_path::String
+    import_library_path::String
     fingerprint::String
     compiler_identity::String
     library_path::String
@@ -676,10 +677,12 @@ function sqlite3_tool_linker_flags(kernel::Symbol=Sys.KERNEL)
     error("SQLite build-tool linkage is unsupported on $kernel.")
 end
 
-"""Resolve the pinned Unix FreeType library, headers, and runtime directories."""
+"""Resolve the pinned FreeType library, headers, and runtime directories."""
 function freetype_jll_paths(kernel::Symbol=Sys.KERNEL)
-    (kernel == :Linux || kernel == :Darwin) || error(
+    (kernel == :Linux || kernel == :Darwin || kernel == :NT) || error(
         "The FreeType adapter is unsupported on $kernel.")
+    kernel == Sys.KERNEL || error(
+        "Cross-platform FreeType artifact resolution is unsupported.")
     snippet = "using FreeType2_jll; " *
         "println(FreeType2_jll.libfreetype_path); " *
         "println.(FreeType2_jll.LIBPATH_list); " *
@@ -722,59 +725,85 @@ end
 """Build the repository-owned FreeType adapter archive in one candidate directory."""
 function build_freetype_archive(
     directory::String, compiler::String, archiver::String,
-    include_dir::String)
-    object_path = joinpath(directory, "euclid_freetype.o")
-    archive_path = joinpath(directory, "libeuclid_freetype.a")
+    include_dir::String, kernel::Symbol)
+    object_path = joinpath(directory,
+        kernel == :NT ? "euclid_freetype.obj" : "euclid_freetype.o")
+    archive_path = joinpath(directory,
+        kernel == :NT ? "euclid_freetype.lib" : "libeuclid_freetype.a")
     source_path = joinpath(FREETYPE_SOURCE_DIR, "euclid_freetype.c")
-    compile_result = capture_command(Cmd([
-        compiler, "-std=c17", "-O2", "-DNDEBUG", "-fPIC", "-Wall", "-Wextra",
-        "-Werror", "-I$include_dir", "-c", source_path, "-o", object_path,
-    ]))
+    compile_command = if kernel == :NT
+        Cmd([compiler, "/nologo", "/std:c17", "/O2", "/DNDEBUG",
+            "/I$include_dir", "/c", source_path, "/Fo$object_path"])
+    else
+        Cmd([compiler, "-std=c17", "-O2", "-DNDEBUG", "-fPIC", "-Wall",
+            "-Wextra", "-Werror", "-I$include_dir", "-c", source_path,
+            "-o", object_path])
+    end
+    kernel == :NT && (compile_command = addenv(
+        compile_command, msvc_build_environment()))
+    compile_result = capture_command(compile_command)
     compile_result.exit_code == 0 || error(
         "FreeType adapter compilation failed: " *
         strip(compile_result.output * compile_result.error_output))
-    archive_result = capture_command(Cmd([
-        archiver, "rcs", archive_path, object_path,
-    ]))
+    archive_command = kernel == :NT ? Cmd([
+        archiver, "/nologo", "/OUT:$archive_path", object_path,
+    ]) : Cmd([archiver, "rcs", archive_path, object_path])
+    kernel == :NT && (archive_command = addenv(
+        archive_command, msvc_build_environment()))
+    archive_result = capture_command(archive_command)
     archive_result.exit_code == 0 || error(
         "FreeType adapter archive creation failed: " *
         strip(archive_result.output * archive_result.error_output))
     return archive_path
 end
 
-"""Build or reuse the content-addressed Unix FreeType adapter archive."""
+"""Build or reuse the content-addressed FreeType adapter archive."""
 function freetype_artifact(kernel::Symbol=Sys.KERNEL)
     paths = freetype_jll_paths(kernel)
-    compiler = Sys.which(get(ENV, "CC", "cc"))
-    archiver = Sys.which(get(ENV, "AR", "ar"))
-    compiler === nothing && error("Could not locate the host C compiler.")
-    archiver === nothing && error("Could not locate the host static archiver.")
-    compile_arguments = [compiler, "-std=c17", "-O2", "-DNDEBUG", "-fPIC",
-        "-Wall", "-Wextra", "-Werror", "-I$(paths.include_dir)"]
+    compiler, archiver = sqlite3_tool_paths(kernel)
+    compile_arguments = kernel == :NT ?
+        [compiler, "/nologo", "/std:c17", "/O2", "/DNDEBUG",
+            "/I$(paths.include_dir)"] :
+        [compiler, "-std=c17", "-O2", "-DNDEBUG", "-fPIC", "-Wall",
+            "-Wextra", "-Werror", "-I$(paths.include_dir)"]
     identity = [string(kernel), string(Sys.ARCH), paths.version,
         bytes2hex(open(sha256, paths.library_path)), compile_arguments...,
         sqlite3_tool_identity(compiler, kernel), sqlite3_tool_identity(archiver, kernel),
         freetype_input_hashes(paths.include_dir)...]
     fingerprint = bytes2hex(sha256(join(identity, '\n')))
     final_directory = joinpath(FREETYPE_BUILD_DIR, fingerprint)
-    archive_path = joinpath(final_directory, "libeuclid_freetype.a")
+    archive_path = joinpath(final_directory,
+        kernel == :NT ? "euclid_freetype.lib" : "libeuclid_freetype.a")
     if !isfile(archive_path)
         mkpath(FREETYPE_BUILD_DIR)
         mktempdir(FREETYPE_BUILD_DIR) do candidate_directory
             build_freetype_archive(
-                candidate_directory, compiler, archiver, paths.include_dir)
+                candidate_directory, compiler, archiver, paths.include_dir, kernel)
             ispath(final_directory) && rm(final_directory; force=true, recursive=true)
             mv(candidate_directory, final_directory)
         end
     end
-    return FreeTypeArtifact(archive_path, fingerprint,
+    import_library_path = kernel == :NT ?
+        joinpath(final_directory, "freetype.lib") : ""
+    if kernel == :NT
+        new_import_library(paths.library_path,
+            joinpath(final_directory, "libfreetype-6.def"),
+            import_library_path, archiver)
+    end
+    return FreeTypeArtifact(archive_path, import_library_path, fingerprint,
         sqlite3_tool_identity(compiler, kernel), paths.library_path,
         unique(paths.runtime_dirs))
 end
 
-"""Return Unix linker flags for the pinned FreeType and Euclid adapter."""
+"""Return platform linker flags for the pinned FreeType and Euclid adapter."""
 function freetype_linker_flags(kernel::Symbol=Sys.KERNEL)
     artifact = freetype_artifact(kernel)
+    if kernel == :NT
+        directory = dirname(artifact.archive_path)
+        return "/LIBPATH:$directory /DEFAULTLIB:euclid_freetype.lib " *
+            "/LIBPATH:$(dirname(artifact.import_library_path)) " *
+            "/DEFAULTLIB:freetype.lib"
+    end
     runtime_flags = kernel == :Linux ?
         "-Wl,-rpath-link,$(join(artifact.runtime_dirs, ':'))" :
         join(["-Wl,-rpath,$directory" for directory in artifact.runtime_dirs], " ")
@@ -893,7 +922,7 @@ function native_runtime_dirs(provider::Symbol=harfbuzz_provider())
         sdl3_provider_identity().library_path,
         sdl3_image_provider_identity().library_path,
     ]
-    (Sys.islinux() || Sys.isapple()) &&
+    (Sys.islinux() || Sys.isapple() || Sys.iswindows()) &&
         append!(paths, freetype_jll_paths().runtime_dirs)
     return native_runtime_directories(paths, native_libraries)
 end
@@ -920,7 +949,7 @@ function native_linker_flags(provider::Symbol=harfbuzz_provider())
     if Sys.iswindows()
         return "$(windows_linker_flags()) $(sdl3_linker_flags()) " *
             "$(sdl3_image_linker_flags()) $(accesskit_linker_flags()) " *
-            "$(sqlite3_linker_flags())"
+            "$(sqlite3_linker_flags()) $(freetype_linker_flags())"
     end
     (Sys.islinux() || Sys.isapple()) || error(
         "SDL3 application linkage is unsupported on $(Sys.KERNEL).")

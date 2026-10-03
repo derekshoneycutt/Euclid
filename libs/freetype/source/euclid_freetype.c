@@ -19,7 +19,11 @@ typedef union EuclidFTAllocation {
     struct {
         size_t size;
     } value;
+#if defined(_MSC_VER)
+    __declspec(align(16)) unsigned char alignment;
+#else
     max_align_t alignment;
+#endif
 } EuclidFTAllocation;
 
 struct EuclidFTFace {

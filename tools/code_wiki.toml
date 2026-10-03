@@ -54,6 +54,13 @@ navigation_order = 20
 owner = "guide_authors"
 
 [[guides]]
+title = "Font Rasterization"
+path = "Guides/FontRasterization.md"
+summary = "FreeType raster policy, memory bounds, and platform integration."
+navigation_order = 25
+owner = "guide_authors"
+
+[[guides]]
 title = "Coding Standards"
 path = "Guides/CodingStandards.md"
 summary = "Mandatory Odin, Julia, testing, and maintainability conventions."

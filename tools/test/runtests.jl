@@ -282,10 +282,31 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         end
     end
 
-    @testset "Unix FreeType adapter inputs" begin
-        @test_throws ErrorException BuildConfiguration.freetype_jll_paths(:NT)
+    @testset "FreeType adapter inputs" begin
         @test_throws ErrorException BuildConfiguration.freetype_jll_paths(:FreeBSD)
-        if Sys.islinux() || Sys.isapple()
+        if Sys.iswindows()
+            paths = BuildConfiguration.freetype_jll_paths()
+            @test paths.version == "2.14.3+1"
+            @test basename(paths.library_path) == "libfreetype-6.dll"
+            @test isfile(paths.library_path)
+            @test isfile(joinpath(paths.include_dir, "ft2build.h"))
+            @test all(isdir, paths.runtime_dirs)
+
+            artifact = BuildConfiguration.freetype_artifact()
+            @test isfile(artifact.archive_path)
+            @test isfile(artifact.import_library_path)
+            @test endswith(artifact.archive_path, "euclid_freetype.lib")
+            @test length(artifact.fingerprint) == 64
+            linker_flags = BuildConfiguration.freetype_linker_flags()
+            @test occursin("/DEFAULTLIB:euclid_freetype.lib", linker_flags)
+            @test occursin("/DEFAULTLIB:freetype.lib", linker_flags)
+            @test occursin("/DEFAULTLIB:freetype.lib",
+                BuildConfiguration.native_linker_flags())
+            runtime_dirs = BuildConfiguration.native_runtime_dirs()
+            @test all(directory -> directory in runtime_dirs, paths.runtime_dirs)
+            @test Sys.BINDIR in runtime_dirs
+        elseif Sys.islinux() || Sys.isapple()
+            @test_throws ErrorException BuildConfiguration.freetype_jll_paths(:NT)
             paths = BuildConfiguration.freetype_jll_paths()
             @test paths.version == "2.14.3+1"
             @test isfile(paths.library_path)
@@ -529,10 +550,12 @@ reflection = "stroke3d.vert.json"
 reflection_sha256 = "reflection"
 """)
             freetype_runtime = Sys.islinux() ? "libfreetype.so.6" :
-                "@rpath/libfreetype.6.dylib"
+                Sys.isapple() ? "@rpath/libfreetype.6.dylib" :
+                "libfreetype-6.dll"
             bom = runtime_sbom_document(
                 "00000000-0000-0000-0000-000000000000",
-                Sys.islinux() || Sys.isapple() ? [freetype_runtime] : String[],
+                Sys.islinux() || Sys.isapple() || Sys.iswindows() ?
+                    [freetype_runtime] : String[],
                 JuliaPackageDep[], binary, assets, manifest)
             components = Dict(component["bom-ref"] => component
                 for component in bom["components"])
@@ -553,7 +576,7 @@ reflection_sha256 = "reflection"
             @test components["native:sqlite3"]["version"] == "3.53.4"
             @test components["native:sqlite3"]["scope"] == "required"
             @test "native:sqlite3" in dependencies
-            if Sys.islinux() || Sys.isapple()
+            if Sys.islinux() || Sys.isapple() || Sys.iswindows()
                 freetype = components["runtime:$freetype_runtime"]
                 @test freetype["version"] == "2.14.3+1"
                 @test freetype["hashes"][1]["alg"] == "SHA-256"

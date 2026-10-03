@@ -40,9 +40,13 @@ Freetype_Memory_Stats :: struct {
     limit_reached: u32,
 }
 
-when ODIN_OS == .Linux || ODIN_OS == .Darwin {
+when ODIN_OS == .Windows {
+    foreign import euclid_freetype "system:euclid_freetype.lib"
+} else when ODIN_OS == .Linux || ODIN_OS == .Darwin {
     foreign import euclid_freetype "system:euclid_freetype"
+}
 
+when ODIN_OS == .Windows || ODIN_OS == .Linux || ODIN_OS == .Darwin {
     foreign euclid_freetype {
         euclid_ft_open :: proc(
             source: [^]u8, source_length: u64, allocation_limit: u64,

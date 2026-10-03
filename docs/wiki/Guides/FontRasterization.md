@@ -41,12 +41,12 @@ are not included in these native figures.
 ## Platform Status
 
 The adapter, pinned runtime linkage, memory tests, and runtime SBOM provenance are
-implemented and verified on Linux x86_64 and Apple Silicon macOS. macOS builds
-link the pinned JLL dylib and embed its runtime directories as Mach-O rpaths,
-including when system HarfBuzz is selected. The application bundle and native
-test executables use the same adapter and raster policy; no Homebrew FreeType
-installation is required. Source-built bundles depend on the local Julia
-artifacts, rather than embedding a relocatable FreeType runtime.
+implemented and verified on Linux x86_64, Apple Silicon macOS, and Windows x86_64.
+macOS builds link the pinned JLL dylib and embed its runtime directories as Mach-O
+rpaths. Windows builds generate an MSVC adapter archive and import library for the
+pinned JLL DLL. Build, test, and run tooling adds the FreeType JLL runtime directories
+to the loader path, including dependent JLL directories; no separate system or
+Homebrew FreeType installation is required. Source-built applications depend on
+the local Julia artifacts rather than embedding a relocatable FreeType runtime.
 
-Windows remains unsupported by the FreeType adapter. Intel and universal macOS
-builds are not supported by the application toolchain.
+Intel and universal macOS builds are not supported by the application toolchain.
