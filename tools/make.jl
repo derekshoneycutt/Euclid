@@ -944,12 +944,25 @@ function runtime_sbom_components(
     components = runtime_file_components(binary_name, binary_path, assets_path)
 
     for lib in runtime_libs
-        push!(components, Dict{String,Any}(
+        component = Dict{String,Any}(
             "type" => "library",
             "bom-ref" => "runtime:$lib",
             "name" => lib,
             "version" => "unknown",
-            "scope" => "required"))
+            "scope" => "required")
+        if Sys.islinux() && lib == "libfreetype.so.6"
+            artifact = EuclidBuildConfiguration.freetype_jll_paths()
+            component["version"] = artifact.version
+            component["hashes"] = [component_hash(artifact.library_path)]
+            component["properties"] = [
+                Dict("name" => "euclid:provider", "value" => "FreeType2_jll"),
+                Dict("name" => "euclid:artifact-tree", "value" =>
+                    basename(dirname(dirname(artifact.library_path)))),
+                Dict("name" => "euclid:header-directory", "value" =>
+                    artifact.include_dir),
+            ]
+        end
+        push!(components, component)
     end
 
     for package in julia_packages

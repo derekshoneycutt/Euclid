@@ -15,11 +15,6 @@ typedef enum EuclidFTStatus {
     EUCLID_FT_UNSUPPORTED = 6
 } EuclidFTStatus;
 
-typedef enum EuclidFTRasterPolicy {
-    EUCLID_FT_UNHINTED = 0,
-    EUCLID_FT_LIGHT_HINTED = 1
-} EuclidFTRasterPolicy;
-
 typedef struct EuclidFTInfo {
     uint32_t glyph_count;
     uint32_t units_per_em;
@@ -47,7 +42,8 @@ typedef struct EuclidFTMemoryStats {
 } EuclidFTMemoryStats;
 
 /* Source bytes are borrowed until close. The native allocation limit covers
-   FreeType library and face allocations, not the wrapper or caller-owned bytes. */
+    FreeType allocations and their callback bookkeeping, not the face wrapper or
+    caller-owned source bytes. */
 EuclidFTStatus euclid_ft_open(
     const uint8_t *source,
     uint64_t source_length,
@@ -65,8 +61,7 @@ EuclidFTStatus euclid_ft_set_em_size_26_6(
 /* Bitmap pixels are borrowed until the next glyph load, size change, render,
    or close. Copy preserves the bitmap's signed-pitch byte layout. */
 EuclidFTStatus euclid_ft_render_gray(
-    EuclidFTFace *face, uint32_t glyph, EuclidFTRasterPolicy policy,
-    EuclidFTBitmap *out_bitmap);
+    EuclidFTFace *face, uint32_t glyph, EuclidFTBitmap *out_bitmap);
 EuclidFTStatus euclid_ft_copy_bitmap(
     EuclidFTFace *face, uint8_t *destination, uint64_t capacity,
     uint64_t *out_copied);

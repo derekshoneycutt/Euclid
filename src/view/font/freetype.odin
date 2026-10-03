@@ -6,8 +6,7 @@ import fontmodel "model"
 import "core:mem"
 import "core:os"
 
-FONT_FREETYPE_NATIVE_MEMORY_LIMIT_BYTES :: 64 * 1024 * 1024
-FONT_FREETYPE_RASTER_POLICY :: fontmodel.Font_Raster_Policy(.Freetype_Light)
+FONT_FREETYPE_NATIVE_MEMORY_LIMIT_BYTES :: 16 * 1024 * 1024
 
 Font_Freetype_Face :: struct {
     source: []u8,
@@ -187,12 +186,8 @@ font_freetype_render_glyph :: proc(
             return {}, false
         }
         bitmap: freetype.Freetype_Bitmap
-        policy := freetype.Freetype_Raster_Policy.Unhinted
-        if FONT_FREETYPE_RASTER_POLICY == .Freetype_Light {
-            policy = .Light_Hinted
-        }
         status := freetype.euclid_ft_render_gray(
-            face.handle, glyph_id, policy, &bitmap)
+            face.handle, glyph_id, &bitmap)
         return bitmap, status == .Ok && bitmap.pixel_mode == 1
     } else {
         return {}, false

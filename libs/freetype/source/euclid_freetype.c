@@ -38,23 +38,28 @@ static void *euclid_ft_alloc(FT_Memory memory, long size) {
     EuclidFTFace *owner = (EuclidFTFace *)memory->user;
     EuclidFTAllocation *allocation;
     uint64_t requested;
+    uint64_t accounted_size;
 
     if (size <= 0) {
         return NULL;
     }
     requested = (uint64_t)size;
-    if (requested > SIZE_MAX - sizeof(*allocation) ||
-        requested > owner->limit_bytes - owner->current_bytes) {
+    if (requested > (uint64_t)SIZE_MAX - sizeof(*allocation)) {
         owner->limit_reached = 1;
         return NULL;
     }
-    allocation = (EuclidFTAllocation *)malloc(sizeof(*allocation) + (size_t)requested);
+    accounted_size = requested + sizeof(*allocation);
+    if (accounted_size > owner->limit_bytes - owner->current_bytes) {
+        owner->limit_reached = 1;
+        return NULL;
+    }
+    allocation = (EuclidFTAllocation *)malloc((size_t)accounted_size);
     if (allocation == NULL) {
         owner->allocation_failed = 1;
         return NULL;
     }
-    allocation->value.size = (size_t)requested;
-    owner->current_bytes += requested;
+    allocation->value.size = (size_t)accounted_size;
+    owner->current_bytes += accounted_size;
     owner->allocation_count += 1;
     if (owner->current_bytes > owner->peak_bytes) {
         owner->peak_bytes = owner->current_bytes;
@@ -81,6 +86,7 @@ static void *euclid_ft_realloc(
     EuclidFTAllocation *resized;
     uint64_t old_size;
     uint64_t requested;
+    uint64_t accounted_size;
 
     (void)current_size;
     if (block == NULL) {
@@ -93,19 +99,24 @@ static void *euclid_ft_realloc(
     allocation = (EuclidFTAllocation *)block - 1;
     old_size = allocation->value.size;
     requested = (uint64_t)new_size;
-    if (requested > SIZE_MAX - sizeof(*allocation) ||
-        requested > owner->limit_bytes - (owner->current_bytes - old_size)) {
+    if (requested > (uint64_t)SIZE_MAX - sizeof(*allocation)) {
+        owner->limit_reached = 1;
+        return NULL;
+    }
+    accounted_size = requested + sizeof(*allocation);
+    if (accounted_size >
+        owner->limit_bytes - (owner->current_bytes - old_size)) {
         owner->limit_reached = 1;
         return NULL;
     }
     resized = (EuclidFTAllocation *)realloc(
-        allocation, sizeof(*allocation) + (size_t)requested);
+        allocation, (size_t)accounted_size);
     if (resized == NULL) {
         owner->allocation_failed = 1;
         return NULL;
     }
-    resized->value.size = (size_t)requested;
-    owner->current_bytes = owner->current_bytes - old_size + requested;
+    resized->value.size = (size_t)accounted_size;
+    owner->current_bytes = owner->current_bytes - old_size + accounted_size;
     owner->allocation_count += 1;
     if (owner->current_bytes > owner->peak_bytes) {
         owner->peak_bytes = owner->current_bytes;
@@ -239,9 +250,7 @@ EuclidFTStatus euclid_ft_set_em_size_26_6(
 }
 
 EuclidFTStatus euclid_ft_render_gray(
-    EuclidFTFace *face, uint32_t glyph, EuclidFTRasterPolicy policy,
-    EuclidFTBitmap *out_bitmap) {
-    FT_Int32 flags;
+    EuclidFTFace *face, uint32_t glyph, EuclidFTBitmap *out_bitmap) {
     FT_Bitmap *bitmap;
     uint64_t pitch;
     uint64_t bytes;
@@ -251,14 +260,8 @@ EuclidFTStatus euclid_ft_render_gray(
         glyph >= (uint32_t)face->ft_face->num_glyphs) {
         return EUCLID_FT_INVALID_ARGUMENT;
     }
-    if (policy == EUCLID_FT_UNHINTED) {
-        flags = FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP;
-    } else if (policy == EUCLID_FT_LIGHT_HINTED) {
-        flags = FT_LOAD_TARGET_LIGHT | FT_LOAD_NO_BITMAP;
-    } else {
-        return EUCLID_FT_INVALID_ARGUMENT;
-    }
-    error = FT_Load_Glyph(face->ft_face, glyph, flags);
+    error = FT_Load_Glyph(face->ft_face, glyph,
+        FT_LOAD_TARGET_LIGHT | FT_LOAD_NO_BITMAP);
     if (error != 0) {
         return euclid_ft_failure(face);
     }

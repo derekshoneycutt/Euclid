@@ -54,7 +54,7 @@ font_test_configure_raster_cache :: proc(cache: ^Font_Cache, glyph_count: int) -
             key = .Regular,
             source_generation = 1,
             pixel_height = JULIA_MONO_FONT_SIZE,
-            policy = font_freetype_raster_policy,
+            policy = .Freetype_Light,
             slot_incarnation = fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION,
         },
         state = .Resident,
@@ -889,7 +889,8 @@ view_test_canonical_raster_identity :: proc(t: ^testing.T) {
     testing.expect_value(t, identity.key, Font_Key.Bold)
     testing.expect_value(t, identity.source_generation, u64(7))
     testing.expect_value(t, identity.pixel_height, u32(32))
-    testing.expect_value(t, identity.policy, font_freetype_raster_policy)
+    testing.expect_value(
+        t, identity.policy, fontmodel.Font_Raster_Policy.Freetype_Light)
     testing.expect_value(t, identity.slot_incarnation,
         u64(fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION))
 
@@ -905,7 +906,8 @@ view_test_canonical_raster_identity :: proc(t: ^testing.T) {
     testing.expect_value(t, request.logical_size, f32(12))
     testing.expect_value(t, request.scene_pixels_per_logical_unit, f32(1.5))
     testing.expect_value(t, request.pixel_height, u32(18))
-    testing.expect_value(t, request.policy, font_freetype_raster_policy)
+    testing.expect_value(
+        t, request.policy, fontmodel.Font_Raster_Policy.Freetype_Light)
 }
 
 // Verify the shipped faces yield a measurable lowercase match scale in MATH constants.

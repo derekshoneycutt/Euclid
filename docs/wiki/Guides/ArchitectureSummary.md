@@ -70,7 +70,7 @@ If you are new, read in this order:
 | **Odin** | Input Boundary | Once-polled portable input frames, bounded event storage, hotkeys, and owner-bound Terminal encoding. | `src/view/input/`, `src/view/view.odin` |
 | **Odin** | Accessibility | Bounded native-ready publication, session-local identity and action storage, validation, and display-owned platform adapters. | `src/accessibility/`, `src/view/native/accessibility/` |
 | **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
-| **Odin** | Font Cache | Required JuliaMono/NewCM residency, FreeType-unhinted CPU raster preparation, MATH-table admission, demand-paged glyphs, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/freetype.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
+| **Odin** | Font Cache | Required JuliaMono/NewCM residency, FreeType light-hinted grayscale CPU raster preparation, MATH-table admission, demand-paged glyphs, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/freetype.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | HarfBuzz Binding | Dependency-owned opaque handles, ABI records, and shaping/OpenType MATH declarations. | `libs/harfbuzz/harfbuzz.odin` |
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Bounded entity registry, analytic curve evaluation, components, direct-target constraints, and derived render packets. | `src/shapes/model/`, `src/shapes/curve/`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
@@ -711,8 +711,10 @@ decisions; drawing consumes sealed results without reshaping.
 
 Source replacement is transactional. Failed candidates retain the prior generation,
 and shutdown joins preparation before unloading GPU resources or destroying HarfBuzz
-and arena state. See [LaTeXSupport.md](LaTeXSupport.md) for typography and MATH behavior
-and [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for publication lifecycle.
+and arena state. See [FontRasterization.md](FontRasterization.md) for the active raster
+policy and native-memory contract, [LaTeXSupport.md](LaTeXSupport.md) for typography
+and MATH behavior, and [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for
+publication lifecycle.
 
 ### Resource And File Ownership
 

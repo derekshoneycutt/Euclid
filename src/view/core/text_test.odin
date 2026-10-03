@@ -163,7 +163,7 @@ text_test_pending_codepoint_uses_replacement :: proc(t: ^testing.T) {
     raster_request := view_font.Font_Raster_Request{
         key = .Regular, source_generation = 1,
         logical_size = 16, scene_pixels_per_logical_unit = 1,
-        pixel_height = 16, policy = .Freetype_Unhinted,
+        pixel_height = 16, policy = .Freetype_Light,
     }
     resolution := ui_text_resolve_codepoint(
         resolver, .Regular, 'α', raster_request)

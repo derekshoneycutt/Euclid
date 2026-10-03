@@ -215,7 +215,6 @@ Font_Shaping_Identity :: struct {
 }
 
 Font_Raster_Policy :: enum u32 {
-    Freetype_Unhinted,
     Freetype_Light,
 }
 

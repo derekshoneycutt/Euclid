@@ -177,7 +177,6 @@ General features:
   - [X] Sums, Products, Integrals
   - [X] More advanced math layouts and features
   - [X] Basic document mode formatting
-  - [ ] Single-line mode formatting
 - [X] Naive spatial-aware shape drawing
 - [X] Improved pen clipping through 3D polygons
 - [X] Resizable layout via Splitters
@@ -208,6 +207,7 @@ Final tasks:
   - [X] Julia sysimage compilation and support
   - [X] Shader-based particle drawing
   - [X] PIC dust particle physics
+  - [X] FreeType/Harfbuzz font rendering
 - [X] Generated Code Wiki
 - [ ] Semantic trace and deterministic animation test harness (default off)
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas

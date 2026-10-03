@@ -12,11 +12,6 @@ Freetype_Status :: enum c.int {
     Unsupported = 6,
 }
 
-Freetype_Raster_Policy :: enum c.int {
-    Unhinted = 0,
-    Light_Hinted = 1,
-}
-
 Freetype_Face :: struct {}
 
 Freetype_Info :: struct {
@@ -61,7 +56,7 @@ when ODIN_OS == .Linux {
         euclid_ft_set_em_size_26_6 :: proc(
             face: ^Freetype_Face, em_size_26_6: u32) -> Freetype_Status ---
         euclid_ft_render_gray :: proc(
-            face: ^Freetype_Face, glyph: u32, policy: Freetype_Raster_Policy,
+            face: ^Freetype_Face, glyph: u32,
             out_bitmap: ^Freetype_Bitmap) -> Freetype_Status ---
         euclid_ft_copy_bitmap :: proc(
             face: ^Freetype_Face, destination: [^]u8, capacity: u64,

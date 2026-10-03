@@ -7,6 +7,8 @@ import viewmodel "model"
 import shapemodel "../shapes/model"
 import color "../core/color"
 import geometry "../core/geometry"
+import view_font "font"
+import "../shapes"
 
 // We draw the basic surface and all the shapes and tools here
 
@@ -423,6 +425,30 @@ draw_encoded_basic_point :: proc(
     }
 }
 
+// draw_encoded_basic_label submits one world label through the atlas text path.
+draw_encoded_basic_label :: proc(
+    state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
+    item: ^shapemodel.Shapes_Label_Draw, high: bool) {
+    if shadow_point_is_elevated(item^.point1) != high {
+        return
+    }
+    source, found := shapes.shape_world_draw_label_source(state^.shape_world, item^)
+    if !found {
+        return
+    }
+    screen := view_core.iso_to_cartesian(item^.point1, state^.iso_scale^)
+    resolver := view_font.cache_terminal_resolver(&state^.font_cache)
+    view_core.ui_text_shaped({
+        encoder = encoder,
+        resolver = resolver,
+        key = .Regular,
+        text = source,
+        position = geometry.Vector2{screen.x, screen.y},
+        color = color.Color_RGBA8(item^.color),
+        font = {view_font.cache_borrow(&state^.font_cache, .Regular), item^.brush_size},
+    })
+}
+
 // draw_encoded_basic_circle encodes one circle in its matching depth layer.
 draw_encoded_basic_circle :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
@@ -464,6 +490,8 @@ draw_encoded_cached_basic_item :: proc(
     state: ^Euclid_General_State, encoder: ^native.Draw_Encoder,
     item: ^shapemodel.Shapes_Draw_Cache_Item, high: bool) {
     switch &typed in item {
+    case shapemodel.Shapes_Label_Draw:
+        draw_encoded_basic_label(state, encoder, &typed, high)
     case shapemodel.Shapes_Point_Draw:
         draw_encoded_basic_point(state, encoder, &typed, high)
     case shapemodel.Shapes_Line_Draw:
@@ -476,7 +504,7 @@ draw_encoded_cached_basic_item :: proc(
         draw_encoded_basic_curve(state, encoder, &typed, high)
     case shapemodel.Shapes_Polygon_Draw:
         draw_encoded_basic_polygon(state, encoder, &typed, high)
-    case shapemodel.Shapes_Label_Draw, shapemodel.Shapes_Trochoid_Tool_Draw,
+    case shapemodel.Shapes_Trochoid_Tool_Draw,
         shapemodel.Shapes_Cycloid_Tool_Draw, shapemodel.Shapes_Pen_Draw,
         shapemodel.Shapes_Compass_Draw:
     }

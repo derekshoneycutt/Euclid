@@ -517,7 +517,8 @@ reflection_sha256 = "reflection"
 """)
             bom = runtime_sbom_document(
                 "00000000-0000-0000-0000-000000000000",
-                String[], JuliaPackageDep[], binary, assets, manifest)
+                Sys.islinux() ? ["libfreetype.so.6"] : String[],
+                JuliaPackageDep[], binary, assets, manifest)
             components = Dict(component["bom-ref"] => component
                 for component in bom["components"])
             binary_ref = Sys.iswindows() ? "file:bin/euclid.exe" :
@@ -537,6 +538,12 @@ reflection_sha256 = "reflection"
             @test components["native:sqlite3"]["version"] == "3.53.4"
             @test components["native:sqlite3"]["scope"] == "required"
             @test "native:sqlite3" in dependencies
+            if Sys.islinux()
+                freetype = components["runtime:libfreetype.so.6"]
+                @test freetype["version"] == "2.14.3+1"
+                @test freetype["hashes"][1]["alg"] == "SHA-256"
+                @test freetype["properties"][1]["value"] == "FreeType2_jll"
+            end
             graphics_runtime = Sys.isapple() ? "native:metal-framework" :
                 Sys.iswindows() ? "native:direct3d12" : "native:vulkan-loader"
             @test graphics_runtime in dependencies
