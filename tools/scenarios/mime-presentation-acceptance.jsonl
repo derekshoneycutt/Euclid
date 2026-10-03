@@ -11,9 +11,9 @@
 {"allocation_checkpoint":"snapshot_slots"}
 {"allocation_checkpoint":"display_cache"}
 {"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
 {"wait_event":"animation_reset_committed","timeout_ms":10000}
 {"wait_event":"animation_tick_committed","timeout_ms":10000}
-{"wait_event":"animation_cycle_boundary","timeout_ms":60000}
 {"do":"pause_simulation"}
 {"wait_state":"simulation_paused","timeout_ms":10000}
 {"wait_state":"animation_idle","timeout_ms":10000}

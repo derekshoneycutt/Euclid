@@ -4,6 +4,7 @@ import geometry "../../core/geometry"
 import color "../../core/color"
 import native "../native"
 import viewmodel "../model"
+import view_core "../core"
 
 import "../../core"
 import dynlayout "../../dynview/layout"
@@ -52,7 +53,7 @@ register_presentation_semantics :: proc(
         clip_bounds = viewmodel.Rectangle(panel),
         numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
             f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
-        label = "Presentation",
+        label = view_core.shell_message(state, .Presentation_Accessible_Label),
     })
     semantic := state^.ui_runtime.semantic_focus
     owns_presentation := semantic^.logical_focus.domain == .Presentation
@@ -246,4 +247,3 @@ prepare_presentation_interaction :: proc(
     register_presentation_semantics(state, scroll.view_rect, scroll)
     return {true, scroll.view_rect, view_text, scroll, selection_view}
 }
-

@@ -22,6 +22,40 @@ asset_package_sidecar_requires_canonical_identity :: proc(t: ^testing.T) {
     testing.expect(t, !missing_digest)
 }
 
+//   Require schema-four manifests to identify the normalized content database.
+@(test)
+packaged_manifest_rejects_legacy_catalog_contract :: proc(t: ^testing.T) {
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    image_path := fmt.tprintf(
+        "sysimage/%s/%s", fingerprint, PACKAGED_SYSIMAGE_FILENAME)
+    database_digest :=
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    manifest := fmt.tprintf(
+        "schema_version=4\npackage_identity=%s\nsysimage_path=%s\n" +
+        "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
+        "sysimage_platform=%s\ncontent_database=content/content.sqlite3\n" +
+        "content_database_sha256=%s\ncontent_fingerprint=%s\n" +
+        "content_schema_version=3\n",
+        fingerprint, image_path, fingerprint, fingerprint,
+        PACKAGED_SYSIMAGE_PLATFORM, database_digest, fingerprint)
+    metadata, valid := parse_packaged_sysimage_manifest(
+        manifest, context.allocator)
+    testing.expect(t, valid)
+    destroy_packaged_sysimage_metadata(&metadata, context.allocator)
+
+    legacy_manifest := fmt.tprintf(
+        "schema_version=3\npackage_identity=%s\nsysimage_path=%s\n" +
+        "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
+        "sysimage_platform=%s\ncatalog_database=catalog/animations.sqlite3\n" +
+        "catalog_database_sha256=%s\ncatalog_corpus_fingerprint=%s\n" +
+        "catalog_schema_version=2\n",
+        fingerprint, image_path, fingerprint, fingerprint,
+        PACKAGED_SYSIMAGE_PLATFORM, database_digest, fingerprint)
+    _, legacy_valid := parse_packaged_sysimage_manifest(
+        legacy_manifest, context.allocator)
+    testing.expect(t, !legacy_valid)
+}
+
 //   Verify distinct package identities map to distinct immutable cache generations.
 @(test)
 asset_package_cache_path_is_identity_addressed :: proc(t: ^testing.T) {
@@ -134,17 +168,17 @@ write_required_entry :: proc(root_dir, rel_path: string) -> bool {
     return os.write_entire_file(full_path, []u8{'x'}) == nil
 }
 
-//   Write the fixed search database fixture required by manifest readiness tests.
-write_test_catalog_database :: proc(unpack_dir: string) -> bool {
-    search_content := "search-index-fixture"
-    search_path, search_err := filepath.join(
-        []string{unpack_dir, "catalog/animations.sqlite3"}, context.allocator)
-    if search_err != nil {
+//   Write the fixed content database fixture required by manifest readiness tests.
+write_test_content_database :: proc(unpack_dir: string) -> bool {
+    content := "content-database-fixture"
+    content_path, content_err := filepath.join(
+        []string{unpack_dir, "content/content.sqlite3"}, context.allocator)
+    if content_err != nil {
         return false
     }
-    defer delete(search_path)
-    if !write_required_entry(unpack_dir, "catalog/animations.sqlite3") ||
-       os.write_entire_file(search_path, search_content) != nil {
+    defer delete(content_path)
+    if !write_required_entry(unpack_dir, "content/content.sqlite3") ||
+       os.write_entire_file(content_path, content) != nil {
         return false
     }
     return true
@@ -156,7 +190,7 @@ write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
     image_path := fmt.tprintf(
         "sysimage/%s/%s", fingerprint, PACKAGED_SYSIMAGE_FILENAME)
     if !write_required_entry(unpack_dir, image_path) ||
-       !write_test_catalog_database(unpack_dir) {
+       !write_test_content_database(unpack_dir) {
         return false
     }
     manifest_path, manifest_err := filepath.join(
@@ -165,16 +199,16 @@ write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
         return false
     }
     defer delete(manifest_path)
-    search_digest :=
-        "9c2bd1ef8519dc108aff1e657288781b79a6fa08b171c33390ada221592b5b2e"
+    content_digest :=
+        "0ba185c13dc5c8685ad34ec0deffaa9f48edf56b17fc1dec32c4055689592ce8"
     manifest := fmt.tprintf(
-        "schema_version=3\npackage_identity=%s\nsysimage_path=%s\n" +
+        "schema_version=4\npackage_identity=%s\nsysimage_path=%s\n" +
         "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
-        "sysimage_platform=%s\ncatalog_database=catalog/animations.sqlite3\n" +
-        "catalog_database_sha256=%s\ncatalog_corpus_fingerprint=%s\n" +
-        "catalog_schema_version=2\n",
+        "sysimage_platform=%s\ncontent_database=content/content.sqlite3\n" +
+        "content_database_sha256=%s\ncontent_fingerprint=%s\n" +
+        "content_schema_version=3\n",
         fingerprint, image_path, fingerprint, fingerprint,
-        PACKAGED_SYSIMAGE_PLATFORM, search_digest, fingerprint)
+        PACKAGED_SYSIMAGE_PLATFORM, content_digest, fingerprint)
     return os.write_entire_file(manifest_path, manifest) == nil
 }
 
@@ -185,7 +219,7 @@ build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
         "NewCMSansMath-Regular.otf",
-        "catalog/animations.sqlite3",
+        "content/content.sqlite3",
     }
 
     for rel_path in required {
@@ -226,14 +260,14 @@ is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
     testing.expect(t, !is_assets_unpack_ready(unpack_dir,
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
 
-    search_path, search_join_error := filepath.join(
-        []string{unpack_dir, "catalog/animations.sqlite3"}, context.allocator)
-    defer delete(search_path)
-    testing.expect(t, search_join_error == nil)
-    testing.expect(t, os.write_entire_file(search_path, "tampered") == nil)
+    content_path, content_join_error := filepath.join(
+        []string{unpack_dir, "content/content.sqlite3"}, context.allocator)
+    defer delete(content_path)
+    testing.expect(t, content_join_error == nil)
+    testing.expect(t, os.write_entire_file(content_path, "tampered") == nil)
     testing.expect(t, !is_assets_unpack_ready(unpack_dir, fingerprint))
     testing.expect(t,
-        os.write_entire_file(search_path, "search-index-fixture") == nil)
+        os.write_entire_file(content_path, "content-database-fixture") == nil)
     testing.expect(t, is_assets_unpack_ready(unpack_dir, fingerprint))
 
     math_path, join_error := filepath.join(

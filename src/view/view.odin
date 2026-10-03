@@ -17,7 +17,7 @@ import "font"
 import "input"
 import native "native"
 import terminalview "terminal"
-import viewcatalog "catalog"
+import viewcontent "content"
 import "ui"
 import accessibility "../accessibility"
 import audio "../audio"
@@ -93,7 +93,7 @@ Window_Frame_Context :: struct {
     chalk_audio: ^native.Sdl_Chalk_Audio_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
-    catalog_service: ^viewcatalog.Catalog_Service,
+    content_service: ^viewcontent.Content_Service,
     scenario_runtime: ^Scenario_Runtime,
     capture_sink: capture.Sink,
     framebuffer_operations: view_core.Framebuffer_Capture_Operations,
@@ -107,7 +107,7 @@ Display_Loop_Context :: struct {
     chalk_audio: ^native.Sdl_Chalk_Audio_Runtime,
     input_runtime: ^input.Input_Runtime,
     presentation: ^Presentation_Runtime,
-    catalog_service: ^viewcatalog.Catalog_Service,
+    content_service: ^viewcontent.Content_Service,
     display_profile: ^evidence_profile.State,
 }
 
@@ -390,7 +390,7 @@ run_gif_capture_frame :: proc(
     view_core.gif_capture_abort_session(&state^.gif_capture)
     state^.ui_runtime.gif_capture_phase = .Error
     view_core.set_gif_status_note(&state^.ui_runtime,
-        "Error: failed to submit GIF frame.")
+        view_core.shell_message(state, .Gif_Error_Submit_Frame))
 }
 
 //   Publish frame evidence, close profiling zones, and release temporary storage.
@@ -872,7 +872,7 @@ prepare_sdl_frame :: proc(
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
     drain_accessibility_actions(state, ctx.platform)
     controls := ui.prepare_ui_controls(state, routed_frame, ui_geometry.splitters)
-    service_library_search(state, ctx.catalog_service, frame_dt)
+    service_library_search(state, ctx.content_service, frame_dt)
     terminal_frame := terminal_service_update(state, ctx.input_runtime, routed_frame)
     apply_sdl_cursor(state, ctx.platform)
     gif_extents := frame_gif_capture_extents(state, ctx.platform)
@@ -1022,7 +1022,7 @@ window_frame_context :: proc(
         chalk_audio = display.chalk_audio,
         input_runtime = display.input_runtime,
         presentation = display.presentation,
-        catalog_service = display.catalog_service,
+        content_service = display.content_service,
         scenario_runtime = scenario.runtime,
         capture_sink = scenario.capture_sink,
         framebuffer_operations = framebuffer_operations,
@@ -1121,7 +1121,7 @@ display_loop_context :: proc(
         draw_runtime = draw_runtime,
         input_runtime = input_runtime,
         presentation = session.presentation,
-        catalog_service = session.catalog_service,
+        content_service = session.content_service,
         display_profile = display_profile,
     }
 }
@@ -1583,7 +1583,7 @@ apply_window_metrics :: proc(
         runtime^.gif_capture_phase = .Error
         runtime^.gif_capture_frame_counter = 0
         view_core.set_gif_status_note(runtime,
-            "Window resized; GIF capture cancelled.")
+            view_core.shell_message(state, .Gif_Cancelled_Window_Resize))
         record_gif_capture_transition(state, previous, .Error)
     }
     return ui.ui_apply_window_metrics(runtime, metrics)
@@ -1704,4 +1704,3 @@ capture_evidence_checkpoint :: proc(
     }
     return snapshot
 }
-

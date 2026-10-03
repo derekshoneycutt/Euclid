@@ -7,15 +7,19 @@ const JULIA_ROOT = joinpath(REPOSITORY_ROOT, "src", "julia")
 const CONTENT_ROOT = joinpath(REPOSITORY_ROOT, "src", "content")
 
 include(joinpath(JULIA_ROOT, "script.jl"))
-include(joinpath(JULIA_ROOT, "search", "search_corpus.jl"))
+include(joinpath(JULIA_ROOT, "search", "content_corpus.jl"))
 
-module BuildAnimationCatalogInput
+module BuildContentInput
 using UUIDs
 using ..AnimationCatalog
-include(joinpath(@__DIR__, "..", "src", "content", "animation_catalog_data.jl"))
+using ..LocalizedContent
+include(joinpath(
+    @__DIR__, "..", "src", "content", "animation_catalog_generation.jl"))
+const AnimationDescriptors = AnimationCatalogGeneration.AnimationDescriptors
+const AuthoredManifest = AnimationCatalogGeneration.AuthoredManifest
 end
 
-"""Create a disposable owner module for build-time animation and sidecar loading."""
+"""Create an isolated owner module for build-time content sidecars."""
 function create_build_content_module()
     content = Module(gensym(:EuclidBuildContent), false, false)
     Core.eval(content, :(const OdinJuliaBridge = $OdinJuliaBridge))
@@ -28,30 +32,32 @@ function create_build_content_module()
     return content
 end
 
-"""Return authored search content from one loaded build-time sidecar."""
+"""Load the search projection authored beside one animation implementation."""
 function load_search_content(content, descriptors, descriptor)
     implementation = AnimationCatalog.ensure_animation_loaded(
         CONTENT_ROOT, descriptors, descriptor.id; owner=content)
     animation_module = parentmodule(implementation.entry)
     content_name = Symbol(string(nameof(animation_module)), "Content")
-    isdefined(animation_module, content_name) || error(
+    Base.invokelatest(isdefined, animation_module, content_name) || error(
         "animation sidecar module is missing: $(descriptor.implementation_path)")
     content_module = Base.invokelatest(getfield, animation_module, content_name)
     getter = Base.invokelatest(getfield, content_module, :get_search_content)
     return Base.invokelatest(getter)
 end
 
-"""Build and atomically publish the canonical built-in search corpus."""
-function export_search_corpus(destination::String)
-    descriptors = BuildAnimationCatalogInput.AnimationDescriptors
+"""Export the canonical content record stream atomically and return its digest."""
+function export_content_records(destination::String)
     content = create_build_content_module()
-    records = EuclidSearchCorpus.build_catalog_corpus(
-        descriptors, descriptor -> load_search_content(content, descriptors, descriptor))
+    records = EuclidContentCorpus.build_content_records(
+        BuildContentInput.AnimationDescriptors,
+        BuildContentInput.AuthoredManifest,
+        descriptor -> load_search_content(
+            content, BuildContentInput.AnimationDescriptors, descriptor))
     mkpath(dirname(destination))
     candidate = destination * ".candidate"
     try
         open(candidate, "w") do io
-            EuclidSearchCorpus.write_catalog_corpus(io, records)
+            EuclidContentCorpus.write_content_records(io, records)
         end
         mv(candidate, destination; force=true)
     finally
@@ -60,11 +66,11 @@ function export_search_corpus(destination::String)
     return bytes2hex(open(sha256, destination))
 end
 
-"""Validate command arguments and run the search corpus exporter."""
+"""Validate arguments and run the deterministic content exporter."""
 function main(arguments::Vector{String})
     length(arguments) == 1 || error(
-        "usage: export_search_corpus.jl OUTPUT.jsonl")
-    println(export_search_corpus(abspath(only(arguments))))
+        "usage: export_content_records.jl OUTPUT.jsonl")
+    println(export_content_records(abspath(only(arguments))))
     return nothing
 end
 

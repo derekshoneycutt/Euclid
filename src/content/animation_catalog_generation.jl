@@ -2,10 +2,16 @@ module AnimationCatalogGeneration
 
 using UUIDs
 using ..AnimationCatalog
+using ..LocalizedContent
 
-export AnimationDescriptors, ensure_animation_loaded
+export AnimationDescriptors, AuthoredManifest, ensure_animation_loaded
 
 include("animation_catalog_data.jl")
+include("localization/ui_messages.jl")
+include("localization/catalog_names.jl")
+include("localization/editions.jl")
+include("localization/edition_assignments.jl")
+include("localization/manifest.jl")
 
 const SourceRoot = @__DIR__
 

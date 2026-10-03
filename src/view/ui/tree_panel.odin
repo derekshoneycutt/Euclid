@@ -3,6 +3,7 @@ package ui
 import native "../native"
 
 import viewmodel "../model"
+import view_core "../core"
 
 import bridgemodel "../../bridge/model"
 import "../../core"
@@ -77,6 +78,7 @@ Tree_Walk_Cursor :: struct {
 
 //   Inputs for one tree list panel frame, grouped so the call passes one value.
 Tree_List_Params :: struct {
+    label: string,
     ji : ^bridgemodel.Euclid_Julia_Interface,
     ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
     list_panel : geometry.Rectangle,
@@ -340,15 +342,17 @@ draw_encoded_tree_text :: proc(
     _ = native.draw_encoder_pop_scissor(encoder)
 }
 
-// Borrow the selected catalogue title for the current frame.
+// Borrow the interface-owned title through preparation and deferred accordion drawing.
+// Materialization copied it out of content storage; interface retirement, not
+// content-generation retirement, ends this borrow.
 selected_animation_title :: proc(state: ^core.Euclid_General_State) -> string {
     if state == nil || state^.julia_interface == nil ||
         state^.julia_interface^.selected_animation == nil {
-        return "Animation"
+        return view_core.shell_message(state, .Animation_Default_Title)
     }
     title := state^.julia_interface^.selected_animation^.name
     if len(title) == 0 {
-        return "Animation"
+        return view_core.shell_message(state, .Animation_Default_Title)
     }
     return title
 }
@@ -361,7 +365,7 @@ prepare_accordion_view :: proc(
     ui_runtime := &state^.ui_runtime
     active_before := ui_runtime^.active_accordion_section
     sections := accordion_sections_for_layout(
-        ui_runtime^.current_layout_mode, selected_animation_title(state))
+        ui_runtime^.current_layout_mode, selected_animation_title(state), state)
     prepared := prepare_accordion(Accordion_Context{
         panel = geometry.Rectangle(panel),
         mouse_input = mouse_input,
@@ -829,7 +833,7 @@ register_tree_semantics :: proc(
         clip_bounds = scroll.control_geometry.clip_bounds,
         numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
             f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
-        label = "Animation library",
+        label = params.label,
     })
     row := 0
     panel := geometry.Rectangle(scroll.control_geometry.bounds)
@@ -1216,4 +1220,3 @@ prepare_tree_list_panel :: proc(params: Tree_List_Params) -> Tree_List_Preparati
     finish_tree_interaction(params, hit, &scroll, &content_h)
     return {scroll, content_h, hit.hovered_node, hit.hovered_expander_node}
 }
-

@@ -32,6 +32,21 @@ mutable struct CompatibilityAnimationProgram
     animation_generation::UInt64
     last_sequence::UInt64
     active::Bool
+    invoke_entry::Function
+end
+
+"""Invoke standalone policy entries; embedded hosts install the checked content boundary."""
+function invoke_compatibility_entry(entry, state_ptr, command)::Bool
+    return Base.invokelatest(entry, state_ptr, command.operation, command.dt)
+end
+
+"""Construct a program with an explicit host invocation boundary or standalone test policy."""
+function CompatibilityAnimationProgram(
+    supervisor, animation_id, entry, state_ptr, runtime_generation,
+    animation_generation, last_sequence, active;
+    invoke_entry=invoke_compatibility_entry)
+    return CompatibilityAnimationProgram(supervisor, animation_id, entry, state_ptr,
+        runtime_generation, animation_generation, last_sequence, active, invoke_entry)
 end
 
 """Validate immutable program identity before invoking compatibility code."""
@@ -45,6 +60,15 @@ function validate_program_identity(
     command.animation_id == program.animation_id ||
         throw(ArgumentError("stale animation UUID"))
     return nothing
+end
+
+"""Recognize the complete entry protocol without accepting future unknown operations."""
+function animation_operation_is_supported(operation::Int32)::Bool
+    return operation in (
+        OdinJuliaBridge.ANIMATION_OPERATION_ENTER,
+        OdinJuliaBridge.ANIMATION_OPERATION_TICK,
+        OdinJuliaBridge.ANIMATION_OPERATION_EXIT,
+        OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED)
 end
 
 """Validate active state and tick metadata before invoking program code."""
@@ -70,6 +94,8 @@ end
 function validate_program_command(
     program::CompatibilityAnimationProgram,
     command::AnimationProgramCommand)::Nothing
+    animation_operation_is_supported(command.operation) ||
+        throw(ArgumentError("unknown animation operation"))
     validate_program_identity(program, command)
     validate_program_operation(program, command)
     return nothing
@@ -84,8 +110,7 @@ function EuclidActorRuntime.receive!(
         command.request_key, nothing)
     pending !== nothing && pending.owner == context.self || return nothing
     validate_program_command(program, command)
-    succeeded = Base.invokelatest(
-        program.entry, program.state_ptr, command.operation, command.dt)
+    succeeded = program.invoke_entry(program.entry, program.state_ptr, command)
     succeeded || throw(AnimationProgramRejectedError(command.operation))
     program.active = command.operation != OdinJuliaBridge.ANIMATION_OPERATION_EXIT
     command.operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK &&

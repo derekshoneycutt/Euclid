@@ -244,6 +244,7 @@ function run_julia_suite(suite::SuiteDefinition)
         report_path = joinpath(directory, "julia-tests.bin")
         command = Cmd(Cmd([
             JULIA_EXE,
+            "--depwarn=error",
             "--project=" * JULIA_TEST_PROJECT,
             JULIA_TEST_REPORTER,
         ]); dir=REPOSITORY_ROOT)

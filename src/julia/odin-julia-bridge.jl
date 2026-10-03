@@ -15,6 +15,7 @@ export BridgeColor, BridgePointView, BridgeSolveResult,
     PresentationMime, PresentedText, TextPlain, TextLatex,
     PRESENTATION_MAX_SOURCE_BYTES, presented_text, present,
     AnimationKey, animation_schema_id, set_animation_value!, get_animation_value,
+    AnimationContentSpecification, animation_content_specification,
     BridgeShapeLine, BridgeShapeCircle, BridgeShapeFilledCircle,
     BridgeCircleRegionGeometry, BridgeShapeCircleRegion,
     BridgeShapeArcQueryResult, BridgeShapeTriangle,
@@ -32,6 +33,7 @@ export BridgeColor, BridgePointView, BridgeSolveResult,
     BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG, BRIDGE_FEATURE_MIME_PRESENTATION,
     BRIDGE_FEATURE_TROCHOIDS, BRIDGE_FEATURE_CYCLOIDS,
     BRIDGE_FEATURE_CIRCLE_REGIONS,
+    BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION,
     TROCHOID_EXTERNAL, TROCHOID_INTERNAL,
     bridge_color, set_null_animations, copy_animation_implementation_path,
     create_new_label,
@@ -75,7 +77,7 @@ include("bridge/points.jl")
 include("bridge/constraints.jl")
 include("bridge/tools.jl")
 include("bridge/animations.jl")
+include("bridge/content_specification.jl")
 include("bridge/presentation.jl")
 
 end
-

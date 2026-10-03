@@ -80,8 +80,8 @@ If you are new, read in this order:
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `libs/julia/bindings/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution, transactional GIF publication, and native static and animated image decode. | `src/files/files.odin`, `src/terminal/graphics/native/sdl_image.odin` |
 | **Odin** | SQLite Runtime Substrate | Explicit native connection and statement lifecycle, typed binding and columns, and structured mechanics errors. | `src/sqlite/`, `libs/sqlite3/sqlite3.odin` |
-| **Odin** | Catalogue Store and Service | Named catalogue SQL, immutable admission/search policy, packed generations, worker scheduling, and paired active/staged publication. | `src/core/catalog/model.odin`, `src/view/catalog/database.odin`, `src/view/catalog/statements.odin`, `src/view/catalog/generation.odin`, `src/view/catalog/worker.odin`, `src/view/catalog/service.odin` |
-| **Odin** | Search Index Builder | Deterministic database construction using `src/sqlite`; schema, transaction, indexing, validation, and vacuum policy remain builder-owned. | `tools/search_index_builder/main.odin` |
+| **Odin** | Content Store and Service | Named content SQL, complete immutable admission, packed generations, search scheduling, and paired active/staged publication. | `src/core/content/model.odin`, `src/core/content/records.odin`, `src/view/content/database.odin`, `src/view/content/statements.odin`, `src/view/content/generation.odin`, `src/view/content/worker.odin`, `src/view/content/service.odin` |
+| **Odin** | Content Database Builder | Deterministic normalized content database construction using `src/sqlite`; schema, transaction, indexing, coverage validation, and vacuum policy remain builder-owned. | `tools/content_builder/main.odin` |
 | **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
 | **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/particles.odin` |
 | **---** | **--- Julia Modules ---** | **---** | **---** |
@@ -125,22 +125,40 @@ Dynview production callers import the child package that owns each symbol. Root
 `core` owns shared primitives, `math` measurement, `layout` placement, `compile`
 rebuild ordering, and `view/ui/dynview` display-thread drawing.
 
-The catalogue store validates packaged SQLite and publishes a bounded, sealed
-arena-backed generation before Julia content initialization. Its packed UTF-8 text is
-resolved through checked offset/length references. Odin builds the native UUID tree from
+The content store validates packaged SQLite and publishes one bounded, sealed
+arena-backed generation before Julia content initialization. Locale-scoped names,
+UI messages and signatures, templates, subjects, editions, availability/defaults,
+and search projections share its lifetime and publication identity. Its packed UTF-8
+text is resolved through checked offset/length references. Odin builds the native UUID
+tree from
 that generation and copies implementation paths to Julia only when a program is
 selected. The Julia animation supervisor resolves and caches implementations, owns
 lifecycle policy, and keeps exactly one active program actor. That actor adapts typed
 lifecycle and tick commands to the `animation_entry` interface. Julia roots the runtime
 host and committed generation, while Odin-held Julia pointers remain borrowed.
 
-Reload asks the catalogue worker to admit a candidate immutable database and materialize
+Reload asks the content worker to admit a candidate immutable database and materialize
 its staged generation while the active pair continues serving search. Its bounded
 candidate generation materializes the inactive native interface before Julia roots and
-validates the candidate generation. Catalogue promotion swaps database and generation
+validates the candidate generation. Content promotion swaps database and generation
 slots together and remains reversible until Julia commit and native publication succeed;
 failure restores the prior database, generation, interface, and selected program actor.
 Finalization then closes and resets the retired pair.
+
+The model and content store are composition-independent substrates. Root core owns
+the service reference, not the content records. Required native message identities,
+complete locale/name/template coverage, signatures, edition defaults, and search
+agreement are admission conditions; failure cannot publish only the catalogue.
+Edition text language is independent of application locale.
+
+Catalogue names and implementation paths are copied into the native interface arena,
+because prepared accordion labels and deferred tree draws outlive the database read.
+UI semantics copy labels into bounded snapshot text, and accessibility publication
+copies snapshot text into its own owner. Search windows carry IDs and copied suggestions,
+not content borrows. Future message consumers must likewise copy any text retained
+in status buffers or prepared draws beyond the generation's retirement boundary.
+Shell messages resolve through typed native IDs and copied display-owned storage.
+Animation specifications resolve before Enter from the same admitted defaults.
 
 Semantic evidence is authoritative for behavioral claims. Diagnostics explain
 operation and failure, while Spall profiles measure timing; neither substitutes for
@@ -437,6 +455,63 @@ Only the compatibility program actor invokes ordinary animation entries. Existin
 content keeps its `animation_entry` interface while actor policy controls identity,
 ordering, replacement, and failure. Tick overload coalesces elapsed time into one
 pending request; it does not create an unbounded actor or transport backlog.
+
+Each reloadable content generation also loads and validates an authored content
+manifest containing en-US UI messages, locale-scoped catalogue names, edition
+declarations, and explicit per-subject defaults. The stable `LocalizedContent`
+module owns declaration types and validation; the candidate generation owns its
+manifest instance. The native content generation publishes these declarations with
+the catalogue and search projections. Shell UI and accessibility messages resolve
+through typed native IDs and exact admitted signatures, without SQL or Julia calls
+in frame code. Static labels are copied into the display-owned bounded shell cache;
+formatted values use caller-owned storage, and semantic/accessibility publication
+and retained GIF notes copy into their existing owners. Animation text producers
+remain author-controlled and unchanged.
+
+### Invocation Content Specifications
+
+`AnimationContentSpecification` is a read-only Julia-owned value returned by
+`animation_content_specification(state_ptr)` during an animation callback.
+The native 440-byte copy-out layout contains bounded locale and edition fields,
+selection revision, animation UUID, and independent content/runtime generation
+identities. It contains no pointer into SQLite, a registry, or an arena.
+
+The Julia host installs the checked content invocation boundary on its supervisor.
+Lifecycle work retains separate active and entering values: old Exit and rollback
+Enter read the active value even while a replacement interface is staged. Successful
+activation/reset promotes the entering value. Before asynchronous submission, each
+tick copies the active specification into its native query snapshot. The host
+validates UUID and generation identities before copying it to Julia; a scoped
+callback binding makes repeated queries coherent and is cleared even on exceptions.
+Missing context, stale identity, missing defaults, and invalid output are explicit
+errors, never default-locale fallbacks.
+
+Selection revision starts at one and changes only when the effective locale/edition
+pair changes. Ticks, resets, and unchanged content/runtime reloads preserve it.
+The initial runtime generation may be zero; content identity and selection revision
+are nonzero. All authored and null/Terminal adapters exercise the query on Enter.
+
+Operation `4`, `Presentation_Selection_Changed`, is explicitly recognized by actor
+validation and each entry as successful no-op. Unknown operations are rejected.
+No production notification delivery, locale choice, or edition switching exists.
+Ignoring a notice does not advance time/RNG, mutate geometry or particles, change
+pause state, or publish/clear text. The headless harness compares exact native
+observations and Julia RNG around direct notices to all authored entries.
+Selected specification and last published presentation remain separate facts.
+The specification records the selection for that invocation, not the provenance of
+previously published bytes. Only ordinary author-controlled publication replaces
+presentation; metadata never relabels an old snapshot.
+
+See [SQLite admission and authoring](Sqlite3.md#authored-editions-and-sidecar-coverage)
+for uniform editions and sidecar coverage, and
+[the bridge lifetime contract](JuliaThreadArchitecture.md#invocation-content-query)
+for callback scoping. [Localization And Editions](Localization.md) provides
+practical content-authoring and consumer-extension workflows. The focused
+`tools/scenarios/content-specification-acceptance.jsonl` scenario
+checks ordinary publication across reset and committed reload, then pauses simulation
+to verify allocation baselines, capture completion, and shutdown.
+It complements exact identity/revision unit tests and direct no-op harness checks;
+it does not compare equal wall-clock frames of an active animation.
 
 ---
 
@@ -835,7 +910,7 @@ the owner responsible for release.
   closure and use platform-relative loader metadata.
 - Builds compile canonical HLSL offline and package validated SPIR-V, reflection JSON,
   shader ABI metadata, Julia scripts, the deterministic
-  `catalog/animations.sqlite3` catalogue and search index, and other assets into
+  `content/content.sqlite3` content database and search index, and other assets into
   `bin/assets.pkg`; HLSL and
   build-only shader tools are not runtime assets. Debug builds publish a matching
   package and `assets.pkg.identity` commit sidecar beside the debug executable.
@@ -846,7 +921,7 @@ the owner responsible for release.
   whose source commit must equal the parent repository gitlink;
   `EUCLID_SHADERCROSS` is an explicit developer override.
 - Startup requires the package and identity sidecar beside the executable. It selects
-  an immutable `assets/v3/<package_identity>` cache generation, verifies archive bytes
+  an immutable `assets/v4/<package_identity>` cache generation, verifies archive bytes
   before a cache miss is extracted, and validates the extracted manifest identity.
   A stale unpacked cache never substitutes for a missing or invalid package commit.
 

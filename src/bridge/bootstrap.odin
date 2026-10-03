@@ -105,7 +105,7 @@ resolve_julia_interface_callbacks :: proc(
 // Prepare Julia callback state without discarding the admitted catalogue registry.
 prepare_julia_interface_content :: proc(
     iface: ^bridgemodel.Euclid_Julia_Interface) -> bool {
-    if iface == nil || iface^.catalog_generation == 0 ||
+    if iface == nil || iface^.content_generation == 0 ||
        iface^.animation_count <= 0 {
         return false
     }
@@ -195,7 +195,7 @@ clean_julia_interface_instance :: proc(iface: ^bridgemodel.Euclid_Julia_Interfac
     iface^.animation_lookup_entries = nil
     iface^.animation_lookup_capacity = 0
     iface^.animation_lookup_count = 0
-    iface^.catalog_generation = 0
+    iface^.content_generation = 0
     iface^.selected_animation = nil
     iface^.current_animation = &iface^.null_animation
 }

@@ -89,6 +89,13 @@ navigation_order = 43
 owner = "guide_authors"
 
 [[guides]]
+title = "Localization And Editions"
+path = "Guides/Localization.md"
+summary = "Authoring localized messages, names, and editions; native consumers, callback queries, and extension workflows."
+navigation_order = 44
+owner = "guide_authors"
+
+[[guides]]
 title = "Tool Rendering"
 path = "Guides/ToolRendering.md"
 summary = "Pen and compass geometry, shading, and rendering contracts."
@@ -162,10 +169,11 @@ guide_paths = [
 symbol_prefixes = ["dust_", "particle_", "emit_", "queue_dust_"]
 
 [[guide_relations]]
-package_id = "odin:src:view:catalog"
+package_id = "odin:src:view:content"
 guide_paths = [
     "Guides/Sqlite3.md#runtime-query-path",
     "Guides/Sqlite3.md#persisted-database-model",
+    "Guides/Localization.md#extending-the-system",
 ]
 symbol_prefixes = []
 
@@ -200,6 +208,11 @@ guide_paths = [
     "Guides/JuliaThreadArchitecture.md#correctness-invariants",
 ]
 symbol_prefixes = ["add_", "dynview_", "notify_", "set_null_"]
+
+[[guide_relations]]
+package_id = "julia:OdinJuliaBridge"
+guide_paths = ["Guides/Localization.md#reading-specifications-from-julia"]
+symbol_prefixes = ["animation_content_"]
 
 [[guide_relations]]
 package_id = "julia:OdinJuliaBridge"

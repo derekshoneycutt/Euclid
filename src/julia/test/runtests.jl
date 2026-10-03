@@ -21,8 +21,16 @@ using Test
         include("animation_catalog_tests.jl")
     end
 
+    @testset "Localized Content" begin
+        include("localized_content_tests.jl")
+    end
+
     @testset "Animation Actors" begin
         include("animation_actor_tests.jl")
+    end
+
+    @testset "Animation Content Specification" begin
+        include("content_specification_tests.jl")
     end
 
     @testset "Runtime Host" begin

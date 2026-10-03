@@ -1,5 +1,6 @@
 package bridgemodel
 
+import contentmodel "../../core/content"
 import protocol "../../core/protocol"
 import evidence_profile "../../evidence/profile"
 import evidence_session "../../evidence/session"
@@ -280,6 +281,8 @@ Communication_Link :: struct($T: typeid) {
 
 // Julia_Runtime_Service owns bridge queues, checked slots, and lifecycle bookkeeping.
 Julia_Runtime_Service :: struct {
+    active_content_specification: contentmodel.Animation_Content_Specification,
+    pending_content_specification: contentmodel.Animation_Content_Specification,
     evidence_ring: evidence_trace.Ring,
     evidence_session: ^evidence_session.Session,
     profile: evidence_profile.State,

@@ -1,7 +1,8 @@
-package catalog
+#+test
+package content
 
 import sqlite3 "../../../libs/sqlite3"
-import catalogdata "../../core/catalog"
+import contentdata "../../core/content"
 
 import "core:c"
 import "core:fmt"
@@ -132,7 +133,8 @@ search_test_database_create :: proc(
         return result
     }
     registered := sqlite3.euclid_sqlite_register_spellfix(database) == .Ok
-    populated := registered && search_test_execute_sql(database, SEARCH_TEST_SCHEMA)
+    populated := registered && search_test_execute_sql(database, SEARCH_TEST_SCHEMA) &&
+        search_test_populate_content(database)
     closed := sqlite3.sqlite3_close(database) == .Ok
     result.ok = populated && closed
     return result
@@ -152,6 +154,12 @@ search_test_make_candidate :: proc(
     mutation := "UPDATE search_metadata SET value='" +
         SEARCH_TEST_CANDIDATE_FINGERPRINT + "' WHERE key IN " +
         "('catalog_fingerprint', 'index_generation');" +
+        "UPDATE content_metadata SET value='" +
+        SEARCH_TEST_CANDIDATE_FINGERPRINT + "' WHERE key IN " +
+        "('content_fingerprint', 'generation_identity');" +
+        "UPDATE ui_translation SET template='Candidate message' "+
+        "WHERE message_key NOT IN (SELECT message_key FROM ui_argument);"+
+        "UPDATE edition SET unique_name='Candidate Original' WHERE edition_id='original';"+
         "UPDATE animation_catalog SET display_name='Candidate Perpendicular' " +
         "WHERE rowid=1;"
     encoded := strings.clone_to_cstring(mutation, context.temp_allocator)
@@ -160,7 +168,7 @@ search_test_make_candidate :: proc(
 }
 
 // Wait for one result in tests after a successful nonblocking submission.
-search_test_receive :: proc(service: ^Catalog_Service) -> Search_Query_Result {
+search_test_receive :: proc(service: ^Content_Service) -> Search_Query_Result {
     result, _ := chan.recv(service.results)
     return result
 }
@@ -184,29 +192,29 @@ search_test_rejects_catalog_mutation :: proc(
     encoded_mutation := strings.clone_to_cstring(mutation, context.temp_allocator)
     testing.expect(t, search_test_execute_sql(database, encoded_mutation))
     testing.expect_value(t, sqlite3.sqlite3_close(database), sqlite3.Result.Ok)
-    service: Catalog_Service
-    testing.expect(t, !catalog_service_init(
+    service: Content_Service
+    testing.expect(t, !content_service_init(
         &service, fixture.path, SEARCH_TEST_FINGERPRINT))
     testing.expect(t, !service.running)
 }
 
 // Submit one query and synchronously receive its worker-owned result in tests.
 search_test_query :: proc(
-    t: ^testing.T, service: ^Catalog_Service,
+    t: ^testing.T, service: ^Content_Service,
     generation: u64, source: string) -> Search_Query_Result {
     request, valid := search_query_request_make(generation, 0, source)
     testing.expect(t, valid)
-    testing.expect(t, catalog_service_try_submit(service, request))
+    testing.expect(t, content_service_try_submit(service, request))
     return search_test_receive(service)
 }
 
 // Submit one query window with an explicit offset and receive its result.
 search_test_query_window :: proc(
-    t: ^testing.T, service: ^Catalog_Service,
+    t: ^testing.T, service: ^Content_Service,
     generation: u64, offset: u32, source: string) -> Search_Query_Result {
     request, valid := search_query_request_make(generation, offset, source)
     testing.expect(t, valid)
-    testing.expect(t, catalog_service_try_submit(service, request))
+    testing.expect(t, content_service_try_submit(service, request))
     return search_test_receive(service)
 }
 
@@ -218,19 +226,19 @@ search_worker_executes_bounded_ranked_queries :: proc(t: ^testing.T) {
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
-    service: Catalog_Service
-    testing.expect(t, catalog_service_init(
+    service: Content_Service
+    testing.expect(t, content_service_init(
         &service, fixture.path, SEARCH_TEST_FINGERPRINT))
-    defer catalog_service_destroy(&service)
-    generation := catalog_service_generation(&service)
+    defer content_service_destroy(&service)
+    generation := content_service_generation(&service)
     testing.expect(t, generation != nil)
     testing.expect_value(t, generation^.generation, service.index_generation)
     testing.expect_value(t, generation^.record_count, u16(CATALOG_EXPECTED_RECORD_COUNT))
     testing.expect_value(t,
         generation^.records[137].node_kind, Catalog_Node_Kind.Terminal)
-    name, name_status := catalogdata.catalog_generation_text(
+    name, name_status := contentdata.content_generation_text(
         generation, generation^.records[0].display_name)
-    testing.expect_value(t, name_status, catalogdata.Catalog_Generation_Status.Ok)
+    testing.expect_value(t, name_status, contentdata.Content_Generation_Status.Ok)
     testing.expect_value(t, name, "Perpendicular")
 
     prefix := search_test_query(t, &service, 7, "perpend")
@@ -282,10 +290,10 @@ search_worker_verifies_corrections_against_real_results :: proc(t: ^testing.T) {
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
-    service: Catalog_Service
-    testing.expect(t, catalog_service_init(
+    service: Content_Service
+    testing.expect(t, content_service_init(
         &service, fixture.path, SEARCH_TEST_FINGERPRINT))
-    defer catalog_service_destroy(&service)
+    defer content_service_destroy(&service)
 
     misspelled := search_test_query(t, &service, 1, "perpendiculr")
     testing.expect_value(t, misspelled.total_match_count, u32(0))
@@ -307,55 +315,55 @@ search_worker_rejects_stale_index_metadata :: proc(t: ^testing.T) {
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
-    service: Catalog_Service
+    service: Content_Service
     other := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    testing.expect(t, !catalog_service_init(&service, fixture.path, other))
+    testing.expect(t, !content_service_init(&service, fixture.path, other))
     testing.expect(t, !service.running)
 }
 
 // Exercise discard, provisional rollback, and finalized candidate publication.
 search_test_catalog_candidate_lifecycle :: proc(
-    t: ^testing.T, service: ^Catalog_Service,
+    t: ^testing.T, service: ^Content_Service,
     candidate: ^Search_Test_Database, active_generation: u64) {
     queued, valid := search_query_request_make(1, 0, "perpendicular")
-    testing.expect(t, valid && catalog_service_try_submit(service, queued))
-    testing.expect(t, catalog_service_stage(
+    testing.expect(t, valid && content_service_try_submit(service, queued))
+    testing.expect(t, content_service_stage(
         service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
-    staged := catalog_service_staged_generation(service)
+    staged := content_service_staged_generation(service)
     testing.expect(t, staged != nil && staged^.generation != active_generation)
     before_commit := search_test_receive(service)
     testing.expect_value(t, before_commit.index_generation, active_generation)
-    testing.expect(t, catalog_service_discard(service))
+    testing.expect(t, content_service_discard(service))
 
-    testing.expect(t, catalog_service_stage(
+    testing.expect(t, content_service_stage(
         service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
-    staged = catalog_service_staged_generation(service)
+    staged = content_service_staged_generation(service)
     staged_generation := staged^.generation
     staged^.generation += 1
-    testing.expect(t, !catalog_service_commit(service))
+    testing.expect(t, !content_service_commit(service))
     staged^.generation = staged_generation
-    testing.expect(t, catalog_service_discard(service))
-    testing.expect_value(t, catalog_service_index_generation(service), active_generation)
+    testing.expect(t, content_service_discard(service))
+    testing.expect_value(t, content_service_index_generation(service), active_generation)
 
-    testing.expect(t, catalog_service_stage(
+    testing.expect(t, content_service_stage(
         service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
-    candidate_generation := catalog_service_staged_generation(service)^.generation
-    testing.expect(t, catalog_service_commit(service))
-    testing.expect(t, catalog_service_discard(service))
+    candidate_generation := content_service_staged_generation(service)^.generation
+    testing.expect(t, content_service_commit(service))
+    testing.expect(t, content_service_discard(service))
     after_rollback := search_test_query(t, service, 2, "perpendicular")
     testing.expect_value(t, after_rollback.index_generation, active_generation)
 
-    testing.expect(t, catalog_service_stage(
+    testing.expect(t, content_service_stage(
         service, candidate.path, SEARCH_TEST_CANDIDATE_FINGERPRINT))
-    testing.expect(t, catalog_service_commit(service))
-    testing.expect(t, catalog_service_finalize(service))
+    testing.expect(t, content_service_commit(service))
+    testing.expect(t, content_service_finalize(service))
     after_commit := search_test_query(t, service, 3, "perpendicular")
     testing.expect_value(t, after_commit.index_generation, candidate_generation)
 }
 
 // Verify staging is isolated and commit advances snapshot and query generations together.
 @(test)
-catalog_worker_stages_discards_and_commits_one_candidate :: proc(t: ^testing.T) {
+content_worker_stages_discards_and_commits_one_candidate :: proc(t: ^testing.T) {
     active := search_test_database_create("transaction-active")
     candidate := search_test_database_create("transaction-candidate")
     defer delete(active.directory)
@@ -367,11 +375,11 @@ catalog_worker_stages_discards_and_commits_one_candidate :: proc(t: ^testing.T) 
     testing.expect(t, active.ok && candidate.ok)
     search_test_make_candidate(t, &candidate)
 
-    service: Catalog_Service
-    testing.expect(t, catalog_service_init(
+    service: Content_Service
+    testing.expect(t, content_service_init(
         &service, active.path, SEARCH_TEST_FINGERPRINT))
-    defer catalog_service_destroy(&service)
-    active_generation := catalog_service_index_generation(&service)
+    defer content_service_destroy(&service)
+    active_generation := content_service_index_generation(&service)
     search_test_catalog_candidate_lifecycle(
         t, &service, &candidate, active_generation)
 }
@@ -381,7 +389,7 @@ catalog_worker_stages_discards_and_commits_one_candidate :: proc(t: ^testing.T) 
 search_protocol_is_fixed_and_bounded :: proc(t: ^testing.T) {
     testing.expect_value(t, len(Search_Query_Result{}.document_keys),
         SEARCH_RESULT_WINDOW_CAPACITY)
-    _, received := catalog_service_try_receive(nil)
+    _, received := content_service_try_receive(nil)
     testing.expect(t, !received)
     oversized: [SEARCH_QUERY_BYTE_CAPACITY + 1]u8
     _, accepted := search_query_request_make(1, 0, string(oversized[:]))
@@ -397,10 +405,10 @@ search_worker_pages_large_corpora_without_message_growth :: proc(t: ^testing.T) 
     defer delete(fixture.path)
     defer _ = os.remove_all(fixture.directory)
     testing.expect(t, fixture.ok)
-    service: Catalog_Service
-    testing.expect(t, catalog_service_init(
+    service: Content_Service
+    testing.expect(t, content_service_init(
         &service, fixture.path, SEARCH_TEST_FINGERPRINT))
-    defer catalog_service_destroy(&service)
+    defer content_service_destroy(&service)
 
     first := search_test_query_window(t, &service, 1, 0, "synthetic")
     second := search_test_query_window(t, &service, 2, 64, "synthetic")
@@ -416,22 +424,22 @@ search_worker_pages_large_corpora_without_message_growth :: proc(t: ^testing.T) 
 // Verify queued edits coalesce to the newest generation without blocking admission.
 @(test)
 search_worker_queue_is_bounded_and_coalesces_newest :: proc(t: ^testing.T) {
-    service: Catalog_Service
-    testing.expect(t, catalog_service_init_storage(&service))
-    defer catalog_service_destroy(&service)
+    service: Content_Service
+    testing.expect(t, content_service_init_storage(&service))
+    defer content_service_destroy(&service)
     service.running = true
-    for generation in 1..=SEARCH_WORKER_CHANNEL_CAPACITY {
+    for generation in 1..=CONTENT_WORKER_CHANNEL_CAPACITY {
         request, _ := search_query_request_make(u64(generation), 0, "line")
-        testing.expect(t, catalog_service_try_submit(&service, request))
+        testing.expect(t, content_service_try_submit(&service, request))
     }
     rejected, _ := search_query_request_make(99, 0, "circle")
-    testing.expect(t, !catalog_service_try_submit(&service, rejected))
+    testing.expect(t, !content_service_try_submit(&service, rejected))
     first, received := chan.recv(service.requests)
     testing.expect(t, received)
     coalesced := search_worker_coalesce(&service, first)
     testing.expect(t, !coalesced.has_pending)
     testing.expect_value(t, coalesced.query.query.generation,
-        u64(SEARCH_WORKER_CHANNEL_CAPACITY))
+        u64(CONTENT_WORKER_CHANNEL_CAPACITY))
     service.running = false
 }
 

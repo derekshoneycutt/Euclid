@@ -1,4 +1,4 @@
-package catalog_model
+package content_model
 
 import viewmodel "../../view/model"
 
@@ -24,6 +24,12 @@ CATALOG_DATABASE_PATH_CAPACITY :: 4096
 SEARCH_FINGERPRINT_BYTE_COUNT :: 64
 CATALOG_TEXT_BYTE_CAPACITY :: CATALOG_RECORD_CAPACITY *
     (CATALOG_NAME_BYTE_CAPACITY + CATALOG_PATH_BYTE_CAPACITY)
+CONTENT_TEXT_BYTE_CAPACITY :: CATALOG_TEXT_BYTE_CAPACITY +
+    CONTENT_LOCALE_CAPACITY * 35 + CONTENT_MESSAGE_CAPACITY * (64 + 256) +
+    CONTENT_ARGUMENT_CAPACITY * 32 + CONTENT_TRANSLATION_CAPACITY * 128 +
+    CONTENT_NAME_CAPACITY * CATALOG_NAME_BYTE_CAPACITY +
+    CONTENT_EDITION_CAPACITY * (64 + 256 + 35 + 1024) +
+    CATALOG_RECORD_CAPACITY * (256 + 2048 + 8192 + 16 * 128 + 15)
 
 // Persisted catalogue node classification, independent of runtime ownership.
 Catalog_Node_Kind :: enum u8 {
@@ -33,7 +39,7 @@ Catalog_Node_Kind :: enum u8 {
 }
 
 // Bounded offset/length view into one immutable generation's packed text bytes.
-Catalog_Text_Ref :: struct {
+Content_Text_Ref :: struct {
     offset: u32,
     length: u32,
 }
@@ -46,14 +52,14 @@ Catalog_Record :: struct {
     node_kind: Catalog_Node_Kind,
     sibling_order: i32,
     catalog_order: i32,
-    display_name: Catalog_Text_Ref,
-    implementation_path: Catalog_Text_Ref,
+    display_name: Content_Text_Ref,
+    implementation_path: Content_Text_Ref,
 }
 
-Catalog_Generation_Record :: Catalog_Record
+Content_Generation_Record :: Catalog_Record
 
 // Result of a bounded generation operation or lifecycle transition.
-Catalog_Generation_Status :: enum {
+Content_Generation_Status :: enum {
     Ok,
     Invalid_State,
     Invalid_Text,
@@ -65,15 +71,16 @@ Catalog_Generation_Status :: enum {
     Sealed,
 }
 
-// Stable owner for one bounded, sealed catalogue projection.
+// Stable owner for one bounded, sealed complete content dataset and catalogue projection.
 // The initialized arena owner must not be copied or moved.
-Catalog_Generation :: struct {
+Content_Generation :: struct {
     arena_owner: storage_pkg.Arena_Owner,
     text_builder: storage_pkg.Bounded_Byte_Builder,
     text_bytes: []u8,
     generation: u64,
     record_count: u16,
     records: [CATALOG_RECORD_CAPACITY]Catalog_Record,
+    data: Content_Records,
     initialized: bool,
     sealed: bool,
 }
@@ -131,13 +138,14 @@ Search_Query_Result :: struct {
 }
 
 // Worker-to-coordinator acknowledgement for one catalogue transaction command.
-Catalog_Control_Result :: struct {
+Content_Control_Result :: struct {
     status: Search_Query_Status,
     index_generation: u64,
+    cleanup_failed: bool,
 }
 
 // Control discriminator for the bounded display-to-worker channel.
-Search_Worker_Request_Kind :: enum u8 {
+Content_Worker_Request_Kind :: enum u8 {
     Query,
     Stage,
     Commit,
@@ -147,8 +155,8 @@ Search_Worker_Request_Kind :: enum u8 {
 }
 
 // Worker control envelope kept pointer-free for channel transfer.
-Search_Worker_Request :: struct {
-    kind: Search_Worker_Request_Kind,
+Content_Worker_Request :: struct {
+    kind: Content_Worker_Request_Kind,
     query: Search_Query_Request,
     database_path_length: u16,
     database_path: [CATALOG_DATABASE_PATH_CAPACITY]u8,
@@ -164,17 +172,17 @@ Search_Result_Acceptance :: enum u8 {
 }
 
 // Display-visible phase of the worker-owned candidate transaction.
-Catalog_Candidate_State :: enum u8 {
+Content_Candidate_State :: enum u8 {
     None,
     Staged,
     Committed,
 }
 
-// Coordinator storage for one worker and its two stable catalogue generations.
-Catalog_Service :: struct {
-    requests: chan.Chan(Search_Worker_Request),
+// Coordinator storage for one worker and its two stable complete content generations.
+Content_Service :: struct {
+    requests: chan.Chan(Content_Worker_Request),
     results: chan.Chan(Search_Query_Result),
-    control_results: chan.Chan(Catalog_Control_Result),
+    control_results: chan.Chan(Content_Control_Result),
     worker: ^thread.Thread,
     backing: []byte,
     allocator_state: tlsf.Allocator,
@@ -183,16 +191,16 @@ Catalog_Service :: struct {
     database_path: [CATALOG_DATABASE_PATH_CAPACITY]u8,
     expected_fingerprint: [SEARCH_FINGERPRINT_BYTE_COUNT]u8,
     index_generation: u64,
-    active_generation: ^Catalog_Generation,
-    staged_generation: ^Catalog_Generation,
-    candidate_state: Catalog_Candidate_State,
+    active_generation: ^Content_Generation,
+    staged_generation: ^Content_Generation,
+    candidate_state: Content_Candidate_State,
     running: bool,
 }
 
-// Initialize one stable generation owner and its bounded text builder.
-catalog_generation_init :: proc(
-    generation: ^Catalog_Generation,
-    reservation := 64 * uint(mem.Kilobyte)) -> Catalog_Generation_Status {
+// Initialize one stable generation owner with the recomputed whole-content text bound.
+content_generation_init :: proc(
+    generation: ^Content_Generation,
+    reservation := 64 * uint(mem.Kilobyte)) -> Content_Generation_Status {
     if generation == nil || generation.initialized || reservation == 0 {
         return .Invalid_State
     }
@@ -202,7 +210,7 @@ catalog_generation_init :: proc(
         return .Allocation_Failed
     }
     status := storage_pkg.bounded_byte_builder_init(
-        &generation.text_builder, CATALOG_TEXT_BYTE_CAPACITY, &generation.arena_owner)
+        &generation.text_builder, CONTENT_TEXT_BYTE_CAPACITY, &generation.arena_owner)
     if status != .Ok {
         storage_pkg.arena_owner_destroy(&generation.arena_owner)
         generation^ = {}
@@ -213,8 +221,8 @@ catalog_generation_init :: proc(
 }
 
 // Begin a new empty generation with a nonzero database identity.
-catalog_generation_begin :: proc(
-    generation: ^Catalog_Generation, identity: u64) -> Catalog_Generation_Status {
+content_generation_begin :: proc(
+    generation: ^Content_Generation, identity: u64) -> Content_Generation_Status {
     if generation == nil || !generation.initialized || generation.sealed {
         return .Invalid_State
     }
@@ -227,9 +235,9 @@ catalog_generation_begin :: proc(
 }
 
 // Append validated UTF-8 bytes and return a stable offset/length reference.
-catalog_generation_append_text :: proc(
-    generation: ^Catalog_Generation, text: string, field_capacity: int,
-    reference: ^Catalog_Text_Ref) -> Catalog_Generation_Status {
+content_generation_append_text :: proc(
+    generation: ^Content_Generation, text: string, field_capacity: int,
+    reference: ^Content_Text_Ref) -> Content_Generation_Status {
     if generation == nil || !generation.initialized || generation.sealed ||
        reference == nil || generation.generation == 0 {
         return .Invalid_State
@@ -250,14 +258,14 @@ catalog_generation_append_text :: proc(
     if status != .Ok {
         return .Allocation_Failed
     }
-    reference^ = Catalog_Text_Ref{offset = u32(offset), length = u32(len(text))}
+    reference^ = Content_Text_Ref{offset = u32(offset), length = u32(len(text))}
     return .Ok
 }
 
 // Append one compact record while preserving its caller-supplied source metadata.
-catalog_generation_append_record :: proc(
-    generation: ^Catalog_Generation,
-    record: Catalog_Generation_Record) -> Catalog_Generation_Status {
+content_generation_append_record :: proc(
+    generation: ^Content_Generation,
+    record: Content_Generation_Record) -> Content_Generation_Status {
     if generation == nil || !generation.initialized || generation.sealed ||
        generation.generation == 0 {
         return .Invalid_State
@@ -271,21 +279,21 @@ catalog_generation_append_record :: proc(
 }
 
 // Validate and seal all records and packed text for immutable publication.
-catalog_generation_seal :: proc(
-    generation: ^Catalog_Generation) -> Catalog_Generation_Status {
+content_generation_seal :: proc(
+    generation: ^Content_Generation) -> Content_Generation_Status {
     if generation == nil || !generation.initialized || generation.sealed ||
        generation.generation == 0 || generation.record_count == 0 {
         return .Invalid_State
     }
     for index in 0..<int(generation.record_count) {
         record := &generation.records[index]
-        if !catalog_generation_reference_is_valid(generation, record.display_name) ||
-           !catalog_generation_reference_is_valid(
+        if !content_generation_reference_is_valid(generation, record.display_name) ||
+           !content_generation_reference_is_valid(
                generation, record.implementation_path) {
             return .Invalid_Reference
         }
     }
-    if !catalog_generation_topology_is_valid(generation) {
+    if !content_generation_topology_is_valid(generation) {
         return .Invalid_Topology
     }
     text_bytes, builder_status := storage_pkg.bounded_byte_builder_seal(
@@ -299,9 +307,9 @@ catalog_generation_seal :: proc(
 }
 
 // Resolve a validated reference only after the generation has been sealed.
-catalog_generation_text :: proc(
-    generation: ^Catalog_Generation,
-    reference: Catalog_Text_Ref) -> (string, Catalog_Generation_Status) {
+content_generation_text :: proc(
+    generation: ^Content_Generation,
+    reference: Content_Text_Ref) -> (string, Content_Generation_Status) {
     if generation == nil || !generation.initialized || !generation.sealed {
         return "", .Invalid_State
     }
@@ -315,15 +323,15 @@ catalog_generation_text :: proc(
 }
 
 // Reset an inactive generation and invalidate its prior records and text views.
-catalog_generation_reset :: proc(
-    generation: ^Catalog_Generation) -> Catalog_Generation_Status {
+content_generation_reset :: proc(
+    generation: ^Content_Generation) -> Content_Generation_Status {
     if generation == nil || !generation.initialized {
         return .Invalid_State
     }
     storage_pkg.arena_owner_reset(&generation.arena_owner)
     generation.text_builder = {}
     status := storage_pkg.bounded_byte_builder_init(
-        &generation.text_builder, CATALOG_TEXT_BYTE_CAPACITY, &generation.arena_owner)
+        &generation.text_builder, CONTENT_TEXT_BYTE_CAPACITY, &generation.arena_owner)
     if status != .Ok {
         return .Allocation_Failed
     }
@@ -331,12 +339,13 @@ catalog_generation_reset :: proc(
     generation.generation = 0
     generation.record_count = 0
     generation.records = {}
+    generation.data = {}
     generation.sealed = false
     return .Ok
 }
 
 // Destroy one initialized generation after all readers have retired.
-catalog_generation_destroy :: proc(generation: ^Catalog_Generation) {
+content_generation_destroy :: proc(generation: ^Content_Generation) {
     if generation == nil || !generation.initialized {
         return
     }
@@ -346,13 +355,14 @@ catalog_generation_destroy :: proc(generation: ^Catalog_Generation) {
     generation.generation = 0
     generation.record_count = 0
     generation.records = {}
+    generation.data = {}
     generation.sealed = false
     generation.initialized = false
 }
 
 // Validate one reference against the current unsealed builder bounds.
-catalog_generation_reference_is_valid :: proc(
-    generation: ^Catalog_Generation, reference: Catalog_Text_Ref) -> bool {
+content_generation_reference_is_valid :: proc(
+    generation: ^Content_Generation, reference: Content_Text_Ref) -> bool {
     offset := uint(reference.offset)
     length := uint(reference.length)
     byte_count := uint(generation.text_builder.count)
@@ -360,15 +370,15 @@ catalog_generation_reference_is_valid :: proc(
 }
 
 // Validate every record's text and topology before generation publication.
-catalog_generation_topology_is_valid :: proc(
-    generation: ^Catalog_Generation) -> bool {
+content_generation_topology_is_valid :: proc(
+    generation: ^Content_Generation) -> bool {
     terminal_count := 0
     for index in 0..<int(generation.record_count) {
         record := &generation.records[index]
         if record.node_kind == .Terminal {
             terminal_count += 1
         }
-        if !catalog_generation_record_is_valid(generation, index) {
+        if !content_generation_record_is_valid(generation, index) {
             return false
         }
     }
@@ -376,38 +386,38 @@ catalog_generation_topology_is_valid :: proc(
 }
 
 // Validate one record's references, ordering, uniqueness, and ancestor chain.
-catalog_generation_record_is_valid :: proc(
-    generation: ^Catalog_Generation, index: int) -> bool {
+content_generation_record_is_valid :: proc(
+    generation: ^Content_Generation, index: int) -> bool {
     record := &generation.records[index]
     if record.stable_id == (uuid.Identifier{}) || record.catalog_order != i32(index) ||
        record.sibling_order < 0 ||
-       !catalog_generation_reference_is_valid(generation, record.display_name) ||
-       !catalog_generation_reference_is_valid(generation, record.implementation_path) {
+       !content_generation_reference_is_valid(generation, record.display_name) ||
+       !content_generation_reference_is_valid(generation, record.implementation_path) {
         return false
     }
-    name := catalog_generation_builder_text(generation, record.display_name)
-    path := catalog_generation_builder_text(generation, record.implementation_path)
+    name := content_generation_builder_text(generation, record.display_name)
+    path := content_generation_builder_text(generation, record.implementation_path)
     if len(name) == 0 || len(name) > CATALOG_NAME_BYTE_CAPACITY ||
        !utf8.valid_string(name) || catalog_text_contains_nul(name) {
         return false
     }
-    if !catalog_generation_path_is_valid(record.node_kind, record, path) ||
-       !catalog_generation_record_is_unique(generation, index) {
+    if !content_generation_path_is_valid(record.node_kind, record, path) ||
+       !content_generation_record_is_unique(generation, index) {
         return false
     }
-    return catalog_generation_ancestor_chain_is_valid(generation, index)
+    return content_generation_ancestor_chain_is_valid(generation, index)
 }
 
 // Read builder-owned bytes for validation before sealing.
-catalog_generation_builder_text :: proc(
-    generation: ^Catalog_Generation, reference: Catalog_Text_Ref) -> string {
+content_generation_builder_text :: proc(
+    generation: ^Content_Generation, reference: Content_Text_Ref) -> string {
     offset := int(reference.offset)
     length := int(reference.length)
     return string(generation.text_builder.storage[offset:offset + length])
 }
 
 // Enforce node-kind-specific path presence, capacity, UTF-8, and package safety.
-catalog_generation_path_is_valid :: proc(
+content_generation_path_is_valid :: proc(
     kind: Catalog_Node_Kind, record: ^Catalog_Record,
     path: string) -> bool {
     if kind == .Terminal {
@@ -416,11 +426,11 @@ catalog_generation_path_is_valid :: proc(
     return (kind == .Category || kind == .Leaf) &&
         len(path) > 0 && len(path) <= CATALOG_PATH_BYTE_CAPACITY &&
         utf8.valid_string(path) && !catalog_text_contains_nul(path) &&
-        catalog_generation_path_is_safe(path)
+        content_generation_path_is_safe(path)
 }
 
 // Reject absolute, noncanonical, or package-escaping implementation paths.
-catalog_generation_path_is_safe :: proc(path: string) -> bool {
+content_generation_path_is_safe :: proc(path: string) -> bool {
     if len(path) == 0 || path[0] == '/' || strings.contains(path, "\\") ||
        strings.contains(path, ":") {
         return false
@@ -440,8 +450,8 @@ catalog_generation_path_is_safe :: proc(path: string) -> bool {
 }
 
 // Reject duplicate stable identities and sibling orders within one parent.
-catalog_generation_record_is_unique :: proc(
-    generation: ^Catalog_Generation, index: int) -> bool {
+content_generation_record_is_unique :: proc(
+    generation: ^Content_Generation, index: int) -> bool {
     record := &generation.records[index]
     for prior_index in 0..<index {
         prior := &generation.records[prior_index]
@@ -456,13 +466,13 @@ catalog_generation_record_is_unique :: proc(
 }
 
 // Verify parent existence and reject self-parenting or cyclic ancestry.
-catalog_generation_ancestor_chain_is_valid :: proc(
-    generation: ^Catalog_Generation, index: int) -> bool {
+content_generation_ancestor_chain_is_valid :: proc(
+    generation: ^Content_Generation, index: int) -> bool {
     record := &generation.records[index]
     current := record
     hops := 0
     for current.has_parent {
-        parent_index := catalog_generation_find(generation, current.parent_stable_id)
+        parent_index := content_generation_find(generation, current.parent_stable_id)
         if parent_index < 0 || parent_index == index {
             return false
         }
@@ -476,8 +486,8 @@ catalog_generation_ancestor_chain_is_valid :: proc(
 }
 
 // Find a stable identity among the bounded records without allocating an index.
-catalog_generation_find :: proc(
-    generation: ^Catalog_Generation, stable_id: uuid.Identifier) -> int {
+content_generation_find :: proc(
+    generation: ^Content_Generation, stable_id: uuid.Identifier) -> int {
     for index in 0..<int(generation.record_count) {
         if generation.records[index].stable_id == stable_id {
             return index
@@ -495,4 +505,3 @@ catalog_text_contains_nul :: proc(text: string) -> bool {
     }
     return false
 }
-

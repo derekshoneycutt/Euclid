@@ -1,6 +1,7 @@
 const ANIMATION_OPERATION_ENTER = Int32(1)
 const ANIMATION_OPERATION_TICK = Int32(2)
 const ANIMATION_OPERATION_EXIT = Int32(3)
+const ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED = Int32(4)
 
 """Typed non-owning identity for one animation value stored by the native host."""
 struct AnimationKey{T}

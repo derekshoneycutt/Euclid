@@ -1,6 +1,7 @@
 package bridgemodel
 
 import animationmodel "../../core/animation"
+import contentmodel "../../core/content"
 import color "../../core/color"
 import geometry "../../core/geometry"
 import storage "../../core/storage"
@@ -83,6 +84,8 @@ Scene_Command_Batch :: struct {
 
 // Animation_Query_Snapshot is the immutable native state visible to one animation tick.
 Animation_Query_Snapshot :: struct {
+    content_specification: contentmodel.Animation_Content_Specification,
+    animation_generation: u64,
     shapes: shapemodel.Shape_Query_Snapshot,
     animation_values_valid: bool,
     animation_values: animationmodel.Animation_Value_Snapshot,
@@ -158,6 +161,7 @@ Animation_Operation :: enum i32 {
     Enter = 1,
     Tick = 2,
     Exit = 3,
+    Presentation_Selection_Changed = 4,
 }
 
 // Euclid_Julia_Animation_Interface retains one Julia animation entry and tree links.
@@ -201,7 +205,7 @@ Euclid_Julia_Interface :: struct {
     global_loop: ^julialib.jl_value_t,
     asset_package_identity: [32]byte,
     asset_package_identity_valid: bool,
-    catalog_generation: u64,
+    content_generation: u64,
 
     null_animation: Euclid_Julia_Animation_Interface,
 

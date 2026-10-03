@@ -10,7 +10,7 @@ include(joinpath(@__DIR__, "..", "make.jl"))
 include(joinpath(@__DIR__, "..", "julia_test_reporter.jl"))
 include(joinpath(@__DIR__, "..", "scenario_runner.jl"))
 include(joinpath(@__DIR__, "shader_tests.jl"))
-include(joinpath(@__DIR__, "search_index_builder_tests.jl"))
+include(joinpath(@__DIR__, "content_builder_tests.jl"))
 
 const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner
@@ -618,6 +618,7 @@ reflection_sha256 = "reflection"
         relative_inputs = replace.(
             relpath.(sysimage_stable_input_paths(), JULIA_TEST_PROJECT), '\\' => '/')
         @test "animation_catalog.jl" in relative_inputs
+        @test "localized_content.jl" in relative_inputs
         @test !("animation_catalog_data.jl" in relative_inputs)
         @test !("animation_catalog_generation.jl" in relative_inputs)
         @test !("nullanimation.jl" in relative_inputs)

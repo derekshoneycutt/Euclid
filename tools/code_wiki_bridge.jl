@@ -75,6 +75,7 @@ function extract_odin_bridge_exports(packages::Vector{DocumentationPackage})
     exports = BridgeOdinExport[]
     for package in packages, symbol in package.symbols
         symbol.declaration_kind == :exported_abi_procedure || continue
+        startswith(symbol.source_path, "src/harness/") && continue
         parts = parse_odin_abi_signature(symbol.signature)
         parameters = parts.parameter_types
         return_type = parts.return_type
@@ -193,6 +194,10 @@ function extract_julia_bridge_calls(
 end
 
 const ODIN_ABI_TYPE_ALIASES = Dict(
+    "uuid.Identifier" => "uuid-bytes",
+    "bridgemodel.Animation_Operation" => "i32",
+    "Animation_Content_Invocation" => "animation-content-invocation",
+    "^contentdata.Animation_Content_Specification" => "pointer-animation-content-specification",
     "void" => "void",
     "^core.Euclid_General_State" => "pointer",
     "^julialib.jl_value_t" => "julia-value",
@@ -280,6 +285,9 @@ const ODIN_ABI_TYPE_ALIASES = Dict(
     "u64" => "u64", "f32" => "f32", "bool" => "bool")
 
 const JULIA_ABI_TYPE_ALIASES = Dict(
+    "NTuple{16,UInt8}" => "uuid-bytes",
+    "AnimationContentInvocationABI" => "animation-content-invocation",
+    "Ref{AnimationContentSpecificationABI}" => "pointer-animation-content-specification",
     "Cvoid" => "void", "Ptr{Cvoid}" => "pointer", "Any" => "julia-value",
     "Cstring" => "cstring", "UInt32" => "u32",
     "Ref{AnimationCallbacksABI}" => "animation-callbacks",

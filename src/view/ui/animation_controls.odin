@@ -135,13 +135,15 @@ prepare_animation_controls :: proc(
     slots := animation_control_layout_slots(
         geometry.Rectangle(ui_runtime^.ui_regions.world_rect))
     pause_icon := ui_runtime^.simulation_paused ? Icon_Button_Id.Play : .Pause
-    pause_label := "Pause animation"
+    pause_label := view_core.shell_message(state, .Animation_Pause)
     if ui_runtime^.simulation_paused {
-        pause_label = "Resume animation"
+        pause_label = view_core.shell_message(state, .Animation_Resume)
     }
-    refresh := update_icon_button(animation_control_button_params(
-        ui_runtime, {ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
-            "Restart animation", 0}, mouse_input, slots.panel),
+    refresh := update_icon_button(
+        animation_control_button_params(
+            ui_runtime, {ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
+                view_core.shell_message(state, .Animation_Restart), 0},
+            mouse_input, slots.panel),
         &ui_runtime^.ui_press_owner)
     pause := update_icon_button(animation_control_button_params(
         ui_runtime, {ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
@@ -180,7 +182,7 @@ cancel_gif_capture_if_paused_mid_capture :: proc(
     phase := ui_runtime^.gif_capture_phase
     if phase == .Armed || phase == .Recording || phase == .Finalizing {
         view_core.cancel_gif_capture_with_note(state,
-            "Canceled: refresh during pause interrupts GIF capture.")
+            view_core.shell_message(state, .Gif_Cancelled_During_Pause))
     }
 }
 

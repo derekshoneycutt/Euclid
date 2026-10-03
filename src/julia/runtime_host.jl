@@ -17,6 +17,7 @@ struct EuclidRuntimeGeneration
     source_root::String
     null_animation::Module
     harness_scenarios::Module
+    authored_manifest::LocalizedContent.ContentManifest
 end
 
 """Julia runtime state owned and rooted by the native Julia worker."""
@@ -82,6 +83,8 @@ function create_euclid_runtime_host(
             load_generation_animation_implementation(
                 generation, state_ptr, terminal_animation_callback, id)),
         actor_runtime)
+    reactor.animation_supervisor_state.invoke_entry =
+        OdinJuliaBridge.invoke_animation_content_entry
     return EuclidRuntimeHost(
         state_ptr, generation, nothing, reactor,
         terminal_animation_callback,
@@ -110,6 +113,10 @@ function terminal_animation_entry(
 
     state_ptr == expected_state_ptr || return false
     dt >= 0 || return false
+    operation == OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED &&
+        return true
+    operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER &&
+        OdinJuliaBridge.animation_content_specification(state_ptr)
     return operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER ||
         operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK ||
         operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
@@ -228,7 +235,8 @@ function load_generation_animation_implementation(
     terminal_animation_callback::Function, animation_id::UUID)
     if animation_id == UUID(UInt128(0))
         return AnimationCatalog.AnimationImplementation(
-            animation_id, getfield(generation.null_animation, :animation_entry))
+            animation_id,
+            Base.invokelatest(getfield, generation.null_animation, :animation_entry))
     end
     path_bytes = Vector{UInt8}(undef,
         OdinJuliaBridge.ANIMATION_IMPLEMENTATION_PATH_MAX_BYTES)
@@ -446,13 +454,22 @@ function create_euclid_runtime_generation(
     Core.eval(content, :(const EuclidLatex = $EuclidLatex))
     Core.eval(content, :(const EuclidSearchContent = $EuclidSearchContent))
     Core.eval(content, :(const AnimationCatalog = $AnimationCatalog))
+    Core.eval(content, :(const LocalizedContent = $LocalizedContent))
     Base.include(content, joinpath(root, "nullanimation.jl"))
     Base.include(content, joinpath(root, "harness_scenarios.jl"))
+    Base.include(content, joinpath(root, "animation_catalog_generation.jl"))
+    catalog_generation = Base.invokelatest(
+        getfield, content, :AnimationCatalogGeneration)
+    authored_manifest = Base.invokelatest(
+        getfield, catalog_generation, :AuthoredManifest)
+    authored_manifest isa LocalizedContent.ContentManifest ||
+        throw(ArgumentError("content generation has an invalid authored manifest"))
     return EuclidRuntimeGeneration(
         content,
         root,
         Base.invokelatest(getfield, content, :NullAnimation),
-        Base.invokelatest(getfield, content, :EuclidHarnessScenarios))
+        Base.invokelatest(getfield, content, :EuclidHarnessScenarios),
+        authored_manifest)
 end
 
 """Load one catalogue-selected implementation into a generation-owned module."""

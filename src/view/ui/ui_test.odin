@@ -1,3 +1,4 @@
+#+test
 package ui
 
 import viewmodel "../model"
@@ -9,10 +10,12 @@ import dynviewmodel "../../dynview/model"
 import "core:testing"
 
 import app_core "../../core"
+import contentdata "../../core/content"
 import app_dynview "../../dynview"
 import geometry "../../core/geometry"
 import termhist "../../terminal/history"
 import "../input"
+import view_core "../core"
 
 //   Build one default-size landscape UI runtime for interaction tests.
 make_baseline_ui_runtime :: proc() -> viewmodel.Euclid_Ui_Runtime_State {
@@ -91,13 +94,15 @@ settings_dust_value_is_right_aligned_inside_panel :: proc(t: ^testing.T) {
 // Verify GIF button labels and enabled states describe every capture phase.
 @(test)
 gif_button_presentation_matches_capture_phase :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
     phases := [6]viewmodel.Gif_Capture_Phase{
         .Idle, .Armed, .Recording, .Finalizing, .Saved, .Error}
     labels := [6]string{
         "Save GIF", "Cancel GIF", "Recording...", "Saving...", "Save GIF", "Save GIF"}
     enabled := [6]bool{true, true, false, false, true, true}
     for phase, index in phases {
-        testing.expect_value(t, gif_capture_button_label(phase), labels[index])
+        testing.expect_value(t, gif_capture_button_label(state, phase), labels[index])
         testing.expect_value(t, gif_capture_button_enabled(phase), enabled[index])
     }
 }
@@ -105,25 +110,49 @@ gif_button_presentation_matches_capture_phase :: proc(t: ^testing.T) {
 // Verify GIF status labels include phase state and prepared recording progress.
 @(test)
 gif_status_labels_cover_capture_phases :: proc(t: ^testing.T) {
-    testing.expect_value(t, gif_capture_status_label(.Idle, 0), "Status: Idle")
-    testing.expect_value(t, gif_capture_status_label(.Armed, 0), "Status: Armed")
-    testing.expect_value(t, gif_capture_status_label(.Recording, 12),
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
+    testing.expect_value(t, gif_capture_status_label(state, .Idle, 0, storage[:]), "Status: Idle")
+    testing.expect_value(t, gif_capture_status_label(state, .Armed, 0, storage[:]), "Status: Armed")
+    testing.expect_value(t, gif_capture_status_label(state, .Recording, 12, storage[:]),
         "Status: Recording (12 frames)")
-    testing.expect_value(t, gif_capture_status_label(.Finalizing, 12),
+    testing.expect_value(t, gif_capture_status_label(state, .Finalizing, 12, storage[:]),
         "Status: Saving")
-    testing.expect_value(t, gif_capture_status_label(.Saved, 12), "Status: Saved")
-    testing.expect_value(t, gif_capture_status_label(.Error, 0), "Status: Error")
+    testing.expect_value(t, gif_capture_status_label(
+        state, .Saved, 12, storage[:]), "Status: Saved")
+    testing.expect_value(t, gif_capture_status_label(
+        state, .Error, 0, storage[:]), "Status: Error")
+    phases := [6]viewmodel.Gif_Capture_Phase{
+        .Idle, .Armed, .Recording, .Finalizing, .Saved, .Error}
+    milestones := [6]string{"GIF capture idle", "GIF capture armed",
+        "GIF capture recording", "GIF capture saving", "GIF capture saved",
+        "GIF capture error"}
+    for phase, index in phases {
+        testing.expect_value(t,
+            gif_accessibility_status_label(state, phase), milestones[index])
+    }
 }
 
 // Verify GIF slider values use export-oriented labels instead of raw factors.
 @(test)
 gif_control_value_labels_are_human_readable :: proc(t: ^testing.T) {
-    testing.expect_value(t, gif_output_scale_label(1), "100%")
-    testing.expect_value(t, gif_output_scale_label(2), "50%")
-    testing.expect_value(t, gif_output_scale_label(3), "33%")
-    testing.expect_value(t, gif_output_scale_label(4), "25%")
-    testing.expect_value(t, gif_capture_cadence_label(1), "frame")
-    testing.expect_value(t, gif_capture_cadence_label(4), "4 frames")
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
+    testing.expect_value(t, gif_output_scale_label(state, 1), "100%")
+    testing.expect_value(t, gif_output_scale_label(state, 2), "50%")
+    testing.expect_value(t, gif_output_scale_label(state, 3), "33%")
+    testing.expect_value(t, gif_output_scale_label(state, 4), "25%")
+    testing.expect_value(t, gif_output_scale_label(state, 0), "100%")
+    testing.expect_value(t, gif_output_scale_label(state, 5), "25%")
+    cadence := [4]string{"frame", "2 frames", "3 frames", "4 frames"}
+    for expected, index in cadence {
+        testing.expect_value(t,
+            gif_capture_cadence_label(state, index + 1, storage[:]), expected)
+    }
+    testing.expect_value(t, gif_capture_cadence_label(state, 0, storage[:]), "frame")
+    testing.expect_value(t, gif_capture_cadence_label(state, 5, storage[:]), "4 frames")
 }
 
 // Verify GIF timing segments remain inside the minimum panel width.
@@ -141,12 +170,59 @@ gif_timing_segments_fit_compact_panel :: proc(t: ^testing.T) {
 // Verify optional settings labels expose unavailable controls without audio changes.
 @(test)
 settings_capability_labels_match_prepared_availability :: proc(t: ^testing.T) {
-    testing.expect_value(t, settings_simd_label(true), "Use SIMD Projection")
-    testing.expect_value(t, settings_simd_label(false),
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    testing.expect_value(t, settings_simd_label(state, true), "Use SIMD Projection")
+    testing.expect_value(t, settings_simd_label(state, false),
         "Use SIMD Projection (Unavailable)")
-    testing.expect_value(t, settings_gpu_dust_label(true), "GPU Dust Instancing")
-    testing.expect_value(t, settings_gpu_dust_label(false),
+    testing.expect_value(t, settings_gpu_dust_label(state, true), "GPU Dust Instancing")
+    testing.expect_value(t, settings_gpu_dust_label(state, false),
         "GPU Dust Instancing (Unavailable)")
+}
+
+// Verify the settings statistics use complete production templates and named counts.
+@(test)
+settings_statistic_messages_preserve_rendered_counts :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    statistics := [4]struct{id: contentdata.Content_Message_Id, expected: string}{
+        {.Settings_Stats_Dust, "Dust particles Rendered: 12"},
+        {.Settings_Stats_Trail, "Trail particles Rendered: 12"},
+        {.Settings_Stats_Flicker, "Flicker particles Rendered: 12"},
+        {.Settings_Stats_Animation_Entries, "Julia animation entries added: 12"},
+    }
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
+    for statistic in statistics {
+        label := view_core.shell_format(state, statistic.id,
+            []contentdata.Content_Format_Argument{{"count", i64(12)}}, storage[:])
+        testing.expect_value(t, label, statistic.expected)
+    }
+}
+
+// Verify GIF and settings visible and semantic static labels retain authored output.
+@(test)
+gif_and_settings_static_messages_preserve_labels :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    labels := []struct{id: contentdata.Content_Message_Id, expected: string}{
+        {.Settings_Display_Fps, "Display FPS"},
+        {.Settings_Limit_Fps, "Limit FPS"},
+        {.Settings_Drawing_Sound, "Enable Drawing Sound"},
+        {.Settings_Maximum_Dust, "Maximum Dust particles"},
+        {.Gif_Output_Scale, "Output scale"},
+        {.Gif_Capture_Every, "Capture every"},
+        {.Gif_Playback_Timing, "Playback timing"},
+        {.Gif_Timing_Animation, "Animation"},
+        {.Gif_Timing_Recorded, "Recorded"},
+        {.Gif_Timing_Animation_Description, "Use animation timing"},
+        {.Gif_Timing_Recorded_Description, "Use recorded timing"},
+        {.Gif_Downsample_Accessible, "Downsample"},
+        {.Gif_Saved_Path_Label, "Path"},
+        {.Gif_Saved_Path_Accessible, "Saved GIF path"},
+    }
+    for label in labels {
+        testing.expect_value(t, view_core.shell_message(state, label.id), label.expected)
+    }
 }
 
 //   Verify forced modes and automatic hysteresis resolve deterministically.
@@ -1278,28 +1354,32 @@ library_search_layout_reserves_only_visible_rows :: proc(t: ^testing.T) {
 // Verify Library Search status remains bounded to meaningful milestones.
 @(test)
 library_search_status_reports_results_and_empty_queries :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
     storage: [64]u8
     search: viewmodel.Library_Search_State
-    testing.expect_value(t, library_search_status_text(&search, storage[:]), "")
+    testing.expect_value(t, library_search_status_text(state, &search, storage[:]), "")
     search.query[0] = 'x'
     search.query_length = 1
-    testing.expect_value(t, library_search_status_text(&search, storage[:]),
+    testing.expect_value(t, library_search_status_text(state, &search, storage[:]),
         "Searching animations")
     search.active = true
-    testing.expect_value(t, library_search_status_text(&search, storage[:]),
+    testing.expect_value(t, library_search_status_text(state, &search, storage[:]),
         "No matching animations")
     search.total_match_count = 42
     search.more_available = true
-    testing.expect_value(t, library_search_status_text(&search, storage[:]),
+    testing.expect_value(t, library_search_status_text(state, &search, storage[:]),
         "Matching animations: 42 or more")
 }
 
 // Verify the spoken suggestion action identifies its proposed correction.
 @(test)
 library_search_suggestion_label_names_target :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
     storage: [64]u8
     testing.expect_value(t,
-        library_search_suggestion_label("Elements", storage[:]),
+        library_search_suggestion_label(state, "Elements", storage[:]),
         "Use suggested search: Elements")
 }
 
@@ -1570,8 +1650,8 @@ tree_keyboard_active_descendant_is_visible :: proc(t: ^testing.T) {
 // Verify document replacement preserves keyboard focus on the document surface.
 @(test)
 presentation_semantics_reconcile_compilation_generation :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State, context.allocator)
-    defer free(state, context.allocator)
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     state^.ui_runtime.semantic_focus = semantic
@@ -1717,7 +1797,9 @@ accordion_layout_places_active_content_after_selected_header :: proc(t: ^testing
 // Verify portrait descriptors lead with the borrowed title and preserve utility order.
 @(test)
 accordion_portrait_descriptors_include_selected_title :: proc(t: ^testing.T) {
-    sections := accordion_portrait_sections("Euclid's Elements")
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    sections := accordion_portrait_sections("Euclid's Elements", state)
     testing.expect_value(t, sections.count, 4)
     testing.expect_value(t, sections.items[0].section,
         viewmodel.Ui_Accordion_Section.View)
@@ -1727,7 +1809,7 @@ accordion_portrait_descriptors_include_selected_title :: proc(t: ^testing.T) {
     testing.expect_value(t, sections.items[3].section,
         viewmodel.Ui_Accordion_Section.Settings)
     testing.expect_value(t,
-        accordion_portrait_sections("").items[0].label, "Animation")
+        accordion_portrait_sections("", state).items[0].label, "Animation")
 }
 
 // Verify landscape retains three utility headers without a View descriptor.
@@ -1761,8 +1843,8 @@ accordion_portrait_layout_places_view_first :: proc(t: ^testing.T) {
 // Verify the selected catalogue title is borrowed with an Animation fallback.
 @(test)
 selected_animation_title_tracks_current_selection :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State, context.allocator)
-    defer free(state, context.allocator)
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
     ji := bridgemodel.Euclid_Julia_Interface{}
     animation := bridgemodel.Euclid_Julia_Animation_Interface{
         name = "Proclus's Commentary"}
@@ -1906,4 +1988,3 @@ tree_row_count_guard_stops_recursive_walks :: proc(t: ^testing.T) {
 
     testing.expect_value(t, count_visible_tree_rows_limited(&ji, &nodes[0], 1), 1)
 }
-

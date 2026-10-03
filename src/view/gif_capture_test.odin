@@ -1,33 +1,55 @@
+#+test
 package view
 
 import viewmodel "model"
 
 import "core:strings"
 import "core:testing"
+import "core:log"
 
 import app_core "../core"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import app_files "../files"
 import app_view "./core"
+import contentdata "../core/content"
 
-//   Verify clearing then setting a long GIF status note truncates with a terminator.
+// Count explicit overflow diagnostics without treating an expected error as a failed test.
+gif_note_test_log :: proc(
+    data: rawptr, level: log.Level, text: string, _: log.Options,
+    _ := #caller_location) {
+    if level == .Error && text == "gif_status_note_capacity_exceeded" {
+        (^int)(data)^ += 1
+    }
+}
+
+// Reject oversized authored notes without replacing valid, terminated status storage.
 @(test)
-clear_and_set_gif_status_note_handles_truncation :: proc(t: ^testing.T) {
+clear_and_set_gif_status_note_rejects_overflow :: proc(t: ^testing.T) {
     ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
     defer free(ui_runtime)
 
     app_view.clear_gif_status_note(ui_runtime)
     testing.expect_value(t, ui_runtime^.gif_status_note_len, 0)
     testing.expect_value(t, ui_runtime^.gif_status_note[0], u8(0))
+    exact := strings.repeat(
+        "x", len(ui_runtime.gif_status_note) - 1, context.temp_allocator)
+    app_view.set_gif_status_note(ui_runtime, exact)
+    baseline := ui_runtime.gif_status_note
 
     long_note := strings.repeat(
         "x", len(ui_runtime^.gif_status_note) + 20, context.temp_allocator)
+    logged := 0
+    prior_logger := context.logger
+    context.logger = log.Logger{procedure = gif_note_test_log, data = &logged}
     app_view.set_gif_status_note(ui_runtime, long_note)
+    context.logger = prior_logger
+    testing.expect_value(t, logged, 1)
 
     expected_len := len(ui_runtime^.gif_status_note) - 1
     testing.expect_value(t, ui_runtime^.gif_status_note_len, expected_len)
     testing.expect_value(t, ui_runtime^.gif_status_note[expected_len], u8(0))
+    testing.expect_value(t, ui_runtime.gif_status_note, baseline)
 }
 
 //   Verify clearing then setting a long GIF path truncates with a terminator.
@@ -220,8 +242,13 @@ gif_capture_transitions_record_required_evidence :: proc(t: ^testing.T) {
 @(test)
 gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
     phases := [3]viewmodel.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
+    generation := contentdata.content_message_test_generation(t)
+    defer contentdata.content_message_test_destroy(generation)
+    service := contentdata.Content_Service{active_generation = generation,
+        running = true, index_generation = generation.generation}
     for phase in phases {
         state := new(app_core.Euclid_General_State, context.allocator)
+        state.content_service = &service
         state^.ui_runtime.window = {1280, 720}
         state^.ui_runtime.gif_capture_phase = phase
         state^.gif_capture.source_width = 900

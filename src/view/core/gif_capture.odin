@@ -73,9 +73,11 @@ clear_gif_status_note :: proc(ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
 //   Store a transient GIF status note displayed in the settings panel.
 set_gif_status_note :: proc(
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State, note: string) {
-    max_len := len(ui_runtime.gif_status_note) - 1
-    n := min(len(note), max_len)
-
+    n := len(note)
+    if n >= len(ui_runtime.gif_status_note) {
+        log.error("gif_status_note_capacity_exceeded")
+        return
+    }
     for i in 0..<n {
         ui_runtime.gif_status_note[i] = note[i]
     }
@@ -332,7 +334,7 @@ gif_capture_advance_armed :: proc(
         clear_gif_status_note(ui_runtime)
     } else {
         ui_runtime.gif_capture_phase = .Error
-        set_gif_status_note(ui_runtime, "Error: failed to begin GIF capture session.")
+        set_gif_status_note(ui_runtime, shell_message(state, .Gif_Error_Begin))
     }
 }
 
@@ -345,7 +347,7 @@ gif_capture_advance_recording :: proc(
         clear_gif_status_note(ui_runtime)
     } else {
         ui_runtime.gif_capture_phase = .Error
-        set_gif_status_note(ui_runtime, "Error: failed to finalize GIF file.")
+        set_gif_status_note(ui_runtime, shell_message(state, .Gif_Error_Finalize))
     }
 }
 

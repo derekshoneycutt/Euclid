@@ -5,11 +5,10 @@ import native "../native"
 import viewmodel "../model"
 
 import "../../core"
+import contentdata "../../core/content"
 import geometry "../../core/geometry"
 import view_core "../core"
 import view_font "../font"
-
-import "core:fmt"
 
 GIF_PATH_INPUT_BOX_ID :: 6205
 GIF_PATH_LABEL_WIDTH :: f32(42)
@@ -26,6 +25,7 @@ Gif_Slider_Rows :: struct {
 
 //   Shared dependencies for controls in one GIF panel frame.
 Gif_Panel_Context :: struct {
+    state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
     mouse_input: Input_Frame,
     ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
@@ -127,19 +127,26 @@ draw_encoded_gif_text :: proc(
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
     rows := gif_view_layout_rows(stack)
     x := panel.x + SETTINGS_PANEL_INSET
-    draw_encoded_label(state, encoder, "Output scale", x, rows.sliders.downsample_y)
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
+    draw_encoded_label(state, encoder, view_core.shell_message(state, .Gif_Output_Scale),
+        x, rows.sliders.downsample_y)
     draw_encoded_gif_value(
-        state, encoder, panel, gif_output_scale_label(prepared.downsample.value),
+        state, encoder, panel, gif_output_scale_label(state, prepared.downsample.value),
         rows.sliders.downsample_y)
-    draw_encoded_label(state, encoder, "Capture every", x, rows.sliders.frame_step_y)
+    draw_encoded_label(state, encoder, view_core.shell_message(state, .Gif_Capture_Every),
+        x, rows.sliders.frame_step_y)
     draw_encoded_gif_value(
-        state, encoder, panel, gif_capture_cadence_label(prepared.frame_step.value),
+        state, encoder, panel,
+        gif_capture_cadence_label(state, prepared.frame_step.value, storage[:]),
         rows.sliders.frame_step_y)
-    draw_encoded_label(state, encoder, "Playback timing", x, rows.timing_y)
+    draw_encoded_label(state, encoder,
+        view_core.shell_message(state, .Gif_Playback_Timing), x, rows.timing_y)
     animation, recorded := gif_timing_button_rects(panel, rows.timing_y)
-    draw_encoded_gif_button_text(state, encoder, "Animation", animation)
-    draw_encoded_gif_button_text(state, encoder, "Recorded", recorded)
-    draw_encoded_label(state, encoder, gif_capture_button_label(prepared.phase),
+    draw_encoded_gif_button_text(state, encoder,
+        view_core.shell_message(state, .Gif_Timing_Animation), animation)
+    draw_encoded_gif_button_text(state, encoder,
+        view_core.shell_message(state, .Gif_Timing_Recorded), recorded)
+    draw_encoded_label(state, encoder, gif_capture_button_label(state, prepared.phase),
         x + SETTINGS_PANEL_INSET, rows.save_button_y + SETTINGS_PANEL_INSET)
     draw_encoded_gif_status(state, encoder, prepared, x, rows.status_y)
 }
@@ -148,8 +155,10 @@ draw_encoded_gif_text :: proc(
 draw_encoded_gif_status :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     prepared: Gif_View_Preparation, x, row_y: f32) {
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
     draw_encoded_label(state, encoder,
-        gif_capture_status_label(prepared.phase, prepared.captured_frames),
+        gif_capture_status_label(state,
+            prepared.phase, prepared.captured_frames, storage[:]),
         x, row_y)
     if prepared.status_note_len > 0 {
         status_note := prepared.status_note
@@ -159,12 +168,13 @@ draw_encoded_gif_status :: proc(
     }
     if prepared.phase == .Saved && len(prepared.last_path) > 0 {
         sections := accordion_sections_for_layout(
-            state^.ui_runtime.current_layout_mode, "")
+            state^.ui_runtime.current_layout_mode, "", state)
         layout := accordion_layout(
             geometry.Rectangle(state^.ui_runtime.ui_regions.accordion_rect), sections,
             state^.ui_runtime.active_accordion_section)
         field := gif_path_input_rect_for_panel(geometry.Rectangle(layout.content))
-        draw_encoded_label(state, encoder, "Path", x,
+        draw_encoded_label(state, encoder,
+            view_core.shell_message(state, .Gif_Saved_Path_Label), x,
             field.y + (field.height - TREE_FONT_SIZE) * 0.5)
         params := gif_path_input_params(state, field, {}, prepared.last_path)
         draw_encoded_input_box(encoder, params, prepared.path_input)
@@ -187,7 +197,8 @@ gif_path_input_params :: proc(
         descriptor = {
             id = semantic_control_id(.Gif_Control, GIF_PATH_INPUT_BOX_ID),
             region = .Accordion_Content, traversal_order = 5,
-            label = "Saved GIF path", text = text, mode = .Read_Only,
+            label = view_core.shell_message(state, .Gif_Saved_Path_Accessible),
+            text = text, mode = .Read_Only,
             cursor_byte = runtime^.gif_path_input.cursor_byte,
             anchor_byte = runtime^.gif_path_input.anchor_byte,
             content_revision = runtime^.last_gif_path_revision,
@@ -217,23 +228,26 @@ draw_encoded_gif_value :: proc(
 }
 
 // gif_output_scale_label describes one integer downsample factor as output scale.
-gif_output_scale_label :: proc(factor: int) -> string {
+gif_output_scale_label :: proc(
+    state: ^core.Euclid_General_State, factor: int) -> string {
     switch clamp(factor, 1, 4) {
-    case 1: return "100%"
-    case 2: return "50%"
-    case 3: return "33%"
-    case 4: return "25%"
+    case 1: return view_core.shell_message(state, .Gif_Output_Scale_Hundred)
+    case 2: return view_core.shell_message(state, .Gif_Output_Scale_Fifty)
+    case 3: return view_core.shell_message(state, .Gif_Output_Scale_Thirty_Three)
+    case 4: return view_core.shell_message(state, .Gif_Output_Scale_Twenty_Five)
     }
-    return "100%"
+    return view_core.shell_message(state, .Gif_Output_Scale_Hundred)
 }
 
-// gif_capture_cadence_label describes how often one presentation is sampled.
-gif_capture_cadence_label :: proc(frame_step: int) -> string {
+// gif_capture_cadence_label writes multi-frame cadence into caller-owned storage.
+gif_capture_cadence_label :: proc(
+    state: ^core.Euclid_General_State, frame_step: int, storage: []u8) -> string {
     clamped := clamp(frame_step, 1, 4)
     if clamped == 1 {
-        return "frame"
+        return view_core.shell_message(state, .Gif_Cadence_Single)
     }
-    return fmt.tprintf("%d frames", clamped)
+    return view_core.shell_format(state, .Gif_Cadence_Multiple,
+        []contentdata.Content_Format_Argument{{"count", u32(clamped)}}, storage)
 }
 
 // gif_timing_button_rects divides one row into two stable timing choices.
@@ -293,7 +307,7 @@ gif_save_button_params :: proc(
         rect = {ctx.panel.x + SETTINGS_PANEL_INSET, row_y,
             ctx.panel.width - SETTINGS_PANEL_INSET * 2,
             SETTINGS_GIF_BUTTON_HEIGHT},
-        label = gif_capture_button_label(phase),
+        label = gif_capture_button_label(ctx.state, phase),
         enabled = gif_capture_button_enabled(phase), mouse = ctx.mouse_input,
         interaction_space_rect = geometry.Rectangle(ctx.panel),
         interaction_enabled = true,
@@ -308,7 +322,7 @@ gif_save_button_params :: proc(
             region = .Accordion_Content,
             traversal_order = 4,
             clip_bounds = viewmodel.Rectangle(ctx.panel),
-            label = gif_capture_button_label(phase),
+            label = gif_capture_button_label(ctx.state, phase),
         },
     }
 }
@@ -346,18 +360,19 @@ gif_timing_button_params :: proc(
 }
 
 // gif_capture_button_label describes the action or active work for one phase.
-gif_capture_button_label :: proc(phase: viewmodel.Gif_Capture_Phase) -> string {
+gif_capture_button_label :: proc(
+    state: ^core.Euclid_General_State, phase: viewmodel.Gif_Capture_Phase) -> string {
     switch phase {
     case .Armed:
-        return "Cancel GIF"
+        return view_core.shell_message(state, .Gif_Action_Cancel)
     case .Recording:
-        return "Recording..."
+        return view_core.shell_message(state, .Gif_Action_Recording)
     case .Finalizing:
-        return "Saving..."
+        return view_core.shell_message(state, .Gif_Action_Saving)
     case .Idle, .Saved, .Error:
-        return "Save GIF"
+        return view_core.shell_message(state, .Gif_Save)
     }
-    return "Save GIF"
+    return view_core.shell_message(state, .Gif_Save)
 }
 
 // gif_capture_button_enabled reports whether one phase accepts button input.
@@ -366,40 +381,42 @@ gif_capture_button_enabled :: #force_inline proc(
     return phase != .Recording && phase != .Finalizing
 }
 
-//   Return human-readable status text for one prepared GIF capture phase.
+// gif_capture_status_label writes recording progress into caller-owned storage.
 gif_capture_status_label :: proc(
-    phase: viewmodel.Gif_Capture_Phase, captured_frames: int) -> string {
+    state: ^core.Euclid_General_State, phase: viewmodel.Gif_Capture_Phase,
+    captured_frames: int, storage: []u8) -> string {
     switch phase {
     case .Idle:
-        return "Status: Idle"
+        return view_core.shell_message(state, .Gif_Status_Idle)
     case .Armed:
-        return "Status: Armed"
+        return view_core.shell_message(state, .Gif_Status_Armed)
     case .Recording:
-        return fmt.tprintf("Status: Recording (%d frames)",
-            captured_frames)
+        return view_core.shell_format(state, .Gif_Status_Recording,
+            []contentdata.Content_Format_Argument{{"count", i64(captured_frames)}},
+            storage)
     case .Finalizing:
-        return "Status: Saving"
+        return view_core.shell_message(state, .Gif_Status_Saving)
     case .Saved:
-        return "Status: Saved"
+        return view_core.shell_message(state, .Gif_Status_Saved)
     case .Error:
-        return "Status: Error"
+        return view_core.shell_message(state, .Gif_Status_Error)
     }
 
-    return "Status: Idle"
+    return view_core.shell_message(state, .Gif_Status_Idle)
 }
 
 // gif_accessibility_status_label reports only meaningful capture milestones.
 gif_accessibility_status_label :: proc(
-    phase: viewmodel.Gif_Capture_Phase) -> string {
+    state: ^core.Euclid_General_State, phase: viewmodel.Gif_Capture_Phase) -> string {
     switch phase {
-    case .Idle: return "GIF capture idle"
-    case .Armed: return "GIF capture armed"
-    case .Recording: return "GIF capture recording"
-    case .Finalizing: return "GIF capture saving"
-    case .Saved: return "GIF capture saved"
-    case .Error: return "GIF capture error"
+    case .Idle: return view_core.shell_message(state, .Gif_Accessibility_Idle)
+    case .Armed: return view_core.shell_message(state, .Gif_Accessibility_Armed)
+    case .Recording: return view_core.shell_message(state, .Gif_Accessibility_Recording)
+    case .Finalizing: return view_core.shell_message(state, .Gif_Accessibility_Saving)
+    case .Saved: return view_core.shell_message(state, .Gif_Accessibility_Saved)
+    case .Error: return view_core.shell_message(state, .Gif_Accessibility_Error)
     }
-    return "GIF capture idle"
+    return view_core.shell_message(state, .Gif_Accessibility_Idle)
 }
 
 // register_gif_status publishes bounded milestone and optional error detail nodes.
@@ -417,7 +434,7 @@ register_gif_status :: proc(
         id = semantic_control_id(.Gif_Control, GIF_STATUS_NODE_ID),
         role = .Status, states = states, bounds = bounds,
         clip_bounds = viewmodel.Rectangle(ctx.panel),
-        label = gif_accessibility_status_label(result^.phase),
+        label = gif_accessibility_status_label(ctx.state, result^.phase),
     })
     if result^.status_note_len <= 0 {
         return
@@ -477,10 +494,14 @@ prepare_gif_timing_controls :: proc(
     timing_y: f32, result: ^Gif_View_Preparation) {
     animation_rect, recorded_rect := gif_timing_button_rects(panel, timing_y)
     result^.animation_timing = update_text_button(gif_timing_button_params(
-        ctx, {6203, "Animation", "Use animation timing", 2, animation_rect}),
+        ctx, {6203, view_core.shell_message(ctx.state, .Gif_Timing_Animation),
+            view_core.shell_message(ctx.state, .Gif_Timing_Animation_Description),
+            2, animation_rect}),
         &ctx.ui_runtime.ui_press_owner)
     result^.recorded_timing = update_text_button(gif_timing_button_params(
-        ctx, {6204, "Recorded", "Use recorded timing", 3, recorded_rect}),
+        ctx, {6204, view_core.shell_message(ctx.state, .Gif_Timing_Recorded),
+            view_core.shell_message(ctx.state, .Gif_Timing_Recorded_Description),
+            3, recorded_rect}),
         &ctx.ui_runtime.ui_press_owner)
     if result^.animation_timing.action.activated {
         ctx.ui_runtime.gif_timing_mode = .Animation
@@ -512,10 +533,12 @@ prepare_gif_path_input :: proc(
 prepare_gif_sliders :: proc(
     ctx: Gif_Panel_Context, result: ^Gif_View_Preparation) {
     result^.downsample = update_settings_integer_slider(gif_slider_params(
-        ctx, result^.rows.sliders.downsample_y, 6201, "Downsample",
+        ctx, result^.rows.sliders.downsample_y, 6201,
+        view_core.shell_message(ctx.state, .Gif_Downsample_Accessible),
         ctx.ui_runtime.gif_downsample_factor))
     result^.frame_step = update_settings_integer_slider(gif_slider_params(
-        ctx, result^.rows.sliders.frame_step_y, 6202, "Capture every",
+        ctx, result^.rows.sliders.frame_step_y, 6202,
+        view_core.shell_message(ctx.state, .Gif_Capture_Every),
         ctx.ui_runtime.gif_frame_step))
     if result^.downsample.changed {
         ctx.ui_runtime.gif_downsample_factor = result^.downsample.value
@@ -545,7 +568,7 @@ prepare_gif_view :: proc(
     if state == nil || state.particle_system == nil {
         return {}
     }
-    ctx := Gif_Panel_Context{panel, mouse_input, &state.ui_runtime,
+    ctx := Gif_Panel_Context{state, panel, mouse_input, &state.ui_runtime,
         view_font.cache_borrow(&state.font_cache, .Regular),
         view_font.cache_terminal_resolver(&state.font_cache)}
     stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
@@ -564,4 +587,3 @@ prepare_gif_view :: proc(
     prepare_gif_path_input(state, ctx, mouse_input, &result)
     return result
 }
-

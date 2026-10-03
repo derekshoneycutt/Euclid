@@ -78,7 +78,7 @@ startup_outline_create :: proc(
     }
     regions := ui.compute_ui_regions(
         layout, f32(metrics.width), f32(metrics.height), vertical, horizontal)
-    sections := ui.accordion_sections_for_layout(layout, "Animation")
+    sections := ui.accordion_sections_for_layout(layout, "")
     accordion := ui.accordion_layout(
         geometry.Rectangle(regions.accordion_rect), sections,
         layout == .Portrait ? .View : .Library)

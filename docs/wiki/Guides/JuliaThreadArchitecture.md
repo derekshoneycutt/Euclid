@@ -555,6 +555,7 @@ animation code may query:
 - packed typed animation values
 - pen state
 - compass state
+- the pointer-free content specification and animation generation
 
 During callback execution, `animation_query_snapshot_target` points to this
 slot-owned copy. Query bridge functions use the snapshot rather than reading
@@ -562,6 +563,31 @@ canonical point or tool state concurrently.
 
 The snapshot represents state at submission time. It deliberately does not
 track canonical changes made while Julia is running.
+
+### Invocation Content Query
+
+`animation_content_specification(state_ptr)` returns an immutable Julia-owned
+`AnimationContentSpecification` only inside a legitimate animation callback.
+The checked native copy-out validates UUID, runtime generation, animation generation,
+and operation before the host binds owned strings and values with `Base.ScopedValues`.
+Repeated queries read that invocation's value; bindings restore on nested calls and
+clear on success or failure. Reloadable entries still execute through
+`Base.invokelatest`, including their access to generation-owned bindings.
+
+Native lifecycle state keeps separate active and pending specifications. Replacement
+Enter reads pending selection, old Exit and rollback Enter read active selection,
+and asynchronous Tick reads its copied slot value. Retiring a content generation
+cannot invalidate a copied specification. Missing context, identity mismatch,
+missing default, stale generation, and invalid output are explicit query failures.
+The symmetric copy-out layout is 440 bytes; selection revision changes only when
+the effective application-locale/edition pair changes, not on ticks or unchanged
+reset/reload. Runtime generation may initially be zero.
+
+Operation `4` is a recognized successful no-op, not a tick or a notification queue.
+No delivery or locale/edition switching exists. The selected specification does not
+describe previously published presentation bytes; ordinary author publication alone
+controls those bytes. See [the animation contract](AnimationsStyle.md#animation-program-contract)
+and [content admission](Sqlite3.md#authored-editions-and-sidecar-coverage).
 
 ### Transactional Scene Mutation
 

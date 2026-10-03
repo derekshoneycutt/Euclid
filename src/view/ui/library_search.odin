@@ -2,6 +2,8 @@ package ui
 
 import native "../native"
 import viewmodel "../model"
+import view_core "../core"
+import contentdata "../../core/content"
 
 import "../../core"
 import geometry "../../core/geometry"
@@ -101,8 +103,10 @@ library_search_input_params :: proc(
             id = semantic_control_id(.Library_Control, LIBRARY_SEARCH_INPUT_ID),
             text_run_id = semantic_control_id(
                 .Library_Control, LIBRARY_SEARCH_TEXT_RUN_ID),
-            region = .Accordion_Content, label = "Search animations",
-            placeholder = "Search animations", text = query, mode = .Editable,
+            region = .Accordion_Content,
+            label = view_core.shell_message(state, .Library_Search_Input),
+            placeholder = view_core.shell_message(state, .Library_Search_Input),
+            text = query, mode = .Editable,
             cursor_byte = search^.input.cursor_byte,
             anchor_byte = search^.input.anchor_byte,
             content_revision = search^.query_revision,
@@ -155,62 +159,45 @@ library_search_apply_suggestion :: proc(search: ^viewmodel.Library_Search_State)
 }
 
 // library_search_suggestion_label builds the bounded spoken correction target.
-library_search_suggestion_label :: proc(suggestion: string, storage: []u8) -> string {
-    prefix := "Use suggested search: "
-    required := len(prefix) + len(suggestion)
-    if len(suggestion) == 0 || required > len(storage) {
-        return "Use suggested search"
+library_search_suggestion_label :: proc(
+    state: ^core.Euclid_General_State, suggestion: string, storage: []u8) -> string {
+    if len(suggestion) == 0 {
+        return view_core.shell_message(state, .Library_Suggestion_Action_Fallback)
     }
-    copy(storage[:], prefix)
-    copy(storage[len(prefix):], suggestion)
-    return string(storage[:required])
-}
-
-// library_search_append_decimal writes one nonnegative count into fixed storage.
-library_search_append_decimal :: proc(bytes: []u8, count: ^int, value: u32) {
-    divisor := u32(1)
-    for value / divisor >= 10 {
-        divisor *= 10
-    }
-    for divisor > 0 {
-        bytes[count^] = u8('0' + value / divisor % 10)
-        count^ += 1
-        divisor /= 10
-    }
+    return view_core.shell_format(state, .Library_Suggestion_Action,
+        []contentdata.Content_Format_Argument{{"query", suggestion}}, storage)
 }
 
 // library_search_status_text formats one bounded meaningful search milestone.
 library_search_status_text :: proc(
+    state: ^core.Euclid_General_State,
     search: ^viewmodel.Library_Search_State, storage: []u8) -> string {
-    if search == nil || len(storage) < 48 || search^.query_length == 0 {
+    if search == nil || search^.query_length == 0 {
         return ""
     }
     if search^.invalid_query {
-        return "Search query is invalid"
+        return view_core.shell_format(state, .Library_Status_Invalid, nil, storage)
     }
     if !search^.active {
-        return "Searching animations"
+        return view_core.shell_format(state, .Library_Status_Searching, nil, storage)
     }
     if search^.total_match_count == 0 {
-        return "No matching animations"
+        return view_core.shell_format(state, .Library_Status_No_Matches, nil, storage)
     }
-    count := 0
-    prefix := "Matching animations: "
-    copy(storage[:], prefix)
-    count += len(prefix)
-    library_search_append_decimal(storage, &count, search^.total_match_count)
+    id := contentdata.Content_Message_Id.Library_Status_Match_Count
     if search^.more_available {
-        suffix := " or more"
-        copy(storage[count:], suffix)
-        count += len(suffix)
+        id = .Library_Status_Match_Count_More
     }
-    return string(storage[:count])
+    return view_core.shell_format(state, id,
+        []contentdata.Content_Format_Argument{{"count", search.total_match_count}},
+        storage)
 }
 
 // prepare_library_search_status publishes bounded result and error feedback.
 prepare_library_search_status :: proc(state: ^core.Euclid_General_State) {
     storage: [64]u8
-    value := library_search_status_text(&state^.ui_runtime.library_search, storage[:])
+    value := library_search_status_text(
+        state, &state^.ui_runtime.library_search, storage[:])
     if len(value) == 0 {
         return
     }
@@ -218,7 +205,8 @@ prepare_library_search_status :: proc(state: ^core.Euclid_General_State) {
         id = semantic_control_id(.Library_Control, LIBRARY_SEARCH_STATUS_ID),
         role = .Status, states = {.Visible, .Enabled},
         region = .Accordion_Content, traversal_order = 4,
-        bounds = {}, clip_bounds = {}, label = "Library search status",
+        bounds = {}, clip_bounds = {},
+        label = view_core.shell_message(state, .Library_Search_Status_Label),
         value = value,
     })
 }
@@ -259,7 +247,7 @@ prepare_library_clear :: proc(
             region = .Accordion_Content,
             traversal_order = 1,
             clip_bounds = viewmodel.Rectangle(panel),
-            label = "Clear search",
+            label = view_core.shell_message(state, .Library_Clear_Search),
         }}, &state^.ui_runtime.ui_press_owner)
     if result.action.activated {
         library_search_clear_query(search)
@@ -277,7 +265,7 @@ prepare_library_suggestion :: proc(
     }
     suggestion := string(search^.suggestion[:search^.suggestion_length])
     label_storage: [viewmodel.LIBRARY_SEARCH_QUERY_BYTE_CAPACITY + 24]u8
-    action_label := library_search_suggestion_label(suggestion, label_storage[:])
+    action_label := library_search_suggestion_label(state, suggestion, label_storage[:])
     result := update_text_button({id = LIBRARY_SEARCH_SUGGESTION_ID,
         rect = layout.suggestion, label = suggestion, enabled = true,
         mouse = frame, interaction_space_rect = panel,
@@ -370,12 +358,14 @@ draw_encoded_library_search_text :: proc(
     focus := state^.ui_runtime.interaction_frame.effective_focus
     if search^.query_length == 0 &&
         !(focus.kind == .Input_Box && focus.id == LIBRARY_SEARCH_INPUT_ID) {
-        draw_encoded_label(state, encoder, "Search animations",
+        draw_encoded_label(state, encoder,
+            view_core.shell_message(state, .Library_Search_Input),
             prepared.layout.text_input.x + INPUT_BOX_TEXT_INSET,
             prepared.layout.text_input.y + 7)
     }
     if search^.suggestion_length > 0 {
-        draw_encoded_label(state, encoder, "Did you mean...",
+        draw_encoded_label(state, encoder,
+            view_core.shell_message(state, .Library_Suggestion_Prompt),
             prepared.layout.suggestion_prompt.x + INPUT_BOX_TEXT_INSET,
             prepared.layout.suggestion_prompt.y + 3)
         draw_encoded_label(state, encoder,

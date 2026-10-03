@@ -1,6 +1,8 @@
 package ui
 
 import viewmodel "../model"
+import view_core "../core"
+import "../../core"
 
 import view_font "../font"
 import geometry "../../core/geometry"
@@ -101,31 +103,40 @@ register_accordion_panel :: proc(
     }
 }
 
-// Return the three utility sections used by landscape composition.
-accordion_landscape_sections :: proc() -> Accordion_Section_Set {
+// Return landscape descriptors; nil state intentionally supplies geometry-only labels.
+accordion_landscape_sections :: proc(
+    state: ^core.Euclid_General_State = nil) -> Accordion_Section_Set {
+    labels: [3]string
+    if state != nil {
+        labels = {view_core.shell_message(state, .Navigation_Library),
+            view_core.shell_message(state, .Gif_Save),
+            view_core.shell_message(state, .Navigation_Settings)}
+    }
     return {
         items = {
-            {section = .Library, label = "Library"},
-            {section = .Save_Gif, label = "Save GIF"},
-            {section = .Settings, label = "Settings"},
+            {section = .Library, label = labels[0]},
+            {section = .Save_Gif, label = labels[1]},
+            {section = .Settings, label = labels[2]},
             {},
         },
         count = 3,
     }
 }
 
-// Return the selected View followed by portrait's three utility sections.
-accordion_portrait_sections :: proc(title: string) -> Accordion_Section_Set {
+// Return portrait descriptors, borrowing display/interface owners rather than content bytes.
+accordion_portrait_sections :: proc(
+    title: string, state: ^core.Euclid_General_State = nil) -> Accordion_Section_Set {
     view_title := title
-    if len(view_title) == 0 {
-        view_title = "Animation"
+    if len(view_title) == 0 && state != nil {
+        view_title = view_core.shell_message(state, .Animation_Default_Title)
     }
+    utilities := accordion_landscape_sections(state)
     return {
         items = {
             {section = .View, label = view_title},
-            {section = .Library, label = "Library"},
-            {section = .Save_Gif, label = "Save GIF"},
-            {section = .Settings, label = "Settings"},
+            utilities.items[0],
+            utilities.items[1],
+            utilities.items[2],
         },
         count = 4,
     }
@@ -133,11 +144,12 @@ accordion_portrait_sections :: proc(title: string) -> Accordion_Section_Set {
 
 // Return ordered descriptors for the resolved layout without retaining title storage.
 accordion_sections_for_layout :: proc(
-    mode: viewmodel.Ui_Layout_Mode, title: string) -> Accordion_Section_Set {
+    mode: viewmodel.Ui_Layout_Mode, title: string,
+    state: ^core.Euclid_General_State = nil) -> Accordion_Section_Set {
     if mode == .Portrait {
-        return accordion_portrait_sections(title)
+        return accordion_portrait_sections(title, state)
     }
-    return accordion_landscape_sections()
+    return accordion_landscape_sections(state)
 }
 
 // Return the active descriptor index, falling back to the first supplied section.

@@ -188,7 +188,7 @@ General features:
   - [X] Full-text search tables
   - [X] Initial spellcheck suggestions
   - [X] Animation catalog manifest tables
-  - [ ] Localization tables
+  - [X] Localization tables
   - [ ] Basic initial user settings structure
   - [ ] Search and use history
   - [ ] Search autocompletion nice-to-haves

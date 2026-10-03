@@ -1,4 +1,4 @@
-module EuclidSearchCorpus
+module EuclidLegacySearchCorpus
 
 using UUIDs
 using ..AnimationCatalog

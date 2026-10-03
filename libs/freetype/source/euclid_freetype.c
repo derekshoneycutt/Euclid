@@ -1,3 +1,5 @@
+/* Narrow CPU-raster adapter: each caller-owned face has a private FreeType
+   library and bounded allocator. Calls on the same face must be serialized. */
 #include "euclid_freetype.h"
 
 #include <ft2build.h>
@@ -15,6 +17,8 @@
 #define EUCLID_FT_MAX_BITMAP_DIMENSION 32768U
 #define EUCLID_FT_MAX_BITMAP_BYTES (64U * 1024U * 1024U)
 
+/* Prefix each allocation with its accounted size without reducing the alignment
+   of the payload returned to FreeType. Accounting includes this prefix. */
 typedef union EuclidFTAllocation {
     struct {
         size_t size;
@@ -26,6 +30,8 @@ typedef union EuclidFTAllocation {
 #endif
 } EuclidFTAllocation;
 
+/* The memory callbacks borrow this stable wrapper through memory.user.
+   Failure flags and allocation high waters persist for the face's lifetime. */
 struct EuclidFTFace {
     struct FT_MemoryRec_ memory;
     FT_Library library;
@@ -38,6 +44,8 @@ struct EuclidFTFace {
     uint32_t allocation_failed;
 };
 
+/* Enforce the per-face byte budget before allocating; distinguish budget
+   exhaustion from a system allocation failure for subsequent status reporting. */
 static void *euclid_ft_alloc(FT_Memory memory, long size) {
     EuclidFTFace *owner = (EuclidFTFace *)memory->user;
     EuclidFTAllocation *allocation;
@@ -71,6 +79,7 @@ static void *euclid_ft_alloc(FT_Memory memory, long size) {
     return allocation + 1;
 }
 
+/* Release a callback-owned block using its prefix, not a caller-supplied size. */
 static void euclid_ft_free(FT_Memory memory, void *block) {
     EuclidFTFace *owner = (EuclidFTFace *)memory->user;
     EuclidFTAllocation *allocation;
@@ -83,6 +92,8 @@ static void euclid_ft_free(FT_Memory memory, void *block) {
     free(allocation);
 }
 
+/* Budget the replacement against all other live blocks. Failure preserves the
+   original block and accounting; successful reallocations count as allocations. */
 static void *euclid_ft_realloc(
     FT_Memory memory, long current_size, long new_size, void *block) {
     EuclidFTFace *owner = (EuclidFTFace *)memory->user;
@@ -128,6 +139,7 @@ static void *euclid_ft_realloc(
     return resized + 1;
 }
 
+/* Prefer sticky allocator failure facts over FreeType's generic error result. */
 static EuclidFTStatus euclid_ft_failure(const EuclidFTFace *owner) {
     if (owner->limit_reached) {
         return EUCLID_FT_MEMORY_LIMIT;
@@ -136,6 +148,8 @@ static EuclidFTStatus euclid_ft_failure(const EuclidFTFace *owner) {
         EUCLID_FT_FREETYPE_ERROR;
 }
 
+/* Unwind acquired resources in dependency order while the callback owner is
+   still alive, preserving the status that caused partial initialization to fail. */
 static EuclidFTStatus euclid_ft_close_partial(EuclidFTFace *owner, EuclidFTStatus status) {
     if (owner->ft_face != NULL) {
         FT_Done_Face(owner->ft_face);
@@ -147,6 +161,9 @@ static EuclidFTStatus euclid_ft_close_partial(EuclidFTFace *owner, EuclidFTStatu
     return status;
 }
 
+/* Open the first face over source bytes borrowed until close. The budget covers
+   FreeType blocks and their prefixes, not this wrapper or caller-owned source.
+   Publish the handle only after admitting usable SFNT horizontal metrics. */
 EuclidFTStatus euclid_ft_open(
     const uint8_t *source,
     uint64_t source_length,
@@ -197,12 +214,16 @@ EuclidFTStatus euclid_ft_open(
     return EUCLID_FT_OK;
 }
 
+/* Destroy the private face/library before the caller releases borrowed source;
+   a null handle is safe, but a closed handle must not be reused. */
 void euclid_ft_close(EuclidFTFace *face) {
     if (face != NULL) {
         (void)euclid_ft_close_partial(face, EUCLID_FT_OK);
     }
 }
 
+/* Resolve through the current charmap; glyph zero is a successful missing-glyph
+   result, not an adapter failure. */
 EuclidFTStatus euclid_ft_glyph_index(
     EuclidFTFace *face, uint32_t codepoint, uint32_t *out_glyph) {
     if (face == NULL || out_glyph == NULL) {
@@ -212,6 +233,8 @@ EuclidFTStatus euclid_ft_glyph_index(
     return EUCLID_FT_OK;
 }
 
+/* Return unscaled, unhinted horizontal metrics in font units. Loading replaces
+   the glyph slot and invalidates any previously borrowed bitmap pixels. */
 EuclidFTStatus euclid_ft_glyph_metrics(
     EuclidFTFace *face, uint32_t glyph, int32_t *out_advance,
     int32_t *out_bearing_x) {
@@ -239,6 +262,8 @@ EuclidFTStatus euclid_ft_glyph_metrics(
     return EUCLID_FT_OK;
 }
 
+/* Set the EM height in 1/64-pixel units: 72 DPI makes FreeType's point-size
+   parameter numerically match pixels, independently of display DPI. */
 EuclidFTStatus euclid_ft_set_em_size_26_6(
     EuclidFTFace *face, uint32_t em_size_26_6) {
     if (face == NULL || em_size_26_6 == 0) {
@@ -253,6 +278,10 @@ EuclidFTStatus euclid_ft_set_em_size_26_6(
         EUCLID_FT_OK : euclid_ft_failure(face);
 }
 
+/* Rasterize an outline with light hinting into bounded grayscale coverage.
+   Publish borrowed slot pixels only after checking format, dimensions, and
+   pitch-derived length; the next load, size change, render, or close invalidates
+   the borrow. Signed pitch and padding remain intact for the native consumer. */
 EuclidFTStatus euclid_ft_render_gray(
     EuclidFTFace *face, uint32_t glyph, EuclidFTBitmap *out_bitmap) {
     FT_Bitmap *bitmap;
@@ -305,6 +334,9 @@ EuclidFTStatus euclid_ft_render_gray(
     return EUCLID_FT_OK;
 }
 
+/* Copy the current slot's raw bitmap bytes into caller-owned storage, preserving
+   signed-pitch layout and padding rather than normalizing rows. Call after a
+   successful render and before another operation changes the slot. */
 EuclidFTStatus euclid_ft_copy_bitmap(
     EuclidFTFace *face, uint8_t *destination, uint64_t capacity,
     uint64_t *out_copied) {
@@ -332,6 +364,8 @@ EuclidFTStatus euclid_ft_copy_bitmap(
     return EUCLID_FT_OK;
 }
 
+/* Snapshot live accounted bytes, lifetime high water, successful allocation/
+   reallocation count, and sticky budget exhaustion without resetting them. */
 EuclidFTStatus euclid_ft_memory_stats(
     EuclidFTFace *face, EuclidFTMemoryStats *out_stats) {
     if (face == NULL || out_stats == NULL) {

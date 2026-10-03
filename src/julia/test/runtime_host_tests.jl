@@ -11,8 +11,11 @@ const RuntimeHostContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content"
 function create_euclid_runtime_host(
     state_ptr::Ptr{Cvoid}; actor_runtime::OptionalActorRuntime=nothing)
 
-    return create_euclid_runtime_host(
+    host = create_euclid_runtime_host(
         state_ptr, RuntimeHostContentRoot; actor_runtime)
+    host.reactor.animation_supervisor_state.invoke_entry =
+        invoke_test_animation_content_entry
+    return host
 end
 
 """Create one test generation against the repository content root."""
@@ -377,8 +380,15 @@ end
     first_generation = create_euclid_runtime_generation()
     second_generation = create_euclid_runtime_generation()
     @test first_generation.content !== second_generation.content
-    @test !isdefined(first_generation.content, :AnimationCatalogGeneration)
-    @test !isdefined(second_generation.content, :AnimationCatalogGeneration)
+    first_catalog = Base.invokelatest(
+        getfield, first_generation.content, :AnimationCatalogGeneration)
+    second_catalog = Base.invokelatest(
+        getfield, second_generation.content, :AnimationCatalogGeneration)
+    @test first_catalog !== second_catalog
+    @test first_generation.authored_manifest ===
+        Base.invokelatest(getfield, first_catalog, :AuthoredManifest)
+    @test second_generation.authored_manifest ===
+        Base.invokelatest(getfield, second_catalog, :AuthoredManifest)
 
     descriptor = only(filter(
         item -> item.id == RuntimeHostPointId,
@@ -388,8 +398,10 @@ end
         first_generation, RuntimeHostPointId, descriptor.implementation_path)
     second_implementation = load_generation_animation(
         second_generation, RuntimeHostPointId, descriptor.implementation_path)
-    first_module = getfield(first_generation.content, :ElementsOneDefinitionPoint)
-    second_module = getfield(second_generation.content, :ElementsOneDefinitionPoint)
+    first_module = Base.invokelatest(
+        getfield, first_generation.content, :ElementsOneDefinitionPoint)
+    second_module = Base.invokelatest(
+        getfield, second_generation.content, :ElementsOneDefinitionPoint)
 
     @test first_implementation.id == RuntimeHostPointId
     @test second_implementation.id == RuntimeHostPointId
@@ -427,7 +439,7 @@ end
     @test host.active_generation === first_generation
     @test host.reactor.session.generation == UInt64(1)
     @test callback_ref.value === host.terminal_animation_callback
-    @test getfield(host.active_generation.content,
+    @test Base.invokelatest(getfield, host.active_generation.content,
         :ElementsOneDefinitionPoint) === first_module
 
     @test stage_euclid_runtime_generation(host, second_generation)

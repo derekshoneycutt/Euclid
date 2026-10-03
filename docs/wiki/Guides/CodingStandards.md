@@ -623,6 +623,12 @@ independently from related APIs.
 - Use `Base.invokelatest` only where freshly evaluated Terminal session or reload
   definitions require latest-world dispatch. Do not spread it into ordinary
   static call paths.
+- After dynamically including content, inspect its module bindings with
+  `Base.invokelatest(getfield, module, name)` and check their existence with
+  `Base.invokelatest(isdefined, module, name)`. Invoke freshly loaded functions
+  through `Base.invokelatest` as well; guarding only the function call does not
+  protect an older-world binding lookup. The Julia application test runner uses
+  `--depwarn=error` to reject world-age compatibility warnings.
 - Keep bridge calls and their status handling visible. Stop transactional
   emission after failure.
 - Do not retain host pointers beyond their documented generation or lifecycle.

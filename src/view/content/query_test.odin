@@ -1,4 +1,4 @@
-package catalog
+package content
 
 import "core:testing"
 

@@ -1,6 +1,6 @@
-package catalog
+package content
 
-import model "../../core/catalog"
+import model "../../core/content"
 
 
 SEARCH_QUERY_BYTE_CAPACITY :: model.SEARCH_QUERY_BYTE_CAPACITY
@@ -17,21 +17,21 @@ SEARCH_FINGERPRINT_BYTE_COUNT :: model.SEARCH_FINGERPRINT_BYTE_COUNT
 
 Catalog_Node_Kind :: model.Catalog_Node_Kind
 Catalog_Record :: model.Catalog_Record
-Catalog_Generation :: model.Catalog_Generation
+Content_Generation :: model.Content_Generation
 Search_Source_Namespace :: model.Search_Source_Namespace
 Search_Document_Id :: model.Search_Document_Id
 Search_Document_Key :: model.Search_Document_Key
 Search_Query_Request :: model.Search_Query_Request
 Search_Query_Status :: model.Search_Query_Status
 Search_Query_Result :: model.Search_Query_Result
-Catalog_Control_Result :: model.Catalog_Control_Result
-Search_Worker_Request_Kind :: model.Search_Worker_Request_Kind
-Search_Worker_Request :: model.Search_Worker_Request
+Content_Control_Result :: model.Content_Control_Result
+Content_Worker_Request_Kind :: model.Content_Worker_Request_Kind
+Content_Worker_Request :: model.Content_Worker_Request
 Search_Result_Acceptance :: model.Search_Result_Acceptance
-Catalog_Candidate_State :: model.Catalog_Candidate_State
+Content_Candidate_State :: model.Content_Candidate_State
 
 // View-owned coordinator state for one worker and its two stable generations.
-Catalog_Service :: model.Catalog_Service
+Content_Service :: model.Content_Service
 
 // Validate both asynchronous generations before display-owned state replacement.
 search_result_acceptance :: proc(

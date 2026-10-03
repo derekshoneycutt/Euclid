@@ -747,7 +747,10 @@ end
 function animation_entry(
     state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
 
-    if operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED
+        return true
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        OdinJuliaBridge.animation_content_specification(state_ptr)
         initialize(state_ptr)
     elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         loop(state_ptr, dt)

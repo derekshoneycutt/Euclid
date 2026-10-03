@@ -6,7 +6,7 @@ import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../files"
 import viewmodel "model"
-import viewcatalog "catalog"
+import viewcontent "content"
 
 import "core:encoding/uuid"
 import "core:os"
@@ -73,15 +73,15 @@ LIBRARY_SEARCH_QUALITY_FIXTURES :: [?]Library_Search_Quality_Fixture{
 }
 
 // search_test_document_key builds one canonical built-in result identity.
-search_test_document_key :: proc(text: string) -> viewcatalog.Search_Document_Key {
-    result := viewcatalog.Search_Document_Key{source_namespace = .Builtin}
+search_test_document_key :: proc(text: string) -> viewcontent.Search_Document_Key {
+    result := viewcontent.Search_Document_Key{source_namespace = .Builtin}
     copy(result.document_id.bytes[:], text)
     return result
 }
 
 // library_search_quality_fixture_matches checks one natural query against the packaged corpus.
 library_search_quality_fixture_matches :: proc(
-    t: ^testing.T, service: ^viewcatalog.Catalog_Service,
+    t: ^testing.T, service: ^viewcontent.Content_Service,
     registry: ^bridgemodel.Euclid_Julia_Interface,
     fixture: Library_Search_Quality_Fixture, generation: u64) {
     stable_id, read_error := uuid.read(fixture.expected_id)
@@ -134,7 +134,7 @@ library_search_commit_derives_visible_ancestry :: proc(t: ^testing.T) {
     search.query_length = 4
     search.generation = 7
     search.index_generation = 11
-    result := viewcatalog.Search_Query_Result{generation = 7,
+    result := viewcontent.Search_Query_Result{generation = 7,
         index_generation = 11, status = .Ready, total_match_count = 1,
         returned_count = 1}
     result.document_keys[0] = search_test_document_key(
@@ -155,7 +155,7 @@ library_search_commit_rejects_stale_generation :: proc(t: ^testing.T) {
     search.generation = 8
     search.index_generation = 12
     search.visible_id_count = 1
-    result := viewcatalog.Search_Query_Result{generation = 7,
+    result := viewcontent.Search_Query_Result{generation = 7,
         index_generation = 12, status = .Ready}
     testing.expect(t, !library_search_commit_result(state, &result))
     testing.expect_value(t, search.visible_id_count, 1)
@@ -176,7 +176,7 @@ library_search_commit_records_typed_evidence :: proc(t: ^testing.T) {
     search^.index_generation = 11
     search^.scenario_correlation = 23
     search^.scenario_correlation_generation = 1
-    result := viewcatalog.Search_Query_Result{generation = 7,
+    result := viewcontent.Search_Query_Result{generation = 7,
         index_generation = 11, status = .Ready, total_match_count = 81,
         returned_count = 64, more_available = true, suggestion_length = 3}
     copy(result.suggestion_bytes[:], "ray")
@@ -211,6 +211,25 @@ library_search_debounce_and_submit_timing :: proc(t: ^testing.T) {
     testing.expect(t, library_search_debounce_ready(&search, 0))
 }
 
+// Content replacement invalidates old projections and immediately reissues retained intent.
+@(test)
+library_search_requeries_after_content_publication :: proc(t: ^testing.T) {
+    search := viewmodel.Library_Search_State{query_length = 4, generation = 8,
+        index_generation = 12, active = true, visible_id_count = 2,
+        suggestion_length = 3}
+    copy(search.query[:], "line")
+    library_search_content_generation_changed(&search, 13)
+    testing.expect_value(t, search.index_generation, u64(13))
+    testing.expect_value(t, search.generation, u64(9))
+    testing.expect_value(t, string(search.query[:search.query_length]), "line")
+    testing.expect(t, search.query_dirty && !search.active)
+    testing.expect_value(t, search.visible_id_count, 0)
+    testing.expect_value(t, search.suggestion_length, 0)
+    testing.expect(t, library_search_debounce_ready(&search, 0))
+    library_search_content_generation_changed(&search, 13)
+    testing.expect_value(t, search.generation, u64(9))
+}
+
 // Verify the packaged index reaches display-owned tree identity through the real worker.
 @(test)
 library_search_packaged_index_commits_visible_node :: proc(t: ^testing.T) {
@@ -222,30 +241,30 @@ library_search_packaged_index_commits_visible_node :: proc(t: ^testing.T) {
     defer delete(bin_dir)
     asset_config := files.make_asset_root_config(bin_dir, context.allocator)
     defer files.destroy_asset_root_config(&asset_config)
-    asset, asset_ok := files.packaged_catalog_asset_with_config(
+    asset, asset_ok := files.packaged_content_asset_with_config(
         &asset_config, context.allocator)
     defer delete(asset.database_path, context.allocator)
     defer delete(asset.corpus_fingerprint, context.allocator)
     testing.expect(t, asset_ok)
-    service := viewcatalog.catalog_service_create(
+    service := viewcontent.content_service_create(
         asset.database_path, asset.corpus_fingerprint)
     testing.expect(t, service != nil)
     if service == nil {
        return
     }
-    defer viewcatalog.catalog_service_destroy_owned(service)
+    defer viewcontent.content_service_destroy_owned(service)
 
     registry_state := new(Euclid_General_State, context.allocator)
     defer bridge.destroy_julia_interface_resources(registry_state)
     defer free(registry_state, context.allocator)
     registry := &registry_state^.julia_interface_slots[0]
     registry_state^.julia_interface = registry
-     generation := viewcatalog.catalog_service_generation(service)
+     generation := viewcontent.content_service_generation(service)
      testing.expect(t, generation != nil)
      if generation == nil {
        return
     }
-     testing.expect(t, bridge.catalog_generation_materialize(registry, generation))
+     testing.expect(t, bridge.content_generation_materialize(registry, generation))
 
     for fixture, index in LIBRARY_SEARCH_QUALITY_FIXTURES {
         library_search_quality_fixture_matches(

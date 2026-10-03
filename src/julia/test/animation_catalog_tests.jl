@@ -5,6 +5,11 @@ if !isdefined(Main, :AnimationCatalog)
 end
 using .AnimationCatalog
 
+if !isdefined(Main, :LocalizedContent)
+    include("../localized_content.jl")
+end
+using .LocalizedContent
+
 if !isdefined(Main, :AnimationCatalogGeneration)
     include("../../content/animation_catalog_generation.jl")
 end
@@ -16,8 +21,9 @@ end
 if !isdefined(Main, :EuclidSearchContent)
     include("../search/search_content.jl")
 end
-if !isdefined(Main, :EuclidSearchCorpus)
-    include("../search/search_corpus.jl")
+if !isdefined(Main, :EuclidLegacySearchCorpus)
+    include(joinpath(@__DIR__,
+        "../../../tools/test/fixtures/legacy_search_corpus.jl"))
 end
 if !isdefined(Main, :NullAnimation)
     include("../../content/nullanimation.jl")
@@ -46,7 +52,7 @@ const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content")
     ]
     loader = descriptor -> EuclidSearchContent.SearchContent(
         "Semantic content for $(descriptor.display_name).", ("alternate",))
-    records = EuclidSearchCorpus.build_catalog_corpus(descriptors, loader)
+    records = EuclidLegacySearchCorpus.build_catalog_corpus(descriptors, loader)
     @test getproperty.(records, :animation_id) ==
         string.([child_id, parent_id, terminal_id])
     @test getproperty.(records, :catalog_order) == [2, 0, 1]
@@ -58,11 +64,11 @@ const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content")
     @test isempty(records[3].aliases)
     first_output = IOBuffer()
     second_output = IOBuffer()
-    EuclidSearchCorpus.write_catalog_corpus(first_output, records)
-    EuclidSearchCorpus.write_catalog_corpus(second_output, records)
+    EuclidLegacySearchCorpus.write_catalog_corpus(first_output, records)
+    EuclidLegacySearchCorpus.write_catalog_corpus(second_output, records)
     first_bytes = take!(first_output)
     @test first_bytes == take!(second_output)
-    @test EuclidSearchCorpus.CATALOG_CORPUS_SCHEMA_VERSION == 2
+    @test EuclidLegacySearchCorpus.CATALOG_CORPUS_SCHEMA_VERSION == 2
     @test String(first_bytes) == """
     {"schema":2,"source_namespace":"builtin","animation_id":"10000000-0000-0000-0000-000000000000","parent_animation_id":"50000000-0000-0000-0000-000000000000","node_kind":2,"display_name":"Perpendicular","sibling_order":0,"catalog_order":2,"implementation_path":"geometry/perpendicular.jl","hierarchy_path":"Geometry / Perpendicular","semantic_text":"Semantic content for Perpendicular.","aliases":["alternate"]}
     {"schema":2,"source_namespace":"builtin","animation_id":"50000000-0000-0000-0000-000000000000","parent_animation_id":null,"node_kind":1,"display_name":"Geometry","sibling_order":0,"catalog_order":0,"implementation_path":"geometry/overview.jl","hierarchy_path":"Geometry","semantic_text":"Semantic content for Geometry.","aliases":["alternate"]}
@@ -71,13 +77,13 @@ const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content")
     unsafe_descriptors = copy(descriptors)
     unsafe_descriptors[3] = AnimationDescriptor(child_id, parent_id, "Perpendicular", 0,
         LeafNode, "geometry/../outside.jl")
-    @test_throws ArgumentError EuclidSearchCorpus.build_catalog_corpus(
+    @test_throws ArgumentError EuclidLegacySearchCorpus.build_catalog_corpus(
         unsafe_descriptors, loader)
     oversized_descriptors = copy(descriptors)
     oversized_descriptors[3] = AnimationDescriptor(
         child_id, parent_id, "Perpendicular", 0, LeafNode,
-        repeat("a", EuclidSearchCorpus.CATALOG_PATH_BYTE_CAPACITY + 1))
-    @test_throws ArgumentError EuclidSearchCorpus.build_catalog_corpus(
+        repeat("a", EuclidLegacySearchCorpus.CATALOG_PATH_BYTE_CAPACITY + 1))
+    @test_throws ArgumentError EuclidLegacySearchCorpus.build_catalog_corpus(
         oversized_descriptors, loader)
 end
 
@@ -159,18 +165,23 @@ end
     Core.eval(owner, :(const EuclidSearchContent = $EuclidSearchContent))
     implementation = ensure_animation_loaded(
         ProductionContentRoot, AnimationDescriptors, PerpendicularId; owner)
-    animation_module = getfield(owner, :ElementsOneDefinitionPerpendicular)
-    sidecar = getfield(animation_module, :ElementsOneDefinitionPerpendicularContent)
-    first_search = sidecar.get_search_content()
-    second_search = sidecar.get_search_content()
+    animation_module = Base.invokelatest(
+        getfield, owner, :ElementsOneDefinitionPerpendicular)
+    sidecar = Base.invokelatest(
+        getfield, animation_module, :ElementsOneDefinitionPerpendicularContent)
+    get_search_content = Base.invokelatest(getfield, sidecar, :get_search_content)
+    get_runtime_view = Base.invokelatest(getfield, animation_module, :get_view_content)
+    get_sidecar_view = Base.invokelatest(getfield, sidecar, :get_view_content)
+    first_search = Base.invokelatest(get_search_content)
+    second_search = Base.invokelatest(get_search_content)
     @test first_search == second_search
-    @test presented_text(animation_module.get_view_content(C_NULL)) ==
-        presented_text(sidecar.get_view_content())
+    @test presented_text(Base.invokelatest(get_runtime_view, C_NULL)) ==
+        presented_text(Base.invokelatest(get_sidecar_view))
 end
 
 @testset "complete production catalog contract" begin
     @test length(AnimationDescriptors) == 138
-    corpus_records = EuclidSearchCorpus.build_catalog_corpus(
+    corpus_records = EuclidLegacySearchCorpus.build_catalog_corpus(
         AnimationDescriptors,
         _ -> EuclidSearchContent.SearchContent("Catalog metadata.", ()))
     ordered_records = sort(corpus_records; by=record -> record.catalog_order)
@@ -233,8 +244,8 @@ end
         @test !occursin(r"\b(?:rand|randn|time|open|read|write)\s*\(", sidecar_source)
         animation_module = parentmodule(implementation.entry)
         content_name = Symbol(string(nameof(animation_module)), "Content")
-        @test isdefined(animation_module, content_name)
-        content_module = getfield(animation_module, content_name)
+        @test Base.invokelatest(isdefined, animation_module, content_name)
+        content_module = Base.invokelatest(getfield, animation_module, content_name)
         get_search_content = Base.invokelatest(
             getfield, content_module, :get_search_content)
         get_sidecar_view = Base.invokelatest(

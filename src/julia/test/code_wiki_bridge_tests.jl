@@ -43,6 +43,15 @@ end
     @test parts.return_type == "void"
 end
 
+@testset "harness-only exports are not the public animation bridge" begin
+    exported = bridge_test_export()
+    exported.symbol.source_path = "src/harness/content_notice.odin"
+    package = DocumentationPackage(
+        language=:odin, stable_id="odin:harness", display_name="harness",
+        source_root="src/harness", symbols=[exported.symbol])
+    @test isempty(CodeWiki.extract_odin_bridge_exports([package]))
+end
+
 @testset "bridge pairing and drift" begin
     exported = bridge_test_export()
     first_call = bridge_test_call()
@@ -88,8 +97,8 @@ end
     packages = CodeWiki.extract_default_wiki_packages(repository_root)
     pairs = extract_bridge_pairs(packages, repository_root)
 
-    @test length(pairs) == 79
-    @test sum(length(pair.julia_calls) for pair in pairs) == 88
+    @test length(pairs) == 80
+    @test sum(length(pair.julia_calls) for pair in pairs) == 89
     @test first(pairs).abi_name < last(pairs).abi_name
     @test all(pair -> !isempty(pair.odin_export.doc_markdown), pairs)
     @test all(pair -> all(call -> !isempty(call.doc_markdown), pair.julia_calls), pairs)

@@ -1,7 +1,6 @@
-package catalog
+package content
 
 import sqlite "../../sqlite"
-import catalogdata "../../core/catalog"
 
 import "core:strings"
 
@@ -23,10 +22,12 @@ Search_Execution :: struct {
 }
 
 // Fixed statement set and connection exclusively owned by the catalogue worker.
-Catalog_Database :: struct {
+Content_Database :: struct {
     connection: sqlite.Connection,
-    statements: Catalog_Statements,
+    statements: Content_Statements,
     index_generation: u64,
+    expected_table_counts: [12]u16,
+    expected_record_count: u32,
 }
 
 // Prepare one persistent repository-owned statement for worker-lifetime reuse.
@@ -110,8 +111,8 @@ search_generation_from_fingerprint :: proc(value: string) -> (u64, bool) {
 
 // Read one required metadata value through the fixed bound lookup statement.
 search_metadata_equals :: proc(
-    database: ^Catalog_Database, key, expected: string) -> bool {
-    statement := &database.statements.metadata
+    database: ^Content_Database, key, expected: string) -> bool {
+    statement := &database.statements.search_metadata
     if !search_bind_text(statement, 1, key) || search_step(statement) != .Row {
         _ = search_statement_reset(statement)
         return false
@@ -120,7 +121,8 @@ search_metadata_equals :: proc(
     count, copied := search_copy_column(statement, 0, value_storage[:])
     matches := copied && count == len(expected) &&
         string(value_storage[:count]) == expected
-    return search_statement_reset(statement) && matches
+    exhausted := search_step(statement) == .Done
+    return search_statement_reset(statement) && matches && exhausted
 }
 
 // Finalize one optional statement while retaining aggregate cleanup success.
@@ -135,11 +137,21 @@ search_finalize :: proc(statement: ^sqlite.Statement, ok: ^bool) {
 }
 
 // Close every worker-owned SQLite resource in reverse preparation order.
-catalog_database_close :: proc(database: ^Catalog_Database) -> bool {
+content_database_close :: proc(database: ^Content_Database) -> bool {
     ok := true
-    search_finalize(&database.statements.spellfix, &ok)
-    search_finalize(&database.statements.metadata, &ok)
+    search_finalize(&database.statements.projection_rows, &ok)
+    search_finalize(&database.statements.availability_rows, &ok)
+    search_finalize(&database.statements.edition_rows, &ok)
+    search_finalize(&database.statements.name_rows, &ok)
     search_finalize(&database.statements.catalog_rows, &ok)
+    search_finalize(&database.statements.subject_rows, &ok)
+    search_finalize(&database.statements.translation_rows, &ok)
+    search_finalize(&database.statements.argument_rows, &ok)
+    search_finalize(&database.statements.message_rows, &ok)
+    search_finalize(&database.statements.locale_rows, &ok)
+    search_finalize(&database.statements.raw_metadata_rows, &ok)
+    search_finalize(&database.statements.spellfix, &ok)
+    search_finalize(&database.statements.search_metadata, &ok)
     search_finalize(&database.statements.search_rows, &ok)
     search_finalize(&database.statements.count, &ok)
     if database.connection.handle != nil {
@@ -155,37 +167,69 @@ catalog_database_close :: proc(database: ^Catalog_Database) -> bool {
 }
 
 // Prepare the complete fixed runtime statement set transactionally.
-catalog_database_prepare_statements :: proc(database: ^Catalog_Database) -> bool {
-    if !search_prepare(&database.connection, &database.statements.count,
-        cstring(SEARCH_COUNT_SQL)) {
-        return false
-    }
-    if !search_prepare(&database.connection, &database.statements.search_rows,
-        cstring(SEARCH_ROWS_SQL)) {
-        return false
-    }
-    if !search_prepare(&database.connection, &database.statements.catalog_rows,
-        cstring(CATALOG_ROWS_SQL)) {
-        return false
-    }
-    if !search_prepare(&database.connection, &database.statements.metadata,
-        cstring(SEARCH_METADATA_SQL)) {
-        return false
-    }
-    return search_prepare(&database.connection, &database.statements.spellfix,
-        cstring(SEARCH_SPELLFIX_SQL))
+content_database_prepare_statements :: proc(database: ^Content_Database) -> bool {
+    return content_database_prepare_search_statements(database) &&
+        content_database_prepare_declaration_statements(database) &&
+        content_database_prepare_catalogue_statements(database)
+}
+
+// Prepare one named statement against the owned connection.
+content_database_prepare :: proc(
+    database: ^Content_Database, statement: ^sqlite.Statement, sql: cstring) -> bool {
+    return search_prepare(&database.connection, statement, sql)
+}
+
+// Prepare the preserved schema-2 search and raw metadata statements.
+content_database_prepare_search_statements :: proc(
+    database: ^Content_Database) -> bool {
+    statements := &database.statements
+    return content_database_prepare(database, &statements.count, SEARCH_COUNT_SQL) &&
+        content_database_prepare(database, &statements.search_rows, SEARCH_ROWS_SQL) &&
+        content_database_prepare(
+            database, &statements.search_metadata, SEARCH_METADATA_SQL) &&
+        content_database_prepare(database, &statements.spellfix, SEARCH_SPELLFIX_SQL) &&
+        content_database_prepare(
+            database, &statements.raw_metadata_rows, RAW_METADATA_ROWS_SQL)
+}
+
+// Prepare locale and localized UI message declaration statements.
+content_database_prepare_declaration_statements :: proc(
+    database: ^Content_Database) -> bool {
+    statements := &database.statements
+    return content_database_prepare(database, &statements.locale_rows, LOCALE_ROWS_SQL) &&
+        content_database_prepare(database, &statements.message_rows, MESSAGE_ROWS_SQL) &&
+        content_database_prepare(
+            database, &statements.argument_rows, ARGUMENT_ROWS_SQL) &&
+        content_database_prepare(
+            database, &statements.translation_rows, TRANSLATION_ROWS_SQL)
+}
+
+// Prepare subject, catalogue, edition, availability, and projection statements.
+content_database_prepare_catalogue_statements :: proc(
+    database: ^Content_Database) -> bool {
+    statements := &database.statements
+    return content_database_prepare(
+            database, &statements.subject_rows, SUBJECT_ROWS_SQL) &&
+        content_database_prepare(database, &statements.catalog_rows, CATALOG_ROWS_SQL) &&
+        content_database_prepare(database, &statements.name_rows, NAME_ROWS_SQL) &&
+        content_database_prepare(database, &statements.edition_rows, EDITION_ROWS_SQL) &&
+        content_database_prepare(
+            database, &statements.availability_rows, AVAILABILITY_ROWS_SQL) &&
+        content_database_prepare(
+            database, &statements.projection_rows, PROJECTION_ROWS_SQL)
 }
 
 // Validate the immutable database contract before worker readiness publication.
-catalog_database_validate_metadata :: proc(
-    database: ^Catalog_Database, expected_fingerprint: string) -> bool {
+content_database_validate_metadata :: proc(
+    database: ^Content_Database, expected_fingerprint: string) -> bool {
     if !search_metadata_equals(database, "schema_version", "2") ||
        !search_metadata_equals(database, "sqlite_version", "3.53.4") ||
        !search_metadata_equals(database, "tokenizer_version", "porter-unicode61-v1") ||
        !search_metadata_equals(database, "query_contract_version", "1") ||
        !search_metadata_equals(database, "document_count", "138") ||
        !search_metadata_equals(database, "catalog_fingerprint", expected_fingerprint) ||
-       !search_metadata_equals(database, "index_generation", expected_fingerprint) {
+       !search_metadata_equals(database, "index_generation", expected_fingerprint) ||
+       !content_admission_validate_metadata(database, expected_fingerprint) {
         return false
     }
     generation, valid := search_generation_from_fingerprint(expected_fingerprint)
@@ -194,32 +238,35 @@ catalog_database_validate_metadata :: proc(
 }
 
 // Open, configure, and admit one immutable packaged database.
-catalog_database_open :: proc(
-    database: ^Catalog_Database, path, expected_fingerprint: string,
-    generation: ^Catalog_Generation) -> bool {
+content_database_open :: proc(
+    database: ^Content_Database, path, expected_fingerprint: string,
+    generation: ^Content_Generation) -> bool {
     open_failure := sqlite.connection_open(
         &database.connection, path, .Immutable_Readonly, context.temp_allocator)
     if open_failure.validation != .None || open_failure.result != .Ok {
-        _ = catalog_database_close(database)
+        if generation != nil {
+            content_generation_reset_failed_read(database, generation)
+        }
+        _ = content_database_close(database)
         return false
     }
     spellfix_failure := sqlite.connection_register_spellfix(&database.connection)
     if spellfix_failure.validation != .None || spellfix_failure.result != .Ok ||
-       !catalog_database_prepare_statements(database) ||
-       !catalog_database_validate_metadata(database, expected_fingerprint) ||
-    !catalog_generation_read_database(database, generation) {
-        _ = catalog_database_close(database)
+       !content_database_prepare_statements(database) ||
+       !content_database_validate_metadata(database, expected_fingerprint) ||
+       !content_generation_read_database(database, generation) {
         if generation != nil {
-            _ = catalogdata.catalog_generation_reset(generation)
+            content_generation_reset_failed_read(database, generation)
         }
+        _ = content_database_close(database)
         return false
     }
     return true
 }
 
 // Execute the fixed count statement for one compiler-generated MATCH value.
-catalog_database_count :: proc(
-    database: ^Catalog_Database, match: string) -> (u32, bool) {
+content_database_count :: proc(
+    database: ^Content_Database, match: string) -> (u32, bool) {
     statement := &database.statements.count
     if !search_bind_text(statement, 1, match) || search_step(statement) != .Row {
         _ = search_statement_reset(statement)
@@ -249,8 +296,8 @@ search_read_document_key :: proc(
 }
 
 // Fill one bounded deterministic result window through the fixed ranked query.
-catalog_database_rows :: proc(
-    database: ^Catalog_Database, match: string,
+content_database_rows :: proc(
+    database: ^Content_Database, match: string,
     result: ^Search_Query_Result) -> bool {
     statement := &database.statements.search_rows
     if !search_bind_text(statement, 1, match) ||
@@ -323,7 +370,7 @@ search_build_suggestion :: proc(
 
 // Query bounded spellfix candidates for one positive bare item.
 search_spellfix_candidates :: proc(
-    database: ^Catalog_Database, parsed: ^Search_Parsed_Query, item_index: int,
+    database: ^Content_Database, parsed: ^Search_Parsed_Query, item_index: int,
     candidates: ^[SEARCH_SPELLFIX_CANDIDATE_CAPACITY]Search_Correction_Candidate,
     candidate_count: ^int) -> bool {
     item := &parsed.items[item_index]
@@ -373,8 +420,8 @@ search_candidate_is_better :: proc(
 }
 
 // Find the best spellfix replacement that executes to at least one real result.
-catalog_database_suggestion :: proc(
-    database: ^Catalog_Database, compiled: ^Search_Compiled_Query,
+content_database_suggestion :: proc(
+    database: ^Content_Database, compiled: ^Search_Compiled_Query,
     result: ^Search_Query_Result) -> bool {
     candidates: [SEARCH_SPELLFIX_CANDIDATE_CAPACITY]Search_Correction_Candidate
     candidate_count := 0
@@ -392,7 +439,7 @@ catalog_database_suggestion :: proc(
         item.text_length = candidate.byte_count
         copy(item.text[:], candidate.bytes[:candidate.byte_count])
         candidate_match := search_parsed_query_compile(candidate_query)
-        count, ok := catalog_database_count(
+        count, ok := content_database_count(
             database, search_compiled_text(&candidate_match))
         if ok && count > 0 && search_candidate_is_better(&candidate, &best, has_best) {
             best = candidate
@@ -403,8 +450,8 @@ catalog_database_suggestion :: proc(
 }
 
 // Execute one admitted query and optionally verify a zero-result correction.
-catalog_database_execute :: proc(
-    database: ^Catalog_Database, request: Search_Query_Request) -> Search_Execution {
+content_database_execute :: proc(
+    database: ^Content_Database, request: Search_Query_Request) -> Search_Execution {
     result := Search_Query_Result{generation = request.generation,
         index_generation = database.index_generation,
         result_offset = request.result_offset}
@@ -421,16 +468,16 @@ catalog_database_execute :: proc(
         return {result = result, ok = true}
     }
     match := search_compiled_text(&compiled)
-    total, count_ok := catalog_database_count(database, match)
+    total, count_ok := content_database_count(database, match)
     result.total_match_count = total
-    if !count_ok || !catalog_database_rows(database, match, &result) {
+    if !count_ok || !content_database_rows(database, match, &result) {
         result.status = .Query_Failed
         return {result = result}
     }
     returned_end := u64(result.result_offset) + u64(result.returned_count)
     result.more_available = returned_end < u64(total)
     result.status = .Ready
-    suggestion_ok := total > 0 || catalog_database_suggestion(
+    suggestion_ok := total > 0 || content_database_suggestion(
         database, &compiled, &result)
     return {result = result, ok = suggestion_ok}
 }

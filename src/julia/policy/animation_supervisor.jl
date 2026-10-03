@@ -26,6 +26,7 @@ mutable struct AnimationSupervisor
     failure::Union{Nothing,EuclidActorRuntime.ActorFailed}
     last_tick_sequence::UInt64
     commands_processed::UInt64
+    invoke_entry::Function
 end
 
 """Create animation policy rooted in one committed runtime generation."""
@@ -36,7 +37,7 @@ function AnimationSupervisor(
     return AnimationSupervisor(
         false, false, runtime_generation, UInt64(0), nothing, nothing, false, C_NULL,
         Dict{UUID,Any}(), load_implementation, nothing, nothing,
-        UInt64(0), UInt64(0))
+        UInt64(0), UInt64(0), invoke_compatibility_entry)
 end
 
 """Mark the animation-policy root ready to accept later phase protocols."""
@@ -157,7 +158,7 @@ function activate_transaction_program!(
     program = CompatibilityAnimationProgram(
         context.self, animation_id, implementation.entry,
         transaction.state_ptr, runtime_generation,
-        animation_generation, UInt64(0), false)
+        animation_generation, UInt64(0), false; invoke_entry=supervisor.invoke_entry)
     actor = EuclidActorRuntime.spawn!(
         context.runtime, program; supervisor=context.self, mailbox_capacity=1)
     command = AnimationProgramCommand(
@@ -240,7 +241,8 @@ function EuclidActorRuntime.receive!(
         program = CompatibilityAnimationProgram(
             context.self, request.animation_id, request.implementation.entry,
             request.state_ptr, request.runtime_generation,
-            request.animation_generation, UInt64(0), true)
+            request.animation_generation, UInt64(0), true;
+            invoke_entry=supervisor.invoke_entry)
         actor = EuclidActorRuntime.spawn!(
             context.runtime, program; supervisor=context.self, mailbox_capacity=1)
     end
@@ -718,6 +720,9 @@ function EuclidActorRuntime.receive!(
     if command.operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
         return complete_program_tick!(supervisor, context, completed)
     end
+    command.operation ==
+        OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED &&
+        return nothing
     transaction = supervisor.lifecycle_transaction
     transaction === nothing && return nothing
     completed.actor == transaction.actor || return nothing

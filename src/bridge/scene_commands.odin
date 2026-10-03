@@ -122,6 +122,10 @@ Animation_Query_Snapshot :: bridgemodel.Animation_Query_Snapshot
 capture_animation_query_snapshot :: proc(
     state: ^core.Euclid_General_State, snapshot: ^Animation_Query_Snapshot) {
 
+    if service := state^.julia_runtime_service; service != nil {
+        snapshot^.content_specification = service^.active_content_specification
+        snapshot^.animation_generation = service^.animation_generation
+    }
     world := state^.shape_world
     if world != nil {
         snapshot^.shapes.registry = world^.registry

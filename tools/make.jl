@@ -120,9 +120,9 @@ struct JuliaSysimageArtifact
     path::String
 end
 
-"""Validated generated search database and the corpus identity it indexes."""
-struct SearchAsset
-    corpus_fingerprint::String
+"""Validated generated content database and the stream identity it indexes."""
+struct ContentAsset
+    content_fingerprint::String
     database_sha256::String
 end
 
@@ -152,10 +152,10 @@ const MACOS_INFO_PLIST_PATH = joinpath(
 const ANALYZER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "analyze.jl")
 const TEST_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "test_runner.jl")
 const SCENARIO_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "scenario_runner.jl")
-const SEARCH_BUILD_DIR = joinpath(SCRIPT_DIR, ".build", "search")
-const SEARCH_EXPORTER = joinpath(SCRIPT_DIR, "tools", "export_search_corpus.jl")
-const SEARCH_BUILDER_SOURCE = joinpath(
-    SCRIPT_DIR, "tools", "search_index_builder", "main.odin")
+const CONTENT_BUILD_DIR = joinpath(SCRIPT_DIR, ".build", "content")
+const CONTENT_EXPORTER = joinpath(SCRIPT_DIR, "tools", "export_content_records.jl")
+const CONTENT_BUILDER_SOURCE = joinpath(
+    SCRIPT_DIR, "tools", "content_builder", "main.odin")
 
 
 """Return true when running on Windows."""
@@ -176,6 +176,7 @@ const SYSIMAGE_STABLE_INPUTS = String[
     "geometry.jl",
     "animations.jl",
     "animation_catalog.jl",
+    "localized_content.jl",
     "runtime.jl",
     "terminal.jl",
     "ticks.jl",
@@ -1108,8 +1109,7 @@ function build_harness(julia_linker_flags::String)
     cmd_parts = [
         "odin",
         "build",
-        "harness/main.odin",
-        "-file",
+        "harness",
         "-define:EUCLID_ENABLE_HARNESS=true",
         is_windows() ? "-out:../bin/euclid_harness.exe" : "-out:../bin/euclid_harness",
     ]
@@ -1224,71 +1224,73 @@ function compile_staged_terminfo()
     result.exit_code == 0 || error("Euclid terminfo compilation failed.")
 end
 
-"""Export the canonical sidecar corpus and return its SHA-256 fingerprint."""
-function export_search_corpus(corpus_path::String)
+"""Export the canonical content stream and return its SHA-256 fingerprint."""
+function export_content_records(corpus_path::String)
     result = run_command(Cmd([
         JULIA_EXE,
+        "--depwarn=error",
         "--project=$JULIA_TEST_PROJECT",
-        SEARCH_EXPORTER,
+        CONTENT_EXPORTER,
         corpus_path,
     ]); cwd=SCRIPT_DIR, capture_output=true)
     result.exit_code == 0 || error(
-        "Search corpus export failed: $(strip(result.stderr))")
+        "Content record export failed: $(strip(result.stderr))")
     fingerprint = String(strip(result.stdout))
     occursin(r"^[0-9a-f]{64}$", fingerprint) || error(
-        "Search corpus exporter returned an invalid fingerprint.")
+        "Content record exporter returned an invalid fingerprint.")
     return fingerprint
 end
 
-"""Compile the standalone native search index builder."""
-function build_search_index_builder()
+"""Compile the standalone native content database builder."""
+function build_content_database_builder()
+    mkpath(CONTENT_BUILD_DIR)
     executable = joinpath(
-        SEARCH_BUILD_DIR, Sys.iswindows() ? "search_index_builder.exe" :
-            "search_index_builder")
+        CONTENT_BUILD_DIR, Sys.iswindows() ? "content_builder.exe" :
+            "content_builder")
     result = run_command(Cmd([
-        "odin", "build", SEARCH_BUILDER_SOURCE, "-file", "-out:$executable",
+        "odin", "build", CONTENT_BUILDER_SOURCE, "-file", "-out:$executable",
         "-vet", "-strict-style", "-disallow-do", "-warnings-as-errors",
         "-extra-linker-flags:$(sqlite3_tool_linker_flags())",
     ]); cwd=SCRIPT_DIR, capture_output=true)
     result.exit_code == 0 || error(
-        "Search index builder compilation failed: " *
+        "Content database builder compilation failed: " *
         strip(result.stdout * result.stderr))
     return executable
 end
 
-"""Build one candidate search database with the native builder."""
-function run_search_index_builder(
+"""Build one candidate content database with the native builder."""
+function run_content_database_builder(
     executable::String, corpus_path::String,
-    database_path::String, corpus_fingerprint::String)
+    database_path::String, content_fingerprint::String)
     result = run_command(Cmd([
-        executable, corpus_path, database_path, corpus_fingerprint,
+        executable, corpus_path, database_path, content_fingerprint,
     ]); cwd=SCRIPT_DIR, capture_output=true)
     result.exit_code == 0 && isempty(result.stderr) || error(
-        "Search index build failed: $(strip(result.stdout * result.stderr))")
-    isfile(database_path) || error("Search index builder produced no database.")
+        "Content database build failed: $(strip(result.stdout * result.stderr))")
+    isfile(database_path) || error("Content builder produced no database.")
     return nothing
 end
 
-"""Generate, reproduce, and stage the immutable built-in search database."""
-function stage_search_asset()
-    mkpath(SEARCH_BUILD_DIR)
-    corpus_path = joinpath(SEARCH_BUILD_DIR, "animations.jsonl")
-    corpus_fingerprint = export_search_corpus(corpus_path)
-    builder = build_search_index_builder()
-    first_candidate = joinpath(SEARCH_BUILD_DIR, "animations.first.sqlite3")
-    second_candidate = joinpath(SEARCH_BUILD_DIR, "animations.second.sqlite3")
-    run_search_index_builder(
-        builder, corpus_path, first_candidate, corpus_fingerprint)
-    run_search_index_builder(
-        builder, corpus_path, second_candidate, corpus_fingerprint)
+"""Generate, reproduce, and stage the immutable content database."""
+function stage_content_asset()
+    mkpath(CONTENT_BUILD_DIR)
+    corpus_path = joinpath(CONTENT_BUILD_DIR, "content-records.jsonl")
+    content_fingerprint = export_content_records(corpus_path)
+    builder = build_content_database_builder()
+    first_candidate = joinpath(CONTENT_BUILD_DIR, "content.first.sqlite3")
+    second_candidate = joinpath(CONTENT_BUILD_DIR, "content.second.sqlite3")
+    run_content_database_builder(
+        builder, corpus_path, first_candidate, content_fingerprint)
+    run_content_database_builder(
+        builder, corpus_path, second_candidate, content_fingerprint)
     first_digest = sysimage_artifact_sha256(first_candidate)
     first_digest == sysimage_artifact_sha256(second_candidate) || error(
-        "Search database generation is not byte deterministic.")
-    staged_path = joinpath(ASSETS_STAGING_DIR, "catalog", "animations.sqlite3")
+        "Content database generation is not byte deterministic.")
+    staged_path = joinpath(ASSETS_STAGING_DIR, "content", "content.sqlite3")
     mkpath(dirname(staged_path))
     mv(first_candidate, staged_path; force=true)
     rm(second_candidate; force=true)
-    return SearchAsset(corpus_fingerprint, first_digest)
+    return ContentAsset(content_fingerprint, first_digest)
 end
 
 """Create the compressed assets archive from staging content."""
@@ -1347,7 +1349,7 @@ end
 """Write deterministic metadata for the staged asset archive."""
 function write_assets_manifest(
     sysimage::JuliaSysimageArtifact, shaders::ShaderArtifacts,
-    search::SearchAsset, sysimage_relative_path::String,
+    content::ContentAsset, sysimage_relative_path::String,
     package_identity::String)
     open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
         write(io, """
@@ -1356,15 +1358,15 @@ julia_root=julia
 content_root=content
 content_input_fingerprint=$(content_input_fingerprint())
 package_identity=$package_identity
-catalog_database=catalog/animations.sqlite3
-catalog_database_sha256=$(search.database_sha256)
-catalog_corpus_fingerprint=$(search.corpus_fingerprint)
-catalog_schema_version=2
+content_database=content/content.sqlite3
+content_database_sha256=$(content.database_sha256)
+content_fingerprint=$(content.content_fingerprint)
+content_schema_version=3
 shader_root=shaders
 shader_manifest=shaders/manifest.toml
 shader_manifest_sha256=$(bytes2hex(open(sha256, shaders.manifest_path)))
 shader_schema_version=1
-schema_version=3
+schema_version=4
 sysimage_path=$(replace(sysimage_relative_path, '\\' => '/'))
 sysimage_input_fingerprint=$(sysimage.input_fingerprint)
 sysimage_artifact_sha256=$(sysimage.artifact_sha256)
@@ -1383,7 +1385,7 @@ function staged_asset_package_identity()
     end
     sort!(paths; by=path -> replace(relpath(path, ASSETS_STAGING_DIR), '\\' => '/'))
     return fingerprint_sysimage_inputs(
-        paths, ASSETS_STAGING_DIR; identity="euclid-assets-v1-catalog-schema-2")
+        paths, ASSETS_STAGING_DIR; identity="euclid-assets-v1-content-schema-3")
 end
 
 """Populate asset staging with content and validated generated artifacts."""
@@ -1406,7 +1408,7 @@ function stage_assets_content(
     copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
     rm(joinpath(ASSETS_STAGING_DIR, "Chalk On Blackboard.wav"); force=true)
     compile_staged_terminfo()
-    search = stage_search_asset()
+    content = stage_content_asset()
 
     sysimage_relative_path = joinpath(
         "sysimage", sysimage.input_fingerprint, julia_sysimage_filename())
@@ -1415,7 +1417,7 @@ function stage_assets_content(
     cp(sysimage.path, staged_sysimage; force=true)
     package_identity = staged_asset_package_identity()
     write_assets_manifest(
-        sysimage, shaders, search, sysimage_relative_path, package_identity)
+        sysimage, shaders, content, sysimage_relative_path, package_identity)
     return package_identity
 end
 

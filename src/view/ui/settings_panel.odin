@@ -3,6 +3,7 @@ package ui
 import native "../native"
 
 import "../../core"
+import contentdata "../../core/content"
 import particlemodel "../../particles/model"
 import geometry "../../core/geometry"
 import view_core "../core"
@@ -116,10 +117,11 @@ draw_encoded_settings_check_labels :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
     labels := [5]struct{label: string, y: f32}{
-        {"Display FPS", rows.fps_y}, {"Limit FPS", rows.limit_y},
-        {"Enable Drawing Sound", rows.sound_y},
-        {settings_simd_label(prepared.simd_available), rows.simd_y},
-        {settings_gpu_dust_label(prepared.gpu_available), rows.gpu_dust_y},
+        {view_core.shell_message(state, .Settings_Display_Fps), rows.fps_y},
+        {view_core.shell_message(state, .Settings_Limit_Fps), rows.limit_y},
+        {view_core.shell_message(state, .Settings_Drawing_Sound), rows.sound_y},
+        {settings_simd_label(state, prepared.simd_available), rows.simd_y},
+        {settings_gpu_dust_label(state, prepared.gpu_available), rows.gpu_dust_y},
     }
     for item in labels {
         draw_encoded_label(state, encoder, item.label,
@@ -145,7 +147,8 @@ draw_encoded_settings_text :: proc(
     if !measured {
         value_width = 40
     }
-    draw_encoded_label(state, encoder, "Maximum Dust particles", x, rows.slider_label_y)
+    draw_encoded_label(state, encoder,
+        view_core.shell_message(state, .Settings_Maximum_Dust), x, rows.slider_label_y)
     draw_encoded_label(state, encoder, value,
         settings_right_aligned_x(panel, value_width), rows.slider_label_y)
     animation_entries_added := 0
@@ -160,19 +163,21 @@ draw_encoded_settings_text :: proc(
 }
 
 // settings_simd_label describes whether SIMD projection can be selected.
-settings_simd_label :: proc(available: bool) -> string {
+settings_simd_label :: proc(
+    state: ^core.Euclid_General_State, available: bool) -> string {
     if available {
-        return "Use SIMD Projection"
+        return view_core.shell_message(state, .Settings_Simd_Available)
     }
-    return "Use SIMD Projection (Unavailable)"
+    return view_core.shell_message(state, .Settings_Simd_Unavailable)
 }
 
 // settings_gpu_dust_label describes whether GPU dust can be selected.
-settings_gpu_dust_label :: proc(available: bool) -> string {
+settings_gpu_dust_label :: proc(
+    state: ^core.Euclid_General_State, available: bool) -> string {
     if available {
-        return "GPU Dust Instancing"
+        return view_core.shell_message(state, .Settings_Gpu_Dust_Available)
     }
-    return "GPU Dust Instancing (Unavailable)"
+    return view_core.shell_message(state, .Settings_Gpu_Dust_Unavailable)
 }
 
 // settings_right_aligned_x keeps one measured value inside the panel inset.
@@ -217,7 +222,7 @@ settings_max_particles_params :: proc(
         mouse_input = ctx.mouse_input,
         ui_runtime = &ctx.state.ui_runtime,
         press_id = SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID,
-        label = "Maximum Dust particles",
+        label = view_core.shell_message(ctx.state, .Settings_Maximum_Dust),
         value = ctx.state.particle_system.use_max_dust_particles,
         min_value = 0,
         max_value = particlemodel.MAX_LOW_PARTICLES,
@@ -234,13 +239,17 @@ draw_settings_particle_stats :: proc(
     encoder: ^native.Draw_Encoder, animation_entries_added: int) {
 
     ps := ctx.state.particle_system
-    labels := [4]string{
-        fmt.tprintf("Dust particles Rendered: %d", ps.last_render_low),
-        fmt.tprintf("Trail particles Rendered: %d", ps.last_render_mid),
-        fmt.tprintf("Flicker particles Rendered: %d", ps.last_render_high),
-        fmt.tprintf("Julia animation entries added: %d", animation_entries_added),
+    statistics := [4]struct{id: contentdata.Content_Message_Id, count: int}{
+        {.Settings_Stats_Dust, ps.last_render_low},
+        {.Settings_Stats_Trail, ps.last_render_mid},
+        {.Settings_Stats_Flicker, ps.last_render_high},
+        {.Settings_Stats_Animation_Entries, animation_entries_added},
     }
-    for label, row in labels {
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
+    for statistic, row in statistics {
+        label := view_core.shell_format(ctx.state, statistic.id,
+            []contentdata.Content_Format_Argument{{"count", i64(statistic.count)}},
+            storage[:])
         view_core.ui_text_shaped({
             encoder = encoder,
             resolver = ctx.font_resolver,
@@ -314,21 +323,24 @@ update_settings_controls :: proc(
     result.max_particles = update_settings_integer_slider(
         settings_max_particles_params(ctx, rows.slider_label_y))
     result.fps = update_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
-        4001, "Display FPS", ctx.state.ui_runtime.display_fps, true, 1}),
+        4001, view_core.shell_message(ctx.state, .Settings_Display_Fps),
+        ctx.state.ui_runtime.display_fps, true, 1}),
         &ctx.state.ui_runtime.ui_press_owner)
     result.limit = update_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
-        4002, "Limit FPS", ctx.state.ui_runtime.limit_fps, true, 2}),
+        4002, view_core.shell_message(ctx.state, .Settings_Limit_Fps),
+        ctx.state.ui_runtime.limit_fps, true, 2}),
         &ctx.state.ui_runtime.ui_press_owner)
     result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
-        4004, "Enable Drawing Sound", ctx.state.user_drawing_sound_enabled, true, 3}),
+        4004, view_core.shell_message(ctx.state, .Settings_Drawing_Sound),
+        ctx.state.user_drawing_sound_enabled, true, 3}),
         &ctx.state.ui_runtime.ui_press_owner)
     simd_available := view_core.simd_batch_projection_available()
-    simd_label := settings_simd_label(simd_available)
+    simd_label := settings_simd_label(ctx.state, simd_available)
     result.simd = update_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, simd_label, ctx.state.ui_runtime.use_simd_batch_projection,
         simd_available, 4}), &ctx.state.ui_runtime.ui_press_owner)
     gpu_available := ctx.state.ui_runtime.gpu_dust_instancing_available
-    gpu_label := settings_gpu_dust_label(gpu_available)
+    gpu_label := settings_gpu_dust_label(ctx.state, gpu_available)
     result.gpu_dust = update_checkbox(settings_checkbox_params(ctx, {rows.gpu_dust_y,
         4005, gpu_label, ctx.state.ui_runtime.use_gpu_dust_instancing,
         gpu_available, 5}), &ctx.state.ui_runtime.ui_press_owner)
@@ -382,5 +394,4 @@ apply_settings_preparation :: proc(
     state.ui_runtime.use_gpu_dust_instancing =
         gpu_available && prepared.gpu_dust.checked_out
 }
-
 

@@ -1,7 +1,7 @@
 package core
 
 import animation_model "animation"
-import catalogmodel "catalog"
+import contentmodel "content"
 import bridgemodel "../bridge/model"
 import dynviewmodel "../dynview/model"
 import audiomodel "../audio/model"
@@ -86,7 +86,7 @@ Euclid_General_State :: struct {
     draw_surface: ^viewmodel.Euclid_Drawing_Surface,
 
     julia_runtime_service: ^bridgemodel.Julia_Runtime_Service,
-    catalog_service: ^catalogmodel.Catalog_Service,
+    content_service: ^contentmodel.Content_Service,
     julia_interface_slots: Julia_Interface_Slots,
     julia_interface_active_slot: int,
     julia_interface: ^bridgemodel.Euclid_Julia_Interface,

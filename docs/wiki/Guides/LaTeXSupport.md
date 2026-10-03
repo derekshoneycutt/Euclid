@@ -5,6 +5,10 @@ and layout pipeline. The implementation supports both standalone math and
 mixed document fragments containing styled prose, inline or display math, line
 breaks, and Euclid inline shapes.
 
+For localized shell messages, catalogue names, edition provenance, and callback
+selection metadata, see [Localization And Editions](Localization.md). Those records
+do not automatically replace the canonical MIME presentation described here.
+
 ## Table Of Contents
 
 1. [Recommended Usage](#recommended-usage)

@@ -11,8 +11,8 @@ import "../files"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import "../particles"
-import catalog "../view/catalog"
-import catalogdata "../core/catalog"
+import content "../view/content"
+import contentdata "../core/content"
 import view_core "../view/core"
 import terminalview "../view/terminal"
 import viewterminalmodel "../view/terminal/model"
@@ -237,6 +237,7 @@ execute_animation_lifecycle_transition :: proc(
         commit_animation_selection(state, animation)
         state^.julia_interface^.pending_animation_reset = false
     } else if succeeded {
+        service^.active_content_specification = service^.pending_content_specification
         commit_animation_reset_bookkeeping(state)
     }
     return succeeded
@@ -334,7 +335,8 @@ animation_lifecycle_invocation_allowed :: proc(
         service^.reload_failure_injection = .None
         return false
     }
-    return true
+    return prepare_animation_content_specification(
+        host^.native_state, animation, operation == ANIMATION_LIFECYCLE_RELOAD)
 }
 
 //   Build one primitive lifecycle payload for the current runtime generation.
@@ -585,6 +587,9 @@ commit_animation_selection :: proc(
     state: ^core.Euclid_General_State,
     animation: ^bridgemodel.Euclid_Julia_Animation_Interface) {
     state^.julia_interface^.current_animation = animation
+    if service := state^.julia_runtime_service; service != nil {
+        service^.active_content_specification = service^.pending_content_specification
+    }
     animation_generation: u64 = 0
     if state^.julia_runtime_service != nil {
         animation_generation = state^.julia_runtime_service^.animation_generation + 1
@@ -956,19 +961,19 @@ refresh_packaged_assets :: proc(
 }
 
 //   Admit the refreshed package database without replacing the active catalogue.
-stage_packaged_catalogue_reload :: proc(
+stage_packaged_content_reload :: proc(
     state: ^core.Euclid_General_State,
     service: ^Julia_Runtime_Service, package_identity: [32]byte) -> bool {
-    if state == nil || state^.catalog_service == nil {
+    if state == nil || state^.content_service == nil {
         mark_julia_reload_failed(service, package_identity)
         return false
     }
-    catalog_service := state^.catalog_service
+    content_service := state^.content_service
     asset_config := julia_service_asset_config(service)
-    asset, asset_ok := files.packaged_catalog_asset_with_config(
+    asset, asset_ok := files.packaged_content_asset_with_config(
         &asset_config, context.temp_allocator)
-    if asset_ok && catalog.catalog_service_stage(
-        catalog_service, asset.database_path, asset.corpus_fingerprint) {
+    if asset_ok && content.content_service_stage(
+        content_service, asset.database_path, asset.corpus_fingerprint) {
         return true
     }
     fmt.eprintln("Julia asset reload: candidate catalogue admission failed")
@@ -1089,7 +1094,7 @@ create_julia_interface_reload_candidate :: proc(
 //   Stage catalogue state and validate one fully described reload transaction.
 stage_and_validate_julia_interface_reload :: proc(
     transaction: ^Julia_Interface_Reload_Transaction) -> bool {
-    if !stage_packaged_catalogue_reload(
+    if !stage_packaged_content_reload(
         transaction^.state, transaction^.service,
         transaction^.package_identity) {
         return false
@@ -1182,14 +1187,14 @@ reject_julia_interface_reload :: proc(
 }
 
 //   Materialize the admitted candidate catalogue into the inactive native registry.
-stage_julia_interface_catalogue :: proc(
+stage_julia_interface_content :: proc(
     transaction: ^Julia_Interface_Reload_Transaction) -> bool {
     staged_interface := transaction^.staged_interface
-    catalog_service := transaction^.state^.catalog_service
-    generation := catalog.catalog_service_staged_generation(
-        catalog_service)
+    content_service := transaction^.state^.content_service
+    generation := content.content_service_staged_generation(
+        content_service)
      if generation == nil ||
-         !catalog_generation_materialize(staged_interface, generation) {
+         !content_generation_materialize(staged_interface, generation) {
         return false
     }
     for source := transaction^.previous_interface^.animation_head;
@@ -1217,7 +1222,7 @@ prepare_julia_interface_reload_candidate :: proc(
     }
     staged_interface^.asset_package_identity = transaction^.package_identity
     staged_interface^.asset_package_identity_valid = true
-    if !stage_julia_interface_catalogue(transaction) {
+    if !stage_julia_interface_content(transaction) {
         return false
     }
     state^.julia_interface = staged_interface
@@ -1263,8 +1268,8 @@ validate_julia_interface_reload :: proc(
     if !activate_julia_interface_reload_candidate(transaction) {
         return false
     }
-    catalog_service := transaction^.state^.catalog_service
-    if !catalog.catalog_service_commit(catalog_service) {
+    content_service := transaction^.state^.content_service
+    if !content.content_service_commit(content_service) {
         return reject_julia_interface_reload(transaction,
             "Julia asset reload: catalogue commit failed", true)
     }
@@ -1279,8 +1284,8 @@ validate_julia_interface_reload :: proc(
     publish_julia_interface_reload(
         state, transaction^.previous_interface,
         transaction^.staged_slot, transaction^.service)
-    if !catalog.catalog_service_finalize(catalog_service) {
-        log.error("catalog_reload_finalize_failed")
+    if !content.content_service_finalize(content_service) {
+        log.error("content_reload_finalize_failed")
     }
     return true
 }
@@ -1291,8 +1296,9 @@ rollback_julia_interface_reload :: proc(
     previous_interface, staged_interface: ^bridgemodel.Euclid_Julia_Interface,
     service: ^Julia_Runtime_Service, package_identity: [32]byte) {
 
-    if state^.catalog_service != nil {
-        _ = catalog.catalog_service_discard(state^.catalog_service)
+    if state^.content_service != nil &&
+       !content.content_service_discard(state^.content_service) {
+        log.error("content_reload_rollback_failed")
     }
     clean_julia_interface_instance(staged_interface)
     state^.julia_interface = previous_interface
@@ -1468,17 +1474,17 @@ animation_link_child_ordered :: proc(
 }
 
 //   Materialize a validated catalogue generation into an empty native registry.
-catalog_generation_materialize :: proc(
+content_generation_materialize :: proc(
     iface: ^bridgemodel.Euclid_Julia_Interface,
-    snapshot: ^catalog.Catalog_Generation) -> bool {
-    if !catalog_generation_shape_is_valid(snapshot) || iface == nil ||
+    snapshot: ^content.Content_Generation) -> bool {
+    if !content_generation_shape_is_valid(snapshot) || iface == nil ||
        iface^.animation_count != 0 || iface^.animation_lookup_count != 0 ||
        !ensure_julia_interface_instance_registry_arena(iface) {
         return false
     }
-    iface^.catalog_generation = snapshot^.generation
-        if !catalog_generation_allocate_nodes(iface, snapshot) ||
-             !catalog_generation_link_parents(iface, snapshot) {
+    iface^.content_generation = snapshot^.generation
+        if !content_generation_allocate_nodes(iface, snapshot) ||
+             !content_generation_link_parents(iface, snapshot) {
         clean_julia_interface_instance(iface)
         return false
     }
@@ -1486,11 +1492,11 @@ catalog_generation_materialize :: proc(
 }
 
 //   Validate generation bounds, identity uniqueness, paths, and parent topology.
-catalog_generation_shape_is_valid :: proc(snapshot: ^catalog.Catalog_Generation) -> bool {
+content_generation_shape_is_valid :: proc(snapshot: ^content.Content_Generation) -> bool {
     if snapshot == nil || snapshot^.generation == 0 ||
        !snapshot^.sealed ||
        snapshot^.record_count == 0 ||
-       snapshot^.record_count > catalog.CATALOG_RECORD_CAPACITY {
+       snapshot^.record_count > content.CATALOG_RECORD_CAPACITY {
         return false
     }
     terminal_count := 0
@@ -1498,7 +1504,7 @@ catalog_generation_shape_is_valid :: proc(snapshot: ^catalog.Catalog_Generation)
         if snapshot^.records[index].node_kind == .Terminal {
             terminal_count += 1
         }
-        if !catalog_generation_record_is_valid(snapshot, index) {
+        if !content_generation_record_is_valid(snapshot, index) {
             return false
         }
     }
@@ -1506,28 +1512,28 @@ catalog_generation_shape_is_valid :: proc(snapshot: ^catalog.Catalog_Generation)
 }
 
 //   Validate one bounded row and its ancestor chain before registry allocation.
-catalog_generation_record_is_valid :: proc(
-    snapshot: ^catalog.Catalog_Generation, index: int) -> bool {
+content_generation_record_is_valid :: proc(
+    snapshot: ^content.Content_Generation, index: int) -> bool {
     record := &snapshot^.records[index]
     if record.stable_id == (uuid.Identifier{}) || record.catalog_order != i32(index) ||
        record.sibling_order < 0 ||
-    !catalog_generation_record_text_is_valid(snapshot, record) ||
-    !catalog_generation_record_is_unique(snapshot, index) {
+    !content_generation_record_text_is_valid(snapshot, record) ||
+    !content_generation_record_is_unique(snapshot, index) {
         return false
     }
-    return catalog_generation_ancestor_chain_is_valid(snapshot, index)
+    return content_generation_ancestor_chain_is_valid(snapshot, index)
 }
 
 //   Validate bounded generation strings and their node-kind-specific path contract.
-catalog_generation_record_text_is_valid :: proc(
-    snapshot: ^catalog.Catalog_Generation, record: ^catalog.Catalog_Record) -> bool {
-    name, name_status := catalogdata.catalog_generation_text(
+content_generation_record_text_is_valid :: proc(
+    snapshot: ^content.Content_Generation, record: ^content.Catalog_Record) -> bool {
+    name, name_status := contentdata.content_generation_text(
         snapshot, record.display_name)
-    path, path_status := catalogdata.catalog_generation_text(
+    path, path_status := contentdata.content_generation_text(
         snapshot, record.implementation_path)
     if name_status != .Ok || path_status != .Ok || len(name) == 0 ||
-       len(name) > catalog.CATALOG_NAME_BYTE_CAPACITY ||
-       len(path) > catalog.CATALOG_PATH_BYTE_CAPACITY {
+       len(name) > content.CATALOG_NAME_BYTE_CAPACITY ||
+       len(path) > content.CATALOG_PATH_BYTE_CAPACITY {
         return false
     }
     if !utf8.valid_string(name) || strings.contains(name, "\x00") {
@@ -1548,8 +1554,8 @@ catalog_generation_record_text_is_valid :: proc(
 }
 
 //   Reject duplicate identities or sibling positions under the same parent.
-catalog_generation_record_is_unique :: proc(
-    snapshot: ^catalog.Catalog_Generation, index: int) -> bool {
+content_generation_record_is_unique :: proc(
+    snapshot: ^content.Content_Generation, index: int) -> bool {
     record := &snapshot^.records[index]
     for prior_index in 0..<index {
         prior := &snapshot^.records[prior_index]
@@ -1564,8 +1570,8 @@ catalog_generation_record_is_unique :: proc(
 }
 
 //   Verify every parent exists and the row's ancestor chain is acyclic.
-catalog_generation_ancestor_chain_is_valid :: proc(
-    snapshot: ^catalog.Catalog_Generation, index: int) -> bool {
+content_generation_ancestor_chain_is_valid :: proc(
+    snapshot: ^content.Content_Generation, index: int) -> bool {
     record := &snapshot^.records[index]
     if !record.has_parent {
         return true
@@ -1575,7 +1581,7 @@ catalog_generation_ancestor_chain_is_valid :: proc(
         if current_id == record.stable_id {
             return false
         }
-        parent_index := catalog_generation_record_index(snapshot, current_id)
+        parent_index := content_generation_record_index(snapshot, current_id)
         if parent_index < 0 {
             return false
         }
@@ -1589,8 +1595,8 @@ catalog_generation_ancestor_chain_is_valid :: proc(
 }
 
 //   Find one stable identity in fixed generation storage.
-catalog_generation_record_index :: proc(
-    snapshot: ^catalog.Catalog_Generation, stable_id: uuid.Identifier) -> int {
+content_generation_record_index :: proc(
+    snapshot: ^content.Content_Generation, stable_id: uuid.Identifier) -> int {
     for index in 0..<int(snapshot^.record_count) {
         if snapshot^.records[index].stable_id == stable_id {
             return index
@@ -1621,10 +1627,11 @@ catalog_path_bytes_are_safe :: proc(path: []u8) -> bool {
     return true
 }
 
-//   Allocate nodes and UUID lookup entries in catalogue order.
-catalog_generation_allocate_nodes :: proc(
+// Allocate registry-owned names and paths; prepared UI draws retain these beyond
+// the SQLite read and content borrow. Interface retirement releases the copies.
+content_generation_allocate_nodes :: proc(
     iface: ^bridgemodel.Euclid_Julia_Interface,
-    snapshot: ^catalog.Catalog_Generation) -> bool {
+    snapshot: ^content.Content_Generation) -> bool {
     for index in 0..<int(snapshot^.record_count) {
         record := &snapshot^.records[index]
         node := new(bridgemodel.Euclid_Julia_Animation_Interface,
@@ -1636,9 +1643,9 @@ catalog_generation_allocate_nodes :: proc(
         node^.node_kind = bridgemodel.Animation_Node_Kind(record.node_kind)
         node^.sibling_order = record.sibling_order
         node^.catalog_order = record.catalog_order
-        name, name_status := catalogdata.catalog_generation_text(
+        name, name_status := contentdata.content_generation_text(
             snapshot, record.display_name)
-        path, path_status := catalogdata.catalog_generation_text(
+        path, path_status := contentdata.content_generation_text(
             snapshot, record.implementation_path)
         if name_status != .Ok || path_status != .Ok {
             return false
@@ -1657,9 +1664,9 @@ catalog_generation_allocate_nodes :: proc(
 }
 
 //   Resolve parent UUIDs only after all nodes and lookup entries exist.
-catalog_generation_link_parents :: proc(
+content_generation_link_parents :: proc(
     iface: ^bridgemodel.Euclid_Julia_Interface,
-    snapshot: ^catalog.Catalog_Generation) -> bool {
+    snapshot: ^content.Content_Generation) -> bool {
     for index in 0..<int(snapshot^.record_count) {
         record := &snapshot^.records[index]
         if !record.has_parent {

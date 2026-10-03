@@ -1,20 +1,21 @@
-package catalog
+package content
 
-import catalogdata "../../core/catalog"
+import contentdata "../../core/content"
 
 import "core:sync/chan"
+import "core:log"
 
 // Coalesced query plus an optional first control request that followed it.
 Search_Coalesced_Request :: struct {
-    query: Search_Worker_Request,
-    pending: Search_Worker_Request,
+    query: Content_Worker_Request,
+    pending: Content_Worker_Request,
     has_pending: bool,
 }
 
 // Drain queued requests and retain shutdown or the newest query generation.
 search_worker_coalesce :: proc(
-    service: ^Catalog_Service,
-    first: Search_Worker_Request) -> Search_Coalesced_Request {
+    service: ^Content_Service,
+    first: Content_Worker_Request) -> Search_Coalesced_Request {
     result := Search_Coalesced_Request{query = first}
     for {
         candidate, available := chan.try_recv(service.requests)
@@ -33,72 +34,86 @@ search_worker_coalesce :: proc(
 }
 
 // Publish one worker control result after a staged-catalogue operation.
-catalog_worker_control_result :: proc(
-    service: ^Catalog_Service, status: Search_Query_Status,
+content_worker_control_result :: proc(
+    service: ^Content_Service, status: Search_Query_Status,
     generation: u64) {
-    _ = chan.send(service.control_results, Catalog_Control_Result{
+    _ = chan.send(service.control_results, Content_Control_Result{
         status = status,
         index_generation = generation,
     })
 }
 
 // Stage one immutable candidate while preserving the active query connection.
-catalog_worker_stage :: proc(
-    service: ^Catalog_Service, staged: ^Catalog_Database,
-    request: ^Search_Worker_Request) {
-    _ = catalog_database_close(staged)
-    _ = catalogdata.catalog_generation_reset(service.staged_generation)
+content_worker_stage :: proc(
+    service: ^Content_Service, staged: ^Content_Database,
+    request: ^Content_Worker_Request) {
+    if !content_database_close(staged) {
+        log.error("content_stage_close_failed")
+        content_worker_control_result(service, .Unavailable, 0)
+        return
+    }
+    _ = contentdata.content_generation_reset(service.staged_generation)
     path := string(request.database_path[:request.database_path_length])
     fingerprint := string(request.expected_fingerprint[:])
-     if catalog_database_open(staged, path, fingerprint, service.staged_generation) &&
+    if content_database_open(staged, path, fingerprint, service.staged_generation) &&
          staged.index_generation == service.staged_generation^.generation {
-        catalog_worker_control_result(
+        content_worker_control_result(
             service, .Candidate_Ready, staged.index_generation)
         return
     }
-    catalog_worker_control_result(service, .Unavailable, 0)
+    content_worker_control_result(service, .Unavailable, 0)
 }
 
 // Promote one admitted candidate and retire the previous active connection.
-catalog_worker_commit :: proc(
-    service: ^Catalog_Service, active, staged: ^Catalog_Database) -> bool {
+content_worker_commit :: proc(
+    service: ^Content_Service, active, staged: ^Content_Database) -> bool {
     if staged.connection.handle == nil || service.active_generation == nil ||
        service.staged_generation == nil ||
+       !service.staged_generation^.sealed || !service.staged_generation^.data.complete ||
        active.index_generation != service.active_generation^.generation ||
        staged.index_generation != service.staged_generation^.generation {
-        catalog_worker_control_result(service, .Unavailable, 0)
+        content_worker_control_result(service, .Unavailable, 0)
         return false
     }
     previous := active^
     active^ = staged^
     staged^ = previous
     generation := active.index_generation
-    catalog_worker_control_result(service, .Candidate_Committed, generation)
+    content_worker_control_result(service, .Candidate_Committed, generation)
     return true
 }
 
 // Retire or roll back one candidate and preserve the prior active connection.
-catalog_worker_discard :: proc(
-    service: ^Catalog_Service, active, staged: ^Catalog_Database,
+content_worker_discard :: proc(
+    service: ^Content_Service, active, staged: ^Content_Database,
     committed: bool) {
     if committed {
         active^, staged^ = staged^, active^
     }
-    _ = catalog_database_close(staged)
-    catalog_worker_control_result(service, .Candidate_Discarded, 0)
+    closed := content_database_close(staged)
+    if !closed {
+        log.error("content_discard_close_failed")
+    }
+    _ = chan.send(service.control_results, Content_Control_Result{
+        status = .Candidate_Discarded, cleanup_failed = !closed})
 }
 
 // Retire the previous active connection after the outer transaction publishes.
-catalog_worker_finalize :: proc(
-    service: ^Catalog_Service, staged: ^Catalog_Database) {
-    _ = catalog_database_close(staged)
-    catalog_worker_control_result(service, .Candidate_Finalized, 0)
+content_worker_finalize :: proc(
+    service: ^Content_Service, staged: ^Content_Database) -> bool {
+    closed := content_database_close(staged)
+    if !closed {
+        log.error("content_finalize_close_failed")
+    }
+    status := closed ? Search_Query_Status.Candidate_Finalized : .Unavailable
+    content_worker_control_result(service, status, 0)
+    return closed
 }
 
 // Dispatch one non-query command and report whether the owner loop should stop.
-catalog_worker_dispatch_control :: proc(
-    service: ^Catalog_Service, active, staged: ^Catalog_Database,
-    request: ^Search_Worker_Request,
+content_worker_dispatch_control :: proc(
+    service: ^Content_Service, active, staged: ^Content_Database,
+    request: ^Content_Worker_Request,
     candidate_committed: ^bool) -> (bool, bool) {
     if request.kind == .Query {
         return false, false
@@ -108,29 +123,34 @@ catalog_worker_dispatch_control :: proc(
         return true, true
     }
     if request.kind == .Stage {
-        catalog_worker_stage(service, staged, request)
+        content_worker_stage(service, staged, request)
     } else if request.kind == .Commit {
-        candidate_committed^ = catalog_worker_commit(service, active, staged)
+        candidate_committed^ = content_worker_commit(service, active, staged)
     } else if request.kind == .Discard {
-        catalog_worker_discard(
+        content_worker_discard(
             service, active, staged, candidate_committed^)
         candidate_committed^ = false
     } else if request.kind == .Finalize {
-        catalog_worker_finalize(service, staged)
-        candidate_committed^ = false
+        if content_worker_finalize(service, staged) {
+            candidate_committed^ = false
+        }
     }
     return true, false
 }
 
 // Run the SQLite owner loop, coalescing adjacent queries without crossing controls.
-search_worker_run :: proc(service: ^Catalog_Service, database: ^Catalog_Database) {
-    staged: Catalog_Database
-    pending: Search_Worker_Request
+content_worker_run :: proc(service: ^Content_Service, database: ^Content_Database) {
+    staged: Content_Database
+    pending: Content_Worker_Request
     has_pending := false
     candidate_committed := false
-    defer _ = catalog_database_close(&staged)
+    defer {
+        if !content_database_close(&staged) {
+            log.error("content_shutdown_candidate_close_failed")
+        }
+    }
     for {
-        request: Search_Worker_Request
+        request: Content_Worker_Request
         if has_pending {
             request = pending
             has_pending = false
@@ -141,7 +161,7 @@ search_worker_run :: proc(service: ^Catalog_Service, database: ^Catalog_Database
                 return
             }
         }
-        handled, stop := catalog_worker_dispatch_control(
+        handled, stop := content_worker_dispatch_control(
             service, database, &staged, &request, &candidate_committed)
         if stop {
             return
@@ -152,29 +172,39 @@ search_worker_run :: proc(service: ^Catalog_Service, database: ^Catalog_Database
         coalesced := search_worker_coalesce(service, request)
         pending = coalesced.pending
         has_pending = coalesced.has_pending
-        execution := catalog_database_execute(database, coalesced.query.query)
-        if !execution.ok {
-            execution.result.status = .Query_Failed
-        }
-        _ = chan.try_send(service.results, execution.result)
-        free_all(context.temp_allocator)
+        content_worker_execute_query(service, database, coalesced.query.query)
     }
 }
 
+// Execute and publish a bounded result before retiring query-local temporary storage.
+content_worker_execute_query :: proc(
+    service: ^Content_Service, database: ^Content_Database,
+    query: Search_Query_Request) {
+    execution := content_database_execute(database, query)
+    if !execution.ok {
+        execution.result.status = .Query_Failed
+    }
+    _ = chan.try_send(service.results, execution.result)
+    free_all(context.temp_allocator)
+}
+
 // Own SQLite from open through finalization on the dedicated worker thread.
-search_worker_entry :: proc(data: rawptr) {
-    service := cast(^Catalog_Service)data
+content_worker_entry :: proc(data: rawptr) {
+    service := cast(^Content_Service)data
     path := string(service.database_path[:service.database_path_length])
     fingerprint := string(service.expected_fingerprint[:])
-    database: Catalog_Database
-    ready := catalog_database_open(
+    database: Content_Database
+    ready := content_database_open(
         &database, path, fingerprint, service.active_generation) &&
+        service.active_generation^.sealed && service.active_generation^.data.complete &&
         database.index_generation == service.active_generation^.generation
     status := ready ? Search_Query_Status.Ready : .Unavailable
     _ = chan.send(service.results, Search_Query_Result{
         status = status, index_generation = database.index_generation})
     if ready {
-        search_worker_run(service, &database)
+        content_worker_run(service, &database)
     }
-    _ = catalog_database_close(&database)
+    if !content_database_close(&database) {
+        log.error("content_shutdown_active_close_failed")
+    }
 }

@@ -17,7 +17,7 @@ ASSET_PACKAGE_ROOT_DIR :: "EuclidApp"
 ASSET_PACKAGE_DIR :: "assets"
 ASSET_PACKAGE_ARCHIVE :: "assets.pkg"
 ASSET_PACKAGE_IDENTITY :: "assets.pkg.identity"
-ASSET_CACHE_SCHEMA_DIR :: "v3"
+ASSET_CACHE_SCHEMA_DIR :: "v4"
 GIF_OUTPUT_DIR_NAME :: "gifs"
 SYSIMAGE_CACHE_DIR_NAME :: "sysimages"
 ASSET_MANIFEST_MAX_BYTES :: 4096
@@ -57,13 +57,13 @@ Packaged_Sysimage_Metadata :: struct {
     input_fingerprint: string,
     artifact_sha256: string,
     package_identity: string,
-    catalog_relative_path: string,
-    catalog_database_sha256: string,
-    catalog_corpus_fingerprint: string,
+    content_relative_path: string,
+    content_database_sha256: string,
+    content_fingerprint: string,
 }
 
-// Resolved immutable search asset and the corpus identity it must contain.
-Packaged_Catalog_Asset :: struct {
+// Resolved immutable whole-content asset and the corpus identity it must contain.
+Packaged_Content_Asset :: struct {
     database_path: string,
     corpus_fingerprint: string,
 }
@@ -88,10 +88,10 @@ Manifest_Parse_State :: struct {
     digest_seen: bool,
     identity_seen: bool,
     platform_ok: bool,
-    catalog_path_seen: bool,
-    catalog_digest_seen: bool,
-    catalog_corpus_seen: bool,
-    catalog_schema_ok: bool,
+    content_path_seen: bool,
+    content_digest_seen: bool,
+    content_fingerprint_seen: bool,
+    content_schema_ok: bool,
 }
 
 //   Release strings retained by packaged sysimage metadata.
@@ -104,9 +104,9 @@ destroy_packaged_sysimage_metadata :: proc(
     delete(metadata.input_fingerprint, allocator)
     delete(metadata.artifact_sha256, allocator)
     delete(metadata.package_identity, allocator)
-    delete(metadata.catalog_relative_path, allocator)
-    delete(metadata.catalog_database_sha256, allocator)
-    delete(metadata.catalog_corpus_fingerprint, allocator)
+    delete(metadata.content_relative_path, allocator)
+    delete(metadata.content_database_sha256, allocator)
+    delete(metadata.content_fingerprint, allocator)
     metadata^ = {}
 }
 
@@ -163,28 +163,28 @@ assign_unique_manifest_string :: proc(
     return true
 }
 
-//   Capture one recognized search manifest field and report whether it matched.
-assign_search_manifest_field :: proc(
+//   Capture one recognized content manifest field and report whether it matched.
+assign_content_manifest_field :: proc(
     state: ^Manifest_Parse_State, key, value: string,
     allocator: mem.Allocator) -> (bool, bool) {
     switch key {
-    case "catalog_database":
+    case "content_database":
         return assign_unique_manifest_string(
-            &state.metadata.catalog_relative_path, &state.catalog_path_seen,
+            &state.metadata.content_relative_path, &state.content_path_seen,
             value, allocator), true
-    case "catalog_database_sha256":
+    case "content_database_sha256":
         return assign_unique_manifest_string(
-            &state.metadata.catalog_database_sha256, &state.catalog_digest_seen,
+            &state.metadata.content_database_sha256, &state.content_digest_seen,
             value, allocator), true
-    case "catalog_corpus_fingerprint":
+    case "content_fingerprint":
         return assign_unique_manifest_string(
-            &state.metadata.catalog_corpus_fingerprint, &state.catalog_corpus_seen,
+            &state.metadata.content_fingerprint, &state.content_fingerprint_seen,
             value, allocator), true
-    case "catalog_schema_version":
-        if state.catalog_schema_ok || value != "2" {
+    case "content_schema_version":
+        if state.content_schema_ok || value != "3" {
             return false, true
         }
-        state.catalog_schema_ok = true
+        state.content_schema_ok = true
         return true, true
     }
     return true, false
@@ -194,14 +194,14 @@ assign_search_manifest_field :: proc(
 assign_sysimage_manifest_field :: proc(
     state: ^Manifest_Parse_State, key, value: string,
     allocator: mem.Allocator) -> bool {
-    search_ok, search_matched := assign_search_manifest_field(
+    content_ok, content_matched := assign_content_manifest_field(
         state, key, value, allocator)
-    if search_matched {
-        return search_ok
+    if content_matched {
+        return content_ok
     }
     switch key {
     case "schema_version":
-        if state.schema_seen || value != "3" {
+        if state.schema_seen || value != "4" {
             return false
         }
         state.schema_seen = true
@@ -231,17 +231,17 @@ packaged_sysimage_manifest_is_valid :: proc(state: ^Manifest_Parse_State) -> boo
     metadata := &state.metadata
     return state.schema_seen && state.identity_seen && state.path_seen &&
         state.input_seen && state.digest_seen && state.platform_ok &&
-        state.catalog_path_seen && state.catalog_digest_seen &&
-        state.catalog_corpus_seen && state.catalog_schema_ok &&
+        state.content_path_seen && state.content_digest_seen &&
+        state.content_fingerprint_seen && state.content_schema_ok &&
         is_safe_asset_relative_path(metadata.relative_path) &&
         strings.has_prefix(metadata.relative_path, "sysimage/") &&
         strings.has_suffix(metadata.relative_path, PACKAGED_SYSIMAGE_FILENAME) &&
         is_lower_sha256(metadata.package_identity) &&
         is_lower_sha256(metadata.input_fingerprint) &&
         is_lower_sha256(metadata.artifact_sha256) &&
-        metadata.catalog_relative_path == "catalog/animations.sqlite3" &&
-        is_lower_sha256(metadata.catalog_database_sha256) &&
-        is_lower_sha256(metadata.catalog_corpus_fingerprint)
+        metadata.content_relative_path == "content/content.sqlite3" &&
+        is_lower_sha256(metadata.content_database_sha256) &&
+        is_lower_sha256(metadata.content_fingerprint)
 }
 
 //   Parse and validate bounded packaged sysimage metadata.
@@ -811,10 +811,10 @@ packaged_asset_path :: proc(
     return packaged_asset_path_with_config(nil, relative_path, allocator)
 }
 
-//   Resolve the validated built-in search database under an optional asset root.
-packaged_catalog_asset_with_config :: proc(
+// Resolve the validated immutable content database under an optional asset root.
+packaged_content_asset_with_config :: proc(
     config: ^Asset_Root_Config,
-    allocator: mem.Allocator) -> (Packaged_Catalog_Asset, bool) {
+    allocator: mem.Allocator) -> (Packaged_Content_Asset, bool) {
     exe_dir, exe_ok := resolve_executable_dir_with_config(
         config, context.temp_allocator)
     if !exe_ok || !ensure_packaged_assets_unpacked_with_force(exe_dir, false) {
@@ -831,11 +831,11 @@ packaged_catalog_asset_with_config :: proc(
         return {}, false
     }
     path, path_error := filepath.join(
-        []string{unpack_dir, metadata.catalog_relative_path}, allocator)
+        []string{unpack_dir, metadata.content_relative_path}, allocator)
     if path_error != nil {
         return {}, false
     }
-    fingerprint := strings.clone(metadata.catalog_corpus_fingerprint, allocator)
+    fingerprint := strings.clone(metadata.content_fingerprint, allocator)
     return {database_path = path, corpus_fingerprint = fingerprint}, true
 }
 
@@ -969,7 +969,7 @@ baseline_asset_entries_exist :: proc(unpack_dir: string) -> bool {
         "compass_icon.png",
         "JuliaMono-Regular.ttf",
         "NewCMSansMath-Regular.otf",
-        "catalog/animations.sqlite3",
+        "content/content.sqlite3",
         "manifest.txt",
     }
 
@@ -1017,10 +1017,10 @@ is_assets_unpack_ready :: proc(
     if image_err != nil || !os.exists(image_path) {
         return false
     }
-    search_path, search_error := filepath.join(
-        []string{unpack_dir, metadata.catalog_relative_path}, context.temp_allocator)
-    if search_error != nil ||
-       !file_matches_sha256(search_path, metadata.catalog_database_sha256) {
+    content_path, content_error := filepath.join(
+        []string{unpack_dir, metadata.content_relative_path}, context.temp_allocator)
+    if content_error != nil ||
+       !file_matches_sha256(content_path, metadata.content_database_sha256) {
         return false
     }
     return platform_terminfo_exists(unpack_dir)

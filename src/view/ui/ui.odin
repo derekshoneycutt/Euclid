@@ -13,6 +13,7 @@ import dyncompile "../../dynview/compile"
 import dyncore "../../dynview/core"
 import "../../core"
 import geometry "../../core/geometry"
+import contentdata "../../core/content"
 import "core:fmt"
 
 TREE_PANEL_PADDING :: 10
@@ -390,7 +391,7 @@ draw_encoded_accordion_geometry :: proc(
     _ = native.draw_encoder_rectangle_outline(
         encoder, geometry.Rectangle(panel), 1, UI_BORDER_COLOR)
     sections := accordion_sections_for_layout(
-        runtime^.current_layout_mode, "Animation")
+        runtime^.current_layout_mode, "", state)
     layout := accordion_layout(
         geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
     draw_encoded_accordion_content(state, encoder, layout, controls)
@@ -424,7 +425,7 @@ draw_encoded_panel_text :: proc(
     runtime := &state^.ui_runtime
     panel := runtime^.ui_regions.accordion_rect
     sections := accordion_sections_for_layout(
-        runtime^.current_layout_mode, selected_animation_title(state))
+        runtime^.current_layout_mode, selected_animation_title(state), state)
     layout := accordion_layout(
         geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
     for index in 0..<sections.count {
@@ -448,10 +449,21 @@ draw_encoded_panel_text :: proc(
             state, encoder, geometry.Rectangle(layout.content), controls.settings)
     case .View:
     }
-    if runtime^.display_fps {
-        draw_encoded_label(state, encoder,
-            fmt.tprintf("FPS %.1f", runtime^.fps_avg_live), 8, 8)
+    draw_encoded_overlay_text(state, encoder)
+}
+
+// draw_encoded_overlay_text emits transient overlay labels outside accordion panels.
+draw_encoded_overlay_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    runtime := &state^.ui_runtime
+    if !runtime^.display_fps {
+        return
     }
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
+    fps := view_core.shell_format(state, .Fps_Overlay,
+        []contentdata.Content_Format_Argument{{"fps", runtime^.fps_avg_live}},
+        storage[:])
+    draw_encoded_label(state, encoder, fps, 8, 8)
 }
 
 // draw_encoded_focus_outline emits the current keyboard-visible focus bounds.
@@ -544,6 +556,7 @@ prepare_active_accordion_controls :: proc(
         result^.library_search = prepare_library_search(
             state, content, library_frame)
         result^.tree = prepare_tree_list_panel({
+            label = view_core.shell_message(state, .Library_Tree_Accessible_Label),
             ji = state^.julia_interface, ui_runtime = &state^.ui_runtime,
             list_panel = result^.library_search.layout.tree,
             mouse_input = library_frame, scroll_y = &state^.ui_runtime.tree_scroll_y,
@@ -629,4 +642,3 @@ prepare_ui_layout_interaction :: proc(
         state^.ui_runtime.ui_regions.text_rect, presentation_frame,
         routed.keyboard)}
 }
-

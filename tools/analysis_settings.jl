@@ -297,10 +297,12 @@ function euclid_architecture_settings()
                 "src/bridge/presentation",
                 "src/core/animation",
                 "src/core/color",
+                "src/core/content",
                 "src/core/geometry",
                 "src/core/protocol",
                 "src/core/storage",
                 "src/view/font/model",
+                "src/view/content",
                 "src/view/model",
                 "src/view/native",
                 "src/view/terminal/model",
@@ -1215,7 +1217,7 @@ AnalysisSettings(
             ReviewedAllocationPolicy(
                 "bridge-catalog-snapshot-registry-nodes",
                 "src/bridge/animations.odin",
-                "catalog_generation_allocate_nodes",
+                "content_generation_allocate_nodes",
                 :unknown,
                 "Generation-local registry nodes and copied catalogue strings use the interface arena, which is bulk-reset on rollback and destroyed at interface teardown.";
                 operation="new",
@@ -1225,13 +1227,13 @@ AnalysisSettings(
                 minimum_matches=1,
                 maximum_matches=1),
             ReviewedAllocationPolicy(
-                "catalog-service-generation-snapshots",
-                "src/view/catalog/service.odin",
-                "catalog_service_init_generations",
+                "content-service-generation-snapshots",
+                "src/view/content/service.odin",
+                "content_service_init_generations",
                 :custom,
-                "The active and staged compact catalogue generation slots are allocated once from the service-owned mutex-wrapped TLSF allocator; their stable arena owners are destroyed after the worker joins.";
+                "The active and staged complete content generation slots are allocated once from the service-owned mutex-wrapped TLSF allocator; their stable arena owners are destroyed after the worker joins.";
                 operation="new",
-                target="Catalog_Generation",
+                target="Content_Generation",
                 allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
