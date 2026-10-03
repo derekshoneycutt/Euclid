@@ -104,7 +104,7 @@ Font_Codepoint_Range :: struct {
     last: rune,
 }
 
-// Fixed flat rune set passed to the stb seed-loading path.
+// Fixed flat rune set passed to the seed-loading path.
 Font_Seed_Codepoint_Set :: struct {
     values: [FONT_SEED_CODEPOINT_CAPACITY]rune,
     count: i32,
@@ -1001,7 +1001,7 @@ cache_publish_required_seed :: proc(
             key = prepared^.key,
             source_generation = prepared^.generation,
             pixel_height = u32(prepared^.base_size),
-            policy = .Stb_Grayscale,
+            policy = .Freetype_Unhinted,
             slot_incarnation = fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION,
         },
         state = .Resident,
@@ -1365,7 +1365,7 @@ font_generation_resolve_glyph :: proc(
 cache_raster_request_is_current :: proc(
     cache: ^Font_Cache, request: fontmodel.Font_Raster_Request) -> bool {
     if cache == nil || request.source_generation == 0 || request.pixel_height == 0 ||
-        request.policy != .Stb_Grayscale {
+        request.policy != .Freetype_Unhinted {
         return false
     }
     entry := cache_effective_entry(cache, request.key)
@@ -1908,7 +1908,7 @@ cache_publication_candidates :: proc(
         key = prepared.key,
         source_generation = prepared.generation,
         pixel_height = u32(prepared.base_size),
-        policy = .Stb_Grayscale,
+        policy = .Freetype_Unhinted,
         slot_incarnation = fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION,
     }
     candidate.canonical_raster.state = .Resident
@@ -2136,7 +2136,7 @@ cache_raster_request :: proc(
         logical_size = logical_size,
         scene_pixels_per_logical_unit = scene_pixels_per_logical_unit,
         pixel_height = selection.pixel_height,
-        policy = .Stb_Grayscale,
+        policy = .Freetype_Unhinted,
         quality_limited = selection.quality_limited,
     }, true
 }
@@ -2162,7 +2162,7 @@ cache_raster_identity :: proc(
         key = effective_key,
         source_generation = entry^.generation,
         pixel_height = u32(entry^.font.base_size),
-        policy = .Stb_Grayscale,
+        policy = .Freetype_Unhinted,
         slot_incarnation = fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION,
     }, true
 }

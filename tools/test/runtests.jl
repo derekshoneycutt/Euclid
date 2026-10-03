@@ -282,6 +282,29 @@ const ScenarioRunner = Main.EuclidScenarioRunner
         end
     end
 
+    @testset "Linux FreeType adapter inputs" begin
+        if Sys.islinux()
+            paths = BuildConfiguration.freetype_jll_paths()
+            @test paths.version == "2.14.3+1"
+            @test isfile(paths.library_path)
+            @test isfile(joinpath(paths.include_dir, "ft2build.h"))
+            @test dirname(paths.library_path) in paths.runtime_dirs
+
+            artifact = BuildConfiguration.freetype_artifact()
+            @test isfile(artifact.archive_path)
+            @test length(artifact.fingerprint) == 64
+            linker_flags = BuildConfiguration.freetype_linker_flags()
+            @test occursin("-L$(dirname(artifact.archive_path))", linker_flags)
+            @test occursin("-leuclid_freetype", linker_flags)
+            @test occursin(paths.library_path,
+                BuildConfiguration.native_linker_flags())
+            @test dirname(paths.library_path) in
+                BuildConfiguration.native_runtime_dirs()
+        else
+            @test_throws ErrorException BuildConfiguration.freetype_jll_paths()
+        end
+    end
+
     @testset "repository driver commands" begin
         build = parse_driver_invocation(["build", "--debug", "--strict"])
         @test build.action == :build

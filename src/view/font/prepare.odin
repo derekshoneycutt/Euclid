@@ -2,10 +2,7 @@ package font
 
 import fontmodel "model"
 
-import stbtt "vendor:stb/truetype"
-
 import "core:mem"
-import "core:os"
 
 // Empty pixels reserved around each glyph during row packing.
 FONT_GLYPH_PADDING :: i32(4)
@@ -98,50 +95,34 @@ prepare_commit_layout :: proc(
     return true
 }
 
-//   Read one font source and initialize its stb font descriptor.
-prepare_open_font :: proc(
-    path: string, allocator: mem.Allocator,
-    info: ^stbtt.fontinfo) -> ([]u8, bool) {
-    file_data, file_error := os.read_entire_file(path, allocator)
-    if file_error != nil {
-        return nil, false
-    }
-    if !stbtt.InitFont(info, raw_data(file_data), 0) {
-        return file_data, false
-    }
-    return file_data, true
-}
-
-//   Count supported glyphs and allocate their parallel metadata slices.
+//   Count mapped glyphs and allocate their parallel metadata slices.
 prepare_allocate_glyph_metadata :: proc(
-    info: ^stbtt.fontinfo, request: Font_Prepare_Request,
+    face: ^Font_Freetype_Face, request: Font_Prepare_Request,
     prepared: ^Prepared_Font, allocator: mem.Allocator) -> bool {
     if prepare_cancellation_requested(request.cancellation) {
         return false
     }
-    glyph_count := int(info.numGlyphs) if request.complete_face else
-        prepare_count_glyphs(info, request.codepoints)
+    glyph_count := int(face.info.glyph_count) if request.complete_face else
+        prepare_count_glyphs(face, request.codepoints)
     return glyph_count > 0 &&
+        glyph_count <= fontmodel.FONT_RASTER_GLYPH_RECORD_CAPACITY &&
         prepare_allocate_metadata(prepared, glyph_count, allocator)
 }
 
-//   Populate one opened font descriptor into prepared CPU atlas ownership.
+//   Populate one opened FreeType face into prepared CPU atlas ownership.
 prepare_populate :: proc(
-    info: ^stbtt.fontinfo, request: Font_Prepare_Request,
+    face: ^Font_Freetype_Face, request: Font_Prepare_Request,
     prepared: ^Prepared_Font, allocator: mem.Allocator) -> bool {
 
-    if !prepare_allocate_glyph_metadata(info, request, prepared, allocator) {
+    if !prepare_allocate_glyph_metadata(face, request, prepared, allocator) {
         prepare_destroy(prepared)
         return false
     }
-    prepared.face_glyph_count = info.numGlyphs
-    ascent: i32
-    stbtt.GetFontVMetrics(info, &ascent, nil, nil)
-    prepared.raster_ascent = f32(ascent) *
-        stbtt.ScaleForPixelHeight(info, f32(request.pixel_size))
+    prepared.face_glyph_count = i32(face.info.glyph_count)
+    prepared.raster_ascent = face.raster_ascent
     metrics_ready := prepare_complete_glyph_metrics(
-        info, request, prepared.glyphs) if request.complete_face else
-        prepare_glyph_metrics(info, request, prepared.glyphs)
+        face, request, prepared.glyphs) if request.complete_face else
+        prepare_glyph_metrics(face, request, prepared.glyphs)
     if !metrics_ready {
         prepare_destroy(prepared)
         return false
@@ -153,7 +134,7 @@ prepare_populate :: proc(
     if !prepare_allocate_atlas(prepared, allocator) {
         return false
     }
-    if !prepare_render_atlas(info, prepared, request.cancellation) {
+    if !prepare_render_atlas(face, prepared, request.cancellation) {
         prepare_destroy(prepared)
         return false
     }
@@ -164,7 +145,7 @@ prepare_populate :: proc(
     return true
 }
 
-//   Parse, rasterize, and pack one TrueType font without native GPU calls.
+//   Prepare one FreeType-backed font without native GPU calls.
 //
 // Parameters:
 //   - request: Valid borrowed source path, positive size, and nonempty codepoint policy.
@@ -176,7 +157,7 @@ prepare_populate :: proc(
 //   - True for a complete CPU font; false after rollback/clear where required.
 //
 // Notes:
-//   - This worker-safe path performs file I/O and stb rasterization but no GPU calls.
+//   - This worker-safe path performs file I/O and rasterization but no GPU calls.
 prepare :: proc(
     request: Font_Prepare_Request, prepared: ^Prepared_Font,
     allocator: mem.Allocator,
@@ -195,37 +176,32 @@ prepare :: proc(
         prepare_destroy(prepared)
         return false
     }
-    info: stbtt.fontinfo
-    file_data, opened := prepare_open_font(request.path, allocator, &info)
-    if !opened {
-        if file_data != nil && allocation_mode == .Individual {
-            delete(file_data, allocator)
-        }
+    face: Font_Freetype_Face
+    if !font_freetype_face_open(
+        request.path, request.pixel_size, allocator, allocation_mode, &face) {
         return false
     }
-    defer if allocation_mode == .Individual {
-        delete(file_data, allocator)
-    }
+    defer font_freetype_face_close(&face, allocator, allocation_mode)
     if prepare_cancellation_requested(request.cancellation) {
         prepare_destroy(prepared)
         return false
     }
-    return prepare_populate(&info, request, prepared, allocator)
+    return prepare_populate(&face, request, prepared, allocator)
 }
 
-//   Report whether one page request contains unique glyph IDs from this face.
+//   Report whether one page request contains unique in-range glyph IDs.
 //
 // Returns:
 //   - True for a nonempty bounded set of unique in-range glyph IDs.
 prepare_glyph_page_request_is_valid :: proc(
-    info: ^stbtt.fontinfo, glyph_ids: []u32) -> bool {
+    face: ^Font_Freetype_Face, glyph_ids: []u32) -> bool {
 
-    if info == nil || len(glyph_ids) == 0 ||
+    if face == nil || face.handle == nil || len(glyph_ids) == 0 ||
         len(glyph_ids) > FONT_GLYPH_PAGE_REQUEST_CAPACITY {
         return false
     }
     for glyph_id, index in glyph_ids {
-        if glyph_id >= u32(info.numGlyphs) {
+        if glyph_id >= face.info.glyph_count {
             return false
         }
         for previous in glyph_ids[:index] {
@@ -239,40 +215,37 @@ prepare_glyph_page_request_is_valid :: proc(
 
 //   Populate compact page-local metrics while preserving original face glyph IDs.
 prepare_glyph_page_metrics :: proc(
-    info: ^stbtt.fontinfo, pixel_size: i32,
+    face: ^Font_Freetype_Face,
     glyph_ids: []u32, glyphs: []Prepared_Glyph,
     cancellation: Font_Prepare_Cancellation) -> bool {
 
-    scale := stbtt.ScaleForPixelHeight(info, f32(pixel_size))
-    ascent: i32
-    stbtt.GetFontVMetrics(info, &ascent, nil, nil)
     for glyph_id, index in glyph_ids {
         if prepare_cancellation_requested(cancellation) {
             return false
         }
-        glyphs[index] = prepare_face_glyph_metric(
-            info, i32(glyph_id), scale, ascent)
+        glyph, valid := prepare_face_glyph_metric(face, glyph_id)
+        if !valid {
+            return false
+        }
+        glyphs[index] = glyph
     }
     return true
 }
 
 //   Allocate, lay out, and rasterize one validated glyph page.
 prepare_glyph_page_populate :: proc(
-    info: ^stbtt.fontinfo, request: Font_Glyph_Page_Request,
+    face: ^Font_Freetype_Face, request: Font_Glyph_Page_Request,
     prepared: ^Prepared_Font, allocator: mem.Allocator) -> bool {
 
-    if !prepare_glyph_page_request_is_valid(info, request.glyph_ids) ||
+    if !prepare_glyph_page_request_is_valid(face, request.glyph_ids) ||
         !prepare_allocate_metadata(prepared, len(request.glyph_ids), allocator) {
         prepare_destroy(prepared)
         return false
     }
-    prepared.face_glyph_count = info.numGlyphs
-    ascent: i32
-    stbtt.GetFontVMetrics(info, &ascent, nil, nil)
-    prepared.raster_ascent = f32(ascent) *
-        stbtt.ScaleForPixelHeight(info, f32(request.pixel_size))
+    prepared.face_glyph_count = i32(face.info.glyph_count)
+    prepared.raster_ascent = face.raster_ascent
     if !prepare_glyph_page_metrics(
-        info, request.pixel_size, request.glyph_ids, prepared.glyphs,
+        face, request.glyph_ids, prepared.glyphs,
         request.cancellation) || !prepare_commit_layout({
         key = request.key,
         generation = request.generation,
@@ -285,7 +258,7 @@ prepare_glyph_page_populate :: proc(
     if !prepare_allocate_atlas(prepared, allocator) {
         return false
     }
-    if !prepare_render_atlas(info, prepared, request.cancellation) {
+    if !prepare_render_atlas(face, prepared, request.cancellation) {
         prepare_destroy(prepared)
         return false
     }
@@ -316,22 +289,17 @@ prepare_glyph_page :: proc(
         prepare_destroy(prepared)
         return false
     }
-    info: stbtt.fontinfo
-    file_data, opened := prepare_open_font(request.path, allocator, &info)
-    if !opened {
-        if file_data != nil && allocation_mode == .Individual {
-            delete(file_data, allocator)
-        }
+    face: Font_Freetype_Face
+    if !font_freetype_face_open(
+        request.path, request.pixel_size, allocator, allocation_mode, &face) {
         return false
     }
-    defer if allocation_mode == .Individual {
-        delete(file_data, allocator)
-    }
+    defer font_freetype_face_close(&face, allocator, allocation_mode)
     if prepare_cancellation_requested(request.cancellation) {
         prepare_destroy(prepared)
         return false
     }
-    return prepare_glyph_page_populate(&info, request, prepared, allocator)
+    return prepare_glyph_page_populate(&face, request, prepared, allocator)
 }
 
 //   Allocate prepared metadata while preserving individual-allocation rollback.
@@ -377,42 +345,48 @@ prepare_allocate_atlas :: proc(
 //   Count requested codepoints represented by real glyphs in the font.
 //
 // Returns:
-//   - Number of codepoints whose stb glyph index is greater than zero.
+//   - Number of codepoints whose FreeType glyph index is greater than zero.
 prepare_count_glyphs :: proc(
-    info: ^stbtt.fontinfo, codepoints: []rune) -> int {
+    face: ^Font_Freetype_Face, codepoints: []rune) -> int {
 
     result := 0
     for codepoint in codepoints {
-        if stbtt.FindGlyphIndex(info, codepoint) > 0 {
+        glyph_id, mapped := font_freetype_glyph_index(face, codepoint)
+        if !mapped {
+            return -1
+        }
+        if glyph_id > 0 {
             result += 1
         }
     }
     return result
 }
 
-//   Derive stb metrics and synthesized space bitmap dimensions.
+//   Derive metrics and synthesized space bitmap dimensions.
 //
 // Returns:
 //   - True when every pre-counted real glyph receives one output record.
 prepare_glyph_metrics :: proc(
-    info: ^stbtt.fontinfo, request: Font_Prepare_Request,
+    face: ^Font_Freetype_Face, request: Font_Prepare_Request,
     glyphs: []Prepared_Glyph) -> bool {
 
-    scale := stbtt.ScaleForPixelHeight(info, f32(request.pixel_size))
-    ascent: i32
-    descent: i32
-    line_gap: i32
-    stbtt.GetFontVMetrics(info, &ascent, &descent, &line_gap)
     glyph_index := 0
     for codepoint in request.codepoints {
         if prepare_cancellation_requested(request.cancellation) {
             return false
         }
-        if stbtt.FindGlyphIndex(info, codepoint) <= 0 {
+        glyph_id, mapped := font_freetype_glyph_index(face, codepoint)
+        if !mapped {
+            return false
+        }
+        if glyph_id == 0 {
             continue
         }
-        glyphs[glyph_index] = prepare_glyph_metric(
-            info, codepoint, request.pixel_size, scale, ascent)
+        glyph, valid := prepare_glyph_metric(face, codepoint, glyph_id)
+        if !valid {
+            return false
+        }
+        glyphs[glyph_index] = glyph
         glyph_index += 1
     }
     return glyph_index == len(glyphs)
@@ -420,57 +394,61 @@ prepare_glyph_metrics :: proc(
 
 //   Populate metrics for every face glyph ID, including missing glyph ID zero.
 prepare_complete_glyph_metrics :: proc(
-    info: ^stbtt.fontinfo, request: Font_Prepare_Request,
+    face: ^Font_Freetype_Face, request: Font_Prepare_Request,
     glyphs: []Prepared_Glyph) -> bool {
 
-    if len(glyphs) != int(info.numGlyphs) {
+    if len(glyphs) != int(face.info.glyph_count) {
         return false
     }
-    scale := stbtt.ScaleForPixelHeight(info, f32(request.pixel_size))
-    ascent: i32
-    stbtt.GetFontVMetrics(info, &ascent, nil, nil)
     for &glyph, glyph_index in glyphs {
         if prepare_cancellation_requested(request.cancellation) {
             return false
         }
-        glyph = prepare_face_glyph_metric(
-            info, i32(glyph_index), scale, ascent)
+        candidate, valid := prepare_face_glyph_metric(face, u32(glyph_index))
+        if !valid {
+            return false
+        }
+        glyph = candidate
     }
     for codepoint in request.codepoints {
         if prepare_cancellation_requested(request.cancellation) {
             return false
         }
-        glyph_id := stbtt.FindGlyphIndex(info, codepoint)
+        glyph_id, mapped := font_freetype_glyph_index(face, codepoint)
+        if !mapped {
+            return false
+        }
         if glyph_id > 0 {
-            glyphs[glyph_id].value = codepoint
+            glyphs[int(glyph_id)].value = codepoint
         }
     }
     return true
 }
 
-//   Calculate one face glyph's scaled advance, offsets, and bitmap bounds.
+//   Calculate one face glyph's compatible advance, offsets, and bitmap bounds.
 prepare_face_glyph_metric :: proc(
-    info: ^stbtt.fontinfo, glyph_id: i32,
-    scale: f32, ascent: i32) -> Prepared_Glyph {
+    face: ^Font_Freetype_Face, glyph_id: u32) -> (Prepared_Glyph, bool) {
 
-    advance: i32
-    stbtt.GetGlyphHMetrics(info, glyph_id, &advance, nil)
-    x0, y0, x1, y1: i32
-    stbtt.GetGlyphBitmapBox(
-        info, glyph_id, scale, scale, &x0, &y0, &x1, &y1)
+    advance, metrics_ready := font_freetype_glyph_advance(face, glyph_id)
+    if !metrics_ready {
+        return {}, false
+    }
+    bitmap, rendered := font_freetype_render_glyph(face, glyph_id)
+    if !rendered {
+        return {}, false
+    }
     result := Prepared_Glyph{
-        value = rune(-1 - glyph_id),
-        glyph_id = u32(glyph_id),
-        offset_x = x0,
-        offset_y = y0,
-        advance_x = i32(f32(advance)*scale),
-        bitmap_width = x1 - x0,
-        bitmap_height = y1 - y0,
+        value = rune(-1 - i32(glyph_id)),
+        glyph_id = glyph_id,
+        bitmap_width = i32(bitmap.width),
+        bitmap_height = i32(bitmap.rows),
     }
     if result.bitmap_width > 0 && result.bitmap_height > 0 {
-        result.offset_y += i32(f32(ascent)*scale)
+        result.offset_x = bitmap.bitmap_left
+        result.offset_y = i32(face.raster_ascent) - bitmap.bitmap_top
     }
-    return result
+    result.advance_x = i32(f32(advance) * face.scale)
+    return result, true
 }
 
 //   Calculate one glyph's cache-compatible offsets, advance, and bitmap bounds.
@@ -482,35 +460,35 @@ prepare_face_glyph_metric :: proc(
 // Returns:
 //   - Complete CPU metrics for the requested represented codepoint.
 prepare_glyph_metric :: proc(
-    info: ^stbtt.fontinfo, codepoint: rune, pixel_size: i32,
-    scale: f32, ascent: i32) -> Prepared_Glyph {
+    face: ^Font_Freetype_Face, codepoint: rune,
+    glyph_id: u32) -> (Prepared_Glyph, bool) {
 
-    advance: i32
-    glyph_id := stbtt.FindGlyphIndex(info, codepoint)
-    stbtt.GetGlyphHMetrics(info, glyph_id, &advance, nil)
+    advance, metrics_ready := font_freetype_glyph_advance(face, glyph_id)
+    if !metrics_ready {
+        return {}, false
+    }
     result := Prepared_Glyph{
         value = codepoint,
-        glyph_id = u32(glyph_id),
+        glyph_id = glyph_id,
     }
     if codepoint == ' ' || codepoint == rune(0x3000) {
-        result.advance_x = i32(f32(advance)*scale)
+        result.advance_x = i32(f32(advance) * face.scale)
         result.bitmap_width = result.advance_x
-        result.bitmap_height = pixel_size
-        return result
+        result.bitmap_height = face.pixel_size
+        return result, true
     }
-
-    x0, y0, x1, y1: i32
-    stbtt.GetCodepointBitmapBox(
-        info, codepoint, scale, scale, &x0, &y0, &x1, &y1)
-    result.offset_x = x0
-    result.offset_y = y0
-    result.bitmap_width = x1 - x0
-    result.bitmap_height = y1 - y0
+    bitmap, rendered := font_freetype_render_glyph(face, glyph_id)
+    if !rendered {
+        return {}, false
+    }
+    result.offset_x = bitmap.bitmap_left
+    result.bitmap_width = i32(bitmap.width)
+    result.bitmap_height = i32(bitmap.rows)
     if result.bitmap_width > 0 && result.bitmap_height > 0 {
-        result.advance_x = i32(f32(advance)*scale)
-        result.offset_y += i32(f32(ascent)*scale)
+        result.advance_x = i32(f32(advance) * face.scale)
+        result.offset_y = i32(face.raster_ascent) - bitmap.bitmap_top
     }
-    return result
+    return result, true
 }
 
 //   Estimate power-of-two atlas dimensions from prepared glyph area.
@@ -599,9 +577,8 @@ prepare_initialize_atlas :: proc(
 
 //   Rasterize each nonempty glyph while observing cancellation between glyphs.
 prepare_render_glyphs :: proc(
-    info: ^stbtt.fontinfo, prepared: ^Prepared_Font,
+    face: ^Font_Freetype_Face, prepared: ^Prepared_Font,
     cancellation: Font_Prepare_Cancellation) -> bool {
-    scale := stbtt.ScaleForPixelHeight(info, f32(prepared.base_size))
     for glyph, index in prepared.glyphs {
         if prepare_cancellation_requested(cancellation) {
             return false
@@ -610,14 +587,10 @@ prepare_render_glyphs :: proc(
             glyph.bitmap_width == 0 || glyph.bitmap_height == 0 {
             continue
         }
-        width, height, offset_x, offset_y: i32
-        bitmap := stbtt.GetGlyphBitmap(
-            info, scale, scale, i32(glyph.glyph_id), &width, &height,
-            &offset_x, &offset_y)
-        if bitmap != nil {
-            prepare_copy_bitmap(
-                bitmap, width, height, prepared.rectangles[index], prepared)
-            stbtt.FreeBitmap(bitmap, info.userdata)
+        bitmap, rendered := font_freetype_render_glyph(face, glyph.glyph_id)
+        if !rendered || !prepare_copy_freetype_bitmap(
+            bitmap, prepared.rectangles[index], prepared) {
+            return false
         }
     }
     return true
@@ -635,41 +608,59 @@ prepare_mark_atlas_corner :: proc(prepared: ^Prepared_Font) {
     }
 }
 
-//   Rasterize glyph alpha into the packed two-channel atlas and add its white corner.
+//   Rasterize glyph alpha into the atlas and add its white validation corner.
 //
 // Side effects:
-//   - Sets every gray channel byte to 255, writes non-space stb bitmap coverage into
+//   - Sets every gray channel byte to 255, writes non-space FreeType coverage into
 //     alpha, and marks the bottom-right corner opaque for downstream validation.
 prepare_render_atlas :: proc(
-    info: ^stbtt.fontinfo, prepared: ^Prepared_Font,
+    face: ^Font_Freetype_Face, prepared: ^Prepared_Font,
     cancellation: Font_Prepare_Cancellation = {}) -> bool {
     if !prepare_initialize_atlas(prepared, cancellation) ||
-        !prepare_render_glyphs(info, prepared, cancellation) {
+        !prepare_render_glyphs(face, prepared, cancellation) {
         return false
     }
     prepare_mark_atlas_corner(prepared)
     return true
 }
 
-//   Copy one grayscale stb bitmap into the atlas alpha channel.
+//   Copy one borrowed grayscale FreeType bitmap into the atlas alpha channel.
 //
 // Side effects:
 //   - Copies only pixels whose rectangle-derived destination lies inside atlas bounds.
-prepare_copy_bitmap :: proc(
-    bitmap: [^]u8, width, height: i32, rectangle: Prepared_Rectangle,
-    prepared: ^Prepared_Font) {
+prepare_copy_freetype_bitmap :: proc(
+    bitmap: Font_Freetype_Bitmap, rectangle: Prepared_Rectangle,
+    prepared: ^Prepared_Font) -> bool {
 
-    for y in 0..<height {
-        for x in 0..<width {
-            destination_x := rectangle.x + x
-            destination_y := rectangle.y + y
+    if bitmap.width != u32(rectangle.width) ||
+        bitmap.rows != u32(rectangle.height) || bitmap.pixels == nil {
+        return false
+    }
+    pitch := i64(bitmap.pitch)
+    if pitch < 0 {
+        pitch = -pitch
+    }
+    if pitch < i64(bitmap.width) ||
+        u64(pitch) * u64(bitmap.rows) > bitmap.byte_length {
+        return false
+    }
+    for row in 0..<int(bitmap.rows) {
+        source_row := row
+        if bitmap.pitch < 0 {
+            source_row = int(bitmap.rows) - row - 1
+        }
+        for column in 0..<int(bitmap.width) {
+            destination_x := rectangle.x + i32(column)
+            destination_y := rectangle.y + i32(row)
             if destination_x >= 0 && destination_x < prepared.atlas_width &&
                 destination_y >= 0 && destination_y < prepared.atlas_height {
-                source_index := y*width + x
+                source_index := source_row*int(pitch) + column
                 destination_index :=
                     (destination_y*prepared.atlas_width + destination_x)*2 + 1
-                prepared.atlas_pixels[int(destination_index)] = bitmap[source_index]
+                prepared.atlas_pixels[int(destination_index)] =
+                    bitmap.pixels[source_index]
             }
         }
     }
+    return true
 }

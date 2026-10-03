@@ -215,7 +215,7 @@ Font_Shaping_Identity :: struct {
 }
 
 Font_Raster_Policy :: enum u32 {
-    Stb_Grayscale,
+    Freetype_Unhinted,
 }
 
 Font_Raster_Identity :: struct {

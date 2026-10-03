@@ -187,7 +187,7 @@ ui_text_cluster_column :: proc(text: string, cluster: u32) -> (int, bool) {
     return dyncore.text_codepoint_count_span(text, 0, int(cluster)), true
 }
 
-//   Resolve Euclid's stb-scaled monospace column width from the finalized atlas.
+//   Resolve Euclid's scaled monospace column width from the finalized atlas.
 ui_text_column_advance :: proc(
     atlas: view_font.Font_Face, font_size: f32) -> (f32, bool) {
     if atlas.space_advance <= 0 || atlas.base_size <= 0 {

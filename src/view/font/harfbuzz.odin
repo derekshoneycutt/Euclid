@@ -1,106 +1,24 @@
 package font
 
 import fontmodel "model"
+import hb "../../../libs/harfbuzz"
 
 import "core:c"
 
-when ODIN_OS == .Windows {
-    foreign import harfbuzz "system:harfbuzz.lib"
-} else {
-    foreign import harfbuzz "system:harfbuzz"
-}
-
-// Opaque HarfBuzz font-data storage referenced by a face.
-Harfbuzz_Blob :: struct {}
-
-// Opaque HarfBuzz view of one font face within a blob.
-Harfbuzz_Face :: struct {}
-
-// Opaque HarfBuzz shaping font configured with OpenType behavior and pixel scale.
-Harfbuzz_Font :: struct {}
-
-// Opaque reusable HarfBuzz input and shaped-output buffer.
-Harfbuzz_Buffer :: struct {}
-
-// HarfBuzz buffer direction values used by explicit math shaping setup.
-Harfbuzz_Direction :: enum c.int {
-    Invalid = 0,
-    Left_To_Right = 4,
-    Right_To_Left = 5,
-    Top_To_Bottom = 6,
-    Bottom_To_Top = 7,
-}
-
-// OpenType MATH glyph-kern table corners in HarfBuzz ABI order.
-Harfbuzz_Math_Kern :: enum c.int {
-    Top_Right = 0,
-    Top_Left = 1,
-    Bottom_Right = 2,
-    Bottom_Left = 3,
-}
-
-// HarfBuzz policy controlling whether a blob copies or borrows source bytes.
-Harfbuzz_Memory_Mode :: enum c.int {
-    Duplicate = 0,
-    Readonly = 1,
-    Writable = 2,
-    Readonly_May_Make_Writable = 3,
-}
-
-// ABI-compatible OpenType feature selection over a source byte interval.
-Harfbuzz_Feature :: struct {
-    tag: u32,
-    value: u32,
-    start: u32,
-    end: u32,
-}
-
-// ABI-compatible HarfBuzz glyph identity and source-cluster record.
-Harfbuzz_Glyph_Info :: struct {
-    codepoint: u32,
-    mask: u32,
-    cluster: u32,
-    private_a: u32,
-    private_b: u32,
-}
-
-// ABI-compatible HarfBuzz glyph advances and offsets in configured font units.
-Harfbuzz_Glyph_Position :: struct {
-    x_advance: i32,
-    y_advance: i32,
-    x_offset: i32,
-    y_offset: i32,
-    private: i32,
-}
-
-// ABI-compatible HarfBuzz glyph ink extents in configured 26.6 units.
-Harfbuzz_Glyph_Extents :: struct {
-    x_bearing: i32,
-    y_bearing: i32,
-    width: i32,
-    height: i32,
-}
-
-// ABI-compatible OpenType MATH glyph variant and vertical advance record.
-Harfbuzz_Math_Glyph_Variant :: struct {
-    glyph: u32,
-    advance: i32,
-}
-
-// ABI-compatible OpenType MATH glyph assembly part.
-Harfbuzz_Math_Glyph_Part :: struct {
-    glyph: u32,
-    start_connector_length: i32,
-    end_connector_length: i32,
-    full_advance: i32,
-    flags: u32,
-}
-
-// ABI-compatible height boundary and value from one MATH kern table.
-Harfbuzz_Math_Kern_Entry :: struct {
-    max_correction_height: i32,
-    kern_value: i32,
-}
+Harfbuzz_Blob :: hb.Blob
+Harfbuzz_Face :: hb.Face
+Harfbuzz_Font :: hb.Font
+Harfbuzz_Buffer :: hb.Buffer
+Harfbuzz_Direction :: hb.Direction
+Harfbuzz_Math_Kern :: hb.Math_Kern
+Harfbuzz_Memory_Mode :: hb.Memory_Mode
+Harfbuzz_Feature :: hb.Feature
+Harfbuzz_Glyph_Info :: hb.Glyph_Info
+Harfbuzz_Glyph_Position :: hb.Glyph_Position
+Harfbuzz_Glyph_Extents :: hb.Glyph_Extents
+Harfbuzz_Math_Glyph_Variant :: hb.Math_Glyph_Variant
+Harfbuzz_Math_Glyph_Part :: hb.Math_Glyph_Part
+Harfbuzz_Math_Kern_Entry :: hb.Math_Kern_Entry
 
 // Math_Variant_Query_Result reports one bounded native variant query outcome.
 Math_Variant_Query_Result :: struct {
@@ -129,65 +47,7 @@ Font_Math_Shaping_Capability :: fontmodel.Font_Math_Shaping_Capability
 Font_Math_Constants :: fontmodel.Font_Math_Constants
 Font_Glyph_Extents :: fontmodel.Font_Glyph_Extents
 
-// Harfbuzz_Math_Constant mirrors hb_ot_math_constant_t values 0 through 55.
-Harfbuzz_Math_Constant :: enum c.int {
-    Script_Percent_Scale_Down = 0,
-    Script_Script_Percent_Scale_Down,
-    Delimited_Sub_Formula_Min_Height,
-    Display_Operator_Min_Height,
-    Math_Leading,
-    Axis_Height,
-    Accent_Base_Height,
-    Flattened_Accent_Base_Height,
-    Subscript_Shift_Down,
-    Subscript_Top_Max,
-    Subscript_Baseline_Drop_Min,
-    Superscript_Shift_Up,
-    Superscript_Shift_Up_Cramped,
-    Superscript_Bottom_Min,
-    Superscript_Baseline_Drop_Max,
-    Sub_Superscript_Gap_Min,
-    Superscript_Bottom_Max_With_Subscript,
-    Space_After_Script,
-    Upper_Limit_Gap_Min,
-    Upper_Limit_Baseline_Rise_Min,
-    Lower_Limit_Gap_Min,
-    Lower_Limit_Baseline_Drop_Min,
-    Stack_Top_Shift_Up,
-    Stack_Top_Display_Style_Shift_Up,
-    Stack_Bottom_Shift_Down,
-    Stack_Bottom_Display_Style_Shift_Down,
-    Stack_Gap_Min,
-    Stack_Display_Style_Gap_Min,
-    Stretch_Stack_Top_Shift_Up,
-    Stretch_Stack_Bottom_Shift_Down,
-    Stretch_Stack_Gap_Above_Min,
-    Stretch_Stack_Gap_Below_Min,
-    Fraction_Numerator_Shift_Up,
-    Fraction_Numerator_Display_Style_Shift_Up,
-    Fraction_Denominator_Shift_Down,
-    Fraction_Denominator_Display_Style_Shift_Down,
-    Fraction_Numerator_Gap_Min,
-    Fraction_Num_Display_Style_Gap_Min,
-    Fraction_Rule_Thickness,
-    Fraction_Denominator_Gap_Min,
-    Fraction_Denom_Display_Style_Gap_Min,
-    Skewed_Fraction_Horizontal_Gap,
-    Skewed_Fraction_Vertical_Gap,
-    Overbar_Vertical_Gap,
-    Overbar_Rule_Thickness,
-    Overbar_Extra_Ascender,
-    Underbar_Vertical_Gap,
-    Underbar_Rule_Thickness,
-    Underbar_Extra_Descender,
-    Radical_Vertical_Gap,
-    Radical_Display_Style_Vertical_Gap,
-    Radical_Rule_Thickness,
-    Radical_Extra_Ascender,
-    Radical_Kern_Before_Degree,
-    Radical_Kern_After_Degree,
-    Radical_Degree_Bottom_Raise_Percent,
-}
+Harfbuzz_Math_Constant :: hb.Math_Constant
 
 Math_Shaping_Role :: enum {
     Upright,
@@ -208,77 +68,6 @@ Math_Shaping_Input :: struct {
     workspace: []u8,
 }
 
-foreign harfbuzz {
-    hb_blob_create :: proc(
-        data: rawptr, length: u32, mode: Harfbuzz_Memory_Mode,
-        user_data, destroy: rawptr) -> ^Harfbuzz_Blob ---
-    hb_blob_destroy :: proc(blob: ^Harfbuzz_Blob) ---
-    hb_blob_get_length :: proc(blob: ^Harfbuzz_Blob) -> u32 ---
-    hb_face_create :: proc(blob: ^Harfbuzz_Blob, index: u32) -> ^Harfbuzz_Face ---
-    hb_face_destroy :: proc(face: ^Harfbuzz_Face) ---
-    hb_face_get_glyph_count :: proc(face: ^Harfbuzz_Face) -> u32 ---
-    hb_face_reference_table :: proc(
-        face: ^Harfbuzz_Face, tag: u32) -> ^Harfbuzz_Blob ---
-    hb_font_create :: proc(face: ^Harfbuzz_Face) -> ^Harfbuzz_Font ---
-    hb_font_destroy :: proc(font: ^Harfbuzz_Font) ---
-    hb_font_set_scale :: proc(font: ^Harfbuzz_Font, x_scale, y_scale: i32) ---
-    hb_font_get_nominal_glyph :: proc(
-        font: ^Harfbuzz_Font, unicode: u32, glyph: ^u32) -> c.int ---
-    hb_font_get_glyph_extents :: proc(
-        font: ^Harfbuzz_Font, glyph: u32,
-        extents: ^Harfbuzz_Glyph_Extents) -> c.int ---
-    hb_ot_font_set_funcs :: proc(font: ^Harfbuzz_Font) ---
-    hb_buffer_create :: proc() -> ^Harfbuzz_Buffer ---
-    hb_buffer_destroy :: proc(buffer: ^Harfbuzz_Buffer) ---
-    hb_buffer_pre_allocate :: proc(buffer: ^Harfbuzz_Buffer, size: u32) -> c.int ---
-    hb_buffer_clear_contents :: proc(buffer: ^Harfbuzz_Buffer) ---
-    hb_buffer_set_direction :: proc(
-        buffer: ^Harfbuzz_Buffer, direction: Harfbuzz_Direction) ---
-    hb_buffer_set_flags :: proc(buffer: ^Harfbuzz_Buffer, flags: u32) ---
-    hb_buffer_get_direction :: proc(
-        buffer: ^Harfbuzz_Buffer) -> Harfbuzz_Direction ---
-    hb_buffer_set_script :: proc(buffer: ^Harfbuzz_Buffer, script: u32) ---
-    hb_buffer_get_script :: proc(buffer: ^Harfbuzz_Buffer) -> u32 ---
-    hb_buffer_add_utf8 :: proc(
-        buffer: ^Harfbuzz_Buffer, text: cstring, text_length: c.int,
-        item_offset: u32, item_length: c.int) ---
-    hb_buffer_guess_segment_properties :: proc(buffer: ^Harfbuzz_Buffer) ---
-    hb_buffer_get_length :: proc(buffer: ^Harfbuzz_Buffer) -> u32 ---
-    hb_buffer_get_glyph_infos :: proc(
-        buffer: ^Harfbuzz_Buffer, length: ^u32) -> [^]Harfbuzz_Glyph_Info ---
-    hb_buffer_get_glyph_positions :: proc(
-        buffer: ^Harfbuzz_Buffer,
-        length: ^u32) -> [^]Harfbuzz_Glyph_Position ---
-    hb_shape :: proc(
-        font: ^Harfbuzz_Font, buffer: ^Harfbuzz_Buffer,
-        features: [^]Harfbuzz_Feature, feature_count: u32) ---
-    hb_ot_math_get_glyph_italics_correction :: proc(
-        font: ^Harfbuzz_Font, glyph: u32) -> i32 ---
-    hb_ot_math_get_glyph_top_accent_attachment :: proc(
-        font: ^Harfbuzz_Font, glyph: u32) -> i32 ---
-    hb_ot_math_get_glyph_kerning :: proc(
-        font: ^Harfbuzz_Font, glyph: u32,
-        corner: Harfbuzz_Math_Kern, correction_height: i32) -> i32 ---
-    hb_ot_math_get_glyph_kernings :: proc(
-        font: ^Harfbuzz_Font, glyph: u32, corner: Harfbuzz_Math_Kern,
-        start_offset: u32, entries_count: ^u32,
-        entries: [^]Harfbuzz_Math_Kern_Entry) -> u32 ---
-    hb_ot_math_get_constant :: proc(
-        font: ^Harfbuzz_Font, constant: Harfbuzz_Math_Constant) -> i32 ---
-    hb_ot_math_get_glyph_variants :: proc(
-        font: ^Harfbuzz_Font, glyph: u32, direction: Harfbuzz_Direction,
-        start_offset: u32, variants_count: ^u32,
-        variants: [^]Harfbuzz_Math_Glyph_Variant) -> u32 ---
-    hb_ot_math_get_min_connector_overlap :: proc(
-        font: ^Harfbuzz_Font, direction: Harfbuzz_Direction) -> i32 ---
-    hb_ot_math_get_glyph_assembly :: proc(
-        font: ^Harfbuzz_Font, glyph: u32, direction: Harfbuzz_Direction,
-        start_offset: u32, parts_count: ^u32, parts: [^]Harfbuzz_Math_Glyph_Part,
-        italic_correction: ^i32) -> u32 ---
-    hb_ot_math_is_glyph_extended_shape :: proc(
-        face: ^Harfbuzz_Face, glyph: u32) -> c.int ---
-}
-
 //   Measure one face's lowercase ink height in its configured 26.6 pixel units.
 //
 // Notes:
@@ -289,11 +78,11 @@ harfbuzz_lowercase_ink_height :: proc(shaper: ^Font_Shaping_Resource) -> (f32, b
     }
     font := cast(^Harfbuzz_Font)shaper.font
     glyph: u32
-    if hb_font_get_nominal_glyph(font, 'x', &glyph) == 0 {
+    if hb.hb_font_get_nominal_glyph(font, 'x', &glyph) == 0 {
         return 0, false
     }
     extents: Harfbuzz_Glyph_Extents
-    if hb_font_get_glyph_extents(font, glyph, &extents) == 0 {
+    if hb.hb_font_get_glyph_extents(font, glyph, &extents) == 0 {
         return 0, false
     }
     height := f32(abs(extents.height))
@@ -331,7 +120,7 @@ harfbuzz_math_constants_capture :: proc(
         text_match_scale = text_match_scale,
     }
     for constant in Harfbuzz_Math_Constant {
-        candidate.values[int(constant)] = hb_ot_math_get_constant(
+        candidate.values[int(constant)] = hb.hb_ot_math_get_constant(
             cast(^Harfbuzz_Font)shaper.font, constant)
     }
     candidate.valid = true
@@ -355,13 +144,13 @@ harfbuzz_face_has_math_table :: proc(shaper: ^Font_Shaping_Resource) -> bool {
     if shaper == nil || shaper.face == nil {
         return false
     }
-    table := hb_face_reference_table(
+    table := hb.hb_face_reference_table(
         cast(^Harfbuzz_Face)shaper.face, harfbuzz_tag('M', 'A', 'T', 'H'))
     if table == nil {
         return false
     }
-    defer hb_blob_destroy(table)
-    return hb_blob_get_length(table) > 0
+    defer hb.hb_blob_destroy(table)
+    return hb.hb_blob_get_length(table) > 0
 }
 
 //   Release every native handle owned by one shaper in reverse acquisition order.
@@ -380,16 +169,16 @@ harfbuzz_shaper_destroy :: proc(shaper: ^Font_Shaping_Resource) {
         return
     }
     if shaper.buffer != nil {
-        hb_buffer_destroy(cast(^Harfbuzz_Buffer)shaper.buffer)
+        hb.hb_buffer_destroy(cast(^Harfbuzz_Buffer)shaper.buffer)
     }
     if shaper.font != nil {
-        hb_font_destroy(cast(^Harfbuzz_Font)shaper.font)
+        hb.hb_font_destroy(cast(^Harfbuzz_Font)shaper.font)
     }
     if shaper.face != nil {
-        hb_face_destroy(cast(^Harfbuzz_Face)shaper.face)
+        hb.hb_face_destroy(cast(^Harfbuzz_Face)shaper.face)
     }
     if shaper.blob != nil {
-        hb_blob_destroy(cast(^Harfbuzz_Blob)shaper.blob)
+        hb.hb_blob_destroy(cast(^Harfbuzz_Blob)shaper.blob)
     }
     shaper^ = {}
 }
@@ -398,11 +187,11 @@ harfbuzz_shaper_destroy :: proc(shaper: ^Font_Shaping_Resource) {
 harfbuzz_shaper_finish_init :: proc(
     shaper: ^Font_Shaping_Resource, pixel_size: i32) -> bool {
 
-    hb_ot_font_set_funcs(cast(^Harfbuzz_Font)shaper.font)
-    hb_font_set_scale(
+    hb.hb_ot_font_set_funcs(cast(^Harfbuzz_Font)shaper.font)
+    hb.hb_font_set_scale(
         cast(^Harfbuzz_Font)shaper.font, pixel_size*64, pixel_size*64)
-    shaper.buffer = hb_buffer_create()
-    if shaper.buffer == nil || hb_buffer_pre_allocate(
+    shaper.buffer = hb.hb_buffer_create()
+    if shaper.buffer == nil || hb.hb_buffer_pre_allocate(
         cast(^Harfbuzz_Buffer)shaper.buffer,
         u32(fontmodel.FONT_SHAPED_GLYPH_CAPACITY)) == 0 {
         harfbuzz_shaper_destroy(shaper)
@@ -435,18 +224,18 @@ harfbuzz_shaper_init :: proc(
         return false
     }
     shaper^ = {}
-    shaper.blob = hb_blob_create(
+    shaper.blob = hb.hb_blob_create(
         raw_data(source), u32(len(source)), .Duplicate, nil, nil)
     if shaper.blob == nil {
         return false
     }
-    shaper.face = hb_face_create(cast(^Harfbuzz_Blob)shaper.blob, 0)
+    shaper.face = hb.hb_face_create(cast(^Harfbuzz_Blob)shaper.blob, 0)
     if shaper.face == nil ||
-        hb_face_get_glyph_count(cast(^Harfbuzz_Face)shaper.face) == 0 {
+        hb.hb_face_get_glyph_count(cast(^Harfbuzz_Face)shaper.face) == 0 {
         harfbuzz_shaper_destroy(shaper)
         return false
     }
-    shaper.font = hb_font_create(cast(^Harfbuzz_Face)shaper.face)
+    shaper.font = hb.hb_font_create(cast(^Harfbuzz_Face)shaper.face)
     if shaper.font == nil {
         harfbuzz_shaper_destroy(shaper)
         return false
@@ -468,7 +257,7 @@ harfbuzz_nominal_glyph :: proc(
         return 0, false
     }
     glyph_id: u32
-    found := hb_font_get_nominal_glyph(
+    found := hb.hb_font_get_nominal_glyph(
         cast(^Harfbuzz_Font)shaper.font, scalar, &glyph_id)
     return glyph_id, found != 0 && glyph_id != 0
 }
@@ -479,11 +268,11 @@ harfbuzz_glyph_extents :: proc(
     glyph_id: u32) -> (Font_Glyph_Extents, bool) {
 
     if shaper == nil || shaper.face == nil || shaper.font == nil || glyph_id == 0 ||
-        glyph_id >= hb_face_get_glyph_count(cast(^Harfbuzz_Face)shaper.face) {
+        glyph_id >= hb.hb_face_get_glyph_count(cast(^Harfbuzz_Face)shaper.face) {
         return {}, false
     }
     native: Harfbuzz_Glyph_Extents
-    found := hb_font_get_glyph_extents(
+    found := hb.hb_font_get_glyph_extents(
         cast(^Harfbuzz_Font)shaper.font, glyph_id, &native)
     return {
         x_bearing = native.x_bearing,
@@ -520,7 +309,7 @@ math_shaping_has_glyph :: proc(
     if capability == nil || capability.resource.face == nil || glyph_id == 0 {
         return false
     }
-    glyph_count := hb_face_get_glyph_count(
+    glyph_count := hb.hb_face_get_glyph_count(
         cast(^Harfbuzz_Face)capability.resource.face)
     return glyph_id < glyph_count
 }
@@ -546,7 +335,7 @@ math_shaping_italic_correction :: proc(
         !math_shaping_has_glyph(capability, glyph_id) {
         return 0, false
     }
-    value := hb_ot_math_get_glyph_italics_correction(
+    value := hb.hb_ot_math_get_glyph_italics_correction(
         cast(^Harfbuzz_Font)capability.resource.font, glyph_id)
     return value, true
 }
@@ -560,7 +349,7 @@ math_shaping_top_accent_attachment :: proc(
         !math_shaping_has_glyph(capability, glyph_id) {
         return 0, false
     }
-    value := hb_ot_math_get_glyph_top_accent_attachment(
+    value := hb.hb_ot_math_get_glyph_top_accent_attachment(
         cast(^Harfbuzz_Font)capability.resource.font, glyph_id)
     return value, true
 }
@@ -578,7 +367,7 @@ math_shaping_glyph_kerning :: proc(
         corner < .Top_Right || corner > .Bottom_Left {
         return 0, false
     }
-    value := hb_ot_math_get_glyph_kerning(
+    value := hb.hb_ot_math_get_glyph_kerning(
         cast(^Harfbuzz_Font)capability.resource.font,
         glyph_id, corner, correction_height)
     return value, true
@@ -597,7 +386,7 @@ math_shaping_copy_kern_table :: proc(
         if index > 0 && entry.max_correction_height <= previous_height {
             return false
         }
-        direct := hb_ot_math_get_glyph_kerning(
+        direct := hb.hb_ot_math_get_glyph_kerning(
             font, glyph_id, corner, entry.max_correction_height)
         if direct != entry.kern_value {
             return false
@@ -607,7 +396,7 @@ math_shaping_copy_kern_table :: proc(
     }
     for index in 0..<len(native)-1 {
         next_height := native[index].max_correction_height + 1
-        next_direct := hb_ot_math_get_glyph_kerning(
+        next_direct := hb.hb_ot_math_get_glyph_kerning(
             font, glyph_id, corner, next_height)
         if next_direct != native[index+1].kern_value {
             return false
@@ -632,7 +421,7 @@ math_shaping_glyph_kern_table :: proc(
     }
     native: [fontmodel.FONT_MATH_KERN_ENTRY_CAPACITY]Harfbuzz_Math_Kern_Entry
     count := u32(len(output))
-    available := hb_ot_math_get_glyph_kernings(
+    available := hb.hb_ot_math_get_glyph_kernings(
         cast(^Harfbuzz_Font)capability.resource.font,
         glyph_id, corner, 0, &count, &native[0])
     if available > u32(len(output)) || count != available {
@@ -661,7 +450,7 @@ math_shaping_directional_variants :: proc(
     }
     native: [fontmodel.FONT_MATH_GLYPH_VARIANT_CAPACITY]Harfbuzz_Math_Glyph_Variant
     count := u32(len(output))
-    available := hb_ot_math_get_glyph_variants(
+    available := hb.hb_ot_math_get_glyph_variants(
         cast(^Harfbuzz_Font)capability.resource.font, glyph_id, direction,
         0, &count, &native[0])
     if count == 0 || int(count) > len(output) || available < count {
@@ -673,7 +462,7 @@ math_shaping_directional_variants :: proc(
             advance = native[index].advance,
         }
     }
-    extended := hb_ot_math_is_glyph_extended_shape(
+    extended := hb.hb_ot_math_is_glyph_extended_shape(
         cast(^Harfbuzz_Face)capability.resource.face, glyph_id) != 0
     return {int(count), extended, true}
 }
@@ -738,12 +527,12 @@ math_shaping_directional_assembly :: proc(
     count := u32(len(output))
     italic_correction: i32
     font := cast(^Harfbuzz_Font)capability^.resource.font
-    available := hb_ot_math_get_glyph_assembly(
+    available := hb.hb_ot_math_get_glyph_assembly(
         font, glyph_id, direction, 0, &count, &native[0], &italic_correction)
     if count == 0 || available != count || int(count) > len(output) {
         return {}
     }
-    min_overlap := hb_ot_math_get_min_connector_overlap(font, direction)
+    min_overlap := hb.hb_ot_math_get_min_connector_overlap(font, direction)
     if min_overlap < 0 {
         return {}
     }
@@ -790,13 +579,13 @@ math_shaping_horizontal_assembly :: proc(
 harfbuzz_copy_result :: proc(
     buffer: ^Harfbuzz_Buffer, output: []Shaped_Glyph) -> (int, bool) {
 
-    glyph_count := hb_buffer_get_length(buffer)
+    glyph_count := hb.hb_buffer_get_length(buffer)
     if glyph_count == 0 || int(glyph_count) > len(output) {
         return 0, false
     }
     info_count, position_count := glyph_count, glyph_count
-    infos := hb_buffer_get_glyph_infos(buffer, &info_count)
-    positions := hb_buffer_get_glyph_positions(buffer, &position_count)
+    infos := hb.hb_buffer_get_glyph_infos(buffer, &info_count)
+    positions := hb.hb_buffer_get_glyph_positions(buffer, &position_count)
     if infos == nil || positions == nil || info_count != glyph_count ||
        position_count != glyph_count {
         return 0, false
@@ -926,9 +715,9 @@ math_shaping_project_source :: proc(
 
 //   Report whether every shaped glyph identity in one buffer is valid.
 math_shaping_buffer_has_glyphs :: proc(buffer: ^Harfbuzz_Buffer) -> bool {
-    glyph_count := hb_buffer_get_length(buffer)
+    glyph_count := hb.hb_buffer_get_length(buffer)
     info_count := glyph_count
-    infos := hb_buffer_get_glyph_infos(buffer, &info_count)
+    infos := hb.hb_buffer_get_glyph_infos(buffer, &info_count)
     if infos == nil || info_count != glyph_count {
         return false
     }
@@ -962,18 +751,18 @@ math_shaping_shape :: proc(
         return 0, false
     }
     buffer := cast(^Harfbuzz_Buffer)capability.resource.buffer
-    hb_buffer_clear_contents(buffer)
-    hb_buffer_set_flags(buffer, 0x10 if input.standalone_accent else 0)
-    hb_buffer_set_direction(buffer, .Left_To_Right)
-    hb_buffer_set_script(buffer, harfbuzz_tag('m', 'a', 't', 'h'))
-    hb_buffer_add_utf8(
+    hb.hb_buffer_clear_contents(buffer)
+    hb.hb_buffer_set_flags(buffer, 0x10 if input.standalone_accent else 0)
+    hb.hb_buffer_set_direction(buffer, .Left_To_Right)
+    hb.hb_buffer_set_script(buffer, harfbuzz_tag('m', 'a', 't', 'h'))
+    hb.hb_buffer_add_utf8(
         buffer, cstring(raw_data(shaping_text)), c.int(len(shaping_text)), 0, -1)
     feature := Harfbuzz_Feature{
         tag = harfbuzz_tag('f', 'l', 'a', 'c'),
         value = 1 if input.flattened_accent else 0,
         end = max(u32),
     }
-    hb_shape(cast(^Harfbuzz_Font)capability.resource.font, buffer, &feature, 1)
+    hb.hb_shape(cast(^Harfbuzz_Font)capability.resource.font, buffer, &feature, 1)
     if !math_shaping_buffer_has_glyphs(buffer) {
         return 0, false
     }
@@ -988,8 +777,8 @@ math_shaping_has_math_properties :: proc(
         return false
     }
     buffer := cast(^Harfbuzz_Buffer)capability.resource.buffer
-    return hb_buffer_get_direction(buffer) == .Left_To_Right &&
-        hb_buffer_get_script(buffer) == harfbuzz_tag('m', 'a', 't', 'h')
+    return hb.hb_buffer_get_direction(buffer) == .Left_To_Right &&
+        hb.hb_buffer_get_script(buffer) == harfbuzz_tag('m', 'a', 't', 'h')
 }
 
 //   Shape borrowed UTF-8 into bounded presentation glyphs using JuliaMono `calt`.
@@ -1022,15 +811,15 @@ harfbuzz_shape :: proc(
         return 0, false
     }
     buffer := cast(^Harfbuzz_Buffer)shaper.buffer
-    hb_buffer_clear_contents(buffer)
-    hb_buffer_add_utf8(
+    hb.hb_buffer_clear_contents(buffer)
+    hb.hb_buffer_add_utf8(
         buffer, cstring(raw_data(text)), c.int(len(text)), 0, -1)
-    hb_buffer_guess_segment_properties(buffer)
+    hb.hb_buffer_guess_segment_properties(buffer)
     feature := Harfbuzz_Feature{
         tag = harfbuzz_tag('c', 'a', 'l', 't'),
         value = 1 if calt_enabled else 0,
         end = max(u32),
     }
-    hb_shape(cast(^Harfbuzz_Font)shaper.font, buffer, &feature, 1)
+    hb.hb_shape(cast(^Harfbuzz_Font)shaper.font, buffer, &feature, 1)
     return harfbuzz_copy_result(buffer, output)
 }

@@ -54,7 +54,7 @@ font_test_configure_raster_cache :: proc(cache: ^Font_Cache, glyph_count: int) -
             key = .Regular,
             source_generation = 1,
             pixel_height = JULIA_MONO_FONT_SIZE,
-            policy = .Stb_Grayscale,
+            policy = .Freetype_Unhinted,
             slot_incarnation = fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION,
         },
         state = .Resident,
@@ -781,6 +781,7 @@ view_test_math_seed_and_table :: proc(t: ^testing.T) {
         pixel_size = JULIA_MONO_FONT_SIZE,
         codepoints = codepoints.values[:codepoints.count],
     }, &prepared, context.allocator))
+    testing.expect_value(t, prepared.raster_ascent, f32(25.792002))
     prepare_destroy(&prepared)
 
     source, read_error := os.read_entire_file(path, context.allocator)
@@ -888,7 +889,8 @@ view_test_canonical_raster_identity :: proc(t: ^testing.T) {
     testing.expect_value(t, identity.key, Font_Key.Bold)
     testing.expect_value(t, identity.source_generation, u64(7))
     testing.expect_value(t, identity.pixel_height, u32(32))
-    testing.expect_value(t, identity.policy, fontmodel.Font_Raster_Policy.Stb_Grayscale)
+    testing.expect_value(t, identity.policy,
+        fontmodel.Font_Raster_Policy.Freetype_Unhinted)
     testing.expect_value(t, identity.slot_incarnation,
         u64(fontmodel.FONT_CANONICAL_RASTER_SLOT_INCARNATION))
 
@@ -904,7 +906,8 @@ view_test_canonical_raster_identity :: proc(t: ^testing.T) {
     testing.expect_value(t, request.logical_size, f32(12))
     testing.expect_value(t, request.scene_pixels_per_logical_unit, f32(1.5))
     testing.expect_value(t, request.pixel_height, u32(18))
-    testing.expect_value(t, request.policy, fontmodel.Font_Raster_Policy.Stb_Grayscale)
+    testing.expect_value(t, request.policy,
+        fontmodel.Font_Raster_Policy.Freetype_Unhinted)
 }
 
 // Verify the shipped faces yield a measurable lowercase match scale in MATH constants.
@@ -1048,6 +1051,13 @@ view_expect_math_vertical_variants :: proc(
         capability, 6, sum_glyph, repeated[:])
     testing.expect(t, sum_ok && result.ok && repeated_result.ok)
     testing.expect(t, result.count > 0 && result.extended_shape)
+    testing.expect_value(t, result.count, 2)
+    testing.expect_value(t, variants[0], fontmodel.Font_Math_Glyph_Variant{
+        glyph_id = 874, advance = 2062,
+    })
+    testing.expect_value(t, variants[1], fontmodel.Font_Math_Glyph_Variant{
+        glyph_id = 6713, advance = 2869,
+    })
     testing.expect_value(t, repeated_result.count, result.count)
     testing.expect(t, !stale_result.ok)
     for index in 0..<result.count {
@@ -1069,6 +1079,20 @@ view_expect_math_vertical_assembly :: proc(
     stale := math_shaping_vertical_assembly(capability, 6, surd_glyph, parts[:])
     testing.expect(t, surd_ok && result.ok && !stale.ok)
     testing.expect(t, result.count > 0 && result.min_connector_overlap >= 0)
+    testing.expect_value(t, result.count, 3)
+    testing.expect_value(t, result.min_connector_overlap, i32(41))
+    testing.expect_value(t, result.italic_correction, i32(0))
+    testing.expect_value(t, parts[0], fontmodel.Font_Math_Glyph_Part{
+        glyph_id = 1296, end_connector_length = 655, full_advance = 3727,
+    })
+    testing.expect_value(t, parts[1], fontmodel.Font_Math_Glyph_Part{
+        glyph_id = 6716, start_connector_length = 1311,
+        end_connector_length = 1311, full_advance = 1311, extender = true,
+    })
+    testing.expect_value(t, parts[2], fontmodel.Font_Math_Glyph_Part{
+        glyph_id = 6717, start_connector_length = 655,
+        full_advance = 1270,
+    })
     has_extender := false
     for part in parts[:result.count] {
         testing.expect(t, part.glyph_id > 0 && part.full_advance > 0)
@@ -1184,6 +1208,15 @@ view_expect_math_shaping_capability :: proc(
         Harfbuzz_Math_Constant.Script_Script_Percent_Scale_Down)] > 0)
     task := view_run_math_shaping_task(t, capability, 7)
     testing.expect(t, task.shaped && task.glyph_count == 3)
+    testing.expect_value(t, task.glyphs[0], Shaped_Glyph{
+        glyph_id = 3455, cluster = 0, x_advance = 944,
+    })
+    testing.expect_value(t, task.glyphs[1], Shaped_Glyph{
+        glyph_id = 12, cluster = 4, x_advance = 1503,
+    })
+    testing.expect_value(t, task.glyphs[2], Shaped_Glyph{
+        glyph_id = 18, cluster = 5, x_advance = 1024,
+    })
     italic_x, italic_x_ok := harfbuzz_nominal_glyph(
         &capability.resource, rune(0x1d465))
     testing.expect(t, italic_x_ok)
@@ -1344,17 +1377,22 @@ view_test_prepare_regular :: proc(t: ^testing.T) {
     testing.expect_value(t, prepared.key, Font_Key.Regular)
     testing.expect_value(t, prepared.generation, u64(7))
     testing.expect_value(t, prepared.base_size, i32(32))
+    testing.expect_value(t, prepared.raster_ascent, f32(25.87234))
     testing.expect_value(t, prepared.glyph_count, i32(96))
+    testing.expect(t, prepared.face_glyph_count == 12337)
     testing.expect_value(t, prepared.padding, i32(4))
     testing.expect(t, prepared.atlas_width <= 1024)
     testing.expect(t, prepared.atlas_height <= 1024)
     testing.expect_value(t, len(prepared.glyphs), 96)
     testing.expect_value(t, len(prepared.rectangles), 96)
     testing.expect_value(t, prepared.glyphs[0].value, rune(' '))
-    testing.expect(t, prepared.glyphs[0].glyph_id > 0)
+    testing.expect_value(t, prepared.glyphs[0].glyph_id, u32(3))
     testing.expect_value(t, prepared.glyphs[0].advance_x, i32(16))
     testing.expect_value(t, prepared.glyphs[0].bitmap_width, i32(16))
     testing.expect_value(t, prepared.glyphs[0].bitmap_height, i32(32))
+    testing.expect_value(t, prepared.glyphs[13].glyph_id, u32(5933))
+    testing.expect_value(t, prepared.glyphs[33].glyph_id, u32(4))
+    testing.expect_value(t, prepared.glyphs[33].advance_x, i32(16))
 
     prepare_destroy(&prepared)
     testing.expect_value(t, prepared.glyph_count, i32(0))
