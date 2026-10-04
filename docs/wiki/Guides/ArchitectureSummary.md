@@ -190,8 +190,11 @@ flowchart LR
 ```
 
 The Julia owner is a dedicated long-lived thread, not part of the CPU pool. The display
-may help execute native pool work while waiting on a fence, but only the Julia owner
-may enter Julia and only the display may publish visible state.
+may help execute Helpable native pool work while waiting on a fence. Optional font
+seed, glyph-page, and reload preparation is submitted as Worker_Only, including
+during shutdown drain; required startup font preparation remains synchronous.
+Font results still require an owner join before display-owned GPU publication.
+Only the Julia owner may enter Julia and only the display may publish visible state.
 
 ### Portable Runtime Values
 

@@ -6,12 +6,9 @@ import vmem "core:mem/virtual"
 import "core:os"
 import "core:sync"
 import "core:thread"
-import "core:container/queue"
 
-// Default occupancy reserves four finite task slots per worker. Backend queues
-// begin at this size but are fully reserved to task capacity before workers start.
+// Default occupancy reserves four finite task slots per worker.
 TASK_POOL_TASKS_PER_WORKER :: 4
-TASK_POOL_INITIAL_QUEUE_CAPACITY :: 16
 
 // Terminal result written by a task procedure and consumed exactly once at join.
 Task_Result :: enum {
@@ -45,6 +42,12 @@ Task_Cancel_Outcome :: enum {
     Requested,
     Already_Requested,
     Stale_Handle,
+}
+
+// Limits which executor may claim one accepted task generation.
+Task_Execution_Policy :: enum u8 {
+    Helpable,
+    Worker_Only,
 }
 
 // Owner-visible lifecycle of one reusable task slot.
@@ -82,15 +85,27 @@ Task_Handle :: struct {
 }
 
 // Internal storage shared across the owner/worker handoff.
-// The owner controls lifecycle fields; the executing worker reads procedure and
-// payload and writes result before publishing backend completion.
+// Workers access procedure, payload, policy, and result only while owning dispatch.
 Task_Slot :: struct {
     generation : u64,
     state : Task_Slot_State,
     procedure : Task_Procedure,
     payload : rawptr,
     result : Task_Result,
+    execution_policy : Task_Execution_Policy,
     cancellation_requested : bool,
+}
+
+// Fixed-capacity ring storing slot indices, never task-owned payloads.
+Task_Index_Queue :: struct {
+    items : []int,
+    head : int,
+    count : int,
+}
+
+// Per-thread stable entry context for one repository-owned worker.
+Task_Worker_Data :: struct {
+    pool : ^Task_Pool,
 }
 
 // Owner-side group of handles joined in deterministic submission order.
@@ -100,27 +115,31 @@ Task_Fence :: struct {
     count : int,
 }
 
-// Allocation-layout mirror of `thread.Pool` worker state used only for budgeting.
-// It must track the backend's private allocation shape or capacity estimation will
-// under-reserve the pool's fixed memory region.
-Task_Pool_Backend_Worker_Data :: struct {
-    pool : ^thread.Pool,
-    task : thread.Task,
-}
-
 // Fixed-capacity task service owned and coordinated by one application thread.
 //
 // Workers execute task procedures, but slot admission, polling, joining, fences,
 // and lifecycle transitions are owner-thread operations. All backend allocations
 // come from one mutex-wrapped TLSF allocator over a virtual-memory region sized
-// before startup, preventing allocator growth while tasks are running.
+// before startup. Scheduler state is protected independently from slot lifecycle.
 Task_Pool :: struct {
-    // Backend workers and generational task-slot table.
-    backend : thread.Pool,
+    // Pool-owned workers, policy queues, completion publication, and task slots.
+    workers : []^thread.Thread,
+    worker_data : []Task_Worker_Data,
     slots : []Task_Slot,
+    helpable_ready : Task_Index_Queue,
+    worker_only_ready : Task_Index_Queue,
+    completions : Task_Index_Queue,
+
+    // Worker/owner dispatch synchronization; workers never mutate owner lifecycle.
+    scheduler_mutex : sync.Mutex,
+    scheduler_changed : sync.Cond,
+    worker_exit : bool,
+    worker_started_count : int,
+    executing_count : int,
+    next_worker_policy : Task_Execution_Policy,
 
     // Fixed allocator ownership. `backing` owns the region managed by TLSF;
-    // synchronized access is required because backend workers allocate internally.
+    // Synchronized access is required for startup and fence allocation.
     backing : []byte,
     tlsf_allocator : tlsf.Allocator,
     synchronized_allocator : mem.Mutex_Allocator,
@@ -171,7 +190,7 @@ task_pool_budget_allocation :: proc(
     budget^ += tlsf.estimate_pool_size(count, size, alignment)
 }
 
-//   Calculate fixed storage for all backend allocations and one maximal fence.
+//   Calculate fixed storage for owned workers, queues, slots, and one maximal fence.
 //
 // Notes:
 //   - The result is rounded up to a virtual-memory page boundary.
@@ -188,18 +207,15 @@ task_pool_allocator_capacity :: proc(worker_count, task_capacity: int) -> int {
         &budget, 1, task_capacity * size_of(Task_Slot), align_of(Task_Slot))
     task_pool_budget_allocation(
         &budget, 1, task_capacity * size_of(Task_Handle), align_of(Task_Handle))
-    task_pool_budget_allocation(&budget, 1,
-        TASK_POOL_INITIAL_QUEUE_CAPACITY * size_of(thread.Task),
-        align_of(thread.Task))
     task_pool_budget_allocation(
-        &budget, 2, task_capacity * size_of(thread.Task), align_of(thread.Task))
+        &budget, 3, task_capacity * size_of(int), align_of(int))
     task_pool_budget_allocation(
         &budget, 1, worker_count * size_of(^thread.Thread), align_of(^thread.Thread))
     task_pool_budget_allocation(
+        &budget, 1, worker_count * size_of(Task_Worker_Data),
+        align_of(Task_Worker_Data))
+    task_pool_budget_allocation(
         &budget, worker_count, size_of(thread.Thread), align_of(thread.Thread))
-    task_pool_budget_allocation(&budget, worker_count,
-        size_of(Task_Pool_Backend_Worker_Data),
-        align_of(Task_Pool_Backend_Worker_Data))
     page_size := int(mem.PAGE_SIZE)
     return ((budget + page_size - 1) / page_size) * page_size
 }
@@ -207,7 +223,7 @@ task_pool_allocator_capacity :: proc(worker_count, task_capacity: int) -> int {
 //   Release the pool-owned allocator after every allocation user has stopped.
 //
 // Parameters:
-//   - pool: A stopped pool whose backend and fence allocations are no longer live.
+//   - pool: A stopped pool whose dispatcher and fence allocations are no longer live.
 //
 // Side effects:
 //   - Destroys TLSF, releases virtual memory, and clears allocator metadata.
@@ -220,17 +236,17 @@ task_pool_release_allocator :: proc(pool: ^Task_Pool) {
     pool.allocator_capacity = 0
 }
 
-//   Allocate slots and fully reserve backend queues before workers start.
+//   Allocate slots and fully reserve policy/completion queues before workers start.
 //
 // Parameters:
 //   - pool: The pool with allocator and worker count already initialized.
-//   - task_capacity: Required slot and backend queue capacity.
+//   - task_capacity: Required slot and dispatch queue capacity.
 //
 // Returns:
 //   - True when all storage is ready; false after rolling back partial setup.
 //
 // Side effects:
-//   - Initializes backend storage from the pool allocator but starts no threads.
+//   - Initializes fixed dispatch storage and starts no threads.
 task_pool_init_backend :: proc(pool: ^Task_Pool, task_capacity: int) -> bool {
     allocator := mem.mutex_allocator(&pool.synchronized_allocator)
     slots, slots_error := make([]Task_Slot, task_capacity, allocator)
@@ -238,16 +254,62 @@ task_pool_init_backend :: proc(pool: ^Task_Pool, task_capacity: int) -> bool {
         return false
     }
     pool.slots = slots
-    thread.pool_init(&pool.backend, allocator, pool.worker_count)
-    if queue.reserve(&pool.backend.tasks, task_capacity) == nil &&
-       reserve(&pool.backend.tasks_done, task_capacity) == nil {
-        return true
+    helpable, helpable_error := make([]int, task_capacity, allocator)
+    worker_only, worker_only_error := make([]int, task_capacity, allocator)
+    completions, completion_error := make([]int, task_capacity, allocator)
+    workers, workers_error := make([]^thread.Thread, pool.worker_count, allocator)
+    worker_data, worker_data_error := make(
+        []Task_Worker_Data, pool.worker_count, allocator)
+    if helpable_error != nil || worker_only_error != nil ||
+       completion_error != nil || workers_error != nil ||
+       worker_data_error != nil {
+        delete(worker_data, allocator)
+        delete(workers, allocator)
+        delete(completions, allocator)
+        delete(worker_only, allocator)
+        delete(helpable, allocator)
+        delete(pool.slots, allocator)
+        pool.slots = nil
+        return false
     }
-    thread.pool_finish(&pool.backend)
-    thread.pool_destroy(&pool.backend)
-    delete(pool.slots, allocator)
-    pool.slots = nil
-    return false
+    pool.helpable_ready.items = helpable
+    pool.worker_only_ready.items = worker_only
+    pool.completions.items = completions
+    pool.workers = workers
+    pool.worker_data = worker_data
+    return true
+}
+
+//   Insert one slot identity into a bounded ring queue.
+task_pool_queue_push :: proc(queue: ^Task_Index_Queue, index: int) {
+    tail := (queue.head + queue.count) % len(queue.items)
+    queue.items[tail] = index
+    queue.count += 1
+}
+
+//   Remove the oldest slot identity from a nonempty bounded ring queue.
+task_pool_queue_pop :: proc(queue: ^Task_Index_Queue) -> int {
+    index := queue.items[queue.head]
+    queue.head = (queue.head + 1) % len(queue.items)
+    queue.count -= 1
+    return index
+}
+
+//   Select a worker queue, alternating classes whenever both contain ready work.
+task_pool_worker_queue :: proc(pool: ^Task_Pool) -> ^Task_Index_Queue {
+    helpable_ready := pool.helpable_ready.count > 0
+    worker_only_ready := pool.worker_only_ready.count > 0
+    if helpable_ready && worker_only_ready {
+        selected := &pool.helpable_ready
+        if pool.next_worker_policy == .Helpable {
+            pool.next_worker_policy = .Worker_Only
+        } else {
+            selected = &pool.worker_only_ready
+            pool.next_worker_policy = .Helpable
+        }
+        return selected
+    }
+    return &pool.helpable_ready if helpable_ready else &pool.worker_only_ready
 }
 
 //   Resolve optional worker and task capacities to valid production values.
@@ -263,6 +325,63 @@ task_pool_resolve_capacities :: proc(
         selected_capacity = task_pool_default_capacity(selected_worker_count)
     }
     return selected_worker_count, max(selected_capacity, selected_worker_count)
+}
+
+//   Free fixed dispatcher storage after every worker has stopped.
+task_pool_release_backend_storage :: proc(pool: ^Task_Pool) {
+    allocator := mem.mutex_allocator(&pool.synchronized_allocator)
+    delete(pool.worker_data, allocator)
+    delete(pool.workers, allocator)
+    delete(pool.completions.items, allocator)
+    delete(pool.worker_only_ready.items, allocator)
+    delete(pool.helpable_ready.items, allocator)
+    delete(pool.slots, allocator)
+    pool.worker_data = nil
+    pool.workers = nil
+    pool.completions = {}
+    pool.worker_only_ready = {}
+    pool.helpable_ready = {}
+    pool.slots = nil
+}
+
+//   Stop and join every worker already started during initialization or shutdown.
+task_pool_stop_workers :: proc(pool: ^Task_Pool) {
+    sync.mutex_lock(&pool.scheduler_mutex)
+    pool.worker_exit = true
+    sync.cond_broadcast(&pool.scheduler_changed)
+    sync.mutex_unlock(&pool.scheduler_mutex)
+    for index in 0..<pool.worker_started_count {
+        worker := pool.workers[index]
+        thread.join(worker)
+        thread.destroy(worker)
+        pool.workers[index] = nil
+    }
+    pool.worker_started_count = 0
+}
+
+//   Start pool-owned worker threads, rolling back every partial startup.
+task_pool_start_workers :: proc(pool: ^Task_Pool) -> bool {
+    pool.worker_exit = false
+    pool.executing_count = 0
+    pool.worker_started_count = 0
+    pool.next_worker_policy = .Helpable
+    saved_context := context
+    context.allocator = mem.mutex_allocator(&pool.synchronized_allocator)
+    for index in 0..<pool.worker_count {
+        pool.worker_data[index].pool = pool
+        worker := thread.create(task_pool_worker)
+        if worker == nil {
+            context = saved_context
+            task_pool_stop_workers(pool)
+            return false
+        }
+        worker.data = &pool.worker_data[index]
+        pool.workers[index] = worker
+        thread.start(worker)
+        pool.worker_started_count += 1
+    }
+    context = saved_context
+    return true
 }
 
 //   Initialize the fixed allocator, slots, queues, and worker threads transactionally.
@@ -304,23 +423,67 @@ task_pool_init :: proc(
         task_pool_release_allocator(pool)
         return false
     }
-    thread.pool_start(&pool.backend)
+    if !task_pool_start_workers(pool) {
+        task_pool_release_backend_storage(pool)
+        task_pool_release_allocator(pool)
+        return false
+    }
     pool.state = .Running
     return true
 }
 
-//   Execute one slot on a backend worker and record its terminal result.
+//   Execute one task procedure with the pool's restricted allocation context.
 //
 // Parameters:
-//   - task: Backend wrapper whose data points to one queued `Task_Slot`.
+//   - pool: The pool owning the claimed slot.
+//   - index: Claimed slot identity.
 //
-// Side effects:
-//   - Invokes the task procedure and writes only the slot's result field.
-task_pool_execute_slot :: proc(task: thread.Task) {
-    slot := (^Task_Slot)(task.data)
-    slot.result = slot.procedure(slot.payload, {
+// Returns:
+//   - The procedure's terminal result, not yet published to the owner.
+task_pool_execute_slot :: proc(pool: ^Task_Pool, index: int) -> Task_Result {
+    slot := &pool.slots[index]
+    saved_allocator := context.allocator
+    context.allocator = mem.nil_allocator()
+    result := slot.procedure(slot.payload, {
         requested = &slot.cancellation_requested,
     })
+    context.allocator = saved_allocator
+    return result
+}
+
+//   Publish one terminal result and wake owner waiters and worker drainers.
+task_pool_publish_completion :: proc(
+    pool: ^Task_Pool, index: int, result: Task_Result) {
+    sync.mutex_lock(&pool.scheduler_mutex)
+    pool.slots[index].result = result
+    task_pool_queue_push(&pool.completions, index)
+    pool.executing_count -= 1
+    sync.cond_broadcast(&pool.scheduler_changed)
+    sync.mutex_unlock(&pool.scheduler_mutex)
+}
+
+//   Run claimed procedures until shutdown has drained accepted work.
+task_pool_worker :: proc(worker: ^thread.Thread) {
+    data := (^Task_Worker_Data)(worker.data)
+    pool := data.pool
+    for {
+        sync.mutex_lock(&pool.scheduler_mutex)
+        for pool.helpable_ready.count == 0 &&
+            pool.worker_only_ready.count == 0 && !pool.worker_exit {
+            sync.cond_wait(&pool.scheduler_changed, &pool.scheduler_mutex)
+        }
+        if pool.worker_exit && pool.helpable_ready.count == 0 &&
+           pool.worker_only_ready.count == 0 {
+            sync.mutex_unlock(&pool.scheduler_mutex)
+            return
+        }
+        queue := task_pool_worker_queue(pool)
+        index := task_pool_queue_pop(queue)
+        pool.executing_count += 1
+        sync.mutex_unlock(&pool.scheduler_mutex)
+        result := task_pool_execute_slot(pool, index)
+        task_pool_publish_completion(pool, index, result)
+    }
 }
 
 //   Report whether cancellation has been requested for the executing task.
@@ -335,7 +498,7 @@ task_cancellation_requested :: proc(token: Task_Cancellation_Token) -> bool {
         sync.atomic_load_explicit(token.requested, .Acquire)
 }
 
-//   Publish backend completions into owner-visible slot state.
+//   Publish synchronized completions into owner-visible slot state.
 //
 // Parameters:
 //   - pool: The owner-thread pool whose completion queue is drained.
@@ -343,12 +506,15 @@ task_cancellation_requested :: proc(token: Task_Cancellation_Token) -> bool {
 // Side effects:
 //   - Marks queued slots completed without consuming their handles or results.
 task_pool_collect_completed :: proc(pool: ^Task_Pool) {
-    for completed in thread.pool_pop_done(&pool.backend) {
-        slot := &pool.slots[completed.user_index]
+    sync.mutex_lock(&pool.scheduler_mutex)
+    for pool.completions.count > 0 {
+        index := task_pool_queue_pop(&pool.completions)
+        slot := &pool.slots[index]
         if slot.state == .Queued {
             slot.state = .Completed
         }
     }
+    sync.mutex_unlock(&pool.scheduler_mutex)
 }
 
 //   Resolve one generational handle to its current live slot.
@@ -371,16 +537,18 @@ task_pool_slot :: proc(
     return slot, true
 }
 
-//   Submit finite work into one available bounded slot.
+//   Submit finite work with explicit owner-help eligibility.
 //
 // Notes:
 //   - Payload storage and writable outputs become task-owned until successful join.
 //   - The owner must eventually join every successfully returned handle.
+//   - Existing calls default to Helpable execution.
 //
 // Parameters:
 //   - pool: The running owner-thread pool.
 //   - procedure: The worker entry point to execute once.
 //   - payload: Opaque task data whose lifetime extends through join.
+//   - execution: Whether the owner may claim this task while helping.
 //
 // Returns:
 //   - A live handle and `Queued`, or a zero handle with the rejection outcome.
@@ -389,7 +557,9 @@ task_pool_slot :: proc(
 //   - Reuses one slot generation, increments outstanding count, and queues work.
 task_pool_submit :: proc(
     pool: ^Task_Pool, procedure: Task_Procedure,
-    payload: rawptr) -> (Task_Handle, Task_Submit_Outcome) {
+    payload: rawptr,
+    execution := Task_Execution_Policy.Helpable) ->
+    (Task_Handle, Task_Submit_Outcome) {
     if pool == nil || pool.state != .Running {
         return {}, .Pool_Stopped
     }
@@ -403,11 +573,18 @@ task_pool_submit :: proc(
         slot.procedure = procedure
         slot.payload = payload
         slot.result = .Failed
+        slot.execution_policy = execution
         sync.atomic_store_explicit(
             &slot.cancellation_requested, false, .Release)
         pool.outstanding_count += 1
-        thread.pool_add_task(&pool.backend, mem.nil_allocator(),
-            task_pool_execute_slot, &slot, index)
+        sync.mutex_lock(&pool.scheduler_mutex)
+        queue := &pool.worker_only_ready
+        if execution == .Helpable {
+            queue = &pool.helpable_ready
+        }
+        task_pool_queue_push(queue, index)
+        sync.cond_signal(&pool.scheduler_changed)
+        sync.mutex_unlock(&pool.scheduler_mutex)
         return {index = index, generation = slot.generation}, .Queued
     }
     return {}, .Queue_Full
@@ -463,30 +640,44 @@ task_pool_poll :: proc(
     return .Ready if slot.state == .Completed else .Pending
 }
 
-//   Execute one queued backend task on the owner thread when available.
+//   Execute one Helpable task on the owner when available.
 //
 // Parameters:
-//   - pool: The pool whose waiting queue may be helped.
+//   - pool: The pool whose Helpable queue may be helped.
 //
 // Returns:
-//   - True when one task was executed; false when no queued task was available.
+//   - True when one task was executed; false when no Helpable task was available.
 //
 // Side effects:
-//   - Runs arbitrary task code synchronously and increments helping telemetry.
+//   - Executes eligible work synchronously and increments helping telemetry.
 task_pool_help_once :: proc(pool: ^Task_Pool) -> bool {
-    task, available := thread.pool_pop_waiting(&pool.backend)
-    if !available {
+    sync.mutex_lock(&pool.scheduler_mutex)
+    if pool.helpable_ready.count == 0 {
+        sync.mutex_unlock(&pool.scheduler_mutex)
         return false
     }
-    thread.pool_do_work(&pool.backend, task)
+    index := task_pool_queue_pop(&pool.helpable_ready)
+    pool.executing_count += 1
+    sync.mutex_unlock(&pool.scheduler_mutex)
+    result := task_pool_execute_slot(pool, index)
+    task_pool_publish_completion(pool, index, result)
     pool.helping_execution_count += 1
     return true
+}
+
+//   Wait for a queue or completion change without missing a concurrent signal.
+task_pool_wait_for_progress :: proc(pool: ^Task_Pool) {
+    sync.mutex_lock(&pool.scheduler_mutex)
+    if pool.helpable_ready.count == 0 && pool.completions.count == 0 {
+        sync.cond_wait(&pool.scheduler_changed, &pool.scheduler_mutex)
+    }
+    sync.mutex_unlock(&pool.scheduler_mutex)
 }
 
 //   Wait for and consume one task's exactly-once terminal result.
 //
 // Notes:
-//   - While blocked, the owner executes other queued work or yields the thread.
+//   - While blocked, the owner executes Helpable work or waits for progress.
 //   - A successful join ends task ownership of the caller's payload and outputs.
 //
 // Parameters:
@@ -519,7 +710,7 @@ task_pool_wait :: proc(
             return result, .Joined
         }
         if !task_pool_help_once(pool) {
-            thread.yield()
+            task_pool_wait_for_progress(pool)
         }
     }
 }
@@ -564,11 +755,12 @@ task_fence_begin :: proc(pool: ^Task_Pool) -> (Task_Fence, bool) {
 //   - On success, appends the live handle to the fence.
 task_fence_submit :: proc(
     pool: ^Task_Pool, fence: ^Task_Fence, procedure: Task_Procedure,
-    payload: rawptr) -> Task_Submit_Outcome {
+    payload: rawptr,
+    execution := Task_Execution_Policy.Helpable) -> Task_Submit_Outcome {
     if fence.count >= len(fence.handles) {
         return .Queue_Full
     }
-    handle, outcome := task_pool_submit(pool, procedure, payload)
+    handle, outcome := task_pool_submit(pool, procedure, payload, execution)
     if outcome == .Queued {
         fence.handles[fence.count] = handle
         fence.count += 1
@@ -604,20 +796,33 @@ task_fence_wait :: proc(pool: ^Task_Pool, fence: ^Task_Fence) -> Task_Result {
     return aggregate
 }
 
-//   Stop admission and finish every task already accepted by the pool.
+//   Stop admission, drain accepted procedures, and then join pool workers.
 //
 // Parameters:
 //   - pool: The running pool to stop; nil or any other state is a no-op.
 //
 // Side effects:
-//   - Transitions through `Stopping`, joins backend work, collects completions,
-//     and leaves terminal slots available for owner observation in `Stopped`.
+//   - Owner drain helping executes Helpable work only; workers execute either class.
+//   - Leaves terminal slots available for owner observation in `Stopped`.
 task_pool_shutdown :: proc(pool: ^Task_Pool) {
     if pool == nil || pool.state != .Running {
         return
     }
     pool.state = .Stopping
-    thread.pool_finish(&pool.backend)
+    for {
+        task_pool_collect_completed(pool)
+        sync.mutex_lock(&pool.scheduler_mutex)
+        drained := pool.helpable_ready.count == 0 &&
+            pool.worker_only_ready.count == 0 && pool.executing_count == 0
+        sync.mutex_unlock(&pool.scheduler_mutex)
+        if drained {
+            break
+        }
+        if !task_pool_help_once(pool) {
+            task_pool_wait_for_progress(pool)
+        }
+    }
+    task_pool_stop_workers(pool)
     task_pool_collect_completed(pool)
     pool.state = .Stopped
 }
@@ -632,8 +837,8 @@ task_pool_shutdown :: proc(pool: ^Task_Pool) {
 //   - pool: The initialized pool to destroy; nil or uninitialized is a no-op.
 //
 // Side effects:
-//   - Joins workers, destroys backend storage, releases virtual memory, and resets
-//     the pool to `Uninitialized`.
+//   - Joins workers, destroys owned dispatch storage, releases virtual memory,
+//     and resets the pool to `Uninitialized`.
 task_pool_destroy :: proc(pool: ^Task_Pool) {
     if pool == nil || pool.state == .Uninitialized {
         return
@@ -646,10 +851,7 @@ task_pool_destroy :: proc(pool: ^Task_Pool) {
         }
     }
     pool.outstanding_count = 0
-    thread.pool_destroy(&pool.backend)
-    delete(pool.slots,
-        mem.mutex_allocator(&pool.synchronized_allocator))
-    pool.slots = nil
+    task_pool_release_backend_storage(pool)
     task_pool_release_allocator(pool)
     pool.state = .Uninitialized
 }

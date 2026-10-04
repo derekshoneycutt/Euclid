@@ -1857,9 +1857,9 @@ AnalysisSettings(
                 allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore),
-            # Task-pool storage is capacity-bounded and released by pool or fence teardown.
+            # Task-pool slots are capacity-bounded and released during pool teardown.
             ReviewedAllocationPolicy(
-                "taskpool-backend-slots",
+                "taskpool-owned-slots",
                 "src/taskpool/taskpool.odin",
                 "task_pool_init_backend",
                 :custom,
@@ -1868,16 +1868,6 @@ AnalysisSettings(
                 target="[]Task_Slot",
                 allocator_source="allocator",
                 certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "taskpool-backend-completion-reserve",
-                "src/taskpool/taskpool.odin",
-                "task_pool_init_backend",
-                :dynamic_growth,
-                "Completion storage is fully reserved to the configured task capacity before workers start.";
-                operation="reserve",
-                target="pool.backend.tasks_done",
-                certainty=:potential,
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "taskpool-fence-handles",

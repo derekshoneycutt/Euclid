@@ -658,7 +658,7 @@ cache_service :: proc(cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
     cache_complete_preparation(cache, pool)
 }
 
-//   Attempt one bounded submission while retaining ownership on queue pressure.
+//   Submit worker-only CPU preparation, retaining ownership on queue pressure.
 //
 // Side effects:
 //   - Transitions Retry to Queued on acceptance, remains Retry when full, or fails and
@@ -667,7 +667,7 @@ cache_submit_preparation :: proc(
     cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
 
     handle, outcome := taskpool.task_pool_submit(
-        pool, prepare_task_execute, &cache.preparation.task)
+        pool, prepare_task_execute, &cache.preparation.task, .Worker_Only)
     switch outcome {
     case .Queued:
         cache.preparation.handle = handle
@@ -690,6 +690,7 @@ cache_submit_preparation :: proc(
 // Side effects:
 //   - Rejects new requests, fails unsubmitted demand, shuts down the pool when work is
 //     active, services its terminal result, and leaves the preparation slot idle.
+//   - Accepted preparation remains worker-only while the display owner waits for drain.
 cache_shutdown_service :: proc(
     cache: ^Font_Cache, pool: ^taskpool.Task_Pool) {
 

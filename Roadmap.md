@@ -191,6 +191,7 @@ General features:
   - [X] Animation catalog manifest tables
   - [X] Localization tables
   - [ ] Basic initial user settings structure
+  - [ ] Persistent REPL history
   - [ ] Search and use history
   - [ ] Dynamic/special lists
     - [ ] Favorites

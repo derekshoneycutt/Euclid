@@ -6,8 +6,10 @@ import fontmodel "model"
 
 import "core:mem"
 import "core:os"
+import "core:sync"
 import "core:testing"
 import "core:thread"
+import "core:time"
 import vmem "core:mem/virtual"
 import geometry "../../core/geometry"
 
@@ -34,10 +36,72 @@ Font_Cancel_Test_State :: struct {
     cancel_at: int,
 }
 
+Font_Execution_Test_Gate :: struct {
+    started: bool,
+    released: bool,
+    release_requested: bool,
+}
+
 Font_Codepoint_Fallback_Test_Result :: struct {
     glyph_id: u32,
     raster_slot_index: i32,
     configured: bool,
+}
+
+// Occupy the sole worker until release, with a watchdog to bound fixture failure.
+font_test_hold_worker :: proc(
+    payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
+    gate := cast(^Font_Execution_Test_Gate)payload
+    sync.atomic_store_explicit(&gate.started, true, .Release)
+    deadline := time.tick_since({}) + 5 * time.Second
+    for !sync.atomic_load_explicit(&gate.released, .Acquire) {
+        if time.tick_since({}) >= deadline {
+            return .Failed
+        }
+        thread.yield()
+    }
+    return .Succeeded
+}
+
+// Wait for synchronized gate entry without assuming that the worker wins a race.
+font_test_wait_for_gate :: proc(gate: ^Font_Execution_Test_Gate) -> bool {
+    deadline := time.tick_since({}) + 5 * time.Second
+    for time.tick_since({}) < deadline {
+        if sync.atomic_load_explicit(&gate.started, .Acquire) {
+            return true
+        }
+        thread.yield()
+    }
+    return false
+}
+
+// Release the blocked worker independently after an owner-executed drain signal.
+font_test_gate_releaser :: proc(worker: ^thread.Thread) {
+    gate := cast(^Font_Execution_Test_Gate)worker.data
+    deadline := time.tick_since({}) + 5 * time.Second
+    for !sync.atomic_load_explicit(&gate.release_requested, .Acquire) {
+        if time.tick_since({}) >= deadline {
+            break
+        }
+        thread.yield()
+    }
+    sync.atomic_store_explicit(&gate.released, true, .Release)
+}
+
+// Signal an independent releaser through ordinary Helpable owner execution.
+font_test_signal_gate_release :: proc(
+    payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
+    gate := cast(^Font_Execution_Test_Gate)payload
+    sync.atomic_store_explicit(&gate.release_requested, true, .Release)
+    return .Succeeded
+}
+
+// Record the executing identity in join-owned output for an unrelated frame task.
+font_test_record_executor :: proc(
+    payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
+    executor := cast(^int)payload
+    executor^ = sync.current_thread_id()
+    return .Succeeded
 }
 
 // Configure a minimal resident face/raster pair for optional-instance tests.
@@ -161,9 +225,7 @@ view_test_optional_raster_page_task_identity :: proc(t: ^testing.T) {
     testing.expect_value(
         t, task.rgba_reservation_bytes,
         u64(fontmodel.FONT_RASTER_PAGE_RESERVATION_RGBA_BYTES))
-    testing.expect_value(
-        t, prepare_task_execute(&task, taskpool.Task_Cancellation_Token{}),
-        taskpool.Task_Result.Succeeded)
+    font_test_run_page_preparation(t, &cache, &task)
     testing.expect_value(t, task.prepared.base_size, i32(18))
     testing.expect(t, task.prepared.atlas_width > 0 && task.prepared.atlas_height > 0)
     prepare_destroy(&task.prepared)
@@ -176,6 +238,31 @@ view_test_optional_raster_page_task_identity :: proc(t: ^testing.T) {
     cache_preparation_arena_destroy(&cache)
     cache_optional_raster_destroy(&cache, &cache.optional_rasters[slot_index])
     font_generation_glyphs_destroy(&cache.entries[int(Font_Key.Regular)])
+}
+
+// Join a real optional page through the production submission path without GPU work.
+font_test_run_page_preparation :: proc(
+    t: ^testing.T, cache: ^Font_Cache, task: ^Font_Prepare_Task) {
+    pool: taskpool.Task_Pool
+    if !testing.expect(t, taskpool.task_pool_init(&pool, 1, 1)) {
+        return
+    }
+    defer taskpool.task_pool_destroy(&pool)
+    cache.preparation.task = task^
+    cache.preparation.state = .Retry
+    cache_submit_preparation(cache, &pool)
+    testing.expect_value(t, cache.preparation.state, Font_Prepare_Operation_State.Queued)
+    testing.expect_value(t,
+        pool.slots[cache.preparation.handle.index].execution_policy,
+        taskpool.Task_Execution_Policy.Worker_Only)
+    result, joined := taskpool.task_pool_wait(&pool, cache.preparation.handle)
+    testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
+    testing.expect_value(t, result, taskpool.Task_Result.Succeeded)
+    testing.expect_value(t, pool.helping_execution_count, u64(0))
+    task^ = cache.preparation.task
+    cache.preparation.task = {}
+    cache.preparation.handle = {}
+    cache.preparation.state = .Idle
 }
 
 // Configure canonical and partial target images for a two-glyph run.
@@ -2220,7 +2307,7 @@ view_test_cache_service_discards_stale_completion :: proc(t: ^testing.T) {
     testing.expect(t, taskpool.task_pool_init(&pool, 1, 1))
     defer taskpool.task_pool_destroy(&pool)
     handle, outcome := taskpool.task_pool_submit(
-        &pool, test_task_succeed, nil)
+        &pool, test_task_succeed, nil, .Worker_Only)
     testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
 
     cache: Font_Cache
@@ -2269,7 +2356,7 @@ view_test_cache_service_cancels_superseded_preparation :: proc(t: ^testing.T) {
     defer taskpool.task_pool_destroy(&pool)
     observed := false
     handle, outcome := taskpool.task_pool_submit(
-        &pool, font_test_wait_for_cancellation, &observed)
+        &pool, font_test_wait_for_cancellation, &observed, .Worker_Only)
     testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
@@ -2303,7 +2390,7 @@ view_test_cache_service_cancelled_page_restores_demand :: proc(t: ^testing.T) {
     defer taskpool.task_pool_destroy(&pool)
     observed := false
     handle, outcome := taskpool.task_pool_submit(
-        &pool, font_test_wait_for_cancellation, &observed)
+        &pool, font_test_wait_for_cancellation, &observed, .Worker_Only)
     testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
     glyph_storage: [32]Font_Glyph_Record
     glyphs := glyph_storage[:]
@@ -2333,7 +2420,7 @@ view_test_cache_service_preserves_current_other_key_work :: proc(t: ^testing.T) 
     defer taskpool.task_pool_destroy(&pool)
     observed := false
     handle, outcome := taskpool.task_pool_submit(
-        &pool, font_test_wait_for_cancellation, &observed)
+        &pool, font_test_wait_for_cancellation, &observed, .Worker_Only)
     testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
     cache: Font_Cache
     cache.entries[int(Font_Key.Bold)] = {
@@ -2361,6 +2448,139 @@ view_test_cache_service_preserves_current_other_key_work :: proc(t: ^testing.T) 
     testing.expect(t, observed)
 }
 
+// Configure a real seed or reload request while retaining an existing resident font.
+font_test_request_optional_preparation :: proc(
+    t: ^testing.T, cache: ^Font_Cache, reload: bool) {
+    cache.entries[int(Font_Key.Bold)] = {
+        font = {base_size = 55},
+        resident = true,
+        generation = 1,
+        requested_generation = 1,
+    }
+    if reload {
+        cache.entries[int(Font_Key.Bold)].state = .Ready
+        cache.entries[int(Font_Key.Bold)].request_count = 1
+        testing.expect(t, cache_reload(cache, .Bold))
+    } else {
+        testing.expect(t, cache_request(cache, .Bold))
+    }
+    testing.expect(t, prepare_task_set_path(
+        &cache.preparation.task, "assets/missing-font.ttf"))
+}
+
+// Prove an unrelated owner wait cannot claim production optional font preparation.
+font_test_optional_preparation_exclusion :: proc(t: ^testing.T, reload: bool) {
+    pool: taskpool.Task_Pool
+    if !testing.expect(t, taskpool.task_pool_init(&pool, 1, 3)) {
+        return
+    }
+    defer taskpool.task_pool_destroy(&pool)
+    gate: Font_Execution_Test_Gate
+    defer sync.atomic_store_explicit(&gate.released, true, .Release)
+    blocker, outcome := taskpool.task_pool_submit(
+        &pool, font_test_hold_worker, &gate, .Worker_Only)
+    testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
+    if !testing.expect(t, font_test_wait_for_gate(&gate)) {
+        return
+    }
+    cache: Font_Cache
+    font_test_request_optional_preparation(t, &cache, reload)
+    cache_service(&cache, &pool)
+    testing.expect_value(t,
+        pool.slots[cache.preparation.handle.index].execution_policy,
+        taskpool.Task_Execution_Policy.Worker_Only)
+    executor: int
+    frame_work, frame_outcome := taskpool.task_pool_submit(
+        &pool, font_test_record_executor, &executor)
+    testing.expect_value(t, frame_outcome, taskpool.Task_Submit_Outcome.Queued)
+    _, joined := taskpool.task_pool_wait(&pool, frame_work)
+    testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
+    testing.expect_value(t, executor, sync.current_thread_id())
+    testing.expect_value(t,
+        taskpool.task_pool_poll(&pool, cache.preparation.handle),
+        taskpool.Task_Poll_Outcome.Pending)
+    font_test_finish_blocked_preparation(t, &cache, &pool, &gate, blocker)
+}
+
+// Release a controlled worker, retire font work, and verify retained font residency.
+font_test_finish_blocked_preparation :: proc(
+    t: ^testing.T, cache: ^Font_Cache, pool: ^taskpool.Task_Pool,
+    gate: ^Font_Execution_Test_Gate, blocker: taskpool.Task_Handle) {
+    sync.atomic_store_explicit(&gate.released, true, .Release)
+    result, joined := taskpool.task_pool_wait(pool, blocker)
+    testing.expect_value(t, result, taskpool.Task_Result.Succeeded)
+    testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
+    cache_shutdown_service(cache, pool)
+    testing.expect(t, cache_preparation_idle(cache))
+    testing.expect_value(t, pool.helping_execution_count, u64(1))
+    testing.expect_value(t, pool.outstanding_count, 0)
+    testing.expect_value(t, cache.entries[int(Font_Key.Bold)].font.base_size, 55)
+    testing.expect_value(t, cache.preparation.publication_count, u64(0))
+    cache_preparation_arena_destroy(cache)
+}
+
+// Verify optional seed and reload preparation stay pending during owner frame helping.
+@(test)
+view_test_optional_font_preparation_excludes_owner :: proc(t: ^testing.T) {
+    font_test_optional_preparation_exclusion(t, false)
+    font_test_optional_preparation_exclusion(t, true)
+}
+
+// Verify font shutdown drains queued preparation without running it on the owner.
+@(test)
+view_test_optional_font_shutdown_worker_only :: proc(t: ^testing.T) {
+    pool: taskpool.Task_Pool
+    if !testing.expect(t, taskpool.task_pool_init(&pool, 1, 3)) {
+        return
+    }
+    defer taskpool.task_pool_destroy(&pool)
+    gate: Font_Execution_Test_Gate
+    defer sync.atomic_store_explicit(&gate.released, true, .Release)
+    blocker, _ := taskpool.task_pool_submit(
+        &pool, font_test_hold_worker, &gate, .Worker_Only)
+    if !testing.expect(t, font_test_wait_for_gate(&gate)) {
+        return
+    }
+    cache: Font_Cache
+    font_test_request_optional_preparation(t, &cache, false)
+    cache_service(&cache, &pool)
+    releaser := thread.create(font_test_gate_releaser)
+    if !testing.expect(t, releaser != nil) {
+        sync.atomic_store_explicit(&gate.released, true, .Release)
+        cache_shutdown_service(&cache, &pool)
+        cache_preparation_arena_destroy(&cache)
+        return
+    }
+    releaser.data = &gate
+    thread.start(releaser)
+    signal, signal_outcome := taskpool.task_pool_submit(
+        &pool, font_test_signal_gate_release, &gate)
+    testing.expect_value(t, signal_outcome, taskpool.Task_Submit_Outcome.Queued)
+    cache_shutdown_service(&cache, &pool)
+    thread.join(releaser)
+    thread.destroy(releaser)
+    font_test_verify_shutdown_drain(t, &cache, &pool, blocker, signal)
+    cache_preparation_arena_destroy(&cache)
+}
+
+// Verify terminal drain results before pool and font arena destruction.
+font_test_verify_shutdown_drain :: proc(
+    t: ^testing.T, cache: ^Font_Cache, pool: ^taskpool.Task_Pool,
+    blocker, signal: taskpool.Task_Handle) {
+    testing.expect_value(t, pool.state, taskpool.Task_Pool_State.Stopped)
+    testing.expect(t, cache_preparation_idle(cache))
+    testing.expect_value(t, cache.preparation.cancellation_completion_count, u64(1))
+    testing.expect_value(t, cache.preparation.publication_count, u64(0))
+    testing.expect_value(t, pool.helping_execution_count, u64(1))
+    result, joined := taskpool.task_pool_wait(pool, blocker)
+    testing.expect_value(t, result, taskpool.Task_Result.Succeeded)
+    testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
+    signal_result, signal_joined := taskpool.task_pool_wait(pool, signal)
+    testing.expect_value(t, signal_result, taskpool.Task_Result.Succeeded)
+    testing.expect_value(t, signal_joined, taskpool.Task_Join_Outcome.Joined)
+    testing.expect_value(t, pool.outstanding_count, 0)
+}
+
 // Verify queue saturation retries and terminal task failure preserves residency.
 @(test)
 view_test_cache_retries_queue_full :: proc(t: ^testing.T) {
@@ -2383,12 +2603,17 @@ view_test_cache_retries_queue_full :: proc(t: ^testing.T) {
 
     taskpool.task_pool_wait(&pool, occupied)
     cache_service(&cache, &pool)
+    testing.expect_value(t, cache.preparation.state, Font_Prepare_Operation_State.Queued)
+    testing.expect_value(t,
+        pool.slots[cache.preparation.handle.index].execution_policy,
+        taskpool.Task_Execution_Policy.Worker_Only)
     for !cache_preparation_idle(&cache) {
         cache_service(&cache, &pool)
         thread.yield()
     }
     testing.expect_value(t, cache.preparation.failure_count, u64(1))
     testing.expect_value(t, cache.entries[int(Font_Key.Bold)].font.base_size, 55)
+    cache_preparation_arena_destroy(&cache)
 }
 
 // Verify shutdown cleans both retry-only and accepted task ownership states.
@@ -2401,6 +2626,7 @@ view_test_cache_shutdown_task_states :: proc(t: ^testing.T) {
     cache_shutdown_service(&retry_cache, &retry_pool)
     testing.expect(t, cache_preparation_idle(&retry_cache))
     testing.expect_value(t, retry_cache.preparation.failure_count, u64(1))
+    cache_preparation_arena_destroy(&retry_cache)
     taskpool.task_pool_destroy(&retry_pool)
 
     queued_pool: taskpool.Task_Pool
@@ -2412,6 +2638,9 @@ view_test_cache_shutdown_task_states :: proc(t: ^testing.T) {
     cache_service(&queued_cache, &queued_pool)
     testing.expect_value(
         t, queued_cache.preparation.state, Font_Prepare_Operation_State.Queued)
+    testing.expect_value(t,
+        queued_pool.slots[queued_cache.preparation.handle.index].execution_policy,
+        taskpool.Task_Execution_Policy.Worker_Only)
     cache_shutdown_service(&queued_cache, &queued_pool)
     testing.expect(t, cache_preparation_idle(&queued_cache))
     testing.expect_value(
@@ -2419,6 +2648,9 @@ view_test_cache_shutdown_task_states :: proc(t: ^testing.T) {
     testing.expect_value(
         t, queued_cache.preparation.cancellation_completion_count, u64(1))
     testing.expect_value(t, queued_cache.preparation.failure_count, u64(0))
+    testing.expect_value(t, queued_pool.helping_execution_count, u64(0))
+    testing.expect_value(t, queued_pool.outstanding_count, 0)
+    cache_preparation_arena_destroy(&queued_cache)
     taskpool.task_pool_destroy(&queued_pool)
 }
 
