@@ -282,12 +282,7 @@ draw_encoded_tree_geometry :: proc(
         }
     }
     _ = native.draw_encoder_pop_scissor(encoder)
-    if scrollbar.has_scrollbar {
-        _ = native.draw_encoder_rectangle(
-            encoder, geometry.Rectangle(scrollbar.track_rect), BACKGROUND_COLOR)
-        _ = native.draw_encoder_rectangle(
-            encoder, geometry.Rectangle(scrollbar.thumb_rect), UI_BORDER_COLOR)
-    }
+    draw_encoded_scrollbar(encoder, scrollbar)
 }
 
 // draw_encoded_tree_node_text emits visible labels in one bounded tree walk.

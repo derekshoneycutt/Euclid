@@ -747,6 +747,10 @@ UI and cache preparation use explicit ordered stages around the fixed-step updat
   fixed frame-local preparation records.
 1. Upload, render, blit, and submit one SDL_GPU command buffer.
 
+Terminal and non-Terminal text surfaces draw their prepared scrollbar track and
+thumb after clipped content and overlays. Rendering uses the same geometry as
+pointer capture and dragging, with the shared Library scrollbar palette.
+
 Shape preparation reads settled `Shape_World` components and writes only its derived
 shape draw cache. Lens and Lune state remains analytic as two centers, two radii, and
 an intersection or directional difference operation. The frame-local cache samples the

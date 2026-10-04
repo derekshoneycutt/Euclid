@@ -334,4 +334,5 @@ terminal_draw_encoded :: proc(
         })
     _ = native.draw_encoder_pop_scissor(encoder)
     terminalview.terminal_draw_overlays(term, resolver, layout)
+    draw_encoded_scrollbar(encoder, scroll.scrollbar)
 }

@@ -157,6 +157,7 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
+  - [ ] Improved input after full input system migration (IME, etc.)
   - [ ] Julia syntax highlighting
   - [ ] History explorer Julia-REPL style
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
@@ -191,7 +192,10 @@ General features:
   - [X] Localization tables
   - [ ] Basic initial user settings structure
   - [ ] Search and use history
-  - [ ] Search autocompletion nice-to-haves
+  - [ ] Dynamic/special lists
+    - [ ] Favorites
+    - [ ] Most viewed
+    - [ ] Recent searches
 - [ ] Full input system
   - [X] Comprehensive mouse/keyboard focus system
   - [X] Basic initial accesibility support

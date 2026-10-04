@@ -100,7 +100,7 @@ view_text_content_panel :: proc(
     return container_geometry(text_panel, 1).drawn_rect
 }
 
-// draw_encoded_presentation_text emits visible Dynview or fallback glyphs only.
+// Draw clipped Dynview or fallback content, then its prepared scrollbar overlay.
 draw_encoded_presentation_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     presentation: Presentation_Preparation) {
@@ -133,6 +133,7 @@ draw_encoded_presentation_text :: proc(
             },
         })
     _ = native.draw_encoder_pop_scissor(encoder)
+    draw_encoded_scrollbar(encoder, presentation.scroll.scrollbar)
 }
 
 //   Return whether the selected catalog node owns the Terminal surface.

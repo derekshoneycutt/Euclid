@@ -2,6 +2,7 @@ package ui
 
 import viewmodel "../model"
 import geometry "../../core/geometry"
+import "../native"
 
 Scroll_Container_State :: struct {
     is_dragging_thumb: bool,
@@ -89,6 +90,18 @@ Scroll_Container_Update_Params :: struct {
     state_in: Scroll_Container_State,
     semantic_focus: ^viewmodel.Ui_Semantic_Focus_State,
     semantic_id: viewmodel.Ui_Node_Id,
+}
+
+// Draw the prepared track and thumb above content using the shared UI palette.
+draw_encoded_scrollbar :: proc(
+    encoder: ^native.Draw_Encoder, scrollbar: Vertical_Scrollbar_Geometry) {
+    if !scrollbar.has_scrollbar {
+        return
+    }
+    _ = native.draw_encoder_rectangle(
+        encoder, scrollbar.track_rect, BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle(
+        encoder, scrollbar.thumb_rect, UI_BORDER_COLOR)
 }
 
 // scroll_container_apply_semantic resolves page commands for its composite owner.
