@@ -12,6 +12,7 @@ import "core:testing"
 import "../core"
 import "../particles"
 import "../shapes"
+import viewmodel "../view/model"
 
 // Build one bridge state around caller-owned canonical world storage.
 bridge_shape_test_state :: proc(
@@ -231,6 +232,42 @@ bridge_shape_hide_emits_world_geometry_dust :: proc(t: ^testing.T) {
     testing.expect(t, particles^.low_particles.alive[0])
     view := shape_get_view(state, line.shape)
     testing.expect_value(t, view.visible, u8(0))
+}
+
+// Verify a newly visible floor label queues one text-spanning dust contact.
+@(test)
+bridge_shape_reveal_queues_label_dust_contact :: proc(t: ^testing.T) {
+    world := new(shapemodel.Shape_World, context.allocator)
+    defer free(world, context.allocator)
+    state := bridge_shape_test_state(world)
+    defer free(state)
+    particles := new(particlemodel.Particle_System, context.allocator)
+    defer free(particles, context.allocator)
+    particles^.use_max_dust_particles = 16
+    state^.particle_system = particles
+    state^.iso_scale = new(viewmodel.Iso_Scale, context.allocator)
+    defer free(state^.iso_scale, context.allocator)
+    state^.iso_scale^.scale = 800
+    label := shape_create_label(state, cstring("∠A′"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain),
+        bridge_shape_test_input({0.5, 0.5, 0}))
+
+    testing.expect_value(t, shape_set_visible(state, label.entity, 1),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, particles^.dust_tool_contact_count, 1)
+    testing.expect_value(t, particles^.dust_tool_contacts[0].source,
+        particlemodel.Dust_Tool_Contact_Source.Label)
+
+    testing.expect_value(t, shape_set_visible(state, label.entity, 1),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, particles^.dust_tool_contact_count, 1)
+
+    elevated_label := shape_create_label(state, cstring("above"),
+        i32(shapemodel.Shape_Text_Mime.Text_Plain),
+        bridge_shape_test_input({0.5, 0.5, 0.2}))
+    testing.expect_value(t, shape_set_visible(state, elevated_label.entity, 1),
+        i32(BRIDGE_STATUS_OK))
+    testing.expect_value(t, particles^.dust_tool_contact_count, 1)
 }
 
 // Verify one batch kick does not immediately age dust emitted by an earlier hide.

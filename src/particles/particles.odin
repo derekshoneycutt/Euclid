@@ -28,6 +28,7 @@ import geometry "../core/geometry"
 
 import "core:math"
 import rand "core:math/rand"
+import utf8 "core:unicode/utf8"
 
 
 Vector2 :: geometry.Vector2
@@ -1212,6 +1213,29 @@ queue_dust_tool_contact :: proc(
     return true
 }
 
+// Queue one bounded contact spanning the rendered width of a revealed text label.
+queue_dust_label_reveal_contact :: proc(
+    ps: ^Particle_System,
+    position: Vector3,
+    text: string,
+    font_size, projection_scale: f32) -> bool {
+    if ps == nil || len(text) == 0 || font_size <= 0 || projection_scale <= 0 {
+        return false
+    }
+    glyph_count := utf8.rune_count_in_string(text)
+    if glyph_count <= 0 {
+        return false
+    }
+    center_offset := font_size / projection_scale
+    start := Vector3{position.x - center_offset,
+        position.y - center_offset, position.z}
+    width := font_size * 0.6 * f32(glyph_count) / projection_scale
+    finish := Vector3{start.x + width, start.y - width, start.z}
+    return queue_dust_tool_contact(ps, {
+        endpoint = start, segment_first = start, segment_second = finish,
+        has_sweep = true, source = .Label})
+}
+
 // Report whether one adjacent contact makes its predecessor redundant.
 dust_tool_contacts_can_coalesce :: proc(
     previous, current: particlemodel.Dust_Tool_Contact) -> bool {
@@ -1225,6 +1249,8 @@ dust_tool_contacts_can_coalesce :: proc(
     case .Point, .Scenario:
         return !previous.has_sweep && !current.has_sweep &&
             previous.endpoint == current.endpoint
+    case .Label:
+        return previous == current
     }
     return false
 }
@@ -1293,6 +1319,19 @@ apply_dust_filled_sweep_leg :: proc(
     }
 }
 
+// Apply one radial sample using the force profile owned by its contact source.
+apply_dust_contact_point :: proc(
+    field: ^Dust_Field_State,
+    position: Vector2,
+    source: particlemodel.Dust_Tool_Contact_Source) -> u64 {
+    if source == .Label {
+        return dust_field_apply_tool_point(
+            field, position, DUST_LABEL_CONTACT_PUSH_RADIUS,
+            DUST_LABEL_CONTACT_PUSH_SPEED)
+    }
+    return dust_field_apply_tool_point(field, position)
+}
+
 // Apply one filled-compass contact over its complete ruled sweep area.
 apply_dust_filled_sweep_to_field :: proc(
     ps: ^Particle_System, intent: ^particlemodel.Dust_Tool_Contact) {
@@ -1313,7 +1352,8 @@ apply_dust_tool_contact_to_field :: proc(
     }
     if !intent^.has_sweep {
         ps^.dust_tool_contact_field_node_visit_count +=
-            dust_field_apply_tool_point(field, {intent^.endpoint.x, intent^.endpoint.y})
+            apply_dust_contact_point(field,
+                {intent^.endpoint.x, intent^.endpoint.y}, intent^.source)
         ps^.dust_tool_contact_sample_count += 1
         return
     }
@@ -1326,7 +1366,7 @@ apply_dust_tool_contact_to_field :: proc(
             math.lerp(intent^.segment_first.x, intent^.segment_second.x, interpolation),
             math.lerp(intent^.segment_first.y, intent^.segment_second.y, interpolation)}
         ps^.dust_tool_contact_field_node_visit_count +=
-            dust_field_apply_tool_point(field, position)
+            apply_dust_contact_point(field, position, intent^.source)
         ps^.dust_tool_contact_sample_count += 1
     }
 }

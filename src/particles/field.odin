@@ -19,18 +19,25 @@ Dust_Field_Neighbors :: struct {
     left, right, down, up: int,
 }
 
+Dust_Field_Impulse_Profile :: struct {
+    radius, push_speed: f32,
+}
+
 DUST_DENSITY_EPSILON :: f32(1e-6)
 DUST_PRESSURE_YIELD :: f32(1.05)
 DUST_PRESSURE_STRENGTH :: f32(0.00008)
 DUST_PRESSURE_ACCELERATION_MAX :: f32(0.03)
 DUST_VISCOSITY :: f32(0.000048)
 DUST_DRAG_RATE :: f32(1.5)
+DUST_LABEL_CONTACT_PUSH_RADIUS :: f32(0.024)
+DUST_LABEL_CONTACT_PUSH_SPEED :: f32(0.009)
 
 // Scalar input for one weighted dust-field tool impulse.
 Dust_Field_Tool_Impulse_Node :: struct {
     node: int,
     delta_x, delta_y, distance_sq: f32,
-    radius, direction_length: f32,
+    profile: Dust_Field_Impulse_Profile,
+    direction_length: f32,
     direction: Vector2,
     directional: bool,
 }
@@ -168,8 +175,7 @@ dust_field_deposit :: proc(field: ^Dust_Field_State,
 
 // Intersect one tool sample's radius with occupied field support.
 dust_field_tool_bounds :: proc(
-    field: ^Dust_Field_State, position: Vector2) -> Dust_Field_Bounds {
-    radius := f32(DUST_CONTACT_PUSH_RADIUS)
+    field: ^Dust_Field_State, position: Vector2, radius: f32) -> Dust_Field_Bounds {
     return {
         min_x = i32(max(int(math.ceil(f64((position.x - radius) /
             DUST_FIELD_SPACING))), int(field^.support_bounds.min_x))),
@@ -187,13 +193,13 @@ dust_field_tool_bounds :: proc(
 dust_field_apply_tool_impulse_node :: proc(
     field: ^Dust_Field_State, input: Dust_Field_Tool_Impulse_Node) {
     node := input.node
-    radius := input.radius
+    radius := input.profile.radius
     if field^.density[node] <= DUST_DENSITY_EPSILON ||
         input.distance_sq > radius * radius {
         return
     }
     distance := f32(math.sqrt(f64(input.distance_sq)))
-    falloff := DUST_CONTACT_PUSH_SPEED * (1 - distance / radius)
+    falloff := input.profile.push_speed * (1 - distance / radius)
     if input.directional {
         field^.momentum_x[node] +=
             field^.density[node] * input.direction.x * falloff / input.direction_length
@@ -210,7 +216,9 @@ dust_field_apply_tool_impulse_node :: proc(
 // Add one radial or authored-direction impulse to occupied nodes near a tool sample.
 dust_field_apply_tool_impulse :: proc(
     field: ^Dust_Field_State, position, direction: Vector2,
-    directional: bool) -> u64 {
+    directional: bool,
+    profile: Dust_Field_Impulse_Profile = {
+        DUST_CONTACT_PUSH_RADIUS, DUST_CONTACT_PUSH_SPEED}) -> u64 {
     if !field^.support_bounds.valid {
        return 0
     }
@@ -219,8 +227,7 @@ dust_field_apply_tool_impulse :: proc(
     if directional && direction_length <= DUST_DENSITY_EPSILON {
        return 0
     }
-    radius := f32(DUST_CONTACT_PUSH_RADIUS)
-    bounds := dust_field_tool_bounds(field, position)
+    bounds := dust_field_tool_bounds(field, position, profile.radius)
     if bounds.min_x > bounds.max_x || bounds.min_y > bounds.max_y {
        return 0
     }
@@ -233,7 +240,7 @@ dust_field_apply_tool_impulse :: proc(
             delta_y := f32(y) * DUST_FIELD_SPACING - position.y
             distance_sq := delta_x * delta_x + delta_y * delta_y
             dust_field_apply_tool_impulse_node(
-                field, {node, delta_x, delta_y, distance_sq, radius,
+                field, {node, delta_x, delta_y, distance_sq, profile,
                     direction_length, direction, directional})
         }
     }
@@ -242,8 +249,11 @@ dust_field_apply_tool_impulse :: proc(
 
 // Add one radial tool-velocity impulse to occupied nodes inside current support.
 dust_field_apply_tool_point :: proc(
-    field: ^Dust_Field_State, position: Vector2) -> u64 {
-    return dust_field_apply_tool_impulse(field, position, {}, false)
+    field: ^Dust_Field_State, position: Vector2,
+    radius: f32 = DUST_CONTACT_PUSH_RADIUS,
+    push_speed: f32 = DUST_CONTACT_PUSH_SPEED) -> u64 {
+    return dust_field_apply_tool_impulse(
+        field, position, {}, false, {radius, push_speed})
 }
 
 // Add one motion-directed filled-sweep impulse to nearby occupied nodes.

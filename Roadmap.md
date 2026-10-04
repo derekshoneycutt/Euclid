@@ -234,9 +234,9 @@ Final tasks:
   - [ ] Freeze and document supported Julia APIs
   - [ ] Remove dead APIs, debug paths, compatibility code, and unused assets
 - [ ] Final editing and review (2-3 weeks)
+  - [ ] Principal code review against documented architecture and standards
   - [ ] Final Terminal user-command interface review
   - [ ] Animation and content editing
-  - [ ] Principal code review against documented architecture and standards
   - [ ] Resolve review findings
 - [ ] Package construction
   - [ ] Linux

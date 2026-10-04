@@ -221,6 +221,66 @@ dust_tool_contact_queue_is_bounded :: proc(t: ^testing.T) {
     testing.expect_value(t, ps^.dust_tool_contact_overflow_count, 1)
 }
 
+// Verify a revealed UTF-8 label queues a contact across its rendered text width.
+@(test)
+dust_label_reveal_contact_covers_text_width :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+
+    testing.expect(t, queue_dust_label_reveal_contact(
+        ps, {0.5, 0.5, 0}, "∠A′", 16, 800))
+
+    contact := ps^.dust_tool_contacts[0]
+    testing.expect_value(t, ps^.dust_tool_contact_count, 1)
+    testing.expect_value(t, contact.source, particlemodel.Dust_Tool_Contact_Source.Label)
+    testing.expect(t, contact.has_sweep)
+    testing.expect(t, contact.segment_second.x > contact.segment_first.x)
+    testing.expect(t, contact.segment_second.y < contact.segment_first.y)
+    testing.expect(t, contact.segment_first.x < 0.5)
+    testing.expect(t, contact.segment_first.y < 0.5)
+}
+
+// Verify a label contact pushes grounded dust away from both sides of its text line.
+@(test)
+dust_label_reveal_contact_pushes_from_text :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    above := 128 * DUST_FIELD_DIM + 125
+    below := 122 * DUST_FIELD_DIM + 125
+    ps^.dust_field.density[above] = 1
+    ps^.dust_field.density[below] = 1
+    ps^.dust_field.support_bounds = {125, 122, 125, 128, true}
+    testing.expect(t, queue_dust_tool_contact(ps, {
+        endpoint = {0.4, 0.6, 0},
+        segment_first = {0.4, 0.6, 0},
+        segment_second = {0.6, 0.4, 0},
+        has_sweep = true,
+        source = .Label}))
+
+    apply_dust_tool_contacts_to_field(ps)
+
+    testing.expect(t, ps^.dust_field.momentum_x[above] > 0)
+    testing.expect(t, ps^.dust_field.momentum_y[above] > 0)
+    testing.expect(t, ps^.dust_field.momentum_x[below] < 0)
+    testing.expect(t, ps^.dust_field.momentum_y[below] < 0)
+}
+
+// Verify label contacts reach farther and push harder than ordinary tool contacts.
+@(test)
+dust_label_contact_uses_stronger_push :: proc(t: ^testing.T) {
+    ps := new(particlemodel.Particle_System, context.allocator)
+    defer free(ps)
+    node := 125 * DUST_FIELD_DIM + 129
+    ps^.dust_field.density[node] = 1
+    ps^.dust_field.support_bounds = {129, 125, 129, 125, true}
+    testing.expect(t, queue_dust_tool_contact(ps, {
+        endpoint = {0.5, 0.5, 0}, source = .Label}))
+
+    apply_dust_tool_contacts_to_field(ps)
+
+    testing.expect(t, ps^.dust_field.momentum_x[node] > 0)
+}
+
 // Verify only exact duplicate filled sweeps coalesce within one spawn boundary.
 @(test)
 dust_tool_contacts_coalesce_only_with_matching_semantics :: proc(t: ^testing.T) {

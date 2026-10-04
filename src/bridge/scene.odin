@@ -2,6 +2,7 @@ package bridge
 
 import "../core"
 import "../particles"
+import shapemodel "../shapes/model"
 
 import "core:math"
 
@@ -28,6 +29,32 @@ queue_tool_dust_contact :: proc(
     accepted := particles.queue_dust_tool_contact(
         state^.particle_system, {endpoint = endpoint, source = .Point})
     assert(accepted)
+}
+
+// Queue one text-width contact when a floor label becomes visible.
+queue_revealed_label_dust_contact :: proc(
+    state: ^core.Euclid_General_State,
+    entity: shapemodel.Shape_Entity,
+    font_size: f32) {
+    if state == nil || state^.particle_system == nil || state^.iso_scale == nil {
+        return
+    }
+    label, has_label := shapemodel.shape_component_get(
+        &state^.shape_world.labels, &state^.shape_world.registry, entity)
+    transform, has_transform := shapemodel.shape_component_get(
+        &state^.shape_world.transforms, &state^.shape_world.registry, entity)
+    if !has_label || !has_transform ||
+        !tool_dust_contact_on_floor(transform^.position) {
+        return
+    }
+    text, has_text := shapemodel.shape_label_source(
+        &state^.shape_world.label_store, label^)
+    if !has_text {
+        return
+    }
+    _ = particles.queue_dust_label_reveal_contact(
+        state^.particle_system, transform^.position, text, font_size,
+        state^.iso_scale^.scale)
 }
 
 // Queue one compound filled-compass sweep when both legs lie on the floor.

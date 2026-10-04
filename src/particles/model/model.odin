@@ -77,6 +77,7 @@ Dust_Tool_Contact_Source :: enum u8 {
     Point,
     Compass_Filled_Sweep,
     Scenario,
+    Label,
 }
 
 // Describe one ordered point push or compound filled-compass sweep.

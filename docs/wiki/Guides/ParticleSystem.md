@@ -180,6 +180,13 @@ each leg. Both interval counts derive from geometric distance and contact radius
 sample spacing remains bounded in both dimensions and no radial or angular bands are
 skipped.
 
+Revealing a plain-text floor label queues one radial line contact centered on the text
+and spanning its estimated rendered width. The width uses the UTF-8 glyph count, label
+font size, and current projection scale, so multi-character labels repel dust across
+their text rather than only at the label anchor. Label contacts use a wider radius and
+stronger push than tool contacts to clear space around newly revealed text. Labels above
+the floor do not affect grounded dust.
+
 ```mermaid
 flowchart LR
     Queue[Bounded contact queue] --> Coalesce[Coalesce adjacent redundant intents]
