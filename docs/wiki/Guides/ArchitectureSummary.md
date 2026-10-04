@@ -936,6 +936,19 @@ the owner responsible for release.
   hierarchy, order, kind, display name, and implementation path.
 - Asset generation evaluates pure sidecars, emits a canonical corpus, and builds the
   immutable SQLite FTS5 and spellfix index before package identity is calculated.
+- The native content builder owns its schema and reusable insert statements in
+  `tools/content_builder/sql/`. Odin `#load(..., string)` embeds these SQL sources
+  at compile time; they are not runtime assets and need no generated Odin source.
+  The named constants retain the existing SQLite C-string call boundary. Builder
+  Odin and SQL source bytes participate in packaged-asset freshness checks.
+- The runtime content store owns its admission and search queries in
+  `src/view/content/sql/`, embedded by named constants in `statements.odin` using
+  the same compile-time `#load(..., string)` pattern. Parameter indexes, result
+  columns, and ordering remain contracts with their binding and decoding code;
+  SQL files are source-build inputs, not packaged or runtime-loaded assets.
+  Loaded string constants use explicit `cstring(CONSTANT)` conversions at SQLite
+  calls, matching the builder; do not apply that constant conversion pattern to
+  arbitrary runtime strings without establishing NUL termination and lifetime.
 - A dedicated Odin worker exclusively owns the read-only SQLite connection and prepared
   statements. The display thread owns query editing, debounce, accepted results,
   suggestion interaction, and filtered tree presentation; drawing never calls SQLite.

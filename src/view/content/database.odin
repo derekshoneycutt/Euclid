@@ -183,25 +183,30 @@ content_database_prepare :: proc(
 content_database_prepare_search_statements :: proc(
     database: ^Content_Database) -> bool {
     statements := &database.statements
-    return content_database_prepare(database, &statements.count, SEARCH_COUNT_SQL) &&
-        content_database_prepare(database, &statements.search_rows, SEARCH_ROWS_SQL) &&
+    return content_database_prepare(
+        database, &statements.count, cstring(SEARCH_COUNT_SQL)) &&
         content_database_prepare(
-            database, &statements.search_metadata, SEARCH_METADATA_SQL) &&
-        content_database_prepare(database, &statements.spellfix, SEARCH_SPELLFIX_SQL) &&
+            database, &statements.search_rows, cstring(SEARCH_ROWS_SQL)) &&
         content_database_prepare(
-            database, &statements.raw_metadata_rows, RAW_METADATA_ROWS_SQL)
+            database, &statements.search_metadata, cstring(SEARCH_METADATA_SQL)) &&
+        content_database_prepare(
+            database, &statements.spellfix, cstring(SEARCH_SPELLFIX_SQL)) &&
+        content_database_prepare(
+            database, &statements.raw_metadata_rows, cstring(RAW_METADATA_ROWS_SQL))
 }
 
 // Prepare locale and localized UI message declaration statements.
 content_database_prepare_declaration_statements :: proc(
     database: ^Content_Database) -> bool {
     statements := &database.statements
-    return content_database_prepare(database, &statements.locale_rows, LOCALE_ROWS_SQL) &&
-        content_database_prepare(database, &statements.message_rows, MESSAGE_ROWS_SQL) &&
+    return content_database_prepare(
+        database, &statements.locale_rows, cstring(LOCALE_ROWS_SQL)) &&
         content_database_prepare(
-            database, &statements.argument_rows, ARGUMENT_ROWS_SQL) &&
+            database, &statements.message_rows, cstring(MESSAGE_ROWS_SQL)) &&
         content_database_prepare(
-            database, &statements.translation_rows, TRANSLATION_ROWS_SQL)
+            database, &statements.argument_rows, cstring(ARGUMENT_ROWS_SQL)) &&
+        content_database_prepare(
+            database, &statements.translation_rows, cstring(TRANSLATION_ROWS_SQL))
 }
 
 // Prepare subject, catalogue, edition, availability, and projection statements.
@@ -209,14 +214,17 @@ content_database_prepare_catalogue_statements :: proc(
     database: ^Content_Database) -> bool {
     statements := &database.statements
     return content_database_prepare(
-            database, &statements.subject_rows, SUBJECT_ROWS_SQL) &&
-        content_database_prepare(database, &statements.catalog_rows, CATALOG_ROWS_SQL) &&
-        content_database_prepare(database, &statements.name_rows, NAME_ROWS_SQL) &&
-        content_database_prepare(database, &statements.edition_rows, EDITION_ROWS_SQL) &&
+        database, &statements.subject_rows, cstring(SUBJECT_ROWS_SQL)) &&
         content_database_prepare(
-            database, &statements.availability_rows, AVAILABILITY_ROWS_SQL) &&
+            database, &statements.catalog_rows, cstring(CATALOG_ROWS_SQL)) &&
         content_database_prepare(
-            database, &statements.projection_rows, PROJECTION_ROWS_SQL)
+            database, &statements.name_rows, cstring(NAME_ROWS_SQL)) &&
+        content_database_prepare(
+            database, &statements.edition_rows, cstring(EDITION_ROWS_SQL)) &&
+        content_database_prepare(
+            database, &statements.availability_rows, cstring(AVAILABILITY_ROWS_SQL)) &&
+        content_database_prepare(
+            database, &statements.projection_rows, cstring(PROJECTION_ROWS_SQL))
 }
 
 // Validate the immutable database contract before worker readiness publication.

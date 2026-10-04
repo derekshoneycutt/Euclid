@@ -471,6 +471,23 @@ attributes, or implementation notes.
 - Use bounded, preallocated storage in steady frame paths unless an approved
   exception applies.
 
+### Compile-Time SQL Sources
+
+- **Review:** Production schemas and named reusable SQLite statements SHOULD live
+  in `.sql` files under the owning subsystem's `sql/` directory, embedded through
+  named Odin constants using `#load("sql/name.sql", string)`.
+- **Review:** Convert loaded constants explicitly with `cstring(CONSTANT)` at
+  SQLite call boundaries. This constant conversion does not justify casting
+  arbitrary runtime strings without NUL-termination and lifetime guarantees.
+- **Review:** Preserve parameter indexes, result-column order, and row ordering as
+  contracts with binding and decoding code. Validate changes with the owning
+  subsystem's execution tests, not syntax highlighting alone.
+- **Review:** SQL files are compile-time source inputs, not runtime assets.
+  Build reuse and fingerprint policies MUST include them where compiled outputs
+  are cached. Do not introduce generated Odin source for simple embedding.
+- **Review:** Tiny transaction mechanics and test-local fixture/mutation SQL may
+  remain inline; do not extract every SQL fragment merely for uniformity.
+
 ## Julia Rules (Required)
 
 ### Formatting and Structure

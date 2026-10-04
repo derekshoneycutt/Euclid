@@ -78,6 +78,17 @@ end
             builder, corpus_path, second_database, fingerprint)
         @test isfile(first_database)
         @test stream_fingerprint(first_database) == stream_fingerprint(second_database)
+        standalone_builder = joinpath(directory, basename(builder))
+        cp(builder, standalone_builder)
+        standalone_database = joinpath(directory, "standalone.sqlite3")
+        standalone = Main.run_command(Cmd([
+            standalone_builder, corpus_path, standalone_database, fingerprint,
+        ]); cwd=directory, capture_output=true)
+        @test standalone.exit_code == 0
+        @test isempty(standalone.stderr)
+        @test isfile(standalone_database)
+        @test stream_fingerprint(standalone_database) ==
+            stream_fingerprint(first_database)
         @test_throws ErrorException Main.run_content_database_builder(
             builder, corpus_path, joinpath(directory, "wrong-fingerprint.sqlite3"),
             repeat("0", 64))
@@ -111,6 +122,29 @@ end
                 directory, replace(name, ' ' => '-') * ".sqlite3")
             @test_throws ErrorException Main.run_content_database_builder(
                 builder, malformed_path, output_path, malformed_fingerprint)
+        end
+
+        @testset "Content builder compile-time input identity" begin
+            mktempdir() do directory
+                source = joinpath(directory, "main.odin")
+                sql_directory = joinpath(directory, "sql")
+                mkpath(sql_directory)
+                schema = joinpath(sql_directory, "schema.sql")
+                write(source, "package main\n")
+                write(schema, "CREATE TABLE example (value INTEGER);\n")
+                original = Main.content_builder_input_fingerprint(directory)
+                @test original == Main.content_builder_input_fingerprint(directory)
+                write(schema, "CREATE TABLE example (value TEXT);\n")
+                @test original != Main.content_builder_input_fingerprint(directory)
+                write(schema, "CREATE TABLE example (value INTEGER);\n")
+                @test original == Main.content_builder_input_fingerprint(directory)
+                renamed = joinpath(sql_directory, "renamed.sql")
+                mv(schema, renamed)
+                @test original != Main.content_builder_input_fingerprint(directory)
+                mv(renamed, schema)
+                write(source, "package main\n// changed\n")
+                @test original != Main.content_builder_input_fingerprint(directory)
+            end
         end
 
         canonical_lines = split(read(corpus_path, String), '\n'; keepempty=false)

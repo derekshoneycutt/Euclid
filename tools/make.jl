@@ -253,6 +253,17 @@ function content_input_fingerprint(root::String=joinpath(SRC_DIR, "content"))
     return fingerprint_sysimage_inputs(paths, root; identity="euclid-content-v1")
 end
 
+"""Hash the native content builder and its compile-time SQL inputs for asset reuse."""
+function content_builder_input_fingerprint(root::String=dirname(CONTENT_BUILDER_SOURCE))
+    paths = String[]
+    for (directory, _, names) in walkdir(root), name in names
+        endswith(name, ".odin") || endswith(name, ".sql") || continue
+        push!(paths, joinpath(directory, name))
+    end
+    sort!(paths; by=path -> replace(relpath(path, root), '\\' => '/'))
+    return fingerprint_sysimage_inputs(paths, root; identity="euclid-content-builder-v1")
+end
+
 """Return the platform-specific generated sysimage filename."""
 julia_sysimage_filename() = "euclid-sysimage." * Libdl.dlext
 
@@ -1357,6 +1368,7 @@ package=assets.pkg
 julia_root=julia
 content_root=content
 content_input_fingerprint=$(content_input_fingerprint())
+content_builder_input_fingerprint=$(content_builder_input_fingerprint())
 package_identity=$package_identity
 content_database=content/content.sqlite3
 content_database_sha256=$(content.database_sha256)
@@ -1826,8 +1838,11 @@ function packaged_assets_are_current()
     expected = "sysimage_input_fingerprint=$(sysimage_input_fingerprint())"
     expected_platform = "sysimage_platform=$(sysimage_platform_key())"
     expected_content = "content_input_fingerprint=$(content_input_fingerprint())"
+    expected_builder =
+        "content_builder_input_fingerprint=$(content_builder_input_fingerprint())"
     lines = split(result.stdout, '\n')
-    return expected in lines && expected_platform in lines && expected_content in lines
+    return expected in lines && expected_platform in lines &&
+        expected_content in lines && expected_builder in lines
 end
 
 """Prepare packaged assets required by Odin runtime integration tests."""
