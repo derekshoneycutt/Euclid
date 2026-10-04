@@ -168,6 +168,11 @@ Kind :: enum u16 {
     Allocation_Baseline_Matched = 521,
     Allocation_Baseline_Mismatched = 522,
     Allocation_Bad_Free = 523,
+
+    // Display-published settings handoffs; outcomes are recorded only after join.
+    Settings_Save_Submitted = 560,
+    Settings_Save_Committed = 561,
+    Settings_Save_Failed = 562,
 }
 
 // Orthogonal event properties that do not change the event kind.

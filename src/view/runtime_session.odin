@@ -7,6 +7,8 @@ import shapemodel "../shapes/model"
 import view_core "core"
 import viewmodel "model"
 import viewcontent "content"
+import setting_model "../settings"
+import user_data "../userdata"
 import "ui"
 import "../core"
 import color "../core/color"
@@ -31,11 +33,18 @@ when !core.SCENARIOS_ENABLED {
 import "core:math/linalg"
 import "core:time"
 
+// Carry app-resolved settings and borrowed store ownership into the view session.
+Session_Startup_Inputs :: struct {
+    preferences: setting_model.Preferences,
+    user_store: ^user_data.Store,
+}
+
 Euclid_Runtime_Session :: struct {
     state : ^Euclid_General_State,
     julia_service : ^bridgemodel.Julia_Runtime_Service,
     presentation : ^Presentation_Runtime,
     content_service: ^viewcontent.Content_Service,
+    startup: Session_Startup_Inputs,
 }
 
 //   Created Julia runtime service plus its completed initialize request id.
@@ -51,6 +60,15 @@ Session_Shape_Storage :: struct {
     world_cycloid_tool : shapemodel.Shape_Cycloid_Tool_Handle,
     world_compass : shapemodel.Shape_Compass_Handle,
     world_pen : shapemodel.Shape_Pen_Handle,
+}
+
+// Supply no-database defaults for existing direct runtime-session callers.
+session_startup_inputs :: proc(
+    startup: ^Session_Startup_Inputs) -> Session_Startup_Inputs {
+    if startup != nil {
+        return startup^
+    }
+    return {preferences = setting_model.default_preferences()}
 }
 
 //   Wait for one Julia startup request without driving a window event loop.
@@ -234,12 +252,16 @@ session_finalize_presentation :: proc(
     state: ^Euclid_General_State,
     julia_service: ^bridgemodel.Julia_Runtime_Service,
     content_service: ^viewcontent.Content_Service,
-    out_session: ^Euclid_Runtime_Session) -> bool {
+    out_session: ^Euclid_Runtime_Session,
+    startup: ^Session_Startup_Inputs = nil) -> bool {
     session := Euclid_Runtime_Session{
         state = state,
         julia_service = julia_service,
         content_service = content_service,
+        startup = session_startup_inputs(startup),
     }
+    session_apply_startup_preferences(
+        state, session.startup.preferences, session.startup.user_store)
     if !session_start_presentation(&session) {
         _ = shutdown_runtime_session(session)
         return false
@@ -248,10 +270,32 @@ session_finalize_presentation :: proc(
     return true
 }
 
+// Initialize editable preference intent without applying hardware fallbacks.
+session_apply_startup_preferences :: proc(
+    state: ^Euclid_General_State,
+    preferences: setting_model.Preferences,
+    store: ^user_data.Store) {
+    if state == nil || state^.particle_system == nil {
+        return
+    }
+    state^.ui_runtime.settings_preferences = preferences
+    state^.ui_runtime.settings_store = store
+    state^.ui_runtime.settings_store_available = store != nil
+    state^.ui_runtime.settings_save_status =
+        .Saved if store != nil else .Unavailable
+    state^.ui_runtime.display_fps = preferences.interface.display_fps
+    state^.ui_runtime.limit_fps = preferences.rendering.limit_fps
+    state^.user_drawing_sound_enabled = preferences.drawing.sound_enabled
+    state^.particle_system^.use_max_dust_particles = preferences.drawing.dust_limit
+    state^.ui_runtime.use_simd_batch_projection =
+        preferences.rendering.simd && view_core.simd_batch_projection_available()
+}
+
 //   Prepare runtime-owned subsystems and state without initializing presentation resources.
 create_runtime_session :: proc(
     settings: ^Euclid_Run_Settings,
-    asset_config: ^files.Asset_Root_Config = nil) -> (Euclid_Runtime_Session, bool) {
+    asset_config: ^files.Asset_Root_Config = nil,
+    startup: ^Session_Startup_Inputs = nil) -> (Euclid_Runtime_Session, bool) {
     if settings == nil {
         return {}, false
     }
@@ -280,7 +324,7 @@ create_runtime_session :: proc(
     }
     session: Euclid_Runtime_Session
     if !session_finalize_presentation(
-        state, julia_service, content_service, &session) {
+        state, julia_service, content_service, &session, startup) {
         return {}, false
     }
     return session, true
@@ -661,6 +705,8 @@ shutdown_runtime_session :: proc(
     julia_egress_router_detach(session.state, session.presentation)
     destroy_presentation_runtime(session.presentation)
     terminal_graphics_runtime_destroy(session.state)
+    settings_save_shutdown(
+        session.state, &session.state^.simulation_executor^.pool)
     taskpool.task_pool_shutdown(&session.state^.simulation_executor^.pool)
     simulation := observe_simulation_executor(session.state^.simulation_executor)
     destroy_simulation_executor(session.state^.simulation_executor)

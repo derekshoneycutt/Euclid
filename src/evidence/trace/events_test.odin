@@ -14,6 +14,9 @@ trace_test_event_schema :: proc(t: ^testing.T) {
     testing.expect_value(t, u16(Kind.Scene_Batch_Published), u16(120))
     testing.expect_value(t, u16(Kind.Checkpoint_Stored), u16(421))
     testing.expect_value(t, u16(Kind.Allocation_Bad_Free), u16(523))
+    testing.expect_value(t, u16(Kind.Settings_Save_Submitted), u16(560))
+    testing.expect_value(t, u16(Kind.Settings_Save_Committed), u16(561))
+    testing.expect_value(t, u16(Kind.Settings_Save_Failed), u16(562))
 }
 
 // Verify correlation keeps an existing identity domain, value, and generation.

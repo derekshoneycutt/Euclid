@@ -308,6 +308,11 @@ Options:
   -S, --no-simd            Disable SIMD projection.
   -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)
   -G, --no-gpu-dust-instancing Disable GPU dust instancing.
+  --persist                Save explicit preference arguments.
+  --user-db=FILENAME       Use an isolated or custom settings database.
+  --no-user-db             Disable saved settings for this invocation.
+  --diagnostics=PATH       Write synchronized diagnostic logs.
+  --profile=spall:PATH     Write display and worker Spall timelines.
   --semantic-trace         Enable semantic trace output.
   --semantic-trace-output=PATH  Write semantic trace JSONL to PATH.
   --semantic-trace-events=LIST   Limit trace categories (runtime,animation,geometry,tools,particles,view).
@@ -316,6 +321,39 @@ Options:
 
 Short options can be combined, for example: -vasg or -VAFSG
 ```
+
+Saved preferences are resolved before the native window is created. Command-line
+preference values take precedence for the current run; `--persist` commits only
+those explicitly supplied values. Use `--user-db=FILENAME` to isolate a settings
+database, or `--no-user-db` for a run with no database reads or writes. The latter
+cannot be combined with `--persist` or `--user-db`.
+
+Changes made in the Settings panel are saved asynchronously to the selected user
+database. With `--no-user-db`, controls still affect the current run but are not
+persisted. SIMD and GPU-instancing controls retain the requested preference even
+when the corresponding hardware capability is unavailable.
+
+The status beneath the controls distinguishes pending, saving, saved, unavailable,
+and failed saves. Changes take effect immediately; a failed write retains the
+latest edits and retries at most three accepted attempts. Shutdown joins accepted
+work and flushes pending edits before stopping the shared pool.
+
+Developers can run the isolated persistence acceptance workflow (requires the
+`sqlite3` CLI for independent committed-row inspection):
+
+```bash
+julia tools/make.jl scenario settings-persistence-acceptance --format=json
+```
+
+This debug workflow runs six scenario processes: save, restore, temporary CLI override,
+no database, final shutdown flush, and a deliberately failed transaction. A seventh
+launch verifies explicit startup persistence failure produces a nonzero exit. It uses
+only fresh databases beneath `.build/scenarios/`, verifies complete typed traces,
+committed rows, startup dimensions, and zero final tracked leaks/bad frees, and
+retains process logs alongside the bundles. Ordinary named scenarios use
+`--no-user-db` so acceptance runs never open the developer's preferences.
+Worker-only ownership is verified; a quantitative frame-latency budget is deferred
+and is not part of the acceptance claim.
 
 ### Q: Why 2 languages?
 

@@ -3,6 +3,9 @@ package viewmodel
 import dynviewmodel "../../dynview/model"
 import color "../../core/color"
 import geometry "../../core/geometry"
+import settings "../../settings"
+import taskpool "../../taskpool"
+import user_data "../../userdata"
 
 import "core:encoding/uuid"
 import "core:time"
@@ -95,12 +98,6 @@ Gif_Capture_Session :: struct {
     paused_presentations: u64,
 }
 
-Layout_Preference :: enum u8 {
-    Auto,
-    Landscape,
-    Portrait,
-}
-
 Ui_Layout_Mode :: enum u8 {
     Landscape,
     Portrait,
@@ -132,6 +129,24 @@ Ui_Accordion_Section :: enum u8 {
     Save_Gif,
     Settings,
     View,
+}
+
+// Settings_Save_Status is the user-visible durability state of local edits.
+Settings_Save_Status :: enum u8 {
+    Saved,
+    Pending,
+    Saving,
+    Unavailable,
+    Failed,
+}
+
+// Settings_Save_Task_Payload is immutable from submit until its handle is joined.
+Settings_Save_Task_Payload :: struct {
+    store: ^user_data.Store,
+    changes: settings.Change_Set,
+    result: user_data.Commit_Result,
+    owner_thread_id: int,
+    worker_thread_id: int,
 }
 
 Ui_Regions :: struct {
@@ -564,6 +579,19 @@ Euclid_Ui_Runtime_State :: struct {
     cursor: Ui_Cursor_Kind,
     limit_fps: bool,
     display_fps: bool,
+    settings_preferences: settings.Preferences,
+    settings_pending: settings.Change_Set,
+    settings_save_status: Settings_Save_Status,
+    settings_store_available: bool,
+    settings_store: ^user_data.Store,
+    settings_failure_count: int,
+    settings_retry_frames: int,
+    settings_save_payload: Settings_Save_Task_Payload,
+    settings_save_handle: taskpool.Task_Handle,
+    settings_save_active: bool,
+    settings_save_commit_count: u64,
+    settings_save_failure_count: u64,
+    settings_save_owner_execution_count: u64,
     simulation_paused: bool,
     animation_policy_paused: bool,
     use_simd_batch_projection: bool,
@@ -601,7 +629,7 @@ Euclid_Ui_Runtime_State :: struct {
     gif_path_input: Ui_Input_Box_State,
     library_search: Library_Search_State,
     window: Ui_Window_Metrics,
-    layout_preference: Layout_Preference,
+    layout_preference: settings.Layout_Preference,
     landscape: Ui_Landscape_Layout_State,
     portrait: Ui_Portrait_Layout_State,
     current_layout_mode: Ui_Layout_Mode,

@@ -8,8 +8,10 @@ import particlemodel "../../particles/model"
 import geometry "../../core/geometry"
 import view_core "../core"
 import view_font "../font"
+import setting_model "../../settings"
 
 import "core:fmt"
+import "core:log"
 
 //   Shared dependencies for controls in one settings panel frame.
 Settings_View_Context :: struct {
@@ -160,6 +162,23 @@ draw_encoded_settings_text :: proc(
             font_resolver = view_font.cache_terminal_resolver(&state^.font_cache)},
         rows.stats_y, encoder, animation_entries_added)
     draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
+    draw_encoded_settings_save_status(
+        state, encoder, x, rows.gpu_dust_y + SETTINGS_TOGGLE_ROW_GAP)
+}
+
+// Resolve and draw the localized persistence state beneath the setting controls.
+draw_encoded_settings_save_status :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    x, y: f32) {
+    message := contentdata.Content_Message_Id.Settings_Save_Saved
+    switch state^.ui_runtime.settings_save_status {
+    case .Saved: message = .Settings_Save_Saved
+    case .Pending: message = .Settings_Save_Pending
+    case .Saving: message = .Settings_Save_Saving
+    case .Unavailable: message = .Settings_Save_Unavailable
+    case .Failed: message = .Settings_Save_Failed
+    }
+    draw_encoded_label(state, encoder, view_core.shell_message(state, message), x, y)
 }
 
 // settings_simd_label describes whether SIMD projection can be selected.
@@ -324,25 +343,27 @@ update_settings_controls :: proc(
         settings_max_particles_params(ctx, rows.slider_label_y))
     result.fps = update_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
         4001, view_core.shell_message(ctx.state, .Settings_Display_Fps),
-        ctx.state.ui_runtime.display_fps, true, 1}),
+        ctx.state.ui_runtime.settings_preferences.interface.display_fps, true, 1}),
         &ctx.state.ui_runtime.ui_press_owner)
     result.limit = update_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
         4002, view_core.shell_message(ctx.state, .Settings_Limit_Fps),
-        ctx.state.ui_runtime.limit_fps, true, 2}),
+        ctx.state.ui_runtime.settings_preferences.rendering.limit_fps, true, 2}),
         &ctx.state.ui_runtime.ui_press_owner)
     result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
         4004, view_core.shell_message(ctx.state, .Settings_Drawing_Sound),
-        ctx.state.user_drawing_sound_enabled, true, 3}),
+        ctx.state.ui_runtime.settings_preferences.drawing.sound_enabled, true, 3}),
         &ctx.state.ui_runtime.ui_press_owner)
     simd_available := view_core.simd_batch_projection_available()
     simd_label := settings_simd_label(ctx.state, simd_available)
     result.simd = update_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
-        4003, simd_label, ctx.state.ui_runtime.use_simd_batch_projection,
+        4003, simd_label,
+        ctx.state.ui_runtime.settings_preferences.rendering.simd,
         simd_available, 4}), &ctx.state.ui_runtime.ui_press_owner)
     gpu_available := ctx.state.ui_runtime.gpu_dust_instancing_available
     gpu_label := settings_gpu_dust_label(ctx.state, gpu_available)
     result.gpu_dust = update_checkbox(settings_checkbox_params(ctx, {rows.gpu_dust_y,
-        4005, gpu_label, ctx.state.ui_runtime.use_gpu_dust_instancing,
+        4005, gpu_label,
+        ctx.state.ui_runtime.settings_preferences.rendering.gpu_dust_instancing,
         gpu_available, 5}), &ctx.state.ui_runtime.ui_press_owner)
     result.simd_available = simd_available
     result.gpu_available = gpu_available
@@ -377,21 +398,128 @@ apply_settings_preparation :: proc(
     prepared: Settings_View_Preparation,
     simd_available: bool,
     gpu_available: bool) {
+    apply_settings_primary_preparation(state, prepared)
+    apply_settings_optional_preparation(
+        state, prepared, simd_available, gpu_available)
+}
+
+// Commit dust, display, and drawing controls from the prepared frame.
+apply_settings_primary_preparation :: proc(
+    state: ^core.Euclid_General_State, prepared: Settings_View_Preparation) {
     if prepared.max_particles.changed {
         state.particle_system.use_max_dust_particles = prepared.max_particles.value
+        settings_record_preference_edit(
+            state, .Drawing_Dust_Limit,
+            setting_model.integer_value(prepared.max_particles.value))
     }
     if prepared.fps.toggled {
         state.ui_runtime.display_fps = prepared.fps.checked_out
+        settings_record_preference_edit(
+            state, .Interface_Display_Fps,
+            setting_model.boolean_value(prepared.fps.checked_out))
     }
     if prepared.limit.toggled {
         state.ui_runtime.limit_fps = prepared.limit.checked_out
+        settings_record_preference_edit(
+            state, .Rendering_Limit_Fps,
+            setting_model.boolean_value(prepared.limit.checked_out))
     }
     if prepared.sound.toggled {
         state.user_drawing_sound_enabled = prepared.sound.checked_out
+        settings_record_preference_edit(
+            state, .Drawing_Sound_Enabled,
+            setting_model.boolean_value(prepared.sound.checked_out))
     }
-    state.ui_runtime.use_simd_batch_projection =
-        simd_available && prepared.simd.checked_out
-    state.ui_runtime.use_gpu_dust_instancing =
-        gpu_available && prepared.gpu_dust.checked_out
 }
 
+// Preserve optional-feature intent while deriving hardware-gated runtime state.
+apply_settings_optional_preparation :: proc(
+    state: ^core.Euclid_General_State,
+    prepared: Settings_View_Preparation,
+    simd_available: bool,
+    gpu_available: bool) {
+    if prepared.simd.toggled {
+        settings_record_preference_edit(
+            state, .Rendering_Simd,
+            setting_model.boolean_value(prepared.simd.checked_out))
+    }
+    if prepared.gpu_dust.toggled {
+        settings_record_preference_edit(
+            state, .Rendering_Gpu_Dust_Instancing,
+            setting_model.boolean_value(prepared.gpu_dust.checked_out))
+    }
+    state.ui_runtime.use_simd_batch_projection =
+        simd_available && state.ui_runtime.settings_preferences.rendering.simd
+    state.ui_runtime.use_gpu_dust_instancing =
+        gpu_available &&
+        state.ui_runtime.settings_preferences.rendering.gpu_dust_instancing
+}
+
+// Coalesce one typed user edit for the next worker-owned persistence batch.
+settings_record_preference_edit :: proc(
+    state: ^core.Euclid_General_State,
+    id: setting_model.Setting_Id,
+    value: setting_model.Setting_Value) {
+    runtime := &state^.ui_runtime
+    preferences := runtime^.settings_preferences
+    pending := runtime^.settings_pending
+    if !setting_model.apply_setting_value(&preferences, id, value, .Override) ||
+        !setting_model.change_set_set(&pending, id, value) {
+        log.errorf("settings_edit_rejected setting=%d", int(id))
+        return
+    }
+    runtime^.settings_preferences = preferences
+    runtime^.settings_pending = pending
+    if runtime^.settings_save_status == .Unavailable ||
+        runtime^.settings_save_status == .Failed {
+        runtime^.settings_failure_count = 0
+        runtime^.settings_retry_frames = 0
+    }
+    runtime^.settings_save_status =
+        .Pending if runtime^.settings_store_available else .Unavailable
+}
+
+// Resolve optional control availability without replacing the retained user preference.
+settings_control_available :: proc(
+    id: setting_model.Setting_Id, simd_available, gpu_available: bool) -> bool {
+    #partial switch id {
+    case .Rendering_Simd: return simd_available
+    case .Rendering_Gpu_Dust_Instancing: return gpu_available
+    }
+    return true
+}
+
+// Apply a typed edit to an existing control, preserving hardware availability gates.
+settings_apply_control_edit :: proc(
+    state: ^core.Euclid_General_State, id: setting_model.Setting_Id,
+    value: setting_model.Setting_Value) -> bool {
+    if state == nil || state^.particle_system == nil ||
+        !setting_model.valid_setting_value(id, value) {
+        return false
+    }
+    prepared: Settings_View_Preparation
+    simd_available := view_core.simd_batch_projection_available()
+    gpu_available := state^.ui_runtime.gpu_dust_instancing_available
+    if !settings_control_available(id, simd_available, gpu_available) {
+        return false
+    }
+    #partial switch id {
+    case .Drawing_Dust_Limit:
+        prepared.max_particles.changed = true
+        prepared.max_particles.value = value.integer
+    case .Interface_Display_Fps:
+        prepared.fps = {toggled = true, checked_out = value.boolean}
+    case .Rendering_Limit_Fps:
+        prepared.limit = {toggled = true, checked_out = value.boolean}
+    case .Drawing_Sound_Enabled:
+        prepared.sound = {toggled = true, checked_out = value.boolean}
+    case .Rendering_Simd:
+        prepared.simd = {toggled = true, checked_out = value.boolean}
+    case .Rendering_Gpu_Dust_Instancing:
+        prepared.gpu_dust = {toggled = true, checked_out = value.boolean}
+    case:
+        return false
+    }
+    apply_settings_preparation(state, prepared, simd_available, gpu_available)
+    return true
+}

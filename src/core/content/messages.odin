@@ -40,6 +40,11 @@ Content_Message_Id :: enum u16 {
     Settings_Stats_Flicker = 1211,
     Settings_Stats_Animation_Entries = 1212,
     Fps_Overlay = 1213,
+    Settings_Save_Saved = 1214,
+    Settings_Save_Pending = 1215,
+    Settings_Save_Saving = 1216,
+    Settings_Save_Unavailable = 1217,
+    Settings_Save_Failed = 1218,
     Gif_Output_Scale = 1301,
     Gif_Capture_Every = 1302,
     Gif_Playback_Timing = 1303,
@@ -87,7 +92,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 69
+CONTENT_SHIPPED_MESSAGE_COUNT :: 74
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -119,6 +124,11 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1211, "ui.settings.stats.flicker"},
     {1212, "ui.settings.stats.animation_entries"},
     {1213, "ui.fps.overlay"},
+    {1214, "ui.settings.save.saved"},
+    {1215, "ui.settings.save.pending"},
+    {1216, "ui.settings.save.saving"},
+    {1217, "ui.settings.save.unavailable"},
+    {1218, "ui.settings.save.failed"},
     {1301, "ui.gif.output_scale"},
     {1302, "ui.gif.capture_every"},
     {1303, "ui.gif.playback_timing"},

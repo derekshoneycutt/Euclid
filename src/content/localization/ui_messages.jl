@@ -162,6 +162,31 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
                     LocalizedContent.Int64Argument)]),
         "Julia animation entries added: {count}"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1214),
+            "ui.settings.save.saved", "Settings persistence is current.",
+            LocalizedContent.MessageArgument[]),
+        "Settings saved"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1215),
+            "ui.settings.save.pending", "Settings edits are waiting to be saved.",
+            LocalizedContent.MessageArgument[]),
+        "Settings not saved yet"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1216),
+            "ui.settings.save.saving", "Settings are being saved.",
+            LocalizedContent.MessageArgument[]),
+        "Saving settings..."),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1217),
+            "ui.settings.save.unavailable", "Settings persistence is unavailable.",
+            LocalizedContent.MessageArgument[]),
+        "Settings storage unavailable"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1218),
+            "ui.settings.save.failed", "Settings could not be saved after retries.",
+            LocalizedContent.MessageArgument[]),
+        "Settings could not be saved"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1213), "ui.fps.overlay",
             "Optional rolling FPS overlay; retain one decimal place.",
             LocalizedContent.MessageArgument[

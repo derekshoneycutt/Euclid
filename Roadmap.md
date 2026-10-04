@@ -190,7 +190,7 @@ General features:
   - [X] Initial spellcheck suggestions
   - [X] Animation catalog manifest tables
   - [X] Localization tables
-  - [ ] Basic initial user settings structure
+  - [X] Basic initial user settings structure
   - [ ] Persistent REPL history
   - [ ] Search and use history
   - [ ] Dynamic/special lists
@@ -293,6 +293,7 @@ Core Features:
   - Scaling
   - Shearing
   - Curve transformations (e.g. 3D rotations)
+- Smart history stuff
 
 ## Brainstorming
 

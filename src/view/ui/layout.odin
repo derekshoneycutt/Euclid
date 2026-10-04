@@ -2,13 +2,14 @@ package ui
 
 import viewmodel "../model"
 import geometry "../../core/geometry"
+import setting_model "../../settings"
 
 AUTO_PORTRAIT_ASPECT_THRESHOLD :: f32(0.9)
 AUTO_LANDSCAPE_ASPECT_THRESHOLD :: f32(1.1)
 
 //   Resolve the first layout deterministically from preference and startup extent.
 resolve_initial_layout_mode :: proc(
-    preference: viewmodel.Layout_Preference,
+    preference: setting_model.Layout_Preference,
     width, height: f32) -> viewmodel.Ui_Layout_Mode {
     if preference == .Landscape {
         return .Landscape
@@ -24,7 +25,7 @@ resolve_initial_layout_mode :: proc(
 
 //   Resolve forced layout or apply automatic orientation hysteresis.
 resolve_layout_mode :: proc(
-    preference: viewmodel.Layout_Preference,
+    preference: setting_model.Layout_Preference,
     current: viewmodel.Ui_Layout_Mode,
     width, height: f32) -> viewmodel.Ui_Layout_Mode {
     if preference == .Landscape {

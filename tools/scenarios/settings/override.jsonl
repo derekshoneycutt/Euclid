@@ -1,0 +1,6 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"assert_setting":{"key":"window.width","value":800}}
+{"assert_setting":{"key":"window.height","value":600}}
+{"assert_setting":{"key":"drawing.dust_limit","value":1400}}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

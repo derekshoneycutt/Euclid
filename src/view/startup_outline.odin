@@ -7,6 +7,7 @@ import native "native"
 
 import color "../core/color"
 import geometry "../core/geometry"
+import setting_model "../settings"
 
 import "core:math"
 
@@ -31,7 +32,7 @@ Startup_Outline :: struct {
     target_distance: f32,
     metrics: viewmodel.Ui_Window_Metrics,
     layout: viewmodel.Ui_Layout_Mode,
-    layout_preference: viewmodel.Layout_Preference,
+    layout_preference: setting_model.Layout_Preference,
 }
 
 // Append one nonempty segment to bounded startup outline storage.
@@ -65,7 +66,7 @@ startup_outline_append_rect :: proc(
 startup_outline_create :: proc(
     metrics: viewmodel.Ui_Window_Metrics = {WINDOW_WIDTH, WINDOW_HEIGHT},
     layout: viewmodel.Ui_Layout_Mode = .Landscape,
-    preference: viewmodel.Layout_Preference = .Auto) -> Startup_Outline {
+    preference: setting_model.Layout_Preference = .Auto) -> Startup_Outline {
     outline: Startup_Outline
     outline.metrics = metrics
     outline.layout = layout

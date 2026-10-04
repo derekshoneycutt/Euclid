@@ -10,6 +10,7 @@ import viewmodel "../view/model"
 import viewterminalmodel "../view/terminal/model"
 import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
+import settings "../settings"
 
 // Defines the core structures used in the Euclid Application.
 // The general bias is to just allocate memory upfront inside Euclid_General_State and
@@ -138,21 +139,6 @@ Euclid_General_State :: struct {
     dynview_documents: dynviewmodel.Dynview_Document_Store,
 }
 
-Window_Mode :: enum u8 {
-    Fixed,
-    Resizable,
-}
-
-Layout_Preference :: viewmodel.Layout_Preference
-
-Window_Startup_Policy :: struct {
-    width: int,
-    height: int,
-    mode: Window_Mode,
-    layout: Layout_Preference,
-    custom_size_set: bool,
-}
-
 Euclid_Run_Settings :: struct {
     do_run : bool,
     do_antialiasing : bool,
@@ -161,7 +147,7 @@ Euclid_Run_Settings :: struct {
     limit_fps: bool,
     use_simd_batch_projection: bool,
     use_gpu_dust_instancing: bool,
-    window: Window_Startup_Policy,
+    window: settings.Window_Startup_Policy,
     evidence_allocations: ^evidence_allocation.Domain,
     evidence: evidence_session.Config,
     profile_path: string,
@@ -169,4 +155,3 @@ Euclid_Run_Settings :: struct {
     scenario_artifact_output: string,
     diagnostics_path : string,
 }
-

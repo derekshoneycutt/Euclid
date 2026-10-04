@@ -872,6 +872,9 @@ prepare_sdl_frame :: proc(
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
     drain_accessibility_actions(state, ctx.platform)
     controls := ui.prepare_ui_controls(state, routed_frame, ui_geometry.splitters)
+    if state^.simulation_executor != nil {
+        settings_save_service(state, &state^.simulation_executor^.pool)
+    }
     service_library_search(state, ctx.content_service, frame_dt)
     terminal_frame := terminal_service_update(state, ctx.input_runtime, routed_frame)
     apply_sdl_cursor(state, ctx.platform)
@@ -1144,7 +1147,8 @@ admit_optional_draw_pipelines :: proc(
 // run_sdl_platform_session owns draw, input, and Euclid state on one platform.
 run_sdl_platform_session :: proc(
     settings: ^Euclid_Run_Settings, display_profile: ^evidence_profile.State,
-    platform: ^native.Sdl_Platform) -> int {
+    platform: ^native.Sdl_Platform,
+    startup: ^Session_Startup_Inputs) -> int {
     draw_runtime: native.Sdl_Draw_Runtime
     if !native.sdl_draw_runtime_create(
         &draw_runtime, platform^.device, sdl_draw_shader_paths(),
@@ -1162,7 +1166,7 @@ run_sdl_platform_session :: proc(
     defer input.input_runtime_destroy(input_runtime, context.allocator)
 
     session, ok := initialize_window_runtime_with_loading(
-        settings, display_profile, platform, &draw_runtime)
+        settings, display_profile, platform, &draw_runtime, startup)
     evidence_profile.zone_end(display_profile)
     if !ok {
         log.error("display_runtime_start_failed")
@@ -1183,7 +1187,9 @@ run_sdl_platform_session :: proc(
 //
 // Returns:
 //   - exit_code: non-zero when strict trace validation failed.
-run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
+run_window_loop :: proc(
+    settings: ^Euclid_Run_Settings,
+    startup: ^Session_Startup_Inputs = nil) -> int {
     display_profile: evidence_profile.State
     init_display_profile(&display_profile, settings^.profile_path)
     defer evidence_profile.destroy(&display_profile)
@@ -1201,7 +1207,7 @@ run_window_loop :: proc(settings: ^Euclid_Run_Settings) -> int {
         return 1
     }
     defer native.sdl_platform_destroy(platform)
-    return run_sdl_platform_session(settings, &display_profile, platform)
+    return run_sdl_platform_session(settings, &display_profile, platform, startup)
 }
 
 // sdl_font_texture_create creates one display-owned atlas candidate.
@@ -1280,6 +1286,8 @@ shutdown_window_runtime :: proc(
     scenario_runtime: ^Scenario_Runtime = nil,
     artifact_output: string = "") -> int {
     if session.state != nil {
+        settings_save_shutdown(
+            session.state, &session.state^.simulation_executor^.pool)
         font.cache_shutdown_service(
             &session.state^.font_cache,
             &session.state^.simulation_executor^.pool)

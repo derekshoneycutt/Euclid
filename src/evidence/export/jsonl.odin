@@ -100,6 +100,9 @@ EVENT_KIND_NAMES :: #sparse [trace.Kind]string{
     .Allocation_Baseline_Matched = "allocation.baseline_matched",
     .Allocation_Baseline_Mismatched = "allocation.baseline_mismatched",
     .Allocation_Bad_Free = "allocation.bad_free",
+    .Settings_Save_Submitted = "settings.save_submitted",
+    .Settings_Save_Committed = "settings.save_committed",
+    .Settings_Save_Failed = "settings.save_failed",
 }
 
 //   Return the stable serialized name of one typed event kind.

@@ -16,6 +16,7 @@ import shapemodel "../../shapes/model"
 
 import allocation_evidence "../allocation"
 import evidence_trace "../trace"
+import settings "../../settings"
 
 // Point-in-time summary of one producer-owned evidence ring.
 //
@@ -38,6 +39,17 @@ Trace_State :: struct {
 // is absent. required_evidence_complete combines session-wide health with the
 // display producer ring's sticky required-evidence state.
 Display :: struct {
+    // Preference intent and joined save evidence; no store or worker pointer escapes.
+    settings_preferences: settings.Preferences,
+    settings_save_status: viewmodel.Settings_Save_Status,
+    settings_store_available: bool,
+    settings_save_active: bool,
+    settings_pending_count: int,
+    settings_save_commit_count: u64,
+    settings_save_failure_count: u64,
+    settings_save_owner_execution_count: u64,
+    window_width: int,
+    window_height: int,
     // Fixed-step simulation clock and display-owned pause control.
     fixed_step : u64,
     simulation_time : f32,
@@ -304,9 +316,29 @@ observe_display_ui :: proc(
         result.library_search_has_matches = search.active &&
             search.total_match_count > 0
     }
+
     if source.gif_capture != nil {
         result.gif_capture_active = source.gif_capture.active
     }
+}
+
+// Copy display-owned intent and joined persistence counters, never live task results.
+observe_display_settings :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, result: ^Display) {
+    if runtime == nil {
+        return
+    }
+    result^.settings_preferences = runtime^.settings_preferences
+    result^.settings_save_status = runtime^.settings_save_status
+    result^.settings_store_available = runtime^.settings_store_available
+    result^.settings_save_active = runtime^.settings_save_active
+    result^.settings_pending_count = runtime^.settings_pending.count
+    result^.settings_save_commit_count = runtime^.settings_save_commit_count
+    result^.settings_save_failure_count = runtime^.settings_save_failure_count
+    result^.settings_save_owner_execution_count =
+        runtime^.settings_save_owner_execution_count
+    result^.window_width = runtime^.window.width
+    result^.window_height = runtime^.window.height
 }
 
 // Copy synchronized particle diagnostics and classify current dust populations.
@@ -366,6 +398,7 @@ display :: proc(source: ^Display_Source) -> Display {
             evidence_trace.ring_evidence_complete(source.evidence_ring),
         trace = trace_state(source.evidence_ring),
     }
+    observe_display_settings(source.ui_runtime, &result)
     if source.terminal != nil {
         result.terminal_ready = source.terminal.initialized &&
             source.terminal.julia_session_ready

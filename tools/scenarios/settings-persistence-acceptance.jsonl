@@ -1,0 +1,12 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_setting":{"key":"drawing.dust_limit","value":1400}}
+{"set_setting":{"key":"interface.display_fps","value":true}}
+{"set_setting":{"key":"rendering.limit_fps","value":false}}
+{"set_setting":{"key":"drawing.sound_enabled","value":true}}
+{"wait_event":"settings_save_submitted","timeout_ms":10000}
+{"wait_event":"settings_save_committed","timeout_ms":10000}
+{"wait_state":"settings_saved","timeout_ms":10000}
+{"assert_state":"settings_worker_only"}
+{"assert_setting":{"key":"drawing.dust_limit","value":1400}}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

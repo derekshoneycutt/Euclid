@@ -4,8 +4,53 @@ package scenario
 import particlemodel "../../particles/model"
 import "../observe"
 import trace "../trace"
+import settings "../../settings"
 
 import "core:testing"
+
+// Verify exact typed settings payloads reject unknown keys, wrong types and extra actions.
+@(test)
+scenario_test_settings_payload_validation :: proc(t: ^testing.T) {
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1400}}\n" +
+        "{\"assert_setting\":{\"key\":\"window.mode\",\"value\":\"fixed\"}}\n",
+        &program), Parse_Error.None)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Set_Setting)
+    testing.expect_value(t, program.commands[0].setting_id,
+        settings.Setting_Id.Drawing_Dust_Limit)
+    testing.expect_value(t, program.commands[0].setting_value.integer, 1400)
+    invalid := [?]string{
+        "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":-1}}",
+        "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1.5}}",
+        "{\"set_setting\":{\"key\":\"rendering.simd\",\"value\":1}}",
+        "{\"set_setting\":{\"key\":\"unknown.key\",\"value\":true}}",
+        "{\"set_setting\":{\"key\":\"window.layout\",\"value\":\"wide\"}}",
+        "{\"set_setting\":{\"key\":\"interface.display_fps\",\"value\":true,\"x\":1}}",
+        "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1},\"shutdown\":true}",
+        "{\"set_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1}," +
+            "\"assert_setting\":{\"key\":\"drawing.dust_limit\",\"value\":1}}",
+    }
+    for source in invalid {
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
+}
+
+// Verify settings waits distinguish pending saves and expose worker ownership evidence.
+@(test)
+scenario_test_settings_states_and_events :: proc(t: ^testing.T) {
+    display := observe.Display{settings_save_status = .Saved}
+    testing.expect(t, state_matches("settings_saved", display))
+    display.settings_pending_count = 1
+    testing.expect(t, !state_matches("settings_saved", display))
+    display.settings_save_active = true
+    testing.expect(t, state_matches("settings_saving", display))
+    display.settings_save_owner_execution_count = 1
+    testing.expect(t, !state_matches("settings_worker_only", display))
+    kind, valid := event_kind("settings_save_committed")
+    testing.expect(t, valid)
+    testing.expect_value(t, kind, trace.Kind.Settings_Save_Committed)
+}
 
 // Return accepted allocation assertions for runner tests.
 scenario_test_allocation_action :: proc(

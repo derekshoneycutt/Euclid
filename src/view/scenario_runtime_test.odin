@@ -15,12 +15,46 @@ import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import particlemodel "../particles/model"
 import input "input"
+import setting_model "../settings"
 
 import "core:log"
 import "core:os"
 import "core:strings"
 import "base:runtime"
 import "core:testing"
+
+// Verify scenario edits share control policy and assertions observe intent, not hardware fallback.
+@(test)
+scenario_runtime_settings_use_control_owner :: proc(t: ^testing.T) {
+    state := new(Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    particles := new(particlemodel.Particle_System, context.allocator)
+    defer free(particles, context.allocator)
+    state^.particle_system = particles
+    state^.ui_runtime.settings_preferences = setting_model.default_preferences()
+    runtime := Scenario_Runtime{state = state}
+    identity: evidence_trace.Identity
+    command := scenario.Command{kind = .Set_Setting,
+        setting_id = .Drawing_Dust_Limit,
+        setting_value = setting_model.integer_value(1400)}
+    handled, accepted := scenario_issue_display_action(&runtime, &command, &identity)
+    testing.expect(t, handled && accepted)
+    testing.expect_value(t, particles^.use_max_dust_particles, 1400)
+    testing.expect_value(t, state^.ui_runtime.settings_pending.count, 1)
+    testing.expect_value(t, state^.ui_runtime.settings_save_status,
+        viewmodel.Settings_Save_Status.Unavailable)
+    command.kind = .Assert_Setting
+    handled, accepted = scenario_issue_display_action(&runtime, &command, &identity)
+    testing.expect(t, handled && accepted)
+    command.setting_value = setting_model.integer_value(1401)
+    _, accepted = scenario_issue_display_action(&runtime, &command, &identity)
+    testing.expect(t, !accepted)
+    command.kind = .Set_Setting
+    command.setting_id = .Window_Width
+    command.setting_value = setting_model.integer_value(800)
+    _, accepted = scenario_issue_display_action(&runtime, &command, &identity)
+    testing.expect(t, !accepted)
+}
 
 // Accept one injected post-presentation capture.
 scenario_runtime_test_capture :: proc(

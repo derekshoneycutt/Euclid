@@ -72,7 +72,9 @@ const EVENT_NAMES = Dict{UInt16,String}(
     465 => "scenario_passed", 466 => "scenario_failed",
     467 => "scenario_inconclusive", 520 => "allocation_checkpoint",
     521 => "allocation_baseline_matched", 522 => "allocation_baseline_mismatched",
-    523 => "allocation_bad_free")
+    523 => "allocation_bad_free",
+    560 => "settings_save_submitted", 561 => "settings_save_committed",
+    562 => "settings_save_failed")
 
 const POINT_EVENT_KINDS = Set(UInt16[180, 181, 182])
 const REQUEST_EVENT_KINDS = Set(UInt16[65, 122, 123])
@@ -85,12 +87,14 @@ const SCENARIO_ACTIONS = [
     "set_library_search", "apply_library_search_suggestion",
     "clear_library_search",
     "start_gif", "stop_gif", "wait_event", "wait_state", "assert_state",
-    "checkpoint", "allocation_checkpoint",
+    "set_setting", "assert_setting", "checkpoint", "allocation_checkpoint",
     "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
 
 const SCENARIO_ACTION_PAYLOADS = (
     set_view_scroll=(required=["y"],),
-    set_splitters=(required=["vertical", "horizontal"],))
+    set_splitters=(required=["vertical", "horizontal"],),
+    set_setting=(required=["key", "value"],),
+    assert_setting=(required=["key", "value"],))
 
 const SCENARIO_EVENTS = [
     "runtime_ready", "runtime_reload_committed", "runtime_reload_rolled_back",
@@ -101,13 +105,15 @@ const SCENARIO_EVENTS = [
     "library_search_committed",
     "frame_presented",
     "capture_completed", "gif_completed", "checkpoint_stored",
-    "runtime_shutdown_complete"]
+    "runtime_shutdown_complete", "settings_save_submitted",
+    "settings_save_committed", "settings_save_failed"]
 
 const SCENARIO_STATES = [
     "runtime_ready", "runtime_idle", "animation_idle",
     "simulation_paused", "simulation_running", "dynview_enabled",
     "gif_active", "gif_idle", "library_search_idle",
-    "library_search_has_matches"]
+    "library_search_has_matches", "settings_saved", "settings_saving",
+    "settings_unavailable", "settings_failed", "settings_worker_only"]
 
 struct TraceEvent
     sequence::UInt64

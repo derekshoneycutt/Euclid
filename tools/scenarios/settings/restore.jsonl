@@ -1,0 +1,14 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"assert_setting":{"key":"window.width","value":900}}
+{"assert_setting":{"key":"window.height","value":650}}
+{"assert_setting":{"key":"window.mode","value":"fixed"}}
+{"assert_setting":{"key":"window.layout","value":"landscape"}}
+{"assert_setting":{"key":"drawing.dust_limit","value":1400}}
+{"assert_setting":{"key":"drawing.sound_enabled","value":true}}
+{"assert_setting":{"key":"interface.display_fps","value":true}}
+{"assert_setting":{"key":"rendering.limit_fps","value":false}}
+{"assert_setting":{"key":"rendering.simd","value":false}}
+{"assert_setting":{"key":"rendering.gpu_dust_instancing","value":false}}
+{"assert_state":"settings_saved"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

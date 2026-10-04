@@ -1,0 +1,5 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_setting":{"key":"drawing.dust_limit","value":1500}}
+{"assert_setting":{"key":"drawing.dust_limit","value":1500}}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

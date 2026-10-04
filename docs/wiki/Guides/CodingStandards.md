@@ -147,6 +147,16 @@ The `vet` target alone is insufficient because it omits tests. Running tests alo
 insufficient because it omits the build and repository analysis. Do not report the
 combined gate as passing when a phase was skipped.
 
+Persistence acceptance MUST use an isolated process-level `--user-db` path, never
+the developer's database. Settings scenarios use exact typed `set_setting` and
+`assert_setting` key/value payloads; edits route through existing control policy
+and cannot mutate startup-only controls. A saved-state predicate is not by itself
+proof of a new commit: require a joined save event and independently inspect the
+committed rows. Arbitrary SQL remains outside the scenario action vocabulary.
+Shutdown MUST drain settings before any subsystem can stop the shared task pool.
+Worker-only execution evidence does not establish a quantitative latency budget;
+report deferred timing claims explicitly.
+
 | Surface | Enforcement | Expected result |
 | --- | --- | --- |
 | Odin build/style | Analysis engine's strict analytical Odin build | No warnings or style failures. |

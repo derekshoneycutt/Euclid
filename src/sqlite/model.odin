@@ -55,7 +55,7 @@ Error :: struct {
     validation: Validation_Error,
 }
 
-// One explicitly opened, thread-confined SQLite connection.
+// One explicitly opened SQLite connection with exclusive sequential thread ownership.
 Connection :: struct {
     handle: ^raw.Database,
 }
@@ -64,6 +64,11 @@ Connection :: struct {
 Statement :: struct {
     handle: ^raw.Statement,
     database: ^raw.Database,
+}
+
+// Check that the linked SQLite library includes mutex support for thread handoff.
+threading_supported :: proc() -> bool {
+    return raw.sqlite3_threadsafe() != 0
 }
 
 // Preserve the SQLite and operation details for one native failure.

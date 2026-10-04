@@ -80,6 +80,7 @@ transient_destructor :: proc() -> rawptr {
 }
 
 foreign sqlite3_library {
+    sqlite3_threadsafe :: proc() -> c.int ---
     sqlite3_libversion :: proc() -> cstring ---
     sqlite3_libversion_number :: proc() -> c.int ---
 
@@ -124,5 +125,4 @@ foreign sqlite3_library {
 
     euclid_sqlite_register_spellfix :: proc(database: ^Database) -> Result ---
 }
-
 

@@ -18,6 +18,23 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
 const JuliaTestReporter = Main.EuclidJuliaTestReporter
 const ScenarioRunner = Main.EuclidScenarioRunner
 
+@testset "settings acceptance evidence validation" begin
+    @test isnothing(ScenarioRunner.validate_settings_process(
+        "== allocation evidence: live=0 current_bytes=0 peak_bytes=42 total=3 bad_frees=0 =="))
+    @test_throws ErrorException ScenarioRunner.validate_settings_process("")
+    @test_throws ErrorException ScenarioRunner.validate_settings_process(
+        "== allocation evidence: live=2 current_bytes=68 peak_bytes=42 total=3 bad_frees=0 ==")
+    @test_throws ErrorException ScenarioRunner.validate_settings_process(
+        "== allocation evidence: live=0 current_bytes=0 peak_bytes=42 total=3 bad_frees=1 ==")
+    rows = [Dict("namespace" => "drawing", "key" => "dust_limit",
+        "integer_value" => 1400)]
+    @test isnothing(ScenarioRunner.require_setting_row(rows, "drawing", "dust_limit", 1400))
+    @test_throws ErrorException ScenarioRunner.require_setting_row(
+        rows, "drawing", "dust_limit", 1500)
+    @test_throws ErrorException ScenarioRunner.require_setting_row(
+        rows, "drawing", "missing", 1400)
+end
+
 @testset "Euclid tooling" begin
     @testset "AccessKit provider" begin
         provider = BuildConfiguration.accesskit_provider_identity()
@@ -1006,3 +1023,24 @@ end
 
 include("sdl_boundary_analysis_tests.jl")
 include("evidence_tests.jl")
+
+@testset "settings task trace validation" begin
+    submitted = (correlation=UInt64(2), generation=UInt64(3),
+        correlation_kind="task", sequence=UInt64(1), payload=(first=UInt32(4),))
+    committed = (correlation=UInt64(2), generation=UInt64(3),
+        correlation_kind="task", sequence=UInt64(2), producer="display",
+        kind="settings_save_committed", payload=(first=UInt32(4), second=UInt32(0)))
+    @test isnothing(ScenarioRunner.validate_settings_outcome(committed, [submitted]))
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (generation=UInt64(4),)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (correlation_kind="scenario_action",)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (sequence=UInt64(1),)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (payload=(first=UInt32(5), second=UInt32(0)),)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (payload=(first=UInt32(4), second=UInt32(1)),)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        committed, [submitted, submitted])
+end

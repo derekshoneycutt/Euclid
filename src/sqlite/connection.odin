@@ -8,7 +8,7 @@ import "core:strings"
 
 SQLITE_HEX_DIGITS :: "0123456789ABCDEF"
 
-// Open one thread-confined connection using explicit SQLite policy and scratch storage.
+// Open one nonconcurrent connection; thread changes require exclusive ownership.
 connection_open :: proc(
     connection: ^Connection, path: string, mode: Open_Mode,
     scratch_allocator: mem.Allocator) -> Error {
@@ -94,7 +94,7 @@ sqlite_path_has_nul :: proc(path: string) -> bool {
     return false
 }
 
-// Translate an explicit open mode into flags for a thread-confined connection.
+// Translate open modes while deliberately disabling per-connection mutexes.
 sqlite_open_flags :: proc(mode: Open_Mode) -> (c.int, bool) {
     switch mode {
     case .Immutable_Readonly:

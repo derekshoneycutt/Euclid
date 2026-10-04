@@ -246,13 +246,13 @@ artifact_state_json :: proc(
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
         "\"display_pending_drops\":%d,\"julia_lifecycle\":%d," +
         "\"julia_active_request_id\":%d,\"julia_failed_requests\":%d," +
-        "\"julia_event_count\":%d,\"julia_evidence_complete\":%v,%s,%s,%s}}\n",
+        "\"julia_event_count\":%d,\"julia_evidence_complete\":%v,%s,%s,%s,%s}}\n",
         state.fixed_step, state.simulation_time, state.simulation_paused,
         state.animation_policy_paused, state.runtime_lifecycle, state.runtime_generation,
         state.active_runtime_request_id, state.failed_runtime_request_count,
         state.animation_generation, state.animation_tick_sequence,
-        state.animation_last_committed_sequence,
-        state.point_count, state.constraint_count, state.particle_count,
+        state.animation_last_committed_sequence, state.point_count,
+        state.constraint_count, state.particle_count,
         artifact_dust_state_json(state), state.dynview_enabled,
         state.view_text_scroll_y, state.view_text_scroll_max, state.vertical_split_x,
         state.horizontal_split_y, state.gif_capture_active, state.gif_captured_frames,
@@ -262,7 +262,33 @@ artifact_state_json :: proc(
         julia_host.trace.event_count, julia_host.trace.evidence_complete,
         artifact_colored_draw_state_json(state),
         artifact_terminal_graphics_state_json(state),
-        artifact_simulation_state_json(simulation))
+        artifact_simulation_state_json(simulation), artifact_settings_state_json(state))
+}
+
+// Serialize pointer-free preference intent alongside terminal save and executor facts.
+artifact_settings_state_json :: proc(state: observe.Display) -> string {
+    preferences := state.settings_preferences
+    return fmt.tprintf(
+        "\"settings\":{{\"preferences\":{{" +
+        "\"window\":{{\"width\":%d,\"height\":%d,\"mode\":%d,\"layout\":%d}}," +
+        "\"rendering\":{{\"vsync\":%v,\"antialiasing\":%v,\"limit_fps\":%v," +
+        "\"simd\":%v,\"gpu_dust_instancing\":%v}}," +
+        "\"drawing\":{{\"dust_limit\":%d,\"sound_enabled\":%v}}," +
+        "\"interface\":{{\"display_fps\":%v}}}},\"status\":%d," +
+        "\"store_available\":%v,\"active\":%v,\"pending_count\":%d," +
+        "\"commit_count\":%d,\"failure_count\":%d,\"owner_execution_count\":%d," +
+        "\"window_width\":%d,\"window_height\":%d}}",
+        preferences.window.width, preferences.window.height,
+        preferences.window.mode, preferences.window.layout,
+        preferences.rendering.vsync, preferences.rendering.antialiasing,
+        preferences.rendering.limit_fps, preferences.rendering.simd,
+        preferences.rendering.gpu_dust_instancing, preferences.drawing.dust_limit,
+        preferences.drawing.sound_enabled, preferences.interface.display_fps,
+        state.settings_save_status,
+        state.settings_store_available, state.settings_save_active,
+        state.settings_pending_count, state.settings_save_commit_count,
+        state.settings_save_failure_count, state.settings_save_owner_execution_count,
+        state.window_width, state.window_height)
 }
 
 //   Encode one unsigned 16-bit value in canonical little-endian order.

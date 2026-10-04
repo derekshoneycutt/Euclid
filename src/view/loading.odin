@@ -272,12 +272,16 @@ loading_prepare_assets_phase :: proc(
 loading_runtime_session :: proc(
     state: ^Euclid_General_State,
     service: ^bridgemodel.Julia_Runtime_Service,
-    content_service: ^viewcontent.Content_Service) -> (Euclid_Runtime_Session, bool) {
+    content_service: ^viewcontent.Content_Service,
+    startup: ^Session_Startup_Inputs = nil) -> (Euclid_Runtime_Session, bool) {
     session := Euclid_Runtime_Session{
         state = state,
         julia_service = service,
         content_service = content_service,
+        startup = session_startup_inputs(startup),
     }
+    session_apply_startup_preferences(
+        state, session.startup.preferences, session.startup.user_store)
     if !session_start_presentation(&session) {
         _ = shutdown_runtime_session(session)
         return {}, false
@@ -326,7 +330,8 @@ initialize_window_runtime_with_loading :: proc(
     settings: ^Euclid_Run_Settings,
     timing_profile: ^evidence_profile.State,
     platform: ^native.Sdl_Platform,
-    draw_runtime: ^native.Sdl_Draw_Runtime) -> (Euclid_Runtime_Session, bool) {
+    draw_runtime: ^native.Sdl_Draw_Runtime,
+    startup: ^Session_Startup_Inputs = nil) -> (Euclid_Runtime_Session, bool) {
 
     startup_started_at := native.sdl_time_seconds()
     display := loading_display_create(platform, draw_runtime)
@@ -356,5 +361,5 @@ initialize_window_runtime_with_loading :: proc(
 
     end_startup_phase("Total startup", startup_started_at)
     return loading_runtime_session(
-        state, started_service.service, content_service)
+        state, started_service.service, content_service, startup)
 }

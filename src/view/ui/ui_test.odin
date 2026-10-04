@@ -13,6 +13,7 @@ import app_core "../../core"
 import contentdata "../../core/content"
 import app_dynview "../../dynview"
 import geometry "../../core/geometry"
+import setting_model "../../settings"
 import termhist "../../terminal/history"
 import "../input"
 import view_core "../core"
@@ -548,6 +549,74 @@ checkbox_update_commits_without_drawing :: proc(t: ^testing.T) {
     released := update_checkbox(params, &owner)
     testing.expect(t, released.toggled && released.checked_out)
     testing.expect(t, !owner.active)
+}
+
+// Produce a checkbox toggle from an ordinary pointer press and release.
+settings_test_pointer_toggle :: proc() -> Checkbox_Result {
+    pointer_owner: viewmodel.Ui_Press_Owner_State
+    pointer_params := Checkbox_Params{
+        id = 4001,
+        rect = {10, 10, 20, 20},
+        checked = false,
+        enabled = true,
+        mouse = {mouse_position = {15, 15},
+            mouse_pressed = {.Left}, mouse_down = {.Left}},
+        interaction_space_rect = {0, 0, 100, 100},
+        interaction_enabled = true,
+    }
+    _ = update_checkbox(pointer_params, &pointer_owner)
+    pointer_params.mouse = {
+        mouse_position = {15, 15}, mouse_released = {.Left}}
+    return update_checkbox(pointer_params, &pointer_owner)
+}
+
+// Produce a checkbox toggle from one addressed semantic action.
+settings_test_semantic_toggle :: proc(t: ^testing.T) -> Checkbox_Result {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    owner: viewmodel.Ui_Press_Owner_State
+    semantic_id := semantic_control_id(.Settings_Control, 4002)
+    testing.expect(t, semantic_begin(semantic))
+    testing.expect(t, semantic_append_command(semantic, {
+        target = semantic_id, kind = .Toggle}))
+    semantic_toggle := update_checkbox({
+        id = 4002,
+        rect = {10, 40, 20, 20},
+        checked = true,
+        enabled = true,
+        interaction_space_rect = {0, 0, 100, 100},
+        interaction_enabled = true,
+        semantic_focus = semantic,
+        semantic_domain = .Settings_Control,
+    }, &owner)
+    return semantic_toggle
+}
+
+// Verify pointer and semantic edits preserve intent under hardware fallback.
+@(test)
+settings_toggle_routes_record_intent_not_hardware_fallback :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    state^.ui_runtime.settings_preferences = setting_model.default_preferences()
+    state^.ui_runtime.settings_store_available = true
+    state^.ui_runtime.settings_save_status = .Saved
+    pointer_toggle := settings_test_pointer_toggle()
+    semantic_toggle := settings_test_semantic_toggle(t)
+    testing.expect(t, pointer_toggle.toggled && pointer_toggle.checked_out)
+    testing.expect(t, semantic_toggle.toggled && !semantic_toggle.checked_out)
+    prepared := Settings_View_Preparation{
+        fps = pointer_toggle,
+        limit = semantic_toggle,
+    }
+    apply_settings_preparation(state, prepared, false, false)
+    runtime := &state^.ui_runtime
+    testing.expect(t, runtime^.settings_preferences.interface.display_fps)
+    testing.expect(t, !runtime^.settings_preferences.rendering.limit_fps)
+    testing.expect_value(t, runtime^.settings_pending.count, 2)
+    testing.expect(t, runtime^.settings_preferences.rendering.simd)
+    testing.expect(t, !runtime^.use_simd_batch_projection)
+    testing.expect(t, runtime^.settings_preferences.rendering.gpu_dust_instancing)
+    testing.expect(t, !runtime^.use_gpu_dust_instancing)
 }
 
 // Verify checkbox preparation preserves distinct visual, hit, and clip geometry.

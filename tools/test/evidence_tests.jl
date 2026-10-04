@@ -10,16 +10,18 @@ end
 
 """Write one canonical fixed-width evidence event fixture."""
 function write_event(io::IO, sequence::UInt64; kind::UInt16=UInt16(64),
-    producer::UInt8=UInt8(3), lane::UInt8=UInt8(2), flags::UInt16=UInt16(0))
+    producer::UInt8=UInt8(3), lane::UInt8=UInt8(2), flags::UInt16=UInt16(0),
+    correlation_kind::UInt8=UInt8(3), first::UInt32=UInt32(60),
+    second::UInt32=UInt32(70))
     for value in (sequence, UInt64(10), UInt64(20), UInt64(30), UInt64(40),
         UInt64(50))
         write_little_endian(io, value)
     end
-    write(io, producer, lane, UInt8(3), UInt8(0))
+    write(io, producer, lane, correlation_kind, UInt8(0))
     write_little_endian(io, kind)
     write_little_endian(io, flags)
-    write_little_endian(io, UInt32(60))
-    write_little_endian(io, UInt32(70))
+    write_little_endian(io, first)
+    write_little_endian(io, second)
 end
 
 """Create a minimal canonical evidence bundle for tool tests."""
@@ -62,6 +64,13 @@ end
     @test "presentation_cleared" in EuclidEvidence.scenario_schema().events
     @test "presentation_superseded" in EuclidEvidence.scenario_schema().events
     @test EuclidEvidence.capabilities().trace_event_bytes == 64
+    @test "set_setting" in EuclidEvidence.scenario_schema().actions
+    @test "assert_setting" in EuclidEvidence.scenario_schema().actions
+    @test EuclidEvidence.scenario_schema().action_payloads.set_setting.required ==
+        ["key", "value"]
+    @test "settings_save_committed" in EuclidEvidence.scenario_schema().events
+    @test "settings_worker_only" in EuclidEvidence.scenario_schema().states
+    @test EuclidEvidence.EVENT_NAMES[UInt16(562)] == "settings_save_failed"
 end
 
 @testset "evidence bundle inspection" begin

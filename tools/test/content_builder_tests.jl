@@ -52,7 +52,7 @@ end
             for record in canonical])
         counts = [count(record -> record["kind"] == kind, canonical)
             for kind in 1:11]
-        @test counts == [6, 1, 69, counts[4], 69, 139, 138, 138, 3, 139, 138]
+        @test counts == [6, 1, 74, counts[4], 74, 139, 138, 138, 3, 139, 138]
         @test counts[4] <= 32
         @test length(canonical) <= 4096
         @test length(read(corpus_path)) <= 4 * 1024 * 1024

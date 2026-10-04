@@ -63,9 +63,12 @@ If you are new, read in this order:
 
 | Section | Module | Purpose | Key files |
 | --- | --- | --- | --- |
-| **Odin** | Application Lifecycle | Process entry and startup/shutdown sequencing. | `src/main.odin` |
+| **Odin** | Application Lifecycle | Process entry and process-level allocation envelope. | `src/main.odin` |
+| **Odin** | Application Coordinator | CLI parsing, saved-preference resolution, startup orchestration, and user-store lifetime. | `src/app/` |
 | **Odin** | Application Composition | Process-wide composition, run settings, and intrinsic task records. | `src/core/core.odin` |
 | **Odin** | Shared Foundations | Bounded storage, animation-generation memory, and native protocol contracts. | `src/core/storage/`, `src/core/animation/`, `src/core/protocol/` |
+| **Odin** | Settings Substrate | Typed user-preference definitions, defaults, validation, and bounded change batches. | `src/settings/` |
+| **Odin** | User Data Store | Durable user database path policy, identity admission, typed settings rows, and transactional commits. | `src/userdata/` |
 | **Odin** | Coordinator Contracts | Bridge transport and presentation contracts plus display and Terminal runtime models. | `src/bridge/model/`, `src/bridge/presentation/`, `src/view/model/`, `src/view/terminal/model/` |
 | **Odin** | Input Boundary | Once-polled portable input frames, bounded event storage, hotkeys, and owner-bound Terminal encoding. | `src/view/input/`, `src/view/view.odin` |
 | **Odin** | Accessibility | Bounded native-ready publication, session-local identity and action storage, validation, and display-owned platform adapters. | `src/accessibility/`, `src/view/native/accessibility/` |
@@ -75,11 +78,11 @@ If you are new, read in this order:
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Bounded entity registry, analytic curve evaluation, components, direct-target constraints, and derived render packets. | `src/shapes/model/`, `src/shapes/curve/`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
 | **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
-| **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/main.odin` |
+| **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/app/launch.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `libs/julia/bindings/julialib.odin` (git submodule) |
 | **Odin** | Assets and IO | Asset package extraction/path resolution, transactional GIF publication, and native static and animated image decode. | `src/files/files.odin`, `src/terminal/graphics/native/sdl_image.odin` |
-| **Odin** | SQLite Runtime Substrate | Explicit native connection and statement lifecycle, typed binding and columns, and structured mechanics errors. | `src/sqlite/`, `libs/sqlite3/sqlite3.odin` |
+| **Odin** | SQLite Runtime Substrate | Explicit native connection and statement lifecycle, typed binding and columns, and structured mechanics errors. Connections are nonconcurrent and use exclusive sequential ownership; the bundled mutex-enabled SQLite build permits task handoff. | `src/sqlite/`, `libs/sqlite3/sqlite3.odin`, `libs/sqlite3/source/sqlite3_custom.c` |
 | **Odin** | Content Store and Service | Named content SQL, complete immutable admission, packed generations, search scheduling, and paired active/staged publication. | `src/core/content/model.odin`, `src/core/content/records.odin`, `src/view/content/database.odin`, `src/view/content/statements.odin`, `src/view/content/generation.odin`, `src/view/content/worker.odin`, `src/view/content/service.odin` |
 | **Odin** | Content Database Builder | Deterministic normalized content database construction using `src/sqlite`; schema, transaction, indexing, coverage validation, and vacuum policy remain builder-owned. | `tools/content_builder/main.odin` |
 | **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
@@ -110,6 +113,12 @@ More-specific model paths beneath view and bridge remain substrate. Reachability
 invariants, storage policy, mutation, and tests belong to its subsystem package.
 `ARCHITECTURE-FORBIDDEN-DEPENDENCY` and `ARCHITECTURE-DEPENDENCY-CYCLE` make violations
 blocking repository-analysis failures.
+
+The SQLite wrapper opens connections without per-connection mutexes. A connection may
+move between threads only through exclusive sequential ownership; no statement,
+connection, or transaction may be used concurrently. The bundled SQLite translation
+unit enables mutex support, and worker handoff must be gated on
+`sqlite.threading_supported()`.
 
 ```mermaid
 flowchart TD
@@ -194,6 +203,20 @@ may help execute Helpable native pool work while waiting on a fence. Optional fo
 seed, glyph-page, and reload preparation is submitted as Worker_Only, including
 during shutdown drain; required startup font preparation remains synchronous.
 Font results still require an owner join before display-owned GPU publication.
+Settings edits are coalesced on the display thread into a fixed change batch, then
+submitted as Worker_Only SQLite commits. The view retains each task payload and its
+borrowed user-store connection until the task is joined; rejected submissions retain
+their pending edits, and shutdown joins accepted saves before the shared pool stops.
+The window shutdown path flushes settings before optional-font teardown, which may
+itself stop the shared pool; runtime-only shutdown retains the same flush boundary.
+SIMD and GPU-instancing preferences retain user intent separately from the effective
+hardware-gated runtime choices.
+The display emits `Settings_Save_Submitted` at accepted admission and emits
+`Settings_Save_Committed` or `Settings_Save_Failed` only after joining. These required
+domain events retain the task slot/generation and batch count; committed outcomes
+include an owner-execution bit, failed outcomes include the typed store error.
+Pointer-free observations expose intent, actual window dimensions, pending count,
+save status, and joined commit/failure/owner-execution counters.
 Only the Julia owner may enter Julia and only the display may publish visible state.
 
 ### Portable Runtime Values

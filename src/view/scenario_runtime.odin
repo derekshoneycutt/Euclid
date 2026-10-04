@@ -19,6 +19,7 @@ import evidence_trace "../evidence/trace"
 import view_core "./core"
 import input "./input"
 import viewmodel "./model"
+import setting_model "../settings"
 import ui "./ui"
 
 import "core:unicode/utf8"
@@ -499,6 +500,10 @@ scenario_issue_display_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
     state := runtime.state
+    if handled, accepted := scenario_issue_settings_action(state, command); handled {
+        return handled, accepted
+    }
+
     if handled, accepted := scenario_issue_viewport_action(runtime, command); handled {
         return handled, accepted
     }
@@ -523,6 +528,21 @@ scenario_issue_display_action :: proc(
     case:
         return false, false
     }
+}
+
+// Route typed setting edits through control policy and assertions through preference intent.
+scenario_issue_settings_action :: proc(
+    state: ^Euclid_General_State, command: ^scenario.Command) -> (bool, bool) {
+    if command.kind == .Set_Setting {
+        return true, ui.settings_apply_control_edit(
+            state, command.setting_id, command.setting_value)
+    }
+    if command.kind == .Assert_Setting {
+        actual := setting_model.setting_value(
+            state^.ui_runtime.settings_preferences, command.setting_id)
+        return true, actual == command.setting_value
+    }
+    return false, false
 }
 
 //   Consume one accepted viewport mutation before authoritative UI geometry is built.

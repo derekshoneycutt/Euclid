@@ -3,6 +3,7 @@ package scenario
 // Package scenario validates and executes bounded semantic workflows.
 
 import particlemodel "../../particles/model"
+import settings "../../settings"
 import "../observe"
 import trace "../trace"
 import json "core:encoding/json"
@@ -60,6 +61,9 @@ EVENT_KINDS :: [?]Event_Kind_Entry {
     {"library_search_committed", .Library_Search_Committed},
     {"checkpoint_stored", .Checkpoint_Stored},
     {"runtime_shutdown_complete", .Runtime_Shutdown_Complete},
+    {"settings_save_submitted", .Settings_Save_Submitted},
+    {"settings_save_committed", .Settings_Save_Committed},
+    {"settings_save_failed", .Settings_Save_Failed},
 }
 
 // Stable semantic operation represented by one validated scenario command.
@@ -97,6 +101,8 @@ Command_Kind :: enum u8 {
     Assert_Allocation_Baseline,
     Assert_No_Bad_Frees,
     Shutdown,
+    Set_Setting,
+    Assert_Setting,
 }
 
 // Payload-free action names accepted by the `do` scenario field.
@@ -193,6 +199,8 @@ Command :: struct {
     dust_distribution : Dust_Distribution,
     key_shift : bool,
     key_control : bool,
+    setting_id: settings.Setting_Id,
+    setting_value: settings.Setting_Value,
 }
 
 // Temporary decoded payload for one exact view-content action object.
@@ -331,6 +339,92 @@ Scenario_Parsed_Line :: struct {
     value: json.Value,
     root: json.Object,
     error: Parse_Error,
+}
+
+// Decode canonical startup enum names for read-only setting assertions.
+scenario_setting_enum :: proc(
+    id: settings.Setting_Id, name: string) -> (settings.Setting_Value, bool) {
+    if id == .Window_Mode {
+        switch name {
+        case "fixed": return settings.window_mode_value(.Fixed), true
+        case "resizable": return settings.window_mode_value(.Resizable), true
+        }
+    } else if id == .Window_Layout {
+        switch name {
+        case "auto": return settings.layout_preference_value(.Auto), true
+        case "landscape": return settings.layout_preference_value(.Landscape), true
+        case "portrait": return settings.layout_preference_value(.Portrait), true
+        }
+    }
+    return {}, false
+}
+
+// Decode a canonical preference scalar without accepting lossy numeric conversion.
+scenario_setting_scalar :: proc(
+    id: settings.Setting_Id, value: json.Value) -> (settings.Setting_Value, bool) {
+    result: settings.Setting_Value
+    #partial switch scalar in value {
+    case bool:
+        result = settings.boolean_value(scalar)
+    case json.Integer:
+        if scalar < json.Integer(min(int)) || scalar > json.Integer(max(int)) {
+            return {}, false
+        }
+        result = settings.integer_value(int(scalar))
+    case string:
+        return scenario_setting_enum(id, scalar)
+    case:
+        return {}, false
+    }
+    return result, settings.valid_setting_value(id, result)
+}
+
+// Validate an exact key/value payload against the existing typed setting registry.
+scenario_setting_payload :: proc(
+    value: json.Value, command: ^Command) -> bool {
+    payload, object_ok := value.(json.Object)
+    if !object_ok || len(payload) != 2 {
+        return false
+    }
+    key_value, key_present := payload["key"]
+    scalar, value_present := payload["value"]
+    key, key_ok := key_value.(string)
+    if !key_present || !value_present || !key_ok {
+        return false
+    }
+    for definition in settings.SETTING_DEFINITIONS {
+        if len(key) != len(definition.namespace) + len(definition.key) + 1 ||
+            key[:len(definition.namespace)] != definition.namespace ||
+            key[len(definition.namespace)] != '.' ||
+            key[len(definition.namespace) + 1:] != definition.key {
+            continue
+        }
+        decoded, valid := scenario_setting_scalar(definition.id, scalar)
+        if !valid {
+            return false
+        }
+        command^.setting_id = definition.id
+        command^.setting_value = decoded
+        return true
+    }
+    return false
+}
+
+// Select one typed settings action while retaining exact-one command validation.
+scenario_setting_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    selected := 0
+    fields := [?]string{"set_setting", "assert_setting"}
+    for field in fields {
+        if value, present := root[field]; present {
+            if !scenario_setting_payload(value, command) {
+                return 0, false
+            }
+            command^.kind = .Set_Setting if field == "set_setting" else .Assert_Setting
+            selected += 1
+        }
+    }
+    return selected, true
 }
 
 //   Decode one exact MIME-bearing view-content action from the parsed root object.
@@ -511,7 +605,8 @@ scenario_parse_line :: proc(line: string) -> Scenario_Parsed_Line {
     if json.unmarshal_string(line, &raw, allocator = context.temp_allocator) != nil {
         return {error = .Invalid_Json}
     }
-    parsed, parse_error := json.parse_string(line, allocator = context.temp_allocator)
+    parsed, parse_error := json.parse_string(
+        line, parse_integers = true, allocator = context.temp_allocator)
     if parse_error != .None {
         return {error = .Invalid_Json}
     }
@@ -686,6 +781,7 @@ runner_update_command :: proc(
     case .Assert_State:
         return runner_assert_state(runner, command, frame.display)
     case .Assert_Focus, .Assert_Terminal_Contains, .Assert_Allocation_Baseline,
+         .Assert_Setting,
          .Assert_No_Bad_Frees:
         return runner_assert_action(runner, command, frame.actions)
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
@@ -698,7 +794,7 @@ runner_update_command :: proc(
          .Set_Library_Search, .Apply_Library_Search_Suggestion,
          .Clear_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
-         .Allocation_Checkpoint, .Shutdown:
+         .Allocation_Checkpoint, .Shutdown, .Set_Setting:
         return runner_issue_action(runner, command, frame.actions)
     }
     return false
@@ -954,6 +1050,11 @@ scenario_structured_action_select :: proc(
         return 0, false
     }
     selected += count
+    count, valid = scenario_setting_action_select(root, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
     count, valid = scenario_numeric_action_select(root, command)
     if !valid {
         return 0, false
@@ -1001,7 +1102,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
     case .Emit_Dust, .Contact_Dust, .Kick_Dust,
          .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
             .Apply_Library_Search_Suggestion, .Clear_Library_Search,
-         .Assert_No_Bad_Frees, .Shutdown:
+         .Assert_No_Bad_Frees, .Shutdown, .Set_Setting, .Assert_Setting:
         return true
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
          .Inject_Reload_Failure,
@@ -1222,7 +1323,22 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "library_search_has_matches": return display.library_search_has_matches
     }
     return runtime_state_matches(name, display) ||
-        dust_state_matches(name, display) || terminal_state_matches(name, display)
+        dust_state_matches(name, display) || terminal_state_matches(name, display) ||
+        settings_state_matches(name, display)
+}
+
+// Evaluate durability and joined worker-ownership predicates independently of runtime idle.
+settings_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "settings_saved":
+        return display.settings_save_status == .Saved &&
+            !display.settings_save_active && display.settings_pending_count == 0
+    case "settings_saving": return display.settings_save_active
+    case "settings_unavailable": return display.settings_save_status == .Unavailable
+    case "settings_failed": return display.settings_save_status == .Failed
+    case "settings_worker_only": return display.settings_save_owner_execution_count == 0
+    }
+    return false
 }
 
 //   Return running before the deadline and fail at or after it.
