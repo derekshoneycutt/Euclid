@@ -781,7 +781,7 @@ function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::UInt64)
     return nothing
 end
 
-"""Hide a REPL-managed geometry target by integer index or bridge shape/view handle."""
+"""Hide a REPL-managed geometry target by integer index or bridge entity/view handle."""
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -791,6 +791,18 @@ function hide!(
     _hide_bridge_point(state_ptr, UInt64(index))
     return nothing
 end
+
+"""Hide a standalone entity returned by `point!` using its packed index."""
+function hide!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    point::OdinJuliaBridge.BridgeShapeEntityResult)
+
+    _ = host_runtime
+    _hide_bridge_point(state_ptr, point.index)
+    return nothing
+end
+
 function hide!(
     host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -856,7 +868,9 @@ function status(
 end
 
 """
-Draw a point with pen animation and return a `BridgePointView` handle.
+Draw a point with pen animation and return a `BridgeShapeEntityResult` handle.
+
+Pass the returned handle to `hide!` to hide the completed point.
 
 Keywords:
 - `color=:steelblue`

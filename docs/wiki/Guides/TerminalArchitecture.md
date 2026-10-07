@@ -612,6 +612,10 @@ constraint solving and frame preparation. Independent `Ticks` callbacks do not a
 drawing jobs: they run outside capture and must not mutate display-owned tool state.
 Animation pause also pauses drawing-job progress.
 
+`point!` returns a `BridgeShapeEntityResult` with the point's packed entity index.
+Like line and circle handles, this handle can be passed directly to `hide!` after
+drawing completes: `p = point!([0.5,0.5,0])`, then `hide!(p)`.
+
 Starting a new EuclidRepl job finalizes and preempts the previous job. Closing a session
 resets managed geometry and stops tick admission before actors become quiescent. A new
 Terminal generation always receives a fresh runtime; drawing jobs never cross generations.
