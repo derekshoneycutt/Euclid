@@ -691,6 +691,7 @@ select_animation_programmatically :: proc(
     }
     state^.ui_runtime.tree_reveal_pending = true
     state^.ui_runtime.tree_reveal_stable_id = selected^.stable_id
+    state^.ui_runtime.tree_reveal_reason = .Programmatic
     return true
 }
 

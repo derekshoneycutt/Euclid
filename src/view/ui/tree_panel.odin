@@ -40,6 +40,7 @@ Tree_Semantic_Context :: struct {
     panel: geometry.Rectangle,
     scroll_y: f32,
     row: ^int,
+    layout: ^Tree_Prepared_Layout,
 }
 
 // Prepared facts for publishing one tree item's semantics.
@@ -69,12 +70,7 @@ Tree_List_Preparation :: struct {
     hovered_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     hovered_expander_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     pressed_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-}
-
-//   Mutable walk cursor: running content y plus the remaining row budget.
-Tree_Walk_Cursor :: struct {
-    content_y : ^f32,
-    remaining : int,
+    layout: Tree_Prepared_Layout,
 }
 
 //   Inputs for one tree list panel frame, grouped so the call passes one value.
@@ -125,6 +121,7 @@ Encoded_Tree_Walk_Context :: struct {
     content_y: ^f32,
     visibility: Tree_Visibility_Policy,
     pressed_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    render_only: bool,
 }
 
 // tree_node_is_visible reports whether the active topology includes one node.
@@ -164,6 +161,17 @@ tree_node_is_effectively_expanded :: proc(
         }
     }
     return false
+}
+
+// expanded_first_child returns only logically expanded children, never closing visual tails.
+expanded_first_child :: proc(
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    policy: Tree_Visibility_Policy = {}) ->
+        ^bridgemodel.Euclid_Julia_Animation_Interface {
+    if node == nil || !tree_node_is_effectively_expanded(policy, node) {
+        return nil
+    }
+    return node^.first_child
 }
 
 // tree_semantic_id identifies the Library tree independently of its rows.
@@ -212,7 +220,7 @@ tree_item_is_keyboard_active :: proc(
 draw_encoded_tree_row :: proc(
     ctx: Encoded_Tree_Walk_Context,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    depth: int, row_y: f32) {
+    depth: int, row_y: f32, expanded: bool = false) {
     row := geometry.Rectangle{
         ctx.panel.x, row_y, ctx.panel.width, TREE_ROW_HEIGHT}
     if row.y + row.height >= ctx.panel.y &&
@@ -226,7 +234,8 @@ draw_encoded_tree_row :: proc(
             highlight.a = 24
             _ = native.draw_encoder_rectangle(ctx.encoder, row, highlight)
         }
-        if tree_item_is_keyboard_active(&ctx.state^.ui_runtime, node) {
+        if !ctx.render_only &&
+           tree_item_is_keyboard_active(&ctx.state^.ui_runtime, node) {
             _ = native.draw_encoder_rectangle_outline(
                 ctx.encoder, geometry.Rectangle(row), 2, UI_TEXT_COLOR)
         }
@@ -234,116 +243,24 @@ draw_encoded_tree_row :: proc(
             icon := geometry.Rectangle{row.x + f32(depth) * TREE_INDENT +
                 TREE_ROW_ICON_OFFSET_X, row.y + TREE_ROW_ICON_OFFSET_Y,
                 TREE_ROW_ICON_SIZE, TREE_ROW_ICON_SIZE}
-            draw_encoded_disclosure(ctx.encoder, icon,
-                tree_node_is_effectively_expanded(ctx.visibility, node))
+            draw_encoded_disclosure(ctx.encoder, icon, expanded)
         }
-    }
-}
-
-// draw_encoded_tree_node encodes one visible tree branch without its labels.
-draw_encoded_tree_node :: proc(
-    ctx: Encoded_Tree_Walk_Context,
-    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    depth, remaining: int) {
-    if ctx.ji == nil || node == nil || remaining <= 0 ||
-        !tree_node_is_visible(ctx.visibility, node) {
-        return
-    }
-    row_y := ctx.panel.y + ctx.content_y^ - ctx.scroll_y
-    ctx.content_y^ += TREE_ROW_HEIGHT
-    draw_encoded_tree_row(ctx, node, depth, row_y)
-    if !tree_node_is_effectively_expanded(ctx.visibility, node) {
-        return
-    }
-    for child, steps := node^.first_child, 0;
-        child != nil && steps < ctx.ji^.animation_count;
-        child, steps = child^.next_sibling, steps + 1 {
-        draw_encoded_tree_node(ctx, child, depth + 1, remaining - 1)
     }
 }
 
 // draw_encoded_tree_geometry encodes visible catalogue chrome without text.
 draw_encoded_tree_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle,
-    pressed_node: ^bridgemodel.Euclid_Julia_Animation_Interface = nil) {
-    if state == nil || state^.julia_interface == nil {
-        return
-    }
-    ji := state^.julia_interface
-    visibility := Tree_Visibility_Policy{search = &state^.ui_runtime.library_search}
-    content_height := f32(count_visible_tree_rows_all_roots(
-        ji, visibility)) * TREE_ROW_HEIGHT
-    max_scroll := max(content_height - panel.height, 0)
-    scroll_y := clamp(state^.ui_runtime.tree_scroll_y, 0, max_scroll)
-    scrollbar := build_vertical_scrollbar(
-        {panel, content_height, scroll_y, max_scroll},
-        SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
-    _ = native.draw_encoder_push_scissor(encoder, geometry.Rectangle(panel))
-    content_y: f32
-    ctx := Encoded_Tree_Walk_Context{
-        state = state, ji = ji, encoder = encoder, panel = panel,
-        scroll_y = scroll_y, content_y = &content_y, visibility = visibility,
-        pressed_node = pressed_node}
-    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
-        if node^.parent == nil {
-            draw_encoded_tree_node(ctx, node, 0, ji^.animation_count)
-        }
-    }
-    _ = native.draw_encoder_pop_scissor(encoder)
-    draw_encoded_scrollbar(encoder, scrollbar)
-}
-
-// draw_encoded_tree_node_text emits visible labels in one bounded tree walk.
-draw_encoded_tree_node_text :: proc(
-    ctx: Encoded_Tree_Walk_Context,
-    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    depth, remaining: int) {
-    if node == nil || remaining <= 0 ||
-        !tree_node_is_visible(ctx.visibility, node) {
-        return
-    }
-    row_y := ctx.panel.y + ctx.content_y^ - ctx.scroll_y
-    ctx.content_y^ += TREE_ROW_HEIGHT
-    if row_y + TREE_ROW_HEIGHT >= ctx.panel.y &&
-        row_y <= ctx.panel.y + ctx.panel.height {
-        draw_encoded_label(ctx.state, ctx.encoder, node^.name,
-            ctx.panel.x + f32(depth) * TREE_INDENT + TREE_ROW_LABEL_OFFSET_X,
-            row_y + TREE_ROW_LABEL_OFFSET_Y)
-    }
-    if !tree_node_is_effectively_expanded(ctx.visibility, node) {
-        return
-    }
-    for child, steps := node^.first_child, 0;
-        child != nil && steps < ctx.ji^.animation_count;
-        child, steps = child^.next_sibling, steps + 1 {
-        draw_encoded_tree_node_text(ctx, child, depth + 1, remaining - 1)
-    }
+    prepared: Tree_List_Preparation) {
+    draw_encoded_prepared_tree(state, encoder, prepared, false)
+    draw_encoded_scrollbar(encoder, prepared.scroll.scrollbar)
 }
 
 // draw_encoded_tree_text emits the visible catalogue labels.
 draw_encoded_tree_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle) {
-    ji := state^.julia_interface
-    if ji == nil {
-        return
-    }
-    visibility := Tree_Visibility_Policy{search = &state^.ui_runtime.library_search}
-    content_height := f32(count_visible_tree_rows_all_roots(
-        ji, visibility)) * TREE_ROW_HEIGHT
-    scroll_y := clamp(state^.ui_runtime.tree_scroll_y,
-        0, max(content_height - panel.height, 0))
-    content_y: f32
-    ctx := Encoded_Tree_Walk_Context{state, ji, encoder, panel,
-        scroll_y, &content_y, visibility, nil}
-    _ = native.draw_encoder_push_scissor(encoder, geometry.Rectangle(panel))
-    for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
-        if node^.parent == nil {
-            draw_encoded_tree_node_text(ctx, node, 0, ji^.animation_count)
-        }
-    }
-    _ = native.draw_encoder_pop_scissor(encoder)
+    prepared: Tree_List_Preparation) {
+    draw_encoded_prepared_tree(state, encoder, prepared, true)
 }
 
 // Borrow the interface-owned title through preparation and deferred accordion drawing.
@@ -596,6 +513,7 @@ tree_set_active_node :: proc(
     if reveal {
         runtime^.tree_reveal_stable_id = node^.stable_id
         runtime^.tree_reveal_pending = true
+        runtime^.tree_reveal_reason = .Navigation
     }
 }
 
@@ -656,6 +574,7 @@ tree_apply_structure_command :: proc(
     active: ^bridgemodel.Euclid_Julia_Animation_Interface,
     kind: viewmodel.Ui_Focus_Command_Kind) ->
         ^bridgemodel.Euclid_Julia_Animation_Interface {
+    tree_motion_anchor_action(params, active, kind)
     #partial switch kind {
     case .Tree_Parent: return tree_apply_parent_command(active)
     case .Tree_Child: return tree_apply_child_command(params.visibility, active)
@@ -682,7 +601,8 @@ tree_apply_semantic_command :: proc(
     active: ^bridgemodel.Euclid_Julia_Animation_Interface,
     command: viewmodel.Ui_Focus_Command) ->
         ^bridgemodel.Euclid_Julia_Animation_Interface {
-    if active == nil {
+    if active == nil ||
+       command.kind == .Scroll_Page || command.kind == .Set_Scroll_Value {
         return active
     }
     target := tree_semantic_navigation_target(params, active, command.kind)
@@ -709,7 +629,8 @@ tree_semantic_command_target :: proc(
         return nil
     }
     node := tree_find_stable_id(params.ji, target.stable_id)
-    if !tree_node_is_visible(params.visibility, node) {
+    _, logical := tree_visible_row(params.ji, node, params.visibility)
+    if !logical {
         return nil
     }
     return node
@@ -762,15 +683,21 @@ tree_item_set_facts :: proc(
 // Publish one visible tree node using its computed parent, state, and geometry.
 tree_publish_item_semantics :: proc(
     ctx: Tree_Semantic_Context, publication: Tree_Item_Semantic_Publication) {
-    bounds := geometry.Rectangle{ctx.panel.x,
-        ctx.panel.y + f32(ctx.row^) * TREE_ROW_HEIGHT - ctx.scroll_y,
-        ctx.panel.width, TREE_ROW_HEIGHT}
+    row := tree_layout_find(ctx.layout, publication.node)
+    assert(row != nil, "logical tree row absent from prepared layout")
+    geometry := tree_row_screen_geometry(row^, ctx.panel, ctx.scroll_y)
+    states := publication.states
+    actions := publication.actions
+    if !tree_row_is_revealed(row^) {
+        states -= {.Visible, .Enabled, .Focusable}
+        actions = {}
+    }
     _ = semantic_register_control(ctx.runtime^.semantic_focus, {
         id = publication.item_id, parent = publication.parent_id,
-        role = .Tree_Item, states = publication.states,
-        actions = publication.actions, region = .Accordion_Content,
-        traversal_order = u16(ctx.row^), bounds = viewmodel.Rectangle(bounds),
-        clip_bounds = viewmodel.Rectangle(ctx.panel), label = publication.node^.name,
+        role = .Tree_Item, states = states,
+        actions = actions, region = .Accordion_Content,
+        traversal_order = u16(ctx.row^), bounds = geometry.bounds,
+        clip_bounds = geometry.clip_bounds, label = publication.node^.name,
         level = u16(publication.depth + 1),
         position_in_set = publication.position, set_size = publication.size,
     })
@@ -781,10 +708,7 @@ tree_publish_semantic_children :: proc(
     ctx: Tree_Semantic_Context, ji: ^bridgemodel.Euclid_Julia_Interface,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth, remaining: int) {
-    if !tree_node_is_effectively_expanded(ctx.policy, node) {
-        return
-    }
-    for child, steps := node^.first_child, 0;
+    for child, steps := expanded_first_child(node, ctx.policy), 0;
         child != nil && steps < ji^.animation_count;
         child, steps = child^.next_sibling, steps + 1 {
         register_tree_item_semantics(ctx, ji, child, depth + 1, remaining - 1)
@@ -829,7 +753,8 @@ register_tree_item_semantics :: proc(
 register_tree_semantics :: proc(
     params: Tree_List_Params,
     scroll: Scroll_Container_Update_Result,
-    active: ^bridgemodel.Euclid_Julia_Animation_Interface) {
+    active: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    layout: ^Tree_Prepared_Layout) {
     tree_id := tree_semantic_id()
     active_id := tree_item_semantic_id(active)
     _ = semantic_register_control(params.ui_runtime^.semantic_focus, {
@@ -846,7 +771,7 @@ register_tree_semantics :: proc(
     row := 0
     panel := geometry.Rectangle(scroll.control_geometry.bounds)
     ctx := Tree_Semantic_Context{params.ui_runtime, params.visibility,
-        tree_id, panel, scroll.scroll_y_out, &row}
+        tree_id, panel, scroll.scroll_y_out, &row, layout}
     for node := params.ji^.animation_head; node != nil; node = node^.next_in_registry {
         if node^.parent == nil {
             register_tree_item_semantics(
@@ -939,61 +864,6 @@ apply_tree_hit :: proc(
     }
 }
 
-//   Advance content cursor for skipped offscreen child branches.
-accumulate_offscreen_child_rows :: proc(
-    ji: ^bridgemodel.Euclid_Julia_Interface,
-    first_child: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    content_y: ^f32,
-    remaining: int,
-    policy: Tree_Visibility_Policy = {}) {
-
-    child := first_child
-    steps := 0
-    for child != nil && steps < ji.animation_count {
-        child_rows := count_visible_tree_rows_limited(
-            ji, child, remaining - 1, policy)
-        content_y^ += f32(child_rows) * TREE_ROW_HEIGHT
-        child = child.next_sibling
-        steps += 1
-    }
-}
-
-//   Traverse child node branches and resolve interaction with depth tracking.
-walk_update_child_nodes_limited :: proc(
-    ctx: Tree_Walk_Context,
-    first_child: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    depth: int,
-    content_y: ^f32,
-    remaining: int) -> Tree_Hit {
-
-    hit := Tree_Hit{}
-
-    child := first_child
-    steps := 0
-    for child != nil && steps < ctx.ji.animation_count {
-        child_hit := walk_update_tree_node_limited(ctx, child, depth + 1, content_y,
-            remaining - 1)
-        merge_tree_hit(&hit, child_hit)
-        child = child.next_sibling
-        steps += 1
-    }
-
-    return hit
-}
-
-//   Return first child pointer only when node is expanded.
-expanded_first_child :: #force_inline proc(
-    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    policy: Tree_Visibility_Policy = {}) ->
-    ^bridgemodel.Euclid_Julia_Animation_Interface {
-
-    if node == nil || !tree_node_is_effectively_expanded(policy, node) {
-        return nil
-    }
-
-    return node.first_child
-}
-
 //   Resolve one node expander and record its hover and toggle identities.
 update_tree_node_expander_hit :: proc(
     ctx: Tree_Walk_Context,
@@ -1063,85 +933,6 @@ update_tree_node_row :: proc(
     }
 }
 
-//   Walk and merge child-node hits for one expanded parent.
-walk_merge_child_hits :: proc(
-    ctx: Tree_Walk_Context,
-    child_first: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    depth: int,
-    cursor: Tree_Walk_Cursor,
-    hit: ^Tree_Hit) {
-
-    if child_first == nil {
-        return
-    }
-    child_hit := walk_update_child_nodes_limited(ctx, child_first, depth,
-        cursor.content_y, cursor.remaining)
-    merge_tree_hit(hit, child_hit)
-}
-
-//   Traverse one tree node branch with clipping-aware row handling.
-walk_update_tree_node_limited :: proc(
-    ctx: Tree_Walk_Context,
-    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
-    depth: int,
-    content_y: ^f32,
-    remaining: int) -> Tree_Hit {
-
-    hit := Tree_Hit{}
-
-    if remaining <= 0 || node == nil {
-        return hit
-    }
-
-    if !tree_node_is_visible(ctx.visibility, node) {
-        return hit
-    }
-    child_first := expanded_first_child(node, ctx.visibility)
-
-    row_y_world := content_y^
-    content_y^ += TREE_ROW_HEIGHT
-
-    row_y_screen := ctx.panel.y + (row_y_world - ctx.scroll_y)
-    row_rect := geometry.Rectangle{ctx.panel.x, row_y_screen, ctx.panel.width,
-        TREE_ROW_HEIGHT}
-
-    if row_rect.y > ctx.panel.y + ctx.panel.height {
-        if child_first != nil {
-            accumulate_offscreen_child_rows(
-                ctx.ji, child_first, content_y, remaining, ctx.visibility)
-        }
-        return hit
-    }
-
-    if row_rect.y + row_rect.height >= ctx.panel.y {
-        update_tree_node_row(ctx, node, depth, row_rect, &hit)
-    }
-
-    walk_merge_child_hits(ctx, child_first, depth,
-        Tree_Walk_Cursor{content_y, remaining}, &hit)
-    return hit
-}
-
-//   Traverse and draw root nodes, aggregating click hits.
-walk_update_tree_roots :: proc(
-    ctx: Tree_Walk_Context,
-    content_y: ^f32) -> Tree_Hit {
-
-    hit := Tree_Hit{}
-
-    for node := ctx.ji.animation_head; node != nil; node = node.next_in_registry {
-        if node.parent != nil {
-            continue
-        }
-
-        root_hit := walk_update_tree_node_limited(ctx, node, 0, content_y,
-            ctx.ji.animation_count)
-        merge_tree_hit(&hit, root_hit)
-    }
-
-    return hit
-}
-
 //   Commit tree scroll drag state from one update result.
 commit_tree_scroll :: proc(
     params: Tree_List_Params,
@@ -1149,21 +940,6 @@ commit_tree_scroll :: proc(
     params.scroll_y^ = scroll.scroll_y_out
     params.ui_runtime.tree_scroll_dragging = scroll.state_out.is_dragging_thumb
     params.ui_runtime.tree_scroll_drag_off = scroll.state_out.drag_offset_y
-}
-
-//   Recount expanded topology and reclamp the prepared tree scrollbar.
-reconcile_tree_topology :: proc(
-    params: Tree_List_Params,
-    scroll: ^Scroll_Container_Update_Result,
-    content_height: ^f32) {
-    content_height^ = f32(count_visible_tree_rows_all_roots(
-        params.ji, params.visibility)) * TREE_ROW_HEIGHT
-    max_scroll := max(content_height^ - scroll^.view_rect.height, 0)
-    params.scroll_y^ = clamp(params.scroll_y^, 0, max_scroll)
-    scroll^.scroll_y_out = params.scroll_y^
-    scroll^.scrollbar = build_vertical_scrollbar(
-        {scroll^.view_rect, content_height^, scroll^.scroll_y_out, max_scroll},
-        SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)
 }
 
 //   Release completed list-item capture after tree interaction.
@@ -1179,14 +955,18 @@ release_tree_list_capture :: proc(params: Tree_List_Params) {
 finish_tree_interaction :: proc(
     params: Tree_List_Params,
     hit: Tree_Hit,
-    scroll: ^Scroll_Container_Update_Result,
-    content_height: ^f32) {
+    prepared: ^Tree_List_Preparation) {
+    if hit.toggled_node != nil {
+        tree_motion_anchor(params, hit.toggled_node, &prepared^.layout)
+    }
     apply_tree_hit(params.ji, params.ui_runtime, hit)
     if hit.toggled_node != nil {
-        reconcile_tree_topology(params, scroll, content_height)
+        prepared^.layout = tree_prepare_layout(params)
+        tree_refresh_preparation(params, prepared)
+        ui_release_geometry_capture(params.ui_runtime)
     }
     active := tree_resolve_active_node(params)
-    register_tree_semantics(params, scroll^, active)
+    register_tree_semantics(params, prepared^.scroll, active, &prepared^.layout)
     if hit.hovered_node != nil && input_frame_left_pressed(params.mouse_input) ||
         hit.selected_node != nil || hit.toggled_node != nil {
         _ = semantic_request_pointer_focus(
@@ -1211,35 +991,25 @@ tree_pressed_node :: proc(
 
 //   Resolve tree scrolling and row interaction before rendering.
 prepare_tree_list_panel :: proc(params: Tree_List_Params) -> Tree_List_Preparation {
-    _ = tree_apply_semantic_commands(params)
-    total_rows := count_visible_tree_rows_all_roots(params.ji, params.visibility)
-    if total_rows <= 0 {
+    if params.ji == nil || params.ji^.animation_count == 0 {
+        params.ui_runtime^.tree_motion = {}
         return {}
     }
-    content_h := f32(total_rows) * TREE_ROW_HEIGHT
-    apply_pending_tree_reveal(params, content_h)
-    scroll := scroll_container_update({id = UI_TREE_SCROLLBAR_ID,
-        rect = params.list_panel, scroll_y_in = params.scroll_y^,
-        content_height = content_h, mouse_input = params.mouse_input,
-        interaction_space_rect = params.list_panel,
-        wheel_step = TREE_ROW_HEIGHT * WHEEL_SCROLL_MULTIPLIER,
-        press_owner = &params.ui_runtime.ui_press_owner,
-        state_in = {params.ui_runtime.tree_scroll_dragging,
-            params.ui_runtime.tree_scroll_drag_off},
-        semantic_focus = params.ui_runtime.semantic_focus,
-        semantic_id = tree_semantic_id()})
-    commit_tree_scroll(params, scroll)
-    walk_ctx := Tree_Walk_Context{ji = params.ji, ui_runtime = params.ui_runtime,
-        panel = scroll.view_rect, scroll_y = scroll.scroll_y_out,
-        allow_clicks = !(scroll.pointer_reserved &&
-            input_frame_left_pressed(params.mouse_input)),
-        mouse_input = params.mouse_input,
-        interaction_space_rect = scroll.view_rect,
-        font = params.font, font_resolver = params.font_resolver,
-        visibility = params.visibility}
-    content_y: f32
-    hit := walk_update_tree_roots(walk_ctx, &content_y)
-    finish_tree_interaction(params, hit, &scroll, &content_h)
-    return {scroll, content_h, hit.hovered_node, hit.hovered_expander_node,
-        tree_pressed_node(params, hit.hovered_node)}
+    layout := tree_prepare_layout(params)
+    _ = tree_apply_semantic_commands(params)
+    tree_motion_settle_navigation(params)
+    layout = tree_prepare_layout(params)
+    tree_apply_visual_reveal(params, &layout)
+    tree_motion_apply_anchor(params, &layout)
+    prepared := Tree_List_Preparation{layout = layout}
+    prepared.scroll = tree_update_scroll(params, layout.content_height)
+    commit_tree_scroll(params, prepared.scroll)
+    tree_motion_release_anchor(params, prepared.scroll)
+    hit := tree_update_prepared_rows(params, &prepared)
+    finish_tree_interaction(params, hit, &prepared)
+    prepared.content_height = prepared.layout.content_height
+    prepared.hovered_node = hit.hovered_node
+    prepared.hovered_expander_node = hit.hovered_expander_node
+    prepared.pressed_node = tree_pressed_node(params, hit.hovered_node)
+    return prepared
 }

@@ -179,6 +179,14 @@ Terminal grids, input, focus, or Julia lifecycle. UI motion policy combines the 
 interface preference with a separately sampled native accessibility preference and
 does not affect Julia's authored geometric animation policy.
 
+Tree motion is also display-owned: bounded UUID-keyed branch geometry shares the
+existing display topology capacity, checked against the admitted catalogue bound.
+Concurrent nested reveals use one prepared row layout for drawing, input, semantic
+publication, and scroll extent. Closing children are visual-only; logical navigation
+does not retain them. Search, typed programmatic reveal, generation/geometry changes,
+reduced motion, and hidden Library settle immediately. Deferred draw passes borrow
+current interface nodes only for their prepared frame and never advance motion.
+
 Semantic evidence is authoritative for behavioral claims. Diagnostics explain
 operation and failure, while Spall profiles measure timing; neither substitutes for
 typed evidence.

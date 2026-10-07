@@ -113,6 +113,7 @@ const SCENARIO_STATES = [
     "simulation_paused", "simulation_running", "dynview_enabled",
     "gif_active", "gif_idle", "library_search_idle",
     "library_search_has_matches", "settings_saved", "settings_saving",
+    "tree_transitioning", "tree_settled",
     "settings_unavailable", "settings_failed", "settings_worker_only",
     "tooltip_visible", "tooltip_hidden"]
 

@@ -16,6 +16,7 @@ GIF_PATH_CAPACITY :: 4096
 LIBRARY_SEARCH_QUERY_BYTE_CAPACITY :: 512
 LIBRARY_SEARCH_RESULT_CAPACITY :: 64
 LIBRARY_SEARCH_VISIBLE_ID_CAPACITY :: 256
+UI_TREE_NODE_CAPACITY :: LIBRARY_SEARCH_VISIBLE_ID_CAPACITY
 // Capacity covers 256 filtered tree nodes, 1,024 Dynview copy targets, and 64
 // static, container, and responsive-layout nodes.
 UI_SEMANTIC_NODE_CAPACITY :: 1344
@@ -638,6 +639,39 @@ Ui_Accordion_Transition :: struct {
     clips: [4]Rectangle,
 }
 
+// Ui_Tree_Branch_Motion retains one sampled descendant extent, never row content.
+Ui_Tree_Branch_Motion :: struct {
+    stable_id: uuid.Identifier,
+    expanded: bool,
+    running: bool,
+    start_seconds: f64,
+    start_height: f32,
+    height: f32,
+    full_height: f32,
+}
+
+// Ui_Tree_Motion retains only generation-scoped identities and reveal geometry.
+Ui_Tree_Motion :: struct {
+    initialized: bool,
+    generation: u64,
+    query_revision: u64,
+    search_generation: u64,
+    search_active: bool,
+    panel: Rectangle,
+    count: int,
+    visual_height: f32,
+    branches: [UI_TREE_NODE_CAPACITY]Ui_Tree_Branch_Motion,
+    anchor_id: uuid.Identifier,
+    anchor_view_y: f32,
+    anchored: bool,
+}
+
+// Ui_Tree_Reveal_Reason distinguishes navigation from external topology replacement.
+Ui_Tree_Reveal_Reason :: enum {
+    Programmatic,
+    Navigation,
+}
+
 // Euclid_Ui_Runtime_State owns persistent display interaction and panel state.
 Euclid_Ui_Runtime_State :: struct {
     tree_scroll_y: f32,
@@ -646,6 +680,8 @@ Euclid_Ui_Runtime_State :: struct {
     settings_scroll_drag_off: f32,
     tree_reveal_pending: bool,
     tree_reveal_stable_id: uuid.Identifier,
+    tree_reveal_reason: Ui_Tree_Reveal_Reason,
+    tree_motion: Ui_Tree_Motion,
     view_text_scroll_y: f32,
     view_text_scroll_max: f32,
     tree_scroll_dragging: bool,

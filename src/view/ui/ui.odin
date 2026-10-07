@@ -379,7 +379,6 @@ draw_encoded_accordion_child :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     section: viewmodel.Ui_Accordion_Section, content: geometry.Rectangle,
     controls: Ui_Control_Preparation) {
-    runtime := &state^.ui_runtime
     _ = native.draw_encoder_rectangle(encoder, content, UI_COMPONENT_BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(encoder, content, 1, UI_BORDER_COLOR)
     switch section {
@@ -387,10 +386,7 @@ draw_encoded_accordion_child :: proc(
         draw_encoded_presentation_geometry(
             state, encoder, content)
     case .Library:
-        show_suggestion := runtime^.library_search.suggestion_length > 0
-        search_layout := library_search_layout(content, show_suggestion)
-        draw_encoded_tree_geometry(
-            state, encoder, search_layout.tree, controls.tree.pressed_node)
+        draw_encoded_tree_geometry(state, encoder, controls.tree)
     case .Save_Gif:
         draw_encoded_gif_geometry(encoder, controls.gif)
     case .Settings:
@@ -493,7 +489,7 @@ draw_encoded_accordion_child_text :: proc(
         draw_encoded_library_search_geometry(
             state, encoder, controls.library_search)
         draw_encoded_library_search_text(state, encoder, controls.library_search)
-        draw_encoded_tree_text(state, encoder, controls.library_search.layout.tree)
+        draw_encoded_tree_text(state, encoder, controls.tree)
     case .Save_Gif:
         draw_encoded_gif_text(state, encoder,
             content, controls.gif)
@@ -702,6 +698,9 @@ ui_clip_accordion_child_frame :: proc(
 // prepare_outgoing_accordion_controls borrows draw facts without actions or semantics.
 prepare_outgoing_accordion_controls :: proc(
     state: ^core.Euclid_General_State, result: ^Ui_Control_Preparation) {
+    if state^.ui_runtime.active_accordion_section != .Library {
+        state^.ui_runtime.tree_motion = {}
+    }
     sections := result^.accordion.sections
     for index in 0..<sections.count {
         section := sections.items[index].section
@@ -717,6 +716,11 @@ prepare_outgoing_accordion_controls :: proc(
             result^.gif = prepare_gif_view(state, content, {}, false)
         case .Library:
             result^.library_search = prepare_library_search_visual(state, content)
+            result^.tree = prepare_tree_visual({
+                ji = state^.julia_interface, ui_runtime = &state^.ui_runtime,
+                list_panel = result^.library_search.layout.tree,
+                scroll_y = &state^.ui_runtime.tree_scroll_y,
+                visibility = {search = &state^.ui_runtime.library_search}})
         case .View:
         }
     }

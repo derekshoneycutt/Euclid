@@ -244,7 +244,7 @@ artifact_state_json :: proc(
         "\"vertical_split_x\":%g,\"horizontal_split_y\":%g," +
         "\"gif_capture_active\":%v,\"gif_captured_frames\":%d," +
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
-        "\"display_pending_drops\":%d,%s,%s,%s,%s,%s,%s}}\n",
+        "\"display_pending_drops\":%d,%s,%s,%s,%s,%s,%s,%s}}\n",
         state.fixed_step, state.simulation_time, state.simulation_paused,
         state.animation_policy_paused, state.runtime_lifecycle, state.runtime_generation,
         state.active_runtime_request_id, state.failed_runtime_request_count,
@@ -259,7 +259,14 @@ artifact_state_json :: proc(
         artifact_colored_draw_state_json(state),
         artifact_terminal_graphics_state_json(state),
         artifact_simulation_state_json(simulation), artifact_settings_state_json(state),
-        artifact_accordion_state_json(state))
+        artifact_accordion_state_json(state), artifact_tree_state_json(state))
+}
+
+// Serialize current tree motion count and fractional visual scroll geometry.
+artifact_tree_state_json :: proc(state: observe.Display) -> string {
+    return fmt.tprintf("\"tree\":{{\"transition_count\":%d," +
+        "\"visual_height\":%g,\"scroll_y\":%g}}",
+        state.tree_transition_count, state.tree_visual_height, state.tree_scroll_y)
 }
 
 // Serialize synchronized host lifecycle and trace health without changing top-level keys.

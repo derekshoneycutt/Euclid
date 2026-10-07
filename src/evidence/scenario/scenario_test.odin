@@ -8,6 +8,16 @@ import settings "../../settings"
 
 import "core:testing"
 
+// Verify transition predicates distinguish concurrent motion from settled tree geometry.
+@(test)
+scenario_tree_motion_predicates :: proc(t: ^testing.T) {
+    testing.expect(t, state_matches("tree_settled", observe.Display{}))
+    testing.expect(t, !state_matches("tree_transitioning", observe.Display{}))
+    display := observe.Display{tree_transition_count = 2}
+    testing.expect(t, state_matches("tree_transitioning", display))
+    testing.expect(t, !state_matches("tree_settled", display))
+}
+
 // Verify exact typed settings payloads reject unknown keys, wrong types and extra actions.
 @(test)
 scenario_test_settings_payload_validation :: proc(t: ^testing.T) {

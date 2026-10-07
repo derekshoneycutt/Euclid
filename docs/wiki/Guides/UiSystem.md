@@ -918,14 +918,42 @@ Their explicit control targets outrank ordinary world interaction.
 
 ### Tree Catalogue
 
-When Library is active, its accordion content counts visible rows, applies pending
-reveal state, updates scrolling, and walks visible roots to resolve hover, selection,
-and expansion. Expansion recounts topology and reclamps scrolling in the same update.
-Rendering repeats the bounded walk only to issue draw calls.
+When Library is active, explicit pointer, keyboard, and accessibility branch toggles
+reveal or conceal full-size descendants over 180 ms with the accordion's cubic ease-out.
+Row height, indentation, and text metrics stay fixed. Subsequent siblings move by the
+current revealed subtree height. Independent branches animate concurrently; nested clips
+intersect ancestor reveals. Reversals sample current geometry rather than queuing work.
+
+The display owner prepares one bounded row layout for chrome, deferred labels, pointer
+interaction, semantic bounds, and scrollbar extent. Retained motion contains UUIDs,
+generation, and geometry only; prepared node/label borrows expire with the frame.
+The existing 256-node display topology bound covers the admitted catalogue through a
+compile-time capacity check. Preparation does not grow storage per frame.
+
+Logical collapse is immediate. Closing descendants are render-only and cannot receive
+hover, clicks, navigation, or accessibility actions. Incoming row bounds are clipped to
+their actual reveal. Keyboard navigation settles relevant ancestor reveals when it
+needs an unrevealed descendant; unrelated branches continue animating.
+
+Search/query/result changes, programmatic ancestor reveal, generation replacement,
+viewport geometry changes, reduced motion, and leaving Library settle motion immediately.
+Outgoing Library accordion drawing is observational and retains scroll intent without
+running controls or consuming semantic commands.
+
+Expansion does not automatically scroll children into view. The initiating parent stays
+anchored where bounds permit; shrinking content applies only the minimum unavoidable
+scroll clamp. Wheel/thumb scrolling and ordinary keyboard reveal take priority. The
+scrollbar tracks fractional visual content height rather than obsolete logical row counts.
 
 The reveal mechanism stores a stable animation UUID rather than a pointer. On the next
 eligible tree frame it resolves the current node and minimally adjusts scroll so the row
 becomes visible. This survives catalogue replacement better than retaining row geometry.
+Its typed reason distinguishes ordinary navigation from programmatic topology changes.
+
+[`tree-transition-acceptance.jsonl`](../../../tools/scenarios/tree-transition-acceptance.jsonl)
+exercises rapid reversal, concurrent branches, keyboard reveal, search settling, reduced
+motion, and Library hiding/reopening. `tree_transitioning` and `tree_settled` expose
+the active transition count; state artifacts also retain visual content height and scroll.
 
 ### Settings Panel
 
@@ -944,7 +972,7 @@ The UI changes display-owned settings directly. The display coordinator applies
 settings with external effects, such as frame pacing, through the owning native service.
 
 The persisted boolean `interface.reduce_motion` defaults to false. It disables
-accordion transitions, not authored geometric animations or simulation. Effective
+accordion and tree transitions, not authored geometric animations or simulation. Effective
 reduced motion is the user preference OR a supported platform request; unchecking
 the box does not override the platform. Settings shows an additional notice when
 the platform independently requests reduced motion.

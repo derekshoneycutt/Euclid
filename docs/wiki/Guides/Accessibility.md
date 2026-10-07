@@ -77,6 +77,15 @@ motion and cannot be overridden by unchecking the box. See
 unavailable desktops, and failure behavior. Screen-reader adapter admission is not
 required for this policy.
 
+Tree branch transitions use the same 180 ms reduced-motion policy. Logical collapse
+immediately removes closing descendants from the operable tree even while their clipped
+visual tails remain. Incoming item bounds share prepared reveal geometry; unrevealed
+items are not focus candidates and advertise no actions. Logical ancestor records remain
+available to preserve hierarchy. Keyboard or addressed focus settles the ancestor path
+needed to reach a child, without waiting for unrelated branch motion.
+Search and programmatic reveal remain immediate, and the tree retains one Tab stop,
+stable item UUIDs, and ordinary expansion/selection semantics.
+
 When the Settings viewport is short, its retained scrollbar provides wheel and thumb
 navigation plus a focusable scroll-panel tab stop with Page Up and Page Down actions.
 Scrolling can reveal the final preference and persistence status without changing the

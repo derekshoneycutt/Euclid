@@ -12,6 +12,23 @@ import viewterminalmodel "../../view/terminal/model"
 
 import "core:testing"
 
+// Verify the display copies only initialized branch motion and retained visual geometry.
+@(test)
+observe_tree_motion_is_pointer_free_and_bounded :: proc(t: ^testing.T) {
+    runtime: viewmodel.Euclid_Ui_Runtime_State
+    runtime.tree_motion.count = 2
+    runtime.tree_motion.branches[0].running = true
+    runtime.tree_motion.branches[2].running = true
+    runtime.tree_motion.visual_height = 140.25
+    runtime.tree_scroll_y = 20.5
+    result: Display
+    observe_display_settings(&runtime, &result)
+    testing.expect_value(t, result.tree_transition_count, 1)
+    testing.expect_value(t, result.tree_visual_height, f32(140.25))
+    testing.expect_value(t, result.tree_scroll_y, f32(20.5))
+    testing.expect(t, runtime.tree_motion.branches[0].running)
+}
+
 // Seed authoritative display scalars used by the observation contract test.
 observe_test_seed_display_scalars :: proc(source: ^Display_Source) {
     source^.fixed_step = 17

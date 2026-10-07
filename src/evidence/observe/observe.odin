@@ -53,6 +53,9 @@ Display :: struct {
     accordion_transition_running: bool,
     accordion_selected: viewmodel.Ui_Accordion_Section,
     accordion_reveal_heights: [4]f32,
+    tree_transition_count: int,
+    tree_visual_height: f32,
+    tree_scroll_y: f32,
     interface_reduce_motion: bool,
     presentation_visible: bool,
     // Fixed-step simulation clock and display-owned pause control.
@@ -355,6 +358,19 @@ observe_display_settings :: proc(
         runtime^.settings_preferences.interface.reduce_motion ||
         runtime^.platform_reduce_motion
     result^.presentation_visible = runtime^.presentation_visible
+    observe_display_tree(runtime, result)
+}
+
+// Copy pointer-free tree reveal and scrolling facts at the display observation boundary.
+observe_display_tree :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, result: ^Display) {
+    result^.tree_scroll_y = runtime^.tree_scroll_y
+    result^.tree_visual_height = runtime^.tree_motion.visual_height
+    for index in 0..<runtime^.tree_motion.count {
+        if runtime^.tree_motion.branches[index].running {
+            result^.tree_transition_count += 1
+        }
+    }
 }
 
 // Copy synchronized particle diagnostics and classify current dust populations.

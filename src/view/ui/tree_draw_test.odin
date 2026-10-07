@@ -61,3 +61,33 @@ tree_draw_encodes_pressed_row_overlay :: proc(t: ^testing.T) {
         testing.expect_value(t, vertices[offset].color, highlight)
     }
 }
+
+// Verify prepared tree chrome balances scissors and never advances motion or retained scrolling.
+@(test)
+tree_draw_prepared_geometry_is_observational :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    ji: bridgemodel.Euclid_Julia_Interface
+    nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
+    params := tree_transition_fixture(&state^.ui_runtime, &ji, nodes[:])
+    state^.julia_interface = &ji
+    _ = prepare_tree_list_panel(params)
+    nodes[0].is_expanded = false
+    prepared := prepare_tree_list_panel(params)
+    before := state^.ui_runtime.tree_motion.branches[0]
+    state^.ui_runtime.tree_scroll_y = 400
+    vertices: [256]native.Draw_Vertex
+    indices: [512]u32
+    batches: [64]native.Draw_Batch
+    commands: [64]native.Draw_Command
+    encoder: native.Draw_Encoder
+    testing.expect(t, native.draw_encoder_begin(&encoder,
+        {vertices[:], indices[:], batches[:], commands[:], nil},
+        {800, 800}, {800, 800}))
+    draw_encoded_tree_geometry(state, &encoder, prepared)
+    testing.expect_value(t, encoder.scissor_count, 1)
+    testing.expect_value(t, encoder.statistics.scissor_overflows, u32(0))
+    testing.expect_value(t, encoder.statistics.command_overflows, u32(0))
+    testing.expect_value(t, state^.ui_runtime.tree_scroll_y, f32(400))
+    testing.expect_value(t, state^.ui_runtime.tree_motion.branches[0], before)
+}

@@ -11,6 +11,22 @@ import "core:os"
 import "core:strings"
 import "core:testing"
 
+// Tree facts retain their numeric types and remain separate from accordion state.
+@(test)
+artifact_tree_state_preserves_json_contract :: proc(t: ^testing.T) {
+    state := observe.Display{
+        tree_transition_count = 2, tree_visual_height = 130.5, tree_scroll_y = 10.25}
+    text := artifact_state_json(state, {}, {})
+    decoded: struct {
+        tree: struct {transition_count: int, visual_height: f32, scroll_y: f32},
+    }
+    testing.expect(t, json.unmarshal_string(
+        text, &decoded, allocator = context.allocator) == nil)
+    testing.expect_value(t, decoded.tree.transition_count, 2)
+    testing.expect_value(t, decoded.tree.visual_height, f32(130.5))
+    testing.expect_value(t, decoded.tree.scroll_y, f32(10.25))
+}
+
 // Host JSON remains valid and keeps lifecycle and trace facts at the snapshot root.
 @(test)
 artifact_host_state_preserves_top_level_json_contract :: proc(t: ^testing.T) {

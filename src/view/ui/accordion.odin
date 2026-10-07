@@ -9,7 +9,8 @@ import geometry "../../core/geometry"
 
 ACCORDION_MAX_SECTION_COUNT :: 4
 ACCORDION_HEADER_ID_BASE :: 2201
-ACCORDION_TRANSITION_SECONDS :: f64(0.180)
+INTERFACE_TRANSITION_SECONDS :: f64(0.180)
+ACCORDION_TRANSITION_SECONDS :: INTERFACE_TRANSITION_SECONDS
 
 // One ordered accordion section and its frame-borrowed display label.
 Accordion_Section_Descriptor :: struct {
@@ -215,7 +216,7 @@ accordion_transition_sample :: proc(
     if now_seconds >= transition^.start_seconds + ACCORDION_TRANSITION_SECONDS {
         progress = 1
     }
-    remaining := f32((1 - progress) * (1 - progress) * (1 - progress))
+    remaining := 1 - interface_motion_ease(transition^.start_seconds, now_seconds)
     height := max(f32(0), transition^.panel.height - ACCORDION_PANEL_INSET * 2 -
         ACCORDION_HEADER_HEIGHT * f32(transition^.section_count))
     transition^.heights = {}
@@ -228,6 +229,15 @@ accordion_transition_sample :: proc(
     }
     transition^.heights[int(transition^.selected)] = max(f32(0), height - transferred)
     transition^.running = progress < 1
+}
+
+// interface_motion_ease gives bounded cubic ease-out independent of simulation time.
+interface_motion_ease :: proc(start_seconds, now_seconds: f64) -> f32 {
+    if now_seconds >= start_seconds + INTERFACE_TRANSITION_SECONDS {
+        return 1
+    }
+    progress := clamp((now_seconds - start_seconds) / INTERFACE_TRANSITION_SECONDS, 0, 1)
+    return f32(1 - (1 - progress) * (1 - progress) * (1 - progress))
 }
 
 // ui_reduced_motion combines explicit interface intent with independent platform policy.
