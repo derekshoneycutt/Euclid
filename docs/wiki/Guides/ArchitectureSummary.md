@@ -985,6 +985,9 @@ the owner responsible for release.
 - Search-time expansion is derived from the accepted matches and their ancestors.
   Stored tree expansion is never overwritten, so clearing search restores ordinary
   browsing immediately.
+- Tree rows render a subtle held-press overlay from prepared hover and pointer
+  ownership. Selection remains release-driven; dragging outside the owned row or
+  releasing the primary button removes the overlay without changing keyboard focus.
 - Scenario search actions use the same display-owned state transitions as UI input.
   `library_search_committed` evidence correlates the originating action and reports the
   query generation, index generation, returned count, total count, truncation, and

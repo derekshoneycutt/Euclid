@@ -350,7 +350,8 @@ draw_encoded_accordion_content :: proc(
     case .Library:
         show_suggestion := runtime^.library_search.suggestion_length > 0
         search_layout := library_search_layout(layout.content, show_suggestion)
-        draw_encoded_tree_geometry(state, encoder, search_layout.tree)
+        draw_encoded_tree_geometry(
+            state, encoder, search_layout.tree, controls.tree.pressed_node)
     case .Save_Gif:
         draw_encoded_gif_geometry(encoder, controls.gif)
     case .Settings:

@@ -68,6 +68,7 @@ Tree_List_Preparation :: struct {
     content_height: f32,
     hovered_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     hovered_expander_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    pressed_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
 //   Mutable walk cursor: running content y plus the remaining row budget.
@@ -123,6 +124,7 @@ Encoded_Tree_Walk_Context :: struct {
     scroll_y: f32,
     content_y: ^f32,
     visibility: Tree_Visibility_Policy,
+    pressed_node: ^bridgemodel.Euclid_Julia_Animation_Interface,
 }
 
 // tree_node_is_visible reports whether the active topology includes one node.
@@ -219,6 +221,11 @@ draw_encoded_tree_row :: proc(
             _ = native.draw_encoder_rectangle(
                 ctx.encoder, geometry.Rectangle(row), UI_BORDER_COLOR)
         }
+        if node == ctx.pressed_node {
+            highlight := UI_TEXT_COLOR
+            highlight.a = 24
+            _ = native.draw_encoder_rectangle(ctx.encoder, row, highlight)
+        }
         if tree_item_is_keyboard_active(&ctx.state^.ui_runtime, node) {
             _ = native.draw_encoder_rectangle_outline(
                 ctx.encoder, geometry.Rectangle(row), 2, UI_TEXT_COLOR)
@@ -258,7 +265,8 @@ draw_encoded_tree_node :: proc(
 // draw_encoded_tree_geometry encodes visible catalogue chrome without text.
 draw_encoded_tree_geometry :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle) {
+    panel: geometry.Rectangle,
+    pressed_node: ^bridgemodel.Euclid_Julia_Animation_Interface = nil) {
     if state == nil || state^.julia_interface == nil {
         return
     }
@@ -275,7 +283,8 @@ draw_encoded_tree_geometry :: proc(
     content_y: f32
     ctx := Encoded_Tree_Walk_Context{
         state = state, ji = ji, encoder = encoder, panel = panel,
-        scroll_y = scroll_y, content_y = &content_y, visibility = visibility}
+        scroll_y = scroll_y, content_y = &content_y, visibility = visibility,
+        pressed_node = pressed_node}
     for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
         if node^.parent == nil {
             draw_encoded_tree_node(ctx, node, 0, ji^.animation_count)
@@ -327,7 +336,7 @@ draw_encoded_tree_text :: proc(
         0, max(content_height - panel.height, 0))
     content_y: f32
     ctx := Encoded_Tree_Walk_Context{state, ji, encoder, panel,
-        scroll_y, &content_y, visibility}
+        scroll_y, &content_y, visibility, nil}
     _ = native.draw_encoder_push_scissor(encoder, geometry.Rectangle(panel))
     for node := ji^.animation_head; node != nil; node = node^.next_in_registry {
         if node^.parent == nil {
@@ -1182,6 +1191,20 @@ finish_tree_interaction :: proc(
     release_tree_list_capture(params)
 }
 
+// Return the hovered row only while it owns the held primary pointer press.
+tree_pressed_node :: proc(
+    params: Tree_List_Params,
+    hovered: ^bridgemodel.Euclid_Julia_Animation_Interface) ->
+    ^bridgemodel.Euclid_Julia_Animation_Interface {
+    owner := params.ui_runtime^.ui_press_owner
+    if hovered != nil && input_frame_left_down(params.mouse_input) &&
+        owner.active && owner.kind == .List_Item &&
+        owner.id == tree_node_press_id(hovered) {
+        return hovered
+    }
+    return nil
+}
+
 //   Resolve tree scrolling and row interaction before rendering.
 prepare_tree_list_panel :: proc(params: Tree_List_Params) -> Tree_List_Preparation {
     _ = tree_apply_semantic_commands(params)
@@ -1213,5 +1236,6 @@ prepare_tree_list_panel :: proc(params: Tree_List_Params) -> Tree_List_Preparati
     content_y: f32
     hit := walk_update_tree_roots(walk_ctx, &content_y)
     finish_tree_interaction(params, hit, &scroll, &content_h)
-    return {scroll, content_h, hit.hovered_node, hit.hovered_expander_node}
+    return {scroll, content_h, hit.hovered_node, hit.hovered_expander_node,
+        tree_pressed_node(params, hit.hovered_node)}
 }
