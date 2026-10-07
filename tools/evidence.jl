@@ -113,7 +113,8 @@ const SCENARIO_STATES = [
     "simulation_paused", "simulation_running", "dynview_enabled",
     "gif_active", "gif_idle", "library_search_idle",
     "library_search_has_matches", "settings_saved", "settings_saving",
-    "settings_unavailable", "settings_failed", "settings_worker_only"]
+    "settings_unavailable", "settings_failed", "settings_worker_only",
+    "tooltip_visible", "tooltip_hidden"]
 
 struct TraceEvent
     sequence::UInt64

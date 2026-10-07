@@ -144,6 +144,9 @@ Display :: struct {
     library_search_idle : bool,
     library_search_has_matches : bool,
 
+    // Display-owned tooltip visibility after the last prepared frame.
+    tooltip_visible : bool,
+
     // Aggregate required-evidence health and display producer state.
     required_evidence_complete : bool,
     trace : Trace_State,
@@ -315,6 +318,7 @@ observe_display_ui :: proc(
                 search.committed_generation == search.generation)
         result.library_search_has_matches = search.active &&
             search.total_match_count > 0
+        result.tooltip_visible = source.ui_runtime.tooltip.visible
     }
 
     if source.gif_capture != nil {

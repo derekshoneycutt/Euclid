@@ -516,6 +516,38 @@ Ui_Cursor_Kind :: enum u8 {
     Resize_Ns,
 }
 
+UI_TOOLTIP_TEXT_CAPACITY :: 128
+
+// Ui_Tooltip_Source identifies how the current tooltip owner was reached.
+Ui_Tooltip_Source :: enum u8 {
+    None,
+    Pointer,
+    Keyboard,
+}
+
+// Ui_Tooltip_Content owns one bounded plain-text tooltip and its control anchor.
+Ui_Tooltip_Content :: struct {
+    owner: Ui_Node_Id,
+    source: Ui_Tooltip_Source,
+    anchor: Rectangle,
+    text: [UI_TOOLTIP_TEXT_CAPACITY]u8,
+    text_length: int,
+}
+
+// Ui_Tooltip_State retains the single display-owned tooltip slot across frames.
+//
+// Controls replace `offer` during preparation each frame; resolution then derives
+// `visible` from the offer, hover timing, and dismissal state.
+Ui_Tooltip_State :: struct {
+    offer: Ui_Tooltip_Content,
+    shown: Ui_Tooltip_Content,
+    visible: bool,
+    hover_owner: Ui_Node_Id,
+    hover_started_seconds: f64,
+    warm_until_seconds: f64,
+    dismissed_owner: Ui_Node_Id,
+}
+
 // Ui_Input_Box_State retains bounded interaction state while borrowing model text.
 Ui_Input_Box_State :: struct {
     cursor_byte: int,
@@ -636,6 +668,7 @@ Euclid_Ui_Runtime_State :: struct {
     ui_regions: Ui_Regions,
     interaction: Ui_Interaction_State,
     interaction_frame: Ui_Interaction_Frame,
+    tooltip: Ui_Tooltip_State,
     semantic_focus: ^Ui_Semantic_Focus_State,
 }
 

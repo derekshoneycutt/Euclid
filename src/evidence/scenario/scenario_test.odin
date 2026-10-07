@@ -145,6 +145,17 @@ scenario_test_library_search_commands :: proc(t: ^testing.T) {
         observe.Display{library_search_has_matches = true}))
 }
 
+// Verify tooltip predicates mirror the observed display-owned visibility.
+@(test)
+scenario_test_tooltip_state_predicates :: proc(t: ^testing.T) {
+    testing.expect(t, state_matches("tooltip_visible",
+        observe.Display{tooltip_visible = true}))
+    testing.expect(t, !state_matches("tooltip_visible", observe.Display{}))
+    testing.expect(t, state_matches("tooltip_hidden", observe.Display{}))
+    testing.expect(t, !state_matches("tooltip_hidden",
+        observe.Display{tooltip_visible = true}))
+}
+
 // Verify named viewport payloads retain explicit zero and both splitter coordinates.
 @(test)
 scenario_test_parse_viewport_actions :: proc(t: ^testing.T) {

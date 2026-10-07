@@ -932,6 +932,7 @@ encode_sdl_ui_geometry :: proc(
             state, encoder, prepared.layout_interaction.presentation)
     }
     ui.draw_encoded_focus_outline(&state^.ui_runtime, encoder)
+    ui.draw_encoded_tooltip(state, encoder)
 }
 
 // encode_sdl_geometry_frame builds and submits one bounded geometry frame.

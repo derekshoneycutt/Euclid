@@ -124,6 +124,30 @@ animation_control_button_params :: #force_inline proc(
     }
 }
 
+// Resolve one animation-control button and offer its label as the tooltip text.
+//
+// A pointer press dismisses the control's tooltip until the pointer leaves it.
+prepare_animation_control_button :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    descriptor: Animation_Control_Descriptor,
+    mouse_input: Input_Frame,
+    clip: geometry.Rectangle) -> Icon_Button_Result {
+    result := update_icon_button(
+        animation_control_button_params(runtime, descriptor, mouse_input, clip),
+        &runtime^.ui_press_owner)
+    owner := semantic_control_id(.Animation_Control, descriptor.id)
+    if result.pressed || result.clicked {
+        tooltip_dismiss(&runtime^.tooltip, owner)
+    }
+    tooltip_offer(&runtime^.tooltip, {
+        owner = owner,
+        source = tooltip_control_source(runtime, owner, descriptor.id),
+        anchor = descriptor.rect,
+        text = descriptor.label,
+    })
+    return result
+}
+
 // Resolve animation-control interaction and commit its actions before simulation.
 prepare_animation_controls :: proc(
     state: ^core.Euclid_General_State,
@@ -139,16 +163,14 @@ prepare_animation_controls :: proc(
     if ui_runtime^.simulation_paused {
         pause_label = view_core.shell_message(state, .Animation_Resume)
     }
-    refresh := update_icon_button(
-        animation_control_button_params(
-            ui_runtime, {ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
-                view_core.shell_message(state, .Animation_Restart), 0},
-            mouse_input, slots.panel),
-        &ui_runtime^.ui_press_owner)
-    pause := update_icon_button(animation_control_button_params(
-        ui_runtime, {ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
-            ui_runtime^.simulation_paused, pause_label, 1}, mouse_input, slots.panel),
-        &ui_runtime^.ui_press_owner)
+    refresh := prepare_animation_control_button(ui_runtime,
+        {ANIMATION_REFRESH_BUTTON_ID, slots.refresh, .Refresh, false,
+            view_core.shell_message(state, .Animation_Restart), 0},
+        mouse_input, slots.panel)
+    pause := prepare_animation_control_button(ui_runtime,
+        {ANIMATION_PAUSE_BUTTON_ID, slots.pause, pause_icon,
+            ui_runtime^.simulation_paused, pause_label, 1},
+        mouse_input, slots.panel)
     hit := Animation_Control_Hit{
         refresh.action.activated,
         pause.action.activated,

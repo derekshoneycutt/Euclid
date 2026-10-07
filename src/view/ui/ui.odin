@@ -580,6 +580,7 @@ prepare_ui_controls :: proc(
     frame: Input_Frame,
     splitters: Splitter_Preparation) -> Ui_Control_Preparation {
     _ = semantic_begin(state^.ui_runtime.semantic_focus)
+    tooltip_frame_begin(&state^.ui_runtime.tooltip)
     register_splitter_semantics(state^.ui_runtime.semantic_focus, splitters)
     animation_frame := ui_animation_control_input_frame(
         frame, state^.ui_runtime.interaction_frame)
@@ -592,6 +593,12 @@ prepare_ui_controls :: proc(
         state, geometry.Rectangle(accordion_panel), routed_frame)
     prepare_active_accordion_controls(state, frame, routed_frame,
         geometry.Rectangle(result.accordion.layout.content), &result)
+    tooltip_frame_resolve(&state^.ui_runtime.tooltip, {
+        now_seconds = frame.sample_time_seconds,
+        window_focused = frame.window_focused,
+        suppressed = state^.ui_runtime.gif_capture_phase == .Recording,
+        dismiss = tooltip_escape_pressed(frame),
+    })
     return result
 }
 

@@ -1321,6 +1321,8 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     case "gif_idle": return !display.gif_capture_active
     case "library_search_idle": return display.library_search_idle
     case "library_search_has_matches": return display.library_search_has_matches
+    case "tooltip_visible": return display.tooltip_visible
+    case "tooltip_hidden": return !display.tooltip_visible
     }
     return runtime_state_matches(name, display) ||
         dust_state_matches(name, display) || terminal_state_matches(name, display) ||

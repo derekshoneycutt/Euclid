@@ -606,6 +606,32 @@ Accordion headers are full-width text buttons with IDs 2201 through 2203. Clicki
 header assigns `active_accordion_section`; selecting the already expanded header leaves
 it expanded because exactly one section is always active.
 
+### Tooltips
+
+`tooltip.odin` owns one display-owned tooltip slot in `Ui_Tooltip_State`. Each
+`prepare_ui_controls` pass begins by clearing the offer; a control offers its semantic
+owner, anchor rectangle, and label text, and the pass ends by resolving visibility.
+Offer text is copied into bounded 128-byte storage at a UTF-8 codepoint boundary, so
+nothing borrowed survives the frame.
+
+- Pointer reach uses the routed `pointer_target`, so captures held by other surfaces
+  suppress hover. A pointer offer shows after 0.5 seconds; while a tooltip was visible
+  within the last 0.35 seconds, neighbouring controls switch immediately.
+- Keyboard reach follows the focus-outline rule: window focused, keyboard focus origin,
+  and logical focus on the control. Keyboard offers show immediately.
+- A pointer offer supersedes a keyboard offer in the same frame.
+- Pointer press or click, and Escape, dismiss the owner's tooltip until a different
+  owner is offered or none is.
+- Window focus loss and active GIF recording hide tooltips. Screenshots keep them.
+
+The tooltip draws last in `encode_sdl_ui_geometry`, after the focus outline, as regular
+JuliaMono at `TREE_FONT_SIZE` in a bordered component box. Placement centres below the
+anchor, flips above when the bottom margin would be crossed, picks the roomier side when
+neither fits, and clamps into the window margins. Tooltips are visual only; accessibility
+continues to use the controls' semantic labels and publishes no tooltip node.
+
+The animation Restart and Pause/Resume buttons currently offer their labels.
+
 ### Checkboxes
 
 Checkboxes return a result containing the output checked state and whether a toggle
@@ -978,6 +1004,7 @@ temporary allocator already reset at frame completion.
 | --- | --- |
 | `src/view/startup_outline_test.odin` | Fixed-capacity silhouette geometry and bounded milestone reveal. |
 | `src/view/ui/ui_test.odin` | Router priority, focus, capture, wheel ownership, regions, splitters, animation controls, accordion layout, tree layout, and scrolling. |
+| `src/view/ui/tooltip_test.odin` | Tooltip placement, bounded text, hover delay, warm switching, keyboard reach, dismissal, and suppression. |
 | `src/view/ui/dynview/selection_test.odin` | Selection modes, hit boundaries, capture, and source extraction. |
 | `src/view/input/input_test.odin` | Device-independent events, correlation, hotkeys, Terminal encoding. |
 | `src/view/terminal/terminal_test.odin` | Terminal geometry, input, selection, links, cursor, and rendering policy. |
@@ -1012,6 +1039,10 @@ shutdown.
 Use scenario evidence when correctness depends on frame ordering, Terminal publication,
 capture completion, or shutdown. A screenshot alone does not prove scenario success;
 the artifact manifest and semantic trace remain authoritative.
+
+`tools/scenarios/tooltip-acceptance.jsonl` proves keyboard-reached tooltip visibility,
+Escape dismissal, focus-driven switching, and hiding through the `tooltip_visible` and
+`tooltip_hidden` state predicates.
 
 ## Current Limitations
 
