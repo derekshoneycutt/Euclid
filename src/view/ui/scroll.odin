@@ -270,6 +270,22 @@ scroll_container_update :: proc(
         wheel_consumed, initial_scroll, max_scroll, sources})
 }
 
+// scroll_container_visual builds a draw-only scroll result without ownership or commands.
+scroll_container_visual :: proc(
+    rect: geometry.Rectangle, content_height, retained_scroll, step: f32) ->
+    Scroll_Container_Update_Result {
+    panel := clamp_non_negative_rect(rect)
+    maximum := max(f32(0), content_height - panel.height)
+    scroll := clamp(retained_scroll, 0, maximum)
+    return {view_rect = panel,
+        control_geometry = {viewmodel.Rectangle(panel), viewmodel.Rectangle(panel)},
+        scroll_y_out = scroll, maximum = maximum, step = step,
+        orientation = .Vertical,
+        scrollbar = build_vertical_scrollbar(
+            {panel, content_height, scroll, maximum},
+            SCROLLBAR_WIDTH, SCROLLBAR_THUMB_MIN_HEIGHT)}
+}
+
 //   Convert screen-space pointer position to local interaction space.
 scroll_container_local_mouse :: #force_inline proc(
     mouse_input: Input_Frame,

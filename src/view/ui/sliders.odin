@@ -310,3 +310,14 @@ update_settings_integer_slider :: proc(
     }
     return slider_result(params, track, hit, clamped, sources)
 }
+
+// prepare_integer_slider preserves full-size geometry without mutating visual-only panels.
+prepare_integer_slider :: proc(
+    params: Integer_Slider_Params, interactive: bool) -> Integer_Slider_Result {
+    if interactive {
+        return update_settings_integer_slider(params)
+    }
+    track := slider_track_rect(params.panel, params.row_y)
+    return slider_result(params, track, slider_hit_rect(track),
+        clamp(params.value, params.min_value, params.max_value), {})
+}

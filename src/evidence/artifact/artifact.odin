@@ -244,9 +244,7 @@ artifact_state_json :: proc(
         "\"vertical_split_x\":%g,\"horizontal_split_y\":%g," +
         "\"gif_capture_active\":%v,\"gif_captured_frames\":%d," +
         "\"evidence_complete\":%v,\"display_event_count\":%d," +
-        "\"display_pending_drops\":%d,\"julia_lifecycle\":%d," +
-        "\"julia_active_request_id\":%d,\"julia_failed_requests\":%d," +
-        "\"julia_event_count\":%d,\"julia_evidence_complete\":%v,%s,%s,%s,%s}}\n",
+        "\"display_pending_drops\":%d,%s,%s,%s,%s,%s,%s}}\n",
         state.fixed_step, state.simulation_time, state.simulation_paused,
         state.animation_policy_paused, state.runtime_lifecycle, state.runtime_generation,
         state.active_runtime_request_id, state.failed_runtime_request_count,
@@ -257,12 +255,31 @@ artifact_state_json :: proc(
         state.view_text_scroll_y, state.view_text_scroll_max, state.vertical_split_x,
         state.horizontal_split_y, state.gif_capture_active, state.gif_captured_frames,
         state.required_evidence_complete, state.trace.event_count,
-        state.trace.pending_drops, julia_host.lifecycle,
-        julia_host.active_request_id, julia_host.failed_request_count,
-        julia_host.trace.event_count, julia_host.trace.evidence_complete,
+        state.trace.pending_drops, artifact_julia_host_state_json(julia_host),
         artifact_colored_draw_state_json(state),
         artifact_terminal_graphics_state_json(state),
-        artifact_simulation_state_json(simulation), artifact_settings_state_json(state))
+        artifact_simulation_state_json(simulation), artifact_settings_state_json(state),
+        artifact_accordion_state_json(state))
+}
+
+// Serialize synchronized host lifecycle and trace health without changing top-level keys.
+artifact_julia_host_state_json :: proc(host: observe.Julia_Host) -> string {
+    return fmt.tprintf("\"julia_lifecycle\":%d,\"julia_active_request_id\":%d," +
+        "\"julia_failed_requests\":%d,\"julia_event_count\":%d," +
+        "\"julia_evidence_complete\":%v",
+        host.lifecycle, host.active_request_id, host.failed_request_count,
+        host.trace.event_count, host.trace.evidence_complete)
+}
+
+// artifact_accordion_state_json exposes pointer-free transition and effective motion facts.
+artifact_accordion_state_json :: proc(state: observe.Display) -> string {
+    heights := state.accordion_reveal_heights
+    return fmt.tprintf("\"accordion\":{{\"selected\":%d,\"transitioning\":%v," +
+        "\"reveal_heights\":[%g,%g,%g,%g],\"reduced_motion\":%v," +
+        "\"presentation_visible\":%v}}",
+        state.accordion_selected, state.accordion_transition_running,
+        heights[0], heights[1], heights[2], heights[3], state.interface_reduce_motion,
+        state.presentation_visible)
 }
 
 // Serialize pointer-free preference intent alongside terminal save and executor facts.
@@ -274,7 +291,7 @@ artifact_settings_state_json :: proc(state: observe.Display) -> string {
         "\"rendering\":{{\"vsync\":%v,\"antialiasing\":%v,\"limit_fps\":%v," +
         "\"simd\":%v,\"gpu_dust_instancing\":%v}}," +
         "\"drawing\":{{\"dust_limit\":%d,\"sound_enabled\":%v}}," +
-        "\"interface\":{{\"display_fps\":%v}}}},\"status\":%d," +
+        "\"interface\":{{\"display_fps\":%v,\"reduce_motion\":%v}}}},\"status\":%d," +
         "\"store_available\":%v,\"active\":%v,\"pending_count\":%d," +
         "\"commit_count\":%d,\"failure_count\":%d,\"owner_execution_count\":%d," +
         "\"window_width\":%d,\"window_height\":%d}}",
@@ -284,6 +301,7 @@ artifact_settings_state_json :: proc(state: observe.Display) -> string {
         preferences.rendering.limit_fps, preferences.rendering.simd,
         preferences.rendering.gpu_dust_instancing, preferences.drawing.dust_limit,
         preferences.drawing.sound_enabled, preferences.interface.display_fps,
+        preferences.interface.reduce_motion,
         state.settings_save_status,
         state.settings_store_available, state.settings_save_active,
         state.settings_pending_count, state.settings_save_commit_count,

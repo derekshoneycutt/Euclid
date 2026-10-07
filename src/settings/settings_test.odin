@@ -29,6 +29,7 @@ preference_defaults_match_existing_behavior :: proc(t: ^testing.T) {
         particlemodel.MAX_LOW_PARTICLES)
     testing.expect(t, !setting_value(preferences, .Drawing_Sound_Enabled).boolean)
     testing.expect(t, !setting_value(preferences, .Interface_Display_Fps).boolean)
+    testing.expect(t, !setting_value(preferences, .Interface_Reduce_Motion).boolean)
 }
 
 // Validate window dimensions, enum domains, and particle capacity bounds.

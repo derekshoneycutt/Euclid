@@ -131,7 +131,8 @@ register_terminal_semantics :: proc(
         actions = {.Focus, .Scroll, .Show_Context_Menu},
         region = .Presentation, traversal_order = 0,
         bounds = viewmodel.Rectangle(bounds),
-        clip_bounds = viewmodel.Rectangle(bounds),
+        clip_bounds = viewmodel.Rectangle(
+            ui_presentation_clip(&state^.ui_runtime, bounds)),
         numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
             f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
         label = view_core.shell_message(state, .Terminal_Accessible_Label),
@@ -315,6 +316,7 @@ terminal_draw_encoded :: proc(
     if encoder == nil || !term.initialized || !prepared.available {
         return
     }
+
     resolver := font.cache_terminal_resolver(&state^.font_cache)
     layout := prepared.layout
     layout.encoder = encoder
@@ -337,4 +339,23 @@ terminal_draw_encoded :: proc(
     _ = native.draw_encoder_pop_scissor(encoder)
     terminalview.terminal_draw_overlays(term, resolver, layout)
     draw_encoded_scrollbar(encoder, scroll.scrollbar)
+}
+
+// terminal_prepare_visual preserves grid and service ownership for an outgoing View tail.
+terminal_prepare_visual :: proc(
+    state: ^core.Euclid_General_State,
+    bounds: geometry.Rectangle) -> Terminal_Prepared_Frame {
+    term := &state^.terminal
+    if !term.initialized {
+        return {}
+    }
+    resolver := font.cache_terminal_resolver(&state^.font_cache)
+    layout := terminalview.terminal_draw_layout(
+        term, resolver, bounds, terminal_draw_theme())
+    layout.terminal_focused = false
+    initial_scroll := terminalview.terminal_initial_scroll_offset(
+        term, layout.padded_bounds, layout.content_height)
+    scroll := scroll_container_visual(layout.padded_bounds, layout.content_height,
+        initial_scroll, layout.line_height * WHEEL_SCROLL_MULTIPLIER)
+    return {available = true, bounds = bounds, layout = layout, scroll = scroll}
 }

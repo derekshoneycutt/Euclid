@@ -50,6 +50,11 @@ Display :: struct {
     settings_save_owner_execution_count: u64,
     window_width: int,
     window_height: int,
+    accordion_transition_running: bool,
+    accordion_selected: viewmodel.Ui_Accordion_Section,
+    accordion_reveal_heights: [4]f32,
+    interface_reduce_motion: bool,
+    presentation_visible: bool,
     // Fixed-step simulation clock and display-owned pause control.
     fixed_step : u64,
     simulation_time : f32,
@@ -343,6 +348,13 @@ observe_display_settings :: proc(
         runtime^.settings_save_owner_execution_count
     result^.window_width = runtime^.window.width
     result^.window_height = runtime^.window.height
+    result^.accordion_transition_running = runtime^.accordion_transition.running
+    result^.accordion_selected = runtime^.active_accordion_section
+    result^.accordion_reveal_heights = runtime^.accordion_transition.heights
+    result^.interface_reduce_motion =
+        runtime^.settings_preferences.interface.reduce_motion ||
+        runtime^.platform_reduce_motion
+    result^.presentation_visible = runtime^.presentation_visible
 }
 
 // Copy synchronized particle diagnostics and classify current dust populations.

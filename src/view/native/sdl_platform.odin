@@ -136,6 +136,7 @@ Sdl_Platform :: struct {
     window_shown: bool,
     unavailable_frames: u64,
     input_diagnostics: Sdl_Input_Diagnostics,
+    motion: Sdl_Motion_Preference,
     accessibility_process_state: native_accessibility.Adapter_Process_State,
     accessibility: native_accessibility.Adapter,
 }

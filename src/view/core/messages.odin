@@ -26,8 +26,8 @@ shell_messages_refresh :: proc(
     generation: ^contentdata.Content_Generation) -> contentdata.Content_Message_Status {
     if generation == nil { return .Invalid_State }
     if runtime.shell_message_generation == generation.generation { return .Ok }
-    bytes: [80][128]u8
-    lengths: [80]u16
+    bytes: [contentdata.CONTENT_MESSAGE_CAPACITY][128]u8
+    lengths: [contentdata.CONTENT_MESSAGE_CAPACITY]u16
     required := contentdata.CONTENT_REQUIRED_MESSAGES
     for identity, ordinal in required {
         id := contentdata.Content_Message_Id(identity.native_id)

@@ -17,8 +17,8 @@ INSERT INTO content_metadata SELECT CASE key
     ELSE key END, value FROM search_metadata;
 INSERT INTO content_metadata VALUES ('schema_version','3'),
     ('default_locale','en-US'), ('tool_compatibility','euclid-content-builder-v1'),
-    ('record_count','870'),
-    ('table_counts','1=6;2=1;3=79;4=10;5=79;6=139;7=138;8=138;9=3;10=139;11=138');
+    ('record_count','874'),
+    ('table_counts','1=6;2=1;3=81;4=10;5=81;6=139;7=138;8=138;9=3;10=139;11=138');
 CREATE TABLE locale(tag TEXT PRIMARY KEY, is_default INTEGER NOT NULL);
 INSERT INTO locale VALUES ('en-US',1);
 CREATE TABLE ui_message(message_key TEXT PRIMARY KEY, native_message_id INTEGER,

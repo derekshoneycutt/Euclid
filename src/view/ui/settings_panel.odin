@@ -1,6 +1,7 @@
 package ui
 
 import native "../native"
+import viewmodel "../model"
 
 import "../../core"
 import contentdata "../../core/content"
@@ -31,17 +32,20 @@ Settings_View_Rows :: struct {
     sound_y : f32,
     simd_y : f32,
     gpu_dust_y : f32,
+    reduce_motion_y: f32,
 }
 
 //   Fixed prepared interaction results for all settings controls.
 Settings_View_Preparation :: struct {
     rows: Settings_View_Rows,
+    scroll: Scroll_Container_Update_Result,
     max_particles: Integer_Slider_Result,
     fps: Checkbox_Result,
     limit: Checkbox_Result,
     sound: Checkbox_Result,
     simd: Checkbox_Result,
     gpu_dust: Checkbox_Result,
+    reduce_motion: Checkbox_Result,
     simd_available: bool,
     gpu_available: bool,
 }
@@ -97,9 +101,9 @@ draw_encoded_slider_geometry :: proc(
 // Draw every checkbox in one prepared Settings layout.
 draw_encoded_settings_checkboxes :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
-    checks := [5]Checkbox_Result{
+    checks := [6]Checkbox_Result{
         prepared.fps, prepared.limit, prepared.sound,
-        prepared.simd, prepared.gpu_dust,
+        prepared.simd, prepared.gpu_dust, prepared.reduce_motion,
     }
     for check in checks {
         draw_encoded_checkbox_geometry(
@@ -112,35 +116,39 @@ draw_encoded_settings_geometry :: proc(
     encoder: ^native.Draw_Encoder, prepared: Settings_View_Preparation) {
     draw_encoded_slider_geometry(encoder, prepared.max_particles)
     draw_encoded_settings_checkboxes(encoder, prepared)
+    draw_encoded_scrollbar(encoder, prepared.scroll.scrollbar)
 }
 
-// Draw labels attached to the five prepared settings checkboxes.
+// Draw labels attached to the prepared settings checkboxes.
 draw_encoded_settings_check_labels :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     x: f32, rows: Settings_View_Rows, prepared: Settings_View_Preparation) {
-    labels := [5]struct{label: string, y: f32}{
+    labels := [6]struct{label: string, y: f32}{
         {view_core.shell_message(state, .Settings_Display_Fps), rows.fps_y},
         {view_core.shell_message(state, .Settings_Limit_Fps), rows.limit_y},
         {view_core.shell_message(state, .Settings_Drawing_Sound), rows.sound_y},
         {settings_simd_label(state, prepared.simd_available), rows.simd_y},
         {settings_gpu_dust_label(state, prepared.gpu_available), rows.gpu_dust_y},
+        {view_core.shell_message(state, .Settings_Reduce_Motion), rows.reduce_motion_y},
     }
     for item in labels {
         draw_encoded_label(state, encoder, item.label,
             x + SETTINGS_CHECKBOX_SIZE + SETTINGS_CHECKBOX_LABEL_GAP,
             item.y - SETTINGS_CHECKBOX_TEXT_OFFSET_Y)
     }
+    if state^.ui_runtime.platform_reduce_motion {
+        draw_encoded_label(state, encoder,
+            view_core.shell_message(state, .Settings_System_Reduce_Motion),
+            x, rows.reduce_motion_y + SETTINGS_TOGGLE_ROW_GAP)
+    }
 }
 
 // draw_encoded_settings_text emits current labels, values, and counters.
 draw_encoded_settings_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
-    panel: geometry.Rectangle, prepared: Settings_View_Preparation) {
-    stack := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
-        panel.y + SETTINGS_HEADER_TOP_OFFSET,
-        panel.width - SETTINGS_PANEL_INSET * 2,
-        panel.height - SETTINGS_HEADER_TOP_OFFSET}
-    rows := settings_view_layout_rows(stack)
+    prepared: Settings_View_Preparation) {
+    panel := prepared.scroll.view_rect
+    rows := prepared.rows
     x := panel.x + SETTINGS_PANEL_INSET
     value := fmt.tprintf("%d", state^.particle_system^.use_max_dust_particles)
     face := view_font.cache_borrow(&state^.font_cache, .Regular)
@@ -162,8 +170,11 @@ draw_encoded_settings_text :: proc(
             font_resolver = view_font.cache_terminal_resolver(&state^.font_cache)},
         rows.stats_y, encoder, animation_entries_added)
     draw_encoded_settings_check_labels(state, encoder, x, rows, prepared)
-    draw_encoded_settings_save_status(
-        state, encoder, x, rows.gpu_dust_y + SETTINGS_TOGGLE_ROW_GAP)
+    status_y := rows.reduce_motion_y + SETTINGS_TOGGLE_ROW_GAP
+    if state^.ui_runtime.platform_reduce_motion {
+        status_y += SETTINGS_TOGGLE_ROW_GAP
+    }
+    draw_encoded_settings_save_status(state, encoder, x, status_y)
 }
 
 // Resolve and draw the localized persistence state beneath the setting controls.
@@ -321,7 +332,9 @@ settings_view_layout_rows :: proc(
         limit_row.cursor_out)
     simd_row := settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
         sound_row.cursor_out)
-    gpu_dust_row := settings_stack_row(stack_rect, 0, simd_row.cursor_out)
+    gpu_dust_row := settings_stack_row(stack_rect, SETTINGS_TOGGLE_ROW_GAP,
+        simd_row.cursor_out)
+    reduce_motion_row := settings_stack_row(stack_rect, 0, gpu_dust_row.cursor_out)
 
     return Settings_View_Rows{
         slider_label_y = slider_label_row.segment_rect.y,
@@ -331,64 +344,140 @@ settings_view_layout_rows :: proc(
         sound_y = sound_row.segment_rect.y,
         simd_y = simd_row.segment_rect.y,
         gpu_dust_y = gpu_dust_row.segment_rect.y,
+        reduce_motion_y = reduce_motion_row.segment_rect.y,
     }
 }
 
 //   Update every settings control and report optional feature availability.
 update_settings_controls :: proc(
     ctx: Settings_View_Context,
-    rows: Settings_View_Rows) -> Settings_Control_Update {
+    rows: Settings_View_Rows, interactive := true) -> Settings_Control_Update {
     result := Settings_View_Preparation{rows = rows}
-    result.max_particles = update_settings_integer_slider(
-        settings_max_particles_params(ctx, rows.slider_label_y))
-    result.fps = update_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
+    result.max_particles = prepare_integer_slider(
+        settings_max_particles_params(ctx, rows.slider_label_y), interactive)
+    result.fps = prepare_checkbox(settings_checkbox_params(ctx, {rows.fps_y,
         4001, view_core.shell_message(ctx.state, .Settings_Display_Fps),
         ctx.state.ui_runtime.settings_preferences.interface.display_fps, true, 1}),
-        &ctx.state.ui_runtime.ui_press_owner)
-    result.limit = update_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
+        &ctx.state.ui_runtime.ui_press_owner, interactive)
+    result.limit = prepare_checkbox(settings_checkbox_params(ctx, {rows.limit_y,
         4002, view_core.shell_message(ctx.state, .Settings_Limit_Fps),
         ctx.state.ui_runtime.settings_preferences.rendering.limit_fps, true, 2}),
-        &ctx.state.ui_runtime.ui_press_owner)
-    result.sound = update_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
+        &ctx.state.ui_runtime.ui_press_owner, interactive)
+    result.sound = prepare_checkbox(settings_checkbox_params(ctx, {rows.sound_y,
         4004, view_core.shell_message(ctx.state, .Settings_Drawing_Sound),
         ctx.state.ui_runtime.settings_preferences.drawing.sound_enabled, true, 3}),
-        &ctx.state.ui_runtime.ui_press_owner)
+        &ctx.state.ui_runtime.ui_press_owner, interactive)
+    prepare_settings_optional_controls(ctx, rows, interactive, &result)
+    return {result, result.simd_available, result.gpu_available}
+}
+
+// Prepare capability-gated toggles and motion policy without committing preference edits.
+prepare_settings_optional_controls :: proc(
+    ctx: Settings_View_Context, rows: Settings_View_Rows,
+    interactive: bool, result: ^Settings_View_Preparation) {
     simd_available := view_core.simd_batch_projection_available()
     simd_label := settings_simd_label(ctx.state, simd_available)
-    result.simd = update_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
+    result.simd = prepare_checkbox(settings_checkbox_params(ctx, {rows.simd_y,
         4003, simd_label,
         ctx.state.ui_runtime.settings_preferences.rendering.simd,
-        simd_available, 4}), &ctx.state.ui_runtime.ui_press_owner)
+        simd_available, 4}), &ctx.state.ui_runtime.ui_press_owner, interactive)
     gpu_available := ctx.state.ui_runtime.gpu_dust_instancing_available
     gpu_label := settings_gpu_dust_label(ctx.state, gpu_available)
-    result.gpu_dust = update_checkbox(settings_checkbox_params(ctx, {rows.gpu_dust_y,
+    result.gpu_dust = prepare_checkbox(settings_checkbox_params(ctx, {rows.gpu_dust_y,
         4005, gpu_label,
         ctx.state.ui_runtime.settings_preferences.rendering.gpu_dust_instancing,
-        gpu_available, 5}), &ctx.state.ui_runtime.ui_press_owner)
+        gpu_available, 5}), &ctx.state.ui_runtime.ui_press_owner, interactive)
     result.simd_available = simd_available
     result.gpu_available = gpu_available
-    return {result, simd_available, gpu_available}
+    result.reduce_motion = prepare_checkbox(settings_checkbox_params(ctx, {
+        rows.reduce_motion_y, 4006,
+        view_core.shell_message(ctx.state, .Settings_Reduce_Motion),
+        ctx.state.ui_runtime.settings_preferences.interface.reduce_motion, true, 6}),
+        &ctx.state.ui_runtime.ui_press_owner, interactive)
+}
+
+// settings_scroll_content_height reserves controls, the platform notice, and save status.
+settings_scroll_content_height :: proc(system_notice: bool) -> f32 {
+    height := f32(SETTINGS_SLIDER_LABEL_TOP_OFFSET + SETTINGS_TRACK_TOP_OFFSET +
+        SETTINGS_TOGGLE_TOP_OFFSET + 6 * SETTINGS_TOGGLE_ROW_GAP +
+        TREE_FONT_SIZE + SETTINGS_PANEL_INSET)
+    if system_notice {
+        height += SETTINGS_TOGGLE_ROW_GAP
+    }
+    return height
+}
+
+// register_settings_scroll_semantics admits keyboard page navigation in short viewports.
+register_settings_scroll_semantics :: proc(
+    state: ^core.Euclid_General_State, scroll: Scroll_Container_Update_Result) {
+    if !scroll.scrollbar.has_scrollbar {
+        return
+    }
+    _ = semantic_register_control(state^.ui_runtime.semantic_focus, {
+        id = semantic_control_id(.Settings_Control, 6102), role = .Panel,
+        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+        actions = {.Focus, .Scroll, .Set_Value}, region = .Accordion_Content,
+        traversal_order = 7, bounds = viewmodel.Rectangle(scroll.view_rect),
+        clip_bounds = viewmodel.Rectangle(scroll.view_rect),
+        numeric_range = {0, f64(scroll.maximum), f64(scroll.scroll_y_out),
+            f64(scroll.step), .Vertical, true},
+        label = view_core.shell_message(state, .Navigation_Settings),
+    })
+}
+
+// prepare_settings_scroll retains bounded short-viewport scrolling across panel switches.
+prepare_settings_scroll :: proc(
+    state: ^core.Euclid_General_State, panel: geometry.Rectangle,
+    frame: Input_Frame, interactive: bool) -> Scroll_Container_Update_Result {
+    runtime := &state^.ui_runtime
+    height := settings_scroll_content_height(runtime^.platform_reduce_motion)
+    scroll := scroll_container_visual(
+        panel, height, runtime^.settings_scroll_y, SETTINGS_TOGGLE_ROW_GAP)
+    if interactive {
+        scroll = scroll_container_update({id = 6102, rect = panel,
+            scroll_y_in = runtime^.settings_scroll_y, content_height = height,
+            mouse_input = frame, interaction_space_rect = panel,
+            wheel_step = SETTINGS_TOGGLE_ROW_GAP * WHEEL_SCROLL_MULTIPLIER,
+            press_owner = &runtime^.ui_press_owner,
+            state_in = {runtime^.settings_scroll_dragging,
+                runtime^.settings_scroll_drag_off},
+            semantic_focus = runtime^.semantic_focus,
+            semantic_id = semantic_control_id(.Settings_Control, 6102)})
+        runtime^.settings_scroll_y = scroll.scroll_y_out
+        runtime^.settings_scroll_dragging = scroll.state_out.is_dragging_thumb
+        runtime^.settings_scroll_drag_off = scroll.state_out.drag_offset_y
+    }
+    if scroll.scrollbar.has_scrollbar {
+        scroll.view_rect.width = max(f32(0), scroll.view_rect.width - SCROLLBAR_WIDTH)
+    }
+    return scroll
 }
 
 //   Resolve settings controls and commit their values before rendering.
 prepare_settings_view :: proc(
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
-    mouse_input: Input_Frame) -> Settings_View_Preparation {
+    mouse_input: Input_Frame, interactive := true) -> Settings_View_Preparation {
     if state == nil || state.particle_system == nil {
         return {}
     }
-    stack_rect := geometry.Rectangle{panel.x + SETTINGS_PANEL_INSET,
-        panel.y + SETTINGS_HEADER_TOP_OFFSET,
-        panel.width - SETTINGS_PANEL_INSET * 2,
-        panel.height - SETTINGS_HEADER_TOP_OFFSET}
+    scroll := prepare_settings_scroll(state, panel, mouse_input, interactive)
+    content_panel := scroll.view_rect
+    stack_rect := geometry.Rectangle{content_panel.x + SETTINGS_PANEL_INSET,
+        content_panel.y + SETTINGS_HEADER_TOP_OFFSET - scroll.scroll_y_out,
+        content_panel.width - SETTINGS_PANEL_INSET * 2,
+        content_panel.height - SETTINGS_HEADER_TOP_OFFSET}
     rows := settings_view_layout_rows(stack_rect)
-    ctx := Settings_View_Context{state, panel, mouse_input,
+    ctx := Settings_View_Context{state, content_panel, mouse_input,
         view_font.cache_borrow(&state.font_cache, .Regular),
         view_font.cache_terminal_resolver(&state.font_cache)}
-    update := update_settings_controls(ctx, rows)
-    apply_settings_preparation(state, update.prepared,
-        update.simd_available, update.gpu_available)
+    update := update_settings_controls(ctx, rows, interactive)
+    update.prepared.scroll = scroll
+    if interactive {
+        register_settings_scroll_semantics(state, scroll)
+        apply_settings_preparation(state, update.prepared,
+            update.simd_available, update.gpu_available)
+    }
     return update.prepared
 }
 
@@ -429,6 +518,10 @@ apply_settings_primary_preparation :: proc(
         settings_record_preference_edit(
             state, .Drawing_Sound_Enabled,
             setting_model.boolean_value(prepared.sound.checked_out))
+    }
+    if prepared.reduce_motion.toggled {
+        settings_record_preference_edit(state, .Interface_Reduce_Motion,
+            setting_model.boolean_value(prepared.reduce_motion.checked_out))
     }
 }
 
@@ -497,18 +590,32 @@ settings_apply_control_edit :: proc(
         !setting_model.valid_setting_value(id, value) {
         return false
     }
-    prepared: Settings_View_Preparation
     simd_available := view_core.simd_batch_projection_available()
     gpu_available := state^.ui_runtime.gpu_dust_instancing_available
     if !settings_control_available(id, simd_available, gpu_available) {
         return false
     }
+    prepared, supported := settings_control_edit_preparation(id, value)
+    if !supported {
+        return false
+    }
+    apply_settings_preparation(state, prepared, simd_available, gpu_available)
+    return true
+}
+
+// Translate an admitted control identity into the same typed results as ordinary input.
+settings_control_edit_preparation :: proc(
+    id: setting_model.Setting_Id, value: setting_model.Setting_Value) ->
+    (Settings_View_Preparation, bool) {
+    prepared: Settings_View_Preparation
     #partial switch id {
     case .Drawing_Dust_Limit:
         prepared.max_particles.changed = true
         prepared.max_particles.value = value.integer
     case .Interface_Display_Fps:
         prepared.fps = {toggled = true, checked_out = value.boolean}
+    case .Interface_Reduce_Motion:
+        prepared.reduce_motion = {toggled = true, checked_out = value.boolean}
     case .Rendering_Limit_Fps:
         prepared.limit = {toggled = true, checked_out = value.boolean}
     case .Drawing_Sound_Enabled:
@@ -518,8 +625,7 @@ settings_apply_control_edit :: proc(
     case .Rendering_Gpu_Dust_Instancing:
         prepared.gpu_dust = {toggled = true, checked_out = value.boolean}
     case:
-        return false
+        return {}, false
     }
-    apply_settings_preparation(state, prepared, simd_available, gpu_available)
-    return true
+    return prepared, true
 }

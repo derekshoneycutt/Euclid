@@ -90,10 +90,7 @@ gif_path_input_visible :: #force_inline proc(
 // gif_path_input_rect resolves the visible field against active accordion geometry.
 gif_path_input_rect :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> geometry.Rectangle {
-    sections := accordion_sections_for_layout(runtime^.current_layout_mode, "")
-    layout := accordion_layout(geometry.Rectangle(runtime^.ui_regions.accordion_rect),
-        sections, runtime^.active_accordion_section)
-    return gif_path_input_rect_for_panel(geometry.Rectangle(layout.content))
+    return gif_path_input_rect_for_panel(accordion_content_rect(runtime, .Save_Gif))
 }
 
 // draw_encoded_gif_geometry encodes GIF controls while capture stays deferred.
@@ -167,12 +164,8 @@ draw_encoded_gif_status :: proc(
             x, row_y + SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET)
     }
     if prepared.phase == .Saved && len(prepared.last_path) > 0 {
-        sections := accordion_sections_for_layout(
-            state^.ui_runtime.current_layout_mode, "", state)
-        layout := accordion_layout(
-            geometry.Rectangle(state^.ui_runtime.ui_regions.accordion_rect), sections,
-            state^.ui_runtime.active_accordion_section)
-        field := gif_path_input_rect_for_panel(geometry.Rectangle(layout.content))
+        field := gif_path_input_rect_for_panel(
+            accordion_content_rect(&state^.ui_runtime, .Save_Gif))
         draw_encoded_label(state, encoder,
             view_core.shell_message(state, .Gif_Saved_Path_Label), x,
             field.y + (field.height - TREE_FONT_SIZE) * 0.5)
@@ -491,18 +484,18 @@ gif_view_layout_rows :: proc(stack_rect: geometry.Rectangle) -> Gif_View_Rows {
 //   Resolve the GIF timing selector and publish the selected mode.
 prepare_gif_timing_controls :: proc(
     ctx: Gif_Panel_Context, panel: geometry.Rectangle,
-    timing_y: f32, result: ^Gif_View_Preparation) {
+    timing_y: f32, result: ^Gif_View_Preparation, interactive := true) {
     animation_rect, recorded_rect := gif_timing_button_rects(panel, timing_y)
-    result^.animation_timing = update_text_button(gif_timing_button_params(
+    result^.animation_timing = prepare_text_button(gif_timing_button_params(
         ctx, {6203, view_core.shell_message(ctx.state, .Gif_Timing_Animation),
             view_core.shell_message(ctx.state, .Gif_Timing_Animation_Description),
             2, animation_rect}),
-        &ctx.ui_runtime.ui_press_owner)
-    result^.recorded_timing = update_text_button(gif_timing_button_params(
+        &ctx.ui_runtime.ui_press_owner, interactive)
+    result^.recorded_timing = prepare_text_button(gif_timing_button_params(
         ctx, {6204, view_core.shell_message(ctx.state, .Gif_Timing_Recorded),
             view_core.shell_message(ctx.state, .Gif_Timing_Recorded_Description),
             3, recorded_rect}),
-        &ctx.ui_runtime.ui_press_owner)
+        &ctx.ui_runtime.ui_press_owner, interactive)
     if result^.animation_timing.action.activated {
         ctx.ui_runtime.gif_timing_mode = .Animation
     }
@@ -515,14 +508,19 @@ prepare_gif_timing_controls :: proc(
 // prepare_gif_path_input borrows published path text and resolves its interaction.
 prepare_gif_path_input :: proc(
     state: ^core.Euclid_General_State, ctx: Gif_Panel_Context,
-    mouse_input: Input_Frame, result: ^Gif_View_Preparation) {
+    mouse_input: Input_Frame, result: ^Gif_View_Preparation, interactive := true) {
     result^.last_path = string(ctx.ui_runtime.last_gif_path[
         :ctx.ui_runtime.last_gif_path_len])
-    if !gif_path_input_visible(ctx.ui_runtime) {
+    if ctx.ui_runtime.gif_capture_phase != .Saved || len(result^.last_path) == 0 {
         return
     }
     params := gif_path_input_params(state,
         gif_path_input_rect_for_panel(ctx.panel), mouse_input, result^.last_path)
+    if !interactive {
+        params.focused = false
+        result^.path_input = input_box_draw_result(params, false)
+        return
+    }
     result^.path_input = input_box_prepare(params, &ctx.ui_runtime.ui_press_owner)
     if result^.path_input.hovered || ctx.ui_runtime.ui_press_owner.kind == .Input_Box {
         ctx.ui_runtime.cursor = .Text
@@ -531,15 +529,15 @@ prepare_gif_path_input :: proc(
 
 // prepare_gif_sliders resolves the two bounded value controls.
 prepare_gif_sliders :: proc(
-    ctx: Gif_Panel_Context, result: ^Gif_View_Preparation) {
-    result^.downsample = update_settings_integer_slider(gif_slider_params(
+    ctx: Gif_Panel_Context, result: ^Gif_View_Preparation, interactive := true) {
+    result^.downsample = prepare_integer_slider(gif_slider_params(
         ctx, result^.rows.sliders.downsample_y, 6201,
         view_core.shell_message(ctx.state, .Gif_Downsample_Accessible),
-        ctx.ui_runtime.gif_downsample_factor))
-    result^.frame_step = update_settings_integer_slider(gif_slider_params(
+        ctx.ui_runtime.gif_downsample_factor), interactive)
+    result^.frame_step = prepare_integer_slider(gif_slider_params(
         ctx, result^.rows.sliders.frame_step_y, 6202,
         view_core.shell_message(ctx.state, .Gif_Capture_Every),
-        ctx.ui_runtime.gif_frame_step))
+        ctx.ui_runtime.gif_frame_step), interactive)
     if result^.downsample.changed {
         ctx.ui_runtime.gif_downsample_factor = result^.downsample.value
     }
@@ -551,10 +549,10 @@ prepare_gif_sliders :: proc(
 // prepare_gif_capture_button resolves and applies the current capture action.
 prepare_gif_capture_button :: proc(
     ctx: Gif_Panel_Context,
-    result: ^Gif_View_Preparation) {
+    result: ^Gif_View_Preparation, interactive := true) {
     params := gif_save_button_params(ctx, result^.rows.save_button_y)
-    result^.save_button = update_text_button(
-        params, &ctx.ui_runtime.ui_press_owner)
+    result^.save_button = prepare_text_button(
+        params, &ctx.ui_runtime.ui_press_owner, interactive)
     if result^.save_button.action.activated {
         ctx.ui_runtime.save_gif_requested = true
     }
@@ -564,7 +562,7 @@ prepare_gif_capture_button :: proc(
 prepare_gif_view :: proc(
     state: ^core.Euclid_General_State,
     panel: geometry.Rectangle,
-    mouse_input: Input_Frame) -> Gif_View_Preparation {
+    mouse_input: Input_Frame, interactive := true) -> Gif_View_Preparation {
     if state == nil || state.particle_system == nil {
         return {}
     }
@@ -576,14 +574,16 @@ prepare_gif_view :: proc(
         panel.width - SETTINGS_PANEL_INSET * 2,
         panel.height - SETTINGS_HEADER_TOP_OFFSET}
     result := Gif_View_Preparation{rows = gif_view_layout_rows(stack_rect)}
-    prepare_gif_sliders(ctx, &result)
-    prepare_gif_timing_controls(ctx, panel, result.rows.timing_y, &result)
-    prepare_gif_capture_button(ctx, &result)
+    prepare_gif_sliders(ctx, &result, interactive)
+    prepare_gif_timing_controls(ctx, panel, result.rows.timing_y, &result, interactive)
+    prepare_gif_capture_button(ctx, &result, interactive)
     result.phase = ctx.ui_runtime.gif_capture_phase
     result.captured_frames = ctx.ui_runtime.gif_captured_frames
     result.status_note = ctx.ui_runtime.gif_status_note
     result.status_note_len = ctx.ui_runtime.gif_status_note_len
-    register_gif_status(ctx, &result)
-    prepare_gif_path_input(state, ctx, mouse_input, &result)
+    if interactive {
+        register_gif_status(ctx, &result)
+    }
+    prepare_gif_path_input(state, ctx, mouse_input, &result, interactive)
     return result
 }

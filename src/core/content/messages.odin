@@ -50,6 +50,8 @@ Content_Message_Id :: enum u16 {
     Settings_Save_Saving = 1216,
     Settings_Save_Unavailable = 1217,
     Settings_Save_Failed = 1218,
+    Settings_Reduce_Motion = 1219,
+    Settings_System_Reduce_Motion = 1220,
     Gif_Output_Scale = 1301,
     Gif_Capture_Every = 1302,
     Gif_Playback_Timing = 1303,
@@ -97,7 +99,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 79
+CONTENT_SHIPPED_MESSAGE_COUNT :: 81
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -139,6 +141,8 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1216, "ui.settings.save.saving"},
     {1217, "ui.settings.save.unavailable"},
     {1218, "ui.settings.save.failed"},
+    {1219, "ui.settings.reduce_motion"},
+    {1220, "ui.settings.system_reduce_motion"},
     {1301, "ui.gif.output_scale"},
     {1302, "ui.gif.capture_every"},
     {1303, "ui.gif.playback_timing"},

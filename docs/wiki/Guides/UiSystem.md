@@ -312,8 +312,10 @@ Portrait uses a full-width world above a full-width accordion:
 Portrait derives `text_rect` from the content geometry of its first View descriptor;
 `terminal_rect` remains the same clamped inset of that region. Expanding View renders
 the existing Presentation or Terminal surface there. Collapsed View content does not
-receive preparation, interaction, focus, or drawing. Its Presentation state and selected
-Terminal generation remain owned by their existing subsystems for the next expansion.
+receive interactive preparation, interaction, or focus. During accordion collapse,
+a bounded render-only tail may draw current owner data behind the shrinking clip.
+Its Presentation state and selected Terminal generation remain owned by their existing
+subsystems for the next expansion.
 
 ### Presentation Visibility
 
@@ -869,6 +871,44 @@ the Library was the original right-side owner. View dispatches to the existing
 Presentation or Terminal preparation and drawing paths; Library, GIF, and Settings
 retain their existing domain behavior. No presentation or terminal state is duplicated.
 
+### Accordion Transitions
+
+Ordinary selection transfers visible height simultaneously over 180 ms with one cubic
+ease-out progress value. The sum of reveal heights remains the available content
+height; header heights and the outer accordion remain fixed. Child layout retains
+the full available height below its own header. Nested scissors reveal that layout
+without scaling text, changing wrap width, shrinking Terminal grids, or adding fades.
+Prepared geometry is shared by controls, deferred text, static input routing, focus
+outlines, and accessibility clipping.
+
+`active_accordion_section` changes immediately. Only that section is interactive and
+logically expanded. Other still-visible sections use explicit visual-only preparation
+without control actions or semantic publication. Hidden portions of selected controls
+cannot admit fresh pointer input or enter keyboard traversal. Logical portrait View
+visibility and Terminal focus-out remain immediate even while outgoing content is drawn.
+Render-only tails borrow current content for one frame, not old pointers or snapshots
+retained in transition state.
+
+Pointer releases outside a reveal cancel the selected child's capture without issuing
+an activation. Suppressed child frames also carry an off-viewport pointer position so
+unrevealed controls cannot acquire hover or tooltip state.
+
+The display-owned transition stores at most four section heights. A new selection
+retargets all current heights without queuing or snapping to an obsolete endpoint.
+Selecting the same section does not restart its clock. Startup, geometry changes
+(including splitter movement), orientation changes, and effective reduced motion
+settle immediately. Monotonic UI sample time drives progress independently of simulation
+and authored animation pause.
+
+Canonical debug acceptance is
+[`accordion-transition-acceptance.jsonl`](../../../tools/scenarios/accordion-transition-acceptance.jsonl)
+and
+[`accordion-portrait-acceptance.jsonl`](../../../tools/scenarios/accordion-portrait-acceptance.jsonl).
+The scenario runner supplies the portrait layout and a tall window for the latter.
+`accordion_transitioning`, `accordion_settled`, `interface_reduced_motion`,
+`presentation_visible`, and `presentation_hidden` expose bounded scalar observations.
+Scenario state artifacts also record section reveal heights and the effective policy.
+
 ### Animation Controls
 
 Refresh and pause/play are not accordion sections. They are a compact overlay inside
@@ -898,9 +938,32 @@ When Settings is active, its controls occupy the accordion content region. It co
 - drawing sound;
 - optional SIMD projection;
 - optional GPU dust instancing.
+- reduced interface motion.
 
 The UI changes display-owned settings directly. The display coordinator applies
 settings with external effects, such as frame pacing, through the owning native service.
+
+The persisted boolean `interface.reduce_motion` defaults to false. It disables
+accordion transitions, not authored geometric animations or simulation. Effective
+reduced motion is the user preference OR a supported platform request; unchecking
+the box does not override the platform. Settings shows an additional notice when
+the platform independently requests reduced motion.
+
+Native policy is sampled at startup, window reactivation, and at most once every five
+seconds. Windows queries client-area animation policy; macOS queries NSWorkspace's
+accessibility reduced-motion preference. On Linux, optional GIO/GSettings reads
+`enable-animations` for the current GNOME or Cinnamon desktop. Other desktops, missing
+GIO, or absent schemas are explicitly unavailable; the saved checkbox still works.
+Query failures are diagnosed and retain the last successfully observed platform request.
+The Linux loader keeps GIO code resident for process-lifetime GObject type registration
+while balancing transient library handles and releasing query-owned objects.
+Native preference detection is separate from screen-reader/accessibility-tree
+availability.
+
+Short Settings viewports scroll rather than hiding the final preference and persistence
+status. The shared scrollbar admits wheel, thumb, and keyboard page navigation; its
+offset is retained across accordion switches. Outgoing visual-only preparation clamps
+draw geometry without changing that offset or consuming scroll commands.
 
 ### GIF Panel
 

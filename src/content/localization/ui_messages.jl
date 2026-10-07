@@ -124,6 +124,17 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
                     LocalizedContent.UInt32Argument)]),
         "Matching animations: {count} or more"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1219), "ui.settings.reduce_motion",
+            "Interface-only reduced motion checkbox; system requests also apply.",
+            LocalizedContent.MessageArgument[]),
+        "Reduce interface motion"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1220),
+            "ui.settings.system_reduce_motion",
+            "Settings notice when the platform independently requests reduced motion.",
+            LocalizedContent.MessageArgument[]),
+        "System requests reduced motion"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1201), "ui.settings.display_fps",
             "Display FPS checkbox label.", LocalizedContent.MessageArgument[]),
         "Display FPS"),

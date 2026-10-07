@@ -177,7 +177,7 @@ checkbox_resolve_interaction :: proc(
         press_owner,
         params,
         can_interact,
-        hovered_item,
+        hovered,
         &owns_press)
 
     out.toggled = toggled
@@ -216,22 +216,18 @@ checkbox_apply_semantics :: proc(
         .Checkbox, params.id, id)
 }
 
-//   Resolve one checkbox interaction without issuing drawing commands.
-update_checkbox :: proc(
-    params: Checkbox_Params,
-    press_owner: ^viewmodel.Ui_Press_Owner_State) -> Checkbox_Result {
-
+// checkbox_draw_result builds immutable control geometry without actions or publication.
+checkbox_draw_result :: proc(params: Checkbox_Params) -> Checkbox_Result {
     drawn_rect := params.rect
     drawn_rect.width = max(f32(0), drawn_rect.width)
     drawn_rect.height = max(f32(0), drawn_rect.height)
     box_rect := checkbox_box_drawn_rect(drawn_rect)
-    local_mouse := checkbox_local_mouse(params.mouse, params.scroll_offset)
-
     hit_rect := drawn_rect
     label_rect := geometry.Rectangle{}
     label_rect, hit_rect = checkbox_label_layout(params, box_rect, hit_rect)
 
-    result := Checkbox_Result{
+    return Checkbox_Result{
+        checked_out = params.checked,
         control_geometry = {
             bounds = viewmodel.Rectangle(hit_rect),
             clip_bounds = viewmodel.Rectangle(params.semantic_clip),
@@ -239,9 +235,28 @@ update_checkbox :: proc(
         box_rect = box_rect,
         label_rect = label_rect,
     }
+}
+
+// Resolve one checkbox interaction without issuing drawing commands.
+update_checkbox :: proc(
+    params: Checkbox_Params,
+    press_owner: ^viewmodel.Ui_Press_Owner_State) -> Checkbox_Result {
+    result := checkbox_draw_result(params)
+    local_mouse := checkbox_local_mouse(params.mouse, params.scroll_offset)
+    hit_rect := geometry.Rectangle(result.control_geometry.bounds)
     checkbox_resolve_interaction(params, press_owner, local_mouse, hit_rect, &result)
     if params.semantic_domain != .None {
         checkbox_apply_semantics(params, press_owner, &result)
     }
     return result
+}
+
+// prepare_checkbox omits all interaction and semantic effects for visual-only panels.
+prepare_checkbox :: proc(
+    params: Checkbox_Params, owner: ^viewmodel.Ui_Press_Owner_State,
+    interactive: bool) -> Checkbox_Result {
+    if interactive {
+        return update_checkbox(params, owner)
+    }
+    return checkbox_draw_result(params)
 }

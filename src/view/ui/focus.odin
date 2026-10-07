@@ -2,6 +2,7 @@ package ui
 
 import viewmodel "../model"
 import input "../input"
+import geometry "../../core/geometry"
 
 import "core:unicode/utf8"
 
@@ -104,6 +105,7 @@ semantic_begin :: proc(state: ^viewmodel.Ui_Semantic_Focus_State) -> bool {
     state^.staging_active = true
     state^.staging_rejected = false
     state^.staging_accordion_parent = {}
+    state^.staging_accordion_clip_set = false
     return true
 }
 
@@ -253,11 +255,30 @@ semantic_control_parent :: proc(
     return parent
 }
 
+// semantic_control_reveal clips selected children and removes hidden focus candidates.
+semantic_control_reveal :: proc(
+    state: ^viewmodel.Ui_Semantic_Focus_State,
+    control: Semantic_Control_Registration) ->
+    (viewmodel.Ui_Node_State, geometry.Rectangle) {
+    states := control.states
+    clip := geometry.Rectangle(control.clip_bounds)
+    if state != nil && state^.staging_accordion_clip_set &&
+        control.region == .Accordion_Content {
+        clip = stack_panel_clamp_x(stack_panel_clamp_y(clip,
+            geometry.Rectangle(state^.staging_accordion_clip)),
+            geometry.Rectangle(state^.staging_accordion_clip))
+        if !geometry.rectangles_intersect(geometry.Rectangle(control.bounds), clip) {
+            states -= {.Visible, .Focusable, .Tab_Stop}
+        }
+    }
+    return states, clip
+}
+
 // semantic_register_control publishes one ordinary control into staging storage.
 semantic_register_control :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State,
     control: Semantic_Control_Registration) -> viewmodel.Ui_Semantic_Status {
-    states := control.states
+    states, clip := semantic_control_reveal(state, control)
     if state != nil && state^.window_focused &&
         state^.focus_origin == .Keyboard && state^.logical_focus == control.id {
         states += {.Focus_Visible}
@@ -274,7 +295,7 @@ semantic_register_control :: proc(
             region = control.region,
             traversal_order = control.traversal_order,
             bounds = control.bounds,
-            clip_bounds = control.clip_bounds,
+            clip_bounds = viewmodel.Rectangle(clip),
             numeric_range = control.numeric_range,
             text_cursor_byte = u16(max(0, control.text_cursor_byte)),
             text_anchor_byte = u16(max(0, control.text_anchor_byte)),
@@ -698,7 +719,7 @@ semantic_command_for_event :: proc(
         return semantic_slider_command(node, event.key)
     case .Tree:
         return semantic_tree_command(node, event.key), 0
-    case .Document:
+    case .Document, .Panel:
         return semantic_document_command(node, event.key)
     case:
     }

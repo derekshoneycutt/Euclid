@@ -499,7 +499,9 @@ apply_sdl_cursor :: proc(
 // service_sdl_frame_runtime advances non-UI display services for one frame.
 service_sdl_frame_runtime :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
-    frame_dt: f32) {
+    frame_dt: f32, sample_seconds: f64) {
+    state^.ui_runtime.platform_reduce_motion = native.sdl_platform_refresh_motion(
+        ctx.platform, sample_seconds)
     font.cache_service(
         &state^.font_cache, &state^.simulation_executor^.pool)
     sync_window_math_shaping(state)
@@ -908,7 +910,7 @@ prepare_sdl_frame :: proc(
     clock: ^native.Sdl_Frame_Clock,
     device_frame: input.Input_Frame) -> Frame_Draw_Preparation {
     frame_dt := native.sdl_frame_clock_step(clock)
-    service_sdl_frame_runtime(state, ctx, frame_dt)
+    service_sdl_frame_runtime(state, ctx, frame_dt, device_frame.sample_time_seconds)
     menu_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     input_frame, ui_geometry := prepare_sdl_ui_input(
         state, ctx, device_frame, frame_dt, menu_event_storage[:])
@@ -970,11 +972,12 @@ encode_sdl_ui_geometry :: proc(
     ui.draw_encoded_panel_text(state, encoder, prepared.controls)
     if ui.is_terminal_selected(state) {
         terminal_graphics_set_draw_encoder(state, encoder)
-        ui.terminal_draw_encoded(state, encoder, prepared.terminal_frame)
+        ui.draw_encoded_view_content(state, encoder, prepared.terminal_frame,
+            prepared.layout_interaction.presentation)
         terminal_graphics_set_draw_encoder(state, nil)
     } else {
-        ui.draw_encoded_presentation_text(
-            state, encoder, prepared.layout_interaction.presentation)
+        ui.draw_encoded_view_content(state, encoder, prepared.terminal_frame,
+            prepared.layout_interaction.presentation)
     }
     ui.draw_encoded_focus_outline(&state^.ui_runtime, encoder)
     ui.draw_encoded_tooltip(state, encoder)

@@ -378,9 +378,13 @@ prepare_accordion_view :: proc(
         active = ui_runtime^.active_accordion_section,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         font_resolver = view_font.cache_terminal_resolver(&state^.font_cache),
+        transition = &ui_runtime^.accordion_transition,
+        reduce_motion = ui_reduced_motion(ui_runtime),
     }, sections, &ui_runtime^.active_accordion_section)
     if active_before != ui_runtime^.active_accordion_section {
-        ui_runtime^.tree_scroll_dragging = false
+        ui_release_geometry_capture(ui_runtime)
+        ui_runtime^.tooltip = {}
+        ui_runtime^.context_menu.active = false
         _ = ui_publish_presentation_visibility(ui_runtime)
     }
     return prepared

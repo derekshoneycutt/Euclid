@@ -39,6 +39,18 @@ Library_Search_Preparation :: struct {
     suggestion: Text_Button_Result,
 }
 
+// prepare_library_search_visual borrows current text without editing or publishing controls.
+prepare_library_search_visual :: proc(
+    state: ^core.Euclid_General_State,
+    panel: geometry.Rectangle) -> Library_Search_Preparation {
+    result := Library_Search_Preparation{layout = library_search_layout(
+        panel, state^.ui_runtime.library_search.suggestion_length > 0)}
+    params := library_search_input_params(state, result.layout, {}, panel)
+    params.focused = false
+    result.input = input_box_draw_result(params, false)
+    return result
+}
+
 // library_search_layout reserves correction rows only while a suggestion is visible.
 library_search_layout :: proc(
     panel: geometry.Rectangle, show_suggestion: bool) -> Library_Search_Layout {
@@ -83,10 +95,8 @@ library_search_visible :: #force_inline proc(
 // library_search_input_rect resolves the routed text-control rectangle.
 library_search_input_rect :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> geometry.Rectangle {
-    sections := accordion_sections_for_layout(runtime^.current_layout_mode, "")
-    accordion := accordion_layout(
-        geometry.Rectangle(runtime^.ui_regions.accordion_rect), sections, .Library)
-    return library_search_layout(accordion.content, false).text_input
+    return library_search_layout(
+        accordion_content_rect(runtime, .Library), false).text_input
 }
 
 // library_search_input_params borrows bounded query storage for one editable frame.

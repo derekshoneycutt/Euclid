@@ -3,11 +3,35 @@ package artifact
 
 import allocation "../allocation"
 import trace "../trace"
+import observe "../observe"
+import "core:encoding/json"
 import "core:fmt"
 import "core:mem"
 import "core:os"
 import "core:strings"
 import "core:testing"
+
+// Host JSON remains valid and keeps lifecycle and trace facts at the snapshot root.
+@(test)
+artifact_host_state_preserves_top_level_json_contract :: proc(t: ^testing.T) {
+    host := observe.Julia_Host{active_request_id = 17, failed_request_count = 3,
+        trace = {event_count = 5, evidence_complete = true}}
+    text := artifact_state_json({}, host, {})
+    decoded: struct {
+        lifecycle: int `json:"julia_lifecycle"`,
+        active_request_id: u64 `json:"julia_active_request_id"`,
+        failed_requests: u64 `json:"julia_failed_requests"`,
+        event_count: int `json:"julia_event_count"`,
+        evidence_complete: bool `json:"julia_evidence_complete"`,
+    }
+    testing.expect(t, json.unmarshal_string(
+        text, &decoded, allocator = context.allocator) == nil)
+    testing.expect_value(t, decoded.lifecycle, int(host.lifecycle))
+    testing.expect_value(t, decoded.active_request_id, host.active_request_id)
+    testing.expect_value(t, decoded.failed_requests, host.failed_request_count)
+    testing.expect_value(t, decoded.event_count, host.trace.event_count)
+    testing.expect_value(t, decoded.evidence_complete, host.trace.evidence_complete)
+}
 
 // Verify the serialized failure manifest contains the canonical result.
 artifact_test_expect_failure_manifest :: proc(t: ^testing.T, directory: string) {

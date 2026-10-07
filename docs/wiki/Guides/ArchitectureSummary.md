@@ -169,6 +169,16 @@ in status buffers or prepared draws beyond the generation's retirement boundary.
 Shell messages resolve through typed native IDs and copied display-owned storage.
 Animation specifications resolve before Enter from the same admitted defaults.
 
+Accordion transition state belongs to the display-owned UI model and retains only
+bounded geometry, section identity, and monotonic timing. Preparation shares full-size
+child rectangles and reveal clips with drawing, routing, and semantic publication.
+There is one logically selected section even when outgoing render-only tails remain
+visible. Portrait Presentation/Terminal logical visibility and service ownership do not
+extend with those tails; visual preparation borrows current owner data without updating
+Terminal grids, input, focus, or Julia lifecycle. UI motion policy combines the durable
+interface preference with a separately sampled native accessibility preference and
+does not affect Julia's authored geometric animation policy.
+
 Semantic evidence is authoritative for behavioral claims. Diagnostics explain
 operation and failure, while Spall profiles measure timing; neither substitutes for
 typed evidence.

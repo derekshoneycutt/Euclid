@@ -502,6 +502,8 @@ Ui_Semantic_Focus_State :: struct {
     staging_active: bool,
     staging_rejected: bool,
     staging_accordion_parent: Ui_Node_Id,
+    staging_accordion_clip: Rectangle,
+    staging_accordion_clip_set: bool,
     window_focused: bool,
     logical_focus: Ui_Node_Id,
     focus_origin: Ui_Focus_Origin,
@@ -622,9 +624,26 @@ Library_Search_State :: struct {
     scenario_correlation_generation: u64,
 }
 
+// Ui_Accordion_Transition owns geometry only; content and labels remain frame-borrowed.
+Ui_Accordion_Transition :: struct {
+    initialized: bool,
+    running: bool,
+    panel: Rectangle,
+    section_count: int,
+    selected: Ui_Accordion_Section,
+    start_seconds: f64,
+    heights: [4]f32,
+    start_heights: [4]f32,
+    contents: [4]Rectangle,
+    clips: [4]Rectangle,
+}
+
 // Euclid_Ui_Runtime_State owns persistent display interaction and panel state.
 Euclid_Ui_Runtime_State :: struct {
     tree_scroll_y: f32,
+    settings_scroll_y: f32,
+    settings_scroll_dragging: bool,
+    settings_scroll_drag_off: f32,
     tree_reveal_pending: bool,
     tree_reveal_stable_id: uuid.Identifier,
     view_text_scroll_y: f32,
@@ -633,6 +652,8 @@ Euclid_Ui_Runtime_State :: struct {
     tree_scroll_drag_off: f32,
     ui_press_owner: Ui_Press_Owner_State,
     active_accordion_section: Ui_Accordion_Section,
+    accordion_transition: Ui_Accordion_Transition,
+    platform_reduce_motion: bool,
     presentation_visible: bool,
     settings_slider_dragging: bool,
     settings_slider_drag_offset_x: f32,
@@ -690,8 +711,8 @@ Euclid_Ui_Runtime_State :: struct {
     gif_capture_frame_counter: int,
     gif_captured_frames: int,
     shell_message_generation: u64,
-    shell_message_bytes: [80][128]u8,
-    shell_message_lengths: [80]u16,
+    shell_message_bytes: [96][128]u8,
+    shell_message_lengths: [96]u16,
     gif_status_note: [260]u8,
     gif_status_note_len: int,
     last_gif_path: [GIF_PATH_CAPACITY]u8,

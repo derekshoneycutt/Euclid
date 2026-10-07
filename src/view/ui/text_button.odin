@@ -31,6 +31,19 @@ Text_Button_Result :: struct {
     pressed : bool,
 }
 
+// prepare_text_button omits actions and semantic publication for visual-only panels.
+prepare_text_button :: proc(
+    params: Text_Button_Params, owner: ^viewmodel.Ui_Press_Owner_State,
+    interactive: bool) -> Text_Button_Result {
+    if interactive {
+        return update_text_button(params, owner)
+    }
+    rectangle := clamp_non_negative_rect(params.rect)
+    return {button_drawn_rect = rectangle,
+        control_geometry = {viewmodel.Rectangle(rectangle),
+            viewmodel.Rectangle(params.interaction_space_rect)}}
+}
+
 //   Resolve whether this text button currently owns the shared press state.
 text_button_owns_press :: #force_inline proc(
     press_owner: ^viewmodel.Ui_Press_Owner_State,
@@ -114,7 +127,7 @@ update_text_button :: proc(
         press_owner,
         params.mouse,
         can_interact,
-        hovered_item,
+        hovered,
         &owns_press)
 
     action := button_resolve_action({params.semantics,

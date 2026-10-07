@@ -9,6 +9,7 @@ import geometry "../../core/geometry"
 
 ACCORDION_MAX_SECTION_COUNT :: 4
 ACCORDION_HEADER_ID_BASE :: 2201
+ACCORDION_TRANSITION_SECONDS :: f64(0.180)
 
 // One ordered accordion section and its frame-borrowed display label.
 Accordion_Section_Descriptor :: struct {
@@ -26,6 +27,8 @@ Accordion_Section_Set :: struct {
 Accordion_Layout :: struct {
     headers: [ACCORDION_MAX_SECTION_COUNT]geometry.Rectangle,
     content: geometry.Rectangle,
+    contents: [ACCORDION_MAX_SECTION_COUNT]geometry.Rectangle,
+    clips: [ACCORDION_MAX_SECTION_COUNT]geometry.Rectangle,
 }
 
 // Prepared header interactions paired with their final frame layout.
@@ -44,6 +47,8 @@ Accordion_Context :: struct {
     active: viewmodel.Ui_Accordion_Section,
     font: view_font.Font_Face,
     font_resolver: view_font.Font_Resolver,
+    transition: ^viewmodel.Ui_Accordion_Transition,
+    reduce_motion: bool,
 }
 
 // accordion_semantic_id returns the stable identity for one section header.
@@ -93,13 +98,19 @@ register_accordion_panel :: proc(
     ctx: Accordion_Context, descriptor: Accordion_Section_Descriptor,
     rect: geometry.Rectangle) {
     id := accordion_panel_semantic_id(descriptor.section)
+    clip := rect
+    if ctx.transition != nil {
+        clip = geometry.Rectangle(ctx.transition^.clips[int(descriptor.section)])
+    }
     _ = semantic_register_control(ctx.semantic_focus, {
         id = id, role = .Panel, states = {.Visible, .Enabled},
         region = .Accordion_Content, bounds = viewmodel.Rectangle(rect),
-        clip_bounds = viewmodel.Rectangle(ctx.panel), label = descriptor.label,
+        clip_bounds = viewmodel.Rectangle(clip), label = descriptor.label,
     })
     if ctx.semantic_focus != nil {
         ctx.semantic_focus^.staging_accordion_parent = id
+        ctx.semantic_focus^.staging_accordion_clip = viewmodel.Rectangle(clip)
+        ctx.semantic_focus^.staging_accordion_clip_set = true
     }
 }
 
@@ -185,10 +196,133 @@ accordion_layout :: proc(
         cursor_y += ACCORDION_HEADER_HEIGHT
         if section_index == active_index {
             result.content = {inner.x, cursor_y, inner.width, content_height}
+            result.contents[int(active)] = result.content
+            result.clips[int(active)] = result.content
             cursor_y += content_height
         }
     }
     return result
+}
+
+// accordion_transition_sample advances all reveal heights with one shared ease-out.
+accordion_transition_sample :: proc(
+    transition: ^viewmodel.Ui_Accordion_Transition, now_seconds: f64) {
+    if !transition^.running {
+        return
+    }
+    progress := clamp((now_seconds - transition^.start_seconds) /
+        ACCORDION_TRANSITION_SECONDS, 0, 1)
+    if now_seconds >= transition^.start_seconds + ACCORDION_TRANSITION_SECONDS {
+        progress = 1
+    }
+    remaining := f32((1 - progress) * (1 - progress) * (1 - progress))
+    height := max(f32(0), transition^.panel.height - ACCORDION_PANEL_INSET * 2 -
+        ACCORDION_HEADER_HEIGHT * f32(transition^.section_count))
+    transition^.heights = {}
+    transferred: f32
+    for start_height, index in transition^.start_heights {
+        if index != int(transition^.selected) {
+            transition^.heights[index] = start_height * remaining
+            transferred += transition^.heights[index]
+        }
+    }
+    transition^.heights[int(transition^.selected)] = max(f32(0), height - transferred)
+    transition^.running = progress < 1
+}
+
+// ui_reduced_motion combines explicit interface intent with independent platform policy.
+ui_reduced_motion :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
+    return runtime^.settings_preferences.interface.reduce_motion ||
+        runtime^.platform_reduce_motion
+}
+
+// accordion_transition_settle assigns the entire available height without animation.
+accordion_transition_settle :: proc(
+    transition: ^viewmodel.Ui_Accordion_Transition, panel: geometry.Rectangle,
+    sections: Accordion_Section_Set, selected: viewmodel.Ui_Accordion_Section) {
+    transition^ = {
+        initialized = true, panel = viewmodel.Rectangle(panel),
+        section_count = sections.count, selected = selected,
+    }
+    transition^.heights[int(selected)] = max(f32(0),
+        panel.height - ACCORDION_PANEL_INSET * 2 -
+        ACCORDION_HEADER_HEIGHT * f32(sections.count))
+}
+
+// accordion_visual_layout separates full-size child layout from bounded reveal clips.
+accordion_visual_layout :: proc(
+    panel: geometry.Rectangle, sections: Accordion_Section_Set,
+    transition: ^viewmodel.Ui_Accordion_Transition) -> Accordion_Layout {
+    inner := geometry.Rectangle{panel.x + ACCORDION_PANEL_INSET,
+        panel.y + ACCORDION_PANEL_INSET,
+        max(f32(0), panel.width - ACCORDION_PANEL_INSET * 2),
+        max(f32(0), panel.height - ACCORDION_PANEL_INSET * 2)}
+    content_height := max(f32(0),
+        inner.height - ACCORDION_HEADER_HEIGHT * f32(sections.count))
+    result: Accordion_Layout
+    cursor_y := inner.y
+    for index in 0..<sections.count {
+        descriptor := sections.items[index]
+        section := int(descriptor.section)
+        result.headers[index] = {
+            inner.x, cursor_y, inner.width, ACCORDION_HEADER_HEIGHT}
+        cursor_y += ACCORDION_HEADER_HEIGHT
+        result.contents[section] = {inner.x, cursor_y, inner.width, content_height}
+        result.clips[section] = {
+            inner.x, cursor_y, inner.width, transition^.heights[section]}
+        cursor_y += transition^.heights[section]
+    }
+    result.content = result.contents[int(transition^.selected)]
+    for index in 0..<ACCORDION_MAX_SECTION_COUNT {
+        transition^.contents[index] = viewmodel.Rectangle(result.contents[index])
+        transition^.clips[index] = viewmodel.Rectangle(result.clips[index])
+    }
+    return result
+}
+
+// accordion_transition_layout samples before retargeting so interruptions stay continuous.
+accordion_transition_layout :: proc(
+    ctx: Accordion_Context, sections: Accordion_Section_Set,
+    selected: viewmodel.Ui_Accordion_Section) -> Accordion_Layout {
+    transition := ctx.transition
+    if transition == nil {
+        return accordion_layout(ctx.panel, sections, selected)
+    }
+    if !transition^.initialized || transition^.panel != viewmodel.Rectangle(ctx.panel) ||
+        transition^.section_count != sections.count || ctx.reduce_motion {
+        accordion_transition_settle(transition, ctx.panel, sections, selected)
+    } else {
+        accordion_transition_sample(transition, ctx.mouse_input.sample_time_seconds)
+        if transition^.selected != selected {
+            transition^.start_heights = transition^.heights
+            transition^.selected = selected
+            transition^.start_seconds = ctx.mouse_input.sample_time_seconds
+            transition^.running = true
+        }
+    }
+    return accordion_visual_layout(ctx.panel, sections, transition)
+}
+
+// accordion_content_rect returns prepared child geometry, falling back before first frame.
+accordion_content_rect :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    section: viewmodel.Ui_Accordion_Section) -> geometry.Rectangle {
+    if runtime^.accordion_transition.initialized {
+        return geometry.Rectangle(runtime^.accordion_transition.contents[int(section)])
+    }
+    sections := accordion_sections_for_layout(runtime^.current_layout_mode, "")
+    return accordion_layout(
+        geometry.Rectangle(runtime^.ui_regions.accordion_rect), sections, section).content
+}
+
+// accordion_content_clip exposes only the visible part of a selected child's layout.
+accordion_content_clip :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    section: viewmodel.Ui_Accordion_Section) -> geometry.Rectangle {
+    if runtime^.accordion_transition.initialized {
+        return geometry.Rectangle(runtime^.accordion_transition.clips[int(section)])
+    }
+    return accordion_content_rect(runtime, section)
 }
 
 // Build one full-width accordion header button.
@@ -267,15 +401,13 @@ prepare_accordion :: proc(
     active^ = sections.items[active_index].section
     result := Accordion_Preparation{
         sections = sections,
-        layout = accordion_layout(
-            ctx.panel, sections, active^),
+        layout = accordion_transition_layout(ctx, sections, active^),
     }
     selected := prepare_accordion_header_interactions(
         ctx, sections, &result, active^)
     if selected != active^ {
         active^ = selected
-        result.layout = accordion_layout(
-            ctx.panel, sections, selected)
+        result.layout = accordion_transition_layout(ctx, sections, selected)
         for section_index in 0..<sections.count {
             result.headers[section_index].button_drawn_rect =
                 result.layout.headers[section_index]

@@ -122,6 +122,18 @@ settings_save_test_expect_dust_limit :: proc(
     testing.expect_value(t, preferences.drawing.dust_limit, 1400)
 }
 
+// Verify the saved batch retains rendering and both interface preferences.
+settings_save_expect_committed_preferences :: proc(
+    t: ^testing.T, store: ^user_data.Store) {
+    preferences := setting_model.default_preferences()
+    loaded := user_data.store_load_settings(store, &preferences)
+    testing.expect_value(t, loaded.failure.kind, user_data.Store_Error_Kind.None)
+    testing.expect(t, .Rendering_Vsync in preferences.present)
+    testing.expect(t, !preferences.rendering.vsync)
+    testing.expect(t, preferences.interface.display_fps)
+    testing.expect(t, preferences.interface.reduce_motion)
+}
+
 // Verify edits coalesce by setting and commit one batch on a worker.
 @(test)
 settings_save_coalesces_and_commits_worker_batch :: proc(t: ^testing.T) {
@@ -143,6 +155,8 @@ settings_save_coalesces_and_commits_worker_batch :: proc(t: ^testing.T) {
         .Rendering_Vsync, setting_model.boolean_value(false))
     _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
         .Interface_Display_Fps, setting_model.boolean_value(true))
+    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+        .Interface_Reduce_Motion, setting_model.boolean_value(true))
 
     settings_save_service(state, &pool)
     testing.expect_value(t, state^.ui_runtime.settings_pending.count, 0)
@@ -150,12 +164,7 @@ settings_save_coalesces_and_commits_worker_batch :: proc(t: ^testing.T) {
     testing.expect(t, settings_save_test_wait_terminal(state, &pool))
     testing.expect_value(t, state^.ui_runtime.settings_save_status,
         viewmodel.Settings_Save_Status.Saved)
-    loaded_preferences := setting_model.default_preferences()
-    loaded := user_data.store_load_settings(&store, &loaded_preferences)
-    testing.expect_value(t, loaded.failure.kind, user_data.Store_Error_Kind.None)
-    testing.expect(t, .Rendering_Vsync in loaded_preferences.present)
-    testing.expect(t, !loaded_preferences.rendering.vsync)
-    testing.expect(t, loaded_preferences.interface.display_fps)
+    settings_save_expect_committed_preferences(t, &store)
     settings_save_shutdown(state, &pool)
     taskpool.task_pool_destroy(&pool)
     testing.expect_value(t, user_data.store_close(&store).kind,

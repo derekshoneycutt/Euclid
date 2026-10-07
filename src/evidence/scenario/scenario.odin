@@ -1326,7 +1326,19 @@ state_matches :: proc(name: string, display: observe.Display) -> bool {
     }
     return runtime_state_matches(name, display) ||
         dust_state_matches(name, display) || terminal_state_matches(name, display) ||
-        settings_state_matches(name, display)
+        settings_state_matches(name, display) || interface_state_matches(name, display)
+}
+
+// interface_state_matches evaluates logical visibility and display-owned motion policy.
+interface_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "accordion_transitioning": return display.accordion_transition_running
+    case "accordion_settled": return !display.accordion_transition_running
+    case "interface_reduced_motion": return display.interface_reduce_motion
+    case "presentation_visible": return display.presentation_visible
+    case "presentation_hidden": return !display.presentation_visible
+    }
+    return false
 }
 
 // Evaluate durability and joined worker-ownership predicates independently of runtime idle.

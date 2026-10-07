@@ -182,6 +182,8 @@ ui_release_geometry_capture :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State)
     runtime^.ui_press_owner = {}
     runtime^.tree_scroll_dragging = false
     runtime^.tree_scroll_drag_off = 0
+    runtime^.settings_scroll_dragging = false
+    runtime^.settings_scroll_drag_off = 0
     runtime^.settings_slider_dragging = false
     runtime^.settings_slider_drag_offset_x = 0
     runtime^.text_scroll_dragging = false
@@ -212,6 +214,7 @@ ui_transition_layout :: proc(
     }
     ui_save_layout_section(runtime)
     ui_release_geometry_capture(runtime)
+    runtime^.accordion_transition.initialized = false
     runtime^.current_layout_mode = destination
     if destination == .Portrait {
         if !runtime^.portrait.entered {
@@ -251,6 +254,24 @@ ui_apply_window_metrics :: proc(
     return changed || transitioned
 }
 
+// prepare_ui_accordion_geometry publishes full-size portrait content and reveal geometry.
+prepare_ui_accordion_geometry :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, frame: Input_Frame) {
+    sections := accordion_sections_for_layout(runtime^.current_layout_mode, "")
+    _ = accordion_transition_layout({
+        panel = geometry.Rectangle(runtime^.ui_regions.accordion_rect),
+        mouse_input = frame, transition = &runtime^.accordion_transition,
+        reduce_motion = ui_reduced_motion(runtime),
+    }, sections, runtime^.active_accordion_section)
+    if runtime^.current_layout_mode == .Portrait {
+        runtime^.ui_regions.text_rect =
+            viewmodel.Rectangle(accordion_content_rect(runtime, .View))
+        runtime^.ui_regions.terminal_rect =
+            layout_terminal_rect(runtime^.ui_regions.text_rect)
+    }
+    _ = ui_publish_presentation_visibility(runtime)
+}
+
 // Prepare panel geometry while preserving capture identity from frame start.
 prepare_ui_geometry :: proc(
     state: ^core.Euclid_General_State,
@@ -271,7 +292,8 @@ prepare_ui_geometry :: proc(
             ui_runtime.vertical_split_x, ui_runtime.horizontal_split_y)
     }
     state^.ui_runtime.ui_regions = regions
-    _ = ui_publish_presentation_visibility(ui_runtime)
+    prepare_ui_accordion_geometry(ui_runtime, mouse_input)
+    regions = ui_runtime^.ui_regions
     view_core.fit_iso_scale_to_viewport(
         state^.iso_scale, regions.world_rect.width, regions.world_rect.height)
 
@@ -338,18 +360,35 @@ draw_encoded_disclosure :: proc(
 draw_encoded_accordion_content :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     layout: Accordion_Layout, controls: Ui_Control_Preparation) {
+    for index in 0..<controls.accordion.sections.count {
+        descriptor := controls.accordion.sections.items[index]
+        section := descriptor.section
+        content := layout.contents[int(section)]
+        clip := layout.clips[int(section)]
+        if clip.width <= 0 || clip.height <= 0 {
+            continue
+        }
+        _ = native.draw_encoder_push_scissor(encoder, clip)
+        draw_encoded_accordion_child(state, encoder, section, content, controls)
+        _ = native.draw_encoder_pop_scissor(encoder)
+    }
+}
+
+// draw_encoded_accordion_child draws one full-size child beneath its reveal clip.
+draw_encoded_accordion_child :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    section: viewmodel.Ui_Accordion_Section, content: geometry.Rectangle,
+    controls: Ui_Control_Preparation) {
     runtime := &state^.ui_runtime
-    _ = native.draw_encoder_rectangle(
-        encoder, geometry.Rectangle(layout.content), UI_COMPONENT_BACKGROUND_COLOR)
-    _ = native.draw_encoder_rectangle_outline(
-        encoder, geometry.Rectangle(layout.content), 1, UI_BORDER_COLOR)
-    switch runtime^.active_accordion_section {
+    _ = native.draw_encoder_rectangle(encoder, content, UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(encoder, content, 1, UI_BORDER_COLOR)
+    switch section {
     case .View:
         draw_encoded_presentation_geometry(
-            state, encoder, geometry.Rectangle(layout.content))
+            state, encoder, content)
     case .Library:
         show_suggestion := runtime^.library_search.suggestion_length > 0
-        search_layout := library_search_layout(layout.content, show_suggestion)
+        search_layout := library_search_layout(content, show_suggestion)
         draw_encoded_tree_geometry(
             state, encoder, search_layout.tree, controls.tree.pressed_node)
     case .Save_Gif:
@@ -391,10 +430,8 @@ draw_encoded_accordion_geometry :: proc(
         encoder, geometry.Rectangle(panel), BACKGROUND_COLOR)
     _ = native.draw_encoder_rectangle_outline(
         encoder, geometry.Rectangle(panel), 1, UI_BORDER_COLOR)
-    sections := accordion_sections_for_layout(
-        runtime^.current_layout_mode, "", state)
-    layout := accordion_layout(
-        geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
+    sections := controls.accordion.sections
+    layout := controls.accordion.layout
     draw_encoded_accordion_content(state, encoder, layout, controls)
     draw_encoded_accordion_headers(
         encoder, sections, layout, runtime^.active_accordion_section)
@@ -423,12 +460,8 @@ draw_encoded_label :: proc(
 draw_encoded_panel_text :: proc(
     state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
     controls: Ui_Control_Preparation) {
-    runtime := &state^.ui_runtime
-    panel := runtime^.ui_regions.accordion_rect
-    sections := accordion_sections_for_layout(
-        runtime^.current_layout_mode, selected_animation_title(state), state)
-    layout := accordion_layout(
-        geometry.Rectangle(panel), sections, runtime^.active_accordion_section)
+    sections := controls.accordion.sections
+    layout := controls.accordion.layout
     for index in 0..<sections.count {
         header := layout.headers[index]
         draw_encoded_label(state, encoder, sections.items[index].label,
@@ -436,7 +469,26 @@ draw_encoded_panel_text :: proc(
                 ACCORDION_HEADER_PADDING,
             header.y + (header.height - TREE_FONT_SIZE) * 0.5)
     }
-    switch runtime^.active_accordion_section {
+    for index in 0..<sections.count {
+        section := sections.items[index].section
+        clip := layout.clips[int(section)]
+        if clip.width <= 0 || clip.height <= 0 {
+            continue
+        }
+        _ = native.draw_encoder_push_scissor(encoder, clip)
+        draw_encoded_accordion_child_text(state, encoder, section,
+            layout.contents[int(section)], controls)
+        _ = native.draw_encoder_pop_scissor(encoder)
+    }
+    draw_encoded_overlay_text(state, encoder)
+}
+
+// draw_encoded_accordion_child_text shares the prepared full-size layout with geometry.
+draw_encoded_accordion_child_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    section: viewmodel.Ui_Accordion_Section, content: geometry.Rectangle,
+    controls: Ui_Control_Preparation) {
+    switch section {
     case .Library:
         draw_encoded_library_search_geometry(
             state, encoder, controls.library_search)
@@ -444,13 +496,12 @@ draw_encoded_panel_text :: proc(
         draw_encoded_tree_text(state, encoder, controls.library_search.layout.tree)
     case .Save_Gif:
         draw_encoded_gif_text(state, encoder,
-            geometry.Rectangle(layout.content), controls.gif)
+            content, controls.gif)
     case .Settings:
         draw_encoded_settings_text(
-            state, encoder, geometry.Rectangle(layout.content), controls.settings)
+            state, encoder, controls.settings)
     case .View:
     }
-    draw_encoded_overlay_text(state, encoder)
 }
 
 // draw_encoded_overlay_text emits transient overlay labels outside accordion panels.
@@ -591,8 +642,16 @@ prepare_ui_controls :: proc(
     accordion_panel := state^.ui_runtime.ui_regions.accordion_rect
     result.accordion = prepare_accordion_view(
         state, geometry.Rectangle(accordion_panel), routed_frame)
-    prepare_active_accordion_controls(state, frame, routed_frame,
+    child_frame := ui_clip_accordion_child_frame(&state^.ui_runtime, routed_frame)
+    prepare_active_accordion_controls(state, frame, child_frame,
         geometry.Rectangle(result.accordion.layout.content), &result)
+    prepare_outgoing_accordion_controls(state, &result)
+    if state^.ui_runtime.current_layout_mode == .Portrait {
+        state^.ui_runtime.ui_regions.text_rect = viewmodel.Rectangle(
+            accordion_content_rect(&state^.ui_runtime, .View))
+        state^.ui_runtime.ui_regions.terminal_rect =
+            layout_terminal_rect(state^.ui_runtime.ui_regions.text_rect)
+    }
     tooltip_frame_resolve(&state^.ui_runtime.tooltip, {
         now_seconds = frame.sample_time_seconds,
         window_focused = frame.window_focused,
@@ -601,6 +660,66 @@ prepare_ui_controls :: proc(
         dismiss = tooltip_escape_pressed(frame),
     })
     return result
+}
+
+// ui_accordion_child_owns_capture excludes header, splitter, and landscape View captures.
+ui_accordion_child_owns_capture :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
+    owner := runtime^.ui_press_owner
+    #partial switch owner.kind {
+    case .List_Item, .Input_Box, .Checkbox, .Slider:
+        return true
+    case .Text_Button:
+        return !animation_control_id(owner.id) &&
+            (owner.id < ACCORDION_HEADER_ID_BASE ||
+                owner.id >= ACCORDION_HEADER_ID_BASE + ACCORDION_MAX_SECTION_COUNT)
+    case .Scrollbar:
+        if owner.id == UI_TREE_SCROLLBAR_ID || owner.id == 6102 {
+            return true
+        }
+    }
+    return runtime^.current_layout_mode == .Portrait &&
+        runtime^.active_accordion_section == .View && ui_presentation_owns_capture(owner)
+}
+
+// ui_clip_accordion_child_frame cancels released captures without activating hidden content.
+ui_clip_accordion_child_frame :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, frame: Input_Frame) -> Input_Frame {
+    clip := accordion_content_clip(runtime, runtime^.active_accordion_section)
+    if clip.width > 0 && clip.height > 0 &&
+        geometry.rectangle_contains(clip, input_frame_mouse_position(frame)) {
+        return frame
+    }
+    if input_frame_left_released(frame) && runtime^.ui_press_owner.active &&
+        ui_accordion_child_owns_capture(runtime) {
+        ui_release_geometry_capture(runtime)
+    }
+    filtered := input.input_frame_filter_pointer(frame, {.Screen_Position})
+    filtered.mouse_position = {-1, -1}
+    return filtered
+}
+
+// prepare_outgoing_accordion_controls borrows draw facts without actions or semantics.
+prepare_outgoing_accordion_controls :: proc(
+    state: ^core.Euclid_General_State, result: ^Ui_Control_Preparation) {
+    sections := result^.accordion.sections
+    for index in 0..<sections.count {
+        section := sections.items[index].section
+        if section == state^.ui_runtime.active_accordion_section ||
+            result^.accordion.layout.clips[int(section)].height <= 0 {
+            continue
+        }
+        content := result^.accordion.layout.contents[int(section)]
+        switch section {
+        case .Settings:
+            result^.settings = prepare_settings_view(state, content, {}, false)
+        case .Save_Gif:
+            result^.gif = prepare_gif_view(state, content, {}, false)
+        case .Library:
+            result^.library_search = prepare_library_search_visual(state, content)
+        case .View:
+        }
+    }
 }
 
 // finish_ui_semantics atomically publishes all geometry and layout registrations.
@@ -650,7 +769,38 @@ prepare_ui_layout_interaction :: proc(
     if !routed.wheel {
         presentation_frame.mouse_wheel_delta = 0
     }
+    if state^.ui_runtime.current_layout_mode == .Portrait {
+        presentation_frame = ui_clip_accordion_child_frame(
+            &state^.ui_runtime, presentation_frame)
+    }
     return {presentation = prepare_presentation_interaction(state,
         state^.ui_runtime.ui_regions.text_rect, presentation_frame,
         routed.keyboard)}
+}
+
+// draw_encoded_view_content separates a render-only portrait tail from logical visibility.
+draw_encoded_view_content :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    terminal: Terminal_Prepared_Frame, presentation: Presentation_Preparation) {
+    runtime := &state^.ui_runtime
+    panel := geometry.Rectangle(runtime^.ui_regions.text_rect)
+    clip := ui_presentation_clip(runtime, panel)
+    if clip.width <= 0 || clip.height <= 0 {
+        return
+    }
+    _ = native.draw_encoder_push_scissor(encoder, clip)
+    if is_terminal_selected(state) {
+        prepared := terminal
+        if !ui_presentation_is_visible(runtime) {
+            prepared = terminal_prepare_visual(state, terminal_content_panel(panel))
+        }
+        terminal_draw_encoded(state, encoder, prepared)
+    } else {
+        prepared := presentation
+        if !ui_presentation_is_visible(runtime) {
+            prepared = prepare_presentation_visual(state, panel)
+        }
+        draw_encoded_presentation_text(state, encoder, prepared)
+    }
+    _ = native.draw_encoder_pop_scissor(encoder)
 }

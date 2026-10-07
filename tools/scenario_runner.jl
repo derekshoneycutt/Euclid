@@ -115,9 +115,13 @@ end
 
 """Run ordinary scenarios without ever opening the developer's preferences."""
 function run_scenario(binary::String, name::String)
+    arguments = ["--no-user-db"]
+    if name == "accordion-portrait-acceptance"
+        append!(arguments, ["--layout=portrait", "--window-size=640x900"])
+    end
     return run_scenario_launch(binary, name,
         joinpath("tools", "scenarios", "$name.jsonl"),
-        fresh_artifact_path(name), ["--no-user-db"])
+        fresh_artifact_path(name), arguments)
 end
 
 """Read canonical committed scalar rows through a separate read-only SQLite process."""

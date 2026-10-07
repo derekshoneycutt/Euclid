@@ -21,6 +21,7 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Flicker particles Rendered: {count}", "Julia animation entries added: {count}",
     "FPS {fps}", "Settings saved", "Settings not saved yet", "Saving settings...",
     "Settings storage unavailable", "Settings could not be saved",
+    "Reduce interface motion", "System requests reduced motion",
     "Output scale", "Capture every", "Playback timing", "Animation",
     "Recorded", "Use animation timing", "Use recorded timing", "Downsample", "Path",
     "Saved GIF path", "100%", "50%", "33%", "25%", "frame", "{count} frames",

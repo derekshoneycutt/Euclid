@@ -63,6 +63,25 @@ Collapsed accordion content is intentionally absent from the native tree. Euclid
 with Library active. Settings or Save GIF controls become discoverable only after their
 accordion is expanded and a native client refreshes its view if necessary.
 
+Accordion selection and expanded state change immediately, independently of the
+180 ms visual height transition. Outgoing panels may remain briefly rendered through
+a shrinking scissor but do not publish operable children. Selected child semantic
+bounds use the same reveal clip as drawing; unrevealed controls are not keyboard
+traversal candidates. Header focus remains responsive and selection does not synthesize
+child focus. Portrait View retains ordinary logical hiding and Terminal focus-out.
+
+The Settings checkbox **Reduce interface motion** persists `interface.reduce_motion`
+and applies to interface transitions only. A supported platform request also disables
+motion and cannot be overridden by unchecking the box. See
+[reduced-motion policy](UiSystem.md#settings-panel) for native sources, refresh frequency,
+unavailable desktops, and failure behavior. Screen-reader adapter admission is not
+required for this policy.
+
+When the Settings viewport is short, its retained scrollbar provides wheel and thumb
+navigation plus a focusable scroll-panel tab stop with Page Up and Page Down actions.
+Scrolling can reveal the final preference and persistence status without changing the
+accordion's height or making clipped controls operable.
+
 ### Explicitly Excluded: Dynview
 
 Dynview document roles are intentionally filtered from the current projection. A named,

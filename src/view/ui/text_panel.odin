@@ -29,6 +29,40 @@ Presentation_Content_Interaction :: struct {
     keyboard_enabled: bool,
 }
 
+// ui_presentation_clip restricts portrait View without changing its full layout size.
+ui_presentation_clip :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    panel: geometry.Rectangle) -> geometry.Rectangle {
+    if runtime^.current_layout_mode != .Portrait {
+        return panel
+    }
+    clip := accordion_content_clip(runtime, .View)
+    return stack_panel_clamp_x(stack_panel_clamp_y(panel, clip), clip)
+}
+
+// prepare_presentation_visual borrows current content without selection or scroll mutations.
+prepare_presentation_visual :: proc(
+    state: ^core.Euclid_General_State,
+    panel: geometry.Rectangle) -> Presentation_Preparation {
+    if state^.julia_interface == nil || is_terminal_selected(state) {
+        return {}
+    }
+    text_panel := view_text_content_panel(panel)
+    text := julia.current_view_snapshot_text(state)
+    content_height := dynlayout.presentation_content_height_or_fallback(
+        &state^.dynview, text_panel, {
+            text_padding = TEXT_PADDING, wrap_advance = TEXT_WRAP_ADVANCE,
+            row_height = TEXT_ROW_HEIGHT, text = text})
+    step := dynlayout.presentation_scroll_step_or_fallback(
+        &state^.dynview, TEXT_ROW_HEIGHT)
+    scroll := scroll_container_visual(
+        text_panel, content_height, state^.ui_runtime.view_text_scroll_y, step)
+    return {active = true, text_panel = text_panel, view_text = text, scroll = scroll,
+        selection_view = {panel = text_panel, scroll_y = scroll.scroll_y_out,
+            text_padding = TEXT_PADDING, row_height = TEXT_ROW_HEIGHT,
+            wrap_advance = TEXT_WRAP_ADVANCE, fallback_text = text}}
+}
+
 // presentation_semantic_id identifies one compiled document generation.
 presentation_semantic_id :: #force_inline proc(
     state: ^core.Euclid_General_State) -> viewmodel.Ui_Node_Id {
@@ -51,7 +85,8 @@ register_presentation_semantics :: proc(
         actions = {.Focus, .Select, .Copy, .Scroll, .Show_Context_Menu},
         region = .Presentation,
         traversal_order = 0, bounds = viewmodel.Rectangle(panel),
-        clip_bounds = viewmodel.Rectangle(panel),
+        clip_bounds = viewmodel.Rectangle(
+            ui_presentation_clip(&state^.ui_runtime, panel)),
         numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
             f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
         label = view_core.shell_message(state, .Presentation_Accessible_Label),

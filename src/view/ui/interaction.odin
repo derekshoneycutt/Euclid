@@ -159,6 +159,15 @@ ui_presentation_target :: proc(
     return {}
 }
 
+// ui_accordion_pointer_is_revealed admits only positive-area visible child bounds.
+ui_accordion_pointer_is_revealed :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    section: viewmodel.Ui_Accordion_Section, mouse: geometry.Vector2) -> bool {
+    clip := accordion_content_clip(runtime, section)
+    return clip.width > 0 && clip.height > 0 &&
+        geometry.rectangle_contains(clip, mouse)
+}
+
 // Resolve the topmost static target under the current pointer sample.
 ui_world_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
@@ -208,19 +217,23 @@ ui_hover_target :: proc(
         return splitter
     }
     regions := runtime^.ui_regions
-    if ui_presentation_is_visible(runtime) {
+    if ui_presentation_is_visible(runtime) &&
+        (runtime^.current_layout_mode != .Portrait ||
+            ui_accordion_pointer_is_revealed(runtime, .View, geometry.Vector2(mouse))) {
         target := ui_presentation_target(
             geometry.Vector2(mouse), regions, terminal_present)
         if target.kind != .None {
             return target
         }
     }
-    if gif_path_input_visible(runtime) && geometry.rectangle_contains(
+    child_visible := ui_accordion_pointer_is_revealed(
+        runtime, runtime^.active_accordion_section, geometry.Vector2(mouse))
+    if child_visible && gif_path_input_visible(runtime) && geometry.rectangle_contains(
         gif_path_input_rect(runtime), geometry.Vector2(mouse)) {
         return ui_interaction_target(
             .Control, .Input_Box, GIF_PATH_INPUT_BOX_ID)
     }
-    if library_search_visible(runtime) && geometry.rectangle_contains(
+    if child_visible && library_search_visible(runtime) && geometry.rectangle_contains(
         library_search_input_rect(runtime), geometry.Vector2(mouse)) {
         return ui_interaction_target(
             .Control, .Input_Box, LIBRARY_SEARCH_INPUT_ID)
