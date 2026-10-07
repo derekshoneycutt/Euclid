@@ -33,7 +33,7 @@ export animate_pen_descend, animate_pen_rise, animate_compass_descend,
     reflected_angle_marker_pose_xy,
     animate_reflect2d_filled_angle_marker
 
-const PenLength = 0.14f0
+const PenLength = 0.35f0
 
 const PenStraightFloorAngle = π / 2f0
 

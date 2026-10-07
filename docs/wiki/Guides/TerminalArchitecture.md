@@ -606,19 +606,20 @@ remain display concerns.
 Those closures retain the generation-local `EuclidReplRuntime` and the lifetime-stable,
 borrowed Odin state pointer. There is no process-global registry of user-session state.
 
-EuclidRepl operations build ordinary scene intent through bridge APIs. Animated jobs use
-a demand-driven `Ticks.Subscription` rather than an always-running frame hook:
-
-1. A helper requests a stream period for its Terminal generation.
-1. The display validates and acknowledges the stream generation.
-1. Fixed simulation steps are coalesced into `Tick_Pulse` ranges.
-1. Julia advances the active job from those pulses.
-1. Completion or replacement requests idempotent stream shutdown.
+EuclidRepl animated jobs advance through Terminal's native animation callback, inside
+the ordinary bounded scene-command capture. The display commits those commands before
+constraint solving and frame preparation. Independent `Ticks` callbacks do not advance
+drawing jobs: they run outside capture and must not mutate display-owned tool state.
+Animation pause also pauses drawing-job progress.
 
 Starting a new EuclidRepl job finalizes and preempts the previous job. Closing a session
 resets managed geometry and stops tick admission before actors become quiescent. A new
-Terminal generation always receives a fresh runtime; jobs and subscriptions never cross
-generations.
+Terminal generation always receives a fresh runtime; drawing jobs never cross generations.
+
+The default diagonal draw has a
+[line acceptance scenario](../../../tools/scenarios/terminal-line-acceptance.jsonl).
+It verifies animation pause freezes job progress and captures the completed line before
+checking allocation safety and orderly shutdown.
 
 ## Backpressure And Memory Ownership
 

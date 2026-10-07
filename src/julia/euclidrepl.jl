@@ -15,7 +15,6 @@ module EuclidRepl
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
-using ..Ticks
 using Colors: Colorant
 
 export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
@@ -127,7 +126,6 @@ mutable struct ReplDrawJob
     kind::Symbol
     duration::Float32
     elapsed::Float32
-    subscription::Union{Nothing,Ticks.Subscription}
     payload::ReplDrawPayload
 end
 
@@ -658,7 +656,7 @@ function finalize_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
     end
 end
 
-"""Remove active hook and clear active job state for the current session."""
+"""Clear the generation-local job without changing managed geometry."""
 function clear_active_job!(
     runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -667,11 +665,6 @@ function clear_active_job!(
     job = session.active_job
     if job === nothing
         return
-    end
-
-    if job.subscription !== nothing
-        Ticks.unsubscribe!(job.subscription)
-        job.subscription = nothing
     end
 
     session.active_job = nothing
@@ -695,7 +688,7 @@ function clear_managed_geometry!(state_ptr::Ptr{Cvoid}, session::ReplDrawSession
     empty!(session.managed_host_ids)
 end
 
-"""Advance the current active EuclidRepl draw job by one frame."""
+"""Advance one draw job inside the native animation tick's scene-command capture."""
 function run_active_job_frame!(
     runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -717,7 +710,7 @@ function run_active_job_frame!(
     end
 end
 
-"""Preempt active draw (if any), then register and start a replacement draw job."""
+"""Preempt an active draw and stage its replacement for captured Terminal animation ticks."""
 function start_job!(
     runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
@@ -730,8 +723,6 @@ function start_job!(
         clear_active_job!(runtime, state_ptr, session)
     end
 
-    job.subscription = Ticks.subscribe(
-        tick -> run_active_job_frame!(runtime, state_ptr, tick.elapsed_seconds))
     session.active_job = job
 end
 
@@ -860,7 +851,7 @@ function status(
         job.kind,
         job.elapsed,
         job.duration,
-        isnothing(job.subscription) ? nothing : Int(job.subscription.id),
+        nothing,
         length(session.managed_host_ids))
 end
 
@@ -884,7 +875,7 @@ function point!(
 
     point = OdinJuliaBridge.create_new_point(state_ptr, pos3, color, brush_value)
     payload = PointPayload(point.index, pos3, color, brush_value)
-    job = ReplDrawJob(:point, draw_duration, Float32(0f0), nothing, payload)
+    job = ReplDrawJob(:point, draw_duration, Float32(0f0), payload)
 
     start_job!(host_runtime, state_ptr, job)
     track_managed_host!(ensure_session!(host_runtime), point.index)
@@ -925,7 +916,7 @@ function line!(
         color,
         brush_value)
 
-    job = ReplDrawJob(:line, draw_duration, Float32(0f0), nothing, payload)
+    job = ReplDrawJob(:line, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     track_managed_host!(ensure_session!(host_runtime), line_shape.host_id)
     return line_shape
@@ -972,7 +963,7 @@ function circle!(
         radius_valid, sweep_theta_valid,
         color, brush_value)
 
-    job = ReplDrawJob(:circle, draw_duration, Float32(0.0), nothing, payload)
+    job = ReplDrawJob(:circle, draw_duration, Float32(0.0), payload)
     start_job!(host_runtime, state_ptr, job)
     track_managed_host!(ensure_session!(host_runtime), shape.host_id)
     return shape
@@ -1004,7 +995,7 @@ function highlight_pen!(
     draw_duration = validated_duration(duration)
 
     payload = PenHighlightPayload(start_pos3, end_pos3, color)
-    job = ReplDrawJob(:highlight_pen, draw_duration, Float32(0f0), nothing, payload)
+    job = ReplDrawJob(:highlight_pen, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     return nothing
 end
@@ -1052,7 +1043,7 @@ function highlight_compass!(
         radius32,
         color,
         filled)
-    job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), nothing, payload)
+    job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     return nothing
 end
@@ -1078,7 +1069,7 @@ function translate_points!(
     draw_duration = validated_duration(duration)
 
     payload = TransformPayload(ids, starts, TranslateSpec(displacement3))
-    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     return ids
 end
@@ -1110,7 +1101,7 @@ function rotate_points!(
         ids,
         starts,
         RotateSpec(axis_a, axis_b, Float32(theta)))
-    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     return ids
 end
@@ -1198,7 +1189,7 @@ function reflect2d_points!(
     draw_duration = validated_duration(duration)
 
     payload = TransformPayload(ids, starts, Reflect2DSpec(line_a, line_b))
-    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
     start_job!(host_runtime, state_ptr, job)
     return ids
 end

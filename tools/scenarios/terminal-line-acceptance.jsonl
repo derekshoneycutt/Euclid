@@ -1,0 +1,23 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"terminal"}
+{"wait_event":"animation_selected","correlation":"terminal","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":"l=line!([0,0,0],[1,1,0]); sleep(3); println(\"line-\" * \"drawing\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"line-drawing","timeout_ms":15000}
+{"do":"pause_animation"}
+{"wait_state":"animation_paused","timeout_ms":10000}
+{"assert_state":"animation_paused"}
+{"screenshot":".build/terminal-line-drawing.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"before=status().elapsed; sleep(0.2); println(before == status().elapsed && status().active ? \"line-\" * \"paused\" : \"pause-failed\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"line-paused","timeout_ms":10000}
+{"do":"resume_animation"}
+{"type":"while status().active; sleep(0.01); end; println(\"line-\" * \"finished\")"}
+{"key":"enter"}
+{"wait_terminal_contains":"line-finished","timeout_ms":15000}
+{"screenshot":".build/terminal-line-finished.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

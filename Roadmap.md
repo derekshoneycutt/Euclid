@@ -193,10 +193,16 @@ General features:
   - [X] Basic initial user settings structure
   - [ ] Persistent REPL history
   - [ ] Search and use history
-  - [ ] Dynamic/special lists
-    - [ ] Favorites
-    - [ ] Most viewed
-    - [ ] Recent searches
+  - [ ] Collections
+    - [ ] Initial bookmarks/favorites type collection
+    - [ ] Multiple custom collections with organization
+    - [ ] Custom introduction and naming in custom collections
+    - [ ] Most viewed (dynamic; non-mutable)
+    - [ ] Recent searches (dynamic; non-mutable)
+    - [ ] Save search as collection feature
+- [ ] Sharing custom collections
+  - [ ] Export/import files
+  - [ ] In-network (ip-2-ip) custom collection sharing
 - [ ] Full input system
   - [X] Comprehensive mouse/keyboard focus system
   - [X] Basic initial accesibility support

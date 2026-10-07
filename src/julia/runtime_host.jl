@@ -74,7 +74,8 @@ function create_euclid_runtime_host(
     state_ptr == C_NULL && throw(ArgumentError("state_ptr must not be null"))
     generation = create_euclid_runtime_generation(content_root)
     terminal_animation_callback = (callback_state_ptr, operation, dt) ->
-        terminal_animation_entry(state_ptr, callback_state_ptr, operation, dt)
+        terminal_animation_entry(state_ptr, callback_state_ptr, operation, dt;
+            repl_runtime=reactor.session.euclid_repl_runtime)
     reactor = EuclidHost.create_host_runtime(
         state_ptr, 0.0f0, 0.0f0;
         session_generation=UInt64(1),
@@ -106,19 +107,24 @@ function discard_euclid_runtime_generation(host::EuclidRuntimeHost)::Bool
     return true
 end
 
-"""Validate one bridge-stable lifecycle operation for the Terminal animation."""
+"""Advance Terminal drawing only inside a captured native animation callback."""
 function terminal_animation_entry(
     expected_state_ptr::Ptr{Cvoid}, state_ptr::Ptr{Cvoid},
-    operation::Int32, dt::Float32)::Bool
+    operation::Int32, dt::Float32;
+    repl_runtime::Union{Nothing,EuclidRepl.EuclidReplRuntime}=nothing)::Bool
 
     state_ptr == expected_state_ptr || return false
     dt >= 0 || return false
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        repl_runtime === nothing ||
+            EuclidRepl.run_active_job_frame!(repl_runtime, state_ptr, dt)
+        return true
+    end
     operation == OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED &&
         return true
     operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER &&
         OdinJuliaBridge.animation_content_specification(state_ptr)
     return operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER ||
-        operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK ||
         operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
 end
 

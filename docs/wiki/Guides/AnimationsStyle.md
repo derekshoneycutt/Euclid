@@ -120,7 +120,9 @@ meaningful action, and legible finish.
 | `z < 0.0` | Below surface | Avoid unless a script documents a specific need. |
 
 Pen and compass rise phases should target a positive top height, commonly
-around `1.4` in existing scripts. Plane primitives require an intentional
+around `1.4` in existing scripts. Shared pen poses use a `0.35` world-unit length,
+matching the native tool distance constraint; do not author a shorter pose and rely
+on a later constraint solve to stretch it. Plane primitives require an intentional
 profile:
 
 - Flat or on-surface demonstrations keep plane vertices at `z = 0.0`.

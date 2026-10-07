@@ -431,8 +431,9 @@ sequenceDiagram
 
 - Each generation receives a fresh session module, actor set, and `EuclidReplRuntime`.
 - Evaluation runs asynchronously on the Julia owner thread.
-- Animated jobs use generation-local tick subscriptions.
-- Reset and shutdown unsubscribe active jobs before closing tick admission.
+- Animated drawing jobs advance in Terminal's captured native animation ticks.
+  Their scene commands commit on the display thread before constraint solving.
+- Reset and shutdown clear active jobs before closing tick admission.
 
 ### Safety, Reliability, And Limits
 

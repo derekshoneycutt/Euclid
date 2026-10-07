@@ -7,6 +7,27 @@ end
 const RuntimeHostPointId = UUID("03bf688d-40d0-56a2-a6be-ca2656c9b10d")
 const RuntimeHostContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content"))
 
+"""Record drawing progress without native calls while testing Terminal tick routing."""
+mutable struct RuntimeHostDrawPayload <: EuclidRepl.ReplDrawPayload
+    frames::Vector{Float32}
+    completions::Int
+end
+
+"""Record the elapsed time rendered through the Terminal animation callback."""
+function EuclidRepl.render_payload!(
+    _state_ptr::Ptr{Cvoid}, elapsed::Real, _duration::Real,
+    payload::RuntimeHostDrawPayload)
+    push!(payload.frames, Float32(elapsed))
+    return nothing
+end
+
+"""Record completion at the captured drawing boundary."""
+function EuclidRepl.finalize_payload!(
+    _state_ptr::Ptr{Cvoid}, payload::RuntimeHostDrawPayload)
+    payload.completions += 1
+    return nothing
+end
+
 """Create one test runtime host against the repository content root."""
 function create_euclid_runtime_host(
     state_ptr::Ptr{Cvoid}; actor_runtime::OptionalActorRuntime=nothing)
@@ -34,6 +55,30 @@ end
     requested_ns = Ticks.interval_nanoseconds(1 / 60)
     @test Main.EuclidPolicy.tick_interval_steps(requested_ns) == UInt64(1)
     @test Float64(1) / Float64(Main.EuclidPolicy.TICK_FIXED_RATE_HZ) == 1 / 60
+end
+
+@testset "Terminal drawings advance only through native animation ticks" begin
+    host = create_euclid_runtime_host(Ptr{Cvoid}(1))
+    runtime = host.reactor.session.euclid_repl_runtime
+    payload = RuntimeHostDrawPayload(Float32[], 0)
+    job = EuclidRepl.ReplDrawJob(:test, 1f0, 0f0, payload)
+    EuclidRepl.start_job!(runtime, host.state_ptr, job)
+    @test EuclidRepl.status(runtime, host.state_ptr).subscription_id === nothing
+    @test isempty(payload.frames)
+    callback = host.terminal_animation_callback
+    @test !callback(Ptr{Cvoid}(2), OdinJuliaBridge.ANIMATION_OPERATION_TICK, 0.2f0)
+    @test !callback(host.state_ptr, OdinJuliaBridge.ANIMATION_OPERATION_TICK, -0.2f0)
+    @test isempty(payload.frames)
+    @test callback(host.state_ptr, OdinJuliaBridge.ANIMATION_OPERATION_TICK, 0.2f0)
+    @test payload.frames == Float32[0.2]
+    @test EuclidRepl.status(runtime, host.state_ptr).active
+    @test callback(host.state_ptr, OdinJuliaBridge.ANIMATION_OPERATION_TICK, 0.8f0)
+    @test payload.frames == Float32[0.2, 1]
+    @test payload.completions == 1
+    @test !EuclidRepl.status(runtime, host.state_ptr).active
+    @test callback(host.state_ptr, OdinJuliaBridge.ANIMATION_OPERATION_TICK, 0.2f0)
+    @test payload.frames == Float32[0.2, 1]
+    @test shutdown_euclid_reactor!(host)
 end
 
 @testset "runtime host startup banner" begin
