@@ -49,6 +49,7 @@ Action :: enum u8 {
     Set_Scroll_Offset = 17,
     Set_Text_Selection = 18,
     Set_Value = 20,
+    Show_Context_Menu = 21,
 }
 
 Role :: enum u8 {
@@ -58,11 +59,13 @@ Role :: enum u8 {
     List_Item = 7,
     Paragraph = 13,
     Tree_Item = 9,
+    Menu_Item = 11,
     Check_Box = 15,
     Text_Input = 17,
     Button = 18,
     Pane = 20,
     List = 24,
+    Menu = 30,
     Search_Input = 32,
     Application = 49,
     Blockquote = 53,
@@ -99,6 +102,8 @@ Orientation :: enum u8 {
 }
 
 Node_Id :: distinct u64
+
+Has_Popup :: enum u8 {Menu = 0}
 
 Tree_Id :: struct {
     bytes: [16]u8,
@@ -210,6 +215,7 @@ foreign accesskit_library {
     accesskit_node_supports_action :: proc(node: ^Node, action: Action) -> bool ---
     accesskit_node_add_action :: proc(node: ^Node, action: Action) ---
     accesskit_node_set_disabled :: proc(node: ^Node) ---
+    accesskit_node_set_has_popup :: proc(node: ^Node, value: Has_Popup) ---
     accesskit_node_set_children :: proc(
         node: ^Node, length: uintptr, values: [^]Node_Id) ---
     accesskit_node_set_controls :: proc(

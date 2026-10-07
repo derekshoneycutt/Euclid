@@ -48,7 +48,8 @@ register_presentation_semantics :: proc(
     _ = semantic_register_control(state^.ui_runtime.semantic_focus, {
         id = id, role = .Document,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-        actions = {.Focus, .Select, .Copy, .Scroll}, region = .Presentation,
+        actions = {.Focus, .Select, .Copy, .Scroll, .Show_Context_Menu},
+        region = .Presentation,
         traversal_order = 0, bounds = viewmodel.Rectangle(panel),
         clip_bounds = viewmodel.Rectangle(panel),
         numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
@@ -57,7 +58,7 @@ register_presentation_semantics :: proc(
     })
     semantic := state^.ui_runtime.semantic_focus
     owns_presentation := semantic^.logical_focus.domain == .Presentation
-    if !owns_presentation &&
+    if !state^.ui_runtime.context_menu.active && !owns_presentation &&
         state^.ui_runtime.interaction.logical_focus.kind == .Presentation {
         _ = semantic_request_pointer_focus(semantic, id)
     }

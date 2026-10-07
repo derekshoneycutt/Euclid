@@ -71,6 +71,7 @@ Adapter_Action_Kind :: enum u8 {
     Collapse,
     Scroll,
     Set_Scroll_Value,
+    Show_Context_Menu,
 }
 
 // Adapter_Action_Status identifies one display-thread drain or rejection outcome.

@@ -43,6 +43,21 @@ native_id_registry_accepts_stable_uuid_identity :: proc(t: ^testing.T) {
     testing.expect_value(t, resolved, identity)
 }
 
+// Verify zero local IDs are valid only when qualified by a UI owner domain.
+@(test)
+native_id_registry_accepts_owner_qualified_zero :: proc(t: ^testing.T) {
+    registry: Native_Id_Registry
+    native_id_registry_init(&registry)
+    identity := Qualified_Identity{domain = .Ui, owner_domain = 9, generation = 1}
+    native_id, ok := native_id_resolve(&registry, identity)
+    testing.expect(t, ok)
+    resolved, found := native_id_lookup(&registry, native_id)
+    testing.expect(t, found)
+    testing.expect_value(t, resolved, identity)
+    _, invalid := native_id_resolve(&registry, {domain = .Ui})
+    testing.expect(t, !invalid)
+}
+
 // Verify the registry rejects exhaustion without wrapping or retargeting IDs.
 @(test)
 native_id_registry_rejects_capacity_exhaustion :: proc(t: ^testing.T) {
@@ -61,6 +76,31 @@ native_id_registry_rejects_capacity_exhaustion :: proc(t: ^testing.T) {
     })
     testing.expect(t, !ok)
     testing.expect_value(t, native_id, u64(0))
+    testing.expect_value(t, registry.diagnostics.exhaustion, 1)
+}
+
+// Verify repeated popup retirement never reuses IDs and eventually rejects admission.
+@(test)
+native_id_registry_bounds_popup_retirement :: proc(t: ^testing.T) {
+    registry: Native_Id_Registry
+    native_id_registry_init(&registry)
+    previous := SYNTHETIC_NATIVE_ID
+    for generation in 1..=(NATIVE_ID_CAPACITY-1)/3 {
+        for local_id in 0..<3 {
+            identity := Qualified_Identity{domain = .Ui, owner_domain = 11,
+                local_id = u64(local_id), generation = u64(generation)}
+            native_id, ok := native_id_resolve(&registry, identity)
+            testing.expect(t, ok)
+            testing.expect_value(t, native_id, previous+1)
+            testing.expect(t, native_id_retire(&registry, native_id))
+            _, found := native_id_lookup(&registry, native_id)
+            testing.expect(t, !found)
+            previous = native_id
+        }
+    }
+    _, admitted := native_id_resolve(&registry, {
+        domain = .Ui, owner_domain = 11, generation = u64(NATIVE_ID_CAPACITY)})
+    testing.expect(t, !admitted)
     testing.expect_value(t, registry.diagnostics.exhaustion, 1)
 }
 

@@ -273,8 +273,8 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
     testing.expect(t, fixture.ok && content_test_mutate(&fixture,
         "INSERT INTO edition VALUES ('greek','Ancient Greek','grc','Greek source');"+
         "INSERT INTO availability SELECT source_namespace,animation_id,'en-US','greek',0 FROM content_subject;"+
-        "UPDATE content_metadata SET value='1000' WHERE key='record_count';"+
-        "UPDATE content_metadata SET value='1=6;2=1;3=74;4=10;5=74;6=139;7=138;8=138;9=4;10=278;11=138' "+
+        "UPDATE content_metadata SET value='1010' WHERE key='record_count';"+
+        "UPDATE content_metadata SET value='1=6;2=1;3=79;4=10;5=79;6=139;7=138;8=138;9=4;10=278;11=138' "+
         "WHERE key='table_counts';"))
     service: Content_Service
     testing.expect(t, content_service_init(

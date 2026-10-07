@@ -596,7 +596,8 @@ prepare_ui_controls :: proc(
     tooltip_frame_resolve(&state^.ui_runtime.tooltip, {
         now_seconds = frame.sample_time_seconds,
         window_focused = frame.window_focused,
-        suppressed = state^.ui_runtime.gif_capture_phase == .Recording,
+        suppressed = state^.ui_runtime.gif_capture_phase == .Recording ||
+            state^.ui_runtime.context_menu.active,
         dismiss = tooltip_escape_pressed(frame),
     })
     return result
@@ -616,6 +617,7 @@ prepare_and_finish_ui_layout :: proc(
     frame: Input_Frame,
     terminal: Terminal_Prepared_Frame) -> Ui_Layout_Interaction_Preparation {
     result := prepare_ui_layout_interaction(state, frame, terminal)
+    context_menu_prepare(state)
     finish_ui_semantics(state)
     return result
 }
@@ -633,6 +635,8 @@ prepare_ui_layout_interaction :: proc(
         bounds := terminal_content_panel(state^.ui_runtime.ui_regions.text_rect)
         if terminal.available {
             bounds = terminal.bounds
+            state^.ui_runtime.context_menu.keyboard_anchor =
+                terminal.editable_geometry.caret
         }
         register_terminal_semantics(state, bounds, terminal.scroll)
         return {}

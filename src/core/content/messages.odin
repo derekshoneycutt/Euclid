@@ -16,6 +16,11 @@ Content_Message_Id :: enum u16 {
     Animation_Default_Title = 1004,
     Presentation_Accessible_Label = 1005,
     Library_Tree_Accessible_Label = 1006,
+    Context_Menu_Label = 1007,
+    Context_Copy = 1008,
+    Context_Select_All = 1009,
+    Context_Paste = 1010,
+    Terminal_Accessible_Label = 1011,
     Library_Search_Input = 1101,
     Library_Clear_Search = 1102,
     Library_Search_Status_Label = 1103,
@@ -92,7 +97,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 74
+CONTENT_SHIPPED_MESSAGE_COUNT :: 79
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -100,6 +105,11 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1004, "ui.animation.default_title"},
     {1005, "ui.presentation.accessible_label"},
     {1006, "ui.library.tree_accessible_label"},
+    {1007, "ui.context_menu.label"},
+    {1008, "ui.context_menu.copy"},
+    {1009, "ui.context_menu.select_all"},
+    {1010, "ui.context_menu.paste"},
+    {1011, "ui.terminal.accessible_label"},
     {1101, "ui.library.search_input"},
     {1102, "ui.library.clear_search"},
     {1103, "ui.library.search_status_label"},

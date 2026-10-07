@@ -153,5 +153,11 @@ terminal_update_clipboard_copy :: proc(
         return
     }
 
-    input.input_set_clipboard_text(terminal_view_selection_text(term))
+    _ = terminal_copy_view_selection(term)
+}
+
+// Publish nonempty view-selection text without changing cursor or selection state.
+terminal_copy_view_selection :: proc(term: ^viewterminalmodel.Terminal_State) -> bool {
+    selected := terminal_view_selection_text(term)
+    return len(selected) > 0 && input.input_set_clipboard_text(selected)
 }

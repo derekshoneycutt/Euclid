@@ -15,6 +15,9 @@ Scenario_Focus_Name :: struct {
 SCENARIO_FOCUS_NAMES :: [?]Scenario_Focus_Name{
     {"terminal", .Terminal, 0},
     {"presentation", .Presentation, 0},
+    {"context_menu", .Context_Menu, 0},
+    {"context_menu_copy", .Context_Menu, 1},
+    {"context_menu_secondary", .Context_Menu, 2},
     {"animation_restart", .Animation_Control, ANIMATION_REFRESH_BUTTON_ID},
     {"animation_pause", .Animation_Control, ANIMATION_PAUSE_BUTTON_ID},
     {"accordion_view", .Accordion, u64(viewmodel.Ui_Accordion_Section.View) + 1},
@@ -427,21 +430,27 @@ semantic_command_requested :: proc(
     return false
 }
 
+// Map payload-free owner commands to the capability required for authorization.
+semantic_simple_action_capability :: proc(
+    kind: viewmodel.Ui_Focus_Command_Kind) -> viewmodel.Ui_Node_Action {
+    #partial switch kind {
+    case .Activate: return .Activate
+    case .Toggle: return .Toggle
+    case .Increment: return .Increment
+    case .Decrement: return .Decrement
+    case .Select: return .Select
+    case .Expand: return .Expand
+    case .Collapse: return .Collapse
+    case .Show_Context_Menu: return .Show_Context_Menu
+    }
+    return .Focus
+}
+
 // semantic_simple_external_action authorizes one payload-free owner command.
 semantic_simple_external_action :: proc(
     state: ^viewmodel.Ui_Semantic_Focus_State, node: viewmodel.Ui_Semantic_Node,
     target: viewmodel.Ui_Node_Id, kind: viewmodel.Ui_Focus_Command_Kind) -> bool {
-    required_action: viewmodel.Ui_Node_Action
-    #partial switch kind {
-    case .Activate: required_action = .Activate
-    case .Toggle: required_action = .Toggle
-    case .Increment: required_action = .Increment
-    case .Decrement: required_action = .Decrement
-    case .Select: required_action = .Select
-    case .Expand: required_action = .Expand
-    case .Collapse: required_action = .Collapse
-    case: required_action = .Focus
-    }
+    required_action := semantic_simple_action_capability(kind)
     if required_action != .Focus && required_action in node.actions {
         return semantic_append_command(state, {target = target, kind = kind})
     }
@@ -681,7 +690,7 @@ semantic_command_for_event :: proc(
         return .None, 0
     }
     #partial switch node.role {
-    case .Button, .Accordion_Header:
+    case .Button, .Accordion_Header, .Menu_Item:
         return semantic_activation_command(node, event), 0
     case .Checkbox:
         return semantic_activation_command(node, event), 0
@@ -790,6 +799,9 @@ semantic_legacy_focus :: proc(
         return {}, false
     }
     node := snapshot^.nodes[index]
+    if node.id.domain == .Context_Menu {
+        return {}, true
+    }
     if node.role == .Terminal || node.id.domain == .Terminal {
         return {kind = .Terminal}, true
     }

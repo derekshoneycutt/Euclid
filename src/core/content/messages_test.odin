@@ -10,6 +10,7 @@ import storage_pkg "../storage"
 // Frozen current-output fixtures with positional identity matching.
 CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Library", "Save GIF", "Settings", "Animation", "Presentation", "Animation library",
+    "Context menu", "Copy", "Select All", "Paste", "Terminal",
     "Search animations", "Clear search", "Library search status", "Did you mean...",
     "Use suggested search", "Use suggested search: {query}", "Search query is invalid",
     "Searching animations", "No matching animations", "Matching animations: {count}",

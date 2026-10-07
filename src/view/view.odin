@@ -593,6 +593,7 @@ accessibility_extended_command_kind :: proc(
     case .Collapse: return .Collapse
     case .Scroll: return .Scroll_Page
     case .Set_Scroll_Value: return .Set_Scroll_Value
+    case .Show_Context_Menu: return .Show_Context_Menu
     }
     return .None
 }
@@ -675,6 +676,8 @@ accessibility_ordinary_publication_role :: proc(
     case .Accordion_Header: return .Accordion_Header, true
     case .Panel: return .Panel, true
     case .Status: return .Status, true
+    case .Menu: return .Menu, true
+    case .Menu_Item: return .Menu_Item, true
     case: return {}, false
     }
 }
@@ -687,7 +690,8 @@ accessibility_composite_publication_role :: proc(
     case .Text_Run: return .Text_Run, true
     case .Tree: return .Tree, true
     case .Tree_Item: return .Tree_Item, true
-    case .Surface, .Document, .Terminal:
+    case .Document, .Terminal: return .Panel, true
+    case .Surface:
     }
     return {}, false
 }
@@ -758,8 +762,26 @@ accessibility_extended_publication_actions :: proc(
 // accessibility_publication_actions maps advertised owner actions without widening.
 accessibility_publication_actions :: proc(
     actions: viewmodel.Ui_Node_Action_Set) -> accessibility.Publication_Action_Set {
-    return accessibility_ordinary_publication_actions(actions) |
+    result := accessibility_ordinary_publication_actions(actions) |
         accessibility_extended_publication_actions(actions)
+    if .Show_Context_Menu in actions {
+        result += {.Show_Context_Menu}
+    }
+    return result
+}
+
+// Publish pane entry points without retaining any content or text-selection facts.
+accessibility_pane_record :: proc(
+    semantic: ^viewmodel.Ui_Semantic_Focus_State,
+    snapshot: ^viewmodel.Ui_Semantic_Snapshot,
+    node: viewmodel.Ui_Semantic_Node) -> accessibility.Control_Publication_Input {
+    return {
+        role = .Panel, bounds = accessibility_button_bounds(node),
+        label = ui.semantic_node_text(snapshot, node.label_offset, node.label_length),
+        enabled = .Enabled in node.states, focusable = .Focusable in node.states,
+        focused = semantic^.logical_focus == node.id,
+        actions = {.Focus, .Show_Context_Menu},
+    }
 }
 
 // accessibility_control_record copies one portable semantic control record.
@@ -768,7 +790,10 @@ accessibility_control_record :: proc(
     snapshot: ^viewmodel.Ui_Semantic_Snapshot,
     node: viewmodel.Ui_Semantic_Node,
     role: accessibility.Publication_Role) -> accessibility.Control_Publication_Input {
-    return {
+    if node.role == .Document || node.role == .Terminal {
+        return accessibility_pane_record(semantic, snapshot, node)
+    }
+    record := accessibility.Control_Publication_Input{
         role = role,
         bounds = accessibility_button_bounds(node),
         label = ui.semantic_node_text(snapshot, node.label_offset, node.label_length),
@@ -793,6 +818,7 @@ accessibility_control_record :: proc(
         position_in_set = node.position_in_set,
         set_size = node.set_size,
     }
+    return record
 }
 
 // accessibility_control_input copies one committed ordinary semantic record.
@@ -858,16 +884,34 @@ frame_gif_capture_extents :: proc(
     }
 }
 
+// Arbitrate topmost popup input before preparing ordinary geometry and pointer focus.
+prepare_sdl_ui_input :: proc(
+    state: ^Euclid_General_State, ctx: Window_Frame_Context,
+    device_frame: input.Input_Frame, frame_dt: f32,
+    menu_event_storage: []input.Input_Event) -> (
+    input.Input_Frame, ui.Ui_Geometry_Preparation) {
+    input_frame := ui.context_menu_route(state, device_frame, menu_event_storage,
+        ctx.input_runtime != nil && card(ctx.input_runtime^.mouse_captured) > 0)
+    geometry := ui.prepare_ui_geometry(state, input_frame, frame_dt)
+    ui.prepare_ui_static_interaction(state, input_frame, geometry.pointer_capture)
+    if state^.ui_runtime.context_menu.focus_changed {
+        ui.ui_apply_semantic_focus(&state^.ui_runtime,
+            input_frame, ui.is_terminal_selected(state))
+        state^.ui_runtime.context_menu.focus_changed = false
+    }
+    return input_frame, geometry
+}
+
 // prepare_sdl_frame advances UI, presentation, simulation, and display caches.
 prepare_sdl_frame :: proc(
     state: ^Euclid_General_State, ctx: Window_Frame_Context,
     clock: ^native.Sdl_Frame_Clock,
-    input_frame: input.Input_Frame) -> Frame_Draw_Preparation {
+    device_frame: input.Input_Frame) -> Frame_Draw_Preparation {
     frame_dt := native.sdl_frame_clock_step(clock)
     service_sdl_frame_runtime(state, ctx, frame_dt)
-    ui_geometry := ui.prepare_ui_geometry(state, input_frame, frame_dt)
-    ui.prepare_ui_static_interaction(
-        state, input_frame, ui_geometry.pointer_capture)
+    menu_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
+    input_frame, ui_geometry := prepare_sdl_ui_input(
+        state, ctx, device_frame, frame_dt, menu_event_storage[:])
     routed_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
     drain_accessibility_actions(state, ctx.platform)
@@ -889,6 +933,7 @@ prepare_sdl_frame :: proc(
         state, alpha, ui_geometry.compile_dynview)
     layout_interaction := ui.prepare_and_finish_ui_layout(
         state, routed_frame, terminal_frame)
+    execute_context_menu_command(state, ctx.input_runtime)
     publish_accessibility_controls(state, ctx.platform)
     service_scenario_before_present(ctx)
     return {input_frame, terminal_frame, controls, ui_geometry.splitters,
@@ -933,6 +978,7 @@ encode_sdl_ui_geometry :: proc(
     }
     ui.draw_encoded_focus_outline(&state^.ui_runtime, encoder)
     ui.draw_encoded_tooltip(state, encoder)
+    ui.draw_encoded_context_menu(state, encoder)
 }
 
 // encode_sdl_geometry_frame builds and submits one bounded geometry frame.

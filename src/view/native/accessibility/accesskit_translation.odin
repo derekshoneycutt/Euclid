@@ -138,6 +138,8 @@ accesskit_ordinary_control_role :: proc(
     case .Accordion_Header: return .Disclosure_Triangle, true
     case .Panel: return .Pane, true
     case .Label: return .Label, true
+    case .Menu: return .Menu, true
+    case .Menu_Item: return .Menu_Item, true
     }
     return .Unknown, false
 }
@@ -162,6 +164,10 @@ accesskit_configure_basic_actions :: proc(
     node: ^accesskit.Node, actions: portable.Publication_Action_Set) {
     if .Focus in actions {
        accesskit.accesskit_node_add_action(node, .Focus)
+    }
+    if .Show_Context_Menu in actions {
+        accesskit.accesskit_node_add_action(node, .Show_Context_Menu)
+        accesskit.accesskit_node_set_has_popup(node, .Menu)
     }
     if .Activate in actions || .Toggle in actions {
         accesskit.accesskit_node_add_action(node, .Click)

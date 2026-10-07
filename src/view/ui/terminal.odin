@@ -2,6 +2,7 @@ package ui
 
 import viewterminalmodel "../terminal/model"
 import viewmodel "../model"
+import view_core "../core"
 
 import "../../core"
 import geometry "../../core/geometry"
@@ -127,20 +128,21 @@ register_terminal_semantics :: proc(
     _ = semantic_register_control(state^.ui_runtime.semantic_focus, {
         id = id, role = .Terminal,
         states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
-        actions = {.Focus, .Scroll}, region = .Presentation, traversal_order = 0,
+        actions = {.Focus, .Scroll, .Show_Context_Menu},
+        region = .Presentation, traversal_order = 0,
         bounds = viewmodel.Rectangle(bounds),
         clip_bounds = viewmodel.Rectangle(bounds),
         numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
             f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
-        label = "Terminal",
+        label = view_core.shell_message(state, .Terminal_Accessible_Label),
     })
     semantic := state^.ui_runtime.semantic_focus
     needs_initial_focus := !state^.ui_runtime.terminal_semantic_focus_initialized ||
         state^.ui_runtime.terminal_semantic_focus_generation !=
             state^.terminal.animation_generation
-    if needs_initial_focus ||
+    if !state^.ui_runtime.context_menu.active && (needs_initial_focus ||
         state^.ui_runtime.interaction.logical_focus.kind == .Terminal &&
-        semantic^.logical_focus.domain != .Terminal {
+        semantic^.logical_focus.domain != .Terminal) {
         if semantic_request_pointer_focus(semantic, id) {
             state^.ui_runtime.terminal_semantic_focus_initialized = true
             state^.ui_runtime.terminal_semantic_focus_generation =

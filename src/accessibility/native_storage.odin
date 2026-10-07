@@ -115,7 +115,8 @@ native_id_registry_init :: proc(registry: ^Native_Id_Registry) {
 native_id_resolve :: proc(
     registry: ^Native_Id_Registry, identity: Qualified_Identity) -> (u64, bool) {
     if registry == nil ||
-       (identity.local_id == 0 && identity.stable_uuid == ([16]u8{})) {
+       (identity.local_id == 0 && identity.stable_uuid == ([16]u8{}) &&
+        (identity.domain != .Ui || identity.owner_domain == 0)) {
         return 0, false
     }
     for index in 0..<registry^.count {

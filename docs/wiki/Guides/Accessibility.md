@@ -6,7 +6,8 @@ Last consolidated: 2026-09-30.
 
 Euclid provides a bounded native accessibility projection for its application shell and
 sidebar on Linux, macOS, and Windows through AccessKit C 0.23.1. The supported surface
-is the ordinary controls, Library Search, and Library Tree described in this guide.
+is the ordinary controls, Library Search, Library Tree, and content-free context-menu
+entry points described in this guide.
 All three platforms consume the same semantic publication, identity, validation, and
 display-thread action model. Their native adapters differ in some observable states and
 operable actions, so this is a version-qualified cross-platform implementation, not a
@@ -49,6 +50,8 @@ The shared projection supports:
 - the Library Tree and TreeItems, including levels, set position, active descendant,
   selection, filtering, expansion facts, and identity retirement;
 - Search-to-Tree and accordion-to-panel control relations;
+- named Presentation and Terminal panes with Focus and Show Context Menu actions,
+  plus their transient Menu and MenuItem children;
 - logical focus, host-window focus, clipped bounds, display scale, enabled, checked,
   selected, expanded, and busy facts where the native adapter exposes them;
 - activation, toggle, increment, decrement, range mutation, text replacement, text
@@ -62,9 +65,11 @@ accordion is expanded and a native client refreshes its view if necessary.
 
 ### Explicitly Excluded: Dynview
 
-Dynview roles are intentionally filtered from the current projection. The native tree
-does not contain its document, prose, headings, mathematical expressions, selection,
-viewport, or animation geometry. A plain or verbal rendering of mathematics is not
+Dynview document roles are intentionally filtered from the current projection. A named,
+content-free Presentation pane exposes Focus and Show Context Menu, and its popup
+exposes Copy and Select All. The native tree does not contain document text, prose,
+headings, mathematical expressions, selection, or animation geometry.
+A plain or verbal rendering of mathematics is not
 equivalent to mathematical accessibility and must not be advertised as such.
 
 The pinned AccessKit schema can represent ordinary structure and mathematical roles,
@@ -81,7 +86,10 @@ text alone.
 
 ### Explicitly Excluded: Terminal
 
-Terminal roles are also intentionally filtered from the current projection. Euclid does
+Terminal content roles are also intentionally filtered from the current projection.
+A named, content-free Terminal pane exposes Focus and Show Context Menu, and its popup
+exposes Copy and Paste. These command entry points do not expose clipboard contents.
+Euclid does
 not expose Terminal input, output, scrollback, cursor, selection, links, alternate-screen
 content, or command history through AccessKit.
 
@@ -159,8 +167,25 @@ one caret/selection pair and basic word starts, not a complete styled text docum
 arbitrary text geometry.
 
 Published roles are Label, TextRun, Button, Checkbox, Slider, AccordionHeader, Panel,
-Status, SearchInput, Tree, and TreeItem. The current UI projection uses all except the
-standalone Label role. Surface, Document, and Terminal UI roles are explicitly ignored.
+Status, SearchInput, Tree, TreeItem, Menu, and MenuItem. The current UI projection uses
+all except the standalone Label role. Surface and Document UI roles are ignored;
+Presentation and Terminal are projected only as content-free named panels.
+
+### Context Menus
+
+Right-click, Shift+F10, Menu, and the native Show Context Menu action open one
+display-owned flat popup. Disabled commands remain visible and published but cannot
+activate. Up/Down wrap over enabled commands, Home/End select an edge, and Enter/Space
+activate once. Escape restores pane focus. Tab/Shift+Tab close and traverse from the
+pane, including in Terminal. Outside presses dismiss and use normal click-through
+routing; presses inside retain their release ownership even after dismissal.
+
+Menu identities include an opening generation. Closed or replaced menu actions are
+rejected, and native IDs are retired without reuse. Repeated openings consume the
+existing bounded session registry; exhaustion rejects native publication explicitly.
+Menu callbacks enqueue bounded owner requests and never read clipboard or pane text.
+Menu-role/action translation and stale/disabled rejection have automated coverage;
+complete screen-reader menu workflows remain unqualified on all three platforms.
 
 ## Cross-Platform Coverage
 
@@ -186,6 +211,7 @@ inspectors and assistive technologies.
 | Repeated provider teardown | Passed | Passed | Passed |
 | Busy-state projection | Not exhaustively qualified | Not exposed by AccessKit macOS 0.27.1 | Transient GIF state not yet automated |
 | Primary screen-reader workflow | No archived complete Orca workflow | VoiceOver review completed | Complete Narrator workflow not recorded |
+| Content-free context menus | Automated shared role/action tests; native workflow unqualified | Native workflow unqualified | Native workflow unqualified |
 | Dynview and mathematics | Excluded | Excluded | Excluded |
 | Terminal | Excluded | Excluded | Excluded |
 

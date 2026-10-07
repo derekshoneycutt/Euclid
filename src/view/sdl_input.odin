@@ -20,6 +20,7 @@ SDL_INPUT_SCANCODES :: [int(input.Input_Key.Count)]sdl.Scancode{
     .KP_0, .KP_1, .KP_2, .KP_3, .KP_4, .KP_5, .KP_6, .KP_7, .KP_8, .KP_9,
     .KP_PERIOD, .KP_DIVIDE, .KP_MULTIPLY, .KP_MINUS, .KP_PLUS,
     .KP_ENTER, .KP_EQUALS,
+    .APPLICATION,
 }
 
 // Sdl_Input_Accumulation retains ordered edge facts while one queue is drained.

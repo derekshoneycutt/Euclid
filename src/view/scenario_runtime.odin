@@ -72,6 +72,7 @@ SCENARIO_KEY_NAMES :: [?]Scenario_Key_Name{
     {"left", .Left}, {"right", .Right}, {"up", .Up}, {"down", .Down},
     {"home", .Home}, {"end", .End}, {"page_up", .Page_Up},
     {"page_down", .Page_Down},
+    {"f10", .F10}, {"menu", .Menu},
 }
 
 //   Load and validate one bounded JSONL scenario before runtime execution.

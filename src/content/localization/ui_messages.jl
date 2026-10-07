@@ -32,6 +32,31 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[]),
         "Animation library"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1007), "ui.context_menu.label",
+            "Accessible name for the transient context menu.",
+            LocalizedContent.MessageArgument[]),
+        "Context menu"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1008), "ui.context_menu.copy",
+            "Copy the originating pane's current selection.",
+            LocalizedContent.MessageArgument[]),
+        "Copy"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1009), "ui.context_menu.select_all",
+            "Select the complete current presentation.",
+            LocalizedContent.MessageArgument[]),
+        "Select All"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1010), "ui.context_menu.paste",
+            "Paste through the current Terminal input owner.",
+            LocalizedContent.MessageArgument[]),
+        "Paste"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1011), "ui.terminal.accessible_label",
+            "Content-free accessible name for the Terminal pane.",
+            LocalizedContent.MessageArgument[]),
+        "Terminal"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1101), "ui.library.search_input",
             "Search input label and placeholder.",
             LocalizedContent.MessageArgument[]),

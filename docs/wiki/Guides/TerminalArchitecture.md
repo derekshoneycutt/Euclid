@@ -156,6 +156,20 @@ window-focus sample. It combines logical Terminal focus, Terminal presentation, 
 activation. Local editing and child keyboard bytes require effective focus. DECSET 1004
 reports its transitions before any admitted pointer or keyboard bytes for that frame.
 
+Terminal's context menu offers Copy and Paste, not Cut or Select All. Opening preserves
+the selection and current input cursor. Paste inserts at the editable prompt cursor,
+or follows the existing bounded foreground-process paste path, including negotiated
+bracketed paste. The click position never relocates input. Process identity and
+generation are checked again before dispatch; a replaced owner cannot receive old
+queued paste. Clipboard failures and rejected admission use content-free diagnostics.
+
+Ordinary right-click remains child-owned while negotiated SGR mouse reporting is
+active. Shift+right-click overrides that mode for Euclid's menu; existing child pointer
+capture still wins. Shift+F10 and Menu open from Terminal focus. While open, the menu
+owns keyboard/text/wheel input, and Tab/Shift+Tab dismiss and traverse the application
+rather than inserting a Terminal tab. Escape restores Terminal focus; outside presses
+dismiss and retain ordinary click-through behavior.
+
 ```mermaid
 flowchart LR
     Output[Child mode-setting output]

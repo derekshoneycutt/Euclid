@@ -24,6 +24,8 @@ Publication_Role :: enum u8 {
     Search_Input,
     Tree,
     Tree_Item,
+    Menu,
+    Menu_Item,
 }
 
 // Publication_Action identifies one owner action accepted by a projected node.
@@ -41,6 +43,7 @@ Publication_Action :: enum u8 {
     Expand,
     Collapse,
     Scroll,
+    Show_Context_Menu,
 }
 
 Publication_Action_Set :: bit_set[Publication_Action; u16]

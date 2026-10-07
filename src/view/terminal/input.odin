@@ -643,6 +643,14 @@ terminal_update_navigation_keys :: proc(
     return {cursor_moved = cursor_moved}
 }
 
+// Resolve negotiated child pointer ownership, including the local Shift override.
+terminal_mouse_reporting_owns_pointer :: proc(
+    term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame) -> bool {
+    mode := termemulator.interpreter_input_mode(&term.output_interpreter)
+    return mode.mouse_tracking != .None && mode.mouse_sgr_encoding &&
+        .Shift not_in frame.mouse_modifiers
+}
+
 //   Track a left-mouse drag over the terminal view as a highlight selection.
 //
 // Parameters:
@@ -656,9 +664,7 @@ terminal_update_navigation_keys :: proc(
 terminal_update_mouse_selection :: proc(
     term: ^viewterminalmodel.Terminal_State, frame: input.Input_Frame,
     font: font.Font_Face, bounds: geometry.Rectangle) {
-    mode := termemulator.interpreter_input_mode(&term.output_interpreter)
-    if mode.mouse_tracking != .None && mode.mouse_sgr_encoding &&
-        .Shift not_in frame.mouse_modifiers {
+    if terminal_mouse_reporting_owns_pointer(term, frame) {
         return
     }
     if term.hyperlink_pressed != 0 {

@@ -366,17 +366,30 @@ dynview_selection_update_keyboard :: proc(
     for event in frame.events {
         dynview_selection_apply_navigation(selection, content.unit_count, event)
     }
-    if input.input_chord_pressed(frame, .A, {.Control}) && content.unit_count > 0 {
-        selection^.anchor = {unit_index = 0}
-        selection^.head = {unit_index = content.unit_count}
-        selection^.active = true
+    if input.input_chord_pressed(frame, .A, {.Control}) {
+        dynview_selection_select_all(selection, content.unit_count)
     }
     if !selection^.active || !input.input_chord_pressed(frame, .C, {.Control}) {
         return
     }
-    selected := dynview_selection_text(runtime, selection^, fallback_text)
-    if len(selected) > 0 {
-        input.input_set_clipboard_text(selected)
+    _ = dynview_selection_copy(runtime, selection^, fallback_text)
+}
+
+// Publish nonempty selection bytes through the shared clipboard boundary.
+dynview_selection_copy :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: dynviewmodel.Dynview_Selection_State, fallback_text: string) -> bool {
+    selected := dynview_selection_text(runtime, selection, fallback_text)
+    return len(selected) > 0 && input.input_set_clipboard_text(selected)
+}
+
+// Select the complete current presentation without changing its copy representation.
+dynview_selection_select_all :: proc(
+    selection: ^dynviewmodel.Dynview_Selection_State, unit_count: int) {
+    if unit_count > 0 {
+        selection^.anchor = {unit_index = 0}
+        selection^.head = {unit_index = unit_count}
+        selection^.active = true
     }
 }
 

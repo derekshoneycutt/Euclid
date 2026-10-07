@@ -1776,8 +1776,8 @@ terminal_editable_descriptor_exposes_only_committed_input :: proc(t: ^testing.T)
 // Verify Terminal registration publishes one generation-scoped global stop.
 @(test)
 terminal_semantics_publish_single_surface :: proc(t: ^testing.T) {
-    state := new(app_core.Euclid_General_State, context.allocator)
-    defer free(state, context.allocator)
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic, context.allocator)
     state^.ui_runtime.semantic_focus = semantic

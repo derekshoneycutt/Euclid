@@ -241,6 +241,7 @@ Ui_Node_Domain :: enum u8 {
     Settings_Control,
     Presentation,
     Terminal,
+    Context_Menu,
 }
 
 // Ui_Node_Id identifies one semantic node across stable and generated content.
@@ -266,6 +267,8 @@ Ui_Node_Role :: enum u8 {
     Tree_Item,
     Document,
     Terminal,
+    Menu,
+    Menu_Item,
 }
 
 Ui_Node_State_Flag :: enum u8 {
@@ -298,6 +301,7 @@ Ui_Node_Action :: enum u8 {
     Scroll,
     Replace_Selected_Text,
     Set_Text_Selection,
+    Show_Context_Menu,
 }
 
 Ui_Node_Action_Set :: bit_set[Ui_Node_Action; u16]
@@ -391,6 +395,7 @@ Ui_Focus_Command_Kind :: enum u8 {
     Replace_Selected_Text,
     Replace_Text,
     Set_Text_Selection,
+    Show_Context_Menu,
 }
 
 // Ui_Focus_Command carries one bounded event-derived action to a semantic owner.
@@ -514,6 +519,41 @@ Ui_Cursor_Kind :: enum u8 {
     Text,
     Resize_Ew,
     Resize_Ns,
+}
+
+UI_CONTEXT_MENU_CAPACITY :: 8
+
+// Ui_Context_Command identifies an operation executed by the originating surface.
+Ui_Context_Command :: enum u8 {None, Copy, Select_All, Paste}
+
+// Ui_Context_Menu_Item owns a bounded localized command label and availability.
+Ui_Context_Menu_Item :: struct {
+    command: Ui_Context_Command,
+    enabled: bool,
+    label: [128]u8,
+    label_length: int,
+}
+
+// Ui_Context_Menu_State retains no borrowed text or display-resource pointers.
+Ui_Context_Menu_State :: struct {
+    active: bool,
+    target: Ui_Node_Id,
+    content_revision: u64,
+    process_id: u64,
+    process_generation: u64,
+    generation: u64,
+    focused: int,
+    items: [UI_CONTEXT_MENU_CAPACITY]Ui_Context_Menu_Item,
+    count: int,
+    bounds: Rectangle,
+    viewport: Rectangle,
+    window: Ui_Window_Metrics,
+    pressed_item: int,
+    captured_buttons: u8,
+    pending: Ui_Context_Command,
+    focus_changed: bool,
+    swallowed_activation_keys: u8,
+    keyboard_anchor: Rectangle,
 }
 
 UI_TOOLTIP_TEXT_CAPACITY :: 128
@@ -669,6 +709,7 @@ Euclid_Ui_Runtime_State :: struct {
     interaction: Ui_Interaction_State,
     interaction_frame: Ui_Interaction_Frame,
     tooltip: Ui_Tooltip_State,
+    context_menu: Ui_Context_Menu_State,
     semantic_focus: ^Ui_Semantic_Focus_State,
 }
 

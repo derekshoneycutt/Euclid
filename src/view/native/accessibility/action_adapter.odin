@@ -439,6 +439,7 @@ adapter_simple_action_mapping :: proc(
     action: accesskit.Action) -> Adapter_Action_Mapping {
     #partial switch action {
     case .Focus: return {.Focus, .Focus, 0, true}
+    case .Show_Context_Menu: return {.Show_Context_Menu, .Show_Context_Menu, 0, true}
     case .Increment: return {.Increment, .Increment, 0, true}
     case .Decrement: return {.Decrement, .Decrement, 0, true}
     case .Expand: return {.Expand, .Expand, 0, true}

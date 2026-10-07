@@ -97,6 +97,7 @@ Input_Key :: enum {
     Keypad_Add,
     Keypad_Enter,
     Keypad_Equal,
+    Menu,
     Count,
 }
 
@@ -304,4 +305,3 @@ input_frame_filter_pointer :: proc(
 input_frame_terminal_focused :: #force_inline proc(frame: Input_Frame) -> bool {
     return frame.terminal_focused || !frame.terminal_focus_known
 }
-

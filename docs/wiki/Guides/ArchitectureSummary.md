@@ -250,6 +250,19 @@ produces bounded commands addressed by complete semantic identity, while current
 owners remain responsible for applying activation, toggling, adjustment, selection,
 copy, and scrolling behavior.
 
+One display-owned flat context menu uses at most eight inline command descriptors.
+Popup input arbitration precedes ordinary UI and Terminal routing, and popup drawing
+runs last. Dynview supplies Copy/Select All; Terminal supplies Copy/Paste through its
+existing selection, prompt-cursor, and owner-bound foreground paste paths. Opening
+does not change selection or cursor. Outside presses dismiss with click-through,
+while popup press/release transactions remain exclusively owned. Escape restores the
+pane; Tab/Shift+Tab dismiss and traverse from it. Target generations, content revision,
+foreground owner and geometry are revalidated before execution. Blur, replacement,
+hidden panes and geometry changes revoke the popup.
+
+AccessKit receives only named content-free pane entry points and transient menu
+commands. Dynview documents and Terminal input/output/history remain excluded.
+
 SDL text input follows effective window focus. The adapter publishes valid committed
 UTF-8 runes and rejects invalid payloads without partial publication. Composition and
 preedit remain separate feature work requiring an independently validated producer and
@@ -757,6 +770,7 @@ can be resolved without retaining framebuffer capture memory.
 
 UI and cache preparation use explicit ordered stages around the fixed-step update:
 
+1. Revalidate popup ownership and claim menu input before ordinary routing.
 1. Compute and publish the frame's UI regions and exact text-panel geometry.
 1. Track Dynview panel, font, and style inputs to determine whether its cache is
   invalidated.
@@ -770,8 +784,11 @@ UI and cache preparation use explicit ordered stages around the fixed-step updat
 1. Resolve layout-dependent presentation scrolling, copy interaction, selection, and
   composite semantic registration.
 1. Validate and atomically publish the complete semantic snapshot, reconciling focus.
+1. Execute any retained menu command at its owner boundary, revalidating its target,
+  then publish native accessibility facts.
 1. Encode bounded world, UI, and non-glyph Dynview geometry from committed state and
   fixed frame-local preparation records.
+1. Encode the active popup above ordinary UI, suppressing hover tooltips.
 1. Upload, render, blit, and submit one SDL_GPU command buffer.
 
 Terminal and non-Terminal text surfaces draw their prepared scrollbar track and
