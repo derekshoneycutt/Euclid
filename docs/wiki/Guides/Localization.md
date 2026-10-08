@@ -74,8 +74,8 @@ asset archives, extracted caches, or generated wiki pages.
 | `src/core/content/specification.odin` | Bounded native selection values and revision rules |
 | `src/julia/bridge/content_specification.jl` | Read-only callback query and symmetric copy-out ABI |
 
-The [SQLite module map](Sqlite3.md#module-map) identifies corpus, builder, runtime,
-and packaging owners when a change extends beyond authoring.
+The [SQLite change map](Sqlite3.md#where-to-trace-a-change) identifies corpus, builder,
+runtime, and packaging owners when a change extends beyond authoring.
 
 ## Writing Shell Messages
 
@@ -105,8 +105,9 @@ or automatic fallback. Placeholder names use `[a-z][a-z0-9_]{0,31}`.
 The authored template bound is 128 UTF-8 bytes, not 128 characters. Text arguments
 are bounded to 512 bytes; formatted output is bounded to 536 bytes. Integers and
 one-decimal floats follow their existing native signatures and precision.
-See [Native Shell Messages](Sqlite3.md#native-shell-messages) for supported value
-kinds, failure statuses, transactional output, and ownership.
+See [Writing Shell Messages](#writing-shell-messages) for the authored contract and
+[Using Messages From Odin](#using-messages-from-odin) for native value kinds, failure
+statuses, output ownership, and consumer behavior.
 
 Use valid UTF-8 without NUL. Do not fit a translation by truncating it or silently
 dropping a placeholder. If an accurate phrase cannot fit, discuss a deliberate bound
@@ -183,8 +184,8 @@ To author additional availability, extend that assembly deliberately rather than
 adding an unused edition and assuming it is selectable. There is no selector today.
 Similarly, declaring a second edition does not install its document producer.
 
-See [Authored Editions And Sidecar Coverage](Sqlite3.md#authored-editions-and-sidecar-coverage)
-for uniform admission and the relationship to the existing search projection.
+See [Packaged Content And Search](Sqlite3.md#packaged-content-and-search) for uniform
+admission and the relationship to the existing search projection.
 
 ## Preparing Another Locale
 
@@ -204,8 +205,10 @@ translations alone.
 
 Byte limits, font coverage, accessible naming, and layout need separate verification.
 Language metadata alone does not prove readable glyphs, shaping, bidirectional layout,
-or appropriate search tokenization. Consult [LaTeX Character Support](LaTeXSupport.md#character-support)
-and the [SQLite constraints](Sqlite3.md#current-constraints) when planning the change.
+or appropriate search tokenization. Consult
+[LaTeX Character Support](LaTeXSupport.md#character-support) and the
+[packaged content and search model](Sqlite3.md#packaged-content-and-search) when
+planning the change.
 
 ## Using Messages From Odin
 
@@ -224,7 +227,8 @@ Never retain a stack-backed string for a future frame.
 Low-level lookup views borrow a content generation and must not escape its retirement
 boundary. Do not call SQL or Julia to obtain labels in frame code. Do not substitute
 hard-coded English after lookup failure: use existing explicit status/diagnostic
-handling. For details, see [ownership and failure semantics](Sqlite3.md#failure-and-lifecycle-semantics).
+handling. For details, see [shared SQLite mechanics](Sqlite3.md#shared-sqlite-mechanics)
+and the [two database lifetimes](Sqlite3.md#two-databases-different-lifetimes).
 
 ## Reading Specifications From Julia
 
@@ -267,7 +271,8 @@ Put each change in the owning subsystem:
 Admission and reload publish all projections together. Never accept a catalogue while
 discarding invalid messages or editions. A failed candidate must preserve the active
 dataset; retired storage stays alive until publication and lifecycle work no longer
-need it. Use the [SQLite lifecycle contract](Sqlite3.md#failure-and-lifecycle-semantics)
+need it. Use the
+[packaged content and search lifecycle](Sqlite3.md#packaged-content-and-search)
 rather than creating a second registry or connection path.
 
 Changing a bound, signature, schema, or ABI requires updating every corresponding

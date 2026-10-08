@@ -283,7 +283,8 @@ operations return `false`. Delivery and locale/edition switching are deferred;
 recognizing this operation does not create a new producer or override existing text.
 
 Edition declarations and availability use the same admission path for original and
-adapted content; see [edition and sidecar authoring](Sqlite3.md#authored-editions-and-sidecar-coverage).
+adapted content; see [declaring editions](Localization.md#declaring-editions) and the
+[packaged content and search model](Sqlite3.md#packaged-content-and-search).
 For contributor workflows and extension rules, use
 [Localization And Editions](Localization.md).
 The query describes the callback's selected specification, not the last published

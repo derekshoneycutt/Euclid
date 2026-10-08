@@ -162,17 +162,15 @@ symbol_prefixes = []
 [[guide_relations]]
 package_id = "odin:src:particles"
 guide_paths = [
-    "Guides/ParticleSystem.md#grounded-pic-field",
-    "Guides/ParticleSystem.md#tool-contacts",
-    "Guides/ParticleSystem.md#rendering",
+    "Guides/ParticleSystem.md#grounded-dust-as-a-field",
+    "Guides/ParticleSystem.md#contacts-and-rendering",
 ]
 symbol_prefixes = ["dust_", "particle_", "emit_", "queue_dust_"]
 
 [[guide_relations]]
 package_id = "odin:src:view:content"
 guide_paths = [
-    "Guides/Sqlite3.md#runtime-query-path",
-    "Guides/Sqlite3.md#persisted-database-model",
+    "Guides/Sqlite3.md#packaged-content-and-search",
     "Guides/Localization.md#extending-the-system",
 ]
 symbol_prefixes = []

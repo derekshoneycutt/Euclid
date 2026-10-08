@@ -120,16 +120,20 @@ end
         wiki_root = joinpath(directory, "docs", "wiki")
         mkpath(joinpath(wiki_root, "Code"))
         mkpath(joinpath(wiki_root, "Guides"))
-        write(joinpath(wiki_root, "Home.md"), "# Home\n\n[Code](Code/Home.md)\n")
+        write(joinpath(wiki_root, "Home.md"),
+            "# Home\n\n[Code](Code/Home.md)\n[Architecture](Guides/Architecture.md#architecture)\n")
         write(joinpath(wiki_root, "_Sidebar.md"), "[Home](Home.md)\n")
         write(joinpath(wiki_root, "Code", "Home.md"), "# Code\n")
         write(joinpath(wiki_root, "Guides", "Home.md"), "# Guides\n")
         write(joinpath(wiki_root, "Guides", "Architecture.md"), "# Architecture\n")
+
         expected = ["Home.md", "_Sidebar.md", "Code/Home.md", "Guides/Home.md",
             "Guides/Architecture.md"]
 
         @test validate_managed_outputs(manifest, expected, directory)
         @test validate_wiki_links(manifest, directory)
+        @test_throws ErrorException CodeWiki.validate_local_markdown_link(
+            directory, "docs/wiki/Home.md", "Guides/Architecture.md#missing")
 
         write(joinpath(wiki_root, "Code", "stale.md"), "# Stale\n")
         @test_throws ErrorException validate_managed_outputs(

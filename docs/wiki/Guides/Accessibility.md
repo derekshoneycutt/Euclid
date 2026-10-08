@@ -77,8 +77,9 @@ child focus. Portrait View retains ordinary logical hiding and Terminal focus-ou
 
 The Settings checkbox **Reduce interface motion** persists `interface.reduce_motion`
 and applies to interface transitions only. A supported platform request also disables
-motion and cannot be overridden by unchecking the box. See
-[reduced-motion policy](UiSystem.md#settings-panel) for native sources, refresh frequency,
+motion and cannot be overridden by unchecking the box. See the UI guide's
+[panel and feature route](UiSystem.md#a-particular-panel-or-feature)
+for native sources, refresh frequency,
 unavailable desktops, and failure behavior. Screen-reader adapter admission is not
 required for this policy.
 
