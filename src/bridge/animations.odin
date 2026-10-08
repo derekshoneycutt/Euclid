@@ -1544,7 +1544,7 @@ content_generation_record_text_is_valid :: proc(
         if record.has_parent || len(path) != 0 {
             return false
         }
-    } else if record.node_kind == .Category || record.node_kind == .Leaf {
+    } else if record.node_kind == .Animation {
         if !catalog_path_bytes_are_safe(transmute([]u8)path) {
             return false
         }

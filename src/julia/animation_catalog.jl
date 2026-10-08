@@ -3,13 +3,12 @@ module AnimationCatalog
 using UUIDs
 
 export AnimationDescriptor, AnimationImplementation,
-    AnimationNodeKind, CategoryNode, LeafNode, TerminalNode,
+    AnimationNodeKind, AnimationNode, TerminalNode,
     animation, ensure_animation_loaded, validate_catalog
 
 @enum AnimationNodeKind::UInt8 begin
-    CategoryNode = 1
-    LeafNode = 2
-    TerminalNode = 3
+    AnimationNode = 1
+    TerminalNode = 2
 end
 
 """Immutable metadata for one animation tree node."""

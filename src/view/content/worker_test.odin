@@ -71,7 +71,7 @@ SELECT value, 'builtin', printf('00000000-0000-0000-0000-%012d', value), NULL, 1
     'Synthetic Scale', 'generated fixture',
        'Synthetic searchable geometry document'
 FROM sequence;
-UPDATE animation_catalog SET node_kind=3, display_name='Terminal',
+UPDATE animation_catalog SET node_kind=2, display_name='Terminal',
     implementation_path=NULL WHERE rowid=138;
 INSERT INTO animation_search(animation_search) VALUES('rebuild');
 INSERT INTO search_terms(word, rank) VALUES

@@ -829,22 +829,6 @@ apply_pending_tree_reveal :: proc(
     ui_runtime^.tree_reveal_pending = false
 }
 
-//   Merge child tree hit results into a single accumulator.
-merge_tree_hit :: #force_inline proc(dst: ^Tree_Hit, src: Tree_Hit) {
-    if src.selected_node != nil {
-        dst.selected_node = src.selected_node
-    }
-    if src.toggled_node != nil {
-        dst.toggled_node = src.toggled_node
-    }
-    if src.hovered_node != nil {
-        dst.hovered_node = src.hovered_node
-    }
-    if src.hovered_expander_node != nil {
-        dst.hovered_expander_node = src.hovered_expander_node
-    }
-}
-
 //   Apply selection/expand hits and sync related UI state.
 apply_tree_hit :: proc(
     ji: ^bridgemodel.Euclid_Julia_Interface,

@@ -24,14 +24,14 @@ catalog_materializer_test_snapshot :: proc() -> ^content.Content_Generation {
         return nil
     }
     records := [?]content.Catalog_Record{
-        {stable_id = catalog_materializer_test_id(1), node_kind = .Category,
+        {stable_id = catalog_materializer_test_id(1), node_kind = .Animation,
             sibling_order = 0, catalog_order = 0},
         {stable_id = catalog_materializer_test_id(2),
             parent_stable_id = catalog_materializer_test_id(1), has_parent = true,
-            node_kind = .Leaf, sibling_order = 5, catalog_order = 1},
+            node_kind = .Animation, sibling_order = 5, catalog_order = 1},
         {stable_id = catalog_materializer_test_id(3),
             parent_stable_id = catalog_materializer_test_id(1), has_parent = true,
-            node_kind = .Leaf, sibling_order = 1, catalog_order = 2},
+            node_kind = .Animation, sibling_order = 1, catalog_order = 2},
         {stable_id = catalog_materializer_test_id(4), node_kind = .Terminal,
             sibling_order = 1, catalog_order = 3},
     }
@@ -93,6 +93,17 @@ catalog_snapshot_materializes_native_registry :: proc(t: ^testing.T) {
     }
     testing.expect_value(t, root^.name, "Root")
     testing.expect_value(t, root^.implementation_path, "root.jl")
+    testing.expect_value(t, i32(root^.node_kind), i32(1))
+    testing.expect_value(t, root^.first_child^.node_kind, root^.node_kind)
+    testing.expect_value(t, i32(bridgemodel.Animation_Node_Kind.Terminal), i32(2))
+    catalog_snapshot_preserves_materialized_registry(t, &iface, snapshot, root)
+}
+
+//   Verify reset isolation, default selection, and registry cleanup.
+catalog_snapshot_preserves_materialized_registry :: proc(
+    t: ^testing.T, iface: ^bridgemodel.Euclid_Julia_Interface,
+    snapshot: ^content.Content_Generation,
+    root: ^bridgemodel.Euclid_Julia_Animation_Interface) {
     testing.expect_value(t, contentdata.content_generation_reset(snapshot),
         contentdata.Content_Generation_Status.Ok)
     testing.expect_value(t, root^.name, "Root")
@@ -103,14 +114,14 @@ catalog_snapshot_materializes_native_registry :: proc(t: ^testing.T) {
     testing.expect_value(t, root^.first_child^.parent, root)
     state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.julia_interface = &iface
+    state^.julia_interface = iface
     select_default_animation(state)
-    testing.expect_value(t, iface.selected_animation, root)
-    clean_julia_interface_instance(&iface)
-    testing.expect_value(t, iface.animation_count, 0)
-    testing.expect_value(t, iface.content_generation, u64(0))
+    testing.expect_value(t, iface^.selected_animation, root)
+    clean_julia_interface_instance(iface)
+    testing.expect_value(t, iface^.animation_count, 0)
+    testing.expect_value(t, iface^.content_generation, u64(0))
     testing.expect(t,
-        animation_lookup_find(&iface, catalog_materializer_test_id(1)) == nil)
+        animation_lookup_find(iface, catalog_materializer_test_id(1)) == nil)
 }
 
 // Verify UUID lookup copies only bounded path bytes and reports Terminal explicitly.
@@ -132,7 +143,7 @@ catalog_path_copy_uses_materialized_registry :: proc(t: ^testing.T) {
     testing.expect_value(t, status, BRIDGE_STATUS_OK)
     testing.expect_value(t, metadata.byte_count, i32(len("later.jl")))
     testing.expect_value(t, metadata.node_kind,
-        i32(bridgemodel.Animation_Node_Kind.Leaf))
+        i32(bridgemodel.Animation_Node_Kind.Animation))
     testing.expect_value(t, string(destination[:metadata.byte_count]), "later.jl")
 
     for index in 0..<len(destination) {

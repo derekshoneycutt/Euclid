@@ -567,7 +567,7 @@ validate_catalog_node :: proc(record: Content_Record) {
     require(record.source_namespace == "builtin" &&
         valid_animation_id(record.animation_id),
         "invalid catalogue node identity")
-    require(record.node_kind >= 1 && record.node_kind <= 3,
+    require(record.node_kind >= 1 && record.node_kind <= 2,
         "invalid catalogue node kind")
     require(record.sibling_order >= 0 && record.catalog_order >= 0,
         "invalid catalogue node ordering")
@@ -576,8 +576,8 @@ validate_catalog_node :: proc(record: Content_Record) {
         optional_string_value(record.implementation_path)
     require(!has_parent || valid_animation_id(parent_id),
         "invalid catalogue parent identity")
-    require(record.node_kind == 3 && !has_implementation ||
-        record.node_kind != 3 && has_implementation &&
+    require(record.node_kind == 2 && !has_implementation ||
+        record.node_kind == 1 && has_implementation &&
         valid_implementation_path(implementation_path),
         "invalid catalogue implementation path")
     if has_implementation {
@@ -1112,14 +1112,14 @@ validate_catalog_coverage :: proc(database: ^Builder_Database) {
         "HAVING count(*) > 1)",
         0, "catalogue sibling name uniqueness")
     require_query_count(database,
-        "SELECT count(*) FROM catalog_node WHERE node_kind=3 " +
+        "SELECT count(*) FROM catalog_node WHERE node_kind=2 " +
         "AND implementation_path IS NULL",
         1, "Terminal node count")
     require_query_count(database,
         "SELECT count(*) FROM search_projection p JOIN catalog_node n " +
         "ON n.source_namespace=p.source_namespace AND n.animation_id=p.animation_id " +
-        "WHERE (n.node_kind=3 AND (length(p.semantic_text)>0 OR length(p.aliases)>0)) " +
-        "OR (n.node_kind!=3 AND length(p.semantic_text)=0)",
+        "WHERE (n.node_kind=2 AND (length(p.semantic_text)>0 OR length(p.aliases)>0)) " +
+        "OR (n.node_kind=1 AND length(p.semantic_text)=0)",
         0, "node/search projection consistency")
 }
 

@@ -41,7 +41,7 @@ CREATE TABLE catalog_node (
     source_namespace TEXT NOT NULL,
     animation_id TEXT NOT NULL,
     parent_animation_id TEXT,
-    node_kind INTEGER NOT NULL CHECK (node_kind IN (1, 2, 3)),
+    node_kind INTEGER NOT NULL CHECK (node_kind IN (1, 2)),
     sibling_order INTEGER NOT NULL CHECK (sibling_order >= 0),
     catalog_order INTEGER NOT NULL CHECK (catalog_order >= 0),
     implementation_path TEXT,
@@ -53,8 +53,8 @@ CREATE TABLE catalog_node (
         DEFERRABLE INITIALLY DEFERRED,
     UNIQUE (source_namespace, catalog_order),
     CHECK (
-        (node_kind = 3 AND implementation_path IS NULL) OR
-        (node_kind IN (1, 2) AND implementation_path IS NOT NULL AND
+        (node_kind = 2 AND implementation_path IS NULL) OR
+        (node_kind = 1 AND implementation_path IS NOT NULL AND
             length(implementation_path) > 0)
     )
 ) WITHOUT ROWID;

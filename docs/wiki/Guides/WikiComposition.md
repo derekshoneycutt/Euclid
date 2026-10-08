@@ -61,7 +61,7 @@ normalized record for each entry. Useful fields include:
 
 - module name and source path;
 - stable animation key or UUID expression when statically available;
-- registered display name and parent/category relationship;
+- registered display name and parent relationship;
 - lifecycle functions present;
 - links to animation source and related authored content.
 

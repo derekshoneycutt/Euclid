@@ -71,7 +71,7 @@ content_generation_record_metadata_read :: proc(
     kind, kind_ok := search_column_i32(statement, 3)
     sibling_order, sibling_ok := search_column_i64(statement, 4)
     catalog_order, catalog_ok := search_column_i64(statement, 5)
-    if !kind_ok || kind < 1 || kind > 3 || !sibling_ok || sibling_order < 0 ||
+    if !kind_ok || kind < 1 || kind > 2 || !sibling_ok || sibling_order < 0 ||
        sibling_order > i64(max(i32)) || !catalog_ok ||
        catalog_order != i64(expected_order) {
         return false

@@ -54,6 +54,10 @@ end
             for kind in 1:11]
         @test counts == [6, 1, 81, counts[4], 81, 139, 138, 138, 3, 139, 138]
         @test counts[4] <= 32
+        catalog_nodes = filter(record -> record["kind"] == 7, canonical)
+        @test count(record -> record["node_kind"] == 2, catalog_nodes) == 1
+        @test all(record -> record["node_kind"] ==
+            (record["implementation_path"] === nothing ? 2 : 1), catalog_nodes)
         @test length(canonical) <= 4096
         @test length(read(corpus_path)) <= 4 * 1024 * 1024
 
@@ -95,6 +99,10 @@ end
 
         malformed_cases = [
             ("old corpus schema", records -> (records[1]["schema"] = 2)),
+            ("removed catalogue kind", records -> begin
+                index = first(findall(record -> record["kind"] == 7, records))
+                records[index]["node_kind"] = 3
+            end),
             ("missing translation", records -> deleteat!(
                 records, first(findall(record -> record["kind"] == 5, records)))),
             ("unknown availability edition", records -> begin

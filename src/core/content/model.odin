@@ -33,9 +33,8 @@ CONTENT_TEXT_BYTE_CAPACITY :: CATALOG_TEXT_BYTE_CAPACITY +
 
 // Persisted catalogue node classification, independent of runtime ownership.
 Catalog_Node_Kind :: enum u8 {
-    Category = 1,
-    Leaf = 2,
-    Terminal = 3,
+    Animation = 1,
+    Terminal = 2,
 }
 
 // Bounded offset/length view into one immutable generation's packed text bytes.
@@ -423,7 +422,7 @@ content_generation_path_is_valid :: proc(
     if kind == .Terminal {
         return !record.has_parent && len(path) == 0
     }
-    return (kind == .Category || kind == .Leaf) &&
+    return kind == .Animation &&
         len(path) > 0 && len(path) <= CATALOG_PATH_BYTE_CAPACITY &&
         utf8.valid_string(path) && !catalog_text_contains_nul(path) &&
         content_generation_path_is_safe(path)

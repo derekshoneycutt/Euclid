@@ -151,9 +151,8 @@ View_Snapshot :: struct {
 
 // Animation_Node_Kind identifies one node's role in the Julia animation tree.
 Animation_Node_Kind :: enum i32 {
-    Category = 1,
-    Leaf = 2,
-    Terminal = 3,
+    Animation = 1,
+    Terminal = 2,
 }
 
 // Animation_Operation identifies a lifecycle operation sent to animation policy.

@@ -270,9 +270,7 @@ function _animation_implementation_path_from_metadata(
             throw(ArgumentError("Terminal catalogue node has an implementation path"))
         return nothing
     end
-    path_backed_kinds = (Int32(AnimationCatalog.CategoryNode),
-        Int32(AnimationCatalog.LeafNode))
-    metadata.node_kind in path_backed_kinds ||
+    metadata.node_kind == Int32(AnimationCatalog.AnimationNode) ||
         throw(ArgumentError("native catalogue returned an invalid animation kind"))
     0 < metadata.byte_count <= length(path_bytes) ||
         throw(ArgumentError("native catalogue returned an invalid implementation path"))

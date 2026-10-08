@@ -94,7 +94,7 @@ If you are new, read in this order:
 | **Julia** | Application Reactor | One bounded actor scheduler for persistent Terminal roots, generation-scoped Terminal services, and animation policy supervision. | `src/julia/runtime.jl`, `src/julia/host/`, `src/julia/policy/`, `src/julia/terminal/` |
 | **Julia** | LaTeX Facade | Defines canonical TeX displayables and submits exact MIME bytes to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
 | **Julia Content** | Generation Bootstrap | Null behavior and harness scenarios loaded into each generation; catalogue descriptors remain build-time inputs. | `src/content/nullanimation.jl`, `src/content/harness_scenarios.jl`, `src/julia/animation_catalog.jl` |
-| **Julia Content** | Content Modules | Domain roots and leaf animation definitions loaded at startup or on demand. | `src/content/elements/`, `src/content/proclus/`, `src/content/hilbert/`, `src/content/algebra/`, `src/content/curves/` |
+| **Julia Content** | Content Modules | Animation definitions loaded at startup or on demand, independently of their position in the hierarchy. | `src/content/elements/`, `src/content/proclus/`, `src/content/hilbert/`, `src/content/algebra/`, `src/content/curves/` |
 
 ### Cross-Module Contracts
 
@@ -483,6 +483,11 @@ runtime and animation generations, active UUID, generation-local implementation 
 exclusive lifecycle transaction, and exactly one active compatibility child. Native
 code owns fixed-step pacing, immutable query snapshots, bounded scene-command storage,
 reset application, and final commit.
+
+Catalogue kinds are `Animation = 1` and `Terminal = 2` across persisted SQLite
+rows, native records, and Julia descriptors. Every animation has an implementation
+path and may have children; parentage never changes its kind or selectability.
+Terminal has no implementation path and uses the host-owned Terminal callback.
 
 | Operation | Actor path | Native publication boundary |
 | --- | --- | --- |

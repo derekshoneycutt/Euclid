@@ -470,10 +470,13 @@ end
     @test_throws ArgumentError _animation_implementation_path_from_metadata(
         OdinJuliaBridge.AnimationImplementationPathMetadata(Int32(4), Int32(9)),
         path_bytes)
-    leaf_metadata = OdinJuliaBridge.AnimationImplementationPathMetadata(
-        Int32(4), Int32(AnimationCatalog.LeafNode))
+    animation_metadata = OdinJuliaBridge.AnimationImplementationPathMetadata(
+        Int32(4), Int32(AnimationCatalog.AnimationNode))
     @test _animation_implementation_path_from_metadata(
-        leaf_metadata, path_bytes) == "a.jl"
+        animation_metadata, path_bytes) == "a.jl"
+    @test_throws ArgumentError _animation_implementation_path_from_metadata(
+        OdinJuliaBridge.AnimationImplementationPathMetadata(Int32(4), Int32(3)),
+        path_bytes)
 
     state_ptr = Ptr{Cvoid}(1)
     host = create_euclid_runtime_host(state_ptr)

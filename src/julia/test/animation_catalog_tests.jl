@@ -33,7 +33,7 @@ if !isdefined(Main, :EuclidRuntimeHost)
 end
 
 const CatalogRootId = UUID("e405664d-b83f-5ca6-af5d-45fead73b38d")
-const CatalogLeafId = UUID("683b096d-5f64-50d2-9853-df907ca19075")
+const CatalogChildId = UUID("683b096d-5f64-50d2-9853-df907ca19075")
 const AlgebraOverviewId = UUID("a8bd259b-0c7b-5b60-b21f-84095e2eb903")
 const PerpendicularId = UUID("144e86ef-79d1-53b5-90bd-920dc9764972")
 const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content"))
@@ -44,11 +44,11 @@ const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content")
     terminal_id = UUID("90000000-0000-0000-0000-000000000000")
     descriptors = AnimationDescriptor[
         AnimationDescriptor(parent_id, nothing, "Geometry", 0,
-            CategoryNode, "geometry/overview.jl"),
+            AnimationNode, "geometry/overview.jl"),
         AnimationDescriptor(terminal_id, nothing, "Terminal", 1,
             TerminalNode, nothing),
         AnimationDescriptor(child_id, parent_id, "Perpendicular", 0,
-            LeafNode, "geometry/perpendicular.jl"),
+            AnimationNode, "geometry/perpendicular.jl"),
     ]
     loader = descriptor -> EuclidSearchContent.SearchContent(
         "Semantic content for $(descriptor.display_name).", ("alternate",))
@@ -60,6 +60,9 @@ const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content")
     @test records[1].hierarchy_path == "Geometry / Perpendicular"
     @test records[1].sibling_order == 0
     @test records[1].implementation_path == "geometry/perpendicular.jl"
+    @test records[1].node_kind == records[2].node_kind == UInt8(AnimationNode)
+    @test UInt8(AnimationNode) == 1
+    @test UInt8(TerminalNode) == 2
     @test records[3].semantic_text == ""
     @test isempty(records[3].aliases)
     first_output = IOBuffer()
@@ -70,18 +73,18 @@ const ProductionContentRoot = normpath(joinpath(@__DIR__, "..", "..", "content")
     @test first_bytes == take!(second_output)
     @test EuclidLegacySearchCorpus.CATALOG_CORPUS_SCHEMA_VERSION == 2
     @test String(first_bytes) == """
-    {"schema":2,"source_namespace":"builtin","animation_id":"10000000-0000-0000-0000-000000000000","parent_animation_id":"50000000-0000-0000-0000-000000000000","node_kind":2,"display_name":"Perpendicular","sibling_order":0,"catalog_order":2,"implementation_path":"geometry/perpendicular.jl","hierarchy_path":"Geometry / Perpendicular","semantic_text":"Semantic content for Perpendicular.","aliases":["alternate"]}
+    {"schema":2,"source_namespace":"builtin","animation_id":"10000000-0000-0000-0000-000000000000","parent_animation_id":"50000000-0000-0000-0000-000000000000","node_kind":1,"display_name":"Perpendicular","sibling_order":0,"catalog_order":2,"implementation_path":"geometry/perpendicular.jl","hierarchy_path":"Geometry / Perpendicular","semantic_text":"Semantic content for Perpendicular.","aliases":["alternate"]}
     {"schema":2,"source_namespace":"builtin","animation_id":"50000000-0000-0000-0000-000000000000","parent_animation_id":null,"node_kind":1,"display_name":"Geometry","sibling_order":0,"catalog_order":0,"implementation_path":"geometry/overview.jl","hierarchy_path":"Geometry","semantic_text":"Semantic content for Geometry.","aliases":["alternate"]}
-    {"schema":2,"source_namespace":"builtin","animation_id":"90000000-0000-0000-0000-000000000000","parent_animation_id":null,"node_kind":3,"display_name":"Terminal","sibling_order":1,"catalog_order":1,"implementation_path":null,"hierarchy_path":"Terminal","semantic_text":"","aliases":[]}
+    {"schema":2,"source_namespace":"builtin","animation_id":"90000000-0000-0000-0000-000000000000","parent_animation_id":null,"node_kind":2,"display_name":"Terminal","sibling_order":1,"catalog_order":1,"implementation_path":null,"hierarchy_path":"Terminal","semantic_text":"","aliases":[]}
     """
     unsafe_descriptors = copy(descriptors)
     unsafe_descriptors[3] = AnimationDescriptor(child_id, parent_id, "Perpendicular", 0,
-        LeafNode, "geometry/../outside.jl")
+        AnimationNode, "geometry/../outside.jl")
     @test_throws ArgumentError EuclidLegacySearchCorpus.build_catalog_corpus(
         unsafe_descriptors, loader)
     oversized_descriptors = copy(descriptors)
     oversized_descriptors[3] = AnimationDescriptor(
-        child_id, parent_id, "Perpendicular", 0, LeafNode,
+        child_id, parent_id, "Perpendicular", 0, AnimationNode,
         repeat("a", EuclidLegacySearchCorpus.CATALOG_PATH_BYTE_CAPACITY + 1))
     @test_throws ArgumentError EuclidLegacySearchCorpus.build_catalog_corpus(
         oversized_descriptors, loader)
@@ -101,12 +104,12 @@ end
 end
 
 """Construct one valid two-node catalog for loader tests."""
-function test_catalog(; leaf_id=CatalogLeafId, path="test/fixtures/lazy_animation.jl")
+function test_catalog(; child_id=CatalogChildId, path="test/fixtures/lazy_animation.jl")
     return AnimationDescriptor[
         AnimationDescriptor(CatalogRootId, nothing, "Root", 0,
-            CategoryNode, "test/fixtures/lazy_animation.jl"),
-        AnimationDescriptor(leaf_id, CatalogRootId, "Leaf", 0,
-            LeafNode, path),
+            AnimationNode, "test/fixtures/lazy_animation.jl"),
+        AnimationDescriptor(child_id, CatalogRootId, "Child", 0,
+            AnimationNode, path),
     ]
 end
 
@@ -134,14 +137,14 @@ end
     @test_throws ArgumentError validate_catalog(test_catalog(path="../outside.jl"))
     @test_throws ArgumentError validate_catalog(test_catalog(path="/tmp/outside.jl"))
     @test_throws ArgumentError validate_catalog(test_catalog(path="test\\outside.jl"))
-    missing_parent = AnimationDescriptor(CatalogLeafId, uuid4(), "Leaf", 0,
-        LeafNode, "test/fixtures/lazy_animation.jl")
+    missing_parent = AnimationDescriptor(CatalogChildId, uuid4(), "Child", 0,
+        AnimationNode, "test/fixtures/lazy_animation.jl")
     @test_throws ArgumentError validate_catalog([missing_parent])
 end
 
 @testset "production animation program contract" begin
     descriptor = AnimationDescriptor(AlgebraOverviewId, nothing, "Algebra", 0,
-        CategoryNode, "algebra/algebra_overview.jl")
+        AnimationNode, "algebra/algebra_overview.jl")
     owner = Module(:ProductionAnimationContract, false, false)
     Core.eval(owner, :(const AnimationCatalog = $AnimationCatalog))
     Core.eval(owner, :(const OdinJuliaBridge = $OdinJuliaBridge))
@@ -199,6 +202,9 @@ end
         ordered_records)
     @test count(descriptor -> descriptor.kind == TerminalNode,
         AnimationDescriptors) == 1
+    @test all(descriptor -> descriptor.kind == AnimationNode,
+        filter(descriptor -> descriptor.implementation_path !== nothing,
+            AnimationDescriptors))
     roots = filter(descriptor -> descriptor.parent_id === nothing,
         AnimationDescriptors)
     @test first(roots).kind == TerminalNode
@@ -282,11 +288,11 @@ end
 
 @testset "animation loading contract" begin
     implementation = ensure_animation_loaded(
-        dirname(@__DIR__), test_catalog(), CatalogLeafId)
-    @test implementation.id == CatalogLeafId
+        dirname(@__DIR__), test_catalog(), CatalogChildId)
+    @test implementation.id == CatalogChildId
     @test Base.invokelatest(implementation.entry, C_NULL, Int32(2), 0.25f0)
 
-    mismatch_catalog = test_catalog(leaf_id=uuid4())
+    mismatch_catalog = test_catalog(child_id=uuid4())
     @test_throws ArgumentError ensure_animation_loaded(
         dirname(@__DIR__), mismatch_catalog, mismatch_catalog[2].id)
 end

@@ -29,7 +29,7 @@ content_generation_test_build :: proc(
         Content_Generation_Status.Ok)
     root := Content_Generation_Record{
         stable_id = root_id,
-        node_kind = .Category,
+        node_kind = .Animation,
         sibling_order = 0,
         catalog_order = 0,
         display_name = name_ref,
@@ -43,7 +43,7 @@ content_generation_test_build :: proc(
     return true
 }
 
-// Append one deterministic leaf and one root Terminal record to a generation.
+// Append one deterministic child animation and one root Terminal record.
 content_generation_test_append_child :: proc(
     t: ^testing.T, generation: ^Content_Generation,
     identity: u8, path: string) {
@@ -61,7 +61,7 @@ content_generation_test_append_child :: proc(
         stable_id = content_generation_test_id(identity),
         parent_stable_id = content_generation_test_id(1),
         has_parent = true,
-        node_kind = .Leaf,
+        node_kind = .Animation,
         sibling_order = 0,
         catalog_order = 1,
         display_name = child_name,
@@ -219,7 +219,7 @@ content_generation_test_build_recordless_root :: proc(
     return true
 }
 
-// Append the valid category root used by invalid-reference tests.
+// Append the valid root animation used by invalid-reference tests.
 content_generation_test_append_root :: proc(
     t: ^testing.T, generation: ^Content_Generation) {
     name: Content_Text_Ref
@@ -230,7 +230,7 @@ content_generation_test_append_root :: proc(
         CATALOG_PATH_BYTE_CAPACITY, &path)
     root := Content_Generation_Record{
         stable_id = content_generation_test_id(1),
-        node_kind = .Category,
+        node_kind = .Animation,
         sibling_order = 0,
         catalog_order = 0,
         display_name = name,
