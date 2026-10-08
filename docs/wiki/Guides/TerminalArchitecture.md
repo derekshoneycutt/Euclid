@@ -240,7 +240,7 @@ a link, but parser code does not call the operating system directly.
 
 | Concern | Primary implementation |
 | --- | --- |
-| Display orchestration and Julia publication | `src/view/terminal_service.odin` |
+| Display orchestration and Julia publication | `src/view/terminal/service/terminal_service.odin` |
 | Terminal state, editing, selection, and rendering | `src/view/terminal/` |
 | Input polling and physical-key encoding | `src/view/input/` |
 | VT interpreter and response generation | `src/terminal/emulator/` |
@@ -249,9 +249,9 @@ a link, but parser code does not call the operating system directly.
 | Shell parsing and command resolution | `src/terminal/shell/` |
 | Shell command markers | `src/terminal/shell_integration/` |
 | Attachments and raster protocols | `src/terminal/attachment/`, `src/terminal/graphics/` |
-| Display-thread graphics publication | `src/view/graphics/`, `src/view/terminal_graphics_service.odin` |
+| Display-thread graphics publication | `src/view/terminal/graphics/`, `src/view/terminal/service/terminal_graphics_service.odin` |
 | Hyperlinks, clipboard, palette, and history | `src/terminal/hyperlink/`, `clipboard/`, `palette/`, `history/` |
-| Scenarios and semantic evidence | `src/view/scenario_runtime.odin`, `src/evidence/`, `tools/scenarios/` |
+| Scenarios and semantic evidence | `src/view/scenario/scenario_runtime.odin`, `src/evidence/`, `tools/scenarios/` |
 
 ## Ownership Model
 

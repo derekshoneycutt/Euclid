@@ -1,56 +1,47 @@
 package ui
 
-import viewmodel "../model"
+import capturemodel "../capture/model"
+
 import geometry "../../core/geometry"
-
-import "../input"
-
-UI_PRESENTATION_SCROLLBAR_ID :: 1001
-UI_TERMINAL_SCROLLBAR_ID :: 1002
-UI_TREE_SCROLLBAR_ID :: 1003
+import input "../input"
+import viewmodel "model"
+import uiwidgets "widgets"
+import uisemantics "semantics"
+import uianimation "animation"
+import uipresentation "presentation"
+import uiterminal "terminal"
+import uiaccordion "layout/accordion"
+import uisplitter "layout/splitter"
+import uigif "gif"
+import uilibrary "library"
 
 // Inputs needed to resolve one immutable device frame against current UI geometry.
 Ui_Interaction_Route_Input :: struct {
-    frame: Input_Frame,
+    frame: input.Input_Frame,
     terminal_present: bool,
     capture: viewmodel.Ui_Press_Owner_State,
+    capture_view: capturemodel.Gif_Capture_View,
 }
-
-// Capture and wheel facts needed to filter one resolved Terminal frame.
-Ui_Terminal_Content_Route_Input :: struct {
-    local_capture: bool,
-    child_capture: bool,
-    wheel_consumed: bool,
-}
-
-// Return one target with its focus owner and optional stable interaction identity.
-ui_interaction_target :: #force_inline proc(
-    kind: viewmodel.Ui_Interaction_Target_Kind,
-    focus: viewmodel.Ui_Focus_Kind = .None,
-    id: int = 0) -> viewmodel.Ui_Interaction_Target {
-    return {kind = kind, focus = {kind = focus, id = id}, id = id}
-}
-
 // Classify icon-button capture between the world overlay and tree controls.
 ui_icon_button_capture_target :: proc(
     capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
-    if animation_control_id(capture.id) {
-        return ui_interaction_target(.Control, id = capture.id)
+    if uianimation.animation_control_id(capture.id) {
+        return viewmodel.ui_interaction_target(.Control, id = capture.id)
     }
-    return ui_interaction_target(.Control, .Accordion, capture.id)
+    return viewmodel.ui_interaction_target(.Control, .Accordion, capture.id)
 }
 
 // ui_scrollbar_capture_target classifies one scrollbar by its owning surface.
 ui_scrollbar_capture_target :: proc(
     capture: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Interaction_Target {
     focus := viewmodel.Ui_Focus_Kind.Accordion
-    if capture.id == UI_PRESENTATION_SCROLLBAR_ID {
+    if capture.id == uipresentation.UI_PRESENTATION_SCROLLBAR_ID {
         focus = .Presentation
     }
-    if capture.id == UI_TERMINAL_SCROLLBAR_ID {
+    if capture.id == uiterminal.UI_TERMINAL_SCROLLBAR_ID {
         focus = .Terminal
     }
-    return ui_interaction_target(.Scrollbar, focus, capture.id)
+    return viewmodel.ui_interaction_target(.Scrollbar, focus, capture.id)
 }
 
 // Classify legacy singleton capture until widget call sites register with the router.
@@ -61,87 +52,27 @@ ui_capture_target :: proc(
     }
     switch capture.kind {
     case .Splitter:
-        return ui_interaction_target(.Splitter, id = capture.id)
+        return viewmodel.ui_interaction_target(.Splitter, id = capture.id)
     case .Scrollbar:
         return ui_scrollbar_capture_target(capture)
     case .Dynview_Selection:
-        return ui_interaction_target(.Control, .Presentation, capture.id)
+        return viewmodel.ui_interaction_target(.Control, .Presentation, capture.id)
     case .Icon_Button:
         return ui_icon_button_capture_target(capture)
     case .Input_Box:
-        return ui_interaction_target(.Control, .Input_Box, capture.id)
+        return viewmodel.ui_interaction_target(.Control, .Input_Box, capture.id)
     case .None:
         return {}
     case .List_Item, .Text_Button, .Checkbox, .Slider:
-        return ui_interaction_target(.Control, .Accordion, capture.id)
+        return viewmodel.ui_interaction_target(.Control, .Accordion, capture.id)
     }
     return {}
 }
 
-// Compute presentation visibility from the resolved composition.
-ui_composition_presentation_visible :: #force_inline proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
-    return runtime^.current_layout_mode == .Landscape ||
-        runtime^.active_accordion_section == .View
-}
 
-// Report the display-owned presentation visibility published for this frame.
-ui_presentation_is_visible :: #force_inline proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
-    return runtime != nil && runtime^.presentation_visible
-}
 
-// Return whether shared capture belongs to hidden Presentation or Terminal UI.
-ui_presentation_owns_capture :: proc(
-    owner: viewmodel.Ui_Press_Owner_State) -> bool {
-    if owner.kind == .Dynview_Selection {
-        return true
-    }
-    return owner.kind == .Scrollbar &&
-        (owner.id == UI_PRESENTATION_SCROLLBAR_ID ||
-         owner.id == UI_TERMINAL_SCROLLBAR_ID)
-}
 
-// Clear focus and pointer transactions when composition hides the presentation.
-ui_hide_presentation_interaction :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
-    if ui_presentation_owns_capture(runtime^.ui_press_owner) {
-        runtime^.ui_press_owner = {}
-    }
-    runtime^.text_scroll_dragging = false
-    runtime^.text_scroll_drag_off = 0
-    runtime^.terminal_scroll_dragging = false
-    runtime^.terminal_scroll_drag_off = 0
-    runtime^.dynview_selection.dragging = false
-    focus := runtime^.interaction.logical_focus.kind
-    if focus == .Terminal || focus == .Presentation {
-        runtime^.interaction.logical_focus = {}
-    }
-    frame := &runtime^.interaction_frame
-    was_terminal_focused := frame^.terminal_focused ||
-        runtime^.interaction.terminal_effectively_focused
-    frame^.logical_focus = runtime^.interaction.logical_focus
-    frame^.effective_focus = runtime^.interaction.logical_focus
-    frame^.terminal_focused = false
-    frame^.terminal_focus_changed = was_terminal_focused
-    frame^.terminal = {}
-    frame^.presentation = {}
-    runtime^.interaction.terminal_effectively_focused = false
-}
 
-// Publish current composition visibility and reconcile hidden interaction once.
-ui_publish_presentation_visibility :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State) -> bool {
-    visible := ui_composition_presentation_visible(runtime)
-    if runtime^.presentation_visible == visible {
-        return false
-    }
-    runtime^.presentation_visible = visible
-    if !visible {
-        ui_hide_presentation_interaction(runtime)
-    }
-    return true
-}
 
 // Resolve a visible Presentation or Terminal target.
 ui_presentation_target :: proc(
@@ -150,11 +81,11 @@ ui_presentation_target :: proc(
     if terminal_present &&
         geometry.rectangle_contains(
             geometry.Rectangle(regions.terminal_rect), mouse) {
-        return ui_interaction_target(.Panel_Content, .Terminal)
+        return viewmodel.ui_interaction_target(.Panel_Content, .Terminal)
     }
     if geometry.rectangle_contains(
         geometry.Rectangle(regions.text_rect), mouse) {
-        return ui_interaction_target(.Panel_Content, .Presentation)
+        return viewmodel.ui_interaction_target(.Panel_Content, .Presentation)
     }
     return {}
 }
@@ -163,7 +94,7 @@ ui_presentation_target :: proc(
 ui_accordion_pointer_is_revealed :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     section: viewmodel.Ui_Accordion_Section, mouse: geometry.Vector2) -> bool {
-    clip := accordion_content_clip(runtime, section)
+    clip := uiaccordion.accordion_content_clip(runtime, section)
     return clip.width > 0 && clip.height > 0 &&
         geometry.rectangle_contains(clip, mouse)
 }
@@ -171,16 +102,17 @@ ui_accordion_pointer_is_revealed :: proc(
 // Resolve the topmost static target under the current pointer sample.
 ui_world_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    mouse: geometry.Vector2) -> viewmodel.Ui_Interaction_Target {
-    control_id, over_control := animation_control_hit_test(
+    mouse: geometry.Vector2,
+    phase: capturemodel.Gif_Capture_Phase) -> viewmodel.Ui_Interaction_Target {
+    control_id, over_control := uianimation.animation_control_hit_test(
         geometry.Rectangle(runtime^.ui_regions.world_rect),
-        runtime^.gif_capture_phase, mouse)
+        phase, mouse)
     if over_control {
-        return ui_interaction_target(.Control, id = control_id)
+        return viewmodel.ui_interaction_target(.Control, id = control_id)
     }
     if geometry.rectangle_contains(
         geometry.Rectangle(runtime^.ui_regions.world_rect), mouse) {
-        return ui_interaction_target(.World)
+        return viewmodel.ui_interaction_target(.World)
     }
     return {}
 }
@@ -188,36 +120,38 @@ ui_world_hover_target :: proc(
 // ui_splitter_hover_target resolves one unlocked splitter under the pointer.
 ui_splitter_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    mouse: geometry.Vector2) -> viewmodel.Ui_Interaction_Target {
-    if splitters_locked_for_gif(runtime^.gif_capture_phase) {
+    mouse: geometry.Vector2,
+    phase: capturemodel.Gif_Capture_Phase) -> viewmodel.Ui_Interaction_Target {
+    if uisplitter.splitters_locked_for_gif(phase) {
         return {}
     }
-    axis, hovered := splitter_hovered_axis(mouse,
+    axis, hovered := uisplitter.splitter_hovered_axis(mouse,
         runtime^.current_layout_mode,
         runtime^.vertical_split_x, runtime^.horizontal_split_y,
         runtime^.window)
     if !hovered {
         return {}
     }
-    id := SPLITTER_VERTICAL_PRESS_ID
+    id := uisplitter.SPLITTER_VERTICAL_PRESS_ID
     if axis == .Horizontal {
-        id = SPLITTER_HORIZONTAL_PRESS_ID
+        id = uisplitter.SPLITTER_HORIZONTAL_PRESS_ID
     }
-    return ui_interaction_target(.Splitter, id = id)
+    return viewmodel.ui_interaction_target(.Splitter, id = id)
 }
 
 // Resolve the topmost static target under the current pointer sample.
 ui_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    frame: Input_Frame,
-    terminal_present: bool) -> viewmodel.Ui_Interaction_Target {
-    mouse := input_frame_mouse_position(frame)
-    splitter := ui_splitter_hover_target(runtime, mouse)
+    frame: input.Input_Frame,
+    terminal_present: bool,
+    capture_view: capturemodel.Gif_Capture_View = {}) -> viewmodel.Ui_Interaction_Target {
+    mouse := uiwidgets.input_frame_mouse_position(frame)
+    splitter := ui_splitter_hover_target(runtime, mouse, capture_view.phase)
     if splitter.kind != .None {
         return splitter
     }
     regions := runtime^.ui_regions
-    if ui_presentation_is_visible(runtime) &&
+    if uipresentation.ui_presentation_is_visible(runtime) &&
         (runtime^.current_layout_mode != .Portrait ||
             ui_accordion_pointer_is_revealed(runtime, .View, geometry.Vector2(mouse))) {
         target := ui_presentation_target(
@@ -226,23 +160,38 @@ ui_hover_target :: proc(
             return target
         }
     }
+    accordion := ui_accordion_hover_target(runtime, geometry.Vector2(mouse), capture_view)
+    if accordion.kind != .None {
+        return accordion
+    }
+    return ui_world_hover_target(runtime, geometry.Vector2(mouse), capture_view.phase)
+}
+
+// Resolve revealed accordion inputs before the surrounding panel background.
+ui_accordion_hover_target :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, mouse: geometry.Vector2,
+    capture_view: capturemodel.Gif_Capture_View) -> viewmodel.Ui_Interaction_Target {
     child_visible := ui_accordion_pointer_is_revealed(
         runtime, runtime^.active_accordion_section, geometry.Vector2(mouse))
-    if child_visible && gif_path_input_visible(runtime) && geometry.rectangle_contains(
-        gif_path_input_rect(runtime), geometry.Vector2(mouse)) {
-        return ui_interaction_target(
-            .Control, .Input_Box, GIF_PATH_INPUT_BOX_ID)
+    if child_visible &&
+       uigif.gif_path_input_visible(runtime, capture_view) &&
+       geometry.rectangle_contains(
+        uigif.gif_path_input_rect(runtime), geometry.Vector2(mouse)) {
+        return viewmodel.ui_interaction_target(
+            .Control, .Input_Box, uigif.GIF_PATH_INPUT_BOX_ID)
     }
-    if child_visible && library_search_visible(runtime) && geometry.rectangle_contains(
-        library_search_input_rect(runtime), geometry.Vector2(mouse)) {
-        return ui_interaction_target(
-            .Control, .Input_Box, LIBRARY_SEARCH_INPUT_ID)
+    if child_visible &&
+       uilibrary.library_search_visible(runtime) &&
+       geometry.rectangle_contains(
+            uilibrary.library_search_input_rect(runtime), geometry.Vector2(mouse)) {
+        return viewmodel.ui_interaction_target(
+            .Control, .Input_Box, uilibrary.LIBRARY_SEARCH_INPUT_ID)
     }
     if geometry.rectangle_contains(
-        geometry.Rectangle(regions.accordion_rect), geometry.Vector2(mouse)) {
-        return ui_interaction_target(.Panel_Content, .Accordion)
+        geometry.Rectangle(runtime^.ui_regions.accordion_rect), mouse) {
+        return viewmodel.ui_interaction_target(.Panel_Content, .Accordion)
     }
-    return ui_world_hover_target(runtime, geometry.Vector2(mouse))
+    return {}
 }
 
 // Resolve persistent logical focus from presentation and routed press transitions.
@@ -251,22 +200,22 @@ ui_route_logical_focus :: proc(
     input: Ui_Interaction_Route_Input,
     pointer_target: viewmodel.Ui_Interaction_Target) -> viewmodel.Ui_Focus_Target {
     result := runtime^.interaction.logical_focus
-    if result.kind == .Input_Box && result.id == GIF_PATH_INPUT_BOX_ID &&
-        !gif_path_input_visible(runtime) {
+    if result.kind == .Input_Box && result.id == uigif.GIF_PATH_INPUT_BOX_ID &&
+        !uigif.gif_path_input_visible(runtime, input.capture_view) {
         result = {}
     }
-    if result.kind == .Input_Box && result.id == LIBRARY_SEARCH_INPUT_ID &&
-        !library_search_visible(runtime) {
+    if result.kind == .Input_Box && result.id == uilibrary.LIBRARY_SEARCH_INPUT_ID &&
+        !uilibrary.library_search_visible(runtime) {
         result = {}
     }
     terminal_present := input.terminal_present
-    visible := ui_presentation_is_visible(runtime)
+    visible := uipresentation.ui_presentation_is_visible(runtime)
     if terminal_present && visible && !runtime^.interaction.terminal_was_present {
         result = {kind = .Terminal}
     } else if (!terminal_present || !visible) && result.kind == .Terminal {
         result = {}
     }
-    if input_frame_left_pressed(input.frame) && !input.capture.active {
+    if uiwidgets.input_frame_left_pressed(input.frame) && !input.capture.active {
         result = pointer_target.focus
     }
     return result
@@ -275,24 +224,19 @@ ui_route_logical_focus :: proc(
 // ui_valid_capture_owner releases input-box capture after its control disappears.
 ui_valid_capture_owner :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    owner: viewmodel.Ui_Press_Owner_State) -> viewmodel.Ui_Press_Owner_State {
+    owner: viewmodel.Ui_Press_Owner_State,
+    capture_view: capturemodel.Gif_Capture_View) -> viewmodel.Ui_Press_Owner_State {
     if owner.kind != .Input_Box ||
-        owner.id == GIF_PATH_INPUT_BOX_ID && gif_path_input_visible(runtime) ||
-        owner.id == LIBRARY_SEARCH_INPUT_ID && library_search_visible(runtime) {
+        owner.id == uigif.GIF_PATH_INPUT_BOX_ID &&
+        uigif.gif_path_input_visible(runtime, capture_view) ||
+        owner.id == uilibrary.LIBRARY_SEARCH_INPUT_ID &&
+        uilibrary.library_search_visible(runtime) {
         return owner
     }
     runtime^.ui_press_owner = {}
     return {}
 }
 
-// Return whether Terminal is the active and valid keyboard focus target.
-ui_terminal_effectively_focused :: #force_inline proc(
-    logical_focus: viewmodel.Ui_Focus_Target,
-    window_focused: bool,
-    terminal_present, presentation_visible: bool) -> bool {
-    return window_focused && terminal_present && presentation_visible &&
-        logical_focus.kind == .Terminal
-}
 
 // Route wheel input to hover only when no pointer capture owns the frame.
 ui_interaction_wheel_target :: #force_inline proc(
@@ -308,17 +252,18 @@ ui_interaction_wheel_target :: #force_inline proc(
 ui_route_interaction_frame :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     input: Ui_Interaction_Route_Input) -> viewmodel.Ui_Interaction_Frame {
-    hover := ui_hover_target(runtime, input.frame, input.terminal_present)
-    capture_owner := ui_valid_capture_owner(runtime, input.capture)
+    hover := ui_hover_target(runtime, input.frame,
+        input.terminal_present, input.capture_view)
+    capture_owner := ui_valid_capture_owner(runtime, input.capture, input.capture_view)
     capture := ui_capture_target(capture_owner)
     pointer_target := hover
     if capture.kind != .None {
         pointer_target = capture
     }
     logical_focus := ui_route_logical_focus(runtime, input, pointer_target)
-    terminal_focused := ui_terminal_effectively_focused(
+    terminal_focused := uiterminal.ui_terminal_effectively_focused(
         logical_focus, input.frame.window_focused, input.terminal_present,
-        ui_presentation_is_visible(runtime))
+        uipresentation.ui_presentation_is_visible(runtime))
     wheel_target := ui_interaction_wheel_target(
         input.frame.mouse_wheel_delta, capture, hover)
     result := viewmodel.Ui_Interaction_Frame{
@@ -334,7 +279,7 @@ ui_route_interaction_frame :: proc(
     if input.frame.window_focused {
         result.effective_focus = logical_focus
     }
-    ui_refresh_surface_interaction(&result)
+    viewmodel.ui_refresh_surface_interaction(&result)
     runtime^.interaction.logical_focus = logical_focus
     runtime^.interaction.terminal_was_present = input.terminal_present
     runtime^.interaction.terminal_effectively_focused = terminal_focused
@@ -345,16 +290,16 @@ ui_route_interaction_frame :: proc(
 // ui_apply_semantic_focus updates transitional surface routing after key traversal.
 ui_apply_semantic_focus :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    frame: Input_Frame, terminal_present: bool) {
-    target, present := semantic_legacy_focus(runtime^.semantic_focus)
+    frame: input.Input_Frame, terminal_present: bool) {
+    target, present := uisemantics.semantic_legacy_focus(runtime^.semantic_focus)
     if !present {
         return
     }
     routed := &runtime^.interaction_frame
     prior_terminal := runtime^.interaction.terminal_effectively_focused
-    terminal_focused := ui_terminal_effectively_focused(
+    terminal_focused := uiterminal.ui_terminal_effectively_focused(
         target, frame.window_focused, terminal_present,
-        ui_presentation_is_visible(runtime))
+        uipresentation.ui_presentation_is_visible(runtime))
     routed^.logical_focus = target
     routed^.effective_focus = target if frame.window_focused else {}
     routed^.terminal_focus_changed = routed^.terminal_focus_changed ||
@@ -362,95 +307,19 @@ ui_apply_semantic_focus :: proc(
     routed^.terminal_focused = terminal_focused
     runtime^.interaction.logical_focus = target
     runtime^.interaction.terminal_effectively_focused = terminal_focused
-    ui_refresh_surface_interaction(routed)
+    viewmodel.ui_refresh_surface_interaction(routed)
 }
 
 // Route focus through the full interaction result for isolated callers and tests.
 ui_reconcile_focus :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    frame: Input_Frame,
-    terminal_present: bool) -> viewmodel.Ui_Interaction_Frame {
+    frame: input.Input_Frame,
+    terminal_present: bool,
+    capture_view: capturemodel.Gif_Capture_View = {}) -> viewmodel.Ui_Interaction_Frame {
     return ui_route_interaction_frame(runtime, {
         frame = frame,
         terminal_present = terminal_present,
         capture = runtime^.ui_press_owner,
+        capture_view = capture_view,
     })
-}
-
-// Refresh narrow surface eligibility after static or layout-dependent routing.
-ui_refresh_surface_interaction :: proc(frame: ^viewmodel.Ui_Interaction_Frame) {
-    frame^.terminal = {
-        keyboard = frame^.effective_focus.kind == .Terminal,
-        pointer = frame^.pointer_target.focus.kind == .Terminal,
-        wheel = frame^.wheel_target.focus.kind == .Terminal,
-    }
-    frame^.presentation = {
-        keyboard = frame^.effective_focus.kind == .Presentation,
-        pointer = frame^.pointer_target.focus.kind == .Presentation,
-        wheel = frame^.wheel_target.focus.kind == .Presentation,
-    }
-    frame^.accordion = {
-        keyboard = frame^.effective_focus.kind == .Accordion,
-        pointer = frame^.pointer_target.focus.kind == .Accordion ||
-            frame^.pointer_target.focus.kind == .Input_Box,
-        wheel = frame^.wheel_target.focus.kind == .Accordion,
-    }
-}
-
-// Refine the static Terminal panel target with prepared scrollbar geometry.
-ui_refine_terminal_scroll_route :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    over_track: bool,
-    pointer_reserved: bool,
-    wheel_present: bool) {
-    frame := &runtime^.interaction_frame
-    scrollbar := ui_interaction_target(
-        .Scrollbar, .Terminal, UI_TERMINAL_SCROLLBAR_ID)
-    if over_track {
-        frame^.hover = scrollbar
-    }
-    capture := frame^.pointer_capture
-    capture_allows_scrollbar := capture.kind == .None ||
-        capture.kind == .Scrollbar && capture.focus.kind == .Terminal
-    if pointer_reserved && capture_allows_scrollbar {
-        frame^.pointer_target = scrollbar
-    }
-    if over_track && wheel_present && capture.kind == .None {
-        frame^.wheel_target = scrollbar
-    }
-    ui_refresh_surface_interaction(frame)
-}
-
-// Return pointer fields required to finish admitted local or child transactions.
-ui_terminal_captured_pointer_fields :: proc(
-    local_capture: bool,
-    child_capture: bool) -> input.Input_Pointer_Fields {
-    fields: input.Input_Pointer_Fields
-    if local_capture {
-        fields += {.Screen_Position, .Release_Edges}
-    }
-    if child_capture {
-        fields += {.Motion, .Release_Edges, .Levels, .Terminal_Position,
-            .Terminal_Ownership}
-    }
-    return fields
-}
-
-// Route one resolved frame to Terminal content from the shared interaction result.
-ui_route_terminal_content_frame :: proc(
-    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    frame: Input_Frame,
-    bounds: geometry.Rectangle,
-    route: Ui_Terminal_Content_Route_Input) -> Input_Frame {
-    if !runtime^.interaction_frame.terminal.pointer {
-        fields := ui_terminal_captured_pointer_fields(
-            route.local_capture, route.child_capture)
-        return input.input_frame_filter_pointer(
-            frame, fields, {bounds.x - 1, bounds.y - 1})
-    }
-    result := frame
-    if route.wheel_consumed || !runtime^.interaction_frame.terminal.wheel {
-        result.mouse_wheel_delta = 0
-    }
-    return result
 }

@@ -30,8 +30,8 @@ This guide describes four contracts that must remain aligned:
 | Asynchronous query and command transaction | `src/bridge/scene_commands.odin` |
 | Julia ABI layouts and wrappers | `src/julia/bridge/common.jl`, `src/julia/bridge/points.jl` |
 | Julia constraint and tool wrappers | `src/julia/bridge/constraints.jl`, `src/julia/bridge/tools.jl` |
-| Worker scheduling and fences | `src/view/simulation_executor.odin` |
-| Display-thread packet consumption | `src/view/elements.odin` |
+| Worker scheduling and fences | `src/view/simulation/simulation_executor.odin` |
+| Display-thread packet consumption | `src/view/world/geometry.odin` |
 | Startup and retirement | `src/view/runtime_session.odin`, `src/bridge/animations.odin` |
 
 ## Ownership And Concurrency

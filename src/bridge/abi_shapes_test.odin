@@ -2,17 +2,14 @@ package bridge
 
 import bridgemodel "model"
 import geometry "../core/geometry"
-
 import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
 import evidence_trace "../evidence/trace"
-
-import "core:testing"
-
-import "../core"
-import "../particles"
-import "../shapes"
-import viewmodel "../view/model"
+import testing "core:testing"
+import core "../core"
+import particles "../particles"
+import shapes "../shapes"
+import worldmodel "../view/world/model"
 
 // Build one bridge state around caller-owned canonical world storage.
 bridge_shape_test_state :: proc(
@@ -245,7 +242,7 @@ bridge_shape_reveal_queues_label_dust_contact :: proc(t: ^testing.T) {
     defer free(particles, context.allocator)
     particles^.use_max_dust_particles = 16
     state^.particle_system = particles
-    state^.iso_scale = new(viewmodel.Iso_Scale, context.allocator)
+    state^.iso_scale = new(worldmodel.Iso_Scale, context.allocator)
     defer free(state^.iso_scale, context.allocator)
     state^.iso_scale^.scale = 800
     label := shape_create_label(state, cstring("∠A′"),

@@ -1,20 +1,20 @@
 #+test
 package view
 
+import preferencesmodel "preferences/model"
 import app_core "../core"
 import setting_model "../settings"
 import taskpool "../taskpool"
 import user_data "../userdata"
-import viewmodel "model"
 import font "font"
-
-import "core:fmt"
-import "core:os"
-import "core:path/filepath"
-import "core:sync"
-import "core:testing"
-import "core:thread"
-import "core:time"
+import fmt "core:fmt"
+import os "core:os"
+import filepath "core:path/filepath"
+import sync "core:sync"
+import testing "core:testing"
+import thread "core:thread"
+import time "core:time"
+import viewpreferences "preferences"
 
 Settings_Save_Test_Gate :: struct {
     mutex: sync.Mutex,
@@ -103,8 +103,8 @@ settings_save_test_wait_terminal :: proc(
     state: ^app_core.Euclid_General_State, pool: ^taskpool.Task_Pool) -> bool {
     deadline := time.tick_since({}) + 5 * time.Second
     for time.tick_since({}) < deadline {
-        settings_save_service(state, pool)
-        if !state^.ui_runtime.settings_save_active &&
+        viewpreferences.settings_save_service(state, pool)
+        if !state^.preferences_runtime.settings_save_active &&
             state^.ui_runtime.settings_save_status != .Saving {
             return true
         }
@@ -147,25 +147,25 @@ settings_save_coalesces_and_commits_worker_batch :: proc(t: ^testing.T) {
     testing.expect(t, taskpool.task_pool_init(&pool, 1, 3))
     state := settings_save_test_state()
     defer free(state, context.allocator)
-    state^.ui_runtime.settings_store = &store
+    state^.preferences_runtime.settings_store = &store
     state^.ui_runtime.settings_store_available = true
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Rendering_Vsync, setting_model.boolean_value(true))
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Rendering_Vsync, setting_model.boolean_value(false))
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Interface_Display_Fps, setting_model.boolean_value(true))
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Interface_Reduce_Motion, setting_model.boolean_value(true))
 
-    settings_save_service(state, &pool)
-    testing.expect_value(t, state^.ui_runtime.settings_pending.count, 0)
-    testing.expect(t, state^.ui_runtime.settings_save_active)
+    viewpreferences.settings_save_service(state, &pool)
+    testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 0)
+    testing.expect(t, state^.preferences_runtime.settings_save_active)
     testing.expect(t, settings_save_test_wait_terminal(state, &pool))
     testing.expect_value(t, state^.ui_runtime.settings_save_status,
-        viewmodel.Settings_Save_Status.Saved)
+        preferencesmodel.Settings_Save_Status.Saved)
     settings_save_expect_committed_preferences(t, &store)
-    settings_save_shutdown(state, &pool)
+    viewpreferences.settings_save_shutdown(state, &pool)
     taskpool.task_pool_destroy(&pool)
     testing.expect_value(t, user_data.store_close(&store).kind,
         user_data.Store_Error_Kind.None)
@@ -189,20 +189,20 @@ settings_save_retains_pending_batch_when_pool_is_full :: proc(t: ^testing.T) {
     testing.expect(t, settings_save_test_wait_worker(&gate))
     state := settings_save_test_state()
     defer free(state, context.allocator)
-    state^.ui_runtime.settings_store = &store
+    state^.preferences_runtime.settings_store = &store
     state^.ui_runtime.settings_store_available = true
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Drawing_Dust_Limit, setting_model.integer_value(1200))
 
-    settings_save_service(state, &pool)
-    testing.expect_value(t, state^.ui_runtime.settings_pending.count, 1)
-    testing.expect(t, !state^.ui_runtime.settings_save_active)
+    viewpreferences.settings_save_service(state, &pool)
+    testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 1)
+    testing.expect(t, !state^.preferences_runtime.settings_save_active)
     settings_save_test_release_worker(&gate)
     _, joined := taskpool.task_pool_wait(&pool, blocker)
     testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
-    settings_save_service(state, &pool)
+    viewpreferences.settings_save_service(state, &pool)
     testing.expect(t, settings_save_test_wait_terminal(state, &pool))
-    settings_save_shutdown(state, &pool)
+    viewpreferences.settings_save_shutdown(state, &pool)
     taskpool.task_pool_destroy(&pool)
     testing.expect_value(t, user_data.store_close(&store).kind,
         user_data.Store_Error_Kind.None)
@@ -226,21 +226,21 @@ settings_save_shutdown_joins_and_flushes_newer_pending_edits :: proc(t: ^testing
     testing.expect(t, settings_save_test_wait_worker(&gate))
     state := settings_save_test_state()
     defer free(state, context.allocator)
-    state^.ui_runtime.settings_store = &store
+    state^.preferences_runtime.settings_store = &store
     state^.ui_runtime.settings_store_available = true
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Drawing_Dust_Limit, setting_model.integer_value(1200))
-    settings_save_service(state, &pool)
-    testing.expect(t, state^.ui_runtime.settings_save_active)
+    viewpreferences.settings_save_service(state, &pool)
+    testing.expect(t, state^.preferences_runtime.settings_save_active)
     testing.expect(t, !taskpool.task_pool_help_once(&pool))
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Drawing_Dust_Limit, setting_model.integer_value(1400))
     settings_save_test_release_worker(&gate)
     _, joined := taskpool.task_pool_wait(&pool, blocker)
     testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
-    settings_save_shutdown(state, &pool)
-    testing.expect(t, !state^.ui_runtime.settings_save_active)
-    testing.expect_value(t, state^.ui_runtime.settings_pending.count, 0)
+    viewpreferences.settings_save_shutdown(state, &pool)
+    testing.expect(t, !state^.preferences_runtime.settings_save_active)
+    testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 0)
     settings_save_test_expect_dust_limit(t, &store)
     taskpool.task_pool_destroy(&pool)
     testing.expect_value(t, user_data.store_close(&store).kind,
@@ -253,51 +253,53 @@ settings_save_retry_merges_latest :: proc(t: ^testing.T) {
     state := settings_save_test_state()
     defer free(state, context.allocator)
     runtime := &state^.ui_runtime
-    runtime^.settings_failure_count = 1
-    runtime^.settings_save_payload.changes.count = 1
-    runtime^.settings_save_payload.changes.changes[0] = {
+    saves := &state^.preferences_runtime
+    saves.settings_failure_count = 1
+    saves.settings_save_payload.changes.count = 1
+    saves.settings_save_payload.changes.changes[0] = {
         id = .Rendering_Vsync,
         kind = .Set,
         value = setting_model.boolean_value(true),
     }
-    _ = setting_model.change_set_set(&runtime^.settings_pending,
+    _ = setting_model.change_set_set(&saves.settings_pending,
         .Rendering_Vsync, setting_model.boolean_value(false))
-    _ = setting_model.change_set_set(&runtime^.settings_pending,
+    _ = setting_model.change_set_set(&saves.settings_pending,
         .Interface_Display_Fps, setting_model.boolean_value(true))
-    runtime^.settings_save_payload.result = {
+    saves.settings_save_payload.result = {
         outcome = user_data.Commit_Outcome.Not_Committed,
         failure = {kind = .Write},
     }
-    settings_save_apply_result(state, .Failed)
-    testing.expect_value(t, runtime^.settings_pending.count, 2)
-    vsync_index := setting_model.change_index(
-        &runtime^.settings_pending, .Rendering_Vsync)
+    viewpreferences.settings_save_apply_result(state, .Failed)
+    testing.expect_value(t, saves.settings_pending.count, 2)
+    vsync_index := setting_model.change_index(&saves.settings_pending, .Rendering_Vsync)
     fps_index := setting_model.change_index(
-        &runtime^.settings_pending, .Interface_Display_Fps)
+        &saves.settings_pending, .Interface_Display_Fps)
     testing.expect(t, vsync_index >= 0 && fps_index >= 0)
     if vsync_index >= 0 && fps_index >= 0 {
-        testing.expect(t,
-            !runtime^.settings_pending.changes[vsync_index].value.boolean)
-        testing.expect(t,
-            runtime^.settings_pending.changes[fps_index].value.boolean)
+        testing.expect(t, !saves.settings_pending.changes[vsync_index].value.boolean)
+        testing.expect(t, saves.settings_pending.changes[fps_index].value.boolean)
     }
-    testing.expect_value(t, runtime^.settings_retry_frames,
-        SETTINGS_SAVE_RETRY_DELAY_FRAMES)
+    testing.expect_value(t, saves.settings_retry_frames,
+        viewpreferences.SETTINGS_SAVE_RETRY_DELAY_FRAMES)
     testing.expect_value(t, runtime^.settings_save_status,
-        viewmodel.Settings_Save_Status.Pending)
+        preferencesmodel.Settings_Save_Status.Pending)
 }
 
 // Verify permanent store faults bypass retries while transient faults are capped.
 @(test)
 settings_save_failure_policy_separates_permanent_and_transient :: proc(t: ^testing.T) {
-    testing.expect_value(t, settings_save_failure_status(.Write, 1),
-        viewmodel.Settings_Save_Status.Pending)
-    testing.expect_value(t, settings_save_failure_status(.Write,
-        SETTINGS_SAVE_MAX_ATTEMPTS), viewmodel.Settings_Save_Status.Failed)
-    testing.expect_value(t, settings_save_failure_status(.Not_Writable, 1),
-        viewmodel.Settings_Save_Status.Unavailable)
-    testing.expect_value(t, settings_save_failure_status(.Invalid_Batch, 1),
-        viewmodel.Settings_Save_Status.Unavailable)
+    testing.expect_value(t, viewpreferences.settings_save_failure_status(.Write, 1),
+        preferencesmodel.Settings_Save_Status.Pending)
+    testing.expect_value(t,
+        viewpreferences.settings_save_failure_status(.Write,
+            viewpreferences.SETTINGS_SAVE_MAX_ATTEMPTS),
+        preferencesmodel.Settings_Save_Status.Failed)
+    testing.expect_value(t,
+        viewpreferences.settings_save_failure_status(.Not_Writable, 1),
+        preferencesmodel.Settings_Save_Status.Unavailable)
+    testing.expect_value(t,
+        viewpreferences.settings_save_failure_status(.Invalid_Batch, 1),
+        preferencesmodel.Settings_Save_Status.Unavailable)
 }
 
 // Verify intentional no-database mode never queues a settings task.
@@ -307,13 +309,13 @@ settings_save_without_store_is_memory_only :: proc(t: ^testing.T) {
     testing.expect(t, taskpool.task_pool_init(&pool, 1, 2))
     state := settings_save_test_state()
     defer free(state, context.allocator)
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Rendering_Vsync, setting_model.boolean_value(false))
-    settings_save_service(state, &pool)
-    testing.expect(t, !state^.ui_runtime.settings_save_active)
-    testing.expect_value(t, state^.ui_runtime.settings_pending.count, 1)
+    viewpreferences.settings_save_service(state, &pool)
+    testing.expect(t, !state^.preferences_runtime.settings_save_active)
+    testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 1)
     testing.expect_value(t, state^.ui_runtime.settings_save_status,
-        viewmodel.Settings_Save_Status.Unavailable)
+        preferencesmodel.Settings_Save_Status.Unavailable)
     taskpool.task_pool_destroy(&pool)
 }
 
@@ -328,21 +330,24 @@ settings_save_window_shutdown_flushes_before_font_pool_teardown :: proc(t: ^test
     defer user_data.store_close(&store)
     state := settings_save_test_state()
     defer free(state, context.allocator)
-    executor := new(Simulation_Executor, context.allocator)
+    executor := new(app_core.Simulation_Executor, context.allocator)
     defer free(executor, context.allocator)
     state^.simulation_executor = executor
     testing.expect(t, taskpool.task_pool_init(&executor^.pool, 1, 3))
     defer taskpool.task_pool_destroy(&executor^.pool)
-    state^.ui_runtime.settings_store = &store
+    state^.preferences_runtime.settings_store = &store
     state^.ui_runtime.settings_store_available = true
-    _ = setting_model.change_set_set(&state^.ui_runtime.settings_pending,
+    _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Drawing_Dust_Limit, setting_model.integer_value(1400))
     testing.expect(t, font.cache_request(&state^.font_cache, .Bold))
     testing.expect_value(t, shutdown_window_runtime({state = state}), 0)
-    testing.expect_value(t, state^.ui_runtime.settings_pending.count, 0)
-    testing.expect_value(t, state^.ui_runtime.settings_save_commit_count, u64(1))
-    testing.expect_value(t, state^.ui_runtime.settings_save_owner_execution_count, u64(0))
-    testing.expect(t, state^.ui_runtime.settings_save_payload.worker_thread_id !=
-        state^.ui_runtime.settings_save_payload.owner_thread_id)
+    testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 0)
+    testing.expect_value(t,
+        state^.preferences_runtime.settings_save_commit_count, u64(1))
+    testing.expect_value(t,
+        state^.preferences_runtime.settings_save_owner_execution_count, u64(0))
+    testing.expect(t,
+        state^.preferences_runtime.settings_save_payload.worker_thread_id !=
+            state^.preferences_runtime.settings_save_payload.owner_thread_id)
     settings_save_test_expect_dust_limit(t, &store)
 }

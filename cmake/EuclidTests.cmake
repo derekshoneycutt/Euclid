@@ -82,10 +82,20 @@ if(BUILD_TESTING)
         terminal/shell
         terminal/shell_integration
         view
-        view/core
+        view/capture
         view/font
+        view/input/backend
+        view/presentation
+        view/startup
+        view/terminal/graphics
+        view/terminal/service
         view/ui
         view/ui/dynview
+        view/ui/text
+        view/ui/widgets
+        view/ui/library/service
+        view/world
+        view/world/projection
     )
     foreach(package_path IN LISTS EUCLID_ODIN_TEST_PACKAGES)
         string(REPLACE "/" "-" package_name "${package_path}")

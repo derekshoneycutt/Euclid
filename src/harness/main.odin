@@ -1,16 +1,17 @@
 package main
 
-import "../bridge"
-import "../core"
+import bridge "../bridge"
+import core "../core"
 import evidence_session "../evidence/session"
-import "../files"
+import files "../files"
 import particlemodel "../particles/model"
-import "../view"
-
-import "core:encoding/uuid"
-import "core:fmt"
-import "core:os"
-import "core:strconv"
+import view "../view"
+import uuid "core:encoding/uuid"
+import fmt "core:fmt"
+import os "core:os"
+import strconv "core:strconv"
+import viewsimulation "../view/simulation"
+import simulationmodel "../view/simulation/model"
 
 Harness_Options :: struct {
     asset_root: string,
@@ -225,7 +226,8 @@ invoke_configured_harness_scenario :: proc(
 run_harness_fixed_steps :: proc(
     session: view.Euclid_Runtime_Session, steps: int) -> bool {
     for _ in 0..<steps {
-        if !view.run_deterministic_fixed_step(session.state, view.FIXED_DT) {
+        if !viewsimulation.run_deterministic_fixed_step(
+           session.state, simulationmodel.FIXED_DT) {
             return false
         }
     }

@@ -1,18 +1,35 @@
 #+test
 package view
 
-import viewmodel "model"
+import viewmodel "ui/model"
 
-import "core:strings"
-import "core:testing"
-import "core:log"
-
+import capturemodel "capture/model"
+import viewcapture "capture"
+import strings "core:strings"
+import testing "core:testing"
+import log "core:log"
 import app_core "../core"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import app_files "../files"
-import app_view "./core"
 import contentdata "../core/content"
+
+// Verify routing receives copied facts rather than borrowing capture policy storage.
+@(test)
+gif_capture_view_is_an_independent_snapshot :: proc(t: ^testing.T) {
+    status := capturemodel.Gif_Capture_Status{
+        gif_capture_phase = .Saved, save_gif_requested = true, last_gif_path_len = 4}
+    snapshot := capturemodel.gif_capture_view(&status)
+    status.gif_capture_phase = .Idle
+    status.save_gif_requested = false
+    status.last_gif_path_len = 0
+    testing.expect_value(t, snapshot.phase, capturemodel.Gif_Capture_Phase.Saved)
+    testing.expect(t, snapshot.requested)
+    testing.expect(t, snapshot.path_available)
+    empty := capturemodel.gif_capture_view(&status)
+    testing.expect_value(t, empty.phase, capturemodel.Gif_Capture_Phase.Idle)
+    testing.expect(t, !empty.requested && !empty.path_available)
+}
 
 // Count explicit overflow diagnostics without treating an expected error as a failed test.
 gif_note_test_log :: proc(
@@ -26,108 +43,108 @@ gif_note_test_log :: proc(
 // Reject oversized authored notes without replacing valid, terminated status storage.
 @(test)
 clear_and_set_gif_status_note_rejects_overflow :: proc(t: ^testing.T) {
-    ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
-    defer free(ui_runtime)
+    gif_capture_status := new(capturemodel.Gif_Capture_Status, context.allocator)
+    defer free(gif_capture_status)
 
-    app_view.clear_gif_status_note(ui_runtime)
-    testing.expect_value(t, ui_runtime^.gif_status_note_len, 0)
-    testing.expect_value(t, ui_runtime^.gif_status_note[0], u8(0))
+    viewcapture.clear_gif_status_note(gif_capture_status)
+    testing.expect_value(t, gif_capture_status^.gif_status_note_len, 0)
+    testing.expect_value(t, gif_capture_status^.gif_status_note[0], u8(0))
     exact := strings.repeat(
-        "x", len(ui_runtime.gif_status_note) - 1, context.temp_allocator)
-    app_view.set_gif_status_note(ui_runtime, exact)
-    baseline := ui_runtime.gif_status_note
+        "x", len(gif_capture_status.gif_status_note) - 1, context.temp_allocator)
+    viewcapture.set_gif_status_note(gif_capture_status, exact)
+    baseline := gif_capture_status.gif_status_note
 
     long_note := strings.repeat(
-        "x", len(ui_runtime^.gif_status_note) + 20, context.temp_allocator)
+        "x", len(gif_capture_status^.gif_status_note) + 20, context.temp_allocator)
     logged := 0
     prior_logger := context.logger
     context.logger = log.Logger{procedure = gif_note_test_log, data = &logged}
-    app_view.set_gif_status_note(ui_runtime, long_note)
+    viewcapture.set_gif_status_note(gif_capture_status, long_note)
     context.logger = prior_logger
     testing.expect_value(t, logged, 1)
 
-    expected_len := len(ui_runtime^.gif_status_note) - 1
-    testing.expect_value(t, ui_runtime^.gif_status_note_len, expected_len)
-    testing.expect_value(t, ui_runtime^.gif_status_note[expected_len], u8(0))
-    testing.expect_value(t, ui_runtime.gif_status_note, baseline)
+    expected_len := len(gif_capture_status^.gif_status_note) - 1
+    testing.expect_value(t, gif_capture_status^.gif_status_note_len, expected_len)
+    testing.expect_value(t, gif_capture_status^.gif_status_note[expected_len], u8(0))
+    testing.expect_value(t, gif_capture_status.gif_status_note, baseline)
 }
 
 //   Verify clearing then setting a long GIF path truncates with a terminator.
 @(test)
 clear_and_set_last_gif_path_handles_truncation :: proc(t: ^testing.T) {
-    ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
-    defer free(ui_runtime)
+    gif_capture_status := new(capturemodel.Gif_Capture_Status, context.allocator)
+    defer free(gif_capture_status)
 
-    app_view.clear_last_gif_path(ui_runtime)
-    testing.expect_value(t, ui_runtime^.last_gif_path_len, 0)
-    testing.expect_value(t, ui_runtime^.last_gif_path[0], u8(0))
-    testing.expect_value(t, ui_runtime^.last_gif_path_revision, u64(1))
+    viewcapture.clear_last_gif_path(gif_capture_status)
+    testing.expect_value(t, gif_capture_status^.last_gif_path_len, 0)
+    testing.expect_value(t, gif_capture_status^.last_gif_path[0], u8(0))
+    testing.expect_value(t, gif_capture_status^.last_gif_path_revision, u64(1))
 
     long_path := strings.repeat(
-        "a", len(ui_runtime^.last_gif_path) + 32, context.temp_allocator)
-    app_view.set_last_gif_path(ui_runtime, long_path)
+        "a", len(gif_capture_status^.last_gif_path) + 32, context.temp_allocator)
+    viewcapture.set_last_gif_path(gif_capture_status, long_path)
 
-    expected_len := len(ui_runtime^.last_gif_path) - 1
-    testing.expect_value(t, ui_runtime^.last_gif_path_len, expected_len)
-    testing.expect_value(t, ui_runtime^.last_gif_path[expected_len], u8(0))
-    testing.expect(t, ui_runtime^.last_gif_path_truncated)
-    testing.expect_value(t, ui_runtime^.last_gif_path_revision, u64(2))
+    expected_len := len(gif_capture_status^.last_gif_path) - 1
+    testing.expect_value(t, gif_capture_status^.last_gif_path_len, expected_len)
+    testing.expect_value(t, gif_capture_status^.last_gif_path[expected_len], u8(0))
+    testing.expect(t, gif_capture_status^.last_gif_path_truncated)
+    testing.expect_value(t, gif_capture_status^.last_gif_path_revision, u64(2))
 }
 
 // Verify GIF path truncation never retains a partial UTF-8 codepoint.
 @(test)
 set_last_gif_path_truncates_at_utf8_boundary :: proc(t: ^testing.T) {
-    ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
-    defer free(ui_runtime)
+    gif_capture_status := new(capturemodel.Gif_Capture_Status, context.allocator)
+    defer free(gif_capture_status)
     prefix := strings.repeat(
-        "a", len(ui_runtime^.last_gif_path) - 2, context.temp_allocator)
+        "a", len(gif_capture_status^.last_gif_path) - 2, context.temp_allocator)
     path := strings.concatenate({prefix, "é"}, context.temp_allocator)
-    app_view.set_last_gif_path(ui_runtime, path)
-    testing.expect_value(t, ui_runtime^.last_gif_path_len, len(prefix))
-    testing.expect(t, ui_runtime^.last_gif_path_truncated)
+    viewcapture.set_last_gif_path(gif_capture_status, path)
+    testing.expect_value(t, gif_capture_status^.last_gif_path_len, len(prefix))
+    testing.expect(t, gif_capture_status^.last_gif_path_truncated)
 }
 
 // Verify fixed-step GIF timing preserves authored progress with bounded delays.
 @(test)
 gif_capture_fixed_step_duration_is_bounded :: proc(t: ^testing.T) {
-    testing.expect_value(t, app_view.gif_capture_fixed_step_duration_ms(0), u64(0))
-    testing.expect_value(t, app_view.gif_capture_fixed_step_duration_ms(1), u64(17))
-    testing.expect_value(t, app_view.gif_capture_fixed_step_duration_ms(4), u64(67))
-    testing.expect_value(t, app_view.gif_capture_fixed_step_duration_ms(~u64(0)),
-        app_view.GIF_MAX_DELAY_MS)
+    testing.expect_value(t, viewcapture.gif_capture_fixed_step_duration_ms(0), u64(0))
+    testing.expect_value(t, viewcapture.gif_capture_fixed_step_duration_ms(1), u64(17))
+    testing.expect_value(t, viewcapture.gif_capture_fixed_step_duration_ms(4), u64(67))
+    testing.expect_value(t, viewcapture.gif_capture_fixed_step_duration_ms(~u64(0)),
+        viewcapture.GIF_MAX_DELAY_MS)
 }
 
 // Verify recorded timing rounds milliseconds and applies GIF duration limits.
 @(test)
 gif_capture_elapsed_duration_is_bounded :: proc(t: ^testing.T) {
-    testing.expect_value(t, app_view.gif_capture_elapsed_duration_ms(0), u64(0))
-    testing.expect_value(t, app_view.gif_capture_elapsed_duration_ms(0.0167), u64(17))
-    testing.expect_value(t, app_view.gif_capture_elapsed_duration_ms(0.001),
-        app_view.GIF_MIN_DELAY_MS)
-    testing.expect_value(t, app_view.gif_capture_elapsed_duration_ms(1000),
-        app_view.GIF_MAX_DELAY_MS)
+    testing.expect_value(t, viewcapture.gif_capture_elapsed_duration_ms(0), u64(0))
+    testing.expect_value(t, viewcapture.gif_capture_elapsed_duration_ms(0.0167), u64(17))
+    testing.expect_value(t, viewcapture.gif_capture_elapsed_duration_ms(0.001),
+        viewcapture.GIF_MIN_DELAY_MS)
+    testing.expect_value(t, viewcapture.gif_capture_elapsed_duration_ms(1000),
+        viewcapture.GIF_MAX_DELAY_MS)
 }
 
 //   Verify gif_capture_scaled_extent matches the screen-to-render ratio with rounding.
 @(test)
 gif_capture_scaled_extent_matches_screen_to_render_ratio :: proc(t: ^testing.T) {
-    one_x := app_view.gif_capture_scaled_extent(900, 1280, 1280)
+    one_x := viewcapture.gif_capture_scaled_extent(900, 1280, 1280)
     testing.expect_value(t, one_x, 900)
 
-    two_x := app_view.gif_capture_scaled_extent(900, 1280, 2560)
+    two_x := viewcapture.gif_capture_scaled_extent(900, 1280, 2560)
     testing.expect_value(t, two_x, 1800)
 
-    round_nearest := app_view.gif_capture_scaled_extent(3, 2, 3)
+    round_nearest := viewcapture.gif_capture_scaled_extent(3, 2, 3)
     testing.expect_value(t, round_nearest, 5)
 
-    safe_minimum := app_view.gif_capture_scaled_extent(0, 0, 0)
+    safe_minimum := viewcapture.gif_capture_scaled_extent(0, 0, 0)
     testing.expect_value(t, safe_minimum, 1)
 }
 
 //   Verify dynamic logical world dimensions map into the framebuffer bounds.
 @(test)
 gif_capture_source_dimensions_follow_world_extent :: proc(t: ^testing.T) {
-    width, height := app_view.gif_capture_source_dimensions_for_framebuffer({
+    width, height := viewcapture.gif_capture_source_dimensions_for_framebuffer({
         logical_width = 640,
         logical_height = 360,
         screen_width = 1280,
@@ -139,7 +156,7 @@ gif_capture_source_dimensions_follow_world_extent :: proc(t: ^testing.T) {
     testing.expect_value(t, width, 1280)
     testing.expect_value(t, height, 720)
 
-    width, height = app_view.gif_capture_source_dimensions_for_framebuffer({
+    width, height = viewcapture.gif_capture_source_dimensions_for_framebuffer({
         logical_width = 2000,
         logical_height = 1000,
         screen_width = 1280,
@@ -154,14 +171,14 @@ gif_capture_source_dimensions_follow_world_extent :: proc(t: ^testing.T) {
 //   Verify one GIF session freezes and clears its framebuffer crop dimensions.
 @(test)
 gif_capture_session_dimensions_are_stable_until_teardown :: proc(t: ^testing.T) {
-    session := viewmodel.Gif_Capture_Session{}
+    session := capturemodel.Gif_Capture_Session{}
 
-    app_view.gif_capture_freeze_source_dimensions(&session, 900, 500)
+    viewcapture.gif_capture_freeze_source_dimensions(&session, 900, 500)
     testing.expect_value(t, session.source_width, 900)
     testing.expect_value(t, session.source_height, 500)
 
     changed_width, changed_height :=
-        app_view.gif_capture_source_dimensions_for_framebuffer({
+        viewcapture.gif_capture_source_dimensions_for_framebuffer({
             logical_width = 640,
             logical_height = 360,
             screen_width = 1280,
@@ -174,7 +191,7 @@ gif_capture_session_dimensions_are_stable_until_teardown :: proc(t: ^testing.T) 
     testing.expect_value(t, session.source_width, 900)
     testing.expect_value(t, session.source_height, 500)
 
-    app_view.gif_capture_clear_source_dimensions(&session)
+    viewcapture.gif_capture_clear_source_dimensions(&session)
     testing.expect_value(t, session.source_width, 0)
     testing.expect_value(t, session.source_height, 0)
 }
@@ -185,26 +202,26 @@ gif_capture_consume_cycle_boundary_consumes_once_per_generation :: proc(t: ^test
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
 
-    testing.expect(t, !app_view.gif_capture_consume_cycle_boundary(state))
+    testing.expect(t, !viewcapture.gif_capture_consume_cycle_boundary(state))
 
     state^.cycle_boundary_generation = 1
-    testing.expect(t, app_view.gif_capture_consume_cycle_boundary(state))
-    testing.expect(t, !app_view.gif_capture_consume_cycle_boundary(state))
+    testing.expect(t, viewcapture.gif_capture_consume_cycle_boundary(state))
+    testing.expect(t, !viewcapture.gif_capture_consume_cycle_boundary(state))
 
     state^.cycle_boundary_generation = 2
-    testing.expect(t, app_view.gif_capture_consume_cycle_boundary(state))
+    testing.expect(t, viewcapture.gif_capture_consume_cycle_boundary(state))
 }
 
 //   Verify aborting an inactive GIF capture session is a safe no-op.
 @(test)
 gif_capture_abort_session_is_safe_when_inactive :: proc(t: ^testing.T) {
-    session := viewmodel.Gif_Capture_Session{
+    session := capturemodel.Gif_Capture_Session{
         source_width = 900,
         source_height = 500,
         output_width = 450,
         output_height = 250,
     }
-    app_view.gif_capture_abort_session(&session)
+    viewcapture.gif_capture_abort_session(&session)
     testing.expect(t, !session.active)
     testing.expect_value(t, session.source_width, 0)
     testing.expect_value(t, session.source_height, 0)
@@ -224,9 +241,9 @@ gif_capture_transitions_record_required_evidence :: proc(t: ^testing.T) {
     }))
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
 
-    record_gif_capture_transition(state, .Armed, .Recording)
-    record_gif_capture_transition(state, .Recording, .Saved)
-    record_gif_capture_transition(state, .Recording, .Error)
+    viewcapture.record_gif_capture_transition(state, .Armed, .Recording)
+    viewcapture.record_gif_capture_transition(state, .Recording, .Saved)
+    viewcapture.record_gif_capture_transition(state, .Recording, .Error)
 
     events: [3]evidence_trace.Event
     count := evidence_trace.ring_drain(&state^.evidence_ring, events[:])
@@ -241,7 +258,7 @@ gif_capture_transitions_record_required_evidence :: proc(t: ^testing.T) {
 // Verify a logical resize aborts every protected GIF phase before geometry changes.
 @(test)
 gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
-    phases := [3]viewmodel.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
+    phases := [3]capturemodel.Gif_Capture_Phase{.Armed, .Recording, .Finalizing}
     generation := contentdata.content_message_test_generation(t)
     defer contentdata.content_message_test_destroy(generation)
     service := contentdata.Content_Service{active_generation = generation,
@@ -250,7 +267,7 @@ gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
         state := new(app_core.Euclid_General_State, context.allocator)
         state.content_service = &service
         state^.ui_runtime.window = {1280, 720}
-        state^.ui_runtime.gif_capture_phase = phase
+        state^.gif_capture_status.gif_capture_phase = phase
         state^.gif_capture.source_width = 900
         state^.gif_capture.source_height = 500
         testing.expect(t, evidence_session.session_init(&state^.evidence_session, {
@@ -261,12 +278,12 @@ gif_capture_resize_cancels_protected_phases :: proc(t: ^testing.T) {
         testing.expect(t, apply_window_metrics(state, {640, 900}))
         testing.expect_value(t, state^.ui_runtime.window,
             viewmodel.Ui_Window_Metrics{640, 900})
-        testing.expect_value(t, state^.ui_runtime.gif_capture_phase,
-            viewmodel.Gif_Capture_Phase.Error)
+        testing.expect_value(t, state^.gif_capture_status.gif_capture_phase,
+            capturemodel.Gif_Capture_Phase.Error)
         testing.expect_value(t, state^.gif_capture.source_width, 0)
         testing.expect_value(t, state^.gif_capture.source_height, 0)
-        note := string(state^.ui_runtime.gif_status_note[
-            :state^.ui_runtime.gif_status_note_len])
+        note := string(state^.gif_capture_status.gif_status_note[
+            :state^.gif_capture_status.gif_status_note_len])
         testing.expect_value(t, note, "Window resized; GIF capture cancelled.")
         events: [1]evidence_trace.Event
         count := evidence_trace.ring_drain(&state^.evidence_ring, events[:])
@@ -283,15 +300,15 @@ gif_capture_resize_ignores_stable_or_unprotected_state :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
     state^.ui_runtime.window = {1280, 720}
-    state^.ui_runtime.gif_capture_phase = .Recording
+    state^.gif_capture_status.gif_capture_phase = .Recording
     testing.expect(t, !apply_window_metrics(state, {1280, 720}))
-    testing.expect_value(t, state^.ui_runtime.gif_capture_phase,
-        viewmodel.Gif_Capture_Phase.Recording)
+    testing.expect_value(t, state^.gif_capture_status.gif_capture_phase,
+        capturemodel.Gif_Capture_Phase.Recording)
 
-    state^.ui_runtime.gif_capture_phase = .Saved
+    state^.gif_capture_status.gif_capture_phase = .Saved
     testing.expect(t, apply_window_metrics(state, {640, 900}))
-    testing.expect_value(t, state^.ui_runtime.gif_capture_phase,
-        viewmodel.Gif_Capture_Phase.Saved)
+    testing.expect_value(t, state^.gif_capture_status.gif_capture_phase,
+        capturemodel.Gif_Capture_Phase.Saved)
 }
 
 //   Verify files-owned GIF output names retain the public prefix and extension.

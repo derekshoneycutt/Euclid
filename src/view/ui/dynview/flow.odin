@@ -1,19 +1,15 @@
 package ui_dynview
 
 import native "../../native"
-
 import dynviewmodel "../../../dynview/model"
 import geometry "../../../core/geometry"
-
 import fontmodel "../../font/model"
-
-import "../../../core"
+import core "../../../core"
 import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
-import view_core "../../core"
-import "../../font"
-
-import "core:math"
+import font "../../font"
+import math "core:math"
+import viewtext "../text"
 
 //   Uniform handler shape for one flow command; the style is resolved by the caller.
 //   Handlers that do not need the command buffer receive nil for it.
@@ -509,11 +505,11 @@ flow_consume_text_span :: proc(
 flow_draw_text_line_content :: proc(
     line_text: string, line_x, row_y: f32,
     style: dyncore.Dynview_Text_Style, draw_ctx: ^Dynview_Draw_Context) {
-    text_font := view_core.Ui_Text_Font{
+    text_font := viewtext.Ui_Text_Font{
         style_font(draw_ctx, style), draw_ctx^.font_size}
     if draw_ctx^.state != nil {
         resolver := font.cache_terminal_resolver(&draw_ctx^.state^.font_cache)
-        view_core.ui_text_shaped({
+        viewtext.ui_text_shaped({
             encoder = draw_ctx.encoder,
             resolver = resolver,
             key = style_font_key(style),

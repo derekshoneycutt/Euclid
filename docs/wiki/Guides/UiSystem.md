@@ -107,26 +107,57 @@ This is a hybrid model:
 
 | Area | Primary files | Responsibility |
 | --- | --- | --- |
-| Window and frame loop | `src/view/view.odin` | Window lifecycle, frame order, world and panel drawing. |
-| Startup presentation | `src/view/loading.odin`, `src/view/startup_outline.odin` | Loading milestones, reference UI silhouette, warning, and ready handoff. |
-| Shared UI entry point | `src/view/ui/ui.odin` | Constants, frame preparation, panel draw dispatch. |
-| Region layout | `src/view/ui/layout.odin` | Clamp and derive all panel rectangles. |
-| Splitters | `src/view/ui/splitter.odin` | Prepared axis ranges, resize capture, owner commit, fade, and cursor. |
-| Containers | `src/view/ui/container.odin` | Clamped fill, border, and inner geometry. |
-| Scrolling | `src/view/ui/scroll.odin` | Viewport, wheel, thumb geometry, capture, scissor, and draw. |
-| Presentation panel | `src/view/ui/text_panel.odin` | Dynview/fallback dispatch, scrolling, selection, and clipboard publication. |
+| Window and frame loop | `src/view/view.odin`, `src/view/frame.odin` | Window entry, ordered owner calls, world and panel drawing. |
+| Startup presentation | `src/view/loading.odin`, `src/view/startup/startup_outline.odin` | Loading milestones, reference UI silhouette, warning, and ready handoff. |
+| Shared UI entry point | `src/view/ui/ui.odin` | Observational application panel drawing and dispatch. |
+| Frame control composition | `src/view/ui/controls.odin` | Control preparation, outgoing render-only tails, and semantic commit ordering. |
+| Geometry composition | `src/view/ui/geometry.odin` | Window/layout reconciliation and application pane preparation. |
+| Region layout | `src/view/ui/layout/regions/layout.odin` | Clamp and derive all panel rectangles. |
+| Splitters | `src/view/ui/layout/splitter/splitter.odin` | Prepared axis ranges, resize capture, owner commit, fade, and cursor. |
+| Containers | `src/view/ui/widgets/container.odin` | Clamped fill, border, and inner geometry. |
+| Scrolling | `src/view/ui/widgets/scroll.odin` | Viewport, wheel, thumb geometry, capture, scissor, and draw. |
+| Presentation panel | `src/view/ui/presentation/text_panel.odin` | Dynview/fallback dispatch, scrolling, selection, and clipboard publication. |
 | Dynview UI | `src/view/ui/dynview/` | Layout drawing, selection geometry, and styled presentation. |
-| Terminal facade | `src/view/ui/terminal.odin` | Terminal panel layout, scroll container, and draw calls. |
-| Terminal service | `src/view/terminal_service.odin` | Terminal lifecycle, input update, Julia messages, and links. |
+| Terminal facade | `src/view/ui/terminal/terminal.odin` | Terminal panel layout, scroll container, and draw calls. |
+| Terminal service | `src/view/terminal/service/terminal_service.odin` | Terminal lifecycle, input update, Julia messages, and links. |
 | Terminal rendering | `src/view/terminal/` | Grid, prompt, selection, links, attachments, and overlays. |
-| Accordion | `src/view/ui/accordion.odin` | Section layout, header interaction, and one-expanded-section policy. |
-| Accordion children | `src/view/ui/tree_panel.odin` | Accordion orchestration plus catalogue traversal, reveal, and scrolling. |
-| Animation controls | `src/view/ui/animation_controls.odin` | World-anchored refresh and pause/play interaction and drawing. |
-| Utility panels | `settings_panel.odin`, `gif_panel.odin` | Runtime settings and GIF controls. |
-| Basic widgets | `*button.odin`, `checkbox.odin`, `sliders.odin`, `range.odin` | Prepared actions, geometry, bounded values, and visuals. |
+| Accordion | `src/view/ui/layout/accordion/accordion.odin` | Section layout, header interaction, and one-expanded-section policy. |
+| Accordion composition | `src/view/ui/composition.odin`, `src/view/ui/sections.odin` | Aggregate panel preparation and application label resolution. |
+| Library panel | `src/view/ui/library/` | Catalogue traversal, reveal, search input, and scrolling. |
+| Animation controls | `src/view/ui/animation/animation_controls.odin` | World-anchored refresh and pause/play interaction and drawing. |
+| Utility panels | `src/view/ui/settings/`, `src/view/ui/gif/` | Runtime settings and GIF controls. |
+| Application overlays | `src/view/ui/overlay/` | Tooltip placement, timing, and application context-menu policy. |
+| Basic widgets | `src/view/ui/widgets/` | Prepared actions, geometry, bounded values, and visuals without application-coordinator imports. |
+| Semantic machinery | `src/view/ui/semantics/` | Bounded snapshots, registration, validation, focus navigation, and addressed commands. Scenario names remain in application UI composition. |
+| Shared stack geometry | `src/view/ui/layout/stack_panel.odin` | Pure axis placement and clipping shared by widgets and semantic registration. |
 | Input boundary | `src/view/input/` | Device polling, event storage, hotkeys, and Terminal encoding. |
 | Font service | `src/view/font/` | Face preparation, publication, lookup, and shaping identity. |
-| Shared state | `src/view/model/model.odin` | UI regions, press owner, interaction, selection, and GIF state. |
+| UI state | `src/view/ui/model/model.odin` | UI regions, press owner, interaction, selection, and panel state. |
+| UI drawing foundations | `src/view/ui/theme/`, `src/view/ui/text/` | Common palette and capability-based text drawing/measurement. |
+| World rendering | `src/view/world/` | Shape/tool/particle encoding; projection math and portable world records have their own child packages. |
+| Capture policy | `src/view/capture/`, `src/view/capture/model/` | Framebuffer mechanics, GIF timing/lifecycle, and portable encoder contracts. |
+| Display messages | `src/view/messages/` | Typed localization lookup and bounded copied labels. |
+| Preference-save contracts | `src/view/preferences/model/` | Save status and immutable worker payloads, independent of UI geometry. |
+
+There is no shared View core package. Import world projection, text drawing,
+capture, or message resolution from the owner above. UI composition still prepares
+application panels and owns their frame ordering; these foundation packages do
+not import that coordinator. Font preparation, residency, and shaping are substrate
+services, while native GPU publication remains display-thread-owned.
+
+Application panels import their owners directly, never the parent UI coordinator.
+Accordion mechanics consume caller-resolved labels; application localization stays
+in `sections.odin`. Shared viewport geometry avoids Presentation/Terminal layout
+dependencies on one another.
+
+UI runtime retains interaction state, preference intent, and visible save feedback.
+Capture intent, phase, counters, options, and bounded note/path storage belong to
+`capture/model`; UI routing consumes a small immutable capture projection and panels
+prepare display facts from that owner. Database ownership, submitted save payloads,
+task handles, retry counters, renderer metrics, and copied-label storage are composed
+separately by root core using `preferences/model`, `telemetry/model`, and
+`messages/model`. Pure tests stay beside reusable machinery. Tests requiring multiple
+panels or frame composition remain in the root UI package as integration tests.
 
 ## Ownership Model
 
@@ -426,8 +457,8 @@ window session.
 | Interaction | Shared `ui_press_owner`, Dynview selection |
 | Accordion | `active_accordion_section` selects View, Library, Save GIF, or Settings from the current layout descriptors |
 | Settings | FPS, simulation pause, SIMD, GPU dust, and slider state |
-| FPS reporting | Fixed rolling bucket arrays, cursor, elapsed time, and average |
-| GIF capture | Request flag, phase, frame counters, options, status, and last path |
+| FPS display | Visibility preference; rolling measurements belong to `telemetry/model` |
+| GIF input | Read-only saved-path selection; capture policy and path storage belong to `capture/model` |
 
 Runtime initialization stores the requested initial extent, resolves the initial mode,
 initializes landscape ratios from `VIEW_WIDTH` and `VIEW_HEIGHT`, initializes the
@@ -1016,7 +1047,7 @@ and resolves the active face generation.
 Common UI text uses JuliaMono through:
 
 - a `Font_Resolver` for styled or fallback runs;
-- `view_core.ui_text_shaped` for shaped labels;
+- `viewtext.ui_text_shaped` for shaped labels;
 - terminal-specific fixed-column shaping for grid content;
 - NewCM and OpenType MATH data through Dynview for mathematical presentation.
 
@@ -1051,7 +1082,8 @@ stateDiagram-v2
 
 While capture requires stable framing, splitter interaction is locked. Frame submission
 occurs after the presented frame and is skipped while simulation is paused. Status and
-path strings live in bounded arrays in UI runtime state. A logical extent change during
+path strings live in bounded arrays in `Gif_Capture_Status`, owned by `capture/model`.
+A logical extent change during
 Armed, Recording, or Finalizing aborts active encoder work, clears frozen dimensions,
 records the existing required GIF failure evidence, publishes Error with
 `Window resized; GIF capture cancelled.`, and accepts the new UI geometry in that same
@@ -1093,13 +1125,13 @@ temporary allocator already reset at frame completion.
 
 | Test area | Coverage |
 | --- | --- |
-| `src/view/startup_outline_test.odin` | Fixed-capacity silhouette geometry and bounded milestone reveal. |
+| `src/view/startup/startup_outline_test.odin` | Fixed-capacity silhouette geometry and bounded milestone reveal. |
 | `src/view/ui/ui_test.odin` | Router priority, focus, capture, wheel ownership, regions, splitters, animation controls, accordion layout, tree layout, and scrolling. |
 | `src/view/ui/tooltip_test.odin` | Tooltip placement, bounded text, hover delay, warm switching, keyboard reach, dismissal, and suppression. |
 | `src/view/ui/dynview/selection_test.odin` | Selection modes, hit boundaries, capture, and source extraction. |
 | `src/view/input/input_test.odin` | Device-independent events, correlation, hotkeys, Terminal encoding. |
 | `src/view/terminal/terminal_test.odin` | Terminal geometry, input, selection, links, cursor, and rendering policy. |
-| `src/view/terminal_service_test.odin` | Display service selection and Terminal lifecycle behavior. |
+| `src/view/terminal/service/terminal_service_test.odin` | Display service selection and Terminal lifecycle behavior. |
 | `src/view/view_test.odin` | View-level state transitions and UI-facing Terminal behavior. |
 
 Run the complete Odin unit suite after UI behavior changes:

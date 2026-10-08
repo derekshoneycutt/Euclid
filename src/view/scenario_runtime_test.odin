@@ -1,14 +1,11 @@
 package view
 
 import bridgemodel "../bridge/model"
-import viewmodel "model"
-
 import presentation_model "../bridge/presentation"
-
 import julia "../bridge"
-import "../core"
+import core "../core"
 import capture "../evidence/capture"
-import "../diagnostics"
+import diagnostics "../diagnostics"
 import artifact "../evidence/artifact"
 import scenario "../evidence/scenario"
 import evidence_session "../evidence/session"
@@ -16,43 +13,50 @@ import evidence_trace "../evidence/trace"
 import particlemodel "../particles/model"
 import input "input"
 import setting_model "../settings"
-
-import "core:log"
-import "core:os"
-import "core:strings"
-import "base:runtime"
-import "core:testing"
+import log "core:log"
+import os "core:os"
+import strings "core:strings"
+import runtime "base:runtime"
+import testing "core:testing"
+import preferencesmodel "preferences/model"
+import viewmodel "ui/model"
+import viewscenario "scenario"
+import viewsimulation "simulation"
 
 // Verify scenario edits share control policy and assertions observe intent, not hardware fallback.
 @(test)
 scenario_runtime_settings_use_control_owner :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
     particles := new(particlemodel.Particle_System, context.allocator)
     defer free(particles, context.allocator)
     state^.particle_system = particles
     state^.ui_runtime.settings_preferences = setting_model.default_preferences()
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
     command := scenario.Command{kind = .Set_Setting,
         setting_id = .Drawing_Dust_Limit,
         setting_value = setting_model.integer_value(1400)}
-    handled, accepted := scenario_issue_display_action(&runtime, &command, &identity)
+    handled, accepted := viewscenario.scenario_issue_display_action(
+        &runtime, &command, &identity)
     testing.expect(t, handled && accepted)
     testing.expect_value(t, particles^.use_max_dust_particles, 1400)
-    testing.expect_value(t, state^.ui_runtime.settings_pending.count, 1)
+    testing.expect_value(t, state^.preferences_runtime.settings_pending.count, 1)
     testing.expect_value(t, state^.ui_runtime.settings_save_status,
-        viewmodel.Settings_Save_Status.Unavailable)
+        preferencesmodel.Settings_Save_Status.Unavailable)
     command.kind = .Assert_Setting
-    handled, accepted = scenario_issue_display_action(&runtime, &command, &identity)
+    handled, accepted = viewscenario.scenario_issue_display_action(
+        &runtime, &command, &identity)
     testing.expect(t, handled && accepted)
     command.setting_value = setting_model.integer_value(1401)
-    _, accepted = scenario_issue_display_action(&runtime, &command, &identity)
+    _, accepted = viewscenario.scenario_issue_display_action(
+        &runtime, &command, &identity)
     testing.expect(t, !accepted)
     command.kind = .Set_Setting
     command.setting_id = .Window_Width
     command.setting_value = setting_model.integer_value(800)
-    _, accepted = scenario_issue_display_action(&runtime, &command, &identity)
+    _, accepted = viewscenario.scenario_issue_display_action(
+        &runtime, &command, &identity)
     testing.expect(t, !accepted)
 }
 
@@ -87,23 +91,23 @@ scenario_runtime_expect_outcome_logs :: proc(t: ^testing.T, path: string) {
 // Verify a running native session remains eligible for scenario-driven input.
 @(test)
 scenario_runtime_terminal_input_tracks_foreground_owner :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.terminal.initialized = true
     state^.terminal.julia_session_ready = true
-    testing.expect(t, scenario_terminal_input_available(state))
+    testing.expect(t, viewscenario.scenario_terminal_input_available(state))
 
     state^.terminal.awaiting_eval = true
-    testing.expect(t, !scenario_terminal_input_available(state))
+    testing.expect(t, !viewscenario.scenario_terminal_input_available(state))
 
     state^.shell.phase = .Running
-    testing.expect(t, scenario_terminal_input_available(state))
+    testing.expect(t, viewscenario.scenario_terminal_input_available(state))
 }
 
 // Verify focus assertions resolve stable names through committed UI semantics.
 @(test)
 scenario_runtime_focus_assertion_uses_committed_snapshot :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
     defer free(semantic)
@@ -112,32 +116,36 @@ scenario_runtime_focus_assertion_uses_committed_snapshot :: proc(t: ^testing.T) 
     snapshot := &semantic^.snapshots[semantic^.committed_index]
     snapshot^.nodes[0] = {id = semantic^.logical_focus, role = .Terminal}
     snapshot^.node_count = 1
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
     command := scenario.Command{kind = .Assert_Focus}
     command.text, _ = scenario.text_copy("terminal")
 
-    handled, accepted := scenario_issue_generic_action(
+    handled, accepted := viewscenario.scenario_issue_generic_action(
         &runtime, &command, &identity)
 
     testing.expect(t, handled && accepted)
     command.text, _ = scenario.text_copy("presentation")
-    handled, accepted = scenario_issue_generic_action(&runtime, &command, &identity)
+    handled, accepted = viewscenario.scenario_issue_generic_action(
+        &runtime, &command, &identity)
     testing.expect(t, handled && !accepted)
 }
 
 // Verify ordinary control activation keys are available without Terminal readiness.
 @(test)
 scenario_runtime_key_injection_is_display_wide :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     input_runtime := new(input.Input_Runtime, context.allocator)
     defer free(input_runtime)
-    runtime := Scenario_Runtime{state = state, input_runtime = input_runtime}
+    runtime := viewscenario.Scenario_Runtime{
+        state = state,
+        input_runtime = input_runtime,
+    }
     command := scenario.Command{kind = .Key}
     command.text, _ = scenario.text_copy("space")
 
-    testing.expect(t, scenario_issue_key(&runtime, &command))
+    testing.expect(t, viewscenario.scenario_issue_key(&runtime, &command))
     testing.expect_value(t, input_runtime^.injected_event_count, 1)
     testing.expect_value(t,
         input_runtime^.injected_events[0].key, input.Input_Key.Space)
@@ -152,7 +160,7 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
     logging_state: diagnostics.Logging_State
     testing.expect(t, diagnostics.logging_start(&logging_state, path, .Info))
     context.logger = logging_state.logger
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.evidence_session.enabled = true
@@ -162,22 +170,22 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
     program.commands[0] = {kind = .Pause_Simulation}
     program.commands[1] = {kind = .Resume_Simulation}
     program.commands[2] = {kind = .Shutdown}
-    runtime: Scenario_Runtime
-    scenario_runtime_init(&runtime, state, program)
+    runtime: viewscenario.Scenario_Runtime
+    viewscenario.scenario_runtime_init(&runtime, state, program)
 
     testing.expect_value(t,
-        scenario_runtime_update(&runtime, 1), scenario.Run_Status.Passed)
+        viewscenario.scenario_runtime_update(&runtime, 1), scenario.Run_Status.Passed)
     testing.expect(t, !state^.ui_runtime.simulation_paused)
     testing.expect(t, runtime.shutdown_requested)
 
-    failed := Scenario_Runtime{
+    failed := viewscenario.Scenario_Runtime{
         state = state,
         terminal_reason = artifact.Reason.Assertion_Failed,
     }
     failed.runner.step = 5
     failed.runner.assertion_count = 3
     failed.runner.failure_count = 1
-    scenario_runtime_record_terminal(&failed, .Failed)
+    viewscenario.scenario_runtime_record_terminal(&failed, .Failed)
 
     context.logger = log.nil_logger()
     diagnostics.logging_stop(&logging_state)
@@ -187,18 +195,20 @@ scenario_runtime_actions_use_display_owned_state :: proc(t: ^testing.T) {
 // Verify animation policy can pause independently from particle simulation.
 @(test)
 scenario_runtime_animation_pause_uses_display_owned_state :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
     pause := scenario.Command{kind = .Pause_Animation}
     resume := scenario.Command{kind = .Resume_Animation}
 
-    handled, accepted := scenario_issue_display_action(&runtime, &pause, &identity)
+    handled, accepted := viewscenario.scenario_issue_display_action(
+        &runtime, &pause, &identity)
     testing.expect(t, handled && accepted)
     testing.expect(t, state^.ui_runtime.animation_policy_paused)
     testing.expect(t, !state^.ui_runtime.simulation_paused)
-    handled, accepted = scenario_issue_display_action(&runtime, &resume, &identity)
+    handled, accepted = viewscenario.scenario_issue_display_action(
+        &runtime, &resume, &identity)
     testing.expect(t, handled && accepted)
     testing.expect(t, !state^.ui_runtime.animation_policy_paused)
 }
@@ -206,23 +216,23 @@ scenario_runtime_animation_pause_uses_display_owned_state :: proc(t: ^testing.T)
 // Verify emit_dust queues one bounded worker request with scenario correlation.
 @(test)
 scenario_runtime_dust_emission_queues_particle_request :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     particle_system := new(particlemodel.Particle_System, context.allocator)
     defer free(particle_system)
-    executor := new(Simulation_Executor, context.allocator)
+    executor := new(core.Simulation_Executor, context.allocator)
     defer free(executor)
     particle_system^.use_max_dust_particles = 100
     state^.particle_system = particle_system
     state^.simulation_executor = executor
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     command := scenario.Command{
         kind = .Emit_Dust, dust_distribution = .Grid, dust_count = 50,
         value = 0.5, secondary_value = 0.4, tertiary_value = 0.2,
         dust_seed = 9}
     identity := evidence_trace.Identity{.Scenario_Action, 12, 1}
 
-    handled, accepted := scenario_issue_generic_action(
+    handled, accepted := viewscenario.scenario_issue_generic_action(
         &runtime, &command, &identity)
 
     testing.expect(t, handled && accepted)
@@ -238,20 +248,20 @@ scenario_runtime_dust_emission_queues_particle_request :: proc(t: ^testing.T) {
 // Verify dust disturbances cross bounded owner requests without direct kick mutation.
 @(test)
 scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     particle_system := new(particlemodel.Particle_System, context.allocator)
     defer free(particle_system)
-    executor := new(Simulation_Executor, context.allocator)
+    executor := new(core.Simulation_Executor, context.allocator)
     defer free(executor)
     state^.particle_system = particle_system
     state^.simulation_executor = executor
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
 
     contact := scenario.Command{
         kind = .Contact_Dust, value = 0.25, secondary_value = 0.75}
-    handled, accepted := scenario_issue_generic_action(
+    handled, accepted := viewscenario.scenario_issue_generic_action(
         &runtime, &contact, &identity)
     testing.expect(t, handled && accepted)
     testing.expect_value(t, particle_system^.dust_tool_contact_count, 1)
@@ -259,7 +269,8 @@ scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
         particlemodel.Dust_Tool_Contact_Source.Scenario)
 
     kick := scenario.Command{kind = .Kick_Dust}
-    handled, accepted = scenario_issue_generic_action(&runtime, &kick, &identity)
+    handled, accepted = viewscenario.scenario_issue_generic_action(
+        &runtime, &kick, &identity)
     testing.expect(t, handled && accepted)
     testing.expect(t, executor^.particle_task.scenario_dust_kick_requested)
 }
@@ -267,7 +278,7 @@ scenario_runtime_dust_disturbances_queue_owner_requests :: proc(t: ^testing.T) {
 // Verify the particle worker consumes one scenario clear-kick request.
 @(test)
 scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     particle_system := new(particlemodel.Particle_System, context.allocator)
     defer free(particle_system)
@@ -276,10 +287,10 @@ scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
     particle_system^.low_particles[0].life = 1
     before_velocity := particle_system^.low_particles.vel_z[0]
     state^.particle_system = particle_system
-    data := Simulation_Task_Data{
+    data := core.Simulation_Task_Data{
         state = state, scenario_dust_kick_requested = true}
 
-    consume_scenario_dust_requests(&data)
+    viewsimulation.consume_scenario_dust_requests(&data)
 
     testing.expect(t, !data.scenario_dust_kick_requested)
     testing.expect(t, particle_system^.low_particles.vel_z[0] > before_velocity)
@@ -288,7 +299,7 @@ scenario_dust_kick_commits_on_particle_worker :: proc(t: ^testing.T) {
 // Verify the particle worker emits queued dust and records correlated completion.
 @(test)
 scenario_dust_emission_commits_on_particle_worker :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     particle_system := new(particlemodel.Particle_System, context.allocator)
     defer free(particle_system)
@@ -297,7 +308,7 @@ scenario_dust_emission_commits_on_particle_worker :: proc(t: ^testing.T) {
     state^.evidence_session.enabled = true
     state^.evidence_session.lanes = evidence_session.ALL_LANES
     state^.evidence_session.required_evidence_complete = true
-    data := new(Simulation_Task_Data, context.allocator)
+    data := new(core.Simulation_Task_Data, context.allocator)
     defer free(data)
     data^.state = state
     data^.dust_emission_queue.count = 1
@@ -306,7 +317,7 @@ scenario_dust_emission_commits_on_particle_worker :: proc(t: ^testing.T) {
         seed = 3, correlation = 14, generation = 1}
     evidence_trace.ring_init(&data^.evidence_ring, .Particle_Worker)
 
-    consume_scenario_dust_requests(data)
+    viewsimulation.consume_scenario_dust_requests(data)
     evidence_session.session_accept_ring(
         &state^.evidence_session, &data^.evidence_ring)
 
@@ -324,7 +335,7 @@ scenario_dust_emission_commits_on_particle_worker :: proc(t: ^testing.T) {
 // Verify viewport actions remain deferred until the next pre-geometry boundary.
 @(test)
 scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     animation := new(bridgemodel.Euclid_Julia_Animation_Interface, context.allocator)
@@ -338,23 +349,24 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
     }
     state^.ui_runtime.vertical_split_x = 900
     state^.ui_runtime.horizontal_split_y = 500
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
 
     scroll := scenario.Command{kind = .Set_View_Scroll, value = 90}
-    handled, accepted := scenario_issue_display_action(&runtime, &scroll, &identity)
+    handled, accepted := viewscenario.scenario_issue_display_action(
+        &runtime, &scroll, &identity)
     testing.expect(t, handled && accepted)
     testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(0))
-    testing.expect(t, scenario_runtime_apply_pending_ui(&runtime))
+    testing.expect(t, viewscenario.scenario_runtime_apply_pending_ui(&runtime))
     testing.expect_value(t, state^.ui_runtime.view_text_scroll_y, f32(90))
 
     splitters := scenario.Command{
         kind = .Set_Splitters, value = 0, secondary_value = 720}
-    handled, accepted = scenario_issue_display_action(
+    handled, accepted = viewscenario.scenario_issue_display_action(
         &runtime, &splitters, &identity)
     testing.expect(t, handled && accepted)
     testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(900))
-    testing.expect(t, scenario_runtime_apply_pending_ui(&runtime))
+    testing.expect(t, viewscenario.scenario_runtime_apply_pending_ui(&runtime))
     testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(320))
     testing.expect_value(t, state^.ui_runtime.horizontal_split_y, f32(580))
 }
@@ -362,7 +374,7 @@ scenario_runtime_defers_viewport_mutations :: proc(t: ^testing.T) {
 // Verify portrait scenario splitter mutation ignores vertical and landscape intent.
 @(test)
 scenario_runtime_portrait_splitter_mutates_only_world_ratio :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.ui_runtime.window = {1280, 720}
     state^.ui_runtime.landscape = {
@@ -372,15 +384,15 @@ scenario_runtime_portrait_splitter_mutates_only_world_ratio :: proc(t: ^testing.
     state^.ui_runtime.vertical_split_x = 320
     state^.ui_runtime.horizontal_split_y = 580
     state^.ui_runtime.current_layout_mode = .Portrait
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
     landscape := state^.ui_runtime.landscape
     splitters := scenario.Command{
         kind = .Set_Splitters, value = 1000, secondary_value = 360}
-    handled, accepted := scenario_issue_display_action(
+    handled, accepted := viewscenario.scenario_issue_display_action(
         &runtime, &splitters, &identity)
     testing.expect(t, handled && accepted)
-    testing.expect(t, scenario_runtime_apply_pending_ui(&runtime))
+    testing.expect(t, viewscenario.scenario_runtime_apply_pending_ui(&runtime))
     testing.expect_value(t, state^.ui_runtime.vertical_split_x, f32(320))
     testing.expect_value(t, state^.ui_runtime.horizontal_split_y, f32(360))
     testing.expect_value(t, state^.ui_runtime.portrait.world_height_ratio, f32(0.5))
@@ -390,7 +402,7 @@ scenario_runtime_portrait_splitter_mutates_only_world_ratio :: proc(t: ^testing.
 // Verify portrait startup resolves directly to the selected-title View section.
 @(test)
 runtime_fields_initialize_portrait_view :: proc(t: ^testing.T) {
-    settings := Euclid_Run_Settings{
+    settings := core.Euclid_Run_Settings{
         window = {width = 640, height = 720, layout = .Portrait},
     }
     runtime: viewmodel.Euclid_Ui_Runtime_State
@@ -408,7 +420,7 @@ runtime_fields_initialize_portrait_view :: proc(t: ^testing.T) {
 // Verify a required screenshot keeps the run active until post-presentation completion.
 @(test)
 scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.evidence_session.enabled = true
@@ -419,25 +431,25 @@ scenario_runtime_waits_for_post_present_capture :: proc(t: ^testing.T) {
     testing.expect(t, copied)
     program := scenario.Program{count = 1}
     program.commands[0] = {kind = .Request_Screenshot, text = path}
-    runtime: Scenario_Runtime
-    scenario_runtime_init(&runtime, state, program)
+    runtime: viewscenario.Scenario_Runtime
+    viewscenario.scenario_runtime_init(&runtime, state, program)
 
     testing.expect_value(t,
-        scenario_runtime_update(&runtime, 1), scenario.Run_Status.Running)
+        viewscenario.scenario_runtime_update(&runtime, 1), scenario.Run_Status.Running)
     captured: capture.Checkpoint
-    testing.expect_value(t, scenario_runtime_after_present(&runtime, {
+    testing.expect_value(t, viewscenario.scenario_runtime_after_present(&runtime, {
         user_data = &captured,
         capture = scenario_runtime_test_capture,
     }), capture.Checkpoint_Status.Completed)
     testing.expect_value(t, captured.fixed_step, u64(11))
     testing.expect_value(t,
-        scenario_runtime_update(&runtime, 2), scenario.Run_Status.Passed)
+        viewscenario.scenario_runtime_update(&runtime, 2), scenario.Run_Status.Passed)
 }
 
 // Verify failed screenshot materialization terminates with required failure evidence.
 @(test)
 scenario_runtime_records_post_present_capture_failure :: proc(t: ^testing.T) {
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     defer free(state)
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.evidence_session.enabled = true
@@ -448,12 +460,12 @@ scenario_runtime_records_post_present_capture_failure :: proc(t: ^testing.T) {
     testing.expect(t, copied)
     program := scenario.Program{count = 1}
     program.commands[0] = {kind = .Request_Screenshot, text = path}
-    runtime: Scenario_Runtime
-    scenario_runtime_init(&runtime, state, program)
+    runtime: viewscenario.Scenario_Runtime
+    viewscenario.scenario_runtime_init(&runtime, state, program)
     testing.expect_value(t,
-        scenario_runtime_update(&runtime, 1), scenario.Run_Status.Running)
+        viewscenario.scenario_runtime_update(&runtime, 1), scenario.Run_Status.Running)
 
-    status := scenario_runtime_after_present(&runtime, {
+    status := viewscenario.scenario_runtime_after_present(&runtime, {
         capture = scenario_runtime_test_capture_failure,
     })
 
@@ -488,10 +500,11 @@ scenario_animation_selection_requests_tree_reveal :: proc(t: ^testing.T) {
     command_text, copied := scenario.text_copy("Target")
     testing.expect(t, copied)
     command := scenario.Command{kind = .Select_Animation, text = command_text}
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
 
-    handled, accepted := scenario_issue_julia_action(&runtime, &command, &identity)
+    handled, accepted := viewscenario.scenario_issue_julia_action(
+        &runtime, &command, &identity)
 
     testing.expect(t, handled && accepted)
     testing.expect_value(t, ji.selected_animation, &nodes[1])
@@ -510,10 +523,11 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
     state^.julia_runtime_service = service
     service^.runtime_generation = 7
     command := scenario.Command{kind = .Reload_Runtime}
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     identity: evidence_trace.Identity
 
-    handled, accepted := scenario_issue_julia_action(&runtime, &command, &identity)
+    handled, accepted := viewscenario.scenario_issue_julia_action(
+        &runtime, &command, &identity)
 
     testing.expect(t, handled && accepted && service^.reload_requested)
     testing.expect_value(t, identity.kind,
@@ -524,14 +538,14 @@ scenario_reload_action_targets_next_runtime_generation :: proc(t: ^testing.T) {
 
 // Verify correlated set and suggestion actions mutate ordinary search state.
 scenario_expect_library_search_mutations :: proc(
-    t: ^testing.T, runtime: ^Scenario_Runtime) {
+    t: ^testing.T, runtime: ^viewscenario.Scenario_Runtime) {
     identity := evidence_trace.Identity{
         kind = .Scenario_Action, id = 17, generation = 1}
     query, copied := scenario.text_copy("perpendiculr")
     testing.expect(t, copied)
     set_command := scenario.Command{kind = .Set_Library_Search, text = query}
 
-    handled, accepted := scenario_issue_library_search_action(
+    handled, accepted := viewscenario.scenario_issue_library_search_action(
         runtime, &set_command, &identity)
 
     search := &runtime^.state^.ui_runtime.library_search
@@ -547,7 +561,7 @@ scenario_expect_library_search_mutations :: proc(
         kind = .Scenario_Action, id = 18, generation = 1}
     suggestion_command := scenario.Command{
         kind = .Apply_Library_Search_Suggestion}
-    handled, accepted = scenario_issue_library_search_action(
+    handled, accepted = viewscenario.scenario_issue_library_search_action(
         runtime, &suggestion_command, &correction)
     testing.expect(t, handled && accepted)
     testing.expect_value(t,
@@ -557,12 +571,12 @@ scenario_expect_library_search_mutations :: proc(
 
 // Verify clear restores ordinary search state and publishes its exact correlation.
 scenario_expect_library_search_clear :: proc(
-    t: ^testing.T, runtime: ^Scenario_Runtime) {
+    t: ^testing.T, runtime: ^viewscenario.Scenario_Runtime) {
     search := &runtime^.state^.ui_runtime.library_search
     clear := evidence_trace.Identity{
         kind = .Scenario_Action, id = 19, generation = 1}
     clear_command := scenario.Command{kind = .Clear_Library_Search}
-    handled, accepted := scenario_issue_library_search_action(
+    handled, accepted := viewscenario.scenario_issue_library_search_action(
         runtime, &clear_command, &clear)
     testing.expect(t, handled && accepted)
     testing.expect_value(t, search^.query_length, 0)
@@ -588,7 +602,7 @@ scenario_library_search_actions_are_correlated :: proc(t: ^testing.T) {
     state^.evidence_session.required_evidence_complete = true
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
     state^.ui_runtime.library_search.worker_available = true
-    runtime := Scenario_Runtime{state = state}
+    runtime := viewscenario.Scenario_Runtime{state = state}
     scenario_expect_library_search_mutations(t, &runtime)
     scenario_expect_library_search_clear(t, &runtime)
 }
@@ -616,7 +630,7 @@ scenario_animation_selection_qualified_name :: proc(t: ^testing.T) {
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
 
-    selected := scenario_find_animation(ji, "Curves/Circle")
+    selected := viewscenario.scenario_find_animation(ji, "Curves/Circle")
 
     testing.expect_value(t, selected, &nodes[3])
 }
@@ -662,11 +676,11 @@ scenario_view_content_submits_typed_owner_request :: proc(t: ^testing.T) {
     testing.expect(t, copied)
     command := scenario.Command{kind = .Set_View_Content,
         view_content_mime = .Text_Latex, text = source}
-    runtime_state := Scenario_Runtime{state = state}
+    runtime_state := viewscenario.Scenario_Runtime{state = state}
     identity := evidence_trace.Identity{
         kind = .Scenario_Action, id = 4, generation = 1}
 
-    handled, accepted := scenario_issue_julia_action(
+    handled, accepted := viewscenario.scenario_issue_julia_action(
         &runtime_state, &command, &identity)
     testing.expect(t, handled && accepted)
     scenario_expect_view_content_request(t, service, animation, identity)

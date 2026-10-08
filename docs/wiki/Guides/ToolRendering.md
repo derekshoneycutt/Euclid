@@ -8,9 +8,9 @@ hiding geometric color or creating a separate glowing rim.
 
 ## Ownership
 
-- `src/view/elements.odin` owns shared tool geometry, draw order, light conversion,
+- `src/view/world/geometry.odin` owns shared tool geometry, draw order, light conversion,
   and bounded occluder selection.
-- `src/view/elements_encoded_tools.odin` emits ordered frame-local tool records.
+- `src/view/world/tools.odin` emits ordered frame-local tool records.
 - `src/view/native/sdl_stroke_pipeline.odin` owns SDL_GPU pipeline admission, packed
   uniform upload, draw recording, and resource release.
 - `src/view/shaders/stroke3d.vert.hlsl` forwards batched vertex color data.
@@ -107,7 +107,7 @@ stroke surface without claiming full world-space ray accuracy.
 
 ## Verification
 
-`src/view/elements_test.odin` covers expanded bounds, fixed context capacity,
+`src/view/world/geometry_test.odin` covers expanded bounds, fixed context capacity,
 cache-order depth gating, world-to-view basis projection, canonical view-depth
 ordering, arc parameter endpoints, attachment scaling, and stable leg slots.
 `src/view/native/draw_encoder_test.odin` covers ordered custom commands and fixed

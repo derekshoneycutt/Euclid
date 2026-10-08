@@ -1,15 +1,14 @@
 package content_model
 
-import viewmodel "../../view/model"
-
-import "core:encoding/uuid"
-import "core:mem"
-import "core:strings"
+import uuid "core:encoding/uuid"
+import mem "core:mem"
+import strings "core:strings"
 import tlsf "core:mem/tlsf"
-import "core:sync/chan"
-import "core:thread"
+import chan "core:sync/chan"
+import thread "core:thread"
 import storage_pkg "../storage"
-import "core:unicode/utf8"
+import utf8 "core:unicode/utf8"
+import viewmodel "../../view/ui/model"
 
 SEARCH_QUERY_BYTE_CAPACITY :: viewmodel.LIBRARY_SEARCH_QUERY_BYTE_CAPACITY
 SEARCH_QUERY_ITEM_CAPACITY :: 16

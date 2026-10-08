@@ -1,12 +1,18 @@
 package observe
 
-import viewmodel "../../view/model"
-import viewterminalmodel "../../view/terminal/model"
+import telemetrymodel "../../view/telemetry/model"
 
+import viewterminalmodel "../../view/terminal/model"
 import bridgemodel "../../bridge/model"
 import dynviewmodel "../../dynview/model"
 import particlemodel "../../particles/model"
 import shapemodel "../../shapes/model"
+import allocation_evidence "../allocation"
+import evidence_trace "../trace"
+import settings "../../settings"
+import preferencesmodel "../../view/preferences/model"
+import viewmodel "../../view/ui/model"
+import capturemodel "../../view/capture/model"
 
 // Package observe copies bounded Euclid facts at explicit ownership boundaries.
 //
@@ -14,9 +20,6 @@ import shapemodel "../../shapes/model"
 // package does not establish synchronization: callers must already own the
 // source or have completed the documented producer handoff or task join.
 
-import allocation_evidence "../allocation"
-import evidence_trace "../trace"
-import settings "../../settings"
 
 // Point-in-time summary of one producer-owned evidence ring.
 //
@@ -41,7 +44,7 @@ Trace_State :: struct {
 Display :: struct {
     // Preference intent and joined save evidence; no store or worker pointer escapes.
     settings_preferences: settings.Preferences,
-    settings_save_status: viewmodel.Settings_Save_Status,
+    settings_save_status: preferencesmodel.Settings_Save_Status,
     settings_store_available: bool,
     settings_save_active: bool,
     settings_pending_count: int,
@@ -145,7 +148,7 @@ Display :: struct {
 
     // GIF capture lifecycle and completed frame count.
     gif_capture_active : bool,
-    gif_capture_phase : viewmodel.Gif_Capture_Phase,
+    gif_capture_phase : capturemodel.Gif_Capture_Phase,
     gif_captured_frames : int,
 
     // Library-search request completion and accepted-result state.
@@ -167,7 +170,10 @@ Display_Source :: struct {
     fixed_step : u64,
     simulation_time : f32,
     ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
-    gif_capture : ^viewmodel.Gif_Capture_Session,
+    preferences_runtime: ^preferencesmodel.Settings_Save_Runtime,
+    telemetry: ^telemetrymodel.Runtime,
+    gif_capture : ^capturemodel.Gif_Capture_Session,
+    gif_capture_status: ^capturemodel.Gif_Capture_Status,
     terminal : ^viewterminalmodel.Terminal_State,
     dynview : ^dynviewmodel.Dynview_System,
     shape_world : ^shapemodel.Shape_World,
@@ -299,7 +305,7 @@ observe_display_julia_service :: proc(
     result.animation_ticks_dropped = service.animation_ticks_dropped
 }
 
-//   Copy display-owned UI and capture state into an in-progress observation.
+// Copy display-owned interaction and layout state into an in-progress observation.
 observe_display_ui :: proc(
     source: ^Display_Source, result: ^Display) {
     if source.ui_runtime != nil {
@@ -309,16 +315,6 @@ observe_display_ui :: proc(
         result.view_text_scroll_max = source.ui_runtime.view_text_scroll_max
         result.vertical_split_x = source.ui_runtime.vertical_split_x
         result.horizontal_split_y = source.ui_runtime.horizontal_split_y
-        result.colored_vertex_count = source.ui_runtime.colored_vertex_count
-        result.colored_index_count = source.ui_runtime.colored_index_count
-        result.curve_candidate_point_count =
-            source.ui_runtime.curve_candidate_point_count
-        result.curve_retained_point_count = source.ui_runtime.curve_retained_point_count
-        result.curve_retention_ratio = source.ui_runtime.curve_retention_ratio
-        result.colored_primitive_overflow_count =
-            source.ui_runtime.colored_primitive_overflow_count
-        result.gif_capture_phase = source.ui_runtime.gif_capture_phase
-        result.gif_captured_frames = source.ui_runtime.gif_captured_frames
         search := &source.ui_runtime.library_search
         result.library_search_idle = search.worker_available &&
             !search.query_dirty && !search.submit_requested &&
@@ -329,6 +325,14 @@ observe_display_ui :: proc(
         result.tooltip_visible = source.ui_runtime.tooltip.visible
     }
 
+}
+
+// Copy independent capture policy and encoder state without requiring UI storage.
+observe_display_capture :: proc(source: ^Display_Source, result: ^Display) {
+    if source.gif_capture_status != nil {
+        result.gif_capture_phase = source.gif_capture_status.gif_capture_phase
+        result.gif_captured_frames = source.gif_capture_status.gif_captured_frames
+    }
     if source.gif_capture != nil {
         result.gif_capture_active = source.gif_capture.active
     }
@@ -343,12 +347,6 @@ observe_display_settings :: proc(
     result^.settings_preferences = runtime^.settings_preferences
     result^.settings_save_status = runtime^.settings_save_status
     result^.settings_store_available = runtime^.settings_store_available
-    result^.settings_save_active = runtime^.settings_save_active
-    result^.settings_pending_count = runtime^.settings_pending.count
-    result^.settings_save_commit_count = runtime^.settings_save_commit_count
-    result^.settings_save_failure_count = runtime^.settings_save_failure_count
-    result^.settings_save_owner_execution_count =
-        runtime^.settings_save_owner_execution_count
     result^.window_width = runtime^.window.width
     result^.window_height = runtime^.window.height
     result^.accordion_transition_running = runtime^.accordion_transition.running
@@ -359,6 +357,33 @@ observe_display_settings :: proc(
         runtime^.platform_reduce_motion
     result^.presentation_visible = runtime^.presentation_visible
     observe_display_tree(runtime, result)
+}
+
+// Copy joined persistence counters without exposing worker payload or store pointers.
+observe_display_preferences :: proc(
+    runtime: ^preferencesmodel.Settings_Save_Runtime, result: ^Display) {
+    if runtime == nil {
+        return
+    }
+    result^.settings_save_active = runtime^.settings_save_active
+    result^.settings_pending_count = runtime^.settings_pending.count
+    result^.settings_save_commit_count = runtime^.settings_save_commit_count
+    result^.settings_save_failure_count = runtime^.settings_save_failure_count
+    result^.settings_save_owner_execution_count =
+        runtime^.settings_save_owner_execution_count
+}
+
+// Copy the last submitted renderer metrics from their display-owned telemetry record.
+observe_display_telemetry :: proc(runtime: ^telemetrymodel.Runtime, result: ^Display) {
+    if runtime == nil {
+        return
+    }
+    result^.colored_vertex_count = runtime^.colored_vertex_count
+    result^.colored_index_count = runtime^.colored_index_count
+    result^.curve_candidate_point_count = runtime^.curve_candidate_point_count
+    result^.curve_retained_point_count = runtime^.curve_retained_point_count
+    result^.curve_retention_ratio = runtime^.curve_retention_ratio
+    result^.colored_primitive_overflow_count = runtime^.colored_primitive_overflow_count
 }
 
 // Copy pointer-free tree reveal and scrolling facts at the display observation boundary.
@@ -431,6 +456,9 @@ display :: proc(source: ^Display_Source) -> Display {
         trace = trace_state(source.evidence_ring),
     }
     observe_display_settings(source.ui_runtime, &result)
+    observe_display_preferences(source.preferences_runtime, &result)
+    observe_display_telemetry(source.telemetry, &result)
+    observe_display_capture(source, &result)
     if source.terminal != nil {
         result.terminal_ready = source.terminal.initialized &&
             source.terminal.julia_session_ready

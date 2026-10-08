@@ -1,24 +1,17 @@
 package view
 
 import geometry "../core/geometry"
-
 import bridgemodel "../bridge/model"
 import dynviewmodel "../dynview/model"
-
 import fontmodel "font/model"
-
 import shapemodel "../shapes/model"
-
 import storage "../core/storage"
-
-import "../diagnostics"
-
-import "core:log"
-import "core:math"
-import "core:os"
-import "core:strings"
-import "core:testing"
-
+import diagnostics "../diagnostics"
+import log "core:log"
+import math "core:math"
+import os "core:os"
+import strings "core:strings"
+import testing "core:testing"
 import app_bridge "../bridge"
 import app_core "../core"
 import app_dyncompile "../dynview/compile"

@@ -1,9 +1,7 @@
 package terminalview
 
 import native "../native"
-
 import viewterminalmodel "model"
-
 import termgrid "../../terminal/grid"
 import termemulator "../../terminal/emulator"
 import termattachment "../../terminal/attachment"
@@ -12,14 +10,13 @@ import termmodel "../../terminal/model"
 import termpalette "../../terminal/palette"
 import termshellintegration "../../terminal/shell_integration"
 import geometry "../../core/geometry"
-import "../input"
-import "../font"
-import view_core "../core"
-
-import "core:fmt"
-import "core:math"
-import "core:strings"
-import "core:unicode/utf8"
+import input "../input"
+import font "../font"
+import fmt "core:fmt"
+import math "core:math"
+import strings "core:strings"
+import utf8 "core:unicode/utf8"
+import viewtext "../ui/text"
 
 Terminal_Shaped_Glyph_Quad :: struct {
     destination: geometry.Rectangle,
@@ -1188,7 +1185,7 @@ terminal_draw_prompt_segment :: proc(
     shaped := terminal_draw_shaped_prompt_span({request.encoder,
         request.resolver, .Regular, segment, segment_position, request.color})
     if !shaped && terminal_text_is_ascii(segment) {
-        _ = view_core.ui_text_unshaped_paged({
+        _ = viewtext.ui_text_unshaped_paged({
             encoder = request.encoder,
             resolver = request.resolver,
             key = .Regular,
@@ -1622,7 +1619,7 @@ terminal_shaped_glyph_destination :: proc(
         width = resolved.source.width*scale,
         height = resolved.source.height*scale,
     }
-    destination_origin := view_core.ui_text_snap_glyph_origin(
+    destination_origin := viewtext.ui_text_snap_glyph_origin(
         encoder, {destination.x, destination.y})
     destination.x = destination_origin.x
     destination.y = destination_origin.y
@@ -1707,7 +1704,7 @@ terminal_shaped_glyphs_resident :: proc(
     request: Terminal_Shaped_Run_Draw,
     workspace: ^Terminal_Shaped_Run_Workspace, glyph_count: int) -> bool {
 
-    selection, resident := view_core.ui_text_shape_glyphs_are_resident(
+    selection, resident := viewtext.ui_text_shape_glyphs_are_resident(
         request.resolver, request.key,
         workspace.shaped_glyphs[:glyph_count], workspace.raster_request)
     if !resident {
@@ -1772,7 +1769,7 @@ terminal_prepare_shaped_run :: proc(
         return false
     }
     terminal_map_shape_cell_columns(request.cells, workspace)
-    raster_request, request_valid := view_core.ui_text_raster_request(
+    raster_request, request_valid := viewtext.ui_text_raster_request(
         request.resolver, request.key, TERMINAL_FONT_SIZE, request.encoder)
     if !request_valid {
         return false
@@ -1815,7 +1812,7 @@ terminal_draw_shaped_output_run :: proc(
                 request.column_width,
             request.position.y,
         }
-        resolved, resident := view_core.ui_text_resolve_selected_glyph(
+        resolved, resident := viewtext.ui_text_resolve_selected_glyph(
             request.resolver, request.key, glyph.glyph_id,
             workspace.raster_request, workspace.raster_selection)
         assert(resident)
@@ -1925,7 +1922,7 @@ terminal_draw_cell :: proc(
     color := terminal_resolve_foreground(
         draw.palette, cell.style.foreground,
         draw.theme.default_foreground)
-    _ = view_core.ui_text_unshaped_paged({
+    _ = viewtext.ui_text_unshaped_paged({
         encoder = draw.encoder,
         resolver = draw.resolver,
         key = terminal_font_key_for_cell(cell.style),
@@ -2155,7 +2152,7 @@ terminal_codepoint_end :: proc(text: string, offset: int) -> int {
 // Returns:
 //   - The pixel width of one virtual blank column.
 terminal_column_width :: proc(font: font.Font_Face) -> f32 {
-    advance, _ := view_core.ui_text_column_advance(font, TERMINAL_FONT_SIZE)
+    advance, _ := viewtext.ui_text_column_advance(font, TERMINAL_FONT_SIZE)
     return advance + TERMINAL_TEXT_SPACING
 }
 

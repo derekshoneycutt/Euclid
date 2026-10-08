@@ -1,18 +1,17 @@
 package app
 
-import "../core"
-import "../diagnostics"
+import core "../core"
+import diagnostics "../diagnostics"
 import evidence_allocation "../evidence/allocation"
 import evidence_session "../evidence/session"
 import setting_model "../settings"
 import user_data "../userdata"
-import "../view"
-
-import "core:fmt"
-import "core:log"
-import "core:os"
-import "core:strconv"
-import "core:strings"
+import view "../view"
+import fmt "core:fmt"
+import log "core:log"
+import os "core:os"
+import strconv "core:strconv"
+import strings "core:strings"
 
 COMMAND_LINE_PATH_MAX_BYTES :: 4096
 DIAGNOSTICS_OPTION_PREFIX :: "--diagnostics="

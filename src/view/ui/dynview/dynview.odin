@@ -1,20 +1,20 @@
 package ui_dynview
 
 import native "../../native"
-import viewmodel "../../model"
 import dynviewmodel "../../../dynview/model"
 import color "../../../core/color"
 import geometry "../../../core/geometry"
-
-import "../../../core"
+import core "../../../core"
 import dynmath "../../../dynview/math"
 import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
-import view_core "../../core"
 import view_font "../../font"
+import theme "../theme"
+import viewtext "../text"
+import viewmodel "../model"
 
-UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
-UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
+UI_BORDER_COLOR :: theme.UI_BORDER_COLOR
+UI_TEXT_COLOR :: theme.UI_TEXT_COLOR
 
 //   Fallback wrapped-text layout metrics, grouped so the styled-or-fallback
 //   entry point passes typography settings as one coherent value.
@@ -55,8 +55,8 @@ Program_Draw_Position :: struct {
 draw_presentation_fallback_text :: proc(
     fallback: Fallback_Text_Content, params: Presentation_Draw_Params) {
 
-    view_core.draw_wrapped_text_content(fallback.text,
-        view_core.Wrapped_Text_Content_Params{
+    viewtext.draw_wrapped_text_content(fallback.text,
+        viewtext.Wrapped_Text_Content_Params{
             encoder = params.encoder,
             panel = params.panel,
             scroll_y = params.scroll_y,

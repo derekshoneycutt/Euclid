@@ -1,17 +1,15 @@
 package ui_dynview
 
-import viewmodel "../../model"
 import native "../../native"
 import dynviewmodel "../../../dynview/model"
-
 import color "../../../core/color"
 import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
 import geometry "../../../core/geometry"
-import "../../input"
-
-import "core:math"
-import "core:strings"
+import input "../../input"
+import math "core:math"
+import strings "core:strings"
+import viewmodel "../model"
 
 // Group one presentation viewport and its fallback typography for selection.
 Dynview_Selection_View :: struct {

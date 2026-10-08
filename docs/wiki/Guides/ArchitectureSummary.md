@@ -50,9 +50,11 @@ If you are new, read in this order:
 1. Host/runtime boundary (`src/bridge/runtime_service.odin`,
    `src/bridge/animations.odin`, `src/bridge/abi-*.odin`,
    `src/julia/odin-julia-bridge.jl`).
-1. Follow one subsystem end to end: Terminal (`src/view/terminal_service.odin`,
+1. Follow one subsystem end to end: Terminal
+   (`src/view/terminal/service/terminal_service.odin`,
    `src/julia/terminal/`), animation (`src/julia/policy/`,
-   `src/bridge/scene_commands.odin`), or Dynview (`src/view/presentation_runtime.odin`,
+   `src/bridge/scene_commands.odin`), or Dynview
+   (`src/view/presentation/presentation_runtime.odin`,
    `src/dynview/`).
 1. Then continue by module using the maps below, touching only each module's
    highlighted files first.
@@ -69,15 +71,24 @@ If you are new, read in this order:
 | **Odin** | Shared Foundations | Bounded storage, animation-generation memory, and native protocol contracts. | `src/core/storage/`, `src/core/animation/`, `src/core/protocol/` |
 | **Odin** | Settings Substrate | Typed user-preference definitions, defaults, validation, and bounded change batches. | `src/settings/` |
 | **Odin** | User Data Store | Durable user database path policy, identity admission, typed settings rows, and transactional commits. | `src/userdata/` |
-| **Odin** | Coordinator Contracts | Bridge transport and presentation contracts plus display and Terminal runtime models. | `src/bridge/model/`, `src/bridge/presentation/`, `src/view/model/`, `src/view/terminal/model/` |
-| **Odin** | Input Boundary | Once-polled portable input frames, bounded event storage, hotkeys, and owner-bound Terminal encoding. | `src/view/input/`, `src/view/view.odin` |
+| **Odin** | Coordinator Contracts | Bridge transport and presentation contracts plus display and Terminal runtime models. | `src/bridge/model/`, `src/bridge/presentation/`, `src/view/ui/model/`, `src/view/terminal/model/` |
+| **Odin** | Input Boundary | Once-polled portable input frames, bounded event storage, hotkeys, and owner-bound Terminal encoding. | `src/view/input/`, `src/view/input/backend/` |
 | **Odin** | Accessibility | Bounded native-ready publication, session-local identity and action storage, validation, and display-owned platform adapters. | `src/accessibility/`, `src/view/native/accessibility/` |
-| **Odin** | Rendering and UI | Frame loop wiring, world rendering, panel rendering, and interaction routing. | `src/view/view.odin`, `src/view/elements.odin`, `src/view/core/view_core.odin`, `src/view/core/isomath.odin`, `src/view/ui/ui.odin` |
+| **Odin** | Rendering and UI | Ordered frame composition, world rendering, application panels, and interaction routing. | `src/view/frame.odin`, `src/view/world/`, `src/view/ui/` |
+| **Odin** | World Projection | Portable drawing-surface/projection values, viewport fit, deterministic shake, and scalar/SIMD projection. | `src/view/world/model/`, `src/view/world/projection/` |
+| **Odin** | UI Foundations | Persistent UI contracts, reusable controls, semantic snapshots/focus, common palette, and capability-based text drawing. | `src/view/ui/model/`, `src/view/ui/widgets/`, `src/view/ui/semantics/`, `src/view/ui/theme/`, `src/view/ui/text/` |
+| **Odin** | Display Message Cache | Typed content-message resolution and bounded copied display-lifetime labels. | `src/view/messages/` |
+| **Odin** | Display Capture Policy | Portable capture contracts, bounded policy/status records, framebuffer mechanics, GIF timing, crop, and lifecycle policy; UI receives copied routing facts. | `src/view/capture/`, `src/view/capture/model/` |
+| **Odin** | Preference Saves | Display-owned bounded payloads, submission, retry, joined results, and shutdown drain. | `src/view/preferences/` |
+| **Odin** | Simulation Coordination | Fixed-step timing, worker execution/join, interpolation, and cache preparation. | `src/view/simulation/` |
+| **Odin** | Presentation Admission | Retained MIME envelopes, parse admission, supersession, publication, and quiescence. | `src/view/presentation/` |
+| **Odin** | Display Telemetry | Renderer observations and rolling FPS, separate from UI interaction state and semantic evidence. | `src/view/telemetry/` |
+| **Odin** | Display Session | Native resource admission, window-frame lifetime, and ordered partial/full teardown. | `src/view/resources.odin`, `src/view/window_session.odin`, `src/view/shutdown.odin` |
 | **Odin** | Font Cache | Required JuliaMono/NewCM residency, FreeType light-hinted grayscale CPU raster preparation, MATH-table admission, demand-paged glyphs, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/freetype.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
 | **Odin** | HarfBuzz Binding | Dependency-owned opaque handles, ABI records, and shaping/OpenType MATH declarations. | `libs/harfbuzz/harfbuzz.odin` |
 | **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
 | **Odin** | Geometry Kernel | Bounded entity registry, analytic curve evaluation, components, direct-target constraints, and derived render packets. | `src/shapes/model/`, `src/shapes/curve/`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
-| **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario_runtime.odin`, `src/view/runtime_session.odin` |
+| **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario/scenario_runtime.odin`, `src/view/runtime_session.odin` |
 | **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/app/launch.odin` |
 | **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
 | **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `libs/julia/bindings/julialib.odin` (git submodule) |
@@ -85,8 +96,8 @@ If you are new, read in this order:
 | **Odin** | SQLite Runtime Substrate | Explicit native connection and statement lifecycle, typed binding and columns, and structured mechanics errors. Connections are nonconcurrent and use exclusive sequential ownership; the bundled mutex-enabled SQLite build permits task handoff. | `src/sqlite/`, `libs/sqlite3/sqlite3.odin`, `libs/sqlite3/source/sqlite3_custom.c` |
 | **Odin** | Content Store and Service | Named content SQL, complete immutable admission, packed generations, search scheduling, and paired active/staged publication. | `src/core/content/model.odin`, `src/core/content/records.odin`, `src/view/content/database.odin`, `src/view/content/statements.odin`, `src/view/content/generation.odin`, `src/view/content/worker.odin`, `src/view/content/service.odin` |
 | **Odin** | Content Database Builder | Deterministic normalized content database construction using `src/sqlite`; schema, transaction, indexing, coverage validation, and vacuum policy remain builder-owned. | `tools/content_builder/main.odin` |
-| **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/sdl_gif_capture.odin` |
-| **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/particles.odin` |
+| **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/capture/backend/sdl_gif_capture.odin` |
+| **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/world/particles.odin` |
 | **---** | **--- Julia Modules ---** | **---** | **---** |
 | **Julia** | Runtime Bootstrap | Script loading, null-animation behavior, and global frame dispatch. | `src/julia/script.jl` |
 | **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
@@ -625,7 +636,7 @@ layout. See [LaTeXSupport.md](LaTeXSupport.md) for syntax and authoring behavior
 | Transfer | `src/bridge/abi-presentation.odin` | `publish_presented_text` | Producer-owned `View_Content_Ready` egress envelope |
 | Submit | animation producer | `get_view_content`, `publish_view_content` | One canonical displayable |
 | Classify | `src/bridge/dynview_native_tex.odin`, `src/dynview/parse/document_grammar.odin` | `presentation_source_mode`, `tex_document_whole_math` | Plain, delimited math, or unwrapped document mode |
-| Schedule | `src/view/presentation_runtime.odin` | `service_presentation_runtime` | One active parse and one newest pending presentation |
+| Schedule | `src/view/presentation/presentation_runtime.odin` | `service_presentation_runtime` | One active parse and one newest pending presentation |
 | Lookup | `src/dynview/core/document_store.odin` | `document_store_lookup_keyed` | Exact generation-local positive or negative cache hit |
 | Parse/build | `src/dynview/parse/`, `src/dynview/core/document_store.odin` | `dynview_parse_build_keyed` | Shared-taskpool work over operation-owned `Dynview_Parse_Result` |
 | Commit | `src/dynview/core/document_store.odin` | `document_store_commit`, `document_store_resolve` | Immutable generation-scoped semantic document |
@@ -763,13 +774,13 @@ The windowed wrapper adds GIF policy without changing this semantic boundary.
 ### Synchronous Framebuffer Capture
 
 Presented-pixel acquisition is a display-thread operation owned by the SDL platform
-and adapted through `src/view/sdl_framebuffer.odin`. The platform copies its owned scene
-target to a temporary `DOWNLOAD` transfer buffer, submits the copy with a fence, waits
-for that submission, and maps the transfer storage. Mapped rows may be padded; the
-platform copies them into tightly packed, top-left RGBA8 storage before unmapping and
-releasing the fence and transfer buffer. The adapter owns that storage through a
-display-lifetime tracking allocator. Crop and nearest-neighbor resize replace buffers
-transactionally, and release is idempotent. Captured pixels never enter canonical
+and adapted through `src/view/capture/backend/sdl_framebuffer.odin`. The platform copies
+its owned scene target to a temporary `DOWNLOAD` transfer buffer, submits the copy with a
+fence, waits for that submission, and maps the transfer storage. Mapped rows may be
+padded; the platform copies them into tightly packed, top-left RGBA8 storage before
+unmapping and releasing the fence and transfer buffer. The adapter owns that storage
+through a display-lifetime tracking allocator. Crop and nearest-neighbor resize replace
+buffers transactionally, and release is idempotent. Captured pixels never enter canonical
 state or worker storage.
 
 Scenario evidence owns bounded screenshot requests, safe relative paths, and completion
@@ -1042,7 +1053,7 @@ the owner responsible for release.
 Choose the owning module first, then touch that module's highlighted files.
 
 - **Lifecycle or timing:** `src/main.odin`, `src/view/view.odin`.
-- **Rendering or UI:** `src/view/elements.odin`, `src/view/ui/`, `src/view/core/`.
+- **Rendering or UI:** `src/view/world/`, `src/view/ui/`.
 - **Pen or compass visuals:** [ToolRendering.md](ToolRendering.md).
 - **Dynview text or math:** `src/dynview/core/`, `src/dynview/math/`,
   `src/dynview/layout/`, `src/dynview/compile/`.

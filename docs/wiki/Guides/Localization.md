@@ -70,7 +70,7 @@ asset archives, extracted caches, or generated wiki pages.
 | Adjacent `*_content.jl` files | Canonical authored View content and semantic search text/aliases |
 | `src/julia/localized_content.jl` | Typed declaration contracts and complete manifest validation |
 | `src/core/content/messages.odin` | Native message IDs, required keys/signatures, and bounded formatter |
-| `src/view/core/messages.odin` | Display-owned static cache and caller-storage formatting helpers |
+| `src/view/messages/messages.odin` | Display-owned static cache and caller-storage formatting helpers |
 | `src/core/content/specification.odin` | Bounded native selection values and revision rules |
 | `src/julia/bridge/content_specification.jl` | Read-only callback query and symmetric copy-out ABI |
 
@@ -209,8 +209,8 @@ and the [SQLite constraints](Sqlite3.md#current-constraints) when planning the c
 
 ## Using Messages From Odin
 
-Display code uses `view_core.shell_message` for static text and
-`view_core.shell_format` for dynamic text. Pass named `Content_Format_Argument`
+Display code uses `viewmessages.shell_message` for static text and
+`viewmessages.shell_format` for dynamic text. Pass named `Content_Format_Argument`
 values with the exact wire kinds; allocate output storage in the caller's appropriate
 owner. A count that happens to fit in `u32` still must be `i64` when its signature
 requires that kind.

@@ -250,7 +250,7 @@ $$
 $$
 
 where $t$ is normalized lifetime progress. `DUST_PEAK_ALPHA` in
-`src/view/particles_encoded.odin` owns the display-level peak-opacity tuning and is
+`src/view/world/particles_encoder.odin` owns the display-level peak-opacity tuning and is
 currently 210. The fragment shader multiplies this tint by atlas coverage, and the
 pipeline applies straight-alpha blending. Authored alpha 255 therefore preserves the
 existing lifetime fade, while lower authored values attenuate it proportionally.
@@ -307,8 +307,8 @@ Field dimensions and settled threshold live in `src/particles/model/model.odin`.
 viscosity, drag, transfer, support, and solve behavior live in
 `src/particles/field.odin`. Emission, ballistic integration, contact queueing and
 sampling, reset, kick, and fixed-step ordering live in `src/particles/particles.odin`.
-Low-particle GPU and fallback rendering live in `src/view/particles.odin`. Observation,
-predicates, and artifacts live under `src/evidence/`.
+Low-particle GPU and fallback rendering live in `src/view/world/particles.odin`.
+Observation, predicates, and artifacts live under `src/evidence/`.
 
 Tune constants only with deterministic field tests, both ordinary dust scenarios, the
 dense PIC scenario, and comparable profile evidence. Preserve bilinear conservation,

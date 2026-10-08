@@ -1,16 +1,56 @@
 #+test
 package observe
 
-import bridgemodel "../../bridge/model"
+import telemetrymodel "../../view/telemetry/model"
+import preferencesmodel "../../view/preferences/model"
 
+import viewmodel "../../view/ui/model"
+import capturemodel "../../view/capture/model"
+import bridgemodel "../../bridge/model"
 import dynviewmodel "../../dynview/model"
 import evidence_trace "../trace"
 import particlemodel "../../particles/model"
 import shapemodel "../../shapes/model"
-import viewmodel "../../view/model"
 import viewterminalmodel "../../view/terminal/model"
+import testing "core:testing"
 
-import "core:testing"
+// Verify capture evidence survives an absent UI and never borrows policy storage.
+@(test)
+observe_test_independent_capture_owner :: proc(t: ^testing.T) {
+    status := capturemodel.Gif_Capture_Status{
+        gif_capture_phase = .Recording, gif_captured_frames = 7}
+    source := Display_Source{gif_capture_status = &status}
+    result := display(&source)
+    status.gif_capture_phase = .Saved
+    status.gif_captured_frames = 8
+    testing.expect_value(t,
+        result.gif_capture_phase, capturemodel.Gif_Capture_Phase.Recording)
+    testing.expect_value(t, result.gif_captured_frames, 7)
+    empty_source := Display_Source{}
+    empty := display(&empty_source)
+    testing.expect_value(t, empty.gif_capture_phase, capturemodel.Gif_Capture_Phase.Idle)
+    testing.expect_value(t, empty.gif_captured_frames, 0)
+}
+
+// Verify persistence evidence is copied from its owner even without a UI projection.
+@(test)
+observe_test_independent_persistence_owner :: proc(t: ^testing.T) {
+    runtime := preferencesmodel.Settings_Save_Runtime{
+        settings_pending = {count = 2},
+        settings_save_active = true,
+        settings_save_commit_count = 3,
+        settings_save_failure_count = 4,
+        settings_save_owner_execution_count = 5,
+    }
+    source := Display_Source{preferences_runtime = &runtime}
+    result := display(&source)
+    testing.expect(t, result.settings_save_active)
+    testing.expect_value(t, result.settings_pending_count, 2)
+    testing.expect_value(t, result.settings_save_commit_count, u64(3))
+    testing.expect_value(t, result.settings_save_failure_count, u64(4))
+    testing.expect_value(t, result.settings_save_owner_execution_count, u64(5))
+    testing.expect_value(t, runtime.settings_pending.count, 2)
+}
 
 // Verify the display copies only initialized branch motion and retained visual geometry.
 @(test)
@@ -38,11 +78,11 @@ observe_test_seed_display_scalars :: proc(source: ^Display_Source) {
     source^.ui_runtime^.view_text_scroll_max = 120
     source^.ui_runtime^.vertical_split_x = 640
     source^.ui_runtime^.horizontal_split_y = 360
-    source^.ui_runtime^.colored_vertex_count = 400
-    source^.ui_runtime^.colored_index_count = 600
-    source^.ui_runtime^.curve_candidate_point_count = 100
-    source^.ui_runtime^.curve_retained_point_count = 25
-    source^.ui_runtime^.curve_retention_ratio = 0.25
+    source^.telemetry^.colored_vertex_count = 400
+    source^.telemetry^.colored_index_count = 600
+    source^.telemetry^.curve_candidate_point_count = 100
+    source^.telemetry^.curve_retained_point_count = 25
+    source^.telemetry^.curve_retention_ratio = 0.25
     source^.required_evidence_complete = true
     source^.shape_world^.transforms.count = 4
     source^.shape_world^.constraints.count = 3
@@ -106,7 +146,9 @@ observe_test_expect_display_scalars :: proc(
 observe_test_display_scalars :: proc(t: ^testing.T) {
     ui_runtime := new(viewmodel.Euclid_Ui_Runtime_State, context.allocator)
     defer free(ui_runtime)
-    gif_capture := new(viewmodel.Gif_Capture_Session, context.allocator)
+    telemetry := new(telemetrymodel.Runtime, context.allocator)
+    defer free(telemetry)
+    gif_capture := new(capturemodel.Gif_Capture_Session, context.allocator)
     defer free(gif_capture)
     terminal := new(viewterminalmodel.Terminal_State, context.allocator)
     defer free(terminal)
@@ -122,6 +164,7 @@ observe_test_display_scalars :: proc(t: ^testing.T) {
     defer free(evidence_ring)
     source := Display_Source{
         ui_runtime = ui_runtime,
+        telemetry = telemetry,
         gif_capture = gif_capture,
         terminal = terminal,
         dynview = dynview,

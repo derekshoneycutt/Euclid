@@ -1,21 +1,17 @@
 package ui_dynview
 
 import native "../../native"
-
 import dynviewmodel "../../../dynview/model"
-
 import fontmodel "../../font/model"
-
-import "../../../core"
+import core "../../../core"
 import dynmath "../../../dynview/math"
 import dyncore "../../../dynview/core"
 import dynlayout "../../../dynview/layout"
 import geometry "../../../core/geometry"
-import view_core "../../core"
-import "../../font"
-
-import "core:math"
-import "core:fmt"
+import font "../../font"
+import math "core:math"
+import fmt "core:fmt"
+import viewtext "../text"
 
 //   Measured per-cell items plus per-column widths and per-row extents.
 Matrix_Draw_Cells :: struct {
@@ -198,7 +194,7 @@ Script_Limits_Draw :: struct {
     item : dynviewmodel.Dynview_Layout_Item,
     script : Script_Attach_Style,
     offsets : dynmath.Script_Draw_Offsets,
-    font : view_core.Ui_Text_Font,
+    font : viewtext.Ui_Text_Font,
     script_x : f32,
     baseline_y : f32,
 }
@@ -242,7 +238,7 @@ Math_Text_Draw :: struct {
     style: dyncore.Dynview_Text_Style,
     text: string,
     position: geometry.Vector2,
-    font: view_core.Ui_Text_Font,
+    font: viewtext.Ui_Text_Font,
 }
 
 //   Exact cached math command/site presentation request.
@@ -359,7 +355,7 @@ draw_math_text :: proc(draw: Math_Text_Draw) {
         return
     }
     resolver := font.cache_terminal_resolver(&draw.state^.font_cache)
-    view_core.ui_text_unshaped_paged({
+    viewtext.ui_text_unshaped_paged({
         encoder = draw.encoder,
         resolver = resolver,
         key = style_font_key(draw.style),
@@ -424,11 +420,11 @@ draw_cached_math_site :: proc(draw: Cached_Math_Site_Draw) -> bool {
     }
     scale := draw.font_size/run^.base_pixel_size
     origin_x := draw.position.x - min(0, run^.ink_left)*scale
-    line_top_y := view_core.ui_text_cached_run_line_top(
+    line_top_y := viewtext.ui_text_cached_run_line_top(
         draw.position.y, run^.ascent, run^.raster_ascent,
         draw.font_size, run^.base_pixel_size)
     resolver := font.cache_terminal_resolver(&draw.ctx.state^.font_cache)
-    return view_core.ui_text_cached_shaped_run({
+    return viewtext.ui_text_cached_shaped_run({
         encoder = draw.ctx.encoder,
         resolver = resolver,
         key = .Math_Regular,
@@ -506,13 +502,13 @@ draw_glyph_accent_parts :: proc(draw: Accent_Glyph_Parts_Draw) -> bool {
     resolver := font.cache_terminal_resolver(&draw.ctx.state^.font_cache)
     for index in 0..<draw.construction.count {
         part := draw.construction.parts[index]
-        resolved, resident := view_core.ui_text_resolve_selected_glyph(
+        resolved, resident := viewtext.ui_text_resolve_selected_glyph(
             resolver, .Math_Regular, part.glyph_id,
             draw.raster.request, draw.raster.selection)
         if !resident {
             return false
         }
-        view_core.ui_text_draw_resolved_glyph({
+        viewtext.ui_text_draw_resolved_glyph({
             encoder = draw.ctx.encoder,
             resolved = resolved,
             position = {
@@ -1440,7 +1436,7 @@ stretch_construction_select_raster :: proc(
         return {}
     }
     resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
-    raster_request, request_valid := view_core.ui_text_raster_request(
+    raster_request, request_valid := viewtext.ui_text_raster_request(
         resolver, .Math_Regular, logical_size, ctx.encoder)
     if !request_valid {
         return {}
@@ -1449,7 +1445,7 @@ stretch_construction_select_raster :: proc(
     for index in 0..<construction.count {
         glyph_ids[index] = construction.parts[index].glyph_id
     }
-    selection, ready := view_core.ui_text_select_glyph_ids(
+    selection, ready := viewtext.ui_text_select_glyph_ids(
         resolver, .Math_Regular, glyph_ids[:construction.count], raster_request)
     return {raster_request, selection, ready}
 }
@@ -1484,13 +1480,13 @@ draw_stretch_construction :: proc(
         part := construction.parts[index]
         part_baseline := position.baseline_y + position.vertical_origin -
             part.advance_offset*item.math_stretch_scale
-        resolved, resident := view_core.ui_text_resolve_selected_glyph(
+        resolved, resident := viewtext.ui_text_resolve_selected_glyph(
             resolver, .Math_Regular, part.glyph_id,
             raster.request, raster.selection)
         if !resident {
             return false
         }
-        view_core.ui_text_draw_resolved_glyph({
+        viewtext.ui_text_draw_resolved_glyph({
             encoder = ctx.encoder,
             resolved = resolved,
             position = {position.origin_x,
@@ -2269,7 +2265,7 @@ draw_large_op_variant :: proc(d: Math_Item_Draw) -> bool {
     }
     glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = item.operator_glyph_id}}
     resolver := font.cache_terminal_resolver(&d.ctx.state^.font_cache)
-    return view_core.ui_text_cached_shaped_run({
+    return viewtext.ui_text_cached_shaped_run({
         encoder = d.ctx.encoder,
         resolver = resolver,
         key = .Math_Regular,
@@ -2412,9 +2408,9 @@ draw_cached_text_item :: proc(
 
 // draw_regular_text_run draws one ordinary cached shaped text run.
 draw_regular_text_run :: proc(
-    params: Text_Run_Draw_Params, text_font: view_core.Ui_Text_Font) {
+    params: Text_Run_Draw_Params, text_font: viewtext.Ui_Text_Font) {
     resolver := font.cache_terminal_resolver(&params.state^.font_cache)
-    view_core.ui_text_shaped({
+    viewtext.ui_text_shaped({
         encoder = params.encoder,
         resolver = resolver,
         key = style_font_key(params.style),
@@ -2427,7 +2423,7 @@ draw_regular_text_run :: proc(
 
 // draw_cached_math_text_run attempts one resident math glyph run.
 draw_cached_math_text_run :: proc(
-    params: Text_Run_Draw_Params, text_font: view_core.Ui_Text_Font) -> bool {
+    params: Text_Run_Draw_Params, text_font: viewtext.Ui_Text_Font) -> bool {
     if params.item.kind != .Math_Glyph_Run {
         return false
     }
@@ -2448,7 +2444,7 @@ draw_cached_math_text_run :: proc(
 
 //   Draw the shaped or math content of one resolved text run.
 draw_text_run_content :: proc(
-    params: Text_Run_Draw_Params, text_font: view_core.Ui_Text_Font) {
+    params: Text_Run_Draw_Params, text_font: viewtext.Ui_Text_Font) {
     if params.item.kind == .Text_Run && params.state != nil {
         draw_regular_text_run(params, text_font)
         return
@@ -2482,7 +2478,7 @@ draw_text_run_underline :: proc(params: Text_Run_Draw_Params) {
 
 //   Draw one cached text-run item with optional underline.
 draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
-    text_font := view_core.Ui_Text_Font{params.resolved_font, params.font_size}
+    text_font := viewtext.Ui_Text_Font{params.resolved_font, params.font_size}
     draw_text_run_content(params, text_font)
     draw_text_run_underline(params)
 }
@@ -2612,7 +2608,7 @@ document_prose_content :: proc(
     }
     text := string(ctx.runtime^.content.document_text[
         run.text_offset:run.text_offset+run.text_count])
-    column_advance, advance_valid := view_core.ui_text_column_advance(
+    column_advance, advance_valid := viewtext.ui_text_column_advance(
         font.cache_borrow(&ctx.state^.font_cache, run.effective_font_key),
         ctx.font_size)
     if !advance_valid {
@@ -2633,10 +2629,10 @@ draw_document_prose_item :: proc(
     }
     cache := &ctx.runtime^.compile_cache
     run := content.run
-    line_top := view_core.ui_text_cached_run_line_top(
+    line_top := viewtext.ui_text_cached_run_line_top(
         position.y, run.ascent, run.raster_ascent,
         ctx.font_size, run.base_pixel_size)
-    return view_core.ui_text_cached_monospace_run({
+    return viewtext.ui_text_cached_monospace_run({
         shaped = {
             encoder = ctx.encoder,
             resolver = font.cache_terminal_resolver(&ctx.state^.font_cache),
@@ -2702,7 +2698,7 @@ draw_document_display_number :: proc(
     position := geometry.Vector2{origin.x+line.display_number_x,
         baseline-ctx.font_size*0.8}
     resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
-    _ = view_core.ui_text_unshaped_paged({
+    _ = viewtext.ui_text_unshaped_paged({
         encoder = ctx.encoder,
         resolver = resolver,
         key = .Regular,

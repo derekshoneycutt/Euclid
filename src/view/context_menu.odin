@@ -1,17 +1,17 @@
 package view
 
-import "../core"
-import viewmodel "model"
-import "ui"
-import "input"
+import core "../core"
+import input "input"
 import terminalview "terminal"
 import termemulator "../terminal/emulator"
-import "core:log"
+import log "core:log"
+import viewmodel "ui/model"
+import uioverlay "ui/overlay"
 
 // execute_context_menu_paste uses the same bounded owner paths as keyboard paste.
 execute_context_menu_paste :: proc(
     state: ^core.Euclid_General_State, runtime: ^input.Input_Runtime) {
-    if !ui.context_menu_paste_available(state) {
+    if !uioverlay.context_menu_paste_available(state) {
         log.warn("context_menu_paste_rejected reason=input_unavailable")
         return
     }
@@ -44,12 +44,12 @@ execute_context_menu_command :: proc(
     if command == .None {
         return
     }
-    if !ui.context_menu_target_valid(state) {
+    if !uioverlay.context_menu_target_valid(state) {
         log.warn("context_menu_command_rejected reason=stale_target")
         return
     }
     if menu^.target.domain == .Presentation {
-        ui.context_menu_execute_presentation(state, command)
+        uioverlay.context_menu_execute_presentation(state, command)
         return
     }
     if command == viewmodel.Ui_Context_Command.Paste {

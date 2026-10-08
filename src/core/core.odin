@@ -1,16 +1,29 @@
 package core
 
+import preferencesmodel "../view/preferences/model"
+import telemetrymodel "../view/telemetry/model"
+import messagesmodel "../view/messages/model"
+
 import animation_model "animation"
 import contentmodel "content"
 import bridgemodel "../bridge/model"
 import dynviewmodel "../dynview/model"
 import audiomodel "../audio/model"
 import fontmodel "../view/font/model"
-import viewmodel "../view/model"
 import viewterminalmodel "../view/terminal/model"
 import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
 import settings "../settings"
+import taskpool "../taskpool"
+import evidence_allocation "../evidence/allocation"
+import evidence_checkpoint "../evidence/checkpoint"
+import evidence_session "../evidence/session"
+import evidence_text "../evidence/text"
+import evidence_trace "../evidence/trace"
+import runtime "base:runtime"
+import worldmodel "../view/world/model"
+import viewmodel "../view/ui/model"
+import capturemodel "../view/capture/model"
 
 // Defines the core structures used in the Euclid Application.
 // The general bias is to just allocate memory upfront inside Euclid_General_State and
@@ -23,13 +36,6 @@ SCENARIOS_ENABLED :: #config(EUCLID_ENABLE_SCENARIOS, false)
 // Compile headless harness execution only for the harness executable and tests.
 HARNESS_ENABLED :: #config(EUCLID_ENABLE_HARNESS, false)
 
-import "../taskpool"
-import evidence_allocation "../evidence/allocation"
-import evidence_checkpoint "../evidence/checkpoint"
-import evidence_session "../evidence/session"
-import evidence_text "../evidence/text"
-import evidence_trace "../evidence/trace"
-import "base:runtime"
 
 Simulation_Task_Data :: struct {
     state: ^Euclid_General_State,
@@ -82,9 +88,9 @@ Julia_Interface_Slots ::
 Euclid_General_State :: struct {
     saved_context : runtime.Context,
 
-    iso_scale: ^viewmodel.Iso_Scale,
+    iso_scale: ^worldmodel.Iso_Scale,
 
-    draw_surface: ^viewmodel.Euclid_Drawing_Surface,
+    draw_surface: ^worldmodel.Euclid_Drawing_Surface,
 
     julia_runtime_service: ^bridgemodel.Julia_Runtime_Service,
     content_service: ^contentmodel.Content_Service,
@@ -106,7 +112,11 @@ Euclid_General_State :: struct {
     user_drawing_sound_enabled: bool,
     
     ui_runtime: viewmodel.Euclid_Ui_Runtime_State,
-    gif_capture: viewmodel.Gif_Capture_Session,
+    preferences_runtime: preferencesmodel.Settings_Save_Runtime,
+    telemetry: telemetrymodel.Runtime,
+    message_labels: messagesmodel.Label_Cache,
+    gif_capture: capturemodel.Gif_Capture_Session,
+    gif_capture_status: capturemodel.Gif_Capture_Status,
     font_cache: fontmodel.Font_Cache,
     terminal: viewterminalmodel.Terminal_State,
     terminal_tick_publisher: viewterminalmodel.Terminal_Tick_Publisher,

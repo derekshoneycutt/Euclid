@@ -2,28 +2,26 @@ package bridge
 
 import bridgemodel "model"
 import shapemodel "../shapes/model"
-
 import audio "../audio"
 import julialib "../../libs/julia/bindings"
-import "../core"
+import core "../core"
 import protocol "../core/protocol"
-import "../files"
+import files "../files"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
-import "../particles"
+import particles "../particles"
 import content "../view/content"
 import contentdata "../core/content"
-import view_core "../view/core"
 import terminalview "../view/terminal"
 import viewterminalmodel "../view/terminal/model"
-
-import "core:c"
-import "core:encoding/uuid"
-import "core:fmt"
-import "core:log"
-import "core:strings"
-import "core:time"
-import "core:unicode/utf8"
+import c "core:c"
+import uuid "core:encoding/uuid"
+import fmt "core:fmt"
+import log "core:log"
+import strings "core:strings"
+import time "core:time"
+import utf8 "core:unicode/utf8"
+import projection "../view/world/projection"
 
 TERMINAL_ANIMATION_NAME :: "Terminal"
 ANIMATION_LOOKUP_INITIAL_RESERVE :: 512
@@ -647,7 +645,7 @@ reset_animation_switch_state :: proc(state: ^core.Euclid_General_State) -> bool 
     particles.discard_dust_tool_contacts(state^.particle_system)
     if particles.emit_shape_world_clear_burst(
         state^.particle_system, state^.shape_world) && state^.iso_scale != nil {
-        view_core.screenshake_on_dust_kick(state^.iso_scale)
+        projection.screenshake_on_dust_kick(state^.iso_scale)
     }
     if shapemodel.shape_world_rewind_animation(state^.shape_world) != .Ok {
         return false

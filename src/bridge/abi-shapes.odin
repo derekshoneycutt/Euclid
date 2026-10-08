@@ -1,12 +1,10 @@
 package bridge
 
 import shapemodel "../shapes/model"
-
-import "../core"
-import "../particles"
-import "../shapes"
-import view_core "../view/core"
-
+import core "../core"
+import particles "../particles"
+import shapes "../shapes"
+import projection "../view/world/projection"
 
 // Group immutable component sources selected for one bridge query.
 Bridge_Shape_Query_Source :: struct {
@@ -714,7 +712,7 @@ shape_set_visible_local :: proc(
         emitted = particles.emit_shape_world_hide_burst(
             state^.particle_system, state^.shape_world, entity, kick_dust)
         if emitted && kick_dust && state^.iso_scale != nil {
-            view_core.screenshake_on_dust_kick(state^.iso_scale)
+            projection.screenshake_on_dust_kick(state^.iso_scale)
         }
     }
     style^.visible = target_visible

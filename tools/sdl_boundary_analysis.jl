@@ -30,7 +30,7 @@ const SDL_OWNER_POLICIES = SdlOwnerPolicy[
     (path="src/view/native/sdl_services.odin", category="platform services", count=1),
     (path="src/view/native/sdl_timing.odin", category="display timing", count=1),
     (path="src/view/input/clipboard.odin", category="system clipboard", count=1),
-    (path="src/view/sdl_input.odin", category="input coordinator", count=1),
+    (path="src/view/input/backend/sdl_input.odin", category="display input backend", count=1),
 ]
 
 """Return the stable Euclid SDL-boundary extension identity."""

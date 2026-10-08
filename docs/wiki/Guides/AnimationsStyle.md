@@ -148,7 +148,7 @@ one uninterrupted draw phase and one cycle boundary.
 
 ## Isometric Projection and Right-Hand Rule
 
-The isometric helper in `src/view/core/isomath.odin` uses a right-handed
+The isometric helper in `src/view/world/projection/projection.odin` uses a right-handed
 world-space convention.
 
 What that means in practice:

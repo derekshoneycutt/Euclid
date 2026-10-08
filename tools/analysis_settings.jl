@@ -265,8 +265,6 @@ function euclid_reviewed_naming_policies()
             "Color", "Local API alias avoids parameter-name shadowing."),
         policy("shape-color-type-alias", "src/shapes/model/shapes.odin", :constant,
             "Color", "Public model alias avoids field-name shadowing."),
-        policy("view-color-type-alias", "src/view/model/model.odin", :constant,
-            "Color", "Model alias avoids field-name shadowing."),
         policy("terminal-color-type-alias", "src/view/terminal/types.odin", :constant,
             "Color", "Terminal package portable color type alias."),
     ]
@@ -287,6 +285,27 @@ function euclid_naming_settings()
     return NamingSettings(conventions, euclid_reviewed_naming_policies())
 end
 
+const ViewSubstratePaths = [
+    "src/view/font",
+    "src/view/input",
+    "src/view/content",
+    "src/view/world/model",
+    "src/view/world/projection",
+    "src/view/ui/model",
+    "src/view/ui/text",
+    "src/view/ui/theme",
+    "src/view/ui/widgets",
+    "src/view/ui/semantics",
+    "src/view/ui/layout",
+    "src/view/capture/model",
+    "src/view/preferences/model",
+    "src/view/telemetry/model",
+    "src/view/messages/model",
+    "src/view/simulation/model",
+    "src/view/native",
+    "src/view/terminal/model",
+]
+
 """Enforce application composition, coordinator, and substrate dependency direction."""
 function euclid_architecture_settings()
     return ArchitectureSettings(
@@ -303,11 +322,7 @@ function euclid_architecture_settings()
                 "src/core/storage",
                 "src/settings",
                 "src/userdata",
-                "src/view/font/model",
-                "src/view/content",
-                "src/view/model",
-                "src/view/native",
-                "src/view/terminal/model",
+                ViewSubstratePaths...,
             ]),
             ArchitectureLayer("composition", ["src/core"            ]),
             ArchitectureLayer("coordinator", [
@@ -510,7 +525,7 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "test-framebuffer-operation-pixels",
-                "src/view/core/framebuffer_capture_test.odin",
+                "src/view/capture/framebuffer_test.odin",
                 "framebuffer_test_allocate",
                 :custom,
                 "Test capture pixels belong to the fixture allocator and are released by the injected unload operation.";
@@ -525,7 +540,7 @@ AnalysisSettings(
             # invalidated together by the owner-controlled reset after final release.
             ReviewedAllocationPolicy(
                 "view-sdl-framebuffer-capture-pixels",
-                "src/view/sdl_framebuffer.odin",
+                "src/view/capture/backend/sdl_framebuffer.odin",
                 "sdl_framebuffer_allocate",
                 :custom,
                 "Capture pixels belong to the display-owned growing arena and are reclaimed by the final transaction reset or owner destruction.";
@@ -579,7 +594,7 @@ AnalysisSettings(
                 maximum_matches=6),
             ReviewedAllocationPolicy(
                 "view-native-dust-atlas-staging",
-                "src/view/particles_encoded.odin",
+                "src/view/world/particles_encoder.odin",
                 "initialize_native_dust_atlas",
                 :temporary,
                 "Fixed atlas pixels are consumed by the synchronous texture upload and reclaimed at the temporary-allocator reset.";
@@ -1459,7 +1474,7 @@ AnalysisSettings(
             # Display presentation allocations live for one runtime session.
             ReviewedAllocationPolicy(
                 "view-presentation-runtime-storage",
-                "src/view/presentation_runtime.odin",
+                "src/view/presentation/presentation_runtime.odin",
                 "create_presentation_runtime",
                 :context,
                 "Display-owned presentation state is created once per process run and explicitly destroyed after parse work joins.";
@@ -1471,7 +1486,7 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "view-presentation-parse-result-storage",
-                "src/view/presentation_runtime.odin",
+                "src/view/presentation/presentation_runtime.odin",
                 "create_presentation_runtime",
                 :context,
                 "Display-owned parser result storage persists for one process run and is explicitly destroyed with its presentation runtime.";
@@ -1483,7 +1498,7 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "view-presentation-staging-storage",
-                "src/view/presentation_runtime.odin",
+                "src/view/presentation/presentation_runtime.odin",
                 "create_presentation_runtime",
                 :context,
                 "Display-owned Dynview staging persists for one process run and is explicitly destroyed with its presentation runtime.";
@@ -1692,20 +1707,22 @@ AnalysisSettings(
                 "view-runtime-session-iso-scale",
                 "src/view/runtime_session.odin",
                 "make_iso_scale",
-                :implicit,
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Iso_Scale",
+                target="worldmodel.Iso_Scale",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "view-runtime-session-drawing-surface",
                 "src/view/runtime_session.odin",
                 "make_drawing_surface",
-                :implicit,
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Euclid_Drawing_Surface",
+                target="worldmodel.Euclid_Drawing_Surface",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
@@ -1727,7 +1744,7 @@ AnalysisSettings(
                 :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Particle_System",
+                target="particlemodel.Particle_System",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1739,7 +1756,7 @@ AnalysisSettings(
                 :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Euclid_General_State",
+                target="core.Euclid_General_State",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=1,
@@ -1772,19 +1789,19 @@ AnalysisSettings(
                 maximum_matches=1),
             ReviewedAllocationPolicy(
                 "view-simulation-executor",
-                "src/view/simulation_executor.odin",
+                "src/view/simulation/simulation_executor.odin",
                 "create_simulation_executor",
-                :implicit,
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Simulation_Executor",
+                target="core.Simulation_Executor",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "view-prose-shaping-workspace",
-                "src/view/simulation_executor.odin",
+                "src/view/simulation/simulation_executor.odin",
                 "create_simulation_executor",
-                :implicit,
+                :context,
                 "Bounded workspace created with the executor and released after its worker pool joins.";
                 operation="new",
                 target="core.Document_Prose_Shaping_Workspace",
@@ -1973,7 +1990,7 @@ AnalysisSettings(
             # generations and deletes it after shutdown, before task-pool teardown.
             ReviewedAllocationPolicy(
                 "view-terminal-graphics-service",
-                "src/view/terminal_graphics_service.odin",
+                "src/view/terminal/service/terminal_graphics_service.odin",
                 "terminal_graphics_runtime_init",
                 :context,
                 "Single display-owned service allocated at runtime initialization, reused across Terminal generations, and freed after service shutdown before its task-pool owner.";

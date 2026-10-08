@@ -427,7 +427,7 @@ errors, invalid values, and capacity failures return explicit statuses.
 Formatting is allocation-free and transactional: a failed call leaves the caller's
 bytes unchanged. The logical output bound is 536 bytes even if the supplied storage
 is larger. Static labels are copied into bounded display-owned slots by
-`src/view/core/messages.odin`; no prepared label retains a content-arena pointer.
+`src/view/messages/messages.odin`; no prepared label retains a content-arena pointer.
 Dynamic values use caller storage and are consumed immediately or copied by semantic
 publication. GIF status notes keep their existing owned buffer and reject overflow
 with a diagnostic instead of truncating. Generation retirement cannot invalidate
@@ -496,7 +496,7 @@ invocation can inherit a dangling service during its terminal lifecycle.
 | Content database and statements | Immutable admission, metadata, search, spellfix, and the complete named statement set. | `src/view/content/database.odin`, `src/view/content/statements.odin` |
 | Content generation | Bounded row codecs, packed text append, complete projection validation, and sealing. | `src/view/content/generation.odin` |
 | Content worker and service | Thread scheduling, bounded channels, active/staged generation slots, publication, rollback, and retirement. | `src/view/content/worker.odin`, `src/view/content/service.odin` |
-| Display coordinator | Debounce, submission, generation checks, catalogue resolution, UI commit. | `src/view/library_search.odin`, `src/view/runtime_session.odin` |
+| Display coordinator | Debounce, submission, generation checks, catalogue resolution, UI commit. | `src/view/ui/library/service/library_search.odin`, `src/view/runtime_session.odin` |
 
 ## Current Constraints
 

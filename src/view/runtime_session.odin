@@ -1,37 +1,47 @@
 package view
 
+import capturemodel "capture/model"
+
 import bridgemodel "../bridge/model"
-
 import shapemodel "../shapes/model"
-
-import view_core "core"
-import viewmodel "model"
 import viewcontent "content"
 import setting_model "../settings"
 import user_data "../userdata"
-import "ui"
-import "../core"
+import core "../core"
 import color "../core/color"
-import "../dynview"
+import dynview "../dynview"
 import evidence_artifact "../evidence/artifact"
 import evidence_export "../evidence/export"
-import "../evidence/observe"
+import observe "../evidence/observe"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
-import "../files"
-import "../shapes"
+import files "../files"
+import shapes "../shapes"
 import julia "../bridge"
-import "../taskpool"
-
-import "core:fmt"
-import "core:log"
-import "core:math"
+import taskpool "../taskpool"
+import fmt "core:fmt"
+import log "core:log"
+import math "core:math"
+import linalg "core:math/linalg"
+import time "core:time"
+import projection "world/projection"
+import worldmodel "world/model"
+import simulationmodel "simulation/model"
+import viewmodel "ui/model"
+import viewcapture "capture"
+import geometry "../core/geometry"
+import particlemodel "../particles/model"
+import viewpresentation "presentation"
+import terminalservice "terminal/service"
+import viewsimulation "simulation"
+import viewscenario "scenario"
+import viewevidence "evidence"
+import viewpreferences "preferences"
+import uiregions "ui/layout/regions"
 
 when !core.SCENARIOS_ENABLED {
     _ :: observe
 }
-import "core:math/linalg"
-import "core:time"
 
 // Carry app-resolved settings and borrowed store ownership into the view session.
 Session_Startup_Inputs :: struct {
@@ -40,9 +50,9 @@ Session_Startup_Inputs :: struct {
 }
 
 Euclid_Runtime_Session :: struct {
-    state : ^Euclid_General_State,
+    state : ^core.Euclid_General_State,
     julia_service : ^bridgemodel.Julia_Runtime_Service,
-    presentation : ^Presentation_Runtime,
+    presentation : ^viewpresentation.Presentation_Runtime,
     content_service: ^viewcontent.Content_Service,
     startup: Session_Startup_Inputs,
 }
@@ -137,7 +147,7 @@ julia_worker_profile_path :: proc(profile_path: string) -> string {
 
 //   Record one required Julia runtime lifecycle transition.
 record_runtime_lifecycle :: proc(
-    state: ^Euclid_General_State, kind: evidence_trace.Kind,
+    state: ^core.Euclid_General_State, kind: evidence_trace.Kind,
     correlation: u64) {
     _ = evidence_session.session_record(
         &state^.evidence_session, &state^.evidence_ring, {
@@ -153,7 +163,7 @@ record_runtime_lifecycle :: proc(
 //   Allocate runtime state and complete the Julia content Invoke phase.
 session_initialize_content :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
-    state: ^Euclid_General_State, content_id_out: ^u64) -> bool {
+    state: ^core.Euclid_General_State, content_id_out: ^u64) -> bool {
     content_id, content_sent := julia.try_submit_runtime_content_initialize(
         julia_service, state)
     if !content_sent {
@@ -167,7 +177,7 @@ session_initialize_content :: proc(
 
 // Copy the admitted content's catalogue into interface-owned deferred-draw storage.
 session_materialize_content :: proc(
-    state: ^Euclid_General_State,
+    state: ^core.Euclid_General_State,
     content_service: ^viewcontent.Content_Service) -> bool {
     state^.content_service = content_service
     generation := viewcontent.content_service_generation(content_service)
@@ -185,9 +195,9 @@ session_materialize_content :: proc(
 session_load_content :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
     content_service: ^viewcontent.Content_Service,
-    settings: ^Euclid_Run_Settings,
+    settings: ^core.Euclid_Run_Settings,
     initialize_id: u64,
-    out_state: ^^Euclid_General_State) -> bool {
+    out_state: ^^core.Euclid_General_State) -> bool {
 
     state := initiate_animations_state(julia_service, settings)
     if state == nil {
@@ -239,7 +249,7 @@ session_create_content_service :: proc(
 
 //   Create and attach presentation resources to one initialized runtime session.
 session_start_presentation :: proc(session: ^Euclid_Runtime_Session) -> bool {
-    session.presentation = create_presentation_runtime()
+    session.presentation = viewpresentation.create_presentation_runtime()
     if session.presentation == nil {
         return false
     }
@@ -249,7 +259,7 @@ session_start_presentation :: proc(session: ^Euclid_Runtime_Session) -> bool {
 
 // Attach presentation resources and return the fully initialized session value.
 session_finalize_presentation :: proc(
-    state: ^Euclid_General_State,
+    state: ^core.Euclid_General_State,
     julia_service: ^bridgemodel.Julia_Runtime_Service,
     content_service: ^viewcontent.Content_Service,
     out_session: ^Euclid_Runtime_Session,
@@ -272,14 +282,14 @@ session_finalize_presentation :: proc(
 
 // Initialize editable preference intent without applying hardware fallbacks.
 session_apply_startup_preferences :: proc(
-    state: ^Euclid_General_State,
+    state: ^core.Euclid_General_State,
     preferences: setting_model.Preferences,
     store: ^user_data.Store) {
     if state == nil || state^.particle_system == nil {
         return
     }
     state^.ui_runtime.settings_preferences = preferences
-    state^.ui_runtime.settings_store = store
+    state^.preferences_runtime.settings_store = store
     state^.ui_runtime.settings_store_available = store != nil
     state^.ui_runtime.settings_save_status =
         .Saved if store != nil else .Unavailable
@@ -288,12 +298,12 @@ session_apply_startup_preferences :: proc(
     state^.user_drawing_sound_enabled = preferences.drawing.sound_enabled
     state^.particle_system^.use_max_dust_particles = preferences.drawing.dust_limit
     state^.ui_runtime.use_simd_batch_projection =
-        preferences.rendering.simd && view_core.simd_batch_projection_available()
+        preferences.rendering.simd && projection.simd_batch_projection_available()
 }
 
 //   Prepare runtime-owned subsystems and state without initializing presentation resources.
 create_runtime_session :: proc(
-    settings: ^Euclid_Run_Settings,
+    settings: ^core.Euclid_Run_Settings,
     asset_config: ^files.Asset_Root_Config = nil,
     startup: ^Session_Startup_Inputs = nil) -> (Euclid_Runtime_Session, bool) {
     if settings == nil {
@@ -316,7 +326,7 @@ create_runtime_session :: proc(
     }
     julia_service := started.service
 
-    state: ^Euclid_General_State
+    state: ^core.Euclid_General_State
     if !session_load_content(
         julia_service, content_service, settings, started.initialize_id, &state) {
         viewcontent.content_service_destroy_owned(content_service)
@@ -331,28 +341,28 @@ create_runtime_session :: proc(
 }
 
 //   Allocate and initialize the isometric projection scale.
-make_iso_scale :: proc() -> ^Iso_Scale {
-    iso_scale := new(Iso_Scale)
-    iso_scale^.scale = view_core.ISO_SCALE_VALUE
-    iso_scale^.x_offset = view_core.ISO_X_OFFSET
-    iso_scale^.y_offset = view_core.ISO_Y_OFFSET
-    view_core.recompute_iso_scale_precompute(iso_scale)
-    iso_scale^.main_light_dir = linalg.normalize(Vector3{0.35, -0.45, -1.0})
+make_iso_scale :: proc() -> ^worldmodel.Iso_Scale {
+    iso_scale := new(worldmodel.Iso_Scale, context.allocator)
+    iso_scale^.scale = worldmodel.ISO_SCALE_VALUE
+    iso_scale^.x_offset = worldmodel.ISO_X_OFFSET
+    iso_scale^.y_offset = worldmodel.ISO_Y_OFFSET
+    projection.recompute_iso_scale_precompute(iso_scale)
+    iso_scale^.main_light_dir = linalg.normalize(geometry.Vector3{0.35, -0.45, -1.0})
     iso_scale^.use_directional_shadow = true
     return iso_scale
 }
 
 //   Allocate and initialize the drawing surface quad.
-make_drawing_surface :: proc() -> ^Euclid_Drawing_Surface {
-    drawing_surface := new(Euclid_Drawing_Surface)
-    edge := f32(view_core.SURFACE_EDGE_SIZE)
-    drawing_surface^.zeros = Vector3{0 - edge, 0 - edge, 0}
-    drawing_surface^.right_up = Vector3{1 + edge, 0 - edge, 0}
-    drawing_surface^.left_down = Vector3{0 - edge, 1 + edge, 0}
-    drawing_surface^.right_down = Vector3{1 + edge, 1 + edge, 0}
-    drawing_surface^.color = viewmodel.Color(view_core.SURFACE_COLOR)
-    drawing_surface^.edge_color = viewmodel.Color(view_core.SURFACE_EDGE_COLOR)
-    drawing_surface^.edge_size = view_core.SURFACE_EDGE_SIZE
+make_drawing_surface :: proc() -> ^worldmodel.Euclid_Drawing_Surface {
+    drawing_surface := new(worldmodel.Euclid_Drawing_Surface, context.allocator)
+    edge := f32(worldmodel.SURFACE_EDGE_SIZE)
+    drawing_surface^.zeros = geometry.Vector3{0 - edge, 0 - edge, 0}
+    drawing_surface^.right_up = geometry.Vector3{1 + edge, 0 - edge, 0}
+    drawing_surface^.left_down = geometry.Vector3{0 - edge, 1 + edge, 0}
+    drawing_surface^.right_down = geometry.Vector3{1 + edge, 1 + edge, 0}
+    drawing_surface^.color = color.Color_RGBA8(worldmodel.SURFACE_COLOR)
+    drawing_surface^.edge_color = color.Color_RGBA8(worldmodel.SURFACE_EDGE_COLOR)
+    drawing_surface^.edge_size = worldmodel.SURFACE_EDGE_SIZE
     return drawing_surface
 }
 
@@ -361,19 +371,19 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
     world := new(shapemodel.Shape_World, context.allocator)
     world_trochoid_tool, trochoid_tool_status := shapes.world_create_trochoid_tool(
         world, {mode = .External, fixed_radius = 0.2, rolling_radius = 0.1,
-            style = {color = color.Color_RGBA8(view_core.TOOL_COLOR), brush_size = 5}})
+            style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
     world_cycloid_tool, cycloid_tool_status := shapes.world_create_cycloid_tool(
         world, {first = {0.04, 0.38, 0}, second = {0.96, 0.38, 0},
             rolling_radius = 0.06, parameter_start = 0,
             parameter_finish = 4 * math.PI,
-            style = {color = color.Color_RGBA8(view_core.TOOL_COLOR), brush_size = 5}})
+            style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
     world_compass, compass_status := shapes.world_create_compass(world, {
         joint1 = {0, 0, 0}, pivot = {0.01, 0.01, 0.01},
-        joint2 = {0.02, 0.02, 0}, limb_length = TOOL_LENGTH,
-        style = {color = color.Color_RGBA8(view_core.TOOL_COLOR), brush_size = 5}})
+        joint2 = {0.02, 0.02, 0}, limb_length = worldmodel.TOOL_LENGTH,
+        style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
     world_pen, pen_status := shapes.world_create_pen(world, {
-        joint1 = {0, 0, 0}, joint2 = {0, 0, 0}, length = TOOL_LENGTH,
-        style = {color = color.Color_RGBA8(view_core.TOOL_COLOR), brush_size = 5}})
+        joint1 = {0, 0, 0}, joint2 = {0, 0, 0}, length = worldmodel.TOOL_LENGTH,
+        style = {color = color.Color_RGBA8(worldmodel.TOOL_COLOR), brush_size = 5}})
     if trochoid_tool_status != .Ok || cycloid_tool_status != .Ok ||
         compass_status != .Ok || pen_status != .Ok ||
         shapemodel.shape_world_freeze_baseline(world) != .Ok {
@@ -381,7 +391,7 @@ make_shape_storage :: proc(out: ^Session_Shape_Storage) -> bool {
         return false
     }
     shapes.world_apply_all_constraints_to_error(
-        world, view_core.ALLOWED_CONSTRAINT_ERROR)
+        world, simulationmodel.ALLOWED_CONSTRAINT_ERROR)
     shapes.shape_world_update_previous_values(world)
     out.world = world
     out.world_trochoid_tool = world_trochoid_tool
@@ -405,12 +415,12 @@ init_ui_layout_pixels :: proc(
 }
 
 //   Initialize display-owned GIF capture preferences and status.
-init_ui_gif_fields :: proc(runtime: ^viewmodel.Euclid_Ui_Runtime_State) {
+init_gif_capture_fields :: proc(runtime: ^capturemodel.Gif_Capture_Status) {
     runtime^.gif_downsample_factor = 2
     runtime^.gif_frame_step = 2
     runtime^.gif_timing_mode = .Animation
     runtime^.gif_capture_phase = .Idle
-    view_core.clear_gif_status_note(runtime)
+    viewcapture.clear_gif_status_note(runtime)
 }
 
 // Resolve the initial accordion section and presentation visibility from layout.
@@ -438,14 +448,15 @@ init_ui_semantic_focus :: proc(
 //   Initialize display-owned UI policy and layout memory from run settings.
 init_ui_runtime_fields :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
-    settings: ^Euclid_Run_Settings) -> bool {
+    settings: ^core.Euclid_Run_Settings) -> bool {
     if settings == nil || !init_ui_semantic_focus(runtime) {
         return false
     }
     runtime^.limit_fps = settings^.limit_fps
     runtime^.simulation_paused = false
     runtime^.use_simd_batch_projection =
-        settings^.use_simd_batch_projection && view_core.simd_batch_projection_available()
+        settings^.use_simd_batch_projection &&
+        projection.simd_batch_projection_available()
     runtime^.use_gpu_dust_instancing = false
     runtime^.window = {
         width = settings^.window.width,
@@ -453,49 +464,49 @@ init_ui_runtime_fields :: proc(
     }
     runtime^.layout_preference = settings^.window.layout
     runtime^.landscape = {
-        vertical_ratio = f32(view_core.VIEW_WIDTH) / f32(view_core.WINDOW_WIDTH),
-        horizontal_ratio = f32(view_core.VIEW_HEIGHT) / f32(view_core.WINDOW_HEIGHT),
+        vertical_ratio = f32(worldmodel.VIEW_WIDTH) / f32(viewmodel.WINDOW_WIDTH),
+        horizontal_ratio = f32(worldmodel.VIEW_HEIGHT) / f32(viewmodel.WINDOW_HEIGHT),
         active_section = .Library,
     }
     runtime^.portrait = {
         world_height_ratio = 0.5,
         active_section = .View,
     }
-    runtime^.current_layout_mode = ui.resolve_initial_layout_mode(
+    runtime^.current_layout_mode = uiregions.resolve_initial_layout_mode(
         settings^.window.layout,
         f32(settings^.window.width), f32(settings^.window.height))
     init_ui_active_section(runtime)
     init_ui_layout_pixels(runtime, settings^.window.width, settings^.window.height)
-    init_ui_gif_fields(runtime)
     return true
 }
 
 //   Populate the simulation/UI scalar fields on the general state.
 init_runtime_fields :: proc(
-    state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) -> bool {
+    state: ^core.Euclid_General_State, settings: ^core.Euclid_Run_Settings) -> bool {
     state^.julia_interface_active_slot = 0
     state^.julia_interface = &state^.julia_interface_slots[0]
     state^.user_drawing_sound_enabled = false
     state^.fixed_step = 0
     state^.simulation_time = 0
-    state^.current_delta_time = view_core.FIXED_DT
+    state^.current_delta_time = simulationmodel.FIXED_DT
     state^.accumulator = 0
     if !init_ui_runtime_fields(&state^.ui_runtime, settings) {
         return false
     }
+    init_gif_capture_fields(&state^.gif_capture_status)
     dynview.set_enabled(&state.dynview, dynview.DYNVIEW_ENABLED_DEFAULT)
-    view_core.screenshake_clear(state^.iso_scale)
+    projection.screenshake_clear(state^.iso_scale)
     return true
 }
 
 //   Initialize typed evidence policy, freeing the state and returning false on failure.
 init_evidence_session :: proc(
-    state: ^Euclid_General_State, settings: ^Euclid_Run_Settings) -> bool {
+    state: ^core.Euclid_General_State, settings: ^core.Euclid_Run_Settings) -> bool {
     if !evidence_session.session_init(
         &state^.evidence_session, settings^.evidence) {
         fmt.eprintln("Invalid semantic evidence configuration.")
-        terminal_graphics_runtime_destroy(state)
-        destroy_simulation_executor(state^.simulation_executor)
+        terminalservice.terminal_graphics_runtime_destroy(state)
+        viewsimulation.destroy_simulation_executor(state^.simulation_executor)
         state^.simulation_executor = nil
         free_animations_state(state)
         return false
@@ -518,10 +529,10 @@ init_evidence_session :: proc(
 
 //   Initialize allocation domains and bind the state-owned runtime resources.
 init_animations_state_resources :: proc(
-    state: ^Euclid_General_State,
+    state: ^core.Euclid_General_State,
     julia_service: ^bridgemodel.Julia_Runtime_Service,
-    settings: ^Euclid_Run_Settings,
-    particle_system: ^Particle_System,
+    settings: ^core.Euclid_Run_Settings,
+    particle_system: ^particlemodel.Particle_System,
     shapes_state: Session_Shape_Storage) -> bool {
     state^.evidence_allocations = settings^.evidence_allocations
     state^.saved_context = context
@@ -538,8 +549,8 @@ init_animations_state_resources :: proc(
 }
 
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
-init_native_shell_or_release :: proc(state: ^Euclid_General_State) -> bool {
-    if shell_service_runtime_init(state) {
+init_native_shell_or_release :: proc(state: ^core.Euclid_General_State) -> bool {
+    if terminalservice.shell_service_runtime_init(state) {
         return true
     }
     fmt.eprintln("Failed to initialize the native shell runtime.")
@@ -548,14 +559,14 @@ init_native_shell_or_release :: proc(state: ^Euclid_General_State) -> bool {
 }
 
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
-init_runtime_executors :: proc(state: ^Euclid_General_State) -> bool {
+init_runtime_executors :: proc(state: ^core.Euclid_General_State) -> bool {
     evidence_trace.ring_init(&state^.evidence_ring, .Display)
-    state^.simulation_executor = create_simulation_executor(state)
+    state^.simulation_executor = viewsimulation.create_simulation_executor(state)
     if state^.simulation_executor == nil {
         fmt.eprintln("Failed to initialize the simulation task pool.")
         return false
     }
-    if terminal_graphics_runtime_init(state) {
+    if terminalservice.terminal_graphics_runtime_init(state) {
         return true
     }
     fmt.eprintln("Failed to initialize terminal graphics.")
@@ -565,15 +576,15 @@ init_runtime_executors :: proc(state: ^Euclid_General_State) -> bool {
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
 make_animations_state :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
-    settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
-    particle_system := new(Particle_System, context.allocator)
+    settings: ^core.Euclid_Run_Settings) -> ^core.Euclid_General_State {
+    particle_system := new(particlemodel.Particle_System, context.allocator)
     particle_system^.use_max_dust_particles = settings^.dust_particle_max
     shape_storage: Session_Shape_Storage
     if !make_shape_storage(&shape_storage) {
         free(particle_system)
         return nil
     }
-    state := new(Euclid_General_State, context.allocator)
+    state := new(core.Euclid_General_State, context.allocator)
     if init_animations_state_resources(
         state, julia_service, settings, particle_system, shape_storage) {
         return state
@@ -587,7 +598,7 @@ make_animations_state :: proc(
 //   Allocate runtime state shared by the windowed frontend and the headless harness.
 initiate_animations_state :: proc(
     julia_service: ^bridgemodel.Julia_Runtime_Service,
-    settings: ^Euclid_Run_Settings) -> ^Euclid_General_State {
+    settings: ^core.Euclid_Run_Settings) -> ^core.Euclid_General_State {
     state := make_animations_state(julia_service, settings)
     if state == nil {
         return nil
@@ -618,7 +629,7 @@ initiate_animations_state :: proc(
 when core.SCENARIOS_ENABLED {
     //   Write the terminal scenario artifact when one was requested.
     write_scenario_artifact :: proc(
-        session: Euclid_Runtime_Session, runtime: ^Scenario_Runtime,
+        session: Euclid_Runtime_Session, runtime: ^viewscenario.Scenario_Runtime,
         simulation: observe.Simulation, output: string) -> bool {
         if runtime == nil || len(output) == 0 {
             return true
@@ -645,7 +656,7 @@ when core.SCENARIOS_ENABLED {
                 last_trace_sequence = last_trace_sequence,
             },
             events = events,
-            state = observe_display_state(session.state),
+            state = viewevidence.observe_display_state(session.state),
             julia_host = observe.julia_host(session.julia_service),
             simulation = simulation,
             allocations = observe.allocation(session.state.evidence_allocations),
@@ -666,7 +677,7 @@ write_session_evidence :: proc(session: ^evidence_session.Session) -> bool {
 
 //   Shut down one runtime session in reverse ownership order.
 finish_runtime_evidence :: proc(
-    session: Euclid_Runtime_Session, scenario_runtime: ^Scenario_Runtime,
+    session: Euclid_Runtime_Session, scenario_runtime: ^viewscenario.Scenario_Runtime,
     simulation: observe.Simulation, artifact_output: string) -> (
     artifact_succeeded, evidence_exit_failed: bool) {
     _ = evidence_session.session_record(
@@ -695,21 +706,22 @@ finish_runtime_evidence :: proc(
 //   Shut down one runtime session in reverse ownership order.
 shutdown_runtime_session :: proc(
     session: Euclid_Runtime_Session,
-    scenario_runtime: ^Scenario_Runtime = nil,
+    scenario_runtime: ^viewscenario.Scenario_Runtime = nil,
     artifact_output: string = "") -> int {
     if session.state == nil || session.julia_service == nil {
         return 0
     }
 
-    quiesce_presentation_runtime(session.state, session.presentation)
+    viewpresentation.quiesce_presentation_runtime(session.state, session.presentation)
     julia_egress_router_detach(session.state, session.presentation)
-    destroy_presentation_runtime(session.presentation)
-    terminal_graphics_runtime_destroy(session.state)
-    settings_save_shutdown(
+    viewpresentation.destroy_presentation_runtime(session.presentation)
+    terminalservice.terminal_graphics_runtime_destroy(session.state)
+    viewpreferences.settings_save_shutdown(
         session.state, &session.state^.simulation_executor^.pool)
     taskpool.task_pool_shutdown(&session.state^.simulation_executor^.pool)
-    simulation := observe_simulation_executor(session.state^.simulation_executor)
-    destroy_simulation_executor(session.state^.simulation_executor)
+    simulation := viewevidence.observe_simulation_executor(
+        session.state^.simulation_executor)
+    viewsimulation.destroy_simulation_executor(session.state^.simulation_executor)
     session.state^.simulation_executor = nil
     shutdown_julia_runtime(session.state, session.julia_service)
     session_retire_content(session)

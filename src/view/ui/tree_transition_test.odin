@@ -1,17 +1,22 @@
 #+test
 package ui
 
-import "core:testing"
-import "core:mem"
+import viewmodel "model"
+import testing "core:testing"
+import mem "core:mem"
 import bridgemodel "../../bridge/model"
 import contentmodel "../../core/content"
-import viewmodel "../model"
+import theme "theme"
+import uisemantics "semantics"
+import uiwidgets "widgets"
+import uilibrary "library"
+import uiaccordion "layout/accordion"
 
 // tree_transition_fixture supplies two roots, a nested branch, and permanent identities.
 tree_transition_fixture :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     ji: ^bridgemodel.Euclid_Julia_Interface,
-    nodes: []bridgemodel.Euclid_Julia_Animation_Interface) -> Tree_List_Params {
+    nodes: []bridgemodel.Euclid_Julia_Animation_Interface) -> uilibrary.Tree_List_Params {
     ji^.animation_head = &nodes[0]
     ji^.animation_count = len(nodes)
     ji^.selected_animation = &nodes[0]
@@ -41,30 +46,30 @@ tree_transition_finishes_at_180_ms :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    initial := tree_prepare_layout(params)
-    testing.expect_value(t, initial.content_height, TREE_ROW_HEIGHT * 6)
+    initial := uilibrary.tree_prepare_layout(params)
+    testing.expect_value(t, initial.content_height, theme.TREE_ROW_HEIGHT * 6)
     nodes[0].is_expanded = false
-    start := tree_prepare_layout(params)
+    start := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, start.content_height, initial.content_height)
-    testing.expect(t, !tree_layout_find(&start, &nodes[2])^.logical)
+    testing.expect(t, !uilibrary.tree_layout_find(&start, &nodes[2])^.logical)
     previous := start.content_height
     samples := [5]f64{30, 60, 90, 120, 179}
     for milliseconds in samples {
         params.mouse_input.sample_time_seconds = 1 + milliseconds / 1000
-        frame := tree_prepare_layout(params)
+        frame := uilibrary.tree_prepare_layout(params)
         testing.expect(t, frame.content_height <= previous)
         testing.expect(t, runtime.tree_motion.branches[0].running)
-        bounds := tree_row_screen_geometry(frame.rows[0], params.list_panel, 0)
-        testing.expect_value(t, bounds.bounds.height, TREE_ROW_HEIGHT)
+        bounds := uilibrary.tree_row_screen_geometry(frame.rows[0], params.list_panel, 0)
+        testing.expect_value(t, bounds.bounds.height, theme.TREE_ROW_HEIGHT)
         previous = frame.content_height
     }
-    params.mouse_input.sample_time_seconds = 1 + INTERFACE_TRANSITION_SECONDS
-    final := tree_prepare_layout(params)
+    params.mouse_input.sample_time_seconds = 1 + uiaccordion.INTERFACE_TRANSITION_SECONDS
+    final := uilibrary.tree_prepare_layout(params)
     testing.expect(t, !runtime.tree_motion.branches[0].running)
     testing.expect_value(t, final.count, 3)
-    testing.expect_value(t, final.content_height, TREE_ROW_HEIGHT * 3)
+    testing.expect_value(t, final.content_height, theme.TREE_ROW_HEIGHT * 3)
     testing.expect_value(t,
-        tree_layout_find(&final, &nodes[4])^.content_y, TREE_ROW_HEIGHT)
+        uilibrary.tree_layout_find(&final, &nodes[4])^.content_y, theme.TREE_ROW_HEIGHT)
 }
 
 // Verify reversal samples the current height and duplicate intent never restarts its deadline.
@@ -74,21 +79,22 @@ tree_transition_reverses_without_a_queue :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     nodes[0].is_expanded = false
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     params.mouse_input.sample_time_seconds = 1.06
-    before := tree_prepare_layout(params)
+    before := uilibrary.tree_prepare_layout(params)
     nodes[0].is_expanded = true
-    after := tree_prepare_layout(params)
+    after := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, after.content_height, before.content_height)
     testing.expect_value(t, runtime.tree_motion.branches[0].start_seconds, f64(1.06))
     params.mouse_input.sample_time_seconds = 1.09
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, runtime.tree_motion.branches[0].start_seconds, f64(1.06))
-    params.mouse_input.sample_time_seconds = 1.06 + INTERFACE_TRANSITION_SECONDS
-    final := tree_prepare_layout(params)
-    testing.expect_value(t, final.content_height, TREE_ROW_HEIGHT * 6)
+    params.mouse_input.sample_time_seconds =
+        1.06 + uiaccordion.INTERFACE_TRANSITION_SECONDS
+    final := uilibrary.tree_prepare_layout(params)
+    testing.expect_value(t, final.content_height, theme.TREE_ROW_HEIGHT * 6)
     testing.expect(t, !runtime.tree_motion.branches[0].running)
 }
 
@@ -99,23 +105,23 @@ tree_transition_composes_concurrent_nested_branches :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     nodes[0].is_expanded = false
     nodes[4].is_expanded = false
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     params.mouse_input.sample_time_seconds = 1.03
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     nodes[1].is_expanded = false
-    frame := tree_prepare_layout(params)
+    frame := uilibrary.tree_prepare_layout(params)
     testing.expect(t, runtime.tree_motion.branches[0].running)
     testing.expect(t, runtime.tree_motion.branches[1].running)
     testing.expect(t, runtime.tree_motion.branches[4].running)
-    descendant := tree_layout_find(&frame, &nodes[2])
-    ancestor := tree_layout_find(&frame, &nodes[1])
+    descendant := uilibrary.tree_layout_find(&frame, &nodes[2])
+    ancestor := uilibrary.tree_layout_find(&frame, &nodes[1])
     testing.expect(t, descendant^.reveal.y >= ancestor^.reveal.y)
     testing.expect(t, descendant^.reveal.height <= ancestor^.reveal.height)
-    params.mouse_input.sample_time_seconds = 1 + INTERFACE_TRANSITION_SECONDS
-    _ = tree_prepare_layout(params)
+    params.mouse_input.sample_time_seconds = 1 + uiaccordion.INTERFACE_TRANSITION_SECONDS
+    _ = uilibrary.tree_prepare_layout(params)
     testing.expect(t, !runtime.tree_motion.branches[0].running)
     testing.expect(t, runtime.tree_motion.branches[1].running)
     testing.expect_value(t, runtime.tree_motion.branches[0].height, f32(0))
@@ -130,23 +136,30 @@ tree_transition_semantics_share_prepared_clips :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     nodes[0].is_expanded = false
-    testing.expect(t, semantic_begin(semantic))
-    _ = prepare_tree_list_panel(params)
-    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
-    testing.expect_value(t, semantic_node_index(
-        semantic_snapshot(semantic), tree_item_semantic_id(&nodes[2])), -1)
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    _ = uilibrary.prepare_tree_list_panel(params)
+    testing.expect_value(t,
+        uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    testing.expect_value(t,
+        uisemantics.semantic_node_index(
+            uisemantics.semantic_snapshot(semantic),
+            uilibrary.tree_item_semantic_id(&nodes[2])),
+        -1)
     params.mouse_input.sample_time_seconds = 1.06
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     nodes[0].is_expanded = true
-    testing.expect(t, semantic_begin(semantic))
-    prepared := prepare_tree_list_panel(params)
-    testing.expect_value(t, semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
-    row := tree_layout_find(&prepared.layout, &nodes[3])
-    expected := tree_row_screen_geometry(row^, params.list_panel, runtime.tree_scroll_y)
-    snapshot := semantic_snapshot(semantic)
-    index := semantic_node_index(snapshot, tree_item_semantic_id(&nodes[3]))
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    prepared := uilibrary.prepare_tree_list_panel(params)
+    testing.expect_value(t,
+        uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
+    row := uilibrary.tree_layout_find(&prepared.layout, &nodes[3])
+    expected := uilibrary.tree_row_screen_geometry(row^,
+        params.list_panel, runtime.tree_scroll_y)
+    snapshot := uisemantics.semantic_snapshot(semantic)
+    index := uisemantics.semantic_node_index(snapshot,
+        uilibrary.tree_item_semantic_id(&nodes[3]))
     testing.expect_value(t, snapshot^.nodes[index].bounds, expected.bounds)
     testing.expect_value(t, snapshot^.nodes[index].clip_bounds, expected.clip_bounds)
     testing.expect(t, .Visible not_in snapshot^.nodes[index].states)
@@ -162,21 +175,24 @@ tree_transition_hidden_release_cannot_activate :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     nodes[0].is_expanded = false
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     nodes[0].is_expanded = true
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     params.mouse_input.sample_time_seconds = 1.01
-    layout := tree_prepare_layout(params)
-    row := tree_layout_find(&layout, &nodes[1])
+    layout := uilibrary.tree_prepare_layout(params)
+    row := uilibrary.tree_layout_find(&layout, &nodes[1])
     runtime.ui_press_owner = {
-        active = true, kind = .List_Item, id = tree_node_press_id(&nodes[1])}
+        active = true, kind = .List_Item, id = uilibrary.tree_node_press_id(&nodes[1])}
     params.mouse_input.mouse_position = {
         params.list_panel.x + 30,
-        params.list_panel.y + row^.content_y + TREE_ROW_HEIGHT - 1}
+        params.list_panel.y + row^.content_y + theme.TREE_ROW_HEIGHT - 1}
     params.mouse_input.mouse_released = {.Left}
-    prepared := Tree_List_Preparation{layout = layout,
-        scroll = scroll_container_visual(params.list_panel, layout.content_height, 0, 1)}
-    hit := tree_update_prepared_rows(params, &prepared)
+    prepared := uilibrary.Tree_List_Preparation{
+        layout = layout,
+        scroll = uiwidgets.scroll_container_visual(params.list_panel,
+            layout.content_height, 0, 1),
+    }
+    hit := uilibrary.tree_update_prepared_rows(params, &prepared)
     testing.expect_value(t, hit.selected_node, nil)
     testing.expect(t, !runtime.ui_press_owner.active)
 }
@@ -191,16 +207,17 @@ tree_transition_keyboard_reveal_finishes_required_path :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     nodes[0].is_expanded = false
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     nodes[0].is_expanded = true
     nodes[4].is_expanded = false
-    _ = prepare_tree_list_panel(params)
-    tree_set_active_node(&runtime, &nodes[2], true)
-    prepared := prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
+    uilibrary.tree_set_active_node(&runtime, &nodes[2], true)
+    prepared := uilibrary.prepare_tree_list_panel(params)
     testing.expect(t, !runtime.tree_motion.branches[0].running)
     testing.expect(t, runtime.tree_motion.branches[4].running)
     testing.expect(t,
-        tree_row_is_revealed(tree_layout_find(&prepared.layout, &nodes[2])^))
+        uilibrary.tree_row_is_revealed(
+            uilibrary.tree_layout_find(&prepared.layout, &nodes[2])^))
     testing.expect(t, !runtime.tree_reveal_pending)
 }
 
@@ -215,9 +232,9 @@ tree_transition_invalidations_snap :: proc(t: ^testing.T) {
         runtime.tree_reveal_pending = false
         runtime.settings_preferences.interface.reduce_motion = false
         runtime.platform_reduce_motion = false
-        _ = tree_prepare_layout(params)
+        _ = uilibrary.tree_prepare_layout(params)
         nodes[0].is_expanded = !nodes[0].is_expanded
-        _ = tree_prepare_layout(params)
+        _ = uilibrary.tree_prepare_layout(params)
         testing.expect(t, runtime.tree_motion.branches[0].running)
         switch trigger {
         case 0: runtime.library_search.query_revision += 1
@@ -230,7 +247,7 @@ tree_transition_invalidations_snap :: proc(t: ^testing.T) {
             runtime.tree_reveal_pending = true
             runtime.tree_reveal_reason = .Programmatic
         }
-        _ = tree_prepare_layout(params)
+        _ = uilibrary.tree_prepare_layout(params)
         testing.expect(t, !runtime.tree_motion.branches[0].running)
     }
 }
@@ -242,26 +259,26 @@ tree_transition_scroll_anchor_respects_input_and_clamp :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    params.list_panel.height = TREE_ROW_HEIGHT * 2
-    layout := tree_prepare_layout(params)
-    runtime.tree_scroll_y = TREE_ROW_HEIGHT * 3
-    tree_motion_anchor(params, &nodes[4], &layout)
+    params.list_panel.height = theme.TREE_ROW_HEIGHT * 2
+    layout := uilibrary.tree_prepare_layout(params)
+    runtime.tree_scroll_y = theme.TREE_ROW_HEIGHT * 3
+    uilibrary.tree_motion_anchor(params, &nodes[4], &layout)
     nodes[0].is_expanded = false
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     params.mouse_input.sample_time_seconds = 1.09
-    layout = tree_prepare_layout(params)
-    tree_motion_apply_anchor(params, &layout)
-    testing.expect_value(t, tree_layout_find(&layout, &nodes[4])^.content_y -
+    layout = uilibrary.tree_prepare_layout(params)
+    uilibrary.tree_motion_apply_anchor(params, &layout)
+    testing.expect_value(t, uilibrary.tree_layout_find(&layout, &nodes[4])^.content_y -
         runtime.tree_scroll_y, runtime.tree_motion.anchor_view_y)
     params.mouse_input.mouse_wheel_delta = -1
-    tree_motion_apply_anchor(params, &layout)
+    uilibrary.tree_motion_apply_anchor(params, &layout)
     testing.expect(t, !runtime.tree_motion.anchored)
     params.mouse_input.sample_time_seconds = 1.18
-    layout = tree_prepare_layout(params)
-    prepared := Tree_List_Preparation{layout = layout}
-    tree_refresh_preparation(params, &prepared)
+    layout = uilibrary.tree_prepare_layout(params)
+    prepared := uilibrary.Tree_List_Preparation{layout = layout}
+    uilibrary.tree_refresh_preparation(params, &prepared)
     testing.expect(t, runtime.tree_scroll_y <= prepared.scroll.maximum)
-    testing.expect_value(t, prepared.scroll.maximum, TREE_ROW_HEIGHT)
+    testing.expect_value(t, prepared.scroll.maximum, theme.TREE_ROW_HEIGHT)
 }
 
 // Verify hidden Library preparation preserves user scroll and leaves no running branches.
@@ -271,15 +288,15 @@ tree_transition_outgoing_preparation_is_noninteractive :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     nodes[0].is_expanded = false
-    _ = tree_prepare_layout(params)
+    _ = uilibrary.tree_prepare_layout(params)
     runtime.tree_scroll_y = 400
     params.mouse_input.mouse_pressed = {.Left}
     params.mouse_input.mouse_wheel_delta = -10
-    prepared := prepare_tree_visual(params)
+    prepared := uilibrary.prepare_tree_visual(params)
     testing.expect_value(t, runtime.tree_scroll_y, f32(400))
-    testing.expect_value(t, prepared.content_height, TREE_ROW_HEIGHT * 3)
+    testing.expect_value(t, prepared.content_height, theme.TREE_ROW_HEIGHT * 3)
     testing.expect(t, !runtime.tree_motion.branches[0].running)
     testing.expect_value(t, prepared.hovered_node, nil)
     testing.expect(t, nodes[1].is_expanded)
@@ -303,14 +320,15 @@ tree_transition_covers_full_catalogue_capacity :: proc(t: ^testing.T) {
             nodes[index + 1].parent = &nodes[index]
         }
     }
-    params := Tree_List_Params{ji = &ji, ui_runtime = &runtime,
+    params := uilibrary.Tree_List_Params{ji = &ji, ui_runtime = &runtime,
         list_panel = {0, 0, 200, 1000}, scroll_y = &runtime.tree_scroll_y}
-    initial := tree_prepare_layout(params)
+    initial := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, initial.count, len(nodes))
     testing.expect_value(t, runtime.tree_motion.count, len(nodes))
-    testing.expect_value(t, initial.content_height, f32(len(nodes)) * TREE_ROW_HEIGHT)
+    testing.expect_value(t,
+        initial.content_height, f32(len(nodes)) * theme.TREE_ROW_HEIGHT)
     nodes[0].is_expanded = false
-    closing := tree_prepare_layout(params)
+    closing := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, closing.count, len(nodes))
     testing.expect(t, !closing.rows[len(nodes) - 1].logical)
     testing.expect_value(t, closing.rows[len(nodes) - 1].depth, len(nodes) - 1)
@@ -324,22 +342,22 @@ tree_transition_pointer_toggle_uses_prepared_row :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     nodes[0].is_expanded = false
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     params.mouse_input.mouse_position = {
-        params.list_panel.x + TREE_ROW_ICON_OFFSET_X + 2,
-        params.list_panel.y + TREE_ROW_ICON_OFFSET_Y + 2}
+        params.list_panel.x + theme.TREE_ROW_ICON_OFFSET_X + 2,
+        params.list_panel.y + theme.TREE_ROW_ICON_OFFSET_Y + 2}
     params.mouse_input.mouse_pressed = {.Left}
     params.mouse_input.mouse_down = {.Left}
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     testing.expect(t, runtime.ui_press_owner.active)
     params.mouse_input.mouse_pressed = {}
     params.mouse_input.mouse_down = {}
     params.mouse_input.mouse_released = {.Left}
-    prepared := prepare_tree_list_panel(params)
+    prepared := uilibrary.prepare_tree_list_panel(params)
     testing.expect(t, nodes[0].is_expanded)
     testing.expect(t, runtime.tree_motion.branches[0].running)
     testing.expect(t, !runtime.ui_press_owner.active)
-    testing.expect_value(t, prepared.content_height, TREE_ROW_HEIGHT * 3)
+    testing.expect_value(t, prepared.content_height, theme.TREE_ROW_HEIGHT * 3)
     testing.expect_value(t, ji.selected_animation, &nodes[0])
 }
 
@@ -353,24 +371,25 @@ tree_transition_addressed_expansion_and_search_policy :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     nodes[0].is_expanded = false
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     semantic^.commands[0] = {
-        target = tree_item_semantic_id(&nodes[0]), kind = .Expand}
+        target = uilibrary.tree_item_semantic_id(&nodes[0]), kind = .Expand}
     semantic^.command_count = 1
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     testing.expect(t, runtime.tree_motion.branches[0].running)
     params.mouse_input.sample_time_seconds = 1.05
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     testing.expect_value(t, runtime.tree_motion.branches[0].start_seconds, f64(1))
     runtime.library_search.active = true
     runtime.library_search.visible_ids[0] = nodes[0].stable_id
     runtime.library_search.visible_ids[1] = nodes[1].stable_id
     runtime.library_search.visible_id_count = 2
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     semantic^.commands[0].kind = .Collapse
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     testing.expect(t, !nodes[0].is_expanded)
-    testing.expect(t, tree_node_is_effectively_expanded(params.visibility, &nodes[0]))
+    testing.expect(t,
+        uilibrary.tree_node_is_effectively_expanded(params.visibility, &nodes[0]))
     testing.expect(t, !runtime.tree_motion.branches[0].running)
 }
 
@@ -381,12 +400,12 @@ tree_transition_snap_cancels_removed_row_capture :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     runtime.ui_press_owner = {
-        active = true, kind = .List_Item, id = tree_node_press_id(&nodes[2])}
+        active = true, kind = .List_Item, id = uilibrary.tree_node_press_id(&nodes[2])}
     runtime.settings_preferences.interface.reduce_motion = true
     nodes[0].is_expanded = false
-    _ = prepare_tree_list_panel(params)
+    _ = uilibrary.prepare_tree_list_panel(params)
     testing.expect(t, !runtime.ui_press_owner.active)
     testing.expect(t, !runtime.tree_motion.branches[0].running)
 }
@@ -412,7 +431,7 @@ tree_transition_preparation_does_not_allocate :: proc(t: ^testing.T) {
         if frame % 5 == 0 {
             nodes[4].is_expanded = !nodes[4].is_expanded
         }
-        _ = prepare_tree_list_panel(params)
+        _ = uilibrary.prepare_tree_list_panel(params)
     }
     testing.expect_value(t, tracker.total_allocation_count, i64(0))
 }
@@ -429,10 +448,10 @@ tree_transition_prepared_disclosure_is_frozen :: proc(t: ^testing.T) {
     runtime.library_search.visible_ids[0] = nodes[0].stable_id
     runtime.library_search.visible_ids[1] = nodes[1].stable_id
     runtime.library_search.visible_id_count = 2
-    prepared := tree_prepare_layout(params)
+    prepared := uilibrary.tree_prepare_layout(params)
     testing.expect(t, prepared.rows[0].expanded)
     runtime.library_search.active = false
     testing.expect(t, prepared.rows[0].expanded)
-    next_frame := tree_prepare_layout(params)
+    next_frame := uilibrary.tree_prepare_layout(params)
     testing.expect(t, !next_frame.rows[0].expanded)
 }

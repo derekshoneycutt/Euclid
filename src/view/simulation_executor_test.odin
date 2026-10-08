@@ -1,31 +1,27 @@
 package view
 
-import viewmodel "model"
-
 import bridgemodel "../bridge/model"
-
 import dynviewmodel "../dynview/model"
-
 import particlemodel "../particles/model"
 import shapemodel "../shapes/model"
-
 import storage "../core/storage"
-
 import app_core "../core"
-import "../particles"
-import "../dynview"
+import particles "../particles"
+import dynview "../dynview"
 import dyncompile "../dynview/compile"
 import dyncore "../dynview/core"
 import evidence_checkpoint "../evidence/checkpoint"
 import evidence_session "../evidence/session"
 import evidence_trace "../evidence/trace"
 import app_files "../files"
-import "../shapes"
-
-import "core:math"
-import "core:os"
-import "core:path/filepath"
-import "core:testing"
+import shapes "../shapes"
+import math "core:math"
+import os "core:os"
+import filepath "core:path/filepath"
+import testing "core:testing"
+import worldmodel "world/model"
+import viewsimulation "simulation"
+import viewevidence "evidence"
 
 //   Enable all typed evidence lanes on one lightweight test state.
 init_test_evidence :: proc(state: ^app_core.Euclid_General_State) {
@@ -105,8 +101,8 @@ headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
     expect_headless_session_ready(t, session)
 
     state := session.state
-    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
-    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.fixed_step, u64(2))
     testing.expectf(t, math.abs(state^.simulation_time - 0.05) <= 0.0001,
         "expected simulation_time near 0.05, got %v", state^.simulation_time)
@@ -131,12 +127,12 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
     defer free(state^.shape_world)
     init_test_evidence(state)
 
-    executor := create_simulation_executor(state)
+    executor := viewsimulation.create_simulation_executor(state)
     testing.expect(t, executor != nil)
     state^.simulation_executor = executor
-    defer destroy_simulation_executor(executor)
+    defer viewsimulation.destroy_simulation_executor(executor)
 
-    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.fixed_step, u64(1))
     testing.expectf(t, math.abs(state^.simulation_time - 0.025) <= 0.0001,
         "expected simulation_time near 0.025, got %v", state^.simulation_time)
@@ -146,7 +142,7 @@ deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing
         evidence_trace.Kind.Constraint_Solve_Completed)
     testing.expect_value(t, first_event.tick, u64(1))
 
-    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.fixed_step, u64(2))
     testing.expectf(t, math.abs(state^.simulation_time - 0.05) <= 0.0001,
         "expected simulation_time near 0.05, got %v", state^.simulation_time)
@@ -199,12 +195,12 @@ deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing
     testing.expect_value(t, point_status, shapemodel.Shape_World_Status.Ok)
     init_test_evidence(state)
 
-    executor := create_simulation_executor(state)
+    executor := viewsimulation.create_simulation_executor(state)
     testing.expect(t, executor != nil)
     state^.simulation_executor = executor
-    defer destroy_simulation_executor(executor)
+    defer viewsimulation.destroy_simulation_executor(executor)
 
-    testing.expect(t, run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
     testing.expect_value(t, state^.evidence_ring.count, 2)
 
     checkpoint_event := state^.evidence_ring.events[1]
@@ -236,12 +232,12 @@ parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testi
         state^.shape_world, {point = point.entity, height = 0, enabled = true})
     testing.expect_value(t, constraint_status, shapemodel.Shape_World_Status.Ok)
 
-    executor := create_simulation_executor(state)
+    executor := viewsimulation.create_simulation_executor(state)
     testing.expect(t, executor != nil)
-    defer destroy_simulation_executor(executor)
-    run_parallel_simulation_step(executor, 0.01)
+    defer viewsimulation.destroy_simulation_executor(executor)
+    viewsimulation.run_parallel_simulation_step(executor, 0.01)
     first_batch_x := particles^.low_particles.pos_x[0]
-    run_parallel_simulation_step(executor, 0.01)
+    viewsimulation.run_parallel_simulation_step(executor, 0.01)
 
     testing.expect_value(t, first_batch_x, f32(0.25))
     testing.expect(t, particles^.low_particles.pos_x[0] > first_batch_x)
@@ -262,19 +258,19 @@ parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T)
     state^.shape_world = new(shapemodel.Shape_World, context.allocator)
     defer free(state^.shape_world)
     state^.particle_system^.use_max_dust_particles = 16
-    executor := create_simulation_executor(state)
+    executor := viewsimulation.create_simulation_executor(state)
     testing.expect(t, executor != nil)
     state^.simulation_executor = executor
-    defer destroy_simulation_executor(executor)
+    defer viewsimulation.destroy_simulation_executor(executor)
     executor^.particle_task.dust_emission_queue.count = 1
     executor^.particle_task.dust_emission_queue.items[0] = {
         distribution = .Point, count = 16, x = 0.51, y = 0.51,
         seed = 23}
 
     for _ in 0..<360 {
-        run_parallel_simulation_step(executor, 1.0 / 60.0)
+        viewsimulation.run_parallel_simulation_step(executor, 1.0 / 60.0)
     }
-    settled := observe_display_state(state)
+    settled := viewevidence.observe_display_state(state)
     testing.expect_value(t, settled.dust_live_count, 16)
     testing.expect_value(t, settled.dust_grounded_count, 16)
     velocity_before := state^.particle_system^.low_particles.vel_x[0]
@@ -285,9 +281,9 @@ parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T)
                 state^.particle_system^.low_particles.pos_y[index], 0}}))
     }
 
-    run_parallel_simulation_step(executor, 1.0 / 60.0)
+    viewsimulation.run_parallel_simulation_step(executor, 1.0 / 60.0)
 
-    disturbed := observe_display_state(state)
+    disturbed := viewevidence.observe_display_state(state)
     testing.expect_value(t, disturbed.dust_grounded_count, 16)
     testing.expect(t,
         state^.particle_system^.low_particles.vel_x[0] != velocity_before)
@@ -309,7 +305,7 @@ expect_dynview_cache_arena_destroyed :: proc(
 expect_parallel_frame_cache_ready :: proc(
     t: ^testing.T,
     state: ^app_core.Euclid_General_State,
-    executor: ^Simulation_Executor) {
+    executor: ^app_core.Simulation_Executor) {
     testing.expect_value(t, state^.shape_world^.draw_cache.item_count, 1)
     testing.expect(t, state^.dynview.compile_cache.is_valid)
     testing.expect(t, state^.dynview.compile_cache.layout_is_valid)
@@ -346,7 +342,7 @@ expect_failed_dynview_rebuild :: proc(
 parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.iso_scale = new(viewmodel.Iso_Scale, context.allocator)
+    state^.iso_scale = new(worldmodel.Iso_Scale, context.allocator)
     defer free(state^.iso_scale)
     state^.shape_world = new(shapemodel.Shape_World, context.allocator)
     defer free(state^.shape_world)
@@ -360,7 +356,7 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     style^.visible = true
     state^.dynview.enabled = true
 
-    executor := create_simulation_executor(state)
+    executor := viewsimulation.create_simulation_executor(state)
     testing.expect(t, executor != nil)
     state^.simulation_executor = executor
     testing.expect(t, state^.dynview.cache_arena.initialized)
@@ -370,20 +366,20 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(0))
     testing.expect(t, !state^.dynview.compile_cache.is_valid)
 
-    run_parallel_frame_preparation(state, 0.25, {})
+    viewsimulation.run_parallel_frame_preparation(state, 0.25, {})
     expect_parallel_frame_cache_ready(t, state, executor)
 
-    run_parallel_frame_preparation(state, 0.75, {})
+    viewsimulation.run_parallel_frame_preparation(state, 0.75, {})
     testing.expect_value(t, state^.shape_world^.draw_cache.item_count, 1)
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(1))
 
     dynview.invalidate(&state^.dynview, dynview.DYNVIEW_INVALIDATE_FONT)
-    run_parallel_frame_preparation(state, 0.75, {})
+    viewsimulation.run_parallel_frame_preparation(state, 0.75, {})
     testing.expect_value(t, executor^.pool.outstanding_count, 0)
     testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(2))
 
-    destroy_simulation_executor(executor)
+    viewsimulation.destroy_simulation_executor(executor)
     expect_dynview_cache_arena_destroyed(t, state)
 }
 
@@ -392,17 +388,17 @@ parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^tes
 dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state)
-    state^.iso_scale = new(viewmodel.Iso_Scale, context.allocator)
+    state^.iso_scale = new(worldmodel.Iso_Scale, context.allocator)
     defer free(state^.iso_scale)
     state^.shape_world = new(shapemodel.Shape_World, context.allocator)
     defer free(state^.shape_world)
     state^.dynview.enabled = true
 
-    executor := create_simulation_executor(state)
+    executor := viewsimulation.create_simulation_executor(state)
     testing.expect(t, executor != nil)
     state^.simulation_executor = executor
-    defer destroy_simulation_executor(executor)
-    run_parallel_frame_preparation(state, 0, {})
+    defer viewsimulation.destroy_simulation_executor(executor)
+    viewsimulation.run_parallel_frame_preparation(state, 0, {})
 
     buffer := &state^.dynview.command_buffer
     buffer^.revision += 1
@@ -413,7 +409,7 @@ dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
     buffer^.commands[1] = {
         kind = .Text_Run, block_id = 1, text_offset = 0, text_len = 1,
     }
-    run_parallel_frame_preparation(state, 0, {})
+    viewsimulation.run_parallel_frame_preparation(state, 0, {})
 
     expect_failed_dynview_rebuild(t, state)
 }

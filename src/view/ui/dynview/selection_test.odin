@@ -1,14 +1,12 @@
 package ui_dynview
 
-import viewmodel "../../model"
 import native "../../native"
 import dynviewmodel "../../../dynview/model"
 import color "../../../core/color"
 import geometry "../../../core/geometry"
-
-import "core:testing"
-
+import testing "core:testing"
 import input "../../input"
+import viewmodel "../model"
 
 // Verify selection boundaries normalize forward and reverse drags.
 @(test)
