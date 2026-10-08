@@ -128,6 +128,7 @@ This is a hybrid model:
 | Utility panels | `src/view/ui/settings/`, `src/view/ui/gif/` | Runtime settings and GIF controls. |
 | Application overlays | `src/view/ui/overlay/` | Tooltip placement, timing, and application context-menu policy. |
 | Basic widgets | `src/view/ui/widgets/` | Prepared actions, geometry, bounded values, and visuals without application-coordinator imports. |
+| Treeview foundations | `src/view/ui/widgets/treeview/` | Tree-specific expander interaction, bounded borrowed hierarchy admission, ordered working-frame intents, and instance-local roving state. The Library still owns production tree preparation, motion, and drawing during migration. |
 | Semantic machinery | `src/view/ui/semantics/` | Bounded snapshots, registration, validation, focus navigation, and addressed commands. Scenario names remain in application UI composition. |
 | Shared stack geometry | `src/view/ui/layout/stack_panel.odin` | Pure axis placement and clipping shared by widgets and semantic registration. |
 | Input boundary | `src/view/input/` | Device polling, event storage, hotkeys, and Terminal encoding. |

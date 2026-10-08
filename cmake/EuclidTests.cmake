@@ -93,6 +93,7 @@ if(BUILD_TESTING)
         view/ui/dynview
         view/ui/text
         view/ui/widgets
+        view/ui/widgets/treeview
         view/ui/library/service
         view/world
         view/world/projection

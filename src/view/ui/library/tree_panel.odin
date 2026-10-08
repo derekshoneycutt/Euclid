@@ -9,6 +9,7 @@ import uuid "core:encoding/uuid"
 import viewmodel "../model"
 import viewmessages "../../messages"
 import uiwidgets "../widgets"
+import treeview "../widgets/treeview"
 import input "../../input"
 import uisemantics "../semantics"
 import theme "../theme"
@@ -829,7 +830,7 @@ update_tree_node_expander_hit :: proc(
         return
     }
 
-    expander_result := uiwidgets.update_tree_expander(uiwidgets.Tree_Expander_Params{
+    expander_result := treeview.update_tree_expander(treeview.Tree_Expander_Params{
         rect = geometry.Rectangle(icon_rect),
         mouse = ctx.mouse_input,
         scroll_offset = geometry.Vector2(ctx.scroll_offset),

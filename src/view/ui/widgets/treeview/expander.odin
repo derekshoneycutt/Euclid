@@ -1,7 +1,7 @@
-package uiwidgets
+package treeview
 
-import geometry "../../../core/geometry"
-import input "../../input"
+import geometry "../../../../core/geometry"
+import input "../../../input"
 
 Tree_Expander_Params :: struct {
     rect: geometry.Rectangle,
@@ -40,8 +40,7 @@ update_tree_expander :: proc(params: Tree_Expander_Params) -> Tree_Expander_Resu
     hovered := params.interaction_enabled &&
         geometry.rectangle_contains(expander_rect, local_mouse) &&
         geometry.rectangle_contains(params.interaction_space_rect, local_mouse)
-    pressed := hovered && input_frame_left_down(params.mouse)
+    pressed := hovered && .Left in params.mouse.mouse_down
 
     return {hovered, pressed, hovered && params.toggle_triggered}
 }
-
