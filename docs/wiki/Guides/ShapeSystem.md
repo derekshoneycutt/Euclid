@@ -1,471 +1,280 @@
 # Shape System
 
-## Purpose
+> Euclid's shape system grew from drawn constructions into a reusable geometric
+> model: canonical shape state is owned once, then projected for animation,
+> simulation, and rendering.
 
-Euclid stores canonical geometry in one fixed-capacity `Shape_World`. The world is
-specialized for two lifetimes: a permanent tool prefix and one replaceable animation
-suffix. It is deliberately not a general entity-component framework. It has no arbitrary
-entity deletion, free list, swap removal, or runtime storage growth.
+## Table Of Contents
 
-This guide describes four contracts that must remain aligned:
+1. [How The Shape System Evolved](#how-the-shape-system-evolved)
+1. [The Canonical Model](#the-canonical-model)
+1. [Geometry, Constraints, And Curves](#geometry-constraints-and-curves)
+1. [Animation And The Julia Boundary](#animation-and-the-julia-boundary)
+1. [Prepared Drawing](#prepared-drawing)
+1. [Permanent Tools And Animation Lifetimes](#permanent-tools-and-animation-lifetimes)
+1. [Where To Trace A Change](#where-to-trace-a-change)
 
-1. `Shape_World` owns canonical identity, components, topology, text, and constraints.
-2. The Odin-Julia bridge exposes packed identities and pointer-free ABI values.
-3. The shape preparation worker compiles canonical state into a bounded draw cache.
-4. Animation retirement invalidates every derived or borrowed view before reuse.
+## How The Shape System Evolved
 
-## Source Map
+Euclid was first conceived in Julia, GLMakie, and Jupyter notebooks as a way to explore
+Euclidean constructions in 2D and 3D. The current desktop application was rebuilt from a
+separate Odin experiment in kinematic isometric stick figures; it was not a direct
+continuation of the notebook implementation.
 
-| Concern | Owning source |
+| Stage | What it contributed |
 | --- | --- |
-| Entity, component, pool, constraint, and world types | `src/shapes/model/` |
-| ABI structs, status values, and bridge version | `src/bridge/abi.odin` |
-| Shape constructors and preflight | `src/shapes/world_constructors.odin` |
-| Direct-target constraint creation and solving | `src/shapes/world_constraints.odin` |
-| World-to-packet compilation | `src/shapes/world_render.odin` |
-| Analytic curve evaluation and bounded explication | `src/shapes/curve/` |
-| Shared packet sorting and polygon triangulation | `src/shapes/draw_cache.odin` |
-| Native shape exports | `src/bridge/abi-shapes.odin` |
-| Constraint and permanent-tool exports | `src/bridge/abi-constraints.odin`, `src/bridge/abi-tools.odin` |
-| Asynchronous query and command transaction | `src/bridge/scene_commands.odin` |
-| Julia ABI layouts and wrappers | `src/julia/bridge/common.jl`, `src/julia/bridge/points.jl` |
-| Julia constraint and tool wrappers | `src/julia/bridge/constraints.jl`, `src/julia/bridge/tools.jl` |
-| Worker scheduling and fences | `src/view/simulation/simulation_executor.odin` |
-| Display-thread packet consumption | `src/view/world/geometry.odin` |
-| Startup and retirement | `src/view/runtime_session.odin`, `src/bridge/animations.odin` |
+| **The Odin prototype** | Kinematic isometric stick figures, extracted into reusable shapes for an isometric surface. Pen and compass tools began as line drawings in a Raylib-only application. |
+| **The desktop application** | The extracted Odin shape model became the construction core, and the Julia animation driver was brought into the application. |
 
-## Ownership And Concurrency
+The first shape storage design was an array of large shape records, with intrusive
+linked lists embedded in those records to express relationships and traversal. As
+constructions and tools grew, that layout became awkward to extend and less friendly to
+CPU cache use. The current model replaces it with ECS-inspired sparse-set components:
+shape identity is separate from the data each shape uses, and dense component storage
+supports iteration over the relevant data.
 
-| Resource | Long-lived owner | Authorized mutation boundary |
-| --- | --- | --- |
-| Registry and canonical components | Display runtime | Startup, synchronized construction, committed scene batches |
-| Ordered constraints | Display runtime | Construction, tool commands, joined fixed-step work |
-| Label and polygon pools | Display runtime | Transactional construction and owner-controlled rewind |
-| Animation query snapshot | Julia tick slot | Immutable for one asynchronous callback |
-| Scene command batch | Julia tick slot | Appended by Julia callback, validated and committed by display |
-| Draw cache storage | `Shape_World` | Exclusively lent to the frame-preparation worker until join |
-| SDL_GPU resources | Display thread | Drawing and shutdown only |
+This is not a general-purpose ECS. The current world is shaped around Euclid's
+construction model and its lifetimes. That history helps explain why the code separates
+entity identity, geometry, constraints, animation commands, and prepared draw packets.
 
-Canonical ownership does not imply that every computation runs on the display thread.
-The owner lends non-overlapping mutation capabilities to finite workers, then joins them
-before observing their results or changing the same storage. Constraint solving writes
-canonical transforms during the fixed-step task window. Shape preparation reads settled
-canonical state and writes only `world.draw_cache` during the frame-preparation window.
+## The Canonical Model
 
-No Julia callback receives a pointer into a shape store. No worker may retain a world,
-snapshot, label, polygon, or packet borrow beyond its task fence.
+`Shape_World` owns canonical shape identity, transforms, visual properties, geometry,
+labels, polygon topology, and constraints. Its values are the authority from which
+simulation and rendering derive their views.
 
-## Canonical World
+| Concern | Owner or boundary |
+| --- | --- |
+| Canonical world and permanent tool baseline | Display runtime |
+| Animation-owned shapes and constraints | Append-only world suffix after the frozen baseline |
+| Julia animation reads | Immutable query snapshot |
+| Julia animation mutations | Scene-command batch committed by the display owner |
+| Constraint solve and draw-cache preparation | Bounded worker task windows, joined before reuse or observation |
+| Native drawing resources | Display thread |
 
 ```mermaid
 flowchart TD
-    R[Generational entity registry]
-    R --> T[Transform components]
-    R --> S[Render-style components]
-    R --> A[Active-feature components]
-    R --> G[Geometry components]
-    R --> L[Label descriptors]
-    G --> V[Ordered polygon entity references]
-    L --> B[Bounded UTF-8 label bytes]
-    R --> C[Ordered direct-target constraints]
-    T --> D[Derived draw cache]
-    S --> D
-    A --> D
-    G --> D
-    L --> D
+    Registry[Generational entity registry]
+    Registry --> Transform[Transform components]
+    Registry --> Style[Render-style and active-feature components]
+    Registry --> Geometry[Geometry components]
+    Registry --> Label[Label descriptors]
+    Geometry --> Topology[Ordered polygon references]
+    Label --> Bytes[World-owned label bytes]
+    Registry --> Constraints[Ordered direct-target constraints]
+    Transform --> Cache[Derived draw cache]
+    Style --> Cache
+    Geometry --> Cache
+    Label --> Cache
 ```
 
-`Shape_World` contains one registry, sparse-dense component sets, two variable-size
-inline pools, one ordered constraint store, and the derived draw cache.
-
-| Store | Canonical meaning | Ordering rule |
-| --- | --- | --- |
-| `registry` | Live entity slots and generations | Append-only slot order |
-| `transforms` | Current and previous world positions | Entity construction order |
-| `render_styles` | Color, brush, visibility | Entity construction order |
-| `active_features` | Selected tool subfeature | Entity construction order |
-| `arcs` | Current and previous radius, start angle, and signed sweep | Entity construction order |
-| `trochoids` | Current and previous analytic curve parameters and directed reveal frontier | Entity construction order |
-| `trochoid_tools` | Current and previous two-ring guide parameters | Entity construction order |
-| `cycloids` | Current and previous rolling-line curve parameters and directed reveal frontier | Entity construction order |
-| `cycloid_tools` | Current and previous rolling-circle guide parameters | Entity construction order |
-| `geometries` | Kind-tagged direct entity references | Immutable after construction |
-| `labels` | MIME and source-span descriptors | Immutable after construction |
-| `vertex_references` | Variable-arity polygon topology | Caller-supplied vertex order |
-| `label_store` | Immutable UTF-8 source bytes | Append order within the lifetime |
-| `constraints` | Direct transform targets and policy | Stable solver order |
-
-Every component set stores dense entity/value arrays plus a sparse slot-to-dense index.
-Sparse entries store the dense index plus one, reserving zero for absence. Lookup succeeds
-only when all three checks pass:
-
-1. The entity slot is nonzero and inside the live registry prefix.
-2. The slot generation equals the handle generation.
-3. The sparse entry points to a dense row containing that exact entity.
-
-This is the only validity rule. Geometry, constraints, bridge calls, snapshots, and
-render preparation all resolve entities through it.
-
-### Entity Encoding
-
-`Shape_Entity` contains a 32-bit slot and a 32-bit generation. ABI and snapshot storage
-pack it without pointers:
+Each component set keeps dense entity/value rows and a sparse lookup from entity slot to
+dense row. Entity handles pair a slot with a generation. Packing that pair for a
+pointer-free boundary uses:
 
 $$
-\operatorname{packed} = (\operatorname{generation} \ll 32)\;|\;\operatorname{slot}
+\operatorname{packed} =
+(\operatorname{generation} \ll 32)\;|\;\operatorname{slot}
 $$
 
-Slot zero and generation zero are invalid. Unpacking recovers an identity but does not
-prove liveness; the receiving registry must still resolve it. Retirement increments the
-generation of every reused animation slot, so a packed handle from an older animation
-cannot name a new entity in the same slot.
+Unpacking yields an identity, not proof that it is live. The receiving registry resolves
+the slot and generation, and the component set confirms that the dense row belongs to
+that entity. This is why stale-handle checks appear at model and bridge boundaries.
 
-### Geometry Composition
+Geometry is composed from explicit references rather than nested ownership trees:
 
-A drawable host entity owns a render style and either geometry or a label. Geometry
-references separate transform entities directly:
-
-| Kind | Direct canonical references |
+| Shape family | Canonical relationships |
 | --- | --- |
-| Point | Host entity also owns its transform |
-| Line | First and second transforms |
-| Arc or filled arc | Host transform is the center; mutable arc component stores radius, start angle, and signed sweep |
-| Trochoid | Host transform is the fixed center; mutable analytic component stores circle, tracer, domain, rotation, and frontier parameters |
-| Trochoid guide | Permanent host transform is the fixed center; rolling center and orientation cue are derived without child transforms |
-| Cycloid | Two endpoint transforms define the fixed line; the host owns radius, tracer, domain, phase, and frontier parameters |
-| Cycloid guide | Two endpoint transforms define the permanent fixed line; rolling center and orientation cue are derived without child transforms |
-| Polygon | Offset and count into ordered entity references |
-| Pen | Two joint transforms |
-| Compass | Two joint transforms and one pivot transform |
+| Point | The host entity owns its transform. |
+| Line | Geometry refers to two transform entities. |
+| Arc | The host transform is the center; the arc component carries radius, start angle, and signed sweep. |
+| Trochoid | The host transform is the fixed center; an analytic component carries rolling and tracer parameters. |
+| Cycloid | Two endpoint transforms define the directed baseline; an analytic component carries rolling and tracer parameters. |
+| Polygon | An ordered range of vertex entity references. |
+| Pen and compass | Joint and pivot transforms plus their tool constraints. |
+| Label | A descriptor into world-owned UTF-8 bytes. |
 
-Typed handles such as `Shape_Line_Handle` and `Shape_Compass_Handle` group the host,
-transform entities, and tool constraint indices for callers. They do not introduce a
-second ownership graph.
+Typed handles group the entities and constraints a caller needs to operate a construction;
+they do not create a second ownership graph. When values cross the bridge or snapshot
+boundary, copy data rather than retaining world pointers, borrowed strings, or pool
+references.
 
-An arc is one host entity, not an endpoint topology. Positive sweeps increase theta,
-negative sweeps decrease theta, zero is empty, and positive or negative `2pi` is an
-explicit full turn. Fixed-step snapshots preserve both current and previous arc values
-so rendering interpolates center, radius, start angle, and signed sweep together.
+An arc is one center-bearing host, not a pair of endpoint entities. Its signed sweep
+distinguishes direction; the current and previous values are interpolated together for
+rendering. Trochoids likewise remain analytic rather than storing sampled curve entities.
+For reduced radius ratio \(R/r=p/q\), a complete trochoid has parameter period
+\(2\pi q\). The named epi- and hypocycloid forms are semantic constructors over that
+same trochoid representation; for a hypocycloid, tracer distance equals rolling radius.
+Cycloid geometry instead derives motion from its two baseline endpoints and the no-slip
+rolling condition. These distinctions matter when changing constructors or interpolation:
+the draw samples are derived, while these parameters and references define the shape.
 
-A trochoid is also one transform-bearing host. External mode uses orbit radius `R + r`;
-internal mode uses `R - r` and requires `R > r`. Domains are directed, so either
-`finish > start` or `finish < start` is valid, and the reveal frontier must remain in
-that directed closed interval. Continuous parameters are interpolated before point
-evaluation. Mode is discrete and may change only while the curve is hidden.
-For either mode and reduced `k = R/r = p/q`, the minimal parameter period is `2pi*q`.
-Epitrochoids and Hypotrochoids are semantic external and internal Trochoids with an
-arbitrary tracer distance `d`. Hypocycloids specialize the internal case to `d = r`,
-where the curve has `p` cusps. Deltoids and astroids are the `k = 3` and `k = 4`
-Hypocycloid conveniences; a Nephroid is the external `k = 2`, `d = r` epicycloid.
-These semantic constructors do not introduce additional canonical shape or bridge types.
+## Geometry, Constraints, And Curves
 
-A cycloid host references two endpoint transforms rather than owning a center transform.
-The rolling interval is centered on their directed line, and the circle advances without
-slipping by one radius per parameter radian. Tracer distance classifies the curve without
-stored mode state: `d = r` is ordinary, `d < r` is curtate, and `d > r` is prolate.
-Endpoint positions, radius, tracer parameters, domain, and frontier all interpolate before
-evaluation.
+Constructors assemble hosts, transforms, geometry, and related constraints. They
+preflight their required world storage before publishing a construction, so failure
+does not leave a partially created shape. The model and constructor packages are the
+source of truth for supported shape kinds and validation.
 
-Sampled curve vertices are never canonical. `src/shapes/curve/` refines a 48-segment
-full-domain lattice using midpoint chord error `0.0005` and maximum parameter step
-`pi/24`. Trochoids permit at most 512 segments/513 vertices; cycloids retain their
-192-segment/193-vertex bound. The frame-local draw cache stores at most 2,560 sampled
-curve vertices across all visible curves. Refining the complete domain before truncating
-at the exact frontier keeps established vertices stable as a drawing advances. Closure
-is represented only by the evaluated final endpoint; no floating-point closure inference
-or synthetic segment is added. Rendering and dust independently explicate canonical
-state, so particle behavior does not depend on a prepared frame.
+Constraints are independent of draw topology. Each names the transforms it reads or may
+move, and their stable order gives the solver repeatable passes. The current families
+include floor and snapping rules, distance, angle, and center-pivot constraints.
+Distance and angle constraints make their movement policy explicit: move the first
+target, both targets, or the second target. See
+[`world_constraints.odin`](../../../src/shapes/world_constraints.odin) for the solver
+and its constraint-specific behavior.
 
-### Labels
+Curves keep analytic parameters in canonical components; sampled vertices belong to
+preparation, not shape identity. For a trochoid with fixed-circle radius \(R\), rolling
+radius \(r\), and tracer distance \(d\), the rolling-center distance is \(R+r\) for
+external rolling and \(R-r\) for internal rolling. Internal rolling requires \(R>r\).
+Cycloids describe a rolling circle along a directed line, with tracer distance classifying
+ordinary, curtate, and prolate forms. Directed parameter domains support drawing either
+direction.
 
-A label component stores MIME, byte offset, byte count, and revision. The source lives
-in the world's fixed 32 KiB byte pool. Version one accepts nonempty, single-line,
-control-free UTF-8 `text/plain` source up to 256 bytes. `text/latex` is reserved and
-rejected until a dedicated renderer is available.
+These parameters are interpolated and evaluated to produce the current visible curve.
+The curve package owns evaluation and adaptive sampling; the draw cache consumes the
+result. The exact sampling policy and bounds belong in
+[`src/shapes/curve/`](../../../src/shapes/curve/), not in this guide.
 
-Descriptors are pointer-free, but a descriptor is meaningful only with the matching
-live label store generation. Code must copy bytes when crossing the ABI and must not
-retain a borrowed `string` across world retirement.
+Labels use a pointer-free descriptor into bytes owned by the world. A descriptor is
+valid only with the world lifetime that owns those bytes; consumers that cross an
+ownership boundary copy the source. This is particularly important during animation
+retirement, when the label pool is rewound along with the shape suffix.
 
-## Construction And Constraints
+## Animation And The Julia Boundary
 
-Constructors compute a complete `Shape_Construction_Needs` value before mutation. The
-preflight covers entities, each component kind, label bytes, polygon references, and
-constraints. Once preflight succeeds, publication is infallible under the world-owner
-contract; otherwise the constructor returns an explicit status with the world unchanged.
+Julia animation code uses `OdinJuliaBridge`; it does not bind directly to `Shape_World`.
+The bridge offers two distinct paths:
 
-Constraints are independent of rendering topology. Each payload names the transform
-entities it reads or moves. Supported kinds are floor, snap-to-floor, snap-point,
-distance, minimum angle, maximum angle, and center-pivot. Distance and angle constraints
-also carry an explicit movement policy: move first, move both, or move second.
-
-The constraint store preserves insertion order. Forward and reverse passes therefore
-have deterministic meaning, and bounded solve-to-error alternates those passes until it
-converges or exhausts its iteration budget. A stale or component-incompatible target is
-rejected before insertion and cannot become an unchecked array index.
-
-## Odin-Julia Bridge ABI
-
-Julia animation code imports `OdinJuliaBridge`; it does not bind directly to canonical
-Odin structures. The public Julia names intentionally retain familiar terms such as
-`create_new_line`, `get_point`, and `set_point_position`, but their identity argument is
-now a packed `Shape_Entity`, not a legacy point-array index.
-
-### ABI Value Rules
-
-| Contract | Odin representation | Julia representation |
-| --- | --- | --- |
-| Entity identity | `u64` | `UInt64` or `Integer` converted to `UInt64` |
-| Position | `Vector3` of `f32` | `NTuple{3, Cfloat}` |
-| Color | Four `u8` channels | `BridgeColor` |
-| Boolean fields in shape structs | `u8` | `UInt8` |
-| Status | `i32` | `Int32` |
-| Constructor result | Status plus packed handles | Isomorphic `BridgeShape*` struct |
-| Entity query | `Bridge_Shape_View` | `BridgePointView` |
-| Arc query | `Bridge_Shape_Arc_Query_Result` | `BridgeShapeArcQueryResult` |
-| Trochoid value/query | `Bridge_Trochoid_Geometry`, `Bridge_Shape_Trochoid_Query_Result` | `BridgeTrochoidGeometry`, `BridgeShapeTrochoidQueryResult` |
-| Cycloid value/query | `Bridge_Cycloid_Geometry`, `Bridge_Shape_Cycloid_Query_Result` | `BridgeCycloidGeometry`, `BridgeShapeCycloidQueryResult` |
-| Label query | Caller-owned byte destination | Copied Julia `String` or `nothing` |
-
-ABI structs must remain field-for-field compatible in order, width, and meaning. A field
-rename on one side is harmless only when layout and semantics remain identical. Adding,
-removing, or reordering fields requires symmetric Odin definitions, Julia definitions,
-wrappers, tests, and bridge-version review.
-
-### Export Families
-
-| Family | Native exports | Contract |
-| --- | --- | --- |
-| Construction | `shape_create_point`, `shape_create_label`, line, arc, trochoid, cycloid, and polygon variants | Return status-bearing packed handle groups |
-| Query | `shape_get_view`, `shape_get_arc`, `shape_get_trochoid`, `shape_get_cycloid`, `shape_copy_label_source` | Return pointer-free projections or copy into caller storage |
-| Mutation | Position, visibility, color, active color, brush, complete arc/trochoid/cycloid geometry, curve frontiers, active feature | Resolve required component or capture a scene command |
-| Constraints | Floor, snap, distance, angle, center-pivot, solve | Validate direct packed transform targets |
-| Tools | Pen, compass, trochoid-guide, and cycloid-guide visibility, configuration, motion, lock, and position operations | Address permanent baseline handles and constraints |
-
-Callers must inspect constructor and mutation status before using returned data. The
-shape-world status mapping used by the bridge is:
-
-| Shape outcome | Bridge status |
-| --- | --- |
-| Success | `BRIDGE_STATUS_OK` (0) |
-| Invalid argument | `BRIDGE_STATUS_INVALID_ARGUMENT` (2) |
-| Capacity exhausted | `BRIDGE_STATUS_OUT_OF_CAPACITY` (5) |
-| Illegal state or duplicate component | `BRIDGE_STATUS_ILLEGAL_STATE` (6) |
-| Stale entity or missing component | `BRIDGE_STATUS_NOT_FOUND` (8) |
-| Invalid UTF-8 | `BRIDGE_STATUS_INVALID_UTF8` (10) |
-| Unsupported MIME | `BRIDGE_STATUS_UNSUPPORTED_MIME` (11) |
-
-The bridge version is currently 9. `BRIDGE_FEATURE_TROCHOIDS` and
-`BRIDGE_FEATURE_CYCLOIDS` advertise their curve and guide contracts. Feature flags
-advertise optional contracts, but version and flags do not replace exact ABI layout
-checks.
-
-### Synchronous And Asynchronous Calls
-
-The bridge has two distinct execution modes.
-
-**Synchronized lifecycle calls** execute against canonical `Shape_World` immediately.
-Shape and constraint constructors belong to this mode and must remain inside a lifecycle
-window where no worker reads or mutates the world.
-
-**Asynchronous animation-tick calls** operate through one immutable query snapshot and
-one bounded scene-command batch. Shape mutators detect capture mode, append their packed
-target and value, and return `BRIDGE_STATUS_OK` when capture succeeds. That status means
-the command was recorded; canonical mutation occurs only if the later batch commits.
+- Synchronized lifecycle operations construct shapes and constraints when the world is
+  not concurrently borrowed.
+- Animation callbacks read an immutable snapshot and record mutations in a bounded
+  command batch. The display owner validates the batch before applying any command.
 
 ```mermaid
 sequenceDiagram
     participant D as Display owner
     participant Q as Query snapshot
-    participant J as Julia host thread
+    participant J as Julia animation
     participant B as Scene batch
     participant W as Shape_World
 
-    D->>Q: Copy queryable components and label bytes
-    D->>J: Submit tick with generation and sequence
-    J->>Q: Read packed-entity projections
-    J->>B: Append bounded mutation commands
-    J-->>D: Return completed tick slot
-    D->>B: Validate identity, capacity, targets, and whole batch
-    D->>W: Commit commands in callback order
+    D->>Q: Copy queryable shape values
+    D->>J: Submit animation callback
+    J->>Q: Read snapshot projections
+    J->>B: Record mutation requests
+    J-->>D: Return completed callback
+    D->>B: Validate the complete batch
+    alt Batch is valid
+        D->>W: Commit commands in callback order
+    else Batch is invalid
+        D->>D: Reject without partial mutation
+    end
 ```
 
-The query snapshot copies registry state, transforms, styles, active features, geometry,
-labels, and label bytes. Reads during capture never fall back to concurrently changing
-canonical state. Tool position queries follow the same rule.
+The snapshot prevents a callback from observing a mixture of canonical states. Recording
+a mutation is provisional: canonical state changes only if the later validation and
+commit succeeds. Validation covers the animation identity and each command's target and
+required component; any invalid command rejects the batch rather than leaving partial
+shape mutations. Constructors are not implicitly part of that asynchronous protocol.
 
-The command batch holds at most 64 commands. Overflow marks the entire batch invalid and
-suppresses direct mutation. Before commit, the display owner verifies the animation
-identity, command count, overflow state, pending animation-value writes, every packed
-entity, and every required component or tool constraint. Any failure rejects the whole
-batch; no shape command is applied partially. Successful commands commit in original
-callback order and emit semantic evidence.
+Odin and Julia bridge records must remain layout- and meaning-compatible. When changing
+this boundary, trace both exports and wrappers, dispatch, validation, and ABI tests. Start with
+[`scene_commands.odin`](../../../src/bridge/scene_commands.odin),
+[`abi-shapes.odin`](../../../src/bridge/abi-shapes.odin), and
+[`src/julia/bridge/`](../../../src/julia/bridge/).
 
-Constructors and constraint-creation exports are not scene commands. Do not call them
-from an asynchronous tick unless they first gain an explicit bounded capture protocol.
+## Prepared Drawing
 
-## Draw Cache
-
-`Shapes_Draw_Cache` is fixed storage embedded in `Shape_World`, but it is not canonical
-state. It is a renderer-oriented packet rebuilt from scratch for each prepared frame.
-Identity, constraints, bridge queries, and evidence must never derive truth from it.
-
-### Packet Layout
-
-| Packet region | Contents |
-| --- | --- |
-| `items` | Tagged union of label, point, line, arc, filled-arc, curve, polygon, pen, compass, and guide draws |
-| `polygon_vertices` | Interpolated world-space vertices for visible polygons |
-| `polygon_triangles` | Packet-local triangle indices produced by triangulation |
-| `polygon_ring_nodes` | Reused ear-clipping workspace; not published semantics |
-| `curve_vertices` | Up to 2,048 frame-local explicated curve vertices |
-| `pen`, `compass`, `trochoid_tool`, `cycloid_tool` | Dedicated tool copies used by high and shadow passes |
-| Counts and draw flags | Initialized prefixes and tool-presence publication state |
-
-Label items retain MIME, byte offset, byte count, and revision rather than copying text.
-The display resolves those descriptors against the still-live canonical label store.
-This is safe only because packet consumption finishes before any animation rewind.
-
-### Build Pipeline
+The shape draw cache is a renderer-oriented projection rebuilt from canonical state for
+a frame. It contains interpolated geometry and draw items, not authoritative identity,
+constraint state, or bridge query results. This keeps geometry useful to other systems
+without making them depend on renderer packet layout.
 
 ```mermaid
 flowchart LR
-    S[Visible render styles] --> R[Resolve live entity]
-    R --> C[Read label or geometry]
-    C --> I[Interpolate direct transforms]
-    I --> P[Reserve packet ranges]
-    P --> T[Triangulate polygons]
-    T --> O[Stable visual-depth sort]
-    O --> J[Worker fence join]
-    J --> D[Display draw passes]
+    World[Canonical shape world] --> Visible[Resolve visible live entities]
+    Visible --> Geometry[Read geometry and interpolate transforms]
+    Geometry --> Packet[Build bounded draw packet]
+    Packet --> Sort[Order for visual depth]
+    Sort --> Fence[Preparation task joins]
+    Fence --> Display[Display consumes draw items]
 ```
 
-`build_shape_world_draw_cache` first resets every packet count and tool flag. It then
-iterates dense render-style order, skips hidden or stale entities, resolves an optional
-active feature, and dispatches labels before geometry. Transform values are linearly
-interpolated between `previous_position` and `position` using the frame alpha.
+The preparation worker writes the derived cache during its task window. The display
+waits for that work to join before consuming the initialized packet data and submitting
+drawing. The cache is bounded and disposable: if a drawable cannot be represented in a
+frame, preparation can omit it without changing canonical world state. See
+[`world_render.odin`](../../../src/shapes/world_render.odin),
+[`draw_cache.odin`](../../../src/shapes/draw_cache.odin), and
+[`src/view/world/geometry.odin`](../../../src/view/world/geometry.odin) for compilation,
+shared packet processing, and display consumption.
 
-Polygon construction reserves contiguous vertex and maximum triangle ranges. If entity
-resolution or item reservation fails, it rolls those ranges back. Ear clipping operates
-in the packet's reusable ring workspace and emits packet-local triangle indices. The
-builder performs no heap allocation.
+Polygon ranges are reserved as a unit and rolled back if the polygon cannot be resolved
+or represented. Prepared items are stably ordered using the project's isometric depth
+heuristic; this is a painter-order approximation, not exact visibility for intersecting
+geometry. Both behaviors belong to packet preparation and must not mutate the canonical
+construction.
 
-After construction, a stable insertion sort uses the isometric depth heuristic
-`x + y - z`. Entirely flat geometry and near-equal depths retain authored order. This is
-a painter-order approximation over whole primitives; it does not split intersecting
-geometry or claim exact visibility.
+## Permanent Tools And Animation Lifetimes
 
-### Capacity And Degradation
-
-The item, polygon vertex, polygon triangle, and 2,048-element curve-vertex regions have
-independent fixed limits.
-The cache builder has no status return: an invalid source or exhausted packet region
-omits that drawable from the current packet. Polygon reservation is transactional, so a
-failed polygon does not leak partial ranges into following items. Canonical state remains
-unchanged and may be rebuilt on a later frame.
-
-This differs intentionally from canonical construction failure. A constructor must
-reject without mutation; packet preparation may degrade by omission because the packet
-is disposable derived state. New packet kinds must preserve reset, reservation rollback,
-and deterministic ordering behavior.
-
-### Publication And Display Consumption
-
-The frame-preparation worker is the only writer to the cache during its task window. The
-display thread waits for the complete preparation fence, then reads initialized packet
-prefixes for low geometry, merged high geometry, shape shadows, tool shadows, and
-pen-polygon crossing behavior. The display thread encodes and submits those packets.
-
-Animation rewind begins by zeroing all packet frontiers and tool flags. This prevents a
-draw item, especially a label descriptor, from naming canonical storage that is about to
-be reused.
-
-## Lifetime And Retirement
-
-At startup, `make_shape_storage` allocates one world, constructs the trochoid and cycloid
-guides, compass, and pen,
-freezes all current frontiers, settles tool constraints, and copies current transforms to
-their previous-position fields. The resulting prefix lives until application shutdown.
+Startup constructs permanent tools and freezes the resulting world prefixes as a
+baseline. An animation appends its own shapes and constraints after those prefixes.
+Replacing an animation retires the suffix and starts another generation:
 
 ```mermaid
 flowchart LR
-    B[Permanent roulette guides, pen, and compass baseline]
-    A1[Animation suffix generation N]
-    R[Owner-controlled retirement]
-    A2[Animation suffix generation N plus 1]
+    Baseline[Permanent tools and frozen baseline]
+    Current[Animation-owned suffix]
+    Retire[Owner-controlled retirement]
+    Next[Next animation suffix]
 
-    B --> A1 --> R --> A2
-    B --> A2
+    Baseline --> Current --> Retire --> Next
+    Baseline --> Next
 ```
 
-Every append-only store records its own baseline frontier. Animation replacement calls
-one production transaction, `reset_animation_switch_state`, in this order:
+Retirement is coordinated with the rest of the runtime:
 
-1. Close generation-owned terminal activity.
-2. Release and join accepted terminal graphics work.
-3. Destroy terminal presentation state.
-4. Emit clear particles while retiring geometry and labels still resolve.
-5. Invalidate the draw cache and rewind every shape-world suffix.
-6. Increment generations for retired entity slots.
-7. Clear other animation-memory borrowers and begin the next generation.
-8. Hide permanent tools and restore incoming-animation drawing policy.
+1. Stop accepting work that belongs to the old animation and join work already accepted.
+2. Emit clear effects that need the old geometry while it still resolves.
+3. Invalidate prepared draw data, then rewind component, topology, label, and constraint
+   suffixes together.
+4. Advance the retired entity generations before the next animation reuses their slots.
 
-`shape_world_rewind_animation` owns the complete shape rewind. It clears component sparse
-membership, restores dense counts, rewinds polygon references, label bytes, and ordered
-constraints, then invalidates entity identities. Callers must not rewind individual
-stores or begin animation-memory reuse before this operation completes.
+The baseline remains. This is the reason retirement belongs to the world/runtime
+lifecycle rather than arbitrary entity deletion.
 
-## Failure Model
+For the concrete ordering, inspect
+[`runtime_session.odin`](../../../src/view/runtime_session.odin),
+[`animations.odin`](../../../src/bridge/animations.odin), and
+`shape_world_rewind_animation` in
+[`shapes.odin`](../../../src/shapes/model/shapes.odin).
 
-| Boundary | Failure behavior |
+The important failure distinction is between canonical construction and frame
+preparation. Construction must reject without publishing a partial shape. A draw packet
+may omit an item that cannot be represented in that frame, because the packet is derived
+and can be rebuilt. Scene commands are a third boundary: validate the complete batch,
+then commit it or reject it without partial mutation.
+
+## Where To Trace A Change
+
+| If the change is about… | Start here |
 | --- | --- |
-| Entity or component lookup | Return absent; never index through a stale handle |
-| Canonical constructor | Return status and preserve all world frontiers |
-| Constraint creation | Reject unresolved targets or invalid movement policy |
-| Label creation | Reject invalid MIME, UTF-8, control text, or exhausted bytes |
-| ABI label copy | Reject insufficient caller capacity without returning a pointer |
-| Scene command capture | Mark overflow and suppress direct canonical mutation |
-| Scene batch commit | Validate all commands, then apply all or reject all |
-| Draw-cache build | Omit invalid or unrepresentable derived items; preserve canonical state |
-| Animation rewind | Reject unless every baseline frontier was frozen |
+| Entity validity, component membership, or world lifetime | [`src/shapes/model/`](../../../src/shapes/model/) |
+| Constructors or constraints | [`world_constructors.odin`](../../../src/shapes/world_constructors.odin), [`world_constraints.odin`](../../../src/shapes/world_constraints.odin) |
+| Curve parameters or sampling | [`src/shapes/curve/`](../../../src/shapes/curve/) |
+| Julia-facing reads and mutations | [`scene_commands.odin`](../../../src/bridge/scene_commands.odin), [`src/julia/bridge/`](../../../src/julia/bridge/) |
+| Frame interpolation or draw packets | [`world_render.odin`](../../../src/shapes/world_render.odin), [`draw_cache.odin`](../../../src/shapes/draw_cache.odin) |
+| Worker scheduling or display consumption | [`simulation_executor.odin`](../../../src/view/simulation/simulation_executor.odin), [`geometry.odin`](../../../src/view/world/geometry.odin) |
+| Animation switch and suffix retirement | [`runtime_session.odin`](../../../src/view/runtime_session.odin), [`animations.odin`](../../../src/bridge/animations.odin) |
 
-Steady-state construction, solving, interpolation, packet preparation, and retirement
-use fixed storage and do not allocate.
-
-## Tests And Verification
-
-| Contract | Primary tests |
-| --- | --- |
-| Packing, stale handles, sparse membership, rewind | `src/core/shapes_test.odin` |
-| Transactional constructors, labels, tools | `src/shapes/world_constructors_test.odin` |
-| Direct-target solver behavior | `src/shapes/world_constraints_test.odin` |
-| Interpolation, dispatch, triangulation, packet invalidation | `src/shapes/world_render_test.odin` |
-| ABI layout behavior and packed-handle rejection | `src/bridge/abi_shapes_test.odin` |
-| Snapshot isolation and atomic scene batches | `src/view/dynview_test.odin` |
-| Production retirement ordering | `src/bridge/animations_test.odin` |
-| Evidence projection | `src/evidence/observe/observe_test.odin` |
-
-Use the complete language suites while developing and the canonical gate before delivery:
-
-```sh
-julia tools/make.jl unit odin
-julia tools/make.jl unit julia
-cmake --build --preset default --target check
-```
-
-## Contributor Checklist
-
-- Keep canonical shape state exclusively in `Shape_World`.
-- Use packed generational entities across ABI, command, snapshot, and evidence boundaries.
-- Validate liveness and required component membership at every external boundary.
-- Keep Odin and Julia ABI structs exactly symmetric and review bridge-version impact.
-- Distinguish synchronous construction from asynchronous command capture.
-- Treat capture success as provisional until the complete scene batch commits.
-- Preflight every canonical store needed by a constructor before mutation.
-- Preserve direct constraint targets and deterministic solver order.
-- Keep labels and polygon references pointer-free and generation-scoped.
-- Treat the draw cache as disposable derived state, never as canonical identity.
-- Roll back partial packet reservations and preserve stable depth ordering.
-- Join all readers before animation retirement or storage reuse.
-- Extend focused tests for stale handles, capacity failure, batch rejection, packet
-  invalidation, and retirement ordering when changing these contracts.
+Useful tests include
+[`shapes_test.odin`](../../../src/shapes/model/shapes_test.odin) for identity and
+component behavior, [`world_constructors_test.odin`](../../../src/shapes/world_constructors_test.odin)
+for construction boundaries, [`world_constraints_test.odin`](../../../src/shapes/world_constraints_test.odin)
+for solving, [`world_render_test.odin`](../../../src/shapes/world_render_test.odin) for
+interpolation and packet preparation, and
+[`animations_test.odin`](../../../src/bridge/animations_test.odin) for retirement
+ordering. The code and tests are the detailed specification; this guide is a route into
+them.

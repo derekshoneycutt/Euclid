@@ -1,38 +1,82 @@
 # Particle System
 
-## Purpose And Ownership
+> Euclid keeps particles as the visible, individually owned material while using a
+> shared field to coordinate the motion of grounded dust.
 
-Euclid's particle system owns bounded particle storage, deterministic emission,
-fixed-step particle motion, grounded-dust field physics, and particle diagnostics.
-Julia animation policy may request emissions and tool actions, but it does not mutate
-particle storage. The particle worker is the sole simulation writer during a fixed
-step. The display thread reads only after the simulation fence joins and exclusively
-owns projection, SDL_GPU resources, GPU uploads, and drawing.
+## Table Of Contents
 
-The shipped grounded-dust design is particle-in-cell (PIC): particles remain the
-visible material while one fixed vector field is the sole authority for grounded XY
-velocity. Airborne dust remains ballistic. Every live low particle remains an
-individual sprite.
+1. [Why The System Changed](#why-the-system-changed)
+1. [Ownership And Execution](#ownership-and-execution)
+1. [Particle Layers And Lifecycle](#particle-layers-and-lifecycle)
+1. [Grounded Dust As A Field](#grounded-dust-as-a-field)
+1. [Contacts And Rendering](#contacts-and-rendering)
+1. [Where To Trace A Change](#where-to-trace-a-change)
+1. [Evidence And Exploration](#evidence-and-exploration)
+
+## Why The System Changed
+
+Particles began as effects around the drawing tools: trails and flickers first, then
+dust released by geometric constructions. The early dust model used cell-based
+collision detection and ordinary Newtonian particle motion. This gave the application
+an expressive way to show construction and motion, but left the particle representation
+and simulation model open to continued evolution.
+
+As the system grew, its storage moved to structure-of-arrays form and gained SIMD
+optimizations where available. The grounded-dust model later changed more substantially:
+instead of resolving grounded motion through individual particle collisions, particles
+transfer density and momentum to a shared PIC-like field; the field is evolved, then
+sampled back to each particle. That change put field mechanics and individual particle
+identity side by side, rather than replacing the dust with a continuous rendered
+surface.
+
+The rendering path evolved too. Dust instancing began in the earlier Raylib renderer
+and later moved to SDL_GPU with the rest of the native backend. The history explains
+why simulation, field transfer, and drawing are separate concerns today—and why this
+guide points to the owning code rather than treating implementation values here as a
+second specification.
+
+## Ownership And Execution
+
+Julia animation policy can request effects, but it does not mutate particle storage.
+The display owner gathers contacts and emission requests; fixed-step work mutates the
+particle and field state; after the worker fence joins, display-side rendering consumes
+the settled result.
+
+| Concern | Owner and boundary |
+| --- | --- |
+| Animation intent | Julia policy requests emissions and tool actions through the bridge. |
+| Canonical particles and field | `Particle_System` owns fixed storage, deterministic random state, contact intents, field planes, and observations. |
+| Fixed-step mutation | Particle/constraint work runs in the simulation task window; the particle worker is the simulation writer for particle state during that step. |
+| Visible rendering | The display thread reads joined state, projects particles, and owns SDL_GPU publication and drawing. |
+| Behavioral evidence | The evidence and scenario layers observe committed state; they do not bypass ordinary particle APIs. |
 
 ```mermaid
 flowchart LR
-    Julia[Julia animation policy] -->|bounded commands| Display[Display thread]
+    Julia[Julia animation policy] -->|bounded requests| Display[Display thread]
     Display -->|contacts and emissions| Worker[Particle worker]
-    Worker -->|mutates fixed storage| System[Particle_System]
+    Worker -->|fixed-step mutation| System[Particle_System]
     Worker --> Fence[Simulation fence]
     Fence -->|joined state| Display
-    Display -->|stage and draw| GPU[SDL_GPU resources]
+    Display -->|project and draw| GPU[SDL_GPU resources]
 ```
 
-## Particle Layers
+The important boundary is the join: the display must not read particle state while
+fixed-step work is mutating it. For the exact task ordering and synchronization path,
+start at [`src/view/simulation/simulation_executor.odin`](../../../src/view/simulation/simulation_executor.odin)
+and [`src/view/frame.odin`](../../../src/view/frame.odin).
 
-Particles use three bounded layers with stable draw ordering.
+## Particle Layers And Lifecycle
 
-| Layer | Typical content | Simulation | Render order |
-| --- | --- | --- | --- |
-| Low | Grounded and airborne dust | Ballistic Z plus grounded PIC XY | Behind tool shadows and active geometry |
-| Middle | Embers and trails | Individual lifetime and velocity | Between shadows and active tools |
-| High | Flicker and sparkle | Individual lifetime and velocity | Above tools |
+The layers are a rendering and effect organization, not three different particle
+frameworks. Low particles are primarily dust; middle particles carry trails and embers;
+high particles provide flicker and sparkle. Their relative ordering helps preserve the
+intended relationship between dust, shadows, tools, and effects.
+
+| Layer | Typical role | Position in the draw order |
+| --- | --- | --- |
+| Low | Grounded and airborne dust | Behind tool shadows and active geometry |
+| Middle | Embers and trails | Between shadows and active tools |
+| High | Flicker and sparkle | Above tools |
 
 ```mermaid
 flowchart TB
@@ -40,294 +84,160 @@ flowchart TB
     Tools[Tools and active geometry]
     Middle[Middle: embers and trails]
     Shadows[Tool shadows]
-    Low[Low: every live dust sprite]
+    Low[Low: individual dust sprites]
     High --> Tools --> Middle --> Shadows --> Low
 ```
 
-`Particle_System` owns fixed-capacity structure-of-arrays storage for all layers. It
-also owns deterministic random state, the bounded contact queue, grounded transfer
-records, the field planes, and scalar diagnostics. No steady-state physics or render
-staging path grows storage.
-
-## Dust Lifecycle
-
-Dust emission reserves a dead low-particle slot, assigns identity and spawn sequence,
-initializes its sprite and visual state, and gives it an authored initial velocity.
-Scenario emissions use explicit distribution, count, position, radius, and seed values
-so acceptance runs are reproducible.
-
-A particle above the floor is airborne. Gravity and ordinary ballistic integration own
-its position and velocity until floor contact. A particle at the floor participates in
-the grounded field and receives its XY velocity only from that field. A clear kick can
-raise grounded particles into the airborne regime; gravity eventually returns them.
+Dust changes between airborne and grounded motion. Airborne particles follow ballistic
+motion and may bounce at the floor. Grounded particles remain individually represented,
+but their XY velocity is sampled from the shared field. A kick can return grounded dust
+to airborne motion.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Airborne: emitted with positive Z motion
-    [*] --> Grounded: emitted at the floor
-    Airborne --> Grounded: floor contact
-    Grounded --> Airborne: clear kick
-    Grounded --> Grounded: PIC field assigns XY velocity
-    Airborne --> Airborne: ballistic XYZ integration
+    [*] --> Airborne: emission above floor
+    [*] --> Grounded: emission at floor
+    Airborne --> Grounded: floor contact and settling
+    Grounded --> Airborne: kick
+    Grounded --> Grounded: field supplies XY velocity
+    Airborne --> Airborne: ballistic motion
 ```
 
-Grounded tool contacts never directly correct particle positions and never affect
-airborne dust. Contacts already deposited into the shared field can affect grounded
-particles emitted later in the same fixed step; this ordering is intentional.
+## Grounded Dust As A Field
 
-## Grounded PIC Field
-
-The field is a fixed $251 \times 251$ nodal lattice over normalized board coordinates
-$[0,1]^2$. Its spacing is
+The field maps normalized board coordinates onto a fixed square lattice. Let $N$ be
+the number of nodes along either axis (`DUST_FIELD_DIM` in
+[`src/particles/model/model.odin`](../../../src/particles/model/model.odin)). The board
+spans $N-1$ intervals, so the spacing is
 
 $$
-h = \frac{1}{250}.
+h = \frac{1}{N-1}.
 $$
 
-It owns five scalar planes:
-
-- density $\rho$;
-- momentum or normalized velocity work planes $m_x$ and $m_y$;
-- solved velocity planes $u_x$ and $u_y$.
-
-Only the inclusive support rectangle touched by current deposits is processed. The
-solve rectangle expands support by one node in each direction and clamps to the board,
-providing the cardinal-neighbor halo required by pressure and viscosity. The previous
-solve rectangle is cleared before the next deposition pass.
-
-### Bilinear Transfer
-
-For board position $p=(x,y)$, clamped lattice coordinates are
+For a board position $p=(x,y)$, clamped lattice coordinates are
 
 $$
-q_x = 250\,\operatorname{clamp}(x,0,1), \qquad
-q_y = 250\,\operatorname{clamp}(y,0,1).
+q_x=(N-1)\operatorname{clamp}(x,0,1), \qquad
+q_y=(N-1)\operatorname{clamp}(y,0,1).
 $$
 
-Let $i=\min(\lfloor q_x\rfloor,249)$,
-$j=\min(\lfloor q_y\rfloor,249)$, $a=q_x-i$, and $b=q_y-j$. The
-four bilinear weights are
+The cell's fractional coordinates $a$ and $b$ define a four-node bilinear stencil:
 
 $$
 w_{00}=(1-a)(1-b),\quad w_{10}=a(1-b),\quad
 w_{01}=(1-a)b,\quad w_{11}=ab.
 $$
 
-They sum to one at interior and boundary positions. Each grounded particle caches its
-base node, fractional coordinates, and particle slot once per step. P2G and G2P expand
-that compact record into the same four-node stencil.
-
-### Fixed-Step Pipeline
-
-```mermaid
-flowchart LR
-    Integrate[Integrate low particles] --> Deposit[P2G grounded density and momentum]
-    Deposit --> Contact[Inject coalesced tool momentum]
-    Contact --> Normalize[Normalize occupied node momentum]
-    Normalize --> Solve[Pressure, viscosity, and drag]
-    Solve --> Sample[G2P exact grounded XY velocity]
-    Sample --> Layers[Update middle and high layers]
-```
-
-For grounded particles $p$ and field nodes $i$, deposition is
+The weights sum to one, including at the board boundary. Particle-to-grid (P2G)
+deposits each grounded particle's weighted density and XY momentum. After the field
+updates its occupied nodes, grid-to-particle (G2P) samples the same stencil back to the
+particle. Reusing the transfer coordinates keeps both directions consistent:
 
 $$
 \rho_i = \sum_p w_{ip}, \qquad
-\mathbf m_i = \sum_p w_{ip}\mathbf v_p.
+\mathbf m_i = \sum_p w_{ip}\mathbf v_p, \qquad
+\mathbf v_p^{\,n+1}=\sum_i w_{ip}\mathbf u_i^{\,n+1}.
 $$
 
-Occupied momentum is normalized to nodal velocity. Yielded pressure is quadratic above
-the density threshold:
+Here $\rho_i$ and $\mathbf m_i$ are deposited density and momentum; $\mathbf u_i$ is
+the field's solved velocity. The field organizes local motion, while each particle
+retains its own position, visual properties, and identity.
+
+```mermaid
+flowchart LR
+    Integrate[Integrate low particles] --> Deposit[P2G: grounded density and momentum]
+    Deposit --> Contact[Apply tool-contact momentum]
+    Contact --> Normalize[Normalize occupied nodes]
+    Normalize --> Solve[Pressure, viscosity, and drag]
+    Solve --> Sample[G2P: sample grounded XY velocity]
+    Sample --> Layers[Update middle and high layers]
+```
+
+The solver's pressure law is a compact way to describe how crowded regions yield and
+spread. Let $\rho_y$ denote the yield density and $k$ the pressure strength; their
+current values are owned by `DUST_PRESSURE_YIELD` and `DUST_PRESSURE_STRENGTH` in
+[`src/particles/field.odin`](../../../src/particles/field.odin):
 
 $$
 P(\rho)=k\max(\rho-\rho_y,0)^2.
 $$
 
-The solver applies a centered pressure gradient, a cardinal discrete velocity
-Laplacian, bounded pressure acceleration, and rational drag:
+The pressure gradient contributes a bounded acceleration. Viscosity smooths neighboring
+velocities, and rational drag damps them. In the following expression, $\Delta t$ is the
+simulation step; $\nu$, $\lambda$, and $a_{\max}$ correspond to
+`DUST_VISCOSITY`, `DUST_DRAG_RATE`, and `DUST_PRESSURE_ACCELERATION_MAX` in the same
+solver module:
 
 $$
-\mathbf u_i^{n+1} =
-\frac{\mathbf u_i^n + \Delta t\left(-\nabla P_i/\rho_i +
-\nu\nabla^2\mathbf u_i\right)}{1+\lambda\Delta t}.
+\mathbf a_i^{\,p}=
+\operatorname{clamp}\left(-\frac{\nabla P_i}{\rho_i},
+-\mathbf a_{\max},\mathbf a_{\max}\right),
+\qquad
+\mathbf u_i^{\,n+1}=
+\frac{\mathbf u_i^{\,n}+\Delta t\left(
+\mathbf a_i^{\,p}+\nu\nabla^2\mathbf u_i^{\,n}\right)}
+{1+\lambda\Delta t}.
 $$
 
-G2P reconstructs each grounded particle's exact next XY velocity:
+Only the region touched by deposits, plus its neighbor halo, needs field work. This keeps
+the fixed topology useful as a local solver without making every field node part of
+every step. Exact support bounds, integration order, and coefficients are implementation
+details; the equations describe the model, not a separately maintained tuning contract.
 
-$$
-\mathbf v_p^{n+1}=\sum_i w_{ip}\mathbf u_i^{n+1}.
-$$
+## Contacts And Rendering
 
-There is no independent grounded residual velocity, particle-pair correction, or sleep
-state competing with this result.
+Tool contacts enter through bounded intents rather than scanning the particle arrays.
+Point tools, filled-compass motion, shape reveals, and floor labels can contribute
+different contact geometry; the worker turns those intents into field-local impulses.
+This makes grounded response part of the shared field solve, while airborne dust remains
+outside that interaction path.
 
-## Tool Contacts
+Rendering preserves particle identity. Each visible low particle contributes an
+individual sprite. The SDL_GPU instanced path is preferred; a bounded expanded-geometry
+path can draw the same sprites when instancing is unavailable. Both feed the ordered
+frame command stream so particle layers retain their place around shapes, shadows, and
+tools. The field itself is not rendered as an aggregate dust surface.
 
-The display queues bounded contact intents instead of searching particle storage.
-Each intent records its source, geometry, and spawn-sequence cutoff. The worker preserves
-command order and coalesces only adjacent contacts with identical source semantics and
-geometry.
-
-Shape hide and clear bursts sample canonical arcs directly from the host center and
-their radius, start angle, and signed sweep. They preserve sweep direction and require
-no synthetic endpoint entities or render-style offset.
-
-Pens, ordinary compass movement, outlined circles, and outline highlights use point
-contacts. Each contributes one radial-away sample at the authored tip. A filled-circle
-update instead records the previous and current compass legs as one compound joint-2
-contact. The worker interpolates complete legs across that motion, then samples along
-each leg. Both interval counts derive from geometric distance and contact radius, so
-sample spacing remains bounded in both dimensions and no radial or angular bands are
-skipped.
-
-Revealing a plain-text floor label queues one radial line contact centered on the text
-and spanning its estimated rendered width. The width uses the UTF-8 glyph count, label
-font size, and current projection scale, so multi-character labels repel dust across
-their text rather than only at the label anchor. Label contacts use a wider radius and
-stronger push than tool contacts to clear space around newly revealed text. Labels above
-the floor do not affect grounded dust.
-
-```mermaid
-flowchart LR
-    Queue[Bounded contact queue] --> Coalesce[Coalesce adjacent redundant intents]
-    Coalesce --> Kind{Contact kind}
-    Kind -->|Point or outline| Point[One radial sample]
-    Kind -->|Filled compass| Legs[Interpolate previous to current legs]
-    Legs --> Sample[Radius-based samples along each leg]
-    Point --> Bounds[Intersect field support]
-    Sample --> Bounds[Intersect field support]
-    Bounds --> Occupied[Visit occupied nodes inside radius]
-    Occupied --> Momentum[Add density-weighted momentum]
-```
-
-At an occupied node, contact momentum scales by local density. Point contacts push
-radially away from their sample. Filled-compass contacts follow local authored leg
-motion, including when a sample lies exactly on an occupied field node. Empty nodes are
-ignored, and airborne particles never enter this grounded field path. Diagnostics
-retain overflow, coalesced-contact, generated-sample, and visited field-node counts so
-contact cost can be explained without per-node trace events.
-
-## Rendering
-
-The renderer projects every live low particle and stores one interleaved `Dust_Instance`
-record per visible sprite. The preferred SDL_GPU path uploads as many as 65,536 records
-and emits one ordered `Dust_Instanced` command. When instancing is unavailable or
-disabled, the encoder expands the same particles into a dedicated bounded stream of
-393,216 textured vertices and emits `Dust_Expanded`; this fallback does not consume
-ordinary shape capacity.
-
-The static six-vertex quad occupies vertex-buffer slot 0. The 32-byte
-`Dust_Instance` stream occupies per-instance slot 1 with these attributes:
-
-| Location | Components | Byte offset | Meaning |
-| --- | --- | --- | --- |
-| 2 | 3 | 0 | Screen center and diameter |
-| 3 | 4 | 12 | Straight-alpha RGBA tint |
-| 4 | 1 | 28 | Atlas sprite index |
-
-Dust commands share the frame's bounded ordered command stream with 2D batches and
-tool strokes. Painter order is surface, low shapes, low dust, ordinary shadows, tool
-shadows, middle particles, merged high shapes and tools, then high particles. Custom
-commands split otherwise mergeable 2D batches so this order remains exact.
-
-Dust atlas publication is a separate display-thread transaction shared by both paths.
-The native 192 by 192 RGBA8 texture contains a 3 by 3 grid of authored variants. Failed
-pipeline admission retains the expanded fallback; failed fallback admission rejects
-dust publication rather than exposing partial resources. Shutdown releases every
-admitted handle in reverse ownership order.
-
-Atlas texels are straight-alpha white masks: every texel has white RGB, uncovered
-texels have zero alpha, and covered texels carry the rasterized coverage. Hypocycloid
-edges use a deterministic 4 by 4 supersampling grid. Transparent-white edge texels keep
-linear filtering from introducing dark color fringes while preserving zero coverage.
-
-Low-dust tint RGB remains unpremultiplied. Its staged alpha is
+The low-dust opacity expression makes the fade inputs explicit. If $t$ is normalized
+lifetime progress, $\alpha_{\mathrm{peak}}$ is the display tuning in
+[`src/view/world/particles_encoder.odin`](../../../src/view/world/particles_encoder.odin),
+and $\alpha_{\mathrm{authored}}$ is the particle's authored alpha, the staged alpha is
 
 $$
 \alpha = \operatorname{clamp}(1-t,0,1)
     \frac{\alpha_{\mathrm{peak}}}{255}
-    \frac{\alpha_{\mathrm{authored}}}{255},
+    \frac{\alpha_{\mathrm{authored}}}{255}.
 $$
 
-where $t$ is normalized lifetime progress. `DUST_PEAK_ALPHA` in
-`src/view/world/particles_encoder.odin` owns the display-level peak-opacity tuning and is
-currently 210. The fragment shader multiplies this tint by atlas coverage, and the
-pipeline applies straight-alpha blending. Authored alpha 255 therefore preserves the
-existing lifetime fade, while lower authored values attenuate it proportionally.
+The mask coverage and straight-alpha blend are handled by the native dust pipeline.
+For renderer changes, follow
+[`src/view/world/particles.odin`](../../../src/view/world/particles.odin),
+[`src/view/world/particles_encoder.odin`](../../../src/view/world/particles_encoder.odin),
+and [`src/view/native/sdl_dust_pipeline.odin`](../../../src/view/native/sdl_dust_pipeline.odin).
 
-Middle embers are native textured quads and high flickers are native rectangles. They
-use the same command stream and therefore preserve the particle layers' authored
-positions around shadows and tools.
+## Where To Trace A Change
 
-The field is never rendered as aggregate material. There is no aggregate texture,
-coverage plane, sprite suppression, or alternate dense-pile rendering authority.
-Particle identity, position, color, lifetime, size, sprite variant, and Z motion remain
-particle-owned.
+| If you are changing... | Start with... |
+| --- | --- |
+| Particle storage, identities, field records, or limits | [`src/particles/model/model.odin`](../../../src/particles/model/model.odin) |
+| Emission, ballistic motion, kicks, contacts, or step order | [`src/particles/particles.odin`](../../../src/particles/particles.odin) |
+| P2G/G2P transfer, pressure, viscosity, drag, or support bounds | [`src/particles/field.odin`](../../../src/particles/field.odin) |
+| Projection, instancing, fallback drawing, or alpha | [`src/view/world/particles.odin`](../../../src/view/world/particles.odin), [`src/view/world/particles_encoder.odin`](../../../src/view/world/particles_encoder.odin), [`src/view/native/sdl_dust_pipeline.odin`](../../../src/view/native/sdl_dust_pipeline.odin) |
+| Runtime evidence or scenario observations | [`src/evidence/`](../../../src/evidence/), [`tools/scenarios/`](../../../tools/scenarios/) |
+| Deterministic field and particle behavior | [`src/particles/field_test.odin`](../../../src/particles/field_test.odin), [`src/particles/particles_test.odin`](../../../src/particles/particles_test.odin) |
 
-## Explicit Exclusions
+## Evidence And Exploration
 
-The accepted system deliberately has none of the following:
+The field tests are the clearest place to understand transfer conservation, boundary
+handling, impulses, and solver behavior. Particle tests cover emission, fixed-step
+transitions, and the interaction between field state and particle state. The checked-in
+[`dust-emission-acceptance`](../../../tools/scenarios/dust-emission-acceptance.jsonl),
+[`dust-settling-acceptance`](../../../tools/scenarios/dust-settling-acceptance.jsonl), and
+[`dust-pic-dense-acceptance`](../../../tools/scenarios/dust-pic-dense-acceptance.jsonl)
+scenarios exercise progressively broader runtime behavior.
 
-- aggregate membership or hysteresis;
-- a grounded particle-pair solver or collision grid;
-- adaptive dense relaxation;
-- sleeping, waking, quiet-frame, or wake-halo authority;
-- direct grounded position correction from tools;
-- aggregate field rendering or hidden low-particle sprites.
-
-Airborne dust is individual and ballistic. Grounded dust is individual and visible but
-shares one field-owned XY velocity model.
-
-## Evidence And Acceptance
-
-Post-join display observations expose live, grounded, and airborne counts; peak grounded
-field speed; kinetic measure; solve-node area; bounded contact diagnostics; and rendered
-low-sprite count. Scenario predicates use these canonical values:
-
-- `dust_settled`: every live dust particle is grounded and peak field speed is at or
-  below the settled threshold;
-- `dust_active`: grounded field speed exceeds the activity threshold;
-- `dust_airborne`: at least one live dust particle is above the floor.
-
-Artifact schema 2 records only the accepted particle and field model. The checked-in
-scenarios are:
-
-- `dust-emission-acceptance`: deterministic 20,000-particle emission and capture;
-- `dust-settling-acceptance`: settle, contact, activity, resettle, kick, and capture;
-- `dust-pic-dense-acceptance`: 20,000-particle settle, contact wave, active and settled
-  captures, allocation baseline, bad-free assertion, and orderly shutdown.
-
-A screenshot is supporting visual evidence, not scenario success. The manifest must be
-`passed`, required trace evidence must remain complete, allocation assertions must pass,
-and shutdown must complete.
-
-## Tuning And Source Map
-
-Field dimensions and settled threshold live in `src/particles/model/model.odin`. Pressure,
-viscosity, drag, transfer, support, and solve behavior live in
-`src/particles/field.odin`. Emission, ballistic integration, contact queueing and
-sampling, reset, kick, and fixed-step ordering live in `src/particles/particles.odin`.
-Low-particle GPU and fallback rendering live in `src/view/world/particles.odin`.
-Observation, predicates, and artifacts live under `src/evidence/`.
-
-Tune constants only with deterministic field tests, both ordinary dust scenarios, the
-dense PIC scenario, and comparable profile evidence. Preserve bilinear conservation,
-boundary clamping, fixed storage, stable slot order, and worker/display ownership.
-
-## Verification
-
-Run the documented repository commands:
-
-```sh
-julia tools/make.jl unit odin
-cmake --build --preset debug
-julia tools/make.jl scenario dust-emission-acceptance
-julia tools/make.jl scenario dust-settling-acceptance
-julia tools/make.jl scenario dust-pic-dense-acceptance
-julia tools/make.jl wiki
-julia tools/make.jl check-wiki
-cmake --build --preset default --target check
-```
-
-The complete `check` target, not a unit suite or screenshot alone, is the final delivery
-gate.
+Use observations and scenario artifacts to support claims about settling, contact
+response, rendered particles, allocation behavior, or shutdown. A screenshot can help
+review appearance, but it does not establish that the scenario passed or that its
+semantic evidence is complete. The relevant tests, scenario manifests, and current
+source remain authoritative for exact values and behavior.

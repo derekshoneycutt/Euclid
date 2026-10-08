@@ -34,6 +34,11 @@ with serious question to AccessKit, forking it, and so on. A defensible start wa
 initiated here, such that we can proceed. This is mostly exasperated details about that
 simultaneous success and failure leading to the current state.
 
+This document is a work in progress. Unlike other guides for this project, this includes
+several technical details and historical records for re-evaluation upon returning to this
+part of the project. Accessibility is currently a massive work-in-progress for Euclid,
+and limitations in AccessKit complicate what we want to document at the current stage.
+
 ## Scope
 
 ### Included Surface

@@ -1,5 +1,11 @@
 # Terminal Architecture
 
+> Euclid's Terminal pairs an Odin-owned terminal machine and native process surface
+> with Julia-owned interactive evaluation and session actors. Generation-scoped
+> protocols connect the two without moving display or native-resource ownership onto
+> the Julia thread. This guide maps those boundaries, the interactive data flows, and
+> the code paths used to change or investigate Terminal behavior.
+
 ## Table Of Contents
 
 1. [Purpose And Architectural Role](#purpose-and-architectural-role)

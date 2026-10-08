@@ -1,1104 +1,379 @@
 # Euclid Architecture Summary
 
+> Euclid is an Odin-hosted desktop application: Odin owns the display, native
+> resources, and visible state, while a dedicated Julia thread runs animation and
+> content policy. Typed messages and explicit owner-controlled handoffs connect them.
+> This guide maps those boundaries to the code and specialist guides, and records the
+> architectural history that explains why the system is shaped this way.
+
 ## Table Of Contents
 
 1. [What This Project Is](#what-this-project-is)
 1. [Where To Start Reading](#where-to-start-reading)
 1. [Module Map (Odin + Julia)](#module-map-odin--julia)
 1. [Execution And Ownership Model](#execution-and-ownership-model)
-1. [Native Backend Boundary](#native-backend-boundary)
+1. [Architecture Guide Map](#architecture-guide-map)
+1. [Odin's Three-Layer Architecture](#odins-three-layer-architecture)
 1. [Julia Actor Architecture](#julia-actor-architecture)
 1. [Terminal Architecture (Interactive Runtime Surface)](#terminal-architecture-interactive-runtime-surface)
-1. [Animation Architecture](#animation-architecture)
-1. [Dynview Text Engine (Hybrid-Immediate Rendering)](#dynview-text-engine-hybrid-immediate-rendering)
-1. [Dynamic LaTeX Pipeline (Native Parse And Layout)](#dynamic-latex-pipeline-native-parse-and-layout)
 1. [Odin-Julia Bridge: How the Boundary Works](#odin-julia-bridge-how-the-boundary-works)
-1. [Native Frame Execution](#native-frame-execution)
 1. [Testing Strategy](#testing-strategy)
 1. [Allocation Strategy: Init-First with Explicit Exceptions](#allocation-strategy-init-first-with-explicit-exceptions)
-1. [Build and Packaging Model](#build-and-packaging-model)
+1. [Build And Packaging](#build-and-packaging)
 1. [Practical Contributor Guide](#practical-contributor-guide)
 1. [Key Architecture Takeaways](#key-architecture-takeaways)
+1. [Addendum: Architectural History](#addendum-architectural-history)
 
 ## What This Project Is
 
-Euclid is a desktop visualization app for geometric constructions and proofs.
-The overall structure includes 2 programming languages, Odin and Julia.
+Euclid is a desktop application for geometric constructions, animation, and
+mathematical presentation. Odin owns the application and display runtime; embedded
+Julia provides animation and content policy. They cooperate through a typed bridge,
+not through shared mutable scene state.
 
-- **Odin** code provides the application shell, rendering loop, simulation data model,
-    memory ownership, and bridge exports. It owns long-lived application state
-  (`Euclid_General_State`), rendering, UI, and systems (shapes + particles +
-  gif capture).
-- **Julia** runtime code provides the sysimage-owned host, policy, authoring APIs, and
-  bridge wrappers. Odin materializes the packaged SQLite catalogue into a native
-  generation-scoped tree; Julia content drives per-animation behavior through stable APIs.
-
-A useful mental model:
-
-- Odin is the **engine and host process**.
-- Julia is the **animation/content runtime** running inside that host.
-
----
+| Think of | As |
+| --- | --- |
+| Odin | The host, native application, and authority for visible state |
+| Julia | The embedded content and animation runtime, entered only by its owner thread |
+| CPU task pool | Finite native work whose results return to an owning thread at a join |
+| Architecture guides | Entry points and motivation; implementation and tests are authoritative |
 
 ## Where To Start Reading
 
-If you are new, read in this order:
+Choose a path based on what you need to understand:
 
-1. Host lifecycle path (`src/main.odin`, `src/view/view.odin`).
-1. Julia host and actor model (`src/julia/runtime_host.jl`, `src/julia/host/`,
-  `src/julia/policy/`, `src/julia/runtime.jl`).
-1. Host/runtime boundary (`src/bridge/runtime_service.odin`,
-   `src/bridge/animations.odin`, `src/bridge/abi-*.odin`,
-   `src/julia/odin-julia-bridge.jl`).
-1. Follow one subsystem end to end: Terminal
-   (`src/view/terminal/service/terminal_service.odin`,
-   `src/julia/terminal/`), animation (`src/julia/policy/`,
-   `src/bridge/scene_commands.odin`), or Dynview
-   (`src/view/presentation/presentation_runtime.odin`,
-   `src/dynview/`).
-1. Then continue by module using the maps below, touching only each module's
-   highlighted files first.
+| If you are trying to... | Start with |
+| --- | --- |
+| Understand one ordinary display frame | [`src/view/frame.odin`](../../../src/view/frame.odin), then [`src/view/view.odin`](../../../src/view/view.odin) |
+| Trace process startup or shutdown | [`src/main.odin`](../../../src/main.odin), [`src/app/`](../../../src/app/), [`src/view/window_session.odin`](../../../src/view/window_session.odin) |
+| Follow a Julia request across the language boundary | [`JuliaThreadArchitecture.md`](JuliaThreadArchitecture.md), [`src/bridge/runtime_service.odin`](../../../src/bridge/runtime_service.odin) |
+| Find a UI control or panel | [`UiSystem.md`](UiSystem.md), [`src/view/ui/`](../../../src/view/ui/) |
+| Change geometry, particles, text, or persistent data | Use the [guide map](#architecture-guide-map) to find that subsystem's entry point |
+| Change style, animation content, localization, or tests | [`CodingStandards.md`](CodingStandards.md), [`AnimationsStyle.md`](AnimationsStyle.md), [`Localization.md`](Localization.md), [`TestingStrategy.md`](TestingStrategy.md) |
 
----
+For a first code-reading pass, follow one vertical path—such as a frame, a Terminal
+request, an animation tick, or a presentation value—from its coordinator to its state
+owner and publication point. The guide map identifies likely owners without attempting
+to restate their internal protocols.
 
 ## Module Map (Odin + Julia)
 
-| Section | Module | Purpose | Key files |
-| --- | --- | --- | --- |
-| **Odin** | Application Lifecycle | Process entry and process-level allocation envelope. | `src/main.odin` |
-| **Odin** | Application Coordinator | CLI parsing, saved-preference resolution, startup orchestration, and user-store lifetime. | `src/app/` |
-| **Odin** | Application Composition | Process-wide composition, run settings, and intrinsic task records. | `src/core/core.odin` |
-| **Odin** | Shared Foundations | Bounded storage, animation-generation memory, and native protocol contracts. | `src/core/storage/`, `src/core/animation/`, `src/core/protocol/` |
-| **Odin** | Settings Substrate | Typed user-preference definitions, defaults, validation, and bounded change batches. | `src/settings/` |
-| **Odin** | User Data Store | Durable user database path policy, identity admission, typed settings rows, and transactional commits. | `src/userdata/` |
-| **Odin** | Coordinator Contracts | Bridge transport and presentation contracts plus display and Terminal runtime models. | `src/bridge/model/`, `src/bridge/presentation/`, `src/view/ui/model/`, `src/view/terminal/model/` |
-| **Odin** | Input Boundary | Once-polled portable input frames, bounded event storage, hotkeys, and owner-bound Terminal encoding. | `src/view/input/`, `src/view/input/backend/` |
-| **Odin** | Accessibility | Bounded native-ready publication, session-local identity and action storage, validation, and display-owned platform adapters. | `src/accessibility/`, `src/view/native/accessibility/` |
-| **Odin** | Rendering and UI | Ordered frame composition, world rendering, application panels, and interaction routing. | `src/view/frame.odin`, `src/view/world/`, `src/view/ui/` |
-| **Odin** | World Projection | Portable drawing-surface/projection values, viewport fit, deterministic shake, and scalar/SIMD projection. | `src/view/world/model/`, `src/view/world/projection/` |
-| **Odin** | UI Foundations | Persistent UI contracts, reusable controls, semantic snapshots/focus, common palette, and capability-based text drawing. | `src/view/ui/model/`, `src/view/ui/widgets/`, `src/view/ui/semantics/`, `src/view/ui/theme/`, `src/view/ui/text/` |
-| **Odin** | Display Message Cache | Typed content-message resolution and bounded copied display-lifetime labels. | `src/view/messages/` |
-| **Odin** | Display Capture Policy | Portable capture contracts, bounded policy/status records, framebuffer mechanics, GIF timing, crop, and lifecycle policy; UI receives copied routing facts. | `src/view/capture/`, `src/view/capture/model/` |
-| **Odin** | Preference Saves | Display-owned bounded payloads, submission, retry, joined results, and shutdown drain. | `src/view/preferences/` |
-| **Odin** | Simulation Coordination | Fixed-step timing, worker execution/join, interpolation, and cache preparation. | `src/view/simulation/` |
-| **Odin** | Presentation Admission | Retained MIME envelopes, parse admission, supersession, publication, and quiescence. | `src/view/presentation/` |
-| **Odin** | Display Telemetry | Renderer observations and rolling FPS, separate from UI interaction state and semantic evidence. | `src/view/telemetry/` |
-| **Odin** | Display Session | Native resource admission, window-frame lifetime, and ordered partial/full teardown. | `src/view/resources.odin`, `src/view/window_session.odin`, `src/view/shutdown.odin` |
-| **Odin** | Font Cache | Required JuliaMono/NewCM residency, FreeType light-hinted grayscale CPU raster preparation, MATH-table admission, demand-paged glyphs, display-thread publication, and source reload monitoring. | `src/view/font/font.odin`, `src/view/font/freetype.odin`, `src/view/font/prepare.odin`, `src/view/font/async.odin`, `src/view/font/finalize.odin`, `src/view/font/watch.odin` |
-| **Odin** | HarfBuzz Binding | Dependency-owned opaque handles, ABI records, and shaping/OpenType MATH declarations. | `libs/harfbuzz/harfbuzz.odin` |
-| **Odin** | Dynview Runtime | Bounded TeX parsing, generation-scoped semantic documents, text/math compilation, layout planning, draw-ready caches, and a generation-tagged worker-owned NewCM shaping capability. | `src/dynview/dynview.odin`, `src/dynview/parse/`, `src/dynview/core/`, `src/dynview/compile/compile.odin`, `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/tracking.odin` |
-| **Odin** | Geometry Kernel | Bounded entity registry, analytic curve evaluation, components, direct-target constraints, and derived render packets. | `src/shapes/model/`, `src/shapes/curve/`, `src/shapes/world_constructors.odin`, `src/shapes/world_constraints.odin`, `src/shapes/world_render.odin` |
-| **Odin** | Semantic Evidence | Typed event schemas, producer-local rings, session policy, observations, scenarios, captures, exports, and artifacts. | `src/evidence/`, `src/view/scenario/scenario_runtime.odin`, `src/view/runtime_session.odin` |
-| **Odin** | Operational Diagnostics | Synchronized optional file logging for lifecycle, degradation, and failure investigation. | `src/diagnostics/`, `src/app/launch.odin` |
-| **Odin** | Bridge and Embedding | Host-side Julia lifecycle, strict bridge ABI, native TeX ingestion, and snapshot staging. | `src/bridge/abi.odin`, `src/bridge/abi-*.odin`, `src/bridge/bootstrap.odin`, `src/bridge/animations.odin`, `src/bridge/scene.odin`, `src/bridge/dynview_native_tex.odin`, `src/bridge/dynview_runtime.odin` |
-| **Odin** | Julia Interop Dependency | External Odin<->Julia interop package consumed by bridge embedding code. | `libs/julia/bindings/julialib.odin` (git submodule) |
-| **Odin** | Assets and IO | Asset package extraction/path resolution, transactional GIF publication, and native static and animated image decode. | `src/files/files.odin`, `src/terminal/graphics/native/sdl_image.odin` |
-| **Odin** | SQLite Runtime Substrate | Explicit native connection and statement lifecycle, typed binding and columns, and structured mechanics errors. Connections are nonconcurrent and use exclusive sequential ownership; the bundled mutex-enabled SQLite build permits task handoff. | `src/sqlite/`, `libs/sqlite3/sqlite3.odin`, `libs/sqlite3/source/sqlite3_custom.c` |
-| **Odin** | Content Store and Service | Named content SQL, complete immutable admission, packed generations, search scheduling, and paired active/staged publication. | `src/core/content/model.odin`, `src/core/content/records.odin`, `src/view/content/database.odin`, `src/view/content/statements.odin`, `src/view/content/generation.odin`, `src/view/content/worker.odin`, `src/view/content/service.odin` |
-| **Odin** | Content Database Builder | Deterministic normalized content database construction using `src/sqlite`; schema, transaction, indexing, coverage validation, and vacuum policy remain builder-owned. | `tools/content_builder/main.odin` |
-| **Odin** | Display GIF capture | Display-owned SDL_image streaming encode lifecycle, bounded one-frame RGBA staging, and fixed-step or recorded timing policy. | `src/view/native/sdl_gif_encoder.odin`, `src/view/capture/backend/sdl_gif_capture.odin` |
-| **Odin** | [Particle System](ParticleSystem.md) | Bounded particle layers, airborne ballistics, grounded PIC field physics, contacts, rendering, and evidence. | `src/particles/model/`, `src/particles/field.odin`, `src/particles/particles.odin`, `src/view/world/particles.odin` |
-| **---** | **--- Julia Modules ---** | **---** | **---** |
-| **Julia** | Runtime Bootstrap | Script loading, null-animation behavior, and global frame dispatch. | `src/julia/script.jl` |
-| **Julia** | Bridge Wrapper | Ergonomic Julia wrappers around bridge exports. | `src/julia/odin-julia-bridge.jl` |
-| **Julia** | Shared Animation Utilities | Sysimage-owned reusable animation and geometry helpers. | `src/julia/animations.jl`, `src/julia/geometry.jl` |
-| **Julia** | Application Reactor | One bounded actor scheduler for persistent Terminal roots, generation-scoped Terminal services, and animation policy supervision. | `src/julia/runtime.jl`, `src/julia/host/`, `src/julia/policy/`, `src/julia/terminal/` |
-| **Julia** | LaTeX Facade | Defines canonical TeX displayables and submits exact MIME bytes to native Dynview APIs. | `src/julia/latex.jl`, `src/julia/latex/facade.jl` |
-| **Julia Content** | Generation Bootstrap | Null behavior and harness scenarios loaded into each generation; catalogue descriptors remain build-time inputs. | `src/content/nullanimation.jl`, `src/content/harness_scenarios.jl`, `src/julia/animation_catalog.jl` |
-| **Julia Content** | Content Modules | Animation definitions loaded at startup or on demand, independently of their position in the hierarchy. | `src/content/elements/`, `src/content/proclus/`, `src/content/hilbert/`, `src/content/algebra/`, `src/content/curves/` |
+The useful shape of the repository is not simply two language inventories. These
+tables group code by the architectural question a contributor is likely to ask.
 
-### Cross-Module Contracts
+### Application and coordination
 
-Odin packages follow three enforced dependency layers:
+| Area | Responsibility | Start in |
+| --- | --- | --- |
+| Process and app setup | Arguments, startup composition, resolved settings, user-store lifetime | [`src/main.odin`](../../../src/main.odin), [`src/app/`](../../../src/app/) |
+| Application composition | Whole-app state and run settings; does not own every reachable model | [`src/core/core.odin`](../../../src/core/core.odin) |
+| Display coordinator | Frame order, UI preparation, simulation, presentation, drawing | [`src/view/`](../../../src/view/) |
+| Julia host and bridge | Julia lifetime, typed transport, ABI exports, request/result routing | [`src/bridge/`](../../../src/bridge/), [`src/julia/host/`](../../../src/julia/host/) |
+| Native backend | SDL3 window, input, GPU, audio, and platform-affine work | [`src/view/native/`](../../../src/view/native/) |
 
-- **Substrate** owns reusable storage, protocol contracts, subsystem models, and leaf
-  behavior. It may depend only on substrate.
-- **Composition** is root package `src/core`. It owns `Euclid_General_State`,
-  `Euclid_Run_Settings`, and intrinsic application task records, and may depend on
-  substrate.
-- **Coordinators** are executable entry points plus `src/view` and `src/bridge`
-  behavior. They may depend on composition and substrate.
+### Reusable models and runtime systems
 
-More-specific model paths beneath view and bridge remain substrate. Reachability from
-`Euclid_General_State` does not imply root-core ownership: each field's defining
-invariants, storage policy, mutation, and tests belong to its subsystem package.
-`ARCHITECTURE-FORBIDDEN-DEPENDENCY` and `ARCHITECTURE-DEPENDENCY-CYCLE` make violations
-blocking repository-analysis failures.
+| Area | Responsibility | Start in |
+| --- | --- | --- |
+| Core substrate | Bounded storage, animation-generation memory, protocols, portable values | [`src/core/storage/`](../../../src/core/storage/), [`src/core/animation/`](../../../src/core/animation/), [`src/core/protocol/`](../../../src/core/protocol/) |
+| Geometry and constraints | Shape world, curves, tools, constraints, render preparation | [`src/shapes/`](../../../src/shapes/) |
+| Particles | Dust and particle state, field physics, worker updates | [`src/particles/`](../../../src/particles/) |
+| UI and interaction | Regions, widgets, panels, focus, accessibility semantics | [`src/view/ui/`](../../../src/view/ui/) |
+| Terminal | Display-owned terminal surface and services, connected to Julia session policy | [`src/view/terminal/`](../../../src/view/terminal/) |
+| Dynview | Native semantic text model, compilation, math measurement, and layout | [`src/dynview/`](../../../src/dynview/) |
+| Fonts | Face loading, shaping support, worker preparation, display publication | [`src/view/font/`](../../../src/view/font/) |
+| Simulation and capture | Fixed-step execution, task joins, screenshots and GIF policy | [`src/view/simulation/`](../../../src/view/simulation/), [`src/view/capture/`](../../../src/view/capture/) |
 
-The SQLite wrapper opens connections without per-connection mutexes. A connection may
-move between threads only through exclusive sequential ownership; no statement,
-connection, or transaction may be used concurrently. The bundled SQLite translation
-unit enables mutex support, and worker handoff must be gated on
-`sqlite.threading_supported()`.
+### Content, persistence, and evidence
 
-```mermaid
-flowchart TD
-    Entry[Executable entry points] --> Composition[Application composition]
-    Entry --> Substrate[Subsystem and model substrate]
-    Coordinators[View and bridge coordinators] --> Composition
-    Coordinators --> Substrate
-    Composition --> Substrate
-```
+| Area | Responsibility | Start in |
+| --- | --- | --- |
+| Content catalogue and search | Packaged catalogue admission, generations, search service | [`src/core/content/`](../../../src/core/content/), [`src/view/content/`](../../../src/view/content/) |
+| User preferences | Typed settings plus separate durable user-data storage | [`src/settings/`](../../../src/settings/), [`src/userdata/`](../../../src/userdata/) |
+| SQLite boundary | Native bindings and owned database/query policy | [`src/sqlite/`](../../../src/sqlite/) |
+| Julia runtime policy | Sysimage host, actor runtime, animation and Terminal policy | [`src/julia/`](../../../src/julia/) |
+| Authored content | Animation modules and their content-facing helpers | [`src/content/`](../../../src/content/) |
+| Evidence and diagnostics | Typed behavioral evidence, scenarios, profiles, and operational logs | [`src/evidence/`](../../../src/evidence/), [`src/diagnostics/`](../../../src/diagnostics/) |
+| Build and analysis | Build orchestration, tests, static analysis, assets, and wiki | [`tools/`](../../../tools/) |
 
-Dynview production callers import the child package that owns each symbol. Root
-`src/dynview` owns enablement and invalidation rather than forwarding child APIs:
-`core` owns shared primitives, `math` measurement, `layout` placement, `compile`
-rebuild ordering, and `view/ui/dynview` display-thread drawing.
-
-The content store validates packaged SQLite and publishes one bounded, sealed
-arena-backed generation before Julia content initialization. Locale-scoped names,
-UI messages and signatures, templates, subjects, editions, availability/defaults,
-and search projections share its lifetime and publication identity. Its packed UTF-8
-text is resolved through checked offset/length references. Odin builds the native UUID
-tree from
-that generation and copies implementation paths to Julia only when a program is
-selected. The Julia animation supervisor resolves and caches implementations, owns
-lifecycle policy, and keeps exactly one active program actor. That actor adapts typed
-lifecycle and tick commands to the `animation_entry` interface. Julia roots the runtime
-host and committed generation, while Odin-held Julia pointers remain borrowed.
-
-Reload asks the content worker to admit a candidate immutable database and materialize
-its staged generation while the active pair continues serving search. Its bounded
-candidate generation materializes the inactive native interface before Julia roots and
-validates the candidate generation. Content promotion swaps database and generation
-slots together and remains reversible until Julia commit and native publication succeed;
-failure restores the prior database, generation, interface, and selected program actor.
-Finalization then closes and resets the retired pair.
-
-The model and content store are composition-independent substrates. Root core owns
-the service reference, not the content records. Required native message identities,
-complete locale/name/template coverage, signatures, edition defaults, and search
-agreement are admission conditions; failure cannot publish only the catalogue.
-Edition text language is independent of application locale.
-
-Catalogue names and implementation paths are copied into the native interface arena,
-because prepared accordion labels and deferred tree draws outlive the database read.
-UI semantics copy labels into bounded snapshot text, and accessibility publication
-copies snapshot text into its own owner. Search windows carry IDs and copied suggestions,
-not content borrows. Future message consumers must likewise copy any text retained
-in status buffers or prepared draws beyond the generation's retirement boundary.
-Shell messages resolve through typed native IDs and copied display-owned storage.
-Animation specifications resolve before Enter from the same admitted defaults.
-
-Accordion transition state belongs to the display-owned UI model and retains only
-bounded geometry, section identity, and monotonic timing. Preparation shares full-size
-child rectangles and reveal clips with drawing, routing, and semantic publication.
-There is one logically selected section even when outgoing render-only tails remain
-visible. Portrait Presentation/Terminal logical visibility and service ownership do not
-extend with those tails; visual preparation borrows current owner data without updating
-Terminal grids, input, focus, or Julia lifecycle. UI motion policy combines the durable
-interface preference with a separately sampled native accessibility preference and
-does not affect Julia's authored geometric animation policy.
-
-Tree motion is also display-owned: bounded UUID-keyed branch geometry shares the
-existing display topology capacity, checked against the admitted catalogue bound.
-Concurrent nested reveals use one prepared row layout for drawing, input, semantic
-publication, and scroll extent. Closing children are visual-only; logical navigation
-does not retain them. Search, typed programmatic reveal, generation/geometry changes,
-reduced motion, and hidden Library settle immediately. Deferred draw passes borrow
-current interface nodes only for their prepared frame and never advance motion.
-
-Semantic evidence is authoritative for behavioral claims. Diagnostics explain
-operation and failure, while Spall profiles measure timing; neither substitutes for
-typed evidence.
-
----
+The [Architecture Guide Map](#architecture-guide-map) provides the next step for each
+subsystem. For dependency ownership and normative code rules, see
+[Coding Standards](CodingStandards.md).
 
 ## Execution And Ownership Model
 
-Euclid has three execution roles. They cooperate through bounded messages, checked
-slots, and joined task-pool work; they do not share mutable ownership.
+Euclid's main runtime roles are distinct owners, not interchangeable worker threads:
 
-| Execution role | Owns | Publishes through | Forbidden work |
-| --- | --- | --- | --- |
-| **Display thread** | SDL window and GPU resources, input, semantic focus snapshots, UI, canonical scene and Terminal state, fixed-step ordering, final publication | Typed Julia ingress, task-pool submissions, display-owned commit boundaries | Julia C API calls or concurrent mutation of canonical state |
-| **Julia owner thread** | Julia lifetime, callback execution, one actor runtime, content generations, reload candidates, Julia-side policy | Typed egress, checked animation slots, canonical MIME envelopes | Native GPU calls, rendering, or direct mutation of display-owned state |
-| **CPU task pool** | Finite operation-owned payloads and cache regions while a task is active | Joined results returned to display-readable ownership | Julia calls, thread-affine native GPU calls, or direct visible-state publication |
+| Owner | Owns | Publishes or hands off |
+| --- | --- | --- |
+| Display thread | Visible UI and scene state, window/GPU resources, input, frame and fixed-step ordering | Validated Julia results; tasks with explicit payload ownership |
+| Julia owner thread | Julia C API and heap roots, content generations, one actor scheduler, Julia-side policy | Typed egress messages, checked animation results, presentation values |
+| CPU task pool | Native data while a finite operation is active | Joined result to the submitting owner |
 
 ```mermaid
 flowchart LR
-  D[Display thread<br/>canonical state and publication]
-  J[Julia owner thread<br/>runtime and actor reactor]
-  W[CPU task pool<br/>finite native work]
+    Display[Display owner<br/>visible state and native presentation]
+    Julia[Julia owner<br/>Julia runtime and actors]
+    Workers[CPU task pool<br/>finite native work]
 
-  D -->|bounded typed ingress| J
-  J -->|bounded typed egress| D
-  D -->|operation-owned task| W
-  W -->|joined result| D
+    Display -->|typed request or checked slot| Julia
+    Julia -->|typed result or replaceable value| Display
+    Display -->|operation-owned task| Workers
+    Workers -->|joined result| Display
 ```
 
-The Julia owner is a dedicated long-lived thread, not part of the CPU pool. The display
-may help execute Helpable native pool work while waiting on a fence. Optional font
-seed, glyph-page, and reload preparation is submitted as Worker_Only, including
-during shutdown drain; required startup font preparation remains synchronous.
-Font results still require an owner join before display-owned GPU publication.
-Settings edits are coalesced on the display thread into a fixed change batch, then
-submitted as Worker_Only SQLite commits. The view retains each task payload and its
-borrowed user-store connection until the task is joined; rejected submissions retain
-their pending edits, and shutdown joins accepted saves before the shared pool stops.
-The window shutdown path flushes settings before optional-font teardown, which may
-itself stop the shared pool; runtime-only shutdown retains the same flush boundary.
-SIMD and GPU-instancing preferences retain user intent separately from the effective
-hardware-gated runtime choices.
-The display emits `Settings_Save_Submitted` at accepted admission and emits
-`Settings_Save_Committed` or `Settings_Save_Failed` only after joining. These required
-domain events retain the task slot/generation and batch count; committed outcomes
-include an owner-execution bit, failed outcomes include the typed store error.
-Pointer-free observations expose intent, actual window dimensions, pending count,
-save status, and joined commit/failure/owner-execution counters.
-Only the Julia owner may enter Julia and only the display may publish visible state.
+Only the Julia owner enters Julia. Julia actors organize policy on that thread; they are
+not the transport and do not own display state. The display remains responsible for
+validating and committing results. Native tasks likewise return data through explicit
+joins rather than publishing visible state themselves.
 
-### Portable Runtime Values
+These boundaries enable Julia work to overlap ordinary display work, but they do not
+make Julia parallel or guarantee independence from CPU and memory pressure. Animation
+execution is asynchronous while its validated effects commit at fixed-step boundaries.
+See [Julia Thread Architecture](JuliaThreadArchitecture.md) for the message and timing
+model.
 
-`src/core/color` owns semantic RGBA8 values and deterministic source-name resolution.
-`src/core/geometry` owns application vectors and rectangles. Canonical shapes,
-particles, Dynview commands and layout records, Terminal themes, UI regions, and
-prepared glyph placement use these portable values. Bridge and protocol payloads keep
-their explicit wire representations. Native display packages convert portable values
-to SDL values only at the owner-specific backend boundary.
+## Architecture Guide Map
 
-### Input Boundary
+Use the focused guide before following implementation details. The code and tests remain
+the authority for current behavior.
 
-The display coordinator drains the SDL event queue exactly once per frame. It applies
-window lifecycle and extent facts to the native platform owner while translating
-keyboard, pointer, focus, wheel, and committed text events into application-owned
-`Input_Frame` values. SDL scancodes provide physical key identity, and queue order is
-preserved in fixed `Input_Runtime` event storage. Consumers never poll SDL directly.
+| Task or subsystem | Guide | Code entry |
+| --- | --- | --- |
+| Understand the UI, widgets, layout, and input | [UI System](UiSystem.md) | [`src/view/ui/`](../../../src/view/ui/) |
+| Understand Julia ownership, actors, messages, and ticks | [Julia Thread Architecture](JuliaThreadArchitecture.md) | [`src/bridge/`](../../../src/bridge/), [`src/julia/`](../../../src/julia/) |
+| Work on the Terminal surface and runtime | [Terminal Architecture](TerminalArchitecture.md) | [`src/view/terminal/`](../../../src/view/terminal/), [`src/julia/`](../../../src/julia/) |
+| Change shapes, curves, or constraints | [Shape System](ShapeSystem.md) | [`src/shapes/`](../../../src/shapes/) |
+| Change particles or dust-field behavior | [Particle System](ParticleSystem.md) | [`src/particles/`](../../../src/particles/) |
+| Trace glyph preparation and rendering | [Font Rasterization](FontRasterization.md) | [`src/view/font/`](../../../src/view/font/) |
+| Work on semantic access and platform adapters | [Accessibility](Accessibility.md) | [`src/accessibility/`](../../../src/accessibility/), [`src/view/native/accessibility/`](../../../src/view/native/accessibility/) |
+| Work on packaged content, user settings, or SQLite | [SQLite Architecture](Sqlite3.md) | [`src/sqlite/`](../../../src/sqlite/), [`src/view/content/`](../../../src/view/content/), [`src/userdata/`](../../../src/userdata/) |
+| Work on native tool visuals | [Tool Rendering](ToolRendering.md) | [`src/view/world/`](../../../src/view/world/) |
+| Author animation behavior | [Animations Style](AnimationsStyle.md) | [`src/content/`](../../../src/content/) |
+| Author or modify mathematical presentation | [LaTeX Support](LaTeXSupport.md) | [`src/dynview/`](../../../src/dynview/) |
+| Change localized application/content messages | [Localization](Localization.md) | [`src/view/messages/`](../../../src/view/messages/), [`src/julia/localized_content.jl`](../../../src/julia/localized_content.jl) |
+| Decide how to validate a behavior change | [Testing Strategy](TestingStrategy.md) | [`tools/scenarios/`](../../../tools/scenarios/), owning subsystem tests |
+| Change repository rules | [Coding Standards](CodingStandards.md) | [`tools/analysis_settings.jl`](../../../tools/analysis_settings.jl) |
 
-`Input_Runtime` owns fixed display-lifetime storage, while each `Input_Frame` borrows
-its event prefix only until the next poll. UI and Terminal consumers receive frame
-value copies, resolve focus and pointer facts without repolling devices, and consume
-committed text from the shared event route. Bytes retained for a Julia evaluation or
-native Terminal session are gated by the complete `Input_Owner` identity, including
-its generation, so stale input cannot cross owner replacement.
+`WikiComposition.md` documents a narrow wiki-generation convention rather than a
+runtime subsystem.
 
-Semantic keyboard routing uses the prior immutable UI snapshot and ordered event
-claims. Ordinary Tab and Shift+Tab traverse explicit enabled Tab stops; Terminal keeps
-plain Tab and uses Ctrl+Tab or Ctrl+Shift+Tab as the application escape. The router
-produces bounded commands addressed by complete semantic identity, while current UI
-owners remain responsible for applying activation, toggling, adjustment, selection,
-copy, and scrolling behavior.
+## Odin's Three-Layer Architecture
 
-One display-owned flat context menu uses at most eight inline command descriptors.
-Popup input arbitration precedes ordinary UI and Terminal routing, and popup drawing
-runs last. Dynview supplies Copy/Select All; Terminal supplies Copy/Paste through its
-existing selection, prompt-cursor, and owner-bound foreground paste paths. Opening
-does not change selection or cursor. Outside presses dismiss with click-through,
-while popup press/release transactions remain exclusively owned. Escape restores the
-pane; Tab/Shift+Tab dismiss and traverse from it. Target generations, content revision,
-foreground owner and geometry are revalidated before execution. Blur, replacement,
-hidden panes and geometry changes revoke the popup.
+The Odin side is organized around three architectural layers. This is more than a
+directory map: it is the intended separation between reusable domain capabilities,
+whole-application wiring, and runtime orchestration.
 
-AccessKit receives only named content-free pane entry points and transient menu
-commands. Dynview documents and Terminal input/output/history remain excluded.
+| Layer | Role | Typical homes |
+| --- | --- | --- |
+| **Reusable substrate** | Owns domain models, algorithms, storage, and protocols. It should work without knowing which complete application composes it. | [`src/shapes/`](../../../src/shapes/), [`src/particles/`](../../../src/particles/), [`src/dynview/`](../../../src/dynview/), [`src/core/storage/`](../../../src/core/storage/), [`src/core/protocol/`](../../../src/core/protocol/) |
+| **Application composition** | Defines the small set of whole-application state and run settings, then wires the participating systems together. It is the composition root, not a general home for every model reachable from app state. | [`src/core/core.odin`](../../../src/core/core.odin) |
+| **Coordinating systems** | Own executable behavior and orchestration: receive input or requests, order work, call the relevant substrate, and publish results at the correct owner boundary. | [`src/view/`](../../../src/view/), [`src/bridge/`](../../../src/bridge/) |
 
-SDL text input follows effective window focus. The adapter publishes valid committed
-UTF-8 runes and rejects invalid payloads without partial publication. Composition and
-preedit remain separate feature work requiring an independently validated producer and
-consumer contract.
+The aspiration is that dependencies point toward reusable capabilities: substrate
+does not import the application composition root, and these layers do not form cycles.
+That keeps models independently understandable and lets coordinators compose them
+without turning application state into a universal dependency. A more-specific model
+can live beneath a coordinator's directory while still belonging architecturally to
+the substrate; responsibility and dependency direction matter more than the folder
+name.
 
-Clipboard reads and writes, retained system cursors, and URL activation use SDL-owned
-platform services. UI code publishes portable cursor intent; only the display
-coordinator converts that intent to a native cursor. Clipboard reads copy SDL-owned
-text before releasing it through `SDL_free`.
+This is an intended shape, not a claim that every package is already perfectly
+separated. The [Coding Standards](CodingStandards.md#package-dependency-direction)
+define the enforceable dependency rules. On the Julia side, the complementary
+architectural story is the [actor framework](#julia-actor-architecture): actors
+organize serialized Julia policy, while typed bridge transport and display ownership
+remain separate concerns.
 
-## Native Frame Execution
-
-The application creates one high-density SDL window, claims it for one SDL_GPU device,
-and owns a physical-pixel RGBA8 scene target. Linux uses Vulkan, macOS uses Metal, and
-Windows uses Direct3D 12. Each eligible
-frame encodes bounded indexed geometry into fixed CPU storage, uploads the occupied
-vertex and index prefixes, renders adjacent compatible batches to that target, blits
-the target to the acquired swapchain texture, and submits one command buffer. The scene
-target has both color-target and sampler usage because the final blit samples it.
-
-Ordinary world shapes and shadows, panel chrome, splitters, controls, Library rows,
-settings, GIF controls, and non-glyph Dynview geometry use this active path. Logical
-coordinates remain authoritative through encoding; the SDL boundary applies physical
-viewports and outward-rounded scissors for high-density output. Capacity rejection is
-atomic. Submitted-frame diagnostics expose overflow totals and vertex, index, batch,
-and upload high-water marks.
-
-Nil swapchain textures are temporary unavailable frames and do not publish
-`Frame_Presented` evidence. Physical resize creates a candidate target before waiting
-for idle and retiring the old target. Font atlases and Terminal attachments use a
-bounded display-owned texture-operation queue. CPU workers only prepare bytes; the
-display thread creates candidates, records SDL_GPU copies, and publishes exact
-generations from successful submission callbacks. Failed creates discard candidates,
-failed animation updates preserve the last resident frame, and borrowed upload bytes
-remain owned until completion. Glyphs, Dynview text, Terminal text, and Terminal
-rasters are textured quads in the active frame. Tool strokes and dust use bounded
-custom commands in that same ordered render pass. Screenshot and GIF acquisition read
-back the display-owned SDL scene target.
-
-The repository-owned `EUCLID-SDL-BOUNDARY` rule permits SDL imports only in the exact
-native color, icon, GPU renderer, platform, platform-service, and timing owners, the
-clipboard adapter, and the display input coordinator. Its import counts fail closed on
-stale or expanded ownership, and the same rule rejects every Raylib or rlgl import.
-
-## Native Backend Boundary
-
-SDL3 owns the window, events, timing, platform services, audio stream, image codecs,
-and GPU device on Linux, macOS, and Windows.
-SDL_GPU owns presentation and display-thread native resources. Portable geometry,
-color, input, scene, Terminal, UI, and Dynview records do not expose backend values.
-Subsystems retain their local preparation caches and append bounded commands to the
-display-owned encoder rather than retaining an alternative immediate renderer.
-
-The repository analyzer classifies every production SDL import under one exact owner:
-
-| Category | Current owners and responsibility |
-| --- | --- |
-| Platform shell | Native view owners create the SDL window, GPU device, scene target, timing state, cursors, clipboard, and input frames. |
-| Rendering | Native draw, stroke, and dust owners hold SDL_GPU pipelines and buffers; higher packages append portable bounded commands. |
-| Images and capture | SDL_image workers decode Terminal pixels; the display-owned icon adapter loads and releases its temporary SDL_image surface. Framebuffer readback and the streaming GIF encoder operate on the SDL scene target. |
-| Publication | Font and Terminal graphics policy retain bounded generation, publication, playback, and cleanup state through portable records. |
-| Accessibility | Portable storage owns validated native-ready facts, monotonic IDs, and bounded callback ingress; the display-owned platform adapter owns AccessKit handles and host focus/bounds forwarding. |
-
-Canonical shapes and particles, Dynview compile/layout/tracking, Terminal
-protocol/storage, and portable input types cannot import SDL directly. The
-repository-owned `EUCLID-SDL-BOUNDARY` rule rejects unclassified SDL imports, exact
-owner drift, and every Raylib or rlgl import.
-
-Accessibility callbacks can only copy protected publication state, admit bounded
-requests, update content-free diagnostics, and free transferred native requests. They
-cannot enter Julia or mutate display-owned UI state. Adapter teardown closes
-publication and action admission before freeing AccessKit and before destroying the SDL
-window. Linux and macOS consume the same bounded semantic publication, AccessKit
-translation, action validation, and session-local identity model; platform owners are
-limited to native admission, lifecycle, focus and bounds forwarding, and queued-event
-delivery.
-
-Detailed contracts remain with their subsystem guides and owners. See
-[Tool Rendering](ToolRendering.md) for local shader locations and fallback cleanup,
-[Particle System](ParticleSystem.md) for dust atlas and instancing ownership, the
-[Terminal Architecture](TerminalArchitecture.md) for CPU payload and texture
-publication, [Synchronous Framebuffer Capture](#synchronous-framebuffer-capture) for
-readback lifetime, and [Resource And File Ownership](#resource-and-file-ownership) for
-native finalization and persisted output.
+View is a particularly unwieldy module that has continued to grow, and candidates continue
+to exist for refactoring specialized cores into the substrate layer. This work may well
+continue in the future.
 
 ## Julia Actor Architecture
 
-One `EuclidActorRuntime.ActorRuntime` organizes cooperative Julia-side concurrency on
-the owner thread. It supplies bounded mailboxes, generational `ActorId` values,
-correlation, lifecycle, and fair scheduling. Actors do not imply parallel Julia
-execution: each actor turn runs serially on the owner thread.
-
-### Actor Topology
-
-```mermaid
-flowchart TD
-  H[EuclidHost.HostRuntime]
-  R[ActorRuntime<br/>shared bounded scheduler]
-  AS[AnimationSupervisor<br/>persistent]
-  AP[CompatibilityAnimationProgram<br/>one selected child]
-  TC[TerminalController<br/>persistent]
-  HK[HotkeyController<br/>persistent]
-  S[HostSessionRuntime<br/>Terminal generation]
-  TA[Evaluator, completion, shell,<br/>process, tick, and container actors]
-
-  H --> R
-  H --> S
-  R --> AS --> AP
-  R --> TC
-  R --> HK
-  R --> TA
-  S -. tracks generation actor IDs .-> TA
-```
-
-| Actor lifetime | Actors | Architectural role |
-| --- | --- | --- |
-| Runtime | `AnimationSupervisor`, `TerminalController`, `HotkeyController` | Preserve application policy across Terminal generations and animation replacements |
-| Terminal generation | Evaluator, completion, shell interpolation/session, process, tick, and container services | Isolate REPL and Terminal work so reset retires one complete session |
-| Selected animation | `CompatibilityAnimationProgram` | Solely adapts typed supervisor commands to `animation_entry` `Enter`, `Tick`, and `Exit` |
-| Tick subscription | `TickCallbackWrapper` | Delivers generation-local Terminal animation callbacks through `TickService` |
-
-The host pump first drains native process, tick, and container requests, then runs the
-shared ready queue within bounded turns and time, routes animation outcomes, advances
-Terminal lifecycle, and advances shutdown. Terminal and animation policy therefore
-share one scheduler and one owner-thread budget rather than separate loops.
-
-The actor boundary is specific: Terminal conversations and animation policy enter the
-reactor; canonical presentation values do not. Dynview publication uses the same
-cross-thread transport but proceeds directly into display-owned parsing and immutable
-snapshots.
-
-See [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for actor identities,
-mailbox behavior, host-pump ordering, request and slot protocols, and shutdown details.
-
----
+One Julia actor scheduler organizes Terminal and animation policy on the dedicated
+Julia owner thread. Typed bridge links and checked slots carry cross-thread requests
+and results; actors do not. See [Julia Thread Architecture](JuliaThreadArchitecture.md)
+for the details and code routes.
 
 ## Terminal Architecture (Interactive Runtime Surface)
 
-Terminal is Euclid's interactive Julia and shell surface. It is owned independently
-from animation-tree selection and uses generation-tagged actor messages rather than a
-parallel bridge evaluator.
-
-See [TerminalArchitecture.md](TerminalArchitecture.md) for the detailed Odin/Julia
-ownership, communication, evaluation, rendering, and lifecycle model.
-
-### Core Architecture
-
-- Odin owns input routing, terminal cells, scrolling, native processes, rendering,
-  and lifecycle evidence.
-- Julia owns evaluation, completion, interpolation, actor policy, and EuclidRepl state.
-- Bounded generation-tagged messages cross the boundary; stale generations are rejected
-  before visible state changes.
-- Terminal publication is independent from Dynview publication.
-- Terminal workers admit PNG/JPEG/GIF dimensions through allocation-free native header
-  parsing. Worker-local SDL_image static surfaces and animated decoders copy into exact
-  caller-owned RGBA8 storage; each returned animation surface is destroyed immediately.
-  Euclid's GIF parser remains authoritative for encoded timing, loop policy, limits,
-  and destination sizing. SDL objects do not cross into Terminal policy or display
-  state.
-
-```mermaid
-sequenceDiagram
-  participant D as Display thread
-  participant H as Julia host adapter
-  participant R as Shared ActorRuntime
-  participant A as Generation actor
-  participant T as Display-owned Terminal
-
-  D->>H: typed ingress + generation
-  H->>A: enqueue typed actor message
-  H->>R: bounded pump
-  R->>A: actor turn
-  A-->>H: typed outgoing result
-  H-->>D: typed egress + correlation
-  D->>T: validate and publish
-```
-
-### Frame Model And Lifecycle
-
-- Each generation receives a fresh session module, actor set, and `EuclidReplRuntime`.
-- Evaluation runs asynchronously on the Julia owner thread.
-- Animated drawing jobs advance in Terminal's captured native animation ticks.
-  Their scene commands commit on the display thread before constraint solving.
-- Reset and shutdown clear active jobs before closing tick admission.
-
-### Safety, Reliability, And Limits
-
-- Input is policy-filtered before evaluation.
-- Parse, evaluation, and hook failures become user-visible output rather than host
-  failures; repeatedly failing hooks auto-disable.
-- Queues, history, and output are bounded with explicit overflow behavior.
-- Runtime counters are available through `:stats`.
-
----
-
-## Animation Architecture
-
-Animation policy lives in the persistent `AnimationSupervisor`. It owns the committed
-runtime and animation generations, active UUID, generation-local implementation cache,
-exclusive lifecycle transaction, and exactly one active compatibility child. Native
-code owns fixed-step pacing, immutable query snapshots, bounded scene-command storage,
-reset application, and final commit.
-
-Catalogue kinds are `Animation = 1` and `Terminal = 2` across persisted SQLite
-rows, native records, and Julia descriptors. Every animation has an implementation
-path and may have children; parentage never changes its kind or selectability.
-Terminal has no implementation path and uses the host-owned Terminal callback.
-
-| Operation | Actor path | Native publication boundary |
-| --- | --- | --- |
-| Tick | `TickAnimation` -> supervisor -> active `CompatibilityAnimationProgram` | Validate and commit the complete scene batch before constraint solving |
-| Selection/reset | Supervisor stops the old child, waits for native reset acknowledgement, then activates the replacement | Correlated lifecycle slot commits one new animation generation |
-| Reload | Candidate generation is separately rooted and candidate actor `Enter` is validated | Publish the inactive interface slot only after actor activation succeeds |
-| Failure | Failed child stops permanently; supervisor emits one typed failure and restores prior state when rollback permits | Reject partial or stale batches and retain the last committed generation |
-
-```mermaid
-sequenceDiagram
-  participant D as Display thread
-  participant S as Checked native slot
-  participant H as Julia host adapter
-  participant V as AnimationSupervisor
-  participant P as CompatibilityAnimationProgram
-
-  D->>S: immutable query or frozen lifecycle intent
-  D->>H: typed request + slot identity
-  H->>V: actor command
-  V->>P: validated Enter, Tick, or Exit
-  P-->>V: typed completion or failure
-  V-->>H: correlated outcome
-  H-->>D: completion + slot identity
-  D->>S: revalidate and commit atomically
-```
-
-Only the compatibility program actor invokes ordinary animation entries. Existing
-content keeps its `animation_entry` interface while actor policy controls identity,
-ordering, replacement, and failure. Tick overload coalesces elapsed time into one
-pending request; it does not create an unbounded actor or transport backlog.
-
-Each reloadable content generation also loads and validates an authored content
-manifest containing en-US UI messages, locale-scoped catalogue names, edition
-declarations, and explicit per-subject defaults. The stable `LocalizedContent`
-module owns declaration types and validation; the candidate generation owns its
-manifest instance. The native content generation publishes these declarations with
-the catalogue and search projections. Shell UI and accessibility messages resolve
-through typed native IDs and exact admitted signatures, without SQL or Julia calls
-in frame code. Static labels are copied into the display-owned bounded shell cache;
-formatted values use caller-owned storage, and semantic/accessibility publication
-and retained GIF notes copy into their existing owners. Animation text producers
-remain author-controlled and unchanged.
-
-### Invocation Content Specifications
-
-`AnimationContentSpecification` is a read-only Julia-owned value returned by
-`animation_content_specification(state_ptr)` during an animation callback.
-The native 440-byte copy-out layout contains bounded locale and edition fields,
-selection revision, animation UUID, and independent content/runtime generation
-identities. It contains no pointer into SQLite, a registry, or an arena.
-
-The Julia host installs the checked content invocation boundary on its supervisor.
-Lifecycle work retains separate active and entering values: old Exit and rollback
-Enter read the active value even while a replacement interface is staged. Successful
-activation/reset promotes the entering value. Before asynchronous submission, each
-tick copies the active specification into its native query snapshot. The host
-validates UUID and generation identities before copying it to Julia; a scoped
-callback binding makes repeated queries coherent and is cleared even on exceptions.
-Missing context, stale identity, missing defaults, and invalid output are explicit
-errors, never default-locale fallbacks.
-
-Selection revision starts at one and changes only when the effective locale/edition
-pair changes. Ticks, resets, and unchanged content/runtime reloads preserve it.
-The initial runtime generation may be zero; content identity and selection revision
-are nonzero. All authored and null/Terminal adapters exercise the query on Enter.
-
-Operation `4`, `Presentation_Selection_Changed`, is explicitly recognized by actor
-validation and each entry as successful no-op. Unknown operations are rejected.
-No production notification delivery, locale choice, or edition switching exists.
-Ignoring a notice does not advance time/RNG, mutate geometry or particles, change
-pause state, or publish/clear text. The headless harness compares exact native
-observations and Julia RNG around direct notices to all authored entries.
-Selected specification and last published presentation remain separate facts.
-The specification records the selection for that invocation, not the provenance of
-previously published bytes. Only ordinary author-controlled publication replaces
-presentation; metadata never relabels an old snapshot.
-
-See [SQLite admission and authoring](Sqlite3.md#authored-editions-and-sidecar-coverage)
-for uniform editions and sidecar coverage, and
-[the bridge lifetime contract](JuliaThreadArchitecture.md#invocation-content-query)
-for callback scoping. [Localization And Editions](Localization.md) provides
-practical content-authoring and consumer-extension workflows. The focused
-`tools/scenarios/content-specification-acceptance.jsonl` scenario
-checks ordinary publication across reset and committed reload, then pauses simulation
-to verify allocation baselines, capture completion, and shutdown.
-It complements exact identity/revision unit tests and direct no-op harness checks;
-it does not compare equal wall-clock frames of an active animation.
-
----
-
-## Dynview Text Engine (Hybrid-Immediate Rendering)
-
-Dynview snapshots contain one canonical MIME presentation materialized as either exact
-plain text or native parsed semantic document content.
-
-```mermaid
-flowchart LR
-    A[Named Julia producer]
-    B[Canonical MIME value]
-    C[One active parse plus newest pending]
-    D[Immutable validated snapshot]
-    E[Compiled text, copy, and layout cache]
-    F[Rendered Dynview output]
-    G[Exact literal fallback]
-
-    A --> B --> C --> D --> E --> F
-    C -->|parse or capacity failure| G --> D
-```
-
-### Architectural Contract
-
-| Ownership | Odin | Julia |
-| --- | --- | --- |
-| Runtime/UI state | Owns front buffer/cache/layout/draw, selection, and copy-hit targets | Reads nothing directly |
-| Text intent | Validates MIME messages and owns parsing, storage, and immutable snapshots | Produces one canonical displayable |
-| Failure semantics | Current invalid TeX is published as its exact literal source | Serialization and transport failures publish nothing partial |
-
-Selection belongs to the display owner. Prose selects at shaped UTF-8 cluster
-boundaries; math and embedded shapes are atomic units that copy their exact source
-spans. Visual wrapping never inserts bytes into copied plain text.
-
----
-
-## Dynamic LaTeX Pipeline (Native Parse And Layout)
-
-LaTeX is a first-class Dynview path. Julia selects one canonical displayable; native
-Dynview owns classification, parsing, semantic storage, snapshots, measurement, and
-layout. See [LaTeXSupport.md](LaTeXSupport.md) for syntax and authoring behavior.
-
-### Native Ingestion
-
-| Stage | Implementation | Core functions | Result |
-| --- | --- | --- | --- |
-| Serialize | `src/julia/bridge/presentation.jl` | `presented_text`, `present`, `publish_view_content` | One bounded MIME value with exact UTF-8 bytes |
-| Transfer | `src/bridge/abi-presentation.odin` | `publish_presented_text` | Producer-owned `View_Content_Ready` egress envelope |
-| Submit | animation producer | `get_view_content`, `publish_view_content` | One canonical displayable |
-| Classify | `src/bridge/dynview_native_tex.odin`, `src/dynview/parse/document_grammar.odin` | `presentation_source_mode`, `tex_document_whole_math` | Plain, delimited math, or unwrapped document mode |
-| Schedule | `src/view/presentation/presentation_runtime.odin` | `service_presentation_runtime` | One active parse and one newest pending presentation |
-| Lookup | `src/dynview/core/document_store.odin` | `document_store_lookup_keyed` | Exact generation-local positive or negative cache hit |
-| Parse/build | `src/dynview/parse/`, `src/dynview/core/document_store.odin` | `dynview_parse_build_keyed` | Shared-taskpool work over operation-owned `Dynview_Parse_Result` |
-| Commit | `src/dynview/core/document_store.odin` | `document_store_commit`, `document_store_resolve` | Immutable generation-scoped semantic document |
-| Stage | `src/bridge/dynview_native_tex.odin` | native document/math import | Pointer-free semantic records in display-owned staging |
-| Publish | `src/bridge/runtime_service.odin` | `publish_presentation_snapshot` | Immutable slot-owned semantic snapshot or exact literal source |
-
-### End-To-End Flow
-
-```mermaid
-flowchart LR
-    A[Julia source string]
-  B[Thin raw-source facade]
-  C[Native classifier and parser]
-  D[Animation-generation document store]
-  E[Pointer-free view snapshot]
-  F[Worker shaping and layout]
-  G[Sealed display cache]
-  H[Rendered Dynview content]
-  I[Exact literal source on failure]
-
-  A --> B --> C --> D --> E --> F --> G --> H
-  C --> I --> E
-```
-
-### Runtime Boundaries For LaTeX
-
-- Julia preserves authored source and selects one bounded MIME representation. It owns
-  transferred bytes until Odin returns their envelope.
-- The display owns parse scheduling, generation-local document storage, and commit
-  validation. One active parse and one newest pending presentation bound the work.
-- Pointer-free semantic snapshots cross into display state. Store and animation-arena
-  pointers do not.
-- Presentation work commits independently from animation scene batches. Selection,
-  reset, reload, and shutdown invalidate stale work, and every accepted task is joined.
-- Odin owns font-sensitive math measurement and drawing. Rejected current content falls
-  back to its exact canonical source without publishing partial semantics.
-
-See [LaTeXSupport.md](LaTeXSupport.md) for supported syntax, document layout, font and
-MATH behavior, compatibility coverage, and authoring guidance.
-
----
+Terminal combines an Odin-owned interactive surface and native process resources with
+Julia-owned evaluation and session policy. It is integrated into View but retains its
+own state and lifecycle. See [Terminal Architecture](TerminalArchitecture.md) for
+ownership, messaging, evaluation, rendering, and lifecycle.
 
 ## Odin-Julia Bridge: How the Boundary Works
 
-### Basic Flow
+The bridge is a closed typed contract, not a generic callback queue. Small requests and
+results use producer-owned bounded messages; animation work and other long-lived
+payloads use checked slots or immutable snapshots. Odin validates and publishes
+results to the owner of visible state. Keep Odin exports, Julia wrappers, message
+identity, and failure handling symmetric.
 
-```mermaid
-flowchart LR
-  D[Display owner]
-  I[Typed ingress link]
-  H[Julia owner host adapter]
-  A[Shared actor runtime]
-  E[Typed egress link]
-  T[Display-owned Terminal]
-  S[Checked animation slots]
-  P[Presentation runtime]
-  V[Immutable Dynview snapshot]
-  C[Canonical scene]
-
-  D --> I --> H
-  H --> A
-  A -->|Terminal outcomes| H --> E --> T
-  D -->|tick or lifecycle slot identity| I
-  A <-->|animation query and result| S
-  S -->|validated atomic commit| C
-  H -->|canonical MIME value| E --> P --> V
-```
-
-The bridge is a closed protocol, not a generic callback queue. Small typed values use
-producer-owned pooled envelopes. Large or transactional animation payloads use
-incarnation-checked service slots. Presentation bytes remain producer-owned until the
-display returns their envelope after parsing or staging.
-
-### Ownership And Rules
-
-- Odin owns application state, memory, rendering, and final frame orchestration.
-- Julia owns animation/content logic and drives changes only through bridge APIs.
-- Core owns the typed runtime-service, snapshot, scene-command, and simulation
-  executor data shapes referenced by `Euclid_General_State`. Bridge and view
-  modules own the behavior that operates on those structures.
-- The bridge is a strict API boundary. Odin exports and Julia wrappers must
-  remain symmetric, and failures must be surfaced without partially mutating
-  canonical host state.
-- Runtime state uses concrete subsystem pointers. Do not erase subsystem types
-  behind `rawptr` fields in `Euclid_General_State`.
-
----
-
-## Native Frame Execution
-
-The display thread submits two kinds of finite native task-pool windows: fixed-step
-simulation and per-frame cache preparation. Both return ownership through an explicit
-join before the display advances to the next dependent phase.
-
-Task handles are generational and joined exactly once. Cancellation is cooperative:
-the submitter retains payload ownership through join. Mandatory simulation and frame
-preparation work is not cancelled.
-
-### Fixed-Step Simulation
-
-The canonical fixed-step operation is `run_deterministic_fixed_step`. It preserves this
-ordering:
-
-1. Publish an available Julia animation batch.
-1. Schedule the next nonblocking Julia animation tick unless animation policy is paused.
-1. Submit particle update and constraint solve tasks to the simulation pool.
-1. Join the complete simulation batch.
-1. Advance display-owned `fixed_step` and deterministic `simulation_time`.
-1. Emit the post-join semantic trace summary.
-
-Particle tasks exclusively mutate `Particle_System`; constraint tasks exclusively
-mutate the ordered constraints and transforms in `Shape_World`. Persistent payloads and
-fence storage are reused. The display may help execute queued work, but cannot advance
-until the complete batch joins.
-
-The particle task owns bounded dust contacts, airborne integration, grounded field
-physics, and ambient effects. It keeps all simulation storage fixed-capacity and
-performs every particle mutation inside the joined worker step. See the
-[Particle System guide](ParticleSystem.md) for the complete ownership and lifecycle
-contract.
-
-Grounded dust XY velocity is owned by one PIC-style vector field. Each particle step
-integrates low dust, deposits grounded density and momentum, applies coalesced tool and
-scenario contacts as density-weighted field momentum, then normalizes, evolves, and
-samples the field back to grounded particles. Floor tools do not directly correct
-particle positions or affect airborne particles. Contacts queued before later same-step
-emissions may affect those grounded deposits through the shared field; animation reset
-discards pending contacts before beginning the next generation.
-
-Tool and scenario actions cross this boundary as bounded requests. Evidence reads
-pointer-free observations after the worker joins.
-
-The windowed wrapper adds GIF policy without changing this semantic boundary.
-
-### Synchronous Framebuffer Capture
-
-Presented-pixel acquisition is a display-thread operation owned by the SDL platform
-and adapted through `src/view/capture/backend/sdl_framebuffer.odin`. The platform copies
-its owned scene target to a temporary `DOWNLOAD` transfer buffer, submits the copy with a
-fence, waits for that submission, and maps the transfer storage. Mapped rows may be
-padded; the platform copies them into tightly packed, top-left RGBA8 storage before
-unmapping and releasing the fence and transfer buffer. The adapter owns that storage
-through a display-lifetime tracking allocator. Crop and nearest-neighbor resize replace
-buffers transactionally, and release is idempotent. Captured pixels never enter canonical
-state or worker storage.
-
-Scenario evidence owns bounded screenshot requests, safe relative paths, and completion
-correlation. The display owner fulfills those requests after presentation by acquiring,
-exporting, and releasing one capture. PNG export wraps the borrowed RGBA8 bytes in an
-SDL `.RGBA32` surface and calls SDL core `SavePNG`; the wrapper never owns the borrowed
-pixels. Screenshot completion is published only after export succeeds and the output
-path exists. GIF policy uses the same acquisition lifecycle, then copies validated pixel
-rows into one exact-size buffer owned by the display's SDL_image encoder. The next
-accepted presentation commits that staged frame with the interval for which it remained
-visible. Authored timing uses fixed-step progress; recorded timing uses monotonic elapsed
-time. Finalization flushes the last staged frame before encoder close and transactional
-publication.
-
-This boundary is deliberately synchronous and has no pending GPU state, shared-frame
-cache, or mapped-pixel lifetime across frames. The scene target remains SDL-owned. One
-bounded CPU frame persists in encoder-owned storage so forward-associated GIF duration
-can be resolved without retaining framebuffer capture memory.
-
-### Per-Frame Preparation
-
-UI and cache preparation use explicit ordered stages around the fixed-step update:
-
-1. Revalidate popup ownership and claim menu input before ordinary routing.
-1. Compute and publish the frame's UI regions and exact text-panel geometry.
-1. Track Dynview panel, font, and style inputs to determine whether its cache is
-  invalidated.
-1. Route keyboard focus against the committed semantic snapshot.
-1. Resolve static focus, hover, pointer, wheel, and geometry-known controls while
-  registering current semantics.
-1. Update Terminal geometry, scrolling, links, and routed input.
-1. Complete fixed-step simulation.
-1. Submit shape draw-cache construction and any invalidated Dynview compilation.
-1. Join every submitted task.
-1. Resolve layout-dependent presentation scrolling, copy interaction, selection, and
-  composite semantic registration.
-1. Validate and atomically publish the complete semantic snapshot, reconciling focus.
-1. Execute any retained menu command at its owner boundary, revalidating its target,
-  then publish native accessibility facts.
-1. Encode bounded world, UI, and non-glyph Dynview geometry from committed state and
-  fixed frame-local preparation records.
-1. Encode the active popup above ordinary UI, suppressing hover tooltips.
-1. Upload, render, blit, and submit one SDL_GPU command buffer.
-
-Terminal and non-Terminal text surfaces draw their prepared scrollbar track and
-thumb after clipped content and overlays. Rendering uses the same geometry as
-pointer capture and dragging, with the shared Library scrollbar palette.
-
-Shape preparation reads settled `Shape_World` components and writes only its derived
-shape draw cache. Lens and Lune state remains analytic as two centers, two radii, and
-an intersection or directional difference operation. The frame-local cache samples the
-two boundary arcs and triangulates the resulting simple polygon; v1 construction accepts
-only proper two-intersection overlaps, excluding tangent, disjoint, coincident, and
-contained-circle topologies.
-Dynview preparation reads immutable snapshots and writes only its compile and layout
-caches. The tasks may run concurrently because their ownership does not overlap.
-Display-only layout-dependent interaction consumes the caches after the fence joins;
-drawing does not mutate interaction state or publish actions.
-
-Before Terminal service processing, UI preparation derives transitional surface
-eligibility from display-owned semantic focus and OS window activation. The resulting
-effective Terminal focus gates local and child keyboard input, drives DECSET 1004
-transitions, and selects prompt and output cursor style. Final layout registration then
-publishes a complete double-buffered semantic snapshot; drawing only observes its
-focus-visible geometry.
-
-Dynview publishes complete bounded cache slices. Failure clears partial derived state
-and preserves exact literal fallback; shutdown clears aliases and joins workers before
-destroying arena storage.
-
-See [ShapeSystem.md](ShapeSystem.md) for entity validity, component storage, direct
-geometry and constraints, label ownership, and animation-suffix retirement.
-
-### Font Cache
-
-The display-owned font cache publishes complete resident generations: GPU resources,
-HarfBuzz state, glyph metadata, and append-only demand-loaded pages. Regular is the
-permanent fallback; other variants load on demand. CPU preparation runs on the task
-pool, while GPU creation and retirement remain on the display thread.
-
-Shaping and Dynview compilation borrow exact-generation capabilities. A stale,
-incomplete, or over-capacity result falls back atomically rather than mixing font
-generations or publishing partial layout. Odin alone makes font-sensitive MATH layout
-decisions; drawing consumes sealed results without reshaping.
-
-Source replacement is transactional. Failed candidates retain the prior generation,
-and shutdown joins preparation before unloading GPU resources or destroying HarfBuzz
-and arena state. See [FontRasterization.md](FontRasterization.md) for the active raster
-policy and native-memory contract, [LaTeXSupport.md](LaTeXSupport.md) for typography
-and MATH behavior, and [JuliaThreadArchitecture.md](JuliaThreadArchitecture.md) for
-publication lifecycle.
-
-### Resource And File Ownership
-
-The files package owns packaged-asset and writable-output path mechanics, archive and
-manifest bytes, codecs, and persisted GIF output. Callers retain the policy that gives
-those operations meaning: GIF capture owns its phase machine, framebuffer timing,
-frozen dimensions, encoder sequence, and completion state, then asks `files` to persist
-the completed encoded bytes. Display code does not construct the output filename or
-write it directly.
-
-CPU preparation remains with each semantic subsystem. Font workers read and rasterize
-the source selected by the font cache; Terminal graphics workers decode into bounded
-attachment-store storage. Joined results do not become visible directly. The display
-owner revalidates the subsystem generation, admits the complete candidate, creates its
-SDL_GPU resource, and releases partial native state on failure. File access used to
-select, monitor, or prepare a font remains font policy rather than a generic files
-facade.
-
-Native identities and cleanup remain local. Font generations own their fonts, pages,
-shapers, and glyph tables; Terminal graphics owns texture residency and playback; tool
-and dust renderers own their shaders, buffers, atlases, and fallbacks. Shutdown first
-stops admission and joins accepted CPU work, then releases native resources on the
-display thread while the graphics context is live. There is no global resource table,
-shared generation scheme, or generic cleanup registry.
-
-### Lifecycle And Failure Rules
-
-- Normal Julia work begins only after startup registration publishes `Ready`.
-- Content initialization establishes the sole native-state binding used by concrete
-  Julia-owner handlers; startup and harness envelopes carry no executable callbacks.
-- Selection, reset, and reload invalidate stale asynchronous results; failed reloads
-  retain the previous valid interface generation.
-- Julia actor shutdown retires the animation supervisor first, then generation-scoped
-  Terminal actors, then persistent Terminal roots. Typed outcomes and requests drain
-  before the owner GC root is released.
-- Julia shutdown completes through typed router handling on its owner thread, and the
-  worker and task pool join before canonical state is freed.
-
----
+Start at [`src/bridge/model/`](../../../src/bridge/model/),
+[`src/bridge/runtime_service.odin`](../../../src/bridge/runtime_service.odin), and
+[`src/julia/odin-julia-bridge.jl`](../../../src/julia/odin-julia-bridge.jl). Follow
+[Julia Thread Architecture](JuliaThreadArchitecture.md) for the transport and
+publication patterns.
 
 ## Testing Strategy
 
-| Layer | Purpose |
+| Layer | Best for |
 | --- | --- |
-| Unit and module tests | First defense for geometry, Dynview, files, particles, bridge behavior, and runtime invariants. |
-| Semantic traces | Typed evidence at owner-controlled state transitions. |
-| Scenarios | Debug/test-only display-loop workflows involving ordering, rendering, capture, allocation, or shutdown. |
-| Headless harness | Deterministic bridge/runtime behavior through the production fixed-step boundary. |
+| Unit and module tests | Local behavior, data structures, and subsystem invariants |
+| Semantic traces | Typed evidence at owner-controlled state transitions |
+| Scenarios | Debug/test display workflows involving ordering, input, rendering, capture, or shutdown |
+| Headless harness | Deterministic bridge/runtime behavior through the fixed-step boundary |
 
-The interactive app and harness share runtime-session and deterministic-step code.
-JSONL scenario CLI and display-loop orchestration compile only when repository debug or
-test tooling enables `EUCLID_ENABLE_SCENARIOS`; default and strict application builds
-leave that automation outside the production control surface. The headless harness is a
-separate developer executable and does not enable the application scenario CLI.
-
-See [TestingStrategy.md](TestingStrategy.md) for the full testing model,
-including trace ownership, checkpoint boundaries, harness usage, failure policy,
-and current coverage gaps.
-
----
+See [Testing Strategy](TestingStrategy.md) for authoring scenarios, evidence
+interpretation, commands, and coverage limits. Use the evidence type appropriate to the
+claim: a screenshot, diagnostic log, profile, and semantic trace answer different
+questions.
 
 ## Allocation Strategy: Init-First with Explicit Exceptions
 
-This policy is strict by design.
+Allocation policy is normative in [Coding Standards](CodingStandards.md#allocation-and-lifetime).
+In brief, choose storage by owner and lifetime, reuse bounded storage in steady-state
+paths, and detach borrowers before resetting arenas. The shared animation allocator is
+available for native data that should live for one animation generation; temporary
+scratch and Julia GC roots follow separate lifetimes.
 
-### Non-Negotiable Rules
+## Build And Packaging
 
-- Do not grow host allocations in steady per-frame paths.
-- Allocate long-lived state at startup and reuse it.
-- Preallocate known-capacity storage and mutate it in place.
-- Prepare reloads in the inactive Julia interface slot.
-- Reuse fixed-step and frame-task payloads and completion storage.
-- Require explicit review justification for new per-frame heap growth.
-
-### Allowed Exceptions
-
-1. Frame-scoped scratch from the temporary allocator, reclaimed at frame reset.
-1. Julia GC-managed objects that do not move host ownership into Julia.
-1. Dedicated subsystem arenas with explicit reset and teardown points.
-1. Narrow event-driven outputs such as final GIF bytes, asset decompression staging,
-   and candidate font metadata.
-
-Event-driven exceptions must remain outside continuous simulation ticks and identify
-the owner responsible for release.
-
-### Current Arena Notes
-
-- Debug process entry wraps `context.allocator` in one process-owned allocation evidence
-  domain. Runtime state borrows that domain for synchronized scenario artifact samples;
-  `main` restores the original allocator before final reporting and metadata teardown.
-- The process domain covers allocations routed through its context allocator. Julia GC,
-  native allocations, temporary storage, and dedicated subsystem allocators remain
-  outside its counters.
-- Julia interface slots own registry arenas cleared on staging, rollback, or retirement.
-- Snapshot slots retain presentation bytes and pointer-free semantics until the slot is
-  free; display aliases are cleared before reuse.
-- Dynview, font preparation, GIF capture, and evidence use dedicated lifecycle arenas.
-- Scenario allocation checks sample the stable `animation`, `snapshot_slots`, and
-  `display_cache` domains at display-thread synchronization points.
-
-### Not Allowed Without Explicit Approval
-
-- Growing slices/arrays every frame in hot UI, view, or simulation loops.
-- Rebuilding stable-capacity runtime buffers from scratch each frame.
-- Hiding ownership so it is unclear who allocates, mutates, and frees.
-
----
-
-## Build and Packaging Model
-
-- CMake 3.28 presets are the cross-platform entry point; `tools/make.jl` owns the
-  domain-specific build, test, analysis, evidence, and asset policy.
-- The CMake `check` target is the complete gate. CMake's reserved `test` target runs
-  registered CTest suites only.
-- HarfBuzz uses `HarfBuzz_jll` by default. Unix builds may select the supported system
-  provider; Windows may not.
-- Development JLL linkage is not a relocatable bundle. Releases must stage the native
-  closure and use platform-relative loader metadata.
-- Builds compile canonical HLSL offline and package validated SPIR-V, reflection JSON,
-  shader ABI metadata, Julia scripts, the deterministic
-  `content/content.sqlite3` content database and search index, and other assets into
-  `bin/assets.pkg`; HLSL and
-  build-only shader tools are not runtime assets. Debug builds publish a matching
-  package and `assets.pkg.identity` commit sidecar beside the debug executable.
-- SDL_shadercross and its recursive dependencies are tracked under
-  `libs/sdl_shadercross/source`.
-  Linux and macOS asset builds configure that source under `.build/shadercross`.
-  Windows uses the manifest-validated provider under `libs/sdl_shadercross/bin/win64`,
-  whose source commit must equal the parent repository gitlink;
-  `EUCLID_SHADERCROSS` is an explicit developer override.
-- Startup requires the package and identity sidecar beside the executable. It selects
-  an immutable `assets/v4/<package_identity>` cache generation, verifies archive bytes
-  before a cache miss is extracted, and validates the extracted manifest identity.
-  A stale unpacked cache never substitutes for a missing or invalid package commit.
-
-### Library Search Ownership
-
-- Adjacent Julia content sidecars own canonical View content and authored semantic
-  search prose. The generated animation catalog remains authoritative for identity,
-  hierarchy, order, kind, display name, and implementation path.
-- Asset generation evaluates pure sidecars, emits a canonical corpus, and builds the
-  immutable SQLite FTS5 and spellfix index before package identity is calculated.
-- The native content builder owns its schema and reusable insert statements in
-  `tools/content_builder/sql/`. Odin `#load(..., string)` embeds these SQL sources
-  at compile time; they are not runtime assets and need no generated Odin source.
-  The named constants retain the existing SQLite C-string call boundary. Builder
-  Odin and SQL source bytes participate in packaged-asset freshness checks.
-- The runtime content store owns its admission and search queries in
-  `src/view/content/sql/`, embedded by named constants in `statements.odin` using
-  the same compile-time `#load(..., string)` pattern. Parameter indexes, result
-  columns, and ordering remain contracts with their binding and decoding code;
-  SQL files are source-build inputs, not packaged or runtime-loaded assets.
-  Loaded string constants use explicit `cstring(CONSTANT)` conversions at SQLite
-  calls, matching the builder; do not apply that constant conversion pattern to
-  arbitrary runtime strings without establishing NUL termination and lifetime.
-- A dedicated Odin worker exclusively owns the read-only SQLite connection and prepared
-  statements. The display thread owns query editing, debounce, accepted results,
-  suggestion interaction, and filtered tree presentation; drawing never calls SQLite.
-- Worker messages contain bounded source-aware document keys, query generation, index
-  generation, result counts, and a verified correction. The display rejects stale
-  generations and resolves built-in UUIDs through the current animation registry.
-- Search-time expansion is derived from the accepted matches and their ancestors.
-  Stored tree expansion is never overwritten, so clearing search restores ordinary
-  browsing immediately.
-- Tree rows render a subtle held-press overlay from prepared hover and pointer
-  ownership. Selection remains release-driven; dragging outside the owned row or
-  releasing the primary button removes the overlay without changing keyboard focus.
-- Scenario search actions use the same display-owned state transitions as UI input.
-  `library_search_committed` evidence correlates the originating action and reports the
-  query generation, index generation, returned count, total count, truncation, and
-  suggestion availability.
-
----
+CMake presets are the cross-platform build entry point; `tools/make.jl` owns the
+domain-specific build, tests, analysis, evidence, and asset commands. Packaged runtime
+assets include Julia content and the deterministic content catalogue. Keep build and
+verification procedures in the [Coding Standards](CodingStandards.md) and
+[Testing Strategy](TestingStrategy.md) guides, rather than duplicating command matrices
+here.
 
 ## Practical Contributor Guide
 
-### If You Need To
+Choose the owner first, then follow its focused guide and tests:
 
-Choose the owning module first, then touch that module's highlighted files.
+| Change | First code route | Read next |
+| --- | --- | --- |
+| Process lifecycle or frame ordering | [`src/main.odin`](../../../src/main.odin), [`src/view/frame.odin`](../../../src/view/frame.odin) | [Julia Thread Architecture](JuliaThreadArchitecture.md) if Julia work is involved |
+| UI control, panel, or focus behavior | [`src/view/ui/`](../../../src/view/ui/) | [UI System](UiSystem.md) |
+| Shape or constraint behavior | [`src/shapes/`](../../../src/shapes/) | [Shape System](ShapeSystem.md) |
+| Dust or particle behavior | [`src/particles/`](../../../src/particles/) | [Particle System](ParticleSystem.md) |
+| Terminal feature | [`src/view/terminal/`](../../../src/view/terminal/) | [Terminal Architecture](TerminalArchitecture.md) |
+| Julia bridge or animation policy | [`src/bridge/`](../../../src/bridge/), [`src/julia/`](../../../src/julia/) | [Julia Thread Architecture](JuliaThreadArchitecture.md) |
+| Authored animation | [`src/content/`](../../../src/content/) | [Animations Style](AnimationsStyle.md) |
+| Presentation parsing or rendering | [`src/dynview/`](../../../src/dynview/) | [LaTeX Support](LaTeXSupport.md), [Font Rasterization](FontRasterization.md) |
+| Content database or saved preferences | [`src/view/content/`](../../../src/view/content/), [`src/userdata/`](../../../src/userdata/) | [SQLite Architecture](Sqlite3.md) |
 
-- **Lifecycle or timing:** `src/main.odin`, `src/view/view.odin`.
-- **Rendering or UI:** `src/view/world/`, `src/view/ui/`.
-- **Pen or compass visuals:** [ToolRendering.md](ToolRendering.md).
-- **Dynview text or math:** `src/dynview/core/`, `src/dynview/math/`,
-  `src/dynview/layout/`, `src/dynview/compile/`.
-- **Geometry or constraints:** `src/shapes/`.
-- **Julia bridge contract:** `src/bridge/abi*.odin` and
-  `src/julia/odin-julia-bridge.jl`.
-- **New animation:** `src/content/elements/`, `src/content/proclus/`,
-  `src/content/hilbert/`, `src/content/algebra/`, `src/content/curves/`.
-- **Terminal or REPL:** `src/view/terminal/`, `src/julia/host/`,
-  `src/julia/euclidrepl.jl`.
-
-### Typical New Animation Workflow
-
-1. Add the Julia animation module/file under `src/content/`.
-1. Implement `get_view_content`, `initialize`, `loop`, `clean`.
-1. Implement the module's direct `animation_entry` dispatcher for Enter, Tick, and Exit.
-1. Publish the named `get_view_content` producer from `initialize`, or from `loop`
-  only when semantic view content changes, using `publish_view_content`.
-1. Add a descriptor and implementation path to the build-time catalogue data, then
-  regenerate the packaged SQLite catalogue and search index.
-1. If bridge functionality is missing, add symmetric Odin export + Julia wrapper.
-
-Review [AnimationsStyle.md](AnimationsStyle.md) for considerations on how to
-make animations "fit in".
-
----
+For a new animation, add its Julia implementation under `src/content/`, follow the
+`animation_entry` and view-content contracts in [Animations Style](AnimationsStyle.md),
+and update the build-time catalogue inputs. If the feature needs a new host capability,
+change the Odin export and Julia wrapper together, then test the boundary and its
+owner-controlled publication.
 
 ## Key Architecture Takeaways
 
-- The app is **host-driven**: Odin controls lifecycle, simulation pacing,
-  rendering, and core state.
-- Julia is **content-driven**: scripts define what animation behavior runs and
-  what geometry/tools are manipulated.
-- One Julia owner thread runs one shared actor scheduler. Persistent policy roots,
-  generation-scoped Terminal actors, and one supervised animation child organize all
-  Julia-side application concurrency.
-- Terminal and animation enter the actor model; Dynview is a separately published
-  immutable value pipeline.
-- The bridge is a closed typed contract: keep Odin exports, Julia wrappers, message
-  identity, and slot validation aligned.
-- Host memory strategy is lifecycle-scoped: startup allocations, temp scratch,
-  and dedicated arenas for targeted subsystems.
-- Dynview materializes one canonical MIME presentation as exact plain text, validated
-  native semantics, or exact literal source after TeX rejection.
-- Julia selects and serializes displayables; Odin classifies, parses, compiles, lays
-  out, and renders LaTeX through Dynview.
-- Assets are packaged and loaded at runtime, enabling script/content iteration
-  without redesigning host architecture.
+- Odin is the host and authority for visible state, native resources, and frame order.
+- Julia is a dedicated, serialized content and policy runtime—not a display-state owner.
+- CPU tasks perform finite native work and return results through explicit joins.
+- Typed messages, immutable snapshots, and checked slots are intentional alternatives
+  for different cross-owner payloads.
+- State belongs to the subsystem that owns its lifetime; `src/core` is composition,
+  not a universal model package.
+- Focused architecture guides point into code; implementation and tests define current
+  behavior.
+
+## Addendum: Architectural History
+
+This is selected architectural context, not a release-by-release changelog. Add a note
+when a significant change helps explain a current ownership boundary, design choice, or
+contributor route.
+
+This addendum is intentionally selective and should remain useful rather than
+exhaustive. When adding a historical note, state what changed and why it helps explain
+today's architecture; avoid turning the section into a dated feature changelog.
+
+### From notebook experiments to a native application
+
+Euclid began as Julia experiments for drawing Euclid's *Elements* with GLMakie in
+Jupyter notebooks, including two- and three-dimensional transformations. The desktop
+application took shape separately from an Odin isometric kinematic stick-figure
+experiment. Its reusable shape system, pen, and compass grew from that work, initially
+using Raylib as the principal native dependency.
+
+The first desktop interface was a fixed-order set of controls: an animation sidebar,
+text along the bottom, and a small Library toolbar. Settings and GIF capture joined the
+right-hand area; GIF controls later became their own accordion section. Early
+particles supplied trails and flicker, then dust. The first particle model used
+cell-based collision detection and ordinary Newtonian motion. A custom GIF encoder
+provided the first capture path.
+
+### Julia moved from frame callback to owner thread
+
+Julia was added to drive shape animations and initially ran on the display thread.
+That connected content to the scene quickly, but meant evaluation, callbacks, and
+runtime work all had to return to the thread responsible for frames. As Julia use and
+interactive work grew, it was moved to a persistent owner thread, with a separate
+native task pool for finite parallel work. The owner thread established a single place
+for Julia C API access and enabled more asynchronous workflows while keeping display
+state under Odin ownership.
+
+### Content, tools, and native preparation expanded
+
+Proclus and then Hilbert broadened the authored animation catalogue; later content
+areas included Algebra, Logic, Curves, and Tarski. Asset packaging and hot reload made
+content iteration less dependent on rebuilding the application. GPU shaders added
+three-dimensional-looking tools and dust instancing. Platform support expanded across
+Linux, macOS, and Windows.
+
+The particle system moved to a structure-of-arrays layout and SIMD-capable operations,
+then to a PIC-style grounded dust model: particles deposit into a vector field, field
+physics run there, and results return to particles. These changes reflect a shift from
+individual per-particle behavior toward explicit data-oriented simulation stages.
+
+### Julia host and interactive session matured
+
+The early Scratchpad provided limited Julia REPL behavior tied closely to animation
+shapes. It evolved into Terminal: an interactive emulator with Julia evaluation,
+completion and shell modes, session lifecycle, and terminal graphics protocols.
+Generation-scoped actors grew around Terminal policy and were later extended to
+animation supervision. The sysimage-based host and reloadable animation modules made
+startup and content replacement more deliberate.
+
+The Julia/Odin static-analysis tooling also grew into a project of its own, while
+continuing to enforce repository-specific rules for the mixed-language codebase.
+The build moved from early Julia scripts and make wrappers to a CMake preset entry
+point, retaining Julia tooling for domain-specific build and verification work.
+
+### Text and fonts became a native pipeline
+
+The first mathematical text path parsed LaTeX in Julia, sent drawing commands to Odin,
+and used Raylib font features plus custom fraction and radical drawing. Font work grew
+from stb through HarfBuzz and math-font support. Later, TeX parsing moved into Odin so
+semantic parsing and renderer behavior could share a native boundary; MIME-based
+presentation APIs separated authored content from rendering policy.
+
+The renderer moved from stb/Raylib font handling to FreeType and HarfBuzz under SDL.
+Text support expanded with OpenType MATH data and embedded Euclid shape artifacts.
+The current ownership and handoff paths are described in
+[Font Rasterization](FontRasterization.md) and [LaTeX Support](LaTeXSupport.md).
+
+### From Raylib to SDL, and from controls to systems
+
+Raylib was replaced by SDL3 and SDL_GPU, removing the prior backend dependency.
+Tool and dust shaders moved to HLSL with SDL_shadercross for platform shader
+translation. Image handling moved from stb and custom GIF code to SDL_image; drawing
+audio was later reintroduced through SDL with a looping sound source.
+
+The UI evolved from fixed-order controls into reusable widgets, organized panels,
+accordion navigation, routed input and focus, localization, and accessibility
+integration. Portrait and landscape layouts and a startup presentation joined the
+display path. AccessKit support introduced semantic controls and native adapters, with
+platform limitations remaining an active area for evaluation.
+
+### Content data became explicit
+
+SQLite was first introduced for full-text animation search with FTS5 and spellfix.
+Julia sidecars became a source for authored presentation and searchable prose, while
+Odin built and queried the packaged content database. Localization definitions were
+then added to the content database. Durable user preferences later gained a separate
+mutable SQLite database, distinct from the packaged catalogue.

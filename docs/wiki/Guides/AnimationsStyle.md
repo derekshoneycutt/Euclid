@@ -1,8 +1,8 @@
 # Animations Style
 
 This document captures the shared style conventions for Julia animations in
-`src/content/`, especially the Hilbert and Euclid content that uses the pen,
-point, line, and plane primitives.
+`src/content/`, especially the content that uses the pen, point, line, and plane
+primitives.
 
 This is kind of a preliminary approach to the style language for the
 animations. As further points arise with further animation work, this is
