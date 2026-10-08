@@ -180,8 +180,8 @@ required component; any invalid command rejects the batch rather than leaving pa
 shape mutations. Constructors are not implicitly part of that asynchronous protocol.
 
 Odin and Julia bridge records must remain layout- and meaning-compatible. When changing
-this boundary, trace both exports and wrappers, dispatch, validation, and ABI tests. Start with
-[`scene_commands.odin`](../../../src/bridge/scene_commands.odin),
+this boundary, trace both exports and wrappers, dispatch, validation, and ABI tests. Start
+with [`scene_commands.odin`](../../../src/bridge/scene_commands.odin),
 [`abi-shapes.odin`](../../../src/bridge/abi-shapes.odin), and
 [`src/julia/bridge/`](../../../src/julia/bridge/).
 
