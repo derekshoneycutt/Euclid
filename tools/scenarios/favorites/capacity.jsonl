@@ -1,0 +1,17 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Point","as":"maximum"}
+{"wait_event":"animation_selected","correlation":"maximum","timeout_ms":10000}
+{"favorite_control":"press"}
+{"favorite_control":"release"}
+{"wait_state":"settings_saved","timeout_ms":10000}
+{"set_setting":{"key":"drawing.dust_limit","value":1400}}
+{"favorite_control":"press"}
+{"favorite_control":"release"}
+{"wait_state":"settings_saved","timeout_ms":10000}
+{"library_placement":"expand_all"}
+{"wait_state":"tree_settled","timeout_ms":10000}
+{"assert_favorites":"capacity"}
+{"screenshot":".build/favorites-maximum.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

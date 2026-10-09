@@ -17,6 +17,8 @@ ACCORDION_TRANSITION_SECONDS :: INTERFACE_TRANSITION_SECONDS
 Accordion_Section_Descriptor :: struct {
     section: viewmodel.Ui_Accordion_Section,
     label: string,
+    error_indicator: bool,
+    accessible_value: string,
 }
 
 // Bounded ordered section descriptors for one layout composition.
@@ -91,6 +93,7 @@ register_accordion_header :: proc(
         bounds = geometry.Rectangle(rect),
         clip_bounds = geometry.Rectangle(ctx.panel),
         label = descriptor.label,
+        value = descriptor.accessible_value,
     })
     return id
 }
@@ -352,9 +355,19 @@ accordion_header_params :: proc(
             region = .Accordion_Headers,
             traversal_order = order,
             clip_bounds = geometry.Rectangle(ctx.panel),
-            label = descriptor.label,
+            label = descriptor.label, value = descriptor.accessible_value,
         },
     }
+}
+
+// Place the error dot over the top-left of a header's label without changing layout.
+accordion_error_indicator_geometry :: proc(
+    header: geometry.Rectangle) -> (geometry.Vector2, f32) {
+    label_x := header.x + theme.ACCORDION_HEADER_PADDING +
+        theme.ACCORDION_DISCLOSURE_SIZE + theme.ACCORDION_HEADER_PADDING
+    label_y := header.y + (header.height - theme.TREE_FONT_SIZE) * 0.5
+    radius := max(f32(2), min(theme.TREE_FONT_SIZE * 0.22, header.height * 0.16))
+    return {label_x + radius * 0.35, label_y + radius * 0.35}, radius
 }
 
 // prepare_accordion_header_interactions resolves pointer and keyboard selection.

@@ -24,6 +24,27 @@ statement_bind_text :: proc(
     return sqlite_binding_result(statement, result)
 }
 
+// Bind copied bytes as one SQLite BLOB.
+statement_bind_blob :: proc(
+    statement: ^Statement, index: int, value: []u8) -> Error {
+    validation := sqlite_validate_binding(statement, index)
+    if validation.validation != .None {
+        return validation
+    }
+    if len(value) > int(max(c.int)) {
+        return sqlite_make_validation_error(.Bind, .Range)
+    }
+    empty_blob: [1]u8
+    value_pointer := raw_data(value)
+    if len(value) == 0 {
+        value_pointer = raw_data(empty_blob[:])
+    }
+    result := raw.sqlite3_bind_blob(
+        statement.handle, c.int(index), value_pointer, c.int(len(value)),
+        raw.transient_destructor())
+    return sqlite_binding_result(statement, result)
+}
+
 // Bind one 32-bit signed integer.
 statement_bind_i32 :: proc(statement: ^Statement, index: int, value: i32) -> Error {
     validation := sqlite_validate_binding(statement, index)

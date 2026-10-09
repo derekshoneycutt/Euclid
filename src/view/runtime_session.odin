@@ -38,6 +38,7 @@ import viewscenario "scenario"
 import viewevidence "evidence"
 import viewpreferences "preferences"
 import uiregions "ui/layout/regions"
+import collections "../collections"
 
 when !core.SCENARIOS_ENABLED {
     _ :: observe
@@ -46,6 +47,7 @@ when !core.SCENARIOS_ENABLED {
 // Carry app-resolved settings and borrowed store ownership into the view session.
 Session_Startup_Inputs :: struct {
     preferences: setting_model.Preferences,
+    collections: collections.Set,
     user_store: ^user_data.Store,
 }
 
@@ -76,9 +78,16 @@ Session_Shape_Storage :: struct {
 session_startup_inputs :: proc(
     startup: ^Session_Startup_Inputs) -> Session_Startup_Inputs {
     if startup != nil {
-        return startup^
+        resolved := startup^
+        if resolved.collections.collection_count == 0 {
+            collections.initialize(&resolved.collections)
+        }
+        return resolved
     }
-    return {preferences = setting_model.default_preferences()}
+    defaults: Session_Startup_Inputs
+    defaults.preferences = setting_model.default_preferences()
+    collections.initialize(&defaults.collections)
+    return defaults
 }
 
 //   Wait for one Julia startup request without driving a window event loop.
@@ -271,7 +280,8 @@ session_finalize_presentation :: proc(
         startup = session_startup_inputs(startup),
     }
     session_apply_startup_preferences(
-        state, session.startup.preferences, session.startup.user_store)
+        state, session.startup.preferences,
+        session.startup.collections, session.startup.user_store)
     if !session_start_presentation(&session) {
         _ = shutdown_runtime_session(session)
         return false
@@ -284,12 +294,14 @@ session_finalize_presentation :: proc(
 session_apply_startup_preferences :: proc(
     state: ^core.Euclid_General_State,
     preferences: setting_model.Preferences,
+    collection_state: collections.Set,
     store: ^user_data.Store) {
     if state == nil || state^.particle_system == nil {
         return
     }
     state^.ui_runtime.settings_preferences = preferences
     state^.preferences_runtime.settings_store = store
+    state^.preferences_runtime.collections_state = collection_state
     state^.ui_runtime.settings_store_available = store != nil
     state^.ui_runtime.settings_save_status =
         .Saved if store != nil else .Unavailable

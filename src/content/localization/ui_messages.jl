@@ -199,29 +199,30 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
         "Julia animation entries added: {count}"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1214),
-            "ui.settings.save.saved", "Settings persistence is current.",
+            "ui.settings.save.saved", "User-data persistence is current.",
             LocalizedContent.MessageArgument[]),
-        "Settings saved"),
+        "User data saved"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1215),
-            "ui.settings.save.pending", "Settings edits are waiting to be saved.",
+            "ui.settings.save.pending",
+            "Accepted user-data changes are waiting to be saved.",
             LocalizedContent.MessageArgument[]),
-        "Settings not saved yet"),
+        "User data not saved yet"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1216),
-            "ui.settings.save.saving", "Settings are being saved.",
+            "ui.settings.save.saving", "User data is being saved.",
             LocalizedContent.MessageArgument[]),
-        "Saving settings..."),
+        "Saving user data..."),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1217),
-            "ui.settings.save.unavailable", "Settings persistence is unavailable.",
+            "ui.settings.save.unavailable", "User-data storage is unavailable.",
             LocalizedContent.MessageArgument[]),
-        "Settings storage unavailable"),
+        "User-data storage unavailable"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1218),
-            "ui.settings.save.failed", "Settings could not be saved after retries.",
+            "ui.settings.save.failed", "User data could not be saved.",
             LocalizedContent.MessageArgument[]),
-        "Settings could not be saved"),
+        "User data could not be saved"),
     LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1213), "ui.fps.overlay",
             "Optional rolling FPS overlay; retain one decimal place.",
@@ -452,4 +453,16 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             "Accessible name for the paused animation resume action.",
             LocalizedContent.MessageArgument[]),
         "Resume animation"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1404),
+            "ui.animation.add_favorite",
+            "Animation control tooltip for adding the selected animation to Favorites.",
+            LocalizedContent.MessageArgument[]),
+        "Add to Favorites"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1405),
+            "ui.animation.remove_favorite",
+            "Animation control tooltip for removing the selected animation from Favorites.",
+            LocalizedContent.MessageArgument[]),
+        "Remove from Favorites"),
 ]

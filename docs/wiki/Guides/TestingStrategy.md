@@ -19,6 +19,11 @@ Tests live beside the behavior they exercise: Odin package tests are `*_test.odi
 files under `src/`, and Julia tests live under `src/julia/test/`. Add focused coverage
 for changed behavior, then use the complete gate before delivery.
 
+The shared user-data save tests cover coalesced settings and collection writes, retry
+retention, and revision-aware failure acknowledgement. A prior transaction success
+must not erase an unresolved failure; only a committed batch covering that failure's
+revision resolves it.
+
 The `check` target combines the validated build, Odin and Julia tests, and repository
 analysis. `vet` runs the validated build and analysis but does not run the application
 test suites, so it is not a replacement for `check`.

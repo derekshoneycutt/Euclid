@@ -7,11 +7,13 @@ import geometry "../../../core/geometry"
 import viewmodel "../model"
 import theme "../theme"
 import uiaccordion "../layout/accordion"
+import uuid "core:encoding/uuid"
 
 #assert(viewmodel.UI_TREE_NODE_CAPACITY >= contentmodel.CATALOG_RECORD_CAPACITY)
 
-// Tree_Prepared_Row borrows a live interface node only until this frame is encoded.
+// Tree_Prepared_Row borrows projection and animation data only for this frame.
 Tree_Prepared_Row :: struct {
+    item: ^viewmodel.Ui_Tree_Item,
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     content_y: f32,
@@ -36,9 +38,9 @@ Tree_Layout_Context :: struct {
 // tree_motion_index resolves one retained identity without generation-owned pointers.
 tree_motion_index :: proc(
     motion: ^viewmodel.Ui_Tree_Motion,
-    node: ^bridgemodel.Euclid_Julia_Animation_Interface) -> int {
+    key: uuid.Identifier) -> int {
     for index in 0..<motion^.count {
-        if motion^.branches[index].stable_id == node^.stable_id {
+        if motion^.branches[index].stable_id == key {
             return index
         }
     }
@@ -51,7 +53,9 @@ tree_motion_needs_reset :: proc(params: Tree_List_Params) -> bool {
     search := &params.ui_runtime^.library_search
     return !motion^.initialized || motion^.generation != params.ji^.content_generation ||
         motion^.panel != geometry.Rectangle(params.list_panel) ||
-        motion^.count != params.ji^.animation_count ||
+        motion^.count != params.ui_runtime^.tree_projection.count ||
+        motion^.topology_revision !=
+            params.ui_runtime^.tree_projection.topology_revision ||
         motion^.query_revision != search^.query_revision ||
         motion^.search_generation != search^.committed_generation ||
         motion^.search_active != search^.active ||
@@ -66,16 +70,21 @@ tree_motion_reset :: proc(params: Tree_List_Params) {
     search := &params.ui_runtime^.library_search
     motion^ = {
         initialized = true, generation = params.ji^.content_generation,
+        topology_revision = params.ui_runtime^.tree_projection.topology_revision,
         query_revision = search^.query_revision,
         search_generation = search^.committed_generation, search_active = search^.active,
         panel = geometry.Rectangle(params.list_panel),
     }
-    for node := params.ji^.animation_head; node != nil; node = node^.next_in_registry {
+    projection := &params.ui_runtime^.tree_projection
+    policy := params.visibility
+    policy.projection = projection
+    for index in 0..<projection^.count {
+        item := projection^.items[index]
         assert(motion^.count < len(motion^.branches),
             "admitted tree exceeds catalogue capacity")
         motion^.branches[motion^.count] = {
-            stable_id = node^.stable_id,
-            expanded = tree_node_is_effectively_expanded(params.visibility, node)}
+            stable_id = item.key,
+            expanded = tree_item_is_effectively_expanded(policy, item)}
         motion^.count += 1
     }
 }
@@ -101,19 +110,24 @@ tree_motion_sample_branch :: proc(
 // tree_motion_measure computes current nested extents bottom-up within the catalogue bound.
 tree_motion_measure :: proc(
     params: Tree_List_Params,
-    node: ^bridgemodel.Euclid_Julia_Animation_Interface, remaining: int) -> f32 {
-    if node == nil || remaining <= 0 || !tree_node_is_visible(params.visibility, node) {
+    item_index, remaining: int) -> f32 {
+    projection := &params.ui_runtime^.tree_projection
+    if item_index < 0 || remaining <= 0 || item_index >= projection^.count {
+        return 0
+    }
+    item := projection^.items[item_index]
+    if !tree_item_is_visible(params.visibility, item) {
         return 0
     }
     full_height: f32
-    for child, steps := node^.first_child, 0;
-        child != nil && steps < params.ji^.animation_count;
-        child, steps = child^.next_sibling, steps + 1 {
+    for child, steps := item.first_child, 0;
+        child != TREE_NO_ITEM && steps < projection^.count;
+        child, steps = projection^.items[child].next_sibling, steps + 1 {
         full_height += tree_motion_measure(params, child, remaining - 1)
     }
-    index := tree_motion_index(&params.ui_runtime^.tree_motion, node)
-    assert(index >= 0, "tree identity absent from admitted motion registry")
-    branch := &params.ui_runtime^.tree_motion.branches[index]
+    motion_index := tree_motion_index(&params.ui_runtime^.tree_motion, item.key)
+    assert(motion_index >= 0, "tree identity absent from admitted motion registry")
+    branch := &params.ui_runtime^.tree_motion.branches[motion_index]
     tree_motion_sample_branch(branch, full_height, params.mouse_input.sample_time_seconds)
     return theme.TREE_ROW_HEIGHT + branch^.height
 }
@@ -121,10 +135,11 @@ tree_motion_measure :: proc(
 // tree_motion_measure_roots samples even hidden branches so their deadlines still finish.
 tree_motion_measure_roots :: proc(params: Tree_List_Params) -> f32 {
     height: f32
-    for node := params.ji^.animation_head; node != nil; node = node^.next_in_registry {
-        if node^.parent == nil {
-            height += tree_motion_measure(params, node, params.ji^.animation_count)
-        }
+    projection := &params.ui_runtime^.tree_projection
+    for root, steps := projection^.first_root, 0;
+        root != TREE_NO_ITEM && steps < projection^.count;
+        root, steps = projection^.items[root].next_sibling, steps + 1 {
+        height += tree_motion_measure(params, root, projection^.count)
     }
     return height
 }
@@ -132,11 +147,15 @@ tree_motion_measure_roots :: proc(params: Tree_List_Params) -> f32 {
 // tree_motion_admit retargets changed explicit topology from the last sampled geometry.
 tree_motion_admit :: proc(params: Tree_List_Params) {
     motion := &params.ui_runtime^.tree_motion
-    for node := params.ji^.animation_head; node != nil; node = node^.next_in_registry {
-        index := tree_motion_index(motion, node)
+    projection := &params.ui_runtime^.tree_projection
+    policy := params.visibility
+    policy.projection = projection
+    for item_index in 0..<projection^.count {
+        item := &projection^.items[item_index]
+        index := tree_motion_index(motion, item^.key)
         assert(index >= 0, "tree identity absent from admitted motion registry")
         branch := &motion^.branches[index]
-        expanded := tree_node_is_effectively_expanded(params.visibility, node)
+        expanded := tree_item_is_effectively_expanded(policy, item^)
         if branch^.expanded == expanded {
             continue
         }
@@ -157,16 +176,18 @@ tree_reveal_intersection :: proc(
 // tree_layout_append records full-size rows beneath inherited content-space reveals.
 tree_layout_append :: proc(
     ctx: Tree_Layout_Context, row: Tree_Prepared_Row) {
-    node := row.node
-    if node == nil || row.depth >= ctx.params.ji^.animation_count ||
-        !tree_node_is_visible(ctx.params.visibility, node) {
+    item := row.item
+    if item == nil || row.depth >= ctx.params.ui_runtime^.tree_projection.count ||
+        !tree_item_is_visible(ctx.params.visibility, item^) {
         return
     }
     assert(ctx.layout^.count < len(ctx.layout^.rows),
         "prepared tree exceeds admitted capacity")
     motion := &ctx.params.ui_runtime^.tree_motion
-    branch := &motion^.branches[tree_motion_index(motion, node)]
+    branch := &motion^.branches[tree_motion_index(motion, item^.key)]
     prepared_row := row
+    prepared_row.node = tree_find_stable_id(
+        ctx.params.ji, item^.target_animation_id)
     prepared_row.expanded = branch^.expanded
     ctx.layout^.rows[ctx.layout^.count] = prepared_row
     ctx.layout^.count += 1
@@ -176,15 +197,17 @@ tree_layout_append :: proc(
     child_y := row.content_y + theme.TREE_ROW_HEIGHT
     reveal := tree_reveal_intersection(
         {0, child_y, ctx.params.list_panel.width, branch^.height}, row.reveal)
-    for child, steps := node^.first_child, 0;
-        child != nil && steps < ctx.params.ji^.animation_count;
-        child, steps = child^.next_sibling, steps + 1 {
-        tree_layout_append(ctx, {node = child, depth = row.depth + 1,
+    projection := &ctx.params.ui_runtime^.tree_projection
+    for child, steps := item^.first_child, 0;
+        child != TREE_NO_ITEM && steps < projection^.count;
+        child, steps = projection^.items[child].next_sibling, steps + 1 {
+        child_item := &projection^.items[child]
+        tree_layout_append(ctx, {item = child_item, depth = row.depth + 1,
             content_y = child_y, reveal = reveal,
             logical = row.logical && branch^.expanded})
-        if tree_node_is_visible(ctx.params.visibility, child) {
+        if tree_item_is_visible(ctx.params.visibility, child_item^) {
             child_y += theme.TREE_ROW_HEIGHT +
-                motion^.branches[tree_motion_index(motion, child)].height
+                motion^.branches[tree_motion_index(motion, child_item^.key)].height
         }
     }
 }
@@ -201,15 +224,18 @@ tree_prepare_layout :: proc(params: Tree_List_Params) -> Tree_Prepared_Layout {
     ctx := Tree_Layout_Context{params, &result}
     y: f32
     clip := geometry.Rectangle{0, 0, params.list_panel.width, result.content_height}
-    for node := params.ji^.animation_head; node != nil; node = node^.next_in_registry {
-        if node^.parent == nil {
-            tree_layout_append(ctx, {node = node, content_y = y, reveal = clip,
-                logical = true})
-            if tree_node_is_visible(params.visibility, node) {
-                y += theme.TREE_ROW_HEIGHT +
-                    params.ui_runtime^.tree_motion.branches[
-                        tree_motion_index(&params.ui_runtime^.tree_motion, node)].height
-            }
+    projection := &params.ui_runtime^.tree_projection
+    for root, steps := projection^.first_root, 0;
+        root != TREE_NO_ITEM && steps < projection^.count;
+        root, steps = projection^.items[root].next_sibling, steps + 1 {
+        item := &projection^.items[root]
+        tree_layout_append(ctx, {item = item, node = tree_find_stable_id(
+            params.ji, item^.target_animation_id), content_y = y,
+            reveal = clip, logical = true})
+        if tree_item_is_visible(params.visibility, item^) {
+            y += theme.TREE_ROW_HEIGHT +
+                params.ui_runtime^.tree_motion.branches[
+                    tree_motion_index(&params.ui_runtime^.tree_motion, item^.key)].height
         }
     }
     return result

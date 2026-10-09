@@ -8,25 +8,30 @@ import geometry "../../core/geometry"
 import native "../native"
 import theme "theme"
 import uilibrary "library"
+import viewmodel "model"
+import uuid "core:encoding/uuid"
 
 // Verify held feedback follows capture ownership, hover, and primary-button state.
 @(test)
 tree_pressed_feedback_requires_owned_hover :: proc(t: ^testing.T) {
     runtime := make_baseline_ui_runtime()
-    node, other: bridgemodel.Euclid_Julia_Animation_Interface
+    node, other: viewmodel.Ui_Tree_Item
+    node.key[0], other.key[0] = 1, 2
+    node.kind, other.kind = .Animation, .Animation
+    node.first_child, other.first_child = uilibrary.TREE_NO_ITEM, uilibrary.TREE_NO_ITEM
     params := uilibrary.Tree_List_Params{ui_runtime = &runtime,
         mouse_input = {mouse_down = {.Left}}}
-    testing.expect_value(t, uilibrary.tree_pressed_node(params, &node), nil)
+    testing.expect_value(t, uilibrary.tree_pressed_item(params, &node), nil)
     runtime.ui_press_owner = {
-        active = true, kind = .List_Item, id = uilibrary.tree_node_press_id(&node)}
-    testing.expect_value(t, uilibrary.tree_pressed_node(params, &node), &node)
-    testing.expect_value(t, uilibrary.tree_pressed_node(params, &other), nil)
-    testing.expect_value(t, uilibrary.tree_pressed_node(params, nil), nil)
+        active = true, kind = .List_Item, id = uilibrary.tree_placement_press_id(&node)}
+    testing.expect_value(t, uilibrary.tree_pressed_item(params, &node), &node)
+    testing.expect_value(t, uilibrary.tree_pressed_item(params, &other), nil)
+    testing.expect_value(t, uilibrary.tree_pressed_item(params, nil), nil)
     params.mouse_input.mouse_down = {}
-    testing.expect_value(t, uilibrary.tree_pressed_node(params, &node), nil)
+    testing.expect_value(t, uilibrary.tree_pressed_item(params, &node), nil)
     params.mouse_input.mouse_down = {.Left}
     runtime.ui_press_owner.kind = .None
-    testing.expect_value(t, uilibrary.tree_pressed_node(params, &node), nil)
+    testing.expect_value(t, uilibrary.tree_pressed_item(params, &node), nil)
 }
 
 // Verify pressed rows receive a subtle overlay without changing selection chrome.
@@ -39,7 +44,10 @@ tree_draw_encodes_pressed_row_overlay :: proc(t: ^testing.T) {
     encoder: native.Draw_Encoder
     state := new(app_core.Euclid_General_State, context.allocator)
     defer free(state, context.allocator)
-    node: bridgemodel.Euclid_Julia_Animation_Interface
+    node: viewmodel.Ui_Tree_Item
+    node.key[0] = 1
+    node.kind = .Animation
+    node.first_child = uilibrary.TREE_NO_ITEM
     row := geometry.Rectangle{10, 20, 100, theme.TREE_ROW_HEIGHT}
     ctx := uilibrary.Encoded_Tree_Walk_Context{state = state,
         encoder = &encoder, panel = row, pressed_node = &node}
@@ -48,7 +56,8 @@ tree_draw_encodes_pressed_row_overlay :: proc(t: ^testing.T) {
         testing.expect(t, native.draw_encoder_begin(&encoder,
             {vertices[:], indices[:], batches[:], commands[:], nil},
             {200, 200}, {200, 200}))
-        node.is_selected = selected
+        state^.ui_runtime.selected_tree_item_id =
+            node.key if selected else uuid.Identifier{}
         uilibrary.draw_encoded_tree_row(ctx, &node, 0, row.y)
         offset := 0
         if selected {

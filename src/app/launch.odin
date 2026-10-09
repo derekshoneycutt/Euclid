@@ -6,6 +6,7 @@ import evidence_allocation "../evidence/allocation"
 import evidence_session "../evidence/session"
 import setting_model "../settings"
 import user_data "../userdata"
+import collections "../collections"
 import view "../view"
 import fmt "core:fmt"
 import log "core:log"
@@ -100,25 +101,29 @@ launch_run_session :: proc(
     launch: Launch_Configuration,
     settings: ^core.Euclid_Run_Settings) -> int {
     resolved: setting_model.Preferences
+    collection_state: collections.Set
     store: user_data.Store
     store_opened := false
     if !launch_prepare_preferences(
-        launch, &resolved, &store, &store_opened) {
+        launch, &resolved, &store, &store_opened, &collection_state) {
         return 1
     }
-    return launch_run_view(settings, resolved, &store, &store_opened)
+    return launch_run_view(
+        settings, resolved, collection_state, &store, &store_opened)
 }
 
 // Run the view with resolved inputs and close the borrowed store afterward.
 launch_run_view :: proc(
     settings: ^core.Euclid_Run_Settings,
     preferences: setting_model.Preferences,
+    collection_state: collections.Set,
     store: ^user_data.Store,
     store_opened: ^bool) -> int {
     launch_apply_preferences(settings, preferences)
     print_startup_settings(settings)
     startup := view.Session_Startup_Inputs{
         preferences = preferences,
+        collections = collection_state,
         user_store = store_opened^ ? store : nil,
     }
     exit_code := view.run_window_loop(settings, &startup)
@@ -147,12 +152,16 @@ launch_prepare_preferences :: proc(
     launch: Launch_Configuration,
     preferences: ^setting_model.Preferences,
     store: ^user_data.Store,
-    store_opened: ^bool) -> bool {
+    store_opened: ^bool,
+    collection_state: ^collections.Set = nil) -> bool {
     state := launch.parse_state
     if !launch_options_valid(state) {
         return false
     }
     preferences^ = setting_model.default_preferences()
+    if collection_state != nil {
+        collections.initialize(collection_state)
+    }
     if !state.no_user_db {
         store_available := launch_open_store(store, state, store_opened)
         if !store_available &&
@@ -163,10 +172,37 @@ launch_prepare_preferences :: proc(
             store, state, preferences, store_opened) {
             return false
         }
+        if store_opened^ && collection_state != nil &&
+            !launch_load_collections(
+                store, state, preferences, collection_state, store_opened) {
+            return false
+        }
     }
     launch_apply_overrides(preferences, state)
     return !state.persist_requested ||
         launch_commit_overrides(store, state, store_opened)
+}
+
+// Load saved collection topology, falling back only for an unavailable default store.
+launch_load_collections :: proc(
+    store: ^user_data.Store,
+    state: Launch_Parse_State,
+    preferences: ^setting_model.Preferences,
+    collection_state: ^collections.Set,
+    store_opened: ^bool) -> bool {
+    load_error := user_data.store_load_collections(store, collection_state)
+    if load_error.kind == .None {
+        return true
+    }
+    fmt.eprintln("Unable to load saved collections: ", load_error.kind)
+    _ = user_data.store_close(store)
+    store_opened^ = false
+    if state.custom_user_db_requested || state.persist_requested {
+        return false
+    }
+    preferences^ = setting_model.default_preferences()
+    collections.initialize(collection_state)
+    return true
 }
 
 // Load saved rows, falling back only for an unavailable default store.

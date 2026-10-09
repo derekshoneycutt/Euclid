@@ -2,9 +2,11 @@ package userdata
 
 import sqlite "../sqlite"
 import settings "../settings"
+import collections "../collections"
+import uuid "core:encoding/uuid"
 
 DATABASE_APPLICATION_ID :: 0x45554355
-DATABASE_SCHEMA_VERSION :: 1
+DATABASE_SCHEMA_VERSION :: 2
 DATABASE_PATH_MAX_BYTES :: 4096
 DATABASE_TEXT_MAX_BYTES :: 64
 DATABASE_DIRECTORY_NAME :: "Euclid"
@@ -53,6 +55,12 @@ Store :: struct {
     read_setting: sqlite.Statement,
     upsert_setting: sqlite.Statement,
     delete_setting: sqlite.Statement,
+    read_collections: sqlite.Statement,
+    read_collection_entries: sqlite.Statement,
+    insert_collection: sqlite.Statement,
+    insert_collection_entry: sqlite.Statement,
+    delete_collection_entries: sqlite.Statement,
+    delete_collections: sqlite.Statement,
     status: Store_Status,
     path: [DATABASE_PATH_MAX_BYTES]u8,
     path_length: int,
@@ -122,6 +130,30 @@ Commit_Result :: struct {
     failure: Store_Error,
     failed_id: settings.Setting_Id,
     has_failed_id: bool,
+}
+
+Collection_Decode_Result :: struct {
+    value: collections.Collection,
+    valid: bool,
+    failure: sqlite.Error,
+}
+
+Collection_Entry_Decode_Result :: struct {
+    value: collections.Entry,
+    valid: bool,
+    failure: sqlite.Error,
+}
+
+Collection_Kind_Decode_Result :: struct {
+    value: collections.Entry_Kind,
+    valid: bool,
+    failure: sqlite.Error,
+}
+
+Collection_Uuid_Decode_Result :: struct {
+    value: uuid.Identifier,
+    valid: bool,
+    failure: sqlite.Error,
 }
 
 Path_Error :: enum u8 {

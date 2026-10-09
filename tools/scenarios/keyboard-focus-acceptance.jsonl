@@ -10,10 +10,16 @@
 {"key":"space"}
 {"assert_state":"simulation_running"}
 {"key":"tab"}
+{"assert_focus":"animation_favorite"}
+{"key":"tab"}
 {"assert_focus":"accordion_library"}
 {"key":"enter"}
 {"key":{"name":"tab","shift":true}}
+{"assert_focus":"animation_favorite"}
+{"key":{"name":"tab","shift":true}}
 {"assert_focus":"animation_pause"}
+{"key":"tab"}
+{"assert_focus":"animation_favorite"}
 {"key":"tab"}
 {"assert_focus":"accordion_library"}
 {"select_animation":"Terminal","as":"terminal"}

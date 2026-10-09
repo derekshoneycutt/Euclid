@@ -2,6 +2,7 @@
 package ui
 
 import viewmodel "model"
+import preferencesmodel "../preferences/model"
 import capturemodel "../capture/model"
 import viewmessages "../messages"
 import geometry "../../core/geometry"
@@ -295,11 +296,12 @@ ui_regions_portrait_is_full_width_and_compact_safe :: proc(t: ^testing.T) {
     testing.expect(t, compact.accordion_rect.height >= 0)
 }
 
-// Verify animation controls remain inset from the world's moving bottom-left edge.
+// Verify separate control groups follow the world's bottom-left and bottom-right edges.
 @(test)
 animation_controls_follow_world_splitters :: proc(t: ^testing.T) {
     world := geometry.Rectangle{0, 0, 640, 480}
-    slots := uianimation.animation_control_layout_slots(geometry.Rectangle(world))
+    slots := uianimation.animation_control_layout_slots(
+        geometry.Rectangle(world), false)
     testing.expect_value(t, slots.panel.x, theme.ANIMATION_CONTROL_EDGE_INSET)
     testing.expect_value(t, slots.panel.y + slots.panel.height,
         world.height - theme.ANIMATION_CONTROL_EDGE_INSET)
@@ -307,9 +309,24 @@ animation_controls_follow_world_splitters :: proc(t: ^testing.T) {
     testing.expect_value(t, slots.pause.x - slots.refresh.x,
         theme.ANIMATION_CONTROL_BUTTON_SIZE + theme.ANIMATION_CONTROL_BUTTON_GAP)
 
-    resized := uianimation.animation_control_layout_slots({0, 0, 480, 320})
+    resized := uianimation.animation_control_layout_slots({0, 0, 480, 320}, false)
     testing.expect_value(t, resized.panel.x, slots.panel.x)
     testing.expect_value(t, resized.panel.y - slots.panel.y, f32(-160))
+
+    favorite_slots := uianimation.animation_control_layout_slots(
+        geometry.Rectangle(world), true)
+    testing.expect_value(t, favorite_slots.panel, slots.panel)
+    testing.expect_value(t, favorite_slots.favorite_panel.x +
+        favorite_slots.favorite_panel.width,
+        world.width - theme.ANIMATION_CONTROL_EDGE_INSET)
+    testing.expect_value(t, favorite_slots.favorite_panel.y, slots.panel.y)
+    testing.expect_value(t, favorite_slots.favorite_panel.height, slots.panel.height)
+    portrait := uianimation.animation_control_layout_slots(
+        {0, 0, 360, 640}, true)
+    testing.expect_value(t, portrait.panel.y + portrait.panel.height,
+        f32(640) - theme.ANIMATION_CONTROL_EDGE_INSET)
+    testing.expect_value(t, portrait.favorite.x + portrait.favorite.width,
+        f32(360) - theme.ANIMATION_CONTROL_EDGE_INSET - theme.ANIMATION_CONTROL_PADDING)
 }
 
 // Verify relocated controls preserve reset, unpause, and pause-toggle semantics.
@@ -466,8 +483,14 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
     testing.expect(t, !routed.presentation.pointer)
     testing.expect(t, !routed.accordion.wheel)
 
+}
+
+// Verify pause and Favorites controls route only when the latter is eligible.
+@(test)
+ui_router_declares_animation_control_targets :: proc(t: ^testing.T) {
+    runtime := make_baseline_ui_runtime()
     controls := uianimation.animation_control_layout_slots(
-        geometry.Rectangle(runtime.ui_regions.world_rect))
+        geometry.Rectangle(runtime.ui_regions.world_rect), false)
     animation := ui_route_interaction_frame(&runtime, {
         frame = {mouse_position = {
             controls.pause.x + 1, controls.pause.y + 1}},
@@ -477,6 +500,24 @@ ui_router_declares_static_target_priority :: proc(t: ^testing.T) {
     testing.expect_value(t, animation.hover.id, uianimation.ANIMATION_PAUSE_BUTTON_ID)
     testing.expect_value(t, animation.hover.focus.kind,
         viewmodel.Ui_Focus_Kind.None)
+
+    favorites := uianimation.animation_control_layout_slots(
+        geometry.Rectangle(runtime.ui_regions.world_rect), true)
+    favorite := ui_route_interaction_frame(&runtime, {
+        frame = {mouse_position = {
+            favorites.favorite.x + 1, favorites.favorite.y + 1}},
+        animation_favorite_eligible = true,
+    })
+    testing.expect_value(t, favorite.hover.kind,
+        viewmodel.Ui_Interaction_Target_Kind.Control)
+    testing.expect_value(t, favorite.hover.id,
+        uianimation.ANIMATION_FAVORITE_BUTTON_ID)
+    ineligible := ui_route_interaction_frame(&runtime, {
+        frame = {mouse_position = {
+            favorites.favorite.x + 1, favorites.favorite.y + 1}},
+    })
+    testing.expect_value(t, ineligible.hover.kind,
+        viewmodel.Ui_Interaction_Target_Kind.World)
 }
 
 // Verify capture from frame start outranks new hover and suppresses wheel routing.
@@ -1643,8 +1684,11 @@ tree_semantics_publish_composite_hierarchy :: proc(t: ^testing.T) {
     scroll_y: f32
 
     testing.expect(t, uisemantics.semantic_begin(semantic))
-    _ = uilibrary.prepare_tree_list_panel({ji = &ji, ui_runtime = &runtime,
+    prepared := uilibrary.prepare_tree_list_panel({ji = &ji, ui_runtime = &runtime,
         list_panel = {0, 0, 200, 100}, scroll_y = &scroll_y})
+    testing.expect_value(t, runtime.tree_projection.items[0].first_child, 1)
+    testing.expect(t, runtime.tree_projection.items[0].expanded)
+    testing.expect_value(t, prepared.layout.count, 2)
     testing.expect_value(t,
         uisemantics.semantic_publish(semantic), viewmodel.Ui_Semantic_Status.Ok)
     snapshot := uisemantics.semantic_snapshot(semantic)
@@ -1750,11 +1794,12 @@ tree_semantic_commands_target_addressed_branch :: proc(t: ^testing.T) {
     scroll_y: f32
     params := uilibrary.Tree_List_Params{ji = &ji, ui_runtime = &runtime,
         list_panel = {0, 0, 200, theme.TREE_ROW_HEIGHT}, scroll_y = &scroll_y}
+    testing.expect(t, uilibrary.tree_projection_prepare(params))
 
     active := uilibrary.tree_apply_semantic_commands(params)
 
-    testing.expect(t, !nodes[1].is_expanded)
-    testing.expect_value(t, active, &nodes[1])
+    testing.expect(t, !runtime.tree_projection.items[1].expanded)
+    testing.expect_value(t, active, &runtime.tree_projection.items[1])
     testing.expect_value(t, semantic^.active_tree_item, nodes[1].stable_id)
 }
 
@@ -1960,6 +2005,89 @@ accordion_landscape_descriptors_remain_unchanged :: proc(t: ^testing.T) {
         viewmodel.Ui_Accordion_Section.Save_Gif)
     testing.expect_value(t, sections.items[2].section,
         viewmodel.Ui_Accordion_Section.Settings)
+}
+
+// Error decoration stays on the Settings header in both layouts and is semantic.
+accordion_user_data_error_sections :: proc(
+    state: ^app_core.Euclid_General_State,
+    mode: viewmodel.Ui_Layout_Mode) ->
+        (uiaccordion.Accordion_Section_Set, geometry.Rectangle) {
+    sections := accordion_sections_for_layout(mode, "Animation", state)
+    settings_index := 2
+    if mode == .Portrait {
+        settings_index = 3
+    }
+    layout := uiaccordion.accordion_layout(
+        {10, 20, 300, 500}, sections, .Library)
+    return sections, layout.headers[settings_index]
+}
+
+// Verify the error dot and published value for one layout without moving hit geometry.
+accordion_user_data_error_layout_test :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State,
+    mode: viewmodel.Ui_Layout_Mode) {
+    sections, header := accordion_user_data_error_sections(state, mode)
+    settings_index := 2
+    if mode == .Portrait {
+        settings_index = 3
+    }
+    baseline := uiaccordion.accordion_section_descriptors(mode, "Animation")
+    baseline_layout := uiaccordion.accordion_layout(
+        {10, 20, 300, 500}, baseline, .Library)
+    testing.expect_value(t, header, baseline_layout.headers[settings_index])
+    testing.expect(t, sections.items[settings_index].error_indicator)
+    testing.expect_value(t, sections.items[settings_index].accessible_value,
+        "User data could not be saved")
+    center, radius := uiaccordion.accordion_error_indicator_geometry(header)
+    testing.expect(t, radius > 0)
+    testing.expect(t, center.x > header.x && center.x < header.x + header.width)
+    testing.expect(t, center.y > header.y && center.y < header.y + header.height)
+
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    ctx := uiaccordion.Accordion_Context{
+        panel = {10, 20, 300, 500}, semantic_focus = semantic}
+    id := uiaccordion.register_accordion_header(
+        ctx, sections.items[settings_index], header, .Library, settings_index)
+    testing.expect_value(t, uisemantics.semantic_publish(semantic),
+        viewmodel.Ui_Semantic_Status.Ok)
+    snapshot := uisemantics.semantic_snapshot(semantic)
+    node := snapshot^.nodes[uisemantics.semantic_node_index(snapshot, id)]
+    testing.expect_value(t, uisemantics.semantic_node_text(
+        snapshot, node.value_offset, node.value_length),
+        "User data could not be saved")
+    free(semantic, context.allocator)
+}
+
+// Error decoration persists while Settings is open and clears only after recovery.
+@(test)
+accordion_user_data_error_indicator_persists_and_is_accessible :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    state^.preferences_runtime.user_data_failure_unresolved = true
+    state^.ui_runtime.settings_save_status =
+        preferencesmodel.Settings_Save_Status.Failed
+    modes := [2]viewmodel.Ui_Layout_Mode{.Landscape, .Portrait}
+    for mode in modes {
+        accordion_user_data_error_layout_test(t, state, mode)
+    }
+
+    state^.ui_runtime.active_accordion_section = .Settings
+    opened_sections := accordion_sections_for_layout(.Landscape, "", state)
+    testing.expect(t, opened_sections.items[2].error_indicator)
+    testing.expect(t, state^.preferences_runtime.user_data_failure_unresolved)
+    state^.preferences_runtime.user_data_failure_unresolved = false
+    state^.ui_runtime.settings_save_status = preferencesmodel.Settings_Save_Status.Saved
+    recovered := accordion_sections_for_layout(.Landscape, "", state)
+    testing.expect(t, !recovered.items[2].error_indicator)
+    testing.expect_value(t, recovered.items[2].accessible_value, "")
+    state^.ui_runtime.settings_save_status =
+        preferencesmodel.Settings_Save_Status.Unavailable
+    unavailable := accordion_sections_for_layout(.Landscape, "", state)
+    testing.expect(t, unavailable.items[2].error_indicator)
+    testing.expect_value(t, unavailable.items[2].accessible_value,
+        "User-data storage unavailable")
 }
 
 // Verify portrait places View content after its first header and keeps four headers.

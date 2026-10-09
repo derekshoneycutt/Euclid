@@ -19,6 +19,7 @@ import uilibrary "library"
 Ui_Interaction_Route_Input :: struct {
     frame: input.Input_Frame,
     terminal_present: bool,
+    animation_favorite_eligible: bool,
     capture: viewmodel.Ui_Press_Owner_State,
     capture_view: capturemodel.Gif_Capture_View,
 }
@@ -103,10 +104,11 @@ ui_accordion_pointer_is_revealed :: proc(
 ui_world_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     mouse: geometry.Vector2,
-    phase: capturemodel.Gif_Capture_Phase) -> viewmodel.Ui_Interaction_Target {
+    phase: capturemodel.Gif_Capture_Phase,
+    animation_favorite_eligible: bool) -> viewmodel.Ui_Interaction_Target {
     control_id, over_control := uianimation.animation_control_hit_test(
         geometry.Rectangle(runtime^.ui_regions.world_rect),
-        phase, mouse)
+        phase, animation_favorite_eligible, mouse)
     if over_control {
         return viewmodel.ui_interaction_target(.Control, id = control_id)
     }
@@ -144,7 +146,8 @@ ui_hover_target :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     frame: input.Input_Frame,
     terminal_present: bool,
-    capture_view: capturemodel.Gif_Capture_View = {}) -> viewmodel.Ui_Interaction_Target {
+    capture_view: capturemodel.Gif_Capture_View = {},
+    animation_favorite_eligible := false) -> viewmodel.Ui_Interaction_Target {
     mouse := uiwidgets.input_frame_mouse_position(frame)
     splitter := ui_splitter_hover_target(runtime, mouse, capture_view.phase)
     if splitter.kind != .None {
@@ -164,7 +167,8 @@ ui_hover_target :: proc(
     if accordion.kind != .None {
         return accordion
     }
-    return ui_world_hover_target(runtime, geometry.Vector2(mouse), capture_view.phase)
+    return ui_world_hover_target(runtime, geometry.Vector2(mouse),
+        capture_view.phase, animation_favorite_eligible)
 }
 
 // Resolve revealed accordion inputs before the surrounding panel background.
@@ -252,8 +256,8 @@ ui_interaction_wheel_target :: #force_inline proc(
 ui_route_interaction_frame :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     input: Ui_Interaction_Route_Input) -> viewmodel.Ui_Interaction_Frame {
-    hover := ui_hover_target(runtime, input.frame,
-        input.terminal_present, input.capture_view)
+    hover := ui_hover_target(runtime, input.frame, input.terminal_present,
+        input.capture_view, input.animation_favorite_eligible)
     capture_owner := ui_valid_capture_owner(runtime, input.capture, input.capture_view)
     capture := ui_capture_target(capture_owner)
     pointer_target := hover

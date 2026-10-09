@@ -4,6 +4,7 @@ import bridgemodel "../bridge/model"
 import presentation_model "../bridge/presentation"
 import julia "../bridge"
 import core "../core"
+import geometry "../core/geometry"
 import capture "../evidence/capture"
 import diagnostics "../diagnostics"
 import artifact "../evidence/artifact"
@@ -20,8 +21,97 @@ import runtime "base:runtime"
 import testing "core:testing"
 import preferencesmodel "preferences/model"
 import viewmodel "ui/model"
+import uilibrary "ui/library"
+import uisemantics "ui/semantics"
 import viewscenario "scenario"
 import viewsimulation "simulation"
+
+// Consume synthetic pointer edges once while preserving held state between display frames.
+@(test)
+scenario_favorites_pointer_edges_are_one_shot :: proc(t: ^testing.T) {
+    runtime: viewscenario.Scenario_Runtime
+    testing.expect(t,
+        !viewscenario.scenario_favorites_pointer(&runtime, {}, "press"))
+    bounds := geometry.Rectangle{10, 20, 30, 40}
+    testing.expect(t,
+        !viewscenario.scenario_favorites_pointer(&runtime, bounds, "unknown"))
+    testing.expect(t,
+        viewscenario.scenario_favorites_pointer(&runtime, bounds, "press"))
+    first := viewscenario.scenario_pointer_frame(&runtime, {})
+    testing.expect_value(t, first.mouse_position.x, f32(25))
+    testing.expect_value(t, first.mouse_position.y, f32(40))
+    testing.expect(t, .Left in first.mouse_pressed && .Left in first.mouse_down)
+    held := viewscenario.scenario_pointer_frame(&runtime, {})
+    testing.expect(t, .Left not_in held.mouse_pressed && .Left in held.mouse_down)
+    testing.expect(t,
+        viewscenario.scenario_favorites_pointer(&runtime, bounds, "release"))
+    released := viewscenario.scenario_pointer_frame(&runtime, {})
+    testing.expect(t,
+        .Left in released.mouse_released && .Left not_in released.mouse_down)
+    settled := viewscenario.scenario_pointer_frame(&runtime, {})
+    testing.expect(t, .Left not_in settled.mouse_released)
+}
+
+// Missing or unpublished placements and ineligible star actions reject without injecting input.
+@(test)
+scenario_favorites_unpublished_actions_are_rejected :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    ji: bridgemodel.Euclid_Julia_Interface
+    node: bridgemodel.Euclid_Julia_Animation_Interface
+    node.name = "Point"
+    node.node_kind = .Animation
+    node.stable_id[0] = 1
+    ji.animation_head = &node
+    ji.animation_count = 1
+    state^.julia_interface = &ji
+    runtime := viewscenario.Scenario_Runtime{state = state}
+    testing.expect(t, !viewscenario.scenario_favorite_control(&runtime, "press"))
+    testing.expect(t, !viewscenario.scenario_library_placement(
+        &runtime, "press:favorite:Point"))
+    testing.expect(t, !viewscenario.scenario_library_placement(
+        &runtime, "press:catalogue:Unknown"))
+    state^.ui_runtime.tree_projection.count = 1
+    state^.ui_runtime.tree_projection.items[0].key = node.stable_id
+    testing.expect(t, !viewscenario.scenario_library_placement(
+        &runtime, "press:catalogue:Point"))
+    testing.expect(t, !runtime.pointer_override)
+}
+
+// Published but hidden or disabled rows cannot receive scenario pointer actions.
+@(test)
+scenario_favorites_hidden_and_disabled_rows_reject_input :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    focus := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(focus, context.allocator)
+    ji: bridgemodel.Euclid_Julia_Interface
+    node: bridgemodel.Euclid_Julia_Animation_Interface
+    node.name = "Point"
+    node.stable_id[0] = 1
+    ji.animation_head = &node
+    ji.animation_count = 1
+    state^.julia_interface = &ji
+    state^.ui_runtime.semantic_focus = focus
+    state^.ui_runtime.tree_projection.count = 1
+    item := &state^.ui_runtime.tree_projection.items[0]
+    item^.key = node.stable_id
+    runtime := viewscenario.Scenario_Runtime{state = state}
+    variants := [?]bool{true, false}
+    for hidden in variants {
+        testing.expect(t, uisemantics.semantic_begin(focus))
+        status := uisemantics.semantic_register_node(focus, {
+            node = {id = uilibrary.tree_placement_semantic_id(item), role = .Tree_Item,
+                states = {.Enabled} if hidden else {.Visible},
+                bounds = {0, 0, 100, 20}}})
+        testing.expect_value(t, status, viewmodel.Ui_Semantic_Status.Ok)
+        testing.expect_value(t,
+            uisemantics.semantic_publish(focus), viewmodel.Ui_Semantic_Status.Ok)
+        testing.expect(t, !viewscenario.scenario_library_placement(
+            &runtime, "press:catalogue:Point"))
+        testing.expect(t, !runtime.pointer_override)
+    }
+}
 
 // Verify scenario edits share control policy and assertions observe intent, not hardware fallback.
 @(test)

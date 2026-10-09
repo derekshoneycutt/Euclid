@@ -21,6 +21,7 @@ SCENARIO_FOCUS_NAMES :: [?]Scenario_Focus_Name{
     {"context_menu_secondary", .Context_Menu, 2},
     {"animation_restart", .Animation_Control, uianimation.ANIMATION_REFRESH_BUTTON_ID},
     {"animation_pause", .Animation_Control, uianimation.ANIMATION_PAUSE_BUTTON_ID},
+    {"animation_favorite", .Animation_Control, uianimation.ANIMATION_FAVORITE_BUTTON_ID},
     {"accordion_view", .Accordion, u64(viewmodel.Ui_Accordion_Section.View) + 1},
     {"accordion_library", .Accordion,
         u64(viewmodel.Ui_Accordion_Section.Library) + 1},

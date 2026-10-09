@@ -100,6 +100,9 @@ foreign sqlite3_library {
     sqlite3_bind_text :: proc(
         statement: ^Statement, index: c.int, value: cstring,
         byte_count: c.int, destructor: rawptr) -> Result ---
+    sqlite3_bind_blob :: proc(
+        statement: ^Statement, index: c.int, value: rawptr,
+        byte_count: c.int, destructor: rawptr) -> Result ---
     sqlite3_bind_int :: proc(
         statement: ^Statement, index: c.int, value: c.int) -> Result ---
     sqlite3_bind_int64 :: proc(
@@ -109,6 +112,7 @@ foreign sqlite3_library {
     sqlite3_bind_null :: proc(statement: ^Statement, index: c.int) -> Result ---
 
     sqlite3_column_text :: proc(statement: ^Statement, column: c.int) -> cstring ---
+    sqlite3_column_blob :: proc(statement: ^Statement, column: c.int) -> rawptr ---
     sqlite3_column_bytes :: proc(statement: ^Statement, column: c.int) -> c.int ---
     sqlite3_column_int :: proc(statement: ^Statement, column: c.int) -> c.int ---
     sqlite3_column_int64 :: proc(statement: ^Statement, column: c.int) -> c.longlong ---
@@ -125,4 +129,3 @@ foreign sqlite3_library {
 
     euclid_sqlite_register_spellfix :: proc(database: ^Database) -> Result ---
 }
-

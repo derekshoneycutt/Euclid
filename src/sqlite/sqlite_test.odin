@@ -61,6 +61,64 @@ sqlite_test_expect_bound_values :: proc(t: ^testing.T, statement: ^Statement) {
     testing.expect_value(t, column_type(statement, 4), Column_Type.Null)
 }
 
+// Verify transient BLOB binding and exact bounded BLOB copying.
+sqlite_test_expect_blob_value :: proc(
+    t: ^testing.T, statement: ^Statement, expected: [16]u8) {
+    destination: [16]u8
+    count, failure := column_blob_copy(statement, 0, destination[:])
+    testing.expect_value(t, failure.validation, Validation_Error.None)
+    testing.expect_value(t, count, 16)
+    testing.expect_value(t, destination, expected)
+    _, capacity_error := column_blob_copy(statement, 0, destination[:8])
+    testing.expect_value(t, capacity_error.validation, Validation_Error.Capacity)
+}
+
+// Verify that an empty input remains an empty SQLite BLOB rather than SQL NULL.
+sqlite_test_expect_empty_blob :: proc(t: ^testing.T, statement: ^Statement) {
+    testing.expect_value(t, column_type(statement, 0), Column_Type.Blob)
+    destination: [1]u8
+    count, failure := column_blob_copy(statement, 0, destination[:0])
+    testing.expect_value(t, failure.validation, Validation_Error.None)
+    testing.expect_value(t, count, 0)
+}
+
+// Verify transient BLOB binding and exact bounded BLOB copying.
+@(test)
+sqlite_blob_binding_and_copy_preserve_all_bytes :: proc(t: ^testing.T) {
+    connection: Connection
+    if !sqlite_test_open_memory(t, &connection) {
+        return
+    }
+    defer _ = connection_close(&connection)
+    statement: Statement
+    failure := statement_prepare(
+        &connection, &statement,
+        strings.clone_to_cstring("SELECT ?1", context.temp_allocator))
+    testing.expect_value(t, failure.validation, Validation_Error.None)
+    identifier: [16]u8
+    identifier[0] = 0x45
+    identifier[15] = 0xA5
+    failure = statement_bind_blob(&statement, 1, identifier[:])
+    testing.expect_value(t, failure.validation, Validation_Error.None)
+    status, step_error := statement_step(&statement)
+    testing.expect_value(t, step_error.validation, Validation_Error.None)
+    testing.expect_value(t, status, Step_Status.Row)
+    sqlite_test_expect_blob_value(t, &statement, identifier)
+    testing.expect_value(t, statement_reset(&statement).validation,
+        Validation_Error.None)
+    empty_destination: [1]u8
+    failure = statement_bind_blob(&statement, 1, empty_destination[:0])
+    testing.expect_value(t, failure.validation, Validation_Error.None)
+    status, step_error = statement_step(&statement)
+    testing.expect_value(t, step_error.validation, Validation_Error.None)
+    testing.expect_value(t, status, Step_Status.Row)
+    sqlite_test_expect_empty_blob(t, &statement)
+    testing.expect_value(t, statement_reset(&statement).validation,
+        Validation_Error.None)
+    testing.expect_value(t, statement_finalize(&statement).validation,
+        Validation_Error.None)
+}
+
 // Verify immutable URI admission and read-only enforcement on an existing fixture.
 @(test)
 sqlite_opens_immutable_readonly_fixture :: proc(t: ^testing.T) {

@@ -5,6 +5,8 @@ import core "../core"
 import evidence_session "../evidence/session"
 import setting_model "../settings"
 import user_data "../userdata"
+import collections "../collections"
+import uuid "core:encoding/uuid"
 
 import "core:testing"
 import "core:fmt"
@@ -15,6 +17,27 @@ Launch_Test_Path :: struct {
     directory: string,
     filename: string,
     valid: bool,
+}
+
+// Create a deterministic UUID for persisted collection launch fixtures.
+launch_test_id :: proc(value: u8) -> uuid.Identifier {
+    identifier: uuid.Identifier
+    identifier[15] = value
+    return identifier
+}
+
+// Save one Favorite fixture before exercising the startup loader.
+launch_test_save_favorite :: proc(store: ^user_data.Store) -> bool {
+    snapshot: collections.Set
+    collections.initialize(&snapshot)
+    snapshot.entries[0] = {
+        id = launch_test_id(1),
+        collection_id = collections.FAVORITES_COLLECTION_ID,
+        kind = .Animation,
+        animation_id = launch_test_id(2),
+    }
+    snapshot.entry_count = 1
+    return user_data.store_replace_collections(store, &snapshot).kind == .None
 }
 
 // Create an isolated durable path for coordinator/store integration tests.
@@ -362,6 +385,37 @@ persist_without_overrides_is_noop :: proc(t: ^testing.T) {
     testing.expect_value(t, loaded_preferences.present, setting_model.Setting_Set{})
     _ = user_data.store_close(&store)
     launch_test_path_destroy(path)
+}
+
+// Load the persisted collection snapshot at the application startup boundary.
+@(test)
+launch_loads_saved_collections_before_runtime_handoff :: proc(t: ^testing.T) {
+    path := launch_test_path(t)
+    testing.expect(t, path.valid)
+    if !path.valid {
+        return
+    }
+    defer launch_test_path_destroy(path)
+    store: user_data.Store
+    testing.expect_value(t, user_data.store_open(&store, path.filename).kind,
+        user_data.Store_Error_Kind.None)
+    testing.expect(t, launch_test_save_favorite(&store))
+    testing.expect_value(t, user_data.store_close(&store).kind,
+        user_data.Store_Error_Kind.None)
+
+    launch := parse_command_line([]string{
+        fmt.tprintf("--user-db=%s", path.filename),
+    })
+    preferences: setting_model.Preferences
+    loaded_collections: collections.Set
+    opened := false
+    testing.expect(t, launch_prepare_preferences(
+        launch, &preferences, &store, &opened, &loaded_collections))
+    testing.expect(t, opened)
+    testing.expect_value(t, loaded_collections.entry_count, 1)
+    testing.expect_value(t, loaded_collections.entries[0].id, launch_test_id(1))
+    testing.expect_value(t, user_data.store_close(&store).kind,
+        user_data.Store_Error_Kind.None)
 }
 
 // Verify explicitly passing a default value persists and is restored as saved.

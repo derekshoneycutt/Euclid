@@ -87,7 +87,7 @@ startup_outline_create :: proc(
         geometry.Rectangle(regions.accordion_rect), sections,
         layout == .Portrait ? .View : .Library)
     controls := uianimation.animation_control_layout_slots(
-        geometry.Rectangle(regions.world_rect))
+        geometry.Rectangle(regions.world_rect), false)
 
     startup_outline_append_rect(&outline, geometry.Rectangle(regions.world_rect))
     startup_outline_append_rect(&outline, geometry.Rectangle(regions.text_rect))

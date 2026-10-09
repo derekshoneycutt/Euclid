@@ -18,6 +18,7 @@ import uiwidgets "../widgets"
 import theme "../theme"
 import worldmodel "../../world/model"
 import uisemantics "../semantics"
+import viewpreferences "../../preferences"
 
 SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID :: 6101
 
@@ -579,13 +580,7 @@ settings_record_preference_edit :: proc(
     }
     runtime^.settings_preferences = preferences
     state^.preferences_runtime.settings_pending = pending
-    if runtime^.settings_save_status == .Unavailable ||
-        runtime^.settings_save_status == .Failed {
-        state^.preferences_runtime.settings_failure_count = 0
-        state^.preferences_runtime.settings_retry_frames = 0
-    }
-    runtime^.settings_save_status =
-        .Pending if runtime^.settings_store_available else .Unavailable
+    viewpreferences.settings_save_note_edit(state)
 }
 
 // Resolve optional control availability without replacing the retained user preference.

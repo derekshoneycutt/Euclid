@@ -18,6 +18,10 @@ LIBRARY_SEARCH_QUERY_BYTE_CAPACITY :: 512
 LIBRARY_SEARCH_RESULT_CAPACITY :: 64
 
 UI_TREE_NODE_CAPACITY :: 512
+TREE_COLLECTIONS_ROOT_ID :: uuid.Identifier{
+    0x45, 0x55, 0x43, 0x4c, 0x49, 0x44, 0x00, 0x00,
+    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
+}
 
 LIBRARY_SEARCH_VISIBLE_ID_CAPACITY :: UI_TREE_NODE_CAPACITY
 
@@ -564,10 +568,45 @@ Ui_Tree_Branch_Motion :: struct {
     full_height: f32,
 }
 
+Ui_Tree_Item_Kind :: enum u8 {
+    Animation,
+    Collections,
+    Collection,
+    Placement,
+}
+
+// Ui_Tree_Item is a display-owned placement that resolves canonical targets by UUID.
+Ui_Tree_Item :: struct {
+    key: uuid.Identifier,
+    target_animation_id: uuid.Identifier,
+    kind: Ui_Tree_Item_Kind,
+    parent: int,
+    first_child: int,
+    last_child: int,
+    next_sibling: int,
+    expanded: bool,
+    selectable: bool,
+}
+
+// Ui_Tree_Projection caches bounded topology without retaining content pointers.
+Ui_Tree_Projection :: struct {
+    valid: bool,
+    content_generation: u64,
+    collections_revision: u64,
+    topology_revision: u64,
+    count: int,
+    first_root: int,
+    last_root: int,
+    collections_expanded: bool,
+    favorites_expanded: bool,
+    items: [UI_TREE_NODE_CAPACITY]Ui_Tree_Item,
+}
+
 // Ui_Tree_Motion retains only generation-scoped identities and reveal geometry.
 Ui_Tree_Motion :: struct {
     initialized: bool,
     generation: u64,
+    topology_revision: u64,
     query_revision: u64,
     search_generation: u64,
     search_active: bool,
@@ -595,6 +634,8 @@ Euclid_Ui_Runtime_State :: struct {
     tree_reveal_pending: bool,
     tree_reveal_stable_id: uuid.Identifier,
     tree_reveal_reason: Ui_Tree_Reveal_Reason,
+    selected_tree_item_id: uuid.Identifier,
+    tree_projection: Ui_Tree_Projection,
     tree_motion: Ui_Tree_Motion,
     view_text_scroll_y: f32,
     view_text_scroll_max: f32,

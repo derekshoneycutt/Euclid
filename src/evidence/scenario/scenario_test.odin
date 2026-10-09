@@ -8,6 +8,32 @@ import settings "../../settings"
 
 import "core:testing"
 
+// Parse bounded Favorites actions while rejecting empty payloads and combined actions.
+@(test)
+scenario_favorites_actions_are_bounded :: proc(t: ^testing.T) {
+    program: Program
+    testing.expect_value(t, parse(
+        "{\"favorite_control\":\"press\"}\n" +
+        "{\"library_placement\":\"focus:favorite:Point\"}\n" +
+        "{\"assert_favorites\":\"order:Point\"}\n", &program), Parse_Error.None)
+    testing.expect_value(t, program.count, 3)
+    testing.expect_value(t, program.commands[0].kind, Command_Kind.Favorite_Control)
+    testing.expect_value(t, program.commands[1].kind, Command_Kind.Library_Placement)
+    testing.expect_value(t, program.commands[2].kind, Command_Kind.Assert_Favorites)
+    testing.expect_value(t,
+        text_string(&program.commands[1].text), "focus:favorite:Point")
+    invalid := [?]string{
+        "{\"favorite_control\":\"\"}",
+        "{\"library_placement\":\"\"}",
+        "{\"assert_favorites\":\"\"}",
+        "{\"favorite_control\":\"press\",\"shutdown\":true}",
+        "{\"library_placement\":\"select:favorite:Point\",\"assert_favorites\":\"empty\"}",
+    }
+    for source in invalid {
+        testing.expect_value(t, parse(source, &program), Parse_Error.Invalid_Command)
+    }
+}
+
 // Verify transition predicates distinguish concurrent motion from settled tree geometry.
 @(test)
 scenario_tree_motion_predicates :: proc(t: ^testing.T) {

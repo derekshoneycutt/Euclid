@@ -248,7 +248,14 @@ prepare_sdl_ui_input :: proc(
     device_frame: input.Input_Frame, frame_dt: f32,
     menu_event_storage: []input.Input_Event) -> (
     input.Input_Frame, ui.Ui_Geometry_Preparation) {
-    input_frame := uioverlay.context_menu_route(state, device_frame, menu_event_storage,
+    scenario_frame := device_frame
+    when core.SCENARIOS_ENABLED {
+        if ctx.scenario_runtime != nil {
+            scenario_frame = viewscenario.scenario_pointer_frame(
+                ctx.scenario_runtime, device_frame)
+        }
+    }
+    input_frame := uioverlay.context_menu_route(state, scenario_frame, menu_event_storage,
         ctx.input_runtime != nil && card(ctx.input_runtime^.mouse_captured) > 0)
     geometry := ui.prepare_ui_geometry(state, input_frame, frame_dt)
     ui.prepare_ui_static_interaction(state, input_frame, geometry.pointer_capture)

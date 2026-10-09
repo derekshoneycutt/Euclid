@@ -17,6 +17,7 @@ Icon_Button_Id :: enum {
     Gif,
     Books,
     Copy,
+    Star,
     None,
 }
 

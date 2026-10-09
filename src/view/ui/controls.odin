@@ -45,6 +45,8 @@ prepare_ui_static_interaction :: proc(
     _ = ui_route_interaction_frame(&state^.ui_runtime, {
         frame = frame,
         terminal_present = uiterminal.is_terminal_selected(state),
+        animation_favorite_eligible =
+            uianimation.animation_favorite_eligible(state^.julia_interface),
         capture = capture,
         capture_view = capturemodel.gif_capture_view(&state^.gif_capture_status),
     })
@@ -110,7 +112,11 @@ prepare_active_accordion_controls :: proc(
             state, content, library_frame)
         result^.tree = uilibrary.prepare_tree_list_panel({
             label = viewmessages.shell_message(state, .Library_Tree_Accessible_Label),
-            ji = state^.julia_interface, ui_runtime = &state^.ui_runtime,
+            ji = state^.julia_interface,
+            collections = &state^.preferences_runtime.collections_state,
+            collections_revision =
+                state^.preferences_runtime.collection_revision,
+            ui_runtime = &state^.ui_runtime,
             list_panel = result^.library_search.layout.tree,
             mouse_input = library_frame, scroll_y = &state^.ui_runtime.tree_scroll_y,
             font = view_font.cache_borrow(&state^.font_cache, .Regular),
@@ -229,7 +235,11 @@ prepare_outgoing_accordion_controls :: proc(
             result^.library_search =
                 uilibrary.prepare_library_search_visual(state, content)
             result^.tree = uilibrary.prepare_tree_visual({
-                ji = state^.julia_interface, ui_runtime = &state^.ui_runtime,
+                ji = state^.julia_interface,
+                collections = &state^.preferences_runtime.collections_state,
+                collections_revision =
+                    state^.preferences_runtime.collection_revision,
+                ui_runtime = &state^.ui_runtime,
                 list_panel = result^.library_search.layout.tree,
                 scroll_y = &state^.ui_runtime.tree_scroll_y,
                 visibility = {search = &state^.ui_runtime.library_search}})

@@ -90,6 +90,7 @@ tables group code by the architectural question a contributor is likely to ask.
 | --- | --- | --- |
 | Content catalogue and search | Packaged catalogue admission, generations, search service | [`src/core/content/`](../../../src/core/content/), [`src/view/content/`](../../../src/view/content/) |
 | User preferences | Typed settings plus separate durable user-data storage | [`src/settings/`](../../../src/settings/), [`src/userdata/`](../../../src/userdata/) |
+| User collections | Bounded placement model, serialized Favorites mutations, a boxed animation-control toggle, and a display-owned Library projection that resolves canonical targets | [`src/collections/`](../../../src/collections/), [`src/userdata/`](../../../src/userdata/), [`src/view/ui/animation/`](../../../src/view/ui/animation/), [`src/view/ui/library/`](../../../src/view/ui/library/) |
 | SQLite boundary | Native bindings and owned database/query policy | [`src/sqlite/`](../../../src/sqlite/) |
 | Julia runtime policy | Sysimage host, actor runtime, animation and Terminal policy | [`src/julia/`](../../../src/julia/) |
 | Authored content | Animation modules and their content-facing helpers | [`src/content/`](../../../src/content/) |
@@ -99,6 +100,12 @@ tables group code by the architectural question a contributor is likely to ask.
 The [Architecture Guide Map](#architecture-guide-map) provides the next step for each
 subsystem. For dependency ownership and normative code rules, see
 [Coding Standards](CodingStandards.md).
+
+The user-data database schema is version 2. It migrates writable settings from earlier
+versioned stores transactionally, preserving existing settings, then creates general
+collection and placement tables with 16-byte UUID identities and foreign-key enforcement.
+Settings and collection mutations share one worker-only transaction queue and one
+durability status in Settings.
 
 ## Execution And Ownership Model
 

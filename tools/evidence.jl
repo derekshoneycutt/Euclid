@@ -85,12 +85,19 @@ const SCENARIO_ACTIONS = [
     "inject_reload_failure", "pause_simulation",
     "resume_simulation", "set_view_scroll", "set_splitters", "screenshot",
     "set_library_search", "apply_library_search_suggestion",
-    "clear_library_search",
+    "clear_library_search", "favorite_control", "library_placement", "assert_favorites",
     "start_gif", "stop_gif", "wait_event", "wait_state", "assert_state",
     "set_setting", "assert_setting", "checkpoint", "allocation_checkpoint",
     "assert_allocation_baseline", "assert_no_bad_frees", "shutdown"]
 
 const SCENARIO_ACTION_PAYLOADS = (
+    favorite_control=(operations=["press", "release", "hover", "leave", "focus"],),
+    library_placement=(operations=["press", "release", "hover", "focus",
+        "select", "expand", "collapse"], addresses=["collections", "favorites",
+        "catalogue:NAME", "favorite:NAME"], special=["focus_library", "expand_all"]),
+    assert_favorites=(operations=["order", "empty", "absent", "remember", "replaced",
+        "selected", "remember_playback", "playing", "hidden", "selection_cleared",
+        "collapsed", "expanded", "failure_retained", "recovered", "capacity"],),
     set_view_scroll=(required=["y"],),
     set_splitters=(required=["vertical", "horizontal"],),
     set_setting=(required=["key", "value"],),

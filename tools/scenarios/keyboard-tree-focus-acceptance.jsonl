@@ -6,6 +6,8 @@
 {"key":"tab"}
 {"assert_focus":"animation_pause"}
 {"key":"tab"}
+{"assert_focus":"animation_favorite"}
+{"key":"tab"}
 {"assert_focus":"accordion_library"}
 {"key":"tab"}
 {"assert_focus":"accordion_save_gif"}

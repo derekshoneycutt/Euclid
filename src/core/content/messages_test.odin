@@ -19,8 +19,8 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "GPU Dust Instancing", "GPU Dust Instancing (Unavailable)", "Maximum Dust particles",
     "Dust particles Rendered: {count}", "Trail particles Rendered: {count}",
     "Flicker particles Rendered: {count}", "Julia animation entries added: {count}",
-    "FPS {fps}", "Settings saved", "Settings not saved yet", "Saving settings...",
-    "Settings storage unavailable", "Settings could not be saved",
+    "FPS {fps}", "User data saved", "User data not saved yet", "Saving user data...",
+    "User-data storage unavailable", "User data could not be saved",
     "Reduce interface motion", "System requests reduced motion",
     "Output scale", "Capture every", "Playback timing", "Animation",
     "Recorded", "Use animation timing", "Use recorded timing", "Downsample", "Path",
@@ -33,6 +33,7 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Canceled: refresh during pause interrupts GIF capture.",
     "Error: failed to submit GIF frame.", "Window resized; GIF capture cancelled.",
     "Restart animation", "Pause animation", "Resume animation",
+    "Add to Favorites", "Remove from Favorites",
 }
 
 // Build a complete message fixture with a stable arena owner for consumer tests.

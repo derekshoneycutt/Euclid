@@ -30,8 +30,8 @@ end
 @testset "localized content declarations" begin
     @test validate_content_manifest(AuthoredManifest, AnimationDescriptors) ===
         AuthoredManifest
-    @test length(AuthoredManifest.ui_messages) == 81
-    @test length(AuthoredManifest.translations) == 81
+    @test length(AuthoredManifest.ui_messages) == 83
+    @test length(AuthoredManifest.translations) == 83
     @test length(AuthoredManifest.catalog_names) == 138
     @test length(AuthoredManifest.editions) == 3
     @test length(AuthoredManifest.subjects) == 139

@@ -103,6 +103,9 @@ Command_Kind :: enum u8 {
     Shutdown,
     Set_Setting,
     Assert_Setting,
+    Favorite_Control,
+    Library_Placement,
+    Assert_Favorites,
 }
 
 // Payload-free action names accepted by the `do` scenario field.
@@ -301,6 +304,9 @@ Raw_Command :: struct {
     screenshot : string,
     start_gif : string,
     set_library_search : string,
+    favorite_control : string,
+    library_placement : string,
+    assert_favorites : string,
     apply_library_search_suggestion : bool,
     clear_library_search : bool,
     set_view_content : Raw_View_Content,
@@ -781,7 +787,7 @@ runner_update_command :: proc(
     case .Assert_State:
         return runner_assert_state(runner, command, frame.display)
     case .Assert_Focus, .Assert_Terminal_Contains, .Assert_Allocation_Baseline,
-         .Assert_Setting,
+         .Assert_Setting, .Assert_Favorites,
          .Assert_No_Bad_Frees:
         return runner_assert_action(runner, command, frame.actions)
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
@@ -794,7 +800,8 @@ runner_update_command :: proc(
          .Set_Library_Search, .Apply_Library_Search_Suggestion,
          .Clear_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
-         .Allocation_Checkpoint, .Shutdown, .Set_Setting:
+         .Allocation_Checkpoint, .Shutdown, .Set_Setting,
+         .Favorite_Control, .Library_Placement:
         return runner_issue_action(runner, command, frame.actions)
     }
     return false
@@ -843,7 +850,8 @@ runner_update :: proc(
             command.kind == .Emit_Dust || command.kind == .Contact_Dust ||
             command.kind == .Kick_Dust ||
             command.kind == .Set_View_Scroll ||
-            command.kind == .Set_Splitters
+            command.kind == .Set_Splitters ||
+            command.kind == .Favorite_Control || command.kind == .Library_Placement
         runner.step += 1
         runner.deadline_ns = 0
         if frame_boundary && runner.step < runner.program.count {
@@ -897,6 +905,17 @@ raw_library_search_command_select :: proc(
 }
 
 //   Select every populated action field and return the number selected.
+raw_favorites_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
+    selected := raw_text_command_select(
+        raw.favorite_control, .Favorite_Control, command)
+    selected += raw_text_command_select(
+        raw.library_placement, .Library_Placement, command)
+    selected += raw_text_command_select(
+        raw.assert_favorites, .Assert_Favorites, command)
+    return selected
+}
+
+// Select all populated fields, retaining exact-one-action validation.
 raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
     selected := 0
     selected += raw_action_command_select(raw.action, command)
@@ -909,6 +928,7 @@ raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
         raw.screenshot, .Request_Screenshot, command)
     selected += raw_text_command_select(raw.start_gif, .Start_Gif, command)
     selected += raw_library_search_command_select(raw, command)
+    selected += raw_favorites_command_select(raw, command)
     selected += raw_text_command_select(raw.wait_event, .Wait_Event, command)
     selected += raw_text_command_select(raw.wait_state, .Wait_State, command)
     selected += raw_text_command_select(raw.wait_terminal_contains,
@@ -1114,7 +1134,8 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Wait_State, .Wait_Terminal_Contains, .Assert_State, .Assert_Focus,
          .Assert_Terminal_Contains,
          .Checkpoint, .Allocation_Checkpoint,
-         .Assert_Allocation_Baseline:
+         .Assert_Allocation_Baseline, .Favorite_Control, .Library_Placement,
+         .Assert_Favorites:
         return false
     }
     return false

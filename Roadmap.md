@@ -193,13 +193,14 @@ General features:
   - [X] Basic initial user settings structure
   - [ ] Persistent REPL history
   - [ ] Search and use history
+  - [ ] Search auto-completion features
   - [ ] Collections
-    - [ ] Initial bookmarks/favorites type collection
-    - [ ] Multiple custom collections with organization
+    - [X] Initial bookmarks/favorites type collection
+    - [ ] Favorites/Collection customization/organization
+    - [ ] Multiple custom collections
     - [ ] Custom introduction and naming in custom collections
     - [ ] Most viewed (dynamic; non-mutable)
     - [ ] Recent searches (dynamic; non-mutable)
-    - [ ] Save search as collection feature
 - [ ] Sharing custom collections
   - [ ] Export/import files
   - [ ] In-network (ip-2-ip) custom collection sharing

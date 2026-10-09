@@ -4,6 +4,8 @@ package userdata
 import raw "../../libs/sqlite3"
 import sqlite "../sqlite"
 import settings "../settings"
+import collections "../collections"
+import uuid "core:encoding/uuid"
 
 import "core:fmt"
 import "core:mem"
@@ -16,6 +18,35 @@ Userdata_Test_Path :: struct {
     directory: string,
     path: string,
     valid: bool,
+}
+
+// Create a deterministic nonzero UUID for collection persistence fixtures.
+userdata_test_id :: proc(value: u8) -> uuid.Identifier {
+    identifier: uuid.Identifier
+    identifier[15] = value
+    return identifier
+}
+
+// Create a genuine v1 settings-only database for migration tests.
+userdata_test_create_v1 :: proc(path: string) -> bool {
+    connection: sqlite.Connection
+    failure := userdata_test_open_sqlite(path, &connection)
+    if !store_sqlite_error_is_clear(failure) {
+        return false
+    }
+    failure = sqlite.connection_exec(&connection,
+        strings.clone_to_cstring(USER_SETTING_SCHEMA_SQL, context.temp_allocator))
+    if store_sqlite_error_is_clear(failure) {
+        failure = sqlite.connection_exec(&connection,
+            "INSERT INTO user_setting VALUES ('migration', 'kept', 'integer', 7, NULL)")
+    }
+    if store_sqlite_error_is_clear(failure) {
+        failure = sqlite.connection_exec(
+            &connection, "PRAGMA application_id=1163215701; PRAGMA user_version=1")
+    }
+    close_error := sqlite.connection_close(&connection)
+    return store_sqlite_error_is_clear(failure) &&
+        store_sqlite_error_is_clear(close_error)
 }
 
 // Create a unique temporary directory and database path for isolated tests.
@@ -420,6 +451,59 @@ userdata_rollback_failure_marks_store_unusable :: proc(t: ^testing.T) {
     testing.expect_value(t, cleanup.kind, Store_Error_Kind.None)
 }
 
+// Prove a collection replay error rolls back an earlier settings write.
+userdata_test_expect_combined_rollback :: proc(
+    t: ^testing.T, store: ^Store, changes: settings.Change_Set) {
+    invalid := collections.Mutation{
+        kind = .Remove_Favorite, entry_id = userdata_test_id(71),
+    }
+    failed := store_commit_user_data(
+        store, changes, []collections.Mutation{invalid})
+    testing.expect_value(t, failed.outcome, Commit_Outcome.Not_Committed)
+    testing.expect_value(t, store^.status, Store_Status.Ready)
+    preferences := settings.default_preferences()
+    loaded := store_load_settings(store, &preferences)
+    testing.expect_value(t, loaded.failure.kind, Store_Error_Kind.None)
+    testing.expect(t, preferences.rendering.vsync)
+}
+
+// Roll back settings when ordered collection replay fails in the shared transaction.
+@(test)
+userdata_combined_commit_is_atomic_for_settings_and_collections :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    store: Store
+    testing.expect_value(t,
+        store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    changes: settings.Change_Set
+    testing.expect(t, settings.change_set_set(
+        &changes, .Rendering_Vsync, settings.boolean_value(false)))
+    userdata_test_expect_combined_rollback(t, &store, changes)
+
+    add_mutation := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = userdata_test_id(72),
+        animation_id = userdata_test_id(73),
+    }
+    committed := store_commit_user_data(
+        &store, changes, []collections.Mutation{add_mutation})
+    testing.expect_value(t, committed.outcome, Commit_Outcome.Committed)
+    preferences := settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, !preferences.rendering.vsync)
+    snapshot: collections.Set
+    testing.expect_value(t, store_load_collections(&store, &snapshot).kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, snapshot.entry_count, 1)
+    testing.expect_value(t, snapshot.entries[0].id, add_mutation.entry_id)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
 // Reject wrong application IDs and future schema versions without rewriting them.
 @(test)
 userdata_admission_preserves_wrong_and_future_databases :: proc(t: ^testing.T) {
@@ -479,14 +563,14 @@ userdata_rejects_future_schema :: proc(
             context.temp_allocator).result,
         raw.Result.Ok)
     testing.expect_value(t,
-        sqlite.connection_exec(&update, "PRAGMA user_version=2").result,
+        sqlite.connection_exec(&update, "PRAGMA user_version=3").result,
         raw.Result.Ok)
     testing.expect_value(t, sqlite.connection_close(&update).result,
         raw.Result.Ok)
     rejected: Store
     future_result := store_open(&rejected, future_path)
     testing.expect_value(t, future_result.kind, Store_Error_Kind.Future_Schema)
-    testing.expect_value(t, future_result.schema_version, i64(2))
+    testing.expect_value(t, future_result.schema_version, i64(3))
 }
 
 // Roll back partially initialized schema and identity after migration failure.
@@ -563,4 +647,219 @@ userdata_read_only_admission_loads_without_writing :: proc(t: ^testing.T) {
 @(test)
 userdata_sqlite_build_is_mutex_enabled :: proc(t: ^testing.T) {
     testing.expect(t, sqlite.threading_supported())
+}
+
+// Upgrade v1 atomically, retain user settings, and seed exactly one editable Favorites role.
+@(test)
+userdata_v1_migration_preserves_settings_and_seeds_favorites :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    testing.expect(t, userdata_test_create_v1(fixture.path))
+
+    store: Store
+    testing.expect_value(t, store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    snapshot: collections.Set
+    testing.expect_value(t, store_load_collections(&store, &snapshot).kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, snapshot.collection_count, 1)
+    testing.expect_value(t, snapshot.collections[0].role, collections.Role.Favorites)
+    testing.expect_value(t,
+        snapshot.collections[0].id, collections.FAVORITES_COLLECTION_ID)
+    testing.expect(t, !snapshot.collections[0].is_read_only)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+
+    inspect: sqlite.Connection
+    testing.expect_value(t,
+        sqlite.connection_open(&inspect, fixture.path, .Readonly,
+            context.temp_allocator).result,
+        raw.Result.Ok)
+    version, version_valid := userdata_test_integer_query(&inspect, "PRAGMA user_version")
+    preserved, preserved_valid := userdata_test_integer_query(
+        &inspect, "SELECT integer_value FROM user_setting WHERE namespace='migration'")
+    testing.expect(t, version_valid && preserved_valid)
+    testing.expect_value(t, version, i64(2))
+    testing.expect_value(t, preserved, i64(7))
+    testing.expect_value(t, sqlite.connection_close(&inspect).result, raw.Result.Ok)
+}
+
+// Keep a read-only v1 database untouched and report that in-place migration is unavailable.
+@(test)
+userdata_read_only_v1_migration_is_rejected_without_mutation :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    testing.expect(t, userdata_test_create_v1(fixture.path))
+
+    store: Store
+    result := store_open_internal(&store, fixture.path, false, true)
+    testing.expect_value(t, result.kind, Store_Error_Kind.Not_Writable)
+    testing.expect_value(t, result.schema_version, i64(1))
+    inspect: sqlite.Connection
+    testing.expect_value(t,
+        sqlite.connection_open(&inspect, fixture.path, .Readonly,
+            context.temp_allocator).result,
+        raw.Result.Ok)
+    version, version_valid := userdata_test_integer_query(&inspect, "PRAGMA user_version")
+    collections_count, collections_valid := userdata_test_integer_query(
+        &inspect,
+        "SELECT COUNT(*) FROM sqlite_schema WHERE name='user_collection'")
+    testing.expect(t, version_valid && collections_valid)
+    testing.expect_value(t, version, i64(1))
+    testing.expect_value(t, collections_count, i64(0))
+    testing.expect_value(t, sqlite.connection_close(&inspect).result, raw.Result.Ok)
+}
+
+// Roll back a failed v1 migration without damaging its prior settings schema.
+@(test)
+userdata_failed_v1_migration_rolls_back_schema_and_version :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    testing.expect(t, userdata_test_create_v1(fixture.path))
+
+    store: Store
+    result := store_open_internal(&store, fixture.path, true, false)
+    testing.expect_value(t, result.kind, Store_Error_Kind.Migration)
+    inspect: sqlite.Connection
+    testing.expect_value(t,
+        sqlite.connection_open(&inspect, fixture.path, .Readonly,
+            context.temp_allocator).result,
+        raw.Result.Ok)
+    version, version_valid := userdata_test_integer_query(&inspect, "PRAGMA user_version")
+    collection_tables, tables_valid := userdata_test_integer_query(
+        &inspect,
+        "SELECT COUNT(*) FROM sqlite_schema WHERE name LIKE 'user_collection%'")
+    preserved, preserved_valid := userdata_test_integer_query(
+        &inspect, "SELECT integer_value FROM user_setting WHERE namespace='migration'")
+    testing.expect(t, version_valid && tables_valid && preserved_valid)
+    testing.expect_value(t, version, i64(1))
+    testing.expect_value(t, collection_tables, i64(0))
+    testing.expect_value(t, preserved, i64(7))
+    testing.expect_value(t, sqlite.connection_close(&inspect).result, raw.Result.Ok)
+}
+
+// Build a bounded persistence fixture with Favorites and a nested read-only group.
+userdata_test_collection_snapshot :: proc() -> collections.Set {
+    snapshot: collections.Set
+    userdata_test_collection_records(&snapshot)
+    userdata_test_collection_entries(&snapshot)
+    return snapshot
+}
+
+// Add Favorites and named collection metadata to the persistence fixture.
+userdata_test_collection_records :: proc(snapshot: ^collections.Set) {
+    snapshot^.collections[0] = {
+        id = collections.FAVORITES_COLLECTION_ID,
+        role = .Favorites,
+    }
+    snapshot^.collections[1] = {
+        id = userdata_test_id(41),
+        role = .User,
+        name_length = 4,
+        order = 1,
+        is_read_only = true,
+    }
+    snapshot^.collections[1].name[0] = 'W'
+    snapshot^.collections[1].name[1] = 'o'
+    snapshot^.collections[1].name[2] = 'r'
+    snapshot^.collections[1].name[3] = 'k'
+    snapshot^.collection_count = 2
+}
+
+// Add a nested group placement and its Favorites animation placement.
+userdata_test_collection_entries :: proc(snapshot: ^collections.Set) {
+    root_id := userdata_test_id(42)
+    nested_id := userdata_test_id(43)
+    animation_id := userdata_test_id(44)
+    snapshot^.entries[0] = {
+        id = root_id,
+        collection_id = userdata_test_id(41),
+        kind = .Group,
+    }
+    snapshot^.entries[1] = {
+        id = nested_id,
+        collection_id = userdata_test_id(41),
+        parent_entry_id = root_id,
+        kind = .Animation,
+        animation_id = animation_id,
+    }
+    snapshot^.entries[2] = {
+        id = userdata_test_id(45),
+        collection_id = collections.FAVORITES_COLLECTION_ID,
+        sibling_order = 0,
+        kind = .Animation,
+        animation_id = animation_id,
+    }
+    snapshot^.entry_count = 3
+}
+
+// Save one snapshot and reopen the same store path for durability assertions.
+userdata_test_save_and_reopen :: proc(
+    t: ^testing.T, path: string, snapshot: ^collections.Set, reopened: ^Store) {
+    store: Store
+    testing.expect_value(t, store_open(&store, path).kind, Store_Error_Kind.None)
+    foreign_keys, foreign_keys_valid := userdata_test_integer_query(
+        &store.connection, "PRAGMA foreign_keys")
+    testing.expect(t, foreign_keys_valid)
+    testing.expect_value(t, foreign_keys, i64(1))
+    userdata_expect_constraint(t, &store,
+        "INSERT INTO user_collection_entry VALUES (" +
+        "X'00000000000000000000000000000099', " +
+        "X'00000000000000000000000000000098', NULL, 0, 'group', NULL)")
+    userdata_expect_constraint(t, &store,
+        "UPDATE user_collection SET is_read_only=1 WHERE system_role='favorites'")
+    testing.expect_value(t, store_replace_collections(&store, snapshot).kind,
+        Store_Error_Kind.None)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+    testing.expect_value(t, store_open(reopened, path).kind, Store_Error_Kind.None)
+}
+
+// Verify reopened collection, placement, parent, order, and read-only fields.
+userdata_test_expect_collection_snapshot :: proc(
+    t: ^testing.T, loaded: ^collections.Set,
+    root_id, animation_id: uuid.Identifier) {
+    testing.expect_value(t, loaded^.collection_count, 2)
+    testing.expect_value(t, loaded^.collections[1].id, userdata_test_id(41))
+    testing.expect_value(t, loaded^.collections[1].name_length, 4)
+    testing.expect_value(t, string(loaded^.collections[1].name[:4]), "Work")
+    testing.expect(t, loaded^.collections[1].is_read_only)
+    testing.expect_value(t, loaded^.entry_count, 3)
+    testing.expect_value(t, loaded^.entries[0].id, root_id)
+    testing.expect_value(t, loaded^.entries[1].parent_entry_id, root_id)
+    testing.expect_value(t, loaded^.entries[1].sibling_order, i64(0))
+    testing.expect_value(t, loaded^.entries[2].animation_id, animation_id)
+    testing.expect_value(t, loaded^.entries[2].sibling_order, i64(0))
+    testing.expect_value(t,
+        collections.validate(loaded), collections.Validation_Error.None)
+}
+
+// Round-trip ordered entries, nested parentage, and read-only metadata through SQLite.
+@(test)
+userdata_collection_snapshot_round_trips_after_reopen :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    snapshot := userdata_test_collection_snapshot()
+    root_id := userdata_test_id(42)
+    animation_id := userdata_test_id(44)
+    reopened: Store
+    userdata_test_save_and_reopen(t, fixture.path, &snapshot, &reopened)
+    loaded: collections.Set
+    testing.expect_value(t, store_load_collections(&reopened, &loaded).kind,
+        Store_Error_Kind.None)
+    userdata_test_expect_collection_snapshot(t, &loaded, root_id, animation_id)
+    testing.expect_value(t, store_close(&reopened).kind, Store_Error_Kind.None)
 }

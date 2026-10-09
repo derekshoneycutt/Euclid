@@ -3,15 +3,23 @@ package userdata
 import raw "../../libs/sqlite3"
 import sqlite "../sqlite"
 import settings "../settings"
+import collections "../collections"
 
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
 
 USER_SETTING_SCHEMA_SQL :: #load("sql/user_setting.sql", string)
+USER_COLLECTION_SCHEMA_SQL :: #load("sql/user_collection_schema.sql", string)
 READ_SETTING_SQL :: #load("sql/read_setting.sql", string)
 UPSERT_SETTING_SQL :: #load("sql/upsert_setting.sql", string)
 DELETE_SETTING_SQL :: #load("sql/delete_setting.sql", string)
+READ_COLLECTIONS_SQL :: #load("sql/read_collections.sql", string)
+READ_COLLECTION_ENTRIES_SQL :: #load("sql/read_collection_entries.sql", string)
+INSERT_COLLECTION_SQL :: #load("sql/insert_collection.sql", string)
+INSERT_COLLECTION_ENTRY_SQL :: #load("sql/insert_collection_entry.sql", string)
+DELETE_COLLECTION_ENTRIES_SQL :: #load("sql/delete_collection_entries.sql", string)
+DELETE_COLLECTIONS_SQL :: #load("sql/delete_collections.sql", string)
 
 // Open or safely admit one database at an explicit durable path.
 store_open :: proc(store: ^Store, path: string) -> Store_Error {
@@ -43,23 +51,39 @@ store_open_internal :: proc(
         return store_abort_open(store, open_error)
     }
     store^.status = read_only ? .Read_Only : .Ready
-    admission_error := store_admit_database(
+    finalize_error := store_finish_open(
         store, read_only, fail_migration_after_schema)
-    if !store_error_is_clear(admission_error) {
-        return store_abort_open(store, admission_error)
-    }
-    prepare_error := store_prepare_statements(store, read_only)
-    if !store_error_is_clear(prepare_error) {
-        return store_abort_open(store, prepare_error)
+    if !store_error_is_clear(finalize_error) {
+        return store_abort_open(store, finalize_error)
     }
     return {}
+}
+
+// Complete schema, statement, and collection admission before publishing the store.
+store_finish_open :: proc(
+    store: ^Store, read_only, fail_migration_after_schema: bool) -> Store_Error {
+    failure := store_admit_database(
+        store, read_only, fail_migration_after_schema)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    failure = store_prepare_statements(store, read_only)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    return store_verify_collection_admission(store)
 }
 
 // Validate that no native resources remain before opening another database.
 store_can_open :: proc(store: ^Store) -> bool {
     return store != nil && store^.connection.handle == nil &&
         store^.read_setting.handle == nil && store^.upsert_setting.handle == nil &&
-        store^.delete_setting.handle == nil
+        store^.delete_setting.handle == nil && store^.read_collections.handle == nil &&
+        store^.read_collection_entries.handle == nil &&
+        store^.insert_collection.handle == nil &&
+        store^.insert_collection_entry.handle == nil &&
+        store^.delete_collection_entries.handle == nil &&
+        store^.delete_collections.handle == nil
 }
 
 // Select read/write access, falling back to read-only only for an existing file.
@@ -110,9 +134,13 @@ store_ensure_parent_directory :: proc(path: string) -> bool {
 // Admit an empty database or verify the stable identity of an existing store.
 store_admit_database :: proc(
     store: ^Store, read_only, fail_migration_after_schema: bool) -> Store_Error {
-    busy_error := store_set_busy_timeout(store)
-    if !store_sqlite_error_is_clear(busy_error) {
-        return {kind = .Open, sqlite_error = busy_error}
+    failure := store_set_busy_timeout(store)
+    if !store_sqlite_error_is_clear(failure) {
+        return {kind = .Open, sqlite_error = failure}
+    }
+    failure = store_enable_foreign_keys(store)
+    if !store_sqlite_error_is_clear(failure) {
+        return {kind = .Open, sqlite_error = failure}
     }
     header := store_read_header(store)
     if !store_error_is_clear(header.failure) {
@@ -123,7 +151,17 @@ store_admit_database :: proc(
         return store_initialize_empty_database(
             store, read_only, fail_migration_after_schema, header)
     }
-    identity_error := store_validate_database_identity(header)
+    return store_admit_existing_database(
+        store, read_only, fail_migration_after_schema, header)
+}
+
+// Admit a known store, applying a transactional migration when the schema is v1.
+store_admit_existing_database :: proc(
+    store: ^Store,
+    read_only, fail_migration_after_schema: bool,
+    header: Store_Header) -> Store_Error {
+    final_header := header
+    identity_error := store_validate_pre_migration_identity(header)
     if !store_error_is_clear(identity_error) {
         return identity_error
     }
@@ -133,7 +171,60 @@ store_admit_database :: proc(
             return {kind = .Open, sqlite_error = pragma_error}
         }
     }
+    if final_header.schema_version == 1 {
+        migration_error := store_upgrade_legacy_database(
+            store, read_only, fail_migration_after_schema, final_header)
+        if !store_error_is_clear(migration_error) {
+            return migration_error
+        }
+        final_header = store_read_header(store)
+        if !store_error_is_clear(final_header.failure) {
+            return final_header.failure
+        }
+    }
+    return store_validate_database_identity(final_header)
+}
+
+// Reject unrelated and unsupported schemas before changing connection policy.
+store_validate_pre_migration_identity :: proc(
+    header: Store_Header) -> Store_Error {
+    if header.application_id != DATABASE_APPLICATION_ID {
+        return {
+            kind = .Wrong_Application,
+            application_id = header.application_id,
+            schema_version = header.schema_version,
+        }
+    }
+    if header.schema_version > DATABASE_SCHEMA_VERSION {
+        return {
+            kind = .Future_Schema,
+            application_id = header.application_id,
+            schema_version = header.schema_version,
+        }
+    }
+    if header.schema_version < 1 {
+        return {
+            kind = .Unsupported_Schema,
+            application_id = header.application_id,
+            schema_version = header.schema_version,
+        }
+    }
     return {}
+}
+
+// Upgrade only schema v1, rejecting read-only legacy stores without mutation.
+store_upgrade_legacy_database :: proc(
+    store: ^Store,
+    read_only, fail_migration_after_schema: bool,
+    header: Store_Header) -> Store_Error {
+    if read_only {
+        return {
+            kind = .Not_Writable,
+            application_id = header.application_id,
+            schema_version = header.schema_version,
+        }
+    }
+    return store_migrate_v1_to_v2(store, fail_migration_after_schema)
 }
 
 // Initialize only a completely empty writable database.
@@ -177,6 +268,23 @@ store_validate_database_identity :: proc(header: Store_Header) -> Store_Error {
             application_id = header.application_id,
             schema_version = header.schema_version,
         }
+    }
+    return {}
+}
+
+// Enable and verify referential checks on this exclusively owned connection.
+store_enable_foreign_keys :: proc(store: ^Store) -> sqlite.Error {
+    failure := store_exec(store, "PRAGMA foreign_keys=ON")
+    if !store_sqlite_error_is_clear(failure) {
+        return failure
+    }
+    enabled, query_error := store_read_integer_query(
+        &store^.connection, "PRAGMA foreign_keys")
+    if !store_sqlite_error_is_clear(query_error) {
+        return query_error
+    }
+    if enabled != 1 {
+        return sqlite.sqlite_make_validation_error(.Exec, .Invalid_State)
     }
     return {}
 }
@@ -261,6 +369,12 @@ store_initialize_schema :: proc(
     failure := sqlite.connection_exec(
         &store^.connection,
         strings.clone_to_cstring(USER_SETTING_SCHEMA_SQL, context.temp_allocator))
+    if store_sqlite_error_is_clear(failure) {
+        failure = sqlite.connection_exec(
+            &store^.connection,
+            strings.clone_to_cstring(
+                USER_COLLECTION_SCHEMA_SQL, context.temp_allocator))
+    }
     if store_sqlite_error_is_clear(failure) && fail_after_schema {
         failure = store_exec(store, "CREATE TABLE user_setting(value INTEGER)")
     }
@@ -268,7 +382,33 @@ store_initialize_schema :: proc(
         failure = store_exec(store, "PRAGMA application_id=1163215701")
     }
     if store_sqlite_error_is_clear(failure) {
-        failure = store_exec(store, "PRAGMA user_version=1")
+        failure = store_exec(store, "PRAGMA user_version=2")
+    }
+    if store_sqlite_error_is_clear(failure) {
+        failure = store_exec(store, "COMMIT")
+        if store_sqlite_error_is_clear(failure) {
+            return {}
+        }
+    }
+    return store_rollback_failure(store, .Migration, failure)
+}
+
+// Upgrade settings-only schema v1 atomically without rewriting user preferences.
+store_migrate_v1_to_v2 :: proc(
+    store: ^Store, fail_after_schema: bool) -> Store_Error {
+    begin_error := store_exec(store, "BEGIN IMMEDIATE")
+    if !store_sqlite_error_is_clear(begin_error) {
+        return {kind = .Migration, sqlite_error = begin_error}
+    }
+    failure := sqlite.connection_exec(
+        &store^.connection,
+        strings.clone_to_cstring(
+            USER_COLLECTION_SCHEMA_SQL, context.temp_allocator))
+    if store_sqlite_error_is_clear(failure) && fail_after_schema {
+        failure = store_exec(store, "CREATE TABLE user_setting(value INTEGER)")
+    }
+    if store_sqlite_error_is_clear(failure) {
+        failure = store_exec(store, "PRAGMA user_version=2")
     }
     if store_sqlite_error_is_clear(failure) {
         failure = store_exec(store, "COMMIT")
@@ -282,24 +422,67 @@ store_initialize_schema :: proc(
 // Prepare only the known-key statements needed by admitted stores.
 store_prepare_statements :: proc(
     store: ^Store, read_only: bool) -> Store_Error {
-    failure := sqlite.statement_prepare(
-        &store^.connection, &store^.read_setting,
-        strings.clone_to_cstring(READ_SETTING_SQL, context.temp_allocator))
-    if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Invalid_Schema, sqlite_error = failure}
+    failure := store_prepare_statement(store, &store^.read_setting, READ_SETTING_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    failure = store_prepare_statement(
+        store, &store^.read_collections, READ_COLLECTIONS_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    failure = store_prepare_statement(
+        store, &store^.read_collection_entries, READ_COLLECTION_ENTRIES_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
     }
     if read_only {
         return {}
     }
-    failure = sqlite.statement_prepare(
-        &store^.connection, &store^.upsert_setting,
-        strings.clone_to_cstring(UPSERT_SETTING_SQL, context.temp_allocator))
-    if !store_sqlite_error_is_clear(failure) {
-        return {kind = .Invalid_Schema, sqlite_error = failure}
+    failure = store_prepare_setting_write_statements(store)
+    if !store_error_is_clear(failure) {
+        return failure
     }
-    failure = sqlite.statement_prepare(
-        &store^.connection, &store^.delete_setting,
-        strings.clone_to_cstring(DELETE_SETTING_SQL, context.temp_allocator))
+    return store_prepare_collection_write_statements(store)
+}
+
+// Prepare the settings mutation statements for one writable connection.
+store_prepare_setting_write_statements :: proc(store: ^Store) -> Store_Error {
+    failure := store_prepare_statement(
+        store, &store^.upsert_setting, UPSERT_SETTING_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    return store_prepare_statement(store, &store^.delete_setting, DELETE_SETTING_SQL)
+}
+
+// Prepare collection snapshot mutations for one writable connection.
+store_prepare_collection_write_statements :: proc(store: ^Store) -> Store_Error {
+    failure := store_prepare_statement(
+        store, &store^.insert_collection, INSERT_COLLECTION_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    failure = store_prepare_statement(
+        store, &store^.insert_collection_entry, INSERT_COLLECTION_ENTRY_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    failure = store_prepare_statement(
+        store, &store^.delete_collection_entries, DELETE_COLLECTION_ENTRIES_SQL)
+    if !store_error_is_clear(failure) {
+        return failure
+    }
+    return store_prepare_statement(
+        store, &store^.delete_collections, DELETE_COLLECTIONS_SQL)
+}
+
+// Prepare one bounded static query and map schema failures consistently.
+store_prepare_statement :: proc(
+    store: ^Store, statement: ^sqlite.Statement, sql: string) -> Store_Error {
+    failure := sqlite.statement_prepare(
+        &store^.connection, statement,
+        strings.clone_to_cstring(sql, context.temp_allocator))
     if !store_sqlite_error_is_clear(failure) {
         return {kind = .Invalid_Schema, sqlite_error = failure}
     }
@@ -634,6 +817,24 @@ store_commit_batch_internal :: proc(
     store: ^Store,
     changes: settings.Change_Set,
     fail_after_changes: int) -> Commit_Result {
+    return store_commit_user_data_internal(
+        store, changes, []collections.Mutation{}, fail_after_changes)
+}
+
+// Commit settings and ordered collection mutations on the same store transaction.
+store_commit_user_data :: proc(
+    store: ^Store,
+    changes: settings.Change_Set,
+    mutations: []collections.Mutation) -> Commit_Result {
+    return store_commit_user_data_internal(store, changes, mutations, -1)
+}
+
+// Validate and commit one bounded immutable user-data task payload.
+store_commit_user_data_internal :: proc(
+    store: ^Store,
+    changes: settings.Change_Set,
+    mutations: []collections.Mutation,
+    fail_after_changes: int) -> Commit_Result {
     if store == nil || store^.status == .Closed {
         return {outcome = .Not_Committed, failure = {kind = .Closed}}
     }
@@ -643,19 +844,23 @@ store_commit_batch_internal :: proc(
     if !settings.valid_change_set(changes) {
         return {outcome = .Not_Committed, failure = {kind = .Invalid_Batch}}
     }
+    if len(mutations) > collections.MUTATION_CAPACITY {
+        return {outcome = .Not_Committed, failure = {kind = .Invalid_Batch}}
+    }
     if store^.status == .Read_Only {
         return {outcome = .Not_Committed, failure = {kind = .Not_Writable}}
     }
-    if changes.count == 0 {
+    if changes.count == 0 && len(mutations) == 0 {
         return {outcome = .Committed}
     }
-    return store_commit_transaction(store, changes, fail_after_changes)
+    return store_commit_transaction(store, changes, mutations, fail_after_changes)
 }
 
 // Apply and commit one nonempty transaction, rolling back every failed outcome.
 store_commit_transaction :: proc(
     store: ^Store,
     changes: settings.Change_Set,
+    mutations: []collections.Mutation,
     fail_after_changes: int) -> Commit_Result {
     begin_error := store_exec(store, "BEGIN IMMEDIATE")
     if !store_sqlite_error_is_clear(begin_error) {
@@ -669,6 +874,10 @@ store_commit_transaction :: proc(
     if !store_sqlite_error_is_clear(applied.failure) {
         return store_commit_rollback_result(
             store, applied.failure, applied.failed_id, applied.has_failed_id)
+    }
+    collection_error := store_apply_collection_mutations(store, mutations)
+    if !store_sqlite_error_is_clear(collection_error) {
+        return store_commit_rollback_result(store, collection_error, {}, false)
     }
     commit_error := store_exec(store, "COMMIT")
     if !store_sqlite_error_is_clear(commit_error) {
@@ -888,6 +1097,12 @@ store_close :: proc(store: ^Store) -> Store_Error {
         return {kind = .Closed}
     }
     failure: Store_Error
+    store_finalize_owned(store, &store^.delete_collections, &failure)
+    store_finalize_owned(store, &store^.delete_collection_entries, &failure)
+    store_finalize_owned(store, &store^.insert_collection_entry, &failure)
+    store_finalize_owned(store, &store^.insert_collection, &failure)
+    store_finalize_owned(store, &store^.read_collection_entries, &failure)
+    store_finalize_owned(store, &store^.read_collections, &failure)
     store_finalize_owned(store, &store^.delete_setting, &failure)
     store_finalize_owned(store, &store^.upsert_setting, &failure)
     store_finalize_owned(store, &store^.read_setting, &failure)

@@ -175,7 +175,8 @@ loading_runtime_session :: proc(
         startup = session_startup_inputs(startup_inputs),
     }
     session_apply_startup_preferences(
-        state, session.startup.preferences, session.startup.user_store)
+        state, session.startup.preferences,
+        session.startup.collections, session.startup.user_store)
     if !session_start_presentation(&session) {
         _ = shutdown_runtime_session(session)
         return {}, false

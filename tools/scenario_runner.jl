@@ -310,6 +310,8 @@ end
 scenario_passed(record) = record.result == "passed" && record.trace_complete &&
     record.exit_code == 0
 
+include(joinpath(@__DIR__, "favorites_scenarios.jl"))
+
 """Write scenario records as stable machine-readable JSON."""
 function write_json_report(io::IO, records)
     report = (schema_version=SCENARIO_SCHEMA_VERSION,
@@ -334,6 +336,8 @@ function run_selected(binary::String, options::ScenarioOptions; io::IO=stdout)
     for name in options.names
         if name == "settings-persistence-acceptance"
             append!(records, run_settings_acceptance(binary))
+        elseif name == "collections-favorites-acceptance"
+            append!(records, run_favorites_acceptance(binary))
         else
             push!(records, run_scenario(binary, name))
         end

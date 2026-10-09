@@ -280,6 +280,37 @@ target; surface-specific filters then preserve only the input facts that surface
 consume. Existing capture takes precedence over current hover so a drag or release
 does not jump to whichever control happens to be under the pointer now.
 
+The world animation overlay uses the same prepared icon-button path for restart,
+pause/resume, and the selected animation's Favorites toggle. The star is only hit
+testable for an eligible selected animation; its checked state is a collection
+placement fact and its activation enters the existing serialized user-data save flow.
+Restart and pause/resume share a bottom-left control box. Favorites occupies its own
+matching bottom-right box, visible only for an eligible selection. Both boxes use the
+same edge inset, padding, background, and border and follow the animation viewport
+when splitters or window dimensions change.
+
+Collections and Favorites begin collapsed on each launch. Their session expansion
+choices survive search filtering and temporary emptiness, even though both synthetic
+roots are omitted while Favorites is empty. Readding an animation creates a fresh
+placement identity without resetting its current playback.
+
+The existing save line in Settings reports the shared user-data transaction state for
+both preference edits and Favorites changes. Pending means accepted changes await a
+commit, Saving means a worker transaction is active, and Saved means no queued edits or
+unresolved failure remain. Transient failures remain recorded while retrying; a
+committed batch clears one only when it covers the failed revision. Failed and
+Unavailable distinguish exhausted or unrecoverable writes from missing or unwritable
+storage. The Settings accordion header keeps a small error dot while a failure remains
+unresolved or storage is unavailable; its accessible value exposes the localized save
+error without replacing the header label. Opening Settings does not clear the error;
+successful recovery removes the dot, while unavailable storage keeps it and updates its
+accessible description.
+
+The world controls use a subtle, low-alpha rounded hover highlight matching the existing
+row feedback. A non-overlapping triangle fan keeps its translucent fill uniform.
+It is visual-only: button hit rectangles, press state, focus behavior, and
+the Favorites gold checked fill remain unchanged.
+
 Three concepts are easy to conflate:
 
 | Concept | Meaning | Owner |

@@ -9,6 +9,7 @@ import log "core:log"
 import sync "core:sync"
 import preferencesmodel "model"
 import core "../../core"
+import collections "../../collections"
 
 SETTINGS_SAVE_MAX_ATTEMPTS :: 3
 SETTINGS_SAVE_RETRY_DELAY_FRAMES :: 60
@@ -19,8 +20,87 @@ settings_save_worker :: proc(
     _ = token
     task := cast(^preferencesmodel.Settings_Save_Task_Payload)payload
     task^.worker_thread_id = sync.current_thread_id()
-    task^.result = user_data.store_commit_batch(task^.store, task^.changes)
+    task^.result = user_data.store_commit_user_data(
+        task^.store, task^.changes, task^.mutations[:task^.mutation_count])
     return .Succeeded if task^.result.outcome == .Committed else .Failed
+}
+
+// Treat settings and collection edits as one outstanding persistence batch.
+settings_save_has_pending :: proc(
+    runtime: ^preferencesmodel.Settings_Save_Runtime) -> bool {
+    return runtime^.settings_pending.count > 0 ||
+        runtime^.collection_mutation_count > 0
+}
+
+// Record an accepted user-data edit and preserve unresolved failure context.
+settings_save_note_edit :: proc(state: ^core.Euclid_General_State) {
+    if state == nil {
+        return
+    }
+    runtime := &state^.preferences_runtime
+    runtime^.user_data_revision += 1
+    if runtime^.settings_store == nil {
+        state^.ui_runtime.settings_save_status = .Unavailable
+        return
+    }
+    if runtime^.settings_save_active {
+        state^.ui_runtime.settings_save_status = .Saving
+        return
+    }
+    if runtime^.user_data_failure_unresolved {
+        state^.ui_runtime.settings_save_status = .Pending
+        return
+    }
+    if state^.ui_runtime.settings_save_status == .Unavailable ||
+        state^.ui_runtime.settings_save_status == .Failed {
+        runtime^.settings_failure_count = 0
+        runtime^.settings_retry_frames = 0
+    }
+    state^.ui_runtime.settings_save_status = .Pending
+}
+
+// Accept one in-memory Favorites edit and retain it for ordered durable replay.
+settings_save_collection_mutation :: proc(
+    state: ^core.Euclid_General_State,
+    mutation: collections.Mutation) -> collections.Mutation_Error {
+    if state == nil {
+        return .Invalid_Entry
+    }
+    runtime := &state^.preferences_runtime
+    staged := runtime^.collections_state
+    mutation_error := collections.apply_mutation(&staged, mutation)
+    if mutation_error != .None {
+        return mutation_error
+    }
+    if runtime^.settings_store != nil &&
+        runtime^.collection_mutation_count +
+            runtime^.settings_save_payload.mutation_count >=
+                collections.MUTATION_CAPACITY {
+        return .Capacity
+    }
+    runtime^.collections_state = staged
+    runtime^.collection_revision += 1
+    if runtime^.settings_store != nil {
+        runtime^.collection_mutations[runtime^.collection_mutation_count] = mutation
+        runtime^.collection_mutation_count += 1
+    }
+    settings_save_note_edit(state)
+    return .None
+}
+
+// Restore failed operations ahead of edits accepted during the worker transaction.
+settings_save_requeue_mutations :: proc(state: ^core.Euclid_General_State) {
+    runtime := &state^.preferences_runtime
+    failed := runtime^.settings_save_payload
+    pending_count := runtime^.collection_mutation_count
+    for index := pending_count; index > 0; index -= 1 {
+        runtime^.collection_mutations[index + failed.mutation_count - 1] =
+            runtime^.collection_mutations[index - 1]
+    }
+    for index in 0..<failed.mutation_count {
+        runtime^.collection_mutations[index] = failed.mutations[index]
+    }
+    runtime^.collection_mutation_count += failed.mutation_count
 }
 
 // Poll and join a completed save before its fixed payload can be reused.
@@ -60,27 +140,98 @@ settings_save_apply_result :: proc(
         runtime^.settings_save_payload.result.outcome == .Committed
     settings_save_record_result(state, committed)
     if committed {
-        runtime^.settings_failure_count = 0
-        runtime^.settings_retry_frames = 0
-        state^.ui_runtime.settings_save_status =
-            .Saved if runtime^.settings_pending.count == 0 else .Pending
+        settings_save_apply_committed_result(state, runtime)
         return
     }
+    settings_save_apply_failed_result(state, runtime)
+}
+
+// Publish aggregate status after a committed batch resolves covered errors.
+settings_save_apply_committed_result :: proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^preferencesmodel.Settings_Save_Runtime) {
+    settings_save_resolve_failure(runtime)
+    if runtime^.user_data_failure_unresolved {
+        state^.ui_runtime.settings_save_status = .Failed
+        return
+    }
+    state^.ui_runtime.settings_save_status =
+        .Saved if !settings_save_has_pending(runtime) else .Pending
+}
+
+// Retain and report a failed transaction before its bounded retry policy.
+settings_save_apply_failed_result :: proc(
+    state: ^core.Euclid_General_State,
+    runtime: ^preferencesmodel.Settings_Save_Runtime) {
     settings_save_requeue(state, runtime^.settings_save_payload.changes)
-    failure := runtime^.settings_save_payload.result.failure.kind
-    status := settings_save_failure_status(failure, runtime^.settings_failure_count)
+    settings_save_requeue_mutations(state)
+    failure := runtime^.settings_save_payload.result.failure
+    settings_save_remember_failure(
+        runtime, runtime^.settings_save_payload.user_data_revision, failure)
+    status := settings_save_failure_status(
+        failure.kind, runtime^.settings_failure_count)
     state^.ui_runtime.settings_save_status = status
     if status == .Unavailable {
-        log.errorf("settings_save_permanent_failure error=%d", int(failure))
+        settings_save_log_failure(
+            "user_data_save_unavailable", runtime^.settings_failure_count, failure)
         return
     }
     if status == .Failed {
-        log.errorf("settings_save_retry_exhausted error=%d", int(failure))
+        settings_save_log_failure(
+            "user_data_save_retry_exhausted", runtime^.settings_failure_count, failure)
         return
     }
     runtime^.settings_retry_frames = SETTINGS_SAVE_RETRY_DELAY_FRAMES
-    log.warnf("settings_save_retry_scheduled attempt=%d error=%d",
-        runtime^.settings_failure_count, int(failure))
+    settings_save_log_failure(
+        "user_data_save_retry_scheduled", runtime^.settings_failure_count, failure)
+}
+
+// Retain only the newest unresolved transaction failure.
+settings_save_remember_failure :: proc(
+    runtime: ^preferencesmodel.Settings_Save_Runtime,
+    revision: u64,
+    failure: user_data.Store_Error) {
+    if !runtime^.user_data_failure_unresolved ||
+        revision >= runtime^.user_data_failure_revision {
+        runtime^.user_data_failure = failure
+        runtime^.user_data_failure_revision = revision
+        runtime^.user_data_failure_unresolved = true
+    }
+}
+
+// Resolve an error only when a committed batch covers its failed revision.
+settings_save_resolve_failure :: proc(
+    runtime: ^preferencesmodel.Settings_Save_Runtime) {
+    if runtime^.user_data_failure_unresolved &&
+        runtime^.settings_save_payload.user_data_revision <
+            runtime^.user_data_failure_revision {
+        return
+    }
+    runtime^.user_data_failure = {}
+    runtime^.user_data_failure_revision = 0
+    runtime^.user_data_failure_unresolved = false
+    runtime^.settings_failure_count = 0
+    runtime^.settings_retry_frames = 0
+}
+
+// Log structured SQLite and store error details without discarding them from state.
+settings_save_log_failure :: proc(
+    event: string, attempt: int, failure: user_data.Store_Error) {
+    if event == "user_data_save_retry_scheduled" {
+        log.warnf(
+            "%s attempt=%d error=%d sqlite_operation=%d sqlite_result=%d sqlite_extended=%d sqlite_validation=%d cleanup_result=%d",
+            event, attempt, int(failure.kind),
+            int(failure.sqlite_error.operation), int(failure.sqlite_error.result),
+            int(failure.sqlite_error.extended_result),
+            int(failure.sqlite_error.validation), int(failure.cleanup_error.result))
+        return
+    }
+    log.errorf(
+        "%s attempt=%d error=%d sqlite_operation=%d sqlite_result=%d sqlite_extended=%d sqlite_validation=%d cleanup_result=%d",
+        event, attempt, int(failure.kind),
+        int(failure.sqlite_error.operation), int(failure.sqlite_error.result),
+        int(failure.sqlite_error.extended_result),
+        int(failure.sqlite_error.validation), int(failure.cleanup_error.result))
 }
 
 // Map one commit failure and attempt count to its durable UI state.
@@ -126,7 +277,7 @@ settings_save_service :: proc(
         state^.ui_runtime.settings_save_status == .Failed {
         return
     }
-    if runtime^.settings_save_active || runtime^.settings_pending.count == 0 {
+    if runtime^.settings_save_active || !settings_save_has_pending(runtime) {
         return
     }
     if runtime^.settings_retry_frames > 0 {
@@ -144,6 +295,9 @@ settings_save_submit :: proc(
     runtime^.settings_save_payload = {
         store = runtime^.settings_store,
         changes = state^.preferences_runtime.settings_pending,
+        mutations = state^.preferences_runtime.collection_mutations,
+        mutation_count = state^.preferences_runtime.collection_mutation_count,
+        user_data_revision = runtime^.user_data_revision,
         owner_thread_id = sync.current_thread_id(),
     }
     handle, outcome := taskpool.task_pool_submit(
@@ -156,6 +310,7 @@ settings_save_submit :: proc(
     runtime^.settings_save_active = true
     runtime^.settings_failure_count += 1
     state^.preferences_runtime.settings_pending = {}
+    state^.preferences_runtime.collection_mutation_count = 0
     state^.ui_runtime.settings_save_status = .Saving
     settings_save_record_event(state, .Settings_Save_Submitted)
 }
@@ -198,7 +353,8 @@ settings_save_record_event :: proc(
             correlation = u64(runtime^.settings_save_handle.index + 1),
             generation = runtime^.settings_save_handle.generation,
             payload = {counts = {
-                u32(runtime^.settings_save_payload.changes.count), detail}},
+                u32(runtime^.settings_save_payload.changes.count +
+                    runtime^.settings_save_payload.mutation_count), detail}},
         })
 }
 
@@ -221,7 +377,7 @@ settings_save_shutdown :: proc(
             runtime^.settings_save_active = false
             settings_save_apply_result(state, result)
         }
-        if runtime^.settings_pending.count == 0 {
+        if !settings_save_has_pending(runtime) {
             return
         }
         if runtime^.settings_store == nil ||

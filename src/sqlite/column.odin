@@ -49,6 +49,36 @@ column_text_copy :: proc(
     return byte_count, {}
 }
 
+// Copy one exact BLOB value into caller-owned bounded bytes.
+column_blob_copy :: proc(
+    statement: ^Statement, column: int, destination: []u8) -> (int, Error) {
+    validation := sqlite_validate_column(statement, column)
+    if validation.validation != .None {
+        return 0, validation
+    }
+    if raw.sqlite3_column_type(statement.handle, c.int(column)) != .Blob {
+        return 0, sqlite_make_validation_error(.Column, .Type_Mismatch)
+    }
+    byte_count := int(raw.sqlite3_column_bytes(statement.handle, c.int(column)))
+    if byte_count < 0 {
+        return 0, sqlite_make_validation_error(.Column, .Range)
+    }
+    if byte_count > len(destination) {
+        return 0, sqlite_make_validation_error(.Column, .Capacity)
+    }
+    source := cast(^u8)raw.sqlite3_column_blob(statement.handle, c.int(column))
+    if byte_count > 0 && source == nil {
+        return 0, sqlite_make_validation_error(.Column, .Invalid_State)
+    }
+    if byte_count > 0 {
+        for index in 0..<byte_count {
+            byte_address := uintptr(source) + uintptr(index)
+            destination[index] = (cast(^u8)byte_address)^
+        }
+    }
+    return byte_count, {}
+}
+
 // Read one exact INTEGER value if it is representable as i32.
 column_i32 :: proc(statement: ^Statement, column: int) -> (i32, Error) {
     value, failure := sqlite_column_integer(statement, column)

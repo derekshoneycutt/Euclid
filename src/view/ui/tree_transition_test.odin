@@ -33,10 +33,30 @@ tree_transition_fixture :: proc(
     seed_tree_node(&nodes[3], &nodes[0], nil, nil, false)
     seed_tree_node(&nodes[4], nil, &nodes[5], nil, true)
     seed_tree_node(&nodes[5], &nodes[4], nil, nil, false)
-    return {ji = ji, ui_runtime = runtime, scroll_y = &runtime^.tree_scroll_y,
+    params := uilibrary.Tree_List_Params{
+        ji = ji, ui_runtime = runtime, scroll_y = &runtime^.tree_scroll_y,
         list_panel = {10, 20, 200, 200},
         mouse_input = {sample_time_seconds = 1, mouse_position = {-1, -1}},
-        visibility = {search = &runtime^.library_search}}
+        visibility = {search = &runtime^.library_search},
+    }
+    assert(uilibrary.tree_projection_prepare(params))
+    for node in nodes {
+        index := uilibrary.tree_projection_find(
+            &runtime^.tree_projection, node.stable_id)
+        runtime^.tree_projection.items[index].expanded = node.is_expanded
+    }
+    return params
+}
+
+// Set one test placement's display-owned expansion state.
+tree_transition_set_expanded :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    node: ^bridgemodel.Euclid_Julia_Animation_Interface,
+    expanded: bool) {
+    index := uilibrary.tree_projection_find(
+        &runtime^.tree_projection, node^.stable_id)
+    assert(index != uilibrary.TREE_NO_ITEM)
+    runtime^.tree_projection.items[index].expanded = expanded
 }
 
 // Verify exact duration, logical collapse, full-size rows, and static endpoint conservation.
@@ -48,7 +68,7 @@ tree_transition_finishes_at_180_ms :: proc(t: ^testing.T) {
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     initial := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, initial.content_height, theme.TREE_ROW_HEIGHT * 6)
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     start := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, start.content_height, initial.content_height)
     testing.expect(t, !uilibrary.tree_layout_find(&start, &nodes[2])^.logical)
@@ -80,11 +100,11 @@ tree_transition_reverses_without_a_queue :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     _ = uilibrary.tree_prepare_layout(params)
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     _ = uilibrary.tree_prepare_layout(params)
     params.mouse_input.sample_time_seconds = 1.06
     before := uilibrary.tree_prepare_layout(params)
-    nodes[0].is_expanded = true
+    tree_transition_set_expanded(&runtime, &nodes[0], true)
     after := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, after.content_height, before.content_height)
     testing.expect_value(t, runtime.tree_motion.branches[0].start_seconds, f64(1.06))
@@ -106,12 +126,12 @@ tree_transition_composes_concurrent_nested_branches :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     _ = uilibrary.tree_prepare_layout(params)
-    nodes[0].is_expanded = false
-    nodes[4].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
+    tree_transition_set_expanded(&runtime, &nodes[4], false)
     _ = uilibrary.tree_prepare_layout(params)
     params.mouse_input.sample_time_seconds = 1.03
     _ = uilibrary.tree_prepare_layout(params)
-    nodes[1].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[1], false)
     frame := uilibrary.tree_prepare_layout(params)
     testing.expect(t, runtime.tree_motion.branches[0].running)
     testing.expect(t, runtime.tree_motion.branches[1].running)
@@ -137,7 +157,7 @@ tree_transition_semantics_share_prepared_clips :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     _ = uilibrary.prepare_tree_list_panel(params)
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     _ = uilibrary.prepare_tree_list_panel(params)
     testing.expect_value(t,
@@ -149,7 +169,7 @@ tree_transition_semantics_share_prepared_clips :: proc(t: ^testing.T) {
         -1)
     params.mouse_input.sample_time_seconds = 1.06
     _ = uilibrary.prepare_tree_list_panel(params)
-    nodes[0].is_expanded = true
+    tree_transition_set_expanded(&runtime, &nodes[0], true)
     testing.expect(t, uisemantics.semantic_begin(semantic))
     prepared := uilibrary.prepare_tree_list_panel(params)
     testing.expect_value(t,
@@ -174,15 +194,16 @@ tree_transition_hidden_release_cannot_activate :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     _ = uilibrary.tree_prepare_layout(params)
-    nodes[0].is_expanded = true
+    tree_transition_set_expanded(&runtime, &nodes[0], true)
     _ = uilibrary.tree_prepare_layout(params)
     params.mouse_input.sample_time_seconds = 1.01
     layout := uilibrary.tree_prepare_layout(params)
     row := uilibrary.tree_layout_find(&layout, &nodes[1])
     runtime.ui_press_owner = {
-        active = true, kind = .List_Item, id = uilibrary.tree_node_press_id(&nodes[1])}
+        active = true, kind = .List_Item,
+        id = uilibrary.tree_placement_press_id(row^.item)}
     params.mouse_input.mouse_position = {
         params.list_panel.x + 30,
         params.list_panel.y + row^.content_y + theme.TREE_ROW_HEIGHT - 1}
@@ -206,10 +227,10 @@ tree_transition_keyboard_reveal_finishes_required_path :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     _ = uilibrary.prepare_tree_list_panel(params)
-    nodes[0].is_expanded = true
-    nodes[4].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], true)
+    tree_transition_set_expanded(&runtime, &nodes[4], false)
     _ = uilibrary.prepare_tree_list_panel(params)
     uilibrary.tree_set_active_node(&runtime, &nodes[2], true)
     prepared := uilibrary.prepare_tree_list_panel(params)
@@ -233,7 +254,10 @@ tree_transition_invalidations_snap :: proc(t: ^testing.T) {
         runtime.settings_preferences.interface.reduce_motion = false
         runtime.platform_reduce_motion = false
         _ = uilibrary.tree_prepare_layout(params)
-        nodes[0].is_expanded = !nodes[0].is_expanded
+        item_index := uilibrary.tree_projection_find(
+            &runtime.tree_projection, nodes[0].stable_id)
+        tree_transition_set_expanded(
+            &runtime, &nodes[0], !runtime.tree_projection.items[item_index].expanded)
         _ = uilibrary.tree_prepare_layout(params)
         testing.expect(t, runtime.tree_motion.branches[0].running)
         switch trigger {
@@ -262,8 +286,9 @@ tree_transition_scroll_anchor_respects_input_and_clamp :: proc(t: ^testing.T) {
     params.list_panel.height = theme.TREE_ROW_HEIGHT * 2
     layout := uilibrary.tree_prepare_layout(params)
     runtime.tree_scroll_y = theme.TREE_ROW_HEIGHT * 3
-    uilibrary.tree_motion_anchor(params, &nodes[4], &layout)
-    nodes[0].is_expanded = false
+    item := uilibrary.tree_layout_find(&layout, &nodes[4])^.item
+    uilibrary.tree_motion_anchor(params, item, &layout)
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     _ = uilibrary.tree_prepare_layout(params)
     params.mouse_input.sample_time_seconds = 1.09
     layout = uilibrary.tree_prepare_layout(params)
@@ -289,7 +314,7 @@ tree_transition_outgoing_preparation_is_noninteractive :: proc(t: ^testing.T) {
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     _ = uilibrary.tree_prepare_layout(params)
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     _ = uilibrary.tree_prepare_layout(params)
     runtime.tree_scroll_y = 400
     params.mouse_input.mouse_pressed = {.Left}
@@ -312,7 +337,9 @@ tree_transition_covers_full_catalogue_capacity :: proc(t: ^testing.T) {
     ji.animation_head = &nodes[0]
     ji.animation_count = len(nodes)
     for index in 0..<len(nodes) {
-        nodes[index].stable_id[0] = byte(index + 1)
+        stable_index := index + 1
+        nodes[index].stable_id[0] = byte(stable_index)
+        nodes[index].stable_id[1] = byte(stable_index >> 8)
         nodes[index].is_expanded = true
         if index + 1 < len(nodes) {
             nodes[index].first_child = &nodes[index + 1]
@@ -322,12 +349,16 @@ tree_transition_covers_full_catalogue_capacity :: proc(t: ^testing.T) {
     }
     params := uilibrary.Tree_List_Params{ji = &ji, ui_runtime = &runtime,
         list_panel = {0, 0, 200, 1000}, scroll_y = &runtime.tree_scroll_y}
+    testing.expect(t, uilibrary.tree_projection_prepare(params))
+    for index in 0..<len(nodes) {
+        tree_transition_set_expanded(&runtime, &nodes[index], true)
+    }
     initial := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, initial.count, len(nodes))
     testing.expect_value(t, runtime.tree_motion.count, len(nodes))
     testing.expect_value(t,
         initial.content_height, f32(len(nodes)) * theme.TREE_ROW_HEIGHT)
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     closing := uilibrary.tree_prepare_layout(params)
     testing.expect_value(t, closing.count, len(nodes))
     testing.expect(t, !closing.rows[len(nodes) - 1].logical)
@@ -341,7 +372,7 @@ tree_transition_pointer_toggle_uses_prepared_row :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     _ = uilibrary.prepare_tree_list_panel(params)
     params.mouse_input.mouse_position = {
         params.list_panel.x + theme.TREE_ROW_ICON_OFFSET_X + 2,
@@ -354,7 +385,9 @@ tree_transition_pointer_toggle_uses_prepared_row :: proc(t: ^testing.T) {
     params.mouse_input.mouse_down = {}
     params.mouse_input.mouse_released = {.Left}
     prepared := uilibrary.prepare_tree_list_panel(params)
-    testing.expect(t, nodes[0].is_expanded)
+    item_index := uilibrary.tree_projection_find(
+        &runtime.tree_projection, nodes[0].stable_id)
+    testing.expect(t, runtime.tree_projection.items[item_index].expanded)
     testing.expect(t, runtime.tree_motion.branches[0].running)
     testing.expect(t, !runtime.ui_press_owner.active)
     testing.expect_value(t, prepared.content_height, theme.TREE_ROW_HEIGHT * 3)
@@ -370,7 +403,7 @@ tree_transition_addressed_expansion_and_search_policy :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     _ = uilibrary.prepare_tree_list_panel(params)
     semantic^.commands[0] = {
         target = uilibrary.tree_item_semantic_id(&nodes[0]), kind = .Expand}
@@ -387,7 +420,9 @@ tree_transition_addressed_expansion_and_search_policy :: proc(t: ^testing.T) {
     _ = uilibrary.prepare_tree_list_panel(params)
     semantic^.commands[0].kind = .Collapse
     _ = uilibrary.prepare_tree_list_panel(params)
-    testing.expect(t, !nodes[0].is_expanded)
+    item_index := uilibrary.tree_projection_find(
+        &runtime.tree_projection, nodes[0].stable_id)
+    testing.expect(t, !runtime.tree_projection.items[item_index].expanded)
     testing.expect(t,
         uilibrary.tree_node_is_effectively_expanded(params.visibility, &nodes[0]))
     testing.expect(t, !runtime.tree_motion.branches[0].running)
@@ -402,9 +437,13 @@ tree_transition_snap_cancels_removed_row_capture :: proc(t: ^testing.T) {
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
     _ = uilibrary.prepare_tree_list_panel(params)
     runtime.ui_press_owner = {
-        active = true, kind = .List_Item, id = uilibrary.tree_node_press_id(&nodes[2])}
+        active = true, kind = .List_Item,
+        id = uilibrary.tree_placement_press_id(
+            &runtime.tree_projection.items[
+                uilibrary.tree_projection_find(&runtime.tree_projection,
+                    nodes[2].stable_id)])}
     runtime.settings_preferences.interface.reduce_motion = true
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     _ = uilibrary.prepare_tree_list_panel(params)
     testing.expect(t, !runtime.ui_press_owner.active)
     testing.expect(t, !runtime.tree_motion.branches[0].running)
@@ -426,10 +465,16 @@ tree_transition_preparation_does_not_allocate :: proc(t: ^testing.T) {
     for frame in 0..<40 {
         params.mouse_input.sample_time_seconds = 1 + f64(frame) / 100
         if frame % 4 == 0 {
-            nodes[0].is_expanded = !nodes[0].is_expanded
+            index := uilibrary.tree_projection_find(
+                &runtime.tree_projection, nodes[0].stable_id)
+            tree_transition_set_expanded(
+                &runtime, &nodes[0], !runtime.tree_projection.items[index].expanded)
         }
         if frame % 5 == 0 {
-            nodes[4].is_expanded = !nodes[4].is_expanded
+            index := uilibrary.tree_projection_find(
+                &runtime.tree_projection, nodes[4].stable_id)
+            tree_transition_set_expanded(
+                &runtime, &nodes[4], !runtime.tree_projection.items[index].expanded)
         }
         _ = uilibrary.prepare_tree_list_panel(params)
     }
@@ -443,7 +488,7 @@ tree_transition_prepared_disclosure_is_frozen :: proc(t: ^testing.T) {
     ji: bridgemodel.Euclid_Julia_Interface
     nodes: [6]bridgemodel.Euclid_Julia_Animation_Interface
     params := tree_transition_fixture(&runtime, &ji, nodes[:])
-    nodes[0].is_expanded = false
+    tree_transition_set_expanded(&runtime, &nodes[0], false)
     runtime.library_search.active = true
     runtime.library_search.visible_ids[0] = nodes[0].stable_id
     runtime.library_search.visible_ids[1] = nodes[1].stable_id

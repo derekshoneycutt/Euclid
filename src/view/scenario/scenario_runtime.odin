@@ -32,6 +32,7 @@ import uisplitter "../ui/layout/splitter"
 import uilibrary "../ui/library"
 import uisettings "../ui/settings"
 import capturemodel "../capture/model"
+import geometry "../../core/geometry"
 
 // Deferred display mutation applied before the next frame's UI geometry is prepared.
 Scenario_Ui_Mutation_Kind :: enum u8 {
@@ -59,6 +60,12 @@ Scenario_Runtime :: struct {
     terminal_recorded: bool,
     terminal_reason: artifact.Reason,
     pending_ui_mutation: Scenario_Ui_Mutation,
+    pointer_override: bool,
+    pointer_position: geometry.Vector2,
+    pointer_down: bool,
+    pointer_pressed: bool,
+    pointer_released: bool,
+    favorites_memory: Scenario_Favorites_Memory,
 }
 
 // Resolved owner-domain identity and its synchronized arena diagnostics.
@@ -514,6 +521,9 @@ scenario_issue_display_action :: proc(
     runtime: ^Scenario_Runtime, command: ^scenario.Command,
     identity: ^evidence_trace.Identity) -> (bool, bool) {
     state := runtime.state
+    if handled, accepted := scenario_issue_favorites_action(runtime, command); handled {
+        return handled, accepted
+    }
     if handled, accepted := scenario_issue_settings_action(state, command); handled {
         return handled, accepted
     }

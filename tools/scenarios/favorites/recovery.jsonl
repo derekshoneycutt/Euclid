@@ -1,0 +1,17 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Circle","as":"c"}
+{"wait_event":"animation_selected","correlation":"c","timeout_ms":10000}
+{"do":"pause_animation"}
+{"favorite_control":"press"}
+{"favorite_control":"release"}
+{"set_setting":{"key":"drawing.dust_limit","value":1500}}
+{"wait_event":"settings_save_failed","timeout_ms":10000}
+{"assert_favorites":"failure_retained"}
+{"wait_state":"settings_saved","timeout_ms":20000}
+{"assert_favorites":"order:Line:Point:Circle"}
+{"assert_favorites":"recovered"}
+{"assert_setting":{"key":"drawing.dust_limit","value":1500}}
+{"screenshot":".build/favorites-recovered.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -46,8 +46,8 @@ application coordinator; settings writes run as worker-only tasks, are joined be
 their payload or store can be reused, and are drained during shutdown.
 
 The UI does not issue SQL. Content requests cross the worker boundary as bounded values.
-Settings changes are collected as typed batches and handed to the persistence path;
-display drawing and controls operate on application-owned settings state.
+Settings and collection changes are collected into the shared user-data save queue;
+display drawing and controls operate on application-owned state.
 
 ## Packaged Content And Search
 
@@ -224,6 +224,23 @@ erDiagram
         integer integer_value
         text text_value
     }
+    USER_COLLECTION {
+        blob collection_id PK
+        text system_role
+        text display_name
+        integer collection_order
+        integer is_read_only
+    }
+    USER_COLLECTION_ENTRY {
+        blob entry_id PK
+        blob collection_id FK
+        blob parent_entry_id FK
+        integer sibling_order
+        text entry_kind
+        blob animation_id
+    }
+    USER_COLLECTION ||--o{ USER_COLLECTION_ENTRY : contains
+    USER_COLLECTION_ENTRY ||--o{ USER_COLLECTION_ENTRY : nests
 ```
 
 The value type selects which scalar column is populated: booleans and integers use
@@ -243,7 +260,7 @@ sequenceDiagram
     App->>Store: Load known settings
     Store-->>App: Validated typed values
     App->>View: Start with saved values and explicit overrides
-    View->>Pool: Submit coalesced setting changes
+    View->>Pool: Submit coalesced user-data changes
     Pool->>Store: Commit one transaction
     Pool-->>View: Joined save outcome
     View->>Pool: Drain accepted saves during shutdown
@@ -258,9 +275,13 @@ committed in one transaction; failure leaves the batch uncommitted and the save 
 retains it for its retry or reporting policy. Shutdown drains accepted writes before
 the coordinator closes the store.
 
-The current stored settings are window, rendering, drawing, and interface preferences.
-There is no shared transaction or generation lifecycle between these rows and the
-packaged catalogue.
+The current user-data store contains window, rendering, drawing, and interface
+preferences plus ordered collection placements. Settings edits and Favorites mutations
+share one serialized worker-only transaction queue; the Settings save line reports
+their aggregate durability. Pending indicates accepted edits not yet committed,
+Saving indicates an active transaction, and Saved requires no queued edits or
+unresolved failure. A failed batch remains unresolved through retries until a
+committed batch covers its revision.
 
 ## Shared SQLite Mechanics
 

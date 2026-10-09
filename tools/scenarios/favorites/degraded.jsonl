@@ -1,0 +1,15 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Circle","as":"c"}
+{"wait_event":"animation_selected","correlation":"c","timeout_ms":10000}
+{"do":"pause_animation"}
+{"favorite_control":"press"}
+{"favorite_control":"release"}
+{"set_setting":{"key":"drawing.dust_limit","value":1500}}
+{"wait_state":"settings_failed","timeout_ms":10000}
+{"assert_favorites":"order:Line:Point:Circle"}
+{"assert_favorites":"failure_retained"}
+{"screenshot":".build/favorites-failed.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"settings_worker_only"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}
