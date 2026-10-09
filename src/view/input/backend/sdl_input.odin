@@ -26,6 +26,7 @@ SDL_INPUT_SCANCODES :: [int(input.Input_Key.Count)]sdl.Scancode{
 Sdl_Input_Accumulation :: struct {
     modifiers: input.Input_Modifiers,
     mouse_pressed: input.Input_Mouse_Buttons,
+    mouse_left_clicks: u8,
     mouse_released: input.Input_Mouse_Buttons,
     mouse_wheel_delta: f32,
     focused: bool,
@@ -116,9 +117,12 @@ sdl_input_append_text :: proc(
 sdl_input_mouse_button :: proc(
     device_button: u8) -> (input.Input_Mouse_Button, bool) {
     switch device_button {
-    case sdl.BUTTON_LEFT: return .Left, true
-    case sdl.BUTTON_MIDDLE: return .Middle, true
-    case sdl.BUTTON_RIGHT: return .Right, true
+    case sdl.BUTTON_LEFT:
+        return .Left, true
+    case sdl.BUTTON_MIDDLE:
+        return .Middle, true
+    case sdl.BUTTON_RIGHT:
+        return .Right, true
     }
     return {}, false
 }
@@ -137,6 +141,9 @@ sdl_input_consume_event :: proc(
             accumulation^.diagnostics.button_events += 1
             if event^.button.down {
                 accumulation^.mouse_pressed += {button}
+                if button == .Left {
+                    accumulation^.mouse_left_clicks = event^.button.clicks
+                }
             } else {
                 accumulation^.mouse_released += {button}
             }
@@ -210,6 +217,7 @@ sdl_input_finish_frame :: proc(
     frame.mouse_moved = input.input_runtime_update_mouse_position(
         runtime, frame.mouse_position)
     frame.mouse_pressed = accumulation.mouse_pressed
+    frame.mouse_left_clicks = accumulation.mouse_left_clicks
     frame.mouse_released = released
     frame.mouse_down = levels
     frame.mouse_wheel_delta = accumulation.mouse_wheel_delta

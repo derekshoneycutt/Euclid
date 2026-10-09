@@ -157,10 +157,10 @@ General features:
   - [X] Initial primitive drawing animation hooks
   - [X] Improved console-like REPL
   - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
-  - [ ] Improved input after full input system migration (IME, etc.)
   - [ ] Julia syntax highlighting
   - [ ] History explorer Julia-REPL style
   - [ ] Initial comprehensive terminal shape drawing suite (In progress)
+  - [ ] Improved input after full input system migration (IME, etc.)
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation
@@ -196,19 +196,17 @@ General features:
   - [ ] Search auto-completion features
   - [ ] Collections
     - [X] Initial bookmarks/favorites type collection
-    - [ ] Favorites/Collection customization/organization
+    - [ ] Favorites/Collection organization
     - [ ] Multiple custom collections
-    - [ ] Custom introduction and naming in custom collections
+    - [ ] Custom introduction and naming in collections
     - [ ] Most viewed (dynamic; non-mutable)
-    - [ ] Recent searches (dynamic; non-mutable)
 - [ ] Sharing custom collections
   - [ ] Export/import files
   - [ ] In-network (ip-2-ip) custom collection sharing
 - [ ] Full input system
   - [X] Comprehensive mouse/keyboard focus system
   - [X] Basic initial accesibility support
-  - [ ] Additional accessibility support (nice-to-have)
-  - [ ] IME etc. (nice-to-have)
+  - [ ] Additional accessibility support
 
 Final tasks:
 

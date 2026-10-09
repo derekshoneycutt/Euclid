@@ -280,3 +280,276 @@ input_box_descriptor_rejects_read_only_mutation :: proc(t: ^testing.T) {
     testing.expect(t, !result.changed)
     testing.expect_value(t, string(buffer[:length]), "path")
 }
+
+// input_box_test_pointer_params borrows text and state for isolated gesture tests.
+input_box_test_pointer_params :: proc(
+    state: ^viewmodel.Ui_Input_Box_State,
+    text: string, clicks: u8, x: f32) -> Input_Box_Params {
+    return {
+        rect = {0, 0, 120, 24},
+        clip_rect = {0, 0, 120, 24},
+        descriptor = {
+            id = {domain = .Library_Control, local_id = 8},
+            text = text,
+            mode = .Editable,
+            content_revision = 1,
+        },
+        state = state,
+        pointer_routed = true,
+        column_advance = 10,
+        frame = {
+            mouse_position = {x, 12},
+            mouse_pressed = {.Left},
+            mouse_down = {.Left},
+            mouse_left_clicks = clicks,
+        },
+    }
+}
+
+// Verify double-click runs distinguish identifiers, Unicode, spaces, and punctuation.
+@(test)
+input_box_double_click_selects_utf8_runs :: proc(t: ^testing.T) {
+    cases := [?]struct {text: string, offset, first, last: int}{
+        {"foo_bar42 next", 4, 0, 9},
+        {"42+17", 1, 0, 2},
+        {"αβ_界9!", len("α"), 0, len("αβ_界9")},
+        {"foo...bar", 4, 3, 6},
+        {"a \t b", 2, 1, 4},
+        {"a\u00a0\u2003b", 1, 1, len("a\u00a0\u2003")},
+        {"one two", 3, 3, 4},
+        {"one two", 4, 4, 7},
+        {"one two", 99, 4, 7},
+        {"one two", -1, 0, 3},
+        {"", 0, 0, 0},
+    }
+    for item in cases {
+        state: viewmodel.Ui_Input_Box_State
+        input_box_select_run(&state, item.text, item.offset)
+        testing.expect_value(t, state.anchor_byte, item.first)
+        testing.expect_value(t, state.cursor_byte, item.last)
+    }
+}
+
+// Verify double-click cell hits do not round the right half into the next run.
+@(test)
+input_box_double_click_hits_character_cells :: proc(t: ^testing.T) {
+    cases := [?]struct {x: f32, first, last: int}{
+        {3, 0, 3}, {33, 0, 3}, {34, 3, 4},
+        {43, 3, 4}, {44, 4, 7}, {114, 4, 7},
+    }
+    for item in cases {
+        state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+        owner: viewmodel.Ui_Press_Owner_State
+        params := input_box_test_pointer_params(&state, "one two", 2, item.x)
+        _ = input_box_prepare(params, &owner)
+        testing.expect_value(t, state.anchor_byte, item.first)
+        testing.expect_value(t, state.cursor_byte, item.last)
+    }
+}
+
+// Verify scrolling maps a double click to the visible UTF-8 word without allocation.
+@(test)
+input_box_double_click_accounts_for_scroll :: proc(t: ^testing.T) {
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1, scroll_x = 40}
+    owner: viewmodel.Ui_Press_Owner_State
+    params := input_box_test_pointer_params(&state, "one αβ_界9 end", 2, 13)
+    params.rect.width = 54
+    result := input_box_prepare(params, &owner)
+    testing.expect_value(t, result.descriptor.anchor_byte, len("one "))
+    testing.expect_value(t, result.descriptor.cursor_byte, len("one αβ_界9"))
+    testing.expect_value(t, result.text_geometry.anchor_column, 4)
+    testing.expect_value(t, result.text_geometry.cursor_column, 9)
+}
+
+// Verify multi-click selections stay fixed across movement and focus-loss release.
+@(test)
+input_box_multi_click_preserves_selection_until_release :: proc(t: ^testing.T) {
+    click_counts := [?]u8{2, 3, 4}
+    for clicks in click_counts {
+        state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+        owner: viewmodel.Ui_Press_Owner_State
+        params := input_box_test_pointer_params(&state, "one two", clicks, 49)
+        _ = input_box_prepare(params, &owner)
+        first := 4 if clicks == 2 else 0
+        testing.expect_value(t, state.anchor_byte, first)
+        testing.expect_value(t, state.cursor_byte, 7)
+        testing.expect(t, state.dragging && state.fixed_selection && owner.active)
+        params.frame = {mouse_position = {14, 12}, mouse_down = {.Left}}
+        _ = input_box_prepare(params, &owner)
+        testing.expect_value(t, state.anchor_byte, first)
+        testing.expect_value(t, state.cursor_byte, 7)
+        params.frame = {mouse_position = {-10, 12}, mouse_released = {.Left},
+            window_focus_changed = true, window_focused = false}
+        _ = input_box_prepare(params, &owner)
+        testing.expect_value(t, state.anchor_byte, first)
+        testing.expect_value(t, state.cursor_byte, 7)
+        testing.expect(t, !owner.active && !state.dragging && !state.fixed_selection)
+    }
+}
+
+// Verify all-text gestures include hidden content in editable and read-only fields.
+@(test)
+input_box_triple_click_selects_complete_content :: proc(t: ^testing.T) {
+    modes := [?]viewmodel.Ui_Editable_Text_Mode{.Editable, .Read_Only}
+    texts := [?]string{"αβ hidden text", ""}
+    for mode in modes {
+        for text in texts {
+            state := viewmodel.Ui_Input_Box_State{content_revision = 1, scroll_x = 20}
+            owner: viewmodel.Ui_Press_Owner_State
+            params := input_box_test_pointer_params(&state, text, 3, 14)
+            params.descriptor.mode = mode
+            params.rect.width = 28
+            params.frame.mouse_down = {}
+            params.frame.mouse_released = {.Left}
+            result := input_box_prepare(params, &owner)
+            testing.expect_value(t, result.descriptor.anchor_byte, 0)
+            testing.expect_value(t, result.descriptor.cursor_byte, len(text))
+            testing.expect(t, !result.changed && !owner.active)
+        }
+    }
+}
+
+// Verify absent/single-click metadata preserves caret rounding and character dragging.
+@(test)
+input_box_single_click_metadata_preserves_dragging :: proc(t: ^testing.T) {
+    click_counts := [?]u8{0, 1}
+    for clicks in click_counts {
+        state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+        owner: viewmodel.Ui_Press_Owner_State
+        params := input_box_test_pointer_params(&state, "one two", clicks, 33)
+        _ = input_box_prepare(params, &owner)
+        testing.expect_value(t, state.anchor_byte, 3)
+        testing.expect_value(t, state.cursor_byte, 3)
+        testing.expect(t, !state.fixed_selection)
+        params.frame = {mouse_position = {64, 12}, mouse_released = {.Left}}
+        _ = input_box_prepare(params, &owner)
+        testing.expect_value(t, state.anchor_byte, 3)
+        testing.expect_value(t, state.cursor_byte, 6)
+    }
+}
+
+// Verify multi-click presses cannot bypass routing, bounds, or another press owner.
+@(test)
+input_box_multi_click_respects_pointer_admission :: proc(t: ^testing.T) {
+    for denied in 0..<3 {
+        state := viewmodel.Ui_Input_Box_State{content_revision = 1,
+            anchor_byte = 1, cursor_byte = 1}
+        owner: viewmodel.Ui_Press_Owner_State
+        params := input_box_test_pointer_params(&state, "one two", 3, 14)
+        if denied == 0 {
+            params.pointer_routed = false
+        } else if denied == 1 {
+            params.frame.mouse_position.x = -10
+        } else {
+            owner = {active = true, kind = .Input_Box, id = 99}
+        }
+        _ = input_box_prepare(params, &owner)
+        testing.expect_value(t, state.anchor_byte, 1)
+        testing.expect_value(t, state.cursor_byte, 1)
+        testing.expect(t, !state.dragging && !state.fixed_selection)
+    }
+}
+
+// Verify content publication clears a captured multi-click gesture's interaction state.
+@(test)
+input_box_revision_clears_multi_click_state :: proc(t: ^testing.T) {
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    owner: viewmodel.Ui_Press_Owner_State
+    params := input_box_test_pointer_params(&state, "one two", 2, 14)
+    _ = input_box_prepare(params, &owner)
+    testing.expect(t, state.fixed_selection)
+    testing.expect(t, input_box_reconcile_content(&state, "new", 2))
+    testing.expect(t, !state.dragging && !state.fixed_selection)
+    testing.expect_value(t, state.anchor_byte, 3)
+    testing.expect_value(t, state.cursor_byte, 3)
+}
+
+// Verify editing and deletion consume the UTF-8 range selected by a double click.
+@(test)
+input_box_multi_click_selection_supports_edits :: proc(t: ^testing.T) {
+    keys := [?]input.Input_Key{.Space, .Backspace, .Delete}
+    for key in keys {
+        buffer: [32]u8
+        copy(buffer[:], "αβ end")
+        length := len("αβ end")
+        state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+        owner: viewmodel.Ui_Press_Owner_State
+        params := input_box_test_pointer_params(&state, string(buffer[:length]), 2, 14)
+        _ = input_box_prepare(params, &owner)
+        events := [1]input.Input_Event{{kind = .Press, key = key}}
+        expected := " end"
+        if key == .Space {
+            events[0] = {kind = .Text, codepoint = '界'}
+            expected = "界 end"
+        }
+        update := input_box_apply_edit_keyboard(&state, {buffer[:], &length},
+            input_box_test_frame(events[:]))
+        testing.expect(t, update.changed)
+        testing.expect_value(t, string(buffer[:length]), expected)
+        testing.expect_value(t, state.anchor_byte, state.cursor_byte)
+    }
+}
+
+// Verify read-only word selection permits copy/navigation but rejects text mutation.
+@(test)
+input_box_read_only_double_click_supports_copy_navigation :: proc(t: ^testing.T) {
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    owner: viewmodel.Ui_Press_Owner_State
+    params := input_box_test_pointer_params(&state, "αβ end", 2, 14)
+    params.descriptor.mode = .Read_Only
+    _ = input_box_prepare(params, &owner)
+    events := [2]input.Input_Event{
+        {kind = .Text, codepoint = 'x'},
+        {kind = .Press, key = .C, modifiers = {.Control}}}
+    update := input_box_apply_keyboard(&state, params.descriptor.text,
+        input_box_test_frame(events[:]))
+    testing.expect(t, update.copy_requested)
+    testing.expect_value(t, update.copy_start, 0)
+    testing.expect_value(t, update.copy_end, len("αβ"))
+    input_box_move_cursor(&state, params.descriptor.text, .Right, false)
+    testing.expect_value(t, state.anchor_byte, len("αβ"))
+    testing.expect_value(t, state.cursor_byte, len("αβ"))
+}
+
+// Verify multi-click ranges reach the existing accessibility selection publication.
+@(test)
+input_box_multi_click_publishes_semantic_selection :: proc(t: ^testing.T) {
+    semantic := new(viewmodel.Ui_Semantic_Focus_State, context.allocator)
+    defer free(semantic, context.allocator)
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    owner: viewmodel.Ui_Press_Owner_State
+    params := input_box_test_pointer_params(&state, "αβ end", 2, 14)
+    params.semantic_focus = semantic
+    testing.expect(t, uisemantics.semantic_begin(semantic))
+    result := input_box_prepare(params, &owner)
+    testing.expect_value(t, result.text_geometry.selection.width, f32(20))
+    testing.expect_value(t, result.text_geometry.anchor_column, 0)
+    testing.expect_value(t, result.text_geometry.cursor_column, 2)
+    snapshot := uisemantics.semantic_staging_snapshot(semantic)
+    index := uisemantics.semantic_node_index(snapshot, params.descriptor.id)
+    testing.expect(t, index >= 0)
+    if index >= 0 {
+        testing.expect_value(t, snapshot^.nodes[index].text_anchor_byte, 0)
+        testing.expect_value(t, snapshot^.nodes[index].text_cursor_byte, len("αβ"))
+    }
+}
+
+// Verify cutting and pasting consume a triple-click selection through bounded storage.
+@(test)
+input_box_triple_click_supports_cut_paste :: proc(t: ^testing.T) {
+    buffer: [32]u8
+    copy(buffer[:], "αβ end")
+    length := len("αβ end")
+    state := viewmodel.Ui_Input_Box_State{content_revision = 1}
+    owner: viewmodel.Ui_Press_Owner_State
+    params := input_box_test_pointer_params(&state, string(buffer[:length]), 3, 14)
+    _ = input_box_prepare(params, &owner)
+    events := [2]input.Input_Event{
+        {kind = .Press, key = .X, modifiers = {.Control}},
+        {kind = .Press, key = .V, modifiers = {.Control}}}
+    update := input_box_apply_edit_keyboard(&state, {buffer[:], &length},
+        input_box_test_frame(events[:]), "replacement")
+    testing.expect(t, update.changed && update.copy_requested)
+    testing.expect_value(t, string(update.copied_bytes[:update.copied_length]), "αβ end")
+    testing.expect_value(t, string(buffer[:length]), "replacement")
+}

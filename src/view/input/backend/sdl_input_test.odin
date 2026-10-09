@@ -81,6 +81,7 @@ sdl_input_test_pointer_wheel_and_focus :: proc(t: ^testing.T) {
     pressed := sdl.Event{type = .MOUSE_BUTTON_DOWN}
     pressed.button.button = sdl.BUTTON_LEFT
     pressed.button.down = true
+    pressed.button.clicks = 2
     sdl_input_consume_event(&runtime, &pressed, &accumulation)
     normal_wheel := sdl.Event{type = .MOUSE_WHEEL}
     normal_wheel.wheel.y = -1.25
@@ -93,7 +94,37 @@ sdl_input_test_pointer_wheel_and_focus :: proc(t: ^testing.T) {
     lost := sdl.Event{type = .WINDOW_FOCUS_LOST}
     sdl_input_consume_event(&runtime, &lost, &accumulation)
     testing.expect(t, .Left in accumulation.mouse_pressed)
+    testing.expect_value(t, accumulation.mouse_left_clicks, u8(2))
     testing.expect_value(t, accumulation.mouse_wheel_delta, f32(1.25))
     testing.expect_value(t, accumulation.diagnostics.wheel_events, u64(2))
     testing.expect(t, !accumulation.focused)
+}
+
+// Verify the latest left press retains its count across other buttons and release.
+@(test)
+sdl_input_test_click_count_tracks_latest_left_press :: proc(t: ^testing.T) {
+    runtime: input.Input_Runtime
+    accumulation: Sdl_Input_Accumulation
+    event := sdl.Event{type = .MOUSE_BUTTON_DOWN}
+    event.button.button = sdl.BUTTON_LEFT
+    event.button.down = true
+    click_counts := [?]u8{1, 2, 3}
+    for clicks in click_counts {
+        event.button.clicks = clicks
+        sdl_input_consume_event(&runtime, &event, &accumulation)
+        testing.expect_value(t, accumulation.mouse_left_clicks, clicks)
+    }
+    event.button.button = sdl.BUTTON_RIGHT
+    event.button.clicks = 1
+    sdl_input_consume_event(&runtime, &event, &accumulation)
+    event.type = .MOUSE_BUTTON_UP
+    event.button.button = sdl.BUTTON_LEFT
+    event.button.down = false
+    sdl_input_consume_event(&runtime, &event, &accumulation)
+    testing.expect_value(t, accumulation.mouse_left_clicks, u8(3))
+    testing.expect(t, .Left in accumulation.mouse_pressed &&
+        .Left in accumulation.mouse_released)
+    accumulation = {}
+    sdl_input_consume_event(&runtime, &event, &accumulation)
+    testing.expect_value(t, accumulation.mouse_left_clicks, u8(0))
 }

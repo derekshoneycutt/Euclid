@@ -211,6 +211,8 @@ Input_Frame :: struct {
     mouse_moved: bool,
     mouse_modifiers: Input_Modifiers,
     mouse_pressed: Input_Mouse_Buttons,
+    // SDL click count for the latest left press; zero denotes unspecified metadata.
+    mouse_left_clicks: u8,
     mouse_released: Input_Mouse_Buttons,
     mouse_down: Input_Mouse_Buttons,
 
@@ -279,6 +281,7 @@ input_frame_filter_pointer :: proc(
     }
     if .Press_Edges not_in fields {
         result.mouse_pressed = {} 
+        result.mouse_left_clicks = 0
     }
     if .Release_Edges not_in fields {
         result.mouse_released = {} 

@@ -6,12 +6,20 @@ import input "../../input"
 import native "../../native"
 import view_font "../../font"
 import utf8 "core:unicode/utf8"
+import unicode "core:unicode"
 import viewmodel "../model"
 import viewtext "../text"
 import theme "../theme"
 import uisemantics "../semantics"
 
 INPUT_BOX_TEXT_INSET :: f32(4)
+
+// Input_Box_Run_Kind defines the three homogeneous double-click selection classes.
+Input_Box_Run_Kind :: enum {
+    Word,
+    Whitespace,
+    Punctuation,
+}
 
 // Input_Box_Params groups borrowed content, geometry, and routed frame interaction.
 Input_Box_Params :: struct {
@@ -127,6 +135,7 @@ input_box_reconcile_content :: proc(
         state^.scroll_x = 0
         state^.content_revision = revision
         state^.dragging = false
+        state^.fixed_selection = false
         return true
     }
     state^.cursor_byte = input_box_clamp_boundary(text, state^.cursor_byte)
@@ -148,9 +157,12 @@ input_box_move_cursor :: proc(
     case .Right:
         destination = selection_end if !extend && selection_start != selection_end else
             input_box_next_boundary(text, destination)
-    case .Home: destination = 0
-    case .End: destination = len(text)
-    case: return
+    case .Home:
+        destination = 0
+    case .End:
+        destination = len(text)
+    case:
+        return
     }
     if !extend {
         state^.anchor_byte = destination
@@ -398,7 +410,76 @@ input_box_hit_boundary :: proc(params: Input_Box_Params, x: f32) -> int {
     return input_box_column_boundary(params.descriptor.text, column)
 }
 
-// input_box_update_pointer resolves shared capture and UTF-8-safe drag selection.
+// input_box_run_kind classifies a codepoint into a word, space, or punctuation run.
+input_box_run_kind :: proc(
+    text: string, offset: int) -> Input_Box_Run_Kind {
+
+    value, _ := utf8.decode_rune_in_string(text[offset:])
+    if value == '_' || unicode.is_letter(value) || unicode.is_digit(value) {
+        return .Word
+    }
+    if unicode.is_space(value) {
+        return .Whitespace
+    }
+    return .Punctuation
+}
+
+// input_box_select_run selects the homogeneous UTF-8 run containing one codepoint.
+input_box_select_run :: proc(
+    state: ^viewmodel.Ui_Input_Box_State, text: string,
+    offset: int) {
+
+    if len(text) == 0 {
+        state^.anchor_byte = 0
+        state^.cursor_byte = 0
+        return
+    }
+    first := input_box_clamp_boundary(text, offset)
+    if first == len(text) {
+        first = input_box_previous_boundary(text, first)
+    }
+    kind := input_box_run_kind(text, first)
+    last := input_box_next_boundary(text, first)
+    for first > 0 {
+        previous := input_box_previous_boundary(text, first)
+        if input_box_run_kind(text, previous) != kind {
+            break
+        }
+        first = previous
+    }
+    for last < len(text) && input_box_run_kind(text, last) == kind {
+        last = input_box_next_boundary(text, last)
+    }
+    state^.anchor_byte = first
+    state^.cursor_byte = last
+}
+
+// input_box_begin_selection resolves an admitted click without changing single-hit rounding.
+input_box_begin_selection :: proc(params: Input_Box_Params) {
+    state := params.state
+    clicks := params.frame.mouse_left_clicks
+    state^.fixed_selection = clicks >= 2
+    state^.dragging = true
+    if clicks >= 3 {
+        state^.anchor_byte = 0
+        state^.cursor_byte = len(params.descriptor.text)
+    } else if clicks == 2 {
+        local_x := params.frame.mouse_position.x - params.rect.x -
+            INPUT_BOX_TEXT_INSET + state^.scroll_x
+        column := 0
+        if params.column_advance > 0 {
+            column = int(max(f32(0), local_x) / params.column_advance)
+        }
+        input_box_select_run(state, params.descriptor.text,
+            input_box_column_boundary(params.descriptor.text, column))
+    } else {
+        state^.cursor_byte = input_box_hit_boundary(
+            params, params.frame.mouse_position.x)
+        state^.anchor_byte = state^.cursor_byte
+    }
+}
+
+// input_box_update_pointer captures character drags or fixed multi-click selections.
 input_box_update_pointer :: proc(
     params: Input_Box_Params, hovered: bool,
     owner: ^viewmodel.Ui_Press_Owner_State) {
@@ -407,20 +488,20 @@ input_box_update_pointer :: proc(
     if params.pointer_routed && hovered && input_frame_left_pressed(params.frame) &&
         !owner^.active {
         owner^ = {active = true, kind = .Input_Box, id = press_id}
-        params.state^.cursor_byte = input_box_hit_boundary(
-            params, params.frame.mouse_position.x)
-        params.state^.anchor_byte = params.state^.cursor_byte
-        params.state^.dragging = true
+        input_box_begin_selection(params)
         owns = true
     }
-    if owns && input_frame_left_down(params.frame) {
+    if owns && input_frame_left_down(params.frame) && !params.state^.fixed_selection {
         params.state^.cursor_byte = input_box_hit_boundary(
             params, params.frame.mouse_position.x)
     }
     if owns && input_frame_left_released(params.frame) {
-        params.state^.cursor_byte = input_box_hit_boundary(
-            params, params.frame.mouse_position.x)
+        if !params.state^.fixed_selection {
+            params.state^.cursor_byte = input_box_hit_boundary(
+                params, params.frame.mouse_position.x)
+        }
         params.state^.dragging = false
+        params.state^.fixed_selection = false
         owner^ = {}
     }
 }

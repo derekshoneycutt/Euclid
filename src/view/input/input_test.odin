@@ -381,6 +381,18 @@ input_test_pointer_filter_is_field_selective :: proc(t: ^testing.T) {
     testing.expect(t, !filtered.terminal_mouse_owned)
 }
 
+// Verify click counts are routed with press edges, never as independent pointer data.
+@(test)
+input_test_pointer_filter_routes_click_count_with_press :: proc(t: ^testing.T) {
+    frame := Input_Frame{mouse_pressed = {.Left}, mouse_left_clicks = 3}
+    admitted := input_frame_filter_pointer(frame, {.Press_Edges})
+    testing.expect_value(t, admitted.mouse_pressed, Input_Mouse_Buttons{.Left})
+    testing.expect_value(t, admitted.mouse_left_clicks, u8(3))
+    filtered := input_frame_filter_pointer(frame, {.Screen_Position, .Levels})
+    testing.expect_value(t, filtered.mouse_pressed, Input_Mouse_Buttons{})
+    testing.expect_value(t, filtered.mouse_left_clicks, u8(0))
+}
+
 // Verify hidden pointer coordinates use the caller's non-interactive sentinel.
 @(test)
 input_test_pointer_filter_replaces_hidden_coordinates :: proc(t: ^testing.T) {

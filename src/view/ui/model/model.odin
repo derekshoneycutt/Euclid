@@ -516,6 +516,7 @@ Ui_Input_Box_State :: struct {
     scroll_x: f32,
     content_revision: u64,
     dragging: bool,
+    fixed_selection: bool,
 }
 
 // Library_Search_State owns bounded display-side query and accepted-result state.
