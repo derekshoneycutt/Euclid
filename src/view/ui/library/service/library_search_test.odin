@@ -293,8 +293,8 @@ library_search_packaged_index_commits_visible_node :: proc(t: ^testing.T) {
     defer viewcontent.content_service_destroy_owned(service)
 
     registry_state := new(core.Euclid_General_State, context.allocator)
-    defer bridge.destroy_julia_interface_resources(registry_state)
     defer free(registry_state, context.allocator)
+    defer bridge.destroy_julia_interface_resources(registry_state)
     registry := &registry_state^.julia_interface_slots[0]
     registry_state^.julia_interface = registry
      generation := viewcontent.content_service_generation(service)
