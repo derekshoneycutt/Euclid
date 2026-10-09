@@ -3,7 +3,7 @@ package treeviewmodel
 import geometry "../../../../../core/geometry"
 import uuid "core:encoding/uuid"
 
-NODE_CAPACITY :: 256
+NODE_CAPACITY :: 512
 NO_NODE :: -1
 
 // Item_Key is opaque to the widget and stable across frame-local topology indices.
