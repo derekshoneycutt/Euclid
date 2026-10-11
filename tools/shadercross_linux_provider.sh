@@ -4,7 +4,6 @@ set -euo pipefail
 
 repository=$(cd "$(dirname "$0")/.." && pwd)
 work="$repository/.build/shadercross-linux-provider"
-source="${EUCLID_SHADERCROSS_SOURCE:-$repository/libs/sdl_shadercross/source}"
 rootfs="$work/ubuntu"
 mkdir -p "$work"
 
@@ -12,6 +11,7 @@ if [[ "$(uname -m)" != x86_64 ]]; then
     echo "Linux shadercross binary production requires an x86_64 host." >&2
     exit 1
 fi
+source "$repository/tools/shadercross_provider_source.sh"
 if [[ "$(git -C "$source" rev-parse HEAD)" != 1ff05bec573988a98ef9e0260b4da44f512b8367 ]]; then
     echo "Linux shadercross production requires the pinned source commit." >&2
     exit 1

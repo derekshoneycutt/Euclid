@@ -2,8 +2,7 @@ const LINUX_SHADERCROSS_DIR = joinpath(
     REPOSITORY_ROOT, "libs", "sdl_shadercross", "bin", "linux64")
 const LINUX_SHADERCROSS_ARTIFACTS = Set([
     "shadercross", "spirv-val", "spirv-dis", "libdxcompiler.so", "libdxil.so"])
-const LINUX_SHADERCROSS_COMPONENTS = union(
-    WINDOWS_SHADERCROSS_COMPONENTS, Set(["SDL3"]))
+const LINUX_SHADERCROSS_COMPONENTS = STATIC_SHADERCROSS_COMPONENTS
 
 """Validate the Linux provider's supported platform and baseline runtime."""
 function validate_linux_shadercross_platform(
@@ -32,7 +31,7 @@ function validate_linux_shadercross_header(manifest::AbstractDict,
     occursin(r"^[0-9a-f]{40}$", source_commit) || error(
         "Linux SDL_shadercross manifest has an invalid source commit.")
     expected_source_commit === nothing || source_commit == expected_source_commit ||
-        error("Linux SDL_shadercross payload does not match the repository gitlink.")
+        error("Linux SDL_shadercross payload does not match the repository source pin.")
 end
 
 """Validate hashes, licenses, and complete inventory of the Linux build tools."""
@@ -47,19 +46,31 @@ function linux_shadercross_manifest(root::AbstractString=LINUX_SHADERCROSS_DIR;
         "Missing Linux SDL_shadercross binary manifest at $manifest_path.")
     manifest = parse_file(manifest_path)
     validate_linux_shadercross_header(manifest, architecture, expected_source_commit)
+    validate_shadercross_inventory(manifest, root, LINUX_SHADERCROSS_COMPONENTS,
+        LINUX_SHADERCROSS_ARTIFACTS, hash_file, file_size)
+    return manifest
+end
+
+"""Validate a statically linked provider's complete component and tool closure."""
+function validate_shadercross_inventory(manifest::AbstractDict, root::AbstractString,
+    expected_components::Set{String}, expected_artifacts::Set{String},
+    hash_file::Function, file_size::Function)
     components = get(manifest, "component", Any[])
     names = Set(String(get(component, "name", "")) for component in components)
-    names == LINUX_SHADERCROSS_COMPONENTS && length(names) == length(components) ||
-        error("Linux SDL_shadercross manifest has an invalid component inventory.")
+    names == expected_components && length(names) == length(components) ||
+        error("SDL_shadercross manifest has an invalid component inventory.")
+    shadercross = only(filter(component -> component["name"] == "SDL_shadercross", components))
+    shadercross["source_commit"] == manifest["source_commit"] || error(
+        "SDL_shadercross component does not match the manifest source commit.")
     source_names = validate_shadercross_source_dependencies!(manifest, root, hash_file)
     artifacts = Set{String}()
     for component in components
         validate_shadercross_component!(component, union(names, source_names),
             artifacts, root, hash_file, file_size)
     end
-    artifacts == LINUX_SHADERCROSS_ARTIFACTS || error(
-        "Linux SDL_shadercross manifest has an incomplete artifact inventory.")
-    return manifest
+    artifacts == expected_artifacts || error(
+        "SDL_shadercross manifest has an incomplete artifact inventory.")
+    return nothing
 end
 
 """Resolve a verified Linux tool without consulting source builds or PATH."""

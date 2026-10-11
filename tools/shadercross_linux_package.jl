@@ -1,14 +1,7 @@
 using SHA
 using TOML
 
-"""Copy a produced Linux artifact and return its hashed manifest record."""
-function package_linux_shadercross_artifact(
-    payload::String, destination::String, filename::String, role::String)
-    cp(joinpath(payload, filename), joinpath(destination, filename); force=true)
-    path = joinpath(destination, filename)
-    return Dict("file" => filename, "role" => role, "bytes" => filesize(path),
-        "sha256" => bytes2hex(open(sha256, path)))
-end
+include(joinpath(@__DIR__, "shadercross_package.jl"))
 
 """Publish the Linux payload using the matching Windows source/license inventory."""
 function package_linux_shadercross()
@@ -18,6 +11,7 @@ function package_linux_shadercross()
     windows = joinpath(repository, "libs", "sdl_shadercross", "bin", "win64")
     destination = joinpath(repository, "libs", "sdl_shadercross", "bin", "linux64")
     manifest = TOML.parsefile(joinpath(windows, "manifest.toml"))
+    validate_packaged_shadercross_pin(manifest, repository)
     inventory = Dict(
         "SDL_shadercross" => ["shadercross" => "cli"],
         "SPIRV-Tools" => ["spirv-val" => "validator", "spirv-dis" => "disassembler"],
@@ -26,7 +20,7 @@ function package_linux_shadercross()
     mkpath(joinpath(destination, "licenses"))
     for component in manifest["component"]
         component["artifact"] = [
-            package_linux_shadercross_artifact(payload, destination, file, role)
+            package_shadercross_artifact(payload, destination, file, role)
             for (file, role) in get(inventory, component["name"], Pair{String,String}[])]
     end
     for filename in readdir(joinpath(windows, "licenses"))

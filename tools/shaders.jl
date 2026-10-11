@@ -2,15 +2,13 @@ module EuclidShaders
 
 using SHA
 using TOML
-import Main.EuclidBuildConfiguration
 
 export ShaderAbi, ShaderArtifacts, ShaderSpec, build_shaders, compile_command,
     dxil_command, msl_command, reflection_command, runtime_artifact_name,
     runtime_shader_entrypoint, runtime_shader_format, shader_abis, shader_specs,
-    shadercross_build_command, shadercross_configure_command,
     validate_pipeline_contracts, validate_reflection, validate_spirv_abi,
     windows_shadercross_manifest, windows_shadercross_runtime_dirs,
-    linux_shadercross_manifest
+    linux_shadercross_manifest, macos_shadercross_manifest
 
 const SHADER_SCHEMA_VERSION = 1
 const MSL_VERSION = "2.0.0"
@@ -19,8 +17,6 @@ const REPOSITORY_ROOT = normpath(joinpath(@__DIR__, ".."))
 const WINDOWS_SDL_DIR = joinpath(REPOSITORY_ROOT, "libs", "sdl", "bin", "win64")
 const WINDOWS_SHADERCROSS_DIR = joinpath(
     REPOSITORY_ROOT, "libs", "sdl_shadercross", "bin", "win64")
-const SHADERCROSS_DEPENDENCIES = [
-    "DirectXShaderCompiler", "SPIRV-Cross", "SPIRV-Headers", "SPIRV-Tools"]
 const WINDOWS_SHADERCROSS_ARTIFACTS = Set([
     "shadercross.exe", "SDL3_shadercross.dll", "spirv-cross-c-shared.dll",
     "dxcompiler.dll", "dxil.dll", "spirv-val.exe", "spirv-dis.exe"])
@@ -29,6 +25,8 @@ const WINDOWS_SHADERCROSS_COMPONENTS = Set([
     "SPIRV-Tools", "SPIRV-Headers"])
 const WINDOWS_SHADERCROSS_SOURCE_DEPENDENCIES = Set([
     "DirectX-Headers", "DXC-SPIRV-Headers", "DXC-SPIRV-Tools"])
+const STATIC_SHADERCROSS_COMPONENTS = union(
+    WINDOWS_SHADERCROSS_COMPONENTS, Set(["SDL3"]))
 
 struct ShaderBuildTools
     compiler::String
@@ -45,18 +43,14 @@ function windows_shadercross_runtime_dirs(
     ]
 end
 
-"""Return the parent repository's pinned shadercross gitlink when available."""
+"""Read the explicit upstream source pin independently of Git or submodules."""
 function repository_shadercross_commit(repository_root::String)
-    ispath(joinpath(repository_root, ".git")) || return nothing
-    git = Sys.which("git")
-    git === nothing && return nothing
-    output = IOBuffer()
-    command = Cmd([git, "-C", repository_root, "rev-parse",
-        "HEAD:libs/sdl_shadercross/source"])
-    process = run(pipeline(ignorestatus(command), stdout=output, stderr=devnull))
-    process.exitcode == 0 || return nothing
-    commit = String(strip(String(take!(output))))
-    return occursin(r"^[0-9a-f]{40}$", commit) ? commit : nothing
+    path = joinpath(repository_root, "libs", "sdl_shadercross", "source-pin.toml")
+    isfile(path) || error("Missing SDL_shadercross source pin at $path")
+    commit = String(get(TOML.parsefile(path), "source_commit", ""))
+    occursin(r"^[0-9a-f]{40}$", commit) || error(
+        "SDL_shadercross source pin has an invalid commit.")
+    return commit
 end
 
 """Validate fixed Windows shadercross manifest platform fields."""
@@ -86,7 +80,7 @@ function validate_shadercross_manifest_header(manifest::AbstractDict,
         "Windows SDL_shadercross manifest has an invalid source commit.")
     expected_source_commit === nothing ||
         source_commit == expected_source_commit || error(
-            "Windows SDL_shadercross payload does not match the repository gitlink.")
+            "Windows SDL_shadercross payload does not match the repository source pin.")
     sdl_manifest = normpath(joinpath(root,
         String(get(manifest, "sdl_manifest", ""))))
     isfile(sdl_manifest) || error(
@@ -175,6 +169,9 @@ function windows_shadercross_manifest(
         "Windows SDL_shadercross manifest contains duplicate components.")
     component_names == WINDOWS_SHADERCROSS_COMPONENTS || error(
         "Windows SDL_shadercross manifest has an incomplete component inventory.")
+    shadercross = only(filter(component -> component["name"] == "SDL_shadercross", components))
+    shadercross["source_commit"] == manifest["source_commit"] || error(
+        "SDL_shadercross component does not match the manifest source commit.")
     source_names = validate_shadercross_source_dependencies!(manifest, root, hash_file)
     allowed_dependencies = union(component_names, source_names, Set(["SDL3"]))
     artifact_names = Set{String}()
@@ -196,6 +193,7 @@ function windows_shadercross_artifact(repository_root::String, filename::String)
 end
 
 include(joinpath(@__DIR__, "shadercross_linux.jl"))
+include(joinpath(@__DIR__, "shadercross_macos.jl"))
 
 struct ShaderSpec
     name::String
@@ -404,100 +402,7 @@ function resolve_tool(name::String; environment_name::String="")
     return realpath(path)
 end
 
-"""Construct the canonical configure command for the vendored shader compiler."""
-function shadercross_configure_command(
-    cmake::String, source::String, build::String)
-    arguments = [cmake, "--fresh", "-S", source, "-B", build, "-G", "Ninja",
-        "-DCMAKE_BUILD_TYPE=Release", "-DSDLSHADERCROSS_VENDORED=ON",
-        "-DSDLSHADERCROSS_CLI=ON", "-DSDLSHADERCROSS_INSTALL=OFF",
-        "-DSDLSHADERCROSS_TESTS=OFF", "-DSPIRV_WERROR=OFF"]
-    return Cmd(arguments)
-end
-
-"""Report whether the bundled shader compiler cache needs fresh configuration."""
-function shadercross_needs_configure(
-    build::String, source::Union{Nothing,String}=nothing)
-    cache = joinpath(build, "CMakeCache.txt")
-    isfile(cache) || return true
-    entries = Set(eachline(cache))
-    configured = "CMAKE_GENERATOR:INTERNAL=Ninja" in entries &&
-        "SPIRV_WERROR:BOOL=OFF" in entries
-    if source !== nothing
-        cmake_source = replace(normpath(source), '\\' => '/')
-        configured &= "CMAKE_HOME_DIRECTORY:INTERNAL=$cmake_source" in entries
-    end
-    return !configured
-end
-
-"""Construct the parallel build command for the vendored shader compiler."""
-function shadercross_build_command(cmake::String, build::String)
-    return Cmd([cmake, "--build", build, "--target", "shadercross",
-        "spirv-val", "spirv-dis",
-        "--parallel"])
-end
-
-"""Capture the Visual Studio x64 compiler and Windows SDK environment."""
-function msvc_build_environment()
-    vcvars = EuclidBuildConfiguration.resolve_msvc_tool_path(
-        "VC/Auxiliary/Build/vcvars64.bat",
-        "Could not locate vcvars64.bat. Install the C++ Build Tools workload.")
-    output = IOBuffer()
-    command = Cmd([
-        "cmd", "/d", "/c", "call", vcvars, ">nul", "&&", "set"])
-    process = run(pipeline(ignorestatus(command), stdout=output, stderr=devnull))
-    process.exitcode == 0 || error(
-        "Could not initialize the Visual Studio x64 build environment.")
-    environment = Dict{String,String}()
-    for line in split(String(take!(output)), '\n')
-        separator = findfirst(==('='), line)
-        (separator === nothing || separator == firstindex(line)) && continue
-        key = strip(line[firstindex(line):prevind(line, separator)])
-        value = strip(line[nextind(line, separator):end])
-        environment[key] = value
-    end
-    environment["PATH"] = string(
-        WINDOWS_SDL_DIR, ';', get(environment, "PATH", get(ENV, "PATH", "")))
-    return environment
-end
-
-"""Run one visible setup command and report its owning stage on failure."""
-function checked_setup_command(command::Cmd, stage::String)
-    if Sys.iswindows()
-        command = addenv(command, collect(msvc_build_environment())...)
-    end
-    process = run(ignorestatus(command))
-    process.exitcode == 0 || error("$stage failed with exit $(process.exitcode).")
-end
-
-"""Build and return the SDL_shadercross CLI from the repository submodule."""
-function build_bundled_shadercross(repository_root::String)
-    source = joinpath(
-        repository_root, "libs", "sdl_shadercross", "source")
-    isfile(joinpath(source, "CMakeLists.txt")) || error(
-        "SDL_shadercross submodule is missing. Run git submodule update --init --recursive.")
-    for dependency in SHADERCROSS_DEPENDENCIES
-        isfile(joinpath(source, "external", dependency, "CMakeLists.txt")) || error(
-            "SDL_shadercross dependencies are missing. Run git submodule update --init --recursive.")
-    end
-    cmake = resolve_tool("cmake")
-    build = joinpath(repository_root, ".build", "shadercross")
-    if shadercross_needs_configure(build, source)
-        checked_setup_command(
-            shadercross_configure_command(cmake, source, build),
-            "SDL_shadercross configuration")
-    end
-    checked_setup_command(
-        shadercross_build_command(cmake, build), "SDL_shadercross build")
-    candidates = Sys.iswindows() ?
-        [joinpath(build, "Release", "shadercross.exe"),
-            joinpath(build, "shadercross.exe")] :
-        [joinpath(build, "shadercross")]
-    executable = findfirst(isfile, candidates)
-    executable === nothing && error("SDL_shadercross build produced no CLI executable.")
-    return realpath(candidates[executable])
-end
-
-"""Resolve an override or the platform's binary/source build-tool provider."""
+"""Resolve an override or the platform's verified binary build-tool provider."""
 function resolve_shadercross(repository_root::String)
     override = get(ENV, SHADERCROSS_ENV, "")
     isempty(override) || return resolve_tool(
@@ -506,26 +411,18 @@ function resolve_shadercross(repository_root::String)
         repository_root, "shadercross.exe")
     Sys.islinux() && return linux_shadercross_artifact(
         repository_root, "shadercross")
-    return build_bundled_shadercross(repository_root)
+    Sys.isapple() && return macos_shadercross_artifact(repository_root, "shadercross")
+    error("SDL_shadercross binary provider is unsupported on $(Sys.KERNEL).")
 end
 
-"""Resolve one SPIRV-Tools executable produced by the shadercross build."""
+"""Resolve one verified SPIRV-Tools executable from the binary provider."""
 function resolve_bundled_spirv_tool(repository_root::String, name::String)
     executable = Sys.iswindows() ? "$name.exe" : name
     Sys.iswindows() && return windows_shadercross_artifact(
         repository_root, executable)
     Sys.islinux() && return linux_shadercross_artifact(repository_root, executable)
-    build = joinpath(repository_root, ".build", "shadercross")
-    candidates = [
-        joinpath(build, "external", "SPIRV-Tools", "tools", "Release", executable),
-        joinpath(build, "external", "SPIRV-Tools", "tools", executable),
-        joinpath(build, "Release", executable),
-        joinpath(build, executable),
-    ]
-    index = findfirst(isfile, candidates)
-    index === nothing && error(
-        "$name was not produced by the bundled shadercross build.")
-    return realpath(candidates[index])
+    Sys.isapple() && return macos_shadercross_artifact(repository_root, executable)
+    error("SPIRV-Tools binary provider is unsupported on $(Sys.KERNEL).")
 end
 
 """Run one checked shader build command."""
@@ -750,12 +647,10 @@ function resolve_shader_build_tools(repository_root::String,
     shadercross_path = shadercross === nothing ?
         resolve_shadercross(repository_root) : realpath(shadercross)
     validator_path = validator === nothing ?
-        (Sys.iswindows() || Sys.islinux() ? resolve_bundled_spirv_tool(
-            repository_root, "spirv-val") : resolve_tool("spirv-val")) :
+        resolve_bundled_spirv_tool(repository_root, "spirv-val") :
         realpath(validator)
     disassembler_path = disassembler === nothing ?
-        (Sys.iswindows() || Sys.islinux() ? resolve_bundled_spirv_tool(
-            repository_root, "spirv-dis") : resolve_tool("spirv-dis")) :
+        resolve_bundled_spirv_tool(repository_root, "spirv-dis") :
         realpath(disassembler)
     return ShaderBuildTools(
         shadercross_path, validator_path, disassembler_path)

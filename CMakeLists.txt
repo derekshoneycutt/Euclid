@@ -19,12 +19,6 @@ if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/analysis/Project.toml")
         "Analysis submodule missing. Run: git submodule update --init --recursive")
 endif()
 
-if(APPLE AND (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libs/sdl_shadercross/source/CMakeLists.txt" OR
-    NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/libs/sdl_shadercross/source/external/DirectXShaderCompiler/CMakeLists.txt"))
-    message(FATAL_ERROR
-        "Shadercross submodules missing. Run: git submodule update --init --recursive")
-endif()
-
 if(WIN32)
     find_program(EUCLID_GENDEF_EXECUTABLE NAMES gendef REQUIRED)
 endif()

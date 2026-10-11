@@ -73,8 +73,13 @@ and libstdc++ with GLIBCXX_3.4.29+ (Ubuntu 22.04 or newer), does not require the
 shadercross submodule, and never falls back to building it. Other Linux
 architectures are not supported by this provider. See its
 [maintenance guide](libs/sdl_shadercross/bin/linux64/README.md).
-macOS still requires SPIR-V Tools (`spirv-val` and `spirv-dis`) and the recursive
-shadercross source submodule.
+Apple Silicon macOS uses the matching checked-in, checksum-validated tools under
+`libs/sdl_shadercross/bin/macos_arm64`, including SPIR-V Tools and the DXC library
+closure. No platform requires the shadercross source submodule or builds it during
+ordinary application builds. [Source pin](libs/sdl_shadercross/source-pin.toml)
+records the upstream commit shared by all three providers; each binary manifest
+records dependency commits, licenses, and hashes. See the
+[macOS maintenance guide](libs/sdl_shadercross/bin/macos_arm64/README.md).
 
 GitHub Actions uses Node 24-based actions; Node is not an application build
 dependency. The Linux CI job installs shaderc and builds checksum-verified
@@ -86,7 +91,7 @@ including `libxss-dev` for X11 screensaver support, rather than disabling
 backends to bypass missing development packages.
 
 On Apple Silicon macOS, install the Xcode command-line tools and the Homebrew packages
-`sdl3`, `sdl3_image`, `pkg-config`, `spirv-tools`, and `shaderc`. Intel and universal
+`sdl3`, `sdl3_image`, `pkg-config`, and `shaderc`. Intel and universal
 macOS builds are not yet supported.
 
 Unix source and distribution builds may intentionally select system HarfBuzz with

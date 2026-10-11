@@ -1,8 +1,7 @@
 # Linux Shadercross Build Tools
 
 This pinned x86-64 payload is build-only. Euclid packages generated shaders, never
-these tools, into application assets. Ordinary Linux builds neither initialize
-nor compile the shadercross source submodule.
+these tools, into application assets. Ordinary Linux builds use only this payload.
 
 ## Compatibility and ownership
 
@@ -27,8 +26,9 @@ This is an explicit maintenance task, not a prerequisite of application builds.
 It needs an x86-64 Linux host with Bash, Git, curl, tar, sha256sum, bubblewrap, and
 unprivileged user namespaces. It requires no Docker daemon or host package changes.
 
-The default source input is the recursive shadercross submodule. Alternatively,
-clone the pinned upstream commit and initialize its recursive dependencies in a
+The default source input is a maintenance-only clone under
+`.build/shadercross-source`, automatically initialized at the pinned upstream commit.
+Alternatively, clone that commit and initialize its recursive dependencies in a
 separate directory, then set `EUCLID_SHADERCROSS_SOURCE` to that checkout. The
 recipe checks all eight source pins and refuses tracked modifications.
 
@@ -50,4 +50,4 @@ After an update, run Julia unit tests and the complete CMake `check` gate.
 Also compile all production shaders in the baseline rootfs from a relocated
 payload, validate their SPIR-V and ABI/reflection contracts, and compare them
 with ordinary host-generated shaders before accepting the refreshed binaries.
-Keep the source submodule until macOS has its own validated binary provider.
+The shadercross submodule has been removed; all platforms use binary providers.
