@@ -32,9 +32,11 @@ The core application is coded in Odin, with SDL3 and SDL_GPU used for rendering.
 
 ## Building from Source
 
-Clone the repository, configure one preset, then build it. CMake verifies the
-toolchain and bootstraps the required Julia environments before invoking the
-project-specific Julia driver.
+Clone the repository, configure one preset, then build it. CMake configuration
+verifies the toolchain; build targets bootstrap the required Julia environments
+before invoking the project-specific Julia driver. Before running Julia tests
+directly in a fresh checkout, run
+`cmake --build --preset default --target configure` to bootstrap those environments.
 
 ### Configure and build
 
@@ -64,6 +66,11 @@ library and matching headers; a separate FreeType installation is not required.
 On Linux and macOS, builds require SDL3 and SDL_image 3.4 development files
 discoverable through `pkg-config`, SPIR-V Tools (`spirv-val` and `spirv-dis`), and
 `glslc` from shaderc.
+
+GitHub Actions uses Node 24-based actions; Node is not an application build
+dependency. The Linux CI job installs the shader tools and builds checksum-verified
+SDL3 3.4.16 and SDL_image 3.4.6 development libraries from their release archives,
+matching the versions recorded in the Windows SDL manifest.
 
 On Apple Silicon macOS, install the Xcode command-line tools and the Homebrew packages
 `sdl3`, `sdl3_image`, `pkg-config`, `spirv-tools`, and `shaderc`. Intel and universal

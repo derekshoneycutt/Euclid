@@ -93,6 +93,11 @@ The Wiki workflow generates and checks `bin/wiki/` for pull requests and
 relevant pushes, then uploads it as a review artifact. Publication runs only
 for `main` pushes after artifact validation.
 
+The build job runs the CMake `configure` target to instantiate both Julia
+environments before invoking Wiki tests directly. CMake preset configuration alone
+does not install Julia packages, and a restored package cache is not a substitute
+for environment bootstrap.
+
 The publisher checks out the separate GitHub Wiki Git repository and
 synchronizes only manifest claims. GitHub Wiki pages use a flat namespace, so
 structured artifact paths are published as unique names such as

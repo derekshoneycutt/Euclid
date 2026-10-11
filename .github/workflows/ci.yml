@@ -22,17 +22,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Set up Julia
-        uses: julia-actions/setup-julia@v2
+        uses: julia-actions/setup-julia@v3
         with:
-          version: "1.12"
+          version: "1.13"
 
       - name: Cache Julia packages
-        uses: julia-actions/cache@v2
+        uses: julia-actions/cache@v3
 
       - name: Set up Odin
         uses: laytan/setup-odin@v2
@@ -43,8 +43,39 @@ jobs:
       - name: Install native dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libx11-dev libxrandr-dev libxi-dev \
-            libxcursor-dev libxinerama-dev
+          sudo apt-get install -y pkg-config glslc spirv-tools libpng-dev \
+            libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
+            libasound2-dev libpulse-dev libwayland-dev libxkbcommon-dev \
+            libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libegl1-mesa-dev \
+            libvulkan-dev
+
+      - name: Build pinned SDL development libraries
+        run: |
+          mkdir -p .build/ci-native
+          cd .build/ci-native
+          curl --fail --location --retry 3 --output SDL3.tar.gz \
+            https://github.com/libsdl-org/SDL/releases/download/release-3.4.16/SDL3-3.4.16.tar.gz
+          curl --fail --location --retry 3 --output SDL3_image.tar.gz \
+            https://github.com/libsdl-org/SDL_image/releases/download/release-3.4.6/SDL3_image-3.4.6.tar.gz
+          echo "7322236cd12090c3eb40b9728be4d49c76f66ad17d04369584d4ecad5cf77c68  SDL3.tar.gz" | sha256sum --check
+          echo "d2e4637ae700f72e5196b8fbd749850ed2e5e1e09c5a5be8d06ff55aaccf3b01  SDL3_image.tar.gz" | sha256sum --check
+          tar -xzf SDL3.tar.gz
+          tar -xzf SDL3_image.tar.gz
+          cmake -S SDL3-3.4.16 -B sdl-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF
+          cmake --build sdl-build --parallel 2
+          sudo cmake --install sdl-build
+          cmake -S SDL3_image-3.4.6 -B image-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DSDLIMAGE_VENDORED=OFF -DSDLIMAGE_SAMPLES=OFF -DSDLIMAGE_TESTS=OFF
+          cmake --build image-build --parallel 2
+          sudo cmake --install image-build
+          sudo ldconfig
+          pkg-config --modversion sdl3 sdl3-image
+          spirv-val --version
+          spirv-dis --version
+          glslc --version
 
       - name: Configure
         run: cmake --preset default
@@ -54,7 +85,7 @@ jobs:
 
       - name: Upload analysis report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: euclid-analysis-report-${{ github.sha }}
           path: .build/reports/analysis.md
