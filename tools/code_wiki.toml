@@ -54,6 +54,13 @@ navigation_order = 20
 owner = "guide_authors"
 
 [[guides]]
+title = "Font Rasterization"
+path = "Guides/FontRasterization.md"
+summary = "FreeType raster policy, memory bounds, and platform integration."
+navigation_order = 25
+owner = "guide_authors"
+
+[[guides]]
 title = "Coding Standards"
 path = "Guides/CodingStandards.md"
 summary = "Mandatory Odin, Julia, testing, and maintainability conventions."
@@ -68,9 +75,58 @@ navigation_order = 40
 owner = "guide_authors"
 
 [[guides]]
-title = "Scratchpad Architecture"
-path = "Guides/ScratchpadArchitecture.md"
-summary = "Interactive Julia terminal, evaluation pipeline, session model, and frame hook lifecycle."
+title = "Shape System"
+path = "Guides/ShapeSystem.md"
+summary = "Bounded shape storage, bridge ABI, draw-cache derivation, and animation lifetime."
+navigation_order = 42
+owner = "guide_authors"
+
+[[guides]]
+title = "SQLite Architecture"
+path = "Guides/Sqlite3.md"
+summary = "Immutable catalogue database, FTS5 and spellfix schema, ownership, and query flow."
+navigation_order = 43
+owner = "guide_authors"
+
+[[guides]]
+title = "Localization And Editions"
+path = "Guides/Localization.md"
+summary = "Authoring localized messages, names, and editions; native consumers, callback queries, and extension workflows."
+navigation_order = 44
+owner = "guide_authors"
+
+[[guides]]
+title = "Tool Rendering"
+path = "Guides/ToolRendering.md"
+summary = "Pen and compass geometry, shading, and rendering contracts."
+navigation_order = 45
+owner = "guide_authors"
+
+[[guides]]
+title = "Accessibility"
+path = "Guides/Accessibility.md"
+summary = "Cross-platform sidebar support, native probes, qualification evidence, exclusions, and AccessKit limits."
+navigation_order = 47
+owner = "guide_authors"
+
+[[guides]]
+title = "UI System"
+path = "Guides/UiSystem.md"
+summary = "Display-owned layout, panels, input, widgets, scrolling, and rendering."
+navigation_order = 48
+owner = "guide_authors"
+
+[[guides]]
+title = "Particle System"
+path = "Guides/ParticleSystem.md"
+summary = "Grounded PIC field physics, airborne dust, contacts, rendering, and evidence."
+navigation_order = 49
+owner = "guide_authors"
+
+[[guides]]
+title = "Terminal Architecture"
+path = "Guides/TerminalArchitecture.md"
+summary = "Interactive Terminal ownership, session actors, native process integration, and EuclidRepl lifecycle."
 navigation_order = 50
 owner = "guide_authors"
 
@@ -104,6 +160,22 @@ guide_paths = [
 symbol_prefixes = []
 
 [[guide_relations]]
+package_id = "odin:src:particles"
+guide_paths = [
+    "Guides/ParticleSystem.md#grounded-dust-as-a-field",
+    "Guides/ParticleSystem.md#contacts-and-rendering",
+]
+symbol_prefixes = ["dust_", "particle_", "emit_", "queue_dust_"]
+
+[[guide_relations]]
+package_id = "odin:src:view:content"
+guide_paths = [
+    "Guides/Sqlite3.md#packaged-content-and-search",
+    "Guides/Localization.md#extending-the-system",
+]
+symbol_prefixes = []
+
+[[guide_relations]]
 package_id = "julia:EuclidAnimations"
 guide_paths = [
     "Guides/AnimationsStyle.md#motion-conventions",
@@ -123,7 +195,7 @@ symbol_prefixes = []
 package_id = "julia:EuclidRepl"
 guide_paths = [
     "Guides/AnimationsStyle.md#motion-conventions",
-    "Guides/ArchitectureSummary.md#scratchpad-architecture-interactive-runtime-surface",
+    "Guides/ArchitectureSummary.md#terminal-architecture-interactive-runtime-surface",
 ]
 symbol_prefixes = ["circle!", "highlight_", "line!", "point!", "reflect", "rotate", "translate"]
 
@@ -134,6 +206,11 @@ guide_paths = [
     "Guides/JuliaThreadArchitecture.md#correctness-invariants",
 ]
 symbol_prefixes = ["add_", "dynview_", "notify_", "set_null_"]
+
+[[guide_relations]]
+package_id = "julia:OdinJuliaBridge"
+guide_paths = ["Guides/Localization.md#reading-specifications-from-julia"]
+symbol_prefixes = ["animation_content_"]
 
 [[guide_relations]]
 package_id = "julia:OdinJuliaBridge"

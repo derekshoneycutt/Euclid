@@ -1,121 +1,211 @@
 package bridge
 
-import "../julialib"
+import animation_model "../core/animation"
+
+import julialib "../../libs/julia/bindings"
 import "../core"
 
-//   Register Julia callbacks that define the null/default animation behavior.
+// Carry one animation key and deterministic schema identity across the C ABI.
+Animation_Value_Abi_Identity :: struct {
+    key : u64,
+    schema_low : u64,
+    schema_high : u64,
+}
+
+// Return the copied path length and native catalogue node kind.
+Animation_Implementation_Path_Metadata :: struct {
+    byte_count: i32,
+    node_kind: i32,
+}
+
+//   Convert a canonical animation-value result to its stable bridge status.
+animation_value_bridge_status :: proc "contextless" (
+    status: animation_model.Animation_Value_Status) -> i32 {
+    switch status {
+    case .Ok:
+        return BRIDGE_STATUS_OK
+    case .Invalid_Argument:
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    case .Illegal_State:
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    case .Not_Found:
+        return BRIDGE_STATUS_NOT_FOUND
+    case .Schema_Mismatch:
+        return BRIDGE_STATUS_SCHEMA_MISMATCH
+    case .Out_Of_Capacity, .Allocation_Failed:
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
+    }
+    return BRIDGE_STATUS_ILLEGAL_STATE
+}
+
+//   Build the canonical identity for the host's active animation generation.
+animation_value_identity :: proc "contextless" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity) ->
+        animation_model.Animation_Value_Identity {
+    return {
+        generation = state^.animation_values.generation,
+        key = identity_abi.key,
+        schema_low = identity_abi.schema_low,
+        schema_high = identity_abi.schema_high,
+    }
+}
+
+//   Copy one Julia-owned opaque value into canonical animation storage.
+//
+// Parameters:
+//   - state: Live host state in a synchronous animation lifecycle callback.
+//   - identity: Nonzero key and deterministic 128-bit Julia schema identity.
+//   - source: Julia-owned bytes valid only for this call.
+//   - byte_count: Exact positive payload size.
+//
+// Returns:
+//   - Stable `BRIDGE_STATUS_*`; the source pointer is never retained.
+@(export)
+set_animation_value :: proc "c" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity,
+    source: ^u8,
+    byte_count: i32) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    if source == nil || byte_count <= 0 ||
+        byte_count > i32(animation_model.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    context = state^.saved_context
+    identity := animation_value_identity(state, identity_abi)
+    source_bytes := cast([^]u8)source
+    payload := source_bytes[:int(byte_count)]
+    if state^.scene_command_batch_target != nil {
+        if state^.animation_query_snapshot_target == nil {
+            return BRIDGE_STATUS_ILLEGAL_STATE
+        }
+        return animation_value_bridge_status(
+            animation_model.animation_value_pending_append(
+                &state^.scene_command_batch_target^.animation_value_writes,
+                identity,
+                payload))
+    }
+    if state^.animation_query_snapshot_target != nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    return animation_value_bridge_status(animation_model.animation_value_store_set(
+        &state^.animation_values, identity, payload))
+}
+
+//   Copy one canonical opaque value into Julia-owned destination storage.
+//
+// Parameters:
+//   - state: Live host state in a synchronous animation lifecycle callback.
+//   - identity: Existing key and exact bound 128-bit schema identity.
+//   - destination: Julia-owned bytes valid only for this call.
+//   - byte_count: Exact positive destination size.
+//
+// Returns:
+//   - Stable `BRIDGE_STATUS_*`; destination changes only on success.
+get_animation_query_value :: proc(
+    state: ^core.Euclid_General_State,
+    identity: animation_model.Animation_Value_Identity,
+    payload: []u8) -> i32 {
+    if state^.scene_command_batch_target == nil ||
+        !state^.animation_query_snapshot_target^.animation_values_valid {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    status := animation_model.animation_value_pending_copy(
+        &state^.scene_command_batch_target^.animation_value_writes,
+        identity,
+        payload)
+    if status != .Not_Found {
+        return animation_value_bridge_status(status)
+    }
+    return animation_value_bridge_status(animation_model.animation_value_snapshot_copy(
+        &state^.animation_query_snapshot_target^.animation_values,
+        identity,
+        payload))
+}
+
+//   Copy one opaque value from the active query snapshot and staged writes.
+@(export)
+get_animation_value :: proc "c" (
+    state: ^core.Euclid_General_State,
+    identity_abi: Animation_Value_Abi_Identity,
+    destination: ^u8,
+    byte_count: i32) -> i32 {
+    if state == nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    if destination == nil || byte_count <= 0 ||
+        byte_count > i32(animation_model.ANIMATION_VALUE_MAX_PAYLOAD_BYTES) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    context = state^.saved_context
+    identity := animation_value_identity(state, identity_abi)
+    destination_bytes := cast([^]u8)destination
+    payload := destination_bytes[:int(byte_count)]
+    if state^.animation_query_snapshot_target != nil {
+        return get_animation_query_value(state, identity, payload)
+    }
+    if state^.scene_command_batch_target != nil {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    return animation_value_bridge_status(animation_model.animation_value_store_copy(
+        &state^.animation_values, identity, payload))
+}
+
+//   Register the Julia entry that defines null/default animation behavior.
 //
 // Parameters:
 //   - state: Global runtime state passed from the host application.
-//   - get_view_text: Julia function pointer used to bind animation callback behavior.
-//   - init: Julia function pointer used to bind animation callback behavior.
-//   - loop: Julia function pointer used to bind animation callback behavior.
-//   - clean: Julia function pointer used to bind animation callback behavior.
+//   - entry: Julia callable implementing Enter, Tick, and Exit operations.
 @(export)
 set_null_animations :: proc "c" (
     state: ^core.Euclid_General_State,
-    get_view_text, init, loop, clean: ^julialib.jl_value_t) {
+    entry: ^julialib.jl_value_t) {
     
-    state^.julia_interface^.null_animation.get_view_text = get_view_text
-    state^.julia_interface^.null_animation.initiate = init
-    state^.julia_interface^.null_animation.loop = loop
-    state^.julia_interface^.null_animation.clean = clean
+    state^.julia_interface^.null_animation.entry = entry
 }
 
-//   Register a top-level animation interface entry in the Julia animation registry.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - callbacks: Bundled Julia function pointers that define animation callback behavior.
-//   - name: Null-terminated animation label string from Julia.
-//   - stable_id: Null-terminated UUID identity string for restore/persistence.
-//
-// Returns:
-//   - 1 when inserted successfully.
-//   - -1 when validation or insertion fails.
+// Copy a generation-local implementation path and report its required byte count.
 @(export)
-add_root_animation_interface :: proc "c" (
-    state : ^core.Euclid_General_State,
-    callbacks : ^Animation_Callbacks,
-    name, stable_id : cstring) -> int {
+copy_animation_implementation_path :: proc "c" (
+    state: ^core.Euclid_General_State,
+    stable_id: cstring,
+    destination: ^u8,
+    destination_capacity: i32,
+    metadata: ^Animation_Implementation_Path_Metadata) -> i32 {
 
+    if state == nil || state^.julia_interface == nil || stable_id == nil ||
+        destination_capacity < 0 || metadata == nil {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
     context = state^.saved_context
-
-    if callbacks == nil {
-        return -1
-    }
-
-    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
+    metadata^ = {}
+    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, stable_id)
     if !parsed_ok {
-        return -1
+        return BRIDGE_STATUS_INVALID_ARGUMENT
     }
-    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id, "") {
-        return -1
+    node := find_animation_by_stable_id(state, parsed_stable_id)
+    if node == nil {
+        return BRIDGE_STATUS_NOT_FOUND
     }
-
-    _, inserted := add_animation_to_registry(
-        state,
-        callbacks^,
-        name,
-        parsed_stable_id,
-        nil)
-    if !inserted {
-        return -1
+    metadata^.node_kind = i32(node^.node_kind)
+    if node^.node_kind == .Terminal {
+        return BRIDGE_STATUS_OK
     }
-
-    return 1
-}
-
-//   Register a child animation interface and link it under an existing parent animation.
-//
-// Parameters:
-//   - state: Global runtime state passed from the host application.
-//   - callbacks: Bundled Julia function pointers that define animation callback behavior.
-//   - name: Null-terminated animation label string from Julia.
-//   - stable_id: Null-terminated UUID identity string for restore/persistence.
-//   - parent_stable_id: Parent animation UUID string that receives the new child entry.
-//
-// Returns:
-//   - 1 when inserted successfully.
-//   - -1 when parent_stable_id does not reference a registered animation.
-@(export)
-add_child_animation_interface :: proc "c" (
-    state : ^core.Euclid_General_State,
-    callbacks : ^Animation_Callbacks,
-    name, stable_id : cstring,
-    parent_stable_id: cstring) -> int {
-
-    context = state^.saved_context
-
-    if callbacks == nil {
-        return -1
+    path_byte_count := i32(len(node^.implementation_path))
+    if path_byte_count <= 0 {
+        return BRIDGE_STATUS_ILLEGAL_STATE
     }
-
-    parent, ok := resolve_parent_animation_by_stable_id(state, parent_stable_id)
-    if !ok {
-        return -1
+    metadata^.byte_count = path_byte_count
+    if destination == nil || destination_capacity < path_byte_count {
+        return BRIDGE_STATUS_OUT_OF_CAPACITY
     }
-
-    parsed_stable_id, parsed_ok := parse_animation_stable_id(stable_id, name)
-    if !parsed_ok {
-        return -1
-    }
-    if reject_duplicate_stable_id(state, name, stable_id, parsed_stable_id,
-        parent_stable_id) {
-        return -1
-    }
-
-    _, inserted := add_animation_to_registry(
-        state,
-        callbacks^,
-        name,
-        parsed_stable_id,
-        parent)
-    if !inserted {
-        return -1
-    }
-
-    return 1
+    destination_bytes := cast([^]u8)destination
+    copy(destination_bytes[:path_byte_count],
+        transmute([]u8)node^.implementation_path)
+    return BRIDGE_STATUS_OK
 }
 
 //   Mark that an animation cycle boundary occurred so host-side systems can consume it once.

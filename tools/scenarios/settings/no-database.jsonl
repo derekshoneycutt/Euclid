@@ -1,0 +1,11 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"assert_setting":{"key":"window.width","value":1280}}
+{"assert_setting":{"key":"window.height","value":720}}
+{"assert_setting":{"key":"drawing.sound_enabled","value":false}}
+{"assert_setting":{"key":"interface.display_fps","value":false}}
+{"assert_state":"settings_unavailable"}
+{"set_setting":{"key":"drawing.dust_limit","value":1300}}
+{"assert_setting":{"key":"drawing.dust_limit","value":1300}}
+{"assert_state":"settings_unavailable"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -1,0 +1,552 @@
+package observe
+
+import telemetrymodel "../../view/telemetry/model"
+
+import viewterminalmodel "../../view/terminal/model"
+import bridgemodel "../../bridge/model"
+import dynviewmodel "../../dynview/model"
+import particlemodel "../../particles/model"
+import shapemodel "../../shapes/model"
+import allocation_evidence "../allocation"
+import evidence_trace "../trace"
+import settings "../../settings"
+import preferencesmodel "../../view/preferences/model"
+import viewmodel "../../view/ui/model"
+import capturemodel "../../view/capture/model"
+
+// Package observe copies bounded Euclid facts at explicit ownership boundaries.
+//
+// Observations are pointer-free values and do not retain source storage. This
+// package does not establish synchronization: callers must already own the
+// source or have completed the documented producer handoff or task join.
+
+
+// Point-in-time summary of one producer-owned evidence ring.
+//
+// Retained event count and pending drops describe current bounded storage;
+// next_sequence includes sequence identities consumed by dropped events.
+Trace_State :: struct {
+    // Producer identity and sticky required-evidence health.
+    producer : evidence_trace.Producer,
+    evidence_complete : bool,
+
+    // Current retained records, unreported drops, and next local identity.
+    event_count : int,
+    pending_drops : u64,
+    next_sequence : u64,
+}
+
+// Pointer-free snapshot of state authoritative to the display owner.
+//
+// Optional subsystem fields remain zero when their backing service or system
+// is absent. required_evidence_complete combines session-wide health with the
+// display producer ring's sticky required-evidence state.
+Display :: struct {
+    // Preference intent and joined save evidence; no store or worker pointer escapes.
+    settings_preferences: settings.Preferences,
+    settings_save_status: preferencesmodel.Settings_Save_Status,
+    settings_store_available: bool,
+    settings_save_active: bool,
+    settings_pending_count: int,
+    settings_save_commit_count: u64,
+    settings_save_failure_count: u64,
+    settings_save_owner_execution_count: u64,
+    window_width: int,
+    window_height: int,
+    accordion_transition_running: bool,
+    accordion_selected: viewmodel.Ui_Accordion_Section,
+    accordion_reveal_heights: [4]f32,
+    tree_transition_count: int,
+    tree_visual_height: f32,
+    tree_scroll_y: f32,
+    interface_reduce_motion: bool,
+    presentation_visible: bool,
+    // Fixed-step simulation clock and display-owned pause control.
+    fixed_step : u64,
+    simulation_time : f32,
+    simulation_paused : bool,
+    animation_policy_paused : bool,
+
+    // Julia runtime lifecycle, active request, and submission pressure.
+    runtime_lifecycle : bridgemodel.Julia_Lifecycle_State,
+    runtime_generation : u64,
+    active_runtime_request_id : u64,
+    failed_runtime_request_count : u64,
+    runtime_request_saturation_count : u64,
+    terminal_ready : bool,
+    terminal_idle : bool,
+    terminal_continuation : bool,
+
+    // Terminal graphics transfer, publication, residency, and playback state.
+    graphics_transfer_admission_count : u64,
+    graphics_transfer_rejection_count : u64,
+    graphics_decode_count : u64,
+    graphics_failure_count : u64,
+    graphics_cancellation_count : u64,
+    graphics_publication_count : u64,
+    graphics_stale_completion_count : u64,
+    graphics_eviction_count : u64,
+    graphics_draw_count : u64,
+    graphics_draw_rejection_count : u64,
+    graphics_cpu_byte_count : int,
+    graphics_gpu_byte_count : int,
+    graphics_animation_decode_byte_count : int,
+    graphics_animated_attachment_count : int,
+    graphics_animation_admission_count : u64,
+    graphics_animation_rejection_count : u64,
+    graphics_gif_preflight_acceptance_count : u64,
+    graphics_gif_preflight_rejection_count : u64,
+    graphics_queue_full_count : u64,
+    graphics_playback_transition_count : u64,
+    graphics_playback_completion_count : u64,
+    graphics_playback_upload_failure_count : u64,
+    graphics_playback_stale_count : u64,
+    graphics_visibility_pause_count : u64,
+    graphics_visibility_resume_count : u64,
+
+    // Animation publication identity and display-side tick state.
+    animation_generation : u64,
+    animation_tick_sequence : u64,
+    animation_last_committed_sequence : u64,
+    animation_tick_pending : bool,
+    animation_ticks_dropped : u64,
+
+    // Current initialized prefixes of display-visible model storage.
+    point_count : int,
+    constraint_count : int,
+    particle_count : int,
+
+    // Particle-owned dust settling and bounded contact diagnostics.
+    dust_live_count : int,
+    dust_airborne_count : int,
+    dust_grounded_count : int,
+    dust_peak_speed_sq : f32,
+    dust_kinetic_measure : f32,
+    dust_field_solve_node_count : int,
+    dust_tool_contact_overflow_count : int,
+    dust_tool_contact_coalesced_count : u64,
+    dust_tool_contact_sample_count : u64,
+    dust_tool_contact_field_node_visit_count : u64,
+    dust_rendered_count : int,
+
+    // Dynamic-view activation and pending invalidation work.
+    dynview_enabled : bool,
+    dynview_pending_invalidation_mask : u32,
+
+    // Effective display-owned presentation viewport state.
+    view_text_scroll_y : f32,
+    view_text_scroll_max : f32,
+    vertical_split_x : f32,
+    horizontal_split_y : f32,
+    // Last presented colored mesh and projected curve-reduction metrics.
+    colored_vertex_count : u32,
+    colored_index_count : u32,
+    curve_candidate_point_count : u32,
+    curve_retained_point_count : u32,
+    curve_retention_ratio : f32,
+    colored_primitive_overflow_count : u32,
+
+    // GIF capture lifecycle and completed frame count.
+    gif_capture_active : bool,
+    gif_capture_phase : capturemodel.Gif_Capture_Phase,
+    gif_captured_frames : int,
+
+    // Library-search request completion and accepted-result state.
+    library_search_idle : bool,
+    library_search_has_matches : bool,
+
+    // Display-owned tooltip visibility after the last prepared frame.
+    tooltip_visible : bool,
+
+    // Aggregate required-evidence health and display producer state.
+    required_evidence_complete : bool,
+    trace : Trace_State,
+}
+
+// Borrowed owner-model components used to assemble one display observation.
+//
+// Callers must keep every non-nil component stable for the duration of display.
+Display_Source :: struct {
+    fixed_step : u64,
+    simulation_time : f32,
+    ui_runtime : ^viewmodel.Euclid_Ui_Runtime_State,
+    preferences_runtime: ^preferencesmodel.Settings_Save_Runtime,
+    telemetry: ^telemetrymodel.Runtime,
+    gif_capture : ^capturemodel.Gif_Capture_Session,
+    gif_capture_status: ^capturemodel.Gif_Capture_Status,
+    terminal : ^viewterminalmodel.Terminal_State,
+    dynview : ^dynviewmodel.Dynview_System,
+    shape_world : ^shapemodel.Shape_World,
+    particle_system : ^particlemodel.Particle_System,
+    julia_service : ^bridgemodel.Julia_Runtime_Service,
+    required_evidence_complete : bool,
+    evidence_ring : ^evidence_trace.Ring,
+}
+
+// Pointer-free snapshot of state authoritative to the Julia host owner.
+//
+// Runtime fields describe serialized request processing. Animation counters
+// distinguish submitted work from committed, coalesced, stale, and dropped
+// outcomes without exposing the service's mutable queues.
+Julia_Host :: struct {
+    // Runtime lifecycle, active request identity, and submission outcomes.
+    lifecycle : bridgemodel.Julia_Lifecycle_State,
+    runtime_generation : u64,
+    active_request_id : u64,
+    active_request_kind : bridgemodel.Julia_Request_Kind,
+    failed_request_count : u64,
+    request_saturation_count : u64,
+
+    // Animation publication identity, pending state, and lifetime outcomes.
+    animation_generation : u64,
+    animation_tick_sequence : u64,
+    animation_last_committed_sequence : u64,
+    animation_tick_pending : bool,
+    animation_ticks_submitted : u64,
+    animation_ticks_committed : u64,
+    animation_ticks_coalesced : u64,
+    animation_ticks_stale : u64,
+    animation_ticks_dropped : u64,
+
+    // Julia-host producer evidence state.
+    trace : Trace_State,
+}
+
+// Producer-ring summaries made stable by simulation and preparation joins.
+Simulation :: struct {
+    // Fixed-step worker evidence.
+    particle : Trace_State,
+    constraint : Trace_State,
+
+    // Frame-preparation worker evidence.
+    shape_cache : Trace_State,
+    dynview : Trace_State,
+}
+
+// Borrowed producer rings made stable by simulation and preparation joins.
+Simulation_Source :: struct {
+    particle : ^evidence_trace.Ring,
+    constraint : ^evidence_trace.Ring,
+    shape_cache : ^evidence_trace.Ring,
+    dynview : ^evidence_trace.Ring,
+}
+
+// Stable scenario lifecycle independent of parser and runner storage.
+Scenario_Lifecycle :: enum u8 {
+    // No scenario is active at this boundary.
+    Inactive,
+
+    // At least one command remains pending or active.
+    Running,
+
+    // Terminal outcomes distinguish success, behavioral failure, and lost evidence.
+    Passed,
+    Failed,
+    Inconclusive,
+}
+
+// Pointer-free scenario progress copied at the runner ownership boundary.
+//
+// Step and assertion counters are cumulative for one run. deadline_ns is the
+// active monotonic wait deadline, or zero when no bounded wait is active.
+Scenario :: struct {
+    // Current lifecycle and command progress.
+    lifecycle : Scenario_Lifecycle,
+    current_step : u32,
+    step_count : u32,
+
+    // Cumulative verification outcomes.
+    assertion_count : u32,
+    failure_count : u32,
+
+    // Active wait bound and sticky required-evidence health.
+    deadline_ns : u64,
+    required_evidence_complete : bool,
+}
+
+//   Copy one ring's scalar state at its owner or synchronized boundary.
+//
+// Parameters:
+//   - ring: Producer-owned ring already safe for observation.
+//
+// Returns:
+//   - Pointer-free ring summary, or zero values for a nil ring.
+//
+// Notes:
+//   - This procedure does not lock the ring or establish an ownership boundary.
+trace_state :: proc(ring: ^evidence_trace.Ring) -> Trace_State {
+    if ring == nil {
+        return {}
+    }
+    return {
+        producer = ring.producer,
+        evidence_complete = evidence_trace.ring_evidence_complete(ring),
+        event_count = ring.count,
+        pending_drops = ring.pending_drops,
+        next_sequence = ring.next_sequence,
+    }
+}
+
+//   Copy Julia-service fields into an in-progress display observation.
+observe_display_julia_service :: proc(
+    service: ^bridgemodel.Julia_Runtime_Service, result: ^Display) {
+    if service == nil {
+        return
+    }
+    result.runtime_lifecycle = service.lifecycle
+    result.runtime_generation = service.runtime_generation
+    result.active_runtime_request_id = service.active_request_id
+    result.failed_runtime_request_count = service.failed_request_count
+    result.runtime_request_saturation_count = service.request_saturation_count
+    result.animation_generation = service.animation_generation
+    result.animation_tick_sequence = service.animation_tick_sequence
+    result.animation_last_committed_sequence = service.animation_last_committed_sequence
+    result.animation_tick_pending = service.animation_tick_pending
+    result.animation_ticks_dropped = service.animation_ticks_dropped
+}
+
+// Copy display-owned interaction and layout state into an in-progress observation.
+observe_display_ui :: proc(
+    source: ^Display_Source, result: ^Display) {
+    if source.ui_runtime != nil {
+        result.simulation_paused = source.ui_runtime.simulation_paused
+        result.animation_policy_paused = source.ui_runtime.animation_policy_paused
+        result.view_text_scroll_y = source.ui_runtime.view_text_scroll_y
+        result.view_text_scroll_max = source.ui_runtime.view_text_scroll_max
+        result.vertical_split_x = source.ui_runtime.vertical_split_x
+        result.horizontal_split_y = source.ui_runtime.horizontal_split_y
+        search := &source.ui_runtime.library_search
+        result.library_search_idle = search.worker_available &&
+            !search.query_dirty && !search.submit_requested &&
+            (search.query_length == 0 ||
+                search.committed_generation == search.generation)
+        result.library_search_has_matches = search.active &&
+            search.total_match_count > 0
+        result.tooltip_visible = source.ui_runtime.tooltip.visible
+    }
+
+}
+
+// Copy independent capture policy and encoder state without requiring UI storage.
+observe_display_capture :: proc(source: ^Display_Source, result: ^Display) {
+    if source.gif_capture_status != nil {
+        result.gif_capture_phase = source.gif_capture_status.gif_capture_phase
+        result.gif_captured_frames = source.gif_capture_status.gif_captured_frames
+    }
+    if source.gif_capture != nil {
+        result.gif_capture_active = source.gif_capture.active
+    }
+}
+
+// Copy display-owned intent and joined persistence counters, never live task results.
+observe_display_settings :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, result: ^Display) {
+    if runtime == nil {
+        return
+    }
+    result^.settings_preferences = runtime^.settings_preferences
+    result^.settings_save_status = runtime^.settings_save_status
+    result^.settings_store_available = runtime^.settings_store_available
+    result^.window_width = runtime^.window.width
+    result^.window_height = runtime^.window.height
+    result^.accordion_transition_running = runtime^.accordion_transition.running
+    result^.accordion_selected = runtime^.active_accordion_section
+    result^.accordion_reveal_heights = runtime^.accordion_transition.heights
+    result^.interface_reduce_motion =
+        runtime^.settings_preferences.interface.reduce_motion ||
+        runtime^.platform_reduce_motion
+    result^.presentation_visible = runtime^.presentation_visible
+    observe_display_tree(runtime, result)
+}
+
+// Copy joined persistence counters without exposing worker payload or store pointers.
+observe_display_preferences :: proc(
+    runtime: ^preferencesmodel.Settings_Save_Runtime, result: ^Display) {
+    if runtime == nil {
+        return
+    }
+    result^.settings_save_active = runtime^.settings_save_active
+    result^.settings_pending_count = runtime^.settings_pending.count
+    result^.settings_save_commit_count = runtime^.settings_save_commit_count
+    result^.settings_save_failure_count = runtime^.settings_save_failure_count
+    result^.settings_save_owner_execution_count =
+        runtime^.settings_save_owner_execution_count
+}
+
+// Copy the last submitted renderer metrics from their display-owned telemetry record.
+observe_display_telemetry :: proc(runtime: ^telemetrymodel.Runtime, result: ^Display) {
+    if runtime == nil {
+        return
+    }
+    result^.colored_vertex_count = runtime^.colored_vertex_count
+    result^.colored_index_count = runtime^.colored_index_count
+    result^.curve_candidate_point_count = runtime^.curve_candidate_point_count
+    result^.curve_retained_point_count = runtime^.curve_retained_point_count
+    result^.curve_retention_ratio = runtime^.curve_retention_ratio
+    result^.colored_primitive_overflow_count = runtime^.colored_primitive_overflow_count
+}
+
+// Copy pointer-free tree reveal and scrolling facts at the display observation boundary.
+observe_display_tree :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State, result: ^Display) {
+    result^.tree_scroll_y = runtime^.tree_scroll_y
+    result^.tree_visual_height = runtime^.tree_motion.visual_height
+    for index in 0..<runtime^.tree_motion.count {
+        if runtime^.tree_motion.branches[index].running {
+            result^.tree_transition_count += 1
+        }
+    }
+}
+
+// Copy synchronized particle diagnostics and classify current dust populations.
+observe_display_particles :: proc(
+    particles: ^particlemodel.Particle_System, result: ^Display) {
+    if particles == nil {
+        return
+    }
+    result.particle_count = particles.next_index
+    result.dust_grounded_count = particles.dust_grounded_count
+    result.dust_peak_speed_sq = particles.dust_peak_speed_sq
+    result.dust_kinetic_measure = particles.dust_kinetic_measure
+    bounds := particles.dust_field.previous_solve_bounds
+    if bounds.valid {
+        width := int(bounds.max_x - bounds.min_x + 1)
+        height := int(bounds.max_y - bounds.min_y + 1)
+        result.dust_field_solve_node_count = width * height
+    }
+    result.dust_tool_contact_overflow_count =
+        particles.dust_tool_contact_overflow_count
+    result.dust_tool_contact_coalesced_count =
+        particles.dust_tool_contact_coalesced_count
+    result.dust_tool_contact_sample_count = particles.dust_tool_contact_sample_count
+    result.dust_tool_contact_field_node_visit_count =
+        particles.dust_tool_contact_field_node_visit_count
+    result.dust_rendered_count = particles.last_render_low
+    for index in 0..<particles.use_max_dust_particles {
+        if !particles.low_particles[index].alive {
+            continue
+        }
+        result.dust_live_count += 1
+        if particles.low_particles.pos_z[index] > 0 {
+            result.dust_airborne_count += 1
+        }
+    }
+}
+
+//   Copy display-owned Euclid truth without advancing any subsystem.
+//
+// Parameters:
+//   - state: Display-owned state observed from the display thread.
+//
+// Returns:
+//   - Pointer-free display snapshot, or zero values for nil state.
+//
+// Notes:
+//   - Missing shape, particle, or Julia services leave their field groups zero.
+//   - The source and all nested mutable services must be stable for the copy.
+display :: proc(source: ^Display_Source) -> Display {
+    if source == nil {
+        return {}
+    }
+    result := Display{
+        fixed_step = source.fixed_step,
+        simulation_time = source.simulation_time,
+        required_evidence_complete = source.required_evidence_complete &&
+            evidence_trace.ring_evidence_complete(source.evidence_ring),
+        trace = trace_state(source.evidence_ring),
+    }
+    observe_display_settings(source.ui_runtime, &result)
+    observe_display_preferences(source.preferences_runtime, &result)
+    observe_display_telemetry(source.telemetry, &result)
+    observe_display_capture(source, &result)
+    if source.terminal != nil {
+        result.terminal_ready = source.terminal.initialized &&
+            source.terminal.julia_session_ready
+        result.terminal_idle = result.terminal_ready && !source.terminal.awaiting_eval
+        result.terminal_continuation = result.terminal_ready &&
+            source.terminal.collecting_continuation
+    }
+    if source.dynview != nil {
+        result.dynview_enabled = source.dynview.enabled
+        result.dynview_pending_invalidation_mask =
+            source.dynview.pending_invalidation_mask
+    }
+    observe_display_ui(source, &result)
+    if source.shape_world != nil {
+        result.point_count = int(source.shape_world.transforms.count)
+        result.constraint_count = int(source.shape_world.constraints.count)
+    }
+    observe_display_particles(source.particle_system, &result)
+    observe_display_julia_service(source.julia_service, &result)
+    return result
+}
+
+//   Copy Julia-host state at its owner or post-publication synchronization boundary.
+//
+// Parameters:
+//   - service: Julia runtime service already stable for observation.
+//
+// Returns:
+//   - Pointer-free host snapshot, or zero values for a nil service.
+//
+// Notes:
+//   - This procedure does not inspect Julia objects or mutable request payloads.
+julia_host :: proc(service: ^bridgemodel.Julia_Runtime_Service) -> Julia_Host {
+    if service == nil {
+        return {}
+    }
+    return {
+        lifecycle = service.lifecycle,
+        runtime_generation = service.runtime_generation,
+        active_request_id = service.active_request_id,
+        active_request_kind = service.active_request_kind,
+        failed_request_count = service.failed_request_count,
+        request_saturation_count = service.request_saturation_count,
+        animation_generation = service.animation_generation,
+        animation_tick_sequence = service.animation_tick_sequence,
+        animation_last_committed_sequence = service.animation_last_committed_sequence,
+        animation_tick_pending = service.animation_tick_pending,
+        animation_ticks_submitted = service.animation_ticks_submitted,
+        animation_ticks_committed = service.animation_ticks_committed,
+        animation_ticks_coalesced = service.animation_ticks_coalesced,
+        animation_ticks_stale = service.animation_ticks_stale,
+        animation_ticks_dropped = service.animation_ticks_dropped,
+        trace = trace_state(&service.evidence_ring),
+    }
+}
+
+//   Copy simulation producer rings after fixed-step and preparation joins.
+//
+// Parameters:
+//   - executor: Simulation executor whose producer tasks have completed their joins.
+//
+// Returns:
+//   - One pointer-free summary for each worker ring, or zero values for nil executor.
+//
+// Notes:
+//   - Calling before all relevant task fences join would race producer-owned rings.
+simulation :: proc(source: ^Simulation_Source) -> Simulation {
+    if source == nil {
+        return {}
+    }
+    return {
+        particle = trace_state(source.particle),
+        constraint = trace_state(source.constraint),
+        shape_cache = trace_state(source.shape_cache),
+        dynview = trace_state(source.dynview),
+    }
+}
+
+//   Copy one allocation domain at its owner-controlled synchronization point.
+//
+// Parameters:
+//   - domain: Allocation domain to sample through its synchronized tracker.
+//
+// Returns:
+//   - Consistent allocation counters, or zero values for an unavailable domain.
+//
+// Notes:
+//   - Sampling uses the allocation domain's internal mutex and does not allocate.
+allocation :: proc(domain: ^allocation_evidence.Domain) -> allocation_evidence.Snapshot {
+    return allocation_evidence.domain_snapshot(domain)
+}

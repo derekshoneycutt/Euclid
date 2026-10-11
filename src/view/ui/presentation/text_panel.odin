@@ -1,0 +1,264 @@
+package uipresentation
+
+import geometry "../../../core/geometry"
+import color "../../../core/color"
+import native "../../native"
+import core "../../../core"
+import dynlayout "../../../dynview/layout"
+import julia "../../../bridge"
+import font "../../font"
+import ui_dynview "../dynview"
+import viewmodel "../model"
+import viewmessages "../../messages"
+import uiwidgets "../widgets"
+import input "../../input"
+import theme "../theme"
+import uisemantics "../semantics"
+import worldmodel "../../world/model"
+import uiterminal "../terminal"
+import uiaccordion "../layout/accordion"
+
+//   Prepared post-layout interaction state for one non-Terminal presentation.
+Presentation_Preparation :: struct {
+    active: bool,
+    text_panel: geometry.Rectangle,
+    view_text: string,
+    scroll: uiwidgets.Scroll_Container_Update_Result,
+    selection_view: ui_dynview.Dynview_Selection_View,
+}
+
+// Presentation_Content_Interaction groups one prepared interaction request.
+Presentation_Content_Interaction :: struct {
+    scroll: uiwidgets.Scroll_Container_Update_Result,
+    view_text: string,
+    mouse_input: input.Input_Frame,
+    keyboard_enabled: bool,
+}
+
+
+// prepare_presentation_visual borrows current content without selection or scroll mutations.
+prepare_presentation_visual :: proc(
+    state: ^core.Euclid_General_State,
+    panel: geometry.Rectangle) -> Presentation_Preparation {
+    if state^.julia_interface == nil || uiterminal.is_terminal_selected(state) {
+        return {}
+    }
+    text_panel := uiwidgets.text_content_panel(panel)
+    text := julia.current_view_snapshot_text(state)
+    content_height := dynlayout.presentation_content_height_or_fallback(
+        &state^.dynview, text_panel, {
+            text_padding = theme.TEXT_PADDING, wrap_advance = theme.TEXT_WRAP_ADVANCE,
+            row_height = theme.TEXT_ROW_HEIGHT, text = text})
+    step := dynlayout.presentation_scroll_step_or_fallback(
+        &state^.dynview, theme.TEXT_ROW_HEIGHT)
+    scroll := uiwidgets.scroll_container_visual(
+        text_panel, content_height, state^.ui_runtime.view_text_scroll_y, step)
+    return {active = true, text_panel = text_panel, view_text = text, scroll = scroll,
+        selection_view = {panel = text_panel, scroll_y = scroll.scroll_y_out,
+            text_padding = theme.TEXT_PADDING, row_height = theme.TEXT_ROW_HEIGHT,
+            wrap_advance = theme.TEXT_WRAP_ADVANCE, fallback_text = text}}
+}
+
+// presentation_semantic_id identifies one compiled document generation.
+presentation_semantic_id :: #force_inline proc(
+    state: ^core.Euclid_General_State) -> viewmodel.Ui_Node_Id {
+    if state == nil {
+        return {}
+    }
+    return {domain = .Presentation,
+        generation = state^.dynview.compile_cache.compiled_revision}
+}
+
+// register_presentation_semantics publishes the focused document surface.
+register_presentation_semantics :: proc(
+    state: ^core.Euclid_General_State,
+    panel: geometry.Rectangle,
+    scroll: uiwidgets.Scroll_Container_Update_Result) {
+    id := presentation_semantic_id(state)
+    _ = uisemantics.semantic_register_control(state^.ui_runtime.semantic_focus, {
+        id = id, role = .Document,
+        states = {.Visible, .Enabled, .Focusable, .Tab_Stop},
+        actions = {.Focus, .Select, .Copy, .Scroll, .Show_Context_Menu},
+        region = .Presentation,
+        traversal_order = 0, bounds = geometry.Rectangle(panel),
+        clip_bounds = geometry.Rectangle(
+            uiaccordion.ui_presentation_clip(&state^.ui_runtime, panel)),
+        numeric_range = {f64(scroll.minimum), f64(scroll.maximum),
+            f64(scroll.scroll_y_out), f64(scroll.step), scroll.orientation, true},
+        label = viewmessages.shell_message(state, .Presentation_Accessible_Label),
+    })
+    semantic := state^.ui_runtime.semantic_focus
+    owns_presentation := semantic^.logical_focus.domain == .Presentation
+    if !state^.ui_runtime.context_menu.active && !owns_presentation &&
+        state^.ui_runtime.interaction.logical_focus.kind == .Presentation {
+        _ = uisemantics.semantic_request_pointer_focus(semantic, id)
+    }
+}
+
+// draw_encoded_presentation_geometry encodes panel and cached non-glyph content.
+draw_encoded_presentation_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    panel: geometry.Rectangle) {
+    if state == nil || state^.julia_interface == nil {
+        return
+    }
+    _ = native.draw_encoder_rectangle(
+        encoder, panel, worldmodel.BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, panel, 1, theme.UI_BORDER_COLOR)
+    text_panel := uiwidgets.text_content_panel(panel)
+    _ = native.draw_encoder_rectangle(
+        encoder, text_panel, theme.UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, text_panel, 1, theme.UI_BORDER_COLOR)
+    if uiterminal.is_terminal_selected(state) {
+        return
+    }
+    ui_dynview.draw_encoded_geometry(&state^.dynview, encoder,
+        text_panel, state^.ui_runtime.view_text_scroll_y,
+        theme.TEXT_PADDING)
+}
+
+// Draw clipped Dynview or fallback content, then its prepared scrollbar overlay.
+draw_encoded_presentation_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    presentation: Presentation_Preparation) {
+    if state == nil || encoder == nil || !presentation.active {
+        return
+    }
+    _ = native.draw_encoder_push_scissor(
+        encoder, geometry.Rectangle(presentation.scroll.view_rect))
+    ui_dynview.dynview_draw_selection({
+        encoder = encoder,
+        runtime = &state^.dynview,
+        selection = state^.ui_runtime.dynview_selection,
+        view = presentation.selection_view,
+        color = color.Color_RGBA8{82, 96, 112, 112},
+    })
+    fallback := ui_dynview.Fallback_Text_Content{
+        presentation.view_text, theme.UI_TEXT_COLOR}
+    ui_dynview.draw_presentation_styled_or_fallback(
+        state, &state^.ui_runtime, fallback, {
+            encoder = encoder,
+            panel = geometry.Rectangle(presentation.text_panel),
+            scroll_y = state^.ui_runtime.view_text_scroll_y,
+            font = font.cache_borrow(&state^.font_cache, .Regular),
+            font_cache = &state^.font_cache,
+            metrics = {
+                padding = theme.TEXT_PADDING,
+                row_height = theme.TEXT_ROW_HEIGHT,
+                wrap_advance = theme.TEXT_WRAP_ADVANCE,
+                font_size = theme.TREE_FONT_SIZE,
+            },
+        })
+    _ = native.draw_encoder_pop_scissor(encoder)
+    uiwidgets.draw_encoded_scrollbar(encoder, presentation.scroll.scrollbar)
+}
+
+
+//   Report whether the display currently owns a non-Terminal presentation surface.
+presentation_scroll_is_available :: #force_inline proc(
+    state: ^core.Euclid_General_State) -> bool {
+
+    return state != nil && state^.julia_interface != nil &&
+        state^.julia_interface^.selected_animation != nil &&
+        !uiterminal.is_terminal_selected(state) &&
+        ui_presentation_is_visible(&state^.ui_runtime)
+}
+
+//   Apply a requested presentation scroll before the next layout interaction pass.
+set_presentation_scroll_position :: proc(
+    state: ^core.Euclid_General_State, requested_y: f32) -> bool {
+
+    if !presentation_scroll_is_available(state) {
+        return false
+    }
+    ui_runtime := &state^.ui_runtime
+    uiwidgets.scroll_container_release_press(&ui_runtime^.ui_press_owner,
+        UI_PRESENTATION_SCROLLBAR_ID, &ui_runtime^.text_scroll_dragging,
+        &ui_runtime^.text_scroll_drag_off)
+    ui_runtime^.view_text_scroll_y = max(0, requested_y)
+    return true
+}
+
+//   Update and commit the presentation scroll container.
+prepare_presentation_scroll :: proc(
+    state: ^core.Euclid_General_State,
+    text_panel: geometry.Rectangle,
+    content_height: f32,
+    scroll_step: f32,
+    mouse_input: input.Input_Frame) -> uiwidgets.Scroll_Container_Update_Result {
+    ui_runtime := &state^.ui_runtime
+    scroll := uiwidgets.scroll_container_update({id = UI_PRESENTATION_SCROLLBAR_ID,
+        rect = text_panel, scroll_y_in = ui_runtime^.view_text_scroll_y,
+        content_height = content_height, mouse_input = mouse_input,
+        interaction_space_rect = text_panel,
+        wheel_step = scroll_step * theme.WHEEL_SCROLL_MULTIPLIER,
+        press_owner = &ui_runtime^.ui_press_owner,
+        state_in = {ui_runtime^.text_scroll_dragging,
+            ui_runtime^.text_scroll_drag_off},
+        semantic_focus = ui_runtime^.semantic_focus,
+        semantic_id = presentation_semantic_id(state)})
+    ui_runtime^.view_text_scroll_y = scroll.scroll_y_out
+    ui_runtime^.text_scroll_dragging = scroll.state_out.is_dragging_thumb
+    ui_runtime^.text_scroll_drag_off = scroll.state_out.drag_offset_y
+    return scroll
+}
+
+//   Resolve copy and selection interaction against prepared presentation layout.
+prepare_presentation_content_interaction :: proc(
+    state: ^core.Euclid_General_State,
+    request: Presentation_Content_Interaction) -> ui_dynview.Dynview_Selection_View {
+    ui_runtime := &state^.ui_runtime
+    selection_view := ui_dynview.Dynview_Selection_View{
+        panel = geometry.Rectangle(request.scroll.view_rect),
+        scroll_y = request.scroll.scroll_y_out, text_padding = theme.TEXT_PADDING,
+        row_height = theme.TEXT_ROW_HEIGHT, wrap_advance = theme.TEXT_WRAP_ADVANCE,
+        fallback_text = request.view_text}
+    content := ui_dynview.dynview_selection_content(
+        &state^.dynview, request.view_text)
+    selection := &ui_runtime^.dynview_selection
+    ui_dynview.dynview_selection_reconcile(selection, content)
+    ui_dynview.dynview_selection_update_mouse({runtime = &state^.dynview,
+        selection = selection, press_owner = &ui_runtime^.ui_press_owner,
+        content = content, view = selection_view, frame = request.mouse_input})
+    if request.keyboard_enabled {
+        ui_dynview.dynview_selection_update_keyboard(
+            &state^.dynview, selection, content,
+            request.view_text, request.mouse_input)
+    }
+    return selection_view
+}
+
+//   Resolve post-layout presentation interaction before rendering.
+prepare_presentation_interaction :: proc(
+    state: ^core.Euclid_General_State,
+    panel: geometry.Rectangle,
+    mouse_input: input.Input_Frame,
+    keyboard_enabled: bool) -> Presentation_Preparation {
+    if state != nil {
+        state^.ui_runtime.view_text_scroll_max = 0
+    }
+    if state == nil || state^.julia_interface == nil ||
+       uiterminal.is_terminal_selected(state) {
+        return {}
+    }
+    if !ui_presentation_is_visible(&state^.ui_runtime) {
+        return {}
+    }
+    text_panel := uiwidgets.text_content_panel(panel)
+    view_text := julia.current_view_snapshot_text(state)
+    content_h := dynlayout.presentation_content_height_or_fallback(&state.dynview,
+        geometry.Rectangle(text_panel), {text_padding = theme.TEXT_PADDING,
+            wrap_advance = theme.TEXT_WRAP_ADVANCE, row_height = theme.TEXT_ROW_HEIGHT,
+            text = view_text})
+    state^.ui_runtime.view_text_scroll_max = max(0, content_h - text_panel.height)
+    scroll_step := dynlayout.presentation_scroll_step_or_fallback(
+        &state.dynview, theme.TEXT_ROW_HEIGHT)
+    scroll := prepare_presentation_scroll(
+        state, text_panel, content_h, scroll_step, mouse_input)
+    selection_view := prepare_presentation_content_interaction(
+        state, {scroll, view_text, mouse_input, keyboard_enabled})
+    register_presentation_semantics(state, scroll.view_rect, scroll)
+    return {true, scroll.view_rect, view_text, scroll, selection_view}
+}

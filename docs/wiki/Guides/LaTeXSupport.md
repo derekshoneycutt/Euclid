@@ -1,21 +1,27 @@
 # LaTeX Support
 
-This document describes the LaTeX subset supported by the Julia parser and
-Dynview replay pipeline. The implementation supports both standalone math and
+This document describes the LaTeX subset supported by Dynview's native parser
+and layout pipeline. The implementation supports both standalone math and
 mixed document fragments containing styled prose, inline or display math, line
 breaks, and Euclid inline shapes.
+
+For localized shell messages, catalogue names, edition provenance, and callback
+selection metadata, see [Localization And Editions](Localization.md). Those records
+do not automatically replace the canonical MIME presentation described here.
 
 ## Table Of Contents
 
 1. [Recommended Usage](#recommended-usage)
 1. [Modes And Classification](#modes-and-classification)
 1. [Document Mode](#document-mode)
+1. [Document Line Breaking](#document-line-breaking)
 1. [Math Mode](#math-mode)
+1. [Display-Math Layout Contract](#display-math-layout-contract)
 1. [Character Support](#character-support)
 1. [Matrix Support](#matrix-support)
 1. [Delimiter Support](#delimiter-support)
 1. [Cache And Invalidation](#cache-and-invalidation)
-1. [Fallback And Failure Behavior](#fallback-and-failure-behavior)
+1. [Literal Failure Behavior](#literal-failure-behavior)
 1. [Practical Authoring Tips](#practical-authoring-tips)
 1. [Known Limitations](#known-limitations)
 1. [Appendix: Module Architecture](#appendix-module-architecture)
@@ -23,44 +29,47 @@ breaks, and Euclid inline shapes.
 
 ## Recommended Usage
 
-Use `EuclidLatex.emit_latex_view_text!` for complete animation view text. It
-classifies the source as math or document mode, emits the supplied fallback as
-the copy payload, builds one complete Dynview stream, and always returns the
-fallback string expected by `get_view_text`.
+The MIME authoring API is the production presentation contract:
 
 ```julia
-const DefinitionLatexDocument = raw"""\textbf{Definition 1.}
+const Definition = tex"""\textbf{Definition 1.}
+
+A point is that which has no part.
+"""
+
+get_view_content(_state_ptr) = Definition
+```
+
+`LaTeXString` serializes as delimited `text/latex` standalone math.
+`TeXDocument` and raw, non-interpolating `tex"..."` literals serialize as
+unwrapped `text/latex` documents. Ordinary strings are always `text/plain`.
+`OdinJuliaBridge.presented_text` selects one exact representation, while
+`publish_view_content` transfers it through bounded producer-owned storage.
+
+Production animations return one canonical displayable from `get_view_content`.
+Use `tex"..."` or `TeXDocument` for complete documents and `L"..."` for one
+standalone math expression. Publish that named producer with
+`OdinJuliaBridge.publish_view_content`.
+
+```julia
+const Definition = tex"""\textbf{Definition 1.}
 
 A point is that which has no part. The symbol $A_1$ marks a point.
 
 \euclidpoint[color=plum1,size=1]
 """
 
-const DefinitionFallback = "Definition 1. A point is that which has no part."
-
-function get_view_text(state_ptr)
-    EuclidLatex.emit_latex_view_text!(
-        state_ptr,
-        DefinitionLatexDocument,
-        DefinitionFallback)
-end
+get_view_content(_state_ptr) = Definition
 ```
-
-Use `replay_emit_math_block!` when a Dynview block is already open and only one
-math expression needs to be inserted. It emits one recursive, non-wrapping math
-block and returns `false` on bridge failure.
-
-Use `emit_latex_dynview!` for a standalone math-only Dynview block when the
-caller does not need to mix prose or shapes.
 
 ## Modes And Classification
 
-`classify_latex_mode` selects one of two modes:
+The native parser selects one of two modes:
 
 | Mode | Intended source | Main API |
 | --- | --- | --- |
-| Math | One standalone expression | `replay_emit_math_block!`, `emit_latex_dynview!` |
-| Document | Prose mixed with styling, math, breaks, or shapes | `emit_latex_view_text!` |
+| Math | One standalone expression | `L"..."` |
+| Document | Prose mixed with styling, math, breaks, or shapes | `tex"..."`, `tex"""..."""`, or `TeXDocument` |
 
 A fragment enclosed entirely by `$...$`, `$$...$$`, `\(...\)`, or `\[...\]`
 is classified as math. Otherwise, document markers such as `\textbf`,
@@ -68,8 +77,13 @@ is classified as math. Otherwise, document markers such as `\textbf`,
 delimiters select document mode. Plain unmarked source is treated as math for
 backward compatibility.
 
-`emit_latex_view_text!` strips a complete outer math delimiter before compiling
-math mode. In document mode it parses the full source into typed document runs;
+For canonical MIME presentations, classification is stricter: `text/plain` is
+always literal, a complete outer delimiter makes `text/latex` standalone math,
+and every unwrapped `text/latex` value is a document. This avoids inferring math
+from unwrapped source during the new producer migration.
+
+Dynview strips a complete outer math delimiter before parsing math mode. In document
+mode it parses the full source into typed native semantic records;
 partial document parsing is not accepted.
 
 ## Document Mode
@@ -79,37 +93,164 @@ Document mode supports a deliberately small LaTeX-like prose language:
 - Plain Unicode text.
 - `\textbf{...}` for bold text.
 - `\textit{...}` and `\emph{...}` for italic text.
+- `\textnormal{...}` to reset weight and italic style within its group.
+- `\texttt{...}` for the resident JuliaMono text family.
+- Scoped `\bfseries` and `\itshape` declarations inside brace groups.
 - `\textcolor{color}{...}` for inline prose color.
 - Nested style commands; flags accumulate, so bold italic text is supported.
+- Literal text specials with `\%`, `\#`, `\_`, `\&`, `\{`, and `\}`.
+- Controlled spaces with a backslash followed by a literal space, and nonbreaking
+    spaces with `~`.
 - Inline math with `$...$` or `\(...\)`.
 - Display math with `$$...$$` or `\[...\]`.
+- Technical displays with `equation`, `align`, `gather`, and `multline`, including
+    their starred forms.
 - Forced line breaks with `\\` or `\newline`.
-- Paragraph breaks from a blank source line.
+- Paragraph breaks from a blank source line or `\par`.
+- `\noindent` at paragraph start to suppress the normal one-em first-line indent.
+- `center`, `flushleft`, and `flushright` environments for paragraph alignment.
+- `itemize`, `enumerate`, and `description` environments for semantic lists.
+- `quote` and `quotation` environments for indented quoted prose.
+- Comments from an unescaped `%` through the source newline.
 - Inline Euclid shapes through `\euclidpoint`, `\euclidline`,
     `\euclidcircle`, `\euclidbox`, `\euclidangle`, `\euclidsemicircle`,
     `\euclidperpendicular`, `\euclidtriangle`, and `\euclidpentagon`.
 
-A single source newline in prose normalizes to one space. A blank line emits a
-paragraph break. Display math receives surrounding line breaks unless adjacent
-document runs already provide them.
+A single source newline in prose normalizes to one breakable space. A blank line or
+`\par` ends the current semantic paragraph. Display math is retained as a dedicated
+semantic block with measured vertical spacing; authors should not add blank lines merely
+to pad a display.
+
+Document grammar revision 30 retains bounded, font-independent levels: at most 256
+paragraph, display, or list-item blocks and at most 2,048 inline text, space, math, shape,
+penalty, or forced-break nodes, plus at most 512 technical display rows. Inline and row
+records preserve source byte spans, style and color,
+math-program identity, and shape values. Breakable and nonbreaking spaces remain
+distinct; each carries one canonical space byte for shaping, and `~` produces
+nonbreaking space semantics. Capacity exhaustion rejects the complete structured
+document and publishes the exact canonical source literally.
+
+### Prose Style And Alignment Matrix
+
+| Form | Native behavior |
+| --- | --- |
+| `\textbf{...}` | Select the resident bold JuliaMono variant. |
+| `\textit{...}`, `\emph{...}` | Select the resident italic JuliaMono variant. |
+| `{\bfseries ...}`, `{\itshape ...}` | Apply a declaration through the end of the current group; declarations compose. |
+| `\textnormal{...}` | Reset weight and italic to JuliaMono Regular while preserving inherited color. |
+| `\texttt{...}` | Retain the resident JuliaMono family and inherited weight or italic flags. |
+| `\textrm{...}` | Unsupported because no resident roman prose face exists; reject the complete document. |
+| `\textsc{...}` | Unsupported because no resident small-caps face exists; reject the complete document. |
+| `center` | Center each paragraph in the environment and suppress first-line indentation. |
+| `flushleft` | Left-align each paragraph in the environment and suppress first-line indentation. |
+| `flushright` | Right-align each paragraph in the environment and suppress first-line indentation. |
+| `quote` | Apply symmetric two-em margins and suppress paragraph indentation. |
+| `quotation` | Apply symmetric two-em margins; suppress the first paragraph indent and retain ordinary indentation thereafter. |
+| `itemize` | Generate bullet labels in a hanging label column. |
+| `enumerate` | Generate document-local decimal labels beginning at `1.`. |
+| `description` | Require `\item[...]` terms and share a left-aligned label column. |
+
+Brace groups scope declarations without producing visible characters. Environment names
+and closing commands must match exactly. Unknown commands, unavailable face requests,
+unclosed groups or environments, and unmatched `\end{...}` commands fail the complete
+structured path.
+
+Lists and quotations may nest in any combination through four levels. Each quotation
+level contributes two-em left and right margins; each list level contributes a two-em
+left margin. Lists use ordinary interline leading between items and three-quarter-em
+spacing at their outer boundaries. List body lines use a hanging origin after the label
+column. Itemized and enumerated labels are right-aligned; description terms are
+left-aligned and share a column capped at the smaller of 12 em or 40 percent of the list
+measure. A wider description term occupies its own line above the body.
+
+Every list requires at least one nonempty item and rejects prose before its first
+`\item`. Optional labels are rejected for `itemize` and `enumerate`; `description`
+requires a nonempty `\item[...]` term. Description terms support nested prose styles,
+colors, escaped specials, controlled or nonbreaking spaces, and inline math. Paragraphs,
+displays, shapes, and nested environments are not permitted inside the brackets.
+Generated labels and description terms are selectable and appear in copied text. A
+canonical space separates each label from its body, and one newline separates items.
+
+The Julia-host snapshot transaction copies exact source bytes, semantic text, document
+descriptors, blocks, and inlines into bounded slot-owned storage. Source/text spans,
+block child ranges, and math-program references are rewritten to snapshot-relative
+offsets and validated before publication. No document-store handle or
+animation-generation pointer reaches display state. Complete documents compile only
+the native semantic layout; command-layout construction remains limited to standalone
+math imported from canonical MIME bytes. The display thread draws, scrolls, and
+computes copy interaction geometry from the resulting sealed semantic layout.
+
+## Document Line Breaking
+
+Paragraph layout searches legal semantic spaces and explicit penalties for the
+lowest-demerit complete line sequence. Cubic line badness uses each space's measured
+stretch and shrink, semantic penalties influence candidate selection, and abrupt
+changes between tight, normal, loose, and very loose lines receive an additional cost.
+Forced breaks terminate the current search path. Hyphenation is not supported.
+
+Interior paragraph lines remain left anchored and adjust their breakable spaces to the
+available width. Stretch uses the measured stretch ratio; shrink stops at the measured
+shrink capacity. Final lines and lines ending at an explicit forced break remain ragged
+with natural spacing. Centered and right-aligned display blocks retain their block
+alignment after line breaking. Ordinary left-aligned paragraphs reserve a one-em
+first-line indent during breaking and placement; `\noindent` and alignment environments
+suppress that reservation. An indivisible sequence wider than the available measure is
+retained as an explicit overfull line.
+
+Search storage and work are bounded: one candidate per layout node plus the terminal
+boundary, four fitness states per candidate, and at most 1,048,576 transition checks per
+block. Candidate, state, or work exhaustion discards the incomplete search and runs the
+deterministic last-fitting greedy breaker over the complete block. Greedy fallback uses
+natural spacing and preserves the same forced-break and overfull-atom behavior.
+
+Inline and display math select different TeX math styles. `$...$` and `\(...\)`
+compile at Text style; `$$...$$` and `\[...\]` compile at Display style. Text style
+keeps fraction branches script-sized with tighter shifts, places large-operator limits
+beside the operator instead of above and below, and suppresses display operator
+variants, so inline math stays close to the height of surrounding prose. Source with no
+outer delimiter is treated as a standalone expression and uses Display style.
+
+## Technical Display Environments
+
+| Environment | Native document behavior |
+| --- | --- |
+| `equation` | Exactly one centered row with a document-local number. |
+| `equation*` | Exactly one centered unnumbered row. |
+| `align` | One top-level `&` alignment point per row; eligible rows are numbered. |
+| `align*` | Measured aligned rows without numbers. |
+| `gather` | Independently centered, numbered rows. |
+| `gather*` | Independently centered unnumbered rows. |
+| `multline` | Left, centered, and right placement for first, middle, and final rows; only the final row is numbered. |
+| `multline*` | The same width-sensitive placement without a number. |
+
+Technical environments form one semantic display block and retain one bounded row
+record per `\\`. Inner matrix and preset-environment separators remain part of their
+own math program and do not split the outer display. `\notag` is accepted once at the
+end of an `align` row and suppresses that row's number; it is rejected elsewhere.
+
+Numbering starts at 1 for each compiled document and is fixed when the native snapshot
+is built, so font and width rebuilds do not renumber rows. Number boxes occupy the right
+edge of the available measure. When content would collide with a number, the content
+uses the full measure, the number moves below that row, and overfull telemetry records
+the fallback. Labels, references, explicit tags, counter commands, and numbering shared
+between documents are not supported.
 
 ### Inline Text Colors
 
 `\textcolor{color}{...}` applies a brush color to nested document text while
 preserving bold and italic font flags. Color names resolve in this order:
 
-1. Common LaTeX names: `black`, `blue`, `brown`, `cyan`, `darkgray`, `gray`,
-    `green`, `lightgray`, `lime`, `magenta`, `olive`, `orange`, `pink`,
-    `purple`, `red`, `teal`, `violet`, `white`, and `yellow`.
+1. All CSS/SVG and X11 names exposed by `Colors.color_names`, including
+    numbered variants such as `antiquewhite4` and `grey60`.
 1. Euclid's Julia palette: `julia_blue`, `julia_red`, `julia_green`, and
     `julia_purple`.
-1. Color names accepted by Colors.jl, such as `steelblue`.
 1. The enclosing document color when the name is unresolved; at the root this
     means the caller's normal Dynview text color.
 
 Color wrappers may be nested with each other and with `\textbf`, `\textit`,
-or `\emph`. This basic support colors prose text runs; embedded math and inline
-Euclid shapes retain their own rendering color rules.
+or `\emph`. This basic support colors prose text runs; embedded math retains
+its own rendering color rules. Inline Euclid shape color options use the same
+Colors.jl names and explicit `julia_*` aliases.
 
 ```julia
 raw"Normal \textcolor{red}{red and \textbf{bold red}} normal"
@@ -169,7 +310,8 @@ raw"\euclidtriangle[color=steelblue,width=2,height=1.5,thickness=2,filled,fill_c
 raw"\euclidpentagon[color=steelblue,width=2,height=2,thickness=2,filled,fill_color=lightgray,edge1_color=red,edge2_color=green,edge3_color=blue,edge4_color=teal,edge5_color=orange]"
 ```
 
-Document mode does not implement general LaTeX commands or environments.
+Document mode does not implement general LaTeX commands, font substitution, or
+environments beyond `center`, `flushleft`, and `flushright`.
 Unknown commands, malformed delimiters, invalid shape options, or unmatched
 style braces cause document parsing to fail and structured output to fall back.
 
@@ -180,26 +322,103 @@ Math mode supports these major groups:
 - Unicode substitution commands for many Greek letters, operators, relations,
   arrows, and set symbols.
 - Upright text operators like `\sin`, `\cos`, `\log`, `\lim`, `\max`.
+- Declared operators: `\operatorname{...}` uses ordinary side scripts, while
+    `\operatorname*{...}` stacks display-style limits by default and accepts
+    `\limits`, `\nolimits`, and `\displaylimits`.
 - `\text{...}` and `\mathrm{...}` for non-italic text inside math.
+- Grouped mathematical alphabets: complete alphanumeric `\mathbb` and `\mathbf`,
+    alphabetic `\mathit`, and uppercase `\mathcal`.
 - Scripts: `^` and `_` including grouped forms.
-- Fractions: `\frac{...}{...}`.
+- Scoped math styles: `\displaystyle`, `\textstyle`, `\scriptstyle`, and
+    `\scriptscriptstyle`; each declaration applies through the end of its current group.
+- Fractions: `\frac{...}{...}`, `\dfrac{...}{...}`, and `\tfrac{...}{...}`.
+- Ruleless binomial stacks: `\binom{...}{...}`, `\dbinom{...}{...}`, and
+    `\tbinom{...}{...}`.
 - Radicals: `\sqrt{...}` and `\sqrt[n]{...}`.
-- Accent bars: `\overline{...}` and `\underline{...}`.
-- Stretch delimiters: `\left ... \right` with mixed delimiter pairs.
-- Large operators with limits: `\sum`, `\prod`, `\int`, `\lim`.
+- Accent rules: `\overline{...}` and `\underline{...}`.
+- Glyph accents: `\hat`, `\widehat`, `\tilde`, `\widetilde`, `\vec`, `\dot`,
+    `\ddot`, `\bar`, `\check`, `\breve`, `\acute`, `\grave`, and `\mathring` use
+    MATH attachment points and horizontal constructions.
+- Stretch delimiters: `\left ... \right` with mixed delimiter pairs and structural
+    `\middle` markers. Every visible delimiter in a group shares one measured extent.
+- Fixed delimiter families: `\big`, `\Big`, `\bigg`, and `\Bigg`, including their
+    `l`, `r`, and `m` atom-class variants.
+- Over/under structures: `\overset`, `\underset`, `\overbrace`, and `\underbrace`;
+    ordinary scripts may annotate the completed brace construct.
+- Large operators with semantic growth and limit policies: `\sum`, `\prod`,
+    `\coprod`, `\int`, `\oint`, `\iint`, `\iiint`, `\lim`, and common n-ary
+    operators. `\limits`, `\nolimits`, and `\displaylimits` override placement when
+    they immediately follow a large operator.
 - Matrix blocks: `\begin{matrix} ... \end{matrix}` and
-    `\begin{array}{...} ... \end{array}` with `&` column separators and `\\`
-    row separators.
+    `\begin{array}{...} ... \end{array}` with `&` column separators, `\\`
+    row separators, boundary rules, and typed row additions.
 - Matrix wrapper environments composed through stretch delimiters: `bmatrix`,
-    `pmatrix`, and `vmatrix`.
-- Spacing markers: `\;` for one normal space, `\ ` for one escaped literal
-    space, and `~` for a nonbreaking space.
+    `Bmatrix`, `pmatrix`, `vmatrix`, and `Vmatrix`.
+- Spacing markers: `\,`, `\:`, `\>`, `\;`, `\!`, a backslash followed by a
+    literal space, `\enspace`, `\quad`, `\qquad`, and `~`.
+
+## Display-Math Layout Contract
+
+Dynview parses supported LaTeX into semantic atoms, explicit glue, and bounded child
+programs, then copies those records into the immutable snapshot. The worker owns all
+font-sensitive measurement against the active Math_Regular generation. The measurement
+root is Display
+style; inline math scopes itself to Text style through the same recursive style-override
+primitive that serves `\displaystyle` and `\textstyle`. Fractions, scripts, limits, and
+radical degrees derive text, script, script-script, and cramped child styles as required.
+
+The math root size is the surrounding text size multiplied by a measured optical scale
+that matches NewCM's lowercase ink height to JuliaMono's, equivalent to `unicode-math`'s
+`Scale=MatchLowercase`. That factor is captured with the OpenType MATH constants and
+shares their generation, so a font republication invalidates it with everything else. It
+is applied once at the root, and every MATH-relative construction follows from it.
+
+Successful native layout uses NewCM's OpenType MATH data for:
+
+- style scaling, axis placement, script constraints, fraction and bar geometry;
+- ruleless stack shifts and minimum gaps;
+- operator variants and limit placement;
+- radical and delimiter variants or bounded assemblies;
+- horizontal brace variants or bounded assemblies and stretch-stack annotation gaps;
+- height-dependent corner kern after final script placement;
+- glyph-accent attachment, horizontal variants, and flattened-accent shaping.
+
+Measurement seals child positions and baselines, rule geometry, selected glyph IDs,
+assembly offsets, and the exact font generation into immutable layout records. Drawing
+uses that geometry directly and never selects a different variant or recomputes a
+typographic placement.
+
+Synthetic script, fraction, bar, radical, delimiter, operator, and accent geometry is
+retained only as a bounded fallback. A missing or stale capability, rejected native
+record, over-capacity construction, or pending glyph page rejects the complete native
+path rather than mixing generations or partially drawing a construction. Per-item
+native-geometry validity and generation fields expose which path was sealed; font-page
+demand and fallback resolution are also retained in generation-local telemetry.
+
+The native semantic record is validated before snapshot publication. Atom, glue, style,
+operator-policy, span, and child-count validation occurs before import. Scripts,
+fraction branches, and radical degrees retain recursive child identities without
+crossing the language boundary; canonical source is not reparsed for layout policy.
+
+### Line Bands And Ink Overflow
+
+Document lines occupy whole grid rows. A line reserves an additional row only when its
+ink cannot be accommodated, and ink is permitted to rise into the unused leading of the
+preceding line rather than forcing a taller band. This is TeX's `\lineskiplimit`
+behavior: the baseline lattice is preserved even though ink protrudes past a band.
+
+The allowance for one line is the exact unused space left below the preceding line's
+lowest ink, so a permitted overflow can never collide. Ink below the baseline always
+reserves rows, which is what keeps that allowance sound. Display math is the deliberate
+exception and still claims its own multi-row band.
 
 ## Character Support
 
-Character handling is practical and intentionally limited. Command support is
-a fixed map in `src/julia/latex.jl`: `UNICODE_COMMAND_MAP` and
-`MATHBB_UPPERCASE_MAP`. It is not general TeX compatibility.
+Character handling is practical and intentionally limited. Fixed commands use
+`MATH_COMMAND_REGISTRY` for output, role, atom class, operator family, growth,
+and limit policy. Grouped mathematical alphabet commands use audited Unicode
+Mathematical Alphanumeric Symbols rendered by the same authoritative NewCM math
+face. This is not general TeX compatibility.
 
 - ASCII letters, digits, and punctuation are the best default for authored
     math source. Examples include `a`, `x_1`, `+`, `(`, and `)`.
@@ -247,8 +466,10 @@ character entry.
 - Triangle operators: `\bigtriangleup`, `\bigtriangledown`, `\triangleleft`,
     `\triangleright`, `\lhd`, `\rhd`, `\unlhd`, and `\unrhd`.
 - Additional operators: `\dagger`, `\ddagger`, and `\amalg`.
-- Calculus and analysis: `\infty`, `\partial`, `\nabla`, `\propto`, `\oint`,
-    `\iint`, `\iiint`, and `\coprod`.
+- Calculus and analysis: `\infty`, `\partial`, `\nabla`, and `\propto`.
+- Large operators: `\sum`, `\prod`, `\coprod`, `\int`, `\oint`, `\iint`,
+    `\iiint`, `\bigcup`, `\bigcap`, `\bigvee`, `\bigwedge`, `\bigsqcup`,
+    `\biguplus`, `\bigoplus`, `\bigotimes`, and `\bigodot`.
 - Logic and quantifiers: `\forall`, `\exists`, `\nexists`, `\neg`, `\land`,
     `\lor`, `\wedge`, `\vee`, `\therefore`, `\because`, `\top`, and `\bot`.
 - Set membership: `\in`, `\notin`, `\ni`, `\owns`, and `\notni`.
@@ -278,17 +499,29 @@ character entry.
     `\Box`, `\square`, `\Diamond`, `\lozenge`, and `\surd`.
 - Suits, music, and marks: `\clubsuit`, `\diamondsuit`, `\heartsuit`,
     `\spadesuit`, `\flat`, `\natural`, `\sharp`, `\checkmark`, and `\degree`.
-- Spacing: `\;` maps to one normal space, `\ ` maps to one escaped literal
-    space, and `~` maps to one nonbreaking space (`\u00a0`).
+- Spacing: `\;` maps to one normal space, a backslash followed by a literal
+    space maps to one escaped space, and `~` maps to one nonbreaking space
+    (`\u00a0`).
 - Delimiter glyphs: `\lceil`, `\rceil`, `\lfloor`, `\rfloor`, `\vert`, `\|`,
     `\Vert`, `\backslash`, `\{`, `\}`.
 
-### `\mathbb` Coverage
+### Mathematical Alphabet Coverage
 
-| Input | Support |
+| Command | Accepted grouped input |
 | --- | --- |
-| `\mathbb{A}` to `\mathbb{Z}` (uppercase only) | Supported via `MATHBB_UPPERCASE_MAP` |
-| `\mathbb{a}` or other non-uppercase forms | Not supported (falls back; no lowercase map) |
+| `\mathbb{...}` | ASCII `A-Z`, `a-z`, and `0-9` |
+| `\mathbf{...}` | ASCII `A-Z`, `a-z`, and `0-9` |
+| `\mathit{...}` | ASCII `A-Z` and `a-z` |
+| `\mathcal{...}` | ASCII `A-Z` |
+
+Each group is all-or-nothing. An unsupported scalar rejects alphabet conversion
+rather than mixing a fallback face into the run. Canonical serialization restores
+the original command and ASCII source. NewCM cmap tests cover every advertised
+scalar, including legacy letterlike codepoints used by double-struck, italic, and
+calligraphic alphabets.
+
+The fixed-command registry currently emits 242 distinct Unicode scalars. The Stage 7
+font audit found all 242 in the checked-in `NewCMSansMath-Regular.otf` cmap.
 
 If a Greek letter or symbol command is not in the tables above,
 treat it as unsupported for now.
@@ -298,16 +531,36 @@ treat it as unsupported for now.
 Matrix mode supports rectangular grids and recursive math within cells:
 
 - Supported: `\begin{matrix}...\end{matrix}`.
-- Supported: `\begin{array}{...}...\end{array}` with a validated `l/c/r`
-    preamble and strict shape checks.
+- Supported: `\begin{array}{...}...\end{array}` with a validated preamble of
+    `l`, `c`, `r`, `|`, `||`, and empty `@{}` directives.
+- Supported: `\hline` at row boundaries and signed `\\[length]` additions in
+    `pt`, `em`, or `ex` units.
 - Supported inside cells: other structured math primitives such as fractions,
     radicals, and scripts.
-- Composition wrappers: `bmatrix`, `pmatrix`, and `vmatrix`.
+- Composition wrappers: `bmatrix`, `Bmatrix`, `pmatrix`, `vmatrix`, and `Vmatrix`.
+- Preset environments: `smallmatrix`, `cases`, `dcases`, `aligned`, `alignedat`,
+    `gathered`, and `subarray`.
 - Canonical wrapper output becomes `\left[...\right]`, `\left(...\right)`, or
     `\left|...\right|` around a `matrix` environment.
 
-Rows must be rectangular. Malformed matrix shape falls back safely rather than
-crashing the frame path.
+Rows must be rectangular. Malformed matrix shape rejects structured output and displays
+the exact canonical source rather than crashing the frame path.
+
+The native parser records matrix dimensions, cell style, row policy, alignments, typed
+boundary gaps, rule counts, and row additions in a bounded descriptor. Matrix commands
+reference that descriptor by block-local index; native measurement and drawing do not
+reparse canonical source for layout policy.
+Normal matrix, array, and `cases` cells enter TeX Text style. `smallmatrix` and
+`subarray` use Script style; `dcases`, `aligned`, `alignedat`, and `gathered` use
+Display style. The selected style applies before recursive fractions, scripts,
+radicals, nested tables, or operators are measured. OpenType MATH style scaling
+remains authoritative.
+
+Preset shape rules are enforced during parsing. `cases` and `dcases` require two
+left-aligned columns and use a structural left brace with an omitted right delimiter.
+`aligned` requires right/left column pairs, while `alignedat{n}` requires exactly
+`2n` columns and suppresses automatic pair gaps. `gathered` accepts one centered
+column. `subarray{l}` and `subarray{c}` accept one column with the requested alignment.
 
 ## Delimiter Support
 
@@ -338,36 +591,36 @@ Available cache APIs:
 - `invalidate_cache_for_style!(style_profile)`
 - `invalidate_cache_for_grammar!(grammar_version)`
 
-In normal animation usage, calling `replay_emit_math_block!` is sufficient and
-cache behavior is automatic.
+In normal animation usage, returning `L"..."` is sufficient and cache behavior
+is automatic.
 
-The current cache applies to math parsing and compiled math programs. Document
-runs are parsed per `emit_latex_view_text!` call; embedded math expressions then
-reuse the math cache.
+The current cache applies to math parsing and compiled math programs. Exact-source
+documents are interned for the animation generation; embedded math expressions reuse
+the math cache.
 
-## Fallback And Failure Behavior
+## Literal Failure Behavior
 
-Fallback text is part of the API contract, not an exceptional afterthought.
-`emit_latex_view_text!` writes the supplied fallback as the Dynview copy payload
-and returns that same string whether structured emission succeeds or fails.
+The canonical MIME bytes govern rendering, copying, hashing, and failure output.
+Copy-icon geometry comes from the sealed semantic block bounds used by drawing,
+while copied content remains the exact authored source.
 
 Document mode fails closed: unsupported commands, malformed style groups,
 unclosed math delimiters, empty math fragments, and invalid Euclid shape options
 abort structured emission. Math mode uses parser recovery for unsupported or
-malformed constructs where possible. In either case, the host keeps rendering
-readable fallback text rather than exposing a partial stream.
+malformed constructs where possible. When parsing cannot publish semantic content,
+the host renders the exact literal source rather than a partial stream or duplicate
+authored text.
 
-Bridge status failures also stop emission. Authors should never make the
-structured stream the only source of user-visible meaning.
+Bridge status failures also stop publication without exposing partial content.
 
 ## Practical Authoring Tips
 
 - Prefer one semantic LaTeX expression over manually spaced pseudo-layout text.
-- Keep fallback text readable on its own.
-- Use `emit_latex_view_text!` for complete view documents instead of manually
+- Keep literal source understandable when native parsing rejects it.
+- Use `tex"..."` or `TeXDocument` for complete view documents instead of manually
     opening and closing a Dynview block.
-- Use raw Julia strings for document source when practical so LaTeX backslashes
-    remain readable.
+- Prefer raw, non-interpolating `tex"..."` literals so LaTeX backslashes remain
+    readable.
 - Keep LaTeX strings stable across frames when possible to maximize cache reuse.
 - Use `\text{...}` for words or labels that should not be italicized.
 - Use `\textbf`, `\textit`, and `\emph` only in document mode; use `\text` or
@@ -376,100 +629,96 @@ structured stream the only source of user-visible meaning.
 
 ## Known Limitations
 
-- This is not a TeX engine. Macros, packages, declarations, sections, lists,
-    tables, equation environments, alignment environments, and general
-    `\begin{...}` document environments are unsupported.
+- This is not a TeX engine. Macros, packages, sections, document tables, custom list
+    labels or counters, and unlisted general `\begin{...}` document environments are
+    unsupported.
 - Document styling is limited to nested bold and italic spans. There is no
     document-level font size, color, heading, or alignment syntax.
 - Math delimiters in document mode use direct closer search; nested delimiter
     escaping is not general TeX-compatible parsing.
-- Matrix support is limited to rectangular `matrix`, validated `array`, and the
-    `bmatrix`, `pmatrix`, and `vmatrix` wrappers.
-- `\mathbb` supports uppercase Latin letters only.
+- Table support is limited to the documented rectangular matrix, array, wrapper,
+    and nested preset environments. Technical display numbering is document-local;
+    tags, labels, references, and counter manipulation are unsupported.
+- `\mathfrak`, `\mathsf`, and `\mathtt` are not supported. `\mathit` excludes
+    digits, and `\mathcal` is uppercase-only.
 - Raw Unicode math is best effort; command forms provide more reliable semantic
     styling.
 - Parser recovery prioritizes rendering continuity rather than TeX-grade error
     diagnostics.
 
+## Visual Semantic Acceptance
+
+The checked-in `tools/scenarios/elements-tex-math-corpus.jsonl` and
+`tools/scenarios/elements-tex-document-corpus.jsonl` programs publish the supported
+math and document corpus through `set_view_content`. Every independently published
+group waits for correlated `presentation_semantic_published` evidence before capture,
+so literal fallback cannot satisfy the acceptance condition. These scenarios are run
+explicitly and are not discovered automatically by the standard `check` target.
+
 ## Appendix: Module Architecture
 
-The LaTeX Julia implementation now uses one public facade module,
-`src/julia/latex.jl`, which includes responsibility-focused files under
-`src/julia/latex/`.
+Julia exposes one stable authoring facade. Dynview owns all TeX grammar and semantic
+compilation.
 
 ### File Layout And Responsibilities
 
 | File | Primary Role | Key Public/Top-Level Surface |
 | --- | --- | --- |
-| `src/julia/latex.jl` | Facade module and stable API surface | `module EuclidLatex`, exports, include order |
-| `src/julia/latex/core.jl` | Core constants, maps, and data types | `UNICODE_COMMAND_MAP`, `LatexToken`, `LatexRun`, `MathPayloadOp` |
-| `src/julia/latex/cache.jl` | Parse/compile cache lifecycle | `clear_cache!`, `prune_cache!`, invalidate APIs |
-| `src/julia/latex/lexer_parser.jl` | Math lexer + parser + normalization | `tokenize_latex`, `parse_latex`, `normalize_runs` |
-| `src/julia/latex/compiler.jl` | AST-to-payload compilation + canonical serialization | `compile_emit_program`, `latex_to_plain_text`, payload builders |
-| `src/julia/latex/document_mode.jl` | Document-mode parsing and run replay orchestration | `classify_latex_mode`, `parse_latex_document`, `emit_latex_view_text!` |
-| `src/julia/latex/dynview_math.jl` | Recursive dynview math block bridge encoding/replay | `replay_emit_math_block!`, `emit_latex_dynview!`, bridge payload encoding |
+| `src/julia/latex.jl` | Facade module and stable API surface | `TeXDocument`, `tex_str`, exports, include order |
+| `src/julia/latex/facade.jl` | Canonical document representation and priming | `TeXDocument`, `tex_str`, `prime_latex!` |
+| `src/dynview/parse/` | Classification, bounded parsing, normalization, semantic lowering | document/math grammars and semantic builders |
+| `src/dynview/core/document_store.odin` | Generation-scoped exact-source interning | immutable document handles and diagnostics |
+| `src/bridge/dynview_native_tex.odin` | Native semantic replay into snapshot staging | transactional span rewriting and record import |
 
 ### Include And Dependency Direction
-
-The include order in `src/julia/latex.jl` is designed so later files can rely
-on earlier symbols without circular imports.
 
 ```mermaid
 flowchart TD
     Facade[src/julia/latex.jl]
-    Core[src/julia/latex/core.jl]
-    Cache[src/julia/latex/cache.jl]
-    Lex[src/julia/latex/lexer_parser.jl]
-    Comp[src/julia/latex/compiler.jl]
-    Doc[src/julia/latex/document_mode.jl]
-    Dyn[src/julia/latex/dynview_math.jl]
+    Thin[src/julia/latex/facade.jl]
+    ABI[src/julia/bridge/presentation.jl]
+    Native[src/dynview/parse]
+    Store[src/dynview/core/document_store.odin]
+    Snapshot[Pointer-free view snapshot]
 
-    Facade --> Core --> Cache --> Lex --> Comp --> Doc --> Dyn
-    Comp --> Lex
-    Doc --> Comp
-    Dyn --> Comp
+    Facade --> Thin --> ABI --> Native --> Store --> Snapshot
 ```
 
-Practical rule: dependencies should generally flow from parsing toward
-compilation and replay, with the facade preserving one stable import path.
+Practical rule: Julia submits source through the facade; parsing and semantics never
+flow back into Julia.
 
 ### End-To-End Runtime Flow
 
 ```mermaid
 flowchart LR
-    A[Source LaTeX text]
-    B{Mode classification}
-    C[Math lexer/parser]
-    D[Normalize runs]
-    E[Compile recursive payload]
-    F[Bridge encode + dynview replay]
-    G[Rendered dynview block]
-    H[Document parser]
-    I[Document runs + embedded math replay]
-    J[Fallback plain text]
+    A[Julia displayable]
+    B[Canonical MIME envelope]
+    C{Native classification}
+    D[Taskpool document/math parse]
+    E[Generation-scoped interned semantics]
+    F[Pointer-free snapshot]
+    G[Worker shaping and layout]
+    H[Rendered Dynview content]
+    I[Exact literal source on failure]
 
-    A --> B
-    B -->|Math| C --> D --> E --> F --> G
-    B -->|Document| H --> I --> G
-    E --> J
-    I --> J
+    A --> B --> C --> D --> E --> F --> G --> H
+    C --> I --> F
 ```
 
 ### Ownership And Failure Boundaries
 
 | Concern | Owning Unit | Failure Behavior |
 | --- | --- | --- |
-| Tokenization + math parse correctness | `lexer_parser.jl` | Produces recoverable fallback atoms where possible |
-| Document command parsing and validation | `document_mode.jl` | Fails closed to fallback on malformed document syntax |
-| Program caching and invalidation | `cache.jl` | Bounded cache with explicit clear/invalidate APIs |
-| Bridge payload encoding/replay | `dynview_math.jl` | Stops emission on bridge status failure |
-| User-visible copy fallback contract | `emit_latex_view_text!` | Always returns supplied fallback string |
+| Tokenization, parsing, and normalization | `src/dynview/parse/` | Preserves frozen recovery behavior or rejects atomically |
+| Semantic reuse | `src/dynview/core/document_store.odin` | Bounded exact-source interning and stable negative caching |
+| Snapshot staging | `src/bridge/dynview_native_tex.odin` | Rebases pointer-free document ranges and publishes no partial fragment |
+| Shaping, layout, and derived caches | `src/dynview/math/`, `src/dynview/layout/`, `src/dynview/compile/` | Publishes exact literal source when semantic content cannot be rebuilt |
+| User-visible copy/failure contract | Canonical MIME presentation | Uses the exact selected bytes |
 
 ## Summary
 
-For complete animation view text, use `emit_latex_view_text!` with a readable
-fallback. Use `replay_emit_math_block!` for math inserted into an already open
-Dynview block. Together, document mode and math mode cover styled prose,
+For complete animation view content, use `tex"..."` or `TeXDocument`; use
+`L"..."` for standalone math. Together, document mode and math mode cover styled prose,
 inline/display math, Euclid shapes, scripts, fractions, radicals, large
 operators, stretch delimiters, and matrix blocks through one bounded snapshot
 and replay pipeline.

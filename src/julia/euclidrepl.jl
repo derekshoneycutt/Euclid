@@ -7,15 +7,14 @@ with tool animation.
 Key behavior:
 - one active draw job at a time,
 - new draws preempt active draw and finalize interrupted shape visibility,
-- drawn geometry persists until scratchpad session reset/restart.
+- drawn geometry persists until Terminal session reset/restart.
 
-Use `?point!`, `?line!`, and `?circle!` in the Scratchpad for API details.
+Use `?point!`, `?line!`, and `?circle!` in the Terminal for API details.
 """
 module EuclidRepl
 
 using ..OdinJuliaBridge
 using ..EuclidAnimations
-using ..Scratchpad
 using Colors: Colorant
 
 export DEFAULT_POINT_DURATION, DEFAULT_LINE_DURATION, DEFAULT_CIRCLE_DURATION,
@@ -57,16 +56,16 @@ end
 abstract type ReplDrawPayload end
 
 struct PointPayload <: ReplDrawPayload
-    point_id::Int
+    point_id::UInt64
     pos::Vector{Float32}
     color
     brush::Float32
 end
 
 struct LinePayload <: ReplDrawPayload
-    host_id::Int
-    start_id::Int
-    end_id::Int
+    host_id::UInt64
+    start_id::UInt64
+    end_id::UInt64
     start_pos::Vector{Float32}
     end_pos::Vector{Float32}
     color
@@ -75,15 +74,11 @@ end
 
 struct CirclePayload <: ReplDrawPayload
     filled::Bool
-    full_sweep::Bool
-    host_id::Int
-    start_id::Int
-    end_id::Int
+    host_id::UInt64
     center::Vector{Float32}
     start_pos::Vector{Float32}
-    end_pos::Vector{Float32}
     radius::Float32
-    angle_theta::Float32
+    sweep_theta::Float32
     color
     brush::Float32
 end
@@ -122,7 +117,7 @@ struct Reflect2DSpec <: TransformSpec
 end
 
 struct TransformPayload <: ReplDrawPayload
-    point_ids::Vector{Int}
+    point_ids::Vector{UInt64}
     start_positions::Vector{Vector{Float32}}
     spec::TransformSpec
 end
@@ -131,13 +126,125 @@ mutable struct ReplDrawJob
     kind::Symbol
     duration::Float32
     elapsed::Float32
-    hook_id::Union{Nothing, Int}
     payload::ReplDrawPayload
 end
 
 mutable struct ReplDrawSession
     active_job::Union{Nothing, ReplDrawJob}
-    managed_host_ids::Vector{Int}
+    managed_host_ids::Vector{UInt64}
+end
+
+"""Generation-local EuclidRepl state owned by one Terminal session."""
+mutable struct EuclidReplRuntime
+    session::ReplDrawSession
+end
+
+"""Create empty EuclidRepl state for one Terminal session generation."""
+create_runtime() = EuclidReplRuntime(ReplDrawSession(nothing, UInt64[]))
+
+"""Install user-facing drawing helpers bound to one Terminal generation."""
+function install_drawing_helpers!(
+    context_module::Module, runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid})::Nothing
+
+    repl_module = EuclidRepl
+    Core.eval(context_module, quote
+        const EuclidRepl = $repl_module
+        const EUCLID_REPL_RUNTIME = $runtime
+        const EUCLID_STATE_PTR = $state_ptr
+        """Hide one REPL-managed geometry target."""
+        hide!(args...; kwargs...) = EuclidRepl.hide!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Return the curated Euclid drawing colors."""
+        euclidcolors(args...; kwargs...) = EuclidRepl.euclidcolors(args...; kwargs...)
+        """Draw one animated point."""
+        point!(args...; kwargs...) = EuclidRepl.point!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Draw one animated line."""
+        line!(args...; kwargs...) = EuclidRepl.line!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Draw one animated circle."""
+        circle!(args...; kwargs...) = EuclidRepl.circle!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Animate a pen highlight."""
+        highlight_pen!(args...; kwargs...) = EuclidRepl.highlight_pen!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Animate a compass highlight."""
+        highlight_compass!(args...; kwargs...) = EuclidRepl.highlight_compass!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Stop the active Euclid draw animation."""
+        stop!() = EuclidRepl.stop!(EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
+        """Clear all geometry managed by this Terminal generation."""
+        clear!() = EuclidRepl.clear!(EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
+        """Return Euclid drawing status for this Terminal generation."""
+        status() = EuclidRepl.status(EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR)
+    end)
+    return nothing
+end
+
+"""Install user-facing rotation helpers bound to one Terminal generation."""
+function install_rotation_helpers!(context_module::Module)::Nothing
+    Core.eval(context_module, quote
+        """Translate managed points."""
+        translate_points!(args...; kwargs...) = EuclidRepl.translate_points!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Rotate managed points about an axis."""
+        rotate_points!(args...; kwargs...) = EuclidRepl.rotate_points!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Rotate managed points about the x axis."""
+        rotate_points_x!(args...; kwargs...) = EuclidRepl.rotate_points_x!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Rotate managed points about the y axis."""
+        rotate_points_y!(args...; kwargs...) = EuclidRepl.rotate_points_y!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Rotate managed points about the z axis."""
+        rotate_points_z!(args...; kwargs...) = EuclidRepl.rotate_points_z!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+    end)
+    return nothing
+end
+
+"""Install user-facing reflection helpers bound to one Terminal generation."""
+function install_reflection_helpers!(context_module::Module)::Nothing
+    Core.eval(context_module, quote
+        """Reflect points across an arbitrary 2D line."""
+        reflect2d_points!(args...; kwargs...) = EuclidRepl.reflect2d_points!(
+            EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Reflect points across the x axis."""
+        reflect2d_points_x_axis!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_x_axis!(
+                EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Reflect points across the y axis."""
+        reflect2d_points_y_axis!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_y_axis!(
+                EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Reflect points across the positive diagonal."""
+        reflect2d_points_diag_pos!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_diag_pos!(
+                EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+        """Reflect points across the negative diagonal."""
+        reflect2d_points_diag_neg!(args...; kwargs...) =
+            EuclidRepl.reflect2d_points_diag_neg!(
+                EUCLID_REPL_RUNTIME, EUCLID_STATE_PTR, args...; kwargs...)
+    end)
+    return nothing
+end
+
+"""Install user-facing transform helpers bound to one Terminal generation."""
+function install_transform_helpers!(context_module::Module)::Nothing
+    install_rotation_helpers!(context_module)
+    install_reflection_helpers!(context_module)
+    return nothing
+end
+
+"""Install user-facing geometry helpers bound to one Terminal generation."""
+function install_session_helpers!(
+    context_module::Module, runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid})::Nothing
+
+    install_drawing_helpers!(context_module, runtime, state_ptr)
+    install_transform_helpers!(context_module)
+    return nothing
 end
 
 struct ReplStatus
@@ -145,22 +252,12 @@ struct ReplStatus
     kind::Union{Nothing,Symbol}
     elapsed::Union{Nothing,Float32}
     duration::Union{Nothing,Float32}
-    hook_id::Union{Nothing,Int}
+    subscription_id::Union{Nothing,Int}
     managed_shape_count::Int
 end
 
-const SESSION_REF = Ref{Union{Nothing, ReplDrawSession}}(nothing)
-
-"""Return the singleton EuclidRepl session, creating it when missing."""
-function ensure_session!()
-    session = SESSION_REF[]
-    if session === nothing
-        session = ReplDrawSession(nothing, Int[])
-        SESSION_REF[] = session
-    end
-
-    return session
-end
+"""Return the Terminal-generation-owned EuclidRepl session."""
+ensure_session!(runtime::EuclidReplRuntime) = runtime.session
 
 """Return `value` as `Float32` and fail when duration is non-positive or non-finite."""
 function validated_duration(value::Real)::Float32
@@ -187,16 +284,6 @@ function validated_start_theta(value::Real)::Float32
     theta = Float32(value)
     if !isfinite(theta)
         throw(ArgumentError("start_theta must be finite"))
-    end
-
-    return theta
-end
-
-"""Validate end theta and return it as `Float32`, allowing `Inf` sentinel."""
-function validated_end_theta(value::Real)::Float32
-    theta = Float32(value)
-    if isnan(theta)
-        throw(ArgumentError("end_theta must not be NaN"))
     end
 
     return theta
@@ -238,9 +325,9 @@ function vec3(name::AbstractString, value::AbstractVector{<:Real})
     return Float32[first_value, second_value, third_value]
 end
 
-"""Return validated non-empty point ids as `Vector{Int}`."""
+"""Return validated non-empty point ids as packed `UInt64` entities."""
 function validated_point_ids(point_ids)
-    ids = Int[Integer(id) for id in point_ids]
+    ids = UInt64[UInt64(id) for id in point_ids]
     if isempty(ids)
         throw(ArgumentError("point_ids must contain at least one id"))
     end
@@ -274,33 +361,11 @@ end
 
 """Validate matching lengths for point ids and start positions."""
 function validate_transform_batch_lengths(
-    point_ids::Vector{Int}, start_positions::Vector{Vector{Float32}})
+    point_ids::Vector{UInt64}, start_positions::Vector{Vector{Float32}})
 
     if length(point_ids) != length(start_positions)
         throw(ArgumentError("point_ids and start_positions must have equal length"))
     end
-end
-
-"""Compute final end theta for REPL circle semantics."""
-function effective_end_theta(start_theta::Float32, end_theta::Float32)
-    if !isfinite(end_theta)
-        return start_theta + TWO_PI_F32
-    end
-
-    if end_theta - start_theta >= TWO_PI_F32
-        return start_theta + TWO_PI_F32
-    end
-
-    return end_theta
-end
-
-"""Return true when REPL semantics should treat the requested arc as full sweep."""
-function is_full_sweep_request(start_theta::Float32, end_theta::Float32)::Bool
-    if !isfinite(end_theta)
-        return true
-    end
-
-    return (end_theta - start_theta) >= TWO_PI_F32
 end
 
 """Compute a point on the XY circle at `theta`, keeping center z."""
@@ -343,13 +408,9 @@ end
 function finalize_payload!(state_ptr::Ptr{Cvoid}, payload::CirclePayload)
     OdinJuliaBridge.set_point_color(state_ptr, payload.host_id, payload.color)
     OdinJuliaBridge.set_point_brush(state_ptr, payload.host_id, payload.brush)
-    OdinJuliaBridge.set_point_position(state_ptr, payload.start_id, payload.start_pos)
-    OdinJuliaBridge.set_point_position(state_ptr, payload.end_id, payload.end_pos)
-    if payload.full_sweep
-        OdinJuliaBridge.set_point_offset(state_ptr, payload.host_id, TWO_PI_F32)
-    else
-        OdinJuliaBridge.set_point_offset(state_ptr, payload.host_id, 0f0)
-    end
+    start_theta = theta_from_center(payload.center, payload.start_pos)
+    OdinJuliaBridge.set_arc_geometry(state_ptr, payload.host_id,
+        payload.radius, start_theta, payload.sweep_theta)
     OdinJuliaBridge.show_point(state_ptr, payload.host_id)
 end
 
@@ -401,14 +462,11 @@ function render_payload!(
             Float32(duration),
             payload.center,
             payload.start_pos,
-            payload.angle_theta,
+            payload.sweep_theta,
             payload.radius;
             brush=payload.brush,
             color=payload.color,
-            marker_host_id=payload.host_id,
-            marker_start_id=payload.start_id,
-            marker_end_id=payload.end_id,
-            full_sweep=payload.full_sweep)
+            marker_host_id=payload.host_id)
     else
         EuclidAnimations.animate_repl_draw_circle(
             state_ptr,
@@ -416,14 +474,11 @@ function render_payload!(
             Float32(duration),
             payload.center,
             payload.start_pos,
-            payload.angle_theta,
+            payload.sweep_theta,
             payload.radius;
             brush=payload.brush,
             color=payload.color,
-            marker_host_id=payload.host_id,
-            marker_start_id=payload.start_id,
-            marker_end_id=payload.end_id,
-            full_sweep=payload.full_sweep)
+            marker_host_id=payload.host_id)
     end
 end
 
@@ -520,7 +575,7 @@ function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
     elapsed::Real,
     duration::Real,
-    point_id::Int,
+    point_id::UInt64,
     start_position::AbstractVector{<:Real},
     spec::TranslateSpec)
 
@@ -538,7 +593,7 @@ function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
     elapsed::Real,
     duration::Real,
-    point_id::Int,
+    point_id::UInt64,
     start_position::AbstractVector{<:Real},
     spec::RotateSpec)
 
@@ -558,7 +613,7 @@ function render_transform_spec!(
     state_ptr::Ptr{Cvoid},
     elapsed::Real,
     duration::Real,
-    point_id::Int,
+    point_id::UInt64,
     start_position::AbstractVector{<:Real},
     spec::Reflect2DSpec)
 
@@ -601,23 +656,22 @@ function finalize_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
     end
 end
 
-"""Remove active hook and clear active job state for the current session."""
-function clear_active_job!(state_ptr::Ptr{Cvoid}, session::ReplDrawSession)
+"""Clear the generation-local job without changing managed geometry."""
+function clear_active_job!(
+    runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    session::ReplDrawSession)
+
     job = session.active_job
     if job === nothing
         return
-    end
-
-    if job.hook_id !== nothing
-        Scratchpad.remove_frame_hook_silent(state_ptr, job.hook_id)
-        job.hook_id = nothing
     end
 
     session.active_job = nothing
 end
 
 """Track a host point id as managed EuclidRepl geometry."""
-function track_managed_host!(session::ReplDrawSession, host_id::Int)
+function track_managed_host!(session::ReplDrawSession, host_id::UInt64)
     if !(host_id in session.managed_host_ids)
         push!(session.managed_host_ids, host_id)
     end
@@ -634,9 +688,13 @@ function clear_managed_geometry!(state_ptr::Ptr{Cvoid}, session::ReplDrawSession
     empty!(session.managed_host_ids)
 end
 
-"""Advance the current active EuclidRepl draw job by one frame."""
-function run_active_job_frame!(state_ptr::Ptr{Cvoid}, dt::Real)
-    session = ensure_session!()
+"""Advance one draw job inside the native animation tick's scene-command capture."""
+function run_active_job_frame!(
+    runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    dt::Real)
+
+    session = ensure_session!(runtime)
     job = session.active_job
     if job === nothing
         return
@@ -648,33 +706,31 @@ function run_active_job_frame!(state_ptr::Ptr{Cvoid}, dt::Real)
 
     if job.elapsed >= job.duration
         finalize_job!(state_ptr, job)
-        clear_active_job!(state_ptr, session)
+        clear_active_job!(runtime, state_ptr, session)
     end
 end
 
-"""Preempt active draw (if any), then register and start a replacement draw job."""
-function start_job!(state_ptr::Ptr{Cvoid}, job::ReplDrawJob)
-    session = ensure_session!()
+"""Preempt an active draw and stage its replacement for captured Terminal animation ticks."""
+function start_job!(
+    runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    job::ReplDrawJob)
+
+    session = ensure_session!(runtime)
 
     if session.active_job !== nothing
         finalize_job!(state_ptr, session.active_job)
-        clear_active_job!(state_ptr, session)
+        clear_active_job!(runtime, state_ptr, session)
     end
 
-    hook_id = Scratchpad.register_frame_hook_silent(
-        state_ptr,
-        (hook_state_ptr, dt) -> run_active_job_frame!(hook_state_ptr, dt),
-        label="EuclidRepl active draw")
-
-    job.hook_id = hook_id
-    # Scratchpad may initialize lazily during hook registration; re-read session
-    # reference to avoid writing active state into a stale session object.
-    ensure_session!().active_job = job
+    session.active_job = job
 end
 
-"""Reset EuclidRepl session state for scratchpad lifecycle transitions."""
-function reset_scratchpad_session!()
-    SESSION_REF[] = nothing
+"""Stop animation and clear managed state before a Terminal session closes."""
+function reset_session!(runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
+    session = ensure_session!(runtime)
+    clear_active_job!(runtime, state_ptr, session)
+    clear_managed_geometry!(state_ptr, session)
     return nothing
 end
 
@@ -683,15 +739,17 @@ Stop the active draw animation hook without deleting geometry.
 
 Returns `true` when an active draw was stopped, otherwise `false`.
 """
-function stop!(state_ptr::Ptr{Cvoid})
-    session = ensure_session!()
+function stop!(
+    host_runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime)
     job = session.active_job
     if job === nothing
         return false
     end
 
     finalize_job!(state_ptr, job)
-    clear_active_job!(state_ptr, session)
+    clear_active_job!(host_runtime, state_ptr, session)
     return true
 end
 
@@ -700,17 +758,19 @@ Clear EuclidRepl-managed geometry and reset active draw state.
 
 Returns `true` when clear completes.
 """
-function clear!(state_ptr::Ptr{Cvoid})
-    session = ensure_session!()
-    clear_active_job!(state_ptr, session)
+function clear!(
+    host_runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
+
+    session = ensure_session!(host_runtime)
+    clear_active_job!(host_runtime, state_ptr, session)
     clear_managed_geometry!(state_ptr, session)
     return true
 end
 
-"""Hide one bridge point, tolerating hosts that lack the hide symbol."""
-function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::Integer)
+"""Hide one packed bridge entity, tolerating hosts that lack the hide symbol."""
+function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::UInt64)
     try
-        OdinJuliaBridge.hide_point(state_ptr, Int(id))
+        OdinJuliaBridge.hide_point(state_ptr, id)
     catch err
         message = sprint(showerror, err)
         if occursin("could not load symbol", message) || occursin("undefined symbol", message)
@@ -721,39 +781,71 @@ function _hide_bridge_point(state_ptr::Ptr{Cvoid}, id::Integer)
     return nothing
 end
 
-"""Hide a REPL-managed geometry target by integer index or bridge shape/view handle."""
-function hide!(state_ptr::Ptr{Cvoid}, index::Integer)
-    _hide_bridge_point(state_ptr, Int(index))
+"""Hide a REPL-managed geometry target by integer index or bridge entity/view handle."""
+function hide!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    index::Integer)
+
+    _ = host_runtime
+    _hide_bridge_point(state_ptr, UInt64(index))
     return nothing
 end
 
-"""Hide a point-view handle by taking its index."""
-function hide!(state_ptr::Ptr{Cvoid}, view::OdinJuliaBridge.BridgePointView)
-    _hide_bridge_point(state_ptr, Int(view.index))
+"""Hide a standalone entity returned by `point!` using its packed index."""
+function hide!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    point::OdinJuliaBridge.BridgeShapeEntityResult)
+
+    _ = host_runtime
+    _hide_bridge_point(state_ptr, point.index)
     return nothing
 end
 
-"""Hide a line-shape handle by its host id."""
-function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeLine)
-    _hide_bridge_point(state_ptr, Int(shape.host_id))
+function hide!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    view::OdinJuliaBridge.BridgePointView)
+
+    _ = host_runtime
+    _hide_bridge_point(state_ptr, view.index)
     return nothing
 end
+function hide!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    shape::OdinJuliaBridge.BridgeShapeLine)
 
-"""Hide a circle-shape handle by its host id."""
-function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeCircle)
-    _hide_bridge_point(state_ptr, Int(shape.host_id))
+    _ = host_runtime
+    _hide_bridge_point(state_ptr, shape.host_id)
     return nothing
 end
+function hide!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    shape::OdinJuliaBridge.BridgeShapeCircle)
 
-"""Hide a filled-circle-shape handle by its host id."""
-function hide!(state_ptr::Ptr{Cvoid}, shape::OdinJuliaBridge.BridgeShapeFilledCircle)
-    _hide_bridge_point(state_ptr, Int(shape.host_id))
+    _ = host_runtime
+    _hide_bridge_point(state_ptr, shape.host_id)
+    return nothing
+end
+function hide!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    shape::OdinJuliaBridge.BridgeShapeFilledCircle)
+
+    _ = host_runtime
+    _hide_bridge_point(state_ptr, shape.host_id)
     return nothing
 end
 
 """Return compact EuclidRepl runtime status for REPL inspection."""
-function status(state_ptr::Ptr{Cvoid})
-    session = ensure_session!()
+function status(
+    host_runtime::EuclidReplRuntime, state_ptr::Ptr{Cvoid})
+
+    _ = state_ptr
+    session = ensure_session!(host_runtime)
     job = session.active_job
 
     if job === nothing
@@ -771,19 +863,24 @@ function status(state_ptr::Ptr{Cvoid})
         job.kind,
         job.elapsed,
         job.duration,
-        job.hook_id,
+        nothing,
         length(session.managed_host_ids))
 end
 
 """
-Draw a point with pen animation and return a `BridgePointView` handle.
+Draw a point with pen animation and return a `BridgeShapeEntityResult` handle.
+
+Pass the returned handle to `hide!` to hide the completed point.
 
 Keywords:
 - `color=:steelblue`
 - `brush=5f0`
 - `duration=DEFAULT_POINT_DURATION` (draw animation duration only)
 """
-function point!(state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real};
+function point!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid},
+    pos::AbstractVector{<:Real};
     color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
     duration::Real=DEFAULT_POINT_DURATION)
     pos3 = vec3("pos", pos)
@@ -791,11 +888,11 @@ function point!(state_ptr::Ptr{Cvoid}, pos::AbstractVector{<:Real};
     draw_duration = validated_duration(duration)
 
     point = OdinJuliaBridge.create_new_point(state_ptr, pos3, color, brush_value)
-    payload = PointPayload(Int(point.index), pos3, color, brush_value)
-    job = ReplDrawJob(:point, draw_duration, Float32(0f0), nothing, payload)
+    payload = PointPayload(point.index, pos3, color, brush_value)
+    job = ReplDrawJob(:point, draw_duration, Float32(0f0), payload)
 
-    start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(point.index))
+    start_job!(host_runtime, state_ptr, job)
+    track_managed_host!(ensure_session!(host_runtime), point.index)
     return point
 end
 
@@ -808,6 +905,7 @@ Keywords:
 - `duration=DEFAULT_LINE_DURATION` (draw animation duration only)
 """
 function line!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     start_pos::AbstractVector{<:Real}, end_pos::AbstractVector{<:Real};
     color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
@@ -824,17 +922,17 @@ function line!(
         color, brush_value)
 
     payload = LinePayload(
-        Int(line_shape.host_id),
-        Int(line_shape.joint1_id),
-        Int(line_shape.joint2_id),
+        line_shape.host_id,
+        line_shape.joint1_id,
+        line_shape.joint2_id,
         start_pos3,
         end_pos3,
         color,
         brush_value)
 
-    job = ReplDrawJob(:line, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(line_shape.host_id))
+    job = ReplDrawJob(:line, draw_duration, Float32(0f0), payload)
+    start_job!(host_runtime, state_ptr, job)
+    track_managed_host!(ensure_session!(host_runtime), line_shape.host_id)
     return line_shape
 end
 
@@ -843,48 +941,45 @@ Draw a circle, arc, or sector with compass animation and return a circle handle.
 
 Keywords:
 - `start_theta=0f0`
-- `end_theta=Inf32` (default full-circle sentinel)
+- `sweep_theta=2pi`
 - `filled=false`
 - `color=:steelblue`
 - `brush=5f0`
 - `duration=DEFAULT_CIRCLE_DURATION` (draw animation duration only)
 
-Circle rules:
-- full circle when `end_theta - start_theta >= 2pi` or `end_theta` is infinite,
-- full circles still start at `start_theta` and sweep one full turn.
+Positive sweeps increase theta and negative sweeps decrease theta. Full turns are
+represented explicitly by positive or negative `2pi` sweeps.
 """
-function circle!(state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::Real;
-    start_theta::Real=0f0, end_theta::Real=Inf32, filled::Bool=false,
+function circle!(
+    host_runtime::EuclidReplRuntime,
+    state_ptr::Ptr{Cvoid}, center::AbstractVector{<:Real}, radius::Real;
+    start_theta::Real=0f0, sweep_theta::Real=TWO_PI_F32, filled::Bool=false,
     color=DEFAULT_COLOR, brush::Real=DEFAULT_BRUSH,
     duration::Real=DEFAULT_CIRCLE_DURATION)
     center3 = vec3("center", center)
     brush_value = validated_brush(brush)
     draw_duration = validated_duration(duration)
     start_theta_valid = validated_start_theta(start_theta)
-    end_theta_valid = validated_end_theta(end_theta)
-    full_sweep = is_full_sweep_request(start_theta_valid, end_theta_valid)
+    sweep_theta_valid = validated_start_theta(sweep_theta)
     radius_valid = validated_radius(radius)
 
-    final_end_theta = effective_end_theta(start_theta_valid, end_theta_valid)
     start_pos = point_on_circle(center3, radius_valid, start_theta_valid)
-    end_pos = point_on_circle(center3, radius_valid, final_end_theta)
-    angle_theta = final_end_theta - start_theta_valid
 
     shape = if filled
         OdinJuliaBridge.create_new_filledcircle(state_ptr, center3, radius_valid,
-            start_theta_valid, final_end_theta, color, brush_value)
+            start_theta_valid, sweep_theta_valid, color, brush_value)
     else
         OdinJuliaBridge.create_new_circle(state_ptr, center3, radius_valid,
-            start_theta_valid, final_end_theta, color, brush_value)
+            start_theta_valid, sweep_theta_valid, color, brush_value)
     end
 
-    payload = CirclePayload(filled, full_sweep, Int(shape.host_id), Int(shape.start_id),
-        Int(shape.end_id), center3, start_pos, end_pos, radius_valid, angle_theta,
+    payload = CirclePayload(filled, shape.host_id, center3, start_pos,
+        radius_valid, sweep_theta_valid,
         color, brush_value)
 
-    job = ReplDrawJob(:circle, draw_duration, Float32(0.0), nothing, payload)
-    start_job!(state_ptr, job)
-    track_managed_host!(ensure_session!(), Int(shape.host_id))
+    job = ReplDrawJob(:circle, draw_duration, Float32(0.0), payload)
+    start_job!(host_runtime, state_ptr, job)
+    track_managed_host!(ensure_session!(host_runtime), shape.host_id)
     return shape
 end
 
@@ -902,6 +997,7 @@ Keywords:
 - `duration=DEFAULT_HIGHLIGHT_DURATION`
 """
 function highlight_pen!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     start_pos::AbstractVector{<:Real},
     end_pos::AbstractVector{<:Real};
@@ -913,8 +1009,8 @@ function highlight_pen!(
     draw_duration = validated_duration(duration)
 
     payload = PenHighlightPayload(start_pos3, end_pos3, color)
-    job = ReplDrawJob(:highlight_pen, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    job = ReplDrawJob(:highlight_pen, draw_duration, Float32(0f0), payload)
+    start_job!(host_runtime, state_ptr, job)
     return nothing
 end
 
@@ -933,6 +1029,7 @@ Keywords:
 - `duration=DEFAULT_HIGHLIGHT_DURATION`
 """
 function highlight_compass!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     center::AbstractVector{<:Real},
     start_pos::AbstractVector{<:Real},
@@ -960,8 +1057,8 @@ function highlight_compass!(
         radius32,
         color,
         filled)
-    job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    job = ReplDrawJob(:highlight_compass, draw_duration, Float32(0f0), payload)
+    start_job!(host_runtime, state_ptr, job)
     return nothing
 end
 
@@ -972,6 +1069,7 @@ Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
 function translate_points!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -985,8 +1083,8 @@ function translate_points!(
     draw_duration = validated_duration(duration)
 
     payload = TransformPayload(ids, starts, TranslateSpec(displacement3))
-    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
+    start_job!(host_runtime, state_ptr, job)
     return ids
 end
 
@@ -997,6 +1095,7 @@ Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
 function rotate_points!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1016,13 +1115,14 @@ function rotate_points!(
         ids,
         starts,
         RotateSpec(axis_a, axis_b, Float32(theta)))
-    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
+    start_job!(host_runtime, state_ptr, job)
     return ids
 end
 
 """Rotate points around world X axis through origin."""
 function rotate_points_x!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1030,6 +1130,7 @@ function rotate_points_x!(
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1041,6 +1142,7 @@ end
 
 """Rotate points around world Y axis through origin."""
 function rotate_points_y!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1048,6 +1150,7 @@ function rotate_points_y!(
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1059,6 +1162,7 @@ end
 
 """Rotate points around world Z axis through origin."""
 function rotate_points_z!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1066,6 +1170,7 @@ function rotate_points_z!(
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return rotate_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1082,6 +1187,7 @@ Keywords:
 - `duration=DEFAULT_TRANSFORM_DURATION`
 """
 function reflect2d_points!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions,
@@ -1097,19 +1203,21 @@ function reflect2d_points!(
     draw_duration = validated_duration(duration)
 
     payload = TransformPayload(ids, starts, Reflect2DSpec(line_a, line_b))
-    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), nothing, payload)
-    start_job!(state_ptr, job)
+    job = ReplDrawJob(:transform, draw_duration, Float32(0f0), payload)
+    start_job!(host_runtime, state_ptr, job)
     return ids
 end
 
 """Reflect points across world X axis (`y=0`) on XY plane."""
 function reflect2d_points_x_axis!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1120,12 +1228,14 @@ end
 
 """Reflect points across world Y axis (`x=0`) on XY plane."""
 function reflect2d_points_y_axis!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1136,12 +1246,14 @@ end
 
 """Reflect points across diagonal `y=x` on XY plane."""
 function reflect2d_points_diag_pos!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,
@@ -1152,12 +1264,14 @@ end
 
 """Reflect points across diagonal `y=-x` on XY plane."""
 function reflect2d_points_diag_neg!(
+    host_runtime::EuclidReplRuntime,
     state_ptr::Ptr{Cvoid},
     point_ids,
     start_positions;
     duration::Real=DEFAULT_TRANSFORM_DURATION)
 
     return reflect2d_points!(
+        host_runtime,
         state_ptr,
         point_ids,
         start_positions,

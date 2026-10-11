@@ -1,14 +1,17 @@
 package main
 
-import "../bridge"
-import "../core"
-import "../files"
-import "../view"
-
-import "core:encoding/uuid"
-import "core:fmt"
-import "core:os"
-import "core:strconv"
+import bridge "../bridge"
+import core "../core"
+import evidence_session "../evidence/session"
+import files "../files"
+import particlemodel "../particles/model"
+import view "../view"
+import uuid "core:encoding/uuid"
+import fmt "core:fmt"
+import os "core:os"
+import strconv "core:strconv"
+import viewsimulation "../view/simulation"
+import simulationmodel "../view/simulation/model"
 
 Harness_Options :: struct {
     asset_root: string,
@@ -21,7 +24,7 @@ Harness_Options :: struct {
 //   One `--name=value` harness option mapped to its setter.
 Harness_Option :: struct {
     prefix: string,
-    set:    Harness_Option_Setter,
+    set: Harness_Option_Setter,
 }
 
 //   All recognized harness options, matched by prefix.
@@ -131,22 +134,24 @@ harness_runtime_settings :: proc(options: Harness_Options) -> core.Euclid_Run_Se
         do_run = true,
         do_antialiasing = false,
         do_vsync = false,
-        dust_particle_max = core.MAX_LOW_PARTICLES,
+        dust_particle_max = particlemodel.MAX_LOW_PARTICLES,
         limit_fps = false,
         use_simd_batch_projection = false,
         use_gpu_dust_instancing = false,
-        semantic_trace_enabled = true,
-        semantic_trace_strict = true,
-        semantic_trace_output = options.trace_output,
-        semantic_trace_events = "",
+        evidence = {
+            enabled = true,
+            strict = true,
+            output_mode = .Binary_File,
+            lanes = evidence_session.ALL_LANES,
+            output_path = options.trace_output,
+        },
     }
 }
 
 //   Refresh packaged assets using the root supplied by the harness invocation.
-initialize_harness_assets :: proc(asset_root: string) -> bool {
-    asset_root_config := files.make_asset_root_config(asset_root)
-    defer files.destroy_asset_root_config(&asset_root_config)
-    if files.reload_packaged_assets_root_with_config(&asset_root_config) {
+initialize_harness_assets :: proc(
+    asset_root_config: ^files.Asset_Root_Config) -> bool {
+    if files.reload_packaged_assets_root_with_config(asset_root_config) {
         return true
     }
     fmt.eprintln("Failed to refresh packaged assets for harness run.")
@@ -155,19 +160,28 @@ initialize_harness_assets :: proc(asset_root: string) -> bool {
 
 //   Initialize one runtime session and execute the configured harness scenario.
 run_harness :: proc(options: Harness_Options) -> bool {
-
-    if !initialize_harness_assets(options.asset_root) {
+    asset_root_config := files.make_asset_root_config(
+        options.asset_root, context.allocator)
+    defer files.destroy_asset_root_config(&asset_root_config)
+    if !initialize_harness_assets(&asset_root_config) {
         return false
     }
 
     settings := harness_runtime_settings(options)
-    session, session_ok := view.create_runtime_session(&settings)
+    session, session_ok := view.create_runtime_session(
+        &settings, &asset_root_config)
     if !session_ok {
         fmt.eprintln("Failed to initialize headless runtime session.")
         return false
     }
     defer view.shutdown_runtime_session(session)
 
+    return execute_harness_case(session, options)
+}
+
+//   Select and execute one configured harness case on an initialized session.
+execute_harness_case :: proc(
+    session: view.Euclid_Runtime_Session, options: Harness_Options) -> bool {
     stable_id, read_error := uuid.read(options.animation_id_text)
     if read_error != .None {
         fmt.eprintln("Invalid animation UUID: ", options.animation_id_text)
@@ -183,9 +197,8 @@ run_harness :: proc(options: Harness_Options) -> bool {
         return false
     }
 
-    if len(options.scenario_name) > 0 &&
-        !bridge.invoke_harness_scenario(
-            session.state, options.scenario_name, options.steps) {
+    if len(options.scenario_name) > 0 && !invoke_configured_harness_scenario(
+        session, options.scenario_name, options.steps) {
         fmt.eprintln("Harness scenario failed: ", options.scenario_name)
         return false
     }
@@ -198,11 +211,23 @@ run_harness :: proc(options: Harness_Options) -> bool {
     return true
 }
 
+//   Invoke one harness-only Julia scenario when the bridge export is compiled.
+invoke_configured_harness_scenario :: proc(
+    session: view.Euclid_Runtime_Session,
+    scenario_name: string, steps: int) -> bool {
+    when core.HARNESS_ENABLED {
+        return bridge.invoke_harness_scenario(
+            session.state, scenario_name, steps)
+    }
+    return false
+}
+
 //   Run N deterministic fixed steps, returning false on the first failure.
 run_harness_fixed_steps :: proc(
     session: view.Euclid_Runtime_Session, steps: int) -> bool {
     for _ in 0..<steps {
-        if !view.run_deterministic_fixed_step(session.state, view.FIXED_DT) {
+        if !viewsimulation.run_deterministic_fixed_step(
+           session.state, simulationmodel.FIXED_DT) {
             return false
         }
     }

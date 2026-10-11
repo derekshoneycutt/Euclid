@@ -1,201 +1,298 @@
 package ui_dynview
 
-import "../../../core"
-import "../../../dynview"
-import view_core "../../core"
-
-import "core:math"
-
-import rl "vendor:raylib"
+import native "../../native"
+import dynviewmodel "../../../dynview/model"
+import fontmodel "../../font/model"
+import core "../../../core"
+import dynmath "../../../dynview/math"
+import dyncore "../../../dynview/core"
+import dynlayout "../../../dynview/layout"
+import geometry "../../../core/geometry"
+import font "../../font"
+import math "core:math"
+import fmt "core:fmt"
+import viewtext "../text"
 
 //   Measured per-cell items plus per-column widths and per-row extents.
 Matrix_Draw_Cells :: struct {
-    items:        [256]core.Dynview_Layout_Item,
-    col_widths:   [16]f32,
-    row_ascents:  [16]f32,
-    row_descents: [16]f32,
+    col_widths : [16]f32,
+    row_ascents : [16]f32,
+    row_descents : [16]f32,
 }
 
 //   Matrix grid geometry: column alignments, grid extents, and inter-cell gaps.
 Matrix_Draw_Geometry :: struct {
-    alignments: [16]dynview.Dynview_Matrix_Column_Alignment,
-    rows:       int,
-    cols:       int,
-    column_gap: f32,
-    row_gap:    f32,
+    alignments : [16]dynmath.Dynview_Matrix_Column_Alignment,
+    column_boundaries : [17]f32,
+    row_boundaries : [17]f32,
+    row_rule_offsets : [17]f32,
+    vertical_rule_counts : [17]u8,
+    horizontal_rule_counts : [17]u8,
+    rows : int,
+    cols : int,
+    rule_thickness : f32,
+    rule_separation : f32,
+    color : dynviewmodel.Color,
 }
 
 //   Control points and style for one normalized cubic Bezier segment.
 Cubic_Segment_Params :: struct {
-    p0, p1, p2, p3: rl.Vector2,
-    color:          rl.Color,
-    thickness:      f32,
-    segment_count:  int,
+    encoder: ^native.Draw_Encoder,
+    p0, p1, p2, p3 : geometry.Vector2,
+    color : dynviewmodel.Color,
+    thickness : f32,
+    segment_count : int,
 }
 
 //   Vertical stem run endpoints and stroke for one stretched brace.
 Brace_Stem :: struct {
-    y0:        f32,
-    y1:        f32,
-    thickness: f32,
-    color:     rl.Color,
+    encoder: ^native.Draw_Encoder,
+    y0 : f32,
+    y1 : f32,
+    thickness : f32,
+    color : dynviewmodel.Color,
 }
 
 //   Radical bar/hook geometry derived from one radical layout item.
 Radical_Bar_Geometry :: struct {
-    bar_y:        f32,
-    bar_start_x:  f32,
-    bar_end_x:    f32,
-    hook_start_x: f32,
-    hook_start_y: f32,
-    hook_flag_x:  f32,
-    root_low_x:   f32,
-    root_low_y:   f32,
-    root_rise_x:  f32,
-    root_rise_y:  f32,
-    root_high_x:  f32,
-    root_high_y:  f32,
-    bar_thickness: f32,
-    hook_stroke:   f32,
+    bar_y : f32,
+    bar_start_x : f32,
+    bar_end_x : f32,
+    hook_start_x : f32,
+    hook_start_y : f32,
+    hook_flag_x : f32,
+    root_low_x : f32,
+    root_low_y : f32,
+    root_rise_x : f32,
+    root_rise_y : f32,
+    root_high_x : f32,
+    root_high_y : f32,
+    bar_thickness : f32,
+    hook_stroke : f32,
 }
 
 //   Per-side variant for one stretch delimiter glyph (which delimiter, where).
 Stretch_Glyph_Side :: struct {
-    delimiter_kind: i32,
-    draw_x:         f32,
+    delimiter_kind : i32,
+    draw_x : f32,
 }
 
 //   Measured limit/glyph metrics for one large operator item.
 Large_Op_Metrics :: struct {
-    script_style:    Dynview_Text_Style,
-    script_font:     rl.Font,
-    glyph_font_size: f32,
-    glyph_ascent:    f32,
-    glyph_descent:   f32,
-    glyph_width:     f32,
-    limit_font_size: f32,
-    limit_height:    f32,
-    limit_advance:   f32,
-    limit_gap:       f32,
-    sup_text:        string,
-    sub_text:        string,
-    sup_cols:        int,
-    sub_cols:        int,
+    script_style : dyncore.Dynview_Text_Style,
+    script_font : font.Font_Face,
+    glyph_font_size : f32,
+    glyph_ascent : f32,
+    glyph_descent : f32,
+    glyph_width : f32,
+    limit_font_size : f32,
+    sup_height : f32,
+    sub_height : f32,
+    sup_ascent : f32,
+    sub_ascent : f32,
+    sup_width : f32,
+    sub_width : f32,
+    limit_advance : f32,
+    limit_gap : f32,
+    sup_text : string,
+    sub_text : string,
+    sup_cols : int,
+    sub_cols : int,
+}
+
+Large_Op_Limit_Position :: struct {
+    x, top: f32,
+}
+
+Stretch_Construction_Position :: struct {
+    origin_x, baseline_y, vertical_origin: f32,
+}
+
+Stretch_Construction_Raster :: struct {
+    request: fontmodel.Font_Raster_Request,
+    selection: font.Font_Raster_Selection,
+    ready: bool,
 }
 
 //   Normalized control-point geometry for one stretched brace glyph.
 Brace_Control_Geometry :: struct {
-    r_norm: f32,
-    tip_x:  f32,
-    stem_x: f32,
-    cusp_x: f32,
-    bend:   f32,
+    r_norm : f32,
+    tip_x : f32,
+    stem_x : f32,
+    cusp_x : f32,
+    bend : f32,
 }
 
 //   Resolved text payload and font for one cached text item.
 Cached_Item_Text :: struct {
-    text:          string,
-    resolved_font: rl.Font,
-    draw_x:        f32,
+    text : string,
+    resolved_font : font.Font_Face,
+    draw_x : f32,
 }
 
 //   Grouped inputs for one matrix cell grid draw pass.
 Matrix_Cell_Draw :: struct {
-    ctx:          Layout_Draw_Context,
-    cell_program: ^core.Dynview_Math_Program,
-    cells:        ^Matrix_Draw_Cells,
-    geometry:     Matrix_Draw_Geometry,
-    draw_x:       f32,
-    item_y:       f32,
+    ctx : Layout_Draw_Context,
+    cell_program : ^dynviewmodel.Dynview_Math_Program,
+    cells : ^Matrix_Draw_Cells,
+    geometry : Matrix_Draw_Geometry,
+    math_style : dynmath.Math_Style,
+    draw_x : f32,
+    item_y : f32,
+}
+
+Matrix_Cell_Resolve :: struct {
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    rows, cols: int,
+    math_style: dynmath.Math_Style,
+    descriptor: ^dynviewmodel.Dynview_Math_Table_Descriptor,
+    cells: ^Matrix_Draw_Cells,
 }
 
 //   Resolved script font and offsets for one script-attach item.
 Script_Attach_Style :: struct {
-    font:      rl.Font,
-    style:     Dynview_Text_Style,
-    ascent:    f32,
-    font_size: f32,
+    font : font.Font_Face,
+    style : dyncore.Dynview_Text_Style,
+    ascent : f32,
+    font_size : f32,
+}
+
+Script_Child_Draw :: struct {
+    program_id: i32,
+    x, baseline: f32,
+    role: dynmath.Math_Child_Style_Role,
 }
 
 //   Resolved numerator and denominator programs for one fraction item.
 Fraction_Programs :: struct {
-    numerator:   ^core.Dynview_Math_Program,
-    denominator: ^core.Dynview_Math_Program,
+    numerator : ^dynviewmodel.Dynview_Math_Program,
+    denominator : ^dynviewmodel.Dynview_Math_Program,
 }
 
 //   Shared inputs describing one radical item's placement and child content.
 Radical_Layout :: struct {
-    ctx:           Layout_Draw_Context,
-    item:          core.Dynview_Layout_Item,
-    draw_x:        f32,
-    baseline_y:    f32,
-    child_program: ^core.Dynview_Math_Program,
-    front_padding: f32,
-    back_padding:  f32,
-    lead_width:    f32,
+    ctx : Layout_Draw_Context,
+    item : dynviewmodel.Dynview_Layout_Item,
+    draw_x : f32,
+    baseline_y : f32,
+    child_program : ^dynviewmodel.Dynview_Math_Program,
+    front_padding : f32,
+    back_padding : f32,
+    lead_width : f32,
+}
+
+//   Measured position and font size for one optional radical index.
+Radical_Index_Layout :: struct {
+    position : geometry.Vector2,
+    font_size : f32,
+}
+
+//   Shared placement and style state for attached script limits.
+Script_Limits_Draw :: struct {
+    ctx : Layout_Draw_Context,
+    item : dynviewmodel.Dynview_Layout_Item,
+    script : Script_Attach_Style,
+    offsets : dynmath.Script_Draw_Offsets,
+    font : viewtext.Ui_Text_Font,
+    script_x : f32,
+    baseline_y : f32,
 }
 
 //   Grouped inputs for one structured math item draw variant.
 Math_Item_Draw :: struct {
-    ctx:           Layout_Draw_Context,
-    style:         Dynview_Text_Style,
-    item:          core.Dynview_Layout_Item,
-    resolved_font: rl.Font,
-    text:          string,
-    draw_x:        f32,
-    item_y:        f32,
+    ctx : Layout_Draw_Context,
+    style : dyncore.Dynview_Text_Style,
+    item : dynviewmodel.Dynview_Layout_Item,
+    resolved_font : font.Font_Face,
+    text : string,
+    draw_x : f32,
+    item_y : f32,
 }
 
 //   Shared draw environment passed to cached layout item renderers so the
 //   state/runtime/panel/font tuple travels as one coherent value.
 Layout_Draw_Context :: struct {
-    state:     ^core.Euclid_General_State,
-    runtime:   ^core.Dynview_System,
-    panel:     rl.Rectangle,
-    font:      rl.Font,
+    encoder: ^native.Draw_Encoder,
+    state : ^core.Euclid_General_State,
+    runtime : ^dynviewmodel.Dynview_System,
+    panel : geometry.Rectangle,
+    font : font.Font_Face,
+    font_size : f32,
+}
+
+//   Complete inputs for emitting one selected horizontal glyph-accent run.
+Accent_Glyph_Parts_Draw :: struct {
+    ctx: Layout_Draw_Context,
+    construction: fontmodel.Font_Math_Stretch_Construction,
+    raster: Stretch_Construction_Raster,
+    draw_x, baseline_y: f32,
+    item: dynviewmodel.Dynview_Layout_Item,
+    color: dynviewmodel.Color,
+}
+
+//   Inputs for one unshaped math run resolved through demand-loaded glyph pages.
+Math_Text_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
+    state: ^core.Euclid_General_State,
+    style: dyncore.Dynview_Text_Style,
+    text: string,
+    position: geometry.Vector2,
+    font: viewtext.Ui_Text_Font,
+}
+
+//   Exact cached math command/site presentation request.
+Cached_Math_Site_Draw :: struct {
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    site: dynviewmodel.Dynview_Shaped_Site,
+    position: geometry.Vector2,
     font_size: f32,
+    color: dynviewmodel.Color,
 }
 
 //   Complete draw context for one stretched delimiter glyph invocation.
 //   Groups layout metrics, style/font state, and delimiter identity into one argument.
 Stretch_Delimiter_Glyph_Params :: struct {
-    state:           ^core.Euclid_General_State,
-    style:           Dynview_Text_Style,
-    fallback_font:   rl.Font,
-    wrap_advance:    f32,
-    font_size:       f32,
-    content_height:  f32,
-    content_ascent:  f32,
-    content_descent: f32,
-    delimiter_kind:  i32,
-    draw_x:          f32,
-    baseline_y:      f32,
+    encoder: ^native.Draw_Encoder,
+    state : ^core.Euclid_General_State,
+    style : dyncore.Dynview_Text_Style,
+    fallback_font : font.Font_Face,
+    wrap_advance : f32,
+    font_size : f32,
+    content_height : f32,
+    content_ascent : f32,
+    content_descent : f32,
+    delimiter_kind : i32,
+    draw_x : f32,
+    baseline_y : f32,
 }
 
 //   Pixel-space geometry derived from baseline/ascent/descent for one delimiter glyph.
 //   The geometry is normalized so family renderers can share the same frame of reference.
 Stretch_Delimiter_Glyph_Geometry :: struct {
-    draw_x:     f32,
-    baseline_y: f32,
-    top_y:      f32,
-    bottom_y:   f32,
-    center_y:   f32,
-    width:      f32,
-    height:     f32,
-    thickness:  f32,
-    right_side: bool,
+    draw_x : f32,
+    baseline_y : f32,
+    top_y : f32,
+    bottom_y : f32,
+    center_y : f32,
+    width : f32,
+    height : f32,
+    thickness : f32,
+    right_side : bool,
 }
 
 //   Uniform handler shape for line-only delimiter family renderers.
 Delimiter_Line_Handler :: #type proc(
-    style: Dynview_Text_Style,
-    geom: Stretch_Delimiter_Glyph_Geometry,
-    family: dynview.Dynview_Delimiter_Family)
+    encoder: ^native.Draw_Encoder,
+    style : dyncore.Dynview_Text_Style,
+    geom : Stretch_Delimiter_Glyph_Geometry,
+    family: dynmath.Dynview_Delimiter_Family)
 
 //   Line-renderers indexed by delimiter family; nil means the family needs a
 //   curved renderer or the text fallback instead of a line fast path.
 DELIMITER_LINE_HANDLERS ::
-    [dynview.Dynview_Delimiter_Family]Delimiter_Line_Handler{
+    [dynmath.Dynview_Delimiter_Family]Delimiter_Line_Handler{
     .None = nil,
     .Paren = nil,
     .Bracket = draw_delimiter_bracket,
@@ -210,15 +307,133 @@ DELIMITER_LINE_HANDLERS ::
 //   Draw inputs for one text-run item: the runtime, style, resolved font,
 //   colors, and draw position, grouped so the renderer passes one coherent value.
 Text_Run_Draw_Params :: struct {
-    runtime:       ^core.Dynview_System,
-    font_size:     f32,
-    style:         Dynview_Text_Style,
-    item:          core.Dynview_Layout_Item,
-    text:          string,
-    resolved_font: rl.Font,
-    text_color:    rl.Color,
-    draw_x:        f32,
-    item_y:        f32,
+    encoder: ^native.Draw_Encoder,
+    state : ^core.Euclid_General_State,
+    runtime : ^dynviewmodel.Dynview_System,
+    font_size : f32,
+    style : dyncore.Dynview_Text_Style,
+    item : dynviewmodel.Dynview_Layout_Item,
+    text : string,
+    resolved_font : font.Font_Face,
+    text_color : dynviewmodel.Color,
+    draw_x : f32,
+    item_y : f32,
+}
+
+// Retain one resolved draw kind and its effective outline policy.
+Document_Shape_Draw_Kind_Result :: struct {
+    kind: dynviewmodel.Dynview_Layout_Item_Kind,
+    outline_stroke: f32,
+    ok: bool,
+}
+
+// Document_Prose_Content retains validated text and shaping metrics for drawing.
+Document_Prose_Content :: struct {
+    run: dynviewmodel.Dynview_Document_Shaped_Run,
+    text: string,
+    column_advance: f32,
+    ok: bool,
+}
+
+DOCUMENT_SHAPE_DRAW_KINDS ::
+    [dynviewmodel.Dynview_Document_Shape_Kind]dynviewmodel.Dynview_Layout_Item_Kind {
+    .None = {},
+    .Point = .Inline_Filled_Circle,
+    .Line = .Inline_Line,
+    .Circle = .Inline_Circle,
+    .Box = .Inline_Box,
+    .Angle = .Inline_Pie_Section,
+    .Semicircle = .Inline_Pie_Section,
+    .Perpendicular = .Inline_Perpendicular,
+    .Triangle = .Inline_Triangle,
+    .Pentagon = .Inline_Pentagon,
+}
+
+//   Draw math text without shaping while allowing any cmap-supported glyph.
+draw_math_text :: proc(draw: Math_Text_Draw) {
+    if draw.state == nil {
+        return
+    }
+    resolver := font.cache_terminal_resolver(&draw.state^.font_cache)
+    viewtext.ui_text_unshaped_paged({
+        encoder = draw.encoder,
+        resolver = resolver,
+        key = style_font_key(draw.style),
+        text = draw.text,
+        position = draw.position,
+        color = draw.style.color,
+        font = draw.font,
+    })
+}
+
+//   Draw one math text span only when it contains content.
+draw_optional_math_text :: proc(draw: Math_Text_Draw) {
+    if len(draw.text) > 0 {
+        draw_math_text(draw)
+    }
+}
+
+//   Resolve the exact shaped run measured for one recursive math item site.
+cached_math_site_run :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    site: dynviewmodel.Dynview_Shaped_Site) -> (^dynviewmodel.Dynview_Shaped_Run, bool) {
+
+    cache := &ctx.runtime^.compile_cache
+    command_index := int(item.math_command_index)
+    if command_index < 0 || command_index >= cache^.math_command_count {
+        return nil, false
+    }
+    command := cache^.math_commands[command_index]
+    run, ok := dynmath.shaped_run_for_command(cache, command, site)
+    return run, ok && run^.math_command_index == command_index
+}
+
+//   Return the same scaled command/site metrics consumed during measurement.
+cached_math_site_metrics :: #force_inline proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    site: dynviewmodel.Dynview_Shaped_Site,
+    font_size: f32) -> (dynmath.Shaped_Run_Layout_Metrics, bool) {
+
+    run, ok := cached_math_site_run(ctx, item, site)
+    if !ok {
+        return {}, false
+    }
+    return dynmath.shaped_run_layout_metrics(run, font_size)
+}
+
+//   Draw one measured command/site run through its exact Math_Regular generation.
+draw_cached_math_site :: proc(draw: Cached_Math_Site_Draw) -> bool {
+    if draw.ctx.state == nil || draw.ctx.runtime == nil {
+        return false
+    }
+    run, ok := cached_math_site_run(draw.ctx, draw.item, draw.site)
+    if !ok || !font.cache_generation_is_resident(
+        &draw.ctx.state^.font_cache, .Math_Regular, run^.font_generation) {
+        return false
+    }
+    cache := &draw.ctx.runtime^.compile_cache
+    glyphs, glyphs_ok := dynmath.shaped_glyphs_for_run(cache, run)
+    if !glyphs_ok {
+        return false
+    }
+    scale := draw.font_size/run^.base_pixel_size
+    origin_x := draw.position.x - min(0, run^.ink_left)*scale
+    line_top_y := viewtext.ui_text_cached_run_line_top(
+        draw.position.y, run^.ascent, run^.raster_ascent,
+        draw.font_size, run^.base_pixel_size)
+    resolver := font.cache_terminal_resolver(&draw.ctx.state^.font_cache)
+    return viewtext.ui_text_cached_shaped_run({
+        encoder = draw.ctx.encoder,
+        resolver = resolver,
+        key = .Math_Regular,
+        glyphs = glyphs,
+        position = {origin_x, line_top_y},
+        color = draw.color,
+        font_size = draw.font_size,
+        base_pixel_size = run^.base_pixel_size,
+    })
 }
 
 //   Fast vertical cull check for one layout line against panel bounds.
@@ -229,34 +444,10 @@ layout_line_outside_panel :: #force_inline proc(
     return line_bottom < panel_top || line_top > panel_bottom
 }
 
-//   Return extra top/bottom culling margin for lines with script or accent items.
-line_visual_padding :: #force_inline proc(
-    cache: ^core.Dynview_Compile_Cache,
-    line: core.Dynview_Layout_Line,
-    font_size: f32) -> (f32, f32) {
-
-    top_pad: f32 = 0
-    bottom_pad: f32 = 0
-    item_end := line.item_start + line.item_count
-    for item_index in line.item_start..<item_end {
-        item := cache^.layout_items[item_index]
-        top_pad = max(top_pad, item.visual_padding_top)
-        bottom_pad = max(bottom_pad, item.visual_padding_bottom)
-
-        script_font_size := max(1.0, font_size * max(0.2, item.script_scale))
-        script_top_pad, script_bottom_pad :=
-            dynview.script_visual_padding(script_font_size)
-        top_pad = max(top_pad, script_top_pad)
-        bottom_pad = max(bottom_pad, script_bottom_pad)
-    }
-
-    return top_pad, bottom_pad
-}
-
 //   Draw one cached math-block item from its precomputed program slot.
 draw_math_block_item :: proc(
     ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item,
+    item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32) {
 
     runtime := ctx.runtime
@@ -271,19 +462,75 @@ draw_math_block_item :: proc(
         return
     }
 
-    baseline_y := item_y + item.ascent
+    baseline_y := item_y + item.visual_padding_top + item.ascent
     draw_math_program_at(ctx,
-        program, Program_Draw_Position{item_x, baseline_y})
+        program, Program_Draw_Position{item_x, baseline_y, 0, {}, 0})
 }
 
-//   Draw one recursive accent wrapper by drawing the child math program first, then the line.
+//   Draw one fully resident horizontal glyph-accent construction.
+draw_glyph_accent_construction :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    draw_x, baseline_y: f32,
+    color: dynviewmodel.Color) -> bool {
+
+    construction := item.accent_glyph_construction
+    cache := &ctx.runtime^.compile_cache
+    if !item.accent_geometry_valid || !construction.valid ||
+        item.accent_glyph_font_generation != cache^.shaped_font_generation {
+        return false
+    }
+    raster := stretch_construction_select_raster(
+        ctx, construction, item.math_font_size)
+    if !raster.ready {
+        return false
+    }
+    return draw_glyph_accent_parts({
+        ctx = ctx,
+        construction = construction,
+        raster = raster,
+        draw_x = draw_x,
+        baseline_y = baseline_y,
+        item = item,
+        color = color,
+    })
+}
+
+// Emit every accent part from the already selected complete raster.
+draw_glyph_accent_parts :: proc(draw: Accent_Glyph_Parts_Draw) -> bool {
+
+    resolver := font.cache_terminal_resolver(&draw.ctx.state^.font_cache)
+    for index in 0..<draw.construction.count {
+        part := draw.construction.parts[index]
+        resolved, resident := viewtext.ui_text_resolve_selected_glyph(
+            resolver, .Math_Regular, part.glyph_id,
+            draw.raster.request, draw.raster.selection)
+        if !resident {
+            return false
+        }
+        viewtext.ui_text_draw_resolved_glyph({
+            encoder = draw.ctx.encoder,
+            resolved = resolved,
+            position = {
+                draw.draw_x+draw.item.accent_glyph_x+
+                    part.advance_offset*draw.item.accent_glyph_scale,
+                draw.baseline_y+draw.item.accent_glyph_line_top,
+            },
+            font_size = draw.item.math_font_size,
+            color = draw.color,
+        })
+    }
+    return true
+}
+
+//   Draw one recursive rule or glyph accent from sealed geometry.
 draw_recursive_accent_item :: proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
-    child_program, ok := dynview.math_program_from_id(
+    child_program, ok := dynmath.math_program_from_id(
         &ctx.runtime^.compile_cache, item.math_program_id)
     if !ok {
         return
@@ -291,20 +538,22 @@ draw_recursive_accent_item :: proc(
 
     baseline_y := item_y + item.ascent
     draw_math_program_at(ctx,
-        child_program^, Program_Draw_Position{draw_x, baseline_y})
+        child_program^, Program_Draw_Position{
+            draw_x+item.accent_child_x,
+            baseline_y + item.accent_child_baseline, 0, {}, 0})
 
-    accent_style := dynview.style_by_id(item.accent_style_id)
-    bar_thickness := max(1.0, item.accent_thickness * ctx.font_size)
-    bar_offset := max(0.0, item.accent_offset * ctx.font_size)
-    bar_y := baseline_y + child_program^.descent + bar_offset
-    if item.accent_mode == 1 {
-        bar_y = baseline_y - child_program^.ascent - bar_offset
+    accent_style := dyncore.style_by_id(item.accent_style_id)
+    if item.accent_mode > 2 {
+        _ = draw_glyph_accent_construction(
+            ctx, item, draw_x, baseline_y, accent_style.color)
+        return
     }
-
-    rl.DrawLineEx(
-        rl.Vector2{draw_x, bar_y},
-        rl.Vector2{draw_x + child_program^.draw_width, bar_y},
-        bar_thickness,
+    _ = native.draw_encoder_line(ctx.encoder,
+        {draw_x + item.accent_rule_left,
+            baseline_y + item.accent_rule_center},
+        {draw_x + item.accent_rule_right,
+            baseline_y + item.accent_rule_center},
+        item.accent_rule_thickness,
         accent_style.color)
 }
 
@@ -322,7 +571,7 @@ radical_bar_geometry :: proc(layout: Radical_Layout) -> Radical_Bar_Geometry {
     g.hook_flag_x = g.hook_start_x - 2.5
     g.root_low_x = layout.draw_x + layout.front_padding + layout.lead_width * 0.26
     g.root_low_y = layout.baseline_y +
-        dynview.radical_root_low_offset(
+        dynmath.radical_root_low_offset(
             layout.ctx.font_size, layout.child_program^.descent)
     g.root_rise_x = layout.draw_x + layout.front_padding + layout.lead_width * 0.88
     g.root_rise_y = g.bar_y - layout.ctx.font_size * 0.14
@@ -333,45 +582,111 @@ radical_bar_geometry :: proc(layout: Radical_Layout) -> Radical_Bar_Geometry {
 }
 
 //   Draw the radical hook stroke (flag, low, rise, high, into the bar).
-draw_radical_hook :: proc(g: Radical_Bar_Geometry, color: rl.Color) {
-    rl.DrawLineEx(rl.Vector2{g.hook_flag_x, g.hook_start_y},
-        rl.Vector2{g.hook_start_x, g.hook_start_y}, g.hook_stroke, color)
-    rl.DrawLineEx(rl.Vector2{g.hook_start_x, g.hook_start_y},
-        rl.Vector2{g.root_low_x, g.root_low_y}, g.hook_stroke, color)
-    rl.DrawLineEx(rl.Vector2{g.root_low_x, g.root_low_y},
-        rl.Vector2{g.root_rise_x, g.root_rise_y}, g.hook_stroke, color)
-    rl.DrawLineEx(rl.Vector2{g.root_rise_x, g.root_rise_y},
-        rl.Vector2{g.root_high_x, g.root_high_y}, g.hook_stroke, color)
-    rl.DrawLineEx(rl.Vector2{g.root_high_x, g.root_high_y},
-        rl.Vector2{g.bar_start_x, g.bar_y}, g.hook_stroke, color)
+draw_radical_hook :: proc(
+    encoder: ^native.Draw_Encoder,
+    g: Radical_Bar_Geometry,
+    color: dynviewmodel.Color) {
+    _ = native.draw_encoder_line(encoder, {g.hook_flag_x, g.hook_start_y},
+        {g.hook_start_x, g.hook_start_y}, g.hook_stroke, color)
+    _ = native.draw_encoder_line(encoder, {g.hook_start_x, g.hook_start_y},
+        {g.root_low_x, g.root_low_y}, g.hook_stroke, color)
+    _ = native.draw_encoder_line(encoder, {g.root_low_x, g.root_low_y},
+        {g.root_rise_x, g.root_rise_y}, g.hook_stroke, color)
+    _ = native.draw_encoder_line(encoder, {g.root_rise_x, g.root_rise_y},
+        {g.root_high_x, g.root_high_y}, g.hook_stroke, color)
+    _ = native.draw_encoder_line(encoder, {g.root_high_x, g.root_high_y},
+        {g.bar_start_x, g.bar_y}, g.hook_stroke, color)
+}
+
+//   Measure and position one optional radical index against the hook.
+radical_index_layout :: proc(
+    layout: Radical_Layout,
+    index_text: string,
+    script_style: dyncore.Dynview_Text_Style) -> Radical_Index_Layout {
+    ctx := layout.ctx
+    index_scale := max(0.75, layout.item.script_scale)
+    font_size := max(3.0, ctx.font_size * index_scale)
+    ascent, _ := dyncore.style_ascent_descent(script_style, font_size)
+    cols := max(1, dyncore.text_codepoint_count_span(index_text, 0, len(index_text)))
+    advance := dyncore.effective_advance(
+        script_style, ctx.runtime^.compile_cache.last_cell_width) * index_scale
+    width := f32(cols) * advance
+    metrics, measured := cached_math_site_metrics(
+        ctx, layout.item, .Radical_Index, font_size)
+    if measured {
+        ascent = metrics.ascent
+        width = metrics.draw_width
+    }
+    right := layout.draw_x + layout.front_padding + layout.lead_width * 0.36
+    return {{
+        right - width,
+        layout.baseline_y - layout.child_program^.ascent * 0.62 -
+            ascent * 0.50 - ctx.font_size * 0.25,
+    }, font_size}
 }
 
 //   Draw the optional radical index text left of the hook.
 draw_radical_index_text :: proc(
     layout: Radical_Layout,
     index_text: string,
-    script_style: Dynview_Text_Style,
-    script_font: rl.Font) {
+    script_style: dyncore.Dynview_Text_Style,
+    script_font: font.Font_Face) {
 
     if len(index_text) == 0 {
         return
     }
     ctx := layout.ctx
-    index_scale := max(0.75, layout.item.script_scale)
-    index_font_size := max(3.0, ctx.font_size * index_scale)
-    index_ascent, _ := dynview.style_ascent_descent(script_style, index_font_size)
-    index_cols :=
-        max(1, dynview.text_codepoint_count_span(index_text, 0, len(index_text)))
-    index_advance := dynview.effective_advance(script_style,
-        ctx.runtime^.compile_cache.last_wrap_advance) * index_scale
-    index_width := f32(index_cols) * index_advance
-    index_right_limit :=
-        layout.draw_x + layout.front_padding + layout.lead_width * 0.36
-    index_x := index_right_limit - index_width
-    index_y := layout.baseline_y - layout.child_program^.ascent * 0.62 -
-        index_ascent * 0.50 - ctx.font_size * 0.25
-    view_core.ui_text_f32(index_text, index_x, index_y, script_style.color,
-        view_core.Ui_Text_Font{script_font, index_font_size})
+    index := radical_index_layout(layout, index_text, script_style)
+    if draw_cached_math_site({
+        ctx = ctx,
+        item = layout.item,
+        site = .Radical_Index,
+        position = index.position,
+        font_size = index.font_size,
+        color = script_style.color,
+    }) {
+        return
+    }
+    draw_math_text({
+        encoder = ctx.encoder,
+        state = ctx.state,
+        style = script_style,
+        text = index_text,
+        position = index.position,
+        font = {script_font, index.font_size},
+    })
+}
+
+//   Build and draw the radicand portion of one resolved radical layout.
+radical_layout_for_child :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    child_program: ^dynviewmodel.Dynview_Math_Program,
+    draw_x, item_y: f32) -> Radical_Layout {
+
+    baseline_y := item_y + item.ascent
+    style := dyncore.style_by_id(item.style_id)
+    base_advance :=
+        dyncore.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
+    lead_width := dynmath.radical_lead_width(ctx.font_size, base_advance)
+    front_padding, back_padding :=
+        dynmath.radical_side_paddings(ctx.font_size, base_advance)
+    content_x := draw_x + front_padding + lead_width
+    if item.radical_geometry_valid {
+        content_x = draw_x + item.math_stretch_content_x
+    }
+    math_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    radicand_style, radicand_size := dynmath.math_child_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size,
+        math_style, .Radical_Radicand)
+    draw_math_program_at(ctx, child_program^, Program_Draw_Position{
+        content_x, baseline_y, radicand_size, radicand_style, 0})
+    return {
+        ctx = ctx, item = item, draw_x = draw_x, baseline_y = baseline_y,
+        child_program = child_program, front_padding = front_padding,
+        back_padding = back_padding, lead_width = lead_width,
+    }
 }
 
 //   Resolve a radical item's child program and layout paddings, drawing the child.
@@ -381,45 +696,98 @@ draw_radical_index_text :: proc(
 //   - ok: true when the child program resolved and was drawn.
 radical_make_layout :: proc(
     ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item,
+    item: dynviewmodel.Dynview_Layout_Item,
     draw_x, item_y: f32,
     out_layout: ^Radical_Layout) -> bool {
 
-    child_program, ok := dynview.math_program_from_id(
+    child_program, ok := dynmath.math_program_from_id(
         &ctx.runtime^.compile_cache, item.math_program_id)
     if !ok {
         return false
     }
 
-    baseline_y := item_y + item.ascent
-    style := dynview.style_by_id(item.style_id)
-    base_advance :=
-        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_wrap_advance)
-    lead_width := dynview.radical_lead_width(ctx.font_size, base_advance)
-    front_padding, back_padding :=
-        dynview.radical_side_paddings(ctx.font_size, base_advance)
-    content_x := draw_x + front_padding + lead_width
-
-    draw_math_program_at(ctx,
-        child_program^, Program_Draw_Position{content_x, baseline_y})
-
-    out_layout^ = Radical_Layout{
-        ctx = ctx,
-        item = item,
-        draw_x = draw_x,
-        baseline_y = baseline_y,
-        child_program = child_program,
-        front_padding = front_padding,
-        back_padding = back_padding,
-        lead_width = lead_width,
-    }
+    out_layout^ = radical_layout_for_child(
+        ctx, item, child_program, draw_x, item_y)
     return true
+}
+
+//   Draw the optional recursive radical degree in sealed or fallback position.
+draw_radical_degree :: proc(layout: Radical_Layout, sealed: bool) -> bool {
+    item := layout.item
+    if item.secondary_math_program_id <= 0 {
+        return false
+    }
+    degree, found := dynmath.math_program_from_id(
+        &layout.ctx.runtime^.compile_cache, item.secondary_math_program_id)
+    if !found {
+        return false
+    }
+    math_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    degree_style, degree_size := dynmath.math_child_font_size(
+        &layout.ctx.runtime^.compile_cache, item.math_font_size,
+        math_style, .Radical_Degree)
+    position := Program_Draw_Position{
+        layout.draw_x+item.radical_degree_x,
+        layout.baseline_y+item.radical_degree_baseline,
+        degree_size, degree_style, 0}
+    if !sealed {
+        right := layout.draw_x + layout.front_padding + layout.lead_width * 0.36
+        position.draw_x = right - degree^.draw_width
+        position.baseline_y = layout.baseline_y -
+            layout.child_program^.ascent * 0.62 + degree^.ascent * 0.50 -
+            item.math_font_size * 0.25
+    }
+    draw_math_program_at(layout.ctx, degree^, position)
+    return true
+}
+
+//   Draw a sealed OpenType surd, MATH rule, and optional recursive degree.
+draw_sealed_radical :: proc(
+    layout: Radical_Layout,
+    radical_style: dyncore.Dynview_Text_Style) -> bool {
+
+    item := layout.item
+    construction := item.math_stretch_constructions[0]
+    if !item.radical_geometry_valid || !construction.valid ||
+        !stretch_construction_is_resident(
+            layout.ctx, construction, item.math_font_size) {
+        return false
+    }
+    if !draw_stretch_construction(layout.ctx, item, construction, {
+        layout.draw_x+item.math_stretch_left_x,
+        layout.baseline_y,
+        item.math_stretch_bottom,
+    }, radical_style.color) {
+        return false
+    }
+    _ = native.draw_encoder_line(layout.ctx.encoder,
+        {layout.draw_x+item.radical_rule_left,
+            layout.baseline_y+item.radical_rule_center},
+        {layout.draw_x+item.radical_rule_right,
+            layout.baseline_y+item.radical_rule_center},
+        item.radical_rule_thickness, radical_style.color)
+    _ = draw_radical_degree(layout, true)
+    return true
+}
+
+//   Draw the heuristic radical rule and hook strokes.
+draw_fallback_radical_strokes :: proc(
+    layout: Radical_Layout,
+    style: dyncore.Dynview_Text_Style) {
+
+    geometry := radical_bar_geometry(layout)
+    _ = native.draw_encoder_line(layout.ctx.encoder,
+        {geometry.bar_start_x, geometry.bar_y},
+        {geometry.bar_end_x, geometry.bar_y},
+        geometry.bar_thickness, style.color)
+    draw_radical_hook(layout.ctx.encoder, geometry, style.color)
 }
 
 //   Draw one recursive radical wrapper by drawing the child math program first, then index and radical stroke.
 draw_recursive_radical_item :: proc(
     ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item,
+    item: dynviewmodel.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
     layout := Radical_Layout{}
@@ -427,52 +795,47 @@ draw_recursive_radical_item :: proc(
         return
     }
 
-    script_style := dynview.style_by_id(item.script_style_id)
+    script_style := dyncore.style_by_id(item.script_style_id)
     script_font := resolve_font_for_style(ctx.state, script_style, ctx.font)
-    index_text := dynview.text_span_from_buffer(
+    index_text := dyncore.text_span_from_buffer(
         &ctx.runtime^.command_buffer,
         item.radical_index_text_offset,
         item.radical_index_text_len)
-    radical_style := dynview.style_by_id(item.accent_style_id)
+    radical_style := dyncore.style_by_id(item.accent_style_id)
 
-    g := radical_bar_geometry(layout)
-    rl.DrawLineEx(
-        rl.Vector2{g.bar_start_x, g.bar_y},
-        rl.Vector2{g.bar_end_x, g.bar_y},
-        g.bar_thickness,
-        radical_style.color)
-    draw_radical_hook(g, radical_style.color)
-    draw_radical_index_text(layout, index_text, script_style, script_font)
+    if draw_sealed_radical(layout, radical_style) {
+        return
+    }
+
+    draw_fallback_radical_strokes(layout, radical_style)
+    if item.secondary_math_program_id > 0 {
+        _ = draw_radical_degree(layout, false)
+    } else {
+        draw_radical_index_text(layout, index_text, script_style, script_font)
+    }
 }
 
 //   Resolve a style-specific font handle, falling back to provided font when state is nil.
 resolve_font_for_style :: #force_inline proc(
     state: ^core.Euclid_General_State,
-    style: Dynview_Text_Style,
-    fallback_font: rl.Font) -> rl.Font {
+    style: dyncore.Dynview_Text_Style,
+    fallback_font: font.Font_Face) -> font.Font_Face {
 
     resolved := fallback_font
     if state == nil {
         return resolved
     }
 
-    flags := style.font_flags
-    if flags == .None {
-        flags = view_core.font_flags_from_bold_italic(style.bold, style.italic)
-    }
-
-    resolved = view_core.font_runtime_resolve(
-        state,
-        flags,
-        view_core.JULIA_MONO_FONT_LOAD_SIZE)
+    resolved = font.cache_resolve(
+        &state^.font_cache, style_font_key(style))
     return resolved
 }
 
 //   Resolve final draw-x for one text item, honoring centered first-column alignment.
 text_item_draw_x :: #force_inline proc(
-    panel: rl.Rectangle,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    panel: geometry.Rectangle,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     item_x: f32) -> f32 {
 
     if style.alignment == .Center && item.col_start == 0 {
@@ -484,78 +847,122 @@ text_item_draw_x :: #force_inline proc(
 //   Resolve the script style, font, and vertical offsets for one script-attach item.
 script_attach_style :: proc(
     ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item) -> Script_Attach_Style {
+    item: dynviewmodel.Dynview_Layout_Item) -> Script_Attach_Style {
 
     out := Script_Attach_Style{}
-    out.style = dynview.style_by_id(item.script_style_id)
+    out.style = dyncore.style_by_id(item.script_style_id)
     out.font = resolve_font_for_style(ctx.state, out.style, ctx.font)
     script_scale := max(0.2, item.script_scale)
-    offsets := dynview.script_draw_offsets(
+    offsets := dynmath.script_draw_offsets(
         ctx.font_size,
         script_scale,
         item.script_sup_raise,
         item.script_sub_drop)
     out.font_size = offsets.script_font_size
-    out.ascent, _ = dynview.style_ascent_descent(out.style, out.font_size)
+    out.ascent, _ = dyncore.style_ascent_descent(out.style, out.font_size)
     return out
+}
+
+//   Draw one cached or fallback script site for a script-attach item.
+draw_script_limit :: proc(
+    draw: Script_Limits_Draw,
+    site: dynviewmodel.Dynview_Shaped_Site) {
+    superscript := site == .Superscript
+    text := dyncore.text_span_from_buffer(&draw.ctx.runtime^.command_buffer,
+        superscript ? draw.item.script_sup_text_offset : draw.item.script_sub_text_offset,
+        superscript ? draw.item.script_sup_text_len : draw.item.script_sub_text_len)
+    ascent := draw.script.ascent
+    metrics, measured := cached_math_site_metrics(
+        draw.ctx, draw.item, site, draw.script.font_size)
+    if measured {
+        ascent = metrics.ascent
+    }
+    top := draw.baseline_y - ascent +
+        (superscript ? -draw.offsets.sup_raise_px : draw.offsets.sub_drop_px)
+    if len(text) > 0 && !draw_cached_math_site({
+        ctx = draw.ctx, item = draw.item, site = site,
+        position = {draw.script_x, top}, font_size = draw.script.font_size,
+        color = draw.script.style.color}) {
+        draw_optional_math_text({
+            encoder = draw.ctx.encoder,
+            state = draw.ctx.state, style = draw.script.style, text = text,
+            position = {draw.script_x, top}, font = draw.font})
+    }
 }
 
 //   Draw the superscript and subscript text for one script-attach item.
 draw_script_attach_scripts :: proc(
     ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item,
+    item: dynviewmodel.Dynview_Layout_Item,
     script: Script_Attach_Style,
     child_width: f32,
     position: Program_Draw_Position) {
 
-    baseline_y := position.baseline_y
-    offsets := dynview.script_draw_offsets(
-        ctx.font_size,
-        max(0.2, item.script_scale),
-        item.script_sup_raise,
-        item.script_sub_drop)
+    offsets := dynmath.script_draw_offsets(ctx.font_size, max(0.2, item.script_scale),
+        item.script_sup_raise, item.script_sub_drop)
     script_x := position.draw_x + child_width +
         max(1.0, item.script_gap * ctx.font_size)
-    font := view_core.Ui_Text_Font{script.font, script.font_size}
-
-    sup_text := dynview.text_span_from_buffer(
-        &ctx.runtime^.command_buffer,
-        item.script_sup_text_offset,
-        item.script_sup_text_len)
-    if len(sup_text) > 0 {
-        sup_top := baseline_y - offsets.sup_raise_px - script.ascent
-        view_core.ui_text_f32(sup_text, script_x, sup_top, script.style.color, font)
+    draw := Script_Limits_Draw{ctx, item, script, offsets,
+        {script.font, script.font_size}, script_x, position.baseline_y}
+    if item.secondary_math_program_id <= 0 {
+        draw_script_limit(draw, .Superscript)
     }
-
-    sub_text := dynview.text_span_from_buffer(
-        &ctx.runtime^.command_buffer,
-        item.script_sub_text_offset,
-        item.script_sub_text_len)
-    if len(sub_text) > 0 {
-        sub_top := baseline_y + offsets.sub_drop_px - script.ascent
-        view_core.ui_text_f32(sub_text, script_x, sub_top, script.style.color, font)
+    if item.tertiary_math_program_id <= 0 {
+        draw_script_limit(draw, .Subscript)
     }
+}
+
+//   Draw one recursive superscript or subscript child program.
+draw_script_attach_child :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    math_style: dynmath.Math_Style,
+    child: Script_Child_Draw) {
+
+    if child.program_id <= 0 {
+        return
+    }
+    program, found := dynmath.math_program_from_id(
+        &ctx.runtime^.compile_cache, child.program_id)
+    if !found {
+        return
+    }
+    child_style, child_size := dynmath.math_child_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size, math_style, child.role)
+    draw_math_program_at(ctx, program^, Program_Draw_Position{
+        child.x, child.baseline, child_size, child_style, 0})
 }
 
 //   Draw one recursive ScriptAttach wrapper by drawing a child program and script text.
 draw_recursive_script_attach_item :: #force_inline proc(
     ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item,
+    item: dynviewmodel.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
     child_program, ok :=
-        dynview.math_program_from_id(&ctx.runtime^.compile_cache, item.math_program_id)
+        dynmath.math_program_from_id(&ctx.runtime^.compile_cache, item.math_program_id)
     if !ok {
         return
     }
 
     baseline_y := item_y + item.ascent
+    math_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
     draw_math_program_at(ctx,
-        child_program^, Program_Draw_Position{draw_x, baseline_y})
+        child_program^, Program_Draw_Position{
+            draw_x, baseline_y, item.math_font_size, math_style, 0})
 
     script := script_attach_style(ctx, item)
     draw_script_attach_scripts(ctx, item, script,
-        child_program^.draw_width, Program_Draw_Position{draw_x, baseline_y})
+        child_program^.draw_width, Program_Draw_Position{
+            draw_x, baseline_y, item.math_font_size, math_style, 0})
+
+    draw_script_attach_child(ctx, item, math_style, {
+        item.secondary_math_program_id, draw_x + item.script_sup_x,
+        baseline_y + item.script_sup_baseline, .Superscript})
+    draw_script_attach_child(ctx, item, math_style, {
+        item.tertiary_math_program_id, draw_x + item.script_sub_x,
+        baseline_y + item.script_sub_baseline, .Subscript})
 }
 
 //   Resolve the numerator and denominator math programs for one fraction item.
@@ -565,15 +972,15 @@ draw_recursive_script_attach_item :: #force_inline proc(
 //   - ok: true when both programs resolved.
 fraction_resolve_programs :: proc(
     ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item) -> (Fraction_Programs, bool) {
+    item: dynviewmodel.Dynview_Layout_Item) -> (Fraction_Programs, bool) {
 
     out := Fraction_Programs{}
-    numerator, ok := dynview.math_program_from_id(
+    numerator, ok := dynmath.math_program_from_id(
         &ctx.runtime^.compile_cache, item.math_program_id)
     if !ok {
         return out, false
     }
-    denominator, ok_den := dynview.math_program_from_id(
+    denominator, ok_den := dynmath.math_program_from_id(
         &ctx.runtime^.compile_cache, item.secondary_math_program_id)
     if !ok_den {
         return out, false
@@ -585,20 +992,36 @@ fraction_resolve_programs :: proc(
 
 //   Resolve the fraction divider color, honoring an accent-style override.
 fraction_divider_color :: #force_inline proc(
-    item: core.Dynview_Layout_Item,
-    style: Dynview_Text_Style) -> rl.Color {
+    item: dynviewmodel.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style) -> dynviewmodel.Color {
 
     if item.accent_style_id > 0 {
-        return dynview.style_by_id(item.accent_style_id).color
+        return dyncore.style_by_id(item.accent_style_id).color
     }
     return style.color
+}
+
+//   Draw the centered divider rule for one recursive fraction.
+draw_fraction_divider :: proc(
+    encoder: ^native.Draw_Encoder,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
+    draw_x, baseline_y: f32) {
+
+    _ = native.draw_encoder_line(encoder,
+        {draw_x + item.fraction_rule_left,
+            baseline_y + item.fraction_rule_center},
+        {draw_x + item.fraction_rule_right,
+            baseline_y + item.fraction_rule_center},
+        max(1, item.fraction_rule_thickness),
+        fraction_divider_color(item, style))
 }
 
 //   Draw one recursive fraction with centered numerator/denominator and center divider.
 draw_recursive_fraction_item :: #force_inline proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
     programs, programs_ok := fraction_resolve_programs(ctx, item)
@@ -609,29 +1032,25 @@ draw_recursive_fraction_item :: #force_inline proc(
     denominator_program := programs.denominator
 
     baseline_y := item_y + item.ascent
-    divider_thickness := max(1.0, item.accent_thickness * ctx.font_size)
-    divider_half := divider_thickness * 0.5
-    divider_gap := dynview.fraction_vertical_gap(ctx.font_size)
-
-    numerator_x := draw_x + (item.draw_width - numerator_program^.draw_width) * 0.5
-    denominator_x := draw_x + (item.draw_width - denominator_program^.draw_width) * 0.5
+    math_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    numerator_style, numerator_size := dynmath.math_child_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size,
+        math_style, .Fraction_Numerator)
+    denominator_style, denominator_size := dynmath.math_child_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size,
+        math_style, .Fraction_Denominator)
     draw_math_program_at(ctx,
         numerator_program^,
-        Program_Draw_Position{numerator_x,
-            baseline_y - divider_half - divider_gap - numerator_program^.descent})
+        Program_Draw_Position{draw_x + item.fraction_numerator_x,
+            baseline_y + item.fraction_numerator_baseline,
+            numerator_size, numerator_style, 0})
     draw_math_program_at(ctx,
         denominator_program^,
-        Program_Draw_Position{denominator_x,
-            baseline_y + divider_half + divider_gap + denominator_program^.ascent})
-
-    base_advance :=
-        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_wrap_advance)
-    side_padding := dynview.fraction_side_padding(ctx.font_size, base_advance)
-    rl.DrawLineEx(
-        rl.Vector2{draw_x + side_padding, baseline_y},
-        rl.Vector2{draw_x + item.draw_width - side_padding, baseline_y},
-        divider_thickness,
-        fraction_divider_color(item, style))
+        Program_Draw_Position{draw_x + item.fraction_denominator_x,
+            baseline_y + item.fraction_denominator_baseline,
+            denominator_size, denominator_style, 0})
+    draw_fraction_divider(ctx.encoder, style, item, draw_x, baseline_y)
 }
 
 //   Draw one normalized cubic Bezier segment as line samples in pixel space.
@@ -649,7 +1068,7 @@ draw_normalized_cubic_segment :: #force_inline proc(
     if geom.right_side {
         x0_norm = 1.0 - x0_norm
     }
-    prev := rl.Vector2{geom.draw_x + geom.width * x0_norm,
+    prev := geometry.Vector2{geom.draw_x + geom.width * x0_norm,
         geom.top_y + geom.height * seg.p0.y}
 
     for i in 1..=seg.segment_count {
@@ -663,9 +1082,11 @@ draw_normalized_cubic_segment :: #force_inline proc(
             x_norm = 1.0 - x_norm
         }
 
-        current := rl.Vector2{geom.draw_x + geom.width * x_norm,
+        current := geometry.Vector2{geom.draw_x + geom.width * x_norm,
             geom.top_y + geom.height * y_norm}
-        rl.DrawLineEx(prev, current, seg.thickness, seg.color)
+        _ = native.draw_encoder_line(seg.encoder, {prev.x, prev.y},
+            {current.x, current.y}, seg.thickness,
+            seg.color)
         prev = current
     }
 }
@@ -688,44 +1109,47 @@ build_stretch_delimiter_geometry :: #force_inline proc(
         width = width,
         height = max(1.0, bottom_y - top_y),
         thickness = max(1.0, params.font_size * 0.09),
-        right_side = dynview.delimiter_is_right(params.delimiter_kind),
+        right_side = dynmath.delimiter_is_right(params.delimiter_kind),
     }
 }
 
 //   Render a single vertical bar centered in the glyph frame.
 draw_delimiter_vert :: #force_inline proc(
-    style: Dynview_Text_Style,
+    encoder: ^native.Draw_Encoder,
+    style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
-    family: dynview.Dynview_Delimiter_Family) {
+    family: dynmath.Dynview_Delimiter_Family) {
 
     _ = family
     x := geom.draw_x + geom.width * 0.5
-    rl.DrawLineEx(rl.Vector2{x, geom.top_y},
-        rl.Vector2{x, geom.bottom_y}, geom.thickness, style.color)
+    _ = native.draw_encoder_line(encoder, {x, geom.top_y},
+        {x, geom.bottom_y}, geom.thickness, style.color)
 }
 
 //   Render a double vertical bar as two lanes centered in the glyph frame.
 draw_delimiter_double_vert :: #force_inline proc(
-    style: Dynview_Text_Style,
+    encoder: ^native.Draw_Encoder,
+    style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
-    family: dynview.Dynview_Delimiter_Family) {
+    family: dynmath.Dynview_Delimiter_Family) {
 
     _ = family
     lane_gap := max(1.0, geom.width * 0.26)
     x1 := geom.draw_x + geom.width * 0.5 - lane_gap
     x2 := geom.draw_x + geom.width * 0.5 + lane_gap
-    rl.DrawLineEx(rl.Vector2{x1, geom.top_y},
-        rl.Vector2{x1, geom.bottom_y}, geom.thickness, style.color)
-    rl.DrawLineEx(rl.Vector2{x2, geom.top_y},
-        rl.Vector2{x2, geom.bottom_y}, geom.thickness, style.color)
+    _ = native.draw_encoder_line(encoder, {x1, geom.top_y},
+        {x1, geom.bottom_y}, geom.thickness, style.color)
+    _ = native.draw_encoder_line(encoder, {x2, geom.top_y},
+        {x2, geom.bottom_y}, geom.thickness, style.color)
 }
 
 //   Render a bracket/ceil/floor as a vertical stem plus optional top/bottom hooks.
 //   Ceil omits the bottom hook; Floor omits the top hook.
 draw_delimiter_bracket :: #force_inline proc(
-    style: Dynview_Text_Style,
+    encoder: ^native.Draw_Encoder,
+    style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
-    family: dynview.Dynview_Delimiter_Family) {
+    family: dynmath.Dynview_Delimiter_Family) {
 
     stem_x := geom.draw_x + geom.width * 0.28
     hook_x := geom.draw_x + geom.width * 0.88
@@ -733,23 +1157,24 @@ draw_delimiter_bracket :: #force_inline proc(
         stem_x = geom.draw_x + geom.width * 0.72
         hook_x = geom.draw_x + geom.width * 0.12
     }
-    rl.DrawLineEx(rl.Vector2{stem_x, geom.top_y},
-        rl.Vector2{stem_x, geom.bottom_y}, geom.thickness, style.color)
+    _ = native.draw_encoder_line(encoder, {stem_x, geom.top_y},
+        {stem_x, geom.bottom_y}, geom.thickness, style.color)
     if family != .Floor {
-        rl.DrawLineEx(rl.Vector2{stem_x, geom.top_y},
-            rl.Vector2{hook_x, geom.top_y}, geom.thickness, style.color)
+        _ = native.draw_encoder_line(encoder, {stem_x, geom.top_y},
+            {hook_x, geom.top_y}, geom.thickness, style.color)
     }
     if family != .Ceil {
-        rl.DrawLineEx(rl.Vector2{stem_x, geom.bottom_y},
-            rl.Vector2{hook_x, geom.bottom_y}, geom.thickness, style.color)
+        _ = native.draw_encoder_line(encoder, {stem_x, geom.bottom_y},
+            {hook_x, geom.bottom_y}, geom.thickness, style.color)
     }
 }
 
 //   Render an angle bracket as two rails meeting at an apex on the glyph midline.
 draw_delimiter_angle :: #force_inline proc(
-    style: Dynview_Text_Style,
+    encoder: ^native.Draw_Encoder,
+    style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
-    family: dynview.Dynview_Delimiter_Family) {
+    family: dynmath.Dynview_Delimiter_Family) {
 
     _ = family
     apex_x := geom.draw_x + geom.width * 0.14
@@ -758,18 +1183,19 @@ draw_delimiter_angle :: #force_inline proc(
         apex_x = geom.draw_x + geom.width * 0.86
         rail_x = geom.draw_x + geom.width * 0.14
     }
-    rl.DrawLineEx(rl.Vector2{rail_x, geom.top_y},
-        rl.Vector2{apex_x, geom.center_y}, geom.thickness, style.color)
-    rl.DrawLineEx(rl.Vector2{apex_x, geom.center_y},
-        rl.Vector2{rail_x, geom.bottom_y}, geom.thickness, style.color)
+    _ = native.draw_encoder_line(encoder, {rail_x, geom.top_y},
+        {apex_x, geom.center_y}, geom.thickness, style.color)
+    _ = native.draw_encoder_line(encoder, {apex_x, geom.center_y},
+        {rail_x, geom.bottom_y}, geom.thickness, style.color)
 }
 
 //   Render line-only delimiter families (no sampled curves or cubic segments).
 //   Returns true when this proc handled the family so callers can short-circuit
 //   curved renderers and fallback glyph paths.
 draw_stretch_delimiter_line_family :: #force_inline proc(
-    style: Dynview_Text_Style,
-    family: dynview.Dynview_Delimiter_Family,
+    encoder: ^native.Draw_Encoder,
+    style: dyncore.Dynview_Text_Style,
+    family: dynmath.Dynview_Delimiter_Family,
     geom: Stretch_Delimiter_Glyph_Geometry) -> bool {
 
     handlers := DELIMITER_LINE_HANDLERS
@@ -778,7 +1204,7 @@ draw_stretch_delimiter_line_family :: #force_inline proc(
         return false
     }
 
-    handler(style, geom, family)
+    handler(encoder, style, geom, family)
     return true
 }
 
@@ -786,7 +1212,8 @@ draw_stretch_delimiter_line_family :: #force_inline proc(
 //   The right side mirrors the same profile so both sides remain symmetric and
 //   visually consistent across changing content heights.
 draw_stretch_delimiter_paren :: #force_inline proc(
-    style: Dynview_Text_Style,
+    encoder: ^native.Draw_Encoder,
+    style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry) {
 
     segment_count := 12
@@ -805,7 +1232,8 @@ draw_stretch_delimiter_paren :: #force_inline proc(
             x1 = geom.draw_x + geom.width * (0.22 + 0.46 * curve1)
         }
 
-        rl.DrawLineEx(rl.Vector2{x0, y0}, rl.Vector2{x1, y1}, geom.thickness, style.color)
+        _ = native.draw_encoder_line(
+            encoder, {x0, y0}, {x1, y1}, geom.thickness, style.color)
     }
 }
 
@@ -822,10 +1250,8 @@ draw_brace_stem :: #force_inline proc(
     if geom.right_side {
         x_stem = geom.draw_x + geom.width * (1.0 - stem_x)
     }
-    rl.DrawLineEx(
-        rl.Vector2{x_stem, stem.y0},
-        rl.Vector2{x_stem, stem.y1},
-        stem.thickness,
+    _ = native.draw_encoder_line(stem.encoder,
+        {x_stem, stem.y0}, {x_stem, stem.y1}, stem.thickness,
         stem.color)
 }
 
@@ -849,34 +1275,34 @@ draw_brace_curves :: proc(
 
     // Top hook: horizontal at the tip, vertical where it joins the stem.
     top := seg
-    top.p0 = rl.Vector2{tip_x, 0.0}
-    top.p1 = rl.Vector2{tip_x - bend * (tip_x - stem_x), 0.0}
-    top.p2 = rl.Vector2{stem_x, r_norm * (1.0 - bend)}
-    top.p3 = rl.Vector2{stem_x, r_norm}
+    top.p0 = geometry.Vector2{tip_x, 0.0}
+    top.p1 = geometry.Vector2{tip_x - bend * (tip_x - stem_x), 0.0}
+    top.p2 = geometry.Vector2{stem_x, r_norm * (1.0 - bend)}
+    top.p3 = geometry.Vector2{stem_x, r_norm}
     draw_normalized_cubic_segment(geom, top)
 
     // Upper cusp curve: vertical at the stem, horizontal into the cusp point.
     upper := seg
-    upper.p0 = rl.Vector2{stem_x, 0.5 - r_norm}
-    upper.p1 = rl.Vector2{stem_x, 0.5 - r_norm * (1.0 - bend)}
-    upper.p2 = rl.Vector2{cusp_x + bend * (stem_x - cusp_x), 0.5}
-    upper.p3 = rl.Vector2{cusp_x, 0.5}
+    upper.p0 = geometry.Vector2{stem_x, 0.5 - r_norm}
+    upper.p1 = geometry.Vector2{stem_x, 0.5 - r_norm * (1.0 - bend)}
+    upper.p2 = geometry.Vector2{cusp_x + bend * (stem_x - cusp_x), 0.5}
+    upper.p3 = geometry.Vector2{cusp_x, 0.5}
     draw_normalized_cubic_segment(geom, upper)
 
     // Lower cusp curve mirrors the upper one below the midline.
     lower := seg
-    lower.p0 = rl.Vector2{cusp_x, 0.5}
-    lower.p1 = rl.Vector2{cusp_x + bend * (stem_x - cusp_x), 0.5}
-    lower.p2 = rl.Vector2{stem_x, 0.5 + r_norm * (1.0 - bend)}
-    lower.p3 = rl.Vector2{stem_x, 0.5 + r_norm}
+    lower.p0 = geometry.Vector2{cusp_x, 0.5}
+    lower.p1 = geometry.Vector2{cusp_x + bend * (stem_x - cusp_x), 0.5}
+    lower.p2 = geometry.Vector2{stem_x, 0.5 + r_norm * (1.0 - bend)}
+    lower.p3 = geometry.Vector2{stem_x, 0.5 + r_norm}
     draw_normalized_cubic_segment(geom, lower)
 
     // Bottom hook mirrors the top hook.
     bottom := seg
-    bottom.p0 = rl.Vector2{stem_x, 1.0 - r_norm}
-    bottom.p1 = rl.Vector2{stem_x, 1.0 - r_norm * (1.0 - bend)}
-    bottom.p2 = rl.Vector2{tip_x - bend * (tip_x - stem_x), 1.0}
-    bottom.p3 = rl.Vector2{tip_x, 1.0}
+    bottom.p0 = geometry.Vector2{stem_x, 1.0 - r_norm}
+    bottom.p1 = geometry.Vector2{stem_x, 1.0 - r_norm * (1.0 - bend)}
+    bottom.p2 = geometry.Vector2{tip_x - bend * (tip_x - stem_x), 1.0}
+    bottom.p3 = geometry.Vector2{tip_x, 1.0}
     draw_normalized_cubic_segment(geom, bottom)
 }
 
@@ -884,7 +1310,8 @@ draw_brace_curves :: proc(
 //   Corner radius is kept stable while extra height stretches only the stems,
 //   which prevents braces from becoming pointy or overly flat at large sizes.
 draw_stretch_delimiter_brace :: #force_inline proc(
-    style: Dynview_Text_Style,
+    encoder: ^native.Draw_Encoder,
+    style: dyncore.Dynview_Text_Style,
     geom: Stretch_Delimiter_Glyph_Geometry,
     font_size: f32) {
 
@@ -903,17 +1330,20 @@ draw_stretch_delimiter_brace :: #force_inline proc(
         bend = f32(0.55),
     }
     draw_brace_curves(geom, cg, Cubic_Segment_Params{
+        encoder = encoder,
         color = style.color,
         thickness = brace_thickness,
         segment_count = segment_count,
     })
 
     draw_brace_stem(geom, cg.stem_x, stem_len,
-        Brace_Stem{geom.top_y + radius_px, geom.center_y - radius_px,
-            brace_thickness, style.color})
+        Brace_Stem{encoder = encoder, y0 = geom.top_y + radius_px,
+            y1 = geom.center_y - radius_px, thickness = brace_thickness,
+            color = style.color})
     draw_brace_stem(geom, cg.stem_x, stem_len,
-        Brace_Stem{geom.center_y + radius_px, geom.bottom_y - radius_px,
-            brace_thickness, style.color})
+        Brace_Stem{encoder = encoder, y0 = geom.center_y + radius_px,
+            y1 = geom.bottom_y - radius_px, thickness = brace_thickness,
+            color = style.color})
 }
 
 //   Draw a font glyph fallback when no procedural family renderer is used.
@@ -923,19 +1353,24 @@ draw_stretch_delimiter_text_fallback :: #force_inline proc(
     params: Stretch_Delimiter_Glyph_Params,
     width: f32) {
 
-    delimiter := dynview.delimiter_text(params.delimiter_kind)
+    delimiter := dynmath.delimiter_text(params.delimiter_kind)
     if len(delimiter) == 0 {
         return
     }
 
     stretch_scale := max(1.0, params.content_height / max(1.0, params.font_size))
     delimiter_font_size := max(1.0, params.font_size * stretch_scale)
-    delim_ascent, _ := dynview.style_ascent_descent(params.style, delimiter_font_size)
+    delim_ascent, _ := dyncore.style_ascent_descent(params.style, delimiter_font_size)
     resolved_font :=
         resolve_font_for_style(params.state, params.style, params.fallback_font)
-    view_core.ui_text_f32(delimiter, params.draw_x, params.baseline_y - delim_ascent,
-        params.style.color,
-        view_core.Ui_Text_Font{resolved_font, delimiter_font_size})
+    draw_math_text({
+        encoder = params.encoder,
+        state = params.state,
+        style = params.style,
+        text = delimiter,
+        position = {params.draw_x, params.baseline_y - delim_ascent},
+        font = {resolved_font, delimiter_font_size},
+    })
     _ = width
 }
 
@@ -945,12 +1380,12 @@ draw_stretch_delimiter_text_fallback :: #force_inline proc(
 draw_stretch_delimiter_glyph :: #force_inline proc(
     params: Stretch_Delimiter_Glyph_Params) -> f32 {
 
-    if params.delimiter_kind == dynview.DELIMITER_KIND_NONE {
+    if params.delimiter_kind == dynmath.DELIMITER_KIND_NONE {
         return 0
     }
 
-    family := dynview.delimiter_family(params.delimiter_kind)
-    width := dynview.stretch_delimiter_width(
+    family := dynmath.delimiter_family(params.delimiter_kind)
+    width := dynmath.stretch_delimiter_width(
         params.style,
         params.wrap_advance,
         params.font_size,
@@ -961,16 +1396,18 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     }
 
     geom := build_stretch_delimiter_geometry(params, width)
-    if draw_stretch_delimiter_line_family(params.style, family, geom) {
+    if draw_stretch_delimiter_line_family(
+        params.encoder, params.style, family, geom) {
         return width
     }
 
     switch family {
     case .Paren:
-        draw_stretch_delimiter_paren(params.style, geom)
+        draw_stretch_delimiter_paren(params.encoder, params.style, geom)
         return width
     case .Brace:
-        draw_stretch_delimiter_brace(params.style, geom, params.font_size)
+        draw_stretch_delimiter_brace(
+            params.encoder, params.style, geom, params.font_size)
         return width
     case .Vert, .Double_Vert, .Bracket, .Ceil, .Floor, .Angle, .None:
     }
@@ -979,19 +1416,132 @@ draw_stretch_delimiter_glyph :: #force_inline proc(
     return width
 }
 
+//   Compare two borrowed glyphs for exact raster-instance coherence.
+stretch_glyphs_share_raster :: #force_inline proc(
+    first, next: font.Resolved_Glyph) -> bool {
+
+    return first.raster_slot_index == next.raster_slot_index &&
+        first.raster_slot_incarnation == next.raster_slot_incarnation &&
+        first.raster_pixel_height == next.raster_pixel_height
+}
+
+//   Demand every selected glyph from one raster before drawing a construction.
+stretch_construction_select_raster :: proc(
+    ctx: Layout_Draw_Context,
+    construction: fontmodel.Font_Math_Stretch_Construction,
+    logical_size: f32) -> Stretch_Construction_Raster {
+
+    if ctx.state == nil || !construction.valid || construction.count <= 0 ||
+        construction.count > len(construction.parts) {
+        return {}
+    }
+    resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
+    raster_request, request_valid := viewtext.ui_text_raster_request(
+        resolver, .Math_Regular, logical_size, ctx.encoder)
+    if !request_valid {
+        return {}
+    }
+    glyph_ids: [fontmodel.FONT_MATH_GLYPH_PART_CAPACITY]u32
+    for index in 0..<construction.count {
+        glyph_ids[index] = construction.parts[index].glyph_id
+    }
+    selection, ready := viewtext.ui_text_select_glyph_ids(
+        resolver, .Math_Regular, glyph_ids[:construction.count], raster_request)
+    return {raster_request, selection, ready}
+}
+
+// Demand a complete construction from one resident raster.
+stretch_construction_is_resident :: #force_inline proc(
+    ctx: Layout_Draw_Context,
+    construction: fontmodel.Font_Math_Stretch_Construction,
+    logical_size: f32) -> bool {
+
+    return stretch_construction_select_raster(
+        ctx, construction, logical_size).ready
+}
+
+//   Draw one fully resident bottom-to-top OpenType MATH construction.
+draw_stretch_construction :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    construction: fontmodel.Font_Math_Stretch_Construction,
+    position: Stretch_Construction_Position,
+    color: dynviewmodel.Color) -> bool {
+
+    raster := stretch_construction_select_raster(
+        ctx, construction, item.math_font_size)
+    if !raster.ready {
+        return false
+    }
+    cache := &ctx.runtime^.compile_cache
+    resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
+    raster_scale := item.math_font_size/cache^.math_constants.base_pixel_size
+    for index in 0..<construction.count {
+        part := construction.parts[index]
+        part_baseline := position.baseline_y + position.vertical_origin -
+            part.advance_offset*item.math_stretch_scale
+        resolved, resident := viewtext.ui_text_resolve_selected_glyph(
+            resolver, .Math_Regular, part.glyph_id,
+            raster.request, raster.selection)
+        if !resident {
+            return false
+        }
+        viewtext.ui_text_draw_resolved_glyph({
+            encoder = ctx.encoder,
+            resolved = resolved,
+            position = {position.origin_x,
+                part_baseline-item.math_stretch_raster_ascent*raster_scale},
+            font_size = item.math_font_size,
+            color = color,
+        })
+    }
+    return true
+}
+
+//   Draw both sealed delimiter sides only when all selected parts are resident.
+draw_sealed_stretch_delimiters :: proc(
+    ctx: Layout_Draw_Context,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
+    draw_x, baseline_y: f32) -> bool {
+
+    cache := &ctx.runtime^.compile_cache
+    if !item.math_stretch_geometry_valid ||
+        item.math_stretch_font_generation != cache^.shaped_font_generation {
+        return false
+    }
+    for construction in item.math_stretch_constructions {
+        if construction.valid &&
+            !stretch_construction_is_resident(
+                ctx, construction, item.math_font_size) {
+            return false
+        }
+    }
+    left := item.math_stretch_constructions[0]
+    right := item.math_stretch_constructions[1]
+    left_ok := !left.valid || draw_stretch_construction(
+        ctx, item, left, {draw_x+item.math_stretch_left_x, baseline_y,
+            item.math_stretch_vertical_origins[0]}, style.color)
+    right_ok := !right.valid || draw_stretch_construction(
+        ctx, item, right, {draw_x+item.math_stretch_right_x, baseline_y,
+            item.math_stretch_vertical_origins[1]}, style.color)
+    return left_ok && right_ok
+}
+
 //   Build the glyph params for one stretch delimiter, shared by left and right.
 stretch_delimiter_glyph_params :: #force_inline proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     baseline_y: f32,
     side: Stretch_Glyph_Side) -> Stretch_Delimiter_Glyph_Params {
 
     return Stretch_Delimiter_Glyph_Params{
+        encoder = ctx.encoder,
         state = ctx.state,
         style = style,
         fallback_font = ctx.font,
-        wrap_advance = ctx.runtime^.compile_cache.last_wrap_advance,
+        wrap_advance = ctx.runtime^.compile_cache.last_cell_width,
         font_size = ctx.font_size,
         content_height = item.ascent + item.descent,
         content_ascent = item.ascent,
@@ -1002,38 +1552,85 @@ stretch_delimiter_glyph_params :: #force_inline proc(
     }
 }
 
+//   Recover the measured style inherited by recursive delimiter content.
+stretch_delimiter_child_style :: #force_inline proc(
+    item: dynviewmodel.Dynview_Layout_Item) -> dynmath.Math_Style {
+
+    return {
+        dynmath.Math_Style_Level(item.math_style_level),
+        item.math_style_cramped,
+    }
+}
+
+//   Draw optional content between one pair of stretch delimiters.
+draw_stretch_delimiter_content :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    content_x, baseline_y: f32) -> f32 {
+
+    if item.math_program_id <= 0 {
+        return 0
+    }
+    child_program, ok := dynmath.math_program_from_id(
+        &ctx.runtime^.compile_cache, item.math_program_id)
+    if !ok {
+        return 0
+    }
+    draw_math_program_at(ctx, child_program^, Program_Draw_Position{
+        content_x, baseline_y, 0, stretch_delimiter_child_style(item), 0})
+    return child_program^.draw_width
+}
+
+//   Draw measured content inside a sealed stretch-delimiter construction.
+draw_sealed_stretch_content :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    draw_x, baseline_y: f32) {
+
+    if item.math_program_id <= 0 {
+        return
+    }
+    child_program, ok := dynmath.math_program_from_id(
+        &ctx.runtime^.compile_cache, item.math_program_id)
+    if ok {
+        draw_math_program_at(ctx, child_program^, Program_Draw_Position{
+            draw_x+item.math_stretch_content_x, baseline_y, 0,
+            stretch_delimiter_child_style(item), item.math_stretch_target_height})
+    }
+}
+
 //   Draw one recursive stretch-delimiter wrapper around optional child content.
 //   Left delimiter, child program, and right delimiter are laid out in-order
 //   using runtime stretch metrics so both delimiters share the same baseline.
 draw_recursive_stretch_delimiter_item :: #force_inline proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
     baseline_y := item_y + item.ascent
-    base_advance :=
-        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_wrap_advance)
-    side_padding := dynview.stretch_delimiter_side_padding(ctx.font_size, base_advance)
+    if draw_sealed_stretch_delimiters(ctx, style, item, draw_x, baseline_y) {
+        draw_sealed_stretch_content(ctx, item, draw_x, baseline_y)
+        return
+    }
+    left_clearance, right_clearance: f32
+    left_clearance, right_clearance = dynmath.stretch_delimiter_clearances({
+        math_program_id = item.math_program_id,
+        math_atom_class = item.math_atom_class,
+        accent_mode = item.accent_mode,
+        radical_mode = item.radical_mode,
+    }, ctx.font_size)
 
-    left_draw_x := draw_x + side_padding
+    left_draw_x := draw_x
     left_width := draw_stretch_delimiter_glyph(
         stretch_delimiter_glyph_params(ctx, style, item, baseline_y,
             Stretch_Glyph_Side{item.accent_mode, left_draw_x}))
 
-    content_x := left_draw_x + left_width
-    content_width: f32 = 0
-    if item.math_program_id > 0 {
-        child_program, ok := dynview.math_program_from_id(
-            &ctx.runtime^.compile_cache, item.math_program_id)
-        if ok {
-            content_width = child_program^.draw_width
-            draw_math_program_at(ctx,
-                child_program^, Program_Draw_Position{content_x, baseline_y})
-        }
-    }
+    content_x := left_draw_x + left_width + left_clearance
+    content_width := draw_stretch_delimiter_content(
+        ctx, item, content_x, baseline_y)
 
-    right_draw_x := content_x + content_width
+    right_draw_x := content_x + content_width + right_clearance
     _ = draw_stretch_delimiter_glyph(
         stretch_delimiter_glyph_params(ctx, style, item, baseline_y,
             Stretch_Glyph_Side{item.radical_mode, right_draw_x}))
@@ -1045,18 +1642,16 @@ draw_recursive_stretch_delimiter_item :: #force_inline proc(
 //   - cell_program: The matrix cell program when ok.
 //   - ok: true when the program resolved and all cells measured.
 matrix_resolve_cells :: proc(
-    ctx: Layout_Draw_Context,
-    item: core.Dynview_Layout_Item,
-    rows, cols: int,
-    cells: ^Matrix_Draw_Cells) -> (^core.Dynview_Math_Program, bool) {
+    input: Matrix_Cell_Resolve) -> (^dynviewmodel.Dynview_Math_Program, bool) {
 
     cell_program, ok :=
-        dynview.math_program_from_id(&ctx.runtime^.compile_cache, item.math_program_id)
-    if !ok || cell_program^.command_count < rows * cols {
+        dynmath.math_program_from_id(&input.ctx.runtime^.compile_cache,
+            input.item.math_program_id)
+    if !ok || cell_program^.command_count < input.rows * input.cols {
         return nil, false
     }
 
-    if !measure_matrix_draw_cells(ctx, cell_program, rows, cols, cells) {
+    if !measure_matrix_draw_cells(input, cell_program) {
         return nil, false
     }
     return cell_program, true
@@ -1065,54 +1660,86 @@ matrix_resolve_cells :: proc(
 //   Build the matrix grid geometry (alignments, gaps) for one matrix item.
 matrix_draw_geometry :: proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
-    rows, cols: int) -> Matrix_Draw_Geometry {
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
+    descriptor: ^dynviewmodel.Dynview_Math_Table_Descriptor) -> Matrix_Draw_Geometry {
 
-    alignments, _ := dynview.decode_matrix_column_alignments(
-        &ctx.runtime^.command_buffer,
-        core.Dynview_Command{
-            script_sub_text_offset = item.script_sub_text_offset,
-            script_sub_text_len = item.script_sub_text_len,
-        },
-        cols)
     base_advance :=
-        dynview.effective_advance(style, ctx.runtime^.compile_cache.last_wrap_advance)
-    return Matrix_Draw_Geometry{
-        alignments = alignments,
-        rows = rows,
-        cols = cols,
-        column_gap = dynview.matrix_column_gap(ctx.font_size, base_advance),
-        row_gap = dynview.matrix_row_gap(ctx.font_size),
+        dyncore.effective_advance(style, ctx.runtime^.compile_cache.last_cell_width)
+    geometry := Matrix_Draw_Geometry{
+        alignments = descriptor^.column_alignments,
+        vertical_rule_counts = descriptor^.vertical_rule_counts,
+        horizontal_rule_counts = descriptor^.horizontal_rule_counts,
+        rows = descriptor^.rows,
+        cols = descriptor^.columns,
+        rule_thickness = dynmath.math_table_rule_thickness(ctx.font_size),
+        rule_separation = dynmath.math_table_rule_separation(ctx.font_size),
+        color = style.color,
     }
+    for boundary in 0..=descriptor^.columns {
+        geometry.column_boundaries[boundary] =
+            dynmath.math_table_column_boundary_width(
+                descriptor, boundary, ctx.font_size, base_advance)
+    }
+    for boundary in 0..=descriptor^.rows {
+        geometry.row_boundaries[boundary] =
+            dynmath.math_table_row_boundary_height(descriptor, boundary, ctx.font_size)
+        geometry.row_rule_offsets[boundary] =
+            dynmath.math_table_row_rule_offset(descriptor, boundary, ctx.font_size)
+    }
+    return geometry
+}
+
+//   Derive the recursive cell style and draw context for one matrix item.
+matrix_cell_draw_context :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    descriptor: ^dynviewmodel.Dynview_Math_Table_Descriptor) ->
+    (Layout_Draw_Context, dynmath.Math_Style) {
+    parent_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    cell_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(descriptor^.cell_style), false}
+    cell_ctx := ctx
+    cell_ctx.font_size = dynmath.math_target_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size, parent_style, cell_style)
+    return cell_ctx, cell_style
 }
 
 //   Draw one recursive matrix wrapper by centering cells per column and baselining per row.
 draw_recursive_matrix_item :: #force_inline proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     draw_x, item_y: f32) {
 
-    rows := int(item.accent_mode)
-    cols := int(item.radical_mode)
-    if rows <= 0 || cols <= 0 || rows > 16 || cols > 16 {
+    descriptor, descriptor_ok := dynmath.matrix_descriptor_from_command(
+        &ctx.runtime^.compile_cache,
+        dynviewmodel.Dynview_Command{
+            table_descriptor_index = item.table_descriptor_index,
+        })
+    if !descriptor_ok {
         return
     }
+    rows := descriptor^.rows
+    cols := descriptor^.columns
+    cell_ctx, cell_style := matrix_cell_draw_context(ctx, item, descriptor)
 
     cells := Matrix_Draw_Cells{}
-    cell_program, cells_ok := matrix_resolve_cells(ctx, item, rows, cols, &cells)
+    cell_program, cells_ok := matrix_resolve_cells({
+        cell_ctx, item, rows, cols, cell_style, descriptor, &cells})
     if !cells_ok {
         return
     }
 
-    geometry := matrix_draw_geometry(ctx, style, item, rows, cols)
+    geometry := matrix_draw_geometry(ctx, style, item, descriptor)
 
     draw_matrix_cells(Matrix_Cell_Draw{
-        ctx = ctx,
+        ctx = cell_ctx,
         cell_program = cell_program,
         cells = &cells,
         geometry = geometry,
+        math_style = cell_style,
         draw_x = draw_x,
         item_y = item_y,
     })
@@ -1121,13 +1748,13 @@ draw_recursive_matrix_item :: #force_inline proc(
 //   Draw one matrix cell at its aligned position within the grid.
 draw_matrix_cell :: #force_inline proc(
     ctx: Layout_Draw_Context,
-    cell_program: ^core.Dynview_Math_Program,
+    cell_program: ^dynviewmodel.Dynview_Math_Program,
     cell_index: int,
-    cell_item: core.Dynview_Layout_Item,
+    cell_item: dynviewmodel.Dynview_Layout_Item,
     position: Program_Draw_Position) {
 
     command_start := cell_program^.command_start + cell_index
-    cell_single_program := core.Dynview_Math_Program{
+    cell_single_program := dynviewmodel.Dynview_Math_Program{
         valid = true,
         command_start = command_start,
         command_count = 1,
@@ -1141,81 +1768,183 @@ draw_matrix_cell :: #force_inline proc(
         position)
 }
 
+//   Draw one aligned row of measured matrix cells.
+draw_matrix_row :: proc(
+    d: Matrix_Cell_Draw,
+    row: int,
+    row_baseline: f32) {
+
+    ctx := d.ctx
+    col_x := d.draw_x + d.geometry.column_boundaries[0]
+    for col in 0..<d.geometry.cols {
+        cell_index := row * d.geometry.cols + col
+        command_index := d.cell_program^.command_start + cell_index
+        command := ctx.runtime^.compile_cache.math_commands[command_index]
+        cell_item, ok := dynmath.math_program_item({
+            cache = &ctx.runtime^.compile_cache,
+            buffer = &ctx.runtime^.command_buffer,
+            cmd = command, font_size = ctx.font_size,
+            command_index = command_index,
+            math_style = d.math_style,
+        })
+        if ok {
+            cell_x := dynmath.matrix_aligned_cell_x(
+                col_x, d.cells.col_widths[col], cell_item.draw_width,
+                d.geometry.alignments[col])
+            draw_matrix_cell(ctx, d.cell_program, cell_index, cell_item,
+                Program_Draw_Position{cell_x, row_baseline, 0, d.math_style, 0})
+        }
+        col_x += d.cells.col_widths[col]
+        col_x += d.geometry.column_boundaries[col + 1]
+    }
+}
+
+//   Draw all rules carried by one column boundary.
+draw_matrix_vertical_boundary_rules :: proc(
+    d: Matrix_Cell_Draw, boundary_x, table_height: f32, boundary: int) {
+
+    count := int(d.geometry.vertical_rule_counts[boundary])
+    if count == 0 {
+        return
+    }
+    occupied := f32(count) * d.geometry.rule_thickness +
+        f32(count - 1) * d.geometry.rule_separation
+    free_space := d.geometry.column_boundaries[boundary] - occupied
+    rule_x := boundary_x + free_space * 0.5
+    if boundary == 0 {
+        rule_x = boundary_x
+    } else if boundary == d.geometry.cols {
+        rule_x = boundary_x + free_space
+    }
+    for _ in 0..<count {
+        center_x := rule_x + d.geometry.rule_thickness * 0.5
+        _ = native.draw_encoder_line(d.ctx.encoder,
+            {center_x, d.item_y}, {center_x, d.item_y + table_height},
+            d.geometry.rule_thickness, d.geometry.color)
+        rule_x += d.geometry.rule_thickness + d.geometry.rule_separation
+    }
+}
+
+//   Draw every vertical table rule from sealed boundary spans.
+draw_matrix_vertical_rules :: proc(d: Matrix_Cell_Draw) {
+    table_height: f32
+    for row in 0..<d.geometry.rows {
+        table_height += d.cells.row_ascents[row] + d.cells.row_descents[row]
+    }
+    for boundary in 0..=d.geometry.rows {
+        table_height += d.geometry.row_boundaries[boundary]
+    }
+    boundary_x := d.draw_x
+    for boundary in 0..=d.geometry.cols {
+        draw_matrix_vertical_boundary_rules(d, boundary_x, table_height, boundary)
+        boundary_x += d.geometry.column_boundaries[boundary]
+        if boundary < d.geometry.cols {
+            boundary_x += d.cells.col_widths[boundary]
+        }
+    }
+}
+
+//   Draw all rules carried by one row boundary.
+draw_matrix_horizontal_boundary_rules :: proc(
+    d: Matrix_Cell_Draw, boundary_y, table_width: f32, boundary: int) {
+
+    count := int(d.geometry.horizontal_rule_counts[boundary])
+    if count == 0 {
+        return
+    }
+    rule_y := boundary_y + d.geometry.row_rule_offsets[boundary]
+    for _ in 0..<count {
+        center_y := rule_y + d.geometry.rule_thickness * 0.5
+        _ = native.draw_encoder_line(d.ctx.encoder,
+            {d.draw_x, center_y}, {d.draw_x + table_width, center_y},
+            d.geometry.rule_thickness, d.geometry.color)
+        rule_y += d.geometry.rule_thickness + d.geometry.rule_separation
+    }
+}
+
+//   Draw every horizontal table rule from sealed boundary spans.
+draw_matrix_horizontal_rules :: proc(d: Matrix_Cell_Draw) {
+    table_width: f32
+    for col in 0..<d.geometry.cols {
+        table_width += d.cells.col_widths[col]
+    }
+    for boundary in 0..=d.geometry.cols {
+        table_width += d.geometry.column_boundaries[boundary]
+    }
+    boundary_y := d.item_y
+    for boundary in 0..=d.geometry.rows {
+        draw_matrix_horizontal_boundary_rules(d, boundary_y, table_width, boundary)
+        boundary_y += d.geometry.row_boundaries[boundary]
+        if boundary < d.geometry.rows {
+            boundary_y += d.cells.row_ascents[boundary] + d.cells.row_descents[boundary]
+        }
+    }
+}
+
 //   Draw every measured matrix cell at its aligned position.
 draw_matrix_cells :: proc(d: Matrix_Cell_Draw) {
-    ctx := d.ctx
     cells := d.cells
     geometry := d.geometry
-    row_top := d.item_y
+    draw_matrix_vertical_rules(d)
+    draw_matrix_horizontal_rules(d)
+    row_top := d.item_y + geometry.row_boundaries[0]
     for row in 0..<geometry.rows {
         row_baseline := row_top + cells.row_ascents[row]
-        col_x := d.draw_x
-        for col in 0..<geometry.cols {
-            cell_index := row * geometry.cols + col
-            cell_item := cells.items[cell_index]
-            cell_x := dynview.matrix_aligned_cell_x(
-                col_x,
-                cells.col_widths[col],
-                cell_item.draw_width,
-                geometry.alignments[col])
-            draw_matrix_cell(ctx, d.cell_program, cell_index, cell_item,
-                Program_Draw_Position{cell_x, row_baseline})
-
-            col_x += cells.col_widths[col]
-            if col + 1 < geometry.cols {
-                col_x += geometry.column_gap
-            }
-        }
-
+        draw_matrix_row(d, row, row_baseline)
         row_top += cells.row_ascents[row] + cells.row_descents[row]
-        if row + 1 < geometry.rows {
-            row_top += geometry.row_gap
-        }
+        row_top += geometry.row_boundaries[row + 1]
     }
 }
 
 //   Measure every matrix cell, accumulating items, column widths, row extents.
 measure_matrix_draw_cells :: proc(
-    ctx: Layout_Draw_Context,
-    cell_program: ^core.Dynview_Math_Program,
-    rows, cols: int,
-    cells: ^Matrix_Draw_Cells) -> bool {
+    input: Matrix_Cell_Resolve,
+    cell_program: ^dynviewmodel.Dynview_Math_Program) -> bool {
 
-    runtime := ctx.runtime
-    font_size := ctx.font_size
+    runtime := input.ctx.runtime
+    font_size := input.ctx.font_size
+    strut_ascent, strut_descent :=
+        dynmath.math_table_row_strut(input.descriptor^.row_spacing, font_size)
 
-    for row in 0..<rows {
-        for col in 0..<cols {
-            cell_index := row * cols + col
+    for row in 0..<input.rows {
+        input.cells.row_ascents[row] = strut_ascent
+        input.cells.row_descents[row] = strut_descent
+        for col in 0..<input.cols {
+            cell_index := row * input.cols + col
             cmd_index := cell_program^.command_start + cell_index
             cell_cmd := runtime^.compile_cache.math_commands[cmd_index]
-            cell_item, cell_ok := dynview.math_program_item(
-                &runtime^.compile_cache,
-                &runtime^.command_buffer,
-                cell_cmd,
-                font_size)
+            cell_item, cell_ok := dynmath.math_program_item({
+                cache = &runtime^.compile_cache,
+                buffer = &runtime^.command_buffer,
+                cmd = cell_cmd,
+                font_size = font_size,
+                command_index = cmd_index,
+                math_style = input.math_style,
+            })
             if !cell_ok {
                 return false
             }
 
-            cells.items[cell_index] = cell_item
-            cells.col_widths[col] = max(cells.col_widths[col], cell_item.draw_width)
-            cells.row_ascents[row] = max(cells.row_ascents[row], cell_item.ascent)
-            cells.row_descents[row] = max(cells.row_descents[row], cell_item.descent)
+            input.cells.col_widths[col] =
+                max(input.cells.col_widths[col], cell_item.draw_width)
+            input.cells.row_ascents[row] =
+                max(input.cells.row_ascents[row], cell_item.ascent)
+            input.cells.row_descents[row] =
+                max(input.cells.row_descents[row], cell_item.descent)
         }
     }
     return true
 }
 
-//   Draw one recursive structured math item variant routed by layout item kind.
-draw_recursive_structured_item :: #force_inline proc(d: Math_Item_Draw) {
+//   Draw the primary recursive item kinds and report whether one matched.
+draw_primary_structured_item :: #force_inline proc(d: Math_Item_Draw) -> bool {
     ctx := d.ctx
     style := d.style
     item := d.item
     draw_x := d.draw_x
     item_y := d.item_y
 
-    switch item.kind {
+    #partial switch item.kind {
     case .Script_Attach:
         draw_recursive_script_attach_item(ctx, item, draw_x, item_y)
     case .Frac:
@@ -1224,17 +1953,181 @@ draw_recursive_structured_item :: #force_inline proc(d: Math_Item_Draw) {
         draw_recursive_stretch_delimiter_item(ctx, style, item, draw_x, item_y)
     case .Matrix:
         draw_recursive_matrix_item(ctx, style, item, draw_x, item_y)
+    case .Style_Override:
+        draw_recursive_style_override_item(ctx, item, draw_x, item_y)
+    case:
+        return false
+    }
+    return true
+}
+
+//   Draw one recursive structured math item variant routed by layout item kind.
+draw_recursive_structured_item :: #force_inline proc(d: Math_Item_Draw) {
+    if draw_primary_structured_item(d) {
+        return
+    }
+    #partial switch d.item.kind {
+    case .Stack:
+        draw_recursive_stack_item(d.ctx, d.item, d.draw_x, d.item_y)
     case .Large_Op:
         draw_large_op_recursive_item(d)
     case .Accent_Bar:
-        draw_recursive_accent_item(ctx, style, item, draw_x, item_y)
+        draw_recursive_accent_item(d.ctx, d.style, d.item, d.draw_x, d.item_y)
     case .Radical_Bar:
-        draw_recursive_radical_item(ctx, item, draw_x, item_y)
+        draw_recursive_radical_item(d.ctx, d.item, d.draw_x, d.item_y)
     case .Text_Run, .Math_Glyph_Run, .Math_Block,
         .Inline_Line, .Inline_Box, .Inline_Circle, .Inline_Filled_Box,
         .Inline_Filled_Circle, .Inline_Pie_Section, .Inline_Perpendicular,
         .Inline_Triangle, .Inline_Pentagon:
     }
+}
+
+//   Draw one ruleless two-part stack from its sealed child positions.
+draw_recursive_stack_item :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    draw_x, item_y: f32) {
+
+    programs, ok := fraction_resolve_programs(ctx, item)
+    if !ok {
+        return
+    }
+    baseline_y := item_y + item.ascent
+    style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    top_style, top_size := dynmath.math_child_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size,
+        style, .Fraction_Numerator)
+    bottom_style, bottom_size := dynmath.math_child_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size,
+        style, .Fraction_Denominator)
+    if item.operator_limits == 1 {
+        bottom_style, bottom_size = style, item.math_font_size
+    } else if item.operator_limits == 2 {
+        top_style, top_size = style, item.math_font_size
+        bottom_style, bottom_size = dynmath.math_child_font_size(
+            &ctx.runtime^.compile_cache, item.math_font_size,
+            style, .Superscript)
+    }
+    draw_math_program_at(ctx, programs.numerator^, Program_Draw_Position{
+        draw_x + item.fraction_numerator_x,
+        baseline_y + item.fraction_numerator_baseline, top_size, top_style, 0})
+    draw_math_program_at(ctx, programs.denominator^, Program_Draw_Position{
+        draw_x + item.fraction_denominator_x,
+        baseline_y + item.fraction_denominator_baseline, bottom_size, bottom_style, 0})
+}
+
+//   Draw one scoped child program under its explicit math style.
+draw_recursive_style_override_item :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Layout_Item,
+    draw_x, item_y: f32) {
+
+    child, ok := dynmath.math_program_from_id(
+        &ctx.runtime^.compile_cache, item.math_program_id)
+    if !ok {
+        return
+    }
+    parent := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.math_style_level), item.math_style_cramped}
+    target := dynmath.Math_Style{
+        dynmath.Math_Style_Level(item.radical_mode), false}
+    target_size := dynmath.math_target_font_size(
+        &ctx.runtime^.compile_cache, item.math_font_size, parent, target)
+    draw_math_program_at(ctx, child^, Program_Draw_Position{
+        draw_x, item_y + item.ascent, target_size, target, 0})
+}
+
+//   Overlay exact cached glyph and limit dimensions used by measurement.
+large_op_apply_cached_metrics :: proc(
+    d: Math_Item_Draw, metrics: ^Large_Op_Metrics) {
+
+    glyph, glyph_ok := cached_math_site_metrics(
+        d.ctx, d.item, .Primary, metrics^.glyph_font_size)
+    if glyph_ok {
+        metrics^.glyph_ascent = glyph.ascent
+        metrics^.glyph_descent = glyph.descent
+        metrics^.glyph_width = glyph.draw_width
+    }
+    if d.item.secondary_math_program_id <= 0 {
+        sup, sup_ok := cached_math_site_metrics(
+            d.ctx, d.item, .Superscript, metrics^.limit_font_size)
+        if sup_ok {
+            metrics^.sup_width = sup.draw_width
+            metrics^.sup_height = sup.ascent + sup.descent
+            metrics^.sup_ascent = sup.ascent
+        }
+    }
+    if d.item.tertiary_math_program_id <= 0 {
+        sub, sub_ok := cached_math_site_metrics(
+            d.ctx, d.item, .Subscript, metrics^.limit_font_size)
+        if sub_ok {
+            metrics^.sub_width = sub.draw_width
+            metrics^.sub_height = sub.ascent + sub.descent
+            metrics^.sub_ascent = sub.ascent
+        }
+    }
+}
+
+//   Override one large-operator limit with a recursive program's metrics.
+large_op_apply_program_limit :: proc(
+    d: Math_Item_Draw,
+    metrics: ^Large_Op_Metrics,
+    site: dynviewmodel.Dynview_Shaped_Site) {
+
+    program_id := d.item.secondary_math_program_id
+    if site == .Subscript {
+        program_id = d.item.tertiary_math_program_id
+    }
+    if program_id <= 0 {
+        return
+    }
+    program, found := dynmath.math_program_from_id(
+        &d.ctx.runtime^.compile_cache, program_id)
+    if !found {
+        return
+    }
+    if site == .Superscript {
+        metrics^.sup_cols = 1
+        metrics^.sup_width = program^.draw_width
+        metrics^.sup_height = program^.ascent + program^.descent
+        metrics^.sup_ascent = program^.ascent
+    } else {
+        metrics^.sub_cols = 1
+        metrics^.sub_width = program^.draw_width
+        metrics^.sub_height = program^.ascent + program^.descent
+        metrics^.sub_ascent = program^.ascent
+    }
+}
+
+//   Populate synthetic script and limit metrics for one large operator.
+large_op_measure_limits :: proc(d: Math_Item_Draw, m: ^Large_Op_Metrics) {
+    ctx := d.ctx
+    item := d.item
+    m^.script_style = dyncore.style_by_id(item.script_style_id)
+    m^.script_font = resolve_font_for_style(ctx.state, m^.script_style, d.resolved_font)
+    limit_scale := max(0.2, item.script_scale)
+    m^.limit_font_size = max(1.0, ctx.font_size * limit_scale)
+    limit_ascent, limit_descent :=
+        dyncore.style_ascent_descent(m^.script_style, m^.limit_font_size)
+    m^.sup_height = limit_ascent + limit_descent
+    m^.sub_height = m^.sup_height
+    m^.sup_ascent = limit_ascent
+    m^.sub_ascent = limit_ascent
+    m^.limit_advance = dyncore.effective_advance(m^.script_style,
+        ctx.runtime^.compile_cache.last_cell_width) * limit_scale
+    m^.limit_gap = dynmath.large_op_limit_gap_for_kind(
+        item.large_op_kind, ctx.font_size, item.script_gap)
+    m^.sup_text = dyncore.text_span_from_buffer(&ctx.runtime^.command_buffer,
+        item.script_sup_text_offset, item.script_sup_text_len)
+    m^.sub_text = dyncore.text_span_from_buffer(&ctx.runtime^.command_buffer,
+        item.script_sub_text_offset, item.script_sub_text_len)
+    m^.sup_cols = dyncore.text_codepoint_count_span(m^.sup_text, 0, len(m^.sup_text))
+    m^.sub_cols = dyncore.text_codepoint_count_span(m^.sub_text, 0, len(m^.sub_text))
+    m^.sup_width = f32(m^.sup_cols) * m^.limit_advance
+    m^.sub_width = f32(m^.sub_cols) * m^.limit_advance
+    large_op_apply_program_limit(d, m, .Superscript)
+    large_op_apply_program_limit(d, m, .Subscript)
 }
 
 //   Compute glyph and limit metrics for one large operator item.
@@ -1245,38 +2138,87 @@ large_op_metrics :: proc(d: Math_Item_Draw) -> Large_Op_Metrics {
     text := d.text
     m := Large_Op_Metrics{}
 
-    glyph_scale := dynview.large_op_glyph_scale(item.large_op_kind)
+    glyph_scale := dynmath.large_op_glyph_scale(item.large_op_kind)
     m.glyph_font_size = max(1.0, ctx.font_size * glyph_scale)
     m.glyph_ascent, m.glyph_descent =
-        dynview.style_ascent_descent(style, m.glyph_font_size)
-    glyph_cols := max(1, dynview.text_codepoint_count_span(text, 0, len(text)))
-    glyph_advance := dynview.effective_advance(style,
-        ctx.runtime^.compile_cache.last_wrap_advance) * glyph_scale
+        dyncore.style_ascent_descent(style, m.glyph_font_size)
+    glyph_cols := max(1, dyncore.text_codepoint_count_span(text, 0, len(text)))
+    glyph_advance := dyncore.effective_advance(style,
+        ctx.runtime^.compile_cache.last_cell_width) * glyph_scale
     m.glyph_width = f32(glyph_cols) * glyph_advance
 
-    m.script_style = dynview.style_by_id(item.script_style_id)
-    m.script_font = resolve_font_for_style(ctx.state, m.script_style, d.resolved_font)
-    limit_scale := dynview.large_op_limit_scale(max(0.2, item.script_scale))
-    m.limit_font_size = max(1.0, ctx.font_size * limit_scale)
-    limit_ascent, limit_descent :=
-        dynview.style_ascent_descent(m.script_style, m.limit_font_size)
-    m.limit_height = limit_ascent + limit_descent
-    m.limit_advance = dynview.effective_advance(m.script_style,
-        ctx.runtime^.compile_cache.last_wrap_advance) * limit_scale
-    m.limit_gap = dynview.large_op_limit_gap_for_kind(
-        item.large_op_kind, ctx.font_size, item.script_gap)
-
-    m.sup_text = dynview.text_span_from_buffer(
-        &ctx.runtime^.command_buffer,
-        item.script_sup_text_offset,
-        item.script_sup_text_len)
-    m.sub_text = dynview.text_span_from_buffer(
-        &ctx.runtime^.command_buffer,
-        item.script_sub_text_offset,
-        item.script_sub_text_len)
-    m.sup_cols = dynview.text_codepoint_count_span(m.sup_text, 0, len(m.sup_text))
-    m.sub_cols = dynview.text_codepoint_count_span(m.sub_text, 0, len(m.sub_text))
+    large_op_measure_limits(d, &m)
+    large_op_apply_cached_metrics(d, &m)
     return m
+}
+
+//   Compute the stacked superscript or subscript top within a large operator box.
+large_op_limit_top :: #force_inline proc(
+    m: Large_Op_Metrics,
+    item_y: f32,
+    site: dynviewmodel.Dynview_Shaped_Site) -> f32 {
+
+    if site == .Superscript {
+        return item_y
+    }
+    top := item_y + m.glyph_ascent + m.glyph_descent + m.limit_gap
+    if m.sup_cols > 0 {
+        top += m.sup_height + m.limit_gap
+    }
+    return top
+}
+
+//   Resolve one operator limit's fallback or sealed position.
+large_op_limit_position :: proc(
+    d: Math_Item_Draw,
+    m: Large_Op_Metrics,
+    site: dynviewmodel.Dynview_Shaped_Site) -> Large_Op_Limit_Position {
+
+    width := m.sup_width
+    if site == .Subscript {
+        width = m.sub_width
+    }
+    position := Large_Op_Limit_Position{
+        d.draw_x + (d.item.draw_width-width)*0.5,
+        large_op_limit_top(m, d.item_y, site)}
+    if !d.item.script_geometry_valid {
+        return position
+    }
+    baseline := d.item.script_sup_baseline
+    ascent := m.sup_ascent
+    position.x = d.draw_x + d.item.script_sup_x
+    if site == .Subscript {
+        baseline = d.item.script_sub_baseline
+        ascent = m.sub_ascent
+        position.x = d.draw_x + d.item.script_sub_x
+    }
+    position.top = d.item_y + d.item.ascent + baseline - ascent
+    return position
+}
+
+//   Resolve and draw one recursive large-operator limit program.
+large_op_draw_program_limit :: proc(
+    d: Math_Item_Draw,
+    position: Large_Op_Limit_Position,
+    program_id: i32,
+    role: dynmath.Math_Child_Style_Role) -> bool {
+
+    if program_id <= 0 {
+        return false
+    }
+    program, found := dynmath.math_program_from_id(
+        &d.ctx.runtime^.compile_cache, program_id)
+    if !found {
+        return true
+    }
+    math_style := dynmath.Math_Style{
+        dynmath.Math_Style_Level(d.item.math_style_level),
+        d.item.math_style_cramped}
+    child_style, child_size := dynmath.math_child_font_size(
+        &d.ctx.runtime^.compile_cache, d.item.math_font_size, math_style, role)
+    draw_math_program_at(d.ctx, program^, Program_Draw_Position{
+        position.x, position.top + program^.ascent, child_size, child_style, 0})
+    return true
 }
 
 //   Draw the stacked superscript or subscript limit for one large operator.
@@ -1284,13 +2226,58 @@ large_op_draw_limit :: #force_inline proc(
     d: Math_Item_Draw,
     m: Large_Op_Metrics,
     text: string,
-    cols: int,
-    top: f32) {
+    site: dynviewmodel.Dynview_Shaped_Site) {
 
-    width := f32(cols) * m.limit_advance
-    x := d.draw_x + (d.item.draw_width - width) * 0.5
-    view_core.ui_text_f32(text, x, top, m.script_style.color,
-        view_core.Ui_Text_Font{m.script_font, m.limit_font_size})
+    position := large_op_limit_position(d, m, site)
+    program_id := d.item.secondary_math_program_id
+    role: dynmath.Math_Child_Style_Role = .Superscript
+    if site == .Subscript {
+        program_id = d.item.tertiary_math_program_id
+        role = .Subscript
+    }
+    if large_op_draw_program_limit(d, position, program_id, role) {
+        return
+    }
+    if draw_cached_math_site({
+        ctx = d.ctx, item = d.item, site = site,
+        position = {position.x, position.top}, font_size = m.limit_font_size,
+        color = m.script_style.color}) {
+        return
+    }
+    draw_math_text({
+        encoder = d.ctx.encoder,
+        state = d.ctx.state,
+        style = m.script_style,
+        text = text,
+        position = {position.x, position.top},
+        font = {m.script_font, m.limit_font_size},
+    })
+}
+
+//   Resolve and draw one sealed display-operator glyph through bounded page demand.
+draw_large_op_variant :: proc(d: Math_Item_Draw) -> bool {
+    item := d.item
+    cache := &d.ctx.runtime^.compile_cache
+    if !item.operator_geometry_valid || item.operator_glyph_id == 0 ||
+        item.operator_font_generation != cache^.shaped_font_generation ||
+        item.operator_glyph_font_size <= 0 || cache^.math_constants.base_pixel_size <= 0 {
+        return false
+    }
+    glyphs := [1]fontmodel.Shaped_Glyph{{glyph_id = item.operator_glyph_id}}
+    resolver := font.cache_terminal_resolver(&d.ctx.state^.font_cache)
+    return viewtext.ui_text_cached_shaped_run({
+        encoder = d.ctx.encoder,
+        resolver = resolver,
+        key = .Math_Regular,
+        glyphs = glyphs[:],
+        position = {
+            d.draw_x + item.operator_glyph_x,
+            d.item_y + item.operator_glyph_line_top,
+        },
+        color = d.style.color,
+        font_size = item.operator_glyph_font_size,
+        base_pixel_size = cache^.math_constants.base_pixel_size,
+    })
 }
 
 //   Draw one display-style large operator with stacked limits above and below.
@@ -1299,19 +2286,25 @@ draw_large_op_recursive_item :: #force_inline proc(d: Math_Item_Draw) {
 
     glyph_top := d.item_y
     if m.sup_cols > 0 {
-        glyph_top += m.limit_height + m.limit_gap
+        glyph_top += m.sup_height + m.limit_gap
     }
     glyph_x := d.draw_x + (d.item.draw_width - m.glyph_width) * 0.5
-    view_core.ui_text_f32(d.text, glyph_x, glyph_top, d.style.color,
-        view_core.Ui_Text_Font{d.resolved_font, m.glyph_font_size})
+    if !draw_large_op_variant(d) && !draw_cached_math_site({
+        ctx = d.ctx, item = d.item, site = .Primary,
+        position = {glyph_x, glyph_top}, font_size = m.glyph_font_size,
+        color = d.style.color}) {
+        draw_math_text({
+            encoder = d.ctx.encoder,
+            state = d.ctx.state, style = d.style, text = d.text,
+            position = {glyph_x, glyph_top},
+            font = {d.resolved_font, m.glyph_font_size}})
+    }
 
     if m.sup_cols > 0 {
-        large_op_draw_limit(d, m, m.sup_text, m.sup_cols,
-            glyph_top - m.limit_gap - m.limit_height)
+        large_op_draw_limit(d, m, m.sup_text, .Superscript)
     }
     if m.sub_cols > 0 {
-        large_op_draw_limit(d, m, m.sub_text, m.sub_cols,
-            glyph_top + m.glyph_ascent + m.glyph_descent + m.limit_gap)
+        large_op_draw_limit(d, m, m.sub_text, .Subscript)
     }
 }
 
@@ -1322,8 +2315,8 @@ draw_large_op_recursive_item :: #force_inline proc(d: Math_Item_Draw) {
 //   - ok: true when the item text range is valid.
 cached_item_resolve_text :: proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     item_x: f32) -> (Cached_Item_Text, bool) {
 
     out := Cached_Item_Text{}
@@ -1332,11 +2325,12 @@ cached_item_resolve_text :: proc(
     if item.text_offset < 0 || item.text_len < 0 {
         return out, false
     }
-    if text_end > runtime^.command_buffer.text_bytes_len {
+    text_bytes := dyncore.command_buffer_text(&runtime^.command_buffer)
+    if text_end > len(text_bytes) {
         return out, false
     }
 
-    out.text = string(runtime^.command_buffer.text_bytes[item.text_offset:text_end])
+    out.text = string(text_bytes[item.text_offset:text_end])
     out.resolved_font = resolve_font_for_style(ctx.state, style, ctx.font)
     out.draw_x = text_item_draw_x(ctx.panel, style, item, item_x)
     return out, true
@@ -1345,13 +2339,15 @@ cached_item_resolve_text :: proc(
 //   Build the text-run draw params for one resolved cached text item.
 text_run_draw_params :: #force_inline proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     resolved: Cached_Item_Text,
     item_y: f32) -> Text_Run_Draw_Params {
 
     text_color := item.has_brush_color ? item.brush_color : style.color
     return Text_Run_Draw_Params{
+        encoder = ctx.encoder,
+        state = ctx.state,
         runtime = ctx.runtime,
         font_size = ctx.font_size,
         style = style,
@@ -1367,8 +2363,8 @@ text_run_draw_params :: #force_inline proc(
 //   Dispatch one resolved cached text item to its kind-specific renderer.
 draw_cached_text_item_dispatch :: proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     resolved: Cached_Item_Text,
     item_y: f32) {
 
@@ -1376,7 +2372,7 @@ draw_cached_text_item_dispatch :: proc(
 
     switch item.kind {
     case .Script_Attach, .Frac, .Stretch_Delimiter,
-        .Matrix, .Large_Op, .Accent_Bar, .Radical_Bar:
+        .Matrix, .Style_Override, .Stack, .Large_Op, .Accent_Bar, .Radical_Bar:
         draw_recursive_structured_item(Math_Item_Draw{
             ctx = ctx,
             style = style,
@@ -1399,8 +2395,8 @@ draw_cached_text_item_dispatch :: proc(
 //   Draw one cached text item.
 draw_cached_text_item :: proc(
     ctx: Layout_Draw_Context,
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    style: dyncore.Dynview_Text_Style,
+    item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32) {
 
     resolved, text_ok := cached_item_resolve_text(ctx, style, item, item_x)
@@ -1410,259 +2406,354 @@ draw_cached_text_item :: proc(
     draw_cached_text_item_dispatch(ctx, style, item, resolved, item_y)
 }
 
-//   Draw one cached text-run item with optional underline.
-draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
+// draw_regular_text_run draws one ordinary cached shaped text run.
+draw_regular_text_run :: proc(
+    params: Text_Run_Draw_Params, text_font: viewtext.Ui_Text_Font) {
+    resolver := font.cache_terminal_resolver(&params.state^.font_cache)
+    viewtext.ui_text_shaped({
+        encoder = params.encoder,
+        resolver = resolver,
+        key = style_font_key(params.style),
+        text = params.text,
+        position = {params.draw_x, params.item_y},
+        color = params.text_color,
+        font = text_font,
+    })
+}
 
-    runtime := params.runtime
-    font_size := params.font_size
-    style := params.style
-    item := params.item
-    text := params.text
-    resolved_font := params.resolved_font
-    text_color := params.text_color
-    draw_x := params.draw_x
-    item_y := params.item_y
+// draw_cached_math_text_run attempts one resident math glyph run.
+draw_cached_math_text_run :: proc(
+    params: Text_Run_Draw_Params, text_font: viewtext.Ui_Text_Font) -> bool {
+    if params.item.kind != .Math_Glyph_Run {
+        return false
+    }
+    return draw_cached_math_site({
+        ctx = {
+            encoder = params.encoder,
+            state = params.state,
+            runtime = params.runtime,
+            font_size = params.font_size,
+        },
+        item = params.item,
+        site = .Primary,
+        position = {params.draw_x, params.item_y},
+        font_size = text_font.font_size,
+        color = params.text_color,
+    })
+}
 
-    view_core.ui_text(text, int(draw_x), int(item_y), text_color,
-        view_core.Ui_Text_Font{resolved_font, font_size})
-    if !style.underline {
+//   Draw the shaped or math content of one resolved text run.
+draw_text_run_content :: proc(
+    params: Text_Run_Draw_Params, text_font: viewtext.Ui_Text_Font) {
+    if params.item.kind == .Text_Run && params.state != nil {
+        draw_regular_text_run(params, text_font)
         return
     }
-
-    underline_width := f32(item.col_span) * dynview.effective_advance(
-        style, runtime^.compile_cache.last_wrap_advance)
-    underline_y := item_y + font_size + 1
-    rl.DrawLineEx(
-        rl.Vector2{draw_x, underline_y},
-        rl.Vector2{draw_x + underline_width, underline_y},
-        1,
-        text_color)
-}
-
-//   Draw one inline box outline with per-edge colors.
-draw_inline_box_outline :: #force_inline proc(
-    item: core.Dynview_Layout_Item,
-    item_x, item_y: f32,
-    color: rl.Color) {
-
-    top_left := rl.Vector2{item_x, item_y}
-    top_right := rl.Vector2{item_x + item.draw_width, item_y}
-    bottom_left := rl.Vector2{item_x, item_y + item.draw_height}
-    bottom_right := rl.Vector2{item_x + item.draw_width, item_y + item.draw_height}
-    stroke := max(1.0, item.inline_atom_stroke)
-    rl.DrawLineEx(top_left, top_right, stroke,
-        shape_edge_color_or(item.shape_edge_color_1, color))
-    rl.DrawLineEx(top_right, bottom_right, stroke,
-        shape_edge_color_or(item.shape_edge_color_2, color))
-    rl.DrawLineEx(bottom_right, bottom_left, stroke,
-        shape_edge_color_or(item.shape_edge_color_3, color))
-    rl.DrawLineEx(bottom_left, top_left, stroke,
-        shape_edge_color_or(item.shape_edge_color_4, color))
-}
-
-//   Draw one inline circle outline with optional inner stroke.
-draw_inline_circle_outline :: #force_inline proc(
-    item: core.Dynview_Layout_Item,
-    item_x, item_y: f32,
-    color: rl.Color) {
-
-    center := rl.Vector2{item_x + item.draw_width * 0.5,
-        item_y + item.draw_height * 0.5}
-    rl.DrawCircleLines(i32(center.x), i32(center.y), item.draw_height * 0.5, color)
-    if item.inline_atom_stroke > 1 {
-        rl.DrawCircleLines(
-            i32(center.x),
-            i32(center.y),
-            max(1.0, item.draw_height * 0.5 - 1),
-            color)
+    if draw_cached_math_text_run(params, text_font) {
+        return
     }
+    draw_math_text({
+        encoder = params.encoder,
+        state = params.state,
+        style = params.style,
+        text = params.text,
+        position = {params.draw_x, params.item_y},
+        font = text_font,
+    })
 }
 
-//   Draw one cached inline shape item.
-draw_cached_inline_basic_item :: #force_inline proc(
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
-    item_x, item_y: f32,
-    color: rl.Color) {
-
-    switch item.kind {
-    case .Inline_Line:
-        center_y := item_y + item.draw_height * 0.5
-        rl.DrawLineEx(
-            rl.Vector2{item_x, center_y},
-            rl.Vector2{item_x + item.draw_width, center_y},
-            max(1.0, item.inline_atom_stroke),
-            color)
-    case .Inline_Box:
-        draw_inline_box_outline(item, item_x, item_y, color)
-    case .Inline_Circle:
-        draw_inline_circle_outline(item, item_x, item_y, color)
-    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
-         .Stretch_Delimiter, .Matrix, .Large_Op,
-         .Accent_Bar, .Radical_Bar, .Inline_Filled_Box, .Inline_Filled_Circle,
-         .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
+//   Draw the optional underline for one resolved text run.
+draw_text_run_underline :: proc(params: Text_Run_Draw_Params) {
+    if !params.style.underline {
+        return
     }
+    underline_width := f32(params.item.col_span) * dyncore.effective_advance(
+        params.style, params.runtime^.compile_cache.last_cell_width)
+    underline_y := params.item_y + params.font_size + 1
+    _ = native.draw_encoder_line(params.encoder,
+        {params.draw_x, underline_y},
+        {params.draw_x + underline_width, underline_y}, 1,
+        params.text_color)
 }
 
-//   Draw one cached filled inline shape item.
-draw_cached_inline_filled_item :: #force_inline proc(
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
-    item_x, item_y: f32,
-    color: rl.Color) {
-
-    switch item.kind {
-    case .Inline_Filled_Box:
-        rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
-        rl.DrawRectangleRec(rect, color)
-        if item.inline_outline_stroke > 0 {
-            rl.DrawRectangleLinesEx(
-                rect, max(1.0, item.inline_outline_stroke), style.color)
-        }
-    case .Inline_Filled_Circle:
-        center := rl.Vector2{item_x + item.draw_width * 0.5,
-            item_y + item.draw_height * 0.5}
-        radius := item.draw_height * 0.5
-        rl.DrawCircleV(center, radius, color)
-        if item.inline_outline_stroke > 0 {
-            stroke := max(1.0, item.inline_outline_stroke)
-            rl.DrawCircleLines(i32(center.x), i32(center.y), radius, style.color)
-            if stroke > 1 {
-                rl.DrawCircleLines(i32(center.x), i32(center.y),
-                    max(1.0, radius - 1), style.color)
-            }
-        }
-    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
-         .Stretch_Delimiter, .Matrix, .Large_Op,
-         .Accent_Bar, .Radical_Bar, .Inline_Line, .Inline_Box,
-         .Inline_Circle, .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle,
-         .Inline_Pentagon:
-    }
-}
-
-//   Draw one inline pie-section atom, filled or outline-only.
-draw_inline_pie_section_item :: #force_inline proc(
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
-    item_x, item_y: f32,
-    color: rl.Color) {
-
-    center := rl.Vector2{item_x + item.pie_center_offset_x,
-        item_y + item.pie_center_offset_y}
-    radius := max(
-        max(item.pie_center_offset_x, item.draw_width - item.pie_center_offset_x),
-        max(item.pie_center_offset_y, item.draw_height - item.pie_center_offset_y))
-    outline_color := item.has_outline_color ? item.outline_color : style.color
-    stroke := max(1.0, item.inline_outline_stroke)
-    if item.pie_is_filled {
-        draw_filled_pie_section(center, radius,
-            item.pie_start_angle_degrees, item.pie_end_angle_degrees, color)
-    }
-    if !item.pie_is_filled || item.inline_outline_stroke > 0 {
-        draw_pie_section_outline(center, radius,
-            item.pie_start_angle_degrees, item.pie_end_angle_degrees,
-            Pie_Section_Style{stroke, outline_color})
-    }
-}
-
-//   Draw one inline triangle atom with optional fill and per-edge colors.
-draw_inline_triangle_item :: #force_inline proc(
-    item: core.Dynview_Layout_Item,
-    item_x, item_y: f32,
-    color: rl.Color) {
-
-    rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
-    draw_triangle_shape(rect,
-        item.shape_is_filled,
-        Triangle_Colors{
-            color,
-            shape_edge_color_or(item.shape_edge_color_1, color),
-            shape_edge_color_or(item.shape_edge_color_2, color),
-            shape_edge_color_or(item.shape_edge_color_3, color),
-        },
-        max(1.0, item.inline_atom_stroke))
-}
-
-//   Draw one inline pentagon atom with optional fill and per-edge colors.
-draw_inline_pentagon_item :: #force_inline proc(
-    item: core.Dynview_Layout_Item,
-    item_x, item_y: f32,
-    color: rl.Color) {
-
-    rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
-    draw_pentagon_shape(rect,
-        item.shape_is_filled,
-        Pentagon_Colors{
-            color,
-            shape_edge_color_or(item.shape_edge_color_1, color),
-            shape_edge_color_or(item.shape_edge_color_2, color),
-            shape_edge_color_or(item.shape_edge_color_3, color),
-            shape_edge_color_or(item.shape_edge_color_4, color),
-            shape_edge_color_or(item.shape_edge_color_5, color),
-        },
-        max(1.0, item.inline_atom_stroke))
-}
-
-//   Draw one cached advanced inline shape item.
-draw_cached_inline_advanced_item :: #force_inline proc(
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
-    item_x, item_y: f32,
-    color: rl.Color) {
-
-    switch item.kind {
-    case .Inline_Pie_Section:
-        draw_inline_pie_section_item(style, item, item_x, item_y, color)
-    case .Inline_Perpendicular:
-        rect := rl.Rectangle{item_x, item_y, item.draw_width, item.draw_height}
-        draw_perpendicular_shape(
-            rect,
-            max(1.0, item.inline_atom_stroke),
-            Perpendicular_Colors{item.brush_color, item.shape_edge_color_1})
-    case .Inline_Triangle:
-        draw_inline_triangle_item(item, item_x, item_y, color)
-    case .Inline_Pentagon:
-        draw_inline_pentagon_item(item, item_x, item_y, color)
-    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
-         .Stretch_Delimiter, .Matrix, .Large_Op,
-         .Accent_Bar, .Radical_Bar, .Inline_Line, .Inline_Box,
-         .Inline_Circle, .Inline_Filled_Box, .Inline_Filled_Circle:
-    }
+//   Draw one cached text-run item with optional underline.
+draw_text_run_item :: proc(params: Text_Run_Draw_Params) {
+    text_font := viewtext.Ui_Text_Font{params.resolved_font, params.font_size}
+    draw_text_run_content(params, text_font)
+    draw_text_run_underline(params)
 }
 
 //   Draw one cached inline shape item.
 draw_cached_inline_item :: proc(
-    style: Dynview_Text_Style,
-    item: core.Dynview_Layout_Item,
+    encoder: ^native.Draw_Encoder,
+    item: dynviewmodel.Dynview_Layout_Item,
     item_x, item_y: f32) {
 
-    color := dynview.inline_draw_color(style, item)
-    switch item.kind {
-    case .Inline_Line, .Inline_Box, .Inline_Circle:
-        draw_cached_inline_basic_item(style, item, item_x, item_y, color)
-    case .Inline_Filled_Box, .Inline_Filled_Circle:
-        draw_cached_inline_filled_item(style, item, item_x, item_y, color)
-    case .Inline_Pie_Section, .Inline_Perpendicular, .Inline_Triangle, .Inline_Pentagon:
-        draw_cached_inline_advanced_item(style, item, item_x, item_y, color)
-    case .Text_Run, .Math_Glyph_Run, .Math_Block, .Script_Attach, .Frac,
-        .Stretch_Delimiter, .Matrix, .Large_Op,
-        .Accent_Bar, .Radical_Bar:
+    encode_inline_item(encoder, item, item_x, item_y)
+}
+
+// Resolve one semantic color against the standard Dynview foreground.
+document_draw_color :: #force_inline proc(
+    color: dynviewmodel.Dynview_Document_Color) -> dynviewmodel.Color {
+    return color.value if color.present else dyncore.UI_TEXT_COLOR
+}
+
+// Preserve an optional semantic color as the transparent-zero shape sentinel.
+document_optional_draw_color :: #force_inline proc(
+    color: dynviewmodel.Dynview_Document_Color) -> dynviewmodel.Color {
+    return color.value if color.present else {}
+}
+
+// Copy five optional semantic edge colors into a native shape draw item.
+document_shape_draw_edge_colors :: proc(
+    result: ^dynviewmodel.Dynview_Layout_Item,
+    shape: dynviewmodel.Dynview_Document_Shape) {
+    result^.shape_edge_color_1 = document_optional_draw_color(shape.edge_colors[0])
+    result^.shape_edge_color_2 = document_optional_draw_color(shape.edge_colors[1])
+    result^.shape_edge_color_3 = document_optional_draw_color(shape.edge_colors[2])
+    result^.shape_edge_color_4 = document_optional_draw_color(shape.edge_colors[3])
+    result^.shape_edge_color_5 = document_optional_draw_color(shape.edge_colors[4])
+}
+
+// Convert one semantic shape into the established allocation-free draw payload.
+document_shape_draw_item :: proc(
+    item: dynviewmodel.Dynview_Document_Layout_Item,
+    shape: dynviewmodel.Dynview_Document_Shape,
+    cell_width: f32) -> (dynviewmodel.Dynview_Layout_Item, bool) {
+
+    geometry, geometry_ok := dynlayout.document_shape_geometry(shape, cell_width)
+    if !geometry_ok {
+        return {}, false
+    }
+    result := dynviewmodel.Dynview_Layout_Item{
+        draw_width = geometry.draw_width, draw_height = geometry.draw_height,
+        inline_atom_stroke = shape.thickness,
+        inline_outline_stroke = shape.thickness,
+        shape_is_filled = shape.filled,
+        pie_start_angle_degrees = shape.start_angle,
+        pie_end_angle_degrees = shape.end_angle,
+        pie_is_filled = shape.filled,
+        pie_center_offset_x = geometry.center_offset_x,
+        pie_center_offset_y = geometry.center_offset_y,
+        has_brush_color = shape.fill_color.present || shape.color.present,
+        brush_color = document_draw_color(
+            shape.fill_color if shape.fill_color.present else shape.color),
+        has_outline_color = shape.arc_color.present || shape.color.present,
+        outline_color = document_draw_color(
+            shape.arc_color if shape.arc_color.present else shape.color),
+    }
+    document_shape_draw_edge_colors(&result, shape)
+    draw_kind := document_shape_draw_kind(shape, result.inline_outline_stroke)
+    if !draw_kind.ok {
+        return {}, false
+    }
+    result.kind = draw_kind.kind
+    result.inline_outline_stroke = draw_kind.outline_stroke
+    return result, true
+}
+
+// Map one semantic shape kind to its draw kind and outline policy.
+document_shape_draw_kind :: proc(
+    shape: dynviewmodel.Dynview_Document_Shape,
+    outline_stroke: f32) -> Document_Shape_Draw_Kind_Result {
+
+    if shape.kind == .None {
+        return {{}, outline_stroke, false}
+    }
+    kinds := DOCUMENT_SHAPE_DRAW_KINDS
+    kind := kinds[shape.kind]
+    if shape.kind == .Point {
+        return {kind, 0, true}
+    }
+    if shape.filled {
+        #partial switch shape.kind {
+        case .Circle: kind = .Inline_Filled_Circle
+        case .Box: kind = .Inline_Filled_Box
+        }
+    }
+    return {kind, outline_stroke, true}
+}
+
+// Resolve one resident shaped run referenced by a prose layout item.
+document_prose_shaped_run :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Document_Layout_Item) ->
+    (dynviewmodel.Dynview_Document_Shaped_Run, bool) {
+    cache := &ctx.runtime^.compile_cache
+    if item.shaped_run_index < 0 ||
+        item.shaped_run_index >= len(cache^.document_shaped_runs) {
+        return {}, false
+    }
+    run := cache^.document_shaped_runs[item.shaped_run_index]
+    if run.glyph_start < 0 || run.glyph_count <= 0 ||
+        run.glyph_count > len(cache^.document_shaped_glyphs)-run.glyph_start ||
+        !font.cache_generation_is_resident(
+            &ctx.state^.font_cache, run.effective_font_key, run.font_generation) {
+        return {}, false
+    }
+    return run, true
+}
+
+// document_prose_content resolves one validated semantic prose payload.
+document_prose_content :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Document_Layout_Item) -> Document_Prose_Content {
+    run, run_valid := document_prose_shaped_run(ctx, item)
+    if !run_valid {
+        return {}
+    }
+    if run.text_offset < 0 || run.text_count <= 0 ||
+        run.text_count > len(ctx.runtime^.content.document_text)-run.text_offset {
+        return {}
+    }
+    text := string(ctx.runtime^.content.document_text[
+        run.text_offset:run.text_offset+run.text_count])
+    column_advance, advance_valid := viewtext.ui_text_column_advance(
+        font.cache_borrow(&ctx.state^.font_cache, run.effective_font_key),
+        ctx.font_size)
+    if !advance_valid {
+        return {}
+    }
+    return {run, text, column_advance, true}
+}
+
+// Draw one sealed semantic prose run through its exact resident font generation.
+draw_document_prose_item :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Document_Layout_Item,
+    semantic_inline: dynviewmodel.Dynview_Document_Inline,
+    position: geometry.Vector2) -> bool {
+    content := document_prose_content(ctx, item)
+    if !content.ok {
+        return false
+    }
+    cache := &ctx.runtime^.compile_cache
+    run := content.run
+    line_top := viewtext.ui_text_cached_run_line_top(
+        position.y, run.ascent, run.raster_ascent,
+        ctx.font_size, run.base_pixel_size)
+    return viewtext.ui_text_cached_monospace_run({
+        shaped = {
+            encoder = ctx.encoder,
+            resolver = font.cache_terminal_resolver(&ctx.state^.font_cache),
+            key = run.effective_font_key,
+            glyphs = cache^.document_shaped_glyphs[
+                run.glyph_start:run.glyph_start+run.glyph_count],
+            position = {position.x, line_top},
+            color = document_draw_color(semantic_inline.color),
+            font_size = ctx.font_size, base_pixel_size = run.base_pixel_size,
+        },
+        text = content.text,
+        column_advance = content.column_advance,
+    })
+}
+
+// Draw one semantic layout item at its exact sealed document-space position.
+draw_document_item :: proc(
+    ctx: Layout_Draw_Context,
+    item: dynviewmodel.Dynview_Document_Layout_Item,
+    origin: geometry.Vector2) {
+
+    content := &ctx.runtime^.content
+    if item.inline_index < 0 || item.inline_index >= len(content^.document_inlines) {
+        return
+    }
+    semantic_inline := content^.document_inlines[item.inline_index]
+    position := geometry.Vector2{origin.x+item.x, origin.y+item.top}
+    switch item.box_kind {
+    case .Prose:
+        _ = draw_document_prose_item(ctx, item, semantic_inline, position)
+    case .Math:
+        if semantic_inline.math_program_id >= 0 && semantic_inline.math_program_id <
+            ctx.runtime^.compile_cache.math_program_count {
+            program := ctx.runtime^.compile_cache.math_programs[
+                semantic_inline.math_program_id]
+            draw_math_program_at(ctx, program, {
+                position.x, origin.y+item.baseline, 0,
+                {dynmath.Math_Style_Level(semantic_inline.root_style), false}, 0})
+        }
+    case .Shape:
+        shape_item, ok := document_shape_draw_item(
+            item, semantic_inline.shape, ctx.runtime^.compile_cache.last_cell_width)
+        if ok {
+            style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_DEFAULT)
+            style.color = document_draw_color(semantic_inline.color)
+            encode_inline_item(ctx.encoder, shape_item, position.x, position.y)
+        }
+    case .None:
+    }
+}
+
+// Draw one parenthesized positive display number from fixed stack storage.
+draw_document_display_number :: proc(
+    ctx: Layout_Draw_Context,
+    line: dynviewmodel.Dynview_Document_Layout_Line,
+    origin: geometry.Vector2) {
+
+    if line.display_number <= 0 {
+        return
+    }
+    style := dyncore.style_by_id(dyncore.DYNVIEW_STYLE_DEFAULT)
+    baseline := origin.y+line.baseline+line.display_number_baseline_offset
+    position := geometry.Vector2{origin.x+line.display_number_x,
+        baseline-ctx.font_size*0.8}
+    resolver := font.cache_terminal_resolver(&ctx.state^.font_cache)
+    _ = viewtext.ui_text_unshaped_paged({
+        encoder = ctx.encoder,
+        resolver = resolver,
+        key = .Regular,
+        text = fmt.tprintf("(%d)", line.display_number),
+        position = position,
+        color = style.color,
+        font = {ctx.font, ctx.font_size},
+    })
+}
+
+// Draw authoritative semantic document lines from sealed pixel geometry.
+draw_document_layout :: proc(
+    ctx: Layout_Draw_Context,
+    scroll_y, text_padding: f32) {
+
+    cache := &ctx.runtime^.compile_cache
+    if !cache^.document_layout_is_valid {
+        return
+    }
+    origin := geometry.Vector2{
+        ctx.panel.x+text_padding,
+        ctx.panel.y+text_padding-scroll_y,
+    }
+    panel_top := ctx.panel.y
+    panel_bottom := ctx.panel.y+ctx.panel.height
+    for line in cache^.document_layout_lines {
+        if layout_line_outside_panel(
+            origin.y+line.top, origin.y+line.bottom, panel_top, panel_bottom) {
+            continue
+        }
+        for item_index in line.item_start..<line.item_start+line.item_count {
+            if item_index >= 0 && item_index < len(cache^.document_layout_items) {
+                draw_document_item(ctx, cache^.document_layout_items[item_index], origin)
+            }
+        }
+        draw_document_display_number(ctx, line, origin)
     }
 }
 
 //   Draw one cached layout line and all its items.
 draw_cached_line :: proc(
     ctx: Layout_Draw_Context,
-    line: core.Dynview_Layout_Line,
+    line: dynviewmodel.Dynview_Layout_Line,
     line_top, text_padding: f32) {
 
     runtime := ctx.runtime
+    cache := &runtime^.compile_cache
     item_end := line.item_start + line.item_count
     for item_index in line.item_start..<item_end {
         item := runtime^.compile_cache.layout_items[item_index]
-        style := dynview.style_by_id(item.style_id)
-        item_x := ctx.panel.x + text_padding + item.x_offset
-        item_y := line_top + item.y_offset
+        style := dyncore.style_by_id(item.style_id)
+        item_x := ctx.panel.x + text_padding +
+            f32(item.col_start) * cache^.last_cell_width + item.content_offset_x
+        item_y := line_top + f32(item.row_offset) * cache^.last_cell_height +
+            item.content_offset_y
 
         if item.kind == .Text_Run ||
             item.kind == .Math_Block ||
@@ -1676,7 +2767,7 @@ draw_cached_line :: proc(
             continue
         }
 
-        draw_cached_inline_item(style, item, item_x, item_y)
+        draw_cached_inline_item(ctx.encoder, item, item_x, item_y)
     }
 }
 
@@ -1700,12 +2791,12 @@ draw_cached_layout :: proc(
     panel_bottom := panel.y + panel.height
     for line_index in 0..<cache^.layout_line_count {
         line := cache^.layout_lines[line_index]
-        line_top := panel.y + text_padding + line.y_offset - scroll_y
-        line_bottom := line_top + line.line_height
-        top_pad, bottom_pad := line_visual_padding(cache, line, ctx.font_size)
+        line_top := panel.y + text_padding +
+            f32(line.row_start) * cache^.last_cell_height - scroll_y
+        line_bottom := line_top + f32(line.row_span) * cache^.last_cell_height
         if layout_line_outside_panel(
-            line_top - top_pad,
-            line_bottom + bottom_pad,
+            line_top,
+            line_bottom,
             panel_top,
             panel_bottom) {
             continue

@@ -1,26 +1,21 @@
 include(joinpath(@__DIR__, "sysimage_core.jl"))
 
-const LatexSamples = (
-    raw"$x_1^2 \in \mathbb{R}$",
-    raw"$\frac{x^2}{\sqrt{y}}$",
-    raw"$\left(\sum_{i=1}^{n} a_i\right)$",
-    raw"$\begin{bmatrix}a & b \\ c & d\end{bmatrix}$")
-
-for source in LatexSamples
-    EuclidLatex.latex_to_plain_text(source)
+"""Exercise stable startup paths without entering the native bridge."""
+function exercise_sysimage_workload()
+    terminal_id = UUID("c4cf618f-86ca-55ba-ac0e-14f31f09940d")
+    descriptors = AnimationCatalog.AnimationDescriptor[
+        AnimationCatalog.AnimationDescriptor(
+            terminal_id, nothing, "Terminal", 0,
+            AnimationCatalog.TerminalNode, nothing),
+    ]
+    AnimationCatalog.validate_catalog(descriptors)
+    EuclidLatex.presented_text(LaTeXString(raw"\alpha + \beta"))
+    EuclidGeometry.circle_line_intersections_xy(
+        Float32[-2, 0, 0], Float32[2, 0, 0],
+        Float32[0, 0, 0], 1.0f0)
+    EuclidReplEvaluation.complete_input(
+        "prin", 4; show_candidates=false, context_module=Main)
+    return nothing
 end
 
-EuclidLatex.parse_latex_document(
-    raw"\textbf{Euclid} document $x_1^2$ \newline \euclidline[color=steelblue]{4}{2}")
-
-Scratchpad.classify_parse("sum(1:3)")
-Scratchpad.classify_parse("begin\n    value = 1")
-Scratchpad.longest_completion_prefix(["EuclidGeometry", "EuclidAnimations"])
-
-const ScratchpadSession = Scratchpad.create_session(Ptr{Cvoid}(0), -1)
-Scratchpad.SessionRef[] = ScratchpadSession
-Scratchpad.queue_input(Ptr{Cvoid}(0), "sum(1:3)")
-Scratchpad.complete_backslash(Ptr{Cvoid}(0), "\\alpha")
-Scratchpad.complete_input(Ptr{Cvoid}(0), "EuclidRep", 9)
-Scratchpad.loop(Ptr{Cvoid}(0), 0f0)
-Scratchpad.SessionRef[] = nothing
+exercise_sysimage_workload()

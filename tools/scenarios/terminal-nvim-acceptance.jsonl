@@ -1,0 +1,16 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":";"}
+{"type":"/usr/bin/nvim -u NONE -n /home/derek/source/derekshoneycutt/EuclidApp/AGENTS.md"}
+{"key":"enter"}
+{"wait_terminal_contains":"Euclid Agent Guide","timeout_ms":10000}
+{"screenshot":"terminal-nvim-visible.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"escape"}
+{"type":":qa!"}
+{"key":"enter"}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

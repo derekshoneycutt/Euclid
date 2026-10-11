@@ -1,8 +1,8 @@
 # Animations Style
 
 This document captures the shared style conventions for Julia animations in
-`src/julia/`, especially the Hilbert and Euclid content that uses the pen,
-point, line, and plane primitives.
+`src/content/`, especially the content that uses the pen, point, line, and plane
+primitives.
 
 This is kind of a preliminary approach to the style language for the
 animations. As further points arise with further animation work, this is
@@ -69,6 +69,9 @@ balance of the complete scene, not fixed object types.
 - Use `khaki3` and `grey60` the same way you use `steelblue` and
   `palevioletred1`: as part of the shared palette, assigned by relationship and
   composition.
+- For Lens and Lune demonstrations, draw the two source circles as distinct
+  constructions before revealing the filled region. Region flickers belong to the
+  reveal itself and should run while fill alpha rises, not as a separate prelude.
 - For order/between demonstrations that use drag passes, the drag color SHOULD
   match the center or emphasized point of that statement. Do not use an
   unrelated shared highlight color when a specific point is the focus.
@@ -117,7 +120,9 @@ meaningful action, and legible finish.
 | `z < 0.0` | Below surface | Avoid unless a script documents a specific need. |
 
 Pen and compass rise phases should target a positive top height, commonly
-around `1.4` in existing scripts. Plane primitives require an intentional
+around `1.4` in existing scripts. Shared pen poses use a `0.35` world-unit length,
+matching the native tool distance constraint; do not author a shorter pose and rely
+on a later constraint solve to stretch it. Plane primitives require an intentional
 profile:
 
 - Flat or on-surface demonstrations keep plane vertices at `z = 0.0`.
@@ -125,9 +130,25 @@ profile:
   elevated vertices.
 - Negative `z` is not the default way to communicate depth.
 
+Trochoid and cycloid constructions keep the analytic curve on one constant-z plane. The
+permanent guide and compass descend together, remain aligned while drawing, then rise
+together before either tool is hidden. Hiding a guide is intentionally silent; hiding
+the finished curve is the operation that emits clear dust.
+
+Hypocycloid families use one common fixed-circle scale so changes in `k = R/r` remain
+visually comparable. For reduced rational `k = p/q`, animate one uninterrupted parameter
+domain of `0..2pi*q`; scale draw duration with `q` to preserve angular speed. The fixed
+and internally rolling rings remain guides, while the compass from rolling center to
+tracer is the drawing instrument.
+
+Long rational Trochoid showcases may deliberately increase angular speed when preserving
+the baseline would make the construction drag. The 5-point Hypotrochoid covers its full
+`0..6pi` closure domain in 10 seconds rather than the 15-second baseline; it still uses
+one uninterrupted draw phase and one cycle boundary.
+
 ## Isometric Projection and Right-Hand Rule
 
-The isometric helper in `src/view/core/isomath.odin` uses a right-handed
+The isometric helper in `src/view/world/projection/projection.odin` uses a right-handed
 world-space convention.
 
 What that means in practice:
@@ -160,9 +181,9 @@ Current frame order is:
 | 1 | Drawing surface | Persistent background surface. |
 | 2 | Low cached geometry | Labels, points, lines, circles, and polygons. |
 | 3 | Low particles | Effects behind tool shadows and high geometry. |
-| 4 | Tool shadows | Pen and compass shadows. |
+| 4 | Tool shadows | Roulette guides, pen, and compass shadows. |
 | 5 | Mid particles | Effects between shadows and active tools. |
-| 6 | High cached tools | Active tool dots plus pen and compass strokes. |
+| 6 | High cached tools | Roulette guides, active tool dots, pen, and compass strokes. |
 | 7 | High particles | Effects above tools. |
 
 Important implications:
@@ -172,6 +193,10 @@ Important implications:
   default mental model.
 - Pen/compass visuals are not depth-sorted against all geometry; they are drawn
   in a dedicated high layer near the end of the world pass.
+- The two-ring trochoid guide and line-based cycloid guide are drawn before the compass
+  in the high tool layer so the compass remains dominant at overlaps. Their short radial
+  pipes mark rolling-body orientation; they are not tracers and do not draw persistent
+  curves.
 - Particles are split across low/mid/high layers, so particle choice controls
   whether effects appear behind geometry, around tool shadows, or above tools.
 
@@ -230,65 +255,86 @@ Tool crossing guidance for 3D plane barriers:
   is meant to be read by the viewer.
 - Avoid abrupt resets immediately after the last visible motion.
 
+### Animation Program Contract
+
+Every catalog-owned animation file is ordinary Julia source with a permanent
+`AnimationId`. It must expose named `get_view_content`, `initialize`, `loop`, and `clean`
+functions plus a direct `animation_entry(state_ptr, operation, dt)::Bool`. The entry
+dispatches bridge-stable Enter, Tick, Exit, and Presentation Selection Changed
+values; it is not generated by source
+rewriting or replaced by a reflective hot-path adapter.
+
+The final expression returns an `AnimationImplementation` whose UUID exactly matches
+`AnimationId`. Loading occurs once per runtime generation, after which Odin invokes the
+bound entry directly. Keep `get_view_content` named even though view updates are pushed:
+`initialize` and changed-content paths pass that producer to `publish_view_content`.
+
+On Enter, exercise `animation_content_specification(state_ptr)` before initialization.
+This read-only owned value reports the application locale, edition ID/name/text
+language, selection revision, animation UUID, and content/runtime generations.
+Enter, Tick, and Exit read their own invocation value; old Exit must not read a
+replacement's selection. Querying outside an invocation is an error.
+
+Handle `ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED` (`Int32(4)`) explicitly
+before the ordinary lifecycle branches and return `true` without side effects.
+Do not implement it as a zero-duration tick: it must not advance time or RNG,
+change geometry/particles/pause, or publish or clear presentation. Unknown
+operations return `false`. Delivery and locale/edition switching are deferred;
+recognizing this operation does not create a new producer or override existing text.
+
+Edition declarations and availability use the same admission path for original and
+adapted content; see [declaring editions](Localization.md#declaring-editions) and the
+[packaged content and search model](Sqlite3.md#packaged-content-and-search).
+For contributor workflows and extension rules, use
+[Localization And Editions](Localization.md).
+The query describes the callback's selected specification, not the last published
+View value. Never relabel an existing presentation using newly selected metadata.
+Keep ordinary `get_view_content` and `publish_view_content` authoritative.
+
 ## View Text Authoring
 
-Animation view text has two coordinated outputs:
-
-- A complete plain fallback string returned by `get_view_text(state_ptr)`.
-- An optional structured Dynview stream containing styled prose, math, and
-  embedded explanatory shapes.
-
-The host uses structured output only when the complete stream is valid. A
-parse, bridge, capacity, compile, or layout failure falls back to the returned
-plain string. Structured output is therefore an enhancement, never the only
-source of meaning.
+Animation view content is one canonical MIME value returned by
+`get_view_content(state_ptr)`. Return an ordinary string for plain text,
+`L"..."` for standalone delimited math, or `tex"..."`/`TeXDocument` for an
+unwrapped document. The selected bytes are authoritative for rendering, copying,
+hashing, and literal failure; do not author a parallel fallback string.
 
 ```mermaid
 flowchart TD
-  A[Author structured source and complete fallback]
-  B[emit_latex_view_text!]
-  C[Plain fallback and copy payload]
-  D[Structured Dynview stream]
-  E{Parse, bridge, compile, and layout valid?}
-  F[Render structured text]
-  G[Render complete fallback]
+  A[Return one canonical displayable]
+  B[publish_view_content]
+  C{Canonical MIME}
+  D[Render plain bytes]
+  E[Parse and render TeX semantics]
+  F[Render exact TeX source on failure]
 
-  A --> B
-  B --> C
-  B --> D --> E
-  E -->|Yes| F
-  E -->|No| G
-  C --> G
+  A --> B --> C
+  C -->|text/plain| D
+  C -->|text/latex valid| E
+  C -->|text/latex invalid| F
 ```
 
 ### Preferred Authoring API
 
-Use `EuclidLatex.emit_latex_view_text!` for complete animation view text. It:
+Use `EuclidLatex.tex"..."` or `TeXDocument` for complete animation documents.
+Use `LaTeXStrings.L"..."` when the complete value is standalone math. The MIME
+serializer submits the exact bytes to native Dynview for classification and parsing.
 
-- classifies the source as document or math mode;
-- parses and emits one complete Dynview stream;
-- installs the supplied fallback as the copy payload;
-- returns the same fallback expected by `get_view_text`;
-- stops structured emission safely when parsing or bridge replay fails.
+Complete documents compile directly into measured semantic layout; they do not
+produce command-layout rows. Standalone math and explicitly authored low-level
+Dynview streams remain available for their separate use cases.
 
 ```julia
-const DefinitionLatexDocument = raw"""\textbf{Definition 1.}
+const DefinitionView = tex"""\textbf{Definition 1.}
 
 A point \euclidpoint[color=plum1,size=1] is that which has no part.
 The symbol $A_1$ identifies a particular point."""
 
-const DefinitionFallback = """Definition 1.
-
-A point is that which has no part. The symbol A_1 identifies a particular point."""
-
-function get_view_text(state_ptr)
-    EuclidLatex.emit_latex_view_text!(
-        state_ptr, DefinitionLatexDocument, DefinitionFallback)
-end
+get_view_content(_state_ptr) = DefinitionView
 ```
 
 Use raw Julia strings for LaTeX source when practical. Keep source constants
-stable across frames so math parsing and compiled-program caches can be reused.
+stable across frames so generation-scoped exact-source interning can reuse semantics.
 
 ### Choosing Document Or Math Mode
 
@@ -329,6 +375,10 @@ Consult [LaTeXSupport.md](LaTeXSupport.md) for the exact supported grammar.
 - Let Dynview wrap ordinary text; do not insert source newlines to control line
   width. A single document-source newline normalizes to a space.
 - Use a blank source line for a semantic paragraph break.
+- Use one `\\` only for an intentional forced line inside a paragraph, such as a
+  compact list or aligned pair of claims. Do not repeat forced breaks to make paragraphs.
+- Do not surround display math with blank lines solely to create vertical padding;
+  display blocks own their spacing.
 - Avoid repeating the entire construction in prose while the animation already
   communicates it visually. Text should state the idea, relation, or conclusion.
 
@@ -369,75 +419,82 @@ Authoring rules for embedded shapes:
   dominating it.
 - Use filled circles and boxes only when fill itself distinguishes the object.
 - Do not reproduce a full diagram in prose from many inline atoms.
-- Do not use an embedded shape as the only representation of required meaning.
-  The fallback must name or describe it in words.
+- Keep the surrounding prose meaningful when an embedded shape is read as source.
 
-The shape command belongs in document mode. For a custom low-level Dynview
-stream, use the corresponding `dynview_inline_*` bridge APIs.
+Shape commands belong in document mode. Julia publishes their source as
+`text/latex`; Odin parses, lays out, and renders the resulting inline semantics.
 
-### Fallback And Copy Semantics
+### Source, Copy, And Failure Semantics
 
-Fallback text is authored content, not generated error text. It must remain
-complete and readable when structured output is unavailable.
+The canonical presentation bytes are also the copy payload. TeX parse or capacity
+failure displays those exact literal source bytes rather than a second authored value.
+Preserve definitions, claims, labels, mathematical conclusions, and meaningful
+paragraph structure in that source. Review both successful rendering and literal
+failure before accepting an animation.
 
-- Preserve all definitions, claims, labels, and mathematical conclusions.
-- Replace embedded shapes with concise nouns or descriptions.
-- Represent important formulas with readable Unicode or plain notation.
-- Preserve paragraph structure where it affects comprehension.
-- Never expose raw LaTeX commands in the fallback.
-- Review both the structured rendering and plain fallback before accepting an
-  animation.
-
-`emit_latex_view_text!` uses the supplied fallback as the copy payload. Copying
-structured text should therefore yield coherent plain content rather than a
-sequence of visual implementation fragments.
+Mouse selection has a distinct clipboard contract. Prose selects at shaped UTF-8
+cluster boundaries, while math and embedded shapes select as complete insets and copy
+their exact source spans. A mixed `Ctrl+C` result therefore combines readable prose with
+TeX for selected insets. `Ctrl+A` selects all rendered units, after which `Ctrl+C`
+copies the complete canonical presentation source. Math subexpression selection is
+intentionally unsupported.
 
 Document mode fails closed. Unsupported commands, malformed style groups,
 unclosed math delimiters, empty math fragments, or invalid shape options abort
 the structured stream instead of displaying a partial document.
 
-### Specialized LaTeX APIs
+### Canonical Presentation APIs
 
 | API | Use |
 | --- | --- |
-| `emit_latex_view_text!` | Complete document/math view text with authored fallback. |
-| `replay_emit_math_block!` | Insert one recursive expression into an open Dynview block. |
-| `emit_latex_dynview!` | Emit a standalone math-only block. |
-| Direct Dynview bridge calls | Last resort for composition the high-level APIs cannot express. |
-
-`replay_emit_math_block!` returns `false` on bridge failure.
-`emit_latex_dynview!` is appropriate only when the caller does not need
-document prose or embedded shapes.
+| Ordinary `String` | Plain `text/plain` content. |
+| `L"..."` | One standalone, delimited `text/latex` expression. |
+| `tex"..."`, `tex"""..."""`, or `TeXDocument` | Unwrapped `text/latex` document source. |
+| `present(state_ptr, value)` | Publish one displayable directly. |
+| `publish_view_content(state_ptr, producer)` | Publish the displayable returned by an animation callback. |
 
 Do not manually parse LaTeX or approximate structured math with spaced text.
 
-### Low-Level Dynview Escape Hatch
+## Search Content Authoring
 
-Use direct `OdinJuliaBridge` Dynview calls only when the high-level document and
-math APIs cannot express the required composition. Typical low-level content
-calls are:
+Every path-backed animation owns adjacent pure content with canonical View content and
+authored search content. Treat these as related but distinct editorial surfaces:
 
-- `dynview_text_run(state_ptr, text, style_id)`;
-- `dynview_line_break(state_ptr)`;
-- `dynview_copyable_text_run(state_ptr, copy_text)`;
-- `dynview_inline_line(state_ptr, length_cols, stroke_px, style_id)`;
-- `dynview_inline_box(state_ptr, width_cols, height_cols, stroke_px, style_id)`;
-- `dynview_inline_circle(state_ptr, radius_cols, stroke_px, style_id)`.
+```julia
+include("example_content.jl")
 
-A manual stream must strictly follow this lifecycle:
+function get_view_content(_state_ptr::Ptr{Cvoid})
+  return ExampleContent.get_view_content()
+end
+```
 
-1. `dynview_reset_stream(state_ptr)`.
-1. `dynview_begin_block(state_ptr, block_kind, block_id)`.
-1. Emit a complete copy payload and visible content.
-1. `dynview_end_block(state_ptr)`.
+The adjacent module exports deterministic zero-argument `get_view_content()` and
+`get_search_content()::SearchContent` functions. It may use the sysimage-owned LaTeX
+facade and search-content type, but it must not call `OdinJuliaBridge`, initialize
+animation state, or depend on mutable runtime state. Repeated calls must produce
+equivalent bounded values.
 
-Every bridge call returns a `BRIDGE_STATUS_*` value. Stop on the first non-OK
-status and return the complete fallback. Never continue writing a partially
-failed stream.
+- Preserve accurate canonical View content. Repair factual errors, omitted structure,
+  unsupported markup, or missing animation-specific context; do not rewrite it only to
+  impose a uniform voice.
+- Describe the specific concept, construction, theorem, or animated behavior in search
+  prose. A description is too generic when another animation title can replace its
+  subject without making the sentence false.
+- Use aliases for likely discovery terms, alternate or historical names, normalized
+  spellings, and spelled-out symbols. Do not repeat the display name merely to populate
+  the alias list.
+- Keep aliases concise and independently useful. Search prose should remain readable
+  natural language rather than a list of keywords.
+- Write useful docstrings that identify the authored content or discovery contract, not
+  merely that a function returns a value.
+- Keep semantic text nonempty, free of NUL bytes, and within the shared search-content
+  limits. Aliases must be nonempty after normalization and unique within the entry.
 
-Low-level atoms use layout-relative column or pixel units, not world-space
-coordinates. They are text-layout content and must follow the same semantic,
-color, density, and fallback rules as document-mode shapes.
+Review sibling animations together. Closely related curves, definitions, axioms, and
+theorems must retain the distinctions a user would rely on when choosing a result. Test
+representative natural-language and alias queries against the packaged index, asserting
+that the intended document appears without freezing broad-query counts or complete rank
+order unless those are deliberate product contracts.
 
 ## Practical Review Check
 
@@ -450,5 +507,8 @@ Before adding a new animation, ask:
 1. Does view text state the geometric idea without narrating every visible action?
 1. Does each embedded shape match a meaningful object or role in the scene?
 1. Is every formula written with supported LaTeX rather than approximate spacing?
-1. Does the plain fallback preserve every claim represented by styles, math, or shapes?
-1. Have both structured Dynview output and fallback text been reviewed?
+1. Does literal-source failure preserve every claim represented by styles, math,
+   or shapes?
+1. Have both structured Dynview output and literal failure been reviewed?
+1. Does search prose uniquely describe this animation rather than its broad category?
+1. Do aliases add terms a user may actually search for without duplicating the title?

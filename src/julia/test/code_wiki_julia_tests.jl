@@ -86,21 +86,28 @@ end
     geometry = extract_julia_module(config, "src/julia/geometry.jl")
     @test geometry.display_name == "EuclidGeometry"
     @test occursin("Shared geometric intersection helpers", geometry.doc_markdown)
-    @test length(filter(symbol -> !isempty(symbol.doc_markdown), geometry.symbols)) == 7
+    @test length(filter(symbol -> !isempty(symbol.doc_markdown), geometry.symbols)) == 15
 
     latex = extract_julia_module(config, "src/julia/latex.jl")
     @test latex.display_name == "EuclidLatex"
-    @test any(symbol -> symbol.name == "parse_latex" &&
-        symbol.visibility == :public, latex.symbols)
+    @test any(symbol -> symbol.name == "TeXDocument" &&
+        symbol.declaration_kind == :struct && symbol.visibility == :public,
+        latex.symbols)
+    @test any(symbol -> symbol.name == "tex_str" &&
+        symbol.declaration_kind == :macro && symbol.visibility == :public,
+        latex.symbols)
     rendered_latex = render_julia_module_page(latex)
-    @test occursin("[`parse_latex`](#symbol-julia-EuclidLatex-function-parse-latex)",
+    @test occursin(
+        "[`TeXDocument`](#symbol-julia-EuclidLatex-struct-TeXDocument)",
         rendered_latex)
-    @test occursin("### `PARSER_GRAMMAR_VERSION`", rendered_latex)
+    @test occursin(
+        "[`tex_str`](#symbol-julia-EuclidLatex-macro-tex-str)",
+        rendered_latex)
 
     bridge = extract_julia_module(config, "src/julia/odin-julia-bridge.jl")
     @test bridge.display_name == "OdinJuliaBridge"
-    @test length(bridge.source_files) == 7
+    @test length(bridge.source_files) == 8
     create_label = only(filter(symbol -> symbol.name == "create_new_label", bridge.symbols))
-    @test length(create_label.method_signatures) >= 16
+    @test length(create_label.method_signatures) >= 6
     @test occursin("Construct a new label", create_label.doc_markdown)
 end

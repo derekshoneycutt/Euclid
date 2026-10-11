@@ -1,0 +1,27 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Proposition I","as":"first-selection"}
+{"wait_event":"animation_selected","correlation":"first-selection","timeout_ms":10000}
+{"wait_event":"presentation_cleared","correlation":"first-selection","timeout_ms":10000}
+{"select_animation":"Axiom I,1","as":"replacement-selection"}
+{"wait_event":"animation_selected","correlation":"replacement-selection","timeout_ms":10000}
+{"wait_event":"presentation_superseded","correlation":"replacement-selection","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"replacement-selection","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"allocation_checkpoint":"animation"}
+{"allocation_checkpoint":"snapshot_slots"}
+{"allocation_checkpoint":"display_cache"}
+{"do":"reset_animation"}
+{"wait_event":"animation_cycle_boundary","timeout_ms":10000}
+{"wait_event":"animation_reset_committed","timeout_ms":10000}
+{"wait_event":"animation_tick_committed","timeout_ms":10000}
+{"do":"pause_simulation"}
+{"wait_state":"simulation_paused","timeout_ms":10000}
+{"wait_state":"animation_idle","timeout_ms":10000}
+{"assert_allocation_baseline":"animation"}
+{"assert_allocation_baseline":"snapshot_slots"}
+{"assert_allocation_baseline":"display_cache"}
+{"screenshot":".build/mime-presentation-acceptance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

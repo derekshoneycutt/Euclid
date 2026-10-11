@@ -6,112 +6,152 @@ sections such as Proclus's Commentaries, Hilbert's Foundations of Geometry, and 
 demonstrations.
 
 This is primarily a Julia-focused application, utilizing the interactive nature of the
-langauge for animations and a REPL-like Scratchpad. Featuring the
+langauge for animations and a REPL-like Terminal. Featuring the
 [JuliaMono](https://juliamono.netlify.app/) font, available under the OFL/SIL license.
 
 The code and documentation of this project is under The Unlicense, being public domain.
 
-The core application is coded in Odin, with Raylib used for rendering.
+The core application is coded in Odin, with SDL3 and SDL_GPU used for rendering.
 
 1. [Building from Source](#building-from-source)
 1. [Questions?](#questions)
     1. [Q: Why?](#q-why)
     1. [Q: What's the utility?](#q-whats-the-utility)
     1. [Q: What about AI?](#q-what-about-ai)
-    1. [Q: What is the "Scratchpad"?](#q-what-is-the-scratchpad)
+    1. [Q: What is the Terminal?](#q-what-is-the-terminal)
     1. [Q: Wait, Save Gif?](#q-wait-save-gif)
     1. [Q: You support LaTeX?](#q-you-support-latex)
     1. [Q: Any performance hacks for users?](#q-any-performance-hacks-for-users)
     1. [Q: Why 2 languages?](#q-why-2-languages)
-    1. [Q: Are there any more options with the make scripts?](#q-are-there-any-more-options-with-the-make-scripts)
+    1. [Q: Are there any more build and verification options?](#q-are-there-any-more-build-and-verification-options)
     1. [Q: Where should I start if I want in the code?](#q-where-should-i-start-if-i-want-in-the-code)
     1. [Q: What's this about hot-reload?](#q-whats-this-about-hot-reload)
-    1. [Q: What is all this output in the make vet output?](#q-what-is-all-this-output-in-the-make-vet-output)
+    1. [Q: What is all this verification output?](#q-what-is-all-this-verification-output)
 
-<p align="center">
-<img src="./screen.gif" >
-</p>
+![Screenshot](./screen.gif)
 
 ## Building from Source
 
-You must have Odin and Julia installed on your system to build from source, and both
-must be available on PATH.
+Clone the repository, configure one preset, then build it. CMake configuration
+verifies the toolchain; build targets bootstrap the required Julia environments
+before invoking the project-specific Julia driver. Before running Julia tests
+directly in a fresh checkout, run
+`cmake --build --preset default --target configure` to bootstrap those environments.
 
-Clone the git repository, then build. Both the conventional `make` entry point
-(on Linux/macOS) and the PowerShell entry point (on Windows) configure
-automatically the first time — verifying the toolchain and installing the
-required Julia packages — and then build via `make.jl`.
-
-### Linux / macOS (shell + Makefile)
+### Configure and build
 
 ```bash
-git clone https://github.com/derekshoneycutt/Euclid.git
+git clone --recurse-submodules https://github.com/derekshoneycutt/Euclid.git
 cd Euclid
-make            # configure (first run) + build
-make run        # build and run the application
+cmake --preset default
+cmake --build --preset default
+cmake --build --preset default --target run
 ```
 
-### Windows (PowerShell + make.ps1)
+For an existing checkout, initialize all nested dependencies with
+`git submodule update --init --recursive` before configuring.
 
-Windows does not ship a standard `make`, so the same shortcuts are provided by
-`make.ps1`:
+The same commands work from Unix shells and PowerShell. Presets keep CMake metadata
+isolated under `.build/cmake/` while preserving Euclid's existing outputs under
+`bin/` and `.build/debug/`.
 
-```powershell
-git clone https://github.com/derekshoneycutt/Euclid.git
-cd Euclid
-.\make.ps1            # configure (first run) + build
-.\make.ps1 run        # build and run the application
-```
+Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each tool
+available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
+Julia project by default, so a separate HarfBuzz installation is not required.
+JLL linkage supplies both the artifact library and its linker search directory
+so Odin's named HarfBuzz import resolves without a system development package.
+Linux, macOS, and Windows font rasterization uses the pinned `FreeType2_jll`
+library and matching headers; a separate FreeType installation is not required.
 
-### Driving the driver directly
+### Unix (Linux/macOS) requirements
 
-Prefer to call the build driver yourself? Configure first through the entry
-point for your platform, then invoke `make.jl`:
+On Linux and macOS, builds require SDL3 and SDL_image 3.4 development files
+discoverable through `pkg-config`, SPIR-V Tools (`spirv-val` and `spirv-dis`), and
+`glslc` from shaderc.
 
-```bash
-make configure    # or: .\make.ps1 configure
-julia tools/make.jl
-# To run immediately: julia tools/make.jl -r
-```
+GitHub Actions uses Node 24-based actions; Node is not an application build
+dependency. The Linux CI job installs the shader tools and builds checksum-verified
+SDL3 3.4.16 and SDL_image 3.4.6 development libraries from their release archives,
+matching the versions recorded in the Windows SDL manifest.
+Its native package setup follows SDL's
+[Ubuntu build dependencies](https://wiki.libsdl.org/SDL3/README-linux#build-dependencies),
+including `libxss-dev` for X11 screensaver support, rather than disabling
+backends to bypass missing development packages.
 
-### Build targets
+On Apple Silicon macOS, install the Xcode command-line tools and the Homebrew packages
+`sdl3`, `sdl3_image`, `pkg-config`, `spirv-tools`, and `shaderc`. Intel and universal
+macOS builds are not yet supported.
 
-The `Makefile` (Linux/macOS) and `make.ps1` (Windows) are thin, conventional
-wrappers over the same commands — all real logic lives in `tools/configure.sh`,
-`make.ps1`, and `tools/make.jl`. Both entry points configure once (tracked by a
-`.configure-done` sentinel) before any build target, so the first bare build just
-works after cloning. The targets are identical across both entry points:
+Unix source and distribution builds may intentionally select system HarfBuzz with
+`EUCLID_HARFBUZZ_PROVIDER=system`. This mode also requires `pkg-config` and the
+HarfBuzz development package: install `harfbuzz-devel` on Fedora,
+`libharfbuzz-dev` on Debian/Ubuntu, or `harfbuzz` and `pkg-config` through Homebrew
+on macOS. Use the `system-harfbuzz` CMake preset to select and validate this mode.
 
-| Linux / macOS | Windows | What it runs |
-| --- | --- | --- |
-| `make` / `make build` | `.\make.ps1` | configure (once), then `julia tools/make.jl` |
-| `make run` | `.\make.ps1 run` | `julia tools/make.jl --run` |
-| `make test` / `make check` | `.\make.ps1 test` / `.\make.ps1 check` | `julia tools/make.jl --vet --test` (the verification baseline) |
-| `make vet` | `.\make.ps1 vet` | `julia tools/make.jl --vet` |
-| `make sysimage` | `.\make.ps1 sysimage` | `julia tools/make.jl --sysimage` |
-| `make harness` | `.\make.ps1 harness` | `julia tools/make.jl --harness` |
-| `make wiki` | `.\make.ps1 wiki` | `julia tools/make.jl --wiki` |
-| `make check-wiki` | `.\make.ps1 check-wiki` | `julia tools/make.jl --check-wiki` |
-| `make configure` | `.\make.ps1 configure` | re-run configure |
-| `make clean` | `.\make.ps1 clean` | `julia tools/make.jl --clean` (also clears the configure sentinel) |
-| `make help` | `.\make.ps1 help` | `julia tools/make.jl --help` |
-
-### Configure
-
-On Linux and macOS, the Makefile runs `tools/configure.sh`, a POSIX sh script
-that checks `odin` and `julia` are on PATH, requires the `tools/analysis`
-submodule to be initialized, and instantiates the application (`src/julia`) and
-analysis (`tools/analysis`) Julia projects. On Windows, `make.ps1` performs the
-same steps natively in PowerShell; it additionally verifies the MSVC environment
-(or `cl.exe`) and `gendef`.
-
-### Windows requires a few more additions before this will work
+### Windows requirements
 
 - `MSVC Toolchain` : Odin will require MSVC tools installed on the system.
 - `gendef` : used in the script to bridge the fact that Julia is not built with
   the same toolchain as Odin uses to build binaries. `gendef` can be installed via e.g.
   Strawberry Perl or MSYS2.
 
+The x64 SDL3, SDL_image, and libpng runtime payload and MSVC import libraries
+are checked in under `libs/sdl/bin/win64`; `manifest.toml` records their versions,
+licenses, and hashes. The matching checked-in shadercross CLI, SPIR-V tools, and DLL
+closure are under `libs/sdl_shadercross/bin/win64`; ordinary Windows builds do not
+require an external SDL3 development package or a local shadercross source build.
+Windows supports only the default `HarfBuzz_jll` provider.
+
+### Presets
+
+```bash
+cmake --preset default
+cmake --preset debug
+cmake --preset strict
+cmake --preset system-harfbuzz  # Unix only
+```
+
+Build the matching configuration with `cmake --build --preset PRESET`. The debug
+preset retains synchronized diagnostics and `.build/debug/` outputs. The strict
+preset enables Odin vet, strict style, disallowed `do`, and warnings-as-errors.
+
+### Build and test targets
+
+```bash
+cmake --build --preset default --target assets
+cmake --build --preset default --target unit
+cmake --build --preset default --target vet
+cmake --build --preset default --target check
+cmake --build --preset default --target harness
+cmake --build --preset default --target sysimage
+cmake --build --preset default --target wiki
+cmake --build --preset default --target check-wiki
+```
+
+`check` is the canonical complete verification gate. CMake reserves `test` for
+CTest's selectable suites:
+
+```bash
+ctest --preset unit
+ctest --preset all
+```
+
+The generator-owned `clean` target removes CMake-known outputs. The `clean-all`
+target invokes Euclid's comprehensive generated-artifact cleanup without deleting
+the active `.build/cmake/` trees.
+
+### Parameterized commands
+
+Keep using the Julia driver directly when an operation takes paths or frequently
+changing options:
+
+```bash
+julia tools/make.jl check src/dynview
+julia tools/make.jl stats src/main.odin --line=310
+julia tools/make.jl evidence capabilities
+julia tools/make.jl unit odin
+julia tools/make.jl run --debug -- --diagnostics=.build/debug/euclid.log
+```
 
 ## Questions?
 
@@ -128,37 +168,41 @@ It's also seriously just *fun*.
 
 ### Q: What about AI?
 
-First, my general policy on it is this: I will not accept code in this project that cannot
+First, my general policy on AI is this: I will not accept code in this project that cannot
 be thoroughly explained and followed up on by a human coder. I do read and work on every
 line of code in this project myself, regardless of where that code has come from--be it
 the old depths of stack overflow, my brain, someone else's brain, some AI tool or another,
-or some other tool.
+or some other tool. As for content that is included in the app (including animation text
+primarily), I am on Zero AI here. The current development state already has some of these
+hardly more than temporary notes at the moment, but since so much of it is given by formal
+translations and existing tech, there should be no reason to need AI for this content.
+All animation content is to be either from one of these sources or hand written by
+a human.
 
-This is not going to be as strong as some would wish. For a project being released into
-the public domain, I just do not have the energy for a stronger stance in this project.
-A public domain project is really not the place for many of the ethical and political
-discussions. I will not be fighting that in this project. This will not be a project that
-is concerned with any stronger stance than demanding a human take full responsibility.
+If I accept contributions in the future, the expectation is that you release the code into
+the public domain and take ownership of the request. I expect to be able to understand the
+code change in review, and I expect a human to interact with. I will just reject anything
+that becomes clear it is just a robot pointed at me. Since this is a public domain project
+you must include a declaration your right to release it into public domain and a
+declaration that you are doing so for this project.
 
 I do see this as an educational project. I am certainly expanding my understanding of
 geometry as I explore it, and I am learning a lot about graphics programming. Sometimes my
 code sucks, and even AI will gladly point it out the second someone points a code review
-agent at it. The code suggested by AI is quite often not very good without modification.
+agent at it. The code suggested by AI is quite often absolute shit without modification.
+The danger here is that AI code makes it easy to not think yourself about the code, on top
+of any other ethical concerns, and that would be counter to this project entirely. As
+such, human involvement through-and-through is an **absolute requirement**.
 
-Finally, yes, there is code that has used AI in this. Again, my conclusion remains: They
-really are not very good on their own. I do need to point out I often continue to
-experiment with the AIs in order to show potential employers that I know how to use the
-things. Additionally, I am getting my Masters in Computer Science, specializing in AI. So
-yes, I do practice in this codebase. Again, I take full responsibility and hand-work on
-all code. I have added a comprehensive, opinionated static analysis engine; I did this
-*even moreso* because I forget things and do embarrassingly stupid things even when I am
-coding by hand, but it helps against bad AI code, too. If an AI driver cannot explain how
-they have gotten code through this static analysis in this project, I'm not really
+I have added a comprehensive, opinionated static analysis engine for this project; I did
+this *even moreso* because I forget things and do embarrassingly stupid things even when I
+am coding by hand, but it helps against bad AI code, too. If an AI driver cannot explain
+how they have gotten code through this static analysis in this project, I'm not really
 interested in their code. I think that is a strong enough stance.
 
-### Q: What is the "Scratchpad"?
+### Q: What is the Terminal?
 
-Before continuing, the point of the Scratchpad is indeed to make the application even more
+Before continuing, the point of the Terminal is indeed to make the application even more
 *fun*. Once again, the point is to be *fun*. Nonetheless, it is a bit technical, including
 computer code. Reader beware. Caution to the wind, this does also provide some educational
 benefit for the tinkerers out there, I think, which is a beneficial addition.
@@ -166,14 +210,13 @@ benefit for the tinkerers out there, I think, which is a beneficial addition.
 The code of this project is designed with a core engine coded in Odin, but all of the
 animations are executed as Julia scripts. Julia is a fast, JIT compiled language in this
 use. Julia users will also be familiar with the REPL, where they can enter in Julia code
-essentially line-by-line and see how it works in a live environment. The Scratchpad in
+essentially line-by-line and see how it works in a live environment. The Terminal in
 this project is like this. It provides an emptied drawing surface and a line input for
 Julia code input. `2+2` will show `4` in the output directly above, for example. In fact,
 via using Julia's `REPL` package directly, even scope issues should follow similar Julia
 REPL standards for those already familiar.
 
-`:help` will show most of the important information for how to use the Scratchpad in
-practice. You can also type `?` to immediately enter the standard Julia REPL help mode,
+You can type `?` to immediately enter the standard Julia REPL help mode,
 navigating the code documentation in the project.
 
 A quick cheatsheet for drawing the standard Euclidean matters:
@@ -186,9 +229,9 @@ A quick cheatsheet for drawing the standard Euclidean matters:
 - `circle!([x, y, z], r)` e.g. `circle!([0.5f0, 0.5f0, 0f0], 0.25f0)`
   : Animates drawing a circle centered at [x, y, z], with a radius of r.
 
-#### Some details about using the Scratchpad
+#### Some details about using the Terminal
 
-The `state_ptr` variable is *always* available from the Scratchpad. This is the first
+The `state_ptr` variable is *always* available from the Terminal. This is the first
 parameter that is sent to all `OdinJuliaBridge` functions, and it holds a value of type
 `Ptr{Cvoid}`, pointing back to the Odin state structure in memory.
 
@@ -213,49 +256,34 @@ metadata storage functions used by most static animations.
 
 ### Q: Wait, Save Gif?
 
-Yup, you can save an animation to a gif file! This is available via the camera icon in the
-top right of the window. This requires that an animation notify when it begins and ends,
-meaning the top animation for many sections will not be allowed to be saved. Most other
-animations can be saved to a gif file, directly from your viewpoint. Click the camera icon
-to enter the Gif Export view, and click Save Gif. The request will be logged, pending the
-start of the next animation. When the next animation starts, notifying the animation cycle
-boundary, the gif is initiated, and frames are saved into the gif buffer. When the
-animation ends, again notfying the animation cycle boundary, the gif buffer is then saved
-to a file.
+Yup, you can save an animation to a gif file! This requires that an animation notify when
+it begins and ends, meaning the top animation for many sections will not be allowed to be
+saved. Most other animations can be saved to a gif file, directly from your viewpoint.
+Click Save Gif on the bottom right and then the Save Gif button. The request will be
+logged, pending the start of the next animation. When the next animation starts, notifying
+the animation cycle boundary, the gif is initiated, and frames are saved into the gif
+buffer. When the animation ends, again notfying the animation cycle boundary, the gif
+buffer is then saved to a file.
 
 If animation is paused in the middle of a gif save, the paused time is not included in the
 animation. It is all skipped and the gif proceeds as if it was never paused. If the
 animation is reset, the gif is canceled.
 
-I have some thoughts about other potential export formats that could be done from the
-camera tab, but for today, it is just gifs. The current code was ported from several
-pieces of C code walking through saving a gif, and something like ffmpeg could probably
-significantly improve on even that, as well as adding other formats. Such are
-considerations for the future.
-
 ### Q: You support LaTeX?
 
 Yes. Somehow, I ended up writing a little mini-LaTeX math renderer in this project. It was
-kind of a pain in the ass for half a week, and it does not yet support everything one
-might hope to find in a more thorough LaTeX rendering engine. This is basically a work in
-progress. The code is kind of a mess, I know it. No shame... well, there's a little bit of
-shame about it, but we're just gonna sit in that and learn.
+kind of a pain in the ass for half a week, and I have been continuing to iterate on it,
+actually bringing in Harfbuzz for the MATH table and easy kerning. It works pretty well
+at this point.
 
 Check out [LaTeX Support](docs/wiki/Guides/LaTeXSupport.md) for exactly what we do support
 today.
-
-The fun thing is that the REPL will render LaTeX if the output is fully a LaTeX MIME type.
-For example, LaTeXStrings gives the `L"..."` syntax, which will render a LaTeX string as
-much as is supported. `LaTeXStrings` is automatically included in the REPL, so you can use
-this to play with what is supported.
-
-Currently, only math mode is supported. Maybe I'll add more? Hmm...
 
 ### Q: Any performance hacks for users?
 
 There are a few!
 
-At the top right of the screen, you can go into the Settings panel. Here, you can reduce
+You can go into the Settings panel. Here, you can reduce
 the maximum number of dust particles that are allowed on the drawing surface, which can
 improve performance. You can also turn the FPS display on/off, enable or disable drawing
 sound, and turn FPS limiting on/off. Turning the FPS limit on/off may have no real effect
@@ -265,12 +293,18 @@ computers, to be honest, especially given LLVM may make this optimization in eit
 The single biggest performance tweak is the default-enabled GPU Dust Instancing, which
 will draw the dust particles with the GPU.
 
-The optional sysimage with `make.jl` bakes stable Julia runtime modules and representative
-LaTeX/Scratchpad compiler workloads into a platform-specific shared library beside the
-executable. Build and run it with `julia tools/make.jl -sr`. Ordinary build or asset
-commands remove an existing sysimage to prevent stale baked code from being used.
+Euclid requires Julia 1.13 and packages a compressed Julia sysimage inside `assets.pkg`,
+committed by an adjacent `assets.pkg.identity` sidecar.
+Normal build and asset commands fingerprint the stable Julia runtime and reuse the image
+from `.build/sysimage-cache` while those inputs remain unchanged. A stable-runtime,
+dependency, Julia, platform, or compiler-setting change triggers one automatic rebuild;
+animation-only changes under `src/content/` continue to reuse the image. The packaged
+`julia/` runtime and `content/` tree remain separate asset roots, and startup and reload
+pass the extracted content root explicitly into each generation. A separate content
+fingerprint refreshes `assets.pkg` without invalidating the sysimage. `julia
+tools/make.jl sysimage` forces a clean rebuild from Julia's stock image before packaging.
 
-Additionally, there are some startup options that can affect application performance.
+Additionally, startup options control window policy and application performance.
 
 ```text
 Usage: ./euclid [options]
@@ -280,6 +314,10 @@ Options:
   -V, --no-vsync           Disable VSYNC.
   -a, --antialiasing       Enable anti-aliasing. (default)
   -A, --no-antialiasing    Disable anti-aliasing.
+  --window-preset=landscape|portrait  Set initial window size.
+  --window-size=WIDTHxHEIGHT           Set a custom initial size.
+  --window-mode=fixed|resizable        Set resize policy. (default: fixed)
+  --layout=auto|landscape|portrait     Set layout policy. (default: auto)
   --dust-particle-max=N    Set maximum dust particles, 0-8192. (default: 8192)
   -f, --limit-fps          Limit rendering to 60 FPS. (default)
   -F, --no-limit-fps       Disable the 60 FPS limit.
@@ -287,6 +325,11 @@ Options:
   -S, --no-simd            Disable SIMD projection.
   -g, --gpu-dust-instancing Enable GPU dust instancing when available. (default)
   -G, --no-gpu-dust-instancing Disable GPU dust instancing.
+  --persist                Save explicit preference arguments.
+  --user-db=FILENAME       Use an isolated or custom settings database.
+  --no-user-db             Disable saved settings for this invocation.
+  --diagnostics=PATH       Write synchronized diagnostic logs.
+  --profile=spall:PATH     Write display and worker Spall timelines.
   --semantic-trace         Enable semantic trace output.
   --semantic-trace-output=PATH  Write semantic trace JSONL to PATH.
   --semantic-trace-events=LIST   Limit trace categories (runtime,animation,geometry,tools,particles,view).
@@ -295,6 +338,39 @@ Options:
 
 Short options can be combined, for example: -vasg or -VAFSG
 ```
+
+Saved preferences are resolved before the native window is created. Command-line
+preference values take precedence for the current run; `--persist` commits only
+those explicitly supplied values. Use `--user-db=FILENAME` to isolate a settings
+database, or `--no-user-db` for a run with no database reads or writes. The latter
+cannot be combined with `--persist` or `--user-db`.
+
+Changes made in the Settings panel are saved asynchronously to the selected user
+database. With `--no-user-db`, controls still affect the current run but are not
+persisted. SIMD and GPU-instancing controls retain the requested preference even
+when the corresponding hardware capability is unavailable.
+
+The status beneath the controls distinguishes pending, saving, saved, unavailable,
+and failed saves. Changes take effect immediately; a failed write retains the
+latest edits and retries at most three accepted attempts. Shutdown joins accepted
+work and flushes pending edits before stopping the shared pool.
+
+Developers can run the isolated persistence acceptance workflow (requires the
+`sqlite3` CLI for independent committed-row inspection):
+
+```bash
+julia tools/make.jl scenario settings-persistence-acceptance --format=json
+```
+
+This debug workflow runs six scenario processes: save, restore, temporary CLI override,
+no database, final shutdown flush, and a deliberately failed transaction. A seventh
+launch verifies explicit startup persistence failure produces a nonzero exit. It uses
+only fresh databases beneath `.build/scenarios/`, verifies complete typed traces,
+committed rows, startup dimensions, and zero final tracked leaks/bad frees, and
+retains process logs alongside the bundles. Ordinary named scenarios use
+`--no-user-db` so acceptance runs never open the developer's preferences.
+Worker-only ownership is verified; a quantitative frame-latency budget is deferred
+and is not part of the acceptance claim.
 
 ### Q: Why 2 languages?
 
@@ -321,44 +397,43 @@ project, but it is actually quite an enjoyable programming experience between th
 They are different languages, but both offer language-level tools for the kind of maths
 used in this project that just make it an enjoyable experience!
 
-### Q: Are there any more options with the make scripts?
+### Q: Are there any more build and verification options?
 
-The build driver (`tools/make.jl`, normally reached through `make` or `make.ps1`)
-has several helpful parameters if the simple stuff above is not enough.
+The Julia build driver provides focused parameterized commands when the CMake
+targets above are not enough.
 
 ```text
-Usage: make.jl [options]
+Usage: julia tools/make.jl COMMAND [ARGUMENTS]
 
-Options:
-    --build, -b         Build the project. (default)
-    --no-build, -B      Skip any build, including vet builds.
-    --assets, -a        Build assets.pkg. (default)
-    --no-assets, -A     Skip assets.pkg build.
-    --sysimage, -s      Build a custom Julia sysimage beside the application.
-    --harness, -H       Build and run the headless semantic trace harness.
-    --clean, -c         Delete generated build artifacts.
-    --run, -r           Run bin/euclid after all other requests.
-    --test, -t          Run application and analyzer tests.
-    --vet, -v           Build, then run repository analysis. With --test, run the
-                        full verification gate (build, tests, analyzer tests,
-                        analyzer self-analysis, and repository analysis).
-    --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
-    --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
-    --                  Pass all remaining args directly to bin/euclid (only with --run).
-    --help, -h          Show this help text.
+Commands:
+  help                         Show this help text.
+  build [--debug] [--strict]   Build the application and assets.
+  run [--debug] [--strict] [-- APP_ARGS]
+                 Build and run the application.
+  run-only [--debug] [-- APP_ARGS]
+                 Run an existing application binary.
+  assets                       Build assets.pkg only.
+  sysimage [--debug] [--strict]
+                 Force rebuilding the Julia sysimage, application, and assets.
+  harness                      Build and run the deterministic headless harness.
+  unit [julia|odin] [OPTS]     Run all application tests or one language suite.
+  vet [OPTS]                   Build and analyze the repository.
+  test [OPTS]                  Run the complete verification gate.
+  check [PATH] [OPTS]          Analyze PATH; defaults to the repository.
+  stats FILE [OPTS]            Show targeted source statistics.
+  analyzer-test                Run the analyzer's own test suite.
+  wiki                         Generate the publishable Wiki artifact.
+  check-wiki                   Verify that the Wiki artifact is current.
+  clean                        Delete generated build artifacts.
 
-Verification options (forwarded to the analysis gate for --vet/--test):
+Verification options (forwarded by vet and test):
     --verbosity=0|1|2   Summary, details, or complete trace output.
     --verbose           Alias for --verbosity=2.
     --color=auto|always|never
     --format=text|json  Select human or complete machine output.
     --settings=PATH     Load analyzer settings from PATH.
-    --report=PATH       Write the comprehensive Markdown analysis report.
-
-Notes:
-    - If no options are provided, the default is --build --assets.
-    - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
-    - Short options can be combined, e.g. -rvas or -Ba.
+    --report=PATH       Write the compact Markdown analysis report.
+    --full-report=PATH  Write the comprehensive Markdown analysis report.
 ```
 
 The harness target is intended for semantic trace and deterministic scenario work. Its
@@ -368,8 +443,18 @@ underlying executable accepts a smaller control surface:
 Usage: euclid_harness --asset-root=PATH --animation-id=UUID --steps=N --trace-output=PATH [--scenario=NAME]
 ```
 
-`julia tools/make.jl -H` builds and runs the default harness scenario and writes the
-resulting trace to `bin/semantic-trace-harness.jsonl`.
+`julia tools/make.jl harness` builds and runs the default harness scenario and writes the
+resulting canonical binary trace to `bin/semantic-trace-harness.bin`. Query that bare
+trace or a scenario bundle through the same evidence command:
+
+```sh
+julia tools/make.jl evidence query bin/semantic-trace-harness.bin \
+  --kind=animation_tick_committed
+julia tools/make.jl evidence query .build/scenarios/SCENARIO-RUN --failures
+```
+
+Application `--semantic-trace-output=PATH` remains the explicit JSONL export for
+human-readable traces.
 
 ### Q: Where should I start if I want in the code?
 
@@ -388,9 +473,10 @@ Some additional documentation is also available in the wiki, including the above
 - [Code Reference](https://github.com/derekshoneycutt/Euclid/wiki/Code/Home):
  generated Odin and Julia API documentation.
 
-Generate the complete publishable Wiki artifact locally with `julia tools/make.jl -w`.
-The artifact is written to ignored `bin/wiki/`. Run `julia tools/make.jl -W` to compare it
-against a fresh generation without modifying the retained artifact.
+Generate the complete publishable Wiki artifact locally with
+`julia tools/make.jl wiki`. The artifact is written to ignored `bin/wiki/`. Run
+`julia tools/make.jl check-wiki` to compare it against a fresh generation without
+modifying the retained artifact.
 
 ### Q: What's this about hot-reload?
 
@@ -400,19 +486,24 @@ copy the built package next to the running instance. If you run from the `bin` f
 a compilation, this will automatically replace the assets package there.
 
 ```bash
-julia tools/make.jl -Ba
+julia tools/make.jl assets
 ```
 
-Euclid will automatically notice the updated package file, unpack it, and reload all
-the Julia code, restarting the current animation according to the new code. If the current
+Euclid will automatically notice a new committed package identity, select or unpack its
+immutable cache generation, and reload all the Julia code, restarting the current
+animation according to the new code. If the current
 animation cannot be found, will simply start the first animation in the tree. This can be
 helpful for simple animation updates.
 
-Animation content remains dynamically loaded when using a sysimage. Changes to baked core
-modules such as the bridge wrappers, LaTeX compiler, geometry helpers, animation helpers,
-or Scratchpad require rebuilding the sysimage and restarting Euclid.
+Animation catalog data, harness scenarios, the null animation, and individual animation
+implementations remain generation-owned and dynamically loaded when using a sysimage.
+Changes to those files continue to participate in asset hot reload. Changes to baked core
+modules such as bridge wrappers, the TeX source facade, geometry and animation helpers,
+runtime policy, evaluation, or Terminal require rebuilding the sysimage and restarting
+Euclid. A running process rejects an updated package whose sysimage fingerprint differs
+from the loaded runtime, preserving the active generation until the application restarts.
 
-### Q: What is all this output in the make vet output?
+### Q: What is all this verification output?
 
 Great question! A lot of this only makes any sense if you are really into the software
 engineering stuff. We perform several checks in the vet mode to try and improve code
@@ -420,15 +511,15 @@ quality and performance.
 
 **FIRST**: Analysis runs through the OdinJuliaAnalysis engine in the
 `tools/analysis` submodule, with Euclid policy in `tools/analysis_settings.jl`.
-Configure (`tools/configure.sh` via the Makefile, or `make.ps1` on Windows)
-instantiates the analyzer's own Julia project (`tools/analysis/Project.toml`), so
-nothing extra is installed into Julia's default environment (see
-[Building from Source](#building-from-source)). The submodule must be initialized
-first:
+The CMake bootstrap target instantiates the analyzer's own Julia project
+(`tools/analysis/Project.toml`), so nothing extra is installed into Julia's
+default environment (see [Building from Source](#building-from-source)). The
+submodule must be initialized first:
 
 ```bash
 git submodule update --init --recursive
-make configure
+cmake --preset default
+cmake --build --preset default --target configure
 ```
 
 The application build itself uses standard parameters. Compiler-validation flags
@@ -441,7 +532,7 @@ code counter (such as `scc`) is required; everything is derived from the same pa
 streams the rest of the analysis pipeline uses.
 
 ```bash
-julia tools/make.jl -v
+julia tools/make.jl vet
 ```
 
 #### Report Output

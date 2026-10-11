@@ -1,0 +1,392 @@
+package dynview_parse
+
+TEX_MATH_OP_CAPACITY :: 4096
+TEX_MATH_PROGRAM_CAPACITY :: 256
+TEX_SEMANTIC_TEXT_BYTE_CAPACITY :: 64 * 1024
+TEX_TABLE_DESCRIPTOR_CAPACITY :: 256
+TEX_DOCUMENT_BLOCK_CAPACITY :: 256
+TEX_DOCUMENT_INLINE_CAPACITY :: 2048
+TEX_DOCUMENT_DISPLAY_ROW_CAPACITY :: 512
+
+// Match the frozen recursive operation numbers emitted by the Julia compiler.
+Tex_Math_Op_Kind :: enum i32 {
+    Text_Run = 1,
+    Math_Glyph_Run,
+    Accent,
+    Radical,
+    Script,
+    Large_Operator,
+    Fraction,
+    Stretch_Delimiter,
+    Matrix,
+    Style_Override,
+    Stack,
+}
+
+// Identify font-independent semantic math roles.
+Tex_Math_Style_Role :: enum {
+    None,
+    Math,
+    Math_Italic,
+    Math_Upright,
+    Text,
+    Mathbb,
+    Mathbf,
+    Mathit,
+    Mathcal,
+    Operator_Name,
+    Operator_Name_Star,
+}
+
+// Match the native and frozen TeX atom classifications.
+Tex_Math_Atom_Class :: enum i32 {
+    None = 0,
+    Ord,
+    Op,
+    Bin,
+    Rel,
+    Open,
+    Close,
+    Punct,
+    Inner,
+}
+
+// Match explicit semantic spacing kinds from the frozen compiler output.
+Tex_Math_Glue_Kind :: enum i32 {
+    None = 0,
+    Thick,
+    Space,
+    Negative_Thin,
+    Quad,
+    Thin,
+    Source,
+}
+
+// Identify supported accent semantics independently from rendering.
+Tex_Accent_Mode :: enum {
+    None,
+    Overline,
+    Underline,
+    Hat,
+    Tilde,
+    Vec,
+    Dot,
+    Ddot,
+    Bar,
+    Check,
+    Breve,
+    Acute,
+    Grave,
+    Ring,
+    Overbrace,
+    Underbrace,
+}
+
+// Identify radical and root-style wrappers independently from rendering.
+Tex_Radical_Mode :: enum {
+    None,
+    Square_Root,
+    Nth_Root,
+}
+
+// Identify TeX's four explicit recursive math size levels.
+Tex_Math_Style_Level :: enum i32 {
+    Display = 0,
+    Text,
+    Script,
+    Script_Script,
+}
+
+// Identify every stretch delimiter supported by the historical parser.
+Tex_Delimiter_Kind :: enum i32 {
+    None = 0,
+    Left_Paren,
+    Right_Paren,
+    Left_Bracket,
+    Right_Bracket,
+    Left_Brace,
+    Right_Brace,
+    Vert,
+    Double_Vert,
+    Left_Ceil,
+    Right_Ceil,
+    Left_Floor,
+    Right_Floor,
+    Left_Angle,
+    Right_Angle,
+}
+
+// Select the caller-provided root math style.
+Tex_Math_Root_Style :: enum {
+    Display,
+    Text,
+}
+
+// Reference immutable bytes in parser-owned semantic text storage.
+Tex_Text_Span :: struct {
+    offset: int,
+    length: int,
+}
+
+// Identify source units retained by table spacing semantics.
+Tex_Table_Length_Unit :: enum {
+    Default,
+    Zero,
+    Em,
+    Pt,
+}
+
+// Retain one font-independent table length.
+Tex_Table_Length :: struct {
+    value: f32,
+    unit: Tex_Table_Length_Unit,
+}
+
+// Identify one table column alignment.
+Tex_Table_Alignment :: enum {
+    Left,
+    Center,
+    Right,
+}
+
+// Identify the font-independent vertical spacing policy for one table.
+Tex_Table_Row_Spacing :: enum i32 {
+    Matrix = 0,
+    Tight,
+    Cases,
+    Alignment,
+}
+
+// Retain bounded table layout semantics without pixel geometry.
+Tex_Table_Descriptor :: struct {
+    present: bool,
+    rows: int,
+    columns: int,
+    cell_style: Tex_Math_Style_Level,
+    row_spacing: Tex_Table_Row_Spacing,
+    alignments: [16]Tex_Table_Alignment,
+    boundary_gaps: [17]Tex_Table_Length,
+    vertical_rule_counts: [17]u8,
+    row_extra_gaps: [16]Tex_Table_Length,
+    horizontal_rule_counts: [17]u8,
+}
+
+// Retain one optional color without depending on rendering packages.
+Tex_Document_Color :: struct {
+    present: bool,
+    red: u8,
+    green: u8,
+    blue: u8,
+    alpha: u8,
+}
+
+// Identify supported inline Euclid shape semantics.
+Tex_Document_Shape_Kind :: enum {
+    None,
+    Point,
+    Line,
+    Circle,
+    Box,
+    Angle,
+    Semicircle,
+    Perpendicular,
+    Triangle,
+    Pentagon,
+}
+
+// Retain one font-independent inline Euclid shape payload.
+Tex_Document_Shape :: struct {
+    present: bool,
+    kind: Tex_Document_Shape_Kind,
+    color: Tex_Document_Color,
+    width: f32,
+    height: f32,
+    thickness: f32,
+    filled: bool,
+    start_angle: f32,
+    end_angle: f32,
+    fill_color: Tex_Document_Color,
+    arc_color: Tex_Document_Color,
+    edge_colors: [5]Tex_Document_Color,
+}
+
+// Identify one font-independent document block.
+Tex_Document_Block_Kind :: enum {
+    Paragraph,
+    Display,
+    List_Item,
+}
+
+// Identify the document-level policy for one technical display environment.
+Tex_Document_Display_Kind :: enum {
+    Plain,
+    Equation,
+    Align,
+    Gather,
+    Multline,
+}
+
+// Identify one semantic item inside a document block.
+Tex_Document_Inline_Kind :: enum {
+    Text,
+    Space,
+    Math,
+    Shape,
+    Penalty,
+    Forced_Break,
+}
+
+// Distinguish spacing behavior before physical measurement.
+Tex_Document_Space_Kind :: enum {
+    Breakable,
+    Nonbreaking,
+    Controlled,
+}
+
+// Identify block alignment independently from physical placement.
+Tex_Document_Alignment :: enum {
+    Left,
+    Center,
+    Right,
+}
+
+// Identify one resolved document container without retaining a parse tree.
+Tex_Document_Container_Kind :: enum u8 {
+    None,
+    Quote,
+    Quotation,
+    Itemize,
+    Enumerate,
+    Description,
+}
+
+// Identify list formatting independently from surrounding quotation containers.
+Tex_Document_List_Kind :: enum u8 {
+    None,
+    Itemize,
+    Enumerate,
+    Description,
+}
+
+// Retain paragraph and display policy before layout.
+Tex_Document_Format :: struct {
+    alignment: Tex_Document_Alignment,
+    no_indent: bool,
+    container_kind: Tex_Document_Container_Kind,
+    container_depth: u8,
+    left_margin_levels: u8,
+    right_margin_levels: u8,
+    list_kind: Tex_Document_List_Kind,
+    list_id: u16,
+    item_ordinal: u16,
+    item_first_block: bool,
+}
+
+// Retain one bounded technical-display row and its existing math programs.
+Tex_Document_Display_Row :: struct {
+    source: Tex_Source_Span,
+    primary_program: int,
+    secondary_program: int,
+    alignment: Tex_Document_Alignment,
+    suppress_number: bool,
+}
+
+// Reference exact bytes in the caller's source document.
+Tex_Source_Span :: struct {
+    offset: int,
+    length: int,
+}
+
+// Retain one pointer-free semantic inline item.
+Tex_Document_Inline :: struct {
+    kind: Tex_Document_Inline_Kind,
+    source: Tex_Source_Span,
+    text: Tex_Text_Span,
+    font_flags: i32,
+    color: Tex_Document_Color,
+    space_kind: Tex_Document_Space_Kind,
+    shape: Tex_Document_Shape,
+    root_style: Tex_Math_Root_Style,
+    math_program: int,
+    penalty: i32,
+}
+
+// Retain one contiguous range of semantic inline items.
+Tex_Document_Block :: struct {
+    kind: Tex_Document_Block_Kind,
+    inline_start: int,
+    inline_count: int,
+    source: Tex_Source_Span,
+    format: Tex_Document_Format,
+    display_kind: Tex_Document_Display_Kind,
+    display_row_start: int,
+    display_row_count: int,
+    display_numbered: bool,
+}
+
+// Describe one recursive program as a linked sequence of semantic operations.
+Tex_Math_Program :: struct {
+    first_op: int,
+    last_op: int,
+    op_count: int,
+}
+
+// Store one font-independent recursive math operation.
+Tex_Math_Op :: struct {
+    kind: Tex_Math_Op_Kind,
+    text: Tex_Text_Span,
+    radical_index_text: Tex_Text_Span,
+    superscript_text: Tex_Text_Span,
+    subscript_text: Tex_Text_Span,
+    accent_mode: Tex_Accent_Mode,
+    radical_mode: Tex_Radical_Mode,
+    style_level: Tex_Math_Style_Level,
+    left_delimiter: Tex_Delimiter_Kind,
+    right_delimiter: Tex_Delimiter_Kind,
+    large_op_kind: i32,
+    operator_growth: i32,
+    operator_limits: i32,
+    style_role: Tex_Math_Style_Role,
+    atom_class: Tex_Math_Atom_Class,
+    glue_kind: Tex_Math_Glue_Kind,
+    child_program: int,
+    secondary_program: int,
+    tertiary_program: int,
+    table_descriptor: int,
+    next_op: int,
+}
+
+// Own bounded parser output without font, layout, bridge, or view dependencies.
+Tex_Semantic_Output :: struct {
+    text: [TEX_SEMANTIC_TEXT_BYTE_CAPACITY]u8,
+    text_count: int,
+    ops: [TEX_MATH_OP_CAPACITY]Tex_Math_Op,
+    op_count: int,
+    programs: [TEX_MATH_PROGRAM_CAPACITY]Tex_Math_Program,
+    program_count: int,
+    table_descriptors: [TEX_TABLE_DESCRIPTOR_CAPACITY]Tex_Table_Descriptor,
+    table_descriptor_count: int,
+    document_blocks: [TEX_DOCUMENT_BLOCK_CAPACITY]Tex_Document_Block,
+    document_block_count: int,
+    document_inlines: [TEX_DOCUMENT_INLINE_CAPACITY]Tex_Document_Inline,
+    document_inline_count: int,
+    document_display_rows:
+        [TEX_DOCUMENT_DISPLAY_ROW_CAPACITY]Tex_Document_Display_Row,
+    document_display_row_count: int,
+    root_program: int,
+    plain_text: Tex_Text_Span,
+    status: Tex_Parse_Status,
+    error_offset: int,
+    recoverable: bool,
+}
+
+//   Return one checked semantic text span as a string view.
+tex_semantic_text :: proc(
+    output: ^Tex_Semantic_Output,
+    span: Tex_Text_Span) -> string {
+    if output == nil || span.offset < 0 || span.length < 0 ||
+        span.offset > output.text_count-span.length {
+        return ""
+    }
+    return string(output.text[span.offset:span.offset + span.length])
+}

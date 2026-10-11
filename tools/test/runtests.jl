@@ -1,20 +1,730 @@
 # Tooling tests for Euclid's verification adapter (tools/test_runner.jl and
-# tools/verify.jl). Run with the analysis project active so JSON3 resolves:
+# tools/verify.jl). Run with the analysis project active so JSON resolves:
 #
 #     julia --project=tools/analysis tools/test/runtests.jl
 
 using Test
 
 include(joinpath(@__DIR__, "..", "verify.jl"))
+include(joinpath(@__DIR__, "..", "make.jl"))
+include(joinpath(@__DIR__, "..", "julia_test_reporter.jl"))
+include(joinpath(@__DIR__, "..", "scenario_runner.jl"))
+include(joinpath(@__DIR__, "shader_tests.jl"))
+include(joinpath(@__DIR__, "harfbuzz_linker_tests.jl"))
+include(joinpath(@__DIR__, "content_builder_tests.jl"))
 
 const Verification = Main.EuclidVerification
 const TestRunner = Verification.EuclidTestRunner
+const BuildConfiguration = Main.EuclidBuildConfiguration
+const JuliaTestReporter = Main.EuclidJuliaTestReporter
+const ScenarioRunner = Main.EuclidScenarioRunner
+
+@testset "settings acceptance evidence validation" begin
+    @test isnothing(ScenarioRunner.validate_settings_process(
+        "== allocation evidence: live=0 current_bytes=0 peak_bytes=42 total=3 bad_frees=0 =="))
+    @test_throws ErrorException ScenarioRunner.validate_settings_process("")
+    @test_throws ErrorException ScenarioRunner.validate_settings_process(
+        "== allocation evidence: live=2 current_bytes=68 peak_bytes=42 total=3 bad_frees=0 ==")
+    @test_throws ErrorException ScenarioRunner.validate_settings_process(
+        "== allocation evidence: live=0 current_bytes=0 peak_bytes=42 total=3 bad_frees=1 ==")
+    rows = [Dict("namespace" => "drawing", "key" => "dust_limit",
+        "integer_value" => 1400)]
+    @test isnothing(ScenarioRunner.require_setting_row(rows, "drawing", "dust_limit", 1400))
+    @test_throws ErrorException ScenarioRunner.require_setting_row(
+        rows, "drawing", "dust_limit", 1500)
+    @test_throws ErrorException ScenarioRunner.require_setting_row(
+        rows, "drawing", "missing", 1400)
+end
 
 @testset "Euclid tooling" begin
+    @testset "AccessKit provider" begin
+        provider = BuildConfiguration.accesskit_provider_identity()
+        @test provider.kind == :repository
+        @test provider.version == "0.23.1"
+        @test isfile(provider.library_path)
+        @test isfile(provider.manifest_path)
+        @test occursin("accesskit", BuildConfiguration.accesskit_linker_flags())
+        @test dirname(provider.library_path) in
+            BuildConfiguration.native_runtime_dirs()
+        @test occursin("accesskit", BuildConfiguration.native_linker_flags())
+        expected_role = Sys.iswindows() ? "runtime" : "runtime-link-library"
+        @test BuildConfiguration.accesskit_artifact_path(expected_role) ==
+            provider.library_path
+        if Sys.iswindows()
+            @test basename(BuildConfiguration.accesskit_artifact_path(
+                "import-library")) == "accesskit.lib"
+        end
+
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; architecture=:unsupported)
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; hash_file=_ -> "invalid")
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("schema_version" => 2)))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("platform" => "wrong")))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("toolchain" => "wrong")))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("license_file" => "licenses/missing")))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path), Dict(
+                "artifact" => [Dict("file" => "bin/missing",
+                    "role" => "runtime-link-library", "sha256" => "missing")])))
+        @test_throws ErrorException BuildConfiguration.accesskit_manifest(
+            ; parse_file=path -> merge(TOML.parsefile(path),
+                Dict("artifact" => Any[])))
+        @test_throws ErrorException BuildConfiguration.accesskit_artifact_path(
+            "missing")
+        @test_throws ErrorException BuildConfiguration.accesskit_artifact_path(
+            expected_role;
+            parse_file=path -> begin
+                manifest = TOML.parsefile(path)
+                push!(manifest["artifact"], copy(first(manifest["artifact"])))
+                manifest
+            end)
+    end
+
+    @testset "AccessKit runtime staging" begin
+        mktempdir() do root
+            source = joinpath(root, "source", "accesskit.dll")
+            destination = joinpath(root, "output", "accesskit.dll")
+            mkpath(dirname(source))
+            write(source, "validated")
+            write_destination = stage_accesskit_runtime(source, destination)
+            @test write_destination == destination
+            @test read(destination, String) == "validated"
+
+            write(destination, "stale")
+            stage_accesskit_runtime(source, destination)
+            @test read(destination, String) == "validated"
+
+            @test_throws ErrorException stage_accesskit_runtime(
+                source, destination;
+                copy_file=(_, target) -> write(target, "corrupt"))
+        end
+        if Sys.iswindows()
+            @test accesskit_runtime_path() == joinpath(BIN_DIR, "accesskit.dll")
+            @test accesskit_runtime_path(true) ==
+                joinpath(SCRIPT_DIR, ".build", "debug", "accesskit.dll")
+        end
+    end
+
+    @testset "SDL3 providers" begin
+        @test BuildConfiguration.sdl3_library_path(
+            "/opt/sdl/lib";
+            kernel=:Linux,
+            is_file=path -> path == "/opt/sdl/lib/libSDL3.so.0",
+            real_path=identity) == "/opt/sdl/lib/libSDL3.so.0"
+        @test BuildConfiguration.sdl3_library_path(
+            "/opt/sdl/lib";
+            kernel=:Darwin,
+            is_file=path -> path == "/opt/sdl/lib/libSDL3.0.dylib",
+            real_path=identity) == "/opt/sdl/lib/libSDL3.0.dylib"
+        @test_throws ErrorException BuildConfiguration.sdl3_library_path(
+            ""; kernel=:Darwin)
+        @test_throws ErrorException BuildConfiguration.sdl3_library_path(
+            "/missing"; kernel=:Linux, is_file=_ -> false)
+
+        responses = Dict(
+            "--modversion" => (exit_code=0, output="3.4.16\n", error_output=""),
+            "--variable=libdir" =>
+                (exit_code=0, output="/opt/sdl/lib\n", error_output=""))
+        capture = command -> responses[command.exec[2]]
+        provider = BuildConfiguration.sdl3_provider_identity(:Linux;
+            capture,
+            is_file=path -> path == "/opt/sdl/lib/libSDL3.so.0",
+            real_path=identity)
+        @test provider.kind == :system
+        @test provider.version == "3.4.16"
+        @test provider.library_path == "/opt/sdl/lib/libSDL3.so.0"
+        darwin_provider = BuildConfiguration.sdl3_provider_identity(:Darwin;
+            capture,
+            is_file=path -> path == "/opt/sdl/lib/libSDL3.0.dylib",
+            real_path=identity)
+        @test darwin_provider.library_path == "/opt/sdl/lib/libSDL3.0.dylib"
+        windows_provider = BuildConfiguration.sdl3_provider_identity(
+            :NT; architecture=:x86_64)
+        @test windows_provider.kind == :repository
+        @test windows_provider.version == "3.4.16"
+        @test basename(windows_provider.library_path) == "SDL3.dll"
+
+        flags_capture = _ ->
+            (exit_code=0, output=" -L/opt/sdl/lib  -lSDL3 \n", error_output="")
+        @test BuildConfiguration.sdl3_linker_flags(
+            :Linux; capture=flags_capture) == "-L/opt/sdl/lib -lSDL3"
+        @test BuildConfiguration.sdl3_linker_flags(
+            :Darwin; capture=flags_capture) == "-L/opt/sdl/lib -lSDL3"
+        @test endswith(BuildConfiguration.sdl3_linker_flags(
+            :NT; architecture=:x86_64),
+            "/DEFAULTLIB:SDL3.lib")
+    end
+
+    @testset "mandatory SDL_image provider" begin
+        @test BuildConfiguration.sdl3_image_library_path(
+            "/opt/sdl-image/lib";
+            kernel=:Linux,
+            is_file=path -> path == "/opt/sdl-image/lib/libSDL3_image.so.0",
+            real_path=identity) == "/opt/sdl-image/lib/libSDL3_image.so.0"
+        @test_throws ErrorException BuildConfiguration.sdl3_image_library_path(
+            ""; kernel=:Linux)
+        @test BuildConfiguration.sdl3_image_library_path(
+            "/opt/sdl-image/lib";
+            kernel=:Darwin,
+            is_file=path ->
+                path == "/opt/sdl-image/lib/libSDL3_image.0.dylib",
+            real_path=identity) ==
+            "/opt/sdl-image/lib/libSDL3_image.0.dylib"
+        @test_throws ErrorException BuildConfiguration.sdl3_image_library_path(
+            "/missing"; kernel=:Linux, is_file=_ -> false)
+
+        responses = Dict(
+            "--modversion" => (exit_code=0, output="3.4.0\n", error_output=""),
+            "--variable=libdir" =>
+                (exit_code=0, output="/opt/sdl-image/lib\n", error_output=""))
+        capture = command -> responses[command.exec[2]]
+        provider = BuildConfiguration.sdl3_image_provider_identity(:Linux;
+            capture,
+            is_file=path -> path == "/opt/sdl-image/lib/libSDL3_image.so.0",
+            real_path=identity)
+        @test provider.kind == :system
+        @test provider.version == "3.4.0"
+        @test provider.library_path == "/opt/sdl-image/lib/libSDL3_image.so.0"
+        darwin_provider = BuildConfiguration.sdl3_image_provider_identity(:Darwin;
+            capture,
+            is_file=path ->
+                path == "/opt/sdl-image/lib/libSDL3_image.0.dylib",
+            real_path=identity)
+        @test darwin_provider.library_path ==
+            "/opt/sdl-image/lib/libSDL3_image.0.dylib"
+        windows_provider = BuildConfiguration.sdl3_image_provider_identity(
+            :NT; architecture=:x86_64)
+        @test windows_provider.kind == :repository
+        @test windows_provider.version == "3.4.6"
+        @test basename(windows_provider.library_path) == "SDL3_image.dll"
+
+        for invalid_version in ("", "invalid", "3.3.9")
+            invalid_responses = copy(responses)
+            invalid_responses["--modversion"] =
+                (exit_code=0, output=invalid_version, error_output="")
+            invalid_capture = command -> invalid_responses[command.exec[2]]
+            @test_throws ErrorException BuildConfiguration.sdl3_image_provider_identity(
+                :Linux;
+                capture=invalid_capture,
+                is_file=_ -> true,
+                real_path=identity)
+        end
+
+        flags_capture = _ ->
+            (exit_code=0, output=" -lSDL3_image   -lSDL3 \n", error_output="")
+        @test BuildConfiguration.sdl3_image_linker_flags(
+            :Linux; capture=flags_capture) == "-lSDL3_image -lSDL3"
+        @test BuildConfiguration.sdl3_image_linker_flags(
+            :Darwin; capture=flags_capture) == "-lSDL3_image -lSDL3"
+        @test endswith(BuildConfiguration.sdl3_image_linker_flags(
+            :NT; architecture=:x86_64),
+            "/DEFAULTLIB:SDL3_image.lib")
+        @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
+            :Linux; capture=_ ->
+                (exit_code=1, output="", error_output="missing"))
+        @test_throws ErrorException BuildConfiguration.sdl3_image_linker_flags(
+            :Linux; capture=_ ->
+                (exit_code=0, output=" \n", error_output=""))
+
+        @test BuildConfiguration.native_runtime_directories(
+            ["/julia/lib", "/opt/sdl/lib"],
+            ["/opt/sdl/lib/libSDL3.so.0", "/opt/sdl/lib/libSDL3_image.so.0"]) ==
+            ["/julia/lib", "/opt/sdl/lib"]
+
+        manifest = BuildConfiguration.windows_sdl_manifest(
+            ; architecture=:x86_64)
+        @test manifest["platform"] == "windows"
+        @test manifest["architecture"] == "x86_64"
+        @test_throws ErrorException BuildConfiguration.windows_sdl_manifest(
+            ; architecture=:aarch64)
+        @test_throws ErrorException BuildConfiguration.windows_sdl_manifest(
+            ; architecture=:x86_64, hash_file=_ -> "invalid")
+    end
+
+    @testset "native linker platform selection" begin
+        @test BuildConfiguration.harfbuzz_provider("jll", :Linux) == :jll
+        @test BuildConfiguration.harfbuzz_provider("SYSTEM", :Darwin) == :system
+        @test_throws ErrorException BuildConfiguration.harfbuzz_provider("", :Linux)
+        @test_throws ErrorException BuildConfiguration.harfbuzz_provider(
+            "invalid", :Linux)
+        @test_throws ErrorException BuildConfiguration.harfbuzz_provider(
+            "system", :NT)
+        @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Linux) ==
+            ["--libs", "--static", "harfbuzz"]
+        @test BuildConfiguration.harfbuzz_pkg_config_arguments(:Darwin) ==
+            ["--libs", "harfbuzz"]
+        @test_throws ErrorException BuildConfiguration.harfbuzz_pkg_config_arguments(
+            :FreeBSD)
+        @test BuildConfiguration.native_test_linker_flags("-ljulia", :Linux) ==
+            "-ljulia -lX11 -lXrandr -lXi -lXcursor -lXinerama"
+        @test BuildConfiguration.native_test_linker_flags("-ljulia", :Darwin) ==
+            "-ljulia"
+        @test BuildConfiguration.native_test_linker_flags("-ljulia", :NT) ==
+            "-ljulia /STACK:8388608"
+        @test_throws ErrorException BuildConfiguration.native_test_linker_flags(
+            "-ljulia", :FreeBSD)
+        library_path, runtime_dirs = BuildConfiguration.harfbuzz_jll_paths()
+        @test isfile(library_path)
+        @test dirname(library_path) in runtime_dirs
+        if !Sys.iswindows()
+            @test dirname(BuildConfiguration.sdl3_provider_identity().library_path) in
+                BuildConfiguration.native_runtime_dirs(:system)
+            @test BuildConfiguration.native_runtime_environment(:system) !== nothing
+        end
+        runtime_environment = BuildConfiguration.native_runtime_environment(:jll)
+        @test runtime_environment !== nothing
+        @test all(directory -> occursin(directory, runtime_environment.second),
+            BuildConfiguration.native_runtime_dirs(:jll))
+        if Sys.iswindows()
+            @test basename(library_path) == "libharfbuzz-0.dll"
+            @test Sys.BINDIR in BuildConfiguration.native_runtime_dirs()
+        else
+            jll_flags = BuildConfiguration.unix_harfbuzz_jll_linker_flags()
+            @test startswith(jll_flags, library_path)
+            @test "-L$(dirname(library_path))" in split(jll_flags)
+            if Sys.isapple()
+                @test all(directory -> "-Wl,-rpath,$directory" in
+                    split(jll_flags), runtime_dirs)
+            else
+                @test occursin("-Wl,-rpath-link,", jll_flags)
+            end
+            @test !(Sys.BINDIR in BuildConfiguration.native_runtime_dirs())
+        end
+    end
+
+    @testset "FreeType adapter inputs" begin
+        @test_throws ErrorException BuildConfiguration.freetype_jll_paths(:FreeBSD)
+        if Sys.iswindows()
+            paths = BuildConfiguration.freetype_jll_paths()
+            @test paths.version == "2.14.3+1"
+            @test basename(paths.library_path) == "libfreetype-6.dll"
+            @test isfile(paths.library_path)
+            @test isfile(joinpath(paths.include_dir, "ft2build.h"))
+            @test all(isdir, paths.runtime_dirs)
+
+            artifact = BuildConfiguration.freetype_artifact()
+            @test isfile(artifact.archive_path)
+            @test isfile(artifact.import_library_path)
+            @test endswith(artifact.archive_path, "euclid_freetype.lib")
+            @test length(artifact.fingerprint) == 64
+            linker_flags = BuildConfiguration.freetype_linker_flags()
+            @test occursin("/DEFAULTLIB:euclid_freetype.lib", linker_flags)
+            @test occursin("/DEFAULTLIB:freetype.lib", linker_flags)
+            @test occursin("/DEFAULTLIB:freetype.lib",
+                BuildConfiguration.native_linker_flags())
+            runtime_dirs = BuildConfiguration.native_runtime_dirs()
+            @test all(directory -> directory in runtime_dirs, paths.runtime_dirs)
+            @test Sys.BINDIR in runtime_dirs
+        elseif Sys.islinux() || Sys.isapple()
+            @test_throws ErrorException BuildConfiguration.freetype_jll_paths(:NT)
+            paths = BuildConfiguration.freetype_jll_paths()
+            @test paths.version == "2.14.3+1"
+            @test isfile(paths.library_path)
+            @test isfile(joinpath(paths.include_dir, "ft2build.h"))
+            @test dirname(paths.library_path) in paths.runtime_dirs
+
+            artifact = BuildConfiguration.freetype_artifact()
+            @test isfile(artifact.archive_path)
+            @test length(artifact.fingerprint) == 64
+            linker_flags = BuildConfiguration.freetype_linker_flags()
+            @test occursin("-L$(dirname(artifact.archive_path))", linker_flags)
+            @test occursin("-leuclid_freetype", linker_flags)
+            if Sys.isapple()
+                @test !occursin("-rpath-link", linker_flags)
+                @test all(directory -> "-Wl,-rpath,$directory" in
+                    split(linker_flags), paths.runtime_dirs)
+            else
+                @test occursin("-Wl,-rpath-link,", linker_flags)
+            end
+            @test occursin(paths.library_path,
+                BuildConfiguration.native_linker_flags())
+            @test dirname(paths.library_path) in
+                BuildConfiguration.native_runtime_dirs()
+            @test dirname(paths.library_path) in
+                BuildConfiguration.native_runtime_dirs(:system)
+            @test occursin(paths.library_path,
+                BuildConfiguration.native_linker_flags(:system))
+        else
+            @test_throws ErrorException BuildConfiguration.freetype_jll_paths()
+        end
+    end
+
+    @testset "repository driver commands" begin
+        build = parse_driver_invocation(["build", "--debug", "--strict"])
+        @test build.action == :build
+        @test build.arguments == ["--debug", "--strict"]
+
+        run = parse_driver_invocation(["run", "--debug", "--", "--no-vsync"])
+        @test run.action == :run
+        @test run.arguments == ["--debug", "--", "--no-vsync"]
+
+        test = parse_driver_invocation(["test", "--verbosity=1"])
+        @test test.action == :test
+        @test test.arguments == ["--verbosity=1"]
+        @test parse_driver_invocation(String[]).action == :help
+        @test parse_driver_invocation(["run-only"]).action == :run_only
+        @test_throws ErrorException parse_driver_invocation(["probe-sdl3"])
+        @test_throws ErrorException parse_driver_invocation(["probe-sdl3-image"])
+        @test parse_driver_invocation(["stats", "tools/make.jl"]).action == :stats
+        @test parse_driver_invocation(["unit", "odin"]).action == :unit
+        @test parse_driver_invocation(["check", "src"]).action == :check
+        @test parse_driver_invocation(["evidence", "capabilities"]).action == :evidence
+        @test parse_driver_invocation(["scenario", "example"]).action == :scenario
+        @test parse_driver_invocation(["accesskit-abi"]).action == :accesskit_abi
+        @test parse_driver_invocation(["accessibility-macos"]).action ==
+            :accessibility_macos
+        @test parse_driver_invocation(["accessibility-windows"]).action ==
+            :accessibility_windows
+        @test parse_dotnet_sdk_version("10.0.401\n") == v"10.0.401"
+        @test parse_dotnet_sdk_version("10.0.100-preview.1") ==
+            v"10.0.100-preview.1"
+        @test_throws ErrorException parse_dotnet_sdk_version("")
+        @test_throws ErrorException parse_dotnet_sdk_version("not-a-version")
+        windows_probe = accessibility_windows_command(
+            "dotnet", "tools/accessibility/accesskit_windows_tree_probe.cs")
+        @test windows_probe.exec == [
+            "dotnet", "run", "--file",
+            "tools/accessibility/accesskit_windows_tree_probe.cs"]
+        release_probe = accessibility_windows_command(
+            "dotnet", "tools/accessibility/accesskit_windows_tree_probe.cs",
+            ["--binary=bin/euclid.exe"])
+        @test release_probe.exec == [
+            "dotnet", "run", "--file",
+            "tools/accessibility/accesskit_windows_tree_probe.cs", "--",
+            "--binary=bin/euclid.exe"]
+        @test parse_driver_invocation(["analyzer-test"]).action == :analyzer_test
+        @test_throws ErrorException parse_driver_invocation(["--run"])
+        @test_throws ErrorException parse_driver_invocation(["-ABr"])
+        @test_throws ErrorException parse_driver_invocation(["unknown"])
+    end
+
+    @testset "scenario selection and reporting" begin
+        mktempdir() do root
+            write(joinpath(root, "second.jsonl"), "{}\n")
+            write(joinpath(root, "first.jsonl"), "{}\n")
+            @test ScenarioRunner.scenario_names(root) == ["first", "second"]
+            selected = ScenarioRunner.parse_scenario_options(
+                ["second", "--format=json"]; root)
+            @test selected.names == ["second"]
+            @test selected.format == :json
+            @test ScenarioRunner.parse_scenario_options(["--all"]; root).names ==
+                ["first", "second"]
+            @test_throws ErrorException ScenarioRunner.parse_scenario_options(
+                ["missing"]; root)
+        end
+
+        first_path = ScenarioRunner.fresh_artifact_path("example")
+        second_path = ScenarioRunner.fresh_artifact_path("example")
+        @test first_path != second_path
+        @test !ispath(first_path)
+        inconclusive = (result="inconclusive", trace_complete=false, exit_code=1)
+        @test !ScenarioRunner.scenario_passed(inconclusive)
+        output = IOBuffer()
+        ScenarioRunner.write_json_report(output, [inconclusive])
+        report = ScenarioRunner.JSON.parse(String(take!(output)))
+        @test !report.passed
+        @test report.scenarios[1].result == "inconclusive"
+    end
+
+    @testset "check command arguments" begin
+        @test analysis_command_arguments(:check, String[]) == ["check", SCRIPT_DIR]
+        @test analysis_command_arguments(:check, ["src", "--color=never"]) ==
+            ["check", "src", "--color=never"]
+        @test analysis_command_arguments(:stats, [
+            "src/main.odin", "--line=61", "--format=json"]) == [
+            "stats", "src/main.odin", "--line=61", "--format=json"]
+        @test_throws ErrorException analysis_command_arguments(:stats, String[])
+        @test_throws ErrorException analysis_command_arguments(:check, [
+            "src/main.odin", "src/view/view.odin"])
+    end
+
+    @testset "debug and strict builds" begin
+        build = parse_build_command(
+            parse_driver_invocation(["build", "--debug", "--strict"]))
+        @test build.debug
+        @test build.strict
+        @test isempty(build.arguments)
+        command = odin_build_command("-ljulia", true, true)
+        @test "-out:$(debug_app_binary_path())" in command
+        @test !("-define:RAYLIB_SHARED=true" in command)
+        @test "-define:EUCLID_ENABLE_SCENARIOS=true" in command
+        @test !("-define:EUCLID_ENABLE_SCENARIOS=true" in
+            odin_build_command("-ljulia", false, false))
+        @test !("-define:EUCLID_ENABLE_SCENARIOS=true" in
+            odin_build_command("-ljulia", false, true))
+        @test debug_assets_archive_path() ==
+            joinpath(dirname(debug_app_binary_path()), "assets.pkg")
+        @test debug_assets_identity_path() ==
+            joinpath(dirname(debug_app_binary_path()), "assets.pkg.identity")
+        if Sys.isapple()
+            @test app_binary_path() == joinpath(
+                BIN_DIR, "Euclid.app", "Contents", "MacOS", "euclid")
+            @test debug_app_binary_path() == joinpath(
+                SCRIPT_DIR, ".build", "debug", "Euclid.app",
+                "Contents", "MacOS", "euclid")
+            @test isfile(MACOS_INFO_PLIST_PATH)
+        end
+        @test "-debug" in command
+        @test "-o:none" in command
+        @test "-vet" in command
+        @test "-strict-style" in command
+        @test "-disallow-do" in command
+        @test "-warnings-as-errors" in command
+
+        mktempdir() do root
+            environment_path = joinpath(root, "euclid.env")
+            runtime_dirs = [raw"C:\Julia Runtime\bin",
+                raw"C:\Artifacts\harfbuzz\bin"]
+            withenv("PATH" => raw"C:\Existing Tools\bin") do
+                write_debug_environment(runtime_dirs; path=environment_path)
+                environment =
+                    BuildConfiguration.native_runtime_environment(runtime_dirs)
+                value = Sys.iswindows() ?
+                    replace(environment.second, '\\' => '/') : environment.second
+                escaped = replace(value, '\\' => "\\\\", '"' => "\\\"")
+                expected = "$(environment.first)=\"$escaped\"\n"
+                @test read(environment_path, String) == expected
+            end
+        end
+
+        debug_arguments = debug_application_arguments(["--no-vsync"], true)
+        @test first(debug_arguments) ==
+            "--diagnostics=$(debug_diagnostics_path())"
+        explicit = ["--diagnostics=custom.log"]
+        @test debug_application_arguments(explicit, true) == explicit
+
+        run = parse_build_command(parse_driver_invocation([
+            "run", "--debug", "--", "--no-vsync"]))
+        @test run.arguments == ["--no-vsync"]
+        @test run.debug
+        @test_throws ErrorException parse_build_command(
+            parse_driver_invocation(["build", "--", "--no-vsync"]))
+        @test_throws ErrorException parse_build_command(
+            parse_driver_invocation(["run-only", "--strict"]))
+    end
+
+    @testset "asset package identity sidecar" begin
+        mktempdir() do root
+            path = joinpath(root, "assets.pkg.identity")
+            identity = repeat("a", 64)
+            digest = repeat("b", 64)
+            write(path, "schema_version=1\npackage_identity=$identity\n" *
+                "archive_sha256=$digest\n")
+            parsed = read_asset_package_identity(path)
+            @test parsed !== nothing
+            @test parsed.package_identity == identity
+            @test parsed.archive_sha256 == digest
+
+            write(path, read(path, String) * "unknown=value\n")
+            @test isnothing(read_asset_package_identity(path))
+        end
+    end
+
+    @testset "zero-Raylib runtime closure" begin
+        @test isnothing(require_zero_raylib_runtime(
+            ["libSDL3.so.0", "libSDL3_image.so.0"], "bin/euclid"))
+        @test_throws ErrorException require_zero_raylib_runtime(
+            ["libSDL3.so.0", "libraylib.so.600"], "bin/euclid")
+        @test_throws ErrorException require_zero_raylib_runtime(
+            ["RAYLIB.DLL"], "bin/euclid.exe")
+        @test_throws ErrorException require_zero_raylib_runtime(
+            ["/Frameworks/librlgl.1.dylib"], "bin/euclid")
+    end
+
+    @testset "SDL3 shader closure metadata" begin
+        mktempdir() do root
+            binary = joinpath(root, "euclid")
+            assets = joinpath(root, "assets.pkg")
+            manifest = joinpath(root, "manifest.toml")
+            write(binary, "application")
+            write(assets, "assets")
+            write(manifest, """
+shadercross_path = "/libs/sdl_shadercross/source"
+shadercross_identity = "sha256:tool"
+shadercross_sha256 = "tool"
+shadercross_closure = ["/lib/libcompiler.so"]
+spirv_validator_path = "/tools/spirv-val"
+spirv_validator_identity = "sha256:validator"
+spirv_validator_sha256 = "validator"
+spirv_validator_closure = ["/lib/libvalidator.so"]
+
+[[shader]]
+name = "stroke3d.vert"
+artifact = "stroke3d.vert.spv"
+artifact_sha256 = "artifact"
+runtime_format = "MSL"
+runtime_entrypoint = "main0"
+runtime_artifact = "stroke3d.vert.msl"
+runtime_artifact_sha256 = "runtime-artifact"
+reflection = "stroke3d.vert.json"
+reflection_sha256 = "reflection"
+""")
+            freetype_runtime = Sys.islinux() ? "libfreetype.so.6" :
+                Sys.isapple() ? "@rpath/libfreetype.6.dylib" :
+                "libfreetype-6.dll"
+            bom = runtime_sbom_document(
+                "00000000-0000-0000-0000-000000000000",
+                Sys.islinux() || Sys.isapple() || Sys.iswindows() ?
+                    [freetype_runtime] : String[],
+                JuliaPackageDep[], binary, assets, manifest)
+            components = Dict(component["bom-ref"] => component
+                for component in bom["components"])
+            binary_ref = Sys.iswindows() ? "file:bin/euclid.exe" :
+                Sys.isapple() ?
+                    "file:bin/Euclid.app/Contents/MacOS/euclid" :
+                    "file:bin/euclid"
+            @test haskey(components[binary_ref], "hashes")
+            @test haskey(components["file:bin/assets.pkg"], "hashes")
+            @test components["build-tool:shadercross"]["scope"] == "excluded"
+            @test components["shader:stroke3d.vert:MSL"]["scope"] ==
+                "required"
+            dependencies = only(bom["dependencies"])["dependsOn"]
+            @test "native:sdl3" in dependencies
+            @test components["native:accesskit"]["version"] == "0.23.1"
+            @test components["native:accesskit"]["scope"] == "required"
+            @test "native:accesskit" in dependencies
+            @test components["native:sqlite3"]["version"] == "3.53.4"
+            @test components["native:sqlite3"]["scope"] == "required"
+            @test "native:sqlite3" in dependencies
+            if Sys.islinux() || Sys.isapple() || Sys.iswindows()
+                freetype = components["runtime:$freetype_runtime"]
+                @test freetype["version"] == "2.14.3+1"
+                @test freetype["hashes"][1]["alg"] == "SHA-256"
+                @test freetype["properties"][1]["value"] == "FreeType2_jll"
+                @test "runtime:$freetype_runtime" in dependencies
+            end
+            graphics_runtime = Sys.isapple() ? "native:metal-framework" :
+                Sys.iswindows() ? "native:direct3d12" : "native:vulkan-loader"
+            @test graphics_runtime in dependencies
+            if Sys.iswindows()
+                @test "native:sdl3-image" in dependencies
+                @test "native:libpng" in dependencies
+            end
+            @test "shader:stroke3d.vert:MSL" in dependencies
+            @test !("build-tool:shadercross" in dependencies)
+        end
+    end
+
+    @testset "fixed command build plans" begin
+        @test build_plan_for(:build) == BuildPlanToggles(true, false, true)
+        @test build_plan_for(:run_only) == BuildPlanToggles(false, false, false)
+        @test build_plan_for(:assets) == BuildPlanToggles(false, false, true)
+        @test build_plan_for(:vet) == BuildPlanToggles(true, true, true)
+        @test build_plan_for(:test) == BuildPlanToggles(true, true, true)
+
+        test_command = parse_build_command(
+            parse_driver_invocation(["test", "--verbosity=1"]))
+        @test test_command.arguments == ["--verbosity=1"]
+        @test_throws ErrorException parse_build_command(
+            parse_driver_invocation(["test", "--debug"]))
+        @test_throws ErrorException parse_build_command(
+            parse_driver_invocation(["assets", "extra"]))
+        @test unit_command_runs_odin(String[])
+        @test unit_command_runs_odin(["odin"])
+        @test !unit_command_runs_odin(["julia"])
+    end
+
+    @testset "sysimage input fingerprint" begin
+        relative_inputs = replace.(
+            relpath.(sysimage_stable_input_paths(), JULIA_TEST_PROJECT), '\\' => '/')
+        @test "animation_catalog.jl" in relative_inputs
+        @test "localized_content.jl" in relative_inputs
+        @test !("animation_catalog_data.jl" in relative_inputs)
+        @test !("animation_catalog_generation.jl" in relative_inputs)
+        @test !("nullanimation.jl" in relative_inputs)
+        @test !any(startswith(path, "elements/") for path in relative_inputs)
+        @test length(content_input_fingerprint()) == 64
+
+        mktempdir() do root
+            first_path = joinpath(root, "first.jl")
+            second_path = joinpath(root, "second.jl")
+            write(first_path, "first")
+            write(second_path, "second")
+            identity = "julia=test;platform=test"
+            first = fingerprint_sysimage_inputs(
+                [first_path, second_path], root; identity)
+            @test first == fingerprint_sysimage_inputs(
+                [first_path, second_path], root; identity)
+            @test first != fingerprint_sysimage_inputs(
+                [first_path, second_path], root; identity=identity * ";changed")
+            write(second_path, "changed")
+            @test first != fingerprint_sysimage_inputs(
+                [first_path, second_path], root; identity)
+        end
+    end
+
+    @testset "sysimage cache validation" begin
+        mktempdir() do cache_root
+            fingerprint = repeat("a", 64)
+            directory = sysimage_cache_dir(fingerprint; cache_root)
+            mkpath(directory)
+            image_path = joinpath(directory, julia_sysimage_filename())
+            write(image_path, "image bytes")
+            artifact = JuliaSysimageArtifact(
+                fingerprint, sysimage_artifact_sha256(image_path), image_path)
+            write_sysimage_cache_metadata(joinpath(directory, "metadata.toml"), artifact)
+
+            cached = load_cached_julia_sysimage(fingerprint; cache_root)
+            @test cached !== nothing
+            @test cached.artifact_sha256 == artifact.artifact_sha256
+            write(image_path, "corrupt")
+            @test load_cached_julia_sysimage(fingerprint; cache_root) === nothing
+        end
+    end
+
     @testset "suite definitions" begin
         suites = TestRunner.suite_definitions()
         @test [suite.name for suite in suites] == ["julia", "odin"]
         @test [suite.language for suite in suites] == ["Julia", "Odin"]
+        command = TestRunner.odin_test_command("")
+        @test !("-define:ODIN_TEST_THREADS=1" in command)
+        @test !("-define:RAYLIB_SHARED=true" in command)
+        @test "-out:$(TestRunner.ODIN_TEST_BINARY)" in command
+        @test dirname(TestRunner.ODIN_TEST_BINARY) ==
+            joinpath(TestRunner.REPOSITORY_ROOT, "bin")
+    end
+
+    @testset "structured test records" begin
+        source_path = joinpath(TestRunner.ODIN_SOURCE_ROOT, "core", "animation")
+        locations = TestRunner.discover_odin_locations(TestRunner.ODIN_SOURCE_ROOT)
+        name = "animation.animation_model_test_animation_value_store_overwrites_bound_key"
+        @test locations[name].file == "src/core/animation/value_store_test.odin"
+        @test locations[name].line == 27
+        package_names = TestRunner.odin_package_test_names(source_path, locations)
+        @test name in package_names
+        @test all(startswith(test_name, "animation.") for test_name in package_names)
+        @test TestRunner.odin_source_path("../outside") === nothing
+        @test TestRunner.odin_source_path("missing") === nothing
+
+        repeated = [
+            (name="loop > value", status="passed"),
+            (name="loop > value", status="passed"),
+            (name="unique", status="passed"),
+        ]
+        disambiguated = JuliaTestReporter.disambiguate_records(repeated)
+        @test [record.name for record in disambiguated] ==
+            ["loop > value [case 1]", "loop > value [case 2]", "unique"]
+
+        record = TestRunner.TestResult(
+            name, "Odin", "core", locations[name].file, locations[name].line,
+            "passed", nothing, nothing)
+        suite = TestRunner.SuiteResult(
+            "odin", "Odin", 1, UInt64(10), "PASS", "", [record])
+        output = IOBuffer()
+        TestRunner.write_json_report(output, [suite])
+        report = TestRunner.JSON.parse(String(take!(output)))
+        @test report.schema_version == "2.0.0"
+        @test report.tests[1].name == name
+        @test report.tests[1].elapsed_ns === nothing
     end
 
     @testset "test count extraction" begin
@@ -28,15 +738,29 @@ const TestRunner = Verification.EuclidTestRunner
         @test TestRunner.reported_odin_count(
             "Finished 1 test in 12.7s. The test was successful.") == 1
         @test TestRunner.reported_odin_count("No tests to run.") === nothing
+        @test TestRunner.odin_suite_status(0, 139) == "PASS"
+        @test TestRunner.odin_suite_status(0, 0) == "FAIL"
+        @test TestRunner.odin_suite_status(0, nothing) == "FAIL"
+        @test TestRunner.odin_suite_status(1, 139) == "FAIL"
     end
 
     @testset "test runner option parsing" begin
-        @test TestRunner.parse_options(String[]) ==
-            (selected_suite=nothing, format="text", color=:auto)
+        defaults = TestRunner.parse_options(String[])
+        @test defaults.selected_suite === nothing
+        @test defaults.format == "text"
+        @test defaults.color == :auto
+        @test defaults.selected_test === nothing
+        @test defaults.selected_package === nothing
         @test TestRunner.parse_options(["--format=json"]).format == "json"
         @test TestRunner.parse_options(["--color=never"]).color == :never
         @test TestRunner.parse_options(["julia"]).selected_suite == "julia"
+        @test TestRunner.parse_options([
+            "odin", "--test=core.example"]).selected_test == "core.example"
+        @test TestRunner.parse_options([
+            "odin", "--package=dynview/math"]).selected_package == "dynview/math"
         @test TestRunner.parse_options(["--bogus"]) isa String
+        @test TestRunner.parse_options(["--test="]) isa String
+        @test TestRunner.parse_options(["--package="]) isa String
         @test TestRunner.parse_options(["julia", "odin"]) isa String
         @test TestRunner.parse_options(["--format=xml"]) isa String
         @test TestRunner.parse_options(["--color=wrong"]) isa String
@@ -67,7 +791,7 @@ const TestRunner = Verification.EuclidTestRunner
         @test Verification.resolve_report_path("analysis.md") ==
             joinpath(Verification.REPOSITORY_ROOT, "analysis.md")
         @test Verification.resolve_report_path("/tmp/analysis.md") ==
-            "/tmp/analysis.md"
+            normpath("/tmp/analysis.md")
         @test Verification.resolve_report_path(nothing) === nothing
         @test Verification.resolve_settings_path("custom.jl") ==
             joinpath(Verification.REPOSITORY_ROOT, "custom.jl")
@@ -297,4 +1021,28 @@ const TestRunner = Verification.EuclidTestRunner
             Verification.OutputPolicy(Verification.Summary, :never, "text"))
         @test occursin("Verification: PASS", String(take!(io)))
     end
+end
+
+include("sdl_boundary_analysis_tests.jl")
+include("evidence_tests.jl")
+
+@testset "settings task trace validation" begin
+    submitted = (correlation=UInt64(2), generation=UInt64(3),
+        correlation_kind="task", sequence=UInt64(1), payload=(first=UInt32(4),))
+    committed = (correlation=UInt64(2), generation=UInt64(3),
+        correlation_kind="task", sequence=UInt64(2), producer="display",
+        kind="settings_save_committed", payload=(first=UInt32(4), second=UInt32(0)))
+    @test isnothing(ScenarioRunner.validate_settings_outcome(committed, [submitted]))
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (generation=UInt64(4),)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (correlation_kind="scenario_action",)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (sequence=UInt64(1),)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (payload=(first=UInt32(5), second=UInt32(0)),)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        merge(committed, (payload=(first=UInt32(4), second=UInt32(1)),)), [submitted])
+    @test_throws ErrorException ScenarioRunner.validate_settings_outcome(
+        committed, [submitted, submitted])
 end

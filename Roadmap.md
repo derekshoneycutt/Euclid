@@ -7,7 +7,7 @@ there are some things that do need to start early.
 
 ## v1
 
-Core Content (>163 animations; 98 complete):
+Core Content (>260 animations; 119 complete):
 
 - [ ] Euclid Elements, Book 1 "the intro core, pythagorus" (85 animations; 38 complete)
   - [X] Definitions (31 animations)
@@ -20,8 +20,8 @@ Core Content (>163 animations; 98 complete):
     - [ ] 21-30
     - [ ] 31-40
     - [ ] 41-48
-- [ ] Commentaries and Alternatives (>10 animations; 2 complete)
-  - [ ] Proclus commentaries (>6 animations)
+- [ ] Commentaries and Alternatives (>42 animations; 2 complete)
+  - [ ] Proclus commentaries (>39 animations)
     - [X] Isosceles Triangle
     - [X] Scalene Triangle
     - [ ] Prop 2: C is on AB
@@ -58,16 +58,38 @@ Core Content (>163 animations; 98 complete):
   - [X] Section 6 (8 animations)
   - [X] Section 7 (17 animations)
   - [X] Section 8 (2 animations)
+- [ ] Tarski (39+ animations)
+  - [ ] Axiom 1-4
+  - [ ] Axiom 5,5_1
+  - [ ] Axiom 6
+  - [ ] Axiom 7,7_1-3
+  - [ ] Axiom 8 (1,2,n)
+  - [ ] Axiom 9 (0,1,n,2_1-2)
+  - [ ] Axiom 10, 10_1-3
+  - [ ] Axiom 11; As11
+  - [ ] Axiom 12-19
+  - [ ] Axiom 20, 20_1
+  - [ ] Axiom 21-24
+- [ ] Logic (9+; 2 complete)
+  - [ ] Between-ness
+  - [X] And
+  - [ ] Or
+  - [X] Not
+  - [ ] If
+  - [ ] Iff
+  - [ ] Existence
+  - [ ] ForAll
+  - [ ] Sets
 - [ ] Algebraic groups (14+ animations; 7 complete)
   - [ ] Definitions (14 animations)
-    - [X] $\mathbb{Z}_2$(irregular polygon reflecting about a line; special case of$C_n$)
+    - [X] $\mathbb{Z}_2$ (irregular poly reflecting about line; special case of $C_n$)
       - [X] Closure
       - [X] Identity
       - [X] Inverse
-    - [X] $C_n$(cyclic group of order$n$; writing a circle in unit dividing $2\pi$)
+    - [X] $C_n$ (cyclic group of order $n$; writing a circle in unit dividing $2\pi$)
       - [X] Associativity
       - [X] Commutative (Abelian)
-    - [ ] $D_n$(dihedral, symmetry of shape with$n$ sides)
+    - [ ] $D_n$ (dihedral, symmetry of shape with $n$ sides)
       - [ ] Non-Abelian
     - [ ] $(\mathbb{R}^2, +)$ (translation group -- moving shapes)
     - [ ] $SO(2)$ Group (special orthogonal group of 2D rotations --
@@ -78,23 +100,41 @@ Core Content (>163 animations; 98 complete):
      infinite rotation fixed about center of polygon)
     - [ ] $E(2)$ Group (euclidean symmetry group of 2D plane --
      polygons translating/rotating/reflecting around another point)
-  - [ ] Demonstrations ? Idk maybe. keep going back and forth lololololol
+- [X] Curves (16+ animations)
+  - [X] Circle
+  - [X] Ellipse
+  - [X] Cycloid
+  - [X] Curtate Cycloid
+  - [X] Prolate Cycloid
+  - [X] Cardioid
+  - [X] Limacon
+  - [X] Dimpled Limacon
+  - [X] Convex Limacon
+  - [X] Deltoid
+  - [X] Astroid
+  - [X] 5-Hypocycloid
+  - [X] 11⁄2-Hypocycloid
+  - [X] Nephroid
+  - [X] 3-Dimple Epitrochoid
+  - [X] 5-Point Hypotrochoid
 
 General features:
 
 - [X] Windows, MacOS, Linux support
-- [X] Julia make script with static analysis report and testing options
-- [X] Primitives
+- [X] CMake & Julia make script with static analysis report and testing options
+- [X] Primitives / Shape System
+  - [X] Sparse simple animation-lifetime component system
+  - [X] Pen
+  - [X] Compass
   - [X] Point
   - [X] Line
   - [X] Circle
   - [X] Filled Circle
   - [X] Polygons (Triangle, Square, Pentagon)
-  - [ ] Cardioids & Limacons
   - [X] Label
-  - [X] Pen
-  - [X] Compass
-  - [ ] Roulette tool
+  - [X] Cycloids and Cycloid Tool
+  - [X] Trochoids and Trochoid Tool
+  - [X] Lenses & Lunes
 - [X] Basic, layered particle system
   - [X] Dust
   - [X] Embers
@@ -109,14 +149,18 @@ General features:
 - [X] UUID animation handles
 - [X] Improved UI layout system
 - [X] Improved hybrid immediate mode, block-based view text rendering
-- [X] Scratchpad REPL
+- [ ] Terminal / REPL
   - [X] Basic setup and availability
   - [X] Basic help feature
   - [X] Basic input tab completion support, including unicode characters & function names
   - [X] Basic clipboard support
   - [X] Initial primitive drawing animation hooks
-  - [X] LaTeX output
-  - [X] Improved Scratchpad console-like REPL
+  - [X] Improved console-like REPL
+  - [X] Terminal support with initial round of Kitty, Sixel, iterm2, etc. support
+  - [ ] Julia syntax highlighting
+  - [ ] History explorer Julia-REPL style
+  - [ ] Initial comprehensive terminal shape drawing suite (In progress)
+  - [ ] Improved input after full input system migration (IME, etc.)
 - [X] Standard group-focused transformation animations for complex shapes
   - [X] Translation
   - [X] Rotation
@@ -132,22 +176,55 @@ General features:
   - [X] Dynamic sized brackets
   - [X] Matrices
   - [X] Sums, Products, Integrals
+  - [X] More advanced math layouts and features
+  - [X] Basic document mode formatting
 - [X] Naive spatial-aware shape drawing
 - [X] Improved pen clipping through 3D polygons
-- [X] Drawing Sounds (Initial procedural)
+- [X] Resizable layout via Splitters
+- [X] Window sizing and portrait
+- [X] SDL3 Migration
+- [X] Drawing Sounds
+- [ ] Sqlite backend
+  - [X] Initial creation and access
+  - [X] Full-text search tables
+  - [X] Initial spellcheck suggestions
+  - [X] Animation catalog manifest tables
+  - [X] Localization tables
+  - [X] Basic initial user settings structure
+  - [ ] Persistent REPL history
+  - [ ] Search and use history
+  - [ ] Search auto-completion features
+  - [ ] Collections
+    - [X] Initial bookmarks/favorites type collection
+    - [ ] Favorites/Collection organization
+    - [ ] Multiple custom collections
+    - [ ] Custom introduction and naming in collections
+    - [ ] Most viewed (dynamic; non-mutable)
+- [ ] Sharing custom collections
+  - [ ] Export/import files
+  - [ ] In-network (ip-2-ip) custom collection sharing
+- [ ] Full input system
+  - [X] Comprehensive mouse/keyboard focus system
+  - [X] Basic initial accesibility support
+  - [ ] Additional accessibility support
 
 Final tasks:
 
 - [X] Final optimizations
   - [X] Dedicated Julia thread for Julia module isolation
+  - [X] Julia Actor Model infrastructure
   - [X] Basic worker threadpool optimizations
   - [X] Julia sysimage compilation and support
   - [X] Shader-based particle drawing
+  - [X] PIC dust particle physics
+  - [X] FreeType/Harfbuzz font rendering
 - [X] Generated Code Wiki
 - [ ] Semantic trace and deterministic animation test harness (default off)
   - [X] JSONL event tracing with runtime, animation, geometry, tool, and particle schemas
   - [X] Deterministic checkpoint snapshots and stable run/step identity
   - [X] Headless harness with stable-UUID scenario selection and Julia assertions
+  - [ ] Expanded and determinitive scenario definitions
+  - [ ] Declarative scenario expectation manifests and semantic regression suite
   - [ ] Running-app end-to-end harness
 - [ ] Runtime hardening
   - [ ] Julia/Odin boundary ownership and lifecycle audit
@@ -163,8 +240,9 @@ Final tasks:
   - [ ] Freeze and document supported Julia APIs
   - [ ] Remove dead APIs, debug paths, compatibility code, and unused assets
 - [ ] Final editing and review (2-3 weeks)
-  - [ ] Animation and content editing
   - [ ] Principal code review against documented architecture and standards
+  - [ ] Final Terminal user-command interface review
+  - [ ] Animation and content editing
   - [ ] Resolve review findings
 - [ ] Package construction
   - [ ] Linux
@@ -182,44 +260,45 @@ Content (24+ animations):
     - 1-5
     - 6-10
     - 11-14
+- More curves
 - Group theory (8+ animations)
   - Klein 4 Group
   - Frieze groups
-  - $Sim(2)$(same as$E(2)$ but with scaling as well)
+  - $Sim(2)$ (same as $E(2)$ but with scaling as well)
   - $Aff(2)$ ($Sim(2)$ with shearing added)
   - Circle group $S^1$ (point of a circle rotating around said circle)
   - $\mathbb{R}/\mathbb{Z}$ (coil going up, animating on each full circle)
   - Free group $F_2$ from figure-8 (walking a cayley tree)
-  - $(\pi_1(R_n)\cong F_n)$Free group$F_n$via the rose$R_n$(draw roses of size$n_a$;
-   where for $m$passes$n_a$varies constantly +1 for each$a\in \{1, ..., m\}$,
+  - $(\pi_1(R_n)\cong F_n)$ Free group $F_n$ via the rose $R_n$ (draw roses of size $n_a$;
+   where for $m$ passes $n_a$ varies constantly +1 for each $a\in \{1, ..., m\}$,
    line disintegrating as drawing with new effect)
-- Possibly Roulettes? (tusi couples, trochoids, cyclocloids,)
-- Logic, Tarski, etc.?
 
 Core Features:
 
-- More primitives (gnomons, strings--small connectors, logic)
+- More primitives
+  - gnomons
+  - strings--small connectors
+  - curve candidates: parabolas and hyperbolas, strophoid, spiral, leminiscate,
+    tratrix and catenary, concoids, cissoids, pedals, negative pedals, glissettes,
+    evolutes and involutes, inversions, caustics
 - Update clipping for better 3D feelings on things past pen w/ 1 plane
 - Limited lifetime line/arc segments--disintegrate after drawing
 - More LaTeX support
-- Improved Scratchpad REPL tab completion (preview of options, etc.)
-- Improved Scratchpad highlight and clipboard support
-- Scratchpad animation recorder w/ playback (e.g. start_recording! ... end_recording!
+- Terminal animation recorder w/ playback (e.g. start_recording! ... end_recording!
  ... replay_recording!)
 - Highlight drawn shape from clicking label in view text area
 - Additional REPL drawing methods
 - REPL-focused exercise suggestions
-- Persisting Scratchpads (runtime-only, as children in the trees of Scratchpad
- that can be navigated away from and returned to with persisted internal state;
+- Persisting Terminals (runtime-only, as children in the trees of Terminal
+  that can be navigated away from and returned to with persisted internal state;
   exit cleans REPL state and removes from tree)
 - Declarative animations support
 - Animation slider
 - Transformations
   - Scaling
   - Shearing
-- Window sizing and portrait mode
-- Revisit sounds? Maybe
-- Alternative tree for connected view vs book view
+  - Curve transformations (e.g. 3D rotations)
+- Smart history stuff
 
 ## Brainstorming
 
@@ -240,7 +319,7 @@ Core Features:
   - $PGL(2, C)$ (animated advanced transformation; changes center and
    radius because transformation preserves circles)
 - Complex numbers support handling
-- More primitives (ellipses/conic sections, spirals)
+- More primitives (spirals)
 - Scaled Cartesian coordinate system
 - Interactive mode animations w/ per-animation settings
 
@@ -251,6 +330,7 @@ Core Features:
   - Propositions (16)
 - Intro rings
 - Scaled polynomial section drawing
+- Maybe a server with downloadable content?
 
 ### v5
 
@@ -261,42 +341,6 @@ Core Features:
 - Fields
 
 ## References
-
-Roulette can be a good basis for all cardioids, limacons, nephroids, ellipses, more
-
-Mechanically, every standard roulette can be animated using three primary components:
-
-1. A Base Circle ($C_{1}$): Center $(x_1, y_1)$, radius $R$, fixed in place.
-1. A Rolling Circle ($C_{2}$): Center $(x_2, y_2)$, radius $r$, which rotates
- around the base circle.
-1. A Tracing Arm ($d$): A physical extension from the center of $C_{2}$ holding
- the pen at distance $d$.
-
-The Universal Formula
-
-Let $\theta$ be the angle of the rolling circle's center relative to the base circle's
- center. The coordinates of the pen $(x, y)$ are given by:
-
-$$\begin{aligned}x&=(R\pm r)\cos (\theta )+d\cos \left(\theta \pm
-\frac{R}{r}\theta \right)\\
- y&=(R\pm r)\sin (\theta )+d\sin \left(\theta \pm \frac{R}{r}\theta \right)\end{aligned}$$
-
-Use $+$ for Epitrochoids (Circle rolling on the outside of the base circle).
-
-Use $-$ for Hypotrochoids (Circle rolling on the inside of the base circle).
-
-By exposing just three variables ($R$, $r$, and $d$) we automatically get support
-for curves:
-
-Target | Curve | Direction | Base Radius ($R$) | Rolling Radius ($r$) | Pen Distance ($d$) | Visual Mechanical Behavior
---- | --- | --- | --- | --- | --- | ---
-Cardioid | Outside | ($+$) | $R$ | $r = R$ | $d = r$ | Pen sits exactly on the rolling circle's rim.
-Limaçon (Inner Loop) | Outside | ($+$) | $R$ | $r = R$ | $d > r$ | Pen extends past the rolling circle's rim.
-Limaçon (Dimpled) | Outside | ($+$) | $R$ | $r = R$ | $d < r$ | Pen sits inside the rolling circle's rim.
-Nephroid | Outside | ($+$) | $R$ | $r = \frac{1}{2}R$ | $d = r$ | Two inward kidney-like cusps.
-Ellipse | Inside | ($-$) | $R$ | $r = \frac{1}{2}R$ | $d \neq r$ | Known as a Tusi Couple. A rolling circle half the size of the base circle collapses planetary motion into perfect lines/ellipses!
-
------------
 
 Schopenhauer uses a diagram like this, very roughly. It includes a square with the
 diagonals crossing. The top triangle made by this diagonal is shaded. On either side

@@ -12,6 +12,8 @@ enforcement.
 1. [Upstream Style Relationship](#upstream-style-relationship)
 1. [Fast Compliance Checklist](#fast-compliance-checklist)
 1. [Global Rules](#global-rules)
+1. [Package Dependency Direction](#package-dependency-direction)
+1. [Allocation And Lifetime](#allocation-and-lifetime)
 1. [Verification Gate](#verification-gate)
 1. [Odin-Julia Boundary Rules](#odin-julia-boundary-rules)
 1. [Odin Rules (Required)](#odin-rules-required)
@@ -35,7 +37,7 @@ Normative language and enforcement labels:
 | **MUST** | Required. A violation blocks acceptance unless this document names an exception. |
 | **SHOULD** | Strong default. Deviations require a concrete readability or correctness reason. |
 | **MAY** | Optional and context-dependent. |
-| **Automated** | Checked by `make test` (the `julia make.jl -vt` gate), compiler flags, tests, or vet analysis. |
+| **Automated** | Checked by the CMake `check` target, compiler flags, tests, or vet analysis. |
 | **Review** | Checked during code review because reliable automation is not yet available. |
 
 ### Living Automated Policy
@@ -54,9 +56,13 @@ When guidance conflicts, use this precedence:
 
 1. Safety, correctness, ownership, and ABI requirements.
 1. Active automated policy in `tools/analysis_settings.jl`.
-1. Repository-specific rules in this document and `ArchitectureSummary.md`.
+1. Repository-specific rules in this document.
 1. Established local module conventions.
 1. Upstream Odin or Julia style guidance.
+
+`ArchitectureSummary.md` is an architectural entry point, not a second
+normative coding standard. When implementation rules appear to conflict,
+follow this document and the active automated policy.
 
 An exception should state what rule is being relaxed and why the normal form is
 worse in that case. It should also explain how correctness or readability
@@ -90,8 +96,7 @@ numeric width is part of the contract.
 
 Before marking work complete, verify all items below:
 
-- Build + vet + tests run with `make test` (the standard Makefile path; equivalently
-  `julia make.jl -vt`).
+- Build + vet + tests run with the CMake `check` target.
 - No hidden per-frame allocation growth in host-side hot paths.
 - Odin and Julia bridge changes are symmetric and documented.
 - Ownership is explicit: who allocates, mutates, and frees.
@@ -105,22 +110,177 @@ Before marking work complete, verify all items below:
 - Canonical validation occurs at boundaries; internal code does not repeatedly
   normalize bad input.
 
+## Package Dependency Direction
+
+Root package `src/core` is application composition, not a universal model package.
+It MUST retain only `Euclid_General_State`, `Euclid_Run_Settings`, and records whose
+purpose intrinsically requires complete application state. A type does not belong in
+root core merely because `Euclid_General_State` reaches it.
+
+Subsystem and model packages are substrate and MUST NOT import root core. Executable
+entry points and behavior in `src/view` and `src/bridge` are coordinators and MAY import
+root core. More-specific model packages beneath those coordinators remain substrate and
+MUST remain composition-independent. Production consumers MUST import the package that
+owns a model directly; root-core forwarding aliases are forbidden.
+
+`tools/analysis_settings.jl` enforces these layers. Substrate-to-composition edges and
+cycles among architecture layers are blocking findings.
+
+Raylib and rlgl imports are forbidden. The repository-owned `EUCLID-SDL-BOUNDARY`
+analysis extension checks parser-backed Odin dependency records and rejects either
+removed backend target.
+
+SDL imports are admitted only at exact native owners. The extension currently admits
+only the exact display-owned native color, icon, platform, platform-service, and timing
+files, the clipboard adapter, and the display input coordinator. Tests and the
+checked-in capability probe are fixtures, not production owners. Add or move an SDL
+import only with a corresponding ownership and architecture update.
+
+## Allocation And Lifetime
+
+Euclid uses initialization-first allocation in production: storage is established
+at the boundary that knows its owner and lifetime, reused while that lifetime is
+active, and released or reset by that owner. Steady-state frame and worker paths
+should use bounded or preallocated storage rather than silently growing the
+default heap.
+
+### Choose Storage By Lifetime
+
+Before adding an allocation, identify who owns it, who may mutate it, how long
+it must remain valid, who reclaims it, and what happens if allocation fails.
+The allocator should make those answers natural:
+
+| Lifetime or use | Preferred storage | Required reasoning |
+| --- | --- | --- |
+| One operation | Caller-owned scratch or temporary storage | Do not retain it past its reset boundary. |
+| Frame or task | Frame/task scratch or operation result storage | Reclaim only after consumers have joined. |
+| Subsystem | Owned allocator, pool, or arena | State owner and teardown; keep allocator with storage. |
+| Generation | Generation-owned storage, often arena | Detach borrowers before reset or replacement. |
+| Process | Explicit process-owned storage | Initialize once; document intentional permanence. |
+| Julia heap | GC-managed values and rooted handles | Root handles during native calls; distinct from Odin storage. |
+
+### Reusable Allocators
+
+Prefer an existing allocator when its lifetime matches the data instead of
+creating another pool or arena for each feature:
+
+| Allocator | Intended use | Lifetime boundary |
+| --- | --- | --- |
+| `context.temp_allocator` | Operation/frame scratch | Invalidated at the temporary-storage reset |
+| Shared animation arena | Native data needed for one active animation | Retire borrowers before generation reset |
+
+The animation allocator is deliberately reusable across feature-level stores.
+The animation-value store and Dynview document store are two existing larger
+management schemes that borrow it; they do not make it exclusive to those
+systems. New native data whose useful lifetime is exactly one animation
+generation SHOULD use this allocator rather than introducing a parallel
+generation arena. Keep its owner and generation contract explicit, and ensure
+all borrowers and derived aliases are detached before the shared reset.
+The allocator API is [`animation_memory_allocator`](../../../src/core/animation/memory.odin);
+its shared borrowers are coordinated in
+[`animation_storage.odin`](../../../src/bridge/animation_storage.odin).
+
+Use `context.temp_allocator` only when the data is truly temporary and cannot
+escape the operation/frame reset. Do not use it for generation-lived state.
+Conversely, do not place frame scratch in the animation arena merely because
+that allocator is available. Data that must outlive an animation generation,
+or has an independent subsystem lifecycle, needs storage owned for that longer
+or separate lifetime.
+
+Production Odin code MUST pass an allocator explicitly. It SHOULD use a
+dedicated allocator whose owner and lifetime match the allocation. Use
+`context.allocator` only when no more appropriate lifetime-bound allocator
+exists; make the allocation owner, retention period, and teardown explicit.
+Explicit context allocation may still produce an analyzer warning; do not hide
+the warning by omitting the allocator or changing it to an unowned default.
+
+In tests, `context.allocator` is the normal choice for fixture allocations and
+is preferred over artificial allocators. The analyzer intentionally ignores
+context allocations in `*_test.odin`; use a reviewed
+`ReviewedAllocationPolicy` only for a justified exception not covered by that
+test-file rule.
+
+### Initialize, Reuse, And Retire
+
+- Known steady-state capacity SHOULD be reserved during initialization. Reuse
+  the buffer or slot rather than rebuilding it on every frame or tick.
+- Hot paths MUST NOT introduce hidden default-heap growth. Dynamic collections
+  still need an intentional capacity and growth policy even where the analyzer
+  does not classify each `append`, `reserve`, or `resize` call.
+- Storage SHOULD be bounded when inputs, traffic, or operation duration can
+  grow. Capacity exhaustion must have an explicit status, backpressure, retry,
+  coalescing, or rejection policy; do not silently truncate or grow without bound.
+- An arena reset invalidates every allocation from that arena. Owners MUST
+  detach or retire all borrowed slices, pointers, and derived aliases before
+  reset or destruction.
+- Keep allocation and release visible as a lifecycle pair. Partial
+  initialization and failure paths MUST clean up only resources they acquired,
+  and MUST leave the object in a documented usable or failed state.
+- Event-driven allocations MAY be appropriate when the event is bounded and
+  their owner and release point are explicit. They MUST NOT become accidental
+  recurring frame/tick allocations.
+
+The following are intentional patterns, not blanket exemptions:
+
+- Frame-scoped scratch is valid until the frame reset; joined task results are
+  valid until the operation owner consumes and reclaims them.
+- Julia GC-managed allocations are appropriate inside Julia's ownership model.
+  Native code MUST keep Julia handles rooted across the call that uses them and
+  copy Julia-owned bytes before their preservation window ends.
+- Dedicated arenas MAY grow within their explicit owner lifetime. Reset only
+  after borrowers are detached, and destroy only after consumers have joined
+  or stopped. Prefer the shared animation allocator for animation-generation
+  data; use another subsystem arena only when its lifetime differs.
+- Narrow event-driven output, such as completed GIF bytes, asset staging, or
+  candidate font metadata, MAY allocate outside a continuous frame/tick path
+  when bounded and reclaimed by a clear owner.
+
+For example, the shared animation arena is borrowed by the animation-value
+store and Dynview document store; both borrowers are cleared before one
+generation reset. Julia host roots and per-call GC frames have separate lifetimes.
+See [Julia Thread Architecture](JuliaThreadArchitecture.md) for these concrete
+boundary patterns.
+
+### Analyzer Policy And Exceptions
+
+The analyzer classifies Odin allocation sites by allocator source. An
+unclassified allocation is a blocking analysis failure; use an explicit,
+traceable allocator expression rather than relying on implicit defaults.
+Dynamic-array mutators are treated separately because the collection carries
+its allocator from creation; that classification does not waive the reuse and
+bounded-growth rules above.
+
+An exception that the analyzer must permit belongs in
+`ReviewedAllocationPolicy` in `tools/analysis_settings.jl`, with an exact site,
+reason, and expected match count. The policy is drift-checked. Do not add a
+broad suppression, weaken classification, or turn a warning off without
+reviewing the allocation's actual owner and lifetime.
+
 ## Verification Gate
 
-Before work is complete, run the standard Makefile target:
+Before work is complete, run the canonical CMake target:
 
 ```sh
-make test
+cmake --build --preset default --target check
 ```
 
-`make test` is the preferred path on systems that support `make`. It runs
-`tools/configure.sh` once (verifying the toolchain and installing Julia dependencies)
-and then the full driver gate, equivalent to `julia make.jl -vt`. `make check` is an
-alias.
+The target bootstraps configured Julia dependencies and invokes the full Julia driver
+gate. CMake's reserved `test` target and `ctest` run selectable suites; they do not
+replace the canonical complete gate.
 
-`make vet` alone is insufficient because it omits tests. Running tests alone is
+The `vet` target alone is insufficient because it omits tests. Running tests alone is
 insufficient because it omits the build and repository analysis. Do not report the
 combined gate as passing when a phase was skipped.
+
+Persistence acceptance MUST use an isolated process-level `--user-db` path, never
+the developer's database. Settings scenarios use exact typed `set_setting` and
+`assert_setting` key/value payloads; edits route through existing control policy
+and cannot mutate startup-only controls. A saved-state predicate is not by itself
+proof of a new commit: require a joined save event and independently inspect the
+committed rows. Arbitrary SQL remains outside the scenario action vocabulary.
+Shutdown MUST drain settings before any subsystem can stop the shared task pool.
+Worker-only execution evidence does not establish a quantitative latency budget;
+report deferred timing claims explicitly.
 
 | Surface | Enforcement | Expected result |
 | --- | --- | --- |
@@ -188,8 +348,8 @@ Code review MUST reject a violation even when the compiler or formatter accepts 
 
 ### Function Size and Complexity
 
-- A function/procedure SHOULD remain at or below 20 executable lines.
-- More than 20 executable lines requires review justification; more than 30
+- A function/procedure SHOULD remain at or below 35 executable lines.
+- More than 45 executable lines requires review justification; more than 65
   requires a documented exception and a clear reason decomposition would make
   the code worse.
 - Each function/procedure must have one clear responsibility.
@@ -307,7 +467,7 @@ the call site superficially short.
 
 | Construct | Form | Example |
 | --- | --- | --- |
-| Import name | `snake_case`; prefer one word | `strings`, `raylib`, `font_core` |
+| Import name | `snake_case`; prefer one word | `strings`, `sdl`, `font_core` |
 | Type | `Ada_Case` | `Scene_Command_Batch` |
 | Enum value | `Ada_Case` | `Request_State.Ready` |
 | Procedure | `snake_case` | `publish_scene_batch` |
@@ -445,6 +605,23 @@ attributes, or implementation notes.
 - Do not retain temp-allocator memory beyond its reset boundary.
 - Use bounded, preallocated storage in steady frame paths unless an approved
   exception applies.
+
+### Compile-Time SQL Sources
+
+- **Review:** Production schemas and named reusable SQLite statements SHOULD live
+  in `.sql` files under the owning subsystem's `sql/` directory, embedded through
+  named Odin constants using `#load("sql/name.sql", string)`.
+- **Review:** Convert loaded constants explicitly with `cstring(CONSTANT)` at
+  SQLite call boundaries. This constant conversion does not justify casting
+  arbitrary runtime strings without NUL-termination and lifetime guarantees.
+- **Review:** Preserve parameter indexes, result-column order, and row ordering as
+  contracts with binding and decoding code. Validate changes with the owning
+  subsystem's execution tests, not syntax highlighting alone.
+- **Review:** SQL files are compile-time source inputs, not runtime assets.
+  Build reuse and fingerprint policies MUST include them where compiled outputs
+  are cached. Do not introduce generated Odin source for simple embedding.
+- **Review:** Tiny transaction mechanics and test-local fixture/mutation SQL may
+  remain inline; do not extract every SQL fragment merely for uniformity.
 
 ## Julia Rules (Required)
 
@@ -595,19 +772,31 @@ independently from related APIs.
 
 - Julia C API calls remain on the persistent owner thread, including exception
   inspection and shutdown.
-- Use `Base.invokelatest` only where freshly evaluated Scratchpad or reload
+- Use `Base.invokelatest` only where freshly evaluated Terminal session or reload
   definitions require latest-world dispatch. Do not spread it into ordinary
   static call paths.
+- After dynamically including content, inspect its module bindings with
+  `Base.invokelatest(getfield, module, name)` and check their existence with
+  `Base.invokelatest(isdefined, module, name)`. Invoke freshly loaded functions
+  through `Base.invokelatest` as well; guarding only the function call does not
+  protect an older-world binding lookup. The Julia application test runner uses
+  `--depwarn=error` to reject world-age compatibility warnings.
 - Keep bridge calls and their status handling visible. Stop transactional
   emission after failure.
 - Do not retain host pointers beyond their documented generation or lifecycle.
 - Runtime-loaded scripts must surface parse, load, and evaluation failures with
   useful context.
 
-### View Text Rule
+### View Content Rule
 
-- `get_view_text` output should be plain Unicode text with renderer wrapping.
-- Do not manually pre-wrap ordinary view text unless fixed-width or semantic
+- Keep `get_view_content` as a named producer returning one canonical displayable:
+  an ordinary string for `text/plain`, `L"..."` for standalone delimited math, or
+  `tex"..."`/`TeXDocument` for an unwrapped document.
+- Invoke the producer through `publish_view_content` from lifecycle or
+  semantic-change points. Do not register it as a native callback or poll it per frame.
+- The selected MIME bytes are authoritative for rendering, copying, hashing, and
+  literal failure. Do not maintain a second fallback representation.
+- Do not manually pre-wrap ordinary view content unless fixed-width or semantic
   layout demands it.
 
 ### Function/Control Flow Guidance
@@ -719,18 +908,18 @@ declaration's review contract.
 - Prefer algorithm, data-layout, and work-elimination improvements over
   incidental syntax tricks.
 - Measure representative workloads before and after a non-obvious optimization.
-- Keep host-side per-frame paths allocation-aware.
-- Avoid hidden allocation churn in hot loops.
-- Preallocate bounded steady-state buffers and mutate them in place.
+- Follow [Allocation And Lifetime](#allocation-and-lifetime) for storage and
+  allocation policy.
 - Keep Julia performance-critical code inside functions and avoid untyped mutable globals.
 - Do not make a Julia API artificially concrete for performance; Julia
   specializes generic methods.
 - Make performance-motivated complexity local and document the measured reason.
-- Follow the allocation policy in `ArchitectureSummary.md`.
 
 ### Safety
 
 - Do not expose unsafe low-level operations as default APIs.
+- Compile automation capable of injecting terminal input or Julia work only into
+  repository debug/test builds. Production builds must retain a secure-disabled default.
 - Validate external/input data at boundaries.
 - Keep interop assumptions explicit and documented.
 - Keep pointer validity, count/span relationships, ABI widths, and nullability explicit.
@@ -739,6 +928,8 @@ declaration's review contract.
 - Thread-affine Julia, rendering, window, and audio operations must remain on
   their owning threads.
 - Prefer bounded failure over unchecked truncation, overflow, or queue growth.
+- Process-scoped allocator instrumentation must restore `context.allocator` before
+  reporting or destroying tracking metadata; runtime state may only borrow that domain.
 
 ## Standard Updates
 

@@ -1,0 +1,415 @@
+package view
+
+import bridgemodel "../bridge/model"
+import dynviewmodel "../dynview/model"
+import particlemodel "../particles/model"
+import shapemodel "../shapes/model"
+import storage "../core/storage"
+import app_core "../core"
+import particles "../particles"
+import dynview "../dynview"
+import dyncompile "../dynview/compile"
+import dyncore "../dynview/core"
+import evidence_checkpoint "../evidence/checkpoint"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
+import app_files "../files"
+import shapes "../shapes"
+import math "core:math"
+import os "core:os"
+import filepath "core:path/filepath"
+import testing "core:testing"
+import worldmodel "world/model"
+import viewsimulation "simulation"
+import viewevidence "evidence"
+
+//   Enable all typed evidence lanes on one lightweight test state.
+init_test_evidence :: proc(state: ^app_core.Euclid_General_State) {
+    testing_config := evidence_session.Config{
+        enabled = true,
+        output_mode = .Sink,
+        lanes = {.Lifecycle, .Domain, .Transport, .Presentation, .Scenario, .Diagnostic},
+    }
+    _ = evidence_session.session_init(&state^.evidence_session, testing_config)
+    evidence_trace.ring_init(&state^.evidence_ring, .Display)
+}
+
+//   Build the run settings for one headless trace-enabled session.
+make_headless_trace_settings :: proc() -> app_core.Euclid_Run_Settings {
+    return app_core.Euclid_Run_Settings{
+        do_run = true,
+        do_antialiasing = false,
+        do_vsync = false,
+        dust_particle_max = particlemodel.MAX_LOW_PARTICLES,
+        limit_fps = true,
+        use_simd_batch_projection = false,
+        use_gpu_dust_instancing = false,
+        evidence = {
+            enabled = true,
+            strict = true,
+            output_mode = .Sink,
+            lanes = evidence_session.ALL_LANES,
+        },
+    }
+}
+
+//   Assert the headless session started with a ready service and live state.
+expect_headless_session_ready :: proc(
+    t: ^testing.T, session: Euclid_Runtime_Session) {
+
+    state := session.state
+    service := session.julia_service
+    testing.expect(t, state != nil)
+    testing.expect(t, service != nil)
+    testing.expect_value(t, service^.lifecycle, bridgemodel.Julia_Lifecycle_State.Ready)
+    testing.expect(t, state^.julia_interface != nil)
+    testing.expect(t, state^.julia_interface^.current_animation != nil)
+    testing.expect(t, state^.simulation_executor != nil)
+    testing.expect(t, state^.simulation_executor^.pool.state == .Running)
+    testing.expect_value(t,
+        state^.simulation_executor^.pool.outstanding_count, 0)
+    testing.expect_value(t, state^.fixed_step, u64(0))
+    testing.expect_value(t, state^.simulation_time, f32(0))
+}
+
+//   Verify a headless runtime session starts, steps, and shuts down without a window.
+@(test)
+headless_runtime_session_starts_steps_and_shuts_down_without_window :: proc(
+    t: ^testing.T) {
+    profile_path := ".build/test-artifacts/headless.spall"
+    worker_profile_path := ".build/test-artifacts/headless.spall.worker.spall"
+    os.make_directory_all(".build/test-artifacts")
+    os.remove(worker_profile_path)
+    cwd, cwd_err := os.get_working_directory(context.temp_allocator)
+    testing.expect(t, cwd_err == nil)
+    testing.expect(t, len(cwd) > 0)
+    bin_dir, bin_join_err := filepath.join([]string{cwd, "bin"}, context.allocator)
+    testing.expect(t, bin_join_err == nil)
+    defer delete(bin_dir)
+    asset_root_config := app_files.make_asset_root_config(bin_dir, context.allocator)
+    defer app_files.destroy_asset_root_config(&asset_root_config)
+    testing.expect(t, app_files.reload_packaged_assets_root_with_config(
+        &asset_root_config))
+
+    settings := make_headless_trace_settings()
+    settings.profile_path = profile_path
+    session, ok := create_runtime_session(&settings, &asset_root_config)
+    testing.expect(t, ok)
+    if !ok {
+        return
+    }
+    expect_headless_session_ready(t, session)
+
+    state := session.state
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
+    testing.expect_value(t, state^.fixed_step, u64(2))
+    testing.expectf(t, math.abs(state^.simulation_time - 0.05) <= 0.0001,
+        "expected simulation_time near 0.05, got %v", state^.simulation_time)
+    testing.expect(t, state^.evidence_session.required_evidence_complete)
+    testing.expect_value(t, shutdown_runtime_session(session), 0)
+
+    profile_info, profile_error := os.stat(worker_profile_path, context.allocator)
+    testing.expect(t, profile_error == nil)
+    testing.expect(t, profile_info.size > 0)
+    os.remove(worker_profile_path)
+}
+
+//   Verify a deterministic fixed step advances identity after the worker joins.
+@(test)
+deterministic_fixed_step_advances_identity_after_worker_join :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
+    defer free(state^.particle_system)
+    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+    init_test_evidence(state)
+
+    executor := viewsimulation.create_simulation_executor(state)
+    testing.expect(t, executor != nil)
+    state^.simulation_executor = executor
+    defer viewsimulation.destroy_simulation_executor(executor)
+
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
+    testing.expect_value(t, state^.fixed_step, u64(1))
+    testing.expectf(t, math.abs(state^.simulation_time - 0.025) <= 0.0001,
+        "expected simulation_time near 0.025, got %v", state^.simulation_time)
+    testing.expect_value(t, state^.evidence_ring.count, 1)
+    first_event := state^.evidence_ring.events[0]
+    testing.expect_value(t, first_event.kind,
+        evidence_trace.Kind.Constraint_Solve_Completed)
+    testing.expect_value(t, first_event.tick, u64(1))
+
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
+    testing.expect_value(t, state^.fixed_step, u64(2))
+    testing.expectf(t, math.abs(state^.simulation_time - 0.05) <= 0.0001,
+        "expected simulation_time near 0.05, got %v", state^.simulation_time)
+    testing.expect_value(t, state^.evidence_ring.count, 2)
+    second_event := state^.evidence_ring.events[1]
+    testing.expect_value(t, second_event.kind,
+        evidence_trace.Kind.Constraint_Solve_Completed)
+    testing.expect_value(t, second_event.tick, u64(2))
+}
+
+//   Verify the canonical one-point checkpoint captured by the fixed-step fixture.
+expect_single_point_checkpoint :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    event: evidence_trace.Event) {
+    handle := evidence_checkpoint.Handle{
+        slot = event.payload.handle.slot,
+        generation = event.payload.handle.generation,
+    }
+    checkpoint, found := evidence_checkpoint.store_get(
+        &state^.evidence_checkpoints, handle)
+    testing.expect(t, found)
+    testing.expect_value(t, checkpoint^.fixed_step, u64(1))
+    testing.expectf(t, math.abs(checkpoint^.simulation_time - 0.025) <= 0.0001,
+        "expected checkpoint simulation_time near 0.025, got %v",
+        checkpoint^.simulation_time)
+    testing.expect_value(t, checkpoint^.point_count, 1)
+    testing.expect_value(t, checkpoint^.points[0].index, i32(0))
+    testing.expect_value(t, checkpoint^.points[0].x, f32(1))
+    testing.expect_value(t, checkpoint^.points[0].y, f32(2))
+    testing.expect_value(t, checkpoint^.points[0].z, f32(3))
+}
+
+//   Verify a deterministic fixed step emits a post-join checkpoint snapshot.
+@(test)
+deterministic_fixed_step_emits_post_join_checkpoint_snapshot :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.julia_interface = &state^.julia_interface_slots[0]
+    state^.julia_interface^.current_animation = &state^.julia_interface^.null_animation
+    state^.julia_interface^.null_animation.name = "null"
+    state^.julia_runtime_service =
+        new(bridgemodel.Julia_Runtime_Service, context.allocator)
+    defer free(state^.julia_runtime_service)
+    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
+    defer free(state^.particle_system)
+    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+    _, point_status := shapes.world_create_point(
+        state^.shape_world, {1, 2, 3}, {})
+    testing.expect_value(t, point_status, shapemodel.Shape_World_Status.Ok)
+    init_test_evidence(state)
+
+    executor := viewsimulation.create_simulation_executor(state)
+    testing.expect(t, executor != nil)
+    state^.simulation_executor = executor
+    defer viewsimulation.destroy_simulation_executor(executor)
+
+    testing.expect(t, viewsimulation.run_deterministic_fixed_step(state, 0.025))
+    testing.expect_value(t, state^.evidence_ring.count, 2)
+
+    checkpoint_event := state^.evidence_ring.events[1]
+    testing.expect_value(t, checkpoint_event.kind,
+        evidence_trace.Kind.Checkpoint_Stored)
+    expect_single_point_checkpoint(t, state, checkpoint_event)
+}
+
+//   Verify a parallel step joins the particle and constraint updates.
+@(test)
+parallel_simulation_step_joins_particle_and_constraint_updates :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
+    defer free(state^.particle_system)
+    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+
+    particles := state^.particle_system
+    particles^.use_max_dust_particles = 1
+    particles^.low_particles.alive[0] = true
+    particles^.low_particles.life[0] = 10
+    particles^.low_particles.vel_x[0] = 0.25
+
+    point, point_status := shapes.world_create_point(
+        state^.shape_world, {0, 0, -1}, {})
+    testing.expect_value(t, point_status, shapemodel.Shape_World_Status.Ok)
+    _, constraint_status := shapes.world_create_floor_constraint(
+        state^.shape_world, {point = point.entity, height = 0, enabled = true})
+    testing.expect_value(t, constraint_status, shapemodel.Shape_World_Status.Ok)
+
+    executor := viewsimulation.create_simulation_executor(state)
+    testing.expect(t, executor != nil)
+    defer viewsimulation.destroy_simulation_executor(executor)
+    viewsimulation.run_parallel_simulation_step(executor, 0.01)
+    first_batch_x := particles^.low_particles.pos_x[0]
+    viewsimulation.run_parallel_simulation_step(executor, 0.01)
+
+    testing.expect_value(t, first_batch_x, f32(0.25))
+    testing.expect(t, particles^.low_particles.pos_x[0] > first_batch_x)
+    transform, found := shapemodel.shape_component_get(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry,
+        point.entity)
+    testing.expect(t, found)
+    testing.expect_value(t, transform^.position.z, f32(0))
+}
+
+// Verify the joined particle worker emits, damps, observes, and disturbs vector dust.
+@(test)
+parallel_simulation_step_damps_and_disturbs_grounded_dust :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.particle_system = new(particlemodel.Particle_System, context.allocator)
+    defer free(state^.particle_system)
+    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+    state^.particle_system^.use_max_dust_particles = 16
+    executor := viewsimulation.create_simulation_executor(state)
+    testing.expect(t, executor != nil)
+    state^.simulation_executor = executor
+    defer viewsimulation.destroy_simulation_executor(executor)
+    executor^.particle_task.dust_emission_queue.count = 1
+    executor^.particle_task.dust_emission_queue.items[0] = {
+        distribution = .Point, count = 16, x = 0.51, y = 0.51,
+        seed = 23}
+
+    for _ in 0..<360 {
+        viewsimulation.run_parallel_simulation_step(executor, 1.0 / 60.0)
+    }
+    settled := viewevidence.observe_display_state(state)
+    testing.expect_value(t, settled.dust_live_count, 16)
+    testing.expect_value(t, settled.dust_grounded_count, 16)
+    velocity_before := state^.particle_system^.low_particles.vel_x[0]
+    for index in 0..<16 {
+        testing.expect(t, particles.queue_dust_tool_contact(
+            state^.particle_system, {endpoint = {
+                state^.particle_system^.low_particles.pos_x[index],
+                state^.particle_system^.low_particles.pos_y[index], 0}}))
+    }
+
+    viewsimulation.run_parallel_simulation_step(executor, 1.0 / 60.0)
+
+    disturbed := viewevidence.observe_display_state(state)
+    testing.expect_value(t, disturbed.dust_grounded_count, 16)
+    testing.expect(t,
+        state^.particle_system^.low_particles.vel_x[0] != velocity_before)
+}
+
+//   Verify terminal Dynview arena diagnostics after executor destruction.
+expect_dynview_cache_arena_destroyed :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State) {
+
+    diagnostics := storage.arena_owner_diagnostics(
+        &state^.dynview.cache_arena)
+    testing.expect(t, !diagnostics.initialized)
+    testing.expect_value(t, diagnostics.destroy_count, u64(1))
+    testing.expect_value(t, len(state^.dynview.compile_cache.shaped_runs), 0)
+    testing.expect_value(t, len(state^.dynview.compile_cache.shaped_glyphs), 0)
+}
+
+//   Verify cache state after the first joined frame preparation.
+expect_parallel_frame_cache_ready :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State,
+    executor: ^app_core.Simulation_Executor) {
+    testing.expect_value(t, state^.shape_world^.draw_cache.item_count, 1)
+    testing.expect(t, state^.dynview.compile_cache.is_valid)
+    testing.expect(t, state^.dynview.compile_cache.layout_is_valid)
+    testing.expect_value(t, executor^.pool.outstanding_count, 0)
+    testing.expect_value(t, state^.dynview.cache_access_state,
+        dynviewmodel.Dynview_Cache_Access_State.Display_Readable)
+    testing.expect(t, state^.dynview.cache_worker_thread_id != 0)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(1))
+}
+
+//   Verify a failed rebuild clears derived views while preserving fallback text.
+expect_failed_dynview_rebuild :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State) {
+    cache := &state^.dynview.compile_cache
+    buffer := &state^.dynview.command_buffer
+    testing.expect(t, !cache^.is_valid && !cache^.layout_is_valid)
+    testing.expect_value(t, cache^.last_error_code,
+        dyncore.DYNVIEW_STATUS_ILLEGAL_STATE)
+    testing.expect(t, buffer^.has_stream_error)
+    testing.expect_value(t, cache^.compiled_plain_text_len, 0)
+    testing.expect_value(t, len(cache^.layout_lines), 0)
+    testing.expect_value(t, len(cache^.layout_items), 0)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(2))
+    testing.expect_value(t, state^.dynview.cache_access_state,
+        dynviewmodel.Dynview_Cache_Access_State.Display_Readable)
+    testing.expect_value(t,
+        dyncompile.presentation_text_or_fallback(&state^.dynview, "fallback"),
+        "fallback")
+}
+
+//   Verify frame preparation joins the shape and dynview cache updates.
+@(test)
+parallel_frame_preparation_joins_shape_and_dynview_cache_updates :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.iso_scale = new(worldmodel.Iso_Scale, context.allocator)
+    defer free(state^.iso_scale)
+    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+    point, point_status := shapes.world_create_point(
+        state^.shape_world, {1, 2, 3}, {})
+    testing.expect_value(t, point_status, shapemodel.Shape_World_Status.Ok)
+    style, found := shapemodel.shape_component_get(
+        &state^.shape_world^.render_styles, &state^.shape_world^.registry,
+        point.entity)
+    testing.expect(t, found)
+    style^.visible = true
+    state^.dynview.enabled = true
+
+    executor := viewsimulation.create_simulation_executor(state)
+    testing.expect(t, executor != nil)
+    state^.simulation_executor = executor
+    testing.expect(t, state^.dynview.cache_arena.initialized)
+
+    dyncompile.compile_if_needed(
+        &state^.dynview, &state^.dynview.cache_arena)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(0))
+    testing.expect(t, !state^.dynview.compile_cache.is_valid)
+
+    viewsimulation.run_parallel_frame_preparation(state, 0.25, {})
+    expect_parallel_frame_cache_ready(t, state, executor)
+
+    viewsimulation.run_parallel_frame_preparation(state, 0.75, {})
+    testing.expect_value(t, state^.shape_world^.draw_cache.item_count, 1)
+    testing.expect_value(t, executor^.pool.outstanding_count, 0)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(1))
+
+    dynview.invalidate(&state^.dynview, dynview.DYNVIEW_INVALIDATE_FONT)
+    viewsimulation.run_parallel_frame_preparation(state, 0.75, {})
+    testing.expect_value(t, executor^.pool.outstanding_count, 0)
+    testing.expect_value(t, state^.dynview.cache_arena.reset_count, u64(2))
+
+    viewsimulation.destroy_simulation_executor(executor)
+    expect_dynview_cache_arena_destroyed(t, state)
+}
+
+//   Verify failed worker rebuilds clear partial views and retain plain fallback.
+@(test)
+dynview_cache_arena_failed_rebuild_preserves_fallback :: proc(t: ^testing.T) {
+    state := new(app_core.Euclid_General_State, context.allocator)
+    defer free(state)
+    state^.iso_scale = new(worldmodel.Iso_Scale, context.allocator)
+    defer free(state^.iso_scale)
+    state^.shape_world = new(shapemodel.Shape_World, context.allocator)
+    defer free(state^.shape_world)
+    state^.dynview.enabled = true
+
+    executor := viewsimulation.create_simulation_executor(state)
+    testing.expect(t, executor != nil)
+    state^.simulation_executor = executor
+    defer viewsimulation.destroy_simulation_executor(executor)
+    viewsimulation.run_parallel_frame_preparation(state, 0, {})
+
+    buffer := &state^.dynview.command_buffer
+    buffer^.revision += 1
+    buffer^.command_count = 2
+    buffer^.text_bytes_len = 1
+    buffer^.text_bytes[0] = 'x'
+    buffer^.commands[0] = {kind = .Begin_Block, block_id = 1}
+    buffer^.commands[1] = {
+        kind = .Text_Run, block_id = 1, text_offset = 0, text_len = 1,
+    }
+    viewsimulation.run_parallel_frame_preparation(state, 0, {})
+
+    expect_failed_dynview_rebuild(t, state)
+}

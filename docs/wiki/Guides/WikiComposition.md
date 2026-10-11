@@ -45,10 +45,10 @@ ownership for the entire batch before its first filesystem write.
 `validate_managed_outputs` then rejects missing or stale pages inside each
 declared stale boundary.
 
-`make wiki` replaces `bin/wiki/` with a validated artifact whose repository
-source links are pinned to the generating commit. `make check-wiki` generates
-into a temporary directory and compares every path and byte with `bin/wiki/`
-without modifying the retained artifact.
+The CMake `wiki` target replaces `bin/wiki/` with a validated artifact whose
+repository source links are pinned to the generating commit. The `check-wiki`
+target generates into a temporary directory and compares every path and byte
+with `bin/wiki/` without modifying the retained artifact.
 
 Shared navigation is composed from all manifest sections regardless of which
 producer owns their content. A new section therefore participates in Home and
@@ -61,7 +61,7 @@ normalized record for each entry. Useful fields include:
 
 - module name and source path;
 - stable animation key or UUID expression when statically available;
-- registered display name and parent/category relationship;
+- registered display name and parent relationship;
 - lifecycle functions present;
 - links to animation source and related authored content.
 
@@ -85,13 +85,22 @@ compositor.
 The compositor generates only `Guides/Home.md`. Files such as this Guide are
 authored directly under `docs/wiki/Guides/` and must never be rewritten,
 deleted, or treated as generated Code output. The artifact builder copies each
-manifest-declared Guide unchanged into `bin/wiki/Guides/`.
+manifest-declared Guide into `bin/wiki/Guides/`, preserving its local Wiki links
+and code examples. Repository links outside the authored Wiki tree are validated
+against the canonical source location and converted to commit-pinned GitHub
+source URLs. This keeps artifacts relocatable and source links usable after flat
+GitHub Wiki publication without modifying authored Guide files.
 
 ## CI Publication
 
 The Wiki workflow generates and checks `bin/wiki/` for pull requests and
 relevant pushes, then uploads it as a review artifact. Publication runs only
 for `main` pushes after artifact validation.
+
+The build job runs the CMake `configure` target to instantiate both Julia
+environments before invoking Wiki tests directly. CMake preset configuration alone
+does not install Julia packages, and a restored package cache is not a substitute
+for environment bootstrap.
 
 The publisher checks out the separate GitHub Wiki Git repository and
 synchronizes only manifest claims. GitHub Wiki pages use a flat namespace, so

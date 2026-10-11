@@ -5,20 +5,36 @@ using Test
         include("geometry_tests.jl")
     end
 
-    @testset "Scratchpad" begin
-        include("scratchpad_tests.jl")
-    end
-
-    @testset "LaTeX" begin
-        include("latex_tests.jl")
-    end
-
     @testset "EuclidRepl" begin
         include("euclidrepl_tests.jl")
     end
 
     @testset "Bridge Helpers" begin
         include("bridge_helpers_tests.jl")
+    end
+
+    @testset "MIME Presentation" begin
+        include("mime_presentation_tests.jl")
+    end
+
+    @testset "Animation Catalog" begin
+        include("animation_catalog_tests.jl")
+    end
+
+    @testset "Localized Content" begin
+        include("localized_content_tests.jl")
+    end
+
+    @testset "Animation Actors" begin
+        include("animation_actor_tests.jl")
+    end
+
+    @testset "Animation Content Specification" begin
+        include("content_specification_tests.jl")
+    end
+
+    @testset "Runtime Host" begin
+        include("runtime_host_tests.jl")
     end
 
     @testset "Code Wiki Odin" begin

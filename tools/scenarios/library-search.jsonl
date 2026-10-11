@@ -1,0 +1,17 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"set_library_search":"-circle line \"is perpendicular to\"","as":"phrase-exclusion"}
+{"wait_event":"library_search_committed","correlation":"phrase-exclusion","timeout_ms":10000}
+{"assert_state":"library_search_has_matches"}
+{"wait_state":"library_search_idle","timeout_ms":10000}
+{"screenshot":".build/library-search.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_library_search":"perpendiculr","as":"misspelling"}
+{"wait_event":"library_search_committed","correlation":"misspelling","timeout_ms":10000}
+{"apply_library_search_suggestion":true,"as":"correction"}
+{"wait_event":"library_search_committed","correlation":"correction","timeout_ms":10000}
+{"assert_state":"library_search_has_matches"}
+{"clear_library_search":true,"as":"clear"}
+{"wait_event":"library_search_committed","correlation":"clear","timeout_ms":10000}
+{"wait_state":"library_search_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

@@ -1,0 +1,308 @@
+package terminalservice
+
+import viewterminalmodel "../model"
+import core "../../../core"
+import files "../../../files"
+import shell "../../../terminal/shell"
+import termsession "../../../terminal/session"
+import input "../../input"
+import terminalview ".."
+import fmt "core:fmt"
+import os "core:os"
+import filepath "core:path/filepath"
+import time "core:time"
+
+// Resolve packaged terminfo, falling back to the source tree for development tests.
+shell_service_resolve_terminfo_directory :: proc(directory: string) -> string {
+    packaged := files.packaged_asset_path("terminfo", context.temp_allocator)
+    if os.is_directory(packaged) {
+        return packaged
+    }
+    source, error := filepath.join(
+        []string{directory, viewterminalmodel.SHELL_TERMINFO_RELATIVE_DIRECTORY},
+        context.temp_allocator)
+    if error != nil || !os.is_directory(source) {
+        return ""
+    }
+    return source
+}
+
+// Initialize the display-owned native shell backend and immutable launch context.
+shell_service_runtime_init :: proc(state: ^core.Euclid_General_State) -> bool {
+    if state == nil ||
+       !termsession.native_terminal_backend_init(&state^.shell.backend) {
+        return false
+    }
+    if !termsession.terminal_session_init(
+        &state^.shell.session, {
+            id = viewterminalmodel.SHELL_SESSION_OWNER_ID, generation = 1,
+        },
+        termsession.native_terminal_backend_make(&state^.shell.backend)) {
+        termsession.native_terminal_backend_destroy(&state^.shell.backend)
+        return false
+    }
+    directory, error := os.get_working_directory(context.temp_allocator)
+    terminfo := shell_service_resolve_terminfo_directory(directory)
+    if error != nil || !shell_service_store_paths(state, directory, terminfo) {
+        shell_service_runtime_destroy(state)
+        return false
+    }
+    return true
+}
+
+// Rebind foreground operation identity to one Terminal animation generation.
+shell_service_begin_generation :: proc(
+    state: ^core.Euclid_General_State, generation: u64) -> bool {
+    if state == nil || generation == 0 || state^.shell.phase != .Inactive {
+        return false
+    }
+    close_phase := state^.shell.close.phase
+    if close_phase != .None && close_phase != .Complete &&
+       close_phase != .Transferred {
+        return false
+    }
+    state^.shell.close = {}
+    return termsession.terminal_session_init(&state^.shell.session,
+        {id = viewterminalmodel.SHELL_SESSION_OWNER_ID, generation = generation},
+        termsession.native_terminal_backend_make(&state^.shell.backend))
+}
+
+// Capture the bounded shell cwd and optional packaged terminfo directory.
+shell_service_store_paths :: proc(
+    state: ^core.Euclid_General_State, directory, terminfo: string) -> bool {
+    runtime := &state^.shell
+    if len(directory) == 0 || len(directory) > len(runtime^.working_directory) {
+        return false
+    }
+    copy(runtime^.working_directory[:], transmute([]u8)directory)
+    runtime^.working_directory_byte_count = len(directory)
+    if os.is_directory(terminfo) &&
+       len(terminfo) <= len(runtime^.terminfo_directory) {
+        copy(runtime^.terminfo_directory[:], transmute([]u8)terminfo)
+        runtime^.terminfo_directory_byte_count = len(terminfo)
+    }
+    return true
+}
+
+// Tear down any foreground process before releasing its native backend.
+shell_service_runtime_destroy :: proc(state: ^core.Euclid_General_State) {
+    if state == nil {
+        return
+    }
+    shell_service_close_until_settled(state)
+    termsession.process_cleanup_registry_destroy(&state^.shell.cleanup)
+    termsession.native_terminal_backend_destroy(&state^.shell.backend)
+    state^.shell = {}
+}
+
+// Apply bounded shell output and completion from ordinary or closing service work.
+shell_service_apply_update :: proc(
+    state: ^core.Euclid_General_State, update: ^termsession.Terminal_Session_Update,
+    runtime: ^input.Input_Runtime = nil) {
+    if state == nil || update == nil {
+        return
+    }
+    if update.output_count > 0 && state^.terminal.initialized {
+        terminalview.terminal_append_ansi_output(
+            &state^.terminal, string(update.output[:update.output_count]), {
+                kind = .Terminal_Session,
+                id = u64(state^.shell.operation_id.slot),
+                generation = state^.shell.operation_id.generation,
+            })
+    }
+    if !update.completion_available {
+        return
+    }
+    if state^.terminal.initialized {
+        if update.completion.status != 0 {
+            terminalview.terminal_append_ansi_output(&state^.terminal, fmt.tprintf(
+                "\n[process exited with status %d]", update.completion.status))
+        }
+        terminalview.terminal_complete_eval(&state^.terminal)
+    }
+    state^.shell.phase = .Inactive
+    state^.shell.request_id = 0
+    state^.shell.operation_id = {}
+    if runtime != nil {
+        _ = input.input_runtime_set_owner(runtime, {})
+    }
+}
+
+// Advance transferred cleanup and one in-progress bounded close without blocking.
+shell_service_maintenance :: proc(state: ^core.Euclid_General_State) {
+    if state == nil {
+        return
+    }
+    termsession.process_cleanup_registry_update(&state^.shell.cleanup)
+    if state^.shell.phase != .Closing {
+        return
+    }
+    update := termsession.terminal_process_close_advance(
+        &state^.shell.close, &state^.shell.session, &state^.shell.cleanup,
+        u64(time.tick_since({})))
+    shell_service_apply_update(state, &update)
+    if viewterminalmodel.shell_runtime_close_finished(&state^.shell) {
+        state^.shell.phase = .Inactive
+    }
+}
+
+// Finish or transfer an active shell before releasing its application-lived owner.
+shell_service_close_until_settled :: proc(state: ^core.Euclid_General_State) {
+    if state == nil || !viewterminalmodel.shell_runtime_close_begin(
+        &state^.shell, u64(time.tick_since({}))) {
+        return
+    }
+    for !viewterminalmodel.shell_runtime_close_finished(&state^.shell) {
+        shell_service_maintenance(state)
+        if !viewterminalmodel.shell_runtime_close_finished(&state^.shell) {
+            time.sleep(time.Millisecond)
+        }
+    }
+    termsession.process_cleanup_registry_update(&state^.shell.cleanup)
+}
+
+// Append a shell failure and restore the editable prompt.
+shell_service_fail :: proc(state: ^core.Euclid_General_State, message: string) {
+    terminalview.terminal_append_ansi_output(&state^.terminal, message)
+    terminalview.terminal_append_ansi_output(&state^.terminal, "\n")
+    terminalview.terminal_complete_eval(&state^.terminal)
+    state^.shell.phase = .Inactive
+}
+
+// Build terminal environment changes for one native child.
+shell_service_environment :: proc(
+    state: ^core.Euclid_General_State) -> ([3]termsession.Environment_Change, int) {
+    changes: [3]termsession.Environment_Change
+    changes[0] = {
+        kind = .Set,
+        key = "TERM",
+        value = viewterminalmodel.SHELL_TERMINFO_NAME,
+    }
+    terminfo := viewterminalmodel.shell_terminfo_directory(&state^.shell)
+    if len(terminfo) > 0 {
+        changes[1] = {kind = .Set, key = "TERMINFO", value = terminfo}
+        changes[2] = {kind = .Set, key = "COLORTERM", value = "truecolor"}
+        return changes, 3
+    }
+    changes[1] = {kind = .Set, key = "COLORTERM", value = "truecolor"}
+    return changes, 2
+}
+
+// Admit one frozen process plan and retain its native operation identity.
+shell_service_begin_plan :: proc(
+    state: ^core.Euclid_General_State, plan: termsession.Process_Plan) -> bool {
+    result := termsession.terminal_session_begin(&state^.shell.session,
+        &termsession.Terminal_Session_Begin_Request{
+            request_id = state^.terminal.pending_eval_request_id,
+            owner = state^.shell.session.owner,
+            plan = plan,
+            dimensions = state^.terminal.geometry.dimensions,
+            geometry_generation = state^.terminal.geometry.generation,
+        })
+    if !result.accepted {
+        shell_service_fail(state, fmt.tprintf(
+            "error: command launch rejected: %v", result.rejection))
+        return false
+    }
+    state^.shell.request_id = result.request_id
+    state^.shell.operation_id = result.operation_id
+    state^.shell.phase = .Running
+    return true
+}
+
+// Parse and launch one literal shell-mode submission through the native PTY backend.
+shell_service_submit :: proc(
+    state: ^core.Euclid_General_State, source: string) -> bool {
+    if state == nil || state^.shell.phase != .Inactive ||
+       !terminalview.terminal_begin_eval(&state^.terminal, source) {
+        return false
+    }
+    parsed := shell.shell_parse(source)
+    if parsed.kind == .Empty {
+        terminalview.terminal_complete_eval(&state^.terminal)
+        return true
+    }
+    if parsed.kind != .Success || parsed.template.interpolation_count != 0 {
+        shell_service_fail(state, "error: unsupported shell syntax")
+        return false
+    }
+    resolved := shell.shell_resolve(&parsed.template, nil)
+    if resolved.kind != .Success {
+        shell_service_fail(state, "error: command cannot resolve arguments")
+        return false
+    }
+    environment, count := shell_service_environment(state)
+    plan := termsession.process_plan_build_resolved(
+        &resolved.command, viewterminalmodel.shell_working_directory(&state^.shell),
+        environment[:count])
+    if plan.kind != .Success {
+        shell_service_fail(state, "error: command cannot form a process plan")
+        return false
+    }
+    return shell_service_begin_plan(state, plan.plan)
+}
+
+// Publish newer Terminal geometry to the active native operation.
+shell_service_resize :: proc(
+    state: ^core.Euclid_General_State,
+    change: terminalview.Terminal_Geometry_Change) {
+    if !change.changed {
+        return
+    }
+    _ = termsession.terminal_session_resize(&state^.shell.session, {
+        owner = state^.shell.session.owner,
+        operation_id = state^.shell.operation_id,
+        geometry_generation = change.generation,
+        dimensions = change.current,
+    })
+}
+
+// Encode and deliver one resolved input frame to the active native operation.
+shell_service_input :: proc(
+    state: ^core.Euclid_General_State, runtime: ^input.Input_Runtime,
+    frame: input.Input_Frame) {
+    if runtime == nil {
+        return
+    }
+    _ = input.input_runtime_set_owner(runtime, {
+        kind = .Terminal_Session,
+        id = u64(state^.shell.operation_id.slot),
+        generation = state^.shell.operation_id.generation,
+    })
+    input.input_terminal_enqueue_interpreter_frame(
+        runtime, &state^.terminal.output_interpreter, frame)
+    bytes: [termsession.TERMINAL_SESSION_INPUT_MAX_BYTES]u8
+    count := input.input_runtime_copy_queued_bytes(runtime, bytes[:])
+    if count == 0 {
+        return
+    }
+    request := termsession.Terminal_Session_Input_Request{
+        owner = state^.shell.session.owner,
+        operation_id = state^.shell.operation_id,
+        byte_count = count,
+    }
+    copy(request.bytes[:], bytes[:count])
+    if termsession.terminal_session_write_input(
+        &state^.shell.session, &request) == .None {
+        _ = input.input_runtime_pop_queued_bytes(runtime, count)
+    } else {
+        runtime^.byte_delivery_rejection_count += 1
+    }
+}
+
+// Drain one native PTY update, forward input, and reconcile final completion.
+shell_service_update :: proc(
+    state: ^core.Euclid_General_State, runtime: ^input.Input_Runtime = nil,
+    frame: input.Input_Frame = {},
+    geometry_change: terminalview.Terminal_Geometry_Change = {}) {
+    if state == nil || state^.shell.phase != .Running {
+        return
+    }
+    update := termsession.terminal_session_update(&state^.shell.session)
+    shell_service_apply_update(state, &update, runtime)
+    if !update.completion_available {
+        shell_service_resize(state, geometry_change)
+        shell_service_input(state, runtime, frame)
+        return
+    }
+}

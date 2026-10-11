@@ -1,5 +1,9 @@
 using OdinJuliaAnalysis
 
+Base.include(@__MODULE__, joinpath(@__DIR__, "build_config.jl"))
+Base.include(@__MODULE__, joinpath(@__DIR__, "sdl_boundary_analysis.jl"))
+using .EuclidBuildConfiguration: native_linker_flags
+
 const RepositoryRoot = normpath(joinpath(@__DIR__, ".."))
 const JuliaProject = joinpath(RepositoryRoot, "src", "julia")
 const AnalyzerRoot = dirname(dirname(pathof(OdinJuliaAnalysis)))
@@ -19,10 +23,12 @@ end
 
 const DefaultExcludes = [
     "tools/analysis",
-    "src/julialib",
+    "libs/sdl_shadercross/source",
+    "libs/julia/bindings",
 ]
 const AllExcludes = [
     "tools/analysis",
+    "libs/sdl_shadercross/source",
 ]
 
 const RuleResponses = Dict(
@@ -30,6 +36,11 @@ const RuleResponses = Dict(
     "FUNCTION-METRIC-POLICY-DRIFT" => Fail,
     "NAMING-POLICY-DRIFT" => Fail,
     "CALL-ROOT-POLICY-DRIFT" => Fail,
+    "IMPORT-POLICY-DRIFT" => Fail,
+    "EUCLID-SDL-BOUNDARY" => Fail,
+    "ARCHITECTURE-FORBIDDEN-DEPENDENCY" => Fail,
+    "ARCHITECTURE-DEPENDENCY-CYCLE" => Fail,
+    "ODIN-UNRESOLVED-INTERNAL-IMPORT" => Report,
     "COMMON-LINE-90" => Warn,
     "COMMON-LINE-100" => Warn,
     "COMMON-LINE-120" => Fail,
@@ -43,147 +54,219 @@ const RuleResponses = Dict(
     "JULIA-DECLARATION-ORDER" => Warn,
     "JULIA-RETURN-TUPLE" => Fail,
     "JULIA-PARAMETERS-FAIL" => Fail,
-    "JULIA-FUNCTION-LINES-WARN" => Warn,
+    "JULIA-FUNCTION-LINES-REPORT" => Warn,
+    "JULIA-FUNCTION-LINES-WARN" => Fail,
     "JULIA-FUNCTION-LINES-FAIL" => Fail,
-    "JULIA-CYCLOMATIC-WARN" => Warn,
+    "JULIA-CYCLOMATIC-REPORT" => Warn,
+    "JULIA-CYCLOMATIC-WARN" => Fail,
     "JULIA-CYCLOMATIC-FAIL" => Fail,
     "ODIN-SYNTAX" => Fail,
     "ODIN-BUILD-FAILED" => Fail,
     "ODIN-CLOSING-PAREN-PLACEMENT" => Fail,
     "ODIN-NAMING" => Warn,
     "ODIN-NONCONST-GLOBAL" => Warn,
-    "ODIN-DECLARATION-ORDER" => Warn,
+    "ODIN-DECLARATION-ORDER" => Fail,
     "ODIN-RETURN-TUPLE" => Fail,
     "ODIN-PARAMETERS-WARN" => Warn,
     "ODIN-PARAMETERS-FAIL" => Fail,
-    "ODIN-FUNCTION-LINES-WARN" => Warn,
+    "ODIN-FUNCTION-LINES-REPORT" => Warn,
+    "ODIN-FUNCTION-LINES-WARN" => Fail,
     "ODIN-FUNCTION-LINES-FAIL" => Fail,
-    "ODIN-CYCLOMATIC-WARN" => Warn,
+    "ODIN-CYCLOMATIC-REPORT" => Warn,
+    "ODIN-CYCLOMATIC-WARN" => Fail,
     "ODIN-CYCLOMATIC-FAIL" => Fail,
-    "ODIN-ALLOCATION-IMPLICIT" => Warn,
+    "ODIN-ALLOCATION-IMPLICIT" => Fail,
     "ODIN-ALLOCATION-UNKNOWN" => Fail,
     "ODIN-ALLOCATION-CONTEXT" => Warn,
     "ODIN-ALLOCATION-HEAP" => Warn,
     "ODIN-ALLOCATION-ARENA" => Warn,
     "ODIN-ALLOCATION-HIDDEN" => Warn,
     "ODIN-ALLOCATION-POLICY-DRIFT" => Fail,
+    "REVIEWED-DIAGNOSTIC-POLICY-DRIFT" => Fail,
     "JULIA-DOC-MISSING" => Fail,
     "ODIN-DOC-MISSING" => Fail)
+
+const DisabledRules = ("JULIA-UNRESOLVED-INTERNAL-IMPORT",)
 
 const AnimationLoopReason =
     "Animation state-machine loops enumerate every construction step in play order."
 
+# Columns: id, path, procedure, operation, target, minimum, maximum, reason.
+const CustomTestAllocationReviews = [
+    ("test-core-arena-owner-growth-buffer", "src/core/storage/arena_owner_test.odin",
+        "storage_test_arena_owner_reset_releases_growth_blocks", "make", "[]u8", 1, 1,
+        "Arena-backed test payload is invalidated by reset and released by destroy."),
+    ("test-core-arena-owner-destroy-buffer", "src/core/storage/arena_owner_test.odin",
+        "storage_test_arena_owner_destroy_preserves_diagnostics", "make", "[]u8", 1, 1,
+        "Arena-backed test payload is released by the owner destruction under test."),
+    ("test-evidence-allocation-baseline-buffer",
+        "src/evidence/allocation/allocation_test.odin",
+        "allocation_test_baseline_restoration", "make", "[]byte", 1, 1,
+        "Bounded test allocation is deleted before the tracked domain is destroyed."),
+    ("test-view-font-preparation-arena-pages", "src/view/font/font_test.odin",
+        "view_test_preparation_arena_reuses_committed_pages", "make", "[]u8", 2, 2,
+        "Bounded buffers verify preparation-arena reuse before explicit destruction.")]
+
+"""Build reviewed records for custom-allocator test fixtures."""
+function custom_test_allocation_reviews()
+    return [ReviewedAllocationPolicy(
+        id, path, procedure, :custom, reason;
+        operation=operation,
+        target=target,
+        allocator_source="allocator",
+        certainty=:definite,
+        response=Ignore,
+        minimum_matches=minimum,
+        maximum_matches=maximum)
+        for (id, path, procedure, operation, target, minimum, maximum, reason) in
+            CustomTestAllocationReviews]
+end
+
 # Modules whose exported `loop` drives one animation as a flat step sequence.
 const AnimationLoopFiles = [
-    "src/julia/algebra/groups/C_n.jl",
-    "src/julia/algebra/groups/C_n_abelian.jl",
-    "src/julia/algebra/groups/C_n_associative.jl",
-    "src/julia/algebra/groups/z_2.jl",
-    "src/julia/algebra/groups/z_2_closure.jl",
-    "src/julia/algebra/groups/z_2_identity.jl",
-    "src/julia/algebra/groups/z_2_inverse.jl",
-    "src/julia/elements/book1/commonnotions.jl",
-    "src/julia/elements/book1/def_001_point.jl",
-    "src/julia/elements/book1/def_002_line.jl",
-    "src/julia/elements/book1/def_003_linextrem.jl",
-    "src/julia/elements/book1/def_004_straightline.jl",
-    "src/julia/elements/book1/def_005_surface.jl",
-    "src/julia/elements/book1/def_006_surfextrem.jl",
-    "src/julia/elements/book1/def_007_planesurface.jl",
-    "src/julia/elements/book1/def_008_angle.jl",
-    "src/julia/elements/book1/def_010_perpendicular.jl",
-    "src/julia/elements/book1/def_011_obtuseangle.jl",
-    "src/julia/elements/book1/def_012_acuteangle.jl",
-    "src/julia/elements/book1/def_013_boundary.jl",
-    "src/julia/elements/book1/def_014_figure.jl",
-    "src/julia/elements/book1/def_015_circle.jl",
-    "src/julia/elements/book1/def_017_diameter.jl",
-    "src/julia/elements/book1/def_018_semicircle.jl",
-    "src/julia/elements/book1/def_019a_trilateral.jl",
-    "src/julia/elements/book1/def_019b_quadrilateral.jl",
-    "src/julia/elements/book1/def_019c_multilateral.jl",
-    "src/julia/elements/book1/def_020a_equilateral.jl",
-    "src/julia/elements/book1/def_020b_isosceles.jl",
-    "src/julia/elements/book1/def_020c_scalene.jl",
-    "src/julia/elements/book1/def_021a_righttriangle.jl",
-    "src/julia/elements/book1/def_021b_obtusetriangle.jl",
-    "src/julia/elements/book1/def_021c_acutetriangle.jl",
-    "src/julia/elements/book1/def_022a_square.jl",
-    "src/julia/elements/book1/def_022b_oblong.jl",
-    "src/julia/elements/book1/def_022c_rhombus.jl",
-    "src/julia/elements/book1/def_022d_rhomboid.jl",
-    "src/julia/elements/book1/def_022d_trapezia.jl",
-    "src/julia/elements/book1/def_023_parallel.jl",
-    "src/julia/elements/book1/post_01_drawline.jl",
-    "src/julia/elements/book1/post_02_finiteline.jl",
-    "src/julia/elements/book1/post_03_drawcircle.jl",
-    "src/julia/elements/book1/post_04_equalright.jl",
-    "src/julia/elements/book1/post_05_nonparallel.jl",
-    "src/julia/elements/book1/prop_01.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_I1.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_I2.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_I3.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_I4.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_I5.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_I6.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_I7.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_II1.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_II2.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_II3.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_II4.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_II5.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_III1.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_IV1.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_IV2.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_IV3.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_IV4.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_IV5.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_IV6.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_V.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/axiom_completeness.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_angle.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_circle.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_congruent_angles.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_congruent_triangles.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_figure.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_halfrays.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_polygon.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_segments.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_sideofline.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_supplementary_angles.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/def_triangle_angle.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_1.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_10.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_11.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_12.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_13.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_14.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_15.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_16.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_17.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_18.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_19.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_2.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_20.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_3.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_4.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_5.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_6.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_7.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_8.jl",
-    "src/julia/hilbert/1.fivegroupsaxioms/theorem_9.jl",
-    "src/julia/proclus/proclus_01_isosceles.jl",
-    "src/julia/proclus/proclus_02_scalene.jl",
+    "src/content/algebra/groups/C_n.jl",
+    "src/content/algebra/groups/C_n_abelian.jl",
+    "src/content/algebra/groups/C_n_associative.jl",
+    "src/content/algebra/groups/z_2.jl",
+    "src/content/algebra/groups/z_2_closure.jl",
+    "src/content/algebra/groups/z_2_identity.jl",
+    "src/content/algebra/groups/z_2_inverse.jl",
+    "src/content/curves/cardioid.jl",
+    "src/content/curves/convex_limacon.jl",
+    "src/content/curves/cycloid_shared.jl",
+    "src/content/curves/dimpled_limacon.jl",
+    "src/content/curves/hypocycloid_shared.jl",
+    "src/content/curves/trochoid_examples_shared.jl",
+    "src/content/elements/book1/commonnotions.jl",
+    "src/content/elements/book1/def_001_point.jl",
+    "src/content/elements/book1/def_002_line.jl",
+    "src/content/elements/book1/def_003_linextrem.jl",
+    "src/content/elements/book1/def_004_straightline.jl",
+    "src/content/elements/book1/def_005_surface.jl",
+    "src/content/elements/book1/def_006_surfextrem.jl",
+    "src/content/elements/book1/def_007_planesurface.jl",
+    "src/content/elements/book1/def_008_angle.jl",
+    "src/content/elements/book1/def_010_perpendicular.jl",
+    "src/content/elements/book1/def_011_obtuseangle.jl",
+    "src/content/elements/book1/def_012_acuteangle.jl",
+    "src/content/elements/book1/def_013_boundary.jl",
+    "src/content/elements/book1/def_014_figure.jl",
+    "src/content/elements/book1/def_015_circle.jl",
+    "src/content/elements/book1/def_017_diameter.jl",
+    "src/content/elements/book1/def_018_semicircle.jl",
+    "src/content/elements/book1/def_019a_trilateral.jl",
+    "src/content/elements/book1/def_019b_quadrilateral.jl",
+    "src/content/elements/book1/def_019c_multilateral.jl",
+    "src/content/elements/book1/def_020a_equilateral.jl",
+    "src/content/elements/book1/def_020b_isosceles.jl",
+    "src/content/elements/book1/def_020c_scalene.jl",
+    "src/content/elements/book1/def_021a_righttriangle.jl",
+    "src/content/elements/book1/def_021b_obtusetriangle.jl",
+    "src/content/elements/book1/def_021c_acutetriangle.jl",
+    "src/content/elements/book1/def_022a_square.jl",
+    "src/content/elements/book1/def_022b_oblong.jl",
+    "src/content/elements/book1/def_022c_rhombus.jl",
+    "src/content/elements/book1/def_022d_rhomboid.jl",
+    "src/content/elements/book1/def_022d_trapezia.jl",
+    "src/content/elements/book1/def_023_parallel.jl",
+    "src/content/elements/book1/post_01_drawline.jl",
+    "src/content/elements/book1/post_02_finiteline.jl",
+    "src/content/elements/book1/post_03_drawcircle.jl",
+    "src/content/elements/book1/post_04_equalright.jl",
+    "src/content/elements/book1/post_05_nonparallel.jl",
+    "src/content/elements/book1/prop_01.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_I1.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_I2.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_I3.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_I4.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_I5.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_I6.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_I7.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_II1.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_II2.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_II3.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_II4.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_II5.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_III1.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_IV1.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_IV2.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_IV3.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_IV4.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_IV5.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_IV6.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_V.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/axiom_completeness.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_angle.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_circle.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_congruent_angles.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_congruent_triangles.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_figure.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_halfrays.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_polygon.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_segments.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_sideofline.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_supplementary_angles.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/def_triangle_angle.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_1.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_10.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_11.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_12.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_13.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_14.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_15.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_16.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_17.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_18.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_19.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_2.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_20.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_3.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_4.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_5.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_6.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_7.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_8.jl",
+    "src/content/hilbert/1.fivegroupsaxioms/theorem_9.jl",
+    "src/content/proclus/proclus_01_isosceles.jl",
+    "src/content/proclus/proclus_02_scalene.jl",
 ]
 
 """Construct the rule settings to utilize for the analysis and report"""
 function euclid_rule_settings()
-    return [
+    settings = [
         RuleSetting(
             setting.rule_id,
-            setting.enabled,
+            setting.enabled && setting.rule_id ∉ DisabledRules,
             get(RuleResponses, setting.rule_id, Report))
         for setting in BaseSettings.rules
+    ]
+    push!(settings, RuleSetting(
+        SDL_BOUNDARY_RULE, true, get(RuleResponses, SDL_BOUNDARY_RULE, Report)))
+    return settings
+end
+
+"""Construct one ignored Odin naming policy with exact drift bounds."""
+function euclid_odin_naming_policy(id, path, kind, name, reason)
+    return ReviewedNamingPolicy(
+        id, path, :odin, kind, name, reason; response=Ignore)
+end
+
+"""Return exact reviewed naming exceptions for intentional public type spellings."""
+function euclid_reviewed_naming_policies()
+    policy = euclid_odin_naming_policy
+    return ReviewedNamingPolicy[
+        policy("bridge-color-abi-name", "src/bridge/model/model.odin", :constant,
+            "Bridge_Color", "Stable public bridge ABI type alias."),
+        policy("rgba8-channel-width-name", "src/core/color/color.odin", :type,
+            "Color_RGBA8", "Type names RGBA channel order and eight-bit width."),
+        policy("dynview-color-type-alias", "src/dynview/model/model.odin", :constant,
+            "Color", "Public model alias avoids field-name shadowing."),
+        policy("particle-color-type-alias", "src/particles/particles.odin", :constant,
+            "Color", "Local API alias avoids parameter-name shadowing."),
+        policy("shape-color-type-alias", "src/shapes/model/shapes.odin", :constant,
+            "Color", "Public model alias avoids field-name shadowing."),
+        policy("terminal-color-type-alias", "src/view/terminal/types.odin", :constant,
+            "Color", "Terminal package portable color type alias."),
     ]
 end
 
@@ -199,27 +282,68 @@ function euclid_naming_settings()
             convention
         for convention in default_naming_settings().conventions
     ]
-    return NamingSettings(conventions)
+    return NamingSettings(conventions, euclid_reviewed_naming_policies())
 end
 
-"""Add the parent animation reviews that are good to ignore to the reviews list"""
-function add_parent_reviews!(reviews)
-    path = "src/julia/algebra/groups/groups.jl"
-    push!(reviews, ReviewedComplexity(
-        "groups-init-euclid-scripts-lines:$path", path, :julia,
-        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
-        response=Ignore, minimum_matches=0))
-    path = "src/julia/elements/book1/book1.jl"
-    push!(reviews, ReviewedComplexity(
-        "euclidbook1-init-euclid-scripts-lines:$path", path, :julia,
-        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
-        response=Ignore, minimum_matches=0))
-    path = "src/julia/hilbert/1.fivegroupsaxioms/fivegroupsaxioms.jl"
-    push!(reviews, ReviewedComplexity(
-        "hilbert1-init-euclid-scripts-lines:$path", path, :julia,
-        "init_euclid_scripts", :executable_lines, AnimationLoopReason;
-        response=Ignore, minimum_matches=0))
-    path = "src/julia/nullanimation.jl"
+const ViewSubstratePaths = [
+    "src/view/font",
+    "src/view/input",
+    "src/view/content",
+    "src/view/world/model",
+    "src/view/world/projection",
+    "src/view/ui/model",
+    "src/view/ui/text",
+    "src/view/ui/theme",
+    "src/view/ui/widgets",
+    "src/view/ui/semantics",
+    "src/view/ui/layout",
+    "src/view/capture/model",
+    "src/view/preferences/model",
+    "src/view/telemetry/model",
+    "src/view/messages/model",
+    "src/view/simulation/model",
+    "src/view/native",
+    "src/view/terminal/model",
+]
+
+"""Enforce application composition, coordinator, and substrate dependency direction."""
+function euclid_architecture_settings()
+    return ArchitectureSettings(
+        [
+            ArchitectureLayer("substrate", [
+                ".",
+                "src/bridge/model",
+                "src/bridge/presentation",
+                "src/core/animation",
+                "src/core/color",
+                "src/core/content",
+                "src/core/geometry",
+                "src/core/protocol",
+                "src/core/storage",
+                "src/settings",
+                "src/userdata",
+                ViewSubstratePaths...,
+            ]),
+            ArchitectureLayer("composition", ["src/core"            ]),
+            ArchitectureLayer("coordinator", [
+                "src/app",
+                "src/main.odin", "src/main_test.odin",
+                "src/harness",
+                "src/bridge",
+                "src/view",
+            ]),
+        ],
+        [
+            ArchitectureDependency("substrate", "substrate"),
+            ArchitectureDependency("composition", "substrate"),
+            ArchitectureDependency("coordinator", "substrate"),
+            ArchitectureDependency("coordinator", "composition"),
+        ])
+end
+
+"""Add reviewed animation complexity exceptions to the reviews list."""
+function add_animation_reviews!(reviews)
+    path = "src/content/nullanimation.jl"
     push!(reviews, ReviewedComplexity(
         "nullanimation-initialize-lines:$path", path, :julia,
         "initialize", :executable_lines, AnimationLoopReason;
@@ -231,49 +355,65 @@ function add_parent_reviews!(reviews)
     reviews
 end
 
+"""Add the reviewed metric policy for the failure-test allocators."""
+function add_builder_test_allocation_procs!(reviews)
+    push!(reviews, ReviewedComplexity(
+        "test-bounded-builder-allocator-parameters",
+        "src/core/storage/bounded_builder_test.odin",
+        :odin,
+        "bounded_builder_test_allocator_proc",
+        :parameters,
+        "The test allocator implements the required seven-parameter allocator ABI.";
+        response=Ignore))
+    push!(reviews, ReviewedComplexity(
+        "test-shaped-builder-allocator-parameters",
+        "src/dynview/math/storage_test.odin",
+        :odin,
+        "shaped_builder_test_allocator_proc",
+        :parameters,
+        "The test allocator implements the required seven-parameter allocator ABI.";
+        response=Ignore))
+    push!(reviews, ReviewedComplexity(
+        "test-document-store-allocator-parameters",
+        "src/dynview/core/document_store_test.odin",
+        :odin,
+        "document_store_test_allocator_proc",
+        :parameters,
+        "The test allocator implements the required seven-parameter allocator ABI.";
+        response=Ignore))
+end
+
+"""Add reviewed metric policies for one animation state-machine module."""
+function add_animation_loop_reviews!(reviews, path)
+    functions = (
+        ("loop", "animation-loop"),
+        ("get_view_content", "animation-get-view-content"),
+        ("initialize", "animation-initialize"),
+        ("reset_cycle_state", "animation-reset-cycle-state"))
+    for (function_name, policy_name) in functions
+        push!(reviews, ReviewedComplexity(
+            "$policy_name-lines:$path", path, :julia, function_name,
+            :executable_lines, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+        push!(reviews, ReviewedComplexity(
+            "$policy_name-branching:$path", path, :julia, function_name,
+            :cyclomatic_complexity, AnimationLoopReason;
+            response=Ignore, minimum_matches=0))
+    end
+end
+
 """Return reviewed function metric policies for animation state-machine loops."""
 function animation_loop_reviews()
     reviews = ReviewedComplexity[]
-    for path in AnimationLoopFiles
-        push!(reviews, ReviewedComplexity(
-            "animation-loop-lines:$path", path, :julia, "loop", :executable_lines,
-            AnimationLoopReason; response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-loop-branching:$path", path, :julia, "loop",
-            :cyclomatic_complexity, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-get-view-text-lines:$path", path, :julia, "get_view_text",
-            :executable_lines, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-get-view-text-branching:$path", path, :julia, "get_view_text",
-            :cyclomatic_complexity, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-initialize-lines:$path", path, :julia, "initialize",
-            :executable_lines, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-initialize-branching:$path", path, :julia, "initialize",
-            :cyclomatic_complexity, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-reset-cycle-state-lines:$path", path, :julia, "reset_cycle_state",
-            :executable_lines, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-        push!(reviews, ReviewedComplexity(
-            "animation-reset-cycle-state-branching:$path", path, :julia,
-            "reset_cycle_state", :cyclomatic_complexity, AnimationLoopReason;
-            response=Ignore, minimum_matches=0))
-    end
-    add_parent_reviews!(reviews)
+    foreach(path -> add_animation_loop_reviews!(reviews, path), AnimationLoopFiles)
+    add_animation_reviews!(reviews)
+    add_builder_test_allocation_procs!(reviews)
 end
 
 AnalysisSettings(
-    :default,
-    Fail,
-    AnalysisThresholds(90, 100, 120, 20, 30, 5, 10, 15, 15),
+    BaseSettings.profile,
+    BaseSettings.failure_threshold,
+    BaseSettings.thresholds,
     [
         ScanProfile(:default, DefaultExcludes),
         ScanProfile(:all, AllExcludes),
@@ -283,36 +423,995 @@ AnalysisSettings(
     euclid_naming_settings(),
     JetSettings([
         JetEntryPoint(
-            "latex-plain-text",
+            "latex-canonical-presentation",
             "src/julia/latex.jl",
-            EuclidAnalysisRoots.EuclidLatex.latex_to_plain_text,
-            (String,)),
+            EuclidAnalysisRoots.EuclidLatex.prime_latex!,
+            (Ptr{Cvoid},)),
     ]),
     OdinBuildSettings([
         OdinBuildTarget(
             "application",
             "src",
             "euclid-analysis",
-            ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"];
-            include_julia_linker_flags=true),
+            [
+                "-vet",
+                "-strict-style",
+                "-disallow-do",
+                "-warnings-as-errors",
+                "-extra-linker-flags:$(native_linker_flags())",
+            ]),
     ]),
     ReturnTupleSettings(2, 2),
     ParameterCountSettings(8, 5, 8),
     FunctionMetricSettings(
-        ResponseThresholds(35, 45, 65),
-        ResponseThresholds(35, 45, 65),
-        ResponseThresholds(10, 14, 200),
-        ResponseThresholds(10, 15, 200),
+        BaseSettings.function_metrics.julia_lines,
+        BaseSettings.function_metrics.odin_lines,
+        BaseSettings.function_metrics.julia_cyclomatic,
+        BaseSettings.function_metrics.odin_cyclomatic,
         animation_loop_reviews()),
-    default_architecture_settings(),
+    euclid_architecture_settings(),
     AllocationSettings(
-        KnownAllocatingProcedure[],
+        BaseSettings.allocations.known_procedures,
         [
-            AllocatorSourcePattern("context.temp_allocator", :temporary),
-            AllocatorSourcePattern("context.allocator", :context),
-            AllocatorSourcePattern("heap.allocator()", :heap),
+            BaseSettings.allocations.source_patterns...;
+            AllocatorSourcePattern("builder.allocator", :custom);
+            AllocatorSourcePattern("operations.allocator", :custom);
+            AllocatorSourcePattern("store.allocator", :custom);
+            AllocatorSourcePattern("store.payload_allocator", :custom);
+            AllocatorSourcePattern("state.allocator", :custom)
+        ],
+        [
+            AllocationResponseOverride(r"_test\.odin$", :context, Ignore),
         ],
         ReviewedAllocationPolicy[
+            # Shared arena ownership reserves virtual storage with explicit lifecycle.
+            ReviewedAllocationPolicy(
+                "core-arena-owner-growing-reservation",
+                "src/core/storage/arena_owner.odin",
+                "arena_owner_growing_init",
+                :arena,
+                "Owner-scoped growing storage is reset in bulk and explicitly destroyed.";
+                operation="arena_init_growing",
+                target="arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-sdl-draw-runtime-reservation",
+                "src/view/native/sdl_draw_runtime.odin",
+                "sdl_draw_runtime_allocate_storage",
+                :arena,
+                "Display-owned fixed renderer staging is released with the SDL draw runtime.";
+                operation="arena_init_static",
+                target="runtime^.arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-font-optional-raster-glyph-metadata",
+                "src/view/font/font.odin",
+                "font_raster_instance_glyphs_init",
+                :custom,
+                "Optional raster glyph tables use the cache-owned 64 MiB TLSF pool. " *
+                    "Retirement reuses freed blocks; cache teardown releases the backing.";
+                operation="make",
+                target="[]Font_Glyph_Record",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-core-arena-owner-partial-init",
+                "src/core/storage/arena_owner_test.odin",
+                "arena_owner_test_init_failure",
+                :arena,
+                "Test reservation is deliberately followed by failure to verify cleanup.";
+                operation="arena_init_growing",
+                target="arena",
+                certainty=:definite,
+                response=Ignore),
+            custom_test_allocation_reviews()...,
+            ReviewedAllocationPolicy(
+                "test-evidence-allocation-snapshot-pressure",
+                "src/evidence/allocation/allocation_test.odin",
+                "allocation_test_snapshot_records_pressure",
+                :custom,
+                "Tracked test bytes remain live only through the pressure snapshot and are explicitly deleted before domain destruction.";
+                operation="make",
+                target="[]byte",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-framebuffer-operation-pixels",
+                "src/view/capture/framebuffer_test.odin",
+                "framebuffer_test_allocate",
+                :custom,
+                "Test capture pixels belong to the fixture allocator and are released by the injected unload operation.";
+                operation="make",
+                target="[]u8",
+                allocator_source="state.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            # Display capture pixels share one synchronous transaction arena and are
+            # invalidated together by the owner-controlled reset after final release.
+            ReviewedAllocationPolicy(
+                "view-sdl-framebuffer-capture-pixels",
+                "src/view/capture/backend/sdl_framebuffer.odin",
+                "sdl_framebuffer_allocate",
+                :custom,
+                "Capture pixels belong to the display-owned growing arena and are reclaimed by the final transaction reset or owner destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            # One fixed RGBA staging buffer is reused for the active GIF stream and
+            # explicitly released on close, abort, failed begin, or display unbind.
+            ReviewedAllocationPolicy(
+                "view-sdl-gif-encoder-staging",
+                "src/view/native/sdl_gif_encoder.odin",
+                "sdl_gif_encoder_begin",
+                :custom,
+                "One capture-scoped RGBA staging buffer is reused for every encoded frame and explicitly released on every terminal path.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            # Renderer command streams are fixed-capacity allocations from one static
+            # display-owned arena destroyed with the native draw runtime.
+            ReviewedAllocationPolicy(
+                "view-sdl-draw-core-storage",
+                "src/view/native/sdl_draw_runtime.odin",
+                "sdl_draw_runtime_allocate_core_storage",
+                :custom,
+                "Four fixed-capacity core draw streams share the native runtime arena and are released when that arena is destroyed.";
+                operation="make",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=4,
+                maximum_matches=4),
+            ReviewedAllocationPolicy(
+                "view-sdl-draw-custom-storage",
+                "src/view/native/sdl_draw_runtime.odin",
+                "sdl_draw_runtime_allocate_custom_storage",
+                :custom,
+                "Six fixed-capacity stroke and dust streams share the native runtime arena and are released when that arena is destroyed.";
+                operation="make",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=6,
+                maximum_matches=6),
+            ReviewedAllocationPolicy(
+                "view-native-dust-atlas-staging",
+                "src/view/world/particles_encoder.odin",
+                "initialize_native_dust_atlas",
+                :temporary,
+                "Fixed atlas pixels are consumed by the synchronous texture upload and reclaimed at the temporary-allocator reset.";
+                operation="make",
+                target="[]u8",
+                allocator_source="context.temp_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            # Shared bounded builders grow within an explicit bulk-lifetime owner.
+            ReviewedAllocationPolicy(
+                "core-bounded-byte-builder-growth",
+                "src/core/storage/bounded_builder.odin",
+                "bounded_byte_builder_reserve",
+                :custom,
+                "Hard-limit-checked geometric byte storage is reclaimed by the allocator owner at reset or destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="builder.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "core-bounded-element-builder-growth",
+                "src/core/storage/bounded_builder.odin",
+                "bounded_element_builder_reserve",
+                :custom,
+                "Hard-limit-checked geometric plain-element storage is reclaimed by the allocator owner at reset or destruction.";
+                operation="make",
+                target="[]Element",
+                allocator_source="builder.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "core-animation-value-store-payload",
+                "src/core/animation/value_store.odin",
+                "animation_value_store_insert",
+                :custom,
+                "Quota-checked opaque payload is retired by shared animation-memory reset or destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "core-animation-value-pending-payload",
+                "src/core/animation/value_store.odin",
+                "animation_value_pending_allocate_storage",
+                :custom,
+                "Validated pending payload storage is retired by shared animation-memory reset or destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.allocator",
+                certainty=:definite,
+                response=Ignore),
+            # Terminal model storage is quota-bounded and reclaimed by its owner.
+            ReviewedAllocationPolicy(
+                "terminal-animation-pixels",
+                "src/terminal/attachment/animation.odin",
+                "animation_allocate",
+                :custom,
+                "Quota-checked animation pixels are released by attachment removal or store destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.payload_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-animation-frames",
+                "src/terminal/attachment/animation.odin",
+                "animation_allocate",
+                :custom,
+                "Quota-checked frame descriptors are released with their animation payload.";
+                operation="make",
+                target="[]Animation_Frame",
+                allocator_source="store.payload_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-kitty-animation-pixels",
+                "src/terminal/attachment/kitty_animation.odin",
+                "kitty_animation_allocate",
+                :custom,
+                "Quota-checked replacement pixels are released on commit rollback or attachment teardown.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.payload_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-kitty-animation-frames",
+                "src/terminal/attachment/kitty_animation.odin",
+                "kitty_animation_allocate",
+                :custom,
+                "Quota-checked replacement descriptors are released with their animation pixels.";
+                operation="make",
+                target="[]Animation_Frame",
+                allocator_source="store.payload_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-attachment-admit-payload",
+                "src/terminal/attachment/store.odin",
+                "attachment_admit",
+                :custom,
+                "Exact admitted payload storage is released by removal, eviction, or store destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.payload_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-attachment-reserve-payload",
+                "src/terminal/attachment/store.odin",
+                "attachment_reserve",
+                :custom,
+                "Exact pending payload storage is released by publication, cancellation, or store destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.payload_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-transfer-payload",
+                "src/terminal/attachment/store.odin",
+                "transfer_begin",
+                :custom,
+                "Limit-checked transfer storage is released on completion or store destruction.";
+                operation="make",
+                target="[]u8",
+                allocator_source="store.payload_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-attachment-store-table-attachments",
+                "src/terminal/attachment/store.odin",
+                "store_allocate_tables",
+                :custom,
+                "Capacity-bounded attachment table is allocated transactionally and released by store destruction or initialization rollback.";
+                operation="make",
+                target="[]Attachment_Entry",
+                allocator_source="table_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-attachment-store-table-placements",
+                "src/terminal/attachment/store.odin",
+                "store_allocate_tables",
+                :custom,
+                "Capacity-bounded placement table is allocated transactionally and released by store destruction or initialization rollback.";
+                operation="make",
+                target="[]Placement_Entry",
+                allocator_source="table_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-attachment-store-table-transfers",
+                "src/terminal/attachment/store.odin",
+                "store_allocate_tables",
+                :custom,
+                "Capacity-bounded transfer table is allocated transactionally and released by store destruction or initialization rollback.";
+                operation="make",
+                target="[]Transfer_Entry",
+                allocator_source="table_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-attachment-store-table-residency",
+                "src/terminal/attachment/store.odin",
+                "store_allocate_tables",
+                :custom,
+                "Capacity-bounded residency table is allocated transactionally and released by store destruction or initialization rollback.";
+                operation="make",
+                target="[]Residency_Entry",
+                allocator_source="table_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-placement-checkpoint-placements",
+                "src/terminal/attachment/store.odin",
+                "placement_checkpoint_init",
+                :custom,
+                "Placement-capacity mirror is allocated transactionally, reused across captures, and released by checkpoint destruction.";
+                operation="make",
+                target="[]Placement_Entry",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-placement-checkpoint-pins",
+                "src/terminal/attachment/store.odin",
+                "placement_checkpoint_init",
+                :custom,
+                "Placement-capacity attachment identity mirror is rolled back on partial failure and released by checkpoint destruction.";
+                operation="make",
+                target="[]Attachment_Id",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-clipboard-action-queue",
+                "src/terminal/clipboard/clipboard.odin",
+                "clipboard_action_queue_init",
+                :custom,
+                "Fixed-capacity action queue storage is retained by the Terminal clipboard owner and released by queue destruction.";
+                operation="make",
+                target="[]Clipboard_Action",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-grid-cells",
+                "src/terminal/grid/grid.odin",
+                "grid_init",
+                :custom,
+                "Geometry-bounded contiguous cell storage is rolled back on partial initialization and released by grid destruction.";
+                operation="make",
+                target="[]Cell",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-grid-rows",
+                "src/terminal/grid/grid.odin",
+                "grid_init",
+                :custom,
+                "Geometry-bounded row descriptors are rolled back on partial initialization and released by grid destruction.";
+                operation="make",
+                target="[]Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-grid-editing-state",
+                "src/terminal/grid/grid.odin",
+                "grid_init",
+                :custom,
+                "One stable editing-state slot is allocated with each grid and released by grid destruction.";
+                operation="make",
+                target="[]Grid_Editing_State",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-grid-snapshot-cells",
+                "src/terminal/grid/grid.odin",
+                "snapshot_init",
+                :custom,
+                "Exact visible-cell snapshot is rolled back on partial initialization and released by snapshot destruction.";
+                operation="make",
+                target="[]Cell",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-grid-snapshot-rows",
+                "src/terminal/grid/grid.odin",
+                "snapshot_init",
+                :custom,
+                "Exact visible-row metadata snapshot is released with its owning snapshot.";
+                operation="make",
+                target="[]Snapshot_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-reflow-cells",
+                "src/terminal/grid/reflow.odin",
+                "reflow_allocate",
+                :custom,
+                "Shape-bounded reflow cells are allocated failure-atomically and released by reflow destruction.";
+                operation="make",
+                target="[]Cell",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-reflow-rows",
+                "src/terminal/grid/reflow.odin",
+                "reflow_allocate",
+                :custom,
+                "Shape-bounded reflow row descriptors are allocated failure-atomically and released by reflow destruction.";
+                operation="make",
+                target="[]Reflow_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-reflow-old-boundaries",
+                "src/terminal/grid/reflow.odin",
+                "reflow_allocate",
+                :custom,
+                "Shape-bounded old-to-semantic boundary map is allocated failure-atomically and released by reflow destruction.";
+                operation="make",
+                target="[]Reflow_Old_To_Semantic",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-reflow-new-boundaries",
+                "src/terminal/grid/reflow.odin",
+                "reflow_allocate",
+                :custom,
+                "Shape-bounded semantic-to-new boundary map is allocated failure-atomically and released by reflow destruction.";
+                operation="make",
+                target="[]Reflow_Semantic_To_New",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-primary-reflow-source-rows",
+                "src/terminal/grid/reflow.odin",
+                "primary_reflow_source",
+                :custom,
+                "Source descriptors are bounded by retained rows and freed after primary reflow preparation or on failure.";
+                operation="make",
+                target="[]Reflow_Source_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-checkpoint-reflow-source-rows",
+                "src/terminal/grid/reflow.odin",
+                "reflow_checkpoint_source",
+                :custom,
+                "Source descriptors are bounded by checkpoint rows and freed after checkpoint reflow preparation or on failure.";
+                operation="make",
+                target="[]Reflow_Source_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-scrollback-cells",
+                "src/terminal/grid/scrollback.odin",
+                "scrollback_init",
+                :custom,
+                "Capacity-and-geometry-bounded cell ring is rolled back on partial initialization and released by scrollback destruction.";
+                operation="make",
+                target="[]Cell",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-scrollback-rows",
+                "src/terminal/grid/scrollback.odin",
+                "scrollback_init",
+                :custom,
+                "Fixed-capacity row metadata ring is released with its owning scrollback.";
+                operation="make",
+                target="[]Scrollback_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-display-checkpoint-cells",
+                "src/terminal/grid/scrollback.odin",
+                "display_checkpoint_init",
+                :custom,
+                "Exact grid and scrollback cell mirrors are allocated transactionally, reused across captures, and released by checkpoint destruction.";
+                operation="make",
+                target="[]Cell",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
+                maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "terminal-display-checkpoint-grid-rows",
+                "src/terminal/grid/scrollback.odin",
+                "display_checkpoint_init",
+                :custom,
+                "Exact visible-row metadata mirror is released by checkpoint destruction or initialization rollback.";
+                operation="make",
+                target="[]Snapshot_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-display-checkpoint-scrollback-rows",
+                "src/terminal/grid/scrollback.odin",
+                "display_checkpoint_init",
+                :custom,
+                "Exact scrollback row-ring mirror is released by checkpoint destruction or initialization rollback.";
+                operation="make",
+                target="[]Scrollback_Row",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-display-checkpoint-command-blocks",
+                "src/terminal/grid/scrollback.odin",
+                "display_checkpoint_init",
+                :custom,
+                "Optional command-block mirror is bounded by shell history and released by checkpoint destruction or initialization rollback.";
+                operation="make",
+                target="[]termmodel.Command_Block",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-history-text-storage",
+                "src/terminal/history/termhist.odin",
+                "termhist_allocate_storage",
+                :custom,
+                "Editor text and backup storage are explicitly destroyed with the history state.";
+                operation="make",
+                target="[]u8",
+                allocator_source="state.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
+                maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "terminal-history-entry-storage",
+                "src/terminal/history/termhist.odin",
+                "termhist_allocate_storage",
+                :custom,
+                "History entry storage is explicitly destroyed with the history state.";
+                operation="make",
+                target="[]Termhist_Entry",
+                allocator_source="state.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-history-cloned-text",
+                "src/terminal/history/termhist.odin",
+                "termhist_clone_text",
+                :custom,
+                "Exact UTF-8 history snapshot is deleted on replacement or with the bounded history owner.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-hyperlink-registry",
+                "src/terminal/hyperlink/hyperlink.odin",
+                "hyperlink_registry_init",
+                :custom,
+                "Fixed-capacity hyperlink entries are retained by the registry and released by registry destruction.";
+                operation="make",
+                target="[]Hyperlink_Entry",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-unix-backend-workspace-storage",
+                "src/terminal/session/unix_backend_unix.odin",
+                "unix_terminal_backend_init",
+                :custom,
+                "Fixed native launch workspace is allocated from the backend arena and reclaimed when that arena is destroyed on failure or teardown.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-windows-backend-workspace-storage",
+                "src/terminal/session/windows_backend_windows.odin",
+                "windows_terminal_backend_init",
+                :custom,
+                "Fixed native launch workspace is allocated from the backend arena and reclaimed when that arena is destroyed on failure or teardown.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-shell-integration-command-blocks",
+                "src/terminal/shell_integration/shell_integration.odin",
+                "shell_integration_init",
+                :custom,
+                "Fixed-capacity command-block ring is retained by shell integration and released by explicit destruction.";
+                operation="make",
+                target="[]termmodel.Command_Block",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-history-entry-growth",
+                "src/terminal/history/termhist.odin",
+                "termhist_ensure_history_capacity",
+                :custom,
+                "Bounded history growth replaces and frees prior owner-backed storage.";
+                operation="make",
+                target="[]Termhist_Entry",
+                allocator_source="state.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "terminal-history-buffer-growth",
+                "src/terminal/history/termhist.odin",
+                "termhist_ensure_u8_capacity",
+                :custom,
+                "Bounded UTF-8 buffer growth replaces and frees prior owner-backed storage.";
+                operation="make",
+                target="[]u8",
+                allocator_source="state.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-animation-memory-generation-payload",
+                "src/core/animation/memory_test.odin",
+                "animation_model_test_animation_memory_advances_generation",
+                :custom,
+                "Test payload is invalidated by generation reset and its arena is destroyed by deferred fixture teardown.";
+                operation="make",
+                target="[]u8",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-animation-memory-destroy-payload",
+                "src/core/animation/memory_test.odin",
+                "animation_model_test_animation_memory_destroy_preserves_diagnostics",
+                :custom,
+                "Test payload is released by the explicit destroy whose terminal diagnostics the test verifies.";
+                operation="make",
+                target="[]u8",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "dynview-math-kern-record-cache",
+                "src/dynview/math/shaping_cache.odin",
+                "cache_math_kern_records",
+                :custom,
+                "Exact-size immutable kern-table storage is reclaimed when the cache arena is reset or destroyed.";
+                operation="make",
+                target="[]fontmodel.Font_Math_Kern_Table",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "dynview-math-accent-source-cache",
+                "src/dynview/math/shaping_cache.odin",
+                "cache_math_accent_source_records",
+                :custom,
+                "Exact-size immutable accent-source storage is reclaimed when the cache arena is reset or destroyed.";
+                operation="make",
+                target="[][2]fontmodel.Font_Math_Stretch_Source",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "bridge-interface-registry-growing-arena",
+                "src/bridge/bootstrap.odin",
+                "ensure_julia_interface_instance_registry_arena",
+                :arena,
+                "One interface-generation arena is bulk-reset on reuse or rollback and destroyed at service teardown.";
+                operation="arena_init_growing",
+                target="iface^.animation_registry_arena",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "bridge-catalog-snapshot-registry-nodes",
+                "src/bridge/animations.odin",
+                "content_generation_allocate_nodes",
+                :unknown,
+                "Generation-local registry nodes and copied catalogue strings use the interface arena, which is bulk-reset on rollback and destroyed at interface teardown.";
+                operation="new",
+                target="bridgemodel.Euclid_Julia_Animation_Interface",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "content-service-generation-snapshots",
+                "src/view/content/service.odin",
+                "content_service_init_generations",
+                :custom,
+                "The active and staged complete content generation slots are allocated once from the service-owned mutex-wrapped TLSF allocator; their stable arena owners are destroyed after the worker joins.";
+                operation="new",
+                target="Content_Generation",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
+                maximum_matches=2),
+            ReviewedAllocationPolicy(
+                "sqlite-immutable-open-uri-scratch",
+                "src/sqlite/connection.odin",
+                "sqlite_open_filename",
+                :custom,
+                "The escaped immutable URI is built in the caller-provided scratch allocator and consumed synchronously by sqlite3_open_v2; the caller reclaims the temporary bytes with that allocator's reset.",
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-text",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_text",
+                :custom,
+                "Three fixed-capacity editable-text buffers are allocated transactionally from the Terminal owner allocator and reclaimed with that allocator after semantic teardown.";
+                operation="make",
+                target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=3,
+                maximum_matches=3),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-title-state",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_storage",
+                :custom,
+                "One stable title-state slot is published only after complete Terminal initialization and reclaimed with the Terminal owner allocator.";
+                operation="make",
+                target="[]termemulator.Terminal_Title_State",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-display-checkpoint",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_storage",
+                :custom,
+                "One stable display-checkpoint owner slot is published after initialization and reclaimed with the Terminal owner allocator after checkpoint teardown.";
+                operation="make",
+                target="[]termgrid.Display_Checkpoint",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-synchronized-output",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_storage",
+                :custom,
+                "One stable synchronized-output slot is published after initialization and reclaimed with the Terminal owner allocator after semantic teardown.";
+                operation="make",
+                target="[]termemulator.Synchronized_Output_State",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-attachment-store",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_storage",
+                :custom,
+                "One stable attachment-store slot is published after initialization and reclaimed with the Terminal owner allocator after store teardown.";
+                operation="make",
+                target="[]termattachment.Store",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-graphics-parser",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_storage",
+                :custom,
+                "One stable graphics-parser slot is published after initialization and reclaimed with the Terminal owner allocator after parser teardown.";
+                operation="make",
+                target="[]gfxprotocol.Graphics_Parser_State",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-hyperlink-registry",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_storage",
+                :custom,
+                "One stable hyperlink-registry slot is published after initialization and reclaimed with the Terminal owner allocator after registry teardown.";
+                operation="make",
+                target="[]termhyperlink.Hyperlink_Registry",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-clipboard-queue",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_storage",
+                :custom,
+                "One stable clipboard-queue slot is published after initialization and reclaimed with the Terminal owner allocator after queue teardown.";
+                operation="make",
+                target="[]termclipboard.Clipboard_Action_Queue",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-retained-shell-integration",
+                "src/view/terminal/lifecycle.odin",
+                "terminal_init_retained_storage",
+                :custom,
+                "One stable shell-integration slot is published after initialization and reclaimed with the Terminal owner allocator after shell-state teardown.";
+                operation="make",
+                target="[]termshellintegration.Shell_Integration_State",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-terminal-selection-line-table",
+                "src/view/terminal/clipboard.odin",
+                "terminal_view_selection_text",
+                :temporary,
+                "Frame-local line views are bounded by the selected terminal extent, do not escape clipboard composition, and are reclaimed at temporary-allocator reset.";
+                operation="make",
+                target="[]string",
+                allocator_source="context.temp_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-terminal-alternate-screen-cell-snapshot",
+                "src/terminal/emulator/interpreter_test.odin",
+                "termgrid_test_interpreter_alternate_screen_restores_primary",
+                :temporary,
+                "Test-only exact cell snapshot remains local to one assertion sequence and is reclaimed at temporary-allocator reset.";
+                operation="make",
+                target="[]Cell",
+                allocator_source="context.temp_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             # Bridge Animations Allocations ; these use a dedicated arena
             ReviewedAllocationPolicy(
                 "bridge-animation-lookup-arena",
@@ -321,17 +1420,7 @@ AnalysisSettings(
                 :unknown,
                 "A dedicated arena is used to allocate lookup information.";
                 operation="make",
-                target="[]core.Euclid_Julia_Animation_Lookup_Entry",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "bridge-animation-add-registered-arena",
-                "src/bridge/animations.odin",
-                "add_animation_to_registry",
-                :unknown,
-                "A dedicated arena is used to allocate new animation registries.";
-                operation="new",
-                target="core.Euclid_Julia_Animation_Interface",
+                target="[]bridgemodel.Euclid_Julia_Animation_Lookup_Entry",
                 certainty=:definite,
                 response=Ignore),
             # Bridge Runtime Service Allocations ; these allocate the main bridge runtime
@@ -345,87 +1434,272 @@ AnalysisSettings(
                 target="Julia_Runtime_Service",
                 certainty=:definite,
                 response=Ignore),
+            # Communication links own one bounded TLSF pool and reclaim transferred data.
             ReviewedAllocationPolicy(
-                "bridge-runtime-create-dynview",
-                "src/bridge/runtime_service.odin",
-                "create_julia_runtime_service",
-                :implicit,
-                "Single one-time creation of the julia runtime service structure.";
-                operation="new",
-                target="core.Dynview_System",
-                certainty=:definite,
-                response=Ignore),
-            # GIF Encoding Allocations ; There is a dedicated arena and some minor heap allocation
-            ReviewedAllocationPolicy(
-                "files-gif-encode-lzwmem",
-                "src/files/gif_encode.odin",
-                "gif_encode_allocate_buffers",
-                :unknown,
-                "Allocate GIF buffers on the dedicated GIF capture arena.";
+                "bridge-communication-link-backing",
+                "src/bridge/communication_link.odin",
+                "communication_link_init",
+                :custom,
+                "Fixed pool backing is stored on the link and deleted after both channels are destroyed.";
                 operation="make",
-                target="[]i16",
+                target="[]byte",
                 certainty=:definite,
-                response=Ignore),
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
-                "files-gif-encode-tlb-used-mem",
-                "src/files/gif_encode.odin",
-                "gif_encode_allocate_buffers",
-                :unknown,
-                "Allocate GIF buffers on the dedicated GIF capture arena.";
+                "bridge-communication-link-envelope",
+                "src/bridge/communication_link.odin",
+                "communication_link_alloc",
+                :custom,
+                "Producer-owned envelopes use the bounded link pool and are reclaimed after return.";
+                operation="new",
+                target="T",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "bridge-communication-link-nested-bytes",
+                "src/bridge/communication_link.odin",
+                "communication_link_alloc_bytes",
+                :custom,
+                "Nested payload bytes use the bounded link pool and are reclaimed with their envelope.";
                 operation="make",
                 target="[]u8",
                 certainty=:definite,
                 response=Ignore,
-                maximum_matches=2),
+                minimum_matches=1,
+                maximum_matches=1),
+            # Display presentation allocations live for one runtime session.
             ReviewedAllocationPolicy(
-                "files-gif-encode-pixels",
-                "src/files/gif_encode.odin",
-                "gif_encode_allocate_buffers",
-                :unknown,
-                "Allocate GIF buffers on the dedicated GIF capture arena.";
-                operation="make",
-                target="[]u32",
+                "view-presentation-runtime-storage",
+                "src/view/presentation/presentation_runtime.odin",
+                "create_presentation_runtime",
+                :context,
+                "Display-owned presentation state is created once per process run and explicitly destroyed after parse work joins.";
+                operation="new",
+                target="Presentation_Runtime",
                 certainty=:definite,
                 response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-presentation-parse-result-storage",
+                "src/view/presentation/presentation_runtime.odin",
+                "create_presentation_runtime",
+                :context,
+                "Display-owned parser result storage persists for one process run and is explicitly destroyed with its presentation runtime.";
+                operation="new",
+                target="dyncore.Dynview_Parse_Result",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-presentation-staging-storage",
+                "src/view/presentation/presentation_runtime.odin",
+                "create_presentation_runtime",
+                :context,
+                "Display-owned Dynview staging persists for one process run and is explicitly destroyed with its presentation runtime.";
+                operation="new",
+                target="dynviewmodel.Dynview_System",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            # Native document storage and layout scratch use explicit allocator owners.
+            ReviewedAllocationPolicy(
+                "dynview-document-store-parse-result",
+                "src/dynview/core/document_store.odin",
+                "document_store_intern_keyed",
+                :temporary,
+                "One parse result is explicitly freed from the temporary allocator before interning returns.";
+                operation="new",
+                target="Dynview_Parse_Result",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "dynview-document-store-blob",
+                "src/dynview/core/document_store.odin",
+                "document_store_allocate_blob",
+                :custom,
+                "Quota-checked immutable document bytes are owned by the store arena and retired on reset or destruction.";
+                operation="make",
+                target="[]u64",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "dynview-document-break-candidates",
+                "src/dynview/layout/optimal.odin",
+                "document_break_allocate_scratch",
+                :custom,
+                "Bounded candidate scratch belongs to the caller's layout transaction arena.";
+                operation="make",
+                target="[]Document_Break_Candidate",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "dynview-document-break-states",
+                "src/dynview/layout/optimal.odin",
+                "document_break_allocate_scratch",
+                :custom,
+                "Bounded state scratch belongs to the caller's layout transaction arena.";
+                operation="make",
+                target="[]Document_Break_State",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            # Focused Dynview fixtures are reclaimed by their explicit arena owners.
+            ReviewedAllocationPolicy(
+                "test-prose-shaping-complete-cache",
+                "src/dynview/compile/prose_shaping_test.odin",
+                "document_prose_shaping_seals_complete_records",
+                :custom,
+                "Compile-cache fixture storage is reclaimed by deferred arena-owner destruction.";
+                operation="new",
+                target="dynviewmodel.Dynview_Compile_Cache",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-prose-shaping-stale-cache",
+                "src/dynview/compile/prose_shaping_test.odin",
+                "document_prose_shaping_rejects_stale_generation",
+                :custom,
+                "Compile-cache fixture storage is reclaimed by deferred arena-owner destruction.";
+                operation="new",
+                target="dynviewmodel.Dynview_Compile_Cache",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-prose-shaping-runtime",
+                "src/dynview/compile/prose_shaping_test.odin",
+                "document_prose_shaping_measures_semantic_inlines_deterministically",
+                :custom,
+                "Runtime fixture storage is reclaimed by deferred runtime-arena destruction.";
+                operation="new",
+                target="dynviewmodel.Dynview_System",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-document-parse-isolated-results",
+                "src/dynview/core/document_store_test.odin",
+                "document_parse_builds_are_isolated_from_store_state",
+                :temporary,
+                "Both independent parse results are explicitly freed from the temporary allocator.";
+                operation="new",
+                target="Dynview_Parse_Result",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=2,
                 maximum_matches=2),
             ReviewedAllocationPolicy(
-                "files-gif-encode-end-file-data",
-                "src/files/gif_encode.odin",
-                "gif_encode_end",
-                :implicit,
-                "One time allocation with a known destruction.";
-                operation="make",
-                target="[]u8",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "files-gif-encode-new-buffer",
-                "src/files/gif_encode.odin",
-                "gif_encode_new_buffer",
-                :unknown,
-                "Allocates on a dedicated and well managed arena for GIF capture.";
+                "test-document-parse-legacy-result",
+                "src/dynview/core/document_store_test.odin",
+                "document_parse_commit_matches_legacy_intern",
+                :temporary,
+                "The split-path parse result is explicitly freed after comparison with direct interning.";
                 operation="new",
-                target="Gif_Encode_Buffer",
+                target="Dynview_Parse_Result",
                 certainty=:definite,
-                response=Ignore),
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
-                "files-gif-encode-new-buffer-data",
-                "src/files/gif_encode.odin",
-                "gif_encode_new_buffer",
-                :unknown,
-                "Allocates on a dedicated and well managed arena for GIF capture.";
-                operation="make",
-                target="[]u8",
+                "test-document-parse-negative-result",
+                "src/dynview/core/document_store_test.odin",
+                "document_parse_commit_preserves_negative_cache",
+                :temporary,
+                "The rejected parse result is explicitly freed after negative-cache verification.";
+                operation="new",
+                target="Dynview_Parse_Result",
                 certainty=:definite,
-                response=Ignore),
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
-                "files-gif-encode-begin-lzw-stream",
-                "src/files/gif_encode.odin",
-                "gif_encode_begin_lzw_bitstream",
-                :unknown,
-                "Allocates on a dedicated and well managed arena for GIF capture.";
-                operation="make",
-                target="[]u8",
+                "test-document-parse-retired-result",
+                "src/dynview/core/document_store_test.odin",
+                "document_parse_commit_rejects_retired_generation",
+                :temporary,
+                "The stale-generation parse result is explicitly freed after rejection verification.";
+                operation="new",
+                target="Dynview_Parse_Result",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-document-parse-atomic-result",
+                "src/dynview/core/document_store_test.odin",
+                "document_parse_split_path_fails_atomically",
+                :temporary,
+                "The reused failure-path parse result is explicitly freed after transactional checks.";
+                operation="new",
+                target="Dynview_Parse_Result",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-document-parse-dispatch-result",
+                "src/dynview/core/document_store_test.odin",
+                "document_parse_commit_preserves_dispatch_rejection",
+                :temporary,
+                "The unsupported-mode parse result is explicitly freed after rejection verification.";
+                operation="new",
+                target="Dynview_Parse_Result",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-document-layout-runtime",
+                "src/dynview/layout/document_build_test.odin",
+                "document_layout_test_runtime",
+                :custom,
+                "Runtime fixture storage belongs to the caller-provided arena owner.";
+                operation="new",
+                target="dynviewmodel.Dynview_System",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "test-dynview-prose-font-runtime",
+                "src/view/dynview_test.odin",
+                "dynview_track_prose_fonts_includes_effective_variant",
+                :custom,
+                "Runtime fixture storage is reclaimed by deferred arena-owner destruction.";
+                operation="new",
+                target="dynviewmodel.Dynview_System",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "input-runtime",
+                "src/view/input/runtime.odin",
+                "input_runtime_create",
+                :custom,
+                "The display owner allocates one fixed-layout input runtime before the " *
+                    "window loop and releases it during orderly display teardown.";
+                operation="new",
+                target="Input_Runtime",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore),
             # Primary Runtime Allocations -- These are all single allocations made once
@@ -433,675 +1707,331 @@ AnalysisSettings(
                 "view-runtime-session-iso-scale",
                 "src/view/runtime_session.odin",
                 "make_iso_scale",
-                :implicit,
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Iso_Scale",
+                target="worldmodel.Iso_Scale",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
                 "view-runtime-session-drawing-surface",
                 "src/view/runtime_session.odin",
                 "make_drawing_surface",
-                :implicit,
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Euclid_Drawing_Surface",
+                target="worldmodel.Euclid_Drawing_Surface",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
-                "view-runtime-session-shapes-system",
+                "view-runtime-session-shape-world",
                 "src/view/runtime_session.odin",
-                "make_point_system",
-                :implicit,
+                "make_shape_storage",
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Shapes_Point_System",
+                target="shapemodel.Shape_World",
                 certainty=:definite,
-                response=Ignore),
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
                 "view-runtime-session-particle-system",
                 "src/view/runtime_session.odin",
-                "initiate_animations_state",
-                :implicit,
+                "make_animations_state",
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Particle_System",
+                target="particlemodel.Particle_System",
                 certainty=:definite,
-                response=Ignore),
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
                 "view-runtime-session-general-state",
                 "src/view/runtime_session.odin",
-                "initiate_animations_state",
-                :implicit,
+                "make_animations_state",
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Euclid_General_State",
+                target="core.Euclid_General_State",
                 certainty=:definite,
-                response=Ignore),
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-window-loop-platform-owner",
+                "src/view/view.odin",
+                "run_window_loop",
+                :context,
+                "Window-session native state is allocated once and explicitly destroyed and freed when the display loop ends.";
+                operation="new",
+                target="native.Sdl_Platform",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "view-runtime-session-semantic-focus",
+                "src/view/runtime_session.odin",
+                "init_ui_semantic_focus",
+                :context,
+                "Fixed-capacity semantic snapshots are allocated once per display session and explicitly freed during runtime teardown.";
+                operation="new",
+                target="viewmodel.Ui_Semantic_Focus_State",
+                allocator_source="context.allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
                 "view-simulation-executor",
-                "src/view/simulation_executor.odin",
+                "src/view/simulation/simulation_executor.odin",
                 "create_simulation_executor",
-                :implicit,
+                :context,
                 "Created once at startup with a definitive destruction at application end.";
                 operation="new",
-                target="Simulation_Executor",
+                target="core.Simulation_Executor",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
-                "view-simulation-executor-threadpool",
-                "src/view/simulation_executor.odin",
+                "view-prose-shaping-workspace",
+                "src/view/simulation/simulation_executor.odin",
                 "create_simulation_executor",
-                :dynamic_growth,
-                "Created once at startup with a definitive destruction at application end.";
-                operation="reserve",
-                target="executor^.pool.tasks_done",
-                certainty=:potential,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "view-view-trace-snapshot",
-                "src/view/view.odin",
-                "record_checkpoint_trace_snapshot",
-                :implicit,
-                "Immediate destruction via defer immediately follows.";
+                :context,
+                "Bounded workspace created with the executor and released after its worker pool joins.";
                 operation="new",
-                target="core.Trace_Checkpoint_Snapshot",
+                target="core.Document_Prose_Shaping_Workspace",
                 certainty=:definite,
                 response=Ignore),
-            # Test Allocations -- every site is a test fixture destroyed by defer free
             ReviewedAllocationPolicy(
-                "test-gif-encode-collect-gce-packed-bytes",
-                "src/files/gif_encode_tests.odin",
-                "collect_gce_packed_bytes",
-                :temporary,
-                "Test helper buffer on the temporary allocator, freed by test teardown.";
+                "view-font-preparation-arena",
+                "src/view/font/async.odin",
+                "cache_preparation_arena_init",
+                :arena,
+                "Reserved once on first optional-font demand, reused across preparations, and destroyed with the font cache.";
+                operation="arena_init_static",
+                target="cache.preparation_arena",
+                certainty=:definite,
+                response=Ignore),
+            # TODO : This next is allocated on context.allocator i.e. the heap
+            #        re-review if safer allocator can fill
+            ReviewedAllocationPolicy(
+                "view-font-generation-glyph-metadata",
+                "src/view/font/font.odin",
+                "font_generation_glyphs_init",
+                :custom,
+                "Exact-size glyph state allocated once per resident font generation " *
+                    "and released during generation teardown.";
+                operation="make",
+                target="[]Font_Glyph_Record",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-font-harfbuzz-ownership-test-arena",
+                "src/view/font/font_test.odin",
+                "view_test_harfbuzz_owns_source_and_bounds_output",
+                :arena,
+                "Test-only arena is destroyed before shaping to verify HarfBuzz copied the source bytes.";
+                operation="arena_init_static",
+                target="arena",
+                certainty=:definite,
+                response=Ignore),
+            # Font preparation buffers use the dedicated preparation allocator and are
+            # released together when preparation is reset or destroyed.
+            ReviewedAllocationPolicy(
+                "view-font-prepare-glyph-metadata",
+                "src/view/font/prepare.odin",
+                "prepare_allocate_metadata",
+                :custom,
+                "Bounded glyph metadata owned by Prepared_Font and released by prepare_destroy or the preparation arena reset.";
+                operation="make",
+                target="[]Prepared_Glyph",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-font-prepare-rectangle-metadata",
+                "src/view/font/prepare.odin",
+                "prepare_allocate_metadata",
+                :custom,
+                "Bounded rectangle metadata owned by Prepared_Font and released by prepare_destroy or the preparation arena reset.";
+                operation="make",
+                target="[]Prepared_Rectangle",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            ReviewedAllocationPolicy(
+                "view-font-prepare-atlas-pixels",
+                "src/view/font/prepare.odin",
+                "prepare_allocate_atlas",
+                :custom,
+                "Sized font-atlas storage owned by Prepared_Font and released by prepare_destroy or the preparation arena reset.";
                 operation="make",
                 target="[]u8",
+                allocator_source="allocator",
+                certainty=:definite,
+                response=Ignore),
+            # Task-pool slots are capacity-bounded and released during pool teardown.
+            ReviewedAllocationPolicy(
+                "taskpool-owned-slots",
+                "src/taskpool/taskpool.odin",
+                "task_pool_init_backend",
+                :custom,
+                "Fixed-capacity task slots allocated once during pool initialization and released during pool teardown.";
+                operation="make",
+                target="[]Task_Slot",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
-                "test-particles-reserve-dead-low-prefers-dead",
-                "src/particles/particles_tests.odin",
-                "reserve_dead_low_particle_slot_prefers_dead_then_wraps",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-reserve-dead-ring-advances",
-                "src/particles/particles_tests.odin",
-                "reserve_dead_particle_slot_ring_advances",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-resolve-pair-no-collision",
-                "src/particles/particles_tests.odin",
-                "resolve_dust_pair_no_collision_keeps_state",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-resolve-pair-approach-impulse",
-                "src/particles/particles_tests.odin",
-                "resolve_dust_pair_overlap_with_approach_applies_impulse",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-resolve-pair-separating-skips",
-                "src/particles/particles_tests.odin",
-                "resolve_dust_pair_overlap_with_separating_velocity_skips_impulse",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-resolve-pair-exact-overlap",
-                "src/particles/particles_tests.odin",
-                "resolve_dust_pair_exact_overlap_uses_deterministic_separation",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-random-ranges-independent",
-                "src/particles/particles_tests.odin",
-                "particle_random_ranges_use_independent_seeded_generators",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
+                "userdata-test-overlong-path-buffer",
+                "src/userdata/database_test.odin",
+                "userdata_paths_are_durable_bounded_and_absolute",
+                :temporary,
+                "Test-only buffer of DATABASE_PATH_MAX_BYTES + 1 bytes exercises rejection before filesystem access; borrowed synchronously by path validation and reclaimed by the test temporary-allocator reset.";
+                operation="make",
+                target="[]u8",
+                allocator_source="context.temp_allocator",
                 certainty=:definite,
                 response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
-                "test-particles-resolve-collisions-rotates-samples",
-                "src/particles/particles_tests.odin",
-                "resolve_dust_collisions_rotates_dense_bucket_samples",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
+                "userdata-test-prefixed-path-overflow-buffer",
+                "src/userdata/database_test.odin",
+                "userdata_rejected_paths_leave_no_allocations",
+                :temporary,
+                "Test-only DATABASE_PATH_MAX_BYTES buffer forces overflow after the working-directory prefix is joined; stays outside the allocator under test, is consumed synchronously, and is reclaimed by the test temporary-allocator reset.";
+                operation="make",
+                target="[]u8",
+                allocator_source="context.temp_allocator",
+                certainty=:definite,
+                response=Ignore,
+                minimum_matches=1,
+                maximum_matches=1),
+            ReviewedAllocationPolicy(
+                "taskpool-fence-handles",
+                "src/taskpool/taskpool.odin",
+                "task_fence_begin",
+                :custom,
+                "One handle per fixed task slot, released when the deterministic fence is completed.";
+                operation="make",
+                target="[]Task_Handle",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
-                "test-particles-reset-clears-runtime-state",
-                "src/particles/particles_tests.odin",
-                "reset_particles_clears_runtime_state_and_marks_all_slots_dead",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-reserve-dead-low-wraps",
-                "src/particles/particles_tests.odin",
-                "reserve_dead_low_particle_slot_wraps_when_all_slots_alive",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-emit-shapes-hide-burst",
-                "src/particles/particles_tests.odin",
-                "emit_shapes_hide_burst_spawns_dust_for_supported_shapes",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-particles-clamp-xy-bounds-bounces",
-                "src/particles/particles_tests.odin",
-                "clamp_xy_bounds_index_bounces_particles_back_inside_bounds",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-shapes-clear-animation-data",
-                "src/shapes/system_tests.odin",
-                "clear_animation_data_clears_animation_owned_slots",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Particle_System",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-generation-slots-alternate",
-                "src/view/dynview_tests.odin",
-                "julia_interface_generation_slots_are_stable_and_alternate",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-snapshot-rejects-recycled-interface",
-                "src/view/dynview_tests.odin",
-                "view_snapshot_rejects_recycled_interface_pointer_from_old_generation",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
+                "taskpool-owned-dispatch-queues",
+                "src/taskpool/taskpool.odin",
+                "task_pool_init_backend",
+                :custom,
+                "Exactly three task-capacity index rings reserve helpable, worker-only, and completion queues once before workers start; use the pool-owned mutex-wrapped TLSF budget, never grow during dispatch, and are deleted on partial setup failure or after workers join during destruction.";
+                operation="make",
+                target="[]int",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
                 minimum_matches=3,
                 maximum_matches=3),
             ReviewedAllocationPolicy(
-                "test-dynview-batch-commits-point-positions",
-                "src/view/dynview_tests.odin",
-                "scene_command_batch_commits_point_positions_in_order",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
+                "taskpool-owned-worker-table",
+                "src/taskpool/taskpool.odin",
+                "task_pool_init_backend",
+                :custom,
+                "Fixed worker-count pointer table allocated once from the pool-owned mutex-wrapped TLSF budget before thread startup; partial setup rolls it back, and destruction frees it only after all started workers join.";
+                operation="make",
+                target="[]^thread.Thread",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
+                minimum_matches=1,
+                maximum_matches=1),
             ReviewedAllocationPolicy(
-                "test-dynview-batch-rejects-invalid-tail",
-                "src/view/dynview_tests.odin",
-                "scene_command_batch_rejects_invalid_tail_atomically",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
+                "taskpool-owned-worker-contexts",
+                "src/taskpool/taskpool.odin",
+                "task_pool_init_backend",
+                :custom,
+                "One stable entry context per configured worker is reserved once in the pool-owned mutex-wrapped TLSF budget; addresses remain valid throughout worker execution, partial setup rolls back the buffer, and destruction releases it after workers join.";
+                operation="make",
+                target="[]Task_Worker_Data",
+                allocator_source="allocator",
                 certainty=:definite,
                 response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
+                minimum_matches=1,
+                maximum_matches=1),
+            # Native terminal backends reserve one fixed workspace for their complete
+            # lifetime and destroy it on initialization failure or backend teardown.
             ReviewedAllocationPolicy(
-                "test-dynview-batch-rejects-overflow-stale",
-                "src/view/dynview_tests.odin",
-                "scene_command_batch_rejects_overflow_and_stale_animation",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=5,
-                maximum_matches=5),
-            ReviewedAllocationPolicy(
-                "test-dynview-tick-reject-reason-classifies",
-                "src/view/dynview_tests.odin",
-                "animation_tick_reject_reason_classifies_stale_generation_and_sequence",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
-            ReviewedAllocationPolicy(
-                "test-dynview-batch-defers-point-properties",
-                "src/view/dynview_tests.odin",
-                "scene_command_batch_defers_general_point_properties_until_commit",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
-            ReviewedAllocationPolicy(
-                "test-dynview-batch-rejects-implicit-compass",
-                "src/view/dynview_tests.odin",
-                "scene_command_batch_rejects_invalid_implicit_compass_handle_atomically",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
-            ReviewedAllocationPolicy(
-                "test-dynview-query-snapshot-immutable",
-                "src/view/dynview_tests.odin",
-                "animation_query_snapshot_is_immutable_during_worker_tick",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "test-dynview-tick-rejects-stale-generation",
-                "src/view/dynview_tests.odin",
-                "animation_tick_rejects_stale_generation_and_sequence",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
-            ReviewedAllocationPolicy(
-                "test-dynview-tick-coalescing-caps-backlog",
-                "src/view/dynview_tests.odin",
-                "animation_tick_coalescing_caps_backlog_without_queue_growth",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
+                "terminal-unix-backend-workspace-arena",
+                "src/terminal/session/unix_backend_unix.odin",
+                "unix_terminal_backend_init",
+                :arena,
+                "One fixed-capacity native launch workspace reserved per backend and destroyed on initialization failure or backend teardown.";
+                operation="arena_init_static",
+                target="backend.workspace_arena",
                 certainty=:definite,
                 response=Ignore),
             ReviewedAllocationPolicy(
-                "test-dynview-runtime-failure-event-identity",
-                "src/view/dynview_tests.odin",
-                "julia_runtime_failure_event_records_request_identity",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
+                "terminal-windows-backend-workspace-arena",
+                "src/terminal/session/windows_backend_windows.odin",
+                "windows_terminal_backend_init",
+                :arena,
+                "One fixed-capacity native launch workspace reserved per backend and destroyed on initialization failure or backend teardown.";
+                operation="arena_init_static",
+                target="backend.workspace_arena",
                 certainty=:definite,
                 response=Ignore),
+            # The display state owns one reusable graphics service across Terminal
+            # generations and deletes it after shutdown, before task-pool teardown.
             ReviewedAllocationPolicy(
-                "test-dynview-runtime-terminal-failure",
-                "src/view/dynview_tests.odin",
-                "julia_runtime_terminal_failure_does_not_report_stopped",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
+                "view-terminal-graphics-service",
+                "src/view/terminal/service/terminal_graphics_service.odin",
+                "terminal_graphics_runtime_init",
+                :context,
+                "Single display-owned service allocated at runtime initialization, reused across Terminal generations, and freed after service shutdown before its task-pool owner.";
                 operation="new",
+                target="viewgraphics.Service",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
+            # Evidence export allocates only at an explicit durable-output boundary.
             ReviewedAllocationPolicy(
-                "test-dynview-runtime-diagnostics-failure",
-                "src/view/dynview_tests.odin",
-                "julia_runtime_diagnostics_report_failure_and_saturation",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-reload-failure-records-revision",
-                "src/view/dynview_tests.odin",
-                "julia_reload_failure_records_package_revision",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-snapshot-copy-preserves-spans",
-                "src/view/dynview_tests.odin",
-                "view_snapshot_copy_preserves_recursive_math_spans",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "test-dynview-snapshot-validation-rejects",
-                "src/view/dynview_tests.odin",
-                "view_snapshot_validation_rejects_incomplete_streams",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-completed-snapshot-found",
-                "src/view/dynview_tests.odin",
-                "completed_view_snapshot_is_found_without_event_index",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-newest-snapshot-supersedes",
-                "src/view/dynview_tests.odin",
-                "newest_completed_view_snapshot_supersedes_older_completion",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-stale-snapshot-clears-commands",
-                "src/view/dynview_tests.odin",
-                "stale_view_snapshot_clears_previous_animation_commands",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=5,
-                maximum_matches=5),
-            ReviewedAllocationPolicy(
-                "test-dynview-text-span-script-attach-bounds",
-                "src/view/dynview_tests.odin",
-                "dynview_text_span_and_script_attach_helpers_respect_bounds",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-layout-prepare-style-placement",
-                "src/view/dynview_tests.odin",
-                "dynview_layout_prepare_style_placement_forces_line_break_and_indent",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-layout-push-item-metadata",
-                "src/view/dynview_tests.odin",
-                "dynview_layout_push_item_records_block_and_column_metadata",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-dynview-layout-consume-text-run-wraps",
-                "src/view/dynview_tests.odin",
-                "dynview_layout_consume_text_run_wraps_and_places_segments",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "test-dynview-measure-math-aggregates-children",
-                "src/view/dynview_tests.odin",
-                "dynview_measure_math_program_aggregates_child_metrics",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "test-dynview-measure-math-rejects-invalid",
-                "src/view/dynview_tests.odin",
-                "dynview_measure_math_program_rejects_invalid_shapes",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "test-dynview-measure-math-sums-widths",
-                "src/view/dynview_tests.odin",
-                "dynview_measure_math_program_sums_multiple_command_widths",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "test-dynview-reset-cache-clears-layout",
-                "src/view/dynview_tests.odin",
-                "dynview_reset_cache_clears_layout_state",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-gif-capture-status-note-truncation",
-                "src/view/gif_capture_tests.odin",
-                "clear_and_set_gif_status_note_handles_truncation",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Euclid_Ui_Runtime_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-gif-capture-last-path-truncation",
-                "src/view/gif_capture_tests.odin",
-                "clear_and_set_last_gif_path_handles_truncation",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Euclid_Ui_Runtime_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-gif-capture-cycle-boundary-consumes-once",
-                "src/view/gif_capture_tests.odin",
-                "gif_capture_consume_cycle_boundary_consumes_once_per_generation",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Euclid_General_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-gif-capture-batch-splits-hide-points",
-                "src/view/gif_capture_tests.odin",
-                "scene_command_batch_splits_large_hide_point_batches",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
-            ReviewedAllocationPolicy(
-                "test-sim-executor-fixed-step-advances-identity",
-                "src/view/simulation_executor_tests.odin",
-                "deterministic_fixed_step_advances_identity_after_worker_join",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=3,
-                maximum_matches=3),
-            ReviewedAllocationPolicy(
-                "test-sim-executor-fixed-step-emits-snapshot",
-                "src/view/simulation_executor_tests.odin",
-                "deterministic_fixed_step_emits_post_join_checkpoint_snapshot",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=4,
-                maximum_matches=4),
-            ReviewedAllocationPolicy(
-                "test-sim-executor-parallel-step-joins-updates",
-                "src/view/simulation_executor_tests.odin",
-                "parallel_simulation_step_joins_particle_and_constraint_updates",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=3,
-                maximum_matches=3),
-            ReviewedAllocationPolicy(
-                "test-sim-executor-frame-prep-joins-caches",
-                "src/view/simulation_executor_tests.odin",
-                "parallel_frame_preparation_joins_shape_and_dynview_cache_updates",
-                :implicit,
-                "Test fixtures destroyed by defer free in the test body.";
-                operation="new",
-                certainty=:definite,
-                response=Ignore,
-                minimum_matches=2,
-                maximum_matches=2),
-            ReviewedAllocationPolicy(
-                "test-trace-json-serialization-escapes",
-                "src/trace/trace_tests.odin",
-                "trace_json_serialization_escapes_strings_and_writes_envelope",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-ring-wraps-monotonic-sequence",
-                "src/trace/trace_tests.odin",
-                "trace_ring_wraps_and_preserves_monotonic_sequence_order",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-strict-overflow-marks-invalid",
-                "src/trace/trace_tests.odin",
-                "trace_strict_overflow_marks_state_invalid",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-file-lifecycle-writes-records",
-                "src/trace/trace_tests.odin",
-                "trace_file_lifecycle_writes_started_config_and_finished_records",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-disabled-state-inert",
-                "src/trace/trace_tests.odin",
-                "trace_disabled_state_is_inert_and_does_not_emit",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-phase2-structured-events",
-                "src/trace/trace_tests.odin",
-                "trace_phase2_structured_events_include_expected_payload_fields",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-phase3-summary-events",
-                "src/trace/trace_tests.odin",
-                "trace_phase3_summary_events_include_geometry_tool_and_particle_payloads",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
-                certainty=:definite,
-                response=Ignore),
-            ReviewedAllocationPolicy(
-                "test-trace-checkpoint-snapshot-serializes",
-                "src/trace/trace_tests.odin",
-                "trace_checkpoint_snapshot_serializes_bounded_post_join_state",
-                :implicit,
-                "Test fixture destroyed by defer free in the test body.";
-                operation="new",
-                target="app_core.Trace_State",
+                "evidence-artifact-trace-buffer",
+                "src/evidence/artifact/artifact.odin",
+                "artifact_trace_bytes",
+                :context,
+                "Bounded serialized trace buffer deleted by standalone and bundle writers after the write completes.";
+                operation="make",
+                target="[]byte",
+                allocator_source="context.allocator",
                 certainty=:definite,
                 response=Ignore),
             ]),
-    ReportSettings(:auto, 100, 100),
-    AnalysisExtension[],
+    ReportSettings(
+        BaseSettings.report.color,
+        BaseSettings.report.warning_limit,
+        BaseSettings.report.report_limit;
+        staging_maximum_response=Ignore,
+        reviewed_diagnostics=ReviewedDiagnosticPolicy[
+            ReviewedDiagnosticPolicy(
+                "bridge-standard-julia-callback-wrapper",
+                "ODIN-UNREACHABLE-PROCEDURE",
+                "src/bridge/animations.odin",
+                "call_julia_callback1",
+                "Intentional standard Julia-caller shape retained to clarify the typed callback convention."),
+            ReviewedDiagnosticPolicy(
+                "julia-platform-host-symbol-cache",
+                "JULIA-NONCONST-GLOBAL",
+                "src/julia/bridge/common.jl",
+                "HOST_SYMBOL_CACHE",
+                "Platform-dependent host symbol resolution is cached for the process lifetime in this unique bridge boundary."),
+        ]),
+    AnalysisExtension[SdlBoundaryExtension()],
     default_duplicate_code_settings(),
     default_resource_lifetime_settings(),
     default_security_settings(),
@@ -1109,45 +2039,87 @@ AnalysisSettings(
     default_documentation_settings(),
     CallRootSettings([
         CallRootEntryPoint(
+            "odin-bridge:invoke_with_exception_diagnostics", :julia,
+            "invoke_with_exception_diagnostics",
+            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
             "odin-bridge:init_euclid_scripts", :julia, "init_euclid_scripts",
             "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:invoke_generation_harness_scenario", :julia,
+            "invoke_generation_harness_scenario",
+            "src/bridge/animations.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:is_euclid_runtime_host", :julia,
+            "is_euclid_runtime_host",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
             "odin-bridge:global_euclid_loop", :julia, "global_euclid_loop",
             "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:scratchpad_classify_input", :julia,
-            "scratchpad_classify_input",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "odin-bridge:terminal_host_start_session", :julia,
+            "terminal_host_start_session",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:scratchpad_complete_backslash", :julia,
-            "scratchpad_complete_backslash",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "odin-bridge:terminal_host_startup_banner", :julia,
+            "terminal_host_startup_banner",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:scratchpad_complete_input", :julia,
-            "scratchpad_complete_input",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "odin-bridge:terminal_host_close_session", :julia,
+            "terminal_host_close_session",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:scratchpad_queue_input", :julia, "scratchpad_queue_input",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "odin-bridge:terminal_host_ingest_evaluation", :julia,
+            "terminal_host_ingest_evaluation",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:scratchpad_save_history_to_file", :julia,
-            "scratchpad_save_history_to_file",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "odin-bridge:terminal_host_pump", :julia, "terminal_host_pump",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:scratchpad_history_previous", :julia,
-            "scratchpad_history_previous",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "odin-bridge:terminal_host_shutdown", :julia, "terminal_host_shutdown",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:scratchpad_history_next", :julia, "scratchpad_history_next",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "odin-bridge:terminal_host_take_evaluation", :julia,
+            "terminal_host_take_evaluation",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "odin-bridge:scratchpad_history_reset_cursor", :julia,
-            "scratchpad_history_reset_cursor",
-            "src/bridge/bootstrap.odin resolves this symbol through jl_get_function"),
+            "odin-bridge:terminal_host_ingest_completion_preview", :julia,
+            "terminal_host_ingest_completion_preview",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "scratchpad-repl:save_history", :julia, "install_hook_helpers!.save_history",
-            "the scratchpad REPL evaluates this command from user input"),
+            "odin-bridge:terminal_host_ingest_completion_candidates", :julia,
+            "terminal_host_ingest_completion_candidates",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
         CallRootEntryPoint(
-            "scratchpad-repl:quit", :julia, "install_hook_helpers!.quit",
-            "the scratchpad REPL evaluates this command from user input"),
-    ]))
+            "odin-bridge:terminal_host_take_completion", :julia,
+            "terminal_host_take_completion",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_take_session_lifecycle", :julia,
+            "terminal_host_take_session_lifecycle",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_tick_stream_configuration", :julia,
+            "terminal_host_ingest_tick_stream_configuration",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_ingest_tick_pulse", :julia,
+            "terminal_host_ingest_tick_pulse",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "odin-bridge:terminal_host_take_tick_stream", :julia,
+            "terminal_host_take_tick_stream",
+            "src/bridge/runtime_service.odin resolves this symbol through jl_get_function"),
+        CallRootEntryPoint(
+            "analysis-extension:sdl-extension_api_version", :julia,
+            "extension_api_version", "tools/sdl_boundary_analysis.jl",
+            "The analyzer invokes this SDL boundary method through Base.invokelatest"),
+        CallRootEntryPoint(
+            "analysis-extension:sdl-extension_rules", :julia,
+            "extension_rules", "tools/sdl_boundary_analysis.jl",
+            "The analyzer invokes this SDL boundary method through Base.invokelatest"),
+        CallRootEntryPoint(
+            "analysis-extension:sdl-extension_phases", :julia,
+            "extension_phases", "tools/sdl_boundary_analysis.jl",
+            "The analyzer invokes this SDL boundary method through Base.invokelatest")],
+        ReviewedImportPolicy[]))

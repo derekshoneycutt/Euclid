@@ -1,0 +1,69 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Euclid: Debug",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.build/debug/euclid",
+      "osx": {
+        "program": "${workspaceFolder}/.build/debug/Euclid.app/Contents/MacOS/euclid"
+      },
+      "windows": {
+        "program": "${workspaceFolder}/.build/debug/euclid.exe"
+      },
+      "envFile": "${workspaceFolder}/.build/debug/euclid.env",
+      "args": [
+        "--diagnostics=${workspaceFolder}/.build/debug/euclid.log"
+      ],
+      "initCommands": [
+        "process handle SIGSEGV --stop false --notify false --pass true"
+      ],
+      "preRunCommands": [
+        "script [bp.SetEnabled(False) for bp in lldb.debugger.GetSelectedTarget().breakpoint_iter() if \"Exception breakpoint\" in str(bp)]"
+      ],
+      "cwd": "${workspaceFolder}/bin",
+      "preLaunchTask": "Euclid: Debug Build"
+    },
+    {
+      "name": "Euclid: Debug Scenario",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.build/debug/euclid",
+      "osx": {
+        "program": "${workspaceFolder}/.build/debug/Euclid.app/Contents/MacOS/euclid"
+      },
+      "windows": {
+        "program": "${workspaceFolder}/.build/debug/euclid.exe"
+      },
+      "envFile": "${workspaceFolder}/.build/debug/euclid.env",
+      "args": [
+        "--diagnostics=${workspaceFolder}/.build/debug/euclid.log",
+        "--scenario=${input:scenarioPath}",
+        "--scenario-artifacts=${input:scenarioArtifacts}"
+      ],
+      "initCommands": [
+        "process handle SIGSEGV --stop false --notify false --pass true"
+      ],
+      "preRunCommands": [
+        "script [bp.SetEnabled(False) for bp in lldb.debugger.GetSelectedTarget().breakpoint_iter() if \"Exception breakpoint\" in str(bp)]"
+      ],
+      "cwd": "${workspaceFolder}/bin",
+      "preLaunchTask": "Euclid: Debug Build"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "scenarioPath",
+      "type": "promptString",
+      "description": "Scenario path relative to the repository root",
+      "default": "tools/scenarios/scratchpad-tex-baseline-restores-allocations.jsonl"
+    },
+    {
+      "id": "scenarioArtifacts",
+      "type": "promptString",
+      "description": "Artifact directory relative to the repository root",
+      "default": ".build/scenario-vscode"
+    }
+  ]
+}

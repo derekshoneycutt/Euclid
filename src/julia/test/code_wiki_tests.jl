@@ -6,21 +6,24 @@ using .CodeWiki
 using Test
 
 const ODIN_DOC_FIXTURE = """package sample
-\tfile: sample.odin
-\t\tdocumented :: proc(value: int) -> bool {...} /* 1!20 */
-\t\t\t  Return whether the value is accepted.
-\t\t\t
-\t\t\tParameters:
-\t\t\t  - value: Candidate value.
+    Package sample owns documented fixture behavior.
+$(Char(9))file: sample.odin
+$(Char(9))$(Char(9))documented :: proc(value: int) -> bool {...} /* 1!20 */
+$(Char(9))$(Char(9))$(Char(9))  Return whether the value is accepted.
+$(Char(9))$(Char(9))$(Char(9))
+$(Char(9))$(Char(9))$(Char(9))Parameters:
+$(Char(9))$(Char(9))$(Char(9))  - value: Candidate value.
 
-\t\tUNDOCUMENTED :: 4 /* 1!80 */
-\t\tINFERRED := 5 /* 1!100 */
+$(Char(9))$(Char(9))UNDOCUMENTED :: 4 /* 1!80 */
+$(Char(9))$(Char(9))INFERRED := 5 /* 1!100 */
+$(Char(9))$(Char(9))QUERY :: `SELECT count(*) FROM records
+WHERE value MATCH ?1`
 
 
-\tfullpath:
-\t\t/tmp/sample
-\tfiles:
-\t\tsample.odin
+$(Char(9))fullpath:
+$(Char(9))$(Char(9))/tmp/sample
+$(Char(9))files:
+$(Char(9))$(Char(9))sample.odin
 """
 
 @testset "Odin package discovery" begin
@@ -43,8 +46,9 @@ end
 
     @test package.stable_id == "odin:src:sample"
     @test package.display_name == "sample"
+    @test package.doc_markdown == "Package sample owns documented fixture behavior."
     @test package.source_files == ["sample.odin"]
-    @test length(package.symbols) == 3
+    @test length(package.symbols) == 4
 
     documented = package.symbols[1]
     @test documented.name == "documented"
@@ -56,9 +60,11 @@ end
     @test package.symbols[2].visibility == :all
     @test package.symbols[3].name == "INFERRED"
     @test package.symbols[3].declaration_kind == :constant
+    @test package.symbols[4].signature ==
+        "QUERY :: `SELECT count(*) FROM records\nWHERE value MATCH ?1`"
 
     @test_throws ErrorException parse_odin_doc(
-        "package broken\n\torphan hierarchy", "src/broken")
+        "package broken\n\t\torphan :: proc()", "src/broken")
 end
 
 @testset "Odin source enrichment and rendering" begin
@@ -97,16 +103,15 @@ end
     repository_root = abspath(joinpath(@__DIR__, "..", "..", ".."))
     config = OdinWikiConfig(
         repository_root=repository_root,
-        excluded_roots=["src/julialib"])
+        excluded_roots=["libs/julia/bindings"])
     packages = discover_odin_packages(config)
 
     @test "src/core" in packages
-    @test !("src/julialib" in packages)
+    @test !("libs/julia/bindings" in packages)
 
-    package = extract_odin_package(config, "src/core")
+    package = extract_odin_package(config, "src/view/font/model")
     symbol = only(filter(item -> item.name == "font_weight_rank", package.symbols))
-    @test occursin("Defines the core structures", package.doc_markdown)
-    @test symbol.source_path == "src/core/font_styles.odin"
+    @test symbol.source_path == "src/view/font/model/styles.odin"
     @test symbol.source_line > 0
     @test occursin("canonical weight ordering", symbol.doc_markdown)
 

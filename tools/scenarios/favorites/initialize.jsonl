@@ -1,0 +1,4 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"assert_favorites":"empty"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

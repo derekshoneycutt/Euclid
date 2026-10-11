@@ -1,215 +1,77 @@
-"""
-Get the maximum number of shapes constraints supported by the bridge.
-
-------
-
-Returns: `Int32` constraint capacity
-"""
-function get_constraint_capacity()
-    @ccall get_constraint_capacity()::Int32
-end
-
-"""
-Get the next constraint index in the shapes constraint system.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-
-Returns: `Int32` next constraint index
-"""
-function get_constraint_next_index(state_ptr::Ptr{Cvoid})
-    @ccall get_constraint_next_index(state_ptr::Ptr{Cvoid})::Int32
-end
-
-"""
-Check whether a constraint index is in the valid bridge range.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `index` : Constraint index to validate
-
-Returns: `UInt8` where non-zero means valid
-"""
-function is_constraint_index_in_range(state_ptr::Ptr{Cvoid}, index::Integer)
-    @ccall is_constraint_index_in_range(state_ptr::Ptr{Cvoid}, index::Int32)::UInt8
-end
-
-"""
-Get one constraint view by id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `index` : Constraint id to retrieve
-
-Returns: `BridgeConstraintView`
-"""
-function get_constraint_view(state_ptr::Ptr{Cvoid}, index::Integer)
-    @ccall get_constraint_view(state_ptr::Ptr{Cvoid}, index::Int32)::BridgeConstraintView
-end
-
-"""
-Create a new constraint from a bridge constraint spec.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `spec` : Constraint specification payload
-
-Returns: `(status::Int32, index::Int32)` where index is -1 on failure
-"""
-function create_constraint(state_ptr::Ptr{Cvoid}, spec::BridgeConstraintSpec)
-    out_index = Ref{Int32}(-1)
-    status = @ccall create_constraint(state_ptr::Ptr{Cvoid}, spec::BridgeConstraintSpec,
-        out_index::Ref{Int32})::Int32
-    return status, out_index[]
-end
-
-"""
-Update selected fields on an existing constraint.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `index` : Constraint id to update
-- `spec_mask` : Field selection mask using `CONSTRAINT_SPEC_*` constants
-- `spec` : Source values for fields selected in `spec_mask`
-
-Returns: `Int32` status code
-"""
-function update_constraint(state_ptr::Ptr{Cvoid}, index::Integer,
-    spec_mask::Integer, spec::BridgeConstraintSpec)
-    @ccall update_constraint(state_ptr::Ptr{Cvoid}, index::Int32,
-        Int32(spec_mask)::Int32, spec::BridgeConstraintSpec)::Int32
-end
-
-"""
-Enable or disable a constraint by id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `index` : Constraint id to update
-- `enabled` : `true` to apply constraint, `false` to disable
-
-Returns: `Int32` status code
-"""
-function set_constraint_enabled(state_ptr::Ptr{Cvoid}, index::Integer, enabled::Bool)
-    @ccall set_constraint_enabled(state_ptr::Ptr{Cvoid}, index::Int32,
+"""Create one direct-target floor constraint."""
+function create_floor_constraint(state_ptr::Ptr{Cvoid}, point::Integer,
+    height::Real=0, bounce::Real=0; enabled::Bool=true)
+    @ccall create_floor_constraint(state_ptr::Ptr{Cvoid}, UInt64(point)::UInt64,
+        Cfloat(height)::Cfloat, Cfloat(bounce)::Cfloat,
         UInt8(enabled)::UInt8)::Int32
 end
 
-"""
-Clear one constraint slot by id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `index` : Constraint id to clear
-
-Returns: `Int32` status code
-"""
-function clear_constraint(state_ptr::Ptr{Cvoid}, index::Integer)
-    @ccall clear_constraint(state_ptr::Ptr{Cvoid}, index::Int32)::Int32
+"""Create one direct-target snap-to-floor constraint."""
+function create_snap_to_floor_constraint(state_ptr::Ptr{Cvoid}, point::Integer,
+    height::Real=0, allowance::Real=0; enabled::Bool=true)
+    @ccall create_snap_to_floor_constraint(state_ptr::Ptr{Cvoid},
+        UInt64(point)::UInt64, Cfloat(height)::Cfloat, Cfloat(allowance)::Cfloat,
+        UInt8(enabled)::UInt8)::Int32
 end
 
-"""
-Get total current constraint error across the point system.
+"""Create one direct-target snap-point constraint."""
+function create_snap_point_constraint(state_ptr::Ptr{Cvoid}, point::Integer,
+    position; enabled::Bool=true)
+    target = (Cfloat(position[1]), Cfloat(position[2]), Cfloat(position[3]))
+    @ccall create_snap_point_constraint(state_ptr::Ptr{Cvoid},
+        UInt64(point)::UInt64, target::NTuple{3, Cfloat},
+        UInt8(enabled)::UInt8)::Int32
+end
 
-------
+"""Create one direct-target distance constraint."""
+function create_distance_constraint(state_ptr::Ptr{Cvoid}, first::Integer,
+    second::Integer, length::Real, movement::Integer; enabled::Bool=true)
+    input = BridgeDistanceConstraintInput(UInt64(first), UInt64(second),
+        Cfloat(length), Int32(movement), UInt8(enabled))
+    @ccall create_distance_constraint(state_ptr::Ptr{Cvoid},
+        input::BridgeDistanceConstraintInput)::Int32
+end
 
-Parameters:
+"""Create one direct-target maximum-angle constraint."""
+function create_max_angle_constraint(state_ptr::Ptr{Cvoid}, first::Integer,
+    pivot::Integer, second::Integer, limit::Real, movement::Integer;
+    enabled::Bool=true)
+    input = BridgeAngleConstraintInput(UInt64(first), UInt64(pivot), UInt64(second),
+        Cfloat(limit), Int32(movement), UInt8(enabled))
+    @ccall create_max_angle_constraint(state_ptr::Ptr{Cvoid},
+        input::BridgeAngleConstraintInput)::Int32
+end
 
-- `state_ptr` : The Euclid application state pointer passed to the native API
+"""Create one direct-target minimum-angle constraint."""
+function create_min_angle_constraint(state_ptr::Ptr{Cvoid}, first::Integer,
+    pivot::Integer, second::Integer, limit::Real, movement::Integer;
+    enabled::Bool=true)
+    input = BridgeAngleConstraintInput(UInt64(first), UInt64(pivot), UInt64(second),
+        Cfloat(limit), Int32(movement), UInt8(enabled))
+    @ccall create_min_angle_constraint(state_ptr::Ptr{Cvoid},
+        input::BridgeAngleConstraintInput)::Int32
+end
 
-Returns: `Cfloat` total error
-"""
+"""Create one direct-target center-pivot constraint."""
+function create_center_pivot_constraint(state_ptr::Ptr{Cvoid}, first::Integer,
+    pivot::Integer, second::Integer; enabled::Bool=true)
+    @ccall create_center_pivot_constraint(state_ptr::Ptr{Cvoid},
+        UInt64(first)::UInt64, UInt64(pivot)::UInt64, UInt64(second)::UInt64,
+        UInt8(enabled)::UInt8)::Int32
+end
+
+"""Return aggregate error across canonical direct-target constraints."""
 function get_total_constraint_error_bridge(state_ptr::Ptr{Cvoid})
     @ccall get_total_constraint_error_bridge(state_ptr::Ptr{Cvoid})::Cfloat
 end
 
-"""
-Get the current error value for one constraint.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `constraint_index` : Constraint id to inspect
-
-Returns: `(status::Int32, error::Cfloat)`
-"""
-function get_constraint_error_bridge(state_ptr::Ptr{Cvoid}, constraint_index::Integer)
-    out_error = Ref{Cfloat}(0)
-    status = @ccall get_constraint_error_bridge(state_ptr::Ptr{Cvoid},
-        Int32(constraint_index)::Int32, out_error::Ref{Cfloat})::Int32
-    return status, out_error[]
-end
-
-"""
-Apply one constraint by id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `constraint_index` : Constraint id to apply
-
-Returns: `Int32` status code
-"""
-function apply_constraint_bridge(state_ptr::Ptr{Cvoid}, constraint_index::Integer)
-    @ccall apply_constraint_bridge(
-        state_ptr::Ptr{Cvoid}, Int32(constraint_index)::Int32)::Int32
-end
-
-"""
-Apply all constraints once in forward or reverse order.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `reverse` : `true` to apply in reverse order, `false` for forward order
-
-Returns: `Int32` status code
-"""
+"""Apply every canonical direct-target constraint once."""
 function apply_all_constraints_bridge(state_ptr::Ptr{Cvoid}, reverse::Bool=false)
     @ccall apply_all_constraints_bridge(
         state_ptr::Ptr{Cvoid}, UInt8(reverse)::UInt8)::Int32
 end
 
-"""
-Solve constraints until total error is below threshold or iteration budget is exhausted.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `allowable_error` : Error threshold target
-- `max_iterations` : Maximum solve iterations (native side clamps and defaults)
-
-Returns: `BridgeSolveResult`
-"""
+"""Solve canonical direct-target constraints within an iteration budget."""
 function solve_constraints_to_error(state_ptr::Ptr{Cvoid}, allowable_error::Real,
     max_iterations::Integer)
     @ccall solve_constraints_to_error(state_ptr::Ptr{Cvoid}, allowable_error::Cfloat,

@@ -4,10 +4,10 @@ on:
   pull_request:
     paths:
       - ".github/workflows/wiki.yml"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "cmake/**"
       - "docs/wiki/Guides/**"
-      - "Makefile"
-      - "make.ps1"
-      - "configure"
       - "src/**"
       - "tools/**"
   push:
@@ -15,10 +15,10 @@ on:
       - main
     paths:
       - ".github/workflows/wiki.yml"
+      - "CMakeLists.txt"
+      - "CMakePresets.json"
+      - "cmake/**"
       - "docs/wiki/Guides/**"
-      - "Makefile"
-      - "make.ps1"
-      - "configure"
       - "src/**"
       - "tools/**"
   workflow_dispatch:
@@ -36,17 +36,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Set up Julia
-        uses: julia-actions/setup-julia@v2
+        uses: julia-actions/setup-julia@v3
         with:
-          version: "1.12"
+          version: "1.13"
 
       - name: Cache Julia packages
-        uses: julia-actions/cache@v2
+        uses: julia-actions/cache@v3
 
       - name: Set up Odin
         uses: laytan/setup-odin@v2
@@ -54,8 +54,11 @@ jobs:
           token: ${{ github.token }}
           release: dev-2026-08
 
-      - name: Instantiate Julia environment
-        run: julia --project=src/julia -e 'using Pkg; Pkg.instantiate()'
+      - name: Configure
+        run: cmake --preset default
+
+      - name: Bootstrap Julia environments
+        run: cmake --build --preset default --target configure
 
       - name: Test Wiki tooling
         run: |
@@ -66,13 +69,13 @@ jobs:
             include("src/julia/test/code_wiki_bridge_tests.jl")'
 
       - name: Generate Wiki artifact
-        run: julia tools/make.jl -w
+        run: cmake --build --preset default --target wiki
 
       - name: Check Wiki artifact
-        run: julia tools/make.jl -W
+        run: cmake --build --preset default --target check-wiki
 
       - name: Upload Wiki artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: euclid-wiki-${{ github.sha }}
           path: bin/wiki
@@ -88,18 +91,18 @@ jobs:
       contents: write
     steps:
       - name: Check out publication tooling
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Julia
-        uses: julia-actions/setup-julia@v2
+        uses: julia-actions/setup-julia@v3
         with:
-          version: "1.12"
+          version: "1.13"
 
       - name: Instantiate Julia environment
         run: julia --project=src/julia -e 'using Pkg; Pkg.instantiate()'
 
       - name: Download validated Wiki artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: euclid-wiki-${{ github.sha }}
           path: bin/wiki

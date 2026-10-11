@@ -1,0 +1,152 @@
+module ElementsOneDefinitionPoint
+
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("03bf688d-40d0-56a2-a6be-ca2656c9b10d")
+
+using ..OdinJuliaBridge
+using ..EuclidAnimations
+using ..EuclidLatex
+
+include("def_001_point_content.jl")
+
+export get_view_content, initialize, clean, loop, animation_entry
+
+const Point = [0.5f0, 0.5f0, 0f0]
+
+const PointColor = :steelblue
+const PointMaxBrush = 5f0
+
+const PenTopZ = 1.4f0
+
+const DescendDuration = 3f0
+const DrawDuration = 4f0
+const RiseDuration = 3f0
+
+"""Complete immutable state for one point-definition animation generation."""
+struct AnimationState
+    point_id::UInt64
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
+
+const PhaseDescend = 0f0
+const PhaseDraw = 1f0
+const PhaseRise = 2f0
+
+"""Return state with updated cycle timing and the same native point handle."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(state.point_id, phase, timer)
+end
+
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return ElementsOneDefinitionPointContent.get_view_content()
+end
+
+"""Reset the animation cycle while preserving its native point handle."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    pointid = state.point_id
+
+    OdinJuliaBridge.hide_point(state_ptr, pointid)
+
+    OdinJuliaBridge.show_pen(state_ptr)
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, PointColor)
+
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, PhaseDescend, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+
+    OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
+end
+
+"""Initialize all objects for this animation"""
+function initialize(state_ptr::Ptr{Cvoid})
+    point = OdinJuliaBridge.create_new_point(
+        state_ptr, Point, PointColor, 0f0)
+
+    state = AnimationState(point.index, PhaseDescend, 0f0)
+    reset_cycle_state(state_ptr, state)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
+end
+
+"""Clean any extra animation data at the end of performance"""
+function clean(state_ptr::Ptr{Cvoid})
+end
+
+"""Perform an iteration of the animation loop for this animation"""
+function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    pointid = state.point_id
+    if pointid < 0
+        return
+    end
+
+    phase = state.phase
+    timer = state.timer
+
+    if phase == PhaseDescend
+        EuclidAnimations.animate_pen_descend(
+            state_ptr, timer, DescendDuration, PenTopZ, Point[1], Point[2])
+
+        timer += dt
+        if timer >= DescendDuration
+            phase = PhaseDraw
+            timer = 0f0
+        end
+    elseif phase == PhaseDraw
+        EuclidAnimations.animate_draw_point(
+            state_ptr, timer, DrawDuration, Point,
+            PointMaxBrush, PointColor, pointid)
+
+        timer += dt
+        if timer >= DrawDuration
+            phase = PhaseRise
+            timer = 0f0
+        end
+    elseif phase == PhaseRise
+        EuclidAnimations.animate_pen_rise(
+            state_ptr, timer, RiseDuration, PenTopZ, Point[1], Point[2])
+
+        timer += dt
+        if timer >= RiseDuration
+            OdinJuliaBridge.hide_pen(state_ptr)
+            OdinJuliaBridge.hide_point(state_ptr, pointid)
+            reset_cycle_state(state_ptr, state)
+            return
+        end
+    end
+
+    OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
+end
+
+
+"""Dispatch one bridge-stable lifecycle operation for this animation."""
+function animation_entry(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED
+        return true
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        OdinJuliaBridge.animation_content_specification(state_ptr)
+        initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        clean(state_ptr)
+    else
+        return false
+    end
+    return true
+end
+
+end
+
+AnimationCatalog.animation(
+    ElementsOneDefinitionPoint.AnimationId, ElementsOneDefinitionPoint.animation_entry)

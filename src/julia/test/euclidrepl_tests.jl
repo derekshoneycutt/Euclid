@@ -11,8 +11,11 @@ end
 if !isdefined(Main, :EuclidLatex)
     include("../latex.jl")
 end
-if !isdefined(Main, :Scratchpad)
-    include("../scratchpad.jl")
+if !isdefined(Main, :EuclidActorRuntime)
+    include("../runtime.jl")
+end
+if !isdefined(Main, :Ticks)
+    include("../ticks.jl")
 end
 if !isdefined(Main, :EuclidRepl)
     include("../euclidrepl.jl")
@@ -22,7 +25,27 @@ using .EuclidRepl
 using Colors
 using Test
 
+@testset "Terminal tick cadence" begin
+    requested_ns = Ticks.interval_nanoseconds(1 / 60)
+    @test requested_ns == UInt64(16_666_666)
+    @test Ticks.interval_nanoseconds(1e-12) == UInt64(1)
+end
+
 const TEST_STATE_PTR = Ptr{Cvoid}(0)
+const TEST_REPL_RUNTIME = EuclidRepl.create_runtime()
+
+"""Provide a successful visibility callback for Julia-only REPL tests."""
+function test_shape_set_visible(
+    _state::Ptr{Cvoid},
+    _entity::UInt64,
+    _visible::UInt8)::Int32
+    return OdinJuliaBridge.BRIDGE_STATUS_OK
+end
+
+if Sys.iswindows()
+    OdinJuliaBridge.HOST_SYMBOL_CACHE[:shape_set_visible] =
+        @cfunction(test_shape_set_visible, Int32, (Ptr{Cvoid}, UInt64, UInt8))
+end
 
 @testset "EuclidRepl validation" begin
     @test_throws ArgumentError EuclidRepl.validated_duration(0f0)
@@ -39,8 +62,6 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
 
     @test_throws ArgumentError EuclidRepl.validated_start_theta(Inf32)
     @test_throws ArgumentError EuclidRepl.validated_start_theta(NaN32)
-
-    @test_throws ArgumentError EuclidRepl.validated_end_theta(NaN32)
 
     @test_throws ArgumentError EuclidRepl.validated_angle_theta(Inf32)
     @test_throws ArgumentError EuclidRepl.validated_angle_theta(NaN32)
@@ -70,41 +91,39 @@ const TEST_STATE_PTR = Ptr{Cvoid}(0)
     @test_throws ArgumentError EuclidRepl.validated_start_positions(
         Float64[1.0, 2.0, 3.0, 4.0])
 
-    @test EuclidRepl.effective_end_theta(0f0, Inf32) ≈ EuclidRepl.TWO_PI_F32
-    @test EuclidRepl.effective_end_theta(0f0, 10f0) ≈ EuclidRepl.TWO_PI_F32
-    @test EuclidRepl.effective_end_theta(0f0, 1f0) ≈ 1f0
 end
 
 @testset "EuclidRepl hide helpers" begin
+    point = OdinJuliaBridge.BridgeShapeEntityResult(
+        OdinJuliaBridge.BRIDGE_STATUS_OK, UInt64(7))
     point_view = OdinJuliaBridge.BridgePointView(
-        0x0,
-        7,
-        0,
-        0x0,
-        0f0,
-        0f0,
-        0x0,
-        (0f0, 0f0, 0f0),
-        0x0,
-        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
-        0x0,
-        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
-        0x0,
-        UInt32(0),
         Int32(0),
-        0,
-        0,
-        0,
-        0)
-    line_shape = OdinJuliaBridge.BridgeShapeLine(11, 12, 13)
-    circle_shape = OdinJuliaBridge.BridgeShapeCircle(21, 22, 23)
-    filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(31, 32, 33)
+        UInt64(7),
+        Int32(0),
+        UInt8(0),
+        UInt8(0),
+        UInt8(0),
+        UInt8(0),
+        (0f0, 0f0, 0f0),
+        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
+        OdinJuliaBridge.BridgeColor(0, 0, 0, 0),
+        UInt8(0),
+        0f0,
+        UInt16(0))
+    line_shape = OdinJuliaBridge.BridgeShapeLine(0, 11, 12, 13)
+    circle_shape = OdinJuliaBridge.BridgeShapeCircle(0, 21)
+    filled_circle_shape = OdinJuliaBridge.BridgeShapeFilledCircle(0, 31)
 
-    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, 5))
-    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, point_view))
-    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, line_shape))
-    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, circle_shape))
-    @test isnothing(EuclidRepl.hide!(TEST_STATE_PTR, filled_circle_shape))
+    @test isnothing(EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, 5))
+    @test isnothing(EuclidRepl.hide!(TEST_REPL_RUNTIME, TEST_STATE_PTR, point))
+    @test isnothing(EuclidRepl.hide!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, point_view))
+    @test isnothing(EuclidRepl.hide!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, line_shape))
+    @test isnothing(EuclidRepl.hide!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, circle_shape))
+    @test isnothing(EuclidRepl.hide!(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR, filled_circle_shape))
 end
 
 @testset "EuclidRepl color palette helpers" begin
@@ -122,14 +141,16 @@ end
 end
 
 @testset "EuclidRepl highlight APIs" begin
-    EuclidRepl.reset_scratchpad_session!()
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
 
     @test_throws ArgumentError EuclidRepl.highlight_pen!(
+        TEST_REPL_RUNTIME,
         TEST_STATE_PTR,
         Float32[0f0, 0f0],
         Float32[1f0, 0f0, 0f0])
 
     @test_throws ArgumentError EuclidRepl.highlight_compass!(
+        TEST_REPL_RUNTIME,
         TEST_STATE_PTR,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
@@ -137,6 +158,7 @@ end
         1f0)
 
     @test_throws ArgumentError EuclidRepl.highlight_compass!(
+        TEST_REPL_RUNTIME,
         TEST_STATE_PTR,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
@@ -144,15 +166,17 @@ end
         0f0)
 
     @test isnothing(EuclidRepl.highlight_pen!(
+        TEST_REPL_RUNTIME,
         TEST_STATE_PTR,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0]))
 
-    pen_status = EuclidRepl.status(TEST_STATE_PTR)
+    pen_status = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test pen_status.active == true
     @test pen_status.kind == :highlight_pen
 
     @test isnothing(EuclidRepl.highlight_compass!(
+        TEST_REPL_RUNTIME,
         TEST_STATE_PTR,
         Float32[0f0, 0f0, 0f0],
         Float32[1f0, 0f0, 0f0],
@@ -160,45 +184,47 @@ end
         1f0,
         filled=true))
 
-    compass_status = EuclidRepl.status(TEST_STATE_PTR)
+    compass_status = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test compass_status.active == true
     @test compass_status.kind == :highlight_compass
 
-    @test EuclidRepl.stop!(TEST_STATE_PTR) == true
-    @test EuclidRepl.status(TEST_STATE_PTR).active == false
+    @test EuclidRepl.stop!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
+    @test EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR).active == false
 end
 
 @testset "EuclidRepl session lifecycle" begin
-    EuclidRepl.reset_scratchpad_session!()
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
 
-    state0 = EuclidRepl.status(TEST_STATE_PTR)
+    state0 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test state0.active == false
     @test state0.managed_shape_count == 0
 
-    session = EuclidRepl.ensure_session!()
-    @test EuclidRepl.stop!(TEST_STATE_PTR) == false
-    @test EuclidRepl.clear!(TEST_STATE_PTR) == true
+    session = EuclidRepl.ensure_session!(TEST_REPL_RUNTIME)
+    @test EuclidRepl.stop!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == false
+    @test EuclidRepl.clear!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
 
     # Simulate managed geometry bookkeeping in test-only state.
     push!(session.managed_host_ids, 1)
     push!(session.managed_host_ids, 2)
-    @test EuclidRepl.status(TEST_STATE_PTR).managed_shape_count == 2
+    @test EuclidRepl.status(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 2
 
-    @test EuclidRepl.clear!(TEST_STATE_PTR) == true
-    @test EuclidRepl.status(TEST_STATE_PTR).managed_shape_count == 0
+    @test EuclidRepl.clear!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
+    @test EuclidRepl.status(
+        TEST_REPL_RUNTIME, TEST_STATE_PTR).managed_shape_count == 0
 
-    EuclidRepl.reset_scratchpad_session!()
-    state_after_reset = EuclidRepl.status(TEST_STATE_PTR)
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
+    state_after_reset = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test state_after_reset.active == false
     @test state_after_reset.managed_shape_count == 0
 end
 
 @testset "EuclidRepl preemption and status" begin
-    EuclidRepl.reset_scratchpad_session!()
+    EuclidRepl.reset_session!(TEST_REPL_RUNTIME, TEST_STATE_PTR)
 
-    session = EuclidRepl.ensure_session!()
+    session = EuclidRepl.ensure_session!(TEST_REPL_RUNTIME)
     payload_a = EuclidRepl.PointPayload(1, Float32[0f0, 0f0, 0f0], :steelblue, 5f0)
-    job_a = EuclidRepl.ReplDrawJob(:point, 0.5f0, 0.25f0, nothing, payload_a)
+    job_a = EuclidRepl.ReplDrawJob(:point, 0.5f0, 0.25f0, payload_a)
 
     payload_b = EuclidRepl.LinePayload(
         2,
@@ -208,19 +234,21 @@ end
         Float32[1f0, 0f0, 0f0],
         :steelblue,
         5f0)
-    job_b = EuclidRepl.ReplDrawJob(:line, 0.8f0, 0f0, nothing, payload_b)
+    job_b = EuclidRepl.ReplDrawJob(:line, 0.8f0, 0f0, payload_b)
 
-    EuclidRepl.start_job!(TEST_STATE_PTR, job_a)
-    s1 = EuclidRepl.status(TEST_STATE_PTR)
+    EuclidRepl.start_job!(TEST_REPL_RUNTIME, TEST_STATE_PTR, job_a)
+    s1 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test s1.active == true
     @test s1.kind == :point
 
-    EuclidRepl.start_job!(TEST_STATE_PTR, job_b)
-    s2 = EuclidRepl.status(TEST_STATE_PTR)
+    EuclidRepl.start_job!(TEST_REPL_RUNTIME, TEST_STATE_PTR, job_b)
+    s2 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test s2.active == true
     @test s2.kind == :line
+    @test s2.subscription_id === nothing
+    @test job_b.elapsed == 0f0
 
-    @test EuclidRepl.stop!(TEST_STATE_PTR) == true
-    s3 = EuclidRepl.status(TEST_STATE_PTR)
+    @test EuclidRepl.stop!(TEST_REPL_RUNTIME, TEST_STATE_PTR) == true
+    s3 = EuclidRepl.status(TEST_REPL_RUNTIME, TEST_STATE_PTR)
     @test s3.active == false
 end

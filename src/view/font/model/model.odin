@@ -1,0 +1,533 @@
+package fontmodel
+
+import "base:runtime"
+import tlsf "core:mem/tlsf"
+import vmem "core:mem/virtual"
+
+import geometry "../../../core/geometry"
+import "../../../taskpool"
+
+// Number of indexed font variants through the final `Font_Key` value.
+FONT_KEY_COUNT :: int(Font_Key.Math_Regular) + 1
+
+// Inclusive physical pixel-height limits for on-demand font raster selection.
+FONT_RASTER_MIN_PIXEL_HEIGHT :: 4
+FONT_RASTER_MAX_PIXEL_HEIGHT :: 256
+
+// Stable slot identity for each face's pinned canonical raster.
+FONT_CANONICAL_RASTER_SLOT_INCARNATION :: 1
+
+// Maximum bytes retained for one display-owned font source path.
+FONT_SOURCE_PATH_CAPACITY :: 1024
+
+// Maximum RGBA charge reserved for one optional atlas before CPU pixel allocation.
+FONT_RASTER_PAGE_RESERVATION_RGBA_BYTES :: 64 * 1024 * 1024
+
+// Maximum face glyph records admitted to one raster instance.
+FONT_RASTER_GLYPH_RECORD_CAPACITY :: 65535
+
+// Reusable metadata capacity shared by all cache-owned optional raster instances.
+FONT_OPTIONAL_GLYPH_METADATA_BYTE_BUDGET :: 64 * 1024 * 1024
+FONT_OPTIONAL_GLYPH_METADATA_POOL_OVERHEAD :: 64 * 1024
+
+// Visible optional raster demand ages into priority after this many cache services.
+FONT_RASTER_DEMAND_AGE_TICKS :: 60
+
+// Maximum concurrently resident glyph-atlas pages per font generation.
+FONT_GLYPH_PAGE_CAPACITY :: 32
+
+// Maximum optional physical-size raster instances resident across the cache.
+FONT_OPTIONAL_RASTER_INSTANCE_CAPACITY :: 16
+
+// Logical RGBA atlas budget, including candidates and application-owned retirement.
+FONT_RASTER_RGBA_BYTE_BUDGET :: 128 * 1024 * 1024
+
+// Maximum runes in either required startup seed policy.
+FONT_SEED_CODEPOINT_CAPACITY :: 512
+
+// Maximum glyphs retained by one bounded shaping workspace.
+FONT_SHAPED_GLYPH_CAPACITY :: 4096
+
+Font_Weight :: enum {
+    Light,
+    Regular,
+    Medium,
+    Semibold,
+    Bold,
+    Extrabold,
+    Black,
+}
+
+Font_Variant_Flags :: enum u32 {
+    None = 0,
+    Italic = 1 << 0,
+    Light = 1 << 1,
+    Regular = 1 << 2,
+    Medium = 1 << 3,
+    Semibold = 1 << 4,
+    Bold = 1 << 5,
+    Extrabold = 1 << 6,
+    Black = 1 << 7,
+}
+
+Font_Key :: enum {
+    Regular,
+    Regular_Italic,
+    Light,
+    Light_Italic,
+    Medium,
+    Medium_Italic,
+    Semi_Bold,
+    Semi_Bold_Italic,
+    Bold,
+    Bold_Italic,
+    Extra_Bold,
+    Extra_Bold_Italic,
+    Black,
+    Black_Italic,
+    Math_Regular,
+}
+
+Font_Load_State :: enum {
+    Unrequested,
+    Requested,
+    Preparing,
+    Ready,
+    Failed,
+}
+
+Shaped_Glyph :: struct {
+    glyph_id: u32,
+    cluster: u32,
+    x_advance: i32,
+    y_advance: i32,
+    x_offset: i32,
+    y_offset: i32,
+}
+
+Font_Shaping_Resource :: struct {
+    blob: rawptr,
+    face: rawptr,
+    font: rawptr,
+    buffer: rawptr,
+}
+
+FONT_MATH_CONSTANT_COUNT :: 56
+FONT_MATH_GLYPH_VARIANT_CAPACITY :: 16
+FONT_MATH_GLYPH_PART_CAPACITY :: 16
+FONT_MATH_KERN_ENTRY_CAPACITY :: 16
+
+// Font_Math_Constants is one immutable generation's complete OpenType MATH table.
+Font_Math_Constants :: struct {
+    valid: bool,
+    generation: u64,
+    base_pixel_size: f32,
+    values: [FONT_MATH_CONSTANT_COUNT]i32,
+    text_match_scale: f32,
+}
+
+Font_Math_Glyph_Variant :: struct {
+    glyph_id: u32,
+    advance: i32,
+    extents: Font_Glyph_Extents,
+    italic_correction: i32,
+    top_accent_attachment: i32,
+}
+
+Font_Math_Glyph_Variants :: struct {
+    valid: bool,
+    generation: u64,
+    base_glyph_id: u32,
+    extended_shape: bool,
+    count: int,
+    values: [FONT_MATH_GLYPH_VARIANT_CAPACITY]Font_Math_Glyph_Variant,
+}
+
+Font_Math_Glyph_Part :: struct {
+    glyph_id: u32,
+    start_connector_length: i32,
+    end_connector_length: i32,
+    full_advance: i32,
+    extender: bool,
+    extents: Font_Glyph_Extents,
+}
+
+Font_Math_Glyph_Assembly :: struct {
+    valid: bool,
+    generation: u64,
+    base_glyph_id: u32,
+    min_connector_overlap: i32,
+    italic_correction: i32,
+    count: int,
+    values: [FONT_MATH_GLYPH_PART_CAPACITY]Font_Math_Glyph_Part,
+}
+
+Font_Math_Kern_Entry :: struct {
+    max_correction_height: i32,
+    kern_value: i32,
+}
+
+Font_Math_Kern_Table :: struct {
+    valid: bool,
+    generation: u64,
+    glyph_id: u32,
+    corner: u8,
+    count: int,
+    entries: [FONT_MATH_KERN_ENTRY_CAPACITY]Font_Math_Kern_Entry,
+}
+
+Font_Math_Stretch_Part :: struct {
+    glyph_id: u32,
+    advance_offset: f32,
+    extents: Font_Glyph_Extents,
+}
+
+Font_Math_Stretch_Construction :: struct {
+    valid: bool,
+    assembled: bool,
+    generation: u64,
+    base_glyph_id: u32,
+    advance: f32,
+    italic_correction: f32,
+    top_accent_attachment: f32,
+    count: int,
+    parts: [FONT_MATH_GLYPH_PART_CAPACITY]Font_Math_Stretch_Part,
+}
+
+Font_Math_Stretch_Source :: struct {
+    raster_ascent: f32,
+    variants: Font_Math_Glyph_Variants,
+    assembly: Font_Math_Glyph_Assembly,
+}
+
+Font_Math_Shaping_Capability :: struct {
+    resource: Font_Shaping_Resource,
+    constants: Font_Math_Constants,
+    generation: u64,
+    failed_generation: u64,
+    raster_ascent: f32,
+}
+
+Font_Shaping_Identity :: struct {
+    key: Font_Key,
+    generation: u64,
+    canonical_pixel_size: f32,
+}
+
+Font_Raster_Policy :: enum u32 {
+    Freetype_Light,
+}
+
+Font_Raster_Identity :: struct {
+    key: Font_Key,
+    source_generation: u64,
+    pixel_height: u32,
+    policy: Font_Raster_Policy,
+    slot_incarnation: u64,
+}
+
+Font_Raster_Metrics :: struct {
+    pixel_height: u32,
+    ascent: f32,
+}
+
+Font_Raster_Height_Selection :: struct {
+    pixel_height: u32,
+    quality_limited: bool,
+    valid: bool,
+}
+
+Font_Raster_Request :: struct {
+    key: Font_Key,
+    source_generation: u64,
+    logical_size: f32,
+    scene_pixels_per_logical_unit: f32,
+    pixel_height: u32,
+    policy: Font_Raster_Policy,
+    quality_limited: bool,
+}
+
+Font_Raster_Budget :: struct {
+    resident_bytes: u64,
+    candidate_bytes: u64,
+    pending_retirement_bytes: u64,
+    optional_instance_count: u32,
+    optional_glyph_metadata_bytes: u64,
+}
+
+Font_Raster_Slot_Selection :: struct {
+    key: Font_Key,
+    slot_index: i32,
+    found: bool,
+}
+
+Font_Raster_Frame_Pin :: struct {
+    slot_index: i32,
+    slot_incarnation: u64,
+}
+
+Font_Glyph_Extents :: struct {
+    x_bearing: i32,
+    y_bearing: i32,
+    width: i32,
+    height: i32,
+}
+
+Font_Shaping_Telemetry :: struct {
+    shape_calls: u64,
+    shaped_runs: u64,
+    shaped_glyphs: u64,
+    native_failures: u64,
+    workspace_overflows: u64,
+    invalid_results: u64,
+    invalid_clusters: u64,
+    pending_glyph_runs: u64,
+}
+
+Font_Glyph_State :: enum u8 {
+    Missing,
+    Pending,
+    Queued,
+    Resident,
+    Capacity_Blocked,
+}
+
+Font_Glyph_Record :: struct {
+    rectangle: geometry.Rectangle,
+    offset_x: i32,
+    offset_y: i32,
+    advance_x: i32,
+    page_index: u16,
+    state: Font_Glyph_State,
+}
+
+Font_Raster_Instance_State :: enum u8 {
+    Vacant,
+    Reserved,
+    Preparing,
+    Resident,
+    Retiring,
+}
+
+// Font_Texture is one opaque display-owned sampled atlas with portable dimensions.
+Font_Texture :: struct {
+    handle: rawptr,
+    width: u32,
+    height: u32,
+}
+
+// Font_Face retains generation metrics independently of any native font facade.
+Font_Face :: struct {
+    base_size: i32,
+    glyph_count: i32,
+    glyph_padding: i32,
+    space_advance: i32,
+    texture: Font_Texture,
+}
+
+// Font texture operations keep native creation and release display-owner injected.
+Font_Texture_Create_Handler :: #type proc(
+    user_data: rawptr, width, height: u32) -> Font_Texture
+Font_Texture_Completion_Handler :: #type proc(
+    user_data: rawptr, identity, generation: u64, succeeded: bool)
+
+// Font_Texture_Upload_Request describes one immutable atlas publication.
+Font_Texture_Upload_Request :: struct {
+    texture: Font_Texture,
+    pixels: []u8,
+    identity: u64,
+    generation: u64,
+    completion: Font_Texture_Completion_Handler,
+    completion_data: rawptr,
+}
+
+Font_Texture_Upload_Handler :: #type proc(
+    user_data: rawptr, request: Font_Texture_Upload_Request) -> bool
+Font_Texture_Release_Handler :: #type proc(
+    user_data: rawptr, texture: Font_Texture)
+
+// Font_Texture_Operations supplies the native atlas lifecycle to the font cache.
+Font_Texture_Operations :: struct {
+    user_data: rawptr,
+    create: Font_Texture_Create_Handler,
+    upload: Font_Texture_Upload_Handler,
+    release: Font_Texture_Release_Handler,
+}
+
+Font_Glyph_Page :: struct {
+    texture: Font_Texture,
+    generation: u64,
+    glyph_count: i32,
+}
+
+Font_Raster_Instance :: struct {
+    identity: Font_Raster_Identity,
+    state: Font_Raster_Instance_State,
+    raster_ascent: f32,
+    texture: Font_Texture,
+    glyphs: []Font_Glyph_Record,
+    glyph_allocator: runtime.Allocator,
+    pages: [FONT_GLYPH_PAGE_CAPACITY]Font_Glyph_Page,
+    page_count: i32,
+    pending_glyph_count: i32,
+    queued_demand_count: i32,
+    charged_rgba_bytes: u64,
+    last_used_tick: u64,
+    first_pending_demand_tick: u64,
+    frame_pin_count: u32,
+}
+
+Font_Cache_Entry :: struct {
+    font: Font_Face,
+    shaping: Font_Shaping_Resource,
+    canonical_raster: Font_Raster_Instance,
+    raster_ascent: f32,
+    generation: u64,
+    requested_generation: u64,
+    resident: bool,
+    state: Font_Load_State,
+    request_count: u64,
+    coalesced_request_count: u64,
+    fallback_resolution_count: u64,
+    page_publication_count: u64,
+    prefetched_glyph_count: u64,
+    pending_codepoint_count: u64,
+    unsupported_codepoint_count: u64,
+    capacity_rejection_count: u64,
+}
+
+Prepared_Font_Allocation_Mode :: enum {
+    Individual,
+    Arena,
+}
+
+Prepared_Glyph :: struct {
+    value: rune,
+    glyph_id: u32,
+    offset_x: i32,
+    offset_y: i32,
+    advance_x: i32,
+    bitmap_width: i32,
+    bitmap_height: i32,
+}
+
+Prepared_Rectangle :: struct {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
+Prepared_Font :: struct {
+    key: Font_Key,
+    generation: u64,
+    base_size: i32,
+    raster_ascent: f32,
+    glyph_count: i32,
+    face_glyph_count: i32,
+    padding: i32,
+    atlas_width: i32,
+    atlas_height: i32,
+    atlas_pixels: []u8,
+    glyphs: []Prepared_Glyph,
+    rectangles: []Prepared_Rectangle,
+    allocator: runtime.Allocator,
+    allocation_mode: Prepared_Font_Allocation_Mode,
+    complete_face: bool,
+}
+
+Font_Prepare_Operation_State :: enum {
+    Idle,
+    Retry,
+    Queued,
+    Uploading,
+}
+
+Font_Prepare_Operation_Kind :: enum {
+    Seed,
+    Glyph_Page,
+}
+
+Font_Prepare_Task :: struct {
+    kind: Font_Prepare_Operation_Kind,
+    key: Font_Key,
+    generation: u64,
+    raster_slot_index: i32,
+    raster_slot_incarnation: u64,
+    upload_identity: u64,
+    rgba_reservation_bytes: u64,
+    path_storage: [1024]u8,
+    path_length: int,
+    pixel_size: i32,
+    codepoints: [FONT_SEED_CODEPOINT_CAPACITY]rune,
+    codepoint_count: i32,
+    glyph_ids: [256]u32,
+    glyph_id_count: i32,
+    demanded_glyph_count: i32,
+    prepared: Prepared_Font,
+    allocator: runtime.Allocator,
+}
+
+Font_Prepare_Operation :: struct {
+    state: Font_Prepare_Operation_State,
+    task: Font_Prepare_Task,
+    pending_texture: Font_Texture,
+    handle: taskpool.Task_Handle,
+    queue_full_count: u64,
+    pending_poll_count: u64,
+    failure_count: u64,
+    publication_count: u64,
+    stale_completion_count: u64,
+    cancellation_request_count: u64,
+    cancellation_completion_count: u64,
+}
+
+Font_Source_Signature :: struct {
+    modification_ns: i64,
+    size: i64,
+    present: bool,
+}
+
+Font_Source_Monitor_Entry :: struct {
+    observed: Font_Source_Signature,
+    pending: Font_Source_Signature,
+    reload_due_ns: i64,
+    pending_change: bool,
+}
+
+Font_Source_Monitor :: struct {
+    entries: [FONT_KEY_COUNT]Font_Source_Monitor_Entry,
+    next_poll_ns: i64,
+    change_count: u64,
+    reload_count: u64,
+    initialized: bool,
+}
+
+Font_Source_Path :: struct {
+    storage: [FONT_SOURCE_PATH_CAPACITY]u8,
+    length: int,
+}
+
+Font_Cache :: struct {
+    entries: [FONT_KEY_COUNT]Font_Cache_Entry,
+    optional_rasters: [FONT_OPTIONAL_RASTER_INSTANCE_CAPACITY]Font_Raster_Instance,
+    frame_pins: [FONT_OPTIONAL_RASTER_INSTANCE_CAPACITY]Font_Raster_Frame_Pin,
+    frame_pin_count: int,
+    frame_active: bool,
+    next_raster_slot_incarnation: u64,
+    next_upload_identity: u64,
+    raster_request_clock: u64,
+    source_paths: [FONT_KEY_COUNT]Font_Source_Path,
+    preparation: Font_Prepare_Operation,
+    preparation_arena: vmem.Arena,
+    preparation_arena_initialized: bool,
+    raster_metadata_allocator: tlsf.Allocator,
+    raster_metadata_backing: []u8,
+    raster_metadata_allocator_initialized: bool,
+    source_monitor: Font_Source_Monitor,
+    shutting_down: bool,
+    shaping_telemetry: Font_Shaping_Telemetry,
+    shaped_glyphs: [FONT_SHAPED_GLYPH_CAPACITY]Shaped_Glyph,
+    texture_operations: Font_Texture_Operations,
+    raster_budget: Font_Raster_Budget,
+}

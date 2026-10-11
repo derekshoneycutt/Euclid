@@ -1,234 +1,73 @@
 
-"""
-Get a `BridgeShapeLine` view by host point id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `host_id` : Host point id for a line shape
-
-Returns: `BridgeShapeLine`
-"""
-function get_shape_line_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
-    @ccall get_shape_line_view(
-        state_ptr::Ptr{Cvoid}, Int32(host_id)::Int32)::BridgeShapeLine
+"""Show the process-global two-ring trochoid guide."""
+function show_trochoid_tool(state_ptr::Ptr{Cvoid})
+    @ccall show_trochoid_tool(state_ptr::Ptr{Cvoid})::Int32
 end
 
-"""
-Get a `BridgeShapeCircle` view by host point id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `host_id` : Host point id for a circle shape
-
-Returns: `BridgeShapeCircle`
-"""
-function get_shape_circle_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
-    @ccall get_shape_circle_view(
-        state_ptr::Ptr{Cvoid}, Int32(host_id)::Int32)::BridgeShapeCircle
+"""Hide the process-global two-ring trochoid guide."""
+function hide_trochoid_tool(state_ptr::Ptr{Cvoid})
+    @ccall hide_trochoid_tool(state_ptr::Ptr{Cvoid})::Int32
 end
 
-"""
-Get a `BridgeShapeFilledCircle` view by host point id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `host_id` : Host point id for a filled circle shape
-
-Returns: `BridgeShapeFilledCircle`
-"""
-function get_shape_filledcircle_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
-    @ccall get_shape_filledcircle_view(
-        state_ptr::Ptr{Cvoid}, Int32(host_id)::Int32)::BridgeShapeFilledCircle
+"""Move the process-global guide's fixed center and elevation."""
+function set_trochoid_tool_position(state_ptr::Ptr{Cvoid}, position)
+    value = (Cfloat(position[1]), Cfloat(position[2]), Cfloat(position[3]))
+    @ccall set_trochoid_tool_position(state_ptr::Ptr{Cvoid},
+        value::NTuple{3, Cfloat})::Int32
 end
 
-"""
-Get a `BridgeShapeTriangle` view by host point id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `host_id` : Host point id for a triangle shape
-
-Returns: `BridgeShapeTriangle`
-"""
-function get_shape_triangle_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
-    @ccall get_shape_triangle_view(state_ptr::Ptr{Cvoid},
-        Int32(host_id)::Int32)::BridgeShapeTriangle
+"""Atomically configure the process-global trochoid guide."""
+function set_trochoid_tool_geometry(state_ptr::Ptr{Cvoid}; mode,
+    fixed_radius::Real, rolling_radius::Real, parameter::Real=0f0,
+    rotation::Real=0f0, orientation_phase::Real=0f0)
+    geometry = BridgeTrochoidToolGeometry(Int32(mode), Cfloat(fixed_radius),
+        Cfloat(rolling_radius), Cfloat(parameter), Cfloat(rotation),
+        Cfloat(orientation_phase))
+    @ccall set_trochoid_tool_geometry(state_ptr::Ptr{Cvoid},
+        geometry::BridgeTrochoidToolGeometry)::Int32
 end
 
-"""
-Get a `BridgeShapeSquare` view by host point id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `host_id` : Host point id for a square shape
-
-Returns: `BridgeShapeSquare`
-"""
-function get_shape_square_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
-    @ccall get_shape_square_view(
-        state_ptr::Ptr{Cvoid}, Int32(host_id)::Int32)::BridgeShapeSquare
+"""Advance only the process-global guide's rolling parameter."""
+function set_trochoid_tool_parameter(state_ptr::Ptr{Cvoid}, parameter::Real)
+    @ccall set_trochoid_tool_parameter(state_ptr::Ptr{Cvoid},
+        Cfloat(parameter)::Cfloat)::Int32
 end
 
-"""
-Get a `BridgeShapePentagon` view by host point id.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `host_id` : Host point id for a pentagon shape
-
-Returns: `BridgeShapePentagon`
-"""
-function get_shape_pentagon_view(state_ptr::Ptr{Cvoid}, host_id::Integer)
-    @ccall get_shape_pentagon_view(state_ptr::Ptr{Cvoid},
-        Int32(host_id)::Int32)::BridgeShapePentagon
+"""Show the process-global literal-line Cycloid guide."""
+function show_cycloid_tool(state_ptr::Ptr{Cvoid})
+    @ccall show_cycloid_tool(state_ptr::Ptr{Cvoid})::Int32
 end
 
-"""
-Get the current pen shape view.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-
-Returns: `BridgeShapePen`
-"""
-function get_pen_view(state_ptr::Ptr{Cvoid})
-    @ccall get_pen_view(state_ptr::Ptr{Cvoid})::BridgeShapePen
+"""Hide the process-global literal-line Cycloid guide."""
+function hide_cycloid_tool(state_ptr::Ptr{Cvoid})
+    @ccall hide_cycloid_tool(state_ptr::Ptr{Cvoid})::Int32
 end
 
-"""
-Get the current compass shape view.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-
-Returns: `BridgeShapeCompass`
-"""
-function get_compass_view(state_ptr::Ptr{Cvoid})
-    @ccall get_compass_view(state_ptr::Ptr{Cvoid})::BridgeShapeCompass
+"""Atomically move both endpoints of the process-global Cycloid guide."""
+function set_cycloid_tool_line(state_ptr::Ptr{Cvoid}, first, second)
+    first_value = (Cfloat(first[1]), Cfloat(first[2]), Cfloat(first[3]))
+    second_value = (Cfloat(second[1]), Cfloat(second[2]), Cfloat(second[3]))
+    @ccall set_cycloid_tool_line(state_ptr::Ptr{Cvoid},
+        first_value::NTuple{3, Cfloat},
+        second_value::NTuple{3, Cfloat})::Int32
 end
 
-"""
-Get the point start index for animation-owned point allocations.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-
-Returns: `Int32` animation point start index
-"""
-function get_shapes_anim_points_start(state_ptr::Ptr{Cvoid})
-    @ccall get_shapes_anim_points_start(state_ptr::Ptr{Cvoid})::Int32
+"""Atomically configure the process-global Cycloid guide."""
+function set_cycloid_tool_geometry(state_ptr::Ptr{Cvoid};
+    rolling_radius::Real, parameter_start::Real, parameter_finish::Real,
+    parameter::Real=parameter_start, orientation_phase::Real=0f0)
+    geometry = BridgeCycloidToolGeometry(Cfloat(rolling_radius),
+        Cfloat(parameter_start), Cfloat(parameter_finish), Cfloat(parameter),
+        Cfloat(orientation_phase))
+    @ccall set_cycloid_tool_geometry(state_ptr::Ptr{Cvoid},
+        geometry::BridgeCycloidToolGeometry)::Int32
 end
 
-"""
-Get the constraint start index for animation-owned constraint allocations.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-
-Returns: `Int32` animation constraint start index
-"""
-function get_shapes_anim_constraints_start(state_ptr::Ptr{Cvoid})
-    @ccall get_shapes_anim_constraints_start(state_ptr::Ptr{Cvoid})::Int32
+"""Advance only the process-global Cycloid guide's rolling parameter."""
+function set_cycloid_tool_parameter(state_ptr::Ptr{Cvoid}, parameter::Real)
+    @ccall set_cycloid_tool_parameter(state_ptr::Ptr{Cvoid},
+        Cfloat(parameter)::Cfloat)::Int32
 end
-
-"""
-Freeze current point and constraint indices as animation boundaries.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-
-Returns: `Int32` status code
-"""
-function freeze_shapes_animation_boundary(state_ptr::Ptr{Cvoid})
-    @ccall freeze_shapes_animation_boundary(state_ptr::Ptr{Cvoid})::Int32
-end
-
-"""
-Clear animation-owned shapes points and constraints.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-
-Returns: `Int32` status code
-"""
-function clear_shapes_animation_data(state_ptr::Ptr{Cvoid})
-    @ccall clear_shapes_animation_data(state_ptr::Ptr{Cvoid})::Int32
-end
-
-"""
-Get the maximum number of shapes points.
-
-------
-
-Returns: `Int32` max point count
-"""
-function get_max_shapes_points()
-    @ccall get_max_shapes_points()::Int32
-end
-
-"""
-Get the maximum number of shapes constraints.
-
-------
-
-Returns: `Int32` max constraint count
-"""
-function get_max_shapes_constraints()
-    @ccall get_max_shapes_constraints()::Int32
-end
-
-"""
-Run native shapes graph validation.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-
-Returns: `Int32` status code
-"""
-function validate_shapes_graph(state_ptr::Ptr{Cvoid})
-    @ccall validate_shapes_graph(state_ptr::Ptr{Cvoid})::Int32
-end
-
-
 
 """
 Show the pen tool in the surface view.
@@ -528,7 +367,7 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
-- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
+- `sweep` : Retained for API symmetry; joint 1 always produces only point-like ground contact
 """
 function lock_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
@@ -568,7 +407,7 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
-- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
+- `sweep` : Retained for API symmetry; joint 1 always produces only point-like ground contact
 """
 function move_compass_joint1(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
@@ -610,7 +449,7 @@ Parameters:
 - `y` : Lock y world coordinate
 - `z` : Lock z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
-- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
+- `sweep` : (Default true) When true, sweeps the grounded area between the previous and current compass legs; false produces only point-like tip contact
 """
 function lock_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
@@ -650,7 +489,7 @@ Parameters:
 - `y` : Target y world coordinate
 - `z` : Target z world coordinate
 - `pos` : A vector can be provided in [x, y, z] form instead of individual parameters
-- `sweep` : (Default true) When true, will sweep dust through the full arc of the compass on ground contact
+- `sweep` : (Default true) When true, sweeps the grounded area between the previous and current compass legs; false produces only point-like tip contact
 """
 function move_compass_joint2(
     state_ptr::Ptr{Cvoid}, x::Real, y::Real, z::Real; sweep::Bool = true)
@@ -678,66 +517,6 @@ Returns: `NTuple{3, Cfloat}` as `(x, y, z)`
 """
 function get_compass_joint2_position(state_ptr::Ptr{Cvoid})
     return @ccall get_compass_joint2_position(state_ptr::Ptr{Cvoid})::NTuple{3, Cfloat}
-end
-
-"""
-Set one animation metadata slot by index.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `pos` : Metadata slot index
-- `metadata` : Value to store in the slot
-"""
-function set_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer, metadata::Real)
-    @ccall set_animation_meta(state_ptr::Ptr{Cvoid}, pos::Cint, metadata::Cfloat)::Cvoid
-end
-
-"""
-Read one animation metadata slot by index.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `pos` : Metadata slot index
-
-Returns: slot value as `Real`
-"""
-function get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Integer)
-    ret = @ccall get_animation_meta(state_ptr::Ptr{Cvoid}, pos::Cint)::Cfloat
-    return Real(ret)
-end
-
-"""
-Enable or disable drawing sound emission for the active animation.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `enabled` : `true` to allow drawing sound, `false` to mute it
-"""
-function set_drawing_sound_enabled(state_ptr::Ptr{Cvoid}, enabled::Bool)
-    @ccall set_drawing_sound_enabled(state_ptr::Ptr{Cvoid}, enabled::Bool)::Cvoid
-end
-
-"""
-Inject drawing sound activity at a specific speed for scripted phases.
-
-------
-
-Parameters:
-
-- `state_ptr` : The Euclid application state pointer passed to the native API
-- `speed` : Drawing speed scalar in the same units used by the host chalk runtime
-"""
-function simulate_drawing_sound(state_ptr::Ptr{Cvoid}, speed::Real)
-    @ccall simulate_drawing_sound(state_ptr::Ptr{Cvoid}, speed::Cfloat)::Cvoid
 end
 
 """

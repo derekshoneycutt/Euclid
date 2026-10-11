@@ -1,0 +1,1450 @@
+package scenario
+
+// Package scenario validates and executes bounded semantic workflows.
+
+import particlemodel "../../particles/model"
+import settings "../../settings"
+import "../observe"
+import trace "../trace"
+import json "core:encoding/json"
+import "core:math"
+
+SCENARIO_COMMAND_CAPACITY :: 128
+SCENARIO_TEXT_CAPACITY :: 768
+SCENARIO_NAME_CAPACITY :: 64
+SCENARIO_DEFAULT_TIMEOUT_MS :: u32(5_000)
+SCENARIO_MAX_TIMEOUT_MS :: u32(60_000)
+SCENARIO_SOURCE_MAX_BYTES :: 64 * 1024
+SCENARIO_LINE_MAX_BYTES :: 1024
+
+// Stable public scenario spelling paired with its typed evidence identity.
+Event_Kind_Entry :: struct {
+    name : string,
+    kind : trace.Kind,
+}
+
+// Stable payload-free action spelling paired with its command identity.
+Action_Kind_Entry :: struct {
+    name : string,
+    kind : Command_Kind,
+}
+
+// Event names accepted by `wait_event`; spellings are part of the scenario format.
+EVENT_KINDS :: [?]Event_Kind_Entry {
+    {"runtime_ready", .Runtime_Ready},
+    {"runtime_reload_committed", .Runtime_Reload_Committed},
+    {"runtime_reload_rolled_back", .Runtime_Reload_Rolled_Back},
+    {"animation_selected", .Animation_Selected},
+    {"animation_reset_committed", .Animation_Reset_Committed},
+    {"animation_tick_committed", .Animation_Tick_Committed},
+    {"animation_cycle_boundary", .Animation_Cycle_Boundary},
+    {"animation_loaded", .Animation_Loaded},
+    {"terminal_session_ready", .Terminal_Session_Ready},
+    {"terminal_raster_published", .Terminal_Raster_Published},
+    {"animation_frame_presented", .Animation_Frame_Presented},
+    {"animation_playback_completed", .Animation_Playback_Completed},
+    {"dust_emission_committed", .Dust_Emission_Committed},
+    {"scene_batch_committed", .Scene_Batch_Committed},
+    {"constraint_solve_completed", .Constraint_Solve_Completed},
+    {"arc_geometry_committed", .Arc_Geometry_Committed},
+    {"trochoid_frontier_committed", .Trochoid_Frontier_Committed},
+    {"trochoid_tool_parameter_committed", .Trochoid_Tool_Parameter_Committed},
+    {"cycloid_frontier_committed", .Cycloid_Frontier_Committed},
+    {"cycloid_tool_parameter_committed", .Cycloid_Tool_Parameter_Committed},
+    {"presentation_cleared", .Presentation_Cleared},
+    {"presentation_superseded", .Presentation_Superseded},
+    {"presentation_semantic_published", .Presentation_Semantic_Published},
+    {"dynview_published", .Dynview_Published},
+    {"frame_presented", .Frame_Presented},
+    {"capture_completed", .Capture_Completed},
+    {"gif_completed", .Gif_Completed},
+    {"library_search_committed", .Library_Search_Committed},
+    {"checkpoint_stored", .Checkpoint_Stored},
+    {"runtime_shutdown_complete", .Runtime_Shutdown_Complete},
+    {"settings_save_submitted", .Settings_Save_Submitted},
+    {"settings_save_committed", .Settings_Save_Committed},
+    {"settings_save_failed", .Settings_Save_Failed},
+}
+
+// Stable semantic operation represented by one validated scenario command.
+Command_Kind :: enum u8 {
+    Reset_Animation,
+    Select_Animation,
+    Reload_Runtime,
+    Inject_Reload_Failure,
+    Type_Text,
+    Key,
+    Pause_Simulation,
+    Resume_Simulation,
+    Pause_Animation,
+    Resume_Animation,
+    Emit_Dust,
+    Contact_Dust,
+    Kick_Dust,
+    Set_View_Content,
+    Set_View_Scroll,
+    Set_Splitters,
+    Set_Library_Search,
+    Apply_Library_Search_Suggestion,
+    Clear_Library_Search,
+    Request_Screenshot,
+    Start_Gif,
+    Stop_Gif,
+    Wait_Event,
+    Wait_State,
+    Wait_Terminal_Contains,
+    Assert_State,
+    Assert_Focus,
+    Assert_Terminal_Contains,
+    Checkpoint,
+    Allocation_Checkpoint,
+    Assert_Allocation_Baseline,
+    Assert_No_Bad_Frees,
+    Shutdown,
+    Set_Setting,
+    Assert_Setting,
+    Favorite_Control,
+    Library_Placement,
+    Assert_Favorites,
+}
+
+// Payload-free action names accepted by the `do` scenario field.
+ACTION_KINDS :: [?]Action_Kind_Entry {
+    {"reset_animation", .Reset_Animation},
+    {"reload_runtime", .Reload_Runtime},
+    {"pause_simulation", .Pause_Simulation},
+    {"resume_simulation", .Resume_Simulation},
+    {"pause_animation", .Pause_Animation},
+    {"resume_animation", .Resume_Animation},
+    {"kick_dust", .Kick_Dust},
+    {"stop_gif", .Stop_Gif},
+}
+
+// Canonical presentation MIME accepted by scenario-authored view content.
+View_Content_Mime :: enum u8 {
+    Text_Plain,
+    Text_Latex,
+}
+
+// Deterministic spatial layout used by one scenario dust emission.
+Dust_Distribution :: enum u8 {
+    Point,
+    Disc,
+    Grid,
+}
+
+// Stable reason a bounded JSON Lines source could not become a complete program.
+Parse_Error :: enum u8 {
+    None,
+    Too_Many_Commands,
+    Invalid_Json,
+    Invalid_Command,
+    Text_Too_Long,
+    Name_Too_Long,
+    Invalid_Timeout,
+    Source_Too_Long,
+    Line_Too_Long,
+}
+
+// Lifecycle of one runner from initialization through a terminal outcome.
+//
+// Inconclusive means required evidence was unavailable, not that behavior passed
+// or failed.
+Run_Status :: enum u8 {
+    Ready,
+    Running,
+    Passed,
+    Failed,
+    Inconclusive,
+}
+
+// Fixed inline storage for a command payload or predicate name.
+//
+// The initialized prefix is not NUL-terminated; count selects the valid bytes.
+Text :: struct {
+    // Inline bytes and initialized prefix length.
+    bytes : [SCENARIO_TEXT_CAPACITY]u8,
+    count : int,
+}
+
+// Fixed inline storage for an action alias or correlation reference.
+//
+// The initialized prefix is not NUL-terminated; count selects the valid bytes.
+Name :: struct {
+    // Inline bytes and initialized prefix length.
+    bytes : [SCENARIO_NAME_CAPACITY]u8,
+    count : int,
+}
+
+// Fully validated, allocation-free scenario instruction.
+Command :: struct {
+    // Operation identity and its inline payload or predicate text.
+    kind : Command_Kind,
+    text : Text,
+    view_content_mime : View_Content_Mime,
+
+    // Optional produced alias and alias required by a later event wait.
+    alias : Name,
+    correlation : Name,
+
+    // Bounded wait duration in milliseconds; nonwait commands leave this zero.
+    timeout_ms : u32,
+
+    // Optional one-based animation frame selected by an event wait.
+    frame_number : u32,
+
+    // Fixed numeric payload used by display-owned viewport actions.
+    value : f32,
+    secondary_value : f32,
+    tertiary_value : f32,
+    dust_count : u32,
+    dust_seed : u64,
+    dust_distribution : Dust_Distribution,
+    key_shift : bool,
+    key_control : bool,
+    setting_id: settings.Setting_Id,
+    setting_value: settings.Setting_Value,
+}
+
+// Temporary decoded payload for one exact view-content action object.
+Raw_View_Content :: struct {
+    mime: string,
+    source: string,
+}
+
+// Temporary decoded payload for one exact scenario dust emission.
+Raw_Dust_Emission :: struct {
+    distribution: string,
+    count: i64,
+    x: f64,
+    y: f64,
+    radius: f64,
+    seed: u64,
+}
+
+// Temporary decoded payload for one exact scenario dust contact.
+Raw_Dust_Contact :: struct {
+    x: f64,
+    y: f64,
+}
+
+// Fixed-capacity scenario program produced from one complete JSON Lines source.
+Program :: struct {
+    // Command storage; only the count-selected prefix is initialized.
+    commands : [SCENARIO_COMMAND_CAPACITY]Command,
+    count : int,
+}
+
+// Runtime binding from one inline scenario name to an existing correlation ID.
+Alias :: struct {
+    name : Name,
+    correlation : trace.Identity,
+}
+
+// Result returned by one synchronous owner-routed scenario action.
+Action_Result :: struct {
+    accepted: bool,
+    correlation: trace.Identity,
+}
+
+// Synchronous runtime action boundary used by the runner.
+Action_Proc :: proc(user_data: rawptr, command: ^Command) -> Action_Result
+
+// Optional runtime action destination supplied by the owner control loop.
+Action_Sink :: struct {
+    // Opaque state interpreted exclusively by the callback implementation.
+    user_data : rawptr,
+
+    // Synchronous action callback; nil leaves ordinary actions without correlation.
+    issue : Action_Proc,
+}
+
+// Borrowed observations and action boundary for one runner advancement.
+Runner_Frame :: struct {
+    now_ns : u64,
+    events : []trace.Event,
+    display : observe.Display,
+    actions : Action_Sink,
+}
+
+// Owner-controlled execution state for one validated fixed program.
+Runner :: struct {
+    // Immutable command program copied into the runner at initialization.
+    program : Program,
+
+    // Bounded action-alias registry; only the alias_count prefix is initialized.
+    aliases : [SCENARIO_COMMAND_CAPACITY]Alias,
+    alias_count : int,
+
+    // Lifecycle and next command index. Terminal statuses are sticky.
+    status : Run_Status,
+    step : int,
+
+    // Cursor into the cumulative trace snapshot and active monotonic wait deadline.
+    trace_cursor : int,
+    deadline_ns : u64,
+
+    // Cumulative assertion and failure evidence for the current run.
+    assertion_count : u32,
+    failure_count : u32,
+}
+
+// Temporary JSON decoding shape for exactly one source line.
+//
+// Action fields are mutually exclusive after validation. Dynamic strings borrow
+// decoder-managed storage only until command_from_raw copies accepted values inline.
+Raw_Command :: struct {
+    // Named payload-free action selected through the public `do` field.
+    action : string `json:"do"`,
+
+    // Text-bearing runtime and capture actions.
+    select_animation : string,
+    inject_reload_failure : string,
+    type_text : string `json:"type"`,
+    screenshot : string,
+    start_gif : string,
+    set_library_search : string,
+    favorite_control : string,
+    library_placement : string,
+    assert_favorites : string,
+    apply_library_search_suggestion : bool,
+    clear_library_search : bool,
+    set_view_content : Raw_View_Content,
+    emit_dust : Raw_Dust_Emission,
+    contact_dust : Raw_Dust_Contact,
+
+    // Event waits and display-state predicates.
+    wait_event : string,
+    wait_state : string,
+    wait_terminal_contains : string,
+    assert_state : string,
+    assert_focus : string,
+    assert_terminal_contains : string,
+
+    // State checkpoint action.
+    checkpoint : string,
+
+    // Allocation checkpoint and assertion actions.
+    allocation_checkpoint : string,
+    assert_allocation_baseline : string,
+    assert_no_bad_frees : bool,
+
+    // Optional produced alias, event correlation reference, and wait bound.
+    alias : string `json:"as"`,
+    correlation : string,
+    timeout_ms : u32,
+    frame_number : u32,
+
+    // Payload-free terminal action represented directly in JSON.
+    shutdown : bool,
+}
+
+// Temporary decoded representations and stable outcome for one JSONL line.
+Scenario_Parsed_Line :: struct {
+    raw: Raw_Command,
+    value: json.Value,
+    root: json.Object,
+    error: Parse_Error,
+}
+
+// Decode canonical startup enum names for read-only setting assertions.
+scenario_setting_enum :: proc(
+    id: settings.Setting_Id, name: string) -> (settings.Setting_Value, bool) {
+    if id == .Window_Mode {
+        switch name {
+        case "fixed": return settings.window_mode_value(.Fixed), true
+        case "resizable": return settings.window_mode_value(.Resizable), true
+        }
+    } else if id == .Window_Layout {
+        switch name {
+        case "auto": return settings.layout_preference_value(.Auto), true
+        case "landscape": return settings.layout_preference_value(.Landscape), true
+        case "portrait": return settings.layout_preference_value(.Portrait), true
+        }
+    }
+    return {}, false
+}
+
+// Decode a canonical preference scalar without accepting lossy numeric conversion.
+scenario_setting_scalar :: proc(
+    id: settings.Setting_Id, value: json.Value) -> (settings.Setting_Value, bool) {
+    result: settings.Setting_Value
+    #partial switch scalar in value {
+    case bool:
+        result = settings.boolean_value(scalar)
+    case json.Integer:
+        if scalar < json.Integer(min(int)) || scalar > json.Integer(max(int)) {
+            return {}, false
+        }
+        result = settings.integer_value(int(scalar))
+    case string:
+        return scenario_setting_enum(id, scalar)
+    case:
+        return {}, false
+    }
+    return result, settings.valid_setting_value(id, result)
+}
+
+// Validate an exact key/value payload against the existing typed setting registry.
+scenario_setting_payload :: proc(
+    value: json.Value, command: ^Command) -> bool {
+    payload, object_ok := value.(json.Object)
+    if !object_ok || len(payload) != 2 {
+        return false
+    }
+    key_value, key_present := payload["key"]
+    scalar, value_present := payload["value"]
+    key, key_ok := key_value.(string)
+    if !key_present || !value_present || !key_ok {
+        return false
+    }
+    for definition in settings.SETTING_DEFINITIONS {
+        if len(key) != len(definition.namespace) + len(definition.key) + 1 ||
+            key[:len(definition.namespace)] != definition.namespace ||
+            key[len(definition.namespace)] != '.' ||
+            key[len(definition.namespace) + 1:] != definition.key {
+            continue
+        }
+        decoded, valid := scenario_setting_scalar(definition.id, scalar)
+        if !valid {
+            return false
+        }
+        command^.setting_id = definition.id
+        command^.setting_value = decoded
+        return true
+    }
+    return false
+}
+
+// Select one typed settings action while retaining exact-one command validation.
+scenario_setting_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    selected := 0
+    fields := [?]string{"set_setting", "assert_setting"}
+    for field in fields {
+        if value, present := root[field]; present {
+            if !scenario_setting_payload(value, command) {
+                return 0, false
+            }
+            command^.kind = .Set_Setting if field == "set_setting" else .Assert_Setting
+            selected += 1
+        }
+    }
+    return selected, true
+}
+
+//   Decode one exact MIME-bearing view-content action from the parsed root object.
+scenario_view_content_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    value, present := root["set_view_content"]
+    if !present {
+        return 0, true
+    }
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || len(payload) != 2 {
+        return 0, false
+    }
+    _, mime_present := payload["mime"]
+    _, source_present := payload["source"]
+    if !mime_present || !source_present {
+        return 0, false
+    }
+    switch raw.set_view_content.mime {
+    case "text/plain":
+        command^.view_content_mime = .Text_Plain
+    case "text/latex":
+        command^.view_content_mime = .Text_Latex
+    case:
+        return 0, false
+    }
+    content, copied := text_copy(raw.set_view_content.source)
+    if !copied {
+        return 0, false
+    }
+    command^.kind = .Set_View_Content
+    command^.text = content
+    return 1, true
+}
+
+// Decode one stable public dust-distribution spelling.
+scenario_dust_distribution :: proc(name: string) -> (Dust_Distribution, bool) {
+    switch name {
+    case "point": return .Point, true
+    case "disc": return .Disc, true
+    case "grid": return .Grid, true
+    }
+    return {}, false
+}
+
+// Copy validated dust-emission geometry and identity into one command.
+scenario_apply_dust_emission :: proc(
+    raw: Raw_Dust_Emission, payload: json.Object, command: ^Command) -> bool {
+    distribution, distribution_ok := scenario_dust_distribution(raw.distribution)
+    x, x_ok := scenario_json_f32(payload["x"])
+    y, y_ok := scenario_json_f32(payload["y"])
+    radius, radius_ok := scenario_json_f32(payload["radius"])
+    if !x_ok || !y_ok || !radius_ok || x < 0 || x > 1 || y < 0 || y > 1 ||
+        radius < 0 || radius > 1 || raw.count <= 0 ||
+        raw.count > i64(max(u32)) || !distribution_ok {
+        return false
+    }
+    command^.kind = .Emit_Dust
+    command^.dust_distribution = distribution
+    command^.value = x
+    command^.secondary_value = y
+    command^.tertiary_value = radius
+    command^.dust_count = u32(raw.count)
+    command^.dust_seed = raw.seed
+    return true
+}
+
+// Decode one exact bounded scenario dust-emission action.
+scenario_dust_emission_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    value, present := root["emit_dust"]
+    if !present {
+        return 0, true
+    }
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || len(payload) != 6 {
+        return 0, false
+    }
+    required := [?]string{"distribution", "count", "x", "y", "radius", "seed"}
+    for field in required {
+        if _, found := payload[field]; !found {
+            return 0, false
+        }
+    }
+    if !scenario_apply_dust_emission(raw.emit_dust, payload, command) {
+        return 0, false
+    }
+    return 1, true
+}
+
+// Decode one exact bounded scenario dust-contact action.
+scenario_dust_contact_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    value, present := root["contact_dust"]
+    if !present {
+        return 0, true
+    }
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || len(payload) != 2 {
+        return 0, false
+    }
+    x_value, x_present := payload["x"]
+    y_value, y_present := payload["y"]
+    if !x_present || !y_present {
+        return 0, false
+    }
+    x, x_ok := scenario_json_f32(x_value)
+    y, y_ok := scenario_json_f32(y_value)
+    if !x_ok || !y_ok || x < 0 || x > 1 || y < 0 || y > 1 {
+        return 0, false
+    }
+    command^.kind = .Contact_Dust
+    command^.value = x
+    command^.secondary_value = y
+    return 1, true
+}
+
+//   Return one finite JSON number as f32 without accepting narrowing overflow.
+scenario_json_f32 :: proc(value: json.Value) -> (f32, bool) {
+    number: f64
+    #partial switch scalar in value {
+    case json.Integer:
+        number = f64(scalar)
+    case json.Float:
+        number = scalar
+    case:
+        return 0, false
+    }
+    if math.is_nan(number) || math.is_inf(number, 0) ||
+        number < -f64(max(f32)) || number > f64(max(f32)) {
+        return 0, false
+    }
+    return f32(number), true
+}
+
+//   Decode one exact named-object viewport action from the parsed root object.
+scenario_numeric_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    selected := 0
+    if value, present := root["set_view_scroll"]; present {
+        payload, payload_ok := value.(json.Object)
+        if !payload_ok || len(payload) != 1 {
+            return 0, false
+        }
+        y_value, y_present := payload["y"]
+        y, y_ok := scenario_json_f32(y_value)
+        if !y_present || !y_ok {
+            return 0, false
+        }
+        command^.kind = .Set_View_Scroll
+        command^.value = y
+        selected += 1
+    }
+    if value, present := root["set_splitters"]; present {
+        payload, payload_ok := value.(json.Object)
+        if !payload_ok || len(payload) != 2 {
+            return 0, false
+        }
+        vertical_value, vertical_present := payload["vertical"]
+        horizontal_value, horizontal_present := payload["horizontal"]
+        vertical, vertical_ok := scenario_json_f32(vertical_value)
+        horizontal, horizontal_ok := scenario_json_f32(horizontal_value)
+        if !vertical_present || !horizontal_present ||
+            !vertical_ok || !horizontal_ok {
+            return 0, false
+        }
+        command^.kind = .Set_Splitters
+        command^.value = vertical
+        command^.secondary_value = horizontal
+        selected += 1
+    }
+    return selected, true
+}
+
+//   Decode one JSONL command line into its temporary struct and structured object.
+scenario_parse_line :: proc(line: string) -> Scenario_Parsed_Line {
+    raw: Raw_Command
+    if json.unmarshal_string(line, &raw, allocator = context.temp_allocator) != nil {
+        return {error = .Invalid_Json}
+    }
+    parsed, parse_error := json.parse_string(
+        line, parse_integers = true, allocator = context.temp_allocator)
+    if parse_error != .None {
+        return {error = .Invalid_Json}
+    }
+    root, root_ok := parsed.(json.Object)
+    if !root_ok {
+        json.destroy_value(parsed, allocator = context.temp_allocator)
+        return {error = .Invalid_Command}
+    }
+    return {raw = raw, value = parsed, root = root}
+}
+
+//   Parse and validate a complete bounded JSON Lines program.
+//
+// Parameters:
+//   - source: Complete borrowed UTF-8 scenario source.
+//   - program: Destination replaced only with commands parsed before an error.
+//
+// Returns:
+//   - Stable parse outcome; `.None` means the complete source was accepted.
+//
+// Side effects:
+//   - Clears program before parsing and retains the valid command prefix on error.
+//   - Uses the context temporary allocator while decoding individual JSON objects.
+//
+// Notes:
+//   - Empty lines are ignored. Every nonempty line must contain exactly one action.
+//   - All retained command data is copied into program-owned fixed storage.
+parse :: proc(source: string, program: ^Program) -> Parse_Error {
+    program^ = {}
+    if len(source) > SCENARIO_SOURCE_MAX_BYTES {
+        return .Source_Too_Long
+    }
+    line_start := 0
+    bytes := transmute([]u8)source
+    for line_end := 0; line_end <= len(bytes); line_end += 1 {
+        if line_end < len(bytes) && bytes[line_end] != '\n' {
+            continue
+        }
+        line := source[line_start:line_end]
+        line_start = line_end + 1
+        if len(line) == 0 {
+            continue
+        }
+        if len(line) > SCENARIO_LINE_MAX_BYTES {
+            return .Line_Too_Long
+        }
+        if program.count == SCENARIO_COMMAND_CAPACITY {
+            return .Too_Many_Commands
+        }
+        parsed_line := scenario_parse_line(line)
+        if parsed_line.error != .None {
+            return parsed_line.error
+        }
+        command, command_error := command_from_raw(
+            parsed_line.raw, parsed_line.root)
+        json.destroy_value(parsed_line.value, allocator = context.temp_allocator)
+        if command_error != .None {
+            return command_error
+        }
+        program.commands[program.count] = command
+        program.count += 1
+    }
+    return .None
+}
+
+//   Initialize one runner over a validated fixed program.
+//
+// Parameters:
+//   - runner: Owner-controlled destination replaced with fresh execution state.
+//   - program: Validated fixed program copied into the runner.
+//
+// Side effects:
+//   - Clears aliases, progress, deadlines, and counters, then sets status to Ready.
+runner_init :: proc(runner: ^Runner, program: Program) {
+    runner^ = {program = program, status = .Ready}
+}
+
+//   Mark the current runner command as failed and stop command advancement.
+runner_fail :: proc(runner: ^Runner) -> bool {
+    runner.failure_count += 1
+    runner.status = .Failed
+    return false
+}
+
+//   Advance one event wait or retain the current command while waiting.
+runner_update_event_wait :: proc(
+    runner: ^Runner, command: ^Command, frame: Runner_Frame) -> bool {
+    if runner.deadline_ns == 0 {
+        runner.deadline_ns = deadline_from(frame.now_ns, command.timeout_ms)
+    }
+    if !runner_match_event(runner, command, frame.events) {
+        runner_wait_or_fail(runner, frame.now_ns)
+        return false
+    }
+    return true
+}
+
+//   Advance one observed-state wait or retain the current command while waiting.
+runner_update_state_wait :: proc(
+    runner: ^Runner, command: ^Command, frame: Runner_Frame) -> bool {
+    if runner.deadline_ns == 0 {
+        runner.deadline_ns = deadline_from(frame.now_ns, command.timeout_ms)
+    }
+    if !state_matches(text_string(&command.text), frame.display) {
+        runner_wait_or_fail(runner, frame.now_ns)
+        return false
+    }
+    return true
+}
+
+//   Evaluate one assertion against the bounded display observation.
+runner_assert_state :: proc(
+    runner: ^Runner, command: ^Command, display: observe.Display) -> bool {
+    runner.assertion_count += 1
+    if !state_matches(text_string(&command.text), display) {
+        return runner_fail(runner)
+    }
+    return true
+}
+
+//   Evaluate one assertion through the owner-provided action boundary.
+runner_assert_action :: proc(
+    runner: ^Runner, command: ^Command, actions: Action_Sink) -> bool {
+    runner.assertion_count += 1
+    if actions.issue == nil || !actions.issue(actions.user_data, command).accepted {
+        return runner_fail(runner)
+    }
+    return true
+}
+
+// Wait until one display-owned action predicate succeeds or its deadline expires.
+runner_update_action_wait :: proc(
+    runner: ^Runner, command: ^Command, frame: Runner_Frame) -> bool {
+    if runner.deadline_ns == 0 {
+        runner.deadline_ns = deadline_from(frame.now_ns, command.timeout_ms)
+    }
+    if frame.actions.issue != nil &&
+        frame.actions.issue(frame.actions.user_data, command).accepted {
+        return true
+    }
+    runner_wait_or_fail(runner, frame.now_ns)
+    return false
+}
+
+//   Issue one ordinary action and retain any requested correlation alias.
+runner_issue_action :: proc(
+    runner: ^Runner, command: ^Command, actions: Action_Sink) -> bool {
+    result := Action_Result{accepted = actions.issue != nil}
+    if actions.issue != nil {
+        result = actions.issue(actions.user_data, command)
+    }
+    if !result.accepted {
+        return runner_fail(runner)
+    }
+    if command.alias.count > 0 && result.correlation.id != 0 &&
+        !runner_store_alias(runner, &command.alias, result.correlation) {
+        return runner_fail(runner)
+    }
+    return true
+}
+
+//   Execute the current command and report whether advancement may continue.
+runner_update_command :: proc(
+    runner: ^Runner, command: ^Command, frame: Runner_Frame) -> bool {
+    switch command.kind {
+    case .Wait_Event:
+        return runner_update_event_wait(runner, command, frame)
+    case .Wait_State:
+        return runner_update_state_wait(runner, command, frame)
+    case .Wait_Terminal_Contains:
+        return runner_update_action_wait(runner, command, frame)
+    case .Assert_State:
+        return runner_assert_state(runner, command, frame.display)
+    case .Assert_Focus, .Assert_Terminal_Contains, .Assert_Allocation_Baseline,
+         .Assert_Setting, .Assert_Favorites,
+         .Assert_No_Bad_Frees:
+        return runner_assert_action(runner, command, frame.actions)
+    case .Reset_Animation, .Select_Animation, .Reload_Runtime,
+         .Inject_Reload_Failure,
+         .Type_Text, .Key,
+         .Pause_Simulation, .Resume_Simulation,
+         .Pause_Animation, .Resume_Animation, .Emit_Dust,
+         .Contact_Dust, .Kick_Dust,
+         .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
+         .Set_Library_Search, .Apply_Library_Search_Suggestion,
+         .Clear_Library_Search,
+         .Request_Screenshot, .Start_Gif, .Stop_Gif, .Checkpoint,
+         .Allocation_Checkpoint, .Shutdown, .Set_Setting,
+         .Favorite_Control, .Library_Placement:
+        return runner_issue_action(runner, command, frame.actions)
+    }
+    return false
+}
+
+//   Advance semantic work until waiting, terminal success, or failure.
+//
+// Parameters:
+//   - runner: Scenario state owned by the calling control loop.
+//   - frame: Current time, evidence, observations, and ordinary action boundary.
+//
+// Returns:
+//   - Current runner status after bounded progress.
+//
+// Side effects:
+//   - Advances commands and the trace cursor, invokes actions synchronously, stores
+//     aliases, updates assertion counters, and transitions runner status.
+//
+// Notes:
+//   - `events` is a stable cumulative snapshot for one run and may only grow.
+//   - A loss of required trace evidence immediately makes the run Inconclusive.
+//   - Terminal statuses are sticky; later calls return without invoking actions.
+runner_update :: proc(
+    runner: ^Runner, frame: Runner_Frame) -> Run_Status {
+    if runner.status == .Passed || runner.status == .Failed ||
+        runner.status == .Inconclusive {
+        return runner.status
+    }
+    if !frame.display.required_evidence_complete {
+        runner.status = .Inconclusive
+        return runner.status
+    }
+    runner.status = .Running
+    for runner.step < runner.program.count {
+        command := &runner.program.commands[runner.step]
+        if !runner_update_command(runner, command, frame) {
+            return runner.status
+        }
+        frame_boundary := command.kind == .Wait_Event ||
+            command.kind == .Wait_State ||
+            command.kind == .Wait_Terminal_Contains || command.kind == .Type_Text ||
+            command.kind == .Key || command.kind == .Set_View_Content ||
+            command.kind == .Set_Library_Search ||
+            command.kind == .Apply_Library_Search_Suggestion ||
+            command.kind == .Clear_Library_Search ||
+            command.kind == .Emit_Dust || command.kind == .Contact_Dust ||
+            command.kind == .Kick_Dust ||
+            command.kind == .Set_View_Scroll ||
+            command.kind == .Set_Splitters ||
+            command.kind == .Favorite_Control || command.kind == .Library_Placement
+        runner.step += 1
+        runner.deadline_ns = 0
+        if frame_boundary && runner.step < runner.program.count {
+            return runner.status
+        }
+    }
+    runner.status = .Passed
+    return runner.status
+}
+
+//   Select one nonempty text-bearing raw command field.
+raw_text_command_select :: proc(
+    source: string, kind: Command_Kind, command: ^Command) -> int {
+    if len(source) == 0 {
+        return 0
+    }
+    command.kind = kind
+    command.text, _ = text_copy(source)
+    return 1
+}
+
+//   Select one supported payload-free Euclid action name.
+raw_action_command_select :: proc(source: string, command: ^Command) -> int {
+    if len(source) == 0 {
+        return 0
+    }
+    for entry in ACTION_KINDS {
+        if entry.name == source {
+            command.kind = entry.kind
+            command.text, _ = text_copy(source)
+            return 1
+        }
+    }
+    return 2
+}
+
+// Select one populated library-search action while preserving exact-one semantics.
+raw_library_search_command_select :: proc(
+    raw: Raw_Command, command: ^Command) -> int {
+    selected := raw_text_command_select(
+        raw.set_library_search, .Set_Library_Search, command)
+    if raw.apply_library_search_suggestion {
+        command.kind = .Apply_Library_Search_Suggestion
+        selected += 1
+    }
+    if raw.clear_library_search {
+        command.kind = .Clear_Library_Search
+        selected += 1
+    }
+    return selected
+}
+
+//   Select every populated action field and return the number selected.
+raw_favorites_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
+    selected := raw_text_command_select(
+        raw.favorite_control, .Favorite_Control, command)
+    selected += raw_text_command_select(
+        raw.library_placement, .Library_Placement, command)
+    selected += raw_text_command_select(
+        raw.assert_favorites, .Assert_Favorites, command)
+    return selected
+}
+
+// Select all populated fields, retaining exact-one-action validation.
+raw_command_select :: proc(raw: Raw_Command, command: ^Command) -> int {
+    selected := 0
+    selected += raw_action_command_select(raw.action, command)
+    selected += raw_text_command_select(
+        raw.select_animation, .Select_Animation, command)
+    selected += raw_text_command_select(
+        raw.inject_reload_failure, .Inject_Reload_Failure, command)
+    selected += raw_text_command_select(raw.type_text, .Type_Text, command)
+    selected += raw_text_command_select(
+        raw.screenshot, .Request_Screenshot, command)
+    selected += raw_text_command_select(raw.start_gif, .Start_Gif, command)
+    selected += raw_library_search_command_select(raw, command)
+    selected += raw_favorites_command_select(raw, command)
+    selected += raw_text_command_select(raw.wait_event, .Wait_Event, command)
+    selected += raw_text_command_select(raw.wait_state, .Wait_State, command)
+    selected += raw_text_command_select(raw.wait_terminal_contains,
+        .Wait_Terminal_Contains, command)
+    selected += raw_text_command_select(raw.assert_state, .Assert_State, command)
+    selected += raw_text_command_select(raw.assert_focus, .Assert_Focus, command)
+    selected += raw_text_command_select(raw.assert_terminal_contains,
+        .Assert_Terminal_Contains, command)
+    selected += raw_text_command_select(raw.checkpoint, .Checkpoint, command)
+    selected += raw_text_command_select(raw.allocation_checkpoint,
+        .Allocation_Checkpoint, command)
+    selected += raw_text_command_select(raw.assert_allocation_baseline,
+        .Assert_Allocation_Baseline, command)
+    if raw.assert_no_bad_frees {
+        command.kind = .Assert_No_Bad_Frees
+        selected += 1
+    }
+    if raw.shutdown {
+        command.kind = .Shutdown
+        selected += 1
+    }
+    return selected
+}
+
+// scenario_key_payload_fields_are_valid rejects unsupported structured key fields.
+scenario_key_payload_fields_are_valid :: proc(payload: json.Object) -> bool {
+    if len(payload) < 1 || len(payload) > 3 {
+        return false
+    }
+    for field in payload {
+        if field != "name" && field != "shift" && field != "ctrl" {
+            return false
+        }
+    }
+    return true
+}
+
+// scenario_key_optional_bool decodes one absent or Boolean structured key field.
+scenario_key_optional_bool :: proc(
+    payload: json.Object, field: string, result: ^bool) -> bool {
+    value, found := payload[field]
+    if !found {
+        return true
+    }
+    decoded, valid := value.(bool)
+    if !valid {
+        return false
+    }
+    result^ = decoded
+    return true
+}
+
+// scenario_key_payload applies one exact modifier-bearing key object.
+scenario_key_payload :: proc(payload: json.Object, command: ^Command) -> bool {
+    if !scenario_key_payload_fields_are_valid(payload) {
+        return false
+    }
+    name_value, name_present := payload["name"]
+    name, name_ok := name_value.(string)
+    if !name_present || !name_ok || len(name) == 0 {
+        return false
+    }
+    if !scenario_key_optional_bool(payload, "shift", &command^.key_shift) ||
+        !scenario_key_optional_bool(payload, "ctrl", &command^.key_control) {
+        return false
+    }
+    command^.kind = .Key
+    command^.text, _ = text_copy(name)
+    return true
+}
+
+// Decode one legacy string or exact modifier-bearing key action.
+scenario_key_action_select :: proc(
+    root: json.Object, command: ^Command) -> (int, bool) {
+    value, present := root["key"]
+    if !present {
+        return 0, true
+    }
+    if name, name_ok := value.(string); name_ok {
+        command^.kind = .Key
+        command^.text, _ = text_copy(name)
+        return 1, len(name) > 0
+    }
+    payload, payload_ok := value.(json.Object)
+    if !payload_ok || !scenario_key_payload(payload, command) {
+        return 0, false
+    }
+    return 1, true
+}
+
+//   Copy bounded aliases and validate command-specific optional fields.
+command_apply_options :: proc(raw: Raw_Command, command: ^Command) -> Parse_Error {
+    command^.alias, _ = name_copy(raw.alias)
+    command^.correlation, _ = name_copy(raw.correlation)
+    if len(raw.alias) > SCENARIO_NAME_CAPACITY ||
+        len(raw.correlation) > SCENARIO_NAME_CAPACITY {
+        return .Name_Too_Long
+    }
+    command^.timeout_ms = raw.timeout_ms
+    command^.frame_number = raw.frame_number
+    if command^.kind == .Wait_Event || command^.kind == .Wait_State ||
+        command^.kind == .Wait_Terminal_Contains {
+        if command^.timeout_ms == 0 {
+            command^.timeout_ms = SCENARIO_DEFAULT_TIMEOUT_MS
+        }
+        if command^.timeout_ms > SCENARIO_MAX_TIMEOUT_MS {
+            return .Invalid_Timeout
+        }
+    }
+    if command^.frame_number > 0 &&
+        (command^.kind != .Wait_Event ||
+         text_string(&command^.text) != "animation_frame_presented") {
+        return .Invalid_Command
+    }
+    return .None
+}
+
+//   Select structured object and numeric actions while preserving exact-one semantics.
+scenario_structured_action_select :: proc(
+    root: json.Object, raw: Raw_Command, command: ^Command) -> (int, bool) {
+    selected := 0
+    count, valid := scenario_key_action_select(root, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
+    count, valid = scenario_view_content_action_select(root, raw, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
+    count, valid = scenario_dust_emission_action_select(root, raw, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
+    count, valid = scenario_dust_contact_action_select(root, raw, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
+    count, valid = scenario_setting_action_select(root, command)
+    if !valid {
+        return 0, false
+    }
+    selected += count
+    count, valid = scenario_numeric_action_select(root, command)
+    if !valid {
+        return 0, false
+    }
+    return selected + count, true
+}
+
+//   Convert one decoded JSON object into exactly one bounded command.
+//
+// Parameters:
+//   - raw: Temporary decoded fields from one nonempty JSON Lines record.
+//
+// Returns:
+//   - The fixed command and None, or a zero command and stable validation error.
+//
+// Notes:
+//   - Exactly one action field must be selected. Waits receive the default timeout
+//     when omitted and reject values beyond the configured maximum.
+command_from_raw :: proc(
+    raw: Raw_Command, root: json.Object) -> (Command, Parse_Error) {
+    command: Command
+    selected := raw_command_select(raw, &command)
+    structured_selected, structured_valid :=
+        scenario_structured_action_select(root, raw, &command)
+    if !structured_valid {
+        return {}, .Invalid_Command
+    }
+    selected += structured_selected
+    if selected != 1 {
+        return {}, .Invalid_Command
+    }
+    if len(text_string(&command.text)) == 0 &&
+        !command_kind_allows_empty_text(command.kind) {
+        return {}, .Text_Too_Long
+    }
+    if options_error := command_apply_options(raw, &command); options_error != .None {
+        return {}, options_error
+    }
+    return command, .None
+}
+
+//   Report whether one command intentionally carries no text payload.
+command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
+    switch kind {
+    case .Emit_Dust, .Contact_Dust, .Kick_Dust,
+         .Set_View_Content, .Set_View_Scroll, .Set_Splitters,
+            .Apply_Library_Search_Suggestion, .Clear_Library_Search,
+         .Assert_No_Bad_Frees, .Shutdown, .Set_Setting, .Assert_Setting:
+        return true
+    case .Reset_Animation, .Select_Animation, .Reload_Runtime,
+         .Inject_Reload_Failure,
+         .Type_Text, .Key,
+         .Pause_Simulation, .Resume_Simulation,
+         .Pause_Animation, .Resume_Animation,
+         .Set_Library_Search,
+         .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
+         .Wait_State, .Wait_Terminal_Contains, .Assert_State, .Assert_Focus,
+         .Assert_Terminal_Contains,
+         .Checkpoint, .Allocation_Checkpoint,
+         .Assert_Allocation_Baseline, .Favorite_Control, .Library_Placement,
+         .Assert_Favorites:
+        return false
+    }
+    return false
+}
+
+//   Copy borrowed text into fixed command storage.
+//
+// Parameters:
+//   - source: Borrowed command payload bytes to copy.
+//
+// Returns:
+//   - Inline text and true, or zero text and false when capacity is exceeded.
+text_copy :: proc(source: string) -> (Text, bool) {
+    if len(source) > SCENARIO_TEXT_CAPACITY {
+        return {}, false
+    }
+    result: Text
+    copy(result.bytes[:], transmute([]u8)source)
+    result.count = len(source)
+    return result, true
+}
+
+//   Copy borrowed text into fixed alias storage.
+//
+// Parameters:
+//   - source: Borrowed alias bytes to copy.
+//
+// Returns:
+//   - Inline name and true, or zero name and false when capacity is exceeded.
+name_copy :: proc(source: string) -> (Name, bool) {
+    if len(source) > SCENARIO_NAME_CAPACITY {
+        return {}, false
+    }
+    result: Name
+    copy(result.bytes[:], transmute([]u8)source)
+    result.count = len(source)
+    return result, true
+}
+
+//   Return a borrowed string over fixed text storage.
+//
+// Parameters:
+//   - text: Fixed text whose initialized prefix will be exposed.
+//
+// Returns:
+//   - A string borrowing the initialized inline bytes.
+//
+// Notes:
+//   - The result remains valid only while text storage remains alive and stable.
+text_string :: proc(text: ^Text) -> string {
+    return string(text.bytes[:text.count])
+}
+
+//   Return a borrowed string over fixed name storage.
+//
+// Parameters:
+//   - name: Fixed name whose initialized prefix will be exposed.
+//
+// Returns:
+//   - A string borrowing the initialized inline bytes.
+//
+// Notes:
+//   - The result remains valid only while name storage remains alive and stable.
+name_string :: proc(name: ^Name) -> string {
+    return string(name.bytes[:name.count])
+}
+
+//   Compute a saturating monotonic deadline from bounded milliseconds.
+//
+// Parameters:
+//   - now_ns: Current monotonic timestamp in nanoseconds.
+//   - timeout_ms: Nonnegative bounded duration in milliseconds.
+//
+// Returns:
+//   - now_ns plus the converted duration, saturated at the maximum u64 value.
+deadline_from :: proc(now_ns: u64, timeout_ms: u32) -> u64 {
+    duration := u64(timeout_ms) * 1_000_000
+    if now_ns > max(u64) - duration {
+        return max(u64)
+    }
+    return now_ns + duration
+}
+
+//   Resolve a wait correlation and scan newly supplied events.
+//
+// Parameters:
+//   - runner: Active runner owning the cumulative trace cursor and aliases.
+//   - command: Current Wait_Event command.
+//   - events: Stable cumulative event snapshot that may only grow.
+//
+// Returns:
+//   - True when a matching event is consumed; false while absent or after failure.
+//
+// Side effects:
+//   - Advances trace_cursor across every inspected event. Invalid event names or aliases
+//     fail the runner; a cursor beyond the snapshot makes evidence Inconclusive.
+runner_match_event :: proc(
+    runner: ^Runner, command: ^Command, events: []trace.Event) -> bool {
+    if runner.trace_cursor > len(events) {
+        runner.status = .Inconclusive
+        return false
+    }
+    expected_kind, valid := event_kind(text_string(&command.text))
+    if !valid {
+        runner.status = .Failed
+        runner.failure_count += 1
+        return false
+    }
+    correlation, correlation_valid := runner_alias_correlation(
+        runner, &command.correlation)
+    if !correlation_valid {
+        runner.status = .Failed
+        runner.failure_count += 1
+        return false
+    }
+    for index in runner.trace_cursor..<len(events) {
+        event := events[index]
+        runner.trace_cursor = index + 1
+        frame_matches := command.frame_number == 0 ||
+            event.payload.counts.first == command.frame_number
+        if event.kind == expected_kind && frame_matches &&
+            (correlation.id == 0 ||
+                (event.correlation_kind == correlation.kind &&
+                 event.correlation == correlation.id &&
+                 event.generation == correlation.generation)) {
+            return true
+        }
+    }
+    return false
+}
+
+//   Convert one stable script event name into vocabulary identity.
+//
+// Parameters:
+//   - name: Public scenario event spelling.
+//
+// Returns:
+//   - The trace kind and true, or Unknown and false for unsupported names.
+event_kind :: proc(name: string) -> (trace.Kind, bool) {
+    for entry in EVENT_KINDS {
+        if entry.name == name {
+            return entry.kind, true
+        }
+    }
+    return .Unknown, false
+}
+
+//   Evaluate one stable scalar-state predicate.
+terminal_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "terminal_ready": return display.terminal_ready
+    case "terminal_idle": return display.terminal_idle
+    case "terminal_continuation": return display.terminal_continuation
+    }
+    return false
+}
+
+//   Evaluate runtime and animation scalar-state predicates.
+runtime_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "runtime_ready": return display.runtime_lifecycle == .Ready
+    case "runtime_idle": return display.active_runtime_request_id == 0
+    // Presentation parsing is independently scheduled and does not extend animation work.
+    case "animation_idle":
+        return !display.animation_tick_pending ||
+            display.animation_tick_sequence == display.animation_last_committed_sequence
+    case "simulation_paused": return display.simulation_paused
+    case "simulation_running": return !display.simulation_paused
+    case "animation_paused": return display.animation_policy_paused
+    }
+    return false
+}
+
+//   Evaluate dust lifecycle scalar-state predicates.
+dust_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "dust_settled":
+        return display.dust_live_count > 0 && display.dust_airborne_count == 0 &&
+            display.dust_grounded_count == display.dust_live_count &&
+            display.dust_peak_speed_sq <=
+                particlemodel.DUST_SETTLED_SPEED_SQ
+    case "dust_active":
+        return display.dust_live_count > 0 &&
+            (display.dust_airborne_count > 0 ||
+                display.dust_peak_speed_sq >
+                    particlemodel.DUST_SETTLED_SPEED_SQ)
+    case "dust_airborne": return display.dust_airborne_count > 0
+    }
+    return false
+}
+
+//   Evaluate one stable scalar-state predicate.
+//
+// Parameters:
+//   - name: Public scenario state-predicate spelling.
+//   - display: Current pointer-free display observation.
+//
+// Returns:
+//   - True when the named predicate currently holds; false for unknown names.
+state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "dynview_enabled": return display.dynview_enabled
+    case "gif_active": return display.gif_capture_active
+    case "gif_idle": return !display.gif_capture_active
+    case "library_search_idle": return display.library_search_idle
+    case "library_search_has_matches": return display.library_search_has_matches
+    case "tooltip_visible": return display.tooltip_visible
+    case "tooltip_hidden": return !display.tooltip_visible
+    }
+    return runtime_state_matches(name, display) ||
+        dust_state_matches(name, display) || terminal_state_matches(name, display) ||
+        settings_state_matches(name, display) || interface_state_matches(name, display)
+}
+
+// interface_state_matches evaluates logical visibility and display-owned motion policy.
+interface_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "accordion_transitioning": return display.accordion_transition_running
+    case "accordion_settled": return !display.accordion_transition_running
+    case "tree_transitioning": return display.tree_transition_count > 0
+    case "tree_settled": return display.tree_transition_count == 0
+    case "interface_reduced_motion": return display.interface_reduce_motion
+    case "presentation_visible": return display.presentation_visible
+    case "presentation_hidden": return !display.presentation_visible
+    }
+    return false
+}
+
+// Evaluate durability and joined worker-ownership predicates independently of runtime idle.
+settings_state_matches :: proc(name: string, display: observe.Display) -> bool {
+    switch name {
+    case "settings_saved":
+        return display.settings_save_status == .Saved &&
+            !display.settings_save_active && display.settings_pending_count == 0
+    case "settings_saving": return display.settings_save_active
+    case "settings_unavailable": return display.settings_save_status == .Unavailable
+    case "settings_failed": return display.settings_save_status == .Failed
+    case "settings_worker_only": return display.settings_save_owner_execution_count == 0
+    }
+    return false
+}
+
+//   Return running before the deadline and fail at or after it.
+//
+// Parameters:
+//   - runner: Active runner with an established monotonic deadline.
+//   - now_ns: Current monotonic timestamp in nanoseconds.
+//
+// Returns:
+//   - Existing terminal status, Running before the deadline, or Failed at timeout.
+//
+// Side effects:
+//   - At timeout, increments failure_count and makes the runner status Failed.
+runner_wait_or_fail :: proc(runner: ^Runner, now_ns: u64) -> Run_Status {
+    if runner.status == .Failed || runner.status == .Inconclusive {
+        return runner.status
+    }
+    if now_ns >= runner.deadline_ns {
+        runner.failure_count += 1
+        runner.status = .Failed
+    }
+    return runner.status
+}
+
+//   Store or replace one bounded action alias.
+//
+// Parameters:
+//   - runner: Runner owning the fixed alias registry.
+//   - name: Nonempty inline alias identity.
+//   - correlation: Existing runtime correlation produced by the action sink.
+//
+// Returns:
+//   - True after replacement or append; false when registry capacity is exhausted.
+//
+// Side effects:
+//   - Replaces a matching correlation or appends one copied alias entry.
+runner_store_alias :: proc(
+    runner: ^Runner, name: ^Name, correlation: trace.Identity) -> bool {
+    for &entry in runner.aliases[:runner.alias_count] {
+        if name_string(&entry.name) == name_string(name) {
+            entry.correlation = correlation
+            return true
+        }
+    }
+    if runner.alias_count < len(runner.aliases) {
+        runner.aliases[runner.alias_count] = {name = name^, correlation = correlation}
+        runner.alias_count += 1
+        return true
+    }
+    return false
+}
+
+//   Resolve one alias, with an empty name representing no correlation constraint.
+//
+// Parameters:
+//   - runner: Runner owning previously produced action aliases.
+//   - name: Alias reference to resolve; an empty name selects wildcard correlation.
+//
+// Returns:
+//   - Correlation and true for an empty or known name; zero and false if unknown.
+runner_alias_correlation :: proc(
+    runner: ^Runner, name: ^Name) -> (trace.Identity, bool) {
+    if name.count == 0 {
+        return {}, true
+    }
+    for &entry in runner.aliases[:runner.alias_count] {
+        if name_string(&entry.name) == name_string(name) {
+            return entry.correlation, true
+        }
+    }
+    return {}, false
+}

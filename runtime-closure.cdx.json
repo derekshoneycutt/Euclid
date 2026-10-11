@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:9d8f4fb9-5ee6-4bfd-a9cb-58d22126ed55",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-07-11T00:00:00Z",
+    "timestamp": "2026-09-25T00:00:00Z",
     "tools": {
       "components": [
         {
@@ -23,7 +23,7 @@
       "bom-ref": "app:euclid",
       "name": "EuclidApp",
       "version": "dev",
-      "description": "Baseline standardized description of EuclidApp cross-platform runtime-closure dependencies."
+      "description": "Final standardized description of EuclidApp cross-platform SDL3 runtime-closure dependencies."
     },
     "properties": [
       {
@@ -32,7 +32,7 @@
       },
       {
         "name": "euclid.runtime.closure.status",
-        "value": "baseline-manifest"
+        "value": "sdl3-cross-platform-final"
       }
     ]
   },
@@ -57,7 +57,7 @@
       "type": "framework",
       "bom-ref": "runtime:julia",
       "name": "Julia Runtime",
-      "version": "1.12.x",
+      "version": "1.13.x",
       "description": "Embedded Julia runtime required by libjulia linkage.",
       "scope": "required"
     },
@@ -65,7 +65,7 @@
       "type": "library",
       "bom-ref": "runtime:libjulia",
       "name": "libjulia",
-      "version": "1.12.x",
+      "version": "1.13.x",
       "scope": "required"
     },
     {
@@ -79,15 +79,61 @@
       "type": "library",
       "bom-ref": "pkg:julia/LinearAlgebra",
       "name": "LinearAlgebra",
-      "version": "1.12.0",
+      "version": "1.13.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "runtime:sdl3",
+      "name": "SDL3",
+      "version": "3.4.x",
+      "description": "Window, input, audio, platform-service, and SDL_GPU runtime used by the Odin host application. Windows x64 uses the repository payload declared by libs/sdl/bin/win64/manifest.toml.",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "runtime:sdl3-image",
+      "name": "SDL_image",
+      "version": ">=3.4.0",
+      "description": "Static and animated image codec plus streaming GIF encoder runtime.",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "runtime:zlib",
+      "name": "zlib",
+      "description": "Direct Kitty RGB/RGBA decompression dependency through Odin vendor:zlib. Unix uses system libz; Windows links the Odin vendor libz.lib payload. Account for the actual provider version and zlib license in release bundles.",
+      "licenses": [
+        {
+          "license": {
+            "id": "Zlib"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "runtime:accesskit",
+      "name": "AccessKit C",
+      "version": "0.23.1",
+      "description": "Repository-owned native accessibility provider validated by per-target manifests under libs/accesskit.",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "runtime:libpng",
+      "name": "libpng",
+      "version": "libpng16-16 ABI",
+      "description": "PNG codec dependency included in the repository Windows x64 SDL_image payload.",
       "scope": "required"
     },
     {
       "type": "framework",
-      "bom-ref": "runtime:raylib",
-      "name": "raylib",
-      "version": "unknown",
-      "description": "Rendering runtime used by the Odin host application.",
+      "bom-ref": "runtime:direct3d12",
+      "name": "Direct3D 12",
+      "version": "system",
+      "description": "Windows SDL_GPU backend used with packaged DXIL shaders.",
       "scope": "required"
     }
   ],
@@ -99,7 +145,12 @@
         "file:bin/assets.pkg",
         "runtime:julia",
         "runtime:libjulia",
-        "runtime:raylib",
+        "runtime:sdl3",
+        "runtime:sdl3-image",
+        "runtime:zlib",
+        "runtime:accesskit",
+        "runtime:libpng",
+        "runtime:direct3d12",
         "pkg:julia/Colors",
         "pkg:julia/LinearAlgebra"
       ]
@@ -124,6 +175,18 @@
     {
       "name": "euclid.runtime.manifest.ownership",
       "value": "repository"
+    },
+    {
+      "name": "euclid.runtime.windows.shader-format",
+      "value": "DXIL"
+    },
+    {
+      "name": "euclid.runtime.windows.sdl-manifest",
+      "value": "libs/sdl/bin/win64/manifest.toml"
+    },
+    {
+      "name": "euclid.runtime.accesskit-provider",
+      "value": "repository-owned AccessKit C 0.23.1 payloads with per-target manifests"
     }
   ]
 }

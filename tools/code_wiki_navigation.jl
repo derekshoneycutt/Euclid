@@ -219,8 +219,9 @@ end
 function assign_package_page_paths(packages::Vector{DocumentationPackage})
     paths = Dict{String,String}()
     ordered = sort(packages; by=package -> package.stable_id)
-    base_paths = [joinpath("Code", package_language_directory(package),
-        wiki_slug(package.display_name) * ".md") for package in ordered]
+    base_paths = [normalize_repo_path(joinpath(
+        "Code", package_language_directory(package),
+        wiki_slug(package.display_name) * ".md")) for package in ordered]
     for (package, base_path) in zip(ordered, base_paths)
         duplicates = count(==(base_path), base_paths)
         suffix = duplicates == 1 ? "" : "-" * wiki_slug(package.stable_id)
@@ -441,13 +442,70 @@ function build_code_wiki_outputs(
     return sort!(outputs; by=output -> output.path)
 end
 
-"""Copy canonical authored Guides into the publishable artifact unchanged."""
+"""Pin repository links while keeping Guide-local links relative to the artifact."""
+function authored_guide_link_target(
+    repository_root::String, manifest::WikiManifest, guide::WikiGuide,
+    target::String, source_link_prefix::String)
+
+    occursin(r"^[A-Za-z][A-Za-z0-9+.-]*:", target) && return target
+    parts = split(target, '#'; limit=2)
+    isempty(first(parts)) && return target
+    source_path = normalize_repo_path(joinpath(manifest.wiki_root, guide.path))
+    resolved = normalize_repo_path(normpath(joinpath(dirname(source_path), first(parts))))
+    wiki_relative = normalize_repo_path(relpath(resolved, manifest.wiki_root))
+    wiki_relative != ".." && !startswith(wiki_relative, "../") && return target
+    validate_local_markdown_link(repository_root, source_path, target)
+    fragment = length(parts) == 2 ? "#" * last(parts) : ""
+    return source_link_prefix * resolved * fragment
+end
+
+"""Rewrite authored repository links without changing fenced or inline code."""
+function rewrite_authored_guide_links(
+    markdown::String, repository_root::String, manifest::WikiManifest,
+    guide::WikiGuide, source_link_prefix::String)
+
+    io = IOBuffer()
+    fence_character = '\0'
+    fence_length = 0
+    pattern = r"`+[^`\n]*`+|(!?\[[^\]]*\]\()([^\s)]+)((?:\s+[^)]*)?\))"
+    for (index, line) in enumerate(split(markdown, '\n'; keepempty=true))
+        index > 1 && write(io, '\n')
+        marker = match(r"^\s*(`{3,}|~{3,})", line)
+        if marker !== nothing
+            fence = marker.captures[1]
+            if fence_length == 0
+                fence_character, fence_length = first(fence), length(fence)
+            elseif first(fence) == fence_character && length(fence) >= fence_length
+                fence_character, fence_length = '\0', 0
+            end
+            write(io, line)
+            continue
+        end
+        if fence_length == 0
+            line = replace(line, pattern => text -> begin
+                matched = match(pattern, text)
+                matched.captures[1] === nothing && return text
+                target = authored_guide_link_target(
+                    repository_root, manifest, guide, String(matched.captures[2]),
+                    source_link_prefix)
+                return matched.captures[1] * target * matched.captures[3]
+            end)
+        end
+        write(io, line)
+    end
+    return String(take!(io))
+end
+
+"""Copy authored Guides with validated, pinned repository source links."""
 function build_authored_guide_outputs(
-    repository_root::String, manifest::WikiManifest)
+    repository_root::String, manifest::WikiManifest;
+    source_link_prefix::String="https://github.com/derekshoneycutt/Euclid/blob/main/")
 
     source_root = joinpath(repository_root, manifest.wiki_root)
     return [WikiOutput(owner=guide.owner, path=guide.path,
-        content=read(joinpath(source_root, guide.path), String))
+        content=rewrite_authored_guide_links(
+            read(joinpath(source_root, guide.path), String), repository_root,
+            manifest, guide, source_link_prefix))
         for guide in manifest.guides]
 end
 
@@ -524,10 +582,36 @@ function validate_managed_outputs(
     return true
 end
 
+"""Remove fenced blocks and inline code before scanning Markdown prose."""
+function markdown_without_code(markdown::String)
+    io = IOBuffer()
+    fence_character = '\0'
+    fence_length = 0
+    for line in split(markdown, '\n'; keepempty=true)
+        matched = match(r"^\s*(`{3,}|~{3,})", line)
+        if matched !== nothing
+            marker = matched.captures[1]
+            if fence_length == 0
+                fence_character = first(marker)
+                fence_length = length(marker)
+            elseif first(marker) == fence_character && length(marker) >= fence_length
+                fence_character = '\0'
+                fence_length = 0
+            end
+            write(io, '\n')
+            continue
+        end
+        fence_length == 0 && write(io, replace(line, r"`[^`\n]*`" => ""))
+        write(io, '\n')
+    end
+    return String(take!(io))
+end
+
 """Return local Markdown link targets from one document body."""
 function local_markdown_links(markdown::String)
     links = String[]
-    for matched in eachmatch(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)", markdown)
+    prose = markdown_without_code(markdown)
+    for matched in eachmatch(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)", prose)
         target = matched.captures[1]
         occursin(r"^[A-Za-z][A-Za-z0-9+.-]*:", target) && continue
         push!(links, target)

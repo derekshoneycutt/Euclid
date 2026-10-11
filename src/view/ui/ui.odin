@@ -1,158 +1,245 @@
 package ui
 
-// Shared UI constants and basic drawing helpers for panel modules.
+import native "../native"
+import core "../../core"
+import geometry "../../core/geometry"
+import contentdata "../../core/content"
+import worldmodel "../world/model"
+import viewmodel "model"
+import theme "theme"
+import viewtext "text"
+import viewmessages "../messages"
+import uisemantics "semantics"
+import uiwidgets "widgets"
+import uiaccordion "layout/accordion"
+import uisettings "settings"
+import uigif "gif"
+import uilibrary "library"
+import uipresentation "presentation"
+import uiterminal "terminal"
 
-import view_core "../core"
-import "../../dynview"
-import "../../core"
-import "core:fmt"
-
-import rl "vendor:raylib"
-
-TREE_PANEL_PADDING :: 10
-TREE_ROW_HEIGHT :: 22
-TREE_INDENT :: 16
-TREE_FONT_SIZE :: 16
-TEXT_ROW_HEIGHT :: 22
-TEXT_PADDING :: 8
-TEXT_WRAP_ADVANCE :: 8.0
-SCROLLBAR_WIDTH :: 8
-SCROLLBAR_THUMB_MIN_HEIGHT :: 24
-DYNVIEW_COPY_ICON_SIZE :: 14
-DYNVIEW_COPY_ICON_X_PAD :: 6
-TREE_TOOLBAR_HEIGHT :: 28
-TREE_TOOLBAR_BUTTON_SIZE :: 20
-TREE_TOOLBAR_GAP :: 6
-TREE_TOOLBAR_EDGE_PAD :: 4
-TREE_TOOLBAR_BUTTON_GAP :: 4
-SETTINGS_TRACK_HEIGHT :: 8
-SETTINGS_KNOB_WIDTH :: 10
-WHEEL_SCROLL_MULTIPLIER :: 2
-SCROLLBAR_DRAG_EPSILON :: 0.001
-TREE_ROW_ICON_OFFSET_X :: 2
-TREE_ROW_ICON_OFFSET_Y :: 3
-TREE_ROW_ICON_SIZE :: 16
-TREE_ROW_LABEL_OFFSET_X :: 22
-TREE_ROW_LABEL_OFFSET_Y :: 2
-
-SETTINGS_PANEL_INSET :: 8
-SETTINGS_HEADER_TOP_OFFSET :: 8
-SETTINGS_SLIDER_LABEL_TOP_OFFSET :: 32
-SETTINGS_TRACK_TOP_OFFSET :: 22
-SETTINGS_TRACK_HIT_PAD_Y :: 6
-SETTINGS_KNOB_PAD_Y :: 4
-SETTINGS_VALUE_TOP_OFFSET :: 16
-SETTINGS_STATS_TOP_OFFSET :: 26
-SETTINGS_STATS_ROW_GAP :: 22
-SETTINGS_TOGGLE_TOP_OFFSET :: 118
-SETTINGS_CHECKBOX_SIZE :: 14
-SETTINGS_CHECKBOX_LABEL_GAP :: 8
-SETTINGS_CHECKBOX_HIT_PAD_Y :: 4
-SETTINGS_CHECKBOX_TEXT_OFFSET_Y :: 1
-SETTINGS_TOGGLE_ROW_GAP :: 22
-SETTINGS_GIF_TOP_OFFSET :: 185
-SETTINGS_GIF_SLIDER_ROW_GAP :: 36
-SETTINGS_GIF_BUTTON_TOP_OFFSET :: 132
-SETTINGS_GIF_BUTTON_HEIGHT :: 24
-SETTINGS_GIF_STATUS_TOP_OFFSET :: 162
-SETTINGS_GIF_FRAME_STEP_SEGMENT_SIZE :: SETTINGS_GIF_SLIDER_ROW_GAP
-SETTINGS_GIF_FRAME_TO_BUTTON_SEGMENT_SIZE ::
-    SETTINGS_GIF_BUTTON_TOP_OFFSET - SETTINGS_GIF_SLIDER_ROW_GAP * 2
-SETTINGS_GIF_BUTTON_TO_STATUS_SEGMENT_SIZE ::
-    SETTINGS_GIF_STATUS_TOP_OFFSET - SETTINGS_GIF_BUTTON_TOP_OFFSET
-SETTINGS_GIF_STATUS_NOTE_ROW_OFFSET :: 18
-SETTINGS_GIF_STATUS_PATH_ROW_OFFSET :: 36
-SCRATCHPAD_CURSOR_BLINK_HALF_PERIOD_SECONDS :: 0.53
-
-ISO_SCALE_VALUE :: view_core.ISO_SCALE_VALUE
-ISO_X_OFFSET :: view_core.ISO_X_OFFSET
-ISO_Y_OFFSET :: view_core.ISO_Y_OFFSET
-
-LIMIT_FPS :: view_core.LIMIT_FPS
-FIXED_DT :: view_core.FIXED_DT
-MAX_FRAME_DT :: view_core.MAX_FRAME_DT
-MAX_STEPS_PER_FRAME :: view_core.MAX_STEPS_PER_FRAME
-FPS_AVERAGE_BUCKET_COUNT :: view_core.FPS_AVERAGE_BUCKET_COUNT
-
-ALLOWED_CONSTRAINT_ERROR :: view_core.ALLOWED_CONSTRAINT_ERROR
-
-WINDOW_HEIGHT :: view_core.WINDOW_HEIGHT
-WINDOW_WIDTH :: view_core.WINDOW_WIDTH
-
-VIEW_HEIGHT :: view_core.VIEW_HEIGHT
-BOTTOM_BAR_HEIGHT :: view_core.BOTTOM_BAR_HEIGHT
-VIEW_WIDTH :: view_core.VIEW_WIDTH
-RIGHT_BAR_WIDTH :: view_core.RIGHT_BAR_WIDTH
-
-WINDOW_TITLE :: view_core.WINDOW_TITLE
-
-BACKGROUND_COLOR :: view_core.BACKGROUND_COLOR
-TOOL_COLOR :: view_core.TOOL_COLOR
-
-UI_BACK_COLOR :: view_core.UI_BACK_COLOR
-UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
-UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
-
-UI_COMPONENT_BACKGROUND_COLOR :: view_core.UI_COMPONENT_BACKGROUND_COLOR
-
-SURFACE_COLOR :: view_core.SURFACE_COLOR
-SURFACE_EDGE_SIZE :: view_core.SURFACE_EDGE_SIZE
-SURFACE_EDGE_COLOR :: view_core.SURFACE_EDGE_COLOR
-
-DYNVIEW_STYLE_OUTPUT :: dynview.DYNVIEW_STYLE_OUTPUT
-DYNVIEW_STYLE_CUSTOM_FONT :: dynview.DYNVIEW_STYLE_CUSTOM_FONT
-DYNVIEW_STYLE_CUSTOM_FONT_MASK :: dynview.DYNVIEW_STYLE_CUSTOM_FONT_MASK
-
-Mouse_Input_State :: view_core.Mouse_Input_State
-
-//   Clamp a rectangle so width and height are never negative.
-clamp_non_negative_rect :: #force_inline proc(rect: rl.Rectangle) -> rl.Rectangle {
-    clamped := rect
-    if clamped.width < 0 {
-        clamped.width = 0
-    }
-    if clamped.height < 0 {
-        clamped.height = 0
-    }
-    return clamped
-}
-
-//   Prepare frame geometry and report whether Dynview cache construction is required.
-prepare_ui_frame :: proc(state: ^core.Euclid_General_State) -> bool {
-    regions := compute_ui_regions(state^.ui_runtime.current_layout_mode)
-    if !validate_ui_regions(regions) {
-        fmt.println("[ui] Warning: invalid regions; using baseline fallback")
-        regions = compute_ui_regions(.Baseline)
-    }
-    state^.ui_runtime.ui_regions = regions
-
-    text_panel := view_text_content_panel(regions.text_rect)
-    dynview.track_panel(&state^.dynview, text_panel)
-    dynview.track_font(&state^.dynview, TREE_FONT_SIZE, TEXT_WRAP_ADVANCE)
-    dynview.track_style(&state^.dynview, dynview.DYNVIEW_STYLE_REVISION_PLAIN_TEXT)
-    return dynview.compile_is_needed(&state^.dynview)
-}
-
-//   Render all UI panels in baseline layout.
-draw_ui_panels :: proc(state: ^core.Euclid_General_State) {
+// draw_encoded_panel_geometry encodes visible composition backgrounds without text.
+draw_encoded_panel_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    controls: Ui_Control_Preparation) {
     regions := state^.ui_runtime.ui_regions
-    mouse_input := view_core.capture_mouse_input_state()
-
-    bottom_bar := rl.Rectangle{
+    window := state^.ui_runtime.window
+    if state^.ui_runtime.current_layout_mode == .Portrait {
+        _ = native.draw_encoder_rectangle(encoder, {0, regions.world_rect.height,
+            f32(window.width), f32(window.height) - regions.world_rect.height},
+            theme.UI_BACK_COLOR)
+        draw_encoded_accordion_geometry(state, encoder, controls)
+        return
+    }
+    _ = native.draw_encoder_rectangle(encoder, {
         regions.world_rect.x,
         regions.world_rect.y + regions.world_rect.height,
         regions.world_rect.width,
-        WINDOW_HEIGHT - regions.world_rect.height,
-    }
-    rl.DrawRectangleRec(bottom_bar, UI_BACK_COLOR)
-    draw_view_text_panel(state, regions.text_rect, mouse_input)
+        f32(window.height) - regions.world_rect.height,
+    }, theme.UI_BACK_COLOR)
+    _ = native.draw_encoder_rectangle(encoder, {
+        regions.world_rect.x + regions.world_rect.width, 0,
+        f32(window.width) - regions.world_rect.width, f32(window.height),
+    }, theme.UI_BACK_COLOR)
+    uipresentation.draw_encoded_presentation_geometry(
+        state, encoder, regions.text_rect)
+    draw_encoded_accordion_geometry(state, encoder, controls)
+}
 
-    right_bar := rl.Rectangle{
-        regions.world_rect.x + regions.world_rect.width,
-        0,
-        WINDOW_WIDTH - regions.world_rect.width,
-        WINDOW_HEIGHT,
+
+// draw_encoded_accordion_content encodes the active section's geometry.
+draw_encoded_accordion_content :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    layout: uiaccordion.Accordion_Layout, controls: Ui_Control_Preparation) {
+    for index in 0..<controls.accordion.sections.count {
+        descriptor := controls.accordion.sections.items[index]
+        section := descriptor.section
+        content := layout.contents[int(section)]
+        clip := layout.clips[int(section)]
+        if clip.width <= 0 || clip.height <= 0 {
+            continue
+        }
+        _ = native.draw_encoder_push_scissor(encoder, clip)
+        draw_encoded_accordion_child(state, encoder, section, content, controls)
+        _ = native.draw_encoder_pop_scissor(encoder)
     }
-    rl.DrawRectangleRec(right_bar, UI_BACK_COLOR)
-    draw_tree_view(state, regions.tree_rect, mouse_input)
+}
+
+// draw_encoded_accordion_child draws one full-size child beneath its reveal clip.
+draw_encoded_accordion_child :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    section: viewmodel.Ui_Accordion_Section, content: geometry.Rectangle,
+    controls: Ui_Control_Preparation) {
+    _ = native.draw_encoder_rectangle(
+        encoder, content, theme.UI_COMPONENT_BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, content, 1, theme.UI_BORDER_COLOR)
+    switch section {
+    case .View:
+        uipresentation.draw_encoded_presentation_geometry(
+            state, encoder, content)
+    case .Library:
+        uilibrary.draw_encoded_tree_geometry(state, encoder, controls.tree)
+    case .Save_Gif:
+        uigif.draw_encoded_gif_geometry(encoder, controls.gif)
+    case .Settings:
+        uisettings.draw_encoded_settings_geometry(encoder, controls.settings)
+    }
+}
+
+// draw_encoded_accordion_headers encodes all section headers and disclosures.
+draw_encoded_accordion_headers :: proc(
+    encoder: ^native.Draw_Encoder, sections: uiaccordion.Accordion_Section_Set,
+    layout: uiaccordion.Accordion_Layout, active: viewmodel.Ui_Accordion_Section) {
+    for index in 0..<sections.count {
+        header := layout.headers[index]
+        expanded := sections.items[index].section == active
+        fill := worldmodel.BACKGROUND_COLOR
+        if expanded {
+            fill = theme.UI_COMPONENT_BACKGROUND_COLOR
+        }
+        _ = native.draw_encoder_rectangle(
+            encoder, geometry.Rectangle(header), fill)
+        _ = native.draw_encoder_rectangle_outline(
+            encoder, geometry.Rectangle(header), 1, theme.UI_BORDER_COLOR)
+        icon_size := min(theme.ACCORDION_DISCLOSURE_SIZE, header.height)
+        icon := geometry.Rectangle{header.x + theme.ACCORDION_HEADER_PADDING,
+            header.y + (header.height - icon_size) * 0.5, icon_size, icon_size}
+        uiwidgets.draw_encoded_disclosure(encoder, geometry.Rectangle(icon), expanded)
+    }
+}
+
+// draw_encoded_accordion_geometry encodes panel chrome while labels stay deferred.
+draw_encoded_accordion_geometry :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    controls: Ui_Control_Preparation) {
+    runtime := &state^.ui_runtime
+    panel := runtime^.ui_regions.accordion_rect
+    _ = native.draw_encoder_rectangle(
+        encoder, geometry.Rectangle(panel), worldmodel.BACKGROUND_COLOR)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, geometry.Rectangle(panel), 1, theme.UI_BORDER_COLOR)
+    sections := controls.accordion.sections
+    layout := controls.accordion.layout
+    draw_encoded_accordion_content(state, encoder, layout, controls)
+    draw_encoded_accordion_headers(
+        encoder, sections, layout, runtime^.active_accordion_section)
+}
+
+
+// draw_encoded_panel_text emits non-presentation labels for the active UI layout.
+draw_encoded_panel_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    controls: Ui_Control_Preparation) {
+    sections := controls.accordion.sections
+    layout := controls.accordion.layout
+    for index in 0..<sections.count {
+        header := layout.headers[index]
+        viewtext.draw_encoded_label(&state^.font_cache, encoder,
+            sections.items[index].label,
+            header.x + theme.ACCORDION_HEADER_PADDING + theme.ACCORDION_DISCLOSURE_SIZE +
+                theme.ACCORDION_HEADER_PADDING,
+            header.y + (header.height - theme.TREE_FONT_SIZE) * 0.5)
+        if sections.items[index].error_indicator {
+            center, radius := uiaccordion.accordion_error_indicator_geometry(header)
+            _ = native.draw_encoder_circle(encoder, center, radius, theme.UI_ERROR_COLOR)
+        }
+    }
+    for index in 0..<sections.count {
+        section := sections.items[index].section
+        clip := layout.clips[int(section)]
+        if clip.width <= 0 || clip.height <= 0 {
+            continue
+        }
+        _ = native.draw_encoder_push_scissor(encoder, clip)
+        draw_encoded_accordion_child_text(state, encoder, section,
+            layout.contents[int(section)], controls)
+        _ = native.draw_encoder_pop_scissor(encoder)
+    }
+    draw_encoded_overlay_text(state, encoder)
+}
+
+// draw_encoded_accordion_child_text shares the prepared full-size layout with geometry.
+draw_encoded_accordion_child_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    section: viewmodel.Ui_Accordion_Section, content: geometry.Rectangle,
+    controls: Ui_Control_Preparation) {
+    switch section {
+    case .Library:
+        uilibrary.draw_encoded_library_search_geometry(
+            state, encoder, controls.library_search)
+        uilibrary.draw_encoded_library_search_text(
+            state, encoder, controls.library_search)
+        uilibrary.draw_encoded_tree_text(state, encoder, controls.tree)
+    case .Save_Gif:
+        uigif.draw_encoded_gif_text(state, encoder,
+            content, controls.gif)
+    case .Settings:
+        uisettings.draw_encoded_settings_text(
+            state, encoder, controls.settings)
+    case .View:
+    }
+}
+
+// draw_encoded_overlay_text emits transient overlay labels outside accordion panels.
+draw_encoded_overlay_text :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder) {
+    runtime := &state^.ui_runtime
+    if !runtime^.display_fps {
+        return
+    }
+    storage: [contentdata.UI_FORMAT_OUTPUT_BYTE_CAPACITY]u8
+    fps := viewmessages.shell_format(state, .Fps_Overlay,
+        []contentdata.Content_Format_Argument{{"fps", state^.telemetry.fps_avg_live}},
+        storage[:])
+    viewtext.draw_encoded_label(&state^.font_cache, encoder, fps, 8, 8)
+}
+
+// draw_encoded_focus_outline emits the current keyboard-visible focus bounds.
+draw_encoded_focus_outline :: proc(
+    runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    encoder: ^native.Draw_Encoder) {
+    semantic := runtime^.semantic_focus
+    if semantic == nil || !semantic^.window_focused ||
+        semantic^.focus_origin != .Keyboard {return}
+    snapshot := uisemantics.semantic_snapshot(semantic)
+    index := uisemantics.semantic_node_index(snapshot, semantic^.logical_focus)
+    if index < 0 || .Focus_Visible not_in snapshot^.nodes[index].states {
+        return
+    }
+    node := snapshot^.nodes[index]
+    _ = native.draw_encoder_push_scissor(encoder, node.clip_bounds)
+    _ = native.draw_encoder_rectangle_outline(
+        encoder, node.bounds, 2, theme.UI_TEXT_COLOR)
+    _ = native.draw_encoder_pop_scissor(encoder)
+}
+
+
+// draw_encoded_view_content separates a render-only portrait tail from logical visibility.
+draw_encoded_view_content :: proc(
+    state: ^core.Euclid_General_State, encoder: ^native.Draw_Encoder,
+    terminal: uiterminal.Terminal_Prepared_Frame,
+    presentation: uipresentation.Presentation_Preparation) {
+    runtime := &state^.ui_runtime
+    panel := geometry.Rectangle(runtime^.ui_regions.text_rect)
+    clip := uiaccordion.ui_presentation_clip(runtime, panel)
+    if clip.width <= 0 || clip.height <= 0 {
+        return
+    }
+    _ = native.draw_encoder_push_scissor(encoder, clip)
+    if uiterminal.is_terminal_selected(state) {
+        prepared := terminal
+        if !uipresentation.ui_presentation_is_visible(runtime) {
+            prepared = uiterminal.terminal_prepare_visual(
+                state, uiterminal.terminal_content_panel(panel))
+        }
+        uiterminal.terminal_draw_encoded(state, encoder, prepared)
+    } else {
+        prepared := presentation
+        if !uipresentation.ui_presentation_is_visible(runtime) {
+            prepared = uipresentation.prepare_presentation_visual(state, panel)
+        }
+        uipresentation.draw_encoded_presentation_text(state, encoder, prepared)
+    }
+    _ = native.draw_encoder_pop_scissor(encoder)
 }

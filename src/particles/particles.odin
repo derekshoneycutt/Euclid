@@ -1,5 +1,11 @@
 package particles
 
+import shapemodel "../shapes/model"
+import curve "../shapes/curve"
+import particlemodel "model"
+import color "../core/color"
+import geometry "../core/geometry"
+
 // Simple particle system kinda took off away from me a bit here, but it has a few important
 // points to discuss:
 
@@ -20,26 +26,17 @@ package particles
 // - Flicker move in a 3D velocity away from the point of emission. They randomly show as
 //   single pixels drawn on the screen. The result is a kind of sparkling flicker effect.
 
-import "../core"
-import view_core "../view/core"
-
 import "core:math"
-import "core:mem"
 import rand "core:math/rand"
+import utf8 "core:unicode/utf8"
 
-import rl "vendor:raylib"
 
-Vector2 :: core.Vector2
-Vector3 :: core.Vector3
-Particle :: core.Particle
-Particle_System :: core.Particle_System
-Shapes_Point_System :: core.Shapes_Point_System
-Shapes_Point :: core.Shapes_Point
-Shapes_Point_Type :: core.Shapes_Point_Type
-Iso_Scale :: core.Iso_Scale
-
-MAX_PARTICLES :: core.MAX_PARTICLES
-MAX_SHAPESPOINTS :: core.MAX_SHAPESPOINTS
+Vector2 :: geometry.Vector2
+Vector3 :: geometry.Vector3
+Color :: color.Color_RGBA8
+Particle :: particlemodel.Particle
+Particle_System :: particlemodel.Particle_System
+MAX_PARTICLES :: particlemodel.MAX_PARTICLES
 
 SPAWN_INTERVAL :: 0.012 // seconds
 PARTICLE_LIFE :: 0.75  // seconds
@@ -87,8 +84,8 @@ DUST_XY_MIN :: 0.0
 DUST_XY_MAX :: 1.0
 
 DUST_CONTACT_PUSH_RADIUS :: 0.01
-DUST_CONTACT_PUSH_RADIUS_LARGE :: 0.04
 DUST_CONTACT_PUSH_SPEED :: 0.0035
+DUST_TOOL_SWEEP_MAX_INTERVALS :: 144
 
 DUST_KICK_FADE_MIN :: 0.03
 DUST_KICK_FADE_MAX :: 0.08
@@ -96,28 +93,24 @@ DUST_EXISTING_UP_KICK_MIN :: 0.0012
 DUST_EXISTING_UP_KICK_MAX :: 0.0148
 DUST_EXISTING_XY_KICK :: 0.0011
 
-DUST_COLLISION_RADIUS :: 0.004
-DUST_COLLISION_RESTITUTION :: 0.42
-DUST_COLLISION_POSITION_SLOP :: 0.0001
-DUST_COLLISION_ZERO_DISTANCE_SQ :: 1e-12
-DUST_COLLISION_NORMAL_JITTER_RADIANS :: 0.18
+DUST_FLOOR_REST_SPEED :: 0.006
 
 PARTICLE_RANDOM_SEED :: u64(0x9e3779b97f4a7c15)
 
-DUST_GRID_CELL_SIZE :: core.DUST_GRID_CELL_SIZE
-DUST_GRID_DIM :: core.DUST_GRID_DIM
-DUST_GRID_DIM_SQUARED :: core.DUST_GRID_DIM_SQUARED
-DUST_GRID_BUCKET_CAP :: core.DUST_GRID_BUCKET_CAP
-DUST_GRID_BUCKET_COUNT :: core.DUST_GRID_BUCKET_COUNT
-DUST_COLLISION_PAIR_CAP :: core.DUST_COLLISION_PAIR_CAP
-
-DUST_GRID_NEIGHBORS :: [5][2]int{{0,0},{1,0},{-1,1},{0,1},{1,1}}
+DUST_TOOL_CONTACT_CAP :: particlemodel.DUST_TOOL_CONTACT_CAP
 
 CLEAR_BURST_POINT_COUNT :: 28
 CLEAR_BURST_LABEL_COUNT :: 12
 CLEAR_BURST_LINE_SAMPLES :: 96
-CLEAR_BURST_CIRCLE_SAMPLES :: 96
-CLEAR_BURST_FILLED_CIRCLE_SAMPLES :: 120
+CLEAR_BURST_ARC_DENSITY :: 192.0
+CLEAR_BURST_ARC_MIN_SAMPLES :: 2
+CLEAR_BURST_ARC_MAX_SAMPLES :: 900
+CLEAR_BURST_CURVE_DENSITY :: CLEAR_BURST_ARC_DENSITY
+CLEAR_BURST_CURVE_MIN_SAMPLES :: CLEAR_BURST_ARC_MIN_SAMPLES
+CLEAR_BURST_CURVE_MAX_SAMPLES :: CLEAR_BURST_ARC_MAX_SAMPLES
+CLEAR_BURST_FILLED_CIRCLE_DENSITY :: 12000.0
+CLEAR_BURST_FILLED_CIRCLE_MIN_SAMPLES :: CLEAR_BURST_POINT_COUNT
+CLEAR_BURST_FILLED_CIRCLE_MAX_SAMPLES :: 900
 CLEAR_BURST_EDGE_REPEATS :: 1
 CLEAR_BURST_POLYGON_FILL_DENSITY :: 900.0
 CLEAR_BURST_POLYGON_FILL_MIN_SAMPLES :: 10
@@ -125,11 +118,7 @@ CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES :: 900
 
 Particle_Emission :: struct {
     origin: Vector3,
-    color: rl.Color,
-}
-
-Dust_Contact_Push :: struct {
-    x, y, radius, radius_sq: f32,
+    color: Color,
 }
 
 Particle_Soa_Batch :: struct {
@@ -144,26 +133,18 @@ Polygon_Fill_Triangles :: struct {
 }
 
 Circle_Dust_Emission :: struct {
-    center, start, finish: Vector3,
-    offset: f32,
-    color: rl.Color,
-    sample_count: int,
+    center: Vector3,
+    radius: f32,
+    start_theta: f32,
+    sweep_theta: f32,
+    color: Color,
 }
 
-Circle_Kind_Burst_Config :: struct {
-    color: rl.Color,
-    sample_count: int,
-    abort_on_invalid: bool,
-}
-
-Dust_Collision_Grid :: struct {
-    cell_y, cell_x, cell_index, cell_count: int,
-    radius_sq, min_sep: f32,
-}
-
-Dust_Pair_Response :: struct {
-    ia, ib: int,
-    nx, ny, penetration: f32,
+// Group one world-backed clear-burst operation and its render color.
+Shape_World_Burst_Context :: struct {
+    particles: ^Particle_System,
+    world: ^shapemodel.Shape_World,
+    color: Color,
 }
 
 //   Emit high-layer flicker particles at a 2D origin.
@@ -214,7 +195,7 @@ emit_trail_particles :: proc(
         }
 
         for _ in 0..<FLICKERS_PER_TRAIL_SPAWN {
-            spawn_flicker_particle(ps, trail_pos, rl.WHITE)
+            spawn_flicker_particle(ps, trail_pos, color.WHITE)
         }
 
         for _ in 0..<BURNOUT_PER_TRAIL_SPAWN {
@@ -222,97 +203,6 @@ emit_trail_particles :: proc(
                 ps, emission.origin.x, emission.origin.y, emission.origin.z,
                 emission.color)
         }
-    }
-}
-
-//   Push nearby dust particles away from a 2D contact position.
-//
-// Parameters:
-//   - ps: Particle system containing dust particles.
-//   - x: Contact x position.
-//   - y: Contact y position.
-//
-// Returns:
-//   - none.
-push_dust_away_from_xy_index :: proc(
-    ps: ^Particle_System, i: int, contact: Dust_Contact_Push) {
-    dx := ps.low_particles.pos_x[i] - contact.x
-    dy := ps.low_particles.pos_y[i] - contact.y
-    dist_sq := dx * dx + dy * dy
-    if dist_sq > contact.radius_sq {
-        return
-    }
-
-    dist := f32(math.sqrt(f64(dist_sq)))
-    nx, ny: f32
-    if dist > f32(0.00001) {
-        inv_dist := f32(1.0) / dist
-        nx = dx * inv_dist
-        ny = dy * inv_dist
-    } else {
-        theta := random_f32_range(ps, f32(0.0), f32(2.0 * math.PI))
-        nx = f32(math.cos(theta))
-        ny = f32(math.sin(theta))
-    }
-
-    falloff := f32(1.0) - math.clamp(dist / contact.radius, f32(0.0), f32(1.0))
-    push := DUST_CONTACT_PUSH_SPEED * falloff
-
-    ps.low_particles.vel_x[i] += nx * push
-    ps.low_particles.vel_y[i] += ny * push
-
-    ps.low_particles.pos_x[i] += nx * push
-    ps.low_particles.pos_y[i] += ny * push
-    clamp_xy_bounds_index(ps, i)
-}
-
-//   Push nearby dust particles away from a 2D contact position.
-//
-// Parameters:
-//   - ps: Particle system containing dust particles.
-//   - x: Contact x position.
-//   - y: Contact y position.
-//
-// Returns:
-//   - none.
-push_dust_away_from_xy :: proc (ps: ^Particle_System, x, y: f32) {
-    if ps^.use_max_dust_particles < 1 {
-        return
-    }
-
-    push_radius := f32(DUST_CONTACT_PUSH_RADIUS)
-    contact := Dust_Contact_Push{x, y, push_radius, push_radius * push_radius}
-
-    for i in 0..<ps^.use_max_dust_particles {
-        if !ps.low_particles[i].alive {
-            continue
-        }
-        push_dust_away_from_xy_index(ps, i, contact)
-    }
-}
-
-//   Push nearby dust particles away from a 2D contact position.
-//
-// Parameters:
-//   - ps: Particle system containing dust particles.
-//   - x: Contact x position.
-//   - y: Contact y position.
-//
-// Returns:
-//   - none.
-push_dust_away_from_xy_large :: proc (ps: ^Particle_System, x, y: f32) {
-    if ps^.use_max_dust_particles < 1 {
-        return
-    }
-
-    push_radius := f32(DUST_CONTACT_PUSH_RADIUS_LARGE)
-    contact := Dust_Contact_Push{x, y, push_radius, push_radius * push_radius}
-
-    for i in 0..<ps^.use_max_dust_particles {
-        if !ps.low_particles[i].alive {
-            continue
-        }
-        push_dust_away_from_xy_index(ps, i, contact)
     }
 }
 
@@ -350,7 +240,7 @@ kick_existing_dust_index :: proc(ps: ^Particle_System, i: int) {
 //
 // Returns:
 //   - none.
-kick_existing_dust :: proc(ps: ^Particle_System, iso_scale: ^Iso_Scale = nil) {
+kick_existing_dust :: proc(ps: ^Particle_System) {
     for i in 0..<ps^.use_max_dust_particles {
         if !ps.low_particles[i].alive {
             continue
@@ -359,84 +249,298 @@ kick_existing_dust :: proc(ps: ^Particle_System, iso_scale: ^Iso_Scale = nil) {
         kick_existing_dust_index(ps, i)
     }
 
-    if iso_scale != nil {
-        view_core.screenshake_on_dust_kick(iso_scale)
+}
+
+//   Resolve one direct world transform position for particle emission.
+shape_world_burst_position :: proc(
+    world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity) -> (Vector3, bool) {
+    transform, found := shapemodel.shape_component_get(
+        &world.transforms, &world.registry, entity)
+    if !found {
+        return {}, false
+    }
+    return transform.position, true
+}
+
+//   Emit one world polygon through the existing bounded fill sampler.
+emit_shape_world_polygon_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    geometry: shapemodel.Shape_Polygon_Geometry) {
+    entities, found := shapemodel.shape_polygon_vertices(ctx.world, geometry)
+    vertices: [12]Vector3
+    if !found || len(entities) > len(vertices) {
+        return
+    }
+    for entity, index in entities {
+        position, position_found := shape_world_burst_position(ctx.world, entity)
+        if !position_found {
+            return
+        }
+        vertices[index] = position
+    }
+    emit_polygon_fill_dust(
+        ctx.particles, &vertices, len(entities), ctx.color)
+}
+
+//   Resolve and emit one world arc using its geometry kind's density model.
+emit_shape_world_arc_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: shapemodel.Shape_Entity,
+    filled: bool) {
+    center, center_ok := shape_world_burst_position(ctx.world, entity)
+    arc, arc_ok := shapemodel.shape_component_get(
+        &ctx.world.arcs, &ctx.world.registry, entity)
+    if !center_ok || !arc_ok {
+        return
+    }
+    emission := Circle_Dust_Emission{
+        center, arc.radius, arc.start_theta, arc.sweep_theta, ctx.color}
+    if filled {
+        emit_filled_circle_dust(ctx.particles, emission)
+    } else {
+        emit_circle_dust(ctx.particles, emission)
     }
 }
 
-//   Emit dust burst particles for a specific drawable shapes item.
-//
-// Parameters:
-//   - ps: Particle system receiving emitted dust.
-//   - ks: Shapes system used to resolve geometry for the selected item.
-//   - index: Point index of the drawable shapes host item.
-//   - kick_dust: When true, pre-kicks existing dust before emitting new dust.
-//
-// Returns:
-//   - none.
-emit_shapes_hide_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    index: int,
-    kick_dust: bool = true,
-    iso_scale: ^Iso_Scale = nil) {
-    if index < 0 || index >= MAX_SHAPESPOINTS || ps^.use_max_dust_particles < 1 {
+// Emit one analytic two-circle region with bounded uniform disk sampling.
+emit_shape_world_circle_region_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    geometry: shapemodel.Shape_Circle_Region_Geometry) {
+    first, first_ok := shape_world_burst_position(ctx.world, geometry.first_center)
+    second, second_ok := shape_world_burst_position(ctx.world, geometry.second_center)
+    region := geometry.value
+    if !first_ok || !second_ok {
         return
     }
+    sample_count := clamp(int(math.round(f64(
+        math.PI * region.first_radius * region.first_radius *
+        CLEAR_BURST_POLYGON_FILL_DENSITY))),
+        CLEAR_BURST_POLYGON_FILL_MIN_SAMPLES,
+        CLEAR_BURST_POLYGON_FILL_MAX_SAMPLES)
+    for _ in 0..<sample_count {
+        random_radius := random_f32_range(ctx.particles, 0, 1)
+        radius := region.first_radius * f32(math.sqrt(f64(random_radius)))
+        theta := random_f32_range(ctx.particles, 0, 2 * math.PI)
+        sample := first + Vector3{radius * f32(math.cos(theta)),
+            radius * f32(math.sin(theta)), 0}
+        delta := sample - second
+        inside_second := delta.x * delta.x + delta.y * delta.y <=
+            region.second_radius * region.second_radius
+        accepted := inside_second
+        if region.operation == .Difference {
+            accepted = !inside_second
+        }
+        if accepted {
+            spawn_dust_particle(ctx.particles, sample, ctx.color)
+        }
+    }
+}
 
-    kp := &ks.points[index]
-    if !kp.do_draw {
+// Return the Euclidean length of one world-space curve segment.
+curve_segment_length :: #force_inline proc(first, second: Vector3) -> f32 {
+    delta := second - first
+    return f32(math.sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z))
+}
+
+// Emit spatially uniform dust across one explicated ordered curve.
+emit_curve_polyline_dust :: proc(
+    ps: ^Particle_System, vertices: []Vector3, color: Color) {
+    total_length: f32
+    for index in 1..<len(vertices) {
+        total_length += curve_segment_length(vertices[index - 1], vertices[index])
+    }
+    if total_length <= 0 {
         return
     }
+    sample_count := clamp(int(math.round(f64(total_length * CLEAR_BURST_CURVE_DENSITY))),
+        CLEAR_BURST_CURVE_MIN_SAMPLES, CLEAR_BURST_CURVE_MAX_SAMPLES)
+    segment_index := 1
+    consumed: f32
+    for sample_index in 0..<sample_count {
+        target := total_length * f32(sample_index) / f32(sample_count - 1)
+        segment_length := curve_segment_length(
+            vertices[segment_index - 1], vertices[segment_index])
+        for segment_index < len(vertices) - 1 && consumed + segment_length < target {
+            consumed += segment_length
+            segment_index += 1
+            segment_length = curve_segment_length(
+                vertices[segment_index - 1], vertices[segment_index])
+        }
+        progress: f32
+        if segment_length > 0 {
+            progress = (target - consumed) / segment_length
+        }
+        sample := vertices[segment_index - 1] +
+            (vertices[segment_index] - vertices[segment_index - 1]) * progress
+        spawn_dust_particle(ps, sample, color)
+    }
+}
 
-    if !is_burst_drawable_kind(kp.kind) {
+// Resolve and emit one canonical trochoid through shared bounded explication.
+emit_shape_world_trochoid_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: shapemodel.Shape_Entity) {
+    center, center_ok := shape_world_burst_position(ctx.world, entity)
+    value, value_ok := shapemodel.shape_component_get(
+        &ctx.world.trochoids, &ctx.world.registry, entity)
+    if !center_ok || !value_ok {
         return
     }
+    vertices: [curve.TROCHOID_MAX_VERTICES]Vector3
+    result := curve.trochoid_explicate(center, value^, vertices[:])
+    if result.status != .Invalid_Input && result.vertex_count > 1 {
+        emit_curve_polyline_dust(
+            ctx.particles, vertices[:result.vertex_count], ctx.color)
+    }
+}
 
+// Resolve and emit one canonical literal-line cycloid through bounded explication.
+emit_shape_world_cycloid_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: shapemodel.Shape_Entity,
+    geometry: shapemodel.Shape_Cycloid_Geometry) {
+    first, first_ok := shape_world_burst_position(ctx.world, geometry.first)
+    second, second_ok := shape_world_burst_position(ctx.world, geometry.second)
+    value, value_ok := shapemodel.shape_component_get(
+        &ctx.world.cycloids, &ctx.world.registry, entity)
+    if !first_ok || !second_ok || !value_ok {
+        return
+    }
+    vertices: [curve.CYCLOID_MAX_VERTICES]Vector3
+    result := curve.cycloid_explicate(first, second, value^, vertices[:])
+    if result.status != .Invalid_Input && result.vertex_count > 1 {
+        emit_curve_polyline_dust(
+            ctx.particles, vertices[:result.vertex_count], ctx.color)
+    }
+}
+
+// Emit one constructed world geometry through its bounded shape explication.
+emit_shape_world_constructed_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: shapemodel.Shape_Entity,
+    geometry: shapemodel.Shape_Geometry) {
+    switch geometry.kind {
+    case .Arc:
+        emit_shape_world_arc_burst(ctx, entity, false)
+    case .Filled_Arc:
+        emit_shape_world_arc_burst(ctx, entity, true)
+    case .Trochoid:
+        emit_shape_world_trochoid_burst(ctx, entity)
+    case .Cycloid:
+        emit_shape_world_cycloid_burst(ctx, entity, geometry.payload.cycloid)
+    case .Polygon:
+        emit_shape_world_polygon_burst(ctx, geometry.payload.polygon)
+    case .Circle_Region:
+        emit_shape_world_circle_region_burst(
+            ctx, geometry.payload.circle_region)
+    case .Point, .Line, .Trochoid_Tool, .Cycloid_Tool,
+        .Pen, .Compass:
+    }
+}
+
+//   Emit one direct world geometry using the legacy sampling behavior.
+emit_shape_world_geometry_burst :: proc(
+    ctx: Shape_World_Burst_Context,
+    entity: shapemodel.Shape_Entity,
+    geometry: shapemodel.Shape_Geometry) {
+    if geometry.kind == .Point {
+        position, found := shape_world_burst_position(ctx.world, entity)
+        if found {
+           emit_point_burst(ctx.particles, position, ctx.color)
+        }
+        return
+    }
+    if geometry.kind == .Line {
+        first, first_ok := shape_world_burst_position(
+            ctx.world, geometry.payload.line.first)
+        second, second_ok := shape_world_burst_position(
+            ctx.world, geometry.payload.line.second)
+        if first_ok && second_ok {
+            emit_line_dust(ctx.particles, first, second, ctx.color)
+        }
+        return
+    }
+    emit_shape_world_constructed_burst(ctx, entity, geometry)
+}
+
+//   Emit visible non-tool geometry after resolving and kicking its clear effect.
+emit_shape_world_hide_geometry_burst :: proc(
+    ctx: Shape_World_Burst_Context, entity: shapemodel.Shape_Entity,
+    kick_dust: bool) -> bool {
+    geometry, found := shapemodel.shape_component_get(
+        &ctx.world^.geometries, &ctx.world^.registry, entity)
+    if !found || geometry^.kind == .Pen || geometry^.kind == .Compass ||
+        geometry^.kind == .Trochoid_Tool || geometry^.kind == .Cycloid_Tool {
+        return false
+    }
     if kick_dust {
-        kick_existing_dust(ps, iso_scale)
+        kick_existing_dust(ctx.particles)
     }
-
-    col := kp.color.? or_else rl.WHITE
-    if emit_shapes_burst(ps, ks, kp, col, true) {
-        return
-    }
+    emit_shape_world_geometry_burst(ctx, entity, geometry^)
+    return true
 }
 
-//   Emit dust bursts across all currently drawable shapes items.
-//
-// Parameters:
-//   - ps: Particle system receiving emitted dust.
-//   - ks: Shapes system used to resolve drawable geometry.
-//
-// Returns:
-//   - none.
-emit_shapes_clear_burst :: proc(
+//   Emit clear dust for one visible entity before its presentation is hidden.
+emit_shape_world_hide_burst :: proc(
     ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    iso_scale: ^Iso_Scale = nil) {
-    if  ps^.use_max_dust_particles < 1 {
-        return
+    world: ^shapemodel.Shape_World,
+    entity: shapemodel.Shape_Entity,
+    kick_dust: bool = true) -> bool {
+    if ps == nil || world == nil || ps.use_max_dust_particles < 1 ||
+        !shapemodel.shape_registry_resolves(&world.registry, entity) {
+        return false
     }
+    style, found := shapemodel.shape_component_get(
+        &world.render_styles, &world.registry, entity)
+    if !found || !style^.visible {
+        return false
+    }
+    if shapemodel.shape_component_contains(&world.labels, &world.registry, entity) {
+        position, position_found := shape_world_burst_position(world, entity)
+        if !position_found {
+           return false
+        }
+        if kick_dust {
+           kick_existing_dust(ps)
+        }
+        emit_label_burst(ps, position, style^.color)
+        return true
+    }
+    return emit_shape_world_hide_geometry_burst(
+        {ps, world, style^.color}, entity, kick_dust)
+}
 
-    kick_existing_dust(ps, iso_scale)
-
-    for i in 0..<MAX_SHAPESPOINTS {
-        kp := &ks.points[i]
-        if !kp.do_draw {
+//   Emit clear dust for every visible label and geometry in one canonical world.
+emit_shape_world_clear_burst :: proc(
+    ps: ^Particle_System,
+    world: ^shapemodel.Shape_World) -> bool {
+    if ps == nil || world == nil || ps.use_max_dust_particles < 1 {
+        return false
+    }
+    kick_existing_dust(ps)
+    for index in 0..<world.render_styles.count {
+        entity := world.render_styles.entities[index]
+        style := world.render_styles.values[index]
+        if !style.visible ||
+           !shapemodel.shape_registry_resolves(&world.registry, entity) {
             continue
         }
-
-        if !is_burst_drawable_kind(kp.kind) {
+        ctx := Shape_World_Burst_Context{ps, world, style.color}
+        if shapemodel.shape_component_contains(&world.labels, &world.registry, entity) {
+            position, found := shape_world_burst_position(world, entity)
+            if found {
+               emit_label_burst(ps, position, style.color)
+            }
             continue
         }
-
-        col := kp.color.? or_else rl.WHITE
-
-        if emit_shapes_burst(ps, ks, kp, col, false) {
-            continue
+        geometry, found := shapemodel.shape_component_get(
+            &world.geometries, &world.registry, entity)
+        if found {
+            emit_shape_world_geometry_burst(ctx, entity, geometry^)
         }
     }
+    return true
 }
 
 //   Advance particle simulation for dust, Ember, and Flicker layers.
@@ -448,14 +552,9 @@ emit_shapes_clear_burst :: proc(
 // Returns:
 //   - none.
 update_particles :: proc(ps: ^Particle_System, dt: f32) {
-    integrate_particle_positions_soa_batch({
-        ps.low_particles.pos_x[:ps^.use_max_dust_particles],
-        ps.low_particles.pos_y[:ps^.use_max_dust_particles],
-        ps.low_particles.pos_z[:ps^.use_max_dust_particles],
-        ps.low_particles.vel_x[:ps^.use_max_dust_particles],
-        ps.low_particles.vel_y[:ps^.use_max_dust_particles],
-        ps.low_particles.vel_z[:ps^.use_max_dust_particles],
-    })
+    ps^.dust_floor_rest_count = 0
+    update_and_deposit_low_dust(ps)
+    apply_dust_tool_contacts_to_field(ps)
 
     integrate_particle_positions_soa_batch({
         ps.particles.pos_x[:],
@@ -475,11 +574,7 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
         ps.high_particles.vel_z[:],
     })
 
-    for i in 0..<ps^.use_max_dust_particles {
-        update_particle_dust_index(ps, i)
-    }
-
-    resolve_dust_collisions(ps)
+    dust_field_finish_grounded(ps, dt)
 
     update_mid_ember_particles(ps, dt)
 
@@ -493,170 +588,18 @@ update_particles :: proc(ps: ^Particle_System, dt: f32) {
 
 
 
-//   Check whether a shapes shape kind participates in dust burst emission.
-is_burst_drawable_kind :: #force_inline proc(kind: Shapes_Point_Type) -> bool {
-    return kind == .Label ||
-        kind == .Point ||
-        kind == .Line ||
-        kind == .Circle ||
-        kind == .Filled_Circle ||
-        kind == .Triangle ||
-        kind == .Square ||
-        kind == .Pentagon
-}
-
 //   Emit point burst dust for one position.
-emit_point_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
+emit_point_burst :: proc(ps: ^Particle_System, p: Vector3, col: Color) {
     for _ in 0..<CLEAR_BURST_POINT_COUNT {
         spawn_dust_particle(ps, p, col)
     }
 }
 
 //   Emit label burst dust for one position.
-emit_label_burst :: proc(ps: ^Particle_System, p: Vector3, col: rl.Color) {
+emit_label_burst :: proc(ps: ^Particle_System, p: Vector3, col: Color) {
     for _ in 0..<CLEAR_BURST_LABEL_COUNT {
         spawn_dust_particle(ps, p, col)
     }
-}
-
-//   Emit burst dust for a single shapes draw item.
-//
-// Returns:
-//   - true when caller should abort (hide-burst strict mode), else false.
-emit_circle_kind_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    kp: ^Shapes_Point,
-    config: Circle_Kind_Burst_Config) -> bool {
-
-    center, center_ok := kp.position.?
-    if !center_ok {
-        return config.abort_on_invalid
-    }
-
-    start_id := kp.child_point_head
-    if start_id < 0 || start_id >= MAX_SHAPESPOINTS {
-        return config.abort_on_invalid
-    }
-
-    end_id := ks.points[start_id].next_child_point
-    if end_id < 0 || end_id >= MAX_SHAPESPOINTS {
-        return config.abort_on_invalid
-    }
-
-    start, start_ok := ks.points[start_id].position.?
-    finish, finish_ok := ks.points[end_id].position.?
-    if !start_ok || !finish_ok {
-        return config.abort_on_invalid
-    }
-
-    if kp.active_child > 1 {
-        start, finish = finish, start
-    }
-
-    emit_circle_dust(ps, {center, start, finish, kp.offset, config.color,
-        config.sample_count})
-    return false
-}
-
-//   Emit burst dust for label/point kinds using the host position.
-emit_point_like_kind_burst :: #force_inline proc(
-    ps: ^Particle_System, kp: ^Shapes_Point, col: rl.Color) {
-    p, ok := kp.position.?
-    if !ok {
-        return
-    }
-
-    switch kp.kind {
-    case .Label:
-        emit_label_burst(ps, p, col)
-    case .Point:
-        emit_point_burst(ps, p, col)
-    case .Line, .Circle, .Filled_Circle, .Triangle, .Square, .Pentagon, .Pen, .Compass:
-        return
-    }
-}
-
-//   Emit burst dust for one line kind, resolving its two child endpoints.
-//
-// Returns:
-//   - true when caller should abort (hide-burst strict mode), else false.
-emit_line_kind_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    kp: ^Shapes_Point,
-    col: rl.Color,
-    abort_on_invalid: bool) -> bool {
-
-    a_id := kp.child_point_head
-    if a_id < 0 || a_id >= MAX_SHAPESPOINTS {
-        return abort_on_invalid
-    }
-
-    b_id := ks.points[a_id].next_child_point
-    if b_id < 0 || b_id >= MAX_SHAPESPOINTS {
-        return abort_on_invalid
-    }
-
-    a, a_ok := ks.points[a_id].position.?
-    b, b_ok := ks.points[b_id].position.?
-    if a_ok && b_ok {
-        emit_line_dust(ps, a, b, col)
-    }
-
-    return false
-}
-
-//   Emit burst dust for polygon edge kinds.
-emit_polygon_kind_burst :: #force_inline proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    kp: ^Shapes_Point,
-    col: rl.Color) {
-    switch kp.kind {
-    case .Triangle:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 3, col)
-    case .Square:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 4, col)
-    case .Pentagon:
-        emit_polygon_edge_dust(ps, ks, kp.child_point_head, 5, col)
-    case .Label, .Point, .Line, .Circle, .Filled_Circle, .Pen, .Compass:
-        return
-    }
-}
-
-//   Emit burst dust for a single shapes draw item.
-//
-// Returns:
-//   - true when caller should abort (hide-burst strict mode), else false.
-emit_shapes_burst :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    kp: ^Shapes_Point,
-    col: rl.Color,
-    abort_on_invalid: bool) -> bool {
-
-    switch kp.kind {
-    case .Label, .Point:
-        emit_point_like_kind_burst(ps, kp, col)
-
-    case .Line:
-        return emit_line_kind_burst(ps, ks, kp, col, abort_on_invalid)
-
-    case .Triangle, .Square, .Pentagon:
-        emit_polygon_kind_burst(ps, ks, kp, col)
-
-    case .Circle:
-        return emit_circle_kind_burst(
-            ps, ks, kp, {col, CLEAR_BURST_CIRCLE_SAMPLES, abort_on_invalid})
-    case .Filled_Circle:
-        return emit_circle_kind_burst(
-            ps, ks, kp, {col, CLEAR_BURST_FILLED_CIRCLE_SAMPLES, abort_on_invalid})
-    case .Pen, .Compass:
-        return abort_on_invalid
-    }
-
-    return false
 }
 
 //   Integrate positions for one SoA particle bucket using velocity.
@@ -677,6 +620,35 @@ integrate_particle_positions_soa_batch :: proc(
         particles.pos_x[i] += particles.vel_x[i]
         particles.pos_y[i] += particles.vel_y[i]
         particles.pos_z[i] += particles.vel_z[i]
+    }
+}
+
+// Integrate every live low-layer dust particle using its current velocity.
+integrate_dust_positions :: proc(ps: ^Particle_System) {
+    for i in 0..<ps^.use_max_dust_particles {
+        if !ps.low_particles[i].alive {
+            continue
+        }
+        ps.low_particles.pos_x[i] += ps.low_particles.vel_x[i]
+        ps.low_particles.pos_y[i] += ps.low_particles.vel_y[i]
+        ps.low_particles.pos_z[i] += ps.low_particles.vel_z[i]
+    }
+}
+
+// Integrate, transition, and deposit live low dust in stable slot order.
+update_and_deposit_low_dust :: proc(ps: ^Particle_System) {
+    dust_field_begin_deposit(ps)
+    for index in 0..<ps^.use_max_dust_particles {
+        if !ps^.low_particles.alive[index] {
+            continue
+        }
+        ps^.low_particles.pos_x[index] += ps^.low_particles.vel_x[index]
+        ps^.low_particles.pos_y[index] += ps^.low_particles.vel_y[index]
+        ps^.low_particles.pos_z[index] += ps^.low_particles.vel_z[index]
+        update_particle_dust_index(ps, index)
+        if ps^.low_particles.pos_z[index] <= DUST_FLOOR_Z {
+            dust_field_deposit_grounded_index(ps, index)
+        }
     }
 }
 
@@ -704,13 +676,31 @@ random_i32_range :: proc(ps: ^Particle_System, min_v, max_v: i32) -> i32 {
     return rand.int32_range(min_v, max_v + 1, particle_random_generator(ps))
 }
 
+//   Clear queued tool contacts and their lifetime diagnostics.
+reset_dust_tool_contact_state :: proc(ps: ^Particle_System) {
+    ps.dust_tool_contact_count = 0
+    ps.dust_tool_contact_overflow_count = 0
+    ps.dust_tool_contact_coalesced_count = 0
+    ps.dust_tool_contact_sample_count = 0
+    ps.dust_tool_contact_field_node_visit_count = 0
+}
+
 //   Reset particle-system runtime counters and mark all particle slots as dead.
 reset_particles :: proc(ps: ^Particle_System) {
     ps.next_index = 0
     ps.spawn_timer = 0
+    reset_dust_tool_contact_state(ps)
+    ps.dust_floor_rest_count = 0
+    dust_field_clear(&ps^.dust_field)
+    ps.dust_transfer_count = 0
+    ps.dust_grounded_count = 0
+    ps.dust_peak_speed_sq = 0
+    ps.dust_kinetic_measure = 0
+    ps.dust_spawn_sequence = 0
     for i in 0..<ps^.use_max_dust_particles {
         ps.low_particles[i].alive = false
         ps.low_particles[i].age = 0
+        ps.dust_slot_spawn_sequences[i] = 0
     }
     for i in 0..<MAX_PARTICLES {
         ps.particles.alive[i] = false
@@ -787,7 +777,7 @@ reserve_dead_particle_slot :: proc(ps: ^Particle_System) -> (int, bool) {
 //   Spawn one ember particle near the provided tool-tip position.
 spawn_ember_particle :: proc(
     ps: ^Particle_System, tip_x, tip_y, tip_z: f32,
-    tip_color: rl.Color) -> (Vector3, bool) {
+    tip_color: Color) -> (Vector3, bool) {
 
     index, ok := reserve_dead_particle_slot(ps)
     if !ok {
@@ -825,7 +815,7 @@ spawn_ember_particle :: proc(
 }
 
 //   Spawn one high-layer flicker particle at an origin with random drift.
-spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.Color) {
+spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: Color) {
 
     index, ok := reserve_dead_high_particle_slot(ps)
     if !ok {
@@ -861,7 +851,7 @@ spawn_flicker_particle :: proc(ps: ^Particle_System, origin: Vector3, color: rl.
 
 //   Spawn one burnout-style ember particle near the provided tool-tip position.
 spawn_burnout_ember_particle :: proc(
-    ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: rl.Color) {
+    ps: ^Particle_System, tip_x, tip_y, tip_z: f32, tip_color: Color) {
 
     index, ok := reserve_dead_particle_slot(ps)
     if !ok {
@@ -915,25 +905,32 @@ clamp_xy_bounds_index :: proc(ps: ^Particle_System, i: int) {
 
 //   Spawn one low-layer dust particle around an origin with random kick values.
 spawn_dust_particle_index :: proc(
-    ps: ^Particle_System, i: int, origin: Vector3, col: rl.Color) {
+    ps: ^Particle_System, i: int, origin: Vector3, col: Color) {
+    spawn_dust_particle_index_with_generator(
+        ps, i, origin, col, particle_random_generator(ps))
+}
+
+// Initialize one low-layer dust slot using an explicitly owned random generator.
+spawn_dust_particle_index_with_generator :: proc(
+    ps: ^Particle_System, i: int, origin: Vector3, col: Color,
+    generator: rand.Generator) {
     ps.low_particles[i].alive = true
     ps.low_particles[i].age = 0
-    ps.low_particles[i].life = random_f32_range(ps, DUST_LIFE_MIN, DUST_LIFE_MAX)
-    ps.low_particles[i].dust_sprite_index = u8(random_i32_range(
-        ps,
-        0,
-        core.DUST_ATLAS_VARIANT_COUNT - 1))
+    ps.low_particles[i].life = rand.float32_range(
+        DUST_LIFE_MIN, DUST_LIFE_MAX, generator)
+    ps.low_particles[i].dust_sprite_index = u8(rand.int32_range(
+        0, particlemodel.DUST_ATLAS_VARIANT_COUNT, generator))
 
-    ps.low_particles.pos_x[i] = origin.x + random_f32_range(ps, -0.0022, 0.0022)
-    ps.low_particles.pos_y[i] = origin.y + random_f32_range(ps, -0.0022, 0.0022)
+    ps.low_particles.pos_x[i] = origin.x + rand.float32_range(-0.0022, 0.0022, generator)
+    ps.low_particles.pos_y[i] = origin.y + rand.float32_range(-0.0022, 0.0022, generator)
     ps.low_particles.pos_z[i] = origin.z
 
-    ps.low_particles.vel_x[i] = random_f32_range(ps, DUST_VX_MIN, DUST_VX_MAX)
-    ps.low_particles.vel_y[i] = random_f32_range(ps, DUST_VY_MIN, DUST_VY_MAX)
-    ps.low_particles.vel_z[i] = random_f32_range(ps, DUST_VZ_MIN, DUST_VZ_MAX)
+    ps.low_particles.vel_x[i] = rand.float32_range(DUST_VX_MIN, DUST_VX_MAX, generator)
+    ps.low_particles.vel_y[i] = rand.float32_range(DUST_VY_MIN, DUST_VY_MAX, generator)
+    ps.low_particles.vel_z[i] = rand.float32_range(DUST_VZ_MIN, DUST_VZ_MAX, generator)
 
     ps.low_particles[i].size =
-        random_f32_range(ps, DUST_SIZE_START_MIN, DUST_SIZE_START_MAX)
+        rand.float32_range(DUST_SIZE_START_MIN, DUST_SIZE_START_MAX, generator)
     ps.low_particles[i].ember_size_start = 0.0
     ps.low_particles[i].ember_size_end = 0.0
     ps.low_particles[i].ember_white_at_birth = 0.0
@@ -941,19 +938,68 @@ spawn_dust_particle_index :: proc(
     ps.low_particles[i].lit_frames = 0
 }
 
+// Return one deterministic scenario-request position inside its selected layout.
+scenario_dust_origin :: proc(
+    request: particlemodel.Scenario_Dust_Emission_Request,
+    index: int, generator: rand.Generator) -> Vector3 {
+    result := Vector3{request.x, request.y, 0}
+    switch request.distribution {
+    case .Point:
+    case .Disc:
+        radial := math.sqrt(rand.float32(generator)) * request.radius
+        angle := rand.float32(generator) * f32(2 * math.PI)
+        result.x += radial * f32(math.cos(angle))
+        result.y += radial * f32(math.sin(angle))
+    case .Grid:
+        side := max(int(math.ceil(math.sqrt(f32(request.count)))), 1)
+        if side > 1 {
+            spacing := request.radius * 2 / f32(side - 1)
+            result.x += f32(index % side) * spacing - request.radius
+            result.y += f32(index / side) * spacing - request.radius
+        }
+    }
+    result.x = clamp(result.x, DUST_XY_MIN, DUST_XY_MAX)
+    result.y = clamp(result.y, DUST_XY_MIN, DUST_XY_MAX)
+    return result
+}
+
+// Emit one deterministic diagnostic request without advancing authored-emission RNG.
+emit_scenario_dust :: proc(
+    ps: ^Particle_System,
+    request: particlemodel.Scenario_Dust_Emission_Request) -> int {
+    local_state: rand.Xoshiro256_Random_State
+    generator := rand.xoshiro256_random_generator(&local_state)
+    rand.reset(request.seed, generator)
+    emitted := 0
+    for index in 0..<int(request.count) {
+        slot, ok := reserve_dead_low_particle_slot(ps)
+        if !ok {
+           break
+        }
+        origin := scenario_dust_origin(request, index, generator)
+        spawn_dust_particle_index_with_generator(ps, slot, origin, color.WHITE, generator)
+        ps^.dust_spawn_sequence += 1
+        ps^.dust_slot_spawn_sequences[slot] = ps^.dust_spawn_sequence
+        emitted += 1
+    }
+    return emitted
+}
+
 //   Reserve one low-layer slot and initialize a randomized dust particle.
-spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: rl.Color) {
+spawn_dust_particle :: proc(ps: ^Particle_System, origin: Vector3, col: Color) {
     index, ok := reserve_dead_low_particle_slot(ps)
     if !ok {
         return
     }
 
     spawn_dust_particle_index(ps, index, origin, col)
+    ps^.dust_spawn_sequence += 1
+    ps^.dust_slot_spawn_sequences[index] = ps^.dust_spawn_sequence
 
 }
 
 //   Emit dust samples along a line segment between two points.
-emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: rl.Color) {
+emit_line_dust :: proc(ps: ^Particle_System, a, b: Vector3, col: Color) {
     sample_count := max(CLEAR_BURST_LINE_SAMPLES, 2)
     denom := f32(sample_count - 1)
     for s in 0..<sample_count {
@@ -1035,7 +1081,7 @@ emit_polygon_fill_dust :: proc(
     ps: ^Particle_System,
     vertices: ^[12]Vector3,
     vertex_count: int,
-    col: rl.Color) {
+    col: Color) {
     if vertex_count < 3 {
         return
     }
@@ -1063,44 +1109,6 @@ emit_polygon_fill_dust :: proc(
     }
 }
 
-//   Emit dust along each edge of a polygon resolved from shapes child-point links.
-//
-// Notes:
-//   - Supports up to the local fixed vertex buffer size.
-emit_polygon_edge_dust :: proc(
-    ps: ^Particle_System,
-    ks: ^Shapes_Point_System,
-    first_child_id: int,
-    vertex_count: int,
-    col: rl.Color) {
-    if vertex_count < 3 {
-        return
-    }
-
-    if first_child_id < 0 || first_child_id >= MAX_SHAPESPOINTS {
-        return
-    }
-
-    vertices: [12]Vector3
-
-    current_id := first_child_id
-    for i in 0..<vertex_count {
-        if current_id < 0 || current_id >= MAX_SHAPESPOINTS {
-            return
-        }
-
-        v, ok := ks.points[current_id].position.?
-        if !ok {
-            return
-        }
-
-        vertices[i] = v
-        current_id = ks.points[current_id].next_child_point
-    }
-
-    emit_polygon_fill_dust(ps, &vertices, vertex_count, col)
-}
-
 //   Normalize angle to non-negative range by adding one full turn when needed.
 normalize_theta :: proc(theta: f32) -> f32 {
     t := theta
@@ -1122,244 +1130,270 @@ compute_sweep_delta :: proc(start_theta, end_theta: f32) -> f32 {
     return delta
 }
 
+//   Derive one bounded particle count from the rendered arc length.
+circle_dust_sample_count :: proc(start_radius, end_radius, sweep_delta: f32) -> int {
+    average_radius := (start_radius + end_radius) * 0.5
+    arc_length := average_radius * abs(sweep_delta)
+    count := int(math.round(f64(arc_length * CLEAR_BURST_ARC_DENSITY)))
+    return clamp(count, CLEAR_BURST_ARC_MIN_SAMPLES, CLEAR_BURST_ARC_MAX_SAMPLES)
+}
+
+//   Derive one bounded particle count from the rendered sector area.
+filled_circle_dust_sample_count :: proc(
+    start_radius, end_radius, sweep_delta: f32) -> int {
+    mean_radius_sq := (
+        start_radius * start_radius + start_radius * end_radius +
+        end_radius * end_radius) / 3.0
+    area := 0.5 * abs(sweep_delta) * mean_radius_sq
+    count := int(math.round(f64(area * CLEAR_BURST_FILLED_CIRCLE_DENSITY)))
+    return clamp(count,
+        CLEAR_BURST_FILLED_CIRCLE_MIN_SAMPLES,
+        CLEAR_BURST_FILLED_CIRCLE_MAX_SAMPLES)
+}
+
 //   Emit dust samples along a circular/arc sweep between start and finish points.
 emit_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
-    start_vec := emission.start - emission.center
-    end_vec := emission.finish - emission.center
-
-    start_radius := f32(math.sqrt(start_vec.x * start_vec.x + start_vec.y * start_vec.y))
-    end_radius := f32(math.sqrt(end_vec.x * end_vec.x + end_vec.y * end_vec.y))
-    if start_radius <= 0 && end_radius <= 0 {
+    if emission.radius <= 0 {
         return
     }
-
-    start_theta := f32(math.atan2(start_vec.y, start_vec.x))
-    end_theta := f32(math.atan2(end_vec.y, end_vec.x))
-    sweep_delta := compute_sweep_delta(start_theta, end_theta) + emission.offset
-
-    clamped_sample_count := max(emission.sample_count, 2)
-    denom := f32(clamped_sample_count - 1)
-    for s in 0..<clamped_sample_count {
+    sample_count := circle_dust_sample_count(
+        emission.radius, emission.radius, emission.sweep_theta)
+    denom := f32(sample_count - 1)
+    for s in 0..<sample_count {
         t := f32(s) / denom
-        theta := start_theta + sweep_delta * t
-        radius := math.lerp(start_radius, end_radius, t)
+        theta := emission.start_theta + emission.sweep_theta * t
+
+        sample := emission.center
+        sample.x += f32(math.cos(theta)) * emission.radius
+        sample.y += f32(math.sin(theta)) * emission.radius
+
+        spawn_dust_particle(ps, sample, emission.color)
+    }
+}
+
+//   Emit uniformly distributed dust throughout one rendered circular sector.
+emit_filled_circle_dust :: proc(ps: ^Particle_System, emission: Circle_Dust_Emission) {
+    if emission.radius <= 0 {
+        return
+    }
+    sample_count := filled_circle_dust_sample_count(
+        emission.radius, emission.radius, emission.sweep_theta)
+
+    for _ in 0..<sample_count {
+        t := random_f32_range(ps, 0.0, 1.0)
+        theta := emission.start_theta + emission.sweep_theta * t
+        radius := emission.radius * f32(math.sqrt(random_f32_range(ps, 0.0, 1.0)))
 
         sample := emission.center
         sample.x += f32(math.cos(theta)) * radius
         sample.y += f32(math.sin(theta)) * radius
+        spawn_dust_particle(ps, sample, emission.color)
+    }
+}
 
-        for _ in 0..<2 {
-            spawn_dust_particle(ps, sample, emission.color)
+// Queue one ordered tool contact for replay by the particle worker.
+can_queue_dust_tool_contacts :: proc(ps: ^Particle_System, count: int) -> bool {
+    return ps != nil && count >= 0 &&
+        ps^.dust_tool_contact_count + count <= DUST_TOOL_CONTACT_CAP
+}
+
+// Queue one ordered tool contact for replay by the particle worker.
+queue_dust_tool_contact :: proc(
+    ps: ^Particle_System, contact: particlemodel.Dust_Tool_Contact) -> bool {
+    if ps == nil || ps^.dust_tool_contact_count >= DUST_TOOL_CONTACT_CAP {
+        if ps != nil {
+            ps^.dust_tool_contact_overflow_count += 1
         }
+        return false
     }
+    stored_contact := contact
+    stored_contact.max_spawn_sequence = ps^.dust_spawn_sequence
+    ps^.dust_tool_contacts[ps^.dust_tool_contact_count] = stored_contact
+    ps^.dust_tool_contact_count += 1
+    return true
 }
 
-//   Map x/y position into the dust collision grid cell index.
-dust_grid_cell_index :: proc(x, y: f32) -> int {
-    cx := clamp(int(x / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
-    cy := clamp(int(y / DUST_GRID_CELL_SIZE), 0, DUST_GRID_DIM - 1)
-    return cy * DUST_GRID_DIM + cx
-}
-
-//   Return a deterministic frame-varying hash for dense collision sampling.
-dust_collision_hash :: #force_inline proc(seed: u64) -> u64 {
-    hash := seed
-    hash = (hash ~ (hash >> 30)) * 0xbf58476d1ce4e5b9
-    hash = (hash ~ (hash >> 27)) * 0x94d049bb133111eb
-    return hash ~ (hash >> 31)
-}
-
-//   Return a bounded angular perturbation that changes each collision frame.
-dust_pair_jitter_angle :: #force_inline proc(ia, ib: int, frame: u64) -> f32 {
-    seed := u64(u32(ia)) * 0x9e3779b185ebca87 ~
-        u64(u32(ib)) * 0xc2b2ae3d27d4eb4f ~ frame * 0x94d049bb133111eb
-    unit := f32(u32(dust_collision_hash(seed) >> 32) & 0x00ffffff) / 16777215.0
-    return (unit - 0.5) * DUST_COLLISION_NORMAL_JITTER_RADIANS
-}
-
-//   Apply the collision impulse when two separated particles are approaching.
-apply_dust_pair_impulse :: #force_inline proc(
+// Queue one bounded contact spanning the rendered width of a revealed text label.
+queue_dust_label_reveal_contact :: proc(
     ps: ^Particle_System,
-    ia, ib: int,
-    nx, ny: f32) {
-
-    vn := (ps.low_particles.vel_x[ib] - ps.low_particles.vel_x[ia]) * nx +
-        (ps.low_particles.vel_y[ib] - ps.low_particles.vel_y[ia]) * ny
-    if vn >= 0 {
-        return
+    position: Vector3,
+    text: string,
+    font_size, projection_scale: f32) -> bool {
+    if ps == nil || len(text) == 0 || font_size <= 0 || projection_scale <= 0 {
+        return false
     }
-    impulse := -(1.0 + DUST_COLLISION_RESTITUTION) * vn * 0.5
-    ps.low_particles.vel_x[ia] -= impulse * nx
-    ps.low_particles.vel_y[ia] -= impulse * ny
-    ps.low_particles.vel_x[ib] += impulse * nx
-    ps.low_particles.vel_y[ib] += impulse * ny
+    glyph_count := utf8.rune_count_in_string(text)
+    if glyph_count <= 0 {
+        return false
+    }
+    center_offset := font_size / projection_scale
+    start := Vector3{position.x - center_offset,
+        position.y - center_offset, position.z}
+    width := font_size * 0.6 * f32(glyph_count) / projection_scale
+    finish := Vector3{start.x + width, start.y - width, start.z}
+    return queue_dust_tool_contact(ps, {
+        endpoint = start, segment_first = start, segment_second = finish,
+        has_sweep = true, source = .Label})
 }
 
-//   Resolve one dust-particle pair collision with positional and velocity response.
-separate_dust_pair :: #force_inline proc(
-    ps: ^Particle_System,
-    response: Dust_Pair_Response) {
-
-    if response.penetration <= DUST_COLLISION_POSITION_SLOP {
-        return
+// Report whether one adjacent contact makes its predecessor redundant.
+dust_tool_contacts_can_coalesce :: proc(
+    previous, current: particlemodel.Dust_Tool_Contact) -> bool {
+    if previous.source != current.source ||
+        previous.max_spawn_sequence != current.max_spawn_sequence {
+        return false
     }
-    correction := (response.penetration - DUST_COLLISION_POSITION_SLOP) * 0.5
-    ps.low_particles.pos_x[response.ia] -= response.nx * correction
-    ps.low_particles.pos_y[response.ia] -= response.ny * correction
-    ps.low_particles.pos_x[response.ib] += response.nx * correction
-    ps.low_particles.pos_y[response.ib] += response.ny * correction
-    clamp_xy_bounds_index(ps, response.ia)
-    clamp_xy_bounds_index(ps, response.ib)
+    switch current.source {
+    case .Compass_Filled_Sweep:
+        return previous == current
+    case .Point, .Scenario:
+        return !previous.has_sweep && !current.has_sweep &&
+            previous.endpoint == current.endpoint
+    case .Label:
+        return previous == current
+    }
+    return false
 }
 
-//   Resolve one dust-particle pair collision with positional and velocity response.
-resolve_dust_pair :: proc(
-    ps: ^Particle_System,
-    ia, ib: int,
-    min_sep, radius_sq: f32) {
-    dx := ps.low_particles.pos_x[ib] - ps.low_particles.pos_x[ia]
-    dy := ps.low_particles.pos_y[ib] - ps.low_particles.pos_y[ia]
-    dist_sq := dx * dx + dy * dy
-    if dist_sq >= radius_sq {
-        return
+// Coalesce adjacent redundant contacts without changing raw queue admission.
+coalesce_dust_tool_contacts :: proc(ps: ^Particle_System) {
+    if ps == nil || ps^.dust_tool_contact_count < 2 {
+       return
     }
-
-    dist := math.sqrt(dist_sq)
-    nx, ny: f32
-    if dist_sq < DUST_COLLISION_ZERO_DISTANCE_SQ {
-        angle := dust_pair_jitter_angle(ia, ib, ps^.dust_collision_frame)
-        nx = f32(math.cos(angle))
-        ny = f32(math.sin(angle))
-    } else {
-        nx = dx / dist
-        ny = dy / dist
-
-        jitter := dust_pair_jitter_angle(ia, ib, ps^.dust_collision_frame) *
-            math.clamp(1.0 - dist_sq / radius_sq, 0.0, 1.0)
-        if jitter != 0 {
-            cos_jitter := f32(math.cos(jitter))
-            sin_jitter := f32(math.sin(jitter))
-            nx, ny = nx * cos_jitter - ny * sin_jitter,
-                nx * sin_jitter + ny * cos_jitter
-        }
-    }
-
-    separate_dust_pair(ps, {ia, ib, nx, ny, min_sep - dist})
-
-    apply_dust_pair_impulse(ps, ia, ib, nx, ny)
-}
-
-//   Cache one detected dust collision pair in the static per-frame pair list.
-cache_dust_collision_pair :: #force_inline proc(ps: ^Particle_System, ia, ib: int) {
-    if ps^.dust_pair_count >= DUST_COLLISION_PAIR_CAP {
-        ps^.dust_pair_dropped_count += 1
-        return
-    }
-
-    ps^.dust_pair_a[ps^.dust_pair_count] = i32(ia)
-    ps^.dust_pair_b[ps^.dust_pair_count] = i32(ib)
-    ps^.dust_pair_count += 1
-}
-
-//   Resolve dust collisions for one cell against configured neighbor cells.
-resolve_dust_collisions_on_grid :: proc(
-    ps: ^Particle_System,
-    grid: Dust_Collision_Grid) {
-
-    if grid.cell_count == 0 {
-        return
-    }
-
-    for off in DUST_GRID_NEIGHBORS {
-        ncx, ncy := grid.cell_x + off[0], grid.cell_y + off[1]
-        if ncx < 0 || ncx >= DUST_GRID_DIM || ncy < 0 || ncy >= DUST_GRID_DIM {
+    write_count := 1
+    for read_index in 1..<ps^.dust_tool_contact_count {
+        current := ps^.dust_tool_contacts[read_index]
+        previous := &ps^.dust_tool_contacts[write_count - 1]
+        if dust_tool_contacts_can_coalesce(previous^, current) {
+            ps^.dust_tool_contact_coalesced_count += 1
             continue
         }
-        cb := ncy * DUST_GRID_DIM + ncx
-        nb := int(ps^.dust_counts[cb])
-        same_cell := grid.cell_index == cb
+        ps^.dust_tool_contacts[write_count] = current
+        write_count += 1
+    }
+    ps^.dust_tool_contact_count = write_count
+}
 
-        for li in 0..<grid.cell_count {
-            ia := int(ps^.dust_buckets[grid.cell_index * DUST_GRID_BUCKET_CAP + li])
-            lj_start := li + 1 if same_cell else 0
-            for lj in lj_start..<nb {
-                ib := int(ps^.dust_buckets[cb * DUST_GRID_BUCKET_CAP + lj])
-                dx := ps.low_particles.pos_x[ib] - ps.low_particles.pos_x[ia]
-                dy := ps.low_particles.pos_y[ib] - ps.low_particles.pos_y[ia]
-                dist_sq := dx * dx + dy * dy
-                if dist_sq < grid.radius_sq {
-                    cache_dust_collision_pair(ps, ia, ib)
-                }
-            }
+// Return radius-bounded intervals for one compass span in board-space XY.
+dust_tool_sweep_interval_count :: proc(first, second: Vector3) -> int {
+    delta_x := second.x - first.x
+    delta_y := second.y - first.y
+    length := math.sqrt(delta_x * delta_x + delta_y * delta_y)
+    intervals := int(math.ceil(f64(length / f32(DUST_CONTACT_PUSH_RADIUS))))
+    return clamp(intervals, 1, DUST_TOOL_SWEEP_MAX_INTERVALS)
+}
+
+// Return intervals covering the largest corresponding filled-leg displacement.
+dust_filled_sweep_interval_count :: proc(
+    intent: ^particlemodel.Dust_Tool_Contact) -> int {
+    first_count := dust_tool_sweep_interval_count(
+        intent^.previous_segment_first, intent^.segment_first)
+    second_count := dust_tool_sweep_interval_count(
+        intent^.previous_segment_second, intent^.segment_second)
+    return max(first_count, second_count)
+}
+
+// Apply one interpolated leg of a compound filled-compass sweep.
+apply_dust_filled_sweep_leg :: proc(
+    ps: ^Particle_System, intent: ^particlemodel.Dust_Tool_Contact,
+    sweep_t: f32) {
+    first := math.lerp(intent^.previous_segment_first, intent^.segment_first, sweep_t)
+    second := math.lerp(
+        intent^.previous_segment_second, intent^.segment_second, sweep_t)
+    interval_count := dust_tool_sweep_interval_count(first, second)
+    endpoint_motion := intent^.segment_second - intent^.previous_segment_second
+    for sample_index in 0..=interval_count {
+        leg_t := f32(sample_index) / f32(interval_count)
+        previous := math.lerp(
+            intent^.previous_segment_first, intent^.previous_segment_second, leg_t)
+        current := math.lerp(intent^.segment_first, intent^.segment_second, leg_t)
+        position := math.lerp(first, second, leg_t)
+        motion := current - previous
+        if motion.x == 0 && motion.y == 0 {
+           motion = endpoint_motion
         }
+        ps^.dust_tool_contact_field_node_visit_count +=
+            dust_field_apply_tool_motion(&ps^.dust_field,
+                {position.x, position.y}, {motion.x, motion.y})
+        ps^.dust_tool_contact_sample_count += 1
     }
 }
 
-//   Reset collision scratch storage and retain a fair bounded sample per active cell.
-populate_dust_collision_grid :: proc(
-    ps: ^Particle_System,
-    active_cells: ^[DUST_GRID_DIM_SQUARED]int,
-    active_cell_count: ^int) {
+// Apply one radial sample using the force profile owned by its contact source.
+apply_dust_contact_point :: proc(
+    field: ^Dust_Field_State,
+    position: Vector2,
+    source: particlemodel.Dust_Tool_Contact_Source) -> u64 {
+    if source == .Label {
+        return dust_field_apply_tool_point(
+            field, position, DUST_LABEL_CONTACT_PUSH_RADIUS,
+            DUST_LABEL_CONTACT_PUSH_SPEED)
+    }
+    return dust_field_apply_tool_point(field, position)
+}
 
-    for i in 0..<ps^.use_max_dust_particles {
-        if !ps.low_particles[i].alive {
-            continue
-        }
-        cell := dust_grid_cell_index(ps.low_particles.pos_x[i], ps.low_particles.pos_y[i])
-        ps^.dust_seen_counts[cell] += 1
-        if ps^.dust_counts[cell] < i32(DUST_GRID_BUCKET_CAP) {
-            if ps^.dust_counts[cell] == 0 {
-                active_cells^[active_cell_count^] = cell
-                active_cell_count^ += 1
-            }
-            slot := cell * DUST_GRID_BUCKET_CAP + int(ps^.dust_counts[cell])
-            ps^.dust_buckets[slot] = i32(i)
-            ps^.dust_counts[cell] += 1
-            continue
-        }
-        sample := u64(ps^.dust_seen_counts[cell])
-        seed := u64(u32(cell)) * 0x9e3779b185ebca87 ~
-            u64(u32(i)) * 0xc2b2ae3d27d4eb4f ~ ps^.dust_collision_frame
-        replacement := int(dust_collision_hash(seed) % sample)
-        if replacement < DUST_GRID_BUCKET_CAP {
-            ps^.dust_buckets[cell * DUST_GRID_BUCKET_CAP + replacement] = i32(i)
-        }
+// Apply one filled-compass contact over its complete ruled sweep area.
+apply_dust_filled_sweep_to_field :: proc(
+    ps: ^Particle_System, intent: ^particlemodel.Dust_Tool_Contact) {
+    interval_count := dust_filled_sweep_interval_count(intent)
+    for sweep_index in 0..=interval_count {
+        apply_dust_filled_sweep_leg(
+            ps, intent, f32(sweep_index) / f32(interval_count))
     }
 }
 
-//   Build temporary dust grid buckets and resolve pairwise dust collisions.
-resolve_dust_collisions :: proc(ps: ^Particle_System) {
-    if ps^.use_max_dust_particles < 1 {
+// Apply one queued contact to deposited field momentum.
+apply_dust_tool_contact_to_field :: proc(
+    ps: ^Particle_System, intent: ^particlemodel.Dust_Tool_Contact,
+    field: ^particlemodel.Dust_Field_State) {
+    if intent^.source == .Compass_Filled_Sweep {
+        apply_dust_filled_sweep_to_field(ps, intent)
         return
     }
-
-    mem.set(&ps^.dust_buckets[0], 0, size_of(ps^.dust_buckets))
-    mem.set(&ps^.dust_counts[0], 0, size_of(ps^.dust_counts))
-    mem.set(&ps^.dust_seen_counts[0], 0, size_of(ps^.dust_seen_counts))
-    ps^.dust_pair_count = 0
-    ps^.dust_pair_dropped_count = 0
-    ps^.dust_collision_frame += 1
-
-    active_cells: [DUST_GRID_DIM_SQUARED]int
-    active_cell_count := 0
-
-    populate_dust_collision_grid(ps, &active_cells, &active_cell_count)
-
-    radius_sq : f32 = DUST_COLLISION_RADIUS * DUST_COLLISION_RADIUS
-    min_sep : f32 = DUST_COLLISION_RADIUS * 2.0
-
-    for i in 0..<active_cell_count {
-        ca := active_cells[i]
-        na := int(ps^.dust_counts[ca])
-        cy := ca / DUST_GRID_DIM
-        cx := ca % DUST_GRID_DIM
-        resolve_dust_collisions_on_grid(ps, {cy, cx, ca, na, radius_sq, min_sep})
+    if !intent^.has_sweep {
+        ps^.dust_tool_contact_field_node_visit_count +=
+            apply_dust_contact_point(field,
+                {intent^.endpoint.x, intent^.endpoint.y}, intent^.source)
+        ps^.dust_tool_contact_sample_count += 1
+        return
     }
+    interval_count := dust_tool_sweep_interval_count(
+        intent^.segment_first, intent^.segment_second)
+    inv_intervals := f32(1.0) / f32(interval_count)
+    for sample_index in 0..=interval_count {
+        interpolation := f32(sample_index) * inv_intervals
+        position := Vector2{
+            math.lerp(intent^.segment_first.x, intent^.segment_second.x, interpolation),
+            math.lerp(intent^.segment_first.y, intent^.segment_second.y, interpolation)}
+        ps^.dust_tool_contact_field_node_visit_count +=
+            apply_dust_contact_point(field, position, intent^.source)
+        ps^.dust_tool_contact_sample_count += 1
+    }
+}
 
-    for i in 0..<ps^.dust_pair_count {
-        ia := int(ps^.dust_pair_a[i])
-        ib := int(ps^.dust_pair_b[i])
-        resolve_dust_pair(ps, ia, ib, min_sep, radius_sq)
+// Apply queued contacts to deposited field momentum in command order.
+apply_dust_tool_contacts_to_field :: proc(ps: ^Particle_System) {
+    if ps == nil {
+        return
+    }
+    ps^.dust_tool_contact_sample_count = 0
+    ps^.dust_tool_contact_field_node_visit_count = 0
+    if ps^.dust_tool_contact_count == 0 {
+        return
+    }
+    coalesce_dust_tool_contacts(ps)
+    field := &ps^.dust_field
+    for contact_index in 0..<ps^.dust_tool_contact_count {
+        intent := &ps^.dust_tool_contacts[contact_index]
+        apply_dust_tool_contact_to_field(ps, intent, field)
+    }
+    ps^.dust_tool_contact_count = 0
+}
+
+// Discard pending tool contacts at a runtime generation boundary.
+discard_dust_tool_contacts :: proc(ps: ^Particle_System) {
+    if ps != nil {
+       ps^.dust_tool_contact_count = 0
     }
 }
 
@@ -1425,14 +1459,22 @@ update_particle_dust_index :: proc(ps: ^Particle_System, i: int) {
 
     ps.low_particles.vel_z[i] += DUST_GRAVITY
 
-    ps.low_particles.vel_x[i] *= DUST_DRAG_XY
-    ps.low_particles.vel_y[i] *= DUST_DRAG_XY
+    if ps.low_particles.pos_z[i] > DUST_FLOOR_Z {
+        ps.low_particles.vel_x[i] *= DUST_DRAG_XY
+        ps.low_particles.vel_y[i] *= DUST_DRAG_XY
+    }
     ps.low_particles.vel_z[i] *= DUST_DRAG_Z
 
-    if ps.low_particles.pos_z[i] < DUST_FLOOR_Z {
+    if ps.low_particles.pos_z[i] <= DUST_FLOOR_Z {
         ps.low_particles.pos_z[i] = DUST_FLOOR_Z
         if ps.low_particles.vel_z[i] < 0 {
-            ps.low_particles.vel_z[i] = -ps.low_particles.vel_z[i] * DUST_BOUNCE
+            impact_speed := -ps.low_particles.vel_z[i]
+            if impact_speed <= DUST_FLOOR_REST_SPEED {
+                ps.low_particles.vel_z[i] = 0
+                ps^.dust_floor_rest_count += 1
+            } else {
+                ps.low_particles.vel_z[i] = impact_speed * DUST_BOUNCE
+            }
         }
     }
 

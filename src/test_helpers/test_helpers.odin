@@ -1,14 +1,15 @@
 package test_helpers
 
+import geometry "../core/geometry"
+
 import "core:math"
 import "core:testing"
-
-import "../core"
 
 EPS :: f32(1e-5)
 
 //   Assert that two Vector3 values match component-wise within EPS.
-expect_vec3_close :: proc(t: ^testing.T, actual, expected: core.Vector3, msg: string) {
+expect_vec3_close :: proc(
+    t: ^testing.T, actual, expected: geometry.Vector3, msg: string) {
     testing.expectf(t,
         math.abs(actual.x - expected.x) <= EPS &&
         math.abs(actual.y - expected.y) <= EPS &&

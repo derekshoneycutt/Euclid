@@ -1,620 +1,544 @@
-# Julia Owner Thread Architecture
+# Julia Thread Architecture
+
+> Julia policy runs on one dedicated owner thread. Typed messages and checked
+> result slots connect it to the display, while the display remains authoritative
+> for visible application state.
 
 ## Table Of Contents
 
-1. [Purpose](#purpose)
-1. [System Model](#system-model)
-1. [Source Map](#source-map)
-1. [Runtime Service](#runtime-service)
-1. [Startup And Readiness](#startup-and-readiness)
-1. [Normal Frame Integration](#normal-frame-integration)
-1. [Animation Tick Pipeline](#animation-tick-pipeline)
-1. [View And Dynview Pipeline](#view-and-dynview-pipeline)
-1. [Scratchpad Pipeline](#scratchpad-pipeline)
-1. [Animation Lifecycle And Reload](#animation-lifecycle-and-reload)
-1. [Lifecycle, Failure, And Diagnostics](#lifecycle-failure-and-diagnostics)
-1. [Memory And Odin Context](#memory-and-odin-context)
-1. [Shutdown](#shutdown)
+1. [Why Julia Has An Owner Thread](#why-julia-has-an-owner-thread)
+1. [The Ownership Model](#the-ownership-model)
+1. [Messages Are The Boundary](#messages-are-the-boundary)
+1. [Synchronous Ticks, Asynchronous Work](#synchronous-ticks-asynchronous-work)
+1. [Actors Organize Julia Policy](#actors-organize-julia-policy)
+1. [Memory And Lifetime Boundaries](#memory-and-lifetime-boundaries)
+1. [Follow The Main Workflows](#follow-the-main-workflows)
+1. [Code Map](#code-map)
+1. [Failure, Lifecycle, And Verification](#failure-lifecycle-and-verification)
 1. [Correctness Invariants](#correctness-invariants)
-1. [Verification Coverage](#verification-coverage)
-1. [Current Constraints](#current-constraints)
 
-## Purpose
+## Why Julia Has An Owner Thread
 
-Euclid embeds Julia as its content and animation runtime. Julia runs on one
-persistent owner thread, not on the display thread. That thread initializes
-Julia, executes Julia callbacks, inspects exceptions, reloads content, and shuts
-the runtime down.
+Julia arrived before the dedicated thread. It was first added as the driver for shape
+animations, and callbacks initially ran on the display thread. That was a natural first
+step: the display owned the scene, and Julia produced animation changes for it. As the
+runtime grew, however, every Julia operation—including interactive evaluation, reload,
+and presentation production—had to return to that same thread.
 
-This document describes the implemented architecture. Its central rule is:
+The display thread also has a frame deadline. Letting it enter an embedded language
+runtime couples input, rendering, and frame pacing to Julia compilation, evaluation,
+garbage collection, and other potentially long runtime work. A dedicated owner thread
+moves that Julia work off the display thread's critical path, creates the opportunity to
+overlap it with native frame work, and gives all Julia C API access one stable home. It
+also creates room for more asynchronous services without making every new feature
+another special case in the render loop.
 
-> Only the Julia owner thread may call the Julia C API, and ordinary
-> asynchronous Julia work may affect display-owned state only through bounded
-> published data.
+This is an isolation and scheduling boundary, not a claim that Julia work is free or
+parallel:
 
-Three publication protocols enforce that rule:
+- Julia calls remain serialized on one thread; the actor runtime does not add parallel
+  Julia execution.
+- Julia garbage collection or a slow callback can still delay other Julia requests and
+  consume CPU. Separating the owner reduces direct interference with display-thread
+  execution; it does not eliminate CPU or memory contention, or promise pause-free
+  Julia work.
+- Native work may run on the CPU task pool, but those workers never enter Julia.
+- Some operations intentionally rendezvous with the Julia owner. The frame-tick
+  relationship is asynchronous in execution but still ordered at fixed-step commit
+  boundaries.
 
-- Scratchpad requests and replies use copied fixed-capacity slots.
-- View text and Dynview semantics use complete snapshots.
-- Animation callbacks read immutable query snapshots and emit transactional
-  scene-command batches.
+The architectural goal is to make the ordinary path increasingly asynchronous while
+keeping the points that must be ordered explicit and small.
 
-Rare animation lifecycle operations remain synchronous. They first quiesce
-asynchronous ticks, then run on the owner thread while the display thread waits
-for the correlated completion.
+## The Ownership Model
 
-## System Model
+Three execution roles cooperate but do not share mutable ownership:
 
-Euclid has three distinct execution roles:
+| Role | Owns | Typical work | Boundary back to the display |
+| --- | --- | --- | --- |
+| **Display thread** | Window and GPU resources, UI, canonical scene and Terminal state, fixed-step orchestration | Poll input, prepare UI, route results, publish validated state, draw | Submits typed ingress; validates and commits typed egress or slots |
+| **Julia owner thread** | Julia lifetime and C API, one actor runtime, Julia content generations and policy | Initialize/evaluate Julia, pump actors, run animation callbacks, serialize presentation, reload | Sends typed egress or completes a checked slot |
+| **CPU task pool** | Operation-owned native payloads and caches during finite tasks | Simulation, constraint solving, TeX parse, Dynview compilation/layout, font preparation | Returns joined operation-owned results to the display owner |
 
-- The **display thread** owns window events, raylib, GPU/audio resources, UI
-  state, canonical scene state, fixed-step orchestration, and publication. It
-  must not call the Julia C API or inspect worker-owned Julia handles.
-- The **Julia owner thread** owns Julia lifetime, C API calls, callback
-  execution, Scratchpad runtime, content registration, and reload. It must not
-  render or concurrently mutate canonical scene state.
-- The **CPU worker pool** runs particle, constraint, shape draw-cache, and
-  conditional Dynview compile/layout tasks. It must not call Julia or
-  thread-affine raylib APIs.
-
-The Julia owner thread is not part of the CPU worker pool. It is a dedicated,
-long-lived command processor with different ownership and shutdown rules.
+The Julia owner is a persistent thread, not one of the CPU-pool workers. The display
+thread is the only owner of visible state and native rendering. The Julia thread may
+request changes but cannot directly mutate canonical scene or UI state. Task-pool work
+may prepare native data but cannot call Julia, use thread-affine native APIs, or publish
+visible state.
 
 ```mermaid
 flowchart LR
-    D[Display thread]
-    R[Bounded request channel]
-    J[Julia owner thread]
-    E[Bounded event channel]
-    S[Service-owned slots]
-    C[Canonical scene and UI]
-    P[CPU worker pool]
+    D[Display thread<br/>canonical state and rendering]
+    J[Julia owner thread<br/>Julia C API and actor runtime]
+    W[CPU task pool<br/>finite native work]
 
-    D -->|try_send| R
-    R --> J
-    J -->|complete slot| S
-    J -->|completion event| E
-    E -->|try_recv or correlated wait| D
-    D -->|validate and publish| C
-    D -->|host work batches| P
-    P -->|joined results| C
+    D -->|typed bounded ingress| J
+    J -->|typed egress or checked slot completion| D
+    D -->|operation-owned task| W
+    W -->|joined native result| D
 ```
 
-## Source Map
+The actor runtime exists inside the Julia-owner boundary. It organizes Julia-side
+policy; it is neither a transport between operating-system threads nor an owner of
+display state.
 
-| Concern | Primary files |
-| --- | --- |
-| Shared service and payload types | `src/core/core.odin` |
-| Channels, worker loop, slots, publication, diagnostics | `src/bridge/runtime_service.odin` |
-| Julia initialization and shutdown | `src/bridge/bootstrap.odin` |
-| Animation scheduling, callback capture, lifecycle, reload | `src/bridge/animations.odin` |
-| Immutable animation queries and scene batches | `src/bridge/scene_commands.odin` |
-| Copied Scratchpad requests and replies | `src/bridge/scratchpad.odin` |
-| Dynview snapshot emission and import | `src/bridge/dynview.odin`, `src/dynview/**` |
-| Frame-loop publication boundaries | `src/view/view.odin` |
-| Host worker-pool windows | `src/view/simulation_executor.odin` |
-| Julia callbacks and global loop | `src/julia/script.jl` |
+## Messages Are The Boundary
 
-## Runtime Service
+The bridge uses two typed tagged unions:
 
-`Julia_Runtime_Service` is allocated before Julia starts. It owns:
+- [`Julia_Host_Ingress`](../../../src/bridge/model/runtime.odin) carries
+  display-produced requests to the Julia owner.
+- [`Julia_Host_Egress`](../../../src/bridge/model/runtime.odin) carries Julia-produced
+  results and events back to the display.
 
-- one persistent `thread.Thread`
-- one request channel and one event channel
-- monotonically increasing request IDs
-- lifecycle, reload, failure, and saturation diagnostics
-- fixed Scratchpad, view-snapshot, and animation-tick slots
-- worker-only Dynview staging storage
-- animation pacing and latency counters
+Each direction has a bounded communication link with a producer-owned envelope pool.
+The consumer borrows a message, interprets or copies its contents, then returns it to
+the link that allocated it. This makes memory ownership travel with the message; the
+receiver does not free memory from the other thread's pool.
 
-Both channels have capacity 16. Requests and events are small control records.
-Large payloads do not travel through channels; channel records carry a slot
-index whose storage remains owned by the service.
+The unions carry several message families. Their differences are part of the design,
+not implementation trivia:
 
-This distinction is important. A completion event may be drained before a
-consumer is ready, but the completed payload remains in its slot until the
-display thread publishes or releases it.
+| Conversation | Display to Julia | Julia to display | Payload strategy |
+| --- | --- | --- | --- |
+| Runtime startup and shutdown | `Runtime_Initialize_Requested`, `Runtime_Content_Initialize_Requested`, `Runtime_Shutdown_Requested` | `Runtime_Initialized`, `Runtime_Content_Initialized`, `Runtime_Shutdown_Completed` | Correlated control message and completion |
+| Animation tick | `Animation_Tick_Requested` with slot identity | `Animation_Tick_Completed` with the same slot identity | Small message; immutable query and scene batch stay in checked service-owned slot |
+| Animation selection, reset, reload | `Animation_Lifecycle_Requested` with transaction identity | `Animation_Lifecycle_Completed` | Checked lifecycle slot plus correlated completion |
+| Terminal session and evaluation | `Terminal_Session_Started`, `Evaluation_Requested`, `Terminal_Interactive_Input`, and other typed Terminal requests | `Terminal_Session_Ready`, `Terminal_Output_Batch`, `Evaluation_Completed`, and other typed results | Pooled typed messages carrying request/session identity |
+| Completion and shell interaction | `Completion_Requested` and shell/session requests | `Completion_Result`, `Completion_Failed`, and correlated policy results | Bounded typed request and response |
+| Presentation content | Produced directly by Julia as `View_Content_Ready` | Not an actor conversation | Producer-owned MIME bytes in an egress envelope; display stages a pointer-free snapshot |
+| Terminal tick stream | `Tick_Pulse` and stream acknowledgements/configuration | `Tick_Stream_Configure_Requested`, `Tick_Stream_Stop_Requested` | Typed control and pulse messages, correlated to a Terminal generation |
 
-### Request And Event Types
+Message names above are representative, not the complete union. The exhaustive current
+variants are defined beside the union in
+[`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin) and the
+Terminal protocol in [`src/core/protocol/`](../../../src/core/protocol/). The bridge
+worker dispatches known variants; it is not a generic callback queue.
 
-Every accepted request receives a monotonically increasing `request_id`. Every
-event repeats the request kind, request ID, slot index, and success state.
+```mermaid
+sequenceDiagram
+    participant D as Display owner
+    participant I as Ingress link
+    participant J as Julia owner loop
+    participant A as Julia actor runtime
+    participant E as Egress link
+    participant C as Display subsystem
 
-| Request | Worker action | Completion event |
+    D->>I: typed request and correlation
+    I->>J: owner receives borrowed envelope
+    J->>A: route policy request when actor-owned
+    A-->>J: typed policy outcome
+    J->>E: typed result or completion
+    E-->>D: display routes and validates result
+    D->>C: commit to owning display subsystem
+    D-->>I: return consumed ingress envelope
+    D-->>E: return consumed egress envelope
+```
+
+### When a message is not the payload
+
+Some work is too large or has a different lifetime to copy through a channel for every
+request. In those cases the message carries a handle to an explicitly owned slot:
+
+- Animation tick requests identify a slot containing the immutable query snapshot and
+  bounded scene-command batch.
+- Lifecycle requests identify a slot containing the frozen selection/reset/reload
+  intent.
+- Presentation messages carry source bytes through the producer's bounded pool; after
+  parsing and validation, the display publishes pointer-free semantic records into a
+  snapshot slot.
+
+Handles include reservation or generation identity where reuse could make an old
+completion look current. The consumer checks that identity before commit and is the
+owner that releases or recycles the slot. The exact slot layout and state transitions
+live in [`runtime.odin`](../../../src/bridge/model/runtime.odin).
+
+## Synchronous Ticks, Asynchronous Work
+
+“Julia is asynchronous” does not mean animation policy has been detached from the
+simulation clock. The display keeps a fixed-step simulation, sends animation work to
+Julia without waiting for each callback to finish, and commits a completed result only
+at an authorized fixed-step boundary.
+
+```mermaid
+sequenceDiagram
+    participant D as Display fixed-step loop
+    participant S as Animation result slot
+    participant J as Julia owner
+    participant A as Animation program actor
+    participant N as Native simulation tasks
+
+    D->>S: publish newest completed valid tick
+    D->>N: run constraints and simulation step
+    D->>J: submit next tick with immutable query snapshot
+    J->>A: invoke animation policy
+    A->>S: append bounded scene commands
+    A-->>J: complete tick
+    J-->>S: mark correlated result complete
+    Note over D,S: Display commits it before constraints on a later fixed step
+```
+
+In code, [`run_deterministic_fixed_step`](../../../src/view/simulation/simulation_timing.odin)
+first attempts to publish an available tick result, then submits a new tick if policy is
+not paused, and runs the native simulation work. The result is validated and committed
+before constraints can consume it. A result that finishes after a boundary waits for a
+later one; stale generations or sequences are rejected. Under overload, elapsed work is
+coalesced rather than growing an unbounded backlog.
+
+This preserves a synchronous **commit contract** without making Julia execution
+synchronous with every frame. Rendering never calls Julia and never waits for a tick
+callback. It consumes canonical state after owner-controlled publication and joined
+native preparation.
+
+There are deliberate exceptions:
+
+| Operation | Wait behavior | Why |
 | --- | --- | --- |
-| `Initialize` | Initialize Julia and include the packaged script | `Initialized` |
-| `Invoke` | Execute a serialized owner-thread task | `Invoke_Complete` |
-| `Scratchpad` | Execute one copied Scratchpad operation | `Scratchpad_Complete` |
-| `View_Snapshot` | Generate fallback text and Dynview semantics | `View_Snapshot_Complete` |
-| `Animation_Tick` | Run Julia loops against a query snapshot and command batch | `Animation_Tick_Complete` |
-| `Shutdown` | Tear Julia down and exit the worker loop | `Shutdown_Complete` |
+| Startup initialization | Startup waits for correlated readiness before using Julia content | The runtime must exist before content services can rely on it |
+| Animation tick | Asynchronous request; result commits at a fixed-step boundary | Keep simulation ordering while allowing display/native work to overlap Julia |
+| Terminal evaluation/completion | Request/result messages; no render-loop Julia call | Evaluation and user interaction may take longer than a frame |
+| Animation selection/reset/reload | Synchronous correlated lifecycle barrier after tick quiescence | Replacing Julia generations and animation actors must be exclusive |
+| View/Dynview content | Replaceable asynchronous publication, then native parse/compile work | Content can supersede older content without being a scene mutation |
+| Shutdown | Cooperative owner-thread sequence, then join | Julia cannot be safely unwound from an unrelated thread |
 
-Display-side submission uses `chan.try_send`. Queue saturation cannot
-implicitly block the display thread. Failed insertion leaves the caller
-responsible for recycling its slot or retrying required work, and increments
-`request_saturation_count`.
+The exact frame ordering is in [`frame.odin`](../../../src/view/frame.odin) and
+[`simulation_timing.odin`](../../../src/view/simulation/simulation_timing.odin). This
+guide describes the boundaries; those functions are the authority for call order.
 
-The owner thread uses blocking `chan.recv` while idle and blocking `chan.send`
-for completions. The bounded event channel can therefore apply backpressure to
-the owner if the display stops draining events, without allowing memory growth.
+## Actors Organize Julia Policy
 
-### Worker Dispatch Loop
+All actor turns run on the Julia owner thread. The actors provide typed mailboxes,
+generational identity, request correlation, lifecycle, and cooperative scheduling.
+They do not create parallel Julia execution and do not replace the Odin communication
+links or checked slots.
 
-`julia_runtime_worker` records its operating-system thread ID, then processes
-requests serially until `Shutdown`:
+The owner adapter pumps one shared scheduler with bounded turns and a time budget.
+Terminal and animation policy therefore make progress through one fair ready queue,
+while each actor retains a narrow responsibility. The pump status reports whether more
+service is due; it is not a second thread or a promise that every Julia request finishes
+within a frame.
 
-1. Receive one request.
-1. Execute its request-kind-specific task.
-1. Send exactly one correlated event.
-1. Restore the worker's saved Odin context.
-1. Clear the worker temporary allocator.
+| Lifetime | Actor or service | Policy it owns |
+| --- | --- | --- |
+| Runtime | `AnimationSupervisor` | Animation identity, active program actor, selection/reset/reload transactions, child failure |
+| Runtime | `TerminalController` | Terminal visibility and top-level session policy |
+| Runtime | `HotkeyController` | Hotkey registration and routing policy |
+| Terminal generation | `Evaluator` | Julia evaluation sequencing and correlated output/completion |
+| Terminal generation | `CompletionService`, `ShellInterpolationService` | Completion and shell-expression policy |
+| Terminal generation | `ShellSession`, `TerminalProcessService` | Julia shell policy and coordination of native process lifecycle requests |
+| Terminal generation | `TickService`, `TerminalContainerService` | Tick subscriptions and container observation/policy |
+| Selected animation | `CompatibilityAnimationProgram` | Adapts actor commands to one animation's `Enter`, `Tick`, and `Exit` callbacks |
 
-Serial execution is intentional. The architecture makes Julia concurrent with
-rendering; it does not execute multiple Julia tasks at once.
+Persistent roots survive Terminal generation replacement; evaluator and other
+generation-scoped actors are retired with their session. The selected animation
+program is a child of the persistent supervisor and is replaced transactionally.
+Generation-bearing `ActorId`s prevent a stale message from addressing a reused
+scheduler slot.
 
-`assert_julia_runtime_owner` guards externally reachable task boundaries before
-they invoke Julia-backed helpers.
+```mermaid
+flowchart TD
+    Host[EuclidRuntimeHost]
+    Runtime[One ActorRuntime on Julia owner]
+    Supervisor[AnimationSupervisor<br/>persistent]
+    Program[CompatibilityAnimationProgram<br/>selected animation]
+    Session[HostSessionRuntime<br/>Terminal generation]
+    Evaluator[Evaluator]
+    Services[Completion, shell, process, tick, container services]
+    Roots[TerminalController and HotkeyController<br/>persistent]
 
-## Startup And Readiness
-
-The window exists before Julia initialization begins, so startup can continue
-drawing while the owner thread performs Julia work.
-
-The sequence is:
-
-1. Prepare packaged assets, using a separate startup worker when available.
-1. Create the Julia runtime service and owner thread.
-1. Submit `Initialize`.
-1. Initialize Julia and include `src/julia/script.jl` on the owner thread.
-1. Receive `Initialized` while drawing startup frames.
-1. Allocate canonical host state on the display thread.
-1. Submit `initialize_julia_state_task` through `Invoke`.
-1. Resolve Julia handles and register content on the owner thread.
-1. Receive `Invoke_Complete`.
-1. Publish lifecycle state `Ready` only after registration and priming succeed.
-1. Finish display-thread graphics and audio initialization.
-
-`Initialized` does not mean normal runtime work is ready. The separate `Ready`
-transition prevents animation, view, and Scratchpad work from observing a
-partially registered interface.
-
-After ten seconds without a startup completion, the loading label changes to
-`Julia is not responding` and logs the request ID. Startup continues waiting
-and rendering; closing the window terminates the process.
-
-## Normal Frame Integration
-
-The display loop performs Julia publication and submission at explicit points:
-
-```text
-apply completed Scratchpad replies
-publish newest complete view snapshot
-run zero or more fixed simulation steps
-    publish newest valid animation tick
-    schedule the next animation tick
-    run and join particle + constraint tasks
-run and join per-frame shape + optional Dynview preparation
-request the next view snapshot
-draw
+    Host --> Runtime
+    Runtime --> Supervisor --> Program
+    Runtime --> Session
+    Session --> Evaluator
+    Session --> Services
+    Runtime --> Roots
 ```
 
-There is no Julia call in the drawing path. Rendering consumes canonical host
-state and previously published caches.
+**Boundary to keep clear:** Julia actors decide what Julia-side policy should happen.
+The Odin bridge decides how requests and results cross threads, and display-owned
+subsystems decide whether published results are still valid and when they affect
+visible state.
 
-## Animation Tick Pipeline
+## Memory And Lifetime Boundaries
 
-Animation ticks are asynchronous, replaceable work tied to fixed simulation
-time. Two service-owned slots bound storage, while policy allows only one
-pending request.
+There are two memory stories here, and they should not be conflated: native
+generation-scoped animation storage, and Julia objects that must stay rooted while
+native code calls into Julia.
 
-Each `Animation_Tick_Slot` contains:
+### One shared native animation arena
 
-- request ID
-- animation generation
-- monotonically increasing tick sequence
-- selected animation identity
-- accumulated fixed-step delta
-- submission timestamp
-- immutable `Animation_Query_Snapshot`
-- bounded `Scene_Command_Batch`
+Odin's `Animation_Memory` owns a shared arena borrowed by both the animation-value
+store and Dynview document store. They are separate stores with different APIs, but
+their generation-scoped allocations draw from the same backing arena. This gives
+animation values and authored document data a common lifetime and lets the application
+retire that generation's storage together.
 
-### Immutable Query State
+```mermaid
+flowchart TB
+    Owner[Animation_Memory owner]
+    Arena[Shared generation arena]
+    Values[Animation_Value_Store]
+    Documents[Dynview_Document_Store]
+    Callback[Julia animation callback]
+    Snapshot[Immutable tick query snapshot]
+    Commands[Pending value writes and scene batch]
 
-Before submission, the display thread copies every value asynchronous Julia
-animation code may query:
-
-- the fixed point array
-- animation metadata
-- pen state
-- compass state
-
-During callback execution, `animation_query_snapshot_target` points to this
-slot-owned copy. Query bridge functions use the snapshot rather than reading
-canonical point or tool state concurrently.
-
-The snapshot represents state at submission time. It deliberately does not
-track canonical changes made while Julia is running.
-
-### Transactional Scene Mutation
-
-Before calling Julia animation loops, the owner thread attaches the slot's
-`Scene_Command_Batch` as `scene_command_batch_target`. Mutating bridge exports
-capture commands instead of directly applying them to canonical scene state.
-
-The command vocabulary covers current recurring animation mutations:
-
-- point position, color, brush, offset, and visibility
-- bounded point-hide batches
-- pen and compass locks, movement, visibility, and active state
-- animation metadata
-- drawing-sound state
-- particle emission
-- animation cycle-boundary notification
-
-The batch holds 64 commands. A point batch within one command holds up to eight
-indices. Exceeding either bound marks the entire batch invalid.
-
-The display validates the complete batch before applying any command. Validation
-checks counts, overflow, producing-animation identity, explicit indices, tool
-dependencies, and every bounded point-list index. Commands are applied in
-callback order only after validation succeeds. Invalid, overflowed, stale, or
-exception-producing batches have no partial effect.
-
-### Fixed-Step Publication Boundary
-
-Each fixed step uses this order:
-
-1. Publish the newest completed animation result, if valid.
-1. Schedule the next owner-thread animation tick.
-1. Submit particle and constraint work to the CPU pool.
-1. Join that simulation batch.
-1. Continue GIF capture and any remaining fixed steps.
-
-Publication immediately before constraints is a correctness boundary. Julia
-may command raw pen or compass endpoint positions; constraints must normalize
-that geometry before rendering or capture observes it.
-
-The next tick's query snapshot is captured after publication and before the
-current constraint task completes. Animation code sees committed command intent
-at that boundary, while rendering sees the subsequently settled geometry.
-
-### Stale Result Rejection
-
-A completed animation tick can commit only when all of these remain true:
-
-- its generation equals `animation_generation`
-- its sequence is newer than `animation_last_committed_sequence`
-- no animation reset is pending
-- its animation is still both current and selected
-- its scene-command batch validates
-
-Selection, reset, and reload increment the animation generation and release
-completed old-generation slots. Pointer identity also prevents publishing work
-for a retired interface.
-
-### Backpressure And Pacing
-
-When one tick is pending, later fixed-step deltas are coalesced rather than
-queued. Accumulated time is capped at 250 ms, preventing a slow callback from
-creating an unbounded queue or catch-up spiral.
-
-When submission becomes possible, accumulated time is included in the new
-tick. If slot or request-channel reservation fails, elapsed time is retained
-for a later attempt and the drop counter advances.
-
-Under sustained Julia overload, logical animation time is therefore coalesced
-and capped while display, input, simulation, and rendering continue.
-
-## View And Dynview Pipeline
-
-View generation is independent of drawing. Two service-owned snapshot slots
-provide one published generation and one replacement generation.
-
-Each `View_Snapshot` owns:
-
-- request ID and monotonically increasing snapshot generation
-- producing-animation identity
-- up to 32 KiB of fallback text
-- up to 1,024 Dynview commands and 32 KiB of command text
-- up to 256 math programs
-- up to 4,096 math commands
-- up to 4,096 math nodes
-
-Only one view request may be pending. Additional frame requests are suppressed
-until its completion event clears `view_snapshot_pending`.
-
-### Owner-Thread Generation
-
-The owner resets `dynview_staging`, redirects `dynview_emit_target` to that
-worker-only runtime, and calls the selected animation's view callback. Fallback
-text and every populated semantic span are copied into the reserved snapshot
-before completion.
-
-No returned string may depend on the worker temporary allocator after task
-completion. Fallback bytes are copied into slot-owned storage because the
-worker clears temporary allocations after each request.
-
-### Display Publication
-
-The display selects the newest completed snapshot by generation without
-depending on event order. It verifies every count and requires a closed,
-error-free Dynview stream before import.
-
-Publication also requires the producing animation to remain current. A stale
-snapshot is released, and old published content is cleared rather than shown
-beneath a new selection.
-
-A valid snapshot is copied into display-owned Dynview semantic storage. The
-previous published slot is recycled only after replacement. Current fallback
-text aliases the published slot, so that slot remains reserved after semantic
-data has been copied.
-
-### Compile And Layout
-
-Publication invalidates display-owned Dynview compile and layout caches.
-`prepare_ui_frame` then computes exact panel bounds and tracks panel, font, and
-style inputs.
-
-The per-frame CPU-pool window runs:
-
-- shape draw-cache construction every frame
-- Dynview compilation and layout only when invalidated
-
-These tasks write disjoint caches and may run concurrently. The display joins
-the preparation batch before drawing, making panel rendering cache-only. Scroll
-state, copy-hit targets, and interaction remain display-thread work.
-
-## Scratchpad Pipeline
-
-Scratchpad UI operations use 16 service-owned slots. Each slot has a 4 KiB input
-buffer and a 4 KiB result buffer.
-
-Supported operations are submit and parse classification, completion, history
-navigation, history cursor reset, and history save.
-
-Submission copies text, caret position, and input generation into a free slot.
-The owner invokes Julia and copies result text into the same slot. Completion
-events enqueue slot indices in a bounded FIFO, preserving worker completion
-order.
-
-UI application uses request identity and input generations to prevent stale
-completion, history, or submission replies from overwriting newer edits. The
-display explicitly returns each consumed slot to `Free`.
-
-A submit classifies input first. Incomplete input preserves multiline editing;
-complete input is queued in Julia; parse errors remain visible to the editor.
-Queued evaluation runs inside Julia's global loop during an animation tick, so
-supported scene mutations use the same query-snapshot and command-batch
-boundary as animation code.
-
-Slot exhaustion or request-channel saturation rejects a new request without
-blocking. UI callers must retain or visibly reject required user intent rather
-than assuming every attempted submission was accepted.
-
-## Animation Lifecycle And Reload
-
-Selection, reset, and reload are not ordinary replaceable ticks. They may create
-objects, rebuild registries, replace Julia handles, and require synchronous IDs
-within one callback.
-
-`synchronize_animation_lifecycle` handles this exception:
-
-1. Refuse to begin while an animation tick is pending.
-1. Enter reload state `Quiescing`.
-1. Submit `update_animation_lifecycle_task` through `Invoke`.
-1. Block for that correlated completion while accepting unrelated events.
-1. Increment `animation_generation` after success.
-1. Clear accumulated tick time and completed old-generation slots.
-
-This compatibility barrier is deliberate and narrow. It preserves exclusive
-access while lifecycle callbacks rebuild canonical scene and registry state.
-Ordinary animation, view, and Scratchpad paths remain asynchronous.
-
-### Staged Reload
-
-Packaged asset modification time drives reload. The owner-thread lifecycle task
-uses these states:
-
-```text
-Quiescing -> Including -> Registering -> Publishing -> Idle
-                                      \-> Failed
+    Owner --> Arena
+    Arena --> Values
+    Arena --> Documents
+    Values -->|pack current values| Snapshot
+    Snapshot -->|read-only callback view| Callback
+    Callback -->|stage changes| Commands
+    Commands -->|validate then commit at boundary| Values
 ```
 
-Reload does not retire the active interface before a replacement is usable:
+Before publishing a new generation, the owners clear the value and document-store
+borrowers, reset the arena once, then publish the new generation to both stores. The
+stores must not retain pointers into the prior generation across that reset. Tick
+callbacks do not borrow this mutable canonical arena for arbitrary reads: the display
+packs values into the immutable tick snapshot, and Julia writes are staged for
+validation and commit. See [`memory.odin`](../../../src/core/animation/memory.odin),
+[`value_store.odin`](../../../src/core/animation/value_store.odin),
+[`document_store.odin`](../../../src/dynview/core/document_store.odin), and the shared
+orchestration in [`animation_storage.odin`](../../../src/bridge/animation_storage.odin).
 
-1. Re-extract changed packaged assets.
-1. Include the replacement Julia script.
-1. Preserve the active animation's stable UUID when one exists.
-1. Clear and resolve the inactive state-owned interface slot.
-1. Register content into that candidate.
-1. Restore the active animation by stable UUID.
-1. Publish the candidate, switch the active-slot index, and clear the retired
-  slot after success.
+### Julia GC roots have a defined window
 
-`Euclid_General_State` owns exactly two inline `Euclid_Julia_Interface` slots.
-Their addresses remain stable for the complete host-state lifetime. Reload
-does not allocate or free interface structs. Each slot retains its own growing
-registry arena so a candidate can coexist with the active generation while
-registration and stable-ID restoration are validated.
+The Julia heap is not this arena. Native code holds Julia handles only while the Julia
+owner thread is active, and the handles must remain visible to Julia's collector for
+the exact period native code relies on them:
 
-If registration or restoration fails, the candidate registry arena is cleared,
-the previous slot is restored, and the previous animation is reset. The failed
-package modification time is retained so the same broken revision is not
-retried every frame. A newer revision may trigger another attempt.
+- The worker installs a Julia GC frame rooting the runtime host for its initialized
+  lifetime. The host owns the Julia-side runtime generation and actor runtime; the
+  Odin service pointer is borrowed and remains valid until the worker has shut down.
+- Calls that construct Julia tick or lifecycle arguments push a stack GC frame for the
+  Julia values used during that invocation, then restore the prior GC stack on return.
+- Reload stages a candidate under a local root while it is validated. The stable host
+  continues to root the active generation until the candidate is committed or rolled
+  back.
+- Julia-to-Odin byte transfers use explicit preserved Julia values while native code
+  copies them into producer-owned bridge storage. The receiver does not retain Julia
+  heap pointers.
 
-Successful publication increments `runtime_generation`, clears the failed
-revision marker, and resets the display-owned Scratchpad editor state to match
-the new Julia session. View snapshots carry this runtime generation in addition
-to animation identity, preventing a recycled arena address from validating an
-old snapshot after later reloads.
+This is a bounded rooting window, not a global pause of Julia GC: ordinary Julia
+collection remains part of Julia execution. When investigating a stale Julia handle,
+start with the worker-lifetime frame and teardown in
+[`runtime_service.odin`](../../../src/bridge/runtime_service.odin), then inspect
+per-call roots and reload staging in
+[`animations.odin`](../../../src/bridge/animations.odin) and
+[`bootstrap.odin`](../../../src/bridge/bootstrap.odin). Julia-side byte preservation is
+visible in [`presentation.jl`](../../../src/julia/bridge/presentation.jl).
 
-## Lifecycle, Failure, And Diagnostics
+The bridge links, tick slots, lifecycle slot, and view snapshot slots have their own
+bounded storage and lifetimes; they do not allocate from the shared animation arena.
+Their definitions and ownership transitions are in
+[`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin) and the
+transport helpers in [`communication_link.odin`](../../../src/bridge/communication_link.odin).
 
-The service lifecycle is:
+## Follow The Main Workflows
 
-```text
-Not_Started -> Starting -> Ready -> Shutdown_Requested -> Stopped
-                    \-------------------------------> Failed
+### Terminal: interactive request and response
+
+Terminal is the clearest actor conversation. Odin owns input routing, the terminal
+grid, scrollback, selection, PTY/process resources, and rendering. Julia actors own
+evaluation sequencing, completion, shell policy, and generation-local session state.
+
+```mermaid
+sequenceDiagram
+    participant D as Display Terminal
+    participant I as Ingress link
+    participant H as Julia host adapter
+    participant R as ActorRuntime
+    participant A as Terminal actor
+    participant E as Egress link
+
+    D->>I: typed request + request/session generation
+    I->>H: receive on Julia owner
+    H->>A: typed actor message
+    H->>R: bounded pump
+    R->>A: actor turn
+    A-->>H: output, completion, or lifecycle result
+    H-->>E: typed egress message
+    E-->>D: validate request and generation
+    D->>D: update display-owned Terminal state
 ```
 
-Readiness is published after initialization and content registration.
-Initialization or shutdown completion failure marks the lifecycle terminally
-`Failed`. Ordinary request failures do not stop the runtime; they update
-attributed diagnostics.
+Ingress/egress variants include evaluation requests and output batches, completion
+requests/results, session start/stop, interactive input, input ownership, geometry and
+capability observations, process requests, and tick-stream messages. Rather than
+duplicating all Terminal protocol fields here, follow
+[`src/core/protocol/`](../../../src/core/protocol/) and
+[`src/view/terminal/service/terminal_service.odin`](../../../src/view/terminal/service/terminal_service.odin).
+For Terminal behavior and lifecycle, see [Terminal Architecture](TerminalArchitecture.md).
 
-`Julia_Runtime_Diagnostics` exposes display-safe scalar state:
+Each Terminal session generation has a fresh Julia module, REPL runtime, and
+generation-scoped actors. Evaluation output can be emitted in bounded batches; Odin
+validates the generation before changing its grid. Native process ownership stays on
+the Odin side even when Julia shell policy participates.
 
-- lifecycle state
-- active request ID and kind
-- total failed requests
-- last failed request ID and kind
-- request-channel saturation count
-- reload state
-- runtime generation
+### Animation: snapshot in, transaction out
 
-`Animation_Tick_Diagnostics` additionally exposes queue depth and high water,
-submitted, committed, coalesced, stale, and dropped counts, the last committed
-sequence, and last and maximum publication latency.
+An animation callback must not query or mutate canonical display state while Julia is
+running independently. The display reserves a tick slot and copies the query values
+Julia may read into an immutable snapshot. Mutation bridge calls append commands to
+that slot's bounded scene batch rather than changing the scene directly.
 
-These snapshots do not invoke Julia or expose Julia-owned handles. Julia
-exceptions are reported at their bridge boundary. A failed animation callback
-invalidates its batch, preventing partial publication.
+The request carries a slot handle plus request ID, animation generation, and tick
+sequence. The Julia owner validates the identity, routes the typed tick through
+`AnimationSupervisor` to the one active compatibility program, and returns a correlated
+completion. Odin validates the completed slot and commits its whole batch at a
+fixed-step boundary. Stale, malformed, or overflowing results are not partially
+applied.
 
-## Memory And Odin Context
+### Invocation Content Query
 
-Cross-thread payload storage is fixed and service-owned. Normal frame operation
-does not allocate request payloads for animation ticks, view snapshots, or
-Scratchpad requests.
+Animation code can query the content specification selected for its current callback,
+including the locale, edition, animation identity, and content/runtime generations.
+The host copies and validates that value for the specific `Enter`, `Tick`, or `Exit`
+invocation, then binds the Julia-owned copy only for that callback. It does not expose a
+pointer into Odin storage or provide a background query of mutable current selection.
+This is why an old `Exit` and a replacement `Enter` can each see the correct
+generation-specific value during a lifecycle transition.
 
-### Host Allocation Ownership
+Follow
+[`content_specification.odin`](../../../src/bridge/content_specification.odin) and
+[`content_specification.jl`](../../../src/julia/bridge/content_specification.jl).
+The callback-scoping contract is also used by [Localization And Editions](Localization.md)
+and the [Architecture Summary](ArchitectureSummary.md).
 
-- `Euclid_General_State` is allocated once by the display thread with its
-  persistent context allocator. Both Julia interface structs are inline in
-  this allocation and have no separate allocator or deallocation path.
-- `Julia_Runtime_Service` and its worker-only `Dynview_System` staging object
-  are allocated once with the startup context allocator. The service owns and
-  frees both after the Julia worker has stopped.
-- Request and event channels each allocate one fixed capacity-16 buffer with
-  the startup context allocator. The service destroys both during teardown.
-- `thread.create_and_start_with_data` owns the persistent worker's platform
-  thread resources. `thread.destroy` releases them after `Shutdown_Complete`.
-- Scratchpad slots, view snapshots, animation tick slots, query snapshots, and
-  scene-command batches are inline in `Julia_Runtime_Service`. Request traffic
-  does not allocate these payloads.
+Start at [`animations.odin`](../../../src/bridge/animations.odin) for request
+submission, validation, and fixed-step publication; then follow
+[`scene_commands.odin`](../../../src/bridge/scene_commands.odin) for transactional
+mutation and [`animation_supervisor.jl`](../../../src/julia/policy/animation_supervisor.jl)
+for Julia policy. The query and command data structures are in
+[`src/bridge/model/model.odin`](../../../src/bridge/model/model.odin).
 
-### Registry Arena Ownership
+### Selection, reset, and reload: an explicit barrier
 
-Each interface slot lazily creates one growing virtual-memory arena during its
-first content registration. That arena owns the complete generation registry:
+Lifecycle changes are not ordinary ticks. Replacing a selected program or content
+generation requires exclusive ordering with the currently active callback:
 
-- animation interface nodes
-- copied animation names
-- UUID lookup-table buffers
+1. Stop admitting new ticks and wait until the outstanding tick is resolved.
+1. Freeze the requested operation and current identity into a checked lifecycle slot.
+1. Send `Animation_Lifecycle_Requested` and wait for its correlated completion while
+   still routing unrelated egress.
+1. Validate the result; only then advance the animation/runtime generation and resume
+   normal tick submission.
 
-`prepare_julia_interface_generation` calls `arena_free_all` before reusing an
-inactive slot. Rollback clears the failed candidate arena. Successful
-publication clears the retired arena after the active-slot switch. Clearing
-retains arena infrastructure for the next reload; application teardown calls
-`arena_destroy` for both slots.
+Reload builds and validates a candidate runtime generation before publication. If
+loading or candidate activation fails, it retires the candidate and restores the prior
+active generation. This is intentionally a narrow synchronous barrier; it is not the
+ordinary communication model for ticks, Terminal requests, or presentation updates.
+Follow [`runtime_session.odin`](../../../src/view/runtime_session.odin),
+[`bootstrap.odin`](../../../src/bridge/bootstrap.odin), and
+[`animation_supervisor.jl`](../../../src/julia/policy/animation_supervisor.jl).
 
-No pointer into a cleared registry arena may be dereferenced. Animation ticks
-use lifecycle generations, and view snapshots use runtime generations plus
-animation identity, before accepting data that contains registry pointers.
+### Presentation: a replaceable value, not an actor conversation
 
-### Temporary Allocator Ownership
+Julia can publish authored presentation content directly as `View_Content_Ready`.
+There is no presentation actor, and the content is not appended to an animation scene
+batch. The display admits the newest value, parses TeX on native worker tasks when
+needed, validates it, and publishes immutable pointer-free semantics into a snapshot.
+Compilation, shaping, and layout then produce display-readable derived caches.
 
-The owner captures its initial Odin context. `initialize_julia_state_task` also
-stores a valid runtime context in `Euclid_General_State.saved_context`.
-Exported bridge entrypoints restore this context before allocation-sensitive
-Odin work.
+This path can supersede older content while parsing or compilation is underway. The
+display retains a producer-owned envelope until native parsing joins, returns the
+envelope to the Julia link, and publishes only a complete current-generation snapshot.
+Begin at [`presentation.jl`](../../../src/julia/bridge/presentation.jl),
+[`abi-presentation.odin`](../../../src/bridge/abi-presentation.odin), and
+[`presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin);
+continue into [`dynview_native_tex.odin`](../../../src/bridge/dynview_native_tex.odin)
+and [`src/dynview/`](../../../src/dynview/).
 
-After every non-shutdown request, the worker restores its original context and
-clears its temporary allocator. Therefore:
+## Code Map
 
-- worker temporary strings must be copied before task completion
-- slot payloads must not point into temporary storage
-- long-lived bridge state must have an explicit persistent owner
-- bridge callbacks must restore `saved_context` before allocating helpers
+| Question | Start here | Continue into |
+| --- | --- | --- |
+| How are Julia requests and events transported? | [`communication_link.odin`](../../../src/bridge/communication_link.odin), [`runtime_service.odin`](../../../src/bridge/runtime_service.odin) | [`src/bridge/model/runtime.odin`](../../../src/bridge/model/runtime.odin) |
+| Where is request dispatch and owner-thread enforcement? | [`runtime_service.odin`](../../../src/bridge/runtime_service.odin) | [`runtime_host.jl`](../../../src/julia/runtime_host.jl), [`src/julia/host/`](../../../src/julia/host/) |
+| How is the Julia runtime initialized and stopped? | [`bootstrap.odin`](../../../src/bridge/bootstrap.odin) | [`src/julia/sysimage_core.jl`](../../../src/julia/sysimage_core.jl), [`src/julia/host/`](../../../src/julia/host/) |
+| Where is actor creation and pump policy? | [`host.jl`](../../../src/julia/host.jl) | [`src/julia/policy/`](../../../src/julia/policy/) |
+| How is Terminal work submitted and committed? | [`terminal_service.odin`](../../../src/view/terminal/service/terminal_service.odin) | [`src/core/protocol/`](../../../src/core/protocol/), [`src/julia/policy/`](../../../src/julia/policy/) |
+| How are animation requests and batches handled? | [`animations.odin`](../../../src/bridge/animations.odin), [`scene_commands.odin`](../../../src/bridge/scene_commands.odin) | [`animation_supervisor.jl`](../../../src/julia/policy/animation_supervisor.jl), [`animation_protocol.jl`](../../../src/julia/policy/animation_protocol.jl) |
+| How is presentation content published? | [`abi-presentation.odin`](../../../src/bridge/abi-presentation.odin) | [`presentation_runtime.odin`](../../../src/view/presentation/presentation_runtime.odin), [`src/dynview/`](../../../src/dynview/) |
+| Where are bridge payload types defined? | [`src/bridge/model/`](../../../src/bridge/model/) | [`src/core/protocol/`](../../../src/core/protocol/) |
+| Where are focused tests? | [`communication_link_test.odin`](../../../src/bridge/communication_link_test.odin) | [`animations_test.odin`](../../../src/bridge/animations_test.odin), [`src/julia/test/`](../../../src/julia/test/) |
 
-The display separately clears its frame temporary allocator after drawing.
+The display frame coordinator that interleaves egress routing, presentation, fixed
+steps, and drawing is [`view.odin`](../../../src/view/view.odin) and
+[`frame.odin`](../../../src/view/frame.odin). The dedicated Julia thread and runtime
+service are implemented in [`runtime_service.odin`](../../../src/bridge/runtime_service.odin).
 
-## Shutdown
+## Failure, Lifecycle, And Verification
 
-Normal shutdown is cooperative and owner-thread-affine:
+### Failure and shutdown
 
-1. Retry nonblocking insertion of `Shutdown` while draining events.
-1. Call `jl_atexit_hook` through `end_julia` on the owner thread.
-1. Send `Shutdown_Complete` and exit the owner loop.
-1. Join/destroy the stopped worker.
-1. Destroy staging storage and both channels.
-1. Destroy both interface registry arenas and free canonical host state.
+The bridge reports queue saturation, allocation failure, stale identity, invalid
+payloads, and actor failure as explicit outcomes. Display-side submission is bounded
+and nonblocking; a failed send leaves the caller responsible for handling the request
+or releasing its reserved slot. Egress may apply bounded backpressure if the display
+stops draining it. Counters and diagnostics are available in the bridge runtime
+service.
 
-Shutdown request saturation or missing completion after five seconds is
-terminal. The process exits because an arbitrary Julia C call cannot be safely
-killed and recovered in-process.
+Shutdown is cooperative because Julia is thread-affine and an arbitrary C API call
+cannot safely be killed from another thread. The display requests shutdown, the owner
+retires animation and Terminal actors in dependency order, Julia performs its own
+teardown, and only after the completion does the display join the thread and destroy
+links and owned storage. Startup and shutdown details are in
+[`bootstrap.odin`](../../../src/bridge/bootstrap.odin) and
+[`runtime_service.odin`](../../../src/bridge/runtime_service.odin).
 
-Service destruction is valid only after shutdown completion. Destroying a live
-owner would violate Julia lifetime ownership and could strand queued payloads.
+### Current boundaries and tradeoffs
+
+- Julia requests execute serially. A slow callback delays later Julia work, though the
+  display can continue ordinary frames and native work.
+- Fixed-step animation publication is ordered, but overload may coalesce elapsed ticks.
+- Selection/reset/reload use a synchronous lifecycle barrier and may briefly stall the
+  display while the old generation is retired and the new one is validated.
+- Presentation production and Terminal requests are message-driven, but both remain
+  subject to bounded queue pressure and owner-thread service time.
+- Separating the thread reduces direct coupling to display execution; it does not
+  guarantee that Julia GC or CPU contention cannot affect responsiveness.
+
+These are current implementation characteristics, not desirable limits for all future
+work. The direction is more asynchronous service where it helps responsiveness, with
+explicit correlation, bounded storage, immutable reads, and owner-controlled commit.
 
 ## Correctness Invariants
 
-1. Every Julia C API call executes on the persistent owner thread.
-1. Every owner-thread request emits one correlated completion event.
-1. Channel payload pointers refer only to storage that outlives the request.
-1. Animation bridge queries read the active immutable query snapshot.
-1. Recurring animation mutations are captured in a bounded scene batch.
-1. Scene batches validate completely before any canonical mutation.
-1. Animation results publish at a fixed-step boundary before constraints.
-1. View snapshots publish only after complete semantic validation.
-1. Slot state is recycled only by the responsible consumer.
-1. Selection, reset, and reload invalidate asynchronous old-generation work.
-1. Rendering performs no Julia call and consumes only joined host caches.
-1. Julia owner work never calls thread-affine raylib rendering APIs.
+Keep these boundaries intact when changing message types, task ordering, or actor
+policy:
 
-Using the request channel alone does not make a callback safe. Its reads and
-writes must also use the correct snapshot, command, or copied-slot protocol.
+- Only the Julia owner thread enters the Julia C API.
+- Julia actors organize policy but never mutate visible display-owned state.
+- A transport envelope stays owned by its producer and returns to that producer after
+  consumption; large or long-lived work uses an explicitly owned slot or snapshot.
+- Animation queries read an immutable submission snapshot; scene changes publish as a
+  complete validated batch before constraints.
+- Generation, sequence, and reservation identity are checked before a delayed result is
+  committed or storage is reused.
+- Presentation snapshots and native task results are fully prepared and joined before
+  display-owned aliases or caches consume them.
+- Rendering does not call Julia or consume worker-owned mutable data.
 
-## Verification Coverage
+### Verification
 
-Odin view tests cover ordered scene-command commit, atomic invalid-batch
-rejection, deferred mutation, tool dependency validation, immutable animation
-queries, generation and sequence rejection, bounded tick coalescing, failure
-attribution, reload failure tracking, Dynview snapshot validation, newest
-completion selection, stale-view clearing, stale Scratchpad reply rejection,
-and repeated host worker-pool joins.
+The bridge and actor behavior have Odin and Julia test coverage. For a focused entry,
+start with [`communication_link_test.odin`](../../../src/bridge/communication_link_test.odin),
+[`animations_test.odin`](../../../src/bridge/animations_test.odin), and
+[`src/julia/test/animation_actor_tests.jl`](../../../src/julia/test/animation_actor_tests.jl);
+Terminal, runtime-host, and publication tests are grouped under
+[`src/julia/test/`](../../../src/julia/test/) and their owning Odin packages.
 
-Julia tests cover Scratchpad, bridge helpers, geometry, LaTeX, and
-runtime-facing content behavior. The required repository gate is the standard
-Makefile target:
+Use the repository's documented commands rather than ad hoc language invocations:
 
 ```sh
-make test
+julia tools/make.jl unit julia
+julia tools/make.jl unit odin
+cmake --build --preset default --target check
 ```
 
-This runs the validated build, vet analysis, and all tests (equivalent to
-`julia make.jl -vt`).
-
-Automated tests do not prove visual timing, responsiveness during an arbitrary
-stuck Julia C call, or platform-specific embedding behavior. Release validation
-must still exercise startup, selection, reset, Scratchpad evaluation, valid and
-invalid reloads, induced Julia delay, and shutdown on supported platforms.
-
-## Current Constraints
-
-- Julia work is serialized on one owner thread. A slow request delays later
-  Julia requests, although ordinary display frames continue.
-- Animation lifecycle operations use a synchronous compatibility barrier after
-  ticks quiesce. Selection, reset, and reload may briefly stall display.
-- Animation overload coalesces and caps logical time instead of guaranteeing
-  every intermediate tick.
-- View generation is requested once per frame when no request is pending; it is
-  not driven by a complete semantic invalidation graph.
-- Scratchpad and request saturation are bounded rejection conditions. Required
-  UI intent must handle unsuccessful submission explicitly.
-- Startup can report an unresponsive owner but cannot safely cancel an
-  arbitrary Julia call in-process.
-- Shutdown timeout is terminal because Julia cannot be forcefully unwound while
-  preserving process integrity.
-
-These are current operating characteristics. Changes to them must
-preserve the ownership, boundedness, and atomic-publication invariants above.
+The full `check` target is the repository gate. Unit suites alone do not verify the
+validated build and repository analysis; consult [Testing Strategy](TestingStrategy.md)
+for selecting behavioral evidence when a change depends on frame ordering, reload,
+Terminal interaction, or shutdown.

@@ -7,16 +7,16 @@ const VERIFICATION_ANALYSIS_PROJECT = get(
     "ODIN_JULIA_ANALYSIS_PROJECT",
     joinpath(@__DIR__, "analysis"))
 
-# Activate the analyzer project so JSON3 is available when this script runs
+# Activate the analyzer project so JSON is available when this script runs
 # standalone; reactivation is a no-op when the driver already activated it.
-if !isdefined(Base, :JSON3) && Base.active_project() !=
+if !isdefined(Base, :JSON) && Base.active_project() !=
         joinpath(VERIFICATION_ANALYSIS_PROJECT, "Project.toml")
     Pkg.activate(VERIFICATION_ANALYSIS_PROJECT; io=devnull)
 end
 
 module EuclidVerification
 
-using JSON3
+using JSON
 
 include(joinpath(@__DIR__, "test_runner.jl"))
 using .EuclidTestRunner
@@ -48,6 +48,17 @@ struct OutputPolicy
     settings_path::Union{Nothing, String}
 end
 
+mutable struct OptionParseState
+    verbosity::Verbosity
+    color::Symbol
+    format::String
+    report_path::Union{Nothing, String}
+    settings_path::Union{Nothing, String}
+end
+
+"""Construct the default mutable state used while parsing verification options."""
+OptionParseState() = OptionParseState(Summary, :auto, "text", nothing, nothing)
+
 """Construct an output policy without report or settings overrides."""
 OutputPolicy(verbosity::Verbosity, color::Symbol, format::String) =
     OutputPolicy(verbosity, color, format, nothing, nothing)
@@ -74,37 +85,58 @@ function usage(io::IO=stdout)
     println(io, "  --report=PATH           Write the comprehensive analysis report")
 end
 
+"""Parse a numeric verbosity value or return its validation error."""
+function parse_verbosity(value::AbstractString)
+    value in ("0", "1", "2") || return "invalid verbosity: $value"
+    return Verbosity(parse(Int, value))
+end
+
+"""Apply one non-empty settings or report path option."""
+function parse_path_option!(state::OptionParseState, argument::String)
+    value = split(argument, "="; limit=2)[2]
+    if startswith(argument, "--settings=")
+        isempty(value) && return "settings path must not be empty"
+        state.settings_path = value
+    else
+        isempty(value) && return "report path must not be empty"
+        state.report_path = value
+    end
+    return nothing
+end
+
+"""Apply one verification option, returning a sentinel or error when parsing stops."""
+function parse_option!(state::OptionParseState, argument::String)
+    argument in ("-h", "--help") && return :help
+    if argument == "--verbose"
+        state.verbosity = Trace
+    elseif startswith(argument, "--verbosity=")
+        value = split(argument, "="; limit=2)[2]
+        verbosity = parse_verbosity(value)
+        verbosity isa String && return verbosity
+        state.verbosity = verbosity
+    elseif startswith(argument, "--color=")
+        state.color = Symbol(split(argument, "="; limit=2)[2])
+    elseif startswith(argument, "--format=")
+        state.format = split(argument, "="; limit=2)[2]
+    elseif startswith(argument, "--settings=") ||
+            startswith(argument, "--report=")
+        return parse_path_option!(state, argument)
+    else
+        return "unknown option: $argument"
+    end
+    return nothing
+end
+
 """Parse verification presentation options."""
 function parse_options(arguments::Vector{String})
-    verbosity = Summary
-    color = :auto
-    format = "text"
-    report_path = nothing
-    settings_path = nothing
+    state = OptionParseState()
     for argument in arguments
-        argument in ("-h", "--help") && return :help
-        if argument == "--verbose"
-            verbosity = Trace
-        elseif startswith(argument, "--verbosity=")
-            value = split(argument, "="; limit=2)[2]
-            value in ("0", "1", "2") || return "invalid verbosity: $value"
-            verbosity = Verbosity(parse(Int, value))
-        elseif startswith(argument, "--color=")
-            color = Symbol(split(argument, "="; limit=2)[2])
-        elseif startswith(argument, "--format=")
-            format = split(argument, "="; limit=2)[2]
-        elseif startswith(argument, "--settings=")
-            settings_path = split(argument, "="; limit=2)[2]
-            isempty(settings_path) && return "settings path must not be empty"
-        elseif startswith(argument, "--report=")
-            report_path = split(argument, "="; limit=2)[2]
-            isempty(report_path) && return "report path must not be empty"
-        else
-            return "unknown option: $argument"
-        end
+        result = parse_option!(state, argument)
+        result === nothing || return result
     end
     return validated_output_policy(
-        verbosity, color, format, report_path, settings_path)
+        state.verbosity, state.color, state.format,
+        state.report_path, state.settings_path)
 end
 
 """Validate parsed presentation modes and construct the output policy."""
@@ -186,9 +218,9 @@ end
 """Run analyzer regression tests and extract structured Julia test counts."""
 function run_analyzer_test_phase(trace::Bool=false)
     test_file = joinpath(ANALYSIS_PROJECT, "test", "runtests.jl")
-    expression = "using Test, JSON3; result=include($(repr(test_file))); " *
+    expression = "using Test, JSON; result=include($(repr(test_file))); " *
         "counts=Test.get_test_counts(result); println(\"$COUNT_MARKER\", " *
-        "JSON3.write(Dict(" *
+        "JSON.json(Dict(" *
         "\"passed\"=>counts.passes + counts.cumulative_passes, " *
         "\"failed\"=>counts.fails + counts.cumulative_fails, " *
         "\"errors\"=>counts.errors + counts.cumulative_errors, " *
@@ -212,7 +244,7 @@ end
 """Parse an analyzer JSON report; report-parse failure returns nothing, not a crash."""
 function parse_json_report(output::String)
     return try
-        JSON3.read(output)
+        JSON.parse(output)
     catch parse_error
         parse_error isa Exception || rethrow()
         nothing
@@ -519,7 +551,7 @@ function write_json_report(io::IO, results::Vector{PhaseResult})
         "schema_version" => "1.0.0",
         "passed" => all(result -> result.status == "PASS", results),
         "phases" => phase_json.(results))
-    JSON3.pretty(io, report)
+    JSON.print(io, report, 4)
     println(io)
 end
 

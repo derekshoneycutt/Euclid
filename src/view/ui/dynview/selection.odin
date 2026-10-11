@@ -1,0 +1,562 @@
+package ui_dynview
+
+import native "../../native"
+import dynviewmodel "../../../dynview/model"
+import color "../../../core/color"
+import dyncore "../../../dynview/core"
+import dynlayout "../../../dynview/layout"
+import geometry "../../../core/geometry"
+import input "../../input"
+import math "core:math"
+import strings "core:strings"
+import viewmodel "../model"
+
+// Group one presentation viewport and its fallback typography for selection.
+Dynview_Selection_View :: struct {
+    panel: geometry.Rectangle,
+    scroll_y: f32,
+    text_padding: f32,
+    row_height: f32,
+    wrap_advance: f32,
+    fallback_text: string,
+}
+
+// Group one selection mode with its current ordered unit count and revision.
+Dynview_Selection_Content :: struct {
+    mode: dynviewmodel.Dynview_Selection_Mode,
+    revision: u64,
+    unit_count: int,
+}
+
+// Group mutable owners and frame data for one pointer-selection update.
+Dynview_Selection_Update :: struct {
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: ^dynviewmodel.Dynview_Selection_State,
+    press_owner: ^viewmodel.Ui_Press_Owner_State,
+    content: Dynview_Selection_Content,
+    view: Dynview_Selection_View,
+    frame: input.Input_Frame,
+}
+
+// Group one selection underlay request with its owner-controlled draw state.
+Dynview_Selection_Draw :: struct {
+    encoder: ^native.Draw_Encoder,
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: dynviewmodel.Dynview_Selection_State,
+    view: Dynview_Selection_View,
+    color: color.Color_RGBA8,
+}
+
+// Append authored separation between two selected semantic document targets.
+dynview_document_write_separator :: proc(
+    builder: ^strings.Builder,
+    separator: dynviewmodel.Dynview_Document_Selection_Separator) {
+
+    switch separator {
+    case .Space:
+        strings.write_byte(builder, ' ')
+    case .Line:
+        strings.write_byte(builder, '\n')
+    case .Item:
+        strings.write_byte(builder, '\n')
+    case .Block:
+        strings.write_string(builder, "\n\n")
+    case .None:
+    }
+}
+
+// Return ordered half-open unit boundaries for one selection anchor and head.
+dynview_selection_ordered :: proc(
+    anchor, head: dynviewmodel.Dynview_Selection_Position) -> (
+        dynviewmodel.Dynview_Selection_Position,
+        dynviewmodel.Dynview_Selection_Position) {
+
+    if anchor.unit_index <= head.unit_index {
+        return anchor, head
+    }
+    return head, anchor
+}
+
+// Compose selected semantic-document targets from sealed canonical and source bytes.
+dynview_document_selection_text :: proc(
+    text: []u8,
+    targets: []dynviewmodel.Dynview_Document_Layout_Copy_Target,
+    anchor, head: dynviewmodel.Dynview_Selection_Position) -> string {
+
+    start, end := dynview_selection_ordered(anchor, head)
+    if start.unit_index < 0 || end.unit_index > len(targets) ||
+        start.unit_index >= end.unit_index {
+        return ""
+    }
+
+    builder := strings.builder_make(context.temp_allocator)
+    for target, relative_index in targets[start.unit_index:end.unit_index] {
+        if target.offset < 0 || target.count < 0 ||
+            target.count > len(text)-target.offset {
+            return ""
+        }
+        if relative_index > 0 {
+            dynview_document_write_separator(&builder, target.separator_before)
+        }
+        strings.write_string(&builder,
+            string(text[target.offset:target.offset+target.count]))
+    }
+    return strings.to_string(builder)
+}
+
+// Resolve the selectable model currently rendered by one presentation runtime.
+dynview_selection_content :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    fallback_text: string) -> Dynview_Selection_Content {
+
+    if runtime == nil {
+        return {.Wrapped_Text, 0,
+            dyncore.text_codepoint_count_span(fallback_text, 0, len(fallback_text))}
+    }
+    revision := runtime^.content.revision
+    if dynlayout.document_layout_is_authoritative(runtime) {
+        return {.Semantic_Document, revision,
+            len(runtime^.compile_cache.document_layout_copy_targets)}
+    }
+    if runtime^.content.presentation_mime == .Text_Plain {
+        return {.Wrapped_Text, revision,
+            dyncore.text_codepoint_count_span(fallback_text, 0, len(fallback_text))}
+    }
+    if runtime^.enabled && runtime^.cache_access_state == .Display_Readable &&
+        runtime^.compile_cache.is_valid && !runtime^.command_buffer.has_stream_error &&
+        len(runtime^.content.presentation_bytes) > 0 {
+        return {.Atomic_Source, revision, 1}
+    }
+    return {.Wrapped_Text, revision,
+        dyncore.text_codepoint_count_span(fallback_text, 0, len(fallback_text))}
+}
+
+// Clear one display-owned presentation selection and its press-independent state.
+dynview_selection_clear :: proc(selection: ^dynviewmodel.Dynview_Selection_State) {
+    if selection != nil {
+        selection^ = {}
+    }
+}
+
+// Reconcile stored logical positions with the currently rendered presentation.
+dynview_selection_reconcile :: proc(
+    selection: ^dynviewmodel.Dynview_Selection_State,
+    content: Dynview_Selection_Content) {
+
+    if selection^.mode != content.mode || selection^.revision != content.revision ||
+        selection^.anchor.unit_index < 0 || selection^.head.unit_index < 0 ||
+        selection^.anchor.unit_index > content.unit_count ||
+        selection^.head.unit_index > content.unit_count {
+        dynview_selection_clear(selection)
+        selection^.mode = content.mode
+        selection^.revision = content.revision
+    }
+}
+
+// Return the screen-space rectangle for one semantic document selection target.
+dynview_document_target_rect :: #force_inline proc(
+    target: dynviewmodel.Dynview_Document_Layout_Copy_Target,
+    view: Dynview_Selection_View) -> geometry.Rectangle {
+
+    return {
+        view.panel.x+view.text_padding+target.x,
+        view.panel.y+view.text_padding-view.scroll_y+target.y,
+        target.width,
+        target.height,
+    }
+}
+
+// Return squared distance from one point to the nearest point in a rectangle.
+dynview_selection_rect_distance_squared :: #force_inline proc(
+    point: geometry.Vector2, rect: geometry.Rectangle) -> f32 {
+
+    dx := max(rect.x-point.x, max(point.x-(rect.x+rect.width), 0))
+    dy := max(rect.y-point.y, max(point.y-(rect.y+rect.height), 0))
+    return dx*dx+dy*dy
+}
+
+// Resolve the nearest semantic target boundary to one screen-space pointer.
+dynview_document_hit_boundary :: proc(
+    targets: []dynviewmodel.Dynview_Document_Layout_Copy_Target,
+    view: Dynview_Selection_View,
+    point: geometry.Vector2) -> dynviewmodel.Dynview_Selection_Position {
+
+    if len(targets) == 0 {
+        return {}
+    }
+    nearest := 0
+    nearest_distance := dynview_selection_rect_distance_squared(
+        point, dynview_document_target_rect(targets[0], view))
+    for target, index in targets[1:] {
+        rect := dynview_document_target_rect(target, view)
+        distance := dynview_selection_rect_distance_squared(point, rect)
+        if distance < nearest_distance {
+            nearest, nearest_distance = index+1, distance
+        }
+    }
+    rect := dynview_document_target_rect(targets[nearest], view)
+    boundary := nearest
+    if point.x >= rect.x+rect.width*0.5 {
+        boundary += 1
+    }
+    return {unit_index = boundary}
+}
+
+// Return the byte boundary after a requested number of UTF-8 codepoints.
+dynview_text_byte_boundary :: proc(text: string, unit_index: int) -> int {
+    if unit_index <= 0 {
+        return 0
+    }
+    units := 0
+    for offset := 0; offset < len(text); {
+        if units == unit_index {
+            return offset
+        }
+        offset += max(1, dyncore.text_utf8_sequence_len(text, offset))
+        units += 1
+    }
+    return len(text)
+}
+
+// Resolve a wrapped fallback pointer to its nearest UTF-8 codepoint boundary.
+dynview_wrapped_hit_boundary :: proc(
+    text: string,
+    view: Dynview_Selection_View,
+    point: geometry.Vector2) -> dynviewmodel.Dynview_Selection_Position {
+
+    max_chars := dyncore.chars_per_text_row(
+        view.panel.width-view.text_padding*2, view.wrap_advance)
+    target_row := max(0, int((point.y-view.panel.y-view.text_padding+
+        view.scroll_y)/view.row_height))
+    start, row := 0, 0
+    for start < len(text) {
+        span := dyncore.next_wrapped_text_span(text, start, max_chars)
+        if row == target_row || span.next_start <= start {
+            row_units := dyncore.text_codepoint_count_span(
+                text, span.line_start, span.line_end)
+            column := int((point.x-view.panel.x-view.text_padding+
+                view.wrap_advance*0.5)/view.wrap_advance)
+            byte_offset := span.line_start
+            for _ in 0..<math.clamp(column, 0, row_units) {
+                byte_offset += max(1, dyncore.text_utf8_sequence_len(text, byte_offset))
+            }
+            return {unit_index = dyncore.text_codepoint_count_span(
+                text, 0, byte_offset)}
+        }
+        start, row = span.next_start, row+1
+    }
+    return {unit_index = dyncore.text_codepoint_count_span(text, 0, len(text))}
+}
+
+// Resolve one pointer to the current presentation mode's nearest logical boundary.
+dynview_selection_hit_boundary :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    content: Dynview_Selection_Content,
+    view: Dynview_Selection_View,
+    point: geometry.Vector2) -> dynviewmodel.Dynview_Selection_Position {
+
+    switch content.mode {
+    case .Semantic_Document:
+        return dynview_document_hit_boundary(
+            runtime^.compile_cache.document_layout_copy_targets, view, point)
+    case .Atomic_Source:
+        rect, ok := dynview_atomic_selection_rect(runtime, view)
+        if !ok {
+            return {}
+        }
+        return {unit_index = point.x >= rect.x+rect.width*0.5 ? 1 : 0}
+    case .Wrapped_Text:
+        return dynview_wrapped_hit_boundary(view.fallback_text, view, point)
+    case .None:
+        return {}
+    }
+    return {}
+}
+
+// Return whether the shared press owner belongs to Dynview selection.
+dynview_selection_owns_press :: #force_inline proc(
+    owner: ^viewmodel.Ui_Press_Owner_State) -> bool {
+    return owner^.active && owner^.kind == .Dynview_Selection
+}
+
+// Advance mouse selection while respecting shared panel press ownership.
+dynview_selection_update_mouse :: proc(
+    update: Dynview_Selection_Update) {
+
+    runtime, selection := update.runtime, update.selection
+    owner, content := update.press_owner, update.content
+    view, frame := update.view, update.frame
+    point := geometry.Vector2{frame.mouse_position.x, frame.mouse_position.y}
+    if .Left in frame.mouse_pressed && !owner^.active && content.unit_count > 0 &&
+        geometry.rectangle_contains(view.panel, point) {
+        position := dynview_selection_hit_boundary(runtime, content, view, point)
+        selection^.anchor, selection^.head = position, position
+        selection^.active, selection^.dragging = false, true
+        owner^ = {active = true, kind = .Dynview_Selection, id = 1001}
+    }
+    if !dynview_selection_owns_press(owner) {
+        return
+    }
+    selection^.head = dynview_selection_hit_boundary(runtime, content, view, point)
+    selection^.active = selection^.anchor != selection^.head
+    if .Left in frame.mouse_released || .Left not_in frame.mouse_down {
+        selection^.dragging = false
+        owner^ = {id = -1}
+    }
+}
+
+// dynview_selection_navigation_target resolves one bounded keyboard boundary.
+dynview_selection_navigation_target :: proc(
+    selection: dynviewmodel.Dynview_Selection_State,
+    unit_count: int,
+    key: input.Input_Key) -> (int, bool) {
+    current := clamp(selection.head.unit_index, 0, unit_count)
+    if key == .Left || key == .Up {
+        return max(current - 1, 0), true
+    }
+    if key == .Right || key == .Down {
+        return min(current + 1, unit_count), true
+    }
+    if key == .Home {
+        return 0, true
+    }
+    if key == .End {
+        return unit_count, true
+    }
+    return current, false
+}
+
+// dynview_selection_apply_navigation moves or extends one logical selection.
+dynview_selection_apply_navigation :: proc(
+    selection: ^dynviewmodel.Dynview_Selection_State,
+    unit_count: int,
+    event: input.Input_Event) {
+    if event.kind != .Press && event.kind != .Repeat ||
+        .Control in event.modifiers || .Alt in event.modifiers ||
+        .Super in event.modifiers {
+        return
+    }
+    target, handled := dynview_selection_navigation_target(
+        selection^, unit_count, event.key)
+    if !handled {
+        return
+    }
+    if .Shift not_in event.modifiers {
+        if selection^.active && (event.key == .Left || event.key == .Up) {
+            target = min(selection^.anchor.unit_index, selection^.head.unit_index)
+        } else if selection^.active && (event.key == .Right || event.key == .Down) {
+            target = max(selection^.anchor.unit_index, selection^.head.unit_index)
+        }
+        selection^.anchor.unit_index = target
+    }
+    selection^.head.unit_index = target
+    selection^.active = selection^.anchor != selection^.head
+}
+
+// Select every logical unit or copy the active selection for keyboard chords.
+dynview_selection_update_keyboard :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: ^dynviewmodel.Dynview_Selection_State,
+    content: Dynview_Selection_Content,
+    fallback_text: string,
+    frame: input.Input_Frame) {
+
+    for event in frame.events {
+        dynview_selection_apply_navigation(selection, content.unit_count, event)
+    }
+    if input.input_chord_pressed(frame, .A, {.Control}) {
+        dynview_selection_select_all(selection, content.unit_count)
+    }
+    if !selection^.active || !input.input_chord_pressed(frame, .C, {.Control}) {
+        return
+    }
+    _ = dynview_selection_copy(runtime, selection^, fallback_text)
+}
+
+// Publish nonempty selection bytes through the shared clipboard boundary.
+dynview_selection_copy :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: dynviewmodel.Dynview_Selection_State, fallback_text: string) -> bool {
+    selected := dynview_selection_text(runtime, selection, fallback_text)
+    return len(selected) > 0 && input.input_set_clipboard_text(selected)
+}
+
+// Select the complete current presentation without changing its copy representation.
+dynview_selection_select_all :: proc(
+    selection: ^dynviewmodel.Dynview_Selection_State, unit_count: int) {
+    if unit_count > 0 {
+        selection^.anchor = {unit_index = 0}
+        selection^.head = {unit_index = unit_count}
+        selection^.active = true
+    }
+}
+
+// Compose one active selection according to its presentation mode.
+dynview_selection_text :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    selection: dynviewmodel.Dynview_Selection_State,
+    fallback_text: string) -> string {
+
+    if !selection.active {
+        return ""
+    }
+    start, end := dynview_selection_ordered(selection.anchor, selection.head)
+    switch selection.mode {
+    case .Semantic_Document:
+        return dynview_document_selection_text(runtime^.content.document_text,
+            runtime^.compile_cache.document_layout_copy_targets, start, end)
+    case .Atomic_Source:
+        if start.unit_index == 0 && end.unit_index == 1 {
+            return string(runtime^.content.presentation_bytes)
+        }
+    case .Wrapped_Text:
+        byte_start := dynview_text_byte_boundary(fallback_text, start.unit_index)
+        byte_end := dynview_text_byte_boundary(fallback_text, end.unit_index)
+        return fallback_text[byte_start:byte_end]
+    case .None:
+    }
+    return ""
+}
+
+// Encode one positive-area selection rectangle into the active presentation pass.
+dynview_draw_selection_rect :: proc(
+    draw: Dynview_Selection_Draw, rect: geometry.Rectangle) {
+    if rect.width > 0 && rect.height > 0 {
+        _ = native.draw_encoder_rectangle(draw.encoder, rect, draw.color)
+    }
+}
+
+// Draw one merged semantic selection fragment and return the next target index.
+dynview_draw_document_selection_group :: proc(
+    draw: Dynview_Selection_Draw, cursor, end, first_line, last_line: int) -> int {
+    cache := &draw.runtime^.compile_cache
+    targets := cache^.document_layout_copy_targets
+    line_index := targets[cursor].line_index
+    group_end := cursor + 1
+    left, right := targets[cursor].x, targets[cursor].x + targets[cursor].width
+    for group_end < end && targets[group_end].line_index == line_index {
+        left = min(left, targets[group_end].x)
+        right = max(right, targets[group_end].x + targets[group_end].width)
+        group_end += 1
+    }
+    content_left := draw.view.panel.x+draw.view.text_padding
+    content_right := draw.view.panel.x+draw.view.panel.width-draw.view.text_padding
+    if line_index >= 0 && line_index < len(cache^.document_layout_lines) {
+        line := cache^.document_layout_lines[line_index]
+        x0 := content_left + left
+        x1 := content_left + right
+        if first_line != last_line && line_index != first_line {
+            x0 = content_left
+        }
+        if first_line != last_line && line_index != last_line {
+            x1 = content_right
+        }
+        y := draw.view.panel.y + draw.view.text_padding - draw.view.scroll_y + line.top
+        dynview_draw_selection_rect(draw, {x0, y, x1-x0, line.bottom-line.top})
+    }
+    return group_end
+}
+
+// Draw semantic selection as merged full-line-height fragments.
+dynview_draw_document_selection :: proc(draw: Dynview_Selection_Draw) {
+    targets := draw.runtime^.compile_cache.document_layout_copy_targets
+    start, end := dynview_selection_ordered(
+        draw.selection.anchor, draw.selection.head)
+    if start.unit_index < 0 || end.unit_index > len(targets) ||
+        start.unit_index >= end.unit_index {
+        return
+    }
+    first_line := targets[start.unit_index].line_index
+    last_line := targets[end.unit_index-1].line_index
+    for cursor := start.unit_index; cursor < end.unit_index; {
+        cursor = dynview_draw_document_selection_group(
+            draw, cursor, end.unit_index, first_line, last_line)
+    }
+}
+
+// Draw wrapped plain-text selection as contiguous row-height fragments.
+dynview_draw_wrapped_selection :: proc(draw: Dynview_Selection_Draw) {
+    text, view := draw.view.fallback_text, draw.view
+    start, end := dynview_selection_ordered(draw.selection.anchor, draw.selection.head)
+    max_chars := dyncore.chars_per_text_row(
+        view.panel.width-view.text_padding*2, view.wrap_advance)
+    content_left := view.panel.x+view.text_padding
+    content_right := view.panel.x+view.panel.width-view.text_padding
+    byte_start, row := 0, 0
+    for byte_start < len(text) {
+        span := dyncore.next_wrapped_text_span(text, byte_start, max_chars)
+        row_start := dyncore.text_codepoint_count_span(text, 0, span.line_start)
+        row_end := dyncore.text_codepoint_count_span(text, 0, span.line_end)
+        next_start := dyncore.text_codepoint_count_span(text, 0, span.next_start)
+        if start.unit_index < next_start && end.unit_index > row_start {
+            left_units := math.clamp(start.unit_index-row_start, 0, row_end-row_start)
+            right_units := math.clamp(end.unit_index-row_start, 0, row_end-row_start)
+            x0 := content_left+f32(left_units)*view.wrap_advance
+            x1 := content_left+f32(right_units)*view.wrap_advance
+            if start.unit_index <= row_start {
+                x0 = content_left
+            }
+            if end.unit_index > row_end {
+                x1 = content_right
+            }
+            y := view.panel.y+view.text_padding+f32(row)*view.row_height-view.scroll_y
+            dynview_draw_selection_rect(draw, {x0, y, x1-x0, view.row_height})
+        }
+        if span.next_start <= byte_start {
+            break
+        }
+        byte_start, row = span.next_start, row+1
+    }
+}
+
+// Draw the active selection beneath presentation glyphs and semantic content.
+dynview_draw_selection :: proc(draw: Dynview_Selection_Draw) {
+    if draw.encoder == nil || !draw.selection.active {
+        return
+    }
+    switch draw.selection.mode {
+    case .Semantic_Document:
+        if draw.runtime != nil {
+            dynview_draw_document_selection(draw)
+        }
+    case .Wrapped_Text:
+        dynview_draw_wrapped_selection(draw)
+    case .Atomic_Source:
+        if draw.runtime != nil {
+            if rect, ok := dynview_atomic_selection_rect(draw.runtime, draw.view); ok {
+                dynview_draw_selection_rect(draw, rect)
+            }
+        }
+    case .None:
+    }
+}
+
+// Return the visible bounds occupied by the legacy standalone presentation layout.
+dynview_atomic_selection_rect :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    view: Dynview_Selection_View) -> (geometry.Rectangle, bool) {
+
+    cache := &runtime^.compile_cache
+    if cache^.layout_item_count <= 0 {
+        return {}, false
+    }
+    first := cache^.layout_items[0]
+    left := view.panel.x+view.text_padding+first.content_offset_x
+    top := view.panel.y+view.text_padding+
+        f32(first.row_offset)*cache^.last_cell_height-view.scroll_y+
+        first.content_offset_y
+    right := left+max(first.draw_width, first.math_advance)
+    bottom := top+max(first.draw_height,
+        f32(first.row_span)*cache^.last_cell_height)
+    for item in cache^.layout_items[1:cache^.layout_item_count] {
+        x := view.panel.x+view.text_padding+item.content_offset_x
+        y := view.panel.y+view.text_padding+
+            f32(item.row_offset)*cache^.last_cell_height-view.scroll_y+
+            item.content_offset_y
+        left, top = min(left, x), min(top, y)
+        right = max(right, x+max(item.draw_width, item.math_advance))
+        bottom = max(bottom, y+max(item.draw_height,
+            f32(item.row_span)*cache^.last_cell_height))
+    }
+    return {left, top, max(0, right-left), max(0, bottom-top)}, true
+}

@@ -1,58 +1,63 @@
 package ui_dynview
 
-import "../../../core"
-import "../../../dynview"
-import view_core "../../core"
+import native "../../native"
+import dynviewmodel "../../../dynview/model"
+import color "../../../core/color"
+import geometry "../../../core/geometry"
+import core "../../../core"
+import dynmath "../../../dynview/math"
+import dyncore "../../../dynview/core"
+import dynlayout "../../../dynview/layout"
+import view_font "../../font"
+import theme "../theme"
+import viewtext "../text"
+import viewmodel "../model"
 
-import rl "vendor:raylib"
-
-
-Mouse_Input_State :: view_core.Mouse_Input_State
-
-UI_BORDER_COLOR :: view_core.UI_BORDER_COLOR
-UI_TEXT_COLOR :: view_core.UI_TEXT_COLOR
-
-
-Dynview_Text_Alignment :: core.Dynview_Text_Alignment
-Dynview_Text_Style :: core.Dynview_Text_Style
-
+UI_BORDER_COLOR :: theme.UI_BORDER_COLOR
+UI_TEXT_COLOR :: theme.UI_TEXT_COLOR
 
 //   Fallback wrapped-text layout metrics, grouped so the styled-or-fallback
 //   entry point passes typography settings as one coherent value.
 Wrapped_Text_Metrics :: struct {
-    padding:      f32,
-    row_height:   f32,
-    wrap_advance: f32,
-    font_size:    f32,
+    padding : f32,
+    row_height : f32,
+    wrap_advance : f32,
+    font_size : f32,
 }
 
 //   Fallback plain-text payload for the styled-or-fallback draw path.
 Fallback_Text_Content :: struct {
-    text:  string,
-    color: rl.Color,
+    text : string,
+    color : color.Color_RGBA8,
 }
 
-//   Panel, font, and metrics for one scratchpad draw pass.
-Scratchpad_Draw_Params :: struct {
-    panel:   rl.Rectangle,
-    scroll_y: f32,
-    font:    rl.Font,
-    metrics: Wrapped_Text_Metrics,
+//   Panel, font, and metrics for one presentation draw pass.
+Presentation_Draw_Params :: struct {
+    encoder: ^native.Draw_Encoder,
+    panel : geometry.Rectangle,
+    scroll_y : f32,
+    font : view_font.Font_Face,
+    font_cache : ^view_font.Font_Cache,
+    metrics : Wrapped_Text_Metrics,
 }
 
 //   Baseline draw position for one child math program.
 Program_Draw_Position :: struct {
-    draw_x:     f32,
-    baseline_y: f32,
+    draw_x : f32,
+    baseline_y : f32,
+    font_size: f32,
+    math_style: dynmath.Math_Style,
+    delimiter_target_height: f32,
 }
 
 
-//   Draw the fallback plain-text content for one scratchpad pass.
-draw_scratchpad_fallback_text :: proc(
-    fallback: Fallback_Text_Content, params: Scratchpad_Draw_Params) {
+//   Draw fallback plain-text content for one presentation pass.
+draw_presentation_fallback_text :: proc(
+    fallback: Fallback_Text_Content, params: Presentation_Draw_Params) {
 
-    view_core.draw_wrapped_text_content(fallback.text,
-        view_core.Wrapped_Text_Content_Params{
+    viewtext.draw_wrapped_text_content(fallback.text,
+        viewtext.Wrapped_Text_Content_Params{
+            encoder = params.encoder,
             panel = params.panel,
             scroll_y = params.scroll_y,
             font = params.font,
@@ -61,63 +66,92 @@ draw_scratchpad_fallback_text :: proc(
             text_color = fallback.color,
             wrap_advance = params.metrics.wrap_advance,
             font_size = params.metrics.font_size,
+            font_cache = params.font_cache,
+            font_key = .Regular,
         })
 }
 
 //   Draw style-aware dynview content, falling back to plain wrapped text when unavailable.
-draw_scratchpad_styled_or_fallback :: proc(
+draw_presentation_styled_or_fallback :: proc(
     state: ^core.Euclid_General_State,
-    ui_runtime: ^core.Euclid_Ui_Runtime_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
     fallback: Fallback_Text_Content,
-    params: Scratchpad_Draw_Params) {
+    params: Presentation_Draw_Params) {
 
     if ui_runtime == nil {
-        draw_scratchpad_fallback_text(fallback, params)
+        draw_presentation_fallback_text(fallback, params)
         return
     }
 
-    runtime := &state^.dynview
-    if runtime^.enabled && runtime^.compile_cache.is_valid &&
-        !runtime^.command_buffer.has_stream_error &&
-        runtime^.command_buffer.command_count > 0 {
-        if runtime^.compile_cache.layout_is_valid {
-            draw_cached_layout(Layout_Draw_Context{
-                state = state,
-                runtime = runtime,
-                panel = params.panel,
-                font = params.font,
-                font_size = params.metrics.font_size,
-            }, params.scroll_y, params.metrics.padding)
-            return
-        }
+    if !draw_presentation_dynview(state, ui_runtime, params) {
+        draw_presentation_fallback_text(fallback, params)
     }
+}
 
-    draw_scratchpad_fallback_text(fallback, params)
+// Draw available authoritative or cached Dynview content for the presentation panel.
+draw_presentation_dynview :: proc(
+    state: ^core.Euclid_General_State,
+    ui_runtime: ^viewmodel.Euclid_Ui_Runtime_State,
+    params: Presentation_Draw_Params) -> bool {
+
+    runtime := &state^.dynview
+    if !runtime^.enabled || runtime^.cache_access_state != .Display_Readable ||
+        !runtime^.compile_cache.is_valid || runtime^.command_buffer.has_stream_error {
+        return false
+    }
+    ctx := Layout_Draw_Context{
+        encoder = params.encoder,
+        state = state, runtime = runtime, panel = params.panel,
+        font = params.font, font_size = params.metrics.font_size,
+    }
+    if dynlayout.document_layout_is_authoritative(runtime) {
+        draw_document_layout(ctx, params.scroll_y, params.metrics.padding)
+        return true
+    }
+    if runtime^.command_buffer.command_count <= 0 {
+        return false
+    }
+    if !runtime^.compile_cache.layout_is_valid {
+        return false
+    }
+    draw_cached_layout(ctx, params.scroll_y, params.metrics.padding)
+    _ = ui_runtime
+    return true
 }
 
 //   Draw one measured child math program with a shared baseline.
 draw_math_program_at :: proc(
     ctx: Layout_Draw_Context,
-    program: core.Dynview_Math_Program,
+    program: dynviewmodel.Dynview_Math_Program,
     position: Program_Draw_Position) {
 
     runtime := ctx.runtime
+    child_ctx := ctx
+    if position.font_size > 0 {
+        child_ctx.font_size = position.font_size
+    }
     child_x := position.draw_x
     command_end := program.command_start + program.command_count
     for command_index in program.command_start..<command_end {
         cmd := runtime^.compile_cache.math_commands[command_index]
-        child_item, ok := dynview.math_program_item(
-            &runtime^.compile_cache,
-            &runtime^.command_buffer,
-            cmd,
-            ctx.font_size)
+        child_item, ok := dynmath.math_program_item({
+            cache = &runtime^.compile_cache,
+            buffer = &runtime^.command_buffer,
+            cmd = cmd,
+            font_size = child_ctx.font_size,
+            command_index = command_index,
+            math_style = position.math_style,
+            delimiter_target_height = position.delimiter_target_height,
+        })
         if !ok {
             continue
         }
 
+        child_x += dynmath.math_program_command_leading_space(
+            &runtime^.compile_cache, program, command_index, child_ctx.font_size)
         child_y := position.baseline_y - child_item.ascent
-        child_style := dynview.style_by_id(child_item.style_id)
-        draw_cached_text_item(ctx, child_style, child_item, child_x, child_y)
+        child_style := dyncore.style_by_id(child_item.style_id)
+        draw_cached_text_item(child_ctx, child_style, child_item, child_x, child_y)
         child_x += child_item.draw_width
     }
 }

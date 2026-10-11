@@ -112,21 +112,28 @@ end
 end
 
 @testset "managed outputs and local links" begin
+    markdown = "[Guide](Guide.md)\n`[]u8`\n```odin\nvalue: []u8\n```\n"
+    @test CodeWiki.local_markdown_links(markdown) == ["Guide.md"]
+
     mktempdir() do directory
         manifest = navigation_test_manifest()
         wiki_root = joinpath(directory, "docs", "wiki")
         mkpath(joinpath(wiki_root, "Code"))
         mkpath(joinpath(wiki_root, "Guides"))
-        write(joinpath(wiki_root, "Home.md"), "# Home\n\n[Code](Code/Home.md)\n")
+        write(joinpath(wiki_root, "Home.md"),
+            "# Home\n\n[Code](Code/Home.md)\n[Architecture](Guides/Architecture.md#architecture)\n")
         write(joinpath(wiki_root, "_Sidebar.md"), "[Home](Home.md)\n")
         write(joinpath(wiki_root, "Code", "Home.md"), "# Code\n")
         write(joinpath(wiki_root, "Guides", "Home.md"), "# Guides\n")
         write(joinpath(wiki_root, "Guides", "Architecture.md"), "# Architecture\n")
+
         expected = ["Home.md", "_Sidebar.md", "Code/Home.md", "Guides/Home.md",
             "Guides/Architecture.md"]
 
         @test validate_managed_outputs(manifest, expected, directory)
         @test validate_wiki_links(manifest, directory)
+        @test_throws ErrorException CodeWiki.validate_local_markdown_link(
+            directory, "docs/wiki/Home.md", "Guides/Architecture.md#missing")
 
         write(joinpath(wiki_root, "Code", "stale.md"), "# Stale\n")
         @test_throws ErrorException validate_managed_outputs(
@@ -136,6 +143,64 @@ end
     end
 end
 
+
+@testset "relocatable authored Guide links" begin
+    mktempdir() do directory
+        manifest = navigation_test_manifest()
+        guide = only(manifest.guides)
+        source = joinpath(directory, manifest.wiki_root, guide.path)
+        mkpath(dirname(source))
+        mkpath(joinpath(directory, "src", "view"))
+        write(joinpath(directory, "src", "view", "frame.odin"), "package view\n")
+        write(joinpath(directory, "README.md"), "# Project\n")
+        markdown = "# Architecture\n\n[Frame](../../../src/view/frame.odin)\n" *
+            "[Project](../../../README.md#project)\n[Guides](Home.md)\n" *
+            "[Self](#architecture)\n[Web](https://example.com)\n" *
+            "`[Missing](../../../missing.odin)`\n```odin\n" *
+            "[Missing](../../../missing.odin)\n```\n~~~text\n" *
+            "[Missing](../../../missing.odin)\n~~~\n"
+        write(source, markdown)
+        prefix = "https://github.com/example/repo/blob/revision/"
+        output = only(CodeWiki.build_authored_guide_outputs(
+            directory, manifest; source_link_prefix=prefix))
+        @test occursin("[Frame]($(prefix)src/view/frame.odin)", output.content)
+        @test occursin("[Project]($(prefix)README.md#project)", output.content)
+        @test occursin("[Guides](Home.md)", output.content)
+        @test occursin("[Self](#architecture)", output.content)
+        @test occursin("[Web](https://example.com)", output.content)
+        @test occursin(split(markdown, "`[Missing]"; limit=2)[2], output.content)
+        @test read(source, String) == markdown
+        outputs = [
+            WikiOutput(owner="wiki_compositor", path="Home.md",
+                content="# Home\n[Architecture](Guides/Architecture.md)\n"),
+            WikiOutput(owner="wiki_compositor", path="_Sidebar.md",
+                content="[Home](Home.md)\n"),
+            WikiOutput(owner="wiki_compositor", path="Guides/Home.md",
+                content="# Guides\n"),
+            WikiOutput(owner="code_wiki", path="Code/Home.md", content="# Code\n")]
+        push!(outputs, output)
+        artifact = joinpath(directory, "bin", "nested", "wiki")
+        @test length(CodeWiki.replace_wiki_artifact(
+            directory, artifact, manifest, outputs)) == 5
+        published = joinpath(directory, "published")
+        sync_wiki_artifact(manifest, artifact, published)
+        page = read(joinpath(published, "Guides-Architecture.md"), String)
+        @test occursin("[Frame]($(prefix)src/view/frame.odin)", page)
+        @test occursin("[Guides](Guides)", page)
+        for target in ("../../../missing.odin", "../../../../outside.odin",
+            "../../../README.md#missing")
+            write(source, "[Invalid]($target)\n")
+            @test_throws ErrorException CodeWiki.build_authored_guide_outputs(
+                directory, manifest; source_link_prefix=prefix)
+        end
+        write(source, "[Missing](Missing.md)\n")
+        invalid = only(CodeWiki.build_authored_guide_outputs(directory, manifest))
+        outputs[end] = invalid
+        @test_throws ErrorException CodeWiki.replace_wiki_artifact(
+            directory, artifact, manifest, outputs)
+        @test read(joinpath(artifact, guide.path), String) == output.content
+    end
+end
 
 @testset "scoped Wiki publication" begin
     mktempdir() do directory

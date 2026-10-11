@@ -1,0 +1,9 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"wait_event":"frame_presented","timeout_ms":10000}
+{"assert_state":"simulation_running"}
+{"do":"pause_simulation"}
+{"wait_state":"simulation_paused","timeout_ms":10000}
+{"do":"resume_simulation"}
+{"wait_state":"simulation_running","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

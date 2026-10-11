@@ -1,64 +1,105 @@
 #!/usr/bin/env julia
 
-"""Return CLI help text for the build script."""
-function show_help()
-    return """
-Usage: ./make.jl [options]
-       (normally invoked via `make <target>` or `make.ps1 <target>`)
+const HELP_TEXT = """
+Euclid repository driver
 
-Options:
-    --build, -b         Build the project. (default)
-    --no-build, -B      Skip any build, including vet builds.
-    --assets, -a        Build assets.pkg. (default)
-    --no-assets, -A     Skip assets.pkg build.
-    --sysimage, -s      Build a custom Julia sysimage beside the application.
-    --harness, -H       Build and run the headless semantic trace harness.
-    --clean, -c         Delete generated build artifacts.
-    --run, -r           Run bin/euclid after all other requests.
-    --test, -t          Run application and analyzer tests.
-    --vet, -v           Build, then run repository analysis. With --test, run the
-                        full verification gate (build, tests, analyzer tests,
-                        analyzer self-analysis, and repository analysis).
-    --wiki, -w          Generate the publishable Wiki artifact in bin/wiki.
-    --check-wiki, -W    Compare bin/wiki with a fresh generation without modifying it.
-    --                  Pass all remaining args directly to bin/euclid (only with --run).
-    --help, -h          Show this help text.
+Usage: julia tools/make.jl COMMAND [ARGUMENTS]
 
-Verification options (forwarded to the analysis gate for --vet/--test):
+Commands:
+    help                         Show this help text.
+    build [--debug] [--strict]   Build the application and assets.
+    run [--debug] [--strict] [-- APP_ARGS]
+                                 Build and run the application.
+    run-only [--debug] [-- APP_ARGS]
+                                 Run an existing application binary.
+    assets                       Build assets.pkg only.
+    sysimage [--debug] [--strict]
+                                 Force rebuilding the Julia sysimage, application, and assets.
+    harness                      Build and run the deterministic headless harness.
+    unit [julia|odin] [OPTS]     Run all application tests or one language suite.
+    vet [OPTS]                   Build and analyze the repository.
+    test [OPTS]                  Run the complete verification gate.
+    check [PATH] [OPTS]          Analyze PATH; defaults to the repository.
+    stats FILE [OPTS]            Show targeted source statistics.
+    evidence COMMAND [ARGS]      Inspect canonical scenario evidence bundles.
+    scenario NAME [--format=text|json]
+                                 Build debug and run one named scenario.
+    scenario --all [--format=text|json]
+                                 Build debug and run the scenario corpus.
+    accesskit-abi                Validate the pinned AccessKit C host ABI.
+    accessibility-tree           Validate Linux AT-SPI controls and interfaces.
+    accessibility-macos          Validate macOS Phase 3 AX controls.
+    accessibility-windows        Validate Windows Phase 1 UIA root and button.
+    analyzer-test                Run the analyzer's own test suite.
+    wiki                         Generate the publishable Wiki artifact.
+    check-wiki                   Verify that the Wiki artifact is current.
+    clean                        Delete generated build artifacts.
+
+Build options:
+    --debug             Build with -debug -o:none under .build/debug.
+    --strict            Build with strict Odin validation flags.
+
+Verification options (forwarded by vet and test):
     --verbosity=0|1|2   Summary, details, or complete trace output.
     --verbose           Alias for --verbosity=2.
     --color=auto|always|never
     --format=text|json  Select human or complete machine output.
     --settings=PATH     Load analyzer settings from PATH.
-    --report=PATH       Write the comprehensive Markdown analysis report.
+    --report=PATH       Write the compact Markdown analysis report.
+    --full-report=PATH  Write the comprehensive Markdown analysis report.
 
-Notes:
-    - If no options are provided, the default is --build --assets.
-    - Lowercase -b/-a enables build/assets; uppercase -B/-A disables them.
-    - Short options can be combined, e.g. -rvas or -Ba.
+Targeted statistics examples:
+    julia tools/make.jl stats src/view/view.odin
+    julia tools/make.jl stats tools/make.jl --function=run_plan_build
 """
+
+"""Return CLI help text for the build script."""
+show_help() = HELP_TEXT
+
+const DRIVER_COMMANDS = Set([
+    "help", "build", "run", "run-only", "assets", "sysimage",
+    "harness",
+    "unit", "vet", "test", "check", "stats", "evidence", "scenario",
+    "accesskit-abi", "accessibility-tree", "accessibility-macos",
+    "accessibility-windows",
+    "analyzer-test", "wiki",
+    "check-wiki", "clean"])
+
+"""Parse one required repository-driver command and its scoped arguments."""
+function parse_driver_invocation(arguments::Vector{String})
+    isempty(arguments) && return DriverInvocation(:help, String[])
+    command = first(arguments)
+    command in DRIVER_COMMANDS || error("Unknown command: $command")
+    return DriverInvocation(Symbol(replace(command, '-' => '_')), arguments[2:end])
 end
 
 
 using Dates
 using Libdl
+using SHA
+using TOML
 using UUIDs
 
-struct Args
-    run::Bool
-    build::Bool
-    assets::Bool
-    sysimage::Bool
-    harness::Bool
-    clean::Bool
-    test::Bool
-    vet::Bool
-    wiki::Bool
-    check_wiki::Bool
-    no_build::Bool
-    no_assets::Bool
-    help::Bool
-    verify_args::Vector{String}
+include(joinpath(@__DIR__, "build_config.jl"))
+using .EuclidBuildConfiguration: accesskit_artifact_path,
+    accesskit_provider_identity,
+    native_linker_flags, native_runtime_dirs, native_runtime_environment,
+    resolve_msvc_tool_path, sdl3_provider_identity, sqlite3_artifact,
+    sqlite3_tool_linker_flags
+include(joinpath(@__DIR__, "shaders.jl"))
+using .EuclidShaders: ShaderArtifacts, build_shaders
+
+struct BuildCommand
+    action::Symbol
+    debug::Bool
+    strict::Bool
+    arguments::Vector{String}
+end
+
+"""Top-level command dispatch decision and its command-scoped arguments."""
+struct DriverInvocation
+    action::Symbol
+    arguments::Vector{String}
 end
 
 struct CommandResult
@@ -72,46 +113,18 @@ struct JuliaPackageDep
     version::String
 end
 
-# Each short flag maps to the parsed-field mutations it applies.
-const SHORT_FLAG_EFFECTS = Dict{Char,Vector{Tuple{Symbol,Bool}}}(
-    'r' => [(:run, true)],
-    'b' => [(:build, true), (:no_build, false)],
-    'B' => [(:build, false), (:vet, false), (:no_build, true)],
-    'a' => [(:assets, true), (:no_assets, false)],
-    'A' => [(:assets, false), (:no_assets, true)],
-    's' => [(:sysimage, true)],
-    'H' => [(:harness, true)],
-    'c' => [(:clean, true)],
-    't' => [(:test, true)],
-    'v' => [(:vet, true), (:no_build, false)],
-    'w' => [(:wiki, true)],
-    'W' => [(:check_wiki, true)],
-    'h' => [(:help, true)])
+"""Validated generated Julia image and the identities governing its reuse."""
+struct JuliaSysimageArtifact
+    input_fingerprint::String
+    artifact_sha256::String
+    path::String
+end
 
-# Each long/short option maps to the parsed-field mutations it applies.
-const OPTION_FLAG_EFFECTS = Dict{String,Vector{Tuple{Symbol,Bool}}}(
-    "--run" => [(:run, true)], "-r" => [(:run, true)],
-    "--build" => [(:build, true), (:no_build, false)],
-    "-b" => [(:build, true), (:no_build, false)],
-    "--assets" => [(:assets, true), (:no_assets, false)],
-    "-a" => [(:assets, true), (:no_assets, false)],
-    "--sysimage" => [(:sysimage, true)], "-s" => [(:sysimage, true)],
-    "--harness" => [(:harness, true)], "-H" => [(:harness, true)],
-    "--clean" => [(:clean, true)], "-c" => [(:clean, true)],
-    "--test" => [(:test, true)], "-t" => [(:test, true)],
-    "--vet" => [(:vet, true), (:no_build, false)],
-    "-v" => [(:vet, true), (:no_build, false)],
-    "--wiki" => [(:wiki, true)], "-w" => [(:wiki, true)],
-    "--check-wiki" => [(:check_wiki, true)], "-W" => [(:check_wiki, true)],
-    "--no-build" => [(:build, false), (:vet, false), (:no_build, true)],
-    "-B" => [(:build, false), (:vet, false), (:no_build, true)],
-    "--no-assets" => [(:assets, false), (:no_assets, true)],
-    "-A" => [(:assets, false), (:no_assets, true)],
-    "--help" => [(:help, true)], "-h" => [(:help, true)])
-
-const ARG_FIELDS = [
-    :run, :build, :assets, :sysimage, :harness, :clean, :test, :vet,
-    :wiki, :check_wiki, :no_build, :no_assets, :help]
+"""Validated generated content database and the stream identity it indexes."""
+struct ContentAsset
+    content_fingerprint::String
+    database_sha256::String
+end
 
 """Resolved build/vet/assets toggles derived from CLI arguments."""
 struct BuildPlanToggles
@@ -124,14 +137,25 @@ end
 # and the other build inputs) is its parent directory.
 const SCRIPT_DIR = abspath(joinpath(@__DIR__, ".."))
 const SRC_DIR = joinpath(SCRIPT_DIR, "src")
+const EVIDENCE_SCRIPT = joinpath(SCRIPT_DIR, "tools", "evidence.jl")
 const BIN_DIR = joinpath(SCRIPT_DIR, "bin")
 const ASSETS_STAGING_DIR = joinpath(BIN_DIR, ".assets_staging")
 const ASSETS_ARCHIVE_PATH = joinpath(BIN_DIR, "assets.pkg")
-const JULIA_SYSIMAGE_PATH = joinpath(BIN_DIR, "euclid-sysimage." * Libdl.dlext)
+const ASSETS_IDENTITY_PATH = ASSETS_ARCHIVE_PATH * ".identity"
+const SYSIMAGE_CACHE_ROOT = joinpath(SCRIPT_DIR, ".build", "sysimage-cache")
 const JULIA_EXE = Base.julia_cmd().exec[1]
 const JULIA_TEST_PROJECT = joinpath(SRC_DIR, "julia")
 const WIKI_GENERATOR = joinpath(SCRIPT_DIR, "tools", "code_wiki.jl")
 const WIKI_ARTIFACT_DIR = joinpath(BIN_DIR, "wiki")
+const MACOS_INFO_PLIST_PATH = joinpath(
+    SCRIPT_DIR, "tools", "macos", "Euclid-Info.plist")
+const ANALYZER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "analyze.jl")
+const TEST_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "test_runner.jl")
+const SCENARIO_RUNNER_SCRIPT = joinpath(SCRIPT_DIR, "tools", "scenario_runner.jl")
+const CONTENT_BUILD_DIR = joinpath(SCRIPT_DIR, ".build", "content")
+const CONTENT_EXPORTER = joinpath(SCRIPT_DIR, "tools", "export_content_records.jl")
+const CONTENT_BUILDER_SOURCE = joinpath(
+    SCRIPT_DIR, "tools", "content_builder", "main.odin")
 
 
 """Return true when running on Windows."""
@@ -139,11 +163,237 @@ is_windows() = Sys.iswindows()
 
 const HARNESS_BINARY_PATH = joinpath(
     BIN_DIR, is_windows() ? "euclid_harness.exe" : "euclid_harness")
-const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.jsonl")
+const HARNESS_TRACE_PATH = joinpath(BIN_DIR, "semantic-trace-harness.bin")
 const HARNESS_ANIMATION_ID = "03bf688d-40d0-56a2-a6be-ca2656c9b10d"
+const SYSIMAGE_STABLE_INPUTS = String[
+    "Project.toml",
+    "Manifest.toml",
+    "sysimage_build.jl",
+    "sysimage_core.jl",
+    "sysimage_workload.jl",
+    "odin-julia-bridge.jl",
+    "latex.jl",
+    "geometry.jl",
+    "animations.jl",
+    "animation_catalog.jl",
+    "localized_content.jl",
+    "runtime.jl",
+    "terminal.jl",
+    "ticks.jl",
+    "euclidrepl.jl",
+    "terminal_container.jl",
+    "eval.jl",
+    "interpolation.jl",
+    "policy.jl",
+    "host.jl",
+    "runtime_host.jl",
+    "runtime_api.jl",
+    "bridge",
+    "latex",
+    "eval",
+    "policy",
+    "host",
+]
+
+"""Return canonical stable files whose bytes determine the Euclid sysimage."""
+function sysimage_stable_input_paths(root::String=JULIA_TEST_PROJECT)
+    paths = String[]
+    for relative in SYSIMAGE_STABLE_INPUTS
+        path = joinpath(root, relative)
+        if isdir(path)
+            for (directory, _, names) in walkdir(path), name in names
+                push!(paths, joinpath(directory, name))
+            end
+        elseif isfile(path)
+            push!(paths, path)
+        else
+            error("Missing stable sysimage input: $path")
+        end
+    end
+    sort!(paths; by=path -> replace(relpath(path, root), '\\' => '/'))
+    return paths
+end
+
+"""Return the toolchain identity that prevents incompatible image reuse."""
+function sysimage_toolchain_identity()
+    commit = string(Base.GIT_VERSION_INFO.commit)
+    cpu_target = get(ENV, "JULIA_CPU_TARGET", "native")
+    return "julia=$(VERSION);commit=$commit;kernel=$(Sys.KERNEL);arch=$(Sys.ARCH);" *
+        "cpu_target=$cpu_target"
+end
+
+"""Hash named files and toolchain identity using an unambiguous byte framing."""
+function fingerprint_sysimage_inputs(
+    paths::Vector{String}, root::String; identity::String=sysimage_toolchain_identity())
+    framed = IOBuffer()
+    identity_bytes = codeunits(identity)
+    write(framed, "identity\0", string(length(identity_bytes)), '\0', identity_bytes)
+    for path in paths
+        relative = replace(relpath(path, root), '\\' => '/')
+        contents = read(path)
+        write(framed, "file\0", string(ncodeunits(relative)), '\0', relative,
+            '\0', string(length(contents)), '\0', contents)
+    end
+    return bytes2hex(sha256(take!(framed)))
+end
+
+"""Return the deterministic identity of the current stable Julia image inputs."""
+function sysimage_input_fingerprint(root::String=JULIA_TEST_PROJECT)
+    paths = sysimage_stable_input_paths(root)
+    return fingerprint_sysimage_inputs(paths, root)
+end
+
+"""Return the deterministic identity of reloadable Julia content bytes."""
+function content_input_fingerprint(root::String=joinpath(SRC_DIR, "content"))
+    paths = String[]
+    for (directory, _, names) in walkdir(root), name in names
+        push!(paths, joinpath(directory, name))
+    end
+    sort!(paths; by=path -> replace(relpath(path, root), '\\' => '/'))
+    return fingerprint_sysimage_inputs(paths, root; identity="euclid-content-v1")
+end
+
+"""Hash the native content builder and its compile-time SQL inputs for asset reuse."""
+function content_builder_input_fingerprint(root::String=dirname(CONTENT_BUILDER_SOURCE))
+    paths = String[]
+    for (directory, _, names) in walkdir(root), name in names
+        endswith(name, ".odin") || endswith(name, ".sql") || continue
+        push!(paths, joinpath(directory, name))
+    end
+    sort!(paths; by=path -> replace(relpath(path, root), '\\' => '/'))
+    return fingerprint_sysimage_inputs(paths, root; identity="euclid-content-builder-v1")
+end
+
+"""Return the platform-specific generated sysimage filename."""
+julia_sysimage_filename() = "euclid-sysimage." * Libdl.dlext
+
+"""Return the platform cache partition for generated Julia images."""
+function sysimage_platform_key()
+    architecture = Sys.ARCH == :x86_64 ? "amd64" :
+        Sys.ARCH == :aarch64 ? "arm64" : lowercase(string(Sys.ARCH))
+    kernel = Sys.iswindows() ? "nt" : lowercase(string(Sys.KERNEL))
+    return "$kernel-$architecture"
+end
+
+"""Return the cache directory for one stable-input fingerprint."""
+function sysimage_cache_dir(
+    fingerprint::String; cache_root::String=SYSIMAGE_CACHE_ROOT)
+    return joinpath(cache_root, sysimage_platform_key(), fingerprint)
+end
+
+"""Return the SHA-256 digest of one generated image."""
+sysimage_artifact_sha256(path::String) = bytes2hex(open(sha256, path))
+
+"""Write generated-image metadata after PackageCompiler succeeds."""
+function write_sysimage_cache_metadata(
+    path::String, artifact::JuliaSysimageArtifact)
+    metadata = Dict(
+        "schema_version" => 1,
+        "input_fingerprint" => artifact.input_fingerprint,
+        "artifact_sha256" => artifact.artifact_sha256,
+        "image_filename" => basename(artifact.path),
+        "toolchain_identity" => sysimage_toolchain_identity())
+    open(path, "w") do io
+        TOML.print(io, metadata; sorted=true)
+    end
+end
+
+"""Return whether cached metadata identifies the requested image and toolchain."""
+function cached_sysimage_metadata_matches(
+    metadata, fingerprint::String, image_path::String)
+
+    return get(metadata, "schema_version", 0) == 1 &&
+        get(metadata, "input_fingerprint", "") == fingerprint &&
+        get(metadata, "image_filename", "") == basename(image_path) &&
+        get(metadata, "toolchain_identity", "") == sysimage_toolchain_identity()
+end
+
+"""Return a cached image only when its metadata and bytes remain valid."""
+function load_cached_julia_sysimage(
+    fingerprint::String; cache_root::String=SYSIMAGE_CACHE_ROOT)
+    directory = sysimage_cache_dir(fingerprint; cache_root)
+    image_path = joinpath(directory, julia_sysimage_filename())
+    metadata_path = joinpath(directory, "metadata.toml")
+    isfile(image_path) && isfile(metadata_path) || return nothing
+    metadata = try
+        TOML.parsefile(metadata_path)
+    catch error_object
+        error_object isa TOML.ParserError || rethrow()
+        return nothing
+    end
+    cached_sysimage_metadata_matches(metadata, fingerprint, image_path) || return nothing
+    expected_digest = get(metadata, "artifact_sha256", "")
+    length(expected_digest) == 64 || return nothing
+    sysimage_artifact_sha256(image_path) == expected_digest || return nothing
+    return JuliaSysimageArtifact(fingerprint, expected_digest, image_path)
+end
+
+"""Return the macOS application bundle output path."""
+macos_app_bundle_path(debug::Bool=false) = joinpath(
+    debug ? joinpath(SCRIPT_DIR, ".build", "debug") : BIN_DIR, "Euclid.app")
 
 """Return the expected output path for the Euclid application binary."""
-app_binary_path() = joinpath(BIN_DIR, is_windows() ? "euclid.exe" : "euclid")
+function app_binary_path(debug::Bool=false)
+    debug && return debug_app_binary_path()
+    Sys.isapple() && return joinpath(
+        macos_app_bundle_path(), "Contents", "MacOS", "euclid")
+    return joinpath(BIN_DIR, is_windows() ? "euclid.exe" : "euclid")
+end
+
+"""Return the isolated debug application output path."""
+function debug_app_binary_path()
+    Sys.isapple() && return joinpath(
+        macos_app_bundle_path(true), "Contents", "MacOS", "euclid")
+    return joinpath(
+        SCRIPT_DIR, ".build", "debug", is_windows() ? "euclid.exe" : "euclid")
+end
+
+"""Return the adjacent Windows AccessKit runtime path for one application build."""
+accesskit_runtime_path(debug::Bool=false) =
+    joinpath(dirname(app_binary_path(debug)), "accesskit.dll")
+
+"""Copy one validated AccessKit runtime and verify the staged bytes."""
+function stage_accesskit_runtime(
+    source::String,
+    destination::String;
+    hash_file::Function=path -> bytes2hex(open(sha256, path)),
+    copy_file::Function=(source, destination) -> cp(source, destination; force=true))
+    expected_hash = hash_file(source)
+    mkpath(dirname(destination))
+    copy_file(source, destination)
+    isfile(destination) || error("AccessKit runtime staging produced no file.")
+    hash_file(destination) == expected_hash || error(
+        "Staged AccessKit runtime hash mismatch.")
+    return destination
+end
+
+"""Stage the manifest-validated Windows AccessKit runtime beside the application."""
+function stage_accesskit_runtime(debug::Bool=false)
+    Sys.iswindows() || return nothing
+    source = accesskit_artifact_path("runtime")
+    return stage_accesskit_runtime(source, accesskit_runtime_path(debug))
+end
+
+"""Return the assets package path adjacent to an application build."""
+runtime_assets_archive_path(debug::Bool=false) =
+    joinpath(dirname(app_binary_path(debug)), "assets.pkg")
+
+"""Return the assets package path adjacent to the debug application."""
+debug_assets_archive_path() = runtime_assets_archive_path(true)
+
+"""Return the asset identity sidecar adjacent to the debug package."""
+debug_assets_identity_path() = debug_assets_archive_path() * ".identity"
+
+"""Return the default synchronized diagnostics path for debug runs."""
+debug_diagnostics_path() = joinpath(SCRIPT_DIR, ".build", "debug", "euclid.log")
+
+"""Add default synchronized diagnostics to debug runs without an override."""
+function debug_application_arguments(arguments::Vector{String}, debug::Bool)
+    enabled = debug &&
+        !any(startswith(argument, "--diagnostics=") for argument in arguments)
+    return enabled ? vcat(["--diagnostics=$(debug_diagnostics_path())"], arguments) :
+        arguments
+end
 
 """Ensure a required command exists on PATH, otherwise raise a helpful error."""
 function require_command(command_name::String, install_hint::String)
@@ -223,33 +473,6 @@ function print_captured_output(label::String, output::String)
     println(normalized)
 end
 
-"""Set a single short option flag in the parsed CLI argument dictionary."""
-function set_short_flag!(args::Dict{Symbol,Bool}, flag::Char)
-    effects = get(SHORT_FLAG_EFFECTS, flag, nothing)
-    effects === nothing && error("Unsupported parameter provided.")
-    for (field, value) in effects
-        args[field] = value
-    end
-end
-
-"""Apply one CLI option's parsed-field mutations from the lookup table."""
-function apply_cli_option!(parsed::Dict{Symbol,Bool}, arg::String)
-    effects = get(OPTION_FLAG_EFFECTS, arg, nothing)
-    if effects !== nothing
-        for (field, value) in effects
-            parsed[field] = value
-        end
-        return
-    end
-    if startswith(arg, "-") && !startswith(arg, "--") && length(arg) > 2
-        for flag in arg[2:end]
-            set_short_flag!(parsed, flag)
-        end
-        return
-    end
-    error("Unsupported parameter provided.")
-end
-
 """Return whether an argument is a verification presentation option to forward."""
 function is_verification_option(arg::String)
     return arg == "--verbose" ||
@@ -257,136 +480,46 @@ function is_verification_option(arg::String)
         startswith(arg, "--color=") ||
         startswith(arg, "--format=") ||
         startswith(arg, "--settings=") ||
-        startswith(arg, "--report=")
+        startswith(arg, "--report=") ||
+        startswith(arg, "--full-report=")
 end
 
-"""
-Parse command-line arguments into structured build flags, optional run arguments,
-and verification presentation options forwarded to the analysis gate.
-
-Returns a tuple of Args and trailing arguments passed after `--` for `--run`.
-"""
-function parse_args(argv::Vector{String})::Tuple{Args, Vector{String}}
-    run_args = String[]
-    cli_args = argv
-
-    if "--" in argv
-        split_index = findfirst(==("--"), argv)
-        cli_args = argv[1:split_index-1]
-        run_args = argv[split_index+1:end]
-    end
-
-    parsed = Dict{Symbol,Bool}(field => false for field in ARG_FIELDS)
-    verify_args = String[]
-
-    for arg in cli_args
-        if is_verification_option(arg)
-            push!(verify_args, arg)
-        else
-            apply_cli_option!(parsed, arg)
-        end
-    end
-
-    if !isempty(run_args) && !parsed[:run]
-        error("Run arguments after -- are only valid with --run.")
-    end
-
-    return Args((parsed[field] for field in ARG_FIELDS)..., verify_args), run_args
+"""Split build options from application arguments following `--`."""
+function split_build_arguments(invocation::DriverInvocation)
+    split_index = findfirst(==("--"), invocation.arguments)
+    options = split_index === nothing ? invocation.arguments :
+        invocation.arguments[1:split_index-1]
+    application_arguments = split_index === nothing ? String[] :
+        invocation.arguments[split_index+1:end]
+    invocation.action in (:run, :run_only) || split_index === nothing || error(
+        "Only run and run-only accept application arguments after --.")
+    return options, application_arguments
 end
 
-"""Resolve the full path to `vswhere.exe` on Windows."""
-function get_vswhere_path()
-    program_files_x86 = get(ENV, "ProgramFiles(x86)", nothing)
-    if program_files_x86 === nothing
-        error("Error: ProgramFiles(x86) environment variable is missing.")
-    end
-
-    vswhere_path = joinpath(
-        program_files_x86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
-    if !isfile(vswhere_path)
-        error("Error: Could not locate vswhere.exe. Install Visual Studio Build Tools.")
-    end
-
-    return vswhere_path
+"""Parse mode modifiers for a build, run, run-only, or sysimage command."""
+function parse_mode_build_command(invocation::DriverInvocation)
+    options, application_arguments = split_build_arguments(invocation)
+    all(option -> option in ("--debug", "--strict"), options) || error(
+        "$(replace(string(invocation.action), '_' => '-')) accepts only --debug and --strict.")
+    debug = "--debug" in options
+    strict = "--strict" in options
+    invocation.action == :run_only && strict && error(
+        "run-only cannot apply --strict to an existing binary.")
+    return BuildCommand(invocation.action, debug, strict, application_arguments)
 end
 
-"""Resolve an MSVC tool path using `vswhere` and a `-find` glob pattern."""
-function resolve_msvc_tool_path(find_glob::String, error_message::String)
-    vswhere_path = get_vswhere_path()
-    result = run_command(
-        Cmd([
-            vswhere_path,
-            "-latest",
-            "-products",
-            "*",
-            "-requires",
-            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-            "-find",
-            find_glob,
-        ]),
-        capture_output=true)
-
-    candidate = split(chomp(result.stdout), '\n')
-    if result.exit_code != 0 || isempty(filter(!isempty, candidate))
-        error(error_message)
+"""Parse build modifiers and optional application arguments for one build command."""
+function parse_build_command(invocation::DriverInvocation)
+    if invocation.action in (:vet, :test)
+        all(is_verification_option, invocation.arguments) || error(
+            "$(invocation.action) accepts only verification options.")
+        return BuildCommand(invocation.action, false, false, invocation.arguments)
     end
-
-    path = strip(first(filter(!isempty, candidate)))
-    if !isfile(path)
-        error(error_message)
+    if invocation.action in (:assets, :harness)
+        require_no_arguments(invocation)
+        return BuildCommand(invocation.action, false, false, String[])
     end
-
-    return path
-end
-
-"""
-Generate a Windows import library from a DLL.
-
-This creates a DEF file with `gendef` and then invokes `lib.exe` to produce the `.lib`.
-"""
-function new_import_library(
-    dll_path::String,
-    def_path::String,
-    out_lib_path::String,
-    dll_name::String,
-    lib_exe_path::String,
-    strip_data_markers::Bool=false)
-    needs_rebuild = !isfile(out_lib_path)
-    if !needs_rebuild && stat(dll_path).mtime > stat(out_lib_path).mtime
-        needs_rebuild = true
-    end
-
-    if !needs_rebuild
-        return
-    end
-
-    mkpath(dirname(def_path))
-
-    gendef_result = run_command(Cmd(["gendef", dll_path]); cwd=dirname(def_path))
-    if gendef_result.exit_code != 0 || !isfile(def_path)
-        error("Error: Failed to generate DEF file for $dll_name")
-    end
-
-    if strip_data_markers
-        lines = readlines(def_path)
-        normalized = replace.(lines, r" DATA$" => "")
-        open(def_path, "w") do io
-            write(io, join(normalized, "\n") * "\n")
-        end
-    end
-
-    lib_result = run_command(
-        Cmd([
-            lib_exe_path,
-            "/def:$def_path",
-            "/machine:x64",
-            "/name:$dll_name",
-            "/out:$out_lib_path",
-        ]),
-        cwd=dirname(def_path))
-    if lib_result.exit_code != 0 || !isfile(out_lib_path)
-        error("Error: Failed to generate import library for $dll_name")
-    end
+    return parse_mode_build_command(invocation)
 end
 
 """Parse runtime dependency tool output into a unique list of library names."""
@@ -467,6 +600,17 @@ function collect_runtime_libs(binary_path::String)
     end
 
     return String[]
+end
+
+"""Reject any measured runtime dependency whose library name identifies Raylib or rlgl."""
+function require_zero_raylib_runtime(runtime_libs, binary_path::String)
+    forbidden = filter(runtime_libs) do library
+        name = lowercase(basename(String(library)))
+        occursin("raylib", name) || occursin("rlgl", name)
+    end
+    isempty(forbidden) && return nothing
+    error("Raylib/rlgl runtime dependency detected for $(binary_path): " *
+        join(forbidden, ", "))
 end
 
 """Collect direct Julia package dependencies from a Julia project environment."""
@@ -612,19 +756,170 @@ and Julia package dependencies.
 """
 function write_runtime_sbom(
     binary_path::String, assets_path::String,
-    output_path::String, julia_project_dir::String)
+    output_path::String, julia_project_dir::String,
+    shader_manifest_path::Union{Nothing,String}=nothing)
 
     serial_uuid = runtime_sbom_serial_uuid()
     runtime_libs = collect_runtime_libs(binary_path)
+    require_zero_raylib_runtime(runtime_libs, binary_path)
     julia_packages = collect_julia_packages(julia_project_dir)
 
     bom = runtime_sbom_document(
-        serial_uuid, runtime_libs, julia_packages)
+        serial_uuid, runtime_libs, julia_packages,
+        binary_path, assets_path, shader_manifest_path)
 
     open(output_path, "w") do io
         write_json(io, bom)
         write(io, '\n')
     end
+end
+
+"""Return one CycloneDX SHA-256 hash record for a concrete file."""
+function component_hash(path::String)
+    return Dict{String,Any}(
+        "alg" => "SHA-256", "content" => sysimage_artifact_sha256(path))
+end
+
+"""Resolve the concrete Linux Vulkan loader used by SDL_GPU."""
+function vulkan_loader_path()
+    Sys.islinux() || return nothing
+    handle = Libdl.dlopen_e("libvulkan.so.1")
+    handle == C_NULL && error("Could not resolve the Vulkan loader.")
+    path = realpath(Libdl.dlpath(handle))
+    Libdl.dlclose(handle)
+    return path
+end
+
+"""Describe the platform graphics runtime used by SDL_GPU."""
+function graphics_runtime_component()
+    if Sys.islinux()
+        loader = vulkan_loader_path()
+        return Dict{String,Any}(
+            "type" => "library", "bom-ref" => "native:vulkan-loader",
+            "name" => basename(loader), "version" => "system",
+            "scope" => "required", "hashes" => [component_hash(loader)])
+    elseif Sys.isapple()
+        return Dict{String,Any}(
+            "type" => "framework", "bom-ref" => "native:metal-framework",
+            "name" => "Metal.framework", "version" => "system",
+            "scope" => "required", "properties" => [Dict(
+                "name" => "euclid:install-name",
+                "value" =>
+                    "/System/Library/Frameworks/Metal.framework/Versions/A/Metal")])
+    elseif Sys.iswindows()
+        library = joinpath(get(ENV, "SystemRoot", raw"C:\Windows"),
+            "System32", "d3d12.dll")
+        isfile(library) || error("Could not resolve the Direct3D 12 runtime.")
+        return Dict{String,Any}(
+            "type" => "library", "bom-ref" => "native:direct3d12",
+            "name" => "d3d12.dll", "version" => "system",
+            "scope" => "required", "hashes" => [component_hash(library)])
+    end
+    error("SDL_GPU runtime metadata is unsupported on $(Sys.KERNEL).")
+end
+
+"""Describe native graphics runtime dependencies in CycloneDX form."""
+function native_graphics_runtime_components()
+    provider = sdl3_provider_identity()
+    components = Dict{String,Any}[
+        Dict("type" => "library", "bom-ref" => "native:sdl3",
+            "name" => "SDL3", "version" => provider.version,
+            "scope" => "required", "hashes" => [component_hash(
+                provider.library_path)],
+            "properties" => [Dict("name" => "euclid:provider",
+                "value" => string(provider.kind))]),
+        graphics_runtime_component(),
+    ]
+    if Sys.iswindows()
+        image = EuclidBuildConfiguration.sdl3_image_provider_identity()
+        push!(components, Dict(
+            "type" => "library", "bom-ref" => "native:sdl3-image",
+            "name" => "SDL3_image", "version" => image.version,
+            "scope" => "required", "hashes" => [component_hash(
+                image.library_path)],
+            "properties" => [Dict(
+                "name" => "euclid:provider", "value" => "repository")]))
+        png = joinpath(dirname(image.library_path), "libpng16-16.dll")
+        isfile(png) || error("Missing repository libpng runtime at $png")
+        push!(components, Dict(
+            "type" => "library", "bom-ref" => "native:libpng",
+            "name" => "libpng16-16.dll", "version" => "unavailable",
+            "scope" => "required", "hashes" => [component_hash(png)],
+            "properties" => [Dict(
+                "name" => "euclid:provider", "value" => "repository")]))
+    end
+    return components
+end
+
+"""Describe the repository-owned AccessKit runtime in CycloneDX form."""
+function accesskit_runtime_component()
+    provider = accesskit_provider_identity()
+    return Dict{String,Any}(
+        "type" => "library", "bom-ref" => "native:accesskit",
+        "name" => "AccessKit C", "version" => provider.version,
+        "scope" => "required", "hashes" => [component_hash(
+            provider.library_path)],
+        "properties" => [
+            Dict("name" => "euclid:provider", "value" => "repository"),
+            Dict("name" => "euclid:manifest", "value" => provider.manifest_path)])
+end
+
+"""Describe the statically linked repository SQLite build in CycloneDX form."""
+function sqlite3_runtime_component()
+    artifact = sqlite3_artifact()
+    compiler = first(split(artifact.compiler_identity, '\n'))
+    return Dict{String,Any}(
+        "type" => "library", "bom-ref" => "native:sqlite3",
+        "name" => "SQLite", "version" => "3.53.4", "scope" => "required",
+        "hashes" => [component_hash(artifact.archive_path)],
+        "properties" => [
+            Dict("name" => "euclid:provider", "value" => "repository"),
+            Dict("name" => "euclid:features", "value" => "fts5,spellfix1"),
+            Dict("name" => "euclid:build-fingerprint",
+                "value" => artifact.fingerprint),
+            Dict("name" => "euclid:compiler", "value" => compiler)])
+end
+
+"""Describe shader compilers as build-only CycloneDX components."""
+function shader_tool_components(manifest_path::Union{Nothing,String})
+    manifest_path === nothing && return Dict{String,Any}[]
+    manifest = TOML.parsefile(manifest_path)
+    components = Dict{String,Any}[]
+    for (name, prefix) in (("SDL_shadercross", "shadercross"),
+        ("SPIR-V Tools validator", "spirv_validator"))
+        path = manifest["$(prefix)_path"]
+        closure = join(manifest["$(prefix)_closure"], ";")
+        push!(components, Dict("type" => "application",
+            "bom-ref" => "build-tool:$prefix", "name" => name,
+            "version" => manifest["$(prefix)_identity"], "scope" => "excluded",
+            "hashes" => [Dict("alg" => "SHA-256",
+                "content" => manifest["$(prefix)_sha256"])],
+            "properties" => [
+                Dict("name" => "euclid:build-only", "value" => "true"),
+                Dict("name" => "euclid:path", "value" => path),
+                Dict("name" => "euclid:dynamic-closure", "value" => closure)]))
+    end
+    return components
+end
+
+"""Describe generated shader artifacts as required CycloneDX components."""
+function shader_artifact_components(manifest_path::Union{Nothing,String})
+    manifest_path === nothing && return Dict{String,Any}[]
+    manifest = TOML.parsefile(manifest_path)
+    components = Dict{String,Any}[]
+    for shader in manifest["shader"]
+        for (kind, field) in ((shader["runtime_format"], "runtime_artifact"),
+            ("reflection", "reflection"))
+            name = shader[field]
+            push!(components, Dict("type" => "file",
+                "bom-ref" => "shader:$(shader["name"]):$kind",
+                "name" => "shaders/$name", "version" => "dev",
+                "scope" => "required", "hashes" => [Dict(
+                    "alg" => "SHA-256",
+                    "content" => shader["$(field)_sha256"])]))
+        end
+    end
+    return components
 end
 
 """Resolve a UUID for the SBOM serial number, preferring a Julia subprocess."""
@@ -640,30 +935,53 @@ function runtime_sbom_serial_uuid()
     return "00000000-0000-0000-0000-000000000000"
 end
 
-"""Build the CycloneDX component list from the binary, assets, libs, and packages."""
-function runtime_sbom_components(runtime_libs, julia_packages, binary_name::String)
-    components = Dict{String,Any}[
-        Dict{String,Any}(
-            "type" => "file",
-            "bom-ref" => "file:$binary_name",
-            "name" => binary_name,
-            "version" => "dev",
-            "scope" => "required"),
-        Dict{String,Any}(
-            "type" => "file",
-            "bom-ref" => "file:bin/assets.pkg",
-            "name" => "bin/assets.pkg",
-            "version" => "dev",
-            "scope" => "required"),
+"""Describe the application binary and asset archive as required files."""
+function runtime_file_components(
+    binary_name::String, binary_path::String, assets_path::String)
+    return Dict{String,Any}[
+        Dict("type" => "file", "bom-ref" => "file:$binary_name",
+            "name" => binary_name, "version" => "dev", "scope" => "required",
+            "hashes" => [component_hash(binary_path)]),
+        Dict("type" => "file", "bom-ref" => "file:bin/assets.pkg",
+            "name" => "bin/assets.pkg", "version" => "dev",
+            "scope" => "required", "hashes" => [component_hash(assets_path)]),
     ]
+end
+
+"""Describe one measured runtime library, enriching the known FreeType provider."""
+function runtime_library_component(lib)
+    component = Dict{String,Any}(
+        "type" => "library",
+        "bom-ref" => "runtime:$lib",
+        "name" => lib,
+        "version" => "unknown",
+        "scope" => "required")
+    if (Sys.islinux() && lib == "libfreetype.so.6") ||
+        (Sys.isapple() && basename(lib) == "libfreetype.6.dylib") ||
+        (Sys.iswindows() && basename(lib) == "libfreetype-6.dll")
+        artifact = EuclidBuildConfiguration.freetype_jll_paths()
+        component["version"] = artifact.version
+        component["hashes"] = [component_hash(artifact.library_path)]
+        component["properties"] = [
+            Dict("name" => "euclid:provider", "value" => "FreeType2_jll"),
+            Dict("name" => "euclid:artifact-tree", "value" =>
+                basename(dirname(dirname(artifact.library_path)))),
+            Dict("name" => "euclid:header-directory", "value" =>
+                artifact.include_dir),
+        ]
+    end
+    return component
+end
+
+"""Build the CycloneDX component list from the binary, assets, libs, and packages."""
+function runtime_sbom_components(
+    runtime_libs, julia_packages, binary_name::String,
+    binary_path::String, assets_path::String,
+    shader_manifest_path::Union{Nothing,String}=nothing)
+    components = runtime_file_components(binary_name, binary_path, assets_path)
 
     for lib in runtime_libs
-        push!(components, Dict{String,Any}(
-            "type" => "library",
-            "bom-ref" => "runtime:$lib",
-            "name" => lib,
-            "version" => "unknown",
-            "scope" => "required"))
+        push!(components, runtime_library_component(lib))
     end
 
     for package in julia_packages
@@ -674,18 +992,27 @@ function runtime_sbom_components(runtime_libs, julia_packages, binary_name::Stri
             "version" => package.version,
             "scope" => "required"))
     end
+    append!(components, native_graphics_runtime_components(),
+        [accesskit_runtime_component(), sqlite3_runtime_component()],
+        shader_tool_components(shader_manifest_path),
+        shader_artifact_components(shader_manifest_path))
     return components
 end
 
 """Assemble the CycloneDX BOM document from its components and dependency refs."""
-function runtime_sbom_document(serial_uuid::AbstractString, runtime_libs, julia_packages)
+function runtime_sbom_document(
+    serial_uuid::AbstractString, runtime_libs, julia_packages,
+    binary_path::String, assets_path::String,
+    shader_manifest_path::Union{Nothing,String}=nothing)
     timestamp = Dates.format(now(UTC), DateFormat("yyyy-mm-ddTHH:MM:SSZ"))
-    binary_name = is_windows() ? "bin/euclid.exe" : "bin/euclid"
-    components = runtime_sbom_components(runtime_libs, julia_packages, binary_name)
+    binary_name = is_windows() ? "bin/euclid.exe" :
+        Sys.isapple() ? "bin/Euclid.app/Contents/MacOS/euclid" : "bin/euclid"
+    components = runtime_sbom_components(
+        runtime_libs, julia_packages, binary_name,
+        binary_path, assets_path, shader_manifest_path)
 
-    depends_on = String["file:$binary_name", "file:bin/assets.pkg"]
-    append!(depends_on, ["runtime:$lib" for lib in runtime_libs])
-    append!(depends_on, ["pkg:julia/$(package.name)" for package in julia_packages])
+    depends_on = String[component["bom-ref"] for component in components
+        if component["scope"] == "required"]
 
     return Dict{String,Any}(
         "\$schema" => "http://cyclonedx.org/schema/bom-1.6.schema.json",
@@ -709,17 +1036,28 @@ function runtime_sbom_document(serial_uuid::AbstractString, runtime_libs, julia_
 end
 
 """Run the Odin build command and capture its output for the gate."""
-function execute_odin_build(julia_linker_flags::String)
+function execute_odin_build(
+    julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
     println("Building Odin...")
     mkpath(BIN_DIR)
+    mkpath(dirname(app_binary_path(debug)))
+    if Sys.isapple()
+        stale_binary = debug ?
+            joinpath(SCRIPT_DIR, ".build", "debug", "euclid") :
+            joinpath(BIN_DIR, "euclid")
+        rm(stale_binary; force=true)
+        contents_path = joinpath(macos_app_bundle_path(debug), "Contents")
+        cp(MACOS_INFO_PLIST_PATH, joinpath(contents_path, "Info.plist"); force=true)
+    end
 
-    cmd_parts = odin_build_command(julia_linker_flags)
+    cmd_parts = odin_build_command(julia_linker_flags, debug, strict)
     return run_command(Cmd(cmd_parts); cwd=SRC_DIR, capture_output=true)
 end
 
 """Build the Odin application with standard parameters."""
-function build_odin(julia_linker_flags::String)
-    build_result = execute_odin_build(julia_linker_flags)
+function build_odin(
+    julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
+    build_result = execute_odin_build(julia_linker_flags, debug, strict)
 
     println("Build exited $(build_result.exit_code)")
     if build_result.exit_code != 0
@@ -727,18 +1065,33 @@ function build_odin(julia_linker_flags::String)
         error("Build failed.")
     end
 
+    debug && write_debug_environment(native_runtime_dirs())
+
     return nothing
 end
 
-"""Assemble the odin build command parts for the standard application build.
+"""Write the native loader environment consumed by the CodeLLDB launch."""
+function write_debug_environment(
+    runtime_dirs::Vector{String};
+    path::String=joinpath(SCRIPT_DIR, ".build", "debug", "euclid.env"))
+    environment = native_runtime_environment(runtime_dirs)
+    environment === nothing && return nothing
+    value = Sys.iswindows() ? replace(environment.second, '\\' => '/') :
+        environment.second
+    escaped = replace(value, '\\' => "\\\\", '"' => "\\\"")
+    write(path, "$(environment.first)=\"$escaped\"\n")
+    return nothing
+end
 
-Strict compiler-validation flags intentionally stay out of this command: the
-analysis engine performs its own dedicated strict build through
-`OdinBuildSettings`, so the application build only needs standard parameters.
-"""
-function odin_build_command(julia_linker_flags::String)
-    out_flag = is_windows() ? "-out:../bin/euclid.exe" : "-out:../bin/euclid"
+"""Assemble the Odin command for a standard, debug, or strict application build."""
+function odin_build_command(
+    julia_linker_flags::String, debug::Bool=false, strict::Bool=false)
+    out_flag = "-out:$(app_binary_path(debug))"
     cmd_parts = ["odin", "build", "main.odin", "-file", out_flag]
+    debug && append!(cmd_parts, [
+        "-define:EUCLID_ENABLE_SCENARIOS=true", "-debug", "-o:none"])
+    strict && append!(cmd_parts,
+        ["-vet", "-strict-style", "-disallow-do", "-warnings-as-errors"])
     if is_windows()
         julia_linker_flags = string(julia_linker_flags, " /STACK:8388608")
     end
@@ -759,16 +1112,16 @@ function report_odin_build_failure(build_result::CommandResult)
     end
 end
 
-"""Build and run the deterministic headless harness target."""
-function run_harness(julia_linker_flags::String)
-    println("Running headless harness...")
+"""Build the deterministic headless harness target."""
+function build_harness(julia_linker_flags::String)
+    println("Building headless harness...")
     mkpath(BIN_DIR)
 
     cmd_parts = [
         "odin",
         "build",
-        "harness/main.odin",
-        "-file",
+        "harness",
+        "-define:EUCLID_ENABLE_HARNESS=true",
         is_windows() ? "-out:../bin/euclid_harness.exe" : "-out:../bin/euclid_harness",
     ]
     if !isempty(julia_linker_flags)
@@ -779,19 +1132,46 @@ function run_harness(julia_linker_flags::String)
     print_captured_output("stdout:", build_result.stdout)
     print_captured_output("stderr:", build_result.stderr)
     build_result.exit_code == 0 || error("Harness build failed.")
+    require_zero_raylib_runtime(
+        collect_runtime_libs(HARNESS_BINARY_PATH), HARNESS_BINARY_PATH)
 
+    return nothing
+end
+
+"""Run one deterministic harness case and return elapsed wall time in seconds."""
+function run_harness_once(runtime_dirs::Vector{String}; capture_output::Bool=false)
+    rm(HARNESS_TRACE_PATH; force=true)
     harness_args = [
         "--asset-root=" * BIN_DIR,
         "--animation-id=" * HARNESS_ANIMATION_ID,
         "--steps=8",
-        "--trace-output=" * HARNESS_TRACE_PATH,
+        "--trace-output=" * relpath(HARNESS_TRACE_PATH, SCRIPT_DIR),
         "--scenario=scenario_point_after_eight_steps",
     ]
+    harness_command = Cmd([HARNESS_BINARY_PATH; harness_args...])
+    runtime_environment = native_runtime_environment(runtime_dirs)
+    if runtime_environment !== nothing
+        harness_command = addenv(harness_command, runtime_environment)
+    end
+    started = time_ns()
     harness_result = run_command(
-        Cmd([HARNESS_BINARY_PATH; harness_args...]); cwd=SCRIPT_DIR)
-    harness_result.exit_code == 0 || error("Harness execution failed.")
+        harness_command; cwd=SCRIPT_DIR, capture_output=capture_output)
+    elapsed_seconds = (time_ns() - started) / 1.0e9
+    if harness_result.exit_code != 0
+        print_captured_output("stdout:", harness_result.stdout)
+        print_captured_output("stderr:", harness_result.stderr)
+        error("Harness execution failed.")
+    end
     isfile(HARNESS_TRACE_PATH) || error(
         "Harness did not produce a semantic trace artifact.")
+    return elapsed_seconds
+end
+
+"""Build and run the deterministic headless harness target."""
+function run_harness(julia_linker_flags::String, runtime_dirs::Vector{String})
+    build_harness(julia_linker_flags)
+    println("Running headless harness...")
+    run_harness_once(runtime_dirs)
     println("Wrote $(relpath(HARNESS_TRACE_PATH, SCRIPT_DIR))")
 end
 
@@ -804,7 +1184,7 @@ function load_verification_adapter()
         joinpath(SCRIPT_DIR, "tools", "analysis"))
     isfile(joinpath(analysis_project, "Project.toml")) || error(
         "Analysis submodule is not initialized. " *
-        "Run `git submodule update --init --recursive`, then `make configure`.")
+        "Run `git submodule update --init --recursive`, then `cmake --preset default`.")
     include(verify_path)
     return Base.invokelatest(getglobal, Main, :EuclidVerification)
 end
@@ -846,27 +1226,118 @@ function copy_directory_contents(source::String, destination::String)
     end
 end
 
+"""Compile the staged Euclid terminfo entry using the host ncurses layout."""
+function compile_staged_terminfo()
+    Sys.iswindows() && return
+    terminfo_dir = joinpath(ASSETS_STAGING_DIR, "terminfo")
+    source_path = joinpath(terminfo_dir, "euclid.terminfo")
+    result = run_command(Cmd(["tic", "-x", "-o", terminfo_dir, source_path]))
+    result.exit_code == 0 || error("Euclid terminfo compilation failed.")
+end
+
+"""Export the canonical content stream and return its SHA-256 fingerprint."""
+function export_content_records(corpus_path::String)
+    result = run_command(Cmd([
+        JULIA_EXE,
+        "--depwarn=error",
+        "--project=$JULIA_TEST_PROJECT",
+        CONTENT_EXPORTER,
+        corpus_path,
+    ]); cwd=SCRIPT_DIR, capture_output=true)
+    result.exit_code == 0 || error(
+        "Content record export failed: $(strip(result.stderr))")
+    fingerprint = String(strip(result.stdout))
+    occursin(r"^[0-9a-f]{64}$", fingerprint) || error(
+        "Content record exporter returned an invalid fingerprint.")
+    return fingerprint
+end
+
+"""Compile the standalone native content database builder."""
+function build_content_database_builder()
+    mkpath(CONTENT_BUILD_DIR)
+    executable = joinpath(
+        CONTENT_BUILD_DIR, Sys.iswindows() ? "content_builder.exe" :
+            "content_builder")
+    result = run_command(Cmd([
+        "odin", "build", CONTENT_BUILDER_SOURCE, "-file", "-out:$executable",
+        "-vet", "-strict-style", "-disallow-do", "-warnings-as-errors",
+        "-extra-linker-flags:$(sqlite3_tool_linker_flags())",
+    ]); cwd=SCRIPT_DIR, capture_output=true)
+    result.exit_code == 0 || error(
+        "Content database builder compilation failed: " *
+        strip(result.stdout * result.stderr))
+    return executable
+end
+
+"""Build one candidate content database with the native builder."""
+function run_content_database_builder(
+    executable::String, corpus_path::String,
+    database_path::String, content_fingerprint::String)
+    result = run_command(Cmd([
+        executable, corpus_path, database_path, content_fingerprint,
+    ]); cwd=SCRIPT_DIR, capture_output=true)
+    result.exit_code == 0 && isempty(result.stderr) || error(
+        "Content database build failed: $(strip(result.stdout * result.stderr))")
+    isfile(database_path) || error("Content builder produced no database.")
+    return nothing
+end
+
+"""Generate, reproduce, and stage the immutable content database."""
+function stage_content_asset()
+    mkpath(CONTENT_BUILD_DIR)
+    corpus_path = joinpath(CONTENT_BUILD_DIR, "content-records.jsonl")
+    content_fingerprint = export_content_records(corpus_path)
+    builder = build_content_database_builder()
+    first_candidate = joinpath(CONTENT_BUILD_DIR, "content.first.sqlite3")
+    second_candidate = joinpath(CONTENT_BUILD_DIR, "content.second.sqlite3")
+    run_content_database_builder(
+        builder, corpus_path, first_candidate, content_fingerprint)
+    run_content_database_builder(
+        builder, corpus_path, second_candidate, content_fingerprint)
+    first_digest = sysimage_artifact_sha256(first_candidate)
+    first_digest == sysimage_artifact_sha256(second_candidate) || error(
+        "Content database generation is not byte deterministic.")
+    staged_path = joinpath(ASSETS_STAGING_DIR, "content", "content.sqlite3")
+    mkpath(dirname(staged_path))
+    mv(first_candidate, staged_path; force=true)
+    rm(second_candidate; force=true)
+    return ContentAsset(content_fingerprint, first_digest)
+end
+
 """Create the compressed assets archive from staging content."""
-function create_assets_archive()
+function create_assets_archive(destination::String)
     result = run_command(
-        Cmd(["tar", "-czf", ASSETS_ARCHIVE_PATH, "-C", ASSETS_STAGING_DIR, "."]))
+        Cmd(["tar", "-czf", destination, "-C", ASSETS_STAGING_DIR, "."]))
     return result.exit_code == 0
 end
 
 """Build and package runtime assets, then optionally generate runtime SBOM metadata."""
-function build_assets(do_build::Bool)
+function build_assets(
+    do_build::Bool, debug::Bool=false; force_sysimage::Bool=false)
     println("Building assets package...")
     prepare_julia_packages()
-    stage_assets_content()
-    finalize_assets_archive()
+    sysimage = ensure_julia_sysimage(; force=force_sysimage)
+    shaders = build_shaders(SCRIPT_DIR)
+    package_identity = stage_assets_content(sysimage, shaders)
+    finalize_assets_archive(package_identity)
+    if debug || Sys.isapple()
+        runtime_archive = runtime_assets_archive_path(debug)
+        runtime_identity = runtime_archive * ".identity"
+        mkpath(dirname(runtime_archive))
+        cp(ASSETS_ARCHIVE_PATH, runtime_archive; force=true)
+        cp(ASSETS_IDENTITY_PATH, runtime_identity; force=true)
+        println("Wrote $runtime_archive")
+        println("Wrote $runtime_identity")
+    end
 
     if do_build
         runtime_sbom_path = joinpath(BIN_DIR, "runtime-closure.generated.cdx.json")
         write_runtime_sbom(
-            app_binary_path(),
+            app_binary_path(debug),
             ASSETS_ARCHIVE_PATH,
             runtime_sbom_path,
-            joinpath(SRC_DIR, "julia"))
+            joinpath(SRC_DIR, "julia"),
+            shaders.manifest_path)
         println("Wrote $runtime_sbom_path")
     end
 end
@@ -886,35 +1357,128 @@ function prepare_julia_packages()
     end
 end
 
-"""Populate the assets staging directory with Julia, shader, and static content."""
-function stage_assets_content()
-    if ispath(ASSETS_STAGING_DIR)
-        rm(ASSETS_STAGING_DIR; force=true, recursive=true)
-    end
-
-    mkpath(joinpath(ASSETS_STAGING_DIR, "julia"))
-    mkpath(joinpath(ASSETS_STAGING_DIR, "shaders"))
-
-    copy_directory_contents(joinpath(SRC_DIR, "julia"),
-        joinpath(ASSETS_STAGING_DIR, "julia"))
-    copy_directory_contents(joinpath(SRC_DIR, "view", "shaders"),
-        joinpath(ASSETS_STAGING_DIR, "shaders"))
-    copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
-
+"""Write deterministic metadata for the staged asset archive."""
+function write_assets_manifest(
+    sysimage::JuliaSysimageArtifact, shaders::ShaderArtifacts,
+    content::ContentAsset, sysimage_relative_path::String,
+    package_identity::String)
     open(joinpath(ASSETS_STAGING_DIR, "manifest.txt"), "w") do io
         write(io, """
 package=assets.pkg
 julia_root=julia
+content_root=content
+content_input_fingerprint=$(content_input_fingerprint())
+content_builder_input_fingerprint=$(content_builder_input_fingerprint())
+package_identity=$package_identity
+content_database=content/content.sqlite3
+content_database_sha256=$(content.database_sha256)
+content_fingerprint=$(content.content_fingerprint)
+content_schema_version=3
 shader_root=shaders
+shader_manifest=shaders/manifest.toml
+shader_manifest_sha256=$(bytes2hex(open(sha256, shaders.manifest_path)))
+shader_schema_version=1
+schema_version=4
+sysimage_path=$(replace(sysimage_relative_path, '\\' => '/'))
+sysimage_input_fingerprint=$(sysimage.input_fingerprint)
+sysimage_artifact_sha256=$(sysimage.artifact_sha256)
+sysimage_platform=$(sysimage_platform_key())
+sysimage_toolchain=$(sysimage_toolchain_identity())
 format=tar.gz
 """)
     end
 end
 
-"""Create the assets archive from staging and clean up the staging directory."""
-function finalize_assets_archive()
+"""Return the semantic identity of all staged package payload bytes."""
+function staged_asset_package_identity()
+    paths = String[]
+    for (directory, _, names) in walkdir(ASSETS_STAGING_DIR), name in names
+        push!(paths, joinpath(directory, name))
+    end
+    sort!(paths; by=path -> replace(relpath(path, ASSETS_STAGING_DIR), '\\' => '/'))
+    return fingerprint_sysimage_inputs(
+        paths, ASSETS_STAGING_DIR; identity="euclid-assets-v1-content-schema-3")
+end
+
+"""Populate asset staging with content and validated generated artifacts."""
+function stage_assets_content(
+    sysimage::JuliaSysimageArtifact, shaders::ShaderArtifacts)
+    if ispath(ASSETS_STAGING_DIR)
+        rm(ASSETS_STAGING_DIR; force=true, recursive=true)
+    end
+
+    mkpath(joinpath(ASSETS_STAGING_DIR, "julia"))
+    mkpath(joinpath(ASSETS_STAGING_DIR, "content"))
+    mkpath(joinpath(ASSETS_STAGING_DIR, "shaders"))
+
+    copy_directory_contents(joinpath(SRC_DIR, "julia"),
+        joinpath(ASSETS_STAGING_DIR, "julia"))
+    copy_directory_contents(joinpath(SRC_DIR, "content"),
+        joinpath(ASSETS_STAGING_DIR, "content"))
+    copy_directory_contents(shaders.directory,
+        joinpath(ASSETS_STAGING_DIR, "shaders"))
+    copy_directory_contents(joinpath(SCRIPT_DIR, "assets"), ASSETS_STAGING_DIR)
+    rm(joinpath(ASSETS_STAGING_DIR, "Chalk On Blackboard.wav"); force=true)
+    compile_staged_terminfo()
+    content = stage_content_asset()
+
+    sysimage_relative_path = joinpath(
+        "sysimage", sysimage.input_fingerprint, julia_sysimage_filename())
+    staged_sysimage = joinpath(ASSETS_STAGING_DIR, sysimage_relative_path)
+    mkpath(dirname(staged_sysimage))
+    cp(sysimage.path, staged_sysimage; force=true)
+    package_identity = staged_asset_package_identity()
+    write_assets_manifest(
+        sysimage, shaders, content, sysimage_relative_path, package_identity)
+    return package_identity
+end
+
+"""Read one committed package identity from its bounded sidecar."""
+function read_asset_package_identity(path::String)
+    isfile(path) || return nothing
+    fields = Dict{String,String}()
+    expected_fields = Set((
+        "schema_version", "package_identity", "archive_sha256"))
+    for line in readlines(path)
+        pair = split(line, '='; limit=2)
+        length(pair) == 2 || return nothing
+        pair[1] in expected_fields || return nothing
+        haskey(fields, pair[1]) && return nothing
+        fields[pair[1]] = pair[2]
+    end
+    length(fields) == length(expected_fields) || return nothing
+    get(fields, "schema_version", "") == "1" || return nothing
+    identity = get(fields, "package_identity", "")
+    archive_digest = get(fields, "archive_sha256", "")
+    occursin(r"^[0-9a-f]{64}$", identity) || return nothing
+    occursin(r"^[0-9a-f]{64}$", archive_digest) || return nothing
+    return (package_identity=identity, archive_sha256=archive_digest)
+end
+
+"""Publish one archive and its identity sidecar with the sidecar as commit record."""
+function publish_assets_archive(package_identity::String)
+    archive_candidate = ASSETS_ARCHIVE_PATH * ".candidate"
+    identity_candidate = ASSETS_IDENTITY_PATH * ".candidate"
+    rm(archive_candidate; force=true)
+    rm(identity_candidate; force=true)
+    create_assets_archive(archive_candidate) || return false
+    archive_digest = sysimage_artifact_sha256(archive_candidate)
+    write(identity_candidate,
+        "schema_version=1\npackage_identity=$package_identity\n" *
+        "archive_sha256=$archive_digest\n")
+    mv(archive_candidate, ASSETS_ARCHIVE_PATH; force=true)
+    mv(identity_candidate, ASSETS_IDENTITY_PATH; force=true)
+    return true
+end
+
+"""Create or reuse the assets archive and clean up the staging directory."""
+function finalize_assets_archive(package_identity::String)
     mkpath(BIN_DIR)
-    assets_exit_code = create_assets_archive() ? 0 : 1
+    committed = read_asset_package_identity(ASSETS_IDENTITY_PATH)
+    reusable = isfile(ASSETS_ARCHIVE_PATH) && committed !== nothing &&
+        committed.package_identity == package_identity &&
+        committed.archive_sha256 == sysimage_artifact_sha256(ASSETS_ARCHIVE_PATH)
+    assets_exit_code = reusable || publish_assets_archive(package_identity) ? 0 : 1
     println("Assets package build exited $assets_exit_code")
 
     if ispath(ASSETS_STAGING_DIR)
@@ -925,152 +1489,106 @@ function finalize_assets_archive()
         error("Assets package build failed.")
     end
 
-    println("Wrote $ASSETS_ARCHIVE_PATH")
+    println(reusable ? "Reusing $ASSETS_ARCHIVE_PATH" :
+        "Wrote $ASSETS_ARCHIVE_PATH")
 end
 
-"""Build a custom Julia sysimage containing Euclid definitions and pure compiler workloads."""
-function build_julia_sysimage()
-    println("Building Julia sysimage...")
-    mkpath(BIN_DIR)
+"""Build or reuse the generated Julia image for the current stable inputs."""
+function ensure_julia_sysimage(; force::Bool=false)
+    fingerprint = sysimage_input_fingerprint()
+    cached = load_cached_julia_sysimage(fingerprint)
+    if !force && cached !== nothing
+        println("Reusing Julia sysimage $(cached.input_fingerprint)")
+        return cached
+    end
 
+    reason = force ? "forced rebuild" : "missing, stale, or invalid cache"
+    println("Building Julia sysimage ($reason)...")
+    final_directory = sysimage_cache_dir(fingerprint)
+    mkpath(dirname(final_directory))
     build_script = joinpath(SRC_DIR, "julia", "sysimage_build.jl")
-    result = run_command(Cmd([
-        JULIA_EXE,
-        "--project=" * JULIA_TEST_PROJECT,
-        build_script,
-        JULIA_SYSIMAGE_PATH,
-    ]); cwd=SCRIPT_DIR)
-    println("Julia sysimage build exited $(result.exit_code)")
-    if result.exit_code != 0 || !isfile(JULIA_SYSIMAGE_PATH)
-        error("Julia sysimage build failed.")
+    artifact = mktempdir(dirname(final_directory)) do candidate_directory
+        image_path = joinpath(candidate_directory, julia_sysimage_filename())
+        result = run_command(Cmd([
+            JULIA_EXE,
+            "--project=" * JULIA_TEST_PROJECT,
+            build_script,
+            image_path,
+        ]); cwd=SCRIPT_DIR)
+        println("Julia sysimage build exited $(result.exit_code)")
+        if result.exit_code != 0 || !isfile(image_path)
+            error("Julia sysimage build failed.")
+        end
+        digest = sysimage_artifact_sha256(image_path)
+        candidate = JuliaSysimageArtifact(fingerprint, digest, image_path)
+        write_sysimage_cache_metadata(
+            joinpath(candidate_directory, "metadata.toml"), candidate)
+        ispath(final_directory) && rm(final_directory; force=true, recursive=true)
+        mv(candidate_directory, final_directory)
+        return JuliaSysimageArtifact(
+            fingerprint, digest, joinpath(final_directory, basename(image_path)))
     end
-
-    println("Wrote $JULIA_SYSIMAGE_PATH")
+    println("Wrote $(artifact.path)")
+    return artifact
 end
 
-"""Remove an old custom sysimage when this build did not explicitly regenerate it."""
-function remove_stale_julia_sysimage()
-    if isfile(JULIA_SYSIMAGE_PATH)
-        rm(JULIA_SYSIMAGE_PATH; force=true)
-        println("Removed stale $JULIA_SYSIMAGE_PATH")
-    end
-end
-
-"""Resolve Julia's runtime directory for Windows DLL loading."""
-function resolve_julia_bindir()
-    julia_bindir_result = run_command(
-        Cmd([JULIA_EXE, "-e", "print(Sys.BINDIR)"]); capture_output=true)
-    if julia_bindir_result.exit_code != 0 || isempty(strip(julia_bindir_result.stdout))
-        error("Error: Could not resolve Julia Sys.BINDIR.")
-    end
-    return strip(julia_bindir_result.stdout)
-end
-
-"""Resolve Julia linker flags and optional runtime bindir data for the current platform."""
-function resolve_julia_linker_flags(do_build::Bool)
+"""Resolve native linker flags and runtime library directories."""
+function resolve_native_linker_flags(do_build::Bool)
     if !do_build
-        return "", nothing
+        return "", native_runtime_dirs()
     end
-    return is_windows() ?
-        windows_julia_linker_flags() : posix_julia_linker_flags()
-end
-
-"""Resolve Julia linker flags on non-Windows platforms via julia-config.jl."""
-function posix_julia_linker_flags()
-    julia_config_path = joinpath(
-        Sys.BINDIR, Base.DATAROOTDIR, "julia", "julia-config.jl")
-    if !isfile(julia_config_path)
-        error("Error: Could not resolve julia-config.jl path.")
-    end
-
-    flags_result = run_command(
-        Cmd([JULIA_EXE, julia_config_path, "--ldflags", "--ldlibs"]);
-        capture_output=true)
-    if flags_result.exit_code != 0
-        error("Error: Failed to query Julia linker flags.")
-    end
-
-    return join(split(flags_result.stdout), " "), nothing
-end
-
-"""Resolve Julia linker flags on Windows by generating import libraries."""
-function windows_julia_linker_flags()
-    julia_bindir = resolve_julia_bindir()
-    libjulia_dll = joinpath(julia_bindir, "libjulia.dll")
-    libopenlibm_dll = joinpath(julia_bindir, "libopenlibm.dll")
-    if !isfile(libjulia_dll)
-        error("Error: Missing Julia runtime DLL at $libjulia_dll")
-    end
-    if !isfile(libopenlibm_dll)
-        error("Error: Missing Julia runtime DLL at $libopenlibm_dll")
-    end
-
-    import_lib_dir::String = joinpath(BIN_DIR, ".julia_import_libs")
-    mkpath(import_lib_dir)
-
-    lib_exe_path = String(resolve_msvc_tool_path(
-        "VC/Tools/MSVC/**/bin/Hostx64/x64/lib.exe",
-        "Error: Could not locate MSVC lib.exe. Install the C++ Build Tools workload."))
-
-    new_import_library(
-        libjulia_dll,
-        joinpath(import_lib_dir, "libjulia.def"),
-        joinpath(import_lib_dir, "julia.lib"),
-        "libjulia.dll",
-        lib_exe_path,
-        true)
-    new_import_library(
-        libopenlibm_dll,
-        joinpath(import_lib_dir, "libopenlibm.def"),
-        joinpath(import_lib_dir, "openlibm.lib"),
-        "libopenlibm.dll",
-        lib_exe_path)
-
-    return "/LIBPATH:$import_lib_dir /DEFAULTLIB:julia.lib /DEFAULTLIB:openlibm.lib",
-        julia_bindir
+    return native_linker_flags(), native_runtime_dirs()
 end
 
 """Run the built Euclid binary with optional trailing run arguments."""
 function run_binary(
-    run_args::Vector{String}, julia_bindir::Union{Nothing,AbstractString})
-    binary = app_binary_path()
+    run_args::Vector{String}, runtime_dirs::Vector{String},
+    debug::Bool=false)
+    binary = app_binary_path(debug)
     if !isfile(binary)
         error("Error: Built binary not found in bin/.")
     end
 
-    if is_windows() && julia_bindir !== nothing
-        new_path = string(julia_bindir, ';', get(ENV, "PATH", ""))
-        withenv("PATH" => new_path) do
-            result = run_command(Cmd([binary; run_args...]); cwd=BIN_DIR)
-            if result.exit_code != 0
-                error("Run step failed.")
+    runtime_environment = native_runtime_environment(runtime_dirs)
+    if runtime_environment !== nothing
+        withenv(runtime_environment) do
+            arguments = debug_application_arguments(run_args, debug)
+            result = run_command(Cmd([binary; arguments...]); cwd=BIN_DIR)
+                if result.exit_code != 0
+                    error("Run step failed with exit code $(result.exit_code).")
             end
         end
         return
     end
 
-    result = run_command(Cmd([binary; run_args...]); cwd=BIN_DIR)
-    if result.exit_code != 0
-        error("Run step failed.")
+    arguments = debug_application_arguments(run_args, debug)
+    result = run_command(Cmd([binary; arguments...]); cwd=BIN_DIR)
+        if result.exit_code != 0
+            error("Run step failed with exit code $(result.exit_code).")
     end
 end
 
 """Remove known generated build artifacts from the repository."""
 function clean_build_files()
     targets = String[
-        app_binary_path(),
+        Sys.isapple() ? macos_app_bundle_path() : app_binary_path(),
+        joinpath(BIN_DIR, "euclid"),
         ASSETS_ARCHIVE_PATH,
         joinpath(BIN_DIR, "runtime-closure.generated.cdx.json"),
         joinpath(BIN_DIR, "libeuclid.so"),
         joinpath(BIN_DIR, "libeuclid.dll"),
         joinpath(BIN_DIR, "libeuclid.dylib"),
-        JULIA_SYSIMAGE_PATH,
+        joinpath(BIN_DIR, "accesskit.dll"),
         joinpath(BIN_DIR, "build"),
         ASSETS_STAGING_DIR,
-        joinpath(BIN_DIR, ".julia_import_libs"),
+        joinpath(BIN_DIR, ".native_import_libs"),
         WIKI_ARTIFACT_DIR,
         joinpath(SCRIPT_DIR, ".build", "analysis"),
+        joinpath(SCRIPT_DIR, ".build", "debug"),
         joinpath(SCRIPT_DIR, ".build", "reports"),
+        joinpath(SCRIPT_DIR, ".build", "scenarios"),
+        joinpath(SCRIPT_DIR, ".build", "sdl3-probe"),
+        SYSIMAGE_CACHE_ROOT,
         joinpath(SCRIPT_DIR, "__pycache__"),
     ]
 
@@ -1105,59 +1623,15 @@ function remove_build_targets(targets::Vector{String})
     return removed
 end
 
-"""Return true when any build/run action flag was explicitly requested."""
-explicit_action_requested(args::Args) =
-    any(getfield(args, field) for field in (
-        :run, :build, :assets, :sysimage, :harness,
-        :vet, :test, :wiki, :check_wiki, :no_build, :no_assets))
-
-"""Resolve effective build, vet, and asset steps from CLI argument combinations."""
-function resolve_build_plan(args::Args)
-    do_build, do_vet = resolve_build_and_vet(args)
-    do_assets = resolve_assets(args)
-    do_build = apply_build_overrides(args, do_build, do_vet, do_assets)
-    do_assets = apply_asset_overrides(args, do_build, do_vet, do_assets)
-    return BuildPlanToggles(do_build, do_vet, do_assets)
+"""Return the fixed build, analysis, and asset plan for one command."""
+function build_plan_for(action::Symbol)
+    action == :assets && return BuildPlanToggles(false, false, true)
+    action in (:run_only, :harness) && return BuildPlanToggles(false, false, false)
+    action == :vet && return BuildPlanToggles(true, true, true)
+    action == :test && return BuildPlanToggles(true, true, true)
+    action in (:build, :run, :sysimage) && return BuildPlanToggles(true, false, true)
+    error("Command does not have a build plan: $action")
 end
-
-"""Resolve the build and vet toggles from the no-build/vet/build flags."""
-function resolve_build_and_vet(args::Args)
-    args.no_build && return false, false
-    args.vet && return true, true
-    return true, false
-end
-
-"""Resolve the assets toggle from the asset override flags."""
-function resolve_assets(args::Args)
-    args.no_assets && return false
-    return true
-end
-
-"""Apply the build overrides implied by assets-only, test-only, and wiki-only runs."""
-function apply_build_overrides(args::Args, do_build::Bool, do_vet::Bool, do_assets::Bool)
-    (assets_only_run(args) || test_only_run(args) || wiki_only_run(args)) && return false
-    return do_build
-end
-
-"""Apply the asset overrides implied by test-only and wiki-only runs."""
-function apply_asset_overrides(args::Args, do_build::Bool, do_vet::Bool, do_assets::Bool)
-    (test_only_run(args) || wiki_only_run(args)) && return false
-    return do_assets
-end
-
-"""Return true when only asset building was requested."""
-assets_only_run(args::Args) =
-    args.assets && !args.build && !args.vet && !args.no_build
-
-"""Return true when only the test step was requested."""
-test_only_run(args::Args) =
-    args.test && !args.build && !args.vet &&
-        !args.no_build && !args.assets && !args.no_assets
-
-"""Return true when only wiki generation or checking was requested."""
-wiki_only_run(args::Args) =
-    (args.wiki || args.check_wiki) && !args.run && !args.build &&
-        !args.assets && !args.sysimage && !args.vet && !args.test
 
 """Verify required external tooling exists for the selected build steps."""
 function ensure_required_commands(
@@ -1233,122 +1707,334 @@ function run_wiki_action(check_only::Bool)
         generate_wiki(candidate_root)
         candidate = wiki_tree_snapshot(candidate_root)
         expected == candidate || error(
-            "Wiki artifact is stale. Run `julia make.jl -w` and review the generated artifact.")
+            "Wiki artifact is stale. Run `julia tools/make.jl wiki` and review it.")
     end
     println("Wiki artifact is current and deterministic.")
 end
 
 """Run the build step, returning the captured build result for the gate."""
-function run_plan_build(args::Args, plan::BuildPlanToggles, julia_flags::String)
+function run_plan_build(
+    command::BuildCommand, plan::BuildPlanToggles, julia_flags::String)
     plan.do_build || return nothing, UInt64(0)
-    if plan.do_vet || args.test
+    if plan.do_vet
         build_started = time_ns()
-        build_result = execute_odin_build(julia_flags)
+        build_result = execute_odin_build(
+            julia_flags, command.debug, command.strict)
         build_elapsed_ns = UInt64(time_ns() - build_started)
         println("Build exited $(build_result.exit_code)")
         return build_result, build_elapsed_ns
     end
-    build_odin(julia_flags)
+    build_odin(julia_flags, command.debug, command.strict)
     return nothing, UInt64(0)
 end
 
 """Run the assets and sysimage packaging steps unless the build failed."""
-function run_plan_packaging(args::Args, plan::BuildPlanToggles, build_ok::Bool)
-    if !build_ok && (plan.do_assets || args.sysimage)
+function run_plan_packaging(
+    command::BuildCommand, plan::BuildPlanToggles, build_ok::Bool)
+    if !build_ok && (plan.do_assets || command.action == :sysimage)
         println(stderr, "Skipping assets and sysimage because the build failed.")
     end
-    plan.do_assets && build_ok && build_assets(plan.do_build)
-    args.sysimage && build_ok && build_julia_sysimage()
+    plan.do_build && build_ok && stage_accesskit_runtime(command.debug)
+    plan.do_assets && build_ok && build_assets(
+        plan.do_build, command.debug; force_sysimage=command.action == :sysimage)
     return nothing
 end
 
 """Run the verification gate selected by the resolved plan, when requested."""
 function run_plan_gate(
-    args::Args, plan::BuildPlanToggles, build_result, build_elapsed_ns::UInt64)
-    plan.do_vet || args.test || return 0
-    selection = plan.do_vet && args.test ? :full : plan.do_vet ? :analysis : :tests
+    command::BuildCommand, plan::BuildPlanToggles,
+    build_result, build_elapsed_ns::UInt64)
+    plan.do_vet || return 0
+    selection = command.action == :test ? :full : :analysis
     return run_verification_gate(
-        selection, build_result, build_elapsed_ns, args.verify_args)
+        selection, build_result, build_elapsed_ns, command.arguments)
 end
 
 """Run the harness and application run steps after a passing gate."""
 function run_plan_validation(
-    args::Args, run_args::Vector{String}, julia_flags::String, julia_bindir)
-    args.harness && run_harness(julia_flags)
-    args.run && run_binary(run_args, julia_bindir)
+    command::BuildCommand, julia_flags::String, runtime_dirs::Vector{String})
+    command.action == :harness && run_harness(julia_flags, runtime_dirs)
+    command.action in (:run, :run_only) && run_binary(
+        command.arguments, runtime_dirs, command.debug)
     return nothing
 end
 
+"""Prepare linker, sysimage, and verification dependencies for a build plan."""
+function prepare_build_plan(command::BuildCommand, plan::BuildPlanToggles)
+    julia_flags, runtime_dirs = resolve_native_linker_flags(
+        plan.do_build || command.action == :harness)
+    plan.do_vet && load_verification_adapter()
+    return julia_flags, runtime_dirs
+end
+
+"""Translate a check or stats command into analyzer command arguments."""
+function analysis_command_arguments(action::Symbol, arguments::Vector{String})
+    paths = filter(argument -> !startswith(argument, "-"), arguments)
+    length(paths) <= 1 || error("$(action) accepts at most one path.")
+    action == :stats && isempty(paths) && error("stats requires a source file.")
+    path = isempty(paths) ? SCRIPT_DIR : only(paths)
+    options = filter(!=(path), arguments)
+    return [string(action), path, options...]
+end
+
+"""Run repository analysis or targeted source statistics without a build."""
+function run_analysis_command(action::Symbol, arguments::Vector{String})
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    analyzer_arguments = analysis_command_arguments(action, arguments)
+    command = Cmd(vcat([
+        JULIA_EXE,
+        "--project=$analysis_project",
+        ANALYZER_SCRIPT,
+    ], analyzer_arguments))
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
+"""Run the canonical evidence bundle inspection CLI."""
+function run_evidence_command(arguments::Vector{String})
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    command = Cmd(vcat([
+        JULIA_EXE,
+        "--project=$analysis_project",
+        EVIDENCE_SCRIPT,
+    ], arguments))
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
+"""Build the headed debug application and run selected scenarios through it."""
+function run_scenario_command(arguments::Vector{String})
+    isempty(arguments) && error("scenario requires one NAME or --all")
+    build = BuildCommand(:build, true, false, String[])
+    build_status = if "--format=json" in arguments
+        redirect_stdout(stderr) do
+            execute_build_plan(build, build_plan_for(:build))
+        end
+    else
+        execute_build_plan(build, build_plan_for(:build))
+    end
+    build_status == 0 || return build_status
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    command = Cmd(vcat([
+        JULIA_EXE, "--project=$analysis_project", SCENARIO_RUNNER_SCRIPT,
+        "--binary=$(debug_app_binary_path())"], arguments))
+    runtime_environment = native_runtime_environment(native_runtime_dirs())
+    command = runtime_environment === nothing ? command :
+        addenv(command, runtime_environment)
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
+"""Return whether a unit invocation includes the Odin application suite."""
+unit_command_runs_odin(arguments::Vector{String}) = !("julia" in arguments)
+
+"""Return whether assets.pkg contains current runtime and content identities."""
+function packaged_assets_are_current()
+    isfile(ASSETS_ARCHIVE_PATH) || return false
+    result = run_command(Cmd([
+        "tar", "-xOf", ASSETS_ARCHIVE_PATH, "./manifest.txt",
+    ]); capture_output=true)
+    result.exit_code == 0 || return false
+    expected = "sysimage_input_fingerprint=$(sysimage_input_fingerprint())"
+    expected_platform = "sysimage_platform=$(sysimage_platform_key())"
+    expected_content = "content_input_fingerprint=$(content_input_fingerprint())"
+    expected_builder =
+        "content_builder_input_fingerprint=$(content_builder_input_fingerprint())"
+    lines = split(result.stdout, '\n')
+    return expected in lines && expected_platform in lines &&
+        expected_content in lines && expected_builder in lines
+end
+
+"""Prepare packaged assets required by Odin runtime integration tests."""
+function prepare_unit_assets(arguments::Vector{String})
+    unit_command_runs_odin(arguments) || return nothing
+    packaged_assets_are_current() && return nothing
+    ensure_required_commands(false, true, false, false)
+    build_assets(false)
+    return nothing
+end
+
+"""Run all application unit tests or one selected language suite."""
+function run_unit_command(arguments::Vector{String})
+    prepare_unit_assets(arguments)
+    command = Cmd(vcat([JULIA_EXE, TEST_RUNNER_SCRIPT], arguments))
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
+"""Run the analyzer package's regression suite."""
+function run_analyzer_test_command(arguments::Vector{String})
+    isempty(arguments) || error("analyzer-test does not accept arguments.")
+    analysis_project = get(ENV, "ODIN_JULIA_ANALYSIS_PROJECT",
+        joinpath(SCRIPT_DIR, "tools", "analysis"))
+    expression = "using Pkg; Pkg.test()"
+    command = Cmd([
+        JULIA_EXE, "--project=$analysis_project", "-e", expression])
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
+"""Run the pinned AccessKit C ABI probe for the active host target."""
+function run_accesskit_abi_command(arguments::Vector{String})
+    isempty(arguments) || error("accesskit-abi does not accept arguments.")
+    script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "run_accesskit_abi_probe.jl")
+    return run_command(Cmd([JULIA_EXE, script]); cwd=SCRIPT_DIR).exit_code
+end
+
+"""Validate the real Linux accessibility button on the desktop bus."""
+function run_accessibility_tree_command(arguments::Vector{String})
+    isempty(arguments) || error("accessibility-tree does not accept arguments.")
+    Sys.islinux() || error("accessibility-tree is supported only on Linux.")
+    python = Sys.which("python3")
+    python === nothing && error("accessibility-tree requires python3 and pyatspi.")
+    test_script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "accesskit_tree_probe_test.py")
+    test_command = Cmd([python, test_script])
+    test_status = run_command(test_command; cwd=SCRIPT_DIR).exit_code
+    test_status == 0 || return test_status
+    script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "accesskit_tree_probe.py")
+    command = Cmd([python, script])
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
+"""Validate Phase 3 controls through the logged-in macOS AX API."""
+function run_accessibility_macos_command(arguments::Vector{String})
+    isempty(arguments) || error("accessibility-macos does not accept arguments.")
+    Sys.isapple() || error("accessibility-macos is supported only on macOS.")
+    swift = Sys.which("swift")
+    swift === nothing && error("accessibility-macos requires the Swift toolchain.")
+    script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "accesskit_macos_tree_probe.swift")
+    return run_command(Cmd([swift, script]); cwd=SCRIPT_DIR).exit_code
+end
+
+"""Parse the SDK version reported by `dotnet --version`."""
+function parse_dotnet_sdk_version(output::AbstractString)
+    candidate = strip(output)
+    isempty(candidate) && error("dotnet --version returned an empty response.")
+    version = tryparse(VersionNumber, candidate)
+    if version === nothing
+        error("Unable to parse .NET SDK version: $(repr(candidate)).")
+    end
+    return version
+end
+
+"""Require a .NET SDK with file-based app support."""
+function require_dotnet_file_app_sdk(dotnet::AbstractString)
+    version = parse_dotnet_sdk_version(read(Cmd([dotnet, "--version"]), String))
+    version.major >= 10 || error(
+        "accessibility-windows requires .NET SDK 10 or newer; found $version.")
+    return version
+end
+
+"""Build the .NET file-based accessibility probe command."""
+function accessibility_windows_command(
+    dotnet::AbstractString, script::AbstractString,
+    arguments::Vector{String}=String[])
+    command = String[dotnet, "run", "--file", script]
+    if !isempty(arguments)
+        push!(command, "--")
+        append!(command, arguments)
+    end
+    return Cmd(command)
+end
+
+"""Validate Windows ordinary controls through UI Automation."""
+function run_accessibility_windows_command(arguments::Vector{String})
+    length(arguments) <= 1 || error(
+        "accessibility-windows accepts at most one --binary=PATH argument.")
+    if !isempty(arguments) && !startswith(only(arguments), "--binary=")
+        error("accessibility-windows accepts only --binary=PATH.")
+    end
+    Sys.iswindows() || error("accessibility-windows is supported only on Windows.")
+    dotnet = Sys.which("dotnet")
+    dotnet === nothing && error("accessibility-windows requires .NET SDK 10 or newer.")
+    require_dotnet_file_app_sdk(dotnet)
+    script = joinpath(SCRIPT_DIR, "tools", "accessibility",
+        "accesskit_windows_tree_probe.cs")
+    command = accessibility_windows_command(dotnet, script, arguments)
+    environment = native_runtime_environment(native_runtime_dirs())
+    command = environment === nothing ? command : addenv(command, environment)
+    return run_command(command; cwd=SCRIPT_DIR).exit_code
+end
+
 """Execute the finalized build plan, verification gate, and optional run step."""
-function execute_build_plan(args::Args, plan::BuildPlanToggles, run_args::Vector{String})
-    julia_flags, julia_bindir = resolve_julia_linker_flags(
-        plan.do_build || args.harness)
-    if args.run && is_windows() && julia_bindir === nothing
-        julia_bindir = resolve_julia_bindir()
-    end
-
-    if (plan.do_build || plan.do_assets) && !args.sysimage
-        remove_stale_julia_sysimage()
-    end
-
-    (plan.do_vet || args.test) && load_verification_adapter()
-
-    build_result, build_elapsed_ns = run_plan_build(args, plan, julia_flags)
+function execute_build_plan(command::BuildCommand, plan::BuildPlanToggles)
+    julia_flags, runtime_dirs = prepare_build_plan(command, plan)
+    build_result, build_elapsed_ns = run_plan_build(command, plan, julia_flags)
     build_ok = build_result === nothing || build_result.exit_code == 0
-    run_plan_packaging(args, plan, build_ok)
+    run_plan_packaging(command, plan, build_ok)
 
-    gate_status = run_plan_gate(args, plan, build_result, build_elapsed_ns)
+    gate_status = run_plan_gate(command, plan, build_result, build_elapsed_ns)
     gate_status == 0 || return gate_status
     build_ok || return 1
 
-    run_plan_validation(args, run_args, julia_flags, julia_bindir)
+    run_plan_validation(command, julia_flags, runtime_dirs)
     return 0
 end
 
-"""Entrypoint for CLI execution. Returns process-style exit status."""
-function main()
-    args, run_args = try
-        parse_args(collect(ARGS))
-    catch err
-        println(stderr, sprint(showerror, err))
-        println(stderr, show_help())
-        return 1
-    end
+"""Require that a standalone command received no arguments."""
+function require_no_arguments(invocation::DriverInvocation)
+    isempty(invocation.arguments) || error(
+        "$(replace(string(invocation.action), '_' => '-')) does not accept arguments.")
+end
 
-    if args.help
+"""Execute analyzer, documentation, cleanup, and build-plan actions."""
+function execute_project_action(invocation::DriverInvocation)
+    invocation.action == :accesskit_abi &&
+        return run_accesskit_abi_command(invocation.arguments)
+    invocation.action == :accessibility_tree &&
+        return run_accessibility_tree_command(invocation.arguments)
+    invocation.action == :accessibility_macos &&
+        return run_accessibility_macos_command(invocation.arguments)
+    invocation.action == :accessibility_windows &&
+        return run_accessibility_windows_command(invocation.arguments)
+    invocation.action == :analyzer_test &&
+        return run_analyzer_test_command(invocation.arguments)
+    if invocation.action in (:wiki, :check_wiki)
+        require_no_arguments(invocation)
+        ensure_required_commands(false, false, false, true)
+        run_wiki_action(invocation.action == :check_wiki)
+        return 0
+    end
+    if invocation.action == :clean
+        require_no_arguments(invocation)
+        clean_build_files()
+        return 0
+    end
+    command = parse_build_command(invocation)
+    plan = build_plan_for(command.action)
+    ensure_required_commands(
+        plan.do_build, plan.do_assets, command.action == :test, false)
+    return execute_build_plan(command, plan)
+end
+
+"""Execute one parsed repository-driver command."""
+function execute_driver_action(invocation::DriverInvocation)
+    if invocation.action == :help
+        require_no_arguments(invocation)
         print(show_help())
         return 0
     end
-
-    run_tests = args.test
-    has_explicit_action = explicit_action_requested(args)
-
-    if args.clean
-        clean_build_files()
-        if !has_explicit_action
-            return 0
-        end
-    end
-
-    plan = resolve_build_plan(args)
-    return execute_requested_actions(args, plan, run_tests, run_args)
+    invocation.action == :unit && return run_unit_command(invocation.arguments)
+    invocation.action in (:check, :stats) && return run_analysis_command(
+        invocation.action, invocation.arguments)
+    invocation.action == :evidence && return run_evidence_command(invocation.arguments)
+    invocation.action == :scenario && return run_scenario_command(invocation.arguments)
+    return execute_project_action(invocation)
 end
 
-"""Run the resolved build plan and wiki action, returning the process exit status."""
-function execute_requested_actions(
-    args::Args, plan::BuildPlanToggles, run_tests::Bool, run_args::Vector{String})
-
-    try
-        args.wiki && args.check_wiki && error(
-            "Choose either --wiki or --check-wiki, not both.")
-        ensure_required_commands(
-            plan.do_build, plan.do_assets, run_tests, args.wiki || args.check_wiki)
-        plan_status = execute_build_plan(args, plan, run_args)
-        plan_status == 0 || return plan_status
-        if args.wiki || args.check_wiki
-            run_wiki_action(args.check_wiki)
-        end
-        return 0
+"""Entrypoint for CLI execution. Returns process-style exit status."""
+function main(arguments::Vector{String}=collect(ARGS))
+    invocation = try
+        parse_driver_invocation(arguments)
+    catch err
+        println(stderr, sprint(showerror, err))
+        println(stderr, "Run `julia tools/make.jl help` for usage.")
+        return 2
+    end
+    return try
+        execute_driver_action(invocation)
     catch err
         println(stderr, sprint(showerror, err))
         return 1

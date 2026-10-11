@@ -1,0 +1,10 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"wait_event":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Proposition I","as":"proposition"}
+{"wait_event":"animation_selected","correlation":"proposition","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"proposition","timeout_ms":10000}
+{"wait_event":"constraint_solve_completed","timeout_ms":10000}
+{"checkpoint":"constrained-figure","as":"checkpoint"}
+{"wait_event":"checkpoint_stored","correlation":"checkpoint","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

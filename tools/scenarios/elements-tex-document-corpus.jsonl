@@ -1,0 +1,17 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Euclid's Elements","as":"elements"}
+{"wait_event":"animation_selected","correlation":"elements","timeout_ms":10000}
+{"wait_event":"dynview_published","correlation":"elements","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"\\noindent {\\bfseries Bold {\\itshape italic}} \\textnormal{normal} \\% \\# \\_ \\& \\{ \\}~kept\\ space% hidden\n\\par\\begin{center}Centered JuliaMono prose.\\end{center}\\begin{flushright}Right aligned prose.\\end{flushright}\n\n\\begin{quote}A short quotation uses symmetric margins without paragraph indentation.\\end{quote}\n\n\\begin{quotation}A longer quotation also uses symmetric margins. Its first paragraph is not indented.\n\nIts following paragraph returns to ordinary first-line indentation.\\end{quotation}"},"as":"document-prose"}
+{"wait_event":"presentation_semantic_published","correlation":"document-prose","timeout_ms":10000}
+{"set_view_scroll":{"y":0}}
+{"screenshot":".build/elements-tex-document-prose.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"set_view_content":{"mime":"text/latex","source":"\\begin{itemize}\n\\item A bullet item with enough text to demonstrate hanging indentation when the panel becomes narrow.\n\\item A nested ordered construction:\n\\begin{enumerate}\n\\item Choose two points $A$ and $B$.\n\\item Draw the segment $AB$ and compare it with\n\\[\\overline{AB} = \\sqrt{(x_B-x_A)^2+(y_B-y_A)^2}.\\]\n\\end{enumerate}\n\\end{itemize}\n\n\\begin{description}\n\\item[Point] That which has no part.\n\\item[\\textcolor{steelblue}{Extended construction term}] A wide styled term moves above its body when the shared label column reaches its bound.\n\\end{description}"},"as":"document-lists"}
+{"wait_event":"presentation_semantic_published","correlation":"document-lists","timeout_ms":10000}
+{"set_view_scroll":{"y":0}}
+{"screenshot":".build/elements-tex-document-lists.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"assert_state":"dynview_enabled"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

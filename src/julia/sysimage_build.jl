@@ -6,10 +6,12 @@ end
 
 const JuliaRoot = @__DIR__
 PackageCompiler.create_sysimage(
-    [:Colors, :LaTeXStrings, :Latexify];
+    [:Colors, :JuliaSyntax, :LaTeXStrings, :Latexify, :LinearAlgebra,
+        :Logging, :Pkg, :REPL, :UUIDs];
     sysimage_path=abspath(ARGS[1]),
     project=JuliaRoot,
     incremental=true,
+    compress_sysimage=true,
     script=joinpath(JuliaRoot, "sysimage_core.jl"),
     precompile_execution_file=joinpath(JuliaRoot, "sysimage_workload.jl"),
     import_into_main=false)

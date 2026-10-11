@@ -1,15 +1,29 @@
 package bridge
 
+import bridgemodel "model"
+import shapemodel "../shapes/model"
+
+import audio "../audio"
+import animation_model "../core/animation"
+
 import "../core"
-import "../trace"
+import evidence_session "../evidence/session"
+import evidence_trace "../evidence/trace"
+import "../particles"
+
+// Hold one resolved canonical Cycloid line.
+Command_Cycloid_Line :: struct {
+    first: Vector3,
+    second: Vector3,
+}
 
 // Scene commands isolate asynchronous Julia callbacks from canonical display state.
 // The Julia owner thread writes one bounded batch while the display thread reads an
 // immutable query snapshot. The display thread validates the entire completed batch
 // before applying any command, so invalid or overflowed batches cannot partially commit.
 
-SCENE_COMMAND_BATCH_CAPACITY :: core.SCENE_COMMAND_BATCH_CAPACITY
-SCENE_COMMAND_POINT_BATCH_CAPACITY :: core.SCENE_COMMAND_POINT_BATCH_CAPACITY
+SCENE_COMMAND_BATCH_CAPACITY :: bridgemodel.SCENE_COMMAND_BATCH_CAPACITY
+#assert(particles.DUST_TOOL_CONTACT_CAP >= SCENE_COMMAND_BATCH_CAPACITY)
 
 //   Per-kind validator shape: report whether one command is valid against state.
 Scene_Command_Validator :: #type proc(
@@ -18,26 +32,24 @@ Scene_Command_Validator :: #type proc(
 //   Dispatch table mapping each scene command kind to its validator. The enum key
 //   makes the table exhaustive at compile time.
 SCENE_COMMAND_VALIDATORS :: [Scene_Command_Kind]Scene_Command_Validator{
-    .Set_Point_Position = validate_command_point_index,
-    .Set_Point_Color = validate_command_point_index,
-    .Set_Point_Brush = validate_command_point_index,
-    .Set_Point_Offset = validate_command_point_index,
-    .Show_Point = validate_command_point_index,
-    .Hide_Point = validate_command_point_index,
-    .Hide_Point_Batch = validate_command_hide_point_batch,
-    .Lock_Pen_Joint1 = validate_command_lock_pen_joint1,
-    .Move_Pen_Joint2 = validate_command_move_pen_joint2,
-    .Set_Pen_Active = validate_command_pen_host,
-    .Show_Pen = validate_command_pen_host,
-    .Hide_Pen = validate_command_pen_host,
-    .Hide_Compass = validate_command_compass_host,
-    .Show_Compass = validate_command_compass_host,
-    .Set_Compass_Active = validate_command_compass_host,
-    .Lock_Compass_Joint1 = validate_command_lock_compass_joint1,
-    .Lock_Compass_Joint2 = validate_command_lock_compass_joint2,
-    .Set_Animation_Meta = validate_command_animation_meta,
-    .Set_Drawing_Sound_Enabled = validate_command_noop,
-    .Simulate_Drawing_Sound = validate_command_noop,
+    .Set_Shape_Position = validate_command_shape_transform,
+    .Set_Shape_Color = validate_command_shape_style,
+    .Set_Shape_Active_Color = validate_command_shape_style,
+    .Set_Shape_Brush = validate_command_shape_style,
+    .Set_Shape_Arc = validate_command_shape_arc,
+    .Set_Shape_Trochoid = validate_command_shape_trochoid,
+    .Set_Shape_Trochoid_Frontier = validate_command_shape_trochoid_frontier,
+    .Set_Trochoid_Tool = validate_command_trochoid_tool,
+    .Set_Trochoid_Tool_Parameter = validate_command_trochoid_tool_parameter,
+    .Set_Shape_Cycloid = validate_command_shape_cycloid,
+    .Set_Shape_Cycloid_Frontier = validate_command_shape_cycloid_frontier,
+    .Set_Cycloid_Tool_Line = validate_command_cycloid_tool_line,
+    .Set_Cycloid_Tool = validate_command_cycloid_tool,
+    .Set_Cycloid_Tool_Parameter = validate_command_cycloid_tool_parameter,
+    .Set_Shape_Visible = validate_command_shape_style,
+    .Set_Shape_Active_Feature = validate_command_shape_active_feature,
+    .Set_Tool_Position = validate_command_shape_transform,
+    .Set_Tool_Lock = validate_command_tool_lock,
     .Emit_Trailing_Particle = validate_command_noop,
     .Emit_Flicker_Particle = validate_command_noop,
     .Notify_Animation_Cycle_Boundary = validate_command_noop,
@@ -50,48 +62,90 @@ Scene_Command_Applier :: #type proc(
 //   Dispatch table mapping each scene command kind to its applier. The enum key
 //   makes the table exhaustive at compile time.
 SCENE_COMMAND_APPLIERS :: [Scene_Command_Kind]Scene_Command_Applier{
-    .Set_Point_Position = apply_set_point_position,
-    .Set_Point_Color = apply_set_point_color,
-    .Set_Point_Brush = apply_set_point_brush,
-    .Set_Point_Offset = apply_set_point_offset,
-    .Show_Point = apply_show_point,
-    .Hide_Point = apply_hide_point,
-    .Hide_Point_Batch = apply_hide_point_batch,
-    .Lock_Pen_Joint1 = apply_lock_pen_joint1,
-    .Move_Pen_Joint2 = apply_move_pen_joint2,
-    .Set_Pen_Active = apply_set_pen_active,
-    .Show_Pen = apply_show_pen,
-    .Hide_Pen = apply_hide_pen,
-    .Hide_Compass = apply_hide_compass,
-    .Show_Compass = apply_show_compass,
-    .Set_Compass_Active = apply_set_compass_active,
-    .Lock_Compass_Joint1 = apply_lock_compass_joint1,
-    .Lock_Compass_Joint2 = apply_lock_compass_joint2,
-    .Set_Animation_Meta = apply_set_animation_meta,
-    .Set_Drawing_Sound_Enabled = apply_set_drawing_sound_enabled,
-    .Simulate_Drawing_Sound = apply_simulate_drawing_sound,
+    .Set_Shape_Position = apply_set_shape_position,
+    .Set_Shape_Color = apply_set_shape_color,
+    .Set_Shape_Active_Color = apply_set_shape_active_color,
+    .Set_Shape_Brush = apply_set_shape_brush,
+    .Set_Shape_Arc = apply_set_shape_arc,
+    .Set_Shape_Trochoid = apply_set_shape_trochoid,
+    .Set_Shape_Trochoid_Frontier = apply_set_shape_trochoid_frontier,
+    .Set_Trochoid_Tool = apply_set_trochoid_tool,
+    .Set_Trochoid_Tool_Parameter = apply_set_trochoid_tool_parameter,
+    .Set_Shape_Cycloid = apply_set_shape_cycloid,
+    .Set_Shape_Cycloid_Frontier = apply_set_shape_cycloid_frontier,
+    .Set_Cycloid_Tool_Line = apply_set_cycloid_tool_line,
+    .Set_Cycloid_Tool = apply_set_cycloid_tool,
+    .Set_Cycloid_Tool_Parameter = apply_set_cycloid_tool_parameter,
+    .Set_Shape_Visible = apply_set_shape_visible,
+    .Set_Shape_Active_Feature = apply_set_shape_active_feature,
+    .Set_Tool_Position = apply_set_tool_position,
+    .Set_Tool_Lock = apply_set_tool_lock,
     .Emit_Trailing_Particle = apply_emit_trailing_particle,
     .Emit_Flicker_Particle = apply_emit_flicker_particle,
     .Notify_Animation_Cycle_Boundary = apply_notify_animation_cycle_boundary,
 }
 
+SCENE_COMMAND_EVIDENCE_KINDS :: [Scene_Command_Kind]evidence_trace.Kind{
+    .Set_Shape_Position = .Point_Position_Committed,
+    .Set_Shape_Color = .Point_Style_Committed,
+    .Set_Shape_Active_Color = .Point_Style_Committed,
+    .Set_Shape_Brush = .Point_Style_Committed,
+    .Set_Shape_Arc = .Arc_Geometry_Committed,
+    .Set_Shape_Trochoid = .Trochoid_Geometry_Committed,
+    .Set_Shape_Trochoid_Frontier = .Trochoid_Frontier_Committed,
+    .Set_Trochoid_Tool = .Trochoid_Tool_Geometry_Committed,
+    .Set_Trochoid_Tool_Parameter = .Trochoid_Tool_Parameter_Committed,
+    .Set_Shape_Cycloid = .Cycloid_Geometry_Committed,
+    .Set_Shape_Cycloid_Frontier = .Cycloid_Frontier_Committed,
+    .Set_Cycloid_Tool_Line = .Cycloid_Tool_Geometry_Committed,
+    .Set_Cycloid_Tool = .Cycloid_Tool_Geometry_Committed,
+    .Set_Cycloid_Tool_Parameter = .Cycloid_Tool_Parameter_Committed,
+    .Set_Shape_Visible = .Point_Visibility_Committed,
+    .Set_Shape_Active_Feature = .Point_Style_Committed,
+    .Set_Tool_Position = .Point_Position_Committed,
+    .Set_Tool_Lock = .Point_Position_Committed,
+    .Emit_Trailing_Particle = .Particle_Emission_Committed,
+    .Emit_Flicker_Particle = .Particle_Emission_Committed,
+    .Notify_Animation_Cycle_Boundary = .Unknown,
+}
+
 // Core owns these data shapes because they are referenced by Euclid_General_State.
 // Bridge owns their capture, validation, and commit behavior.
-Scene_Command_Kind :: core.Scene_Command_Kind
-Scene_Command :: core.Scene_Command
-Scene_Command_Batch :: core.Scene_Command_Batch
-Animation_Query_Snapshot :: core.Animation_Query_Snapshot
+Scene_Command_Kind :: bridgemodel.Scene_Command_Kind
+Scene_Command :: bridgemodel.Scene_Command
+Scene_Command_Batch :: bridgemodel.Scene_Command_Batch
+Animation_Query_Snapshot :: bridgemodel.Animation_Query_Snapshot
 
 //   Copy the canonical values a Julia animation may query during one asynchronous tick.
 // The snapshot remains worker-owned until that tick completes; callbacks must not read
-// concurrently mutating point-system or animation metadata through another path.
+// concurrently mutating point-system or tool state through another path.
 capture_animation_query_snapshot :: proc(
     state: ^core.Euclid_General_State, snapshot: ^Animation_Query_Snapshot) {
 
-    copy(snapshot^.points[:], state^.point_system^.points[:])
-    copy(snapshot^.metadata[:], state^.anim_metadata[:])
-    snapshot^.pen = state^.pen
-    snapshot^.compass = state^.compass
+    if service := state^.julia_runtime_service; service != nil {
+        snapshot^.content_specification = service^.active_content_specification
+        snapshot^.animation_generation = service^.animation_generation
+    }
+    world := state^.shape_world
+    if world != nil {
+        snapshot^.shapes.registry = world^.registry
+        snapshot^.shapes.transforms = world^.transforms
+        snapshot^.shapes.arcs = world^.arcs
+        snapshot^.shapes.trochoids = world^.trochoids
+        snapshot^.shapes.trochoid_tools = world^.trochoid_tools
+        snapshot^.shapes.cycloids = world^.cycloids
+        snapshot^.shapes.cycloid_tools = world^.cycloid_tools
+        snapshot^.shapes.render_styles = world^.render_styles
+        snapshot^.shapes.active_features = world^.active_features
+        snapshot^.shapes.geometries = world^.geometries
+        snapshot^.shapes.labels = world^.labels
+        snapshot^.shapes.label_store = world^.label_store
+    }
+    snapshot^.animation_values_valid =
+        animation_model.animation_value_store_pack(
+            &state^.animation_values,
+            state^.animation_values.generation,
+            &snapshot^.animation_values) == .Ok
 }
 
 //   Return the worker-owned immutable query snapshot active for the current callback.
@@ -138,183 +192,22 @@ append_scene_command :: proc "contextless" (
     return command, true
 }
 
-//   Capture a point-position mutation when an asynchronous scene batch is active.
-capture_point_position_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, index: int, position: core.Vector3) -> bool {
-
-    command, captured := append_scene_command(state, .Set_Point_Position)
-    if command != nil {
-        command^.point_index = index
-        command^.position = position
-    }
-    return captured
-}
-
-//   Capture a point-color mutation while preserving the bridge color payload exactly.
-capture_point_color_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, index: int, color: Bridge_Color) -> bool {
-
-    command, captured := append_scene_command(state, .Set_Point_Color)
-    if command != nil {
-        command^.point_index = index
-        command^.color = color
-    }
-    return captured
-}
-
-//   Capture a point brush-size mutation for later display-thread validation and commit.
-capture_point_brush_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, index: int, brush_size: f32) -> bool {
-
-    command, captured := append_scene_command(state, .Set_Point_Brush)
-    if command != nil {
-        command^.point_index = index
-        command^.scalar = brush_size
-    }
-    return captured
-}
-
-//   Capture a point-indexed scalar command such as a child offset mutation.
-capture_point_scalar_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
-    index: int, scalar: f32) -> bool {
-
-    command, captured := append_scene_command(state, kind)
-    if command != nil {
-        command^.point_index = index
-        command^.scalar = scalar
-    }
-    return captured
-}
-
-//   Capture a point-indexed command that carries no payload beyond its target index.
-capture_point_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind, index: int) -> bool {
-
-    command, captured := append_scene_command(state, kind)
-    if command != nil {
-        command^.point_index = index
-    }
-    return captured
-}
-
-//   Copy a bounded point-index list into hide commands.
-// Large batches are split into multiple commands so reset and tear-down paths do
-// not invalidate the whole scene batch when they hide more points than the per-command
-// point-index array can hold.
-capture_hide_point_batch_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, indices: [^]i32, count: i32) -> bool {
-
-    if state^.scene_command_batch_target == nil {
-        return false
-    }
-    if count < 0 {
-        batch := state^.scene_command_batch_target
-        batch^.overflowed = true
-        return true
-    }
-
-    remaining := int(count)
-    offset := 0
-    for remaining > 0 {
-        command, _ := append_scene_command(state, .Hide_Point_Batch)
-        if command == nil {
-            batch := state^.scene_command_batch_target
-            batch^.overflowed = true
-            return true
-        }
-
-        chunk_size := remaining
-        if chunk_size > len(command^.point_indices) {
-            chunk_size = len(command^.point_indices)
-        }
-        command^.point_count = chunk_size
-        for point_index in 0..<chunk_size {
-            command^.point_indices[point_index] = indices[offset + point_index]
-        }
-
-        remaining -= chunk_size
-        offset += chunk_size
-    }
-    return true
-}
-
-//   Capture a position payload for a tool movement or lock command.
-capture_position_command :: proc "contextless" (
+// Capture one packed-entity mutation for display-thread validation and commit.
+capture_shape_command :: proc "contextless" (
     state: ^core.Euclid_General_State,
-    kind: Scene_Command_Kind, position: core.Vector3) -> bool {
-
+    kind: Scene_Command_Kind,
+    entity: u64) -> (^Scene_Command, bool) {
     command, captured := append_scene_command(state, kind)
     if command != nil {
-        command^.position = position
+        command^.entity = entity
     }
-    return captured
-}
-
-//   Capture a position and boolean option used by compass lock commands.
-capture_position_flag_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
-    position: core.Vector3, flag: bool) -> bool {
-
-    command, captured := append_scene_command(state, kind)
-    if command != nil {
-        command^.position = position
-        command^.flag = flag
-    }
-    return captured
-}
-
-//   Capture tool activation state and its associated display color.
-capture_active_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
-    active: int, color: Bridge_Color) -> bool {
-
-    command, captured := append_scene_command(state, kind)
-    if command != nil {
-        command^.integer = active
-        command^.color = color
-    }
-    return captured
-}
-
-//   Capture one indexed animation metadata write for ordered commit with scene changes.
-capture_animation_meta_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, position: int, metadata: f32) -> bool {
-
-    command, captured := append_scene_command(state, .Set_Animation_Meta)
-    if command != nil {
-        command^.integer = position
-        command^.scalar = metadata
-    }
-    return captured
-}
-
-//   Capture a scalar-only scene command such as simulated drawing-sound intensity.
-capture_scalar_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind, scalar: f32) -> bool {
-
-    command, captured := append_scene_command(state, kind)
-    if command != nil {
-        command^.scalar = scalar
-    }
-    return captured
-}
-
-//   Capture a boolean-only scene command such as drawing-sound enablement.
-capture_flag_command :: proc "contextless" (
-    state: ^core.Euclid_General_State, kind: Scene_Command_Kind, flag: bool) -> bool {
-
-    command, captured := append_scene_command(state, kind)
-    if command != nil {
-        command^.flag = flag
-    }
-    return captured
+    return command, captured
 }
 
 //   Capture one particle emission with the position and color observed by Julia.
 capture_particle_command :: proc "contextless" (
     state: ^core.Euclid_General_State, kind: Scene_Command_Kind,
-    position: core.Vector3, color: Bridge_Color) -> bool {
+    position: Vector3, color: Bridge_Color) -> bool {
 
     command, captured := append_scene_command(state, kind)
     if command != nil {
@@ -325,81 +218,206 @@ capture_particle_command :: proc "contextless" (
 }
 
 //   Check a command point index against the initialized canonical point span.
-valid_scene_point_index :: #force_inline proc(
-    state: ^core.Euclid_General_State, index: int) -> bool {
-
-    return index >= 0 && index < state^.point_system^.next_point_index
+// Resolve one packed command identity against the current canonical world.
+validate_command_shape_entity :: proc(
+    state: ^core.Euclid_General_State,
+    command: ^Scene_Command) -> (shapemodel.Shape_Entity, bool) {
+    return bridge_shape_resolve(state, command^.entity)
 }
 
-//   Validate one point-indexed command against the canonical point span.
-validate_command_point_index :: proc(
+// Validate one packed command target that requires a transform component.
+validate_command_shape_transform :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return valid_scene_point_index(state, command^.point_index)
+    entity, found := validate_command_shape_entity(state, command)
+    return found && shapemodel.shape_component_contains(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry, entity)
 }
 
-//   Validate one hide-point-batch command: bounds plus every listed index.
-validate_command_hide_point_batch :: proc(
+// Validate one packed command target that requires a render-style component.
+validate_command_shape_style :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    if command^.point_count < 0 ||
-        command^.point_count > len(command^.point_indices) {
+    entity, found := validate_command_shape_entity(state, command)
+    return found && shapemodel.shape_component_contains(
+        &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
+}
+
+// Validate one complete arc mutation against host membership and value rules.
+validate_command_shape_arc :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    return found && shapemodel.shape_component_contains(
+        &state^.shape_world^.arcs, &state^.shape_world^.registry, entity) &&
+        shapemodel.shape_arc_is_valid(command^.arc)
+}
+
+// Validate one complete trochoid mutation against host membership and value rules.
+validate_command_shape_trochoid :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found || !shapemodel.shape_trochoid_is_valid(command^.trochoid) {
         return false
     }
-    for point_index in command^.point_indices[:command^.point_count] {
-        if !valid_scene_point_index(state, int(point_index)) {
-            return false
-        }
+    current, has_value := shapemodel.shape_component_get(
+        &state^.shape_world^.trochoids, &state^.shape_world^.registry, entity)
+    style, has_style := shapemodel.shape_component_get(
+        &state^.shape_world^.render_styles, &state^.shape_world^.registry, entity)
+    return has_value && has_style &&
+        (current.mode == command^.trochoid.mode || !style.visible)
+}
+
+// Validate one reveal frontier against the target's complete directed domain.
+validate_command_shape_trochoid_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found {
+        return false
     }
-    return true
+    value, has_value := shapemodel.shape_component_get(
+        &state^.shape_world^.trochoids, &state^.shape_world^.registry, entity)
+    return has_value && shapemodel.shape_scalar_is_finite(command^.scalar) &&
+        shapemodel.shape_parameter_is_in_directed_domain(value.parameter_start,
+            value.parameter_finish, command^.scalar)
 }
 
-//   Validate a pen-joint1 lock: the joint host and the constraint slot.
-validate_command_lock_pen_joint1 :: proc(
+// Validate complete guide configuration against singleton identity and visibility.
+validate_command_trochoid_tool :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return valid_scene_point_index(state, state^.pen.joint1_id) &&
-        state^.pen.lock_point1_id >= 0 &&
-        state^.pen.lock_point1_id < state^.point_system^.next_constraint_index
+    expected := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
+    if command^.entity != expected ||
+        !shapemodel.shape_trochoid_tool_is_valid(command^.trochoid_tool) {
+        return false
+    }
+    current, has_value := shapemodel.shape_component_get(
+        &state^.shape_world^.trochoid_tools, &state^.shape_world^.registry,
+        state^.world_trochoid_tool.shape)
+    style, has_style := shapemodel.shape_component_get(
+        &state^.shape_world^.render_styles, &state^.shape_world^.registry,
+        state^.world_trochoid_tool.shape)
+    return has_value && has_style &&
+        (current.mode == command^.trochoid_tool.mode || !style.visible)
 }
 
-//   Validate a pen-joint2 move: the joint host index.
-validate_command_move_pen_joint2 :: proc(
+// Validate one finite rolling-parameter update for the singleton guide.
+validate_command_trochoid_tool_parameter :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return valid_scene_point_index(state, state^.pen.joint2_id)
+    expected := shapemodel.shape_entity_pack(state^.world_trochoid_tool.shape)
+    return command^.entity == expected &&
+        shapemodel.shape_scalar_is_finite(command^.scalar) &&
+        shapemodel.shape_component_contains(&state^.shape_world^.trochoid_tools,
+            &state^.shape_world^.registry, state^.world_trochoid_tool.shape)
 }
 
-//   Validate a pen host-dependent command (active/show/hide).
-validate_command_pen_host :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return valid_scene_point_index(state, state^.pen.host_id)
+// Resolve one canonical Cycloid host's current literal endpoint positions.
+command_cycloid_line :: proc(state: ^core.Euclid_General_State,
+    entity: shapemodel.Shape_Entity,
+    kind: shapemodel.Shape_Geometry_Kind) -> (Command_Cycloid_Line, bool) {
+    geometry, found := shapemodel.shape_component_get(
+        &state^.shape_world^.geometries, &state^.shape_world^.registry, entity)
+    if !found || geometry.kind != kind {
+        return {}, false
+    }
+    first_entity := geometry.payload.cycloid.first
+    second_entity := geometry.payload.cycloid.second
+    if kind == .Cycloid_Tool {
+        first_entity = geometry.payload.cycloid_tool.first
+        second_entity = geometry.payload.cycloid_tool.second
+    }
+    first, first_ok := shapemodel.shape_component_get(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry, first_entity)
+    second, second_ok := shapemodel.shape_component_get(
+        &state^.shape_world^.transforms, &state^.shape_world^.registry, second_entity)
+    if !first_ok || !second_ok {
+        return {}, false
+    }
+    return {first.position, second.position}, true
 }
 
-//   Validate a compass host-dependent command (show/hide/active).
-validate_command_compass_host :: proc(
+// Validate one complete Cycloid mutation against its immutable literal rail.
+validate_command_shape_cycloid :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return valid_scene_point_index(state, state^.compass.host_id)
+    entity, found := validate_command_shape_entity(state, command)
+    if !found || !shapemodel.shape_component_contains(&state^.shape_world^.cycloids,
+        &state^.shape_world^.registry, entity) ||
+        !shapemodel.shape_cycloid_is_valid(command^.cycloid) {
+        return false
+    }
+    line, line_ok := command_cycloid_line(state, entity, .Cycloid)
+    return line_ok && shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
+        command^.cycloid.rolling_radius, command^.cycloid.parameter_start,
+        command^.cycloid.parameter_finish)
 }
 
-//   Validate a compass-joint1 lock: joint, pivot, and constraint slot.
-validate_command_lock_compass_joint1 :: proc(
+// Validate one Cycloid reveal frontier against its directed domain.
+validate_command_shape_cycloid_frontier :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return valid_scene_point_index(state, state^.compass.joint1_id) &&
-        valid_scene_point_index(state, state^.compass.pivot_id) &&
-        state^.compass.lock_point1_id >= 0 &&
-        state^.compass.lock_point1_id < state^.point_system^.next_constraint_index
+    entity, found := validate_command_shape_entity(state, command)
+    if !found {
+        return false
+    }
+    value, has_value := shapemodel.shape_component_get(&state^.shape_world^.cycloids,
+        &state^.shape_world^.registry, entity)
+    return has_value && shapemodel.shape_parameter_is_in_directed_domain(
+        value.parameter_start, value.parameter_finish, command^.scalar)
 }
 
-//   Validate a compass-joint2 lock: joint, pivot, and constraint slot.
-validate_command_lock_compass_joint2 :: proc(
+// Validate one atomic permanent-guide endpoint update against current scalar state.
+validate_command_cycloid_tool_line :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return valid_scene_point_index(state, state^.compass.joint2_id) &&
-        valid_scene_point_index(state, state^.compass.pivot_id) &&
-        state^.compass.lock_point2_id >= 0 &&
-        state^.compass.lock_point2_id < state^.point_system^.next_constraint_index
+    expected := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    value, found := shapemodel.shape_component_get(
+        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        state^.world_cycloid_tool.shape)
+    return command^.entity == expected && found &&
+        shapemodel.shape_cycloid_line_is_valid(command^.position,
+            command^.second_position, value.rolling_radius,
+            value.parameter_start, value.parameter_finish)
 }
 
-//   Validate an animation-metadata write: the metadata index must be in range.
-validate_command_animation_meta :: proc(
+// Validate one complete permanent Cycloid-guide scalar mutation.
+validate_command_cycloid_tool :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
-    return command^.integer >= 0 && command^.integer < len(state^.anim_metadata)
+    expected := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    if command^.entity != expected ||
+        !shapemodel.shape_cycloid_tool_is_valid(command^.cycloid_tool) {
+        return false
+    }
+    line, found := command_cycloid_line(
+        state, state^.world_cycloid_tool.shape, .Cycloid_Tool)
+    return found && shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
+        command^.cycloid_tool.rolling_radius,
+        command^.cycloid_tool.parameter_start,
+        command^.cycloid_tool.parameter_finish)
+}
+
+// Validate one permanent Cycloid-guide rolling parameter update.
+validate_command_cycloid_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    expected := shapemodel.shape_entity_pack(state^.world_cycloid_tool.shape)
+    value, found := shapemodel.shape_component_get(
+        &state^.shape_world^.cycloid_tools, &state^.shape_world^.registry,
+        state^.world_cycloid_tool.shape)
+    return command^.entity == expected && found &&
+        shapemodel.shape_parameter_is_in_directed_domain(
+            value.parameter_start, value.parameter_finish, command^.scalar)
+}
+
+// Validate one packed command target that requires an active-feature component.
+validate_command_shape_active_feature :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    return found && shapemodel.shape_component_contains(
+        &state^.shape_world^.active_features, &state^.shape_world^.registry, entity)
+}
+
+// Validate one packed tool target whose direct snap constraint must exist.
+validate_command_tool_lock :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) -> bool {
+    entity, found := validate_command_shape_entity(state, command)
+    if !found {
+        return false
+    }
+    _, constraint_found := tool_lock_constraint(state, entity)
+    return constraint_found
 }
 
 //   Validate a command with no state dependency (always valid).
@@ -414,13 +432,154 @@ scene_command_batch_wellformed :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
     if state == nil || batch == nil || batch^.overflowed ||
-        state^.julia_interface == nil || state^.point_system == nil {
+        state^.julia_interface == nil {
         return false
     }
     if batch^.command_count < 0 || batch^.command_count > len(batch^.commands) {
         return false
     }
     return batch^.animation == state^.julia_interface^.current_animation
+}
+
+// Count commands that can enqueue one compound tool-contact intent.
+scene_command_batch_tool_contact_count :: proc(batch: ^Scene_Command_Batch) -> int {
+    count := 0
+    for command_index in 0..<batch^.command_count {
+        command := &batch^.commands[command_index]
+        produces_contact := command^.kind == .Set_Tool_Position ||
+            (command^.kind == .Set_Tool_Lock && command^.flag)
+        if produces_contact && tool_dust_contact_on_floor(command^.position) {
+            count += 1
+        }
+    }
+    return count
+}
+
+// Apply one validated packed-entity transform mutation.
+apply_set_shape_position :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_position(state, command^.entity, command^.position)
+}
+
+// Apply one packed tool transform mutation with its owner-side effects.
+apply_set_tool_position :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    set_tool_position(state, shapemodel.shape_entity_unpack(command^.entity),
+        command^.position, command^.flag)
+}
+
+// Apply one packed tool snap-lock mutation.
+apply_set_tool_lock :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    set_tool_lock(state, shapemodel.shape_entity_unpack(command^.entity),
+        command^.position, command^.flag, command^.integer != 0)
+}
+
+// Apply one validated packed-entity color mutation.
+apply_set_shape_color :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_color(state, command^.entity, command^.color)
+}
+
+// Apply one validated packed-entity active-color mutation.
+apply_set_shape_active_color :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_active_color(state, command^.entity, command^.color)
+}
+
+// Apply one validated packed-entity brush mutation.
+apply_set_shape_brush :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_brush_size(state, command^.entity, command^.scalar)
+}
+
+// Apply one validated complete arc mutation atomically.
+apply_set_shape_arc :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_arc(state, command^.entity, {
+        radius = command^.arc.radius,
+        start_theta = command^.arc.start_theta,
+        sweep_theta = command^.arc.sweep_theta,
+    })
+}
+
+// Apply one validated complete trochoid mutation atomically.
+apply_set_shape_trochoid :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.trochoid
+    _ = shape_set_trochoid(state, command^.entity, {i32(value.mode),
+        value.fixed_radius, value.rolling_radius, value.tracer_distance,
+        value.tracer_phase, value.rotation, value.parameter_start,
+        value.parameter_finish, value.draw_parameter})
+}
+
+// Apply one validated trochoid reveal-frontier mutation.
+apply_set_shape_trochoid_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_trochoid_frontier(state, command^.entity, command^.scalar)
+}
+
+// Apply one validated complete singleton-guide configuration.
+apply_set_trochoid_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.trochoid_tool
+    _ = set_trochoid_tool_geometry(state, {i32(value.mode), value.fixed_radius,
+        value.rolling_radius, value.parameter, value.rotation,
+        value.orientation_phase})
+}
+
+// Apply one validated singleton-guide rolling parameter.
+apply_set_trochoid_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_trochoid_tool_parameter(state, command^.scalar)
+}
+
+// Apply one validated complete Cycloid scalar mutation.
+apply_set_shape_cycloid :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.cycloid
+    _ = shape_set_cycloid(state, command^.entity, {value.rolling_radius,
+        value.tracer_distance, value.tracer_phase, value.parameter_start,
+        value.parameter_finish, value.draw_parameter})
+}
+
+// Apply one validated Cycloid reveal-frontier mutation.
+apply_set_shape_cycloid_frontier :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_cycloid_frontier(state, command^.entity, command^.scalar)
+}
+
+// Apply one validated atomic permanent-guide endpoint update.
+apply_set_cycloid_tool_line :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_cycloid_tool_line(state, command^.position, command^.second_position)
+}
+
+// Apply one validated complete permanent Cycloid-guide scalar mutation.
+apply_set_cycloid_tool :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    value := command^.cycloid_tool
+    _ = set_cycloid_tool_geometry(state, {value.rolling_radius,
+        value.parameter_start, value.parameter_finish, value.parameter,
+        value.orientation_phase})
+}
+
+// Apply one validated permanent Cycloid-guide rolling parameter update.
+apply_set_cycloid_tool_parameter :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = set_cycloid_tool_parameter(state, command^.scalar)
+}
+
+// Apply one validated packed-entity visibility mutation.
+apply_set_shape_visible :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_visible(state, command^.entity, u8(command^.flag))
+}
+
+// Apply one validated packed-entity active-feature mutation.
+apply_set_shape_active_feature :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    _ = shape_set_active_feature(state, command^.entity, u16(command^.integer))
 }
 
 //   Validate a complete batch against current canonical state without mutation.
@@ -432,6 +591,12 @@ validate_scene_command_batch :: proc(
     if !scene_command_batch_wellformed(state, batch) {
         return false
     }
+    if animation_model.animation_value_store_validate_pending(
+        &state^.animation_values,
+        state^.animation_values.generation,
+        &batch^.animation_value_writes) != .Ok {
+        return false
+    }
 
     validators := SCENE_COMMAND_VALIDATORS
     for command_index in 0..<batch^.command_count {
@@ -441,202 +606,40 @@ validate_scene_command_batch :: proc(
             return false
         }
     }
-    return true
-}
-
-//   Apply one set-point-position command and record its position-change event.
-apply_set_point_position :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    previous_position := state^.point_system^.points[command^.point_index].position
-    set_point_position_with_floor_crossing_dust(
-        state, command^.point_index, command^.position)
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.position_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{
-            from_position = previous_position,
-            to_position = command^.position,
-        })
-}
-
-//   Apply one set-point-color command and record its style-change event.
-apply_set_point_color :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_point_color(state, i32(command^.point_index), command^.color)
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.style_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{color = command^.color})
-}
-
-//   Apply one set-point-brush command and record its style-change event.
-apply_set_point_brush :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_point_brush(state, i32(command^.point_index), command^.scalar)
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.style_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{brush_size = command^.scalar})
-}
-
-//   Apply one set-point-offset command and record its style-change event.
-apply_set_point_offset :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    _ = set_point_offset(state, i32(command^.point_index), command^.scalar)
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.style_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{offset = command^.scalar})
-}
-
-//   Apply one show-point command and record its visibility-change event.
-apply_show_point :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    show_point(state, i32(command^.point_index))
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.visibility_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{visible = true})
-}
-
-//   Apply one hide-point command and record its visibility-change event.
-apply_hide_point :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    hide_point(state, i32(command^.point_index))
-    _ = trace.record_point_event(
-        &state^.trace_state, "point.visibility_changed", command^.point_index,
-        trace.Trace_Point_Event_Fields{visible = false})
-}
-
-//   Apply one hide-point-batch command.
-apply_hide_point_batch :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    hide_point_batch(state, &command^.point_indices[0], i32(command^.point_count))
-}
-
-//   Apply one pen-joint1 lock command and record its joint-change event.
-apply_lock_pen_joint1 :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    lock_pen_joint1(state, command^.position)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.joint_changed", "pen",
-        {"joint1", command^.position, nil, nil})
-}
-
-//   Apply one pen-joint2 move command and record its joint-change event.
-apply_move_pen_joint2 :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    move_pen_joint2(state, command^.position)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.joint_changed", "pen",
-        {"joint2", command^.position, nil, nil})
-}
-
-//   Apply one set-pen-active command and record its active-change event.
-apply_set_pen_active :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_pen_active(state, i32(command^.integer), command^.color)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.active_changed", "pen",
-        {"", nil, nil, command^.integer})
-}
-
-//   Apply one show-pen command and record its visibility-change event.
-apply_show_pen :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    show_pen(state)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.visibility_changed", "pen",
-        {"", nil, true, nil})
-}
-
-//   Apply one hide-pen command and record its visibility-change event.
-apply_hide_pen :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    hide_pen(state)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "pen.visibility_changed", "pen",
-        {"", nil, false, nil})
-}
-
-//   Apply one hide-compass command and record its visibility-change event.
-apply_hide_compass :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    hide_compass(state)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.visibility_changed", "compass",
-        {"", nil, false, nil})
-}
-
-//   Apply one show-compass command and record its visibility-change event.
-apply_show_compass :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    show_compass(state)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.visibility_changed", "compass",
-        {"", nil, true, nil})
-}
-
-//   Apply one set-compass-active command and record its active-change event.
-apply_set_compass_active :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_compass_active(state, i32(command^.integer), command^.color)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.active_changed", "compass",
-        {"", nil, nil, command^.integer})
-}
-
-//   Apply one compass-joint1 lock command and record its joint-change event.
-apply_lock_compass_joint1 :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    lock_compass_joint1(state, command^.position, command^.flag)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.joint_changed", "compass",
-        {"joint1", command^.position, nil, nil})
-}
-
-//   Apply one compass-joint2 lock command and record its joint-change event.
-apply_lock_compass_joint2 :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    lock_compass_joint2(state, command^.position, command^.flag)
-    _ = trace.record_tool_event(
-        &state^.trace_state, "compass.joint_changed", "compass",
-        {"joint2", command^.position, nil, nil})
-}
-
-//   Apply one set-animation-meta command.
-apply_set_animation_meta :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_animation_meta(state, i32(command^.integer), command^.scalar)
-}
-
-//   Apply one set-drawing-sound-enabled command.
-apply_set_drawing_sound_enabled :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    set_drawing_sound_enabled(state, command^.flag)
-}
-
-//   Apply one simulate-drawing-sound command.
-apply_simulate_drawing_sound :: proc(
-    state: ^core.Euclid_General_State, command: ^Scene_Command) {
-    simulate_drawing_sound(state, command^.scalar)
+    contact_count := scene_command_batch_tool_contact_count(batch)
+    return contact_count == 0 || particles.can_queue_dust_tool_contacts(
+        state^.particle_system, contact_count)
 }
 
 //   Apply one emit-trailing-particle command and record its emission.
 apply_emit_trailing_particle :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     emit_trailing_particle(state, command^.position, command^.color)
-    _ = trace.record_particles_emitted(
-        &state^.trace_state, {"trail", "mid", 1, command^.position, command^.color})
 }
 
 //   Apply one emit-flicker-particle command and record its emission.
 apply_emit_flicker_particle :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     emit_flicker_particle(state, command^.position, command^.color)
-    _ = trace.record_particles_emitted(
-        &state^.trace_state, {"flicker", "high", 10, command^.position, command^.color})
 }
 
 //   Apply one animation-cycle-boundary notification command.
 apply_notify_animation_cycle_boundary :: proc(
     state: ^core.Euclid_General_State, command: ^Scene_Command) {
     notify_animation_cycle_boundary_local(state)
+}
+
+// Report whether one accepted batch represents grounded drawing activity.
+scene_command_batch_has_drawing_activity :: proc(batch: ^Scene_Command_Batch) -> bool {
+    if batch == nil {
+        return false
+    }
+    for command_index in 0..<batch^.command_count {
+        if batch^.commands[command_index].kind == .Emit_Trailing_Particle {
+            return true
+        }
+    }
+    return false
 }
 
 //   Validate and apply one completed batch in original callback order.
@@ -646,16 +649,92 @@ commit_scene_command_batch :: proc(
     state: ^core.Euclid_General_State, batch: ^Scene_Command_Batch) -> bool {
 
     if !validate_scene_command_batch(state, batch) {
+        audio.set_drawing_activity(&state^.chalk_audio, false)
+        record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
+        return false
+    }
+    if animation_model.animation_value_store_apply_pending(
+        &state^.animation_values,
+        state^.animation_values.generation,
+        &batch^.animation_value_writes) != .Ok {
+        audio.set_drawing_activity(&state^.chalk_audio, false)
+        record_scene_batch_evidence(state, .Scene_Batch_Rejected, true)
         return false
     }
 
     appliers := SCENE_COMMAND_APPLIERS
+    hide_burst_kicked := false
     for command_index in 0..<batch^.command_count {
         command := &batch^.commands[command_index]
-        applier := appliers[command^.kind]
-        if applier != nil {
-            applier(state, command)
+        if command^.kind == .Set_Shape_Visible {
+            _, emitted := shape_set_visible_local(
+                state, command^.entity, u8(command^.flag), !hide_burst_kicked)
+            hide_burst_kicked = hide_burst_kicked || emitted
+        } else {
+            applier := appliers[command^.kind]
+            if applier != nil {
+                applier(state, command)
+            }
         }
+        record_scene_command_evidence(state, command)
     }
+    audio.set_drawing_activity(&state^.chalk_audio,
+        scene_command_batch_has_drawing_activity(batch))
+    record_scene_batch_evidence(state, .Scene_Batch_Committed, false)
     return true
+}
+
+//   Record one scene-batch outcome using the current animation tick identity.
+record_scene_batch_evidence :: proc(
+    state: ^core.Euclid_General_State, kind: evidence_trace.Kind,
+    failed: bool) {
+    service := state^.julia_runtime_service
+    flags: evidence_trace.Flags = {.Required}
+    if failed {
+        flags += {.Failure}
+    }
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Transport,
+            kind = kind,
+            correlation_kind = .Scene_Batch,
+            correlation = service != nil ? service^.animation_tick_sequence : 0,
+            generation = service != nil ? service^.animation_generation : 0,
+            tick = state^.fixed_step,
+            flags = flags,
+        })
+}
+
+//   Select compact typed evidence for one committed scene command.
+scene_command_evidence :: proc(
+    command: ^Scene_Command) -> (evidence_trace.Kind, evidence_trace.Event_Payload) {
+    evidence_kinds := SCENE_COMMAND_EVIDENCE_KINDS
+    kind := evidence_kinds[command^.kind]
+    payload: evidence_trace.Event_Payload
+    #partial switch command^.kind {
+    case .Emit_Trailing_Particle, .Emit_Flicker_Particle:
+        payload.counts.first = command^.kind == .Emit_Trailing_Particle ? 1 : 10
+    case:
+    }
+    return kind, payload
+}
+
+//   Record one committed scene command using compact kind-specific payload fields.
+record_scene_command_evidence :: proc(
+    state: ^core.Euclid_General_State, command: ^Scene_Command) {
+    kind, payload := scene_command_evidence(command)
+    if kind == .Unknown {
+        return
+    }
+    service := state^.julia_runtime_service
+    _ = evidence_session.session_record(
+        &state^.evidence_session, &state^.evidence_ring, {
+            lane = .Domain,
+            kind = kind,
+            correlation_kind = .Scene_Batch,
+            correlation = service != nil ? service^.animation_tick_sequence : 0,
+            generation = service != nil ? service^.animation_generation : 0,
+            tick = state^.fixed_step,
+            payload = payload,
+        })
 }

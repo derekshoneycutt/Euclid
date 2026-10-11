@@ -1,0 +1,921 @@
+module HilbertChapterOneTheorem17
+
+using UUIDs
+using ..AnimationCatalog
+
+const AnimationId = UUID("43ffb287-fbcf-5a9e-87dc-48221544d19d")
+
+using ..OdinJuliaBridge
+using ..EuclidAnimations
+using ..EuclidLatex
+
+include("theorem_17_content.jl")
+
+export get_view_content, initialize, clean, loop, animation_entry
+
+const PointA = [0.10f0, 0.82f0, 0f0]
+const PointB = [0.38f0, 0.82f0, 0f0]
+const PointC = [0.38f0, 0.50f0, 0f0]
+const PointD = [0.10f0, 0.50f0, 0f0]
+const PointP = [0.17f0, 0.60f0, 0f0]
+
+const PointAPrime = [0.57f0, 0.82f0, 0f0]
+const PointBPrime = [0.85f0, 0.82f0, 0f0]
+const PointCPrime = [0.85f0, 0.50f0, 0f0]
+const PointDPrime = [0.57f0, 0.50f0, 0f0]
+const PointPPrime = [0.64f0, 0.60f0, 0f0]
+
+const EdgeBrush = 5f0
+const PointBrush = 6f0
+const LabelColor = :plum1
+const HighlightColor = :lightgreen
+
+const ColorAB = :steelblue
+const ColorBC = :palevioletred1
+const ColorCD = :khaki3
+const ColorDA = :grey60
+const ColorAux = :khaki3
+const ColorPointP = :grey60
+
+const PenTopZ = 1.4f0
+const CompassTopZ = 1.4f0
+const ToolResetOffscreenJoint1 = [0.50f0, 1.25f0, 1.55f0]
+const ToolResetOffscreenJoint2 = [0.57f0, 1.25f0, 1.55f0]
+
+const DescendDuration = 1.8f0
+const DrawDuration = 2.1f0
+const DrawPointDuration = 1.4f0
+const ArcMoveDuration = 1.35f0
+const DragDuration = 1.1f0
+const PenLiftDuration = 1.6f0
+const CompassLiftDuration = 1.8f0
+const FinalHoldDuration = 0.35f0
+
+const LabelAPoint = PointA + [-0.03f0, 0.03f0, 0f0]
+const LabelBPoint = PointB + [0.05f0, 0.06f0, 0f0]
+const LabelCPoint = PointC + [0.02f0, -0.04f0, 0f0]
+const LabelDPoint = PointD + [-0.03f0, -0.04f0, 0f0]
+const LabelPPoint = PointP + [0.05f0, -0.05f0, 0f0]
+
+const LabelAPrimePoint = PointAPrime + [-0.03f0, 0.03f0, 0f0]
+const LabelBPrimePoint = PointBPrime + [0.05f0, 0.06f0, 0f0]
+const LabelCPrimePoint = PointCPrime + [0.02f0, -0.04f0, 0f0]
+const LabelDPrimePoint = PointDPrime + [-0.03f0, -0.04f0, 0f0]
+const LabelPPrimePoint = PointPPrime + [0.05f0, -0.05f0, 0f0]
+
+"""Complete immutable state for one Theorem 17 animation generation."""
+struct AnimationState
+    edge_abhost_id::UInt64
+    edge_abjoint1_id::Int64
+    edge_abjoint2_id::Int64
+    edge_bchost_id::UInt64
+    edge_bcjoint1_id::Int64
+    edge_bcjoint2_id::Int64
+    edge_cdhost_id::UInt64
+    edge_cdjoint1_id::Int64
+    edge_cdjoint2_id::Int64
+    edge_dahost_id::UInt64
+    edge_dajoint1_id::Int64
+    edge_dajoint2_id::Int64
+    edge_aprime_bprime_host_id::UInt64
+    edge_aprime_bprime_joint1_id::Int64
+    edge_aprime_bprime_joint2_id::Int64
+    edge_bprime_cprime_host_id::UInt64
+    edge_bprime_cprime_joint1_id::Int64
+    edge_bprime_cprime_joint2_id::Int64
+    edge_cprime_dprime_host_id::UInt64
+    edge_cprime_dprime_joint1_id::Int64
+    edge_cprime_dprime_joint2_id::Int64
+    edge_dprime_aprime_host_id::UInt64
+    edge_dprime_aprime_joint1_id::Int64
+    edge_dprime_aprime_joint2_id::Int64
+    edge_aphost_id::UInt64
+    edge_apjoint1_id::Int64
+    edge_apjoint2_id::Int64
+    edge_pchost_id::UInt64
+    edge_pcjoint1_id::Int64
+    edge_pcjoint2_id::Int64
+    edge_aprime_pprime_host_id::UInt64
+    edge_aprime_pprime_joint1_id::Int64
+    edge_aprime_pprime_joint2_id::Int64
+    edge_pprime_cprime_host_id::UInt64
+    edge_pprime_cprime_joint1_id::Int64
+    edge_pprime_cprime_joint2_id::Int64
+    point_pid::UInt64
+    point_pprime_id::UInt64
+    label_aid::UInt64
+    label_bid::UInt64
+    label_cid::UInt64
+    label_did::UInt64
+    label_pid::UInt64
+    label_aprime_id::UInt64
+    label_bprime_id::UInt64
+    label_cprime_id::UInt64
+    label_dprime_id::UInt64
+    label_pprime_id::UInt64
+    phase::Float32
+    timer::Float32
+end
+
+const StateKey = OdinJuliaBridge.AnimationKey{AnimationState}(0x01)
+
+const PhaseDescendA = 0f0
+const PhaseDrawAB = 1f0
+const PhaseDrawBC = 2f0
+const PhaseDrawCD = 3f0
+const PhaseDrawDA = 4f0
+const PhaseArcToAPrime = 5f0
+const PhaseDrawAPrimeBPrime = 6f0
+const PhaseDrawBPrimeCPrime = 7f0
+const PhaseDrawCPrimeDPrime = 8f0
+const PhaseDrawDPrimeAPrime = 9f0
+const PhaseArcToP = 10f0
+const PhaseDrawP = 11f0
+const PhaseArcToPPrime = 12f0
+const PhaseDrawPPrime = 13f0
+const PhaseArcToAForAP = 14f0
+const PhaseDrawAP = 15f0
+const PhaseArcToPForPC = 16f0
+const PhaseDrawPC = 17f0
+const PhaseArcToAPrimeForAPrimePPrime = 18f0
+const PhaseDrawAPrimePPrime = 19f0
+const PhaseArcToPPrimeForPPrimeCPrime = 20f0
+const PhaseDrawPPrimeCPrime = 21f0
+const PhasePenRiseBeforeHighlights = 22f0
+
+const PhaseCompassDescendAB = 23f0
+const PhaseHighlightPath1ABForward = 24f0
+const PhaseHighlightPath1BCForward = 25f0
+const PhaseHighlightPath1CPForward = 26f0
+const PhaseHighlightPath1PAForward = 27f0
+const PhaseHighlightPath1APBack = 28f0
+const PhaseHighlightPath1PCBack = 29f0
+const PhaseHighlightPath1CBBack = 30f0
+const PhaseHighlightPath1BABack = 31f0
+
+const PhaseCompassArcToPrime = 32f0
+const PhaseHighlightPath2ABForward = 33f0
+const PhaseHighlightPath2BCForward = 34f0
+const PhaseHighlightPath2CPForward = 35f0
+const PhaseHighlightPath2PAForward = 36f0
+const PhaseHighlightPath2APBack = 37f0
+const PhaseHighlightPath2PCBack = 38f0
+const PhaseHighlightPath2CBBack = 39f0
+const PhaseHighlightPath2BABack = 40f0
+const PhaseCompassRiseEnd = 41f0
+const PhaseFinalHold = 42f0
+
+"""Return state with updated cycle timing and unchanged native handles."""
+function with_timing(state::AnimationState, phase::Float32, timer::Float32)
+    return AnimationState(
+        state.edge_abhost_id, state.edge_abjoint1_id, state.edge_abjoint2_id,
+        state.edge_bchost_id, state.edge_bcjoint1_id, state.edge_bcjoint2_id,
+        state.edge_cdhost_id, state.edge_cdjoint1_id, state.edge_cdjoint2_id,
+        state.edge_dahost_id, state.edge_dajoint1_id, state.edge_dajoint2_id,
+        state.edge_aprime_bprime_host_id, state.edge_aprime_bprime_joint1_id,
+        state.edge_aprime_bprime_joint2_id, state.edge_bprime_cprime_host_id,
+        state.edge_bprime_cprime_joint1_id, state.edge_bprime_cprime_joint2_id,
+        state.edge_cprime_dprime_host_id, state.edge_cprime_dprime_joint1_id,
+        state.edge_cprime_dprime_joint2_id, state.edge_dprime_aprime_host_id,
+        state.edge_dprime_aprime_joint1_id, state.edge_dprime_aprime_joint2_id,
+        state.edge_aphost_id, state.edge_apjoint1_id, state.edge_apjoint2_id,
+        state.edge_pchost_id, state.edge_pcjoint1_id, state.edge_pcjoint2_id,
+        state.edge_aprime_pprime_host_id, state.edge_aprime_pprime_joint1_id,
+        state.edge_aprime_pprime_joint2_id, state.edge_pprime_cprime_host_id,
+        state.edge_pprime_cprime_joint1_id, state.edge_pprime_cprime_joint2_id,
+        state.point_pid, state.point_pprime_id, state.label_aid, state.label_bid,
+        state.label_cid, state.label_did, state.label_pid, state.label_aprime_id,
+        state.label_bprime_id, state.label_cprime_id, state.label_dprime_id,
+        state.label_pprime_id,
+        phase, timer)
+end
+
+"""Get the view content for this animation"""
+function get_view_content(_state_ptr::Ptr{Cvoid})
+    return HilbertChapterOneTheorem17Content.get_view_content()
+end
+
+"""Reset the animation cycle while preserving its native handles."""
+function reset_cycle_state(state_ptr::Ptr{Cvoid}, state::AnimationState)
+    edge_a_b_host_id = state.edge_abhost_id
+    edge_a_b_joint2_id = state.edge_abjoint2_id
+    edge_b_c_host_id = state.edge_bchost_id
+    edge_b_c_joint2_id = state.edge_bcjoint2_id
+    edge_c_d_host_id = state.edge_cdhost_id
+    edge_c_d_joint2_id = state.edge_cdjoint2_id
+    edge_d_a_host_id = state.edge_dahost_id
+    edge_d_a_joint2_id = state.edge_dajoint2_id
+
+    edge_a_prime_b_prime_host_id = state.edge_aprime_bprime_host_id
+    edge_a_prime_b_prime_joint2_id = state.edge_aprime_bprime_joint2_id
+    edge_b_prime_c_prime_host_id = state.edge_bprime_cprime_host_id
+    edge_b_prime_c_prime_joint2_id = state.edge_bprime_cprime_joint2_id
+    edge_c_prime_d_prime_host_id = state.edge_cprime_dprime_host_id
+    edge_c_prime_d_prime_joint2_id = state.edge_cprime_dprime_joint2_id
+    edge_d_prime_a_prime_host_id = state.edge_dprime_aprime_host_id
+    edge_d_prime_a_prime_joint2_id = state.edge_dprime_aprime_joint2_id
+
+    edge_a_p_host_id = state.edge_aphost_id
+    edge_a_p_joint2_id = state.edge_apjoint2_id
+    edge_p_c_host_id = state.edge_pchost_id
+    edge_p_c_joint2_id = state.edge_pcjoint2_id
+    edge_a_prime_p_prime_host_id = state.edge_aprime_pprime_host_id
+    edge_a_prime_p_prime_joint2_id = state.edge_aprime_pprime_joint2_id
+    edge_p_prime_c_prime_host_id = state.edge_pprime_cprime_host_id
+    edge_p_prime_c_prime_joint2_id = state.edge_pprime_cprime_joint2_id
+
+    point_p_id = state.point_pid
+    point_p_prime_id = state.point_pprime_id
+
+    label_a_id = state.label_aid
+    label_b_id = state.label_bid
+    label_c_id = state.label_cid
+    label_d_id = state.label_did
+    label_p_id = state.label_pid
+    label_a_prime_id = state.label_aprime_id
+    label_b_prime_id = state.label_bprime_id
+    label_c_prime_id = state.label_cprime_id
+    label_d_prime_id = state.label_dprime_id
+    label_p_prime_id = state.label_pprime_id
+
+    OdinJuliaBridge.hide_point_batch(state_ptr,
+        [edge_a_b_host_id, edge_b_c_host_id, edge_c_d_host_id, edge_d_a_host_id,
+         edge_a_prime_b_prime_host_id, edge_b_prime_c_prime_host_id,
+         edge_c_prime_d_prime_host_id, edge_d_prime_a_prime_host_id,
+         edge_a_p_host_id, edge_p_c_host_id,
+         edge_a_prime_p_prime_host_id, edge_p_prime_c_prime_host_id,
+         point_p_id, point_p_prime_id,
+         label_a_id, label_b_id, label_c_id, label_d_id, label_p_id,
+         label_a_prime_id, label_b_prime_id, label_c_prime_id,
+         label_d_prime_id, label_p_prime_id])
+
+    OdinJuliaBridge.set_point_position(state_ptr, edge_a_b_joint2_id, PointA)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_b_c_joint2_id, PointB)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_c_d_joint2_id, PointC)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_d_a_joint2_id, PointD)
+
+    OdinJuliaBridge.set_point_position(
+        state_ptr, edge_a_prime_b_prime_joint2_id, PointAPrime)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, edge_b_prime_c_prime_joint2_id, PointBPrime)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, edge_c_prime_d_prime_joint2_id, PointCPrime)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, edge_d_prime_a_prime_joint2_id, PointDPrime)
+
+    OdinJuliaBridge.set_point_position(state_ptr, edge_a_p_joint2_id, PointA)
+    OdinJuliaBridge.set_point_position(state_ptr, edge_p_c_joint2_id, PointP)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, edge_a_prime_p_prime_joint2_id, PointAPrime)
+    OdinJuliaBridge.set_point_position(
+        state_ptr, edge_p_prime_c_prime_joint2_id, PointPPrime)
+
+
+    OdinJuliaBridge.hide_pen(state_ptr)
+    OdinJuliaBridge.hide_compass(state_ptr)
+    OdinJuliaBridge.lock_pen_joint1(
+        state_ptr, ToolResetOffscreenJoint1[1], ToolResetOffscreenJoint1[2],
+        ToolResetOffscreenJoint1[3])
+    OdinJuliaBridge.move_pen_joint2(
+        state_ptr, ToolResetOffscreenJoint2[1], ToolResetOffscreenJoint2[2],
+        ToolResetOffscreenJoint2[3])
+    OdinJuliaBridge.lock_compass_joint1(
+        state_ptr, ToolResetOffscreenJoint1[1], ToolResetOffscreenJoint1[2],
+        ToolResetOffscreenJoint1[3], sweep = false)
+    OdinJuliaBridge.lock_compass_joint2(
+        state_ptr, ToolResetOffscreenJoint2[1], ToolResetOffscreenJoint2[2],
+        ToolResetOffscreenJoint2[3], sweep = false)
+
+    OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorAB)
+    OdinJuliaBridge.set_compass_active(state_ptr, 0, HighlightColor)
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, 0f0, 0f0))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return false
+
+    OdinJuliaBridge.notify_animation_cycle_boundary(state_ptr)
+    return true
+end
+
+"""Initialize all objects for this animation"""
+function initialize(state_ptr::Ptr{Cvoid})
+    edge_a_b = OdinJuliaBridge.create_new_line(
+        state_ptr, PointA, PointA,
+        ColorAB, 0f0)
+    edge_b_c = OdinJuliaBridge.create_new_line(
+        state_ptr, PointB, PointB,
+        ColorBC, 0f0)
+    edge_c_d = OdinJuliaBridge.create_new_line(
+        state_ptr, PointC, PointC,
+        ColorCD, 0f0)
+    edge_d_a = OdinJuliaBridge.create_new_line(
+        state_ptr, PointD, PointD,
+        ColorDA, 0f0)
+
+    edge_a_prime_b_prime = OdinJuliaBridge.create_new_line(
+        state_ptr, PointAPrime, PointAPrime, ColorAB, 0f0)
+    edge_b_prime_c_prime = OdinJuliaBridge.create_new_line(
+        state_ptr, PointBPrime, PointBPrime, ColorBC, 0f0)
+    edge_c_prime_d_prime = OdinJuliaBridge.create_new_line(
+        state_ptr, PointCPrime, PointCPrime, ColorCD, 0f0)
+    edge_d_prime_a_prime = OdinJuliaBridge.create_new_line(
+        state_ptr, PointDPrime, PointDPrime, ColorDA, 0f0)
+
+    edge_a_p = OdinJuliaBridge.create_new_line(
+        state_ptr, PointA, PointA,
+        ColorAux, 0f0)
+    edge_p_c = OdinJuliaBridge.create_new_line(
+        state_ptr, PointP, PointP,
+        ColorAux, 0f0)
+    edge_a_prime_p_prime = OdinJuliaBridge.create_new_line(
+        state_ptr, PointAPrime, PointAPrime, ColorAux, 0f0)
+    edge_p_prime_c_prime = OdinJuliaBridge.create_new_line(
+        state_ptr, PointPPrime, PointPPrime, ColorAux, 0f0)
+
+    point_p = OdinJuliaBridge.create_new_point(
+        state_ptr, PointP, ColorPointP, 0f0)
+    point_p_prime = OdinJuliaBridge.create_new_point(
+        state_ptr, PointPPrime, ColorPointP, 0f0)
+
+    label_a = OdinJuliaBridge.create_new_label(
+        state_ptr, 'A', LabelAPoint, LabelColor, 16f0)
+    label_b = OdinJuliaBridge.create_new_label(
+        state_ptr, 'B', LabelBPoint, LabelColor, 16f0)
+    label_c = OdinJuliaBridge.create_new_label(
+        state_ptr, 'C', LabelCPoint, LabelColor, 16f0)
+    label_d = OdinJuliaBridge.create_new_label(
+        state_ptr, 'D', LabelDPoint, LabelColor, 16f0)
+    label_p = OdinJuliaBridge.create_new_label(
+        state_ptr, 'P', LabelPPoint, LabelColor, 16f0)
+
+    label_a_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "A′",
+        LabelAPrimePoint, LabelColor, 16f0)
+    label_b_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "B′",
+        LabelBPrimePoint, LabelColor, 16f0)
+    label_c_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "C′",
+        LabelCPrimePoint, LabelColor, 16f0)
+    label_d_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "D′",
+        LabelDPrimePoint, LabelColor, 16f0)
+    label_p_prime = OdinJuliaBridge.create_new_label(
+        state_ptr, "P′",
+        LabelPPrimePoint, LabelColor, 16f0)
+
+
+
+
+
+
+    state = AnimationState(
+        edge_a_b.host_id, edge_a_b.joint1_id, edge_a_b.joint2_id, edge_b_c.host_id,
+        edge_b_c.joint1_id, edge_b_c.joint2_id, edge_c_d.host_id, edge_c_d.joint1_id,
+        edge_c_d.joint2_id, edge_d_a.host_id, edge_d_a.joint1_id, edge_d_a.joint2_id,
+        edge_a_prime_b_prime.host_id, edge_a_prime_b_prime.joint1_id,
+        edge_a_prime_b_prime.joint2_id, edge_b_prime_c_prime.host_id,
+        edge_b_prime_c_prime.joint1_id, edge_b_prime_c_prime.joint2_id,
+        edge_c_prime_d_prime.host_id, edge_c_prime_d_prime.joint1_id,
+        edge_c_prime_d_prime.joint2_id, edge_d_prime_a_prime.host_id,
+        edge_d_prime_a_prime.joint1_id, edge_d_prime_a_prime.joint2_id,
+        edge_a_p.host_id, edge_a_p.joint1_id, edge_a_p.joint2_id, edge_p_c.host_id,
+        edge_p_c.joint1_id, edge_p_c.joint2_id, edge_a_prime_p_prime.host_id,
+        edge_a_prime_p_prime.joint1_id,
+        edge_a_prime_p_prime.joint2_id, edge_p_prime_c_prime.host_id,
+        edge_p_prime_c_prime.joint1_id, edge_p_prime_c_prime.joint2_id,
+        point_p.index, point_p_prime.index, label_a.index, label_b.index,
+        label_c.index, label_d.index, label_p.index, label_a_prime.index,
+        label_b_prime.index, label_c_prime.index, label_d_prime.index,
+        label_p_prime.index,
+        0f0, 0f0)
+    reset_cycle_state(state_ptr, state)
+    OdinJuliaBridge.publish_view_content(state_ptr, get_view_content)
+end
+
+"""Clean any extra animation data at the end of performance"""
+function clean(state_ptr::Ptr{Cvoid})
+end
+
+"""Perform an iteration of the animation loop for this animation"""
+function loop(state_ptr::Ptr{Cvoid}, dt::Float32)
+    state, status = OdinJuliaBridge.get_animation_value(state_ptr, StateKey)
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+    edge_a_b_host_id = state.edge_abhost_id
+    edge_a_b_joint1_id = state.edge_abjoint1_id
+    edge_a_b_joint2_id = state.edge_abjoint2_id
+    edge_b_c_host_id = state.edge_bchost_id
+    edge_b_c_joint1_id = state.edge_bcjoint1_id
+    edge_b_c_joint2_id = state.edge_bcjoint2_id
+    edge_c_d_host_id = state.edge_cdhost_id
+    edge_c_d_joint1_id = state.edge_cdjoint1_id
+    edge_c_d_joint2_id = state.edge_cdjoint2_id
+    edge_d_a_host_id = state.edge_dahost_id
+    edge_d_a_joint1_id = state.edge_dajoint1_id
+    edge_d_a_joint2_id = state.edge_dajoint2_id
+
+    edge_a_prime_b_prime_host_id = state.edge_aprime_bprime_host_id
+    edge_a_prime_b_prime_joint1_id = state.edge_aprime_bprime_joint1_id
+    edge_a_prime_b_prime_joint2_id = state.edge_aprime_bprime_joint2_id
+    edge_b_prime_c_prime_host_id = state.edge_bprime_cprime_host_id
+    edge_b_prime_c_prime_joint1_id = state.edge_bprime_cprime_joint1_id
+    edge_b_prime_c_prime_joint2_id = state.edge_bprime_cprime_joint2_id
+    edge_c_prime_d_prime_host_id = state.edge_cprime_dprime_host_id
+    edge_c_prime_d_prime_joint1_id = state.edge_cprime_dprime_joint1_id
+    edge_c_prime_d_prime_joint2_id = state.edge_cprime_dprime_joint2_id
+    edge_d_prime_a_prime_host_id = state.edge_dprime_aprime_host_id
+    edge_d_prime_a_prime_joint1_id = state.edge_dprime_aprime_joint1_id
+    edge_d_prime_a_prime_joint2_id = state.edge_dprime_aprime_joint2_id
+
+    edge_a_p_host_id = state.edge_aphost_id
+    edge_a_p_joint1_id = state.edge_apjoint1_id
+    edge_a_p_joint2_id = state.edge_apjoint2_id
+    edge_p_c_host_id = state.edge_pchost_id
+    edge_p_c_joint1_id = state.edge_pcjoint1_id
+    edge_p_c_joint2_id = state.edge_pcjoint2_id
+    edge_a_prime_p_prime_host_id = state.edge_aprime_pprime_host_id
+    edge_a_prime_p_prime_joint1_id = state.edge_aprime_pprime_joint1_id
+    edge_a_prime_p_prime_joint2_id = state.edge_aprime_pprime_joint2_id
+    edge_p_prime_c_prime_host_id = state.edge_pprime_cprime_host_id
+    edge_p_prime_c_prime_joint1_id = state.edge_pprime_cprime_joint1_id
+    edge_p_prime_c_prime_joint2_id = state.edge_pprime_cprime_joint2_id
+
+    point_p_id = state.point_pid
+    point_p_prime_id = state.point_pprime_id
+
+    label_a_id = state.label_aid
+    label_b_id = state.label_bid
+    label_c_id = state.label_cid
+    label_d_id = state.label_did
+    label_p_id = state.label_pid
+    label_a_prime_id = state.label_aprime_id
+    label_b_prime_id = state.label_bprime_id
+    label_c_prime_id = state.label_cprime_id
+    label_d_prime_id = state.label_dprime_id
+    label_p_prime_id = state.label_pprime_id
+
+    if edge_a_b_host_id < 0 || edge_a_prime_b_prime_host_id < 0
+        return
+    end
+
+    phase = state.phase
+    timer = state.timer
+
+    if phase == PhaseDescendA
+        EuclidAnimations.animate_pen_descend(
+            state_ptr, timer, DescendDuration, PenTopZ, PointA[1], PointA[2])
+        timer += dt
+        if timer >= DescendDuration
+            OdinJuliaBridge.show_point(state_ptr, label_a_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorAB)
+            phase = PhaseDrawAB
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawAB
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointA, PointB;
+            penbrush=EdgeBrush,
+            pencolor=ColorAB,
+            line_host_id=edge_a_b_host_id,
+            line_joint1_id=edge_a_b_joint1_id,
+            line_joint2_id=edge_a_b_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            OdinJuliaBridge.show_point(state_ptr, label_b_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorBC)
+            phase = PhaseDrawBC
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawBC
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointB, PointC;
+            penbrush=EdgeBrush,
+            pencolor=ColorBC,
+            line_host_id=edge_b_c_host_id,
+            line_joint1_id=edge_b_c_joint1_id,
+            line_joint2_id=edge_b_c_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            OdinJuliaBridge.show_point(state_ptr, label_c_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorCD)
+            phase = PhaseDrawCD
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawCD
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointC, PointD;
+            penbrush=EdgeBrush,
+            pencolor=ColorCD,
+            line_host_id=edge_c_d_host_id,
+            line_joint1_id=edge_c_d_joint1_id,
+            line_joint2_id=edge_c_d_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            OdinJuliaBridge.show_point(state_ptr, label_d_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorDA)
+            phase = PhaseDrawDA
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawDA
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointD, PointA;
+            penbrush=EdgeBrush,
+            pencolor=ColorDA,
+            line_host_id=edge_d_a_host_id,
+            line_joint1_id=edge_d_a_joint1_id,
+            line_joint2_id=edge_d_a_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            phase = PhaseArcToAPrime
+            timer = 0f0
+        end
+
+    elseif phase == PhaseArcToAPrime
+        EuclidAnimations.animate_pen_arcmove(
+            state_ptr, timer, ArcMoveDuration, PointA, PointAPrime, 0.24f0, 1, :none)
+        timer += dt
+        if timer >= ArcMoveDuration
+            OdinJuliaBridge.show_point(state_ptr, label_a_prime_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorAB)
+            phase = PhaseDrawAPrimeBPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawAPrimeBPrime
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointAPrime, PointBPrime;
+            penbrush=EdgeBrush,
+            pencolor=ColorAB,
+            line_host_id=edge_a_prime_b_prime_host_id,
+            line_joint1_id=edge_a_prime_b_prime_joint1_id,
+            line_joint2_id=edge_a_prime_b_prime_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            OdinJuliaBridge.show_point(state_ptr, label_b_prime_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorBC)
+            phase = PhaseDrawBPrimeCPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawBPrimeCPrime
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointBPrime, PointCPrime;
+            penbrush=EdgeBrush,
+            pencolor=ColorBC,
+            line_host_id=edge_b_prime_c_prime_host_id,
+            line_joint1_id=edge_b_prime_c_prime_joint1_id,
+            line_joint2_id=edge_b_prime_c_prime_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            OdinJuliaBridge.show_point(state_ptr, label_c_prime_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorCD)
+            phase = PhaseDrawCPrimeDPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawCPrimeDPrime
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointCPrime, PointDPrime;
+            penbrush=EdgeBrush,
+            pencolor=ColorCD,
+            line_host_id=edge_c_prime_d_prime_host_id,
+            line_joint1_id=edge_c_prime_d_prime_joint1_id,
+            line_joint2_id=edge_c_prime_d_prime_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            OdinJuliaBridge.show_point(state_ptr, label_d_prime_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorDA)
+            phase = PhaseDrawDPrimeAPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawDPrimeAPrime
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointDPrime, PointAPrime;
+            penbrush=EdgeBrush,
+            pencolor=ColorDA,
+            line_host_id=edge_d_prime_a_prime_host_id,
+            line_joint1_id=edge_d_prime_a_prime_joint1_id,
+            line_joint2_id=edge_d_prime_a_prime_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            phase = PhaseArcToP
+            timer = 0f0
+        end
+
+    elseif phase == PhaseArcToP
+        EuclidAnimations.animate_pen_arcmove(
+            state_ptr, timer, ArcMoveDuration, PointAPrime, PointP, 0.24f0, 1, :none)
+        timer += dt
+        if timer >= ArcMoveDuration
+            phase = PhaseDrawP
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawP
+        EuclidAnimations.animate_draw_point(
+            state_ptr, timer, DrawPointDuration, PointP,
+            PointBrush, ColorPointP, point_p_id)
+        timer += dt
+        if timer >= DrawPointDuration
+            OdinJuliaBridge.show_point(state_ptr, label_p_id)
+            phase = PhaseArcToPPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseArcToPPrime
+        EuclidAnimations.animate_pen_arcmove(
+            state_ptr, timer, ArcMoveDuration, PointP, PointPPrime, 0.24f0, 1, :none)
+        timer += dt
+        if timer >= ArcMoveDuration
+            phase = PhaseDrawPPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawPPrime
+        EuclidAnimations.animate_draw_point(
+            state_ptr, timer, DrawPointDuration, PointPPrime,
+            PointBrush, ColorPointP, point_p_prime_id)
+        timer += dt
+        if timer >= DrawPointDuration
+            OdinJuliaBridge.show_point(state_ptr, label_p_prime_id)
+            OdinJuliaBridge.set_pen_active(state_ptr, 0, ColorAux)
+            phase = PhaseArcToAForAP
+            timer = 0f0
+        end
+
+    elseif phase == PhaseArcToAForAP
+        EuclidAnimations.animate_pen_arcmove(
+            state_ptr, timer, ArcMoveDuration, PointPPrime, PointA, 0.24f0, 1, :none)
+        timer += dt
+        if timer >= ArcMoveDuration
+            phase = PhaseDrawAP
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawAP
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointA, PointP;
+            penbrush=EdgeBrush,
+            pencolor=ColorAux,
+            line_host_id=edge_a_p_host_id,
+            line_joint1_id=edge_a_p_joint1_id,
+            line_joint2_id=edge_a_p_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            phase = PhaseDrawPC
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawPC
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointP, PointC;
+            penbrush=EdgeBrush,
+            pencolor=ColorAux,
+            line_host_id=edge_p_c_host_id,
+            line_joint1_id=edge_p_c_joint1_id,
+            line_joint2_id=edge_p_c_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            phase = PhaseArcToAPrimeForAPrimePPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseArcToAPrimeForAPrimePPrime
+        EuclidAnimations.animate_pen_arcmove(
+            state_ptr, timer, ArcMoveDuration, PointC, PointAPrime, 0.24f0, 1, :none)
+        timer += dt
+        if timer >= ArcMoveDuration
+            phase = PhaseDrawAPrimePPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawAPrimePPrime
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointAPrime, PointPPrime;
+            penbrush=EdgeBrush,
+            pencolor=ColorAux,
+            line_host_id=edge_a_prime_p_prime_host_id,
+            line_joint1_id=edge_a_prime_p_prime_joint1_id,
+            line_joint2_id=edge_a_prime_p_prime_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            phase = PhaseDrawPPrimeCPrime
+            timer = 0f0
+        end
+    elseif phase == PhaseDrawPPrimeCPrime
+        EuclidAnimations.animate_draw_line(state_ptr,
+            timer, DrawDuration,
+            PointPPrime, PointCPrime;
+            penbrush=EdgeBrush,
+            pencolor=ColorAux,
+            line_host_id=edge_p_prime_c_prime_host_id,
+            line_joint1_id=edge_p_prime_c_prime_joint1_id,
+            line_joint2_id=edge_p_prime_c_prime_joint2_id)
+        timer += dt
+        if timer >= DrawDuration
+            phase = PhasePenRiseBeforeHighlights
+            timer = 0f0
+        end
+    elseif phase == PhasePenRiseBeforeHighlights
+        EuclidAnimations.animate_pen_rise(
+            state_ptr, timer, PenLiftDuration, PenTopZ, PointCPrime[1], PointCPrime[2])
+        timer += dt
+        if timer >= PenLiftDuration
+            OdinJuliaBridge.hide_pen(state_ptr)
+            phase = PhaseCompassDescendAB
+            timer = 0f0
+        end
+
+    elseif phase == PhaseCompassDescendAB
+        EuclidAnimations.animate_pen_descend(
+            state_ptr, timer, DescendDuration, PenTopZ, PointA[1], PointA[2])
+        timer += dt
+        if timer >= DescendDuration
+            phase = PhaseHighlightPath1ABForward
+            timer = 0f0
+        end
+
+    elseif phase == PhaseHighlightPath1ABForward
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointA, PointB, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath1BCForward
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath1BCForward
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointB, PointC, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath1CPForward
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath1CPForward
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointC, PointP, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath1PAForward
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath1PAForward
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointP, PointA, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath1APBack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath1APBack
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointA, PointP, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath1PCBack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath1PCBack
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointP, PointC, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath1CBBack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath1CBBack
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointC, PointB, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath1BABack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath1BABack
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointB, PointA, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseCompassArcToPrime
+            timer = 0f0
+        end
+
+    elseif phase == PhaseCompassArcToPrime
+        EuclidAnimations.animate_pen_arcmove(
+            state_ptr, timer, ArcMoveDuration, PointA, PointAPrime, 0.22f0, 1, :none)
+        timer += dt
+        if timer >= ArcMoveDuration
+            phase = PhaseHighlightPath2ABForward
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath2ABForward
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointAPrime, PointBPrime, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath2BCForward
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath2BCForward
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointBPrime, PointCPrime, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath2CPForward
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath2CPForward
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointCPrime, PointPPrime, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath2PAForward
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath2PAForward
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointPPrime, PointAPrime, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath2APBack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath2APBack
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointAPrime, PointPPrime, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath2PCBack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath2PCBack
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointPPrime, PointCPrime, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath2CBBack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath2CBBack
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointCPrime, PointBPrime, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseHighlightPath2BABack
+            timer = 0f0
+        end
+    elseif phase == PhaseHighlightPath2BABack
+        EuclidAnimations.animate_pen_tilt_and_drag(
+            state_ptr, timer, DragDuration, PointBPrime, PointAPrime, HighlightColor)
+        timer += dt
+        if timer >= DragDuration
+            phase = PhaseCompassRiseEnd
+            timer = 0f0
+        end
+
+    elseif phase == PhaseCompassRiseEnd
+        EuclidAnimations.animate_pen_rise(
+            state_ptr, timer, PenLiftDuration, PenTopZ, PointAPrime[1], PointAPrime[2])
+        timer += dt
+        if timer >= PenLiftDuration
+            OdinJuliaBridge.hide_pen(state_ptr)
+            phase = PhaseFinalHold
+            timer = 0f0
+        end
+    elseif phase == PhaseFinalHold
+        timer += dt
+        if timer >= FinalHoldDuration
+            reset_cycle_state(state_ptr, state)
+            return
+        end
+    end
+
+    status = OdinJuliaBridge.set_animation_value!(
+        state_ptr, StateKey, with_timing(state, phase, timer))
+    status == OdinJuliaBridge.BRIDGE_STATUS_OK || return
+end
+
+
+"""Dispatch one bridge-stable lifecycle operation for this animation."""
+function animation_entry(
+    state_ptr::Ptr{Cvoid}, operation::Int32, dt::Float32)::Bool
+
+    if operation == OdinJuliaBridge.ANIMATION_OPERATION_PRESENTATION_SELECTION_CHANGED
+        return true
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_ENTER
+        OdinJuliaBridge.animation_content_specification(state_ptr)
+        initialize(state_ptr)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_TICK
+        loop(state_ptr, dt)
+    elseif operation == OdinJuliaBridge.ANIMATION_OPERATION_EXIT
+        clean(state_ptr)
+    else
+        return false
+    end
+    return true
+end
+
+end
+
+AnimationCatalog.animation(
+    HilbertChapterOneTheorem17.AnimationId, HilbertChapterOneTheorem17.animation_entry)

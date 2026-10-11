@@ -5,7 +5,7 @@ A normal Julia JIT session can resolve bare `@ccall` names from the host process
 but code restored from a PackageCompiler sysimage cannot do so reliably on Windows.
 Host exports remain at fixed addresses for the lifetime of the process.
 """
-const HOST_SYMBOL_CACHE = Dict{Symbol, Ptr{Cvoid}}()
+HOST_SYMBOL_CACHE = Dict{Symbol, Ptr{Cvoid}}()
 
 """
 Resolve an Odin bridge function exported by the Euclid executable.
@@ -56,150 +56,11 @@ macro ccall(expression)
     return esc(:(Base.@ccall $rewritten))
 end
 
-struct BridgeDynviewMathOp
-    kind::Int32
-    style_id::Int32
-    child_program_id::Int32
-    secondary_child_program_id::Int32
-    script_style_id::Int32
-    accent_style_id::Int32
-    accent_mode::Int32
-    radical_mode::Int32
-    large_op_kind::Int32
-    text_offset::Int32
-    text_len::Int32
-    index_text_offset::Int32
-    index_text_len::Int32
-    sup_text_offset::Int32
-    sup_text_len::Int32
-    sub_text_offset::Int32
-    sub_text_len::Int32
-    script_scale::Float32
-    script_sup_raise::Float32
-    script_sub_drop::Float32
-    script_gap::Float32
-    accent_thickness::Float32
-    accent_offset::Float32
-end
-
 struct BridgeColor
     r::UInt8
     g::UInt8
     b::UInt8
     a::UInt8
-end
-
-"""
-Fill plus five edge colors for one inline pentagon atom.
-
-Mirrors the Odin `Bridge_Pentagon_Colors` ABI struct field-for-field.
-"""
-struct BridgePentagonColors
-    fill::BridgeColor
-    edge1::BridgeColor
-    edge2::BridgeColor
-    edge3::BridgeColor
-    edge4::BridgeColor
-    edge5::BridgeColor
-end
-
-"""
-Fill plus three edge colors for one inline triangle atom.
-
-Mirrors the Odin `Bridge_Triangle_Colors` ABI struct field-for-field.
-"""
-struct BridgeTriangleColors
-    fill::BridgeColor
-    edge1::BridgeColor
-    edge2::BridgeColor
-    edge3::BridgeColor
-end
-
-"""
-Four independent edge colors for one inline box atom.
-
-Mirrors the Odin `Bridge_Box_Edge_Colors` ABI struct field-for-field.
-"""
-struct BridgeBoxEdgeColors
-    edge1::BridgeColor
-    edge2::BridgeColor
-    edge3::BridgeColor
-    edge4::BridgeColor
-end
-
-"""
-Fill and arc colors for one inline pie-section atom.
-
-Mirrors the Odin `Bridge_Pie_Colors` ABI struct field-for-field.
-"""
-struct BridgePieColors
-    fill::BridgeColor
-    arc::BridgeColor
-end
-
-"""
-Flat op payload for one inline math block.
-
-Mirrors the Odin `Bridge_Dynview_Math_Program` ABI struct field-for-field.
-"""
-struct BridgeDynviewMathProgram
-    ops::Ptr{BridgeDynviewMathOp}
-    op_count::Int32
-    top_level_op_count::Int32
-end
-
-"""
-Width, height, and stroke for one rectangular inline atom.
-
-Mirrors the Odin `Bridge_Inline_Box_Dims` ABI struct field-for-field.
-"""
-struct BridgeInlineBoxDims
-    width::Cfloat
-    height::Cfloat
-    stroke::Cfloat
-end
-
-"""
-Width and height for one sized inline atom.
-
-Mirrors the Odin `Bridge_Inline_Size` ABI struct field-for-field.
-"""
-struct BridgeInlineSize
-    width::Cfloat
-    height::Cfloat
-end
-
-"""
-Top-bar length, stem height, and stroke for one inline perpendicular atom.
-
-Mirrors the Odin `Bridge_Inline_Perpendicular_Dims` ABI struct field-for-field.
-"""
-struct BridgeInlinePerpendicularDims
-    length::Cfloat
-    stem_height::Cfloat
-    stroke::Cfloat
-end
-
-"""
-Top and stem colors for one inline perpendicular atom.
-
-Mirrors the Odin `Bridge_Perpendicular_Colors` ABI struct field-for-field.
-"""
-struct BridgePerpendicularColors
-    top::BridgeColor
-    stem::BridgeColor
-end
-
-"""
-Radius and sweep angles for one inline pie-section atom.
-
-Mirrors the Odin `Bridge_Pie_Section_Geometry` ABI struct field-for-field.
-"""
-struct BridgePieSectionGeometry
-    radius::Cfloat
-    start_angle_degrees::Cfloat
-    end_angle_degrees::Cfloat
-    outline_stroke::Cfloat
 end
 
 """
@@ -210,17 +71,56 @@ Mirrors the Odin `Bridge_Arc_Geometry` ABI struct field-for-field.
 struct BridgeArcGeometry
     radius::Cfloat
     start_theta::Cfloat
-    end_theta::Cfloat
+    sweep_theta::Cfloat
 end
 
-"""
-Glyph and decoration for one label point.
+"""Two-circle region operation and radii matching the native ABI layout."""
+struct BridgeCircleRegionGeometry
+    operation::Int32
+    first_radius::Cfloat
+    second_radius::Cfloat
+end
 
-Mirrors the Odin `Bridge_Label_Glyph` ABI struct field-for-field.
-"""
-struct BridgeLabelGlyph
-    label::UInt32
-    decoration_kind::Int32
+"""Complete mutable trochoid description matching the native ABI layout."""
+struct BridgeTrochoidGeometry
+    mode::Int32
+    fixed_radius::Cfloat
+    rolling_radius::Cfloat
+    tracer_distance::Cfloat
+    tracer_phase::Cfloat
+    rotation::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    draw_parameter::Cfloat
+end
+
+"""Complete permanent-guide description matching the native ABI layout."""
+struct BridgeTrochoidToolGeometry
+    mode::Int32
+    fixed_radius::Cfloat
+    rolling_radius::Cfloat
+    parameter::Cfloat
+    rotation::Cfloat
+    orientation_phase::Cfloat
+end
+
+"""Complete mutable literal-line cycloid description matching the native ABI."""
+struct BridgeCycloidGeometry
+    rolling_radius::Cfloat
+    tracer_distance::Cfloat
+    tracer_phase::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    draw_parameter::Cfloat
+end
+
+"""Complete permanent Cycloid-guide description matching the native ABI."""
+struct BridgeCycloidToolGeometry
+    rolling_radius::Cfloat
+    parameter_start::Cfloat
+    parameter_finish::Cfloat
+    parameter::Cfloat
+    orientation_phase::Cfloat
 end
 
 """
@@ -241,59 +141,58 @@ struct BridgePentagonVertices
     vertices::NTuple{5, NTuple{3, Cfloat}}
 end
 
-struct BridgePointView
-    valid::UInt8
-    index::Int64
-
-    point_type::Int64
-    do_draw::UInt8
-    brush_size::Cfloat
-    offset::Cfloat
-
-    has_position::UInt8
-    pos::NTuple{3, Cfloat}
-
-    has_color::UInt8
+"""Canonical presentation values passed to shape constructors."""
+struct BridgeShapeStyle
     color::BridgeColor
+    brush_size::Cfloat
+end
 
-    has_active_color::UInt8
+"""Position and presentation values passed to standalone shape constructors."""
+struct BridgePositionedShapeInput
+    position::NTuple{3, Cfloat}
+    style::BridgeShapeStyle
+end
+
+"""Direct targets and policy for one distance constraint."""
+struct BridgeDistanceConstraintInput
+    first::UInt64
+    second::UInt64
+    length::Cfloat
+    movement::Int32
+    enabled::UInt8
+end
+
+"""Direct targets and policy for one angle constraint."""
+struct BridgeAngleConstraintInput
+    first::UInt64
+    pivot::UInt64
+    second::UInt64
+    limit::Cfloat
+    movement::Int32
+    enabled::UInt8
+end
+
+"""Result of constructing one standalone entity."""
+struct BridgeShapeEntityResult
+    status::Int32
+    index::UInt64
+end
+
+"""Pointer-free component projection for one packed entity."""
+struct BridgePointView
+    status::Int32
+    index::UInt64
+    point_type::Int32
+    do_draw::UInt8
+    has_position::UInt8
+    has_color::UInt8
+    has_active_feature::UInt8
+    pos::NTuple{3, Cfloat}
+    color::BridgeColor
     active_color::BridgeColor
-
-    has_label::UInt8
-    label::UInt32
-    decoration_kind::Int32
-
-    active_child::Int64
-    child_count::Int64
-    child_point_head::Int64
-    next_child_point::Int64
-end
-
-struct BridgeConstraintView
-    valid::UInt8
-    index::Int32
-
-    traits::Int32
-    on_point::Int32
-    restriction::NTuple{3, Cfloat}
-    bounce::Cfloat
-    allowance::Cfloat
-    depend_on::Int32
-    has_child_offset::UInt8
-    child_offset::Int32
-    do_apply::UInt8
-end
-
-struct BridgeConstraintSpec
-    traits::Int32
-    on_point::Int32
-    restriction::NTuple{3, Cfloat}
-    bounce::Cfloat
-    allowance::Cfloat
-    depend_on::Int32
-    has_child_offset::UInt8
-    child_offset::Int32
-    do_apply::UInt8
+    has_active_color::UInt8
+    brush_size::Cfloat
+    active_child::UInt16
 end
 
 struct BridgeSolveResult
@@ -305,81 +204,90 @@ struct BridgeSolveResult
 end
 
 struct BridgeShapeLine
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
+    status::Int32
+    host_id::UInt64
+    joint1_id::UInt64
+    joint2_id::UInt64
 end
 
 struct BridgeShapeCircle
-    host_id::Int64
-    start_id::Int64
-    end_id::Int64
+    status::Int32
+    host_id::UInt64
 end
 
-struct BridgeShapeFilledCircle
-    host_id::Int64
-    start_id::Int64
-    end_id::Int64
+const BridgeShapeFilledCircle = BridgeShapeCircle
+
+"""Result of constructing one circle region and its direct centers."""
+struct BridgeShapeCircleRegion
+    status::Int32
+    host_id::UInt64
+    first_center_id::UInt64
+    second_center_id::UInt64
+end
+
+"""Pointer-free result of querying one arc host's mutable geometry."""
+struct BridgeShapeArcQueryResult
+    status::Int32
+    host_id::UInt64
+    arc::BridgeArcGeometry
+end
+
+"""Result of constructing one animation-owned trochoid."""
+struct BridgeShapeTrochoidResult
+    status::Int32
+    host_id::UInt64
+end
+
+"""Pointer-free result of querying one trochoid's mutable geometry."""
+struct BridgeShapeTrochoidQueryResult
+    status::Int32
+    host_id::UInt64
+    geometry::BridgeTrochoidGeometry
+end
+
+"""Result of constructing one literal-line Cycloid and both endpoints."""
+struct BridgeShapeCycloidResult
+    status::Int32
+    host_id::UInt64
+    first_id::UInt64
+    second_id::UInt64
+end
+
+"""Pointer-free result of querying one Cycloid's line and scalar geometry."""
+struct BridgeShapeCycloidQueryResult
+    status::Int32
+    host_id::UInt64
+    first::NTuple{3,Cfloat}
+    second::NTuple{3,Cfloat}
+    geometry::BridgeCycloidGeometry
 end
 
 struct BridgeShapeTriangle
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
-    joint3_id::Int64
+    status::Int32
+    host_id::UInt64
+    joint1_id::UInt64
+    joint2_id::UInt64
+    joint3_id::UInt64
 end
 
 struct BridgeShapeSquare
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
-    joint3_id::Int64
-    joint4_id::Int64
+    status::Int32
+    host_id::UInt64
+    joint1_id::UInt64
+    joint2_id::UInt64
+    joint3_id::UInt64
+    joint4_id::UInt64
 end
 
 struct BridgeShapePentagon
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
-    joint3_id::Int64
-    joint4_id::Int64
-    joint5_id::Int64
+    status::Int32
+    host_id::UInt64
+    joint1_id::UInt64
+    joint2_id::UInt64
+    joint3_id::UInt64
+    joint4_id::UInt64
+    joint5_id::UInt64
 end
-
-struct BridgeShapePen
-    host_id::Int64
-    joint1_id::Int64
-    joint2_id::Int64
-
-    length_constraint_id::Int64
-    point1_floor_id::Int64
-    point2_floor_id::Int64
-    lock_point1_id::Int64
-    lock_point2_id::Int64
-end
-
-struct BridgeShapeCompass
-    host_id::Int64
-    joint1_id::Int64
-    pivot_id::Int64
-    joint2_id::Int64
-
-    center_pivot_id::Int64
-    limb1_length_id::Int64
-    limb2_length_id::Int64
-    point1_floor_id::Int64
-    pivot_floor_id::Int64
-    point2_floor_id::Int64
-    lock_point1_id::Int64
-    lock_point2_id::Int64
-end
-
-const LABEL_DECORATION_NONE = Int32(0)
-const LABEL_DECORATION_PRIME = Int32(1)
-const LABEL_DECORATION_DOUBLEPRIME = Int32(2)
-const LABEL_DECORATION_TRIPLEPRIME = Int32(3)
-const LABEL_DECORATION_HAT = Int32(4)
-const LABEL_DECORATION_BAR = Int32(5)
 
 const BRIDGE_STATUS_OK = Int32(0)
 const BRIDGE_STATUS_INVALID_INDEX = Int32(1)
@@ -389,85 +297,20 @@ const BRIDGE_STATUS_INVALID_CONSTRAINT = Int32(4)
 const BRIDGE_STATUS_OUT_OF_CAPACITY = Int32(5)
 const BRIDGE_STATUS_ILLEGAL_STATE = Int32(6)
 const BRIDGE_STATUS_NON_CONVERGED = Int32(7)
+const BRIDGE_STATUS_NOT_FOUND = Int32(8)
+const BRIDGE_STATUS_SCHEMA_MISMATCH = Int32(9)
 
-const BRIDGE_DYNVIEW_BLOCK_INPUT = Int32(1)
-const BRIDGE_DYNVIEW_BLOCK_OUTPUT = Int32(2)
-const BRIDGE_DYNVIEW_STYLE_DEFAULT = Int32(0)
-const BRIDGE_DYNVIEW_STYLE_PROMPT = Int32(1)
-const BRIDGE_DYNVIEW_STYLE_OUTPUT = Int32(2)
-const BRIDGE_DYNVIEW_STYLE_ERROR = Int32(3)
-const BRIDGE_DYNVIEW_STYLE_BOLD = Int32(10)
-const BRIDGE_DYNVIEW_STYLE_ITALIC = Int32(11)
-const BRIDGE_DYNVIEW_STYLE_CENTER = Int32(12)
-const BRIDGE_DYNVIEW_STYLE_MEDIUM = Int32(13)
-const BRIDGE_DYNVIEW_STYLE_SEMIBOLD = Int32(14)
-const BRIDGE_DYNVIEW_STYLE_EXTRABOLD = Int32(15)
-const BRIDGE_DYNVIEW_STYLE_BLACK = Int32(16)
-const BRIDGE_DYNVIEW_STYLE_UNDERLINE = Int32(17)
-const BRIDGE_DYNVIEW_STYLE_INLINE_ATOM = Int32(20)
-const BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT = Int32(1 << 24)
-const BRIDGE_DYNVIEW_ACCENT_MODE_OVERLINE = Int32(1)
-const BRIDGE_DYNVIEW_ACCENT_MODE_UNDERLINE = Int32(2)
-const BRIDGE_DYNVIEW_RADICAL_MODE_SQRT = Int32(1)
-const BRIDGE_DYNVIEW_RADICAL_MODE_NTHROOT = Int32(2)
-const BRIDGE_DYNVIEW_LARGE_OP_KIND_SUM = Int32(1)
-const BRIDGE_DYNVIEW_LARGE_OP_KIND_PROD = Int32(2)
-const BRIDGE_DYNVIEW_LARGE_OP_KIND_INT = Int32(3)
-const BRIDGE_DYNVIEW_LARGE_OP_KIND_LIM = Int32(4)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_NONE = Int32(0)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_PAREN = Int32(1)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_PAREN = Int32(2)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_BRACKET = Int32(3)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_BRACKET = Int32(4)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_BRACE = Int32(5)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_BRACE = Int32(6)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_VERT = Int32(7)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_DOUBLE_VERT = Int32(8)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_CEIL = Int32(9)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_CEIL = Int32(10)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_FLOOR = Int32(11)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_FLOOR = Int32(12)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_LEFT_ANGLE = Int32(13)
-const BRIDGE_DYNVIEW_DELIMITER_KIND_RIGHT_ANGLE = Int32(14)
+const BRIDGE_VERSION = Int32(11)
+const BRIDGE_FEATURE_TYPED_ANIMATION_STATE = Int32(1 << 4)
+const BRIDGE_FEATURE_ANIMATION_METADATA_CATALOG = Int32(1 << 5)
+const BRIDGE_FEATURE_MIME_PRESENTATION = Int32(1 << 6)
+const BRIDGE_FEATURE_TROCHOIDS = Int32(1 << 7)
+const BRIDGE_FEATURE_CYCLOIDS = Int32(1 << 8)
+const BRIDGE_FEATURE_CIRCLE_REGIONS = Int32(1 << 9)
+const BRIDGE_FEATURE_ANIMATION_CONTENT_SPECIFICATION = Int32(1 << 10)
 
-const BRIDGE_DYNVIEW_FONT_FLAG_NONE = Int32(0)
-const BRIDGE_DYNVIEW_FONT_FLAG_ITALIC = Int32(1 << 0)
-const BRIDGE_DYNVIEW_FONT_FLAG_LIGHT = Int32(1 << 1)
-const BRIDGE_DYNVIEW_FONT_FLAG_REGULAR = Int32(1 << 2)
-const BRIDGE_DYNVIEW_FONT_FLAG_MEDIUM = Int32(1 << 3)
-const BRIDGE_DYNVIEW_FONT_FLAG_SEMIBOLD = Int32(1 << 4)
-const BRIDGE_DYNVIEW_FONT_FLAG_BOLD = Int32(1 << 5)
-const BRIDGE_DYNVIEW_FONT_FLAG_EXTRABOLD = Int32(1 << 6)
-const BRIDGE_DYNVIEW_FONT_FLAG_BLACK = Int32(1 << 7)
-
-const CONSTRAINT_SPEC_TRAITS = Int32(1 << 0)
-const CONSTRAINT_SPEC_ONPOINT = Int32(1 << 1)
-const CONSTRAINT_SPEC_RESTRICTION = Int32(1 << 2)
-const CONSTRAINT_SPEC_BOUNCE = Int32(1 << 3)
-const CONSTRAINT_SPEC_ALLOWANCE = Int32(1 << 4)
-const CONSTRAINT_SPEC_DEPENDON = Int32(1 << 5)
-const CONSTRAINT_SPEC_CHILDOFFSET = Int32(1 << 6)
-const CONSTRAINT_SPEC_DOAPPLY = Int32(1 << 7)
-
-const ANIMATION_STABLE_ID_NAMESPACE = UUID("66f8da8f-bd5c-5f58-ae66-5cbaf6ea4d41")
-
-"""
-Build a dynview style id that carries explicit JuliaMono font variant flags.
-
-Combine one or more `BRIDGE_DYNVIEW_FONT_FLAG_*` bits (including `ITALIC`) and
-pass the resulting style id into `dynview_text_run`/`dynview_math_glyph_run`.
-"""
-dynview_style_with_font_flags(flags::Integer) =
-    Int32(BRIDGE_DYNVIEW_STYLE_CUSTOM_FONT | Int32(flags))
-
-"""
-Derive a deterministic animation stable ID string from a semantic key.
-
-This helper uses UUID v5 with a fixed project namespace so the same key always
-produces the same identity across reloads.
-"""
-animation_stable_id_from_key(key::AbstractString) =
-    string(uuid5(ANIMATION_STABLE_ID_NAMESPACE, String(key)))
+const TROCHOID_EXTERNAL = Int32(0)
+const TROCHOID_INTERNAL = Int32(1)
 
 """
 Construct a new BridgeColor from standard Julia color types

@@ -1,0 +1,441 @@
+package files
+
+import "core:fmt"
+import "core:os"
+import "core:path/filepath"
+import "core:testing"
+
+//   Verify package identity sidecars require complete canonical digest fields.
+@(test)
+asset_package_sidecar_requires_canonical_identity :: proc(t: ^testing.T) {
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    sidecar, ok := parse_asset_package_sidecar(fmt.tprintf(
+        "schema_version=1\npackage_identity=%s\narchive_sha256=%s\n",
+        fingerprint, fingerprint), context.allocator)
+    testing.expect(t, ok)
+    testing.expect_value(t, sidecar.package_identity, fingerprint)
+    destroy_asset_package_sidecar(&sidecar, context.allocator)
+
+    _, missing_digest := parse_asset_package_sidecar(fmt.tprintf(
+        "schema_version=1\npackage_identity=%s\n", fingerprint),
+        context.allocator)
+    testing.expect(t, !missing_digest)
+}
+
+//   Require schema-four manifests to identify the normalized content database.
+@(test)
+packaged_manifest_rejects_legacy_catalog_contract :: proc(t: ^testing.T) {
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    image_path := fmt.tprintf(
+        "sysimage/%s/%s", fingerprint, PACKAGED_SYSIMAGE_FILENAME)
+    database_digest :=
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    manifest := fmt.tprintf(
+        "schema_version=4\npackage_identity=%s\nsysimage_path=%s\n" +
+        "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
+        "sysimage_platform=%s\ncontent_database=content/content.sqlite3\n" +
+        "content_database_sha256=%s\ncontent_fingerprint=%s\n" +
+        "content_schema_version=3\n",
+        fingerprint, image_path, fingerprint, fingerprint,
+        PACKAGED_SYSIMAGE_PLATFORM, database_digest, fingerprint)
+    metadata, valid := parse_packaged_sysimage_manifest(
+        manifest, context.allocator)
+    testing.expect(t, valid)
+    destroy_packaged_sysimage_metadata(&metadata, context.allocator)
+
+    legacy_manifest := fmt.tprintf(
+        "schema_version=3\npackage_identity=%s\nsysimage_path=%s\n" +
+        "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
+        "sysimage_platform=%s\ncatalog_database=catalog/animations.sqlite3\n" +
+        "catalog_database_sha256=%s\ncatalog_corpus_fingerprint=%s\n" +
+        "catalog_schema_version=2\n",
+        fingerprint, image_path, fingerprint, fingerprint,
+        PACKAGED_SYSIMAGE_PLATFORM, database_digest, fingerprint)
+    _, legacy_valid := parse_packaged_sysimage_manifest(
+        legacy_manifest, context.allocator)
+    testing.expect(t, !legacy_valid)
+}
+
+//   Verify distinct package identities map to distinct immutable cache generations.
+@(test)
+asset_package_cache_path_is_identity_addressed :: proc(t: ^testing.T) {
+    first := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    second := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    first_path, first_ok := resolve_asset_unpack_dir(first, context.allocator)
+    second_path, second_ok := resolve_asset_unpack_dir(second, context.allocator)
+    defer delete(first_path)
+    defer delete(second_path)
+    testing.expect(t, first_ok)
+    testing.expect(t, second_ok)
+    testing.expect(t, first_path != second_path)
+    testing.expect(t, filepath.base(first_path) == first)
+    testing.expect(t, filepath.base(second_path) == second)
+}
+
+
+//   Create a clean per-test sandbox directory under the OS temp directory.
+prepare_sandbox_dir :: proc(dir_name: string) -> (string, bool) {
+    temp_dir, temp_err := os.temp_directory(context.temp_allocator)
+    if temp_err != nil || len(temp_dir) == 0 {
+        return "", false
+    }
+
+    path, path_err := filepath.join([]string{temp_dir, dir_name}, context.allocator)
+    if path_err != nil || len(path) == 0 {
+        return "", false
+    }
+
+    _ = os.remove_all(path)
+    if os.make_directory_all(path) != nil {
+        return "", false
+    }
+
+    return path, true
+}
+
+//   Verify GIF transactions hide partial output until atomic publication.
+@(test)
+gif_output_transaction_publishes_only_complete_file :: proc(t: ^testing.T) {
+    sandbox, ready := prepare_sandbox_dir("euclid-gif-transaction-test")
+    testing.expect(t, ready)
+    defer delete(sandbox)
+    defer os.remove_all(sandbox)
+    transaction, reserved := reserve_gif_output_transaction_in_directory(
+        sandbox, "capture.gif", context.allocator)
+    testing.expect(t, reserved)
+    defer destroy_gif_output_transaction(&transaction, context.allocator)
+    testing.expect(t, os.exists(transaction.temporary_path))
+    testing.expect(t, !os.exists(transaction.final_path))
+
+    payload := []u8{'G', 'I', 'F', '8', '9', 'a'}
+    testing.expect(t, os.write_entire_file(transaction.temporary_path, payload) == nil)
+    testing.expect(t, publish_gif_output_transaction(&transaction))
+    testing.expect(t, !os.exists(transaction.temporary_path))
+    testing.expect(t, os.exists(transaction.final_path))
+}
+
+//   Verify abort cleanup removes a reserved partial GIF without publishing it.
+@(test)
+gif_output_transaction_abort_removes_partial_file :: proc(t: ^testing.T) {
+    sandbox, ready := prepare_sandbox_dir("euclid-gif-transaction-abort-test")
+    testing.expect(t, ready)
+    defer delete(sandbox)
+    defer os.remove_all(sandbox)
+    transaction, reserved := reserve_gif_output_transaction_in_directory(
+        sandbox, "capture.gif", context.allocator)
+    testing.expect(t, reserved)
+    temporary_path := fmt.aprintf(
+        "%s", transaction.temporary_path, allocator=context.allocator)
+    final_path := fmt.aprintf(
+        "%s", transaction.final_path, allocator=context.allocator)
+    defer delete(temporary_path)
+    defer delete(final_path)
+
+    destroy_gif_output_transaction(&transaction, context.allocator)
+    testing.expect(t, !os.exists(temporary_path))
+    testing.expect(t, !os.exists(final_path))
+    testing.expect_value(t, transaction, Gif_Output_Transaction{})
+}
+
+//   Write one required file entry (with parent dirs) under a test root.
+write_required_entry :: proc(root_dir, rel_path: string) -> bool {
+    last_separator := -1
+    for i in 0..<len(rel_path) {
+        if rel_path[i] == '/' {
+            last_separator = i
+        }
+    }
+
+    if last_separator > 0 {
+        parent_rel := rel_path[:last_separator]
+        parent_dir, parent_join_err := filepath.join(
+            []string{root_dir, parent_rel}, context.allocator)
+        if parent_join_err != nil {
+            return false
+        }
+        defer delete(parent_dir)
+        if !os.is_directory(parent_dir) && os.make_directory_all(parent_dir) != nil {
+            return false
+        }
+    }
+
+    full_path, join_err := filepath.join([]string{root_dir, rel_path}, context.allocator)
+    if join_err != nil {
+        return false
+    }
+    defer delete(full_path)
+
+    return os.write_entire_file(full_path, []u8{'x'}) == nil
+}
+
+//   Write the fixed content database fixture required by manifest readiness tests.
+write_test_content_database :: proc(unpack_dir: string) -> bool {
+    content := "content-database-fixture"
+    content_path, content_err := filepath.join(
+        []string{unpack_dir, "content/content.sqlite3"}, context.allocator)
+    if content_err != nil {
+        return false
+    }
+    defer delete(content_path)
+    if !write_required_entry(unpack_dir, "content/content.sqlite3") ||
+       os.write_entire_file(content_path, content) != nil {
+        return false
+    }
+    return true
+}
+
+//   Write the required image and its matching package manifest.
+write_test_sysimage_manifest :: proc(unpack_dir: string) -> bool {
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    image_path := fmt.tprintf(
+        "sysimage/%s/%s", fingerprint, PACKAGED_SYSIMAGE_FILENAME)
+    if !write_required_entry(unpack_dir, image_path) ||
+       !write_test_content_database(unpack_dir) {
+        return false
+    }
+    manifest_path, manifest_err := filepath.join(
+        []string{unpack_dir, "manifest.txt"}, context.allocator)
+    if manifest_err != nil {
+        return false
+    }
+    defer delete(manifest_path)
+    content_digest :=
+        "0ba185c13dc5c8685ad34ec0deffaa9f48edf56b17fc1dec32c4055689592ce8"
+    manifest := fmt.tprintf(
+        "schema_version=4\npackage_identity=%s\nsysimage_path=%s\n" +
+        "sysimage_input_fingerprint=%s\nsysimage_artifact_sha256=%s\n" +
+        "sysimage_platform=%s\ncontent_database=content/content.sqlite3\n" +
+        "content_database_sha256=%s\ncontent_fingerprint=%s\n" +
+        "content_schema_version=3\n",
+        fingerprint, image_path, fingerprint, fingerprint,
+        PACKAGED_SYSIMAGE_PLATFORM, content_digest, fingerprint)
+    return os.write_entire_file(manifest_path, manifest) == nil
+}
+
+//   Build the full required unpack tree (scripts, icon, fonts, manifest).
+build_ready_unpack_tree :: proc(unpack_dir: string) -> bool {
+    required := []string{
+        "julia/script.jl",
+        "compass_icon.png",
+        "JuliaMono-Regular.ttf",
+        "NewCMSansMath-Regular.otf",
+        "content/content.sqlite3",
+    }
+
+    for rel_path in required {
+        if !write_required_entry(unpack_dir, rel_path) {
+            return false
+        }
+    }
+    if !write_test_sysimage_manifest(unpack_dir) {
+        return false
+    }
+
+    when ODIN_OS == .Linux {
+        if !write_required_entry(unpack_dir, "terminfo/e/euclid") {
+            return false
+        }
+    } else when ODIN_OS == .Darwin {
+        if !write_required_entry(unpack_dir, "terminfo/65/euclid") {
+            return false
+        }
+    }
+
+    return true
+}
+
+//   Verify is_assets_unpack_ready reports false until every required entry exists.
+@(test)
+is_assets_unpack_ready_requires_all_entries :: proc(t: ^testing.T) {
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    unpack_dir, ok := prepare_sandbox_dir("euclid_unpack_ready")
+    defer delete(unpack_dir)
+    defer _ = os.remove_all(unpack_dir)
+    testing.expect(t, ok)
+
+    testing.expect(t, !is_assets_unpack_ready(unpack_dir, fingerprint))
+
+    testing.expect(t, build_ready_unpack_tree(unpack_dir))
+    testing.expect(t, is_assets_unpack_ready(unpack_dir, fingerprint))
+    testing.expect(t, !is_assets_unpack_ready(unpack_dir,
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+
+    content_path, content_join_error := filepath.join(
+        []string{unpack_dir, "content/content.sqlite3"}, context.allocator)
+    defer delete(content_path)
+    testing.expect(t, content_join_error == nil)
+    testing.expect(t, os.write_entire_file(content_path, "tampered") == nil)
+    testing.expect(t, !is_assets_unpack_ready(unpack_dir, fingerprint))
+    testing.expect(t,
+        os.write_entire_file(content_path, "content-database-fixture") == nil)
+    testing.expect(t, is_assets_unpack_ready(unpack_dir, fingerprint))
+
+    math_path, join_error := filepath.join(
+        []string{unpack_dir, "NewCMSansMath-Regular.otf"}, context.allocator)
+    defer delete(math_path)
+    testing.expect(t, join_error == nil)
+    testing.expect(t, os.remove(math_path) == nil)
+    testing.expect(t, !is_assets_unpack_ready(unpack_dir, fingerprint))
+}
+
+//   Verify should_continue_unpack across the missing/partial/complete/forced matrix.
+@(test)
+should_continue_unpack_matrix :: proc(t: ^testing.T) {
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    sandbox, ok := prepare_sandbox_dir("euclid_unpack_should_continue")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+    testing.expect(t, ok)
+
+    archive_path, archive_join_err := filepath.join(
+        []string{sandbox, "assets.pkg"}, context.allocator)
+    unpack_dir, unpack_join_err := filepath.join(
+        []string{sandbox, "unpack"}, context.allocator)
+    defer delete(archive_path)
+    defer delete(unpack_dir)
+    testing.expect(t, archive_join_err == nil)
+    testing.expect(t, unpack_join_err == nil)
+
+    continue_unpack, result := should_continue_unpack(
+        archive_path, unpack_dir, fingerprint, false)
+    testing.expect(t, !continue_unpack && !result)
+
+    testing.expect(t, os.make_directory_all(unpack_dir) == nil)
+    continue_unpack, result = should_continue_unpack(
+        archive_path, unpack_dir, fingerprint, false)
+    testing.expect(t, !continue_unpack && result)
+
+    testing.expect(t, os.write_entire_file(archive_path, []u8{'a'}) == nil)
+
+    continue_unpack, result = should_continue_unpack(
+        archive_path, unpack_dir, fingerprint, false)
+    testing.expect(t, continue_unpack && !result)
+
+    testing.expect(t, build_ready_unpack_tree(unpack_dir))
+    continue_unpack, result = should_continue_unpack(
+        archive_path, unpack_dir, fingerprint, false)
+    testing.expect(t, !continue_unpack && result)
+
+    continue_unpack, result = should_continue_unpack(
+        archive_path, unpack_dir, fingerprint, true)
+    testing.expect(t, continue_unpack && !result)
+}
+
+//   Verify prepare_unpack_directory clears stale contents and recreates the directory.
+@(test)
+prepare_unpack_directory_clears_and_recreates :: proc(t: ^testing.T) {
+    sandbox, ok := prepare_sandbox_dir("euclid_prepare_unpack")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+    testing.expect(t, ok)
+
+    nested_file := "inner/data.bin"
+    testing.expect(t, write_required_entry(sandbox, nested_file))
+
+    nested_file_path, nested_err := filepath.join(
+        []string{sandbox, nested_file}, context.allocator)
+    defer delete(nested_file_path)
+    testing.expect(t, nested_err == nil)
+    testing.expect(t, os.exists(nested_file_path))
+
+    testing.expect(t, prepare_unpack_directory(sandbox))
+    testing.expect(t, os.is_directory(sandbox))
+    testing.expect(t, !os.exists(nested_file_path))
+}
+
+//   Verify candidate publication replaces valid trees and preserves them on failure.
+@(test)
+publish_candidate_unpack_directory_is_transactional :: proc(t: ^testing.T) {
+    sandbox, ok := prepare_sandbox_dir("euclid_publish_unpack")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+    testing.expect(t, ok)
+    active := fmt.tprintf("%s/active", sandbox)
+    candidate := fmt.tprintf("%s/candidate", sandbox)
+    backup := fmt.tprintf("%s/backup", sandbox)
+    testing.expect(t, os.make_directory_all(active) == nil)
+    testing.expect(t, write_required_entry(active, "old.txt"))
+
+    testing.expect(t, !publish_candidate_unpack_directory(
+        fmt.tprintf("%s/missing", sandbox), active, backup))
+    testing.expect(t, os.exists(fmt.tprintf("%s/old.txt", active)))
+
+    testing.expect(t, os.make_directory_all(candidate) == nil)
+    testing.expect(t, write_required_entry(candidate, "new.txt"))
+    testing.expect(t, publish_candidate_unpack_directory(candidate, active, backup))
+    testing.expect(t, !os.exists(fmt.tprintf("%s/old.txt", active)))
+    testing.expect(t, os.exists(fmt.tprintf("%s/new.txt", active)))
+}
+
+//   Verify a rejected candidate archive leaves the active asset tree untouched.
+@(test)
+replace_packaged_asset_tree_preserves_active_on_rejection :: proc(t: ^testing.T) {
+    sandbox, ok := prepare_sandbox_dir("euclid_incompatible_unpack")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+    testing.expect(t, ok)
+    active := fmt.tprintf("%s/assets", sandbox)
+    archive := fmt.tprintf("%s/assets.pkg", sandbox)
+    testing.expect(t, os.make_directory_all(active) == nil)
+    testing.expect(t, write_required_entry(active, "active.txt"))
+    testing.expect(t, os.write_entire_file(archive, "invalid archive") == nil)
+    fingerprint := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    testing.expect(t, !replace_packaged_asset_tree(
+        archive, active, fingerprint, fingerprint, fingerprint))
+    testing.expect(t, os.exists(fmt.tprintf("%s/active.txt", active)))
+}
+
+//   Verify digest-addressed image materialization reuses and repairs its cache.
+@(test)
+materialize_packaged_sysimage_repairs_corrupt_cache :: proc(t: ^testing.T) {
+    sandbox, ok := prepare_sandbox_dir("euclid_sysimage_materialize")
+    defer delete(sandbox)
+    defer _ = os.remove_all(sandbox)
+    testing.expect(t, ok)
+    unpack_dir := fmt.tprintf("%s/assets", sandbox)
+    image_relative := fmt.tprintf("sysimage/input/%s", PACKAGED_SYSIMAGE_FILENAME)
+    testing.expect(t, os.make_directory_all(unpack_dir) == nil)
+    testing.expect(t, write_required_entry(unpack_dir, image_relative))
+    digest := "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+    metadata := Packaged_Sysimage_Metadata{
+        relative_path = image_relative,
+        input_fingerprint = "input",
+        artifact_sha256 = digest,
+    }
+
+    cached, cached_ok := materialize_packaged_sysimage(
+        unpack_dir, &metadata, context.allocator)
+    defer delete(cached)
+    testing.expect(t, cached_ok)
+    testing.expect(t, file_matches_sha256(cached, digest))
+    testing.expect(t, os.write_entire_file(cached, "corrupt") == nil)
+    repaired, repaired_ok := materialize_packaged_sysimage(
+        unpack_dir, &metadata, context.allocator)
+    defer delete(repaired)
+    testing.expect(t, repaired_ok)
+    testing.expect_value(t, repaired, cached)
+    testing.expect(t, file_matches_sha256(repaired, digest))
+}
+
+//   Verify resolve_writable_gif_output_dir rejects empty input and creates the dir.
+@(test)
+resolve_writable_gif_output_dir_behaviour :: proc(t: ^testing.T) {
+    output_dir, ok := resolve_writable_gif_output_dir("")
+    testing.expect(t, !ok)
+    testing.expect_value(t, output_dir, "")
+
+    base_dir, base_ok := prepare_sandbox_dir("euclid_gif_output")
+    defer delete(base_dir)
+    defer _ = os.remove_all(base_dir)
+    testing.expect(t, base_ok)
+
+    expected_output, expected_err := filepath.join(
+        []string{base_dir, GIF_OUTPUT_DIR_NAME}, context.allocator)
+    defer delete(expected_output)
+    testing.expect(t, expected_err == nil)
+
+    output_dir, ok = resolve_writable_gif_output_dir(base_dir)
+    testing.expect(t, ok)
+    testing.expect_value(t, output_dir, expected_output)
+    testing.expect(t, os.is_directory(output_dir))
+}

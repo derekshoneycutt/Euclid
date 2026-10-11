@@ -1,38 +1,29 @@
 package bridge
 
-import "../julialib"
+import bridgemodel "model"
+
+import julialib "../../libs/julia/bindings"
 import "../core"
 import "../files"
 
 import "base:runtime"
 import "core:fmt"
-import "core:os"
-import "core:path/filepath"
 import "core:strings"
 import vmem "core:mem/virtual"
 
-when ODIN_OS == .Windows {
-    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.dll"
-} else when ODIN_OS == .Darwin {
-    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.dylib"
-} else {
-    JULIA_SYSIMAGE_FILENAME :: "euclid-sysimage.so"
+Julia_Exception_Format :: struct {
+    exception_type: cstring,
+    exception: ^julialib.jl_value_t,
+    sprint: ^julialib.jl_value_t,
+    showerror: ^julialib.jl_value_t,
+    backtrace: ^julialib.jl_value_t,
 }
 
-//   Resolve the optional custom Julia sysimage beside the Euclid executable.
-resolve_julia_sysimage_path :: proc() -> (string, bool) {
-    exe_dir, exe_err := os.get_executable_directory(context.temp_allocator)
-    if exe_err != nil || len(exe_dir) == 0 {
-        return "", false
-    }
-
-    image_path, path_err := filepath.join(
-        []string{exe_dir, JULIA_SYSIMAGE_FILENAME}, context.temp_allocator)
-    if path_err != nil || !os.exists(image_path) {
-        return "", false
-    }
-
-    return image_path, true
+//   Resolve the mandatory verified Julia sysimage from packaged assets.
+resolve_julia_sysimage_path :: proc(
+    asset_config: ^files.Asset_Root_Config = nil) -> (string, bool) {
+    return files.resolve_packaged_sysimage_path(
+        asset_config, context.temp_allocator)
 }
 
 //   Initialize the Julia runtime and load the packaged bridge script into Main.
@@ -40,17 +31,26 @@ resolve_julia_sysimage_path :: proc() -> (string, bool) {
 // Notes:
 //   - Intended to be called once during application startup before Julia bridge calls.
 //   - Exits immediately if packaged script include fails.
-initiate_julia :: proc() -> bool {
-    image_path, has_image := resolve_julia_sysimage_path()
-    if has_image {
-        fmt.println("Starting Julia with custom sysimage: ", image_path)
-        image_path_c := strings.clone_to_cstring(image_path, context.temp_allocator)
-        julialib.jl_init_with_image_file(nil, image_path_c)
-    } else {
-        julialib.jl_init()
+initiate_julia :: proc(
+    asset_config: ^files.Asset_Root_Config = nil) -> bool {
+    project_path, project_ok := resolve_packaged_julia_project_path(
+        false, asset_config)
+    if !project_ok {
+        return false
     }
+    julialib.julia_options()^.project = strings.clone_to_cstring(
+        project_path, context.temp_allocator)
 
-    return include_packaged_script(false)
+    image_path, has_image := resolve_julia_sysimage_path(asset_config)
+    if !has_image {
+        fmt.eprintln("Julia startup failed: packaged sysimage is missing or invalid")
+        return false
+    }
+    fmt.println("Starting Julia with packaged sysimage: ", image_path)
+    image_path_c := strings.clone_to_cstring(image_path, context.temp_allocator)
+    julialib.jl_init_with_image_file(nil, image_path_c)
+
+    return include_packaged_script(false, asset_config)
 }
 
 //   Shut down the Julia runtime and flush Julia-side teardown hooks.
@@ -67,7 +67,7 @@ end_julia :: proc() {
 //
 // Parameters:
 //   - iface: Inactive state-owned generation slot to prepare.
-prepare_julia_interface_generation :: proc(iface: ^core.Euclid_Julia_Interface) {
+prepare_julia_interface_generation :: proc(iface: ^bridgemodel.Euclid_Julia_Interface) {
     if iface == nil {
         return
     }
@@ -94,31 +94,37 @@ prepare_julia_interface_generation :: proc(iface: ^core.Euclid_Julia_Interface) 
 
 //   Resolve the Julia callback function handles for one interface generation slot.
 resolve_julia_interface_callbacks :: proc(
-    iface: ^core.Euclid_Julia_Interface, main_module: ^julialib.jl_module_t) {
+    iface: ^bridgemodel.Euclid_Julia_Interface, main_module: ^julialib.jl_module_t) {
 
+    iface^.invoke_with_exception_diagnostics = julialib.jl_get_function(
+        main_module, "invoke_with_exception_diagnostics")
     iface^.init_scripts = julialib.jl_get_function(main_module, "init_euclid_scripts")
     iface^.global_loop = julialib.jl_get_function(main_module, "global_euclid_loop")
-    iface^.scratchpad_classify_input = julialib.jl_get_function(
-        main_module, "scratchpad_classify_input")
-    iface^.scratchpad_complete_backslash = julialib.jl_get_function(
-        main_module, "scratchpad_complete_backslash")
-    iface^.scratchpad_complete_input = julialib.jl_get_function(
-        main_module, "scratchpad_complete_input")
-    iface^.scratchpad_queue_input = julialib.jl_get_function(
-        main_module, "scratchpad_queue_input")
-    iface^.scratchpad_save_history_to_file = julialib.jl_get_function(
-        main_module, "scratchpad_save_history_to_file")
-    iface^.scratchpad_history_previous = julialib.jl_get_function(
-        main_module, "scratchpad_history_previous")
-    iface^.scratchpad_history_next = julialib.jl_get_function(
-        main_module, "scratchpad_history_next")
-    iface^.scratchpad_history_reset_cursor = julialib.jl_get_function(
-        main_module, "scratchpad_history_reset_cursor")
+}
+
+// Prepare Julia callback state without discarding the admitted catalogue registry.
+prepare_julia_interface_content :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface) -> bool {
+    if iface == nil || iface^.content_generation == 0 ||
+       iface^.animation_count <= 0 {
+        return false
+    }
+    main_module := resolve_main_module()
+    if main_module == nil {
+        return false
+    }
+    iface^.null_animation = {}
+    iface^.current_animation = &iface^.null_animation
+    iface^.selected_animation = nil
+    iface^.pending_animation_reset = false
+    iface^.animation_reset_cooldown_remaining = 0
+    resolve_julia_interface_callbacks(iface, main_module)
+    return julia_interface_handles_valid(iface)
 }
 
 //   Return the inactive state-owned interface generation slot for staged registration.
 julia_interface_staging_slot :: proc(
-    state: ^core.Euclid_General_State) -> (^core.Euclid_Julia_Interface, int) {
+    state: ^core.Euclid_General_State) -> (^bridgemodel.Euclid_Julia_Interface, int) {
 
     if state == nil || state^.julia_interface_active_slot < 0 ||
         state^.julia_interface_active_slot >= len(state^.julia_interface_slots) {
@@ -131,22 +137,16 @@ julia_interface_staging_slot :: proc(
 
 //   Report whether the required Julia callbacks were resolved for an interface generation.
 //   Report whether every required Julia interface handle is present.
-julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bool {
+julia_interface_handles_valid :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface) -> bool {
     if iface == nil {
         return false
     }
 
     handles := [?]rawptr{
+        iface^.invoke_with_exception_diagnostics,
         iface^.init_scripts,
         iface^.global_loop,
-        iface^.scratchpad_classify_input,
-        iface^.scratchpad_complete_backslash,
-        iface^.scratchpad_complete_input,
-        iface^.scratchpad_queue_input,
-        iface^.scratchpad_save_history_to_file,
-        iface^.scratchpad_history_previous,
-        iface^.scratchpad_history_next,
-        iface^.scratchpad_history_reset_cursor,
     }
     for handle in handles {
         if handle == nil {
@@ -156,19 +156,12 @@ julia_interface_handles_valid :: proc(iface: ^core.Euclid_Julia_Interface) -> bo
     return true
 }
 
-//   Ensure the animation registry arena allocator exists for bridge storage.
-//
-// Parameters:
-//   - state: Global runtime state containing the Julia interface.
-//
-// Returns:
-//   - ok: true when name arena allocator is ready for use.
-ensure_julia_interface_registry_arena :: proc(state: ^core.Euclid_General_State) -> bool {
-    if state == nil || state^.julia_interface == nil {
+//   Ensure one interface generation owns a ready registry arena allocator.
+ensure_julia_interface_instance_registry_arena :: proc(
+    iface: ^bridgemodel.Euclid_Julia_Interface) -> bool {
+    if iface == nil {
         return false
     }
-
-    iface := state^.julia_interface
     if iface^.animation_registry_arena_initialized {
         return true
     }
@@ -187,7 +180,7 @@ ensure_julia_interface_registry_arena :: proc(state: ^core.Euclid_General_State)
 }
 
 //   Clear one interface registry while retaining its arena for reuse.
-clean_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
+clean_julia_interface_instance :: proc(iface: ^bridgemodel.Euclid_Julia_Interface) {
     if iface == nil {
         return
     }
@@ -202,6 +195,7 @@ clean_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
     iface^.animation_lookup_entries = nil
     iface^.animation_lookup_capacity = 0
     iface^.animation_lookup_count = 0
+    iface^.content_generation = 0
     iface^.selected_animation = nil
     iface^.current_animation = &iface^.null_animation
 }
@@ -222,7 +216,7 @@ destroy_julia_interface_resources :: proc(state: ^core.Euclid_General_State) {
 }
 
 //   Destroy registry allocations owned by one retired interface generation.
-destroy_julia_interface_instance :: proc(iface: ^core.Euclid_Julia_Interface) {
+destroy_julia_interface_instance :: proc(iface: ^bridgemodel.Euclid_Julia_Interface) {
     if iface == nil {
         return
     }
@@ -264,8 +258,11 @@ include_packaged_script_failure :: proc(exit_on_failure: bool) -> bool {
 }
 
 //   Resolve the packaged Julia project directory that owns Project.toml.
-resolve_packaged_julia_project_path :: proc(exit_on_failure: bool) -> (string, bool) {
-    project_path := files.packaged_asset_path("julia", context.temp_allocator)
+resolve_packaged_julia_project_path :: proc(
+    exit_on_failure: bool,
+    asset_config: ^files.Asset_Root_Config = nil) -> (string, bool) {
+    project_path := files.packaged_asset_path_with_config(
+        asset_config, "julia", context.temp_allocator)
     if len(project_path) == 0 {
         fmt.eprintln("Failed to resolve packaged Julia project path.")
         fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
@@ -275,52 +272,27 @@ resolve_packaged_julia_project_path :: proc(exit_on_failure: bool) -> (string, b
     return project_path, true
 }
 
-//   Resolve the Julia `Pkg.activate` function used to activate the packaged project.
-resolve_pkg_activate_function :: proc(
-    exit_on_failure: bool) -> (^julialib.jl_value_t, bool) {
-    pkg_value := julialib.jl_eval_string("import Pkg; Pkg")
-    if pkg_value == nil || julialib.jl_exception_occurred() != nil {
-        fmt.eprintln("Failed to resolve Julia Pkg module.")
-        print_julia_exception("resolve Julia Pkg module")
-        return nil, include_packaged_script_failure(exit_on_failure)
+//   Resolve the packaged Julia content directory used by generation loading.
+resolve_packaged_julia_content_path :: proc(
+    exit_on_failure: bool,
+    asset_config: ^files.Asset_Root_Config = nil) -> (string, bool) {
+    content_path := files.packaged_asset_path_with_config(
+        asset_config, "content", context.temp_allocator)
+    if len(content_path) == 0 {
+        fmt.eprintln("Failed to resolve packaged Julia content path.")
+        fmt.eprintln("Expected content directory in assets package next to executable.")
+        return "", include_packaged_script_failure(exit_on_failure)
     }
 
-    pkg_module := (^julialib.jl_module_t)(pkg_value)
-    activate_fn := julialib.jl_get_function(pkg_module, "activate")
-    if activate_fn == nil {
-        fmt.eprintln("Failed to resolve Pkg.activate from the Julia Pkg module.")
-        return nil, include_packaged_script_failure(exit_on_failure)
-    }
-
-    return activate_fn, true
-}
-
-//   Activate the packaged Julia project before loading script.jl through Main.include.
-activate_packaged_julia_project :: proc(
-    project_path: string,
-    exit_on_failure: bool) -> bool {
-
-    activate_fn, activate_ok := resolve_pkg_activate_function(exit_on_failure)
-    if !activate_ok {
-        return false
-    }
-
-    project_cstr := strings.clone_to_cstring(project_path, context.temp_allocator)
-    project_value := julialib.jl_cstr_to_string(project_cstr)
-    activate_result := julialib.jl_call1(activate_fn, project_value)
-    if julialib.jl_exception_occurred() != nil || activate_result == nil {
-        fmt.eprintln("Failed to activate packaged Julia project via Pkg.activate(path).")
-        fmt.eprintln("Resolved project path: ", project_path)
-        print_julia_exception("activate packaged Julia project")
-        return include_packaged_script_failure(exit_on_failure)
-    }
-
-    return true
+    return content_path, true
 }
 
 //   Resolve the packaged Julia script path needed for Main.include.
-resolve_packaged_script_include_path :: proc(exit_on_failure: bool) -> (string, bool) {
-    script_path := files.packaged_asset_path("julia/script.jl", context.temp_allocator)
+resolve_packaged_script_include_path :: proc(
+    exit_on_failure: bool,
+    asset_config: ^files.Asset_Root_Config = nil) -> (string, bool) {
+    script_path := files.packaged_asset_path_with_config(
+        asset_config, "julia/script.jl", context.temp_allocator)
     if len(script_path) == 0 {
         fmt.eprintln("Failed to resolve packaged Julia script path.")
         fmt.eprintln("Expected assets package directory next to executable: assets.pkg")
@@ -372,16 +344,11 @@ call_include_packaged_script :: proc(
 //
 // Notes:
 //   - When exit_on_failure is true, unrecoverable include errors terminate the process.
-include_packaged_script :: proc(exit_on_failure: bool) -> bool {
-    project_path, project_ok := resolve_packaged_julia_project_path(exit_on_failure)
-    if !project_ok {
-        return false
-    }
-    if !activate_packaged_julia_project(project_path, exit_on_failure) {
-        return false
-    }
-
-    script_path, path_ok := resolve_packaged_script_include_path(exit_on_failure)
+include_packaged_script :: proc(
+    exit_on_failure: bool,
+    asset_config: ^files.Asset_Root_Config = nil) -> bool {
+    script_path, path_ok := resolve_packaged_script_include_path(
+        exit_on_failure, asset_config)
     if !path_ok {
         return false
     }
@@ -394,10 +361,56 @@ include_packaged_script :: proc(exit_on_failure: bool) -> bool {
     return call_include_packaged_script(include_fn, script_path, exit_on_failure)
 }
 
-//   Print Julia exception type/message details for a named bridge context.
+//   Format and print one retained Julia exception, reporting formatter success.
+print_formatted_julia_exception :: proc(
+    context_of_error: string, format: Julia_Exception_Format) -> bool {
+    msg_val := format_julia_exception_message(
+        format.sprint, format.showerror, format.exception, format.backtrace)
+    if julialib.jl_exception_occurred() != nil || msg_val == nil {
+        julialib.jl_exception_clear()
+        return false
+    }
+    fmt.eprintln("Julia exception context: ", context_of_error)
+    fmt.eprintln("Julia exception type: ", format.exception_type)
+    fmt.eprintln(julialib.jl_string_ptr(msg_val))
+    return true
+}
+
+//   Resolve Base formatters and capture the pending exception backtrace.
+prepare_julia_exception_format :: proc(
+    exception_type: cstring,
+    exception: ^julialib.jl_value_t) -> (Julia_Exception_Format, bool) {
+    base_module := resolve_base_module()
+    if base_module == nil {
+        julialib.jl_exception_clear()
+        return {}, false
+    }
+    sprint_fn := julialib.jl_get_function(base_module, "sprint")
+    showerror_fn := julialib.jl_get_function(base_module, "showerror")
+    catch_backtrace_fn := julialib.jl_get_function(base_module, "catch_backtrace")
+    if sprint_fn == nil || showerror_fn == nil {
+        julialib.jl_exception_clear()
+        return {}, false
+    }
+    backtrace: ^julialib.jl_value_t
+    if catch_backtrace_fn != nil {
+        backtrace = julialib.jl_call0(catch_backtrace_fn)
+    }
+    julialib.jl_exception_clear()
+    return {
+        exception_type = exception_type,
+        exception = exception,
+        sprint = sprint_fn,
+        showerror = showerror_fn,
+        backtrace = backtrace,
+    }, true
+}
+
+//   Print Julia exception type, message, and backtrace for a named bridge context.
 //
 // Notes:
-//   - Falls back to type-only output when Base sprint/showerror cannot be resolved.
+//   - Suspends Julia GC while retaining the original exception across formatter calls.
+//   - Falls back to context and type when Base formatting fails.
 print_julia_exception :: proc(context_of_error: string) {
     ex_raw := julialib.jl_exception_occurred()
     if ex_raw == nil {
@@ -405,43 +418,27 @@ print_julia_exception :: proc(context_of_error: string) {
     }
 
     ex := (^julialib.jl_value_t)(ex_raw)
-
     ex_type := cstring(julialib.jl_typeof_str(ex_raw))
+    gc_was_enabled := julialib.jl_gc_enable(0)
+    defer julialib.jl_gc_enable(gc_was_enabled)
 
-    base_module := resolve_base_module()
-    if base_module == nil {
-        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
+    exception_format, available := prepare_julia_exception_format(ex_type, ex)
+    if !available {
+        print_julia_exception_static(context_of_error, ex_type, ex)
         return
     }
-
-    sprint_fn := julialib.jl_get_function(base_module, "sprint")
-    showerror_fn := julialib.jl_get_function(base_module, "showerror")
-    catch_backtrace_fn := julialib.jl_get_function(base_module, "catch_backtrace")
-
-    if sprint_fn == nil || showerror_fn == nil {
-        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
-        fmt.println("Julia exception formatter unavailable (Base.sprint/Base.showerror).")
-        return
+    if !print_formatted_julia_exception(context_of_error, exception_format) {
+        print_julia_exception_static(context_of_error, ex_type, ex)
     }
+}
 
-    bt_val: ^julialib.jl_value_t = nil
-    if catch_backtrace_fn != nil {
-        bt_val = julialib.jl_call0(catch_backtrace_fn)
-        if julialib.jl_exception_occurred() != nil {
-            bt_val = nil
-        }
-    }
+//   Print the original Julia exception identity when Julia formatting is unavailable.
+print_julia_exception_static :: proc(
+    context_of_error: string, ex_type: cstring, ex: ^julialib.jl_value_t) {
 
-    msg_val := format_julia_exception_message(sprint_fn, showerror_fn, ex, bt_val)
-    if julialib.jl_exception_occurred() != nil || msg_val == nil {
-        fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
-        fmt.println("Failed to format exception text via Base.sprint(showerror, ...).")
-        return
-    }
-
-    msg := julialib.jl_string_ptr(msg_val)
-    fmt.println("Julia exception in ", context_of_error, " type=", ex_type)
-    fmt.println(msg)
+    fmt.eprintln("Julia exception context: ", context_of_error)
+    fmt.eprintln("Julia exception type: ", ex_type)
+    fmt.eprintln("Julia exception object: ", rawptr(ex))
 }
 
 //   Format a Julia exception through Base.sprint(showerror, ...), with optional backtrace.

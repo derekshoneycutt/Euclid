@@ -1,0 +1,15 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Terminal","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"wait_state":"terminal_ready","timeout_ms":10000}
+{"type":";"}
+{"type":"/bin/bash --noprofile --norc -c 'tput smcup; printf \"PTY-%s\" \"ALT-SCREEN\"; read -n 1; tput rmcup; printf \"PTY-%s\" \"RESTORED\"'"}
+{"key":"enter"}
+{"wait_terminal_contains":"PTY-ALT-SCREEN","timeout_ms":10000}
+{"screenshot":"terminal-pty-alternate.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"type":"q"}
+{"wait_terminal_contains":"PTY-RESTORED","timeout_ms":10000}
+{"wait_state":"terminal_idle","timeout_ms":10000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

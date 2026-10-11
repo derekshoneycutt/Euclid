@@ -36,6 +36,22 @@ function bridge_test_call(; name="ping", parameter_type="Int32", return_type="In
         source_line=symbol.source_line, symbol=symbol)
 end
 
+@testset "Odin ABI signature parsing" begin
+    parts = CodeWiki.parse_odin_abi_signature(
+        "notify :: proc(^core.Euclid_General_State, u64) {...}")
+    @test parts.parameter_types == ["^core.Euclid_General_State", "u64"]
+    @test parts.return_type == "void"
+end
+
+@testset "harness-only exports are not the public animation bridge" begin
+    exported = bridge_test_export()
+    exported.symbol.source_path = "src/harness/content_notice.odin"
+    package = DocumentationPackage(
+        language=:odin, stable_id="odin:harness", display_name="harness",
+        source_root="src/harness", symbols=[exported.symbol])
+    @test isempty(CodeWiki.extract_odin_bridge_exports([package]))
+end
+
 @testset "bridge pairing and drift" begin
     exported = bridge_test_export()
     first_call = bridge_test_call()
@@ -49,6 +65,21 @@ end
         [exported], BridgeJuliaCall[])
     @test_throws ErrorException CodeWiki.pair_bridge_records(
         [exported], [bridge_test_call(parameter_type="Cfloat")])
+    identity_export = bridge_test_export(
+        parameter_type="Animation_Value_Abi_Identity")
+    identity_call = bridge_test_call(parameter_type="AnimationValueIdentityABI")
+    @test length(CodeWiki.pair_bridge_records(
+        [identity_export], [identity_call])) == 1
+    path_export = bridge_test_export(
+        parameter_type="Animation_Implementation_Path_Metadata")
+    path_call = bridge_test_call(
+        parameter_type="AnimationImplementationPathMetadata")
+    @test length(CodeWiki.pair_bridge_records(
+        [path_export], [path_call])) == 1
+    vector_export = bridge_test_export(parameter_type="Vector3")
+    vector_call = bridge_test_call(parameter_type="NTuple{3,Cfloat}")
+    @test length(CodeWiki.pair_bridge_records(
+        [vector_export], [vector_call])) == 1
     @test isempty(CodeWiki.pair_bridge_records([exported], BridgeJuliaCall[], ["ping"]))
     @test_throws ErrorException CodeWiki.pair_bridge_records(
         [exported], BridgeJuliaCall[], ["unknown"])
@@ -66,8 +97,8 @@ end
     packages = CodeWiki.extract_default_wiki_packages(repository_root)
     pairs = extract_bridge_pairs(packages, repository_root)
 
-    @test length(pairs) == 120
-    @test sum(length(pair.julia_calls) for pair in pairs) == 130
+    @test length(pairs) == 80
+    @test sum(length(pair.julia_calls) for pair in pairs) == 89
     @test first(pairs).abi_name < last(pairs).abi_name
     @test all(pair -> !isempty(pair.odin_export.doc_markdown), pairs)
     @test all(pair -> all(call -> !isempty(call.doc_markdown), pair.julia_calls), pairs)

@@ -1,0 +1,850 @@
+package bridge
+
+import shapemodel "../shapes/model"
+import core "../core"
+import particles "../particles"
+import shapes "../shapes"
+import projection "../view/world/projection"
+
+// Group immutable component sources selected for one bridge query.
+Bridge_Shape_Query_Source :: struct {
+    registry: ^shapemodel.Shape_Registry,
+    transforms: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Transform),
+    arcs: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Arc),
+    trochoids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Trochoid),
+    cycloids: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid),
+    cycloid_tools: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Cycloid_Tool),
+    render_styles: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Render_Style),
+    active_features: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Active_Feature),
+    geometries: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Geometry),
+    labels: ^shapemodel.Shape_Component_Set(shapemodel.Shape_Label),
+    label_store: ^shapemodel.Shape_Label_Store,
+}
+
+// Hold one resolved literal Cycloid line.
+Bridge_Cycloid_Line :: struct {
+    first: Vector3,
+    second: Vector3,
+}
+
+// Map canonical world outcomes to stable bridge status values.
+bridge_shape_status :: proc(status: shapemodel.Shape_World_Status) -> i32 {
+    switch status {
+    case .Ok: return BRIDGE_STATUS_OK
+    case .Invalid_Argument: return BRIDGE_STATUS_INVALID_ARGUMENT
+    case .Illegal_State, .Already_Present: return BRIDGE_STATUS_ILLEGAL_STATE
+    case .Not_Found: return BRIDGE_STATUS_NOT_FOUND
+    case .Out_Of_Capacity: return BRIDGE_STATUS_OUT_OF_CAPACITY
+    case .Invalid_Utf8: return BRIDGE_STATUS_INVALID_UTF8
+    case .Unsupported_Mime: return BRIDGE_STATUS_UNSUPPORTED_MIME
+    }
+    return BRIDGE_STATUS_INVALID_ARGUMENT
+}
+
+// Resolve the authoritative canonical world owned by one runtime state.
+bridge_shape_world :: proc(
+    state: ^core.Euclid_General_State) -> ^shapemodel.Shape_World {
+    if state == nil {
+        return nil
+    }
+    return state.shape_world
+}
+
+// Decode and validate one packed entity against the authoritative registry.
+bridge_shape_resolve :: proc(
+    state: ^core.Euclid_General_State,
+    packed: u64) -> (shapemodel.Shape_Entity, bool) {
+    world := bridge_shape_world(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    return entity, world != nil &&
+        shapemodel.shape_registry_resolves(&world.registry, entity)
+}
+
+// Select worker-owned projections during capture and canonical state otherwise.
+bridge_shape_query_source :: proc(
+    state: ^core.Euclid_General_State) -> (Bridge_Shape_Query_Source, bool) {
+    snapshot := active_animation_query_snapshot(state)
+    if snapshot != nil {
+        shapes := &snapshot.shapes
+        return {&shapes.registry, &shapes.transforms, &shapes.arcs, &shapes.trochoids,
+            &shapes.cycloids, &shapes.cycloid_tools,
+            &shapes.render_styles,
+            &shapes.active_features, &shapes.geometries, &shapes.labels,
+            &shapes.label_store}, true
+    }
+    world := bridge_shape_world(state)
+    if world == nil {
+        return {}, false
+    }
+    return {&world.registry, &world.transforms, &world.arcs, &world.trochoids,
+        &world.cycloids, &world.cycloid_tools,
+        &world.render_styles,
+        &world.active_features, &world.geometries, &world.labels,
+        &world.label_store}, true
+}
+
+// Convert ABI presentation values into canonical world construction style.
+bridge_shape_style :: proc(style: Bridge_Shape_Style) -> shapes.Shape_Style {
+    return {color = style.color, brush_size = style.brush_size}
+}
+
+// Pack one standalone entity constructor result for ABI return.
+bridge_shape_entity_result :: proc(
+    entity: shapemodel.Shape_Entity,
+    status: shapemodel.Shape_World_Status) -> Bridge_Shape_Entity_Result {
+    return {bridge_shape_status(status), shapemodel.shape_entity_pack(entity)}
+}
+
+// Create one standalone transform-backed point in the canonical world.
+@(export)
+shape_create_point :: proc "c" (
+    state: ^core.Euclid_General_State,
+    input: Bridge_Positioned_Shape_Input) -> Bridge_Shape_Entity_Result {
+    context = state.saved_context
+    handle, status := shapes.world_create_point(
+        state.shape_world, input.position, bridge_shape_style(input.style))
+    return bridge_shape_entity_result(handle.entity, status)
+}
+
+// Create one null-terminated UTF-8 plain-text label with transactional source copying.
+@(export)
+shape_create_label :: proc "c" (
+    state: ^core.Euclid_General_State,
+    source: cstring,
+    mime: i32,
+    input: Bridge_Positioned_Shape_Input) -> Bridge_Shape_Entity_Result {
+    context = state.saved_context
+    if source == nil || mime < 0 ||
+        mime > i32(shapemodel.Shape_Text_Mime.Text_Latex) {
+        return {BRIDGE_STATUS_INVALID_ARGUMENT, 0}
+    }
+    text := string(source)
+    handle, status := shapes.world_create_label(state.shape_world, {
+        source = text, mime = shapemodel.Shape_Text_Mime(mime),
+        position = input.position, style = bridge_shape_style(input.style)})
+    return bridge_shape_entity_result(handle.entity, status)
+}
+
+// Create one line with direct packed endpoint handles.
+@(export)
+shape_create_line :: proc "c" (
+    state: ^core.Euclid_General_State,
+    first, second: Vector3,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Line_Result {
+    context = state.saved_context
+    handle, status := shapes.world_create_line(
+        state.shape_world, first, second, bridge_shape_style(style))
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.first),
+        shapemodel.shape_entity_pack(handle.second),
+    }
+}
+
+// Create one outlined arc and return its packed host identity.
+@(export)
+shape_create_arc :: proc "c" (
+    state: ^core.Euclid_General_State,
+    center: Vector3,
+    arc: shapemodel.Bridge_Arc_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Arc_Result {
+    context = state.saved_context
+    handle, status := shapes.world_create_arc(state.shape_world, {
+        center = center, radius = arc.radius, start_theta = arc.start_theta,
+        sweep_theta = arc.sweep_theta, style = bridge_shape_style(style)})
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+    }
+}
+
+// Create one filled arc and return its packed host identity.
+@(export)
+shape_create_filled_arc :: proc "c" (
+    state: ^core.Euclid_General_State,
+    center: Vector3,
+    arc: shapemodel.Bridge_Arc_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Arc_Result {
+    context = state.saved_context
+    handle, status := shapes.world_create_filled_arc(state.shape_world, {
+        center = center, radius = arc.radius, start_theta = arc.start_theta,
+        sweep_theta = arc.sweep_theta, style = bridge_shape_style(style)})
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+    }
+}
+
+// Create one two-circle filled region and return its direct packed identities.
+@(export)
+shape_create_circle_region :: proc "c" (
+    state: ^core.Euclid_General_State,
+    first_center, second_center: Vector3,
+    geometry: shapemodel.Bridge_Circle_Region_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Circle_Region_Result {
+    context = state.saved_context
+    if geometry.operation < 0 || geometry.operation >
+        i32(shapemodel.Shape_Circle_Region_Operation.Difference) {
+        return {status = BRIDGE_STATUS_INVALID_ARGUMENT}
+    }
+    input := shapes.Circle_Region_Input{first_center = first_center,
+        second_center = second_center, first_radius = geometry.first_radius,
+        second_radius = geometry.second_radius,
+        operation = shapemodel.Shape_Circle_Region_Operation(geometry.operation),
+        style = bridge_shape_style(style)}
+    handle, status := shapes.world_create_circle_region(state.shape_world, input)
+    return {bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.first_center),
+        shapemodel.shape_entity_pack(handle.second_center)}
+}
+
+// Convert one bridge trochoid value into validated canonical state.
+bridge_trochoid_value :: proc(
+    geometry: shapemodel.Bridge_Trochoid_Geometry) -> shapemodel.Shape_Trochoid {
+    if geometry.mode < 0 || geometry.mode > i32(shapemodel.Shape_Trochoid_Mode.Internal) {
+        return {}
+    }
+    return {mode = shapemodel.Shape_Trochoid_Mode(geometry.mode),
+        fixed_radius = geometry.fixed_radius, rolling_radius = geometry.rolling_radius,
+        tracer_distance = geometry.tracer_distance, tracer_phase = geometry.tracer_phase,
+        rotation = geometry.rotation, parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        draw_parameter = geometry.draw_parameter}
+}
+
+// Convert one bridge cycloid description into canonical scalar state.
+bridge_cycloid_value :: proc(
+    geometry: shapemodel.Bridge_Cycloid_Geometry) -> shapemodel.Shape_Cycloid {
+    return {rolling_radius = geometry.rolling_radius,
+        tracer_distance = geometry.tracer_distance,
+        tracer_phase = geometry.tracer_phase,
+        parameter_start = geometry.parameter_start,
+        parameter_finish = geometry.parameter_finish,
+        draw_parameter = geometry.draw_parameter}
+}
+
+// Resolve one cycloid host's immutable endpoint references and current positions.
+bridge_cycloid_endpoints :: proc(source: ^Bridge_Shape_Query_Source,
+    entity: shapemodel.Shape_Entity) -> (Bridge_Cycloid_Line, bool) {
+    geometry, has_geometry := shapemodel.shape_component_get(
+        source^.geometries, source^.registry, entity)
+    if !has_geometry || geometry.kind != .Cycloid {
+        return {}, false
+    }
+    first, first_ok := shapemodel.shape_component_get(
+        source^.transforms, source^.registry, geometry.payload.cycloid.first)
+    second, second_ok := shapemodel.shape_component_get(
+        source^.transforms, source^.registry, geometry.payload.cycloid.second)
+    if !first_ok || !second_ok {
+        return {}, false
+    }
+    return {first.position, second.position}, true
+}
+
+// Create one outlined trochoid and return its packed host identity.
+@(export)
+shape_create_trochoid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    center: Vector3,
+    geometry: shapemodel.Bridge_Trochoid_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Trochoid_Result {
+    context = state.saved_context
+    value := bridge_trochoid_value(geometry)
+    handle, status := shapes.world_create_trochoid(state.shape_world, {
+        center = center, mode = value.mode, fixed_radius = value.fixed_radius,
+        rolling_radius = value.rolling_radius, tracer_distance = value.tracer_distance,
+        tracer_phase = value.tracer_phase, rotation = value.rotation,
+        parameter_start = value.parameter_start,
+        parameter_finish = value.parameter_finish,
+        draw_parameter = value.draw_parameter, style = bridge_shape_style(style)})
+    return {bridge_shape_status(status), shapemodel.shape_entity_pack(handle.shape)}
+}
+
+// Create one literal-line cycloid and return its host and endpoint identities.
+@(export)
+shape_create_cycloid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    first, second: Vector3,
+    geometry: shapemodel.Bridge_Cycloid_Geometry,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Cycloid_Result {
+    context = state.saved_context
+    value := bridge_cycloid_value(geometry)
+    handle, status := shapes.world_create_cycloid(state.shape_world, {
+        first = first, second = second, rolling_radius = value.rolling_radius,
+        tracer_distance = value.tracer_distance, tracer_phase = value.tracer_phase,
+        parameter_start = value.parameter_start,
+        parameter_finish = value.parameter_finish,
+        draw_parameter = value.draw_parameter, style = bridge_shape_style(style)})
+    return {bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.first),
+        shapemodel.shape_entity_pack(handle.second)}
+}
+
+// Create one triangle with direct packed ordered vertex handles.
+@(export)
+shape_create_triangle :: proc "c" (
+    state: ^core.Euclid_General_State,
+    vertices: [3]Vector3,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Triangle_Result {
+    context = state.saved_context
+    handle, status := shapes.world_create_triangle(
+        state.shape_world, vertices, bridge_shape_style(style))
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        shapemodel.shape_entity_pack(handle.first),
+        shapemodel.shape_entity_pack(handle.second),
+        shapemodel.shape_entity_pack(handle.third),
+    }
+}
+
+// Create one square with direct packed ordered vertex handles.
+@(export)
+shape_create_square :: proc "c" (
+    state: ^core.Euclid_General_State,
+    vertices: shapemodel.Bridge_Square_Vertices,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Square_Result {
+    context = state.saved_context
+    handle, status := shapes.world_create_square(
+        state.shape_world, vertices.vertices, bridge_shape_style(style))
+    packed: [4]u64
+    for entity, index in handle.vertices {
+        packed[index] = shapemodel.shape_entity_pack(entity)
+    }
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        packed,
+    }
+}
+
+// Create one pentagon with direct packed ordered vertex handles.
+@(export)
+shape_create_pentagon :: proc "c" (
+    state: ^core.Euclid_General_State,
+    vertices: shapemodel.Bridge_Pentagon_Vertices,
+    style: Bridge_Shape_Style) -> Bridge_Shape_Pentagon_Result {
+    context = state.saved_context
+    handle, status := shapes.world_create_pentagon(
+        state.shape_world, vertices.vertices, bridge_shape_style(style))
+    packed: [5]u64
+    for entity, index in handle.vertices {
+        packed[index] = shapemodel.shape_entity_pack(entity)
+    }
+    return {
+        bridge_shape_status(status),
+        shapemodel.shape_entity_pack(handle.shape),
+        packed,
+    }
+}
+
+// Project one entity's transform and render style into a bridge view.
+shape_view_project_presentation :: proc(
+    source: ^Bridge_Shape_Query_Source,
+    entity: shapemodel.Shape_Entity,
+    view: ^Bridge_Shape_View) {
+    transform, has_transform := shapemodel.shape_component_get(
+        source^.transforms, source^.registry, entity)
+    if has_transform {
+        view^.has_transform = 1
+        view^.position = transform.position
+    }
+    style, has_style := shapemodel.shape_component_get(
+        source^.render_styles, source^.registry, entity)
+    if has_style {
+        view^.has_style = 1
+        view^.visible = u8(style.visible)
+        view^.color = {style.color.r, style.color.g, style.color.b, style.color.a}
+        active_color, has_active_color := style.active_color.?
+        view^.has_active_color = u8(has_active_color)
+        view^.active_color = {active_color.r, active_color.g,
+            active_color.b, active_color.a}
+        view^.brush_size = style.brush_size
+    }
+}
+
+// Project one entity's semantic components into a bridge view.
+shape_view_project_semantics :: proc(
+    source: ^Bridge_Shape_Query_Source,
+    entity: shapemodel.Shape_Entity,
+    view: ^Bridge_Shape_View) {
+    feature, has_feature := shapemodel.shape_component_get(
+        source^.active_features, source^.registry, entity)
+    if has_feature {
+        view^.has_active_feature = 1
+        view^.active_feature = feature.index
+    }
+    geometry, has_geometry := shapemodel.shape_component_get(
+        source^.geometries, source^.registry, entity)
+    if has_geometry {
+        view^.kind = i32(geometry.kind)
+    }
+}
+
+// Resolve one packed entity into pointer-free component projections.
+@(export)
+shape_get_view :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64) -> Bridge_Shape_View {
+    context = state.saved_context
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return {status = BRIDGE_STATUS_NOT_FOUND, entity = packed}
+    }
+    view := Bridge_Shape_View{status = BRIDGE_STATUS_OK, entity = packed, kind = -1}
+    shape_view_project_presentation(&source, entity, &view)
+    shape_view_project_semantics(&source, entity, &view)
+    return view
+}
+
+// Return one resolved arc host's complete mutable geometry.
+@(export)
+shape_get_arc :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64) -> Bridge_Shape_Arc_Query_Result {
+    context = state.saved_context
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    arc, found := shapemodel.shape_component_get(source.arcs, source.registry, entity)
+    if !found {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    return {BRIDGE_STATUS_OK, packed,
+        {arc.radius, arc.start_theta, arc.sweep_theta}}
+}
+
+// Return one resolved trochoid host's complete mutable geometry.
+@(export)
+shape_get_trochoid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64) -> Bridge_Shape_Trochoid_Query_Result {
+    context = state.saved_context
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    value, found := shapemodel.shape_component_get(
+        source.trochoids, source.registry, entity)
+    if !found {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    return {BRIDGE_STATUS_OK, packed, {i32(value.mode), value.fixed_radius,
+        value.rolling_radius, value.tracer_distance, value.tracer_phase, value.rotation,
+        value.parameter_start, value.parameter_finish, value.draw_parameter}}
+}
+
+// Return one resolved cycloid host's endpoint positions and scalar geometry.
+@(export)
+shape_get_cycloid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64) -> Bridge_Shape_Cycloid_Query_Result {
+    context = state.saved_context
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    value, found := shapemodel.shape_component_get(
+        source.cycloids, source.registry, entity)
+    line, endpoints_ok := bridge_cycloid_endpoints(&source, entity)
+    if !found || !endpoints_ok {
+        return {status = BRIDGE_STATUS_NOT_FOUND, shape = packed}
+    }
+    geometry := shapemodel.Bridge_Cycloid_Geometry{value.rolling_radius,
+        value.tracer_distance, value.tracer_phase, value.parameter_start,
+        value.parameter_finish, value.draw_parameter}
+    return {BRIDGE_STATUS_OK, packed, line.first, line.second, geometry}
+}
+
+// Set one live transform position by packed entity identity.
+@(export)
+shape_set_position :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    position: Vector3) -> i32 {
+    context = state.saved_context
+    command, captured := capture_shape_command(state, .Set_Shape_Position, packed)
+    if command != nil {
+        command.position = position
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    transform, has_transform := shapemodel.shape_component_get_mut(
+        &state.shape_world.transforms, &state.shape_world.registry, entity)
+    if !has_transform {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    transform.position = position
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live arc's complete mutable geometry by packed host identity.
+@(export)
+shape_set_arc :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    arc: shapemodel.Bridge_Arc_Geometry) -> i32 {
+    context = state.saved_context
+    value := shapemodel.Shape_Arc{radius = arc.radius,
+        start_theta = arc.start_theta, sweep_theta = arc.sweep_theta}
+    if !shapemodel.shape_arc_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(state, .Set_Shape_Arc, packed)
+    if command != nil {
+        command.arc = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, has_arc := shapemodel.shape_component_get_mut(
+        &state.shape_world.arcs, &state.shape_world.registry, entity)
+    if !has_arc {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current.radius = value.radius
+    current.start_theta = value.start_theta
+    current.sweep_theta = value.sweep_theta
+    return BRIDGE_STATUS_OK
+}
+
+// Restore the previous interpolation sample after replacing trochoid values.
+bridge_trochoid_preserve_previous :: proc(
+    current: ^shapemodel.Shape_Trochoid, previous: shapemodel.Shape_Trochoid) {
+    current^.previous_fixed_radius = previous.previous_fixed_radius
+    current^.previous_rolling_radius = previous.previous_rolling_radius
+    current^.previous_tracer_distance = previous.previous_tracer_distance
+    current^.previous_tracer_phase = previous.previous_tracer_phase
+    current^.previous_rotation = previous.previous_rotation
+    current^.previous_parameter_start = previous.previous_parameter_start
+    current^.previous_parameter_finish = previous.previous_parameter_finish
+    current^.previous_draw_parameter = previous.previous_draw_parameter
+}
+
+// Set one live trochoid's complete mutable description.
+@(export)
+shape_set_trochoid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    geometry: shapemodel.Bridge_Trochoid_Geometry) -> i32 {
+    context = state.saved_context
+    value := bridge_trochoid_value(geometry)
+    if !shapemodel.shape_trochoid_is_valid(value) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(state, .Set_Shape_Trochoid, packed)
+    if command != nil {
+        command.trochoid = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state.shape_world.trochoids, &state.shape_world.registry, entity)
+    if !has_value {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    style, has_style := shapemodel.shape_component_get(
+        &state.shape_world.render_styles, &state.shape_world.registry, entity)
+    if !has_style || current.mode != value.mode && style.visible {
+        return BRIDGE_STATUS_ILLEGAL_STATE
+    }
+    previous := current^
+    current^ = value
+    bridge_trochoid_preserve_previous(current, previous)
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live trochoid's reveal frontier without changing its complete domain.
+@(export)
+shape_set_trochoid_frontier :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    frontier: f32) -> i32 {
+    context = state.saved_context
+    if !shapemodel.shape_scalar_is_finite(frontier) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(
+        state, .Set_Shape_Trochoid_Frontier, packed)
+    if command != nil {
+        command.scalar = frontier
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state.shape_world.trochoids, &state.shape_world.registry, entity)
+    if !has_value || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, frontier) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    current.draw_parameter = frontier
+    return BRIDGE_STATUS_OK
+}
+
+// Restore the previous interpolation sample after replacing cycloid values.
+bridge_cycloid_preserve_previous :: proc(
+    current: ^shapemodel.Shape_Cycloid, previous: shapemodel.Shape_Cycloid) {
+    current^.previous_rolling_radius = previous.previous_rolling_radius
+    current^.previous_tracer_distance = previous.previous_tracer_distance
+    current^.previous_tracer_phase = previous.previous_tracer_phase
+    current^.previous_parameter_start = previous.previous_parameter_start
+    current^.previous_parameter_finish = previous.previous_parameter_finish
+    current^.previous_draw_parameter = previous.previous_draw_parameter
+}
+
+// Set one live cycloid's complete scalar description against its immutable rail.
+@(export)
+shape_set_cycloid :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    geometry: shapemodel.Bridge_Cycloid_Geometry) -> i32 {
+    context = state.saved_context
+    value := bridge_cycloid_value(geometry)
+    source, available := bridge_shape_query_source(state)
+    entity := shapemodel.shape_entity_unpack(packed)
+    if !available || !shapemodel.shape_registry_resolves(source.registry, entity) {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    line, endpoints_ok := bridge_cycloid_endpoints(&source, entity)
+    if !shapemodel.shape_cycloid_is_valid(value) || !endpoints_ok ||
+        !shapemodel.shape_cycloid_line_is_valid(line.first, line.second,
+            value.rolling_radius, value.parameter_start, value.parameter_finish) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(state, .Set_Shape_Cycloid, packed)
+    if command != nil {
+        command.cycloid = value
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state.shape_world.cycloids, &state.shape_world.registry, entity)
+    if !has_value {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    previous := current^
+    current^ = value
+    bridge_cycloid_preserve_previous(current, previous)
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live cycloid's reveal frontier without changing its complete domain.
+@(export)
+shape_set_cycloid_frontier :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    frontier: f32) -> i32 {
+    context = state.saved_context
+    if !shapemodel.shape_scalar_is_finite(frontier) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(
+        state, .Set_Shape_Cycloid_Frontier, packed)
+    if command != nil {
+        command.scalar = frontier
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    current, has_value := shapemodel.shape_component_get_mut(
+        &state.shape_world.cycloids, &state.shape_world.registry, entity)
+    if !has_value || !shapemodel.shape_parameter_is_in_directed_domain(
+        current.parameter_start, current.parameter_finish, frontier) {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    current.draw_parameter = frontier
+    return BRIDGE_STATUS_OK
+}
+
+// Apply one visibility transition and report whether it emitted hide dust.
+shape_set_visible_local :: proc(
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    visible: u8,
+    kick_dust: bool) -> (i32, bool) {
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND, false
+    }
+    style, has_style := shapemodel.shape_component_get_mut(
+        &state.shape_world.render_styles, &state.shape_world.registry, entity)
+    if !has_style {
+        return BRIDGE_STATUS_NOT_FOUND, false
+    }
+    target_visible := visible != 0
+    emitted := false
+    if !style^.visible && target_visible {
+        queue_revealed_label_dust_contact(state, entity, style^.brush_size)
+    }
+    if style^.visible && !target_visible {
+        emitted = particles.emit_shape_world_hide_burst(
+            state^.particle_system, state^.shape_world, entity, kick_dust)
+        if emitted && kick_dust && state^.iso_scale != nil {
+            projection.screenshake_on_dust_kick(state^.iso_scale)
+        }
+    }
+    style^.visible = target_visible
+    return BRIDGE_STATUS_OK, emitted
+}
+
+// Set one live render style's visibility by packed entity identity.
+@(export)
+shape_set_visible :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    visible: u8) -> i32 {
+    context = state.saved_context
+    command, captured := capture_shape_command(state, .Set_Shape_Visible, packed)
+    if command != nil {
+        command.flag = visible != 0
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    status, _ := shape_set_visible_local(state, packed, visible, true)
+    return status
+}
+
+// Set one live render style's color by packed entity identity.
+@(export)
+shape_set_color :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    color: Bridge_Color) -> i32 {
+    context = state.saved_context
+    command, captured := capture_shape_command(state, .Set_Shape_Color, packed)
+    if command != nil {
+        command.color = color
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    style, has_style := shapemodel.shape_component_get_mut(
+        &state.shape_world.render_styles, &state.shape_world.registry, entity)
+    if !has_style {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    style.color = {color.r, color.g, color.b, color.a}
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live render style's optional active color by packed entity identity.
+@(export)
+shape_set_active_color :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    color: Bridge_Color) -> i32 {
+    context = state.saved_context
+    command, captured := capture_shape_command(
+        state, .Set_Shape_Active_Color, packed)
+    if command != nil {
+        command.color = color
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    style, has_style := shapemodel.shape_component_get_mut(
+        &state.shape_world.render_styles, &state.shape_world.registry, entity)
+    if !has_style {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    style.active_color = color
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live render style's brush size by packed entity identity.
+@(export)
+shape_set_brush_size :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    brush_size: f32) -> i32 {
+    context = state.saved_context
+    if brush_size < 0 {
+        return BRIDGE_STATUS_INVALID_ARGUMENT
+    }
+    command, captured := capture_shape_command(state, .Set_Shape_Brush, packed)
+    if command != nil {
+        command.scalar = brush_size
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    style, has_style := shapemodel.shape_component_get_mut(
+        &state.shape_world.render_styles, &state.shape_world.registry, entity)
+    if !has_style {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    style.brush_size = brush_size
+    return BRIDGE_STATUS_OK
+}
+
+// Set one live optional active feature by packed entity identity.
+shape_set_active_feature :: proc "c" (
+    state: ^core.Euclid_General_State,
+    packed: u64,
+    active_feature: u16) -> i32 {
+    context = state.saved_context
+    command, captured := capture_shape_command(
+        state, .Set_Shape_Active_Feature, packed)
+    if command != nil {
+        command.integer = int(active_feature)
+    }
+    if captured {
+        return BRIDGE_STATUS_OK
+    }
+    entity, found := bridge_shape_resolve(state, packed)
+    if !found {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    feature, has_feature := shapemodel.shape_component_get_mut(
+        &state.shape_world.active_features, &state.shape_world.registry, entity)
+    if !has_feature {
+        return BRIDGE_STATUS_NOT_FOUND
+    }
+    feature.index = active_feature
+    return BRIDGE_STATUS_OK
+}

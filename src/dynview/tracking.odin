@@ -1,11 +1,12 @@
 package dynview
 
-import "../core"
+import dynviewmodel "model"
 
-import rl "vendor:raylib"
+import geometry "../core/geometry"
+import fontmodel "../view/font/model"
 
 //   Toggle Dynview rendering and invalidate all cache inputs when it changes.
-set_enabled :: proc(runtime: ^core.Dynview_System, enabled: bool) {
+set_enabled :: proc(runtime: ^dynviewmodel.Dynview_System, enabled: bool) {
     if runtime^.enabled == enabled {
         return
     }
@@ -19,7 +20,7 @@ set_enabled :: proc(runtime: ^core.Dynview_System, enabled: bool) {
 }
 
 //   Mark compile cache invalid and accumulate invalidation reasons.
-invalidate :: proc(runtime: ^core.Dynview_System, mask: u32) {
+invalidate :: proc(runtime: ^dynviewmodel.Dynview_System, mask: u32) {
     if runtime == nil {
         return
     }
@@ -28,21 +29,8 @@ invalidate :: proc(runtime: ^core.Dynview_System, mask: u32) {
     runtime^.compile_cache.is_valid = false
 }
 
-//   Mark stream invalid and preserve first error code for diagnostics/fallback.
-mark_stream_error :: proc(runtime: ^core.Dynview_System, code: i32) {
-    if runtime == nil {
-        return
-    }
-
-    runtime^.command_buffer.has_stream_error = true
-    if runtime^.compile_cache.last_error_code == DYNVIEW_STATUS_OK {
-        runtime^.compile_cache.last_error_code = code
-    }
-    runtime^.compile_cache.is_valid = false
-}
-
 //   Track panel dimensions and invalidate when layout bounds change.
-track_panel :: proc(runtime: ^core.Dynview_System, panel: rl.Rectangle) {
+track_panel :: proc(runtime: ^dynviewmodel.Dynview_System, panel: geometry.Rectangle) {
     if runtime == nil {
         return
     }
@@ -58,24 +46,30 @@ track_panel :: proc(runtime: ^core.Dynview_System, panel: rl.Rectangle) {
     invalidate(runtime, DYNVIEW_INVALIDATE_PANEL)
 }
 
-//   Track font/wrap metrics and invalidate when text layout metrics shift.
-track_font :: proc(runtime: ^core.Dynview_System, font_size, wrap_advance: f32) {
+//   Track canonical font and cell metrics, invalidating when text layout shifts.
+track_font :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    font_size, cell_width, cell_height: f32) {
+
     if runtime == nil {
         return
     }
 
     cache := &runtime^.compile_cache
-    if font_size == cache^.last_font_size && wrap_advance == cache^.last_wrap_advance {
+    if font_size == cache^.last_font_size &&
+        cell_width == cache^.last_cell_width &&
+        cell_height == cache^.last_cell_height {
         return
     }
 
     cache^.last_font_size = font_size
-    cache^.last_wrap_advance = wrap_advance
+    cache^.last_cell_width = cell_width
+    cache^.last_cell_height = cell_height
     invalidate(runtime, DYNVIEW_INVALIDATE_FONT)
 }
 
 //   Track style schema version and invalidate when style mapping changes.
-track_style :: proc(runtime: ^core.Dynview_System, style_revision: u64) {
+track_style :: proc(runtime: ^dynviewmodel.Dynview_System, style_revision: u64) {
     if runtime == nil {
         return
     }
@@ -86,4 +80,29 @@ track_style :: proc(runtime: ^core.Dynview_System, style_revision: u64) {
 
     runtime^.compile_cache.last_style_revision = style_revision
     invalidate(runtime, DYNVIEW_INVALIDATE_STYLE)
+}
+
+// Track every requested JuliaMono variant's effective face identity.
+track_prose_fonts :: proc(
+    runtime: ^dynviewmodel.Dynview_System,
+    effective_keys: []fontmodel.Font_Key,
+    generations: []u64) {
+
+    count := int(fontmodel.Font_Key.Math_Regular)
+    if runtime == nil || len(effective_keys) != count || len(generations) != count {
+        return
+    }
+    cache := &runtime^.compile_cache
+    changed := false
+    for index in 0..<count {
+        if cache^.last_prose_effective_keys[index] != effective_keys[index] ||
+            cache^.last_prose_font_generations[index] != generations[index] {
+            changed = true
+        }
+        cache^.last_prose_effective_keys[index] = effective_keys[index]
+        cache^.last_prose_font_generations[index] = generations[index]
+    }
+    if changed {
+        invalidate(runtime, DYNVIEW_INVALIDATE_FONT)
+    }
 }

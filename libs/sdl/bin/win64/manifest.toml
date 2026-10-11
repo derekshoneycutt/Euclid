@@ -1,0 +1,59 @@
+schema_version = 1
+platform = "windows"
+architecture = "x86_64"
+toolchain = "msvc"
+
+[[library]]
+name = "SDL3"
+version = "3.4.16"
+source_url = "https://github.com/libsdl-org/SDL/releases/tag/release-3.4.16"
+source_commit = "fa2c02bb6e21974a89ea9824bc53c9932abe5f9c"
+license = "Zlib"
+license_file = "licenses/SDL3.txt"
+license_sha256 = "1c040b8271b37e5076359f8fd54240e371114112924d2df81ef87c7d6a1dfdfd"
+dependencies = []
+
+[[library.artifact]]
+file = "SDL3.dll"
+role = "runtime"
+sha256 = "1f98969319302a100931f4385e5918a0bd53ab07773040682d22e7edb54858c0"
+
+[[library.artifact]]
+file = "SDL3.lib"
+role = "import-library"
+sha256 = "d32f1db2d948accad7b000f7268f7bc6ace6651c8816e26df4ef0878c2b43fab"
+
+[[library]]
+name = "SDL3_image"
+version = "3.4.6"
+source_url = "https://github.com/libsdl-org/SDL_image/releases/tag/release-3.4.6"
+source_commit = "f661fa1ad24ab1b81e43662532f9a6a9fcf67ea6"
+license = "Zlib"
+license_file = "licenses/SDL3_image.txt"
+license_sha256 = "e36997fe492c48e7ed873065cc3a694f38e8189a328d3709099ffdc9a8843f4c"
+dependencies = ["SDL3"]
+
+[[library.artifact]]
+file = "SDL3_image.dll"
+role = "runtime"
+sha256 = "1a7a34b1cfa0c4f5b47b13bb4668002d21e2136634e94023303b792e3e4ec399"
+
+[[library.artifact]]
+file = "SDL3_image.lib"
+role = "import-library"
+sha256 = "53c5e7af66610bfb2d164f49e214395f95ad320b14ce109af3c5d651ee2714cd"
+
+[[library]]
+name = "libpng"
+version = "unavailable"
+abi = "libpng16-16"
+source_url = "https://github.com/glennrp/libpng"
+license = "Libpng-2.0"
+license_file = "licenses/libpng.txt"
+license_sha256 = "16d9daaafbf63a31a5bdc91d4600972548fef5aaa1244202393288dbd079c49a"
+dependencies = ["SDL3_image"]
+
+[[library.artifact]]
+file = "libpng16-16.dll"
+role = "runtime"
+sha256 = "fb243cedb9b55b9095596be133636f7681f31a4b0d2ab54607551addb1f60902"

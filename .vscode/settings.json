@@ -1,0 +1,35 @@
+{
+  "julia.environmentPath": "${workspaceFolder}/src/julia",
+  "julia.numTestProcesses": 1,
+  "juliaTestExplorer.exclude": "**/{.git,.build,bin,node_modules,out,dist}/**",
+  "juliaTestExplorer.testSuites": [
+    {
+      "name": "Application",
+      "entrypoint": "src/julia/test/runtests.jl",
+      "project": "src/julia",
+      "cwd": "."
+    },
+    {
+      "name": "Tooling",
+      "entrypoint": "tools/test/runtests.jl",
+      "project": "tools/analysis",
+      "cwd": "."
+    },
+    {
+      "name": "Analyzer",
+      "entrypoint": "tools/analysis/test/runtests.jl",
+      "project": "tools/analysis",
+      "cwd": "tools/analysis"
+    }
+  ],
+  "odinTestExplorer.argumentProvider": {
+    "command": "julia",
+    "args": ["${workspaceFolder}/tools/odin-test-arguments.jl"],
+    "cwd": "${workspaceFolder}",
+    "environment": {
+      "PATH": "${userHome}/.juliaup/bin${pathSeparator}${env:PATH}"
+    },
+    "scope": "workspace"
+  },
+  "sarif-viewer.connectToGithubCodeScanning": "off",
+}

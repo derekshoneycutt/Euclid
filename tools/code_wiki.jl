@@ -140,6 +140,17 @@ function parsed_odin_symbol(
         visibility=isempty(comment_lines) ? :all : :documented)
 end
 
+"""Collect one declaration and its compiler-emitted column-zero continuations."""
+function collect_odin_declaration_lines(lines::Vector{String}, start_index::Int)
+    declaration = String[lines[start_index][3:end]]
+    index = start_index + 1
+    while index <= length(lines) && !startswith(lines[index], '\t')
+        push!(declaration, lines[index])
+        index += 1
+    end
+    return join(declaration, "\n"), index
+end
+
 """Collect comment lines immediately following one declaration record."""
 function collect_odin_comment_lines(lines::Vector{String}, start_index::Int)
     comments = String[]
@@ -173,6 +184,22 @@ function parse_odin_doc(output::AbstractString, source_root::AbstractString)
     return package
 end
 
+"""Consume one package-description line before the first Odin file record."""
+function consume_odin_package_doc_line!(
+    package::DocumentationPackage, line::String, current_file::AbstractString)::Bool
+
+    isempty(current_file) || return false
+    tab_indented = startswith(line, '\t') && !startswith(line, "\t\t")
+    space_indented = startswith(line, "    ") && !startswith(line, "        ")
+    (tab_indented || space_indented) || return false
+    text = strip(line)
+    if !isempty(text)
+        package.doc_markdown = isempty(package.doc_markdown) ? text :
+            package.doc_markdown * "\n" * text
+    end
+    return true
+end
+
 """Parse file, declaration, and metadata records into one package."""
 function parse_odin_doc_body!(package::DocumentationPackage, lines::Vector{String})
     current_file = ""
@@ -183,12 +210,15 @@ function parse_odin_doc_body!(package::DocumentationPackage, lines::Vector{Strin
             current_file = strip(line[8:end])
             push!(package.source_files, current_file)
             index += 1
+        elseif consume_odin_package_doc_line!(package, line, current_file)
+            index += 1
         elseif startswith(line, "\t\t") && !startswith(line, "\t\t\t")
             isempty(current_file) && error("Odin declaration appeared before a file record.")
-            comments, next_index = collect_odin_comment_lines(lines, index + 1)
+            declaration, comment_index = collect_odin_declaration_lines(lines, index)
+            comments, next_index = collect_odin_comment_lines(lines, comment_index)
             push!(package.symbols, parsed_odin_symbol(
                 package.stable_id, package.display_name, package.source_root,
-                current_file, line[3:end], comments))
+                current_file, declaration, comments))
             index = next_index
         elseif line == "\tfullpath:"
             index += 2
@@ -287,9 +317,11 @@ function enrich_odin_child_packages!(
     return package
 end
 
-"""Capture `odin doc` output, recovering only from its intermittent pre-output crash."""
-function run_odin_doc(relative_path::String)
-    command = Cmd(["odin", "doc", relative_path, "-in-source-order"])
+"""Capture `odin doc` output from the repository root, retrying pre-output crashes."""
+function run_odin_doc(repository_root::String, relative_path::String)
+    command = Cmd(Cmd([
+        "odin", "doc", relative_path, "-in-source-order",
+        "-define:EUCLID_ENABLE_HARNESS=true"]); dir=repository_root)
     for attempt in 1:3
         stdout = IOBuffer()
         stderr = IOBuffer()
@@ -312,7 +344,8 @@ function extract_odin_package(config::OdinWikiConfig, package_path::AbstractStri
     discovered_packages = discover_odin_packages(config)
     relative_path in discovered_packages ||
         error("Path is not a discovered Odin package: $relative_path")
-    package = parse_odin_doc(run_odin_doc(relative_path), relative_path)
+    package = parse_odin_doc(
+        run_odin_doc(config.repository_root, relative_path), relative_path)
     enrich_odin_source_metadata!(package, config.repository_root)
     return enrich_odin_child_packages!(package, discovered_packages)
 end
@@ -408,7 +441,7 @@ function generate_requested_odin_page(repository_root::String, arguments::Vector
         joinpath(repository_root, "docs", "wiki", "Code", "Odin", "core.md") :
         abspath(arguments[2])
     config = OdinWikiConfig(
-        repository_root=repository_root, excluded_roots=["src/julialib"])
+        repository_root=repository_root, excluded_roots=["libs/julia/bindings"])
     package = extract_odin_package(config, package_path)
     write_odin_package_page(package, output_path)
     println("Wrote ", relpath(output_path, repository_root))
@@ -418,7 +451,7 @@ end
 """Extract the configured code-reference packages without executing Julia modules."""
 function extract_default_wiki_packages(repository_root::String)
     odin_config = OdinWikiConfig(
-        repository_root=repository_root, excluded_roots=["src/julialib"])
+        repository_root=repository_root, excluded_roots=["libs/julia/bindings"])
     odin_paths = discover_odin_packages(odin_config)
     packages = map(path -> extract_odin_package(odin_config, path), odin_paths)
     julia_config = JuliaWikiConfig(repository_root=repository_root)
@@ -451,7 +484,8 @@ function build_complete_wiki_outputs(
     outputs = build_code_wiki_outputs(
         packages, bridge_pairs; source_link_prefix=source_link_prefix)
     append!(outputs, build_wiki_compositor_outputs(manifest))
-    append!(outputs, build_authored_guide_outputs(repository_root, manifest))
+    append!(outputs, build_authored_guide_outputs(
+        repository_root, manifest; source_link_prefix=source_link_prefix))
     return outputs
 end
 

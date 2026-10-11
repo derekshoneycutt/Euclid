@@ -1,0 +1,19 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"select_animation":"Proposition I","as":"selection"}
+{"wait_event":"animation_selected","correlation":"selection","timeout_ms":10000}
+{"assert_state":"tooltip_hidden"}
+{"key":"tab"}
+{"assert_focus":"animation_restart"}
+{"wait_state":"tooltip_visible","timeout_ms":5000}
+{"screenshot":".build/tooltip-acceptance.png"}
+{"wait_event":"capture_completed","timeout_ms":10000}
+{"key":"escape"}
+{"wait_state":"tooltip_hidden","timeout_ms":5000}
+{"key":"tab"}
+{"assert_focus":"animation_pause"}
+{"wait_state":"tooltip_visible","timeout_ms":5000}
+{"key":"tab"}
+{"assert_focus":"accordion_library"}
+{"wait_state":"tooltip_hidden","timeout_ms":5000}
+{"assert_no_bad_frees":true}
+{"shutdown":true}
