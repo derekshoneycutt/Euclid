@@ -859,16 +859,17 @@ function harfbuzz_jll_paths()
     return first(paths), unique(paths[2:end])
 end
 
-"""Resolve Unix linker flags for the HarfBuzz JLL product."""
+"""Resolve the JLL product and search path required by Odin's named foreign import."""
 function unix_harfbuzz_jll_linker_flags()
     harfbuzz_library, runtime_dirs = harfbuzz_jll_paths()
     (Sys.islinux() || Sys.isapple()) || error(
         "Unix HarfBuzz JLL linkage is unsupported on $(Sys.KERNEL).")
     if Sys.islinux()
-        return "$harfbuzz_library -Wl,-rpath-link,$(join(runtime_dirs, ':'))"
+        return "$harfbuzz_library -L$(dirname(harfbuzz_library)) " *
+            "-Wl,-rpath-link,$(join(runtime_dirs, ':'))"
     end
     rpaths = ["-Wl,-rpath,$directory" for directory in runtime_dirs]
-    return join([harfbuzz_library; rpaths], " ")
+    return join([harfbuzz_library; "-L$(dirname(harfbuzz_library))"; rpaths], " ")
 end
 
 """Generate the Windows import libraries required by the Odin application."""

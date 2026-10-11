@@ -19,6 +19,11 @@ Tests live beside the behavior they exercise: Odin package tests are `*_test.odi
 files under `src/`, and Julia tests live under `src/julia/test/`. Add focused coverage
 for changed behavior, then use the complete gate before delivery.
 
+Worker-ownership tests use explicit condition-variable gates to establish ordering.
+Elapsed wall-clock time must not release a blocked worker or substitute for the
+owner's release signal. Font gate regression coverage deliberately holds a worker
+beyond the former five-second fixture watchdog before requesting release.
+
 The shared user-data save tests cover coalesced settings and collection writes, retry
 retention, and revision-aware failure acknowledgement. A prior transaction success
 must not erase an unresolved failure; only a committed batch covering that failure's

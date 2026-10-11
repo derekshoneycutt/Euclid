@@ -58,6 +58,8 @@ isolated under `.build/cmake/` while preserving Euclid's existing outputs under
 Source builds require CMake 3.28 or newer, Ninja, Odin, and Julia, with each tool
 available on PATH. HarfBuzz and its runtime dependencies use `HarfBuzz_jll` from the
 Julia project by default, so a separate HarfBuzz installation is not required.
+JLL linkage supplies both the artifact library and its linker search directory
+so Odin's named HarfBuzz import resolves without a system development package.
 Linux, macOS, and Windows font rasterization uses the pinned `FreeType2_jll`
 library and matching headers; a separate FreeType installation is not required.
 

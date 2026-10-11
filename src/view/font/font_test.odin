@@ -37,6 +37,8 @@ Font_Cancel_Test_State :: struct {
 }
 
 Font_Execution_Test_Gate :: struct {
+    mutex: sync.Mutex,
+    changed: sync.Cond,
     started: bool,
     released: bool,
     release_requested: bool,
@@ -48,51 +50,69 @@ Font_Codepoint_Fallback_Test_Result :: struct {
     configured: bool,
 }
 
-// Occupy the sole worker until release, with a watchdog to bound fixture failure.
+// Occupy the sole worker until the test explicitly releases its execution gate.
 font_test_hold_worker :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     gate := cast(^Font_Execution_Test_Gate)payload
-    sync.atomic_store_explicit(&gate.started, true, .Release)
-    deadline := time.tick_since({}) + 5 * time.Second
-    for !sync.atomic_load_explicit(&gate.released, .Acquire) {
-        if time.tick_since({}) >= deadline {
-            return .Failed
-        }
-        thread.yield()
+    sync.mutex_lock(&gate.mutex)
+    gate.started = true
+    sync.cond_broadcast(&gate.changed)
+    for !gate.released {
+        sync.cond_wait(&gate.changed, &gate.mutex)
     }
+    sync.mutex_unlock(&gate.mutex)
     return .Succeeded
 }
 
 // Wait for synchronized gate entry without assuming that the worker wins a race.
-font_test_wait_for_gate :: proc(gate: ^Font_Execution_Test_Gate) -> bool {
-    deadline := time.tick_since({}) + 5 * time.Second
-    for time.tick_since({}) < deadline {
-        if sync.atomic_load_explicit(&gate.started, .Acquire) {
-            return true
-        }
-        thread.yield()
+font_test_wait_for_gate :: proc(gate: ^Font_Execution_Test_Gate) {
+    sync.mutex_lock(&gate.mutex)
+    for !gate.started {
+        sync.cond_wait(&gate.changed, &gate.mutex)
     }
-    return false
+    sync.mutex_unlock(&gate.mutex)
+}
+
+// Release the blocked worker on explicit owner action, including early teardown.
+font_test_release_gate :: proc(gate: ^Font_Execution_Test_Gate) {
+    sync.mutex_lock(&gate.mutex)
+    gate.released = true
+    gate.release_requested = true
+    sync.cond_broadcast(&gate.changed)
+    sync.mutex_unlock(&gate.mutex)
 }
 
 // Release the blocked worker independently after an owner-executed drain signal.
 font_test_gate_releaser :: proc(worker: ^thread.Thread) {
     gate := cast(^Font_Execution_Test_Gate)worker.data
-    deadline := time.tick_since({}) + 5 * time.Second
-    for !sync.atomic_load_explicit(&gate.release_requested, .Acquire) {
-        if time.tick_since({}) >= deadline {
-            break
-        }
-        thread.yield()
+    sync.mutex_lock(&gate.mutex)
+    for !gate.release_requested {
+        sync.cond_wait(&gate.changed, &gate.mutex)
     }
-    sync.atomic_store_explicit(&gate.released, true, .Release)
+    gate.released = true
+    sync.cond_broadcast(&gate.changed)
+    sync.mutex_unlock(&gate.mutex)
+}
+
+// Start the independent gate releaser and return nil if thread creation fails.
+font_test_start_gate_releaser :: proc(
+    gate: ^Font_Execution_Test_Gate) -> ^thread.Thread {
+    releaser := thread.create(font_test_gate_releaser)
+    if releaser != nil {
+        releaser.data = gate
+        thread.start(releaser)
+    }
+    return releaser
 }
 
 // Signal an independent releaser through ordinary Helpable owner execution.
 font_test_signal_gate_release :: proc(
     payload: rawptr, _: taskpool.Task_Cancellation_Token) -> taskpool.Task_Result {
     gate := cast(^Font_Execution_Test_Gate)payload
-    sync.atomic_store_explicit(&gate.release_requested, true, .Release)
+    sync.mutex_lock(&gate.mutex)
+    gate.release_requested = true
+    sync.cond_broadcast(&gate.changed)
+    sync.mutex_unlock(&gate.mutex)
     return .Succeeded
 }
 
@@ -2476,13 +2496,11 @@ font_test_optional_preparation_exclusion :: proc(t: ^testing.T, reload: bool) {
     }
     defer taskpool.task_pool_destroy(&pool)
     gate: Font_Execution_Test_Gate
-    defer sync.atomic_store_explicit(&gate.released, true, .Release)
+    defer font_test_release_gate(&gate)
     blocker, outcome := taskpool.task_pool_submit(
         &pool, font_test_hold_worker, &gate, .Worker_Only)
     testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued)
-    if !testing.expect(t, font_test_wait_for_gate(&gate)) {
-        return
-    }
+    font_test_wait_for_gate(&gate)
     cache: Font_Cache
     font_test_request_optional_preparation(t, &cache, reload)
     cache_service(&cache, &pool)
@@ -2506,7 +2524,7 @@ font_test_optional_preparation_exclusion :: proc(t: ^testing.T, reload: bool) {
 font_test_finish_blocked_preparation :: proc(
     t: ^testing.T, cache: ^Font_Cache, pool: ^taskpool.Task_Pool,
     gate: ^Font_Execution_Test_Gate, blocker: taskpool.Task_Handle) {
-    sync.atomic_store_explicit(&gate.released, true, .Release)
+    font_test_release_gate(gate)
     result, joined := taskpool.task_pool_wait(pool, blocker)
     testing.expect_value(t, result, taskpool.Task_Result.Succeeded)
     testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
@@ -2526,6 +2544,45 @@ view_test_optional_font_preparation_excludes_owner :: proc(t: ^testing.T) {
     font_test_optional_preparation_exclusion(t, true)
 }
 
+// Prove elapsed fixture time cannot release the worker or its independent releaser.
+@(test)
+view_test_font_execution_gate_requires_explicit_release :: proc(t: ^testing.T) {
+    pool: taskpool.Task_Pool
+    if !testing.expect(t, taskpool.task_pool_init(&pool, 1, 2)) {
+        return
+    }
+    defer taskpool.task_pool_destroy(&pool)
+    gate: Font_Execution_Test_Gate
+    defer font_test_release_gate(&gate)
+    blocker, outcome := taskpool.task_pool_submit(
+        &pool, font_test_hold_worker, &gate, .Worker_Only)
+    if !testing.expect_value(t, outcome, taskpool.Task_Submit_Outcome.Queued) {
+        return
+    }
+    font_test_wait_for_gate(&gate)
+    releaser := font_test_start_gate_releaser(&gate)
+    if !testing.expect(t, releaser != nil) {
+        return
+    }
+    defer {
+        font_test_release_gate(&gate)
+        thread.join(releaser)
+        thread.destroy(releaser)
+    }
+    time.sleep(6 * time.Second)
+    testing.expect_value(t, taskpool.task_pool_poll(&pool, blocker),
+        taskpool.Task_Poll_Outcome.Pending)
+    signal, signal_outcome := taskpool.task_pool_submit(
+        &pool, font_test_signal_gate_release, &gate)
+    testing.expect_value(t, signal_outcome, taskpool.Task_Submit_Outcome.Queued)
+    signal_result, signal_joined := taskpool.task_pool_wait(&pool, signal)
+    testing.expect_value(t, signal_result, taskpool.Task_Result.Succeeded)
+    testing.expect_value(t, signal_joined, taskpool.Task_Join_Outcome.Joined)
+    result, joined := taskpool.task_pool_wait(&pool, blocker)
+    testing.expect_value(t, result, taskpool.Task_Result.Succeeded)
+    testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
+}
+
 // Verify font shutdown drains queued preparation without running it on the owner.
 @(test)
 view_test_optional_font_shutdown_worker_only :: proc(t: ^testing.T) {
@@ -2535,24 +2592,20 @@ view_test_optional_font_shutdown_worker_only :: proc(t: ^testing.T) {
     }
     defer taskpool.task_pool_destroy(&pool)
     gate: Font_Execution_Test_Gate
-    defer sync.atomic_store_explicit(&gate.released, true, .Release)
+    defer font_test_release_gate(&gate)
     blocker, _ := taskpool.task_pool_submit(
         &pool, font_test_hold_worker, &gate, .Worker_Only)
-    if !testing.expect(t, font_test_wait_for_gate(&gate)) {
-        return
-    }
+    font_test_wait_for_gate(&gate)
     cache: Font_Cache
     font_test_request_optional_preparation(t, &cache, false)
     cache_service(&cache, &pool)
-    releaser := thread.create(font_test_gate_releaser)
+    releaser := font_test_start_gate_releaser(&gate)
     if !testing.expect(t, releaser != nil) {
-        sync.atomic_store_explicit(&gate.released, true, .Release)
+        font_test_release_gate(&gate)
         cache_shutdown_service(&cache, &pool)
         cache_preparation_arena_destroy(&cache)
         return
     }
-    releaser.data = &gate
-    thread.start(releaser)
     signal, signal_outcome := taskpool.task_pool_submit(
         &pool, font_test_signal_gate_release, &gate)
     testing.expect_value(t, signal_outcome, taskpool.Task_Submit_Outcome.Queued)

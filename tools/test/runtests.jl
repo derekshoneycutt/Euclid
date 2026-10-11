@@ -10,6 +10,7 @@ include(joinpath(@__DIR__, "..", "make.jl"))
 include(joinpath(@__DIR__, "..", "julia_test_reporter.jl"))
 include(joinpath(@__DIR__, "..", "scenario_runner.jl"))
 include(joinpath(@__DIR__, "shader_tests.jl"))
+include(joinpath(@__DIR__, "harfbuzz_linker_tests.jl"))
 include(joinpath(@__DIR__, "content_builder_tests.jl"))
 
 const Verification = Main.EuclidVerification
@@ -289,6 +290,7 @@ end
         else
             jll_flags = BuildConfiguration.unix_harfbuzz_jll_linker_flags()
             @test startswith(jll_flags, library_path)
+            @test "-L$(dirname(library_path))" in split(jll_flags)
             if Sys.isapple()
                 @test all(directory -> "-Wl,-rpath,$directory" in
                     split(jll_flags), runtime_dirs)
