@@ -484,7 +484,8 @@ function build_complete_wiki_outputs(
     outputs = build_code_wiki_outputs(
         packages, bridge_pairs; source_link_prefix=source_link_prefix)
     append!(outputs, build_wiki_compositor_outputs(manifest))
-    append!(outputs, build_authored_guide_outputs(repository_root, manifest))
+    append!(outputs, build_authored_guide_outputs(
+        repository_root, manifest; source_link_prefix=source_link_prefix))
     return outputs
 end
 

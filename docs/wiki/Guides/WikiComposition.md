@@ -85,7 +85,11 @@ compositor.
 The compositor generates only `Guides/Home.md`. Files such as this Guide are
 authored directly under `docs/wiki/Guides/` and must never be rewritten,
 deleted, or treated as generated Code output. The artifact builder copies each
-manifest-declared Guide unchanged into `bin/wiki/Guides/`.
+manifest-declared Guide into `bin/wiki/Guides/`, preserving its local Wiki links
+and code examples. Repository links outside the authored Wiki tree are validated
+against the canonical source location and converted to commit-pinned GitHub
+source URLs. This keeps artifacts relocatable and source links usable after flat
+GitHub Wiki publication without modifying authored Guide files.
 
 ## CI Publication
 

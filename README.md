@@ -71,6 +71,10 @@ GitHub Actions uses Node 24-based actions; Node is not an application build
 dependency. The Linux CI job installs the shader tools and builds checksum-verified
 SDL3 3.4.16 and SDL_image 3.4.6 development libraries from their release archives,
 matching the versions recorded in the Windows SDL manifest.
+Its native package setup follows SDL's
+[Ubuntu build dependencies](https://wiki.libsdl.org/SDL3/README-linux#build-dependencies),
+including `libxss-dev` for X11 screensaver support, rather than disabling
+backends to bypass missing development packages.
 
 On Apple Silicon macOS, install the Xcode command-line tools and the Homebrew packages
 `sdl3`, `sdl3_image`, `pkg-config`, `spirv-tools`, and `shaderc`. Intel and universal
