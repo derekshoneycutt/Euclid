@@ -155,19 +155,23 @@ It's also seriously just *fun*.
 
 ### Q: What about AI?
 
-First, my general policy on it is this: I will not accept code in this project that cannot
+First, my general policy on AI is this: I will not accept code in this project that cannot
 be thoroughly explained and followed up on by a human coder. I do read and work on every
 line of code in this project myself, regardless of where that code has come from--be it
 the old depths of stack overflow, my brain, someone else's brain, some AI tool or another,
-or some other tool.
+or some other tool. As for content that is included in the app (including animation text
+primarily), I am on Zero AI here. The current development state already has some of these
+hardly more than temporary notes at the moment, but since so much of it is given by formal
+translations and existing tech, there should be no reason to need AI for this content.
+All animation content is to be either from one of these sources or hand written by
+a human.
 
-This is not going to be as strong as some would wish. For a project being released into
-the public domain, I just do not have the energy for a stronger stance in this project.
-A public domain project is really not the place for many of the ethical and political
-discussions. In many ways, this project is actively hostile to copyright concerns, and
-it is difficult to take a stronger stance through this project otherwise. I will not be
-fighting more in this project. This will not be a project that is concerned with any
-stronger stance than demanding a human take full responsibility.
+If I accept contributions in the future, the expectation is that you release the code into
+the public domain and take ownership of the request. I expect to be able to understand the
+code change in review, and I expect a human to interact with. I will just reject anything
+that becomes clear it is just a robot pointed at me. Since this is a public domain project
+you must include a declaration your right to release it into public domain and a
+declaration that you are doing so for this project.
 
 I do see this as an educational project. I am certainly expanding my understanding of
 geometry as I explore it, and I am learning a lot about graphics programming. Sometimes my
