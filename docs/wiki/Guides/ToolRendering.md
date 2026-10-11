@@ -58,11 +58,15 @@ offline with SDL_shadercross, validates the binaries with SPIR-V Tools, reflects
 interfaces, and rejects descriptor-set, resource-count, vertex-layout, uniform-layout,
 or cross-stage mismatches. Only generated SPIR-V, reflection JSON, and their hashed ABI
 manifest enter `assets.pkg`; source HLSL and shader compilers are not runtime assets.
-SDL_shadercross is a recursive submodule at `libs/sdl_shadercross/source`. Linux and
-macOS asset builds configure that source under `.build/shadercross`; Windows uses the
-checked-in, manifest-validated build-tool provider under
-`libs/sdl_shadercross/bin/win64`. Its recorded source commit must match the parent
-repository gitlink. An explicit
+macOS asset builds configure the recursive SDL_shadercross submodule at
+`libs/sdl_shadercross/source` under `.build/shadercross`. Linux x86-64 and Windows
+use checked-in, manifest-validated build-tool providers under
+`libs/sdl_shadercross/bin/linux64` and `libs/sdl_shadercross/bin/win64`.
+Their recorded source commits must match the parent repository gitlink.
+The Linux provider targets glibc 2.35 and GLIBCXX_3.4.29, bundles DXC libraries
+with `$ORIGIN` search paths, and statically links its build-only SDL3 and SPIRV-Cross.
+Its validator and disassembler are bundled as well; no shadercross source build
+or external SPIR-V Tools installation is needed. An explicit
 `EUCLID_SHADERCROSS` path overrides the platform provider for development.
 
 The display-thread SDL runtime admits the stroke pipeline and fixed buffers as one

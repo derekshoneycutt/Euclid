@@ -119,6 +119,51 @@ end
             expected_source_commit=repeat("0", 40))
     end
 
+    if Sys.islinux()
+        manifest = Shaders.linux_shadercross_manifest(
+            Shaders.LINUX_SHADERCROSS_DIR;
+            expected_source_commit=Shaders.repository_shadercross_commit(
+                Shaders.REPOSITORY_ROOT))
+        @test manifest["glibc_minimum"] == "2.35"
+        @test manifest["source_commit"] ==
+            "1ff05bec573988a98ef9e0260b4da44f512b8367"
+        @test Set(artifact["file"] for component in manifest["component"]
+            for artifact in get(component, "artifact", Any[])) ==
+            Shaders.LINUX_SHADERCROSS_ARTIFACTS
+        withenv(Shaders.SHADERCROSS_ENV => nothing) do
+            tools = Shaders.resolve_shader_build_tools(
+                Shaders.REPOSITORY_ROOT, nothing, nothing, nothing)
+            @test tools.compiler ==
+                realpath(joinpath(Shaders.LINUX_SHADERCROSS_DIR, "shadercross"))
+            @test tools.validator ==
+                realpath(joinpath(Shaders.LINUX_SHADERCROSS_DIR, "spirv-val"))
+            @test tools.disassembler ==
+                realpath(joinpath(Shaders.LINUX_SHADERCROSS_DIR, "spirv-dis"))
+            mktempdir() do empty_repository
+                @test_throws ErrorException Shaders.resolve_shadercross(empty_repository)
+            end
+        end
+        withenv(Shaders.SHADERCROSS_ENV => Base.julia_cmd().exec[1]) do
+            @test Shaders.resolve_shadercross(Shaders.REPOSITORY_ROOT) ==
+                realpath(Base.julia_cmd().exec[1])
+        end
+        @test_throws ErrorException Shaders.linux_shadercross_manifest(
+            ; architecture=:aarch64)
+        @test_throws ErrorException Shaders.linux_shadercross_manifest(
+            ; expected_source_commit=repeat("0", 40))
+        @test_throws ErrorException Shaders.linux_shadercross_manifest(
+            ; hash_file=_ -> "invalid")
+        @test_throws ErrorException Shaders.linux_shadercross_manifest(
+            ; file_size=_ -> -1)
+        for mutation in (
+            Dict("schema_version" => 2), Dict("platform" => "windows"),
+            Dict("glibc_minimum" => "2.43"), Dict("glibcxx_minimum" => "3.4.35"),
+            Dict("runtime_search_path" => "/build"), Dict("component" => Any[]))
+            @test_throws ErrorException Shaders.linux_shadercross_manifest(
+                ; parse_file=path -> merge(TOML.parsefile(path), mutation))
+        end
+    end
+
     document = reflected_document(
         spec.uniform_buffers, spec.samplers, spec.inputs, spec.outputs)
     @test Shaders.validate_reflection(spec, document)

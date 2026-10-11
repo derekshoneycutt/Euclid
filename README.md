@@ -66,11 +66,18 @@ library and matching headers; a separate FreeType installation is not required.
 ### Unix (Linux/macOS) requirements
 
 On Linux and macOS, builds require SDL3 and SDL_image 3.4 development files
-discoverable through `pkg-config`, SPIR-V Tools (`spirv-val` and `spirv-dis`), and
-`glslc` from shaderc.
+discoverable through `pkg-config`, and `glslc` from shaderc.
+Linux x86-64 builds use the checked-in, checksum-validated shadercross and SPIR-V
+Tools payload under `libs/sdl_shadercross/bin/linux64`. It requires glibc 2.35+
+and libstdc++ with GLIBCXX_3.4.29+ (Ubuntu 22.04 or newer), does not require the
+shadercross submodule, and never falls back to building it. Other Linux
+architectures are not supported by this provider. See its
+[maintenance guide](libs/sdl_shadercross/bin/linux64/README.md).
+macOS still requires SPIR-V Tools (`spirv-val` and `spirv-dis`) and the recursive
+shadercross source submodule.
 
 GitHub Actions uses Node 24-based actions; Node is not an application build
-dependency. The Linux CI job installs the shader tools and builds checksum-verified
+dependency. The Linux CI job installs shaderc and builds checksum-verified
 SDL3 3.4.16 and SDL_image 3.4.6 development libraries from their release archives,
 matching the versions recorded in the Windows SDL manifest.
 Its native package setup follows SDL's
