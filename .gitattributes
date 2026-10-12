@@ -1,4 +1,9 @@
 libs/sdl/bin/win64/licenses/*.txt text eol=lf
 libs/sdl_shadercross/bin/win64/licenses/*.txt text eol=crlf
-libs/accesskit/include/accesskit.h text eol=lf
+libs/accesskit/include/accesskit.h text eol=lf linguist-vendored
 libs/accesskit/licenses/* text eol=lf
+libs/sqlite3/source/sqlite3.c linguist-vendored
+libs/sqlite3/source/sqlite3.h linguist-vendored
+libs/sqlite3/source/sqlite3ext.h linguist-vendored
+libs/sqlite3/source/shell.c linguist-vendored
+libs/sqlite3/source/spellfix.c linguist-vendored
