@@ -11,6 +11,38 @@ function reflected_interface(entries)
         "\"location\": $(entry.first) }" for entry in entries], ", ")
 end
 
+if Sys.isapple()
+    @testset "relocated Apple Silicon production shaders" begin
+        mktempdir() do root
+            payload = joinpath(root, "relocated payload")
+            cp(Shaders.MACOS_SHADERCROSS_DIR, payload)
+            Shaders.macos_shadercross_manifest(payload)
+            original = joinpath(root, "original")
+            relocated = joinpath(root, "relocated")
+            mkpath(original)
+            mkpath(relocated)
+            specs = Shaders.shader_specs(joinpath(Shaders.REPOSITORY_ROOT, "src"))
+            abis = Shaders.shader_abis()
+            withenv("DYLD_LIBRARY_PATH" => nothing,
+                "DYLD_FALLBACK_LIBRARY_PATH" => nothing) do
+                for spec in specs
+                    for (tools, output) in (
+                        (Shaders.MACOS_SHADERCROSS_DIR, original), (payload, relocated))
+                        Shaders.build_shader(spec, abis[spec.name], output,
+                            joinpath(tools, "shadercross"), joinpath(tools, "spirv-val"),
+                            joinpath(tools, "spirv-dis"))
+                    end
+                    for extension in ("spv", "msl", "json")
+                        filename = "$(spec.name).$extension"
+                        @test read(joinpath(original, filename)) ==
+                            read(joinpath(relocated, filename))
+                    end
+                end
+            end
+        end
+    end
+end
+
 """Build a minimal shadercross reflection document for contract tests."""
 function reflected_document(
     uniforms::Int, samplers::Int,
@@ -67,32 +99,27 @@ end
     reflection = Shaders.reflection_command(
         "shadercross", spec, "output.spv", "output.json")
     @test reflection.exec[3:6] == ["--source", "SPIRV", "--dest", "JSON"]
-    configure = Shaders.shadercross_configure_command(
-        "cmake", "/source/libs/sdl_shadercross/source", "/source/.build/shadercross")
-    @test configure.exec[2] == "--fresh"
-    @test configure.exec[7:8] == ["-G", "Ninja"]
-    @test "-DSDLSHADERCROSS_VENDORED=ON" in configure.exec
-    @test "-DSDLSHADERCROSS_INSTALL=OFF" in configure.exec
-    @test "-DSPIRV_WERROR=OFF" in configure.exec
-    mktempdir() do build
-        source = "/source/libs/sdl_shadercross/source"
-        @test Shaders.shadercross_needs_configure(build, source)
-        write(joinpath(build, "CMakeCache.txt"), "SPIRV_WERROR:BOOL=ON\n")
-        @test Shaders.shadercross_needs_configure(build, source)
-        write(joinpath(build, "CMakeCache.txt"),
-            "CMAKE_GENERATOR:INTERNAL=Unix Makefiles\nSPIRV_WERROR:BOOL=OFF\n")
-        @test Shaders.shadercross_needs_configure(build, source)
-        write(joinpath(build, "CMakeCache.txt"),
-            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n" *
-            "CMAKE_HOME_DIRECTORY:INTERNAL=/source/tools/shadercross\n")
-        @test Shaders.shadercross_needs_configure(build, source)
-        write(joinpath(build, "CMakeCache.txt"),
-            "CMAKE_GENERATOR:INTERNAL=Ninja\nSPIRV_WERROR:BOOL=OFF\n" *
-            "CMAKE_HOME_DIRECTORY:INTERNAL=$source\n")
-        @test !Shaders.shadercross_needs_configure(build, source)
+    @test Shaders.repository_shadercross_commit(Shaders.REPOSITORY_ROOT) ==
+        "1ff05bec573988a98ef9e0260b4da44f512b8367"
+    for (validate, architecture) in (
+        (Shaders.windows_shadercross_manifest, :x86_64),
+        (Shaders.linux_shadercross_manifest, :x86_64),
+        (Shaders.macos_shadercross_manifest, :aarch64))
+        @test validate(; architecture,
+            expected_source_commit=Shaders.repository_shadercross_commit(
+                Shaders.REPOSITORY_ROOT))["source_commit"] ==
+            "1ff05bec573988a98ef9e0260b4da44f512b8367"
     end
-    @test Shaders.shadercross_build_command(
-        "cmake", "/source/.build/shadercross").exec[end] == "--parallel"
+    mktempdir() do repository
+        @test_throws ErrorException Shaders.repository_shadercross_commit(repository)
+        root = joinpath(repository, "libs", "sdl_shadercross")
+        mkpath(root)
+        pin = joinpath(root, "source-pin.toml")
+        write(pin, "source_commit = \"invalid\"\n")
+        @test_throws ErrorException Shaders.repository_shadercross_commit(repository)
+        write(pin, "source_commit = \"$(repeat("a", 40))\"\n")
+        @test Shaders.repository_shadercross_commit(repository) == repeat("a", 40)
+    end
 
     if Sys.iswindows()
         manifest = Shaders.windows_shadercross_manifest(
@@ -117,6 +144,107 @@ end
         @test_throws ErrorException Shaders.windows_shadercross_manifest(
             Shaders.WINDOWS_SHADERCROSS_DIR;
             expected_source_commit=repeat("0", 40))
+    end
+
+    @testset "Apple Silicon binary provider" begin
+        manifest = Shaders.macos_shadercross_manifest(; architecture=:aarch64,
+            expected_source_commit=Shaders.repository_shadercross_commit(
+                Shaders.REPOSITORY_ROOT))
+        @test manifest["macos_minimum"] == "11.0"
+        @test Set(artifact["file"] for component in manifest["component"]
+            for artifact in get(component, "artifact", Any[])) ==
+            Shaders.MACOS_SHADERCROSS_ARTIFACTS
+        @test_throws ErrorException Shaders.macos_shadercross_manifest(
+            ; architecture=:x86_64)
+        @test_throws ErrorException Shaders.macos_shadercross_manifest(
+            ; architecture=:aarch64, expected_source_commit=repeat("0", 40))
+        @test_throws ErrorException Shaders.macos_shadercross_manifest(
+            ; architecture=:aarch64, hash_file=_ -> "invalid")
+        @test_throws ErrorException Shaders.macos_shadercross_manifest(
+            ; architecture=:aarch64, file_size=_ -> -1)
+        for mutation in (
+            Dict("schema_version" => 2), Dict("platform" => "linux"),
+            Dict("provider" => "unknown"), Dict("toolchain" => "gcc"),
+            Dict("architecture" => "x86_64"), Dict("macos_minimum" => "26.0"),
+            Dict("runtime_search_path" => "/build"), Dict("component" => Any[]),
+            Dict("source_commit" => "invalid"), Dict("source_dependency" => Any[]))
+            @test_throws ErrorException Shaders.macos_shadercross_manifest(
+                ; architecture=:aarch64,
+                parse_file=path -> merge(TOML.parsefile(path), mutation))
+        end
+        mktempdir() do root
+            payload = joinpath(root, "payload")
+            cp(Shaders.MACOS_SHADERCROSS_DIR, payload)
+            rm(joinpath(payload, "libdxil.dylib"))
+            @test_throws ErrorException Shaders.macos_shadercross_manifest(
+                payload; architecture=:aarch64)
+        end
+        if Sys.isapple()
+            withenv(Shaders.SHADERCROSS_ENV => nothing) do
+                tools = Shaders.resolve_shader_build_tools(
+                    Shaders.REPOSITORY_ROOT, nothing, nothing, nothing)
+                @test tools.compiler ==
+                    realpath(joinpath(Shaders.MACOS_SHADERCROSS_DIR, "shadercross"))
+                @test tools.validator ==
+                    realpath(joinpath(Shaders.MACOS_SHADERCROSS_DIR, "spirv-val"))
+                @test tools.disassembler ==
+                    realpath(joinpath(Shaders.MACOS_SHADERCROSS_DIR, "spirv-dis"))
+                mktempdir() do repository
+                    @test_throws ErrorException Shaders.resolve_shadercross(repository)
+                    @test_throws ErrorException Shaders.resolve_bundled_spirv_tool(
+                        repository, "spirv-val")
+                end
+            end
+            withenv(Shaders.SHADERCROSS_ENV => Base.julia_cmd().exec[1]) do
+                @test Shaders.resolve_shadercross(Shaders.REPOSITORY_ROOT) ==
+                    realpath(Base.julia_cmd().exec[1])
+            end
+        end
+    end
+
+    if Sys.islinux()
+        manifest = Shaders.linux_shadercross_manifest(
+            Shaders.LINUX_SHADERCROSS_DIR;
+            expected_source_commit=Shaders.repository_shadercross_commit(
+                Shaders.REPOSITORY_ROOT))
+        @test manifest["glibc_minimum"] == "2.35"
+        @test manifest["source_commit"] ==
+            "1ff05bec573988a98ef9e0260b4da44f512b8367"
+        @test Set(artifact["file"] for component in manifest["component"]
+            for artifact in get(component, "artifact", Any[])) ==
+            Shaders.LINUX_SHADERCROSS_ARTIFACTS
+        withenv(Shaders.SHADERCROSS_ENV => nothing) do
+            tools = Shaders.resolve_shader_build_tools(
+                Shaders.REPOSITORY_ROOT, nothing, nothing, nothing)
+            @test tools.compiler ==
+                realpath(joinpath(Shaders.LINUX_SHADERCROSS_DIR, "shadercross"))
+            @test tools.validator ==
+                realpath(joinpath(Shaders.LINUX_SHADERCROSS_DIR, "spirv-val"))
+            @test tools.disassembler ==
+                realpath(joinpath(Shaders.LINUX_SHADERCROSS_DIR, "spirv-dis"))
+            mktempdir() do empty_repository
+                @test_throws ErrorException Shaders.resolve_shadercross(empty_repository)
+            end
+        end
+        withenv(Shaders.SHADERCROSS_ENV => Base.julia_cmd().exec[1]) do
+            @test Shaders.resolve_shadercross(Shaders.REPOSITORY_ROOT) ==
+                realpath(Base.julia_cmd().exec[1])
+        end
+        @test_throws ErrorException Shaders.linux_shadercross_manifest(
+            ; architecture=:aarch64)
+        @test_throws ErrorException Shaders.linux_shadercross_manifest(
+            ; expected_source_commit=repeat("0", 40))
+        @test_throws ErrorException Shaders.linux_shadercross_manifest(
+            ; hash_file=_ -> "invalid")
+        @test_throws ErrorException Shaders.linux_shadercross_manifest(
+            ; file_size=_ -> -1)
+        for mutation in (
+            Dict("schema_version" => 2), Dict("platform" => "windows"),
+            Dict("glibc_minimum" => "2.43"), Dict("glibcxx_minimum" => "3.4.35"),
+            Dict("runtime_search_path" => "/build"), Dict("component" => Any[]))
+            @test_throws ErrorException Shaders.linux_shadercross_manifest(
+                ; parse_file=path -> merge(TOML.parsefile(path), mutation))
+        end
     end
 
     document = reflected_document(

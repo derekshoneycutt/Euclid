@@ -56,13 +56,20 @@ does not provide depth-aware crossings or welded attachment shading.
 Canonical shader source is HLSL. `tools/shaders.jl` compiles both stages to SPIR-V
 offline with SDL_shadercross, validates the binaries with SPIR-V Tools, reflects their
 interfaces, and rejects descriptor-set, resource-count, vertex-layout, uniform-layout,
-or cross-stage mismatches. Only generated SPIR-V, reflection JSON, and their hashed ABI
+or cross-stage mismatches. Only generated runtime shaders (SPIR-V on Linux, MSL on
+macOS, DXIL on Windows), reflection JSON, and their hashed ABI
 manifest enter `assets.pkg`; source HLSL and shader compilers are not runtime assets.
-SDL_shadercross is a recursive submodule at `libs/sdl_shadercross/source`. Linux and
-macOS asset builds configure that source under `.build/shadercross`; Windows uses the
-checked-in, manifest-validated build-tool provider under
-`libs/sdl_shadercross/bin/win64`. Its recorded source commit must match the parent
-repository gitlink. An explicit
+Apple Silicon macOS, Linux x86-64, and Windows x86-64 use checked-in,
+manifest-validated build-tool providers under `libs/sdl_shadercross/bin/macos_arm64`,
+`libs/sdl_shadercross/bin/linux64`, and `libs/sdl_shadercross/bin/win64`.
+Their recorded source commits must match `libs/sdl_shadercross/source-pin.toml`;
+there is no shadercross submodule or automatic source-build fallback.
+The Linux provider targets glibc 2.35 and GLIBCXX_3.4.29, bundles DXC libraries
+with `$ORIGIN` search paths, and statically links its build-only SDL3 and SPIRV-Cross.
+The macOS provider targets arm64 and macOS 11.0, bundles DXC with `@loader_path`
+library references, and statically links SDL3 and SPIRV-Cross. Both providers bundle
+their validator and disassembler; no shadercross source build or external SPIR-V
+Tools installation is needed. An explicit
 `EUCLID_SHADERCROSS` path overrides the platform provider for development.
 
 The display-thread SDL runtime admits the stroke pipeline and fixed buffers as one

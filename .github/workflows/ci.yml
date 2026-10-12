@@ -23,8 +23,9 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v6
-        with:
-          submodules: recursive
+
+      - name: Initialize required source dependencies
+        run: git submodule update --init --recursive libs/julia/bindings tools/analysis
 
       - name: Set up Julia
         uses: julia-actions/setup-julia@v3
@@ -44,7 +45,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build pkg-config \
-            glslc spirv-tools libpng-dev gnome-desktop-testing \
+            glslc libpng-dev gnome-desktop-testing \
             libasound2-dev libpulse-dev libaudio-dev libfribidi-dev libjack-dev \
             libsndio-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
             libxfixes-dev libxi-dev libxss-dev libxtst-dev libxinerama-dev \
@@ -77,8 +78,8 @@ jobs:
           sudo cmake --install image-build
           sudo ldconfig
           pkg-config --modversion sdl3 sdl3-image
-          spirv-val --version
-          spirv-dis --version
+          "$GITHUB_WORKSPACE/libs/sdl_shadercross/bin/linux64/spirv-val" --version
+          "$GITHUB_WORKSPACE/libs/sdl_shadercross/bin/linux64/spirv-dis" --version
           glslc --version
 
       - name: Configure

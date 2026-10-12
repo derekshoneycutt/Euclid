@@ -52,3 +52,25 @@ euclid_add_driver_target(wiki ARGS wiki)
 euclid_add_driver_target(check-wiki ARGS check-wiki)
 euclid_add_driver_target(clean-all NO_BOOTSTRAP ARGS clean)
 euclid_add_driver_target(euclid-help NO_BOOTSTRAP ARGS help)
+
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    add_custom_target(shadercross-linux-provider
+        COMMAND bash "${CMAKE_SOURCE_DIR}/tools/shadercross_linux_provider.sh"
+        COMMAND "${EUCLID_JULIA_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tools/shadercross_linux_package.jl"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()
+
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+    add_custom_target(shadercross-macos-provider
+        COMMAND bash "${CMAKE_SOURCE_DIR}/tools/shadercross_macos_provider.sh"
+        COMMAND "${EUCLID_JULIA_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tools/shadercross_macos_package.jl"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        USES_TERMINAL
+        VERBATIM
+    )
+endif()

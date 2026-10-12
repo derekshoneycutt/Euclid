@@ -548,7 +548,7 @@ end
             write(binary, "application")
             write(assets, "assets")
             write(manifest, """
-shadercross_path = "/libs/sdl_shadercross/source"
+shadercross_path = "/libs/sdl_shadercross/bin/macos_arm64/shadercross"
 shadercross_identity = "sha256:tool"
 shadercross_sha256 = "tool"
 shadercross_closure = ["/lib/libcompiler.so"]
