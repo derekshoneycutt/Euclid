@@ -140,6 +140,13 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
             LocalizedContent.MessageArgument[]),
         "Move Down"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1115),
+            "ui.library.unicode_completion",
+            "Accessible inline Unicode completion hint, not an input value or Tab stop.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("symbol", LocalizedContent.TextArgument)]),
+        "Unicode completion: {symbol}. Press Right Arrow to insert; Escape to dismiss."),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1219), "ui.settings.reduce_motion",
             "Interface-only reduced motion checkbox; system requests also apply.",
             LocalizedContent.MessageArgument[]),

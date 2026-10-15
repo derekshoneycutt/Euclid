@@ -73,7 +73,7 @@ content_fixture_materializes_native_message_signatures :: proc(t: ^testing.T) {
     testing.expect(t, content_admission_read_messages(&database, generation))
     testing.expect(t, content_admission_read_arguments(&database, generation))
     testing.expect(t, content_admission_read_translations(&database, generation))
-    testing.expect_value(t, generation.data.argument_count, u16(11))
+    testing.expect_value(t, generation.data.argument_count, u16(12))
     testing.expect(t, content_admission_validate_messages(generation))
     testing.expect(t, content_admission_validate_translations(generation))
 }
@@ -202,7 +202,7 @@ content_worker_admits_and_rejects_typed_signatures :: proc(t: ^testing.T) {
         &service, fixture.path, SEARCH_TEST_FINGERPRINT))
     defer content_service_destroy(&service)
     generation := content_service_generation(&service)
-    testing.expect_value(t, generation^.data.argument_count, u16(11))
+    testing.expect_value(t, generation^.data.argument_count, u16(12))
     content_test_reject_candidate(t, &service, "content-native-signature",
         "INSERT INTO ui_argument VALUES ('ui.navigation.library',0,'count','uint32');"+
         "UPDATE ui_translation SET template='{count}' WHERE message_key='ui.navigation.library';")
@@ -274,7 +274,7 @@ content_worker_accepts_greek_edition_under_english_ui :: proc(t: ^testing.T) {
         "INSERT INTO edition VALUES ('greek','Ancient Greek','grc','Greek source');"+
         "INSERT INTO availability SELECT source_namespace,animation_id,'en-US','greek',0 FROM content_subject;"+
         "UPDATE content_metadata SET value='1025' WHERE key='record_count';"+
-        "UPDATE content_metadata SET value='1=6;2=1;3=86;4=11;5=86;6=139;7=138;8=138;9=4;10=278;11=138' "+
+        "UPDATE content_metadata SET value='1=6;2=1;3=87;4=12;5=87;6=139;7=138;8=138;9=4;10=278;11=138' "+
         "WHERE key='table_counts';"))
     service: Content_Service
     testing.expect(t, content_service_init(

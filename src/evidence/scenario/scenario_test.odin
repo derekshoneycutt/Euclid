@@ -160,10 +160,11 @@ scenario_test_library_search_commands :: proc(t: ^testing.T) {
     result := parse(
         "{\"set_library_search\":\"-circle \\\"right angle\\\"\",\"as\":\"search\"}\n" +
         "{\"apply_library_search_suggestion\":true,\"as\":\"correction\"}\n" +
-        "{\"clear_library_search\":true,\"as\":\"clear\"}\n",
+        "{\"clear_library_search\":true,\"as\":\"clear\"}\n" +
+        "{\"assert_library_search\":\"α\"}\n",
         &program)
     testing.expect_value(t, result, Parse_Error.None)
-    testing.expect_value(t, program.count, 3)
+    testing.expect_value(t, program.count, 4)
     testing.expect_value(t, program.commands[0].kind, Command_Kind.Set_Library_Search)
     testing.expect_value(t,
         text_string(&program.commands[0].text), `-circle "right angle"`)
@@ -171,6 +172,12 @@ scenario_test_library_search_commands :: proc(t: ^testing.T) {
         Command_Kind.Apply_Library_Search_Suggestion)
     testing.expect_value(t, program.commands[2].kind,
         Command_Kind.Clear_Library_Search)
+    testing.expect_value(t, program.commands[3].kind, Command_Kind.Assert_Library_Search)
+    testing.expect_value(t, text_string(&program.commands[3].text), "α")
+    invalid: Program
+    testing.expect_value(t, parse(
+        "{\"assert_library_search\":\"α\",\"key\":\"right\"}", &invalid),
+        Parse_Error.Invalid_Command)
 
     event, event_valid := event_kind("library_search_committed")
     testing.expect(t, event_valid)

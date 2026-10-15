@@ -18,6 +18,7 @@ LIBRARY_SEARCH_INPUT_ID :: 6401
 LIBRARY_SEARCH_CLEAR_ID :: 6402
 LIBRARY_SEARCH_SUGGESTION_ID :: 6403
 LIBRARY_SEARCH_STATUS_ID :: 6404
+LIBRARY_SEARCH_UNICODE_STATUS_ID :: 6405
 LIBRARY_SEARCH_TEXT_RUN_ID :: 6410
 LIBRARY_SEARCH_INPUT_HEIGHT :: f32(30)
 LIBRARY_SEARCH_PROMPT_HEIGHT :: f32(20)
@@ -137,7 +138,9 @@ library_search_input_params :: proc(
         column_advance = theme.TEXT_WRAP_ADVANCE,
         font = view_font.cache_borrow(&state^.font_cache, .Regular),
         resolver = view_font.cache_terminal_resolver(&state^.font_cache),
-        edit_target = {search^.query[:], &search^.query_length}}
+        edit_target = {search^.query[:], &search^.query_length},
+        edit_policy = {unicode_completion = true,
+            end_suggestion = string(search^.suggestion[:search^.suggestion_length])}}
 }
 
 // library_search_apply_input commits edit and immediate-submit intent.
@@ -147,7 +150,8 @@ library_search_apply_input :: proc(
         viewmodel.library_search_query_changed(
             search, LIBRARY_SEARCH_DEBOUNCE_SECONDS)
     }
-    if result.submit_requested && search^.query_length > 0 {
+    if (result.submit_requested || result.suggestion_accepted) &&
+        search^.query_length > 0 {
         search^.query_dirty = true
         search^.submit_requested = true
         search^.debounce_remaining_seconds = 0
@@ -229,21 +233,25 @@ prepare_library_search_status :: proc(state: ^core.Euclid_General_State) {
     })
 }
 
-// library_search_accept_suggestion_key admits Right only at a collapsed end caret.
-library_search_accept_suggestion_key :: proc(
-    search: ^viewmodel.Library_Search_State, frame: input.Input_Frame) -> bool {
-    if search == nil || search^.suggestion_length <= 0 ||
-        search^.input.cursor_byte != search^.query_length ||
-        search^.input.anchor_byte != search^.query_length {
-        return false
+// prepare_library_unicode_status exposes the offered replacement without a Tab stop.
+prepare_library_unicode_status :: proc(
+    state: ^core.Euclid_General_State, prepared: uiwidgets.Input_Box_Result) {
+    if len(prepared.unicode_completion.text) == 0 {
+        return
     }
-    for event in frame.events {
-        if (event.kind == .Press || event.kind == .Repeat) &&
-            event.key == .Right && event.modifiers == {} {
-            return true
-        }
-    }
-    return false
+    storage: [192]u8
+    value := viewmessages.shell_format(state, .Library_Unicode_Completion,
+        []contentdata.Content_Format_Argument{
+            {"symbol", prepared.unicode_completion.text}}, storage[:])
+    _ = uisemantics.semantic_register_control(state^.ui_runtime.semantic_focus, {
+        id = uisemantics.semantic_control_id(
+            .Library_Control, LIBRARY_SEARCH_UNICODE_STATUS_ID),
+        parent = prepared.descriptor.id, role = .Status,
+        states = {.Visible, .Enabled}, region = .Accordion_Content,
+        bounds = prepared.unicode_hint,
+        clip_bounds = prepared.control_geometry.clip_bounds,
+        label = value,
+    })
 }
 
 // prepare_library_clear resolves, registers, and applies the Clear action.
@@ -320,14 +328,11 @@ prepare_library_search :: proc(
     search := &state^.ui_runtime.library.search
     result := Library_Search_Preparation{layout = library_search_layout(
         panel, search^.suggestion_length > 0)}
-    accept_suggestion := library_search_accept_suggestion_key(search, frame)
     params := library_search_input_params(state, result.layout, frame, panel)
     result.input = uiwidgets.input_box_prepare(
         params, &state^.ui_runtime.input.press_owner)
     library_search_apply_input(search, result.input)
-    if accept_suggestion {
-        library_search_apply_suggestion(search)
-    }
+    prepare_library_unicode_status(state, result.input)
     result.clear = prepare_library_clear(state, panel, frame, result.layout)
     result.layout = library_search_layout(panel, search^.suggestion_length > 0)
     result.suggestion = prepare_library_suggestion(

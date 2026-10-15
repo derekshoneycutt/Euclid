@@ -775,6 +775,9 @@ scenario_issue_generic_action :: proc(
     case .Assert_Focus:
         return true, ui.semantic_focus_matches_name(
             runtime.state^.ui_runtime.semantic_focus, text)
+    case .Assert_Library_Search:
+        search := &runtime.state^.ui_runtime.library.search
+        return true, string(search^.query[:search^.query_length]) == text
     case .Wait_Terminal_Contains, .Assert_Terminal_Contains:
         return true, scenario_terminal_contains(runtime.state, text)
     case:

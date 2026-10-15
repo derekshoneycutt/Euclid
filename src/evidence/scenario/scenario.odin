@@ -95,6 +95,7 @@ Command_Kind :: enum u8 {
     Wait_Terminal_Contains,
     Assert_State,
     Assert_Focus,
+    Assert_Library_Search,
     Assert_Terminal_Contains,
     Checkpoint,
     Allocation_Checkpoint,
@@ -319,6 +320,7 @@ Raw_Command :: struct {
     wait_terminal_contains : string,
     assert_state : string,
     assert_focus : string,
+    assert_library_search : string,
     assert_terminal_contains : string,
 
     // State checkpoint action.
@@ -786,8 +788,8 @@ runner_update_command :: proc(
         return runner_update_action_wait(runner, command, frame)
     case .Assert_State:
         return runner_assert_state(runner, command, frame.display)
-    case .Assert_Focus, .Assert_Terminal_Contains, .Assert_Allocation_Baseline,
-         .Assert_Setting, .Assert_Favorites,
+    case .Assert_Focus, .Assert_Library_Search, .Assert_Terminal_Contains,
+         .Assert_Allocation_Baseline, .Assert_Setting, .Assert_Favorites,
          .Assert_No_Bad_Frees:
         return runner_assert_action(runner, command, frame.actions)
     case .Reset_Animation, .Select_Animation, .Reload_Runtime,
@@ -893,6 +895,8 @@ raw_library_search_command_select :: proc(
     raw: Raw_Command, command: ^Command) -> int {
     selected := raw_text_command_select(
         raw.set_library_search, .Set_Library_Search, command)
+    selected += raw_text_command_select(
+        raw.assert_library_search, .Assert_Library_Search, command)
     if raw.apply_library_search_suggestion {
         command.kind = .Apply_Library_Search_Suggestion
         selected += 1
@@ -1132,7 +1136,7 @@ command_kind_allows_empty_text :: proc(kind: Command_Kind) -> bool {
          .Set_Library_Search,
          .Request_Screenshot, .Start_Gif, .Stop_Gif, .Wait_Event,
          .Wait_State, .Wait_Terminal_Contains, .Assert_State, .Assert_Focus,
-         .Assert_Terminal_Contains,
+         .Assert_Terminal_Contains, .Assert_Library_Search,
          .Checkpoint, .Allocation_Checkpoint,
          .Assert_Allocation_Baseline, .Favorite_Control, .Library_Placement,
          .Assert_Favorites:

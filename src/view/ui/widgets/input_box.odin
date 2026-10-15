@@ -36,6 +36,7 @@ Input_Box_Params :: struct {
     font: view_font.Font_Face,
     resolver: view_font.Font_Resolver,
     edit_target: Input_Box_Edit_Target,
+    edit_policy: Input_Box_Edit_Policy,
 }
 
 // Input_Box_Update reports the selected copy range produced by one update.
@@ -48,6 +49,7 @@ Input_Box_Update :: struct {
     tab_requested: bool,
     copied_length: int,
     copied_bytes: [viewmodel.LIBRARY_SEARCH_QUERY_BYTE_CAPACITY]u8,
+    suggestion_accepted: bool,
 }
 
 // Input_Box_Edit_Target supplies caller-owned bounded text storage.
@@ -70,6 +72,9 @@ Input_Box_Result :: struct {
     changed: bool,
     submit_requested: bool,
     tab_requested: bool,
+    suggestion_accepted: bool,
+    unicode_completion: Unicode_Completion,
+    unicode_hint: geometry.Rectangle,
 }
 
 // input_box_clamp_boundary clamps one byte offset to a UTF-8 codepoint boundary.
@@ -136,6 +141,7 @@ input_box_reconcile_content :: proc(
         state^.content_revision = revision
         state^.dragging = false
         state^.fixed_selection = false
+        state^.unicode_dismissed = false
         return true
     }
     state^.cursor_byte = input_box_clamp_boundary(text, state^.cursor_byte)
@@ -221,13 +227,17 @@ input_box_replace_selection :: proc(
         return false
     }
     tail_length := text_length - last
+    changed := text[first:last] != replacement[:inserted]
     copy(target.bytes[first + inserted:first + inserted + tail_length],
         target.bytes[last:text_length])
     copy(target.bytes[first:first + inserted], transmute([]u8)replacement[:inserted])
     target.length^ = first + inserted + tail_length
     state^.cursor_byte = first + inserted
     state^.anchor_byte = state^.cursor_byte
-    return first != last || inserted > 0
+    if changed {
+        state^.unicode_dismissed = false
+    }
+    return changed
 }
 
 // input_box_delete_selection removes a selection or one adjacent codepoint.
@@ -324,12 +334,16 @@ input_box_apply_edit_event :: proc(
 // input_box_apply_edit_keyboard mutates caller-owned text from one ordered frame.
 input_box_apply_edit_keyboard :: proc(
     state: ^viewmodel.Ui_Input_Box_State, target: Input_Box_Edit_Target,
-    frame: input.Input_Frame, clipboard_text: string = "") -> Input_Box_Update {
+    frame: input.Input_Frame, clipboard_text: string = "",
+    policy: Input_Box_Edit_Policy = {}) -> Input_Box_Update {
     result: Input_Box_Update
     if state == nil || target.length == nil {
         return result
     }
     for event in frame.events {
+        if input_box_apply_completion_event(state, target, event, policy, &result) {
+            continue
+        }
         input_box_apply_edit_event(
             state, target, event, clipboard_text, &result)
     }
@@ -358,8 +372,10 @@ input_box_apply_focused_input :: proc(
     if input_box_frame_requests_paste(params.frame) {
         clipboard_text = input.input_get_clipboard_text()
     }
+    policy := params.edit_policy
+    policy.unicode_completion = input_box_unicode_enabled(params)
     update := input_box_apply_edit_keyboard(
-        params.state, params.edit_target, params.frame, clipboard_text)
+        params.state, params.edit_target, params.frame, clipboard_text, policy)
     resolved^.descriptor.text = string(
         params.edit_target.bytes[:params.edit_target.length^])
     return update
@@ -511,6 +527,10 @@ input_box_reveal_cursor :: proc(
     params: Input_Box_Params, align_end: bool) {
     visible_width := max(f32(0), params.rect.width - INPUT_BOX_TEXT_INSET * 2)
     text := params.descriptor.text
+    if input_box_unicode_enabled(params) &&
+        len(input_box_unicode_candidate(params.state, text).text) > 0 {
+        visible_width -= params.column_advance * 4
+    }
     total_width := f32(input_box_byte_column(text, len(text))) * params.column_advance
     maximum := max(f32(0), total_width - visible_width + 1)
     cursor_x := f32(input_box_byte_column(
@@ -525,7 +545,7 @@ input_box_reveal_cursor :: proc(
     params.state^.scroll_x = clamp(params.state^.scroll_x, 0, maximum)
 }
 
-// input_box_prepare updates one read-only field and builds its draw geometry.
+// input_box_prepare applies routed edits and publishes current text and draw geometry.
 input_box_prepare :: proc(
     params: Input_Box_Params,
     owner: ^viewmodel.Ui_Press_Owner_State) -> Input_Box_Result {
@@ -533,6 +553,9 @@ input_box_prepare :: proc(
     changed := input_box_reconcile_content(
         params.state, params.descriptor.text, params.descriptor.content_revision)
     semantic_changed := input_box_apply_semantic_text(params, &resolved)
+    if semantic_changed {
+        resolved.edit_policy.end_suggestion = ""
+    }
     hovered := geometry.rectangle_contains(params.rect,
         {params.frame.mouse_position.x, params.frame.mouse_position.y})
     input_box_update_pointer(resolved, hovered, owner)
@@ -552,6 +575,7 @@ input_box_prepare :: proc(
     result.changed = update.changed || semantic_changed
     result.submit_requested = update.submit_requested
     result.tab_requested = update.tab_requested
+    result.suggestion_accepted = update.suggestion_accepted
     input_box_publish_semantics(resolved, owner, &result)
     return result
 }
@@ -573,34 +597,42 @@ input_box_draw_result :: proc(
     inner := params.rect
     inner.x += INPUT_BOX_TEXT_INSET
     inner.width = max(f32(0), inner.width - INPUT_BOX_TEXT_INSET * 2)
-    start := min(params.state^.anchor_byte, params.state^.cursor_byte)
-    end := max(params.state^.anchor_byte, params.state^.cursor_byte)
-    text := params.descriptor.text
-    start_x := f32(input_box_byte_column(text, start)) * params.column_advance
-    end_x := f32(input_box_byte_column(text, end)) * params.column_advance
-    caret_x := f32(input_box_byte_column(
-        text, params.state^.cursor_byte)) * params.column_advance
-    text_y := params.rect.y + (params.rect.height - theme.TREE_FONT_SIZE) * 0.5
+    candidate: Unicode_Completion
+    if input_box_unicode_enabled(params) {
+        candidate = input_box_unicode_candidate(params.state, params.descriptor.text)
+        if len(candidate.text) > 0 {
+            inner.width -= params.column_advance * 4
+        }
+    }
     descriptor := input_box_result_descriptor(params)
-    selection := geometry.Rectangle{inner.x + start_x - params.state^.scroll_x,
-        text_y, end_x - start_x, theme.TREE_FONT_SIZE}
-    caret := geometry.Rectangle{inner.x + caret_x - params.state^.scroll_x,
-        text_y, 1, theme.TREE_FONT_SIZE}
-    control := viewmodel.Ui_Control_Geometry{
-        geometry.Rectangle(params.rect), geometry.Rectangle(params.clip_rect)}
+    text_geometry := input_box_text_geometry(params, inner, descriptor)
+    caret := text_geometry.caret
     return {hovered = hovered, focused = params.focused,
-        control_geometry = control, descriptor = descriptor,
-        text_geometry = {
-            control = control,
-            caret = geometry.Rectangle(caret),
-            selection = geometry.Rectangle(selection),
-            cursor_column = input_box_byte_column(
-                descriptor.text, descriptor.cursor_byte),
-            anchor_column = input_box_byte_column(
-                descriptor.text, descriptor.anchor_byte),
-        }, inner = inner,
+        control_geometry = text_geometry.control, descriptor = descriptor,
+        text_geometry = text_geometry, inner = inner,
         text_x = inner.x - params.state^.scroll_x,
-        selection = selection, caret = caret}
+        selection = text_geometry.selection, caret = caret,
+        unicode_completion = candidate,
+        unicode_hint = {caret.x + params.column_advance * 0.5, caret.y,
+            params.column_advance * 3, caret.height}}
+}
+
+// input_box_text_geometry projects one UTF-8 selection into scrolled cell geometry.
+input_box_text_geometry :: proc(
+    params: Input_Box_Params, inner: geometry.Rectangle,
+    descriptor: viewmodel.Ui_Editable_Text_Descriptor) ->
+        viewmodel.Ui_Editable_Text_Geometry {
+    cursor := input_box_byte_column(descriptor.text, descriptor.cursor_byte)
+    anchor := input_box_byte_column(descriptor.text, descriptor.anchor_byte)
+    start_x := f32(min(cursor, anchor)) * params.column_advance
+    width := f32(abs(cursor - anchor)) * params.column_advance
+    text_y := params.rect.y + (params.rect.height - theme.TREE_FONT_SIZE) * 0.5
+    return {control = {params.rect, params.clip_rect},
+        caret = {inner.x + f32(cursor) * params.column_advance - params.state^.scroll_x,
+            text_y, 1, theme.TREE_FONT_SIZE},
+        selection = {inner.x + start_x - params.state^.scroll_x,
+            text_y, width, theme.TREE_FONT_SIZE},
+        cursor_column = cursor, anchor_column = anchor}
 }
 
 // Publish one semantic text-run child beneath its editable input control.
@@ -654,7 +686,7 @@ input_box_publish_semantics :: proc(
         int(descriptor.id.local_id), descriptor.id)
 }
 
-// draw_encoded_input_box renders one prepared read-only field inside its clip.
+// draw_encoded_input_box renders prepared text, selection, caret, and completion.
 draw_encoded_input_box :: proc(
     encoder: ^native.Draw_Encoder,
     params: Input_Box_Params, prepared: Input_Box_Result) {
@@ -678,5 +710,24 @@ draw_encoded_input_box :: proc(
     if prepared.focused {
         _ = native.draw_encoder_rectangle(encoder, prepared.caret, theme.UI_TEXT_COLOR)
     }
+    _ = native.draw_encoder_pop_scissor(encoder)
+    draw_encoded_input_box_completion(encoder, params, prepared)
+}
+
+// draw_encoded_input_box_completion borrows the regular text path for the inline hint.
+draw_encoded_input_box_completion :: proc(
+    encoder: ^native.Draw_Encoder, params: Input_Box_Params,
+    prepared: Input_Box_Result) {
+    if len(prepared.unicode_completion.text) == 0 {
+        return
+    }
+    bytes: [12]u8
+    count := copy(bytes[:], prepared.unicode_completion.text)
+    count += copy(bytes[count:], " \u2192")
+    _ = native.draw_encoder_push_scissor(encoder, prepared.control_geometry.bounds)
+    _ = viewtext.ui_text_shaped({encoder = encoder, resolver = params.resolver,
+        key = .Regular, text = string(bytes[:count]),
+        position = {prepared.unicode_hint.x, prepared.unicode_hint.y},
+        color = theme.UI_TEXT_COLOR, font = viewtext.ui_text_font(params.font)})
     _ = native.draw_encoder_pop_scissor(encoder)
 }

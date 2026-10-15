@@ -1651,16 +1651,78 @@ library_search_suggestion_key_requires_collapsed_end_caret :: proc(t: ^testing.T
         query_length = 3, suggestion_length = 4,
         input = {cursor_byte = 3, anchor_byte = 3},
     }
+    copy(search.query[:], "bad")
+    copy(search.suggestion[:], "line")
     right := [1]input.Input_Event{{kind = .Press, key = .Right}}
-    testing.expect(t, uilibrary.library_search_accept_suggestion_key(
-        &search, {events = right[:]}))
+    policy := uiwidgets.Input_Box_Edit_Policy{end_suggestion = "line"}
+    target := uiwidgets.Input_Box_Edit_Target{search.query[:], &search.query_length}
+    result := uiwidgets.input_box_apply_edit_keyboard(
+        &search.input, target, {events = right[:]}, "", policy)
+    testing.expect(t, result.suggestion_accepted)
     search.input.anchor_byte = 1
-    testing.expect(t, !uilibrary.library_search_accept_suggestion_key(
-        &search, {events = right[:]}))
-    search.input.anchor_byte = 3
+    result = uiwidgets.input_box_apply_edit_keyboard(
+        &search.input, target, {events = right[:]}, "", policy)
+    testing.expect(t, !result.suggestion_accepted)
+    search.input.anchor_byte = search.input.cursor_byte
     tab := [1]input.Input_Event{{kind = .Press, key = .Tab}}
-    testing.expect(t, !uilibrary.library_search_accept_suggestion_key(
-        &search, {events = tab[:]}))
+    result = uiwidgets.input_box_apply_edit_keyboard(
+        &search.input, target, {events = tab[:]}, "", policy)
+    testing.expect(t, !result.suggestion_accepted)
+}
+
+// Verify Unicode acceptance is a normal debounced search edit, not a correction submit.
+@(test)
+library_search_unicode_acceptance_debounces_once :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    search := &state^.ui_runtime.library.search
+    copy(search^.query[:], "\\alpha")
+    search^.query_length = len("\\alpha")
+    search^.input = {
+        cursor_byte = search^.query_length,
+        anchor_byte = search^.query_length,
+    }
+    search^.active = true
+    search^.suggestion_length = len("line")
+    copy(search^.suggestion[:], "line")
+    state^.ui_runtime.input.interaction_frame.effective_focus = {
+        kind = .Input_Box, id = uilibrary.LIBRARY_SEARCH_INPUT_ID}
+    unchanged := uilibrary.prepare_library_search(state, {0, 0, 240, 180}, {})
+    testing.expect_value(t, unchanged.input.unicode_completion.text, "α")
+    testing.expect_value(t, search^.generation, u64(0))
+    testing.expect_value(t, string(search^.query[:search^.query_length]), "\\alpha")
+    events := [2]input.Input_Event{
+        {kind = .Press, key = .Right}, {kind = .Press, key = .Right}}
+    accepted := uilibrary.prepare_library_search(
+        state, {0, 0, 240, 180}, {events = events[:]})
+    testing.expect(t, accepted.input.changed && !accepted.input.suggestion_accepted)
+    testing.expect_value(t, string(search^.query[:search^.query_length]), "α")
+    testing.expect_value(t, search^.generation, u64(1))
+    testing.expect(t, search^.query_dirty && !search^.active && !search^.submit_requested)
+    testing.expect_value(t, search^.debounce_remaining_seconds,
+        uilibrary.LIBRARY_SEARCH_DEBOUNCE_SECONDS)
+}
+
+// Verify spelling corrections still submit immediately through the same ordered editor.
+@(test)
+library_search_keyboard_correction_preserves_submit :: proc(t: ^testing.T) {
+    state := make_shell_test_state(t)
+    defer destroy_shell_test_state(state)
+    search := &state^.ui_runtime.library.search
+    copy(search^.query[:], "bad")
+    search^.query_length = 3
+    search^.input = {cursor_byte = 3, anchor_byte = 3}
+    copy(search^.suggestion[:], "line")
+    search^.suggestion_length = 4
+    state^.ui_runtime.input.interaction_frame.effective_focus = {
+        kind = .Input_Box, id = uilibrary.LIBRARY_SEARCH_INPUT_ID}
+    events := [1]input.Input_Event{{kind = .Press, key = .Right}}
+    result := uilibrary.prepare_library_search(
+        state, {0, 0, 240, 180}, {events = events[:]})
+    testing.expect(t, result.input.suggestion_accepted)
+    testing.expect_value(t, string(search^.query[:search^.query_length]), "line")
+    testing.expect(t, search^.submit_requested && search^.query_dirty)
+    testing.expect_value(t, search^.debounce_remaining_seconds, f32(0))
 }
 
 // Verify integer sliders apply addressed keyboard commands through normal clamping.
