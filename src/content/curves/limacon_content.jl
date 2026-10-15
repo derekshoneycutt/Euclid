@@ -9,14 +9,23 @@ export get_search_content, get_view_content
 function get_view_content()
     return tex"""\textbf{Limaçon}
 
-A limaçon is traced by a point carried by a circle rolling around a circle of equal radius. Placing the tracer beyond the rolling rim produces an inner loop."""
+A limaçon is traced by a point $P$ carried by a circle rolling around another circle of equal radius.
+
+For the fixed circle with radius $R$ and the rolling circle with radius $r$, $R=r$.
+When the distance $d$ between the point $P$ and the center of the rolling circle is greater than the radius $r$ of the rolling circle, $d>r$, an inner loop is produced.
+
+$$x(\theta) = 2r\cos\theta - d\cos\left(2\theta\right)$$
+
+$$y(\theta) = 2r\sin\theta - d\sin\left(2\theta\right)$$"""
 end
 
 """Describe the extended tracer and inner loop of this limaçon."""
 function get_search_content()
     return SearchContent(
-        "This limaçon is an epitrochoid traced beyond the rim of a circle rolling " *
-        "around an equal fixed circle, producing a pronounced inner loop.",
+        """Limaçon
+A limaçon is traced by a point P carried by a circle rolling around another circle of equal radius.
+For the fixed circle with radius R and the rolling circle with radius r, R=r.
+When the distance d between the point P and the center of the rolling circle is greater than the radius r of the rolling circle, , an inner loop is produced.""",
         ("Pascal's limaçon", "limacon", "snail curve", "inner-loop curve"))
 end
 

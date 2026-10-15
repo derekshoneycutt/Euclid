@@ -7,6 +7,7 @@ import geometry "../../../core/geometry"
 import viewmodel "../model"
 import theme "../theme"
 import uiaccordion "../layout/accordion"
+import uiwidgets "../widgets"
 import uuid "core:encoding/uuid"
 
 #assert(viewmodel.UI_TREE_NODE_CAPACITY >= contentmodel.CATALOG_RECORD_CAPACITY)
@@ -17,9 +18,14 @@ Tree_Prepared_Row :: struct {
     node: ^bridgemodel.Euclid_Julia_Animation_Interface,
     depth: int,
     content_y: f32,
+    canonical_y: f32,
     reveal: geometry.Rectangle,
     logical: bool,
     expanded: bool,
+    actions: Tree_Actions_Layout,
+    actions_toggle: uiwidgets.Icon_Button_Result,
+    actions_up: uiwidgets.Text_Button_Result,
+    actions_down: uiwidgets.Text_Button_Result,
 }
 
 // Tree_Prepared_Layout bounds all rows, including visual-only closing descendants.
@@ -129,7 +135,8 @@ tree_motion_measure :: proc(
     assert(motion_index >= 0, "tree identity absent from admitted motion registry")
     branch := &params.ui_runtime^.tree_motion.branches[motion_index]
     tree_motion_sample_branch(branch, full_height, params.mouse_input.sample_time_seconds)
-    return theme.TREE_ROW_HEIGHT + branch^.height
+    actions_height := tree_actions_sample(params, &item)
+    return theme.TREE_ROW_HEIGHT + actions_height + branch^.height
 }
 
 // tree_motion_measure_roots samples even hidden branches so their deadlines still finish.
@@ -142,6 +149,16 @@ tree_motion_measure_roots :: proc(params: Tree_List_Params) -> f32 {
         height += tree_motion_measure(params, root, projection^.count)
     }
     return height
+}
+
+// tree_motion_item_extent combines row, attached actions, and descendant reveal.
+tree_motion_item_extent :: proc(
+    params: Tree_List_Params, item: ^viewmodel.Ui_Tree_Item) -> f32 {
+    index := tree_motion_index(
+        &params.ui_runtime^.tree_motion, item^.key)
+    return theme.TREE_ROW_HEIGHT +
+        tree_actions_current_height(params.ui_runtime, item^.key) +
+        params.ui_runtime^.tree_motion.branches[index].height
 }
 
 // tree_motion_admit retargets changed explicit topology from the last sampled geometry.
@@ -186,28 +203,36 @@ tree_layout_append :: proc(
     motion := &ctx.params.ui_runtime^.tree_motion
     branch := &motion^.branches[tree_motion_index(motion, item^.key)]
     prepared_row := row
+    prepared_row.canonical_y = row.content_y
     prepared_row.node = tree_find_stable_id(
         ctx.params.ji, item^.target_animation_id)
     prepared_row.expanded = branch^.expanded
+    prepared_row.actions = tree_actions_layout(
+        ctx.params, item, row.depth, row.content_y)
     ctx.layout^.rows[ctx.layout^.count] = prepared_row
     ctx.layout^.count += 1
-    if branch^.height <= 0 && !branch^.expanded {
+    tree_layout_append_children(ctx, prepared_row, branch^.height)
+}
+
+// tree_layout_append_children places descendants beneath the sampled drawer and branch reveal.
+tree_layout_append_children :: proc(
+    ctx: Tree_Layout_Context, row: Tree_Prepared_Row, branch_height: f32) {
+    if branch_height <= 0 && !row.expanded {
         return
     }
-    child_y := row.content_y + theme.TREE_ROW_HEIGHT
+    child_y := row.content_y + theme.TREE_ROW_HEIGHT + row.actions.height
     reveal := tree_reveal_intersection(
-        {0, child_y, ctx.params.list_panel.width, branch^.height}, row.reveal)
+        {0, child_y, ctx.params.list_panel.width, branch_height}, row.reveal)
     projection := &ctx.params.ui_runtime^.tree_projection
-    for child, steps := item^.first_child, 0;
+    for child, steps := row.item^.first_child, 0;
         child != TREE_NO_ITEM && steps < projection^.count;
         child, steps = projection^.items[child].next_sibling, steps + 1 {
         child_item := &projection^.items[child]
         tree_layout_append(ctx, {item = child_item, depth = row.depth + 1,
             content_y = child_y, reveal = reveal,
-            logical = row.logical && branch^.expanded})
+            logical = row.logical && row.expanded})
         if tree_item_is_visible(ctx.params.visibility, child_item^) {
-            child_y += theme.TREE_ROW_HEIGHT +
-                motion^.branches[tree_motion_index(motion, child_item^.key)].height
+            child_y += tree_motion_item_extent(ctx.params, child_item)
         }
     }
 }
@@ -233,11 +258,10 @@ tree_prepare_layout :: proc(params: Tree_List_Params) -> Tree_Prepared_Layout {
             params.ji, item^.target_animation_id), content_y = y,
             reveal = clip, logical = true})
         if tree_item_is_visible(params.visibility, item^) {
-            y += theme.TREE_ROW_HEIGHT +
-                params.ui_runtime^.tree_motion.branches[
-                    tree_motion_index(&params.ui_runtime^.tree_motion, item^.key)].height
+            y += tree_motion_item_extent(params, item)
         }
     }
+    tree_reorder_apply(params, &result)
     return result
 }
 

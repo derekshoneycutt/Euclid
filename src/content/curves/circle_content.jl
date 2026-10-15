@@ -9,14 +9,21 @@ export get_search_content, get_view_content
 function get_view_content()
     return tex"""\textbf{Circle}
 
-A circle is the plane curve traced by a point kept at a constant distance from a fixed center."""
+A circle \euclidcircle[color=steelblue,size=1,thickness=2] is a plane figure contained by one line such that all the straight lines falling upon it from one point among those lying within the figure equal one another.
+
+With radius $r$, and center $(h, k)$, we draw the circle with a compass.
+
+$$x(\theta) = h + r\cos\theta$$
+
+$$y(\theta) = k + r\cos\theta$$"""
 end
 
 """Describe the constant-radius locus and compass construction of a circle."""
 function get_search_content()
     return SearchContent(
-        "A circle is the locus of points equidistant from a fixed center, constructed " *
-        "by rotating a compass at constant radius.",
+        """Circle
+A circle is a plane figure contained by one line such that all the straight lines falling upon it from one point among those lying within the figure equal one another.
+With radius r, and center , we draw the circle with a compass.""",
         ("compass construction", "constant radius", "equidistant points"))
 end
 

@@ -124,6 +124,22 @@ const UiMessageSources = LocalizedContent.UiMessageSourceDeclaration[
                     LocalizedContent.UInt32Argument)]),
         "Matching animations: {count} or more"),
     LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1112), "ui.library.actions_for",
+            "Accessible disclosure and drawer name for a selected Favorite.",
+            LocalizedContent.MessageArgument[
+                LocalizedContent.MessageArgument("name", LocalizedContent.TextArgument)]),
+        "Actions for {name}"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1113), "ui.library.move_up",
+            "Move the selected Favorite one sibling position upward.",
+            LocalizedContent.MessageArgument[]),
+        "Move Up"),
+    LocalizedContent.UiMessageSourceDeclaration(
+        LocalizedContent.UiMessageDeclaration(UInt16(1114), "ui.library.move_down",
+            "Move the selected Favorite one sibling position downward.",
+            LocalizedContent.MessageArgument[]),
+        "Move Down"),
+    LocalizedContent.UiMessageSourceDeclaration(
         LocalizedContent.UiMessageDeclaration(UInt16(1219), "ui.settings.reduce_motion",
             "Interface-only reduced motion checkbox; system requests also apply.",
             LocalizedContent.MessageArgument[]),

@@ -92,6 +92,42 @@ needed to reach a child, without waiting for unrelated branch motion.
 Search and programmatic reveal remain immediate, and the tree retains one Tab stop,
 stable item UUIDs, and ordinary expansion/selection semantics.
 
+The selected Favorites placement exposes a localized "Actions for {name}" disclosure
+button and an attached actions panel, separate from tree branch expansion. The
+panel extends the selected row's background across its full width, with distinct
+borderless action-button fills even at rest and when disabled. Enabled
+actions retain pointer feedback and visible keyboard-focus outlines. The
+ellipsis disclosure inverts its fill and dots while open; the collapsed appearance
+is unchanged. Its explicit
+Tab stops follow the tree: disclosure, enabled Move Up, then enabled Move Down.
+Enter or Space activates the focused control; opening retains disclosure focus.
+Escape is claimed only by these action controls and closes the drawer with focus on
+the disclosure. Interior moves retain action focus; reaching an endpoint returns
+focus to the disclosure. Retired owners repair to the tree or panel without stealing
+focus from a new selection. Addressed focus reveals the control, while ordinary
+scrolling preserves the open choice and removes clipped controls from traversal.
+
+Accepted Favorites moves update sibling order and endpoint states immediately, then
+animate the selected placement and its attached drawer vertically over displaced
+neighbors using the shared 180 ms interface easing. Repeated or reversed moves
+retarget from sampled positions without disabling actions. Pointer targets, focus
+outlines, and native bounds follow the same visible geometry; native sibling order
+remains the committed logical order. Passing rows are clipped behind the selected
+block, including their labels, and cannot capture pointer input through it.
+Focused-action reveal considers the committed destination once rather than forcing
+scrolling each animation frame. Ordinary scrolling preserves running content-space
+motion. Drawer closure, selection or context changes, incompatible topology, reload,
+viewport changes, and reduced motion settle the visual offsets to committed order;
+drawer disclosure retains its independent closing-tail policy.
+
+Native records use placement-qualified, content-generation-qualified identities,
+clipped bounds, current enabled and expanded states, and a disclosure-to-panel relation.
+Buttons do not increase Favorites membership counts. Sibling positions and native
+child order follow the saved ordering. Native and keyboard activation revalidate
+selection, ancestry, drawer state, clipping, and sibling policy at the display owner;
+queued requests cannot operate a closed, deselected, or retired drawer. These facts
+extend the bounded projection, not its screen-reader speech or platform-parity claims.
+
 When the Settings viewport is short, its retained scrollbar provides wheel and thumb
 navigation plus a focusable scroll-panel tab stop with Page Up and Page Down actions.
 Scrolling can reveal the final preference and persistence status without changing the

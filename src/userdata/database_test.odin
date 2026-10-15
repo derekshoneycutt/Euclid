@@ -504,6 +504,172 @@ userdata_combined_commit_is_atomic_for_settings_and_collections :: proc(t: ^test
     testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
 }
 
+// Assert persisted Favorites identity and animation order without assuming row order.
+userdata_test_expect_favorites_order :: proc(
+    t: ^testing.T, snapshot: ^collections.Set,
+    expected_entries, expected_animations: []uuid.Identifier) {
+    testing.expect_value(t, len(expected_entries), len(expected_animations))
+    indexes: [collections.ENTRY_CAPACITY]int
+    count, failure := collections.ordered_siblings(
+        snapshot, collections.FAVORITES_COLLECTION_ID, {}, indexes[:])
+    testing.expect_value(t, failure, collections.Policy_Error.None)
+    testing.expect_value(t, count, len(expected_entries))
+    if count != len(expected_entries) || count != len(expected_animations) {
+        return
+    }
+    for position in 0..<count {
+        entry := snapshot.entries[indexes[position]]
+        testing.expect_value(t, entry.id, expected_entries[position])
+        testing.expect_value(t, entry.animation_id, expected_animations[position])
+    }
+}
+
+// Seed a durable Favorites sequence and return its immutable add operations.
+userdata_test_seed_favorites :: proc(
+    t: ^testing.T, store: ^Store) -> [3]collections.Mutation {
+    additions := [3]collections.Mutation{
+        {
+        kind = .Add_Favorite,
+        entry_id = userdata_test_id(31),
+        animation_id = userdata_test_id(41),
+        },
+        {
+            kind = .Add_Favorite,
+            entry_id = userdata_test_id(32),
+            animation_id = userdata_test_id(42),
+        },
+        {
+            kind = .Add_Favorite,
+            entry_id = userdata_test_id(33),
+            animation_id = userdata_test_id(43),
+        },
+    }
+    initial := store_commit_user_data(
+        store, {}, additions[:])
+    testing.expect_value(t, initial.outcome, Commit_Outcome.Committed)
+    return additions
+}
+
+// Verify a rejected transaction preserved saved order and preferences.
+userdata_test_expect_failed_reorder_unchanged :: proc(
+    t: ^testing.T, store: ^Store, additions: [3]collections.Mutation) {
+    snapshot: collections.Set
+    testing.expect_value(t, store_load_collections(store, &snapshot).kind,
+        Store_Error_Kind.None)
+    userdata_test_expect_favorites_order(t, &snapshot,
+        []uuid.Identifier{
+            additions[0].entry_id, additions[1].entry_id, additions[2].entry_id,
+        },
+        []uuid.Identifier{
+            additions[0].animation_id,
+            additions[1].animation_id,
+            additions[2].animation_id,
+        })
+    preferences := settings.default_preferences()
+    testing.expect_value(t, store_load_settings(store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, preferences.rendering.vsync)
+}
+
+// Roll back settings and an earlier valid swap when later replay is stale.
+@(test)
+userdata_collection_mutation_rollback_is_atomic :: proc(t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    store: Store
+    testing.expect_value(t,
+        store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    additions := userdata_test_seed_favorites(t, &store)
+    changes: settings.Change_Set
+    testing.expect(t, settings.change_set_set(
+        &changes, .Rendering_Vsync, settings.boolean_value(false)))
+    move := collections.Mutation{
+        kind = .Reorder_Siblings,
+        entry_id = additions[0].entry_id,
+        sibling_entry_id = additions[1].entry_id,
+        direction = .Down,
+    }
+    rollback := store_commit_user_data(
+        &store, changes, []collections.Mutation{move, move})
+    testing.expect_value(t, rollback.outcome, Commit_Outcome.Not_Committed)
+    userdata_test_expect_failed_reorder_unchanged(t, &store, additions)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
+// Commit a mixed settings and structural batch that leaves a deliberate order.
+userdata_test_commit_reordered_favorites :: proc(
+    t: ^testing.T, store: ^Store, additions: [3]collections.Mutation) {
+    a, b, c := additions[0], additions[1], additions[2]
+    changes: settings.Change_Set
+    testing.expect(t, settings.change_set_set(
+        &changes, .Rendering_Vsync, settings.boolean_value(false)))
+    d := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = userdata_test_id(34),
+        animation_id = userdata_test_id(44),
+    }
+    move_a_down_b := collections.Mutation{
+        kind = .Reorder_Siblings,
+        entry_id = a.entry_id,
+        sibling_entry_id = b.entry_id,
+        direction = .Down,
+    }
+    move_a_down_c := collections.Mutation{
+        kind = .Reorder_Siblings,
+        entry_id = a.entry_id,
+        sibling_entry_id = c.entry_id,
+        direction = .Down,
+    }
+    remove_b := collections.Mutation{
+        kind = .Remove_Favorite,
+        entry_id = b.entry_id,
+    }
+    committed := store_commit_user_data(store, changes,
+        []collections.Mutation{d, move_a_down_b, move_a_down_c, remove_b})
+    testing.expect_value(t, committed.outcome, Commit_Outcome.Committed)
+}
+
+// Persist add, repeated move, and remove operations through close and reopen.
+@(test)
+userdata_collection_mutation_moves_round_trip_after_reopen :: proc(
+    t: ^testing.T) {
+    fixture := userdata_test_path(t)
+    testing.expect(t, fixture.valid)
+    if !fixture.valid {
+        return
+    }
+    defer os.remove_all(fixture.directory)
+    store: Store
+    testing.expect_value(t,
+        store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    additions := userdata_test_seed_favorites(t, &store)
+    a, b, c := additions[0], additions[1], additions[2]
+    d := collections.Mutation{
+        entry_id = userdata_test_id(34),
+        animation_id = userdata_test_id(44),
+    }
+    userdata_test_commit_reordered_favorites(t, &store, additions)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+
+    testing.expect_value(t,
+        store_open(&store, fixture.path).kind, Store_Error_Kind.None)
+    reopened: collections.Set
+    testing.expect_value(t, store_load_collections(&store, &reopened).kind,
+        Store_Error_Kind.None)
+    userdata_test_expect_favorites_order(t, &reopened,
+        []uuid.Identifier{c.entry_id, a.entry_id, d.entry_id},
+        []uuid.Identifier{c.animation_id, a.animation_id, d.animation_id})
+    preferences := settings.default_preferences()
+    testing.expect_value(t, store_load_settings(&store, &preferences).failure.kind,
+        Store_Error_Kind.None)
+    testing.expect(t, !preferences.rendering.vsync)
+    testing.expect_value(t, store_close(&store).kind, Store_Error_Kind.None)
+}
+
 // Reject wrong application IDs and future schema versions without rewriting them.
 @(test)
 userdata_admission_preserves_wrong_and_future_databases :: proc(t: ^testing.T) {

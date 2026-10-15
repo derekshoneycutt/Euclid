@@ -9,14 +9,23 @@ export get_search_content, get_view_content
 function get_view_content()
     return tex"""\textbf{Dimpled Limaçon}
 
-A dimpled limaçon is traced when the carried point lies inside the rolling circle, but far enough from its center to bend the curve inward without forming a cusp."""
+A limaçon is traced by a point $P$ carried by a circle rolling around another circle of equal radius.
+
+For the fixed circle with radius $R$ and the rolling circle with radius $r$, $R=r$.
+When the distance $d$ between the point $P$ and the center of the rolling circle is less than the radius $r$ of the rolling circle, $d<r$, only a dimple is produced, with no loop or cusp.
+
+$$x(\theta) = 2r\cos\theta - d\cos\left(2\theta\right)$$
+
+$$y(\theta) = 2r\sin\theta - d\sin\left(2\theta\right)$$"""
 end
 
 """Describe the inward bend formed by this dimpled limaçon."""
 function get_search_content()
     return SearchContent(
-        "A dimpled limaçon is traced inside an externally rolling circle, far enough " *
-        "from its center to bend inward without forming a cusp or inner loop.",
+        """Dimpled Limaçon
+A limaçon is traced by a point P carried by a circle rolling around another circle of equal radius.
+For the fixed circle with radius R and the rolling circle with radius r,.
+When the distance d between the point P and the center of the rolling circle is less than the radius r of the rolling circle, , only a dimple is produced, with no loop or cusp.""",
         ("dimpled limacon", "indented limaçon", "loopless limaçon"))
 end
 

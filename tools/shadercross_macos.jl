@@ -20,6 +20,12 @@ function validate_macos_shadercross_header(manifest::AbstractDict,
         "macOS SDL_shadercross manifest must target macOS 11.0.")
     get(manifest, "runtime_search_path", "") == "@loader_path" || error(
         "macOS SDL_shadercross payload must use loader-relative libraries.")
+    validate_macos_shadercross_source_pin(manifest, expected_source_commit)
+end
+
+"""Require a well-formed source commit and match the repository pin when supplied."""
+function validate_macos_shadercross_source_pin(
+    manifest::AbstractDict, expected_source_commit::Union{Nothing,String})
     source_commit = String(get(manifest, "source_commit", ""))
     occursin(r"^[0-9a-f]{40}$", source_commit) || error(
         "macOS SDL_shadercross manifest has an invalid source commit.")

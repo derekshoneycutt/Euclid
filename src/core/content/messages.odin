@@ -32,6 +32,9 @@ Content_Message_Id :: enum u16 {
     Library_Status_No_Matches = 1109,
     Library_Status_Match_Count = 1110,
     Library_Status_Match_Count_More = 1111,
+    Library_Actions_For = 1112,
+    Library_Move_Up = 1113,
+    Library_Move_Down = 1114,
     Settings_Display_Fps = 1201,
     Settings_Limit_Fps = 1202,
     Settings_Drawing_Sound = 1203,
@@ -101,7 +104,7 @@ Content_Required_Message :: struct {
     key: string,
 }
 
-CONTENT_SHIPPED_MESSAGE_COUNT :: 83
+CONTENT_SHIPPED_MESSAGE_COUNT :: 86
 CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Message{
     {1001, "ui.navigation.library"},
     {1002, "ui.gif.save"},
@@ -125,6 +128,9 @@ CONTENT_REQUIRED_MESSAGES :: [CONTENT_SHIPPED_MESSAGE_COUNT]Content_Required_Mes
     {1109, "ui.library.status.no_matches"},
     {1110, "ui.library.status.match_count"},
     {1111, "ui.library.status.match_count_more"},
+    {1112, "ui.library.actions_for"},
+    {1113, "ui.library.move_up"},
+    {1114, "ui.library.move_down"},
     {1201, "ui.settings.display_fps"},
     {1202, "ui.settings.limit_fps"},
     {1203, "ui.settings.drawing_sound"},
@@ -241,6 +247,7 @@ Content_Message_Signature :: struct {
 content_message_signature :: proc(id: Content_Message_Id) -> Content_Message_Signature {
     #partial switch id {
     case .Library_Suggestion_Action: return {"query", .Text}
+    case .Library_Actions_For: return {"name", .Text}
     case .Library_Status_Match_Count, .Library_Status_Match_Count_More,
          .Gif_Cadence_Multiple:
         return {"count", .Uint32}

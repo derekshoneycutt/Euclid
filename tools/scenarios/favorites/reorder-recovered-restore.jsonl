@@ -1,0 +1,11 @@
+{"wait_state":"runtime_ready","timeout_ms":10000}
+{"assert_favorites":"order:Point:Line:Circle"}
+{"library_placement":"focus_library"}
+{"key":"enter"}
+{"wait_state":"accordion_settled","timeout_ms":10000}
+{"assert_favorites":"collapsed:collections"}
+{"assert_favorites":"collapsed:favorites"}
+{"assert_favorites":"actions_closed:favorite:Point"}
+{"assert_favorites":"recovered"}
+{"assert_no_bad_frees":true}
+{"shutdown":true}

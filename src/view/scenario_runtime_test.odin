@@ -25,6 +25,29 @@ import uilibrary "ui/library"
 import uisemantics "ui/semantics"
 import viewscenario "scenario"
 import viewsimulation "simulation"
+import uiaccordion "ui/layout/accordion"
+
+// Verify swap sampling freezes test input time without allowing time to run backwards on resume.
+@(test)
+scenario_reorder_sampling_is_bounded_and_monotonic :: proc(t: ^testing.T) {
+    state := new(core.Euclid_General_State, context.allocator)
+    defer free(state, context.allocator)
+    runtime := viewscenario.Scenario_Runtime{state = state}
+    testing.expect(t, !viewscenario.scenario_reorder_sample(&runtime, "middle"))
+    state^.ui_runtime.tree_reorder_motion = {active = true, start_seconds = 10}
+    testing.expect(t, !viewscenario.scenario_reorder_sample(&runtime, "unknown"))
+    testing.expect(t, viewscenario.scenario_reorder_sample(&runtime, "start"))
+    frame := viewscenario.scenario_pointer_frame(&runtime, {sample_time_seconds = 20})
+    testing.expect_value(t, frame.sample_time_seconds, f64(10))
+    testing.expect(t, viewscenario.scenario_reorder_sample(&runtime, "middle"))
+    testing.expect(t, !viewscenario.scenario_reorder_sample(&runtime, "start"))
+    testing.expect(t, viewscenario.scenario_reorder_sample(&runtime, "resume"))
+    frame = viewscenario.scenario_pointer_frame(&runtime, {sample_time_seconds = 10})
+    testing.expect_value(t, frame.sample_time_seconds,
+        10 + uiaccordion.INTERFACE_TRANSITION_SECONDS * 0.5)
+    frame = viewscenario.scenario_pointer_frame(&runtime, {sample_time_seconds = 20})
+    testing.expect_value(t, frame.sample_time_seconds, f64(20))
+}
 
 // Consume synthetic pointer edges once while preserving held state between display frames.
 @(test)

@@ -7,9 +7,7 @@ export get_search_content, get_view_content
 
 const IdentityLatexDocument = raw"""\textbf{Identity}
 
-Identity means there is a motion that changes nothing at all.
-
-In this model, that is the \textit{do-nothing} motion $e$.
+Identity means there is a motion that changes nothing at all. In this model, that is the \textit{do-nothing} motion $e$.
 
 \begin{enumerate}
 \item $e \circ r = r$: doing nothing before reflection changes nothing.
@@ -27,8 +25,12 @@ end
 """Describe the do-nothing identity motion in the reflection group."""
 function get_search_content()
     return SearchContent(
-        "The identity is the unique group element that leaves every motion unchanged " *
-        "when composed on either side, represented here by doing nothing.",
+        """Identity
+Identity means there is a motion that changes nothing at all. In this model, that is the do-nothing motion e.
+doing nothing before reflection changes nothing.
+doing nothing after reflection changes nothing.
+The visual cue also reinforces that returning to start is a valid identity outcome.
+Formally, this means for every allowed motion a.""",
         ("identity element", "neutral element", "do-nothing motion", "no-op"))
 end
 

@@ -31,6 +31,9 @@ SCENARIO_FOCUS_NAMES :: [?]Scenario_Focus_Name{
         u64(viewmodel.Ui_Accordion_Section.Settings) + 1},
     {"library_search", .Library_Control, uilibrary.LIBRARY_SEARCH_INPUT_ID},
     {"library_tree", .Animation_Tree, uilibrary.TREE_SEMANTIC_LOCAL_ID},
+    {"library_actions", .Library_Action, uilibrary.TREE_ACTION_TOGGLE},
+    {"library_move_up", .Library_Action, uilibrary.TREE_ACTION_UP},
+    {"library_move_down", .Library_Action, uilibrary.TREE_ACTION_DOWN},
     {"settings_max_dust", .Settings_Control,
         uisettings.SETTINGS_MAX_PARTICLES_SLIDER_PRESS_ID},
 }

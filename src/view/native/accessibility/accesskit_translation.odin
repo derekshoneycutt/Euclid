@@ -231,7 +231,9 @@ accesskit_configure_control_state :: proc(
     if control.selected {
        accesskit.accesskit_node_set_selected(node, true)
     }
-    if control.role == .Accordion_Header {
+    if control.role == .Accordion_Header ||
+        control.role == .Button && (.Expand in control.actions ||
+            .Collapse in control.actions) {
         accesskit.accesskit_node_set_expanded(node, control.expanded)
     }
     if control.role == .Tree_Item && .Toggle in control.actions {

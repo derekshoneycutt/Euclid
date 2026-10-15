@@ -19,6 +19,30 @@ const BuildConfiguration = Main.EuclidBuildConfiguration
 const JuliaTestReporter = Main.EuclidJuliaTestReporter
 const ScenarioRunner = Main.EuclidScenarioRunner
 
+@testset "Favorites durable reorder inspection" begin
+    baseline = [Dict("animation" => animation, "placement" => placement,
+        "sibling_order" => index - 1) for (index, (animation, placement)) in
+        enumerate(zip(["point", "line", "circle"], ["a", "b", "c"]))]
+    reordered = deepcopy(baseline[[2, 1, 3]])
+    for (index, row) in enumerate(reordered)
+        row["sibling_order"] = index - 1
+    end
+    @test isnothing(ScenarioRunner.require_favorites_reorder(
+        reordered, baseline, [2, 1, 3]))
+    @test_throws ErrorException ScenarioRunner.require_favorites_reorder(
+        reordered, baseline, [1, 2, 3])
+    replaced = deepcopy(reordered)
+    replaced[1]["placement"] = "replacement"
+    @test_throws ErrorException ScenarioRunner.require_favorites_reorder(
+        replaced, baseline, [2, 1, 3])
+    @test_throws ErrorException ScenarioRunner.require_favorites_reorder(
+        reordered[1:2], baseline, [2, 1, 3])
+    duplicated = deepcopy(reordered)
+    duplicated[2]["sibling_order"] = duplicated[1]["sibling_order"]
+    @test_throws ErrorException ScenarioRunner.require_favorites_reorder(
+        duplicated, baseline, [2, 1, 3])
+end
+
 @testset "settings acceptance evidence validation" begin
     @test isnothing(ScenarioRunner.validate_settings_process(
         "== allocation evidence: live=0 current_bytes=0 peak_bytes=42 total=3 bad_frees=0 =="))
@@ -725,6 +749,30 @@ reflection_sha256 = "reflection"
         @test report.schema_version == "2.0.0"
         @test report.tests[1].name == name
         @test report.tests[1].elapsed_ns === nothing
+    end
+
+    @testset "Julia failure diagnostics" begin
+        records = [
+            (name="catalog > names", status="failed", file="catalog_tests.jl",
+                line=216, message="Expression: actual == expected\nEvaluated: false"),
+            (name="catalog > load", status="error", file="catalog_tests.jl",
+                line=220, message="unexpected load error"),
+            (name="catalog > identity", status="passed", file="catalog_tests.jl",
+                line=221, message=nothing),
+            (name="catalog > pending", status="broken", file="catalog_tests.jl",
+                line=222, message="broken assertion"),
+        ]
+        output = IOBuffer()
+        JuliaTestReporter.write_failure_details(output, records)
+        text = String(take!(output))
+        @test occursin("FAILURE: catalog > names\ncatalog_tests.jl:216", text)
+        @test occursin("Expression: actual == expected\nEvaluated: false", text)
+        @test occursin("FAILURE: catalog > load\ncatalog_tests.jl:220", text)
+        @test occursin("unexpected load error", text)
+        @test !occursin("catalog > identity", text)
+        @test !occursin("catalog > pending", text)
+        JuliaTestReporter.write_failure_details(output, records[3:4])
+        @test isempty(String(take!(output)))
     end
 
     @testset "test count extraction" begin

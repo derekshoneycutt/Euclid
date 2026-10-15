@@ -650,12 +650,12 @@ const AnimationDescriptors = AnimationDescriptor[
     AnimationDescriptor(
         UUID("7d7dbc7a-c360-486d-b727-a9909d4c569e"),
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
-        "5-Hypocycloid", 11, AnimationNode,
+        "5-Cusped Hypocycloid", 11, AnimationNode,
         "curves/five_hypocycloid.jl"),
     AnimationDescriptor(
         UUID("d6fcda98-5195-457d-8154-939930ec00c5"),
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
-        "11⁄2-Hypocycloid", 12, AnimationNode,
+        "11⁄2 Hypocycloid", 12, AnimationNode,
         "curves/eleven_half_hypocycloid.jl"),
     AnimationDescriptor(
         UUID("5cea3464-3e41-444d-a326-2fbd9b20de7e"),
@@ -670,7 +670,7 @@ const AnimationDescriptors = AnimationDescriptor[
     AnimationDescriptor(
         UUID("b0c35f2e-6108-4510-ab0e-cfa3a7269869"),
         UUID("13d8650f-98d2-4701-9312-d9b6ce4c46a6"),
-        "5-Point Hypotrochoid", 15, AnimationNode,
+        "5-Round-Point Hypotrochoid", 15, AnimationNode,
         "curves/five_point_hypotrochoid.jl"),
     AnimationDescriptor(
         UUID("2905c158-007b-4412-be60-20a27decc0b2"),

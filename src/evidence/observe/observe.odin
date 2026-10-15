@@ -391,6 +391,12 @@ observe_display_tree :: proc(
     runtime: ^viewmodel.Euclid_Ui_Runtime_State, result: ^Display) {
     result^.tree_scroll_y = runtime^.tree_scroll_y
     result^.tree_visual_height = runtime^.tree_motion.visual_height
+    if runtime^.tree_reorder_motion.active {
+        result^.tree_transition_count += 1
+    }
+    if runtime^.tree_actions_motion.running {
+        result^.tree_transition_count += 1
+    }
     for index in 0..<runtime^.tree_motion.count {
         if runtime^.tree_motion.branches[index].running {
             result^.tree_transition_count += 1

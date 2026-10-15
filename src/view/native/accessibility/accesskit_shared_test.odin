@@ -13,6 +13,100 @@ Accesskit_Shared_Text_Fixture :: struct {
     ok: bool,
 }
 
+// accesskit_shared_favorites_controls supplies a placement-qualified inline disclosure.
+accesskit_shared_favorites_controls :: proc() -> [5]Adapter_Control_Input {
+    placement := portable.Qualified_Identity{domain = .Ui, owner_domain = 6}
+    placement.stable_uuid[0] = 91
+    toggle := placement
+    toggle.owner_domain = 12
+    toggle.local_id = 1
+    drawer := toggle
+    drawer.local_id = 4
+    up, down := toggle, toggle
+    up.local_id, down.local_id = 2, 3
+    return {
+        {identity = placement, control = {role = .Tree_Item,
+            bounds = {10, 10, 220, 34}, label = "Line", enabled = true,
+            selected = true, position_in_set = 1, set_size = 3}},
+        {identity = toggle, parent_identity = placement, controls_identity = drawer,
+            control = {role = .Button, bounds = {198, 10, 220, 34},
+                label = "Actions for Line", enabled = true, focusable = true,
+                expanded = true, actions = {.Focus, .Activate, .Expand, .Collapse}}},
+        {identity = drawer, parent_identity = placement, control = {
+            role = .Panel, bounds = {30, 34, 220, 66}, label = "Actions for Line"}},
+        {identity = up, parent_identity = drawer, control = {
+            role = .Button, bounds = {34, 38, 118, 62}, label = "Move Up"}},
+        {identity = down, parent_identity = drawer, control = {
+            role = .Button, bounds = {122, 38, 216, 62}, label = "Move Down",
+            enabled = true, focusable = true, focused = true,
+            actions = {.Focus, .Activate}}},
+    }
+}
+
+// Verify native hierarchy, focused action, disabled admission, and control retirement.
+@(test)
+accesskit_shared_favorites_disclosure_hierarchy_and_retirement :: proc(t: ^testing.T) {
+    owner := new(Adapter, context.allocator)
+    defer free(owner, context.allocator)
+    controls := accesskit_shared_favorites_controls()
+    input := Adapter_Tree_Input{root_bounds = {0, 0, 800, 600}, controls = controls[:]}
+    testing.expect(t, adapter_publish_controls(owner, input))
+    publication := &owner^.control_publication.current
+    retired := publication^.controls[4].native_id
+    testing.expect_value(t, publication^.controls[1].controls_native_id,
+        publication^.controls[2].native_id)
+    testing.expect_value(t, publication^.controls[4].parent_native_id,
+        publication^.controls[2].native_id)
+    testing.expect_value(t, publication^.controls[0].set_size, u16(3))
+    testing.expect(t, publication^.controls[4].focused)
+    request := portable.Queued_Action{kind = u16(accesskit.Action.Click),
+        target_native_id = retired, publication_generation = publication^.generation}
+    action: Adapter_Action
+    testing.expect_value(t, adapter_validate_control_action(
+        owner, request, publication, &action), Adapter_Action_Status.Ok)
+    testing.expect_value(t, action.identity, controls[4].identity)
+    request.target_native_id = publication^.controls[3].native_id
+    testing.expect_value(t, adapter_validate_control_action(
+        owner, request, publication, &action), Adapter_Action_Status.Disabled_Target)
+    controls[1].control.expanded = false
+    input.controls = controls[:3]
+    testing.expect(t, adapter_publish_controls(owner, input))
+    _, found := portable.native_id_lookup(&owner^.native_ids, retired)
+    testing.expect(t, !found)
+    request.target_native_id = retired
+    testing.expect_value(t, adapter_validate_control_action(owner, request,
+        &owner^.control_publication.current, &action),
+        Adapter_Action_Status.Stale_Generation)
+}
+
+// Verify disclosure buttons advertise ordinary activation plus explicit expansion actions.
+@(test)
+accesskit_shared_favorites_disclosure_translates_actions :: proc(t: ^testing.T) {
+    node := accesskit.accesskit_node_new(.Button)
+    testing.expect(t, node != nil)
+    if node == nil {
+        return
+    }
+    defer accesskit.accesskit_node_free(node)
+    accesskit_configure_control_actions(node, {.Focus, .Activate, .Expand, .Collapse})
+    accesskit_configure_control_state(node, {
+        role = .Button, enabled = true, expanded = true,
+        actions = {.Focus, .Activate, .Expand, .Collapse}})
+    testing.expect(t, accesskit.accesskit_node_supports_action(node, .Click))
+    testing.expect(t, accesskit.accesskit_node_supports_action(node, .Expand))
+    testing.expect(t, accesskit.accesskit_node_supports_action(node, .Collapse))
+    controls := accesskit_shared_favorites_controls()
+    owner := new(Adapter, context.allocator)
+    defer free(owner, context.allocator)
+    testing.expect(t, adapter_publish_controls(owner, {
+        root_bounds = {0, 0, 800, 600}, controls = controls[:]}))
+    update := accesskit_control_tree_update(&owner^.control_publication.current)
+    testing.expect(t, update != nil)
+    if update != nil {
+        accesskit.accesskit_tree_update_free(update)
+    }
+}
+
 // accesskit_shared_text_fixture publishes one editable owner and TextRun child.
 accesskit_shared_text_fixture :: proc(owner: ^Adapter) -> Accesskit_Shared_Text_Fixture {
     owner_identity := portable.Qualified_Identity{

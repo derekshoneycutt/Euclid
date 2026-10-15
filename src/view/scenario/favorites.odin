@@ -9,10 +9,11 @@ import uianimation "../ui/animation"
 import uilibrary "../ui/library"
 import uisemantics "../ui/semantics"
 import ui "../ui"
+import uiaccordion "../ui/layout/accordion"
 import uuid "core:encoding/uuid"
 import log "core:log"
 
-// One bounded placement baseline for remove/reappend acceptance.
+// One bounded placement and playback baseline for Favorites acceptance.
 Scenario_Favorites_Memory :: struct {
     placement: uuid.Identifier,
     playback: uuid.Identifier,
@@ -33,6 +34,13 @@ scenario_favorites_split :: proc(text: string) -> (string, string) {
 scenario_pointer_frame :: proc(
     runtime: ^Scenario_Runtime, frame: input.Input_Frame) -> input.Input_Frame {
     result := frame
+    if runtime^.reorder_sample_active {
+        result.sample_time_seconds = runtime^.reorder_sample_time
+    } else {
+        result.sample_time_seconds = max(
+            result.sample_time_seconds, runtime^.reorder_sample_floor)
+    }
+    runtime^.reorder_frame_time = result.sample_time_seconds
     if runtime^.pointer_override {
         result.mouse_position = {
             runtime^.pointer_position.x,
@@ -133,6 +141,10 @@ scenario_library_placement :: proc(
     if text == "expand_all" {
         return scenario_favorites_expand_all(runtime)
     }
+    if text == "scroll_top" {
+        return scenario_library_queue_command(runtime,
+            {target = uilibrary.tree_semantic_id(), kind = .Set_Scroll_Value})
+    }
     if text == "focus_library" {
         return uisemantics.semantic_apply_external_action(
             runtime^.state^.ui_runtime.semantic_focus,
@@ -141,10 +153,24 @@ scenario_library_placement :: proc(
             .Focus)
     }
     operation, address := scenario_favorites_split(text)
+    if operation == "swap_sample" {
+        return scenario_reorder_sample(runtime, address)
+    }
     item := scenario_favorites_item(runtime, address)
     if item == nil {
         return false
     }
+    if operation == "actions_focus" || operation == "actions_open" ||
+        operation == "move_up" || operation == "move_down" {
+        return scenario_reorder_control(runtime, item, operation)
+    }
+    return scenario_library_published_action(runtime, item, operation)
+}
+
+// scenario_library_published_action admits pointer and semantic actions on published tree rows.
+scenario_library_published_action :: proc(
+    runtime: ^Scenario_Runtime,
+    item: ^viewmodel.Ui_Tree_Item, operation: string) -> bool {
     focus := runtime^.state^.ui_runtime.semantic_focus
     id := uilibrary.tree_placement_semantic_id(item)
     snapshot := uisemantics.semantic_snapshot(focus)
@@ -163,6 +189,89 @@ scenario_library_placement :: proc(
         return scenario_favorites_pointer(runtime, node.bounds, operation)
     }
     return scenario_library_apply(runtime, item, operation, node.clip_bounds)
+}
+
+// scenario_reorder_control addresses ordinary published disclosure and move controls.
+scenario_reorder_control :: proc(
+    runtime: ^Scenario_Runtime, item: ^viewmodel.Ui_Tree_Item,
+    operation: string) -> bool {
+    state := runtime^.state
+    action := uilibrary.TREE_ACTION_TOGGLE
+    if operation == "move_up" {
+        action = uilibrary.TREE_ACTION_UP
+    } else if operation == "move_down" {
+        action = uilibrary.TREE_ACTION_DOWN
+    }
+    id := viewmodel.Ui_Node_Id{domain = .Library_Action, local_id = action,
+        stable_id = item^.key, generation = state^.julia_interface^.content_generation}
+    kind := viewmodel.Ui_Focus_Command_Kind.Activate
+    if operation == "actions_focus" {
+        kind = .Focus
+    } else if operation == "actions_open" {
+        kind = .Expand
+    }
+    return scenario_library_queue_command(runtime, {target = id, kind = kind})
+}
+
+// scenario_library_queue_command validates now and defers mutations to the ordinary owner phase.
+scenario_library_queue_command :: proc(
+    runtime: ^Scenario_Runtime, command: viewmodel.Ui_Focus_Command) -> bool {
+    accepted := uisemantics.semantic_apply_external_action(
+        runtime^.state^.ui_runtime.semantic_focus,
+        command.target, command.kind, command.numeric_value)
+    if accepted && command.kind != .Focus {
+        runtime^.pending_reorder_command = command
+    }
+    return accepted
+}
+
+// scenario_reorder_drain delivers addressed actions after keyboard resets the command buffer.
+scenario_reorder_drain :: proc(runtime: ^Scenario_Runtime) {
+    command := runtime^.pending_reorder_command
+    runtime^.pending_reorder_command = {}
+    if command.kind == .None {
+        return
+    }
+    if !uisemantics.semantic_apply_external_action(
+        runtime^.state^.ui_runtime.semantic_focus,
+        command.target, command.kind, command.numeric_value) {
+        log.error("scenario_reorder_command_rejected")
+        runtime^.runner.status = .Failed
+        runtime^.runner.failure_count += 1
+    }
+}
+
+// scenario_reorder_sample freezes only the test input clock at an accepted swap's sample.
+scenario_reorder_sample :: proc(runtime: ^Scenario_Runtime, sample: string) -> bool {
+    if sample == "resume" {
+        runtime^.reorder_sample_active = false
+        return true
+    }
+    if sample == "hold" {
+        runtime^.reorder_sample_time = runtime^.reorder_frame_time
+        runtime^.reorder_sample_floor = runtime^.reorder_frame_time
+        runtime^.reorder_sample_active = true
+        return true
+    }
+    motion := &runtime^.state^.ui_runtime.tree_reorder_motion
+    if !motion^.active {
+        return false
+    }
+    fraction: f64
+    switch sample {
+    case "start": fraction = 0
+    case "middle": fraction = 0.5
+    case: return false
+    }
+    sampled_at := motion^.start_seconds +
+        fraction * uiaccordion.INTERFACE_TRANSITION_SECONDS
+    if sampled_at < runtime^.reorder_sample_floor {
+        return false
+    }
+    runtime^.reorder_sample_time = sampled_at
+    runtime^.reorder_sample_floor = runtime^.reorder_sample_time
+    runtime^.reorder_sample_active = true
+    return true
 }
 
 // Apply an admitted semantic tree action while preserving occurrence-specific keyboard focus.
@@ -274,8 +383,16 @@ scenario_favorites_capacity :: proc(runtime: ^Scenario_Runtime) -> bool {
 scenario_favorites_order :: proc(
     runtime: ^Scenario_Runtime, text: string) -> bool {
     set := &runtime^.state^.preferences_runtime.collections_state
+    indexes: [collections.ENTRY_CAPACITY]int
+    count, failure := collections.ordered_siblings(
+        set, collections.FAVORITES_COLLECTION_ID, {}, indexes[:])
+    if failure != .None {
+        log.errorf("scenario_favorites_order_rejected policy=%v", failure)
+        return false
+    }
     remaining := text
-    for entry in set^.entries[:set^.entry_count] {
+    for index in indexes[:count] {
+        entry := set^.entries[index]
         name, suffix := scenario_favorites_split(remaining)
         animation := scenario_find_animation(runtime^.state^.julia_interface, name)
         if animation == nil || entry.animation_id != animation^.stable_id {
@@ -286,7 +403,7 @@ scenario_favorites_order :: proc(
     return len(remaining) == 0
 }
 
-// Check placement identity, disclosure and visibility against the published tree.
+// Compare the current placement with an explicitly remembered identity.
 scenario_favorites_remember_placement :: proc(
     runtime: ^Scenario_Runtime, operation, argument: string) -> bool {
     item := scenario_favorites_item(runtime, argument)
@@ -297,8 +414,23 @@ scenario_favorites_remember_placement :: proc(
         runtime^.favorites_memory.placement = item^.key
         return true
     }
-    return runtime^.favorites_memory.placement != (uuid.Identifier{}) &&
-        runtime^.favorites_memory.placement != item^.key
+    remembered := runtime^.favorites_memory.placement
+    if remembered == (uuid.Identifier{}) {
+        return false
+    }
+    return (remembered == item^.key) == (operation == "same_placement")
+}
+
+// Check the addressed drawer's open choice without mistaking a closing tail for controls.
+scenario_favorites_drawer :: proc(
+    runtime: ^Scenario_Runtime, operation, argument: string) -> bool {
+    item := scenario_favorites_item(runtime, argument)
+    if item == nil {
+        return false
+    }
+    motion := runtime^.state^.ui_runtime.tree_actions_motion
+    opened := motion.open && motion.entry_id == item^.key
+    return opened if operation == "actions_open" else !motion.open
 }
 
 // Check placement selection, disclosure and visibility against the published tree.
@@ -308,8 +440,10 @@ scenario_favorites_placement_assertion :: proc(
     switch operation {
     case "absent":
         return scenario_favorites_item(runtime, argument) == nil
-    case "remember", "replaced":
+    case "remember", "replaced", "same_placement":
         return scenario_favorites_remember_placement(runtime, operation, argument)
+    case "actions_open", "actions_closed":
+        return scenario_favorites_drawer(runtime, operation, argument)
     case "selected":
         item := scenario_favorites_item(runtime, argument)
         return item != nil && state^.ui_runtime.selected_tree_item_id == item^.key

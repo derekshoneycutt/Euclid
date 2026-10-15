@@ -9,14 +9,21 @@ export get_search_content, get_view_content
 function get_view_content()
     return tex"""\textbf{Curtate Cycloid}
 
-When the tracing point lies inside the rolling circle, $d<r$, it traces a curtate cycloid. The curve remains above the fixed line through two wheel revolutions."""
+The curtate cycloid is produced by tracing a point $P$ that lies inside a circle, such that its distance $d<r$ where $r$ is the radius of the circle, as it rolls along a straight line without slipping.
+
+$P$ will not make contact with the straight line, leaving round, dimples but no cusps.
+
+$$x(\theta) = r\theta - d\sin\theta$$
+
+$$y(\theta) = r - d\cos\theta$$"""
 end
 
 """Describe the smooth path traced inside a rolling circle."""
 function get_search_content()
     return SearchContent(
-        "A curtate cycloid is traced by a point inside a circle rolling along a " *
-        "straight line, producing a smooth curve that never reaches the rail.",
+        """Curtate Cycloid
+The curtate cycloid is produced by tracing a point P that lies inside a circle, such that its distance  where r is the radius of the circle, as it rolls along a straight line without slipping.
+P will not make contact with the straight line, leaving round, dimples but no cusps.""",
         ("shortened cycloid", "tracer inside rolling circle", "smooth cycloid"))
 end
 

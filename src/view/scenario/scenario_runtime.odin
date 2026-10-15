@@ -66,6 +66,11 @@ Scenario_Runtime :: struct {
     pointer_pressed: bool,
     pointer_released: bool,
     favorites_memory: Scenario_Favorites_Memory,
+    reorder_sample_active: bool,
+    reorder_sample_time: f64,
+    reorder_sample_floor: f64,
+    reorder_frame_time: f64,
+    pending_reorder_command: viewmodel.Ui_Focus_Command,
 }
 
 // Resolved owner-domain identity and its synchronized arena diagnostics.

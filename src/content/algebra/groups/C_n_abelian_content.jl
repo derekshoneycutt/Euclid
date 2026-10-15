@@ -9,7 +9,7 @@ export get_search_content, get_view_content
 function get_view_content()
     return tex"""\textbf{Abelian Groups / Commutativity}
 
-An abelian group is one where order does not matter: doing one allowed rotation and then another gives the same result as doing them in the reverse order.
+An abelian, or commutative, group is one where order does not matter: doing one allowed rotation and then another gives the same result as doing them in the reverse order.
 
 For cyclic rotations about one center, order never changes the outcome.
 
@@ -18,16 +18,15 @@ For cyclic rotations about one center, order never changes the outcome.
 \item $\rho^4\rho^2 = \rho^6$.
 \end{enumerate}
 
-Order does not change the result, so this is a concrete visual proof that $C_n$ is abelian.
-
-Formally, this is the statement $\rho^2\rho^4 = \rho^4\rho^2$."""
+Order does not change the result (the operations commute), so $C_n$ is abelian."""
 end
 
 """Describe commutativity in the cyclic rotation group."""
 function get_search_content()
     return SearchContent(
-        "An abelian group has a commutative operation, so changing operand order does " *
-        "not change the result; rotations in Cₙ commute.",
+        """Abelian Groups / Commutativity
+An abelian, or commutative, group is one where order does not matter: doing one allowed rotation and then another gives the same result as doing them in the reverse order.
+For cyclic rotations about one center, order never changes the outcome.""",
         ("abelian group", "commutative operation", "order does not matter", "commutativity"))
 end
 

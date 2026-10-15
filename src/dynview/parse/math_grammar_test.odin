@@ -480,6 +480,29 @@ tex_parse_math_matches_rich_table_fixture :: proc(t: ^testing.T) {
     testing.expect_value(t, descriptor.row_extra_gaps[1].value, f32(-2))
 }
 
+// Accept newline whitespace before a horizontal rule in a multiline array.
+@(test)
+tex_parse_math_accepts_multiline_array_hline :: proc(t: ^testing.T) {
+    output := tex_math_test_output()
+    defer free(output)
+    source := "\\begin{array}{c|c|c}\n" +
+        "P & Q & P \\land Q \\\\\n" +
+        "\\hline\n" +
+        "\\text{T} & \\text{T} & \\text{T} \\\\\n" +
+        "\\text{T} & \\text{F} & \\text{F} \\\\\n" +
+        "\\text{F} & \\text{T} & \\text{F} \\\\\n" +
+        "\\text{F} & \\text{F} & \\text{F} \\\\\n" +
+        "\\end{array}"
+    testing.expect_value(t, tex_parse_math(
+        source, .Display, output), Tex_Parse_Status.Ok)
+    testing.expect(t, !output.recoverable)
+    table := &output.ops[output.programs[output.root_program].first_op]
+    descriptor := &output.table_descriptors[table.table_descriptor]
+    testing.expect_value(t, descriptor.rows, 5)
+    testing.expect_value(t, descriptor.columns, 3)
+    testing.expect_value(t, descriptor.horizontal_rule_counts[1], u8(1))
+}
+
 //   Verify the reported Terminal formulas compile without recoverable fallback.
 @(test)
 tex_parse_math_matches_reported_terminal_formulas :: proc(t: ^testing.T) {

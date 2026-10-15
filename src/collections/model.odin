@@ -21,6 +21,11 @@ Entry_Kind :: enum u8 {
     Animation,
 }
 
+Move_Direction :: enum u8 {
+    Up,
+    Down,
+}
+
 Collection :: struct {
     id: uuid.Identifier,
     role: Role,
@@ -74,18 +79,28 @@ Policy_Error :: enum u8 {
     Not_Favorited,
     Capacity,
     Order_Overflow,
+    Missing_Entry,
+    Missing_Sibling,
+    Missing_Collection,
+    Different_Scope,
+    Not_Adjacent,
+    No_Neighbor,
+    Invalid_Direction,
 }
 
 Mutation_Kind :: enum u8 {
     Add_Favorite,
     Remove_Favorite,
+    Reorder_Siblings,
 }
 
-// One ordered Favorites operation retaining entry identity across retry.
+// One immutable structural operation retaining placement identities across retry.
 Mutation :: struct {
     kind: Mutation_Kind,
     entry_id: uuid.Identifier,
     animation_id: uuid.Identifier,
+    sibling_entry_id: uuid.Identifier,
+    direction: Move_Direction,
 }
 
 Mutation_Error :: enum u8 {
@@ -304,6 +319,103 @@ favorites_remove :: proc(set: ^Set, entry_id: uuid.Identifier) -> Policy_Error {
     return .Not_Favorited
 }
 
+// Find the immediate editable sibling above or below a placement.
+sibling_neighbor :: proc(
+    set: ^Set, entry_id: uuid.Identifier,
+    direction: Move_Direction) -> (uuid.Identifier, Policy_Error) {
+    if validate(set) != .None {
+        return {}, .Invalid_Set
+    }
+    if entry_id == (uuid.Identifier{}) {
+        return {}, .Invalid_Identity
+    }
+    if !move_direction_is_valid(direction) {
+        return {}, .Invalid_Direction
+    }
+    entry_index := find_entry(set, entry_id)
+    if entry_index < 0 {
+        return {}, .Missing_Entry
+    }
+    entry := set.entries[entry_index]
+    collection_index := find_collection(set, entry.collection_id)
+    if set.collections[collection_index].is_read_only {
+        return {}, .Read_Only
+    }
+    neighbor_index := sibling_neighbor_index(set, entry, direction)
+    if neighbor_index < 0 {
+        return {}, .No_Neighbor
+    }
+    return set.entries[neighbor_index].id, .None
+}
+
+// Capture one immutable move of a placement into its current adjacent position.
+make_sibling_move :: proc(
+    set: ^Set, entry_id: uuid.Identifier,
+    direction: Move_Direction) -> (Mutation, Policy_Error) {
+    sibling_id, failure := sibling_neighbor(set, entry_id, direction)
+    if failure != .None {
+        return {}, failure
+    }
+    return Mutation{
+        kind = .Reorder_Siblings,
+        entry_id = entry_id,
+        sibling_entry_id = sibling_id,
+        direction = direction,
+    }, .None
+}
+
+// Enumerate ordered backing-array indexes into caller-owned storage.
+ordered_siblings :: proc(
+    set: ^Set,
+    collection_id, parent_entry_id: uuid.Identifier,
+    destination: []int) -> (int, Policy_Error) {
+    if validate(set) != .None {
+        return 0, .Invalid_Set
+    }
+    scope_failure := ordered_siblings_scope_validate(
+        set, collection_id, parent_entry_id)
+    if scope_failure != .None {
+        return 0, scope_failure
+    }
+    sibling_count := count_siblings(set, collection_id, parent_entry_id)
+    if sibling_count > len(destination) {
+        return 0, .Capacity
+    }
+    count := 0
+    for index in 0..<set.entry_count {
+        entry := set.entries[index]
+        if entry.collection_id == collection_id &&
+            entry.parent_entry_id == parent_entry_id {
+            destination[count] = index
+            count += 1
+        }
+    }
+    sort_siblings_by_order(set, destination[:count])
+    return count, .None
+}
+
+// Validate a requested collection-parent scope before ordered enumeration.
+ordered_siblings_scope_validate :: proc(
+    set: ^Set, collection_id, parent_entry_id: uuid.Identifier) -> Policy_Error {
+    if collection_id == (uuid.Identifier{}) {
+        return .Invalid_Identity
+    }
+    if find_collection(set, collection_id) < 0 {
+        return .Missing_Collection
+    }
+    if parent_entry_id == (uuid.Identifier{}) {
+        return .None
+    }
+    parent_index := find_entry(set, parent_entry_id)
+    if parent_index < 0 {
+        return .Missing_Entry
+    }
+    if set.entries[parent_index].collection_id != collection_id {
+        return .Different_Scope
+    }
+    return .None
+}
+
 // Replay one accepted structural operation against a validated snapshot.
 apply_mutation :: proc(set: ^Set, mutation: Mutation) -> Mutation_Error {
     switch mutation.kind {
@@ -321,6 +433,15 @@ apply_mutation :: proc(set: ^Set, mutation: Mutation) -> Mutation_Error {
             return .Invalid_Entry
         }
         if favorites_remove(set, mutation.entry_id) != .None {
+            return .Policy
+        }
+        return .None
+    case .Reorder_Siblings:
+        if mutation.entry_id == (uuid.Identifier{}) ||
+            mutation.sibling_entry_id == (uuid.Identifier{}) {
+            return .Invalid_Entry
+        }
+        if sibling_move_apply(set, mutation) != .None {
             return .Policy
         }
         return .None
@@ -366,6 +487,103 @@ find_entry :: proc(set: ^Set, id: uuid.Identifier) -> int {
         }
     }
     return -1
+}
+
+// Find the nearest sibling index in one validated collection-parent scope.
+sibling_neighbor_index :: proc(
+    set: ^Set, entry: Entry, direction: Move_Direction) -> int {
+    neighbor_index := -1
+    for index in 0..<set.entry_count {
+        candidate := set.entries[index]
+        if candidate.collection_id != entry.collection_id ||
+            candidate.parent_entry_id != entry.parent_entry_id {
+            continue
+        }
+        if direction == .Up && candidate.sibling_order < entry.sibling_order &&
+            (neighbor_index < 0 ||
+                candidate.sibling_order > set.entries[neighbor_index].sibling_order) {
+            neighbor_index = index
+        } else if direction == .Down &&
+            candidate.sibling_order > entry.sibling_order &&
+            (neighbor_index < 0 ||
+                candidate.sibling_order < set.entries[neighbor_index].sibling_order) {
+            neighbor_index = index
+        }
+    }
+    return neighbor_index
+}
+
+// Apply an immutable move only while its recorded placements remain adjacent.
+sibling_move_apply :: proc(set: ^Set, mutation: Mutation) -> Policy_Error {
+    if validate(set) != .None {
+        return .Invalid_Set
+    }
+    if !move_direction_is_valid(mutation.direction) {
+        return .Invalid_Direction
+    }
+    if mutation.entry_id == mutation.sibling_entry_id {
+        return .Invalid_Identity
+    }
+    entry_index := find_entry(set, mutation.entry_id)
+    sibling_index := find_entry(set, mutation.sibling_entry_id)
+    if entry_index < 0 {
+        return .Missing_Entry
+    }
+    if sibling_index < 0 {
+        return .Missing_Sibling
+    }
+    entry := set.entries[entry_index]
+    sibling := set.entries[sibling_index]
+    if entry.collection_id != sibling.collection_id ||
+        entry.parent_entry_id != sibling.parent_entry_id {
+        return .Different_Scope
+    }
+    collection_index := find_collection(set, entry.collection_id)
+    if set.collections[collection_index].is_read_only {
+        return .Read_Only
+    }
+    if sibling_neighbor_index(set, entry, mutation.direction) != sibling_index {
+        return .Not_Adjacent
+    }
+    set.entries[entry_index].sibling_order = sibling.sibling_order
+    set.entries[sibling_index].sibling_order = entry.sibling_order
+    return .None
+}
+
+// Count siblings without depending on their backing-array arrangement.
+count_siblings :: proc(
+    set: ^Set, collection_id, parent_entry_id: uuid.Identifier) -> int {
+    count := 0
+    for entry in set.entries[:set.entry_count] {
+        if entry.collection_id == collection_id &&
+            entry.parent_entry_id == parent_entry_id {
+            count += 1
+        }
+    }
+    return count
+}
+
+// Sort bounded backing-array indexes by their authoritative order values.
+sort_siblings_by_order :: proc(set: ^Set, indexes: []int) {
+    if len(indexes) < 2 {
+        return
+    }
+    for index in 1..<len(indexes) {
+        entry_index := indexes[index]
+        position := index
+        for position > 0 &&
+            set.entries[indexes[position - 1]].sibling_order >
+                set.entries[entry_index].sibling_order {
+            indexes[position] = indexes[position - 1]
+            position -= 1
+        }
+        indexes[position] = entry_index
+    }
+}
+
+// Reject enum values outside the two supported ordering directions.
+move_direction_is_valid :: proc(direction: Move_Direction) -> bool {
+    return direction == .Up || direction == .Down
 }
 
 // Enforce the storage shape associated with a placement kind.

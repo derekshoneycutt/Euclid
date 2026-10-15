@@ -9,14 +9,24 @@ export get_search_content, get_view_content
 function get_view_content()
     return tex"""\textbf{Cycloid}
 
-A point at distance $d=r$ from the center of a circle rolling without slipping along a fixed line traces a cycloid. This construction follows two complete wheel revolutions."""
+The standard cycloid is produced by tracing a point $P$ on a circle as it rolls along a straight line without slipping.
+
+Each point where $P$ contacts the straight line forms a cusp.
+
+Where $r$ is the radius of the circle and $d$ is the distance of $P$ from the center of the circle, then $r=d$.
+
+$$x(\theta) = r(\theta - \sin\theta)$$
+
+$$y(\theta) = r(1 - \cos\theta)$$"""
 end
 
 """Describe the rim-traced cusps of an ordinary cycloid."""
 function get_search_content()
     return SearchContent(
-        "A cycloid is traced by a point on the rim of a circle rolling without " *
-        "slipping along a straight line, forming one cusp per revolution.",
+        """Cycloid
+The standard cycloid is produced by tracing a point P on a circle as it rolls along a straight line without slipping.
+Each point where P contacts the straight line forms a cusp.
+Where r is the radius of the circle and d is the distance of P from the center of the circle, then .""",
         ("rolling circle", "wheel curve", "cusped roulette"))
 end
 

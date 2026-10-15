@@ -161,6 +161,7 @@ Ui_Node_Domain :: enum u8 {
     Presentation,
     Terminal,
     Context_Menu,
+    Library_Action,
 }
 
 // Ui_Node_Id identifies one semantic node across stable and generated content.
@@ -315,6 +316,7 @@ Ui_Focus_Command_Kind :: enum u8 {
     Replace_Text,
     Set_Text_Selection,
     Show_Context_Menu,
+    Dismiss,
 }
 
 // Ui_Focus_Command carries one bounded event-derived action to a semantic owner.
@@ -620,6 +622,37 @@ Ui_Tree_Motion :: struct {
     anchored: bool,
 }
 
+// Ui_Tree_Reorder_Row retains sampled positions without borrowing projection storage.
+Ui_Tree_Reorder_Row :: struct {
+    id: uuid.Identifier,
+    from_y: f32,
+    target_y: f32,
+}
+
+// Ui_Tree_Reorder_Motion owns bounded visual offsets for accepted Favorites moves.
+Ui_Tree_Reorder_Motion :: struct {
+    active: bool,
+    retarget_pending: bool,
+    owner: uuid.Identifier,
+    generation: u64,
+    topology_revision: u64,
+    panel: geometry.Rectangle,
+    drawer_height: f32,
+    start_seconds: f64,
+    count: int,
+    rows: [UI_TREE_NODE_CAPACITY]Ui_Tree_Reorder_Row,
+}
+
+// Ui_Tree_Actions_Motion retains one transient Favorites drawer by placement UUID.
+Ui_Tree_Actions_Motion :: struct {
+    entry_id: uuid.Identifier,
+    open: bool,
+    height: f32,
+    start_height: f32,
+    start_seconds: f64,
+    running: bool,
+}
+
 // Ui_Tree_Reveal_Reason distinguishes navigation from external topology replacement.
 Ui_Tree_Reveal_Reason :: enum {
     Programmatic,
@@ -638,6 +671,11 @@ Euclid_Ui_Runtime_State :: struct {
     selected_tree_item_id: uuid.Identifier,
     tree_projection: Ui_Tree_Projection,
     tree_motion: Ui_Tree_Motion,
+    tree_actions_motion: Ui_Tree_Actions_Motion,
+    tree_reorder_motion: Ui_Tree_Reorder_Motion,
+    tree_actions_press_entry: uuid.Identifier,
+    tree_actions_last_focus: Ui_Node_Id,
+    tree_actions_reveal_pending: bool,
     view_text_scroll_y: f32,
     view_text_scroll_max: f32,
     tree_scroll_dragging: bool,

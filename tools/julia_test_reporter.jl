@@ -94,7 +94,18 @@ function disambiguate_records(records)
     end
 end
 
-"""Serialize the root result set, propagating nested sets to their parent."""
+"""Print failed Julia leaf identities, locations, and assertion diagnostics."""
+function write_failure_details(io::IO, records)
+    for record in records
+        record.status in ("failed", "error") || continue
+        println(io, "FAILURE: ", record.name)
+        println(io, record.file, ':', record.line)
+        println(io, record.message)
+        println(io)
+    end
+end
+
+"""Serialize the root results and print failing leaves before signaling failure."""
 function Test.finish(testset::StructuredTestSet)
     if Test.get_testset_depth() > 0
         Test.record(Test.get_testset(), testset)
@@ -107,6 +118,7 @@ function Test.finish(testset::StructuredTestSet)
         serialize(io, records)
     end
     failed = filter(record -> record.status in ("failed", "error"), records)
+    write_failure_details(stderr, failed)
     isempty(failed) || error("$(length(failed)) Julia tests failed")
     return testset
 end

@@ -171,6 +171,9 @@ tex_table_consume_prefix_controls :: proc(
         if status != .Ok {
             return false
         }
+        if tex_table_consume_whitespace(parser, token) {
+            continue
+        }
         if token.kind != .Command ||
             tex_token_text(parser.cursor.source, token) != "\\hline" {
             return true
@@ -182,6 +185,22 @@ tex_table_consume_prefix_controls :: proc(
         }
         state.descriptor.horizontal_rule_counts[state.rows] += 1
     }
+}
+
+// Consume one all-whitespace token before a row-boundary control.
+tex_table_consume_whitespace :: proc(
+    parser: ^Tex_Math_Parser, token: Tex_Token) -> bool {
+    if token.kind != .Text {
+        return false
+    }
+    text := tex_token_text(parser.cursor.source, token)
+    for byte in transmute([]u8)text {
+        if !tex_math_ascii_space(byte) {
+            return false
+        }
+    }
+    _, status := tex_math_take(parser)
+    return status == .Ok
 }
 
 //   Parse one cell program until alignment, row, or environment termination.

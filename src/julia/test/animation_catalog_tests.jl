@@ -216,10 +216,10 @@ end
     @test getproperty.(curves, :display_name) ==
         ["Circle", "Ellipse", "Cycloid", "Curtate Cycloid",
             "Prolate Cycloid", "Cardioid", "Limaçon", "Dimpled Limaçon",
-            "Convex Limaçon", "Deltoid", "Astroid", "5-Hypocycloid",
-                "11⁄2-Hypocycloid", "Nephroid", "3-Dimple Epitrochoid",
-                "5-Point Hypotrochoid"]
-            @test getproperty.(curves, :sibling_order) == collect(0:15)
+            "Convex Limaçon", "Deltoid", "Astroid", "5-Cusped Hypocycloid",
+            "11⁄2 Hypocycloid", "Nephroid", "3-Dimple Epitrochoid",
+            "5-Round-Point Hypotrochoid"]
+    @test getproperty.(curves, :sibling_order) == collect(0:15)
     logic_id = UUID("2905c158-007b-4412-be60-20a27decc0b2")
     logic = sort(filter(descriptor -> descriptor.parent_id == logic_id,
         AnimationDescriptors); by=descriptor -> descriptor.sibling_order)

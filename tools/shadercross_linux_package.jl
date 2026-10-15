@@ -36,11 +36,11 @@ function package_linux_shadercross()
     cp(joinpath(work, "SDL3-3.4.16", "LICENSE.txt"),
         joinpath(destination, sdl["license_file"]); force=true)
     push!(manifest["component"], sdl)
-    write_linux_shadercross_manifest(manifest, work, destination)
+    write_linux_shadercross_manifest!(manifest, work, destination)
 end
 
 """Record baseline build provenance and persist the refreshed Linux manifest."""
-function write_linux_shadercross_manifest(
+function write_linux_shadercross_manifest!(
     manifest::AbstractDict, work::String, destination::String)
     for field in ("sdl_manifest", "msvc_version", "cmake_options")
         delete!(manifest, field)

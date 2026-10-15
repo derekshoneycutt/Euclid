@@ -196,10 +196,12 @@ General features:
   - [ ] Search auto-completion features
   - [ ] Collections
     - [X] Initial bookmarks/favorites type collection
-    - [ ] Favorites/Collection organization
+    - [X] Favorites/Collection organization
+    - [ ] Custom naming in collections
     - [ ] Multiple custom collections
-    - [ ] Custom introduction and naming in collections
+    - [ ] Custom introduction in collections
     - [ ] Most viewed (dynamic; non-mutable)
+    - [ ] Most recent (dynamic; non-mutable)
 - [ ] Sharing custom collections
   - [ ] Export/import files
   - [ ] In-network (ip-2-ip) custom collection sharing

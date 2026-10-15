@@ -663,6 +663,10 @@ semantic_command_for_event :: proc(
         .Super in event.modifiers {
         return .None, 0
     }
+    if node.id.domain == .Library_Action && event.kind == .Press &&
+        event.key == .Escape {
+        return .Dismiss, 0
+    }
     #partial switch node.role {
     case .Button, .Accordion_Header, .Menu_Item:
         return semantic_activation_command(node, event), 0

@@ -70,6 +70,13 @@ end
         ["key", "value"]
     @test "settings_save_committed" in EuclidEvidence.scenario_schema().events
     @test "settings_worker_only" in EuclidEvidence.scenario_schema().states
+    payloads = EuclidEvidence.scenario_schema().action_payloads
+    @test all(operation -> operation in payloads.library_placement.operations,
+        ["actions_focus", "actions_open", "move_up", "move_down"])
+    @test "scroll_top" in payloads.library_placement.special
+    @test payloads.library_placement.swap_sample == ["hold", "start", "middle", "resume"]
+    @test all(operation -> operation in payloads.assert_favorites.operations,
+        ["same_placement", "actions_open", "actions_closed"])
     @test EuclidEvidence.EVENT_NAMES[UInt16(562)] == "settings_save_failed"
 end
 

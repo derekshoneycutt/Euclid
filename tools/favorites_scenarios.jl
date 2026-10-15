@@ -37,6 +37,8 @@ function favorites_launch(binary, root, database, name, source;
     end
     record = run_scenario_launch(binary, "favorites-$name", source,
         joinpath(root, name), ["--user-db=$database"; arguments])
+    scenario_passed(record) || error("Favorites scenario failed: $source " *
+        "step=$(record.failed_step) reason=$(record.reason) artifacts=$(record.artifacts)")
     validate_settings_launch(record)
     return record
 end
@@ -65,10 +67,12 @@ function run_favorites_roundtrip(binary::String, root::String, migrated::Bool)
 end
 
 """Remove the external SQLite fault after the scenario proves retained failure state."""
-function favorites_recovery_launch(binary::String, root::String, database::String)
+function favorites_recovery_launch(binary::String, root::String, database::String;
+    source=joinpath("tools", "scenarios", "favorites", "recovery.jsonl"))
+    baseline = favorites_database_rows(database)
     diagnostics = joinpath(root, "recovery.log")
     task = @async favorites_launch(binary, root, database, "recovery",
-        joinpath("tools", "scenarios", "favorites", "recovery.jsonl");
+        source;
         arguments=["--diagnostics=$diagnostics"])
     deadline = time() + 30
     observed = false
@@ -85,6 +89,8 @@ function favorites_recovery_launch(binary::String, root::String, database::Strin
         fetch(task)
         error("Recovery did not publish its failure checkpoint")
     end
+    favorites_database_rows(database) == baseline ||
+        error("Retained failed edits changed committed Favorites before recovery")
     favorites_fixture_sql(database, "DROP TRIGGER favorites_acceptance_failure")
     return fetch(task)
 end
@@ -123,6 +129,92 @@ function run_favorites_acceptance(binary::String)
     append!(records, migrated)
     append!(records, run_favorites_failure_cases(binary, root, database))
     append!(records, run_favorites_capacity(binary, root))
+    append!(records, run_favorites_motion(binary, root))
+    append!(records, run_favorites_ordering(binary, root))
+    return records
+end
+
+"""Require a precise durable permutation without recreating any animation placement."""
+function require_favorites_reorder(rows, baseline, permutation)
+    length(rows) == length(baseline) == length(permutation) ||
+        error("Reorder changed Favorites membership count")
+    length(unique(row["placement"] for row in baseline)) == length(baseline) ||
+        error("Seed contains duplicate placement identities")
+    length(unique(row["animation"] for row in baseline)) == length(baseline) ||
+        error("Seed contains duplicate animation identities")
+    for (index, source) in enumerate(permutation)
+        rows[index]["animation"] == baseline[source]["animation"] ||
+            error("Durable Favorites order differs at sibling $index")
+        rows[index]["placement"] == baseline[source]["placement"] ||
+            error("Reorder replaced a Favorites placement UUID")
+        index == 1 || rows[index - 1]["sibling_order"] < rows[index]["sibling_order"] ||
+            error("Durable Favorites sibling positions are not increasing")
+    end
+    return nothing
+end
+
+"""Prove UI-driven reordering changes durable order and survives a separate process."""
+function run_favorites_ordering(binary::String, root::String)
+    directory = joinpath(root, "ordering")
+    mkpath(directory)
+    database = joinpath(directory, "user.sqlite3")
+    sources = joinpath("tools", "scenarios", "favorites")
+    records = [favorites_launch(binary, directory, database, "seed",
+        joinpath(sources, "reorder-seed.jsonl"))]
+    baseline = favorites_database_rows(database)
+    length(baseline) == 3 || error("Ordering seed did not persist three Favorites")
+    push!(records, favorites_launch(binary, directory, database, "reorder",
+        joinpath(sources, "reorder-acceptance.jsonl")))
+    reordered = favorites_database_rows(database)
+    require_favorites_reorder(reordered, baseline, [2, 1, 3])
+    push!(records, favorites_launch(binary, directory, database, "restore",
+        joinpath(sources, "reorder-restore.jsonl");
+        arguments=["--layout=portrait", "--window-size=640x900"]))
+    favorites_database_rows(database) == reordered ||
+        error("Reorder restore changed committed rows or UUIDs")
+    append!(records, run_favorites_reorder_failure(binary, directory, database, baseline))
+    return records
+end
+
+"""Prove failed moves roll back durably while later retained moves recover in order."""
+function run_favorites_reorder_failure(binary::String, root::String,
+    database::String, seed)
+    sources = joinpath("tools", "scenarios", "favorites")
+    baseline = favorites_database_rows(database)
+    favorites_fixture_sql(database,
+        "CREATE TRIGGER favorites_acceptance_failure BEFORE INSERT ON user_collection_entry " *
+        "BEGIN SELECT RAISE(ABORT,'favorites reorder fault'); END")
+    records = [favorites_launch(binary, root, database, "reorder-degraded",
+        joinpath(sources, "reorder-degraded.jsonl"))]
+    favorites_database_rows(database) == baseline ||
+        error("Failed reorder partially committed durable rows")
+    push!(records, favorites_recovery_launch(binary, root, database;
+        source=joinpath(sources, "reorder-recovery.jsonl")))
+    recovered = favorites_database_rows(database)
+    require_favorites_reorder(recovered, seed, [1, 2, 3])
+    push!(records, favorites_launch(binary, root, database, "recovered-restore",
+        joinpath(sources, "reorder-recovered-restore.jsonl")))
+    favorites_database_rows(database) == recovered ||
+        error("Recovered reorder changed on relaunch")
+    return records
+end
+
+"""Exercise sampled swap rendering and reduced motion against independent user stores."""
+function run_favorites_motion(binary::String, root::String)
+    records = NamedTuple[]
+    for (name, source, arguments) in (
+        ("motion-landscape", "reorder-motion.jsonl", String[]),
+        ("motion-portrait", "reorder-motion.jsonl",
+            ["--layout=portrait", "--window-size=640x900"]),
+        ("motion-short", "reorder-motion.jsonl",
+            ["--layout=portrait", "--window-size=640x640"]),
+        ("motion-reduced", "reorder-motion-reduced.jsonl", String[]))
+        directory = joinpath(root, name)
+        mkpath(directory)
+        push!(records, favorites_launch(binary, directory,
+            joinpath(directory, "user.sqlite3"), "acceptance",
+            joinpath("tools", "scenarios", "favorites", source); arguments))
+    end
     return records
 end
 

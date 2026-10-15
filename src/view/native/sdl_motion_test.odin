@@ -23,7 +23,7 @@ motion_test_unavailable :: proc() -> (bool, Sdl_Motion_Status) {
     return false, .Unavailable
 }
 
-// Native policy is bounded in frequency and refreshed immediately on reactivation.
+// Native policy is cached, refreshes on focus, and supports the macOS native query.
 @(test)
 sdl_motion_refresh_is_cached_and_focus_sensitive :: proc(t: ^testing.T) {
     platform := new(Sdl_Platform, context.allocator)
@@ -34,6 +34,10 @@ sdl_motion_refresh_is_cached_and_focus_sensitive :: proc(t: ^testing.T) {
     testing.expect(t, !sdl_platform_refresh_motion(platform, 2, motion_test_allowed))
     testing.expect_value(t, platform^.motion.sampled_seconds, f64(2))
     testing.expect(t, sdl_platform_refresh_motion(platform, 7, motion_test_requested))
+    when ODIN_OS == .Darwin {
+        _, status := sdl_query_reduced_motion()
+        testing.expect_value(t, status, Sdl_Motion_Status.Supported)
+    }
 }
 
 // Failure and absence remain explicit and do not erase a previously admitted request.

@@ -30,8 +30,18 @@ end
 @testset "localized content declarations" begin
     @test validate_content_manifest(AuthoredManifest, AnimationDescriptors) ===
         AuthoredManifest
-    @test length(AuthoredManifest.ui_messages) == 83
-    @test length(AuthoredManifest.translations) == 83
+    @test length(AuthoredManifest.ui_messages) == 86
+    @test length(AuthoredManifest.translations) == 86
+    actions_message = only(filter(entry -> entry.key == "ui.library.actions_for",
+        AuthoredManifest.ui_messages))
+    @test actions_message.native_id == UInt16(1112)
+    @test length(actions_message.arguments) == 1
+    @test only(actions_message.arguments).name == "name"
+    @test only(actions_message.arguments).kind == TextArgument
+    actions_translation = only(filter(
+        entry -> entry.message_key == "ui.library.actions_for",
+        AuthoredManifest.translations))
+    @test actions_translation.template == "Actions for {name}"
     @test length(AuthoredManifest.catalog_names) == 138
     @test length(AuthoredManifest.editions) == 3
     @test length(AuthoredManifest.subjects) == 139

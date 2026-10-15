@@ -112,6 +112,7 @@ prepare_active_accordion_controls :: proc(
             state, content, library_frame)
         result^.tree = uilibrary.prepare_tree_list_panel({
             label = viewmessages.shell_message(state, .Library_Tree_Accessible_Label),
+            general_state = state,
             ji = state^.julia_interface,
             collections = &state^.preferences_runtime.collections_state,
             collections_revision =
@@ -235,6 +236,7 @@ prepare_outgoing_accordion_controls :: proc(
             result^.library_search =
                 uilibrary.prepare_library_search_visual(state, content)
             result^.tree = uilibrary.prepare_tree_visual({
+                general_state = state,
                 ji = state^.julia_interface,
                 collections = &state^.preferences_runtime.collections_state,
                 collections_revision =

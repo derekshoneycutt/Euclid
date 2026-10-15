@@ -33,11 +33,11 @@ function package_macos_shadercross()
     cp(joinpath(work, "SDL3-3.4.16", "LICENSE.txt"),
         joinpath(destination, sdl["license_file"]); force=true)
     push!(manifest["component"], sdl)
-    write_macos_shadercross_manifest(manifest, destination)
+    write_macos_shadercross_manifest!(manifest, destination)
 end
 
 """Record the native toolchain, runtime baseline, and maintenance recipe."""
-function write_macos_shadercross_manifest(manifest::AbstractDict, destination::String)
+function write_macos_shadercross_manifest!(manifest::AbstractDict, destination::String)
     for field in ("sdl_manifest", "msvc_version", "cmake_options")
         delete!(manifest, field)
     end

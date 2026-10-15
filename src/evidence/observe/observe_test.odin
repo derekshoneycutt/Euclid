@@ -69,6 +69,17 @@ observe_tree_motion_is_pointer_free_and_bounded :: proc(t: ^testing.T) {
     testing.expect(t, runtime.tree_motion.branches[0].running)
 }
 
+// Verify tree-settled evidence includes attached drawer and reorder transitions.
+@(test)
+observe_tree_motion_includes_drawer_and_swap :: proc(t: ^testing.T) {
+    runtime: viewmodel.Euclid_Ui_Runtime_State
+    runtime.tree_reorder_motion.active = true
+    runtime.tree_actions_motion.running = true
+    result: Display
+    observe_display_tree(&runtime, &result)
+    testing.expect_value(t, result.tree_transition_count, 2)
+}
+
 // Seed authoritative display scalars used by the observation contract test.
 observe_test_seed_display_scalars :: proc(source: ^Display_Source) {
     source^.fixed_step = 17

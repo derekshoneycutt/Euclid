@@ -54,30 +54,84 @@ draw_encoded_prepared_tree :: proc(
     ctx := Encoded_Tree_Walk_Context{
         state = state, ji = state^.julia_interface, encoder = encoder, panel = panel,
         pressed_node = prepared.pressed_node,
+        scroll_y = prepared.scroll.scroll_y_out,
         visibility = visibility}
+    foreground := tree_reorder_foreground(
+        &state^.ui_runtime, prepared.layout)
+    occlusion: geometry.Rectangle
+    if foreground >= 0 {
+        occlusion = tree_reorder_block_clip(
+            prepared.layout.rows[foreground], panel, prepared.scroll.scroll_y_out)
+    }
     for index in 0..<prepared.layout.count {
         row := prepared.layout.rows[index]
         row_geometry := tree_row_screen_geometry(
             row, panel, prepared.scroll.scroll_y_out)
         bounds := geometry.Rectangle(row_geometry.bounds)
         clip := geometry.Rectangle(row_geometry.clip_bounds)
-        if !geometry.rectangles_intersect(bounds, clip) {
+        drawer := tree_actions_screen_rect(
+            row.actions.drawer_rect, panel, prepared.scroll.scroll_y_out)
+        if !geometry.rectangles_intersect(bounds, clip) &&
+            !(row.actions.height > 0 && geometry.rectangles_intersect(drawer, clip)) {
             continue
         }
-        _ = native.draw_encoder_push_scissor(encoder, clip)
-        if text {
-            viewtext.draw_encoded_label(
-                &state^.font_cache, encoder,
-                tree_item_label(state^.julia_interface, row.item),
+        tree_draw_reorder_layer(ctx, row, row_geometry, text,
+            {} if index == foreground else occlusion)
+    }
+
+}
+
+// tree_draw_reorder_layer clips background geometry and text around the opaque moving block.
+tree_draw_reorder_layer :: proc(
+    ctx: Encoded_Tree_Walk_Context, row: Tree_Prepared_Row,
+    bounds: viewmodel.Ui_Control_Geometry, text: bool, occlusion: geometry.Rectangle) {
+    clip := bounds.clip_bounds
+    if occlusion.height <= 0 || !geometry.rectangles_intersect(clip, occlusion) {
+        draw_encoded_prepared_tree_row(ctx, row, bounds, text)
+        return
+    }
+    above := bounds
+    above.clip_bounds.height = max(min(occlusion.y, clip.y + clip.height) - clip.y, 0)
+    below := bounds
+    below.clip_bounds.y = max(clip.y, occlusion.y + occlusion.height)
+    below.clip_bounds.height = max(clip.y + clip.height - below.clip_bounds.y, 0)
+    if above.clip_bounds.height > 0 {
+        draw_encoded_prepared_tree_row(ctx, row, above, text)
+    }
+    if below.clip_bounds.height > 0 {
+        draw_encoded_prepared_tree_row(ctx, row, below, text)
+    }
+}
+
+// draw_encoded_prepared_tree_row shares one inherited clip between row and drawer.
+draw_encoded_prepared_tree_row :: proc(
+    ctx: Encoded_Tree_Walk_Context, row: Tree_Prepared_Row,
+    row_geometry: viewmodel.Ui_Control_Geometry, text: bool) {
+    bounds := row_geometry.bounds
+    clip := row_geometry.clip_bounds
+    _ = native.draw_encoder_push_scissor(ctx.encoder, clip)
+    if text {
+        label_clip := tree_actions_label_clip(row.actions, bounds, clip)
+        if geometry.rectangles_intersect(label_clip, clip) {
+            _ = native.draw_encoder_push_scissor(ctx.encoder, label_clip)
+            viewtext.draw_encoded_label(&ctx.state^.font_cache, ctx.encoder,
+                tree_item_label(ctx.ji, row.item),
                 bounds.x + f32(row.depth) *
                     theme.TREE_INDENT + theme.TREE_ROW_LABEL_OFFSET_X,
                 bounds.y + theme.TREE_ROW_LABEL_OFFSET_Y)
-        } else {
-            ctx.render_only = !row.logical
-            draw_encoded_tree_row(ctx, row.item, row.depth, bounds.y, row.expanded)
+            _ = native.draw_encoder_pop_scissor(ctx.encoder)
         }
-        _ = native.draw_encoder_pop_scissor(encoder)
+        draw_encoded_tree_actions_text(
+            ctx.state, ctx.encoder, row, ctx.panel, ctx.scroll_y)
+    } else {
+        current := ctx
+        current.render_only = !row.logical
+        draw_encoded_tree_row(current, row.item, row.depth, bounds.y, row.expanded)
+        draw_encoded_tree_actions_geometry(ctx.encoder, row, ctx.panel, ctx.scroll_y)
+        tree_actions_draw_focus(
+            ctx.encoder, &ctx.state^.ui_runtime, row, ctx.panel, ctx.scroll_y)
     }
+    _ = native.draw_encoder_pop_scissor(ctx.encoder)
 }
 
 // tree_update_scroll resolves ordinary scrolling against current animated content extent.
@@ -121,29 +175,55 @@ tree_update_prepared_rows :: proc(
         font_resolver = params.font_resolver,
         visibility = {search = params.visibility.search,
             projection = &params.ui_runtime^.tree_projection}}
-    for row in prepared^.layout.rows[:prepared^.layout.count] {
-        row_geometry := tree_row_screen_geometry(
-            row, ctx.panel, prepared^.scroll.scroll_y_out)
-        clip := geometry.Rectangle(row_geometry.clip_bounds)
-        owns := params.ui_runtime^.ui_press_owner.active &&
-            params.ui_runtime^.ui_press_owner.kind == .List_Item &&
-            params.ui_runtime^.ui_press_owner.id == tree_placement_press_id(row.item)
-        admitted := tree_row_is_revealed(row) &&
-            geometry.rectangles_intersect(geometry.Rectangle(row_geometry.bounds), clip)
-        if owns &&
-           (!admitted || uiwidgets.input_frame_left_released(params.mouse_input) &&
-            !geometry.rectangle_contains(clip,
-                uiwidgets.input_frame_mouse_position(params.mouse_input))) {
-            params.ui_runtime^.ui_press_owner = {}
-        }
-        if !admitted {
+    tree_actions_cancel_hidden_capture(params, prepared)
+    foreground := tree_reorder_foreground(
+        params.ui_runtime, prepared^.layout)
+    foreground_hit := false
+    if foreground >= 0 {
+        block := tree_reorder_block_clip(prepared^.layout.rows[foreground],
+            ctx.panel, ctx.scroll_y)
+        foreground_hit = geometry.rectangle_contains(
+            block, uiwidgets.input_frame_mouse_position(params.mouse_input))
+    }
+    for index in 0..<prepared^.layout.count {
+        if foreground_hit && index != foreground {
+            if params.ui_runtime^.ui_press_owner.kind == .List_Item &&
+                params.ui_runtime^.ui_press_owner.id ==
+                    tree_placement_press_id(prepared^.layout.rows[index].item) {
+                params.ui_runtime^.ui_press_owner = {}
+            }
             continue
         }
-        ctx.interaction_space_rect = clip
-        update_tree_node_row(ctx, row.item, row.depth,
-            geometry.Rectangle(row_geometry.bounds), &hit)
+        tree_update_prepared_row(params, ctx, &prepared^.layout.rows[index], &hit)
     }
     return hit
+}
+
+// tree_update_prepared_row keeps row capture and drawer admission on the same viewport.
+tree_update_prepared_row :: proc(
+    params: Tree_List_Params, ctx: Tree_Walk_Context,
+    row: ^Tree_Prepared_Row, hit: ^Tree_Hit) {
+    row_geometry := tree_row_screen_geometry(row^, ctx.panel, ctx.scroll_y)
+    clip := geometry.Rectangle(row_geometry.clip_bounds)
+    owns := params.ui_runtime^.ui_press_owner.active &&
+        params.ui_runtime^.ui_press_owner.kind == .List_Item &&
+        params.ui_runtime^.ui_press_owner.id == tree_placement_press_id(row^.item)
+    admitted := tree_row_is_revealed(row^) &&
+        geometry.rectangles_intersect(geometry.Rectangle(row_geometry.bounds), clip)
+    if owns &&
+       (!admitted || uiwidgets.input_frame_left_released(params.mouse_input) &&
+        !geometry.rectangle_contains(clip,
+            uiwidgets.input_frame_mouse_position(params.mouse_input))) {
+        params.ui_runtime^.ui_press_owner = {}
+    }
+    tree_actions_prepare_controls(params, row, ctx, hit)
+    if !admitted {
+        return
+    }
+    current := ctx
+    current.interaction_space_rect = clip
+    update_tree_node_row(current, row^.item, row^.depth,
+        geometry.Rectangle(row_geometry.bounds), hit)
 }
 
 // tree_cancel_hidden_capture releases rows removed or clipped by an immediate topology change.
@@ -299,6 +379,7 @@ tree_motion_running :: proc(motion: ^viewmodel.Ui_Tree_Motion) -> bool {
 
 // prepare_tree_visual settles hidden Library content without commands, semantics, or scrolling.
 prepare_tree_visual :: proc(params: Tree_List_Params) -> Tree_List_Preparation {
+    tree_actions_close_context(params.ui_runtime)
     if params.ji == nil ||
         params.ji^.animation_count == 0 &&
             (params.collections == nil || params.collections^.entry_count == 0) {

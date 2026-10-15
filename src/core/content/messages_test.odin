@@ -14,7 +14,8 @@ CONTENT_MESSAGE_TEST_TEMPLATES :: [CONTENT_SHIPPED_MESSAGE_COUNT]string{
     "Search animations", "Clear search", "Library search status", "Did you mean...",
     "Use suggested search", "Use suggested search: {query}", "Search query is invalid",
     "Searching animations", "No matching animations", "Matching animations: {count}",
-    "Matching animations: {count} or more", "Display FPS", "Limit FPS",
+    "Matching animations: {count} or more", "Actions for {name}", "Move Up", "Move Down",
+    "Display FPS", "Limit FPS",
     "Enable Drawing Sound", "Use SIMD Projection", "Use SIMD Projection (Unavailable)",
     "GPU Dust Instancing", "GPU Dust Instancing (Unavailable)", "Maximum Dust particles",
     "Dust particles Rendered: {count}", "Trail particles Rendered: {count}",
@@ -80,11 +81,12 @@ content_message_test_append :: proc(
         &translation.template)
 }
 
-// Freeze the ten dynamic consumers' named kinds separately from authored templates.
+// Freeze dynamic consumers' named kinds separately from authored templates.
 content_message_test_signature :: proc(
     id: Content_Message_Id) -> (string, Content_Argument_Kind) {
     #partial switch id {
     case .Library_Suggestion_Action: return "query", .Text
+    case .Library_Actions_For: return "name", .Text
     case .Library_Status_Match_Count, .Library_Status_Match_Count_More,
          .Gif_Cadence_Multiple:
         return "count", .Uint32
@@ -106,7 +108,9 @@ content_message_test_destroy :: proc(generation: ^Content_Generation) {
 content_message_test_expected :: proc(
     template: string, kind: Content_Argument_Kind) -> string {
     switch kind {
-    case .Text: return "Use suggested search: Elements"
+    case .Text:
+        return "Actions for Elements" if template == "Actions for {name}" else
+            "Use suggested search: Elements"
     case .Uint32, .Int64:
         // Baseline templates each contain one named count placeholder.
         for index in 0..<len(template) {

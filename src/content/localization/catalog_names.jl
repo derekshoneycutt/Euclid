@@ -169,7 +169,7 @@ const EnUsCatalogNames = LocalizedContent.CatalogNameDeclaration[
         "Proposition I"),
     LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("7d7dbc7a-c360-486d-b727-a9909d4c569e"), "en-US",
-        "5-Hypocycloid"),
+        "5-Cusped Hypocycloid"),
     LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("7f6f36f4-a711-59c8-b22d-76f7157b29df"), "en-US",
         "Equal Right Angles"),
@@ -259,7 +259,7 @@ const EnUsCatalogNames = LocalizedContent.CatalogNameDeclaration[
         "Straight Line"),
     LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("b0c35f2e-6108-4510-ab0e-cfa3a7269869"), "en-US",
-        "5-Point Hypotrochoid"),
+        "5-Round-Point Hypotrochoid"),
     LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("b2472007-9bab-592b-a891-8b9c97d86539"), "en-US",
         "Diameter"),
@@ -349,7 +349,7 @@ const EnUsCatalogNames = LocalizedContent.CatalogNameDeclaration[
         "Definition: Segments"),
     LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("d6fcda98-5195-457d-8154-939930ec00c5"), "en-US",
-        "11⁄2-Hypocycloid"),
+        "11⁄2 Hypocycloid"),
     LocalizedContent.CatalogNameDeclaration(
         "builtin", UUID("db80657d-3c76-554e-9bec-b193cc6dcdbf"), "en-US",
         "Theorem 18"),

@@ -32,9 +32,10 @@ Settings_Save_Test_Path :: struct {
 }
 
 // Create a deterministic nonzero identity for collection save tests.
-settings_save_test_id :: proc(value: u8) -> uuid.Identifier {
+settings_save_test_id :: proc(value: int) -> uuid.Identifier {
     identifier: uuid.Identifier
-    identifier[15] = value
+    identifier[14] = u8(value >> 8)
+    identifier[15] = u8(value)
     return identifier
 }
 
@@ -151,6 +152,42 @@ settings_save_test_finish_collection_save :: proc(
     return snapshot
 }
 
+// Assert Favorites placement identity in authoritative sibling order.
+settings_save_test_expect_favorites_order :: proc(
+    t: ^testing.T, snapshot: ^collections.Set,
+    expected: []uuid.Identifier) {
+    indexes: [collections.ENTRY_CAPACITY]int
+    count, failure := collections.ordered_siblings(
+        snapshot, collections.FAVORITES_COLLECTION_ID, {}, indexes[:])
+    testing.expect_value(t, failure, collections.Policy_Error.None)
+    testing.expect_value(t, count, len(expected))
+    if count != len(expected) {
+        return
+    }
+    for position in 0..<count {
+        testing.expect_value(t, snapshot.entries[indexes[position]].id,
+            expected[position])
+    }
+}
+
+// Reopen the committed store and verify its Favorites sibling order.
+settings_save_test_reopen_favorites :: proc(
+    t: ^testing.T,
+    store: ^user_data.Store,
+    path: string,
+    expected: []uuid.Identifier) {
+    testing.expect_value(t, user_data.store_close(store).kind,
+        user_data.Store_Error_Kind.None)
+    testing.expect_value(t, user_data.store_open(store, path).kind,
+        user_data.Store_Error_Kind.None)
+    reopened: collections.Set
+    testing.expect_value(t, user_data.store_load_collections(store, &reopened).kind,
+        user_data.Store_Error_Kind.None)
+    settings_save_test_expect_favorites_order(t, &reopened, expected)
+    testing.expect_value(t, user_data.store_close(store).kind,
+        user_data.Store_Error_Kind.None)
+}
+
 // Queue a first Favorites edit behind a blocked worker and return its handle.
 settings_save_test_start_blocked_collection_save :: proc(
     t: ^testing.T,
@@ -187,6 +224,95 @@ settings_save_test_start_blocked_collection_save :: proc(
     return blocker, first
 }
 
+// Stage add, move, and remove operations while retaining expected identities.
+settings_save_test_enqueue_ordered_mutations :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State) -> (
+        uuid.Identifier, uuid.Identifier) {
+    first := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = settings_save_test_id(2),
+        animation_id = settings_save_test_id(1),
+    }
+    second := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = settings_save_test_id(3),
+        animation_id = settings_save_test_id(4),
+    }
+    third := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = settings_save_test_id(5),
+        animation_id = settings_save_test_id(6),
+    }
+    additions := []collections.Mutation{first, second, third}
+    for mutation in additions {
+        testing.expect_value(t,
+            viewpreferences.settings_save_collection_mutation(state, mutation),
+            collections.Mutation_Error.None)
+    }
+    settings_save_test_finish_ordered_mutations(t, state, first, second)
+    return first.entry_id, third.entry_id
+}
+
+// Move one placement down twice, then remove the original first sibling.
+settings_save_test_finish_ordered_mutations :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State,
+    first, second: collections.Mutation) {
+    move_second, second_error := collections.make_sibling_move(
+        &state^.preferences_runtime.collections_state, first.entry_id, .Down)
+    testing.expect_value(t, second_error, collections.Policy_Error.None)
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, move_second),
+        collections.Mutation_Error.None)
+    move_third, third_error := collections.make_sibling_move(
+        &state^.preferences_runtime.collections_state, first.entry_id, .Down)
+    testing.expect_value(t, third_error, collections.Policy_Error.None)
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, move_third),
+        collections.Mutation_Error.None)
+    remove := collections.Mutation{
+        kind = .Remove_Favorite,
+        entry_id = second.entry_id,
+    }
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, remove),
+        collections.Mutation_Error.None)
+}
+
+// Accept two additions and repeated moves while a worker payload is outstanding.
+settings_save_test_enqueue_in_flight_moves :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State,
+    first: collections.Mutation) -> (uuid.Identifier, uuid.Identifier) {
+    second := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = settings_save_test_id(13),
+        animation_id = settings_save_test_id(14),
+    }
+    third := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = settings_save_test_id(15),
+        animation_id = settings_save_test_id(16),
+    }
+    additions := []collections.Mutation{second, third}
+    for mutation in additions {
+        testing.expect_value(t,
+            viewpreferences.settings_save_collection_mutation(state, mutation),
+            collections.Mutation_Error.None)
+    }
+    for _ in 0..<2 {
+        move, failure := collections.make_sibling_move(
+            &state^.preferences_runtime.collections_state, first.entry_id, .Down)
+        testing.expect_value(t, failure, collections.Policy_Error.None)
+        testing.expect_value(t,
+            viewpreferences.settings_save_collection_mutation(state, move),
+            collections.Mutation_Error.None)
+    }
+    testing.expect_value(t,
+        state^.preferences_runtime.collection_mutation_count, 4)
+    return second.entry_id, third.entry_id
+}
+
 // Verify ordered Favorites mutations share one durable settings save lifecycle.
 @(test)
 settings_save_commits_ordered_collection_mutations :: proc(t: ^testing.T) {
@@ -209,22 +335,14 @@ settings_save_commits_ordered_collection_mutations :: proc(t: ^testing.T) {
         .Interface_Display_Fps, setting_model.boolean_value(true))
     _ = setting_model.change_set_set(&state^.preferences_runtime.settings_pending,
         .Interface_Reduce_Motion, setting_model.boolean_value(true))
-    animation_id := settings_save_test_id(1)
-    entry_id := settings_save_test_id(2)
-    add := collections.Mutation{
-        kind = .Add_Favorite, entry_id = entry_id, animation_id = animation_id,
-    }
-    remove := collections.Mutation{kind = .Remove_Favorite, entry_id = entry_id}
-    testing.expect_value(t,
-        viewpreferences.settings_save_collection_mutation(state, add),
-        collections.Mutation_Error.None)
-    testing.expect_value(t,
-        viewpreferences.settings_save_collection_mutation(state, remove),
-        collections.Mutation_Error.None)
-    _ = settings_save_test_finish_collection_save(t, state, &pool, &store, 0)
+    first_id, third_id := settings_save_test_enqueue_ordered_mutations(t, state)
+    snapshot := settings_save_test_finish_collection_save(
+        t, state, &pool, &store, 2)
+    settings_save_test_expect_favorites_order(
+        t, &snapshot, []uuid.Identifier{third_id, first_id})
     taskpool.task_pool_destroy(&pool)
-    testing.expect_value(t, user_data.store_close(&store).kind,
-        user_data.Store_Error_Kind.None)
+    settings_save_test_reopen_favorites(
+        t, &store, path.filename, []uuid.Identifier{third_id, first_id})
 }
 
 // Preserve edits accepted while the immutable worker payload is outstanding.
@@ -243,23 +361,16 @@ settings_save_retains_newer_collection_edits_until_acknowledged :: proc(t: ^test
     defer free(state, context.allocator)
     blocker, first := settings_save_test_start_blocked_collection_save(
         t, &store, &pool, &gate, state)
-    second := collections.Mutation{
-        kind = .Add_Favorite,
-        entry_id = settings_save_test_id(13),
-        animation_id = settings_save_test_id(14),
-    }
-    testing.expect_value(t,
-        viewpreferences.settings_save_collection_mutation(state, second),
-        collections.Mutation_Error.None)
-    testing.expect_value(t,
-        state^.preferences_runtime.collection_mutation_count, 1)
+    second_id, third_id := settings_save_test_enqueue_in_flight_moves(
+        t, state, first)
     settings_save_test_release_worker(&gate)
     _, joined := taskpool.task_pool_wait(&pool, blocker)
     testing.expect_value(t, joined, taskpool.Task_Join_Outcome.Joined)
     snapshot := settings_save_test_finish_collection_save(
-        t, state, &pool, &store, 2)
-    testing.expect_value(t, snapshot.entries[0].id, first.entry_id)
-    testing.expect_value(t, snapshot.entries[1].id, second.entry_id)
+        t, state, &pool, &store, 3)
+    settings_save_test_expect_favorites_order(t, &snapshot, []uuid.Identifier{
+        second_id, third_id, first.entry_id,
+    })
     testing.expect_value(t,
         state^.preferences_runtime.collection_mutation_count, 0)
     taskpool.task_pool_destroy(&pool)
@@ -504,6 +615,33 @@ settings_save_retry_success_clears_covered_failure :: proc(t: ^testing.T) {
 }
 
 // Restore a failed operation batch ahead of newer optimistic Favorites edits.
+settings_save_test_apply_failed_collection_batch :: proc(
+    t: ^testing.T,
+    state: ^app_core.Euclid_General_State,
+    saves: ^preferencesmodel.Settings_Save_Runtime,
+    failed: []collections.Mutation,
+    newer: collections.Mutation) {
+    saves^.collection_mutations[0] = newer
+    saves^.collection_mutation_count = 1
+    for mutation, index in failed {
+        saves^.settings_save_payload.mutations[index] = mutation
+    }
+    saves^.settings_save_payload.mutation_count = len(failed)
+    saves^.settings_save_payload.result = {
+        outcome = user_data.Commit_Outcome.Not_Committed,
+        failure = {kind = .Write},
+    }
+    saves^.settings_failure_count = 1
+    viewpreferences.settings_save_apply_result(state, .Failed)
+    testing.expect_value(t, saves^.collection_mutation_count, len(failed) + 1)
+    for mutation, index in failed {
+        testing.expect_value(t, saves^.collection_mutations[index], mutation)
+    }
+    testing.expect_value(t,
+        saves^.collection_mutations[len(failed)], newer)
+}
+
+// Verify retries put failed moves before newer dependent edits.
 @(test)
 settings_save_retry_requeues_collection_operations_in_order :: proc(t: ^testing.T) {
     state := settings_save_test_state()
@@ -514,32 +652,112 @@ settings_save_retry_requeues_collection_operations_in_order :: proc(t: ^testing.
         entry_id = settings_save_test_id(21),
         animation_id = settings_save_test_id(22),
     }
+    following := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = settings_save_test_id(23),
+        animation_id = settings_save_test_id(24),
+    }
+    move := collections.Mutation{
+        kind = .Reorder_Siblings,
+        entry_id = failed.entry_id,
+        sibling_entry_id = following.entry_id,
+        direction = .Down,
+    }
     newer := collections.Mutation{
         kind = .Remove_Favorite,
-        entry_id = failed.entry_id,
+        entry_id = following.entry_id,
     }
-    saves.collection_mutations[0] = newer
-    saves.collection_mutation_count = 1
-    saves.settings_save_payload.mutations[0] = failed
-    saves.settings_save_payload.mutation_count = 1
-    saves.settings_save_payload.result = {
-        outcome = user_data.Commit_Outcome.Not_Committed,
-        failure = {kind = .Write},
-    }
-    saves.settings_failure_count = 1
-    viewpreferences.settings_save_apply_result(state, .Failed)
-    testing.expect_value(t, saves.collection_mutation_count, 2)
-    testing.expect_value(t, saves.collection_mutations[0], failed)
-    testing.expect_value(t, saves.collection_mutations[1], newer)
+    failed_batch := []collections.Mutation{failed, following, move}
+    settings_save_test_apply_failed_collection_batch(
+        t, state, saves, failed_batch, newer)
+    settings_save_test_expect_replay(
+        t, saves.collection_mutations[:saves.collection_mutation_count],
+        failed.entry_id)
+}
+
+// Replay an ordered mutation queue and assert its final placement identity.
+settings_save_test_expect_replay :: proc(
+    t: ^testing.T, mutations: []collections.Mutation,
+    expected_entry: uuid.Identifier) {
     replay: collections.Set
     collections.initialize(&replay)
+    for mutation in mutations {
+        testing.expect_value(t,
+            collections.apply_mutation(&replay, mutation),
+            collections.Mutation_Error.None)
+    }
+    testing.expect_value(t, replay.entry_count, 1)
+    testing.expect_value(t, replay.entries[0].id, expected_entry)
+}
+
+// Fill the queue with one active operation and the remaining pending edits.
+settings_save_test_fill_active_collection_queue :: proc(
+    t: ^testing.T, state: ^app_core.Euclid_General_State,
+    store: ^user_data.Store) -> collections.Mutation {
+    runtime := &state^.preferences_runtime
+    runtime.settings_store = store
+    collections.initialize(&runtime.collections_state)
+    first := collections.Mutation{
+        kind = .Add_Favorite,
+        entry_id = settings_save_test_id(1),
+        animation_id = settings_save_test_id(1001),
+    }
     testing.expect_value(t,
-        collections.apply_mutation(&replay, saves.collection_mutations[0]),
+        viewpreferences.settings_save_collection_mutation(state, first),
         collections.Mutation_Error.None)
+    runtime.settings_save_payload.mutations[0] = first
+    runtime.settings_save_payload.mutation_count = 1
+    runtime.collection_mutation_count = 0
+    runtime.settings_save_active = true
+    for value in 2..=collections.MUTATION_CAPACITY {
+        addition := collections.Mutation{
+            kind = .Add_Favorite,
+            entry_id = settings_save_test_id(value),
+            animation_id = settings_save_test_id(value + 1000),
+        }
+        testing.expect_value(t,
+            viewpreferences.settings_save_collection_mutation(state, addition),
+            collections.Mutation_Error.None)
+    }
+    return first
+}
+
+// Enforce pending plus active batch capacity without publishing rejected moves.
+@(test)
+settings_save_collection_capacity_counts_only_active_payloads :: proc(
+    t: ^testing.T) {
+    state := settings_save_test_state()
+    defer free(state, context.allocator)
+    store: user_data.Store
+    runtime := &state^.preferences_runtime
+    first := settings_save_test_fill_active_collection_queue(t, state, &store)
+    testing.expect_value(t, runtime.collection_mutation_count,
+        collections.MUTATION_CAPACITY - 1)
+    original_revision := runtime.collection_revision
+    move, move_error := collections.make_sibling_move(
+        &runtime.collections_state, first.entry_id, .Down)
+    testing.expect_value(t, move_error, collections.Policy_Error.None)
     testing.expect_value(t,
-        collections.apply_mutation(&replay, saves.collection_mutations[1]),
+        viewpreferences.settings_save_collection_mutation(state, move),
+        collections.Mutation_Error.Capacity)
+    testing.expect_value(t, runtime.collection_revision, original_revision)
+    testing.expect_value(t, runtime.collections_state.entries[0].sibling_order, i64(0))
+    testing.expect_value(t, runtime.collections_state.entries[1].sibling_order, i64(1))
+
+    runtime.settings_save_active = false
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, move),
         collections.Mutation_Error.None)
-    testing.expect_value(t, replay.entry_count, 0)
+    testing.expect_value(t, runtime.collection_mutation_count,
+        collections.MUTATION_CAPACITY)
+    next_move, next_error := collections.make_sibling_move(
+        &runtime.collections_state, first.entry_id, .Down)
+    testing.expect_value(t, next_error, collections.Policy_Error.None)
+    revision_at_capacity := runtime.collection_revision
+    testing.expect_value(t,
+        viewpreferences.settings_save_collection_mutation(state, next_move),
+        collections.Mutation_Error.Capacity)
+    testing.expect_value(t, runtime.collection_revision, revision_at_capacity)
 }
 
 // Verify permanent store faults bypass retries while transient faults are capped.

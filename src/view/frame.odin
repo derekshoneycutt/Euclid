@@ -281,6 +281,11 @@ prepare_sdl_frame :: proc(
     routed_event_storage: [input.INPUT_EVENT_CAPACITY]input.Input_Event
     routed_frame := route_ui_keyboard_frame(state, input_frame, routed_event_storage[:])
     uiaccessibility.drain_accessibility_actions(state, ctx.platform)
+    when core.SCENARIOS_ENABLED {
+        if ctx.scenario_runtime != nil {
+            viewscenario.scenario_reorder_drain(ctx.scenario_runtime)
+        }
+    }
     controls := ui.prepare_ui_controls(state, routed_frame, ui_geometry.splitters)
     if state^.simulation_executor != nil {
         viewpreferences.settings_save_service(state, &state^.simulation_executor^.pool)

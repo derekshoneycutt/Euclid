@@ -9,14 +9,18 @@ export get_search_content, get_view_content
 function get_view_content()
     return tex"""\textbf{Logic}
 
-Logical operations describe how conditions and sets combine. The diagrams here use bounded regions to make those relationships visible."""
+Logic and set operations are frequently used in many mathematics, and they have even been
+employed to describe geometric properties by mathematicians like Tarski. Basic operations are
+shown here in visual forms that may help understand geometric reasoning utilizing them."""
 end
 
 """Describe logical connectives through bounded geometric regions."""
 function get_search_content()
     return SearchContent(
-        "Logic visualizes conjunction and bounded negation with overlapping circles, " *
-        "using a lens for intersection and a lune for set difference.",
+        """Logic
+Logic and set operations are frequently used in many mathematics, and they have even been
+employed to describe geometric properties by mathematicians like Tarski. Basic operations are
+shown here in visual forms that may help understand geometric reasoning utilizing them.""",
         ("logical connectives", "set operations", "geometric logic", "Venn diagram"))
 end
 

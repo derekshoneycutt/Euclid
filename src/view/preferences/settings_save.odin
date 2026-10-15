@@ -72,10 +72,13 @@ settings_save_collection_mutation :: proc(
     if mutation_error != .None {
         return mutation_error
     }
+    in_flight_mutation_count := 0
+    if runtime^.settings_save_active {
+        in_flight_mutation_count = runtime^.settings_save_payload.mutation_count
+    }
     if runtime^.settings_store != nil &&
-        runtime^.collection_mutation_count +
-            runtime^.settings_save_payload.mutation_count >=
-                collections.MUTATION_CAPACITY {
+        runtime^.collection_mutation_count + in_flight_mutation_count >=
+            collections.MUTATION_CAPACITY {
         return .Capacity
     }
     runtime^.collections_state = staged

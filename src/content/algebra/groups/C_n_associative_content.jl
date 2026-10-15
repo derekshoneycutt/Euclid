@@ -18,18 +18,24 @@ Here, compare the two ways of grouping the same three rotations.
 \begin{enumerate}
 \item Left grouping: $(\rho^1\rho^2)\rho^3 = \rho^6$.
 \item Right grouping: $\rho^1(\rho^2\rho^3) = \rho^6$.
-\item Both paths match because function composition is associative.
 \end{enumerate}
 
-The side-by-side circles make grouping visible while the endpoint confirms equality.
-Formally, the same final motion appears no matter how the three actions are grouped."""
+Both paths match because function composition is associative."""
 end
 
 """Describe associativity through two groupings of three rotations."""
 function get_search_content()
     return SearchContent(
-        "Associativity means regrouping three operations does not change their result; " *
-        "the same rotations agree under left and right parenthesization.",
+        """Associativity
+
+Associativity means the grouping of the operation does not matter:
+
+Here, compare the two ways of grouping the same three rotations.
+
+Left grouping
+Right grouping
+
+Both paths match because function composition is associative.""",
         ("associative operation", "grouping does not matter", "bracketing invariant"))
 end
 
